@@ -7,7 +7,9 @@ import {
   activePersona,
   assistantSettings,
   CREDENTIALS,
+  chatDisplay,
   chatInterests,
+  chatMaxRounds,
   chatReplyMode,
   chatTalkativeness,
   dataHome,
@@ -474,6 +476,56 @@ describe("chat settings", () => {
     setEnv("CHAT_REPLY_MODE", "audio");
     expect(chatReplyMode()).toBe("auto");
     expect(warnings).toEqual(["CHAT_REPLY_MODE='audio' is not auto, text or voice; using auto"]);
+  });
+
+  test("the display is focus, normal or verbose in any case; anything else is normal, with a warning", () => {
+    expect(chatDisplay()).toBe("normal");
+    for (const [value, read] of [
+      ["focus", "focus"],
+      [" Verbose ", "verbose"],
+      ["NORMAL", "normal"],
+    ] as const) {
+      setEnv("CHAT_DISPLAY", value);
+      expect([value, chatDisplay()]).toEqual([value, read]);
+    }
+    expect(warnings).toEqual([]);
+    setEnv("CHAT_DISPLAY", "loud");
+    expect(chatDisplay()).toBe("normal");
+    expect(warnings).toEqual(["CHAT_DISPLAY='loud' is not focus, normal or verbose; using normal"]);
+  });
+
+  test("the display is the install's: settings.yaml's, under the environment's, for every persona", () => {
+    write("settings.yaml", "chats:\n  display: verbose\n");
+    const hers = write("personas/alice/persona.yaml", "chats:\n  display: focus\n");
+    installSettings();
+    expect(chatDisplay()).toBe("verbose");
+    expect(withPersona("alice", chatDisplay)).toBe("verbose");
+    expect(warnings).toEqual([`Unknown setting chats.display in ${hers}`]);
+    setEnv("CHAT_DISPLAY", "Focus");
+    expect(chatDisplay()).toBe("focus");
+  });
+
+  test("max rounds are 8 unset, and her persona.yaml's win over the environment's", () => {
+    write("personas/alice/persona.yaml", "chat:\n  maxRounds: 12\n");
+    installSettings();
+    expect(chatMaxRounds()).toBe(8);
+    setEnv("CHAT_MAX_ROUNDS", "3");
+    expect([chatMaxRounds(), withPersona("alice", chatMaxRounds)]).toEqual([3, 12]);
+    setEnv("CHAT_MAX_ROUNDS", "1");
+    expect(chatMaxRounds()).toBe(1);
+    expect(warnings).toEqual([]);
+  });
+
+  test("max rounds below 1, or not a whole number, are 8, with a warning", () => {
+    for (const value of ["0", "-2", "2.5"]) {
+      setEnv("CHAT_MAX_ROUNDS", value);
+      expect([value, chatMaxRounds()]).toEqual([value, 8]);
+    }
+    expect(warnings).toEqual([
+      "CHAT_MAX_ROUNDS='0' is below 1; using default 8",
+      "CHAT_MAX_ROUNDS='-2' is below 1; using default 8",
+      "CHAT_MAX_ROUNDS='2.5' is not a valid int; using default 8",
+    ]);
   });
 });
 

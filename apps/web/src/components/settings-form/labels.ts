@@ -2,7 +2,7 @@
 // groups, option labels, flags and why a value is refused.
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
-import { REPLY_MODE_LABELS } from "@/features/chats/labels";
+import { DISPLAY_LABELS, REPLY_MODE_LABELS } from "@/features/chats/labels";
 import type { RoleId } from "@/lib/providers";
 
 /** Each row's title. */
@@ -56,6 +56,7 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "assistant.folders": msg`Assistant Folders`,
   "assistant.spendPauseUsd": msg`Assistant Spend Pause`,
   "assistant.contextTokens": msg`Assistant Context`,
+  "chats.display": msg`Task Display`,
   prompt: msg`System Prompt File`,
   "identity.timezone": msg`Time Zone`,
   "voice.provider": msg`Voice Provider`,
@@ -103,6 +104,7 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "chat.interests": msg`Interests`,
   "chat.talkativeness": msg`Talkativeness`,
   "chat.replyMode": msg`Reply Mode`,
+  "chat.maxRounds": msg`Rounds per Reply`,
 };
 
 /** The line under a row, for the rows that have one. */
@@ -125,6 +127,7 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "assistant.folders": msg`Folders every task may read and write besides its own, one per line.`,
   "assistant.spendPauseUsd": msg`A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1.`,
   "assistant.contextTokens": msg`The most context a task's requests carry, in tokens. Default 128000.`,
+  "chats.display": msg`How much of her tasks each chat shows, until the chat picks its own with /focus, /normal or /verbose. Focus hides task cards, and Verbose opens her newest running task's steps and, on a call, has her say how far a task's plan has got, which costs a reply each time. Default Normal.`,
   prompt: msg`Relative to her folder. Default prompt.md.`,
   "voice.model": msg`Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken.`,
   "hearing.language": msg`The language you speak in calls, as a two-letter code. Default zh.`,
@@ -140,6 +143,7 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "chat.interests": msg`Topics she cares about, separated by commas or 、. The director reads them with her summary to tell when a group's line is one she'd join in on. Empty means her summary alone.`,
   "chat.talkativeness": msg`How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5.`,
   "chat.replyMode": msg`Whether she answers in text or with a voice message. Auto lets the director choose voice when a line suits it, more often after a voice message of yours. A chat's own reply mode overrides hers, and without a key for her voice she answers in text.`,
+  "chat.maxRounds": msg`How many rounds of one reply may call her tools. Each round bills a request to her mind, or more when a malformed reply is asked for again. If the last still calls one, one more round asks her to answer, or to hand the work to a task. Default 8.`,
 };
 
 /** A choice's label by row and value; a value without one shows as it is. */
@@ -154,6 +158,7 @@ export const SETTING_OPTION_LABELS: Readonly<
     "s2.1-pro-free": msg`s2.1-pro-free (Free, under Fair Use)`,
   },
   "chat.replyMode": REPLY_MODE_LABELS,
+  "chats.display": DISPLAY_LABELS,
 };
 
 /** The headings a card's rows are grouped under. */

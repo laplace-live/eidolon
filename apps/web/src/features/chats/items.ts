@@ -1,8 +1,9 @@
-// What a chat's log shows: the lines said, the turns that failed, where each call began and ended,
-// and a card for each task she started. Recall, other tool events, the greeting prompt and the
-// bookkeeping events stay hidden.
+// What a chat's log shows: the lines said, her words before a tool call, the turns that failed,
+// where each call began and ended, and a card for each task she started. Recall, other tool events,
+// the greeting prompt and the bookkeeping events stay hidden.
 import type {
   Attachment,
+  ChatDisplay,
   ChatEvent,
   ChatEventOf,
   CutOff,
@@ -28,7 +29,10 @@ type PersonaItem = {
   readonly sentAsText: boolean;
   readonly interrupted: boolean;
   readonly cutOff: CutOff | null;
-  /** The decision her turn answered; null for a greeting, or a late photo of unknown turn. */
+  /**
+   * The decision her turn answered; null for a greeting, a late photo of unknown turn, and her
+   * words before a tool call, whose turn's decision her message carries.
+   */
   readonly reason: ReplyReason | null;
   /** Said on a call, as its transcript. */
   readonly call: boolean;
@@ -115,15 +119,32 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
     if ("turn" in event && !turns.has(event.turn)) {
       turns.set(event.turn, chosen.get(event.persona) ?? null);
     }
-    const started = event.type === "tool-call" ? tasks.get(event.seq) : undefined;
-    if (started !== undefined && started.task !== null) {
-      items.push({
-        kind: "task",
-        seq: event.seq,
-        persona: started.persona,
-        task: started.task,
-        call: started,
-      });
+    if (event.type === "tool-call") {
+      if (event.said !== undefined && event.said !== "") {
+        items.push({
+          kind: "persona",
+          seq: event.seq,
+          persona: event.persona,
+          text: event.said,
+          images: [],
+          voice: null,
+          sentAsText: false,
+          interrupted: false,
+          cutOff: null,
+          reason: null,
+          call: false,
+        });
+      }
+      const started = tasks.get(event.seq);
+      if (started !== undefined && started.task !== null) {
+        items.push({
+          kind: "task",
+          seq: event.seq,
+          persona: started.persona,
+          task: started.task,
+          call: started,
+        });
+      }
     } else if (event.type === "decision") {
       const reason = reasonOf(event, speakers);
       for (const reply of event.replies) chosen.set(reply.persona, reason);
@@ -199,6 +220,21 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
     previous = event;
   }
   return items;
+}
+
+/** An item's key in the log: her words before a task's call share its seq with the card. */
+export function itemKey(item: ChatItem): string {
+  return `${item.kind}-${item.seq}`;
+}
+
+/** What a chat in `display` shows: focus leaves out task cards, but for those `revealed`. */
+export function displayedItems(
+  items: readonly ChatItem[],
+  display: ChatDisplay | null,
+  revealed: ReadonlySet<string>,
+): readonly ChatItem[] {
+  if (display !== "focus") return items;
+  return items.filter((item) => item.kind !== "task" || revealed.has(item.task));
 }
 
 /**

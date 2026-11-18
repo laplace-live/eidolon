@@ -1,8 +1,9 @@
 // A task's card in the chat log, at her start_task call: what it works on and where, its state,
 // what she passed on that it hasn't read, what it asks the owner, its plan, its latest step and the
-// files it wrote, its steps on demand, and Stop. Every button a task has is here or on the waiting
-// bar.
+// files it wrote, its steps on demand or as the chat's display opens them, and Stop. Every button a
+// task has is here or on the waiting bar.
 
+import type { ChatDisplay } from "@eidolon/chat";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRightIcon, ListTodoIcon, SquareIcon } from "lucide-react";
@@ -25,29 +26,16 @@ import type { TaskSnapshot, TasksResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { TaskPrompt } from "./cards";
 import { FileList, ModelText, QueuedLines, SpendText, StatusBadge, TodoList } from "./parts";
-import { chatTasksQuery, useAnswering, useStopTask } from "./queries";
-import { followsSteps, offers } from "./state";
+import { chatTasksQuery, useAnswering, useChatTask, useStopTask } from "./queries";
+import { followsSteps, keepsLiveSteps, offers, stepsShown } from "./state";
 import { latestStep, toolState } from "./transcript";
 import { TranscriptLog } from "./transcript-view";
 import { useTaskEvents } from "./use-task-events";
 
-/** One of the chat's tasks, as the chat's page last read them. */
-function useChatTask(chat: string, id: string): TaskSnapshot | undefined {
-  const select = useCallback(
-    (data: TasksResponse) => data.tasks.find((task) => task.id === id),
-    [id],
-  );
-  // The chat's page polls the list; a card only reads it.
-  return useQuery({ ...chatTasksQuery(chat), select, refetchOnMount: false }).data;
-}
-
-/** Whether task `id`'s card follows its transcript, as followsSteps decides. */
-function useFollows(chat: string, id: string, open: boolean): boolean {
-  const select = useCallback(
-    (data: TasksResponse) => followsSteps(id, data.tasks, open),
-    [id, open],
-  );
-  return useQuery({ ...chatTasksQuery(chat), select, refetchOnMount: false }).data ?? open;
+/** Whether task `id` is the newest running one, whose card follows it with its steps closed. */
+function useNewest(chat: string, id: string): boolean {
+  const select = useCallback((data: TasksResponse) => followsSteps(id, data.tasks, false), [id]);
+  return useQuery({ ...chatTasksQuery(chat), select, refetchOnMount: false }).data ?? false;
 }
 
 function Meta({ label, children }: { readonly label: string; readonly children: ReactNode }) {
@@ -87,13 +75,33 @@ function StopButton({ task }: { readonly task: TaskSnapshot }) {
   );
 }
 
-export function TaskCard({ chatId, item }: { readonly chatId: string; readonly item: TaskItem }) {
+export function TaskCard({
+  chatId,
+  item,
+  display,
+}: {
+  readonly chatId: string;
+  readonly item: TaskItem;
+  /** The chat's display; null while it isn't known. */
+  readonly display: ChatDisplay | null;
+}) {
   const { t } = useLingui();
   const titleId = useId();
   const task = useChatTask(chatId, item.task);
-  const [open, setOpen] = useState(false);
   const running = task?.status === "running";
-  const follows = useFollows(chatId, item.task, open);
+  const newest = useNewest(chatId, item.task);
+  // The owner's Show Steps or Hide Steps holds until the display changes.
+  const [toggle, setToggle] = useState<{
+    readonly display: ChatDisplay | null;
+    readonly open: boolean;
+  } | null>(null);
+  if (toggle !== null && toggle.display !== display) setToggle(null);
+  const chosen = toggle !== null && toggle.display === display ? toggle.open : null;
+  const [live, setLive] = useState(false);
+  const shownLive = keepsLiveSteps(live, { display, newest, running });
+  if (shownLive !== live) setLive(shownLive);
+  const open = stepsShown({ display, chosen, newest, shownLive });
+  const follows = open || newest;
   const events = useTaskEvents(item.task, running, follows);
   const step = running && follows ? latestStep(events.view) : null;
   const status = task?.status ?? item.call.final?.result.status ?? null;
@@ -185,7 +193,7 @@ export function TaskCard({ chatId, item }: { readonly chatId: string; readonly i
           size="sm"
           aria-expanded={open}
           data-action="steps"
-          onClick={() => setOpen((shown) => !shown)}
+          onClick={() => setToggle({ display, open: !open })}
         >
           <ChevronRightIcon className={cn("transition-transform", open && "rotate-90")} />
           {open ? t`Hide Steps` : t`Show Steps`}

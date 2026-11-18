@@ -122,6 +122,67 @@ describe("reduceLive", () => {
     expect(tail.turn).toEqual({ id: "b", persona: "mio", after: 12, text: "好", tool: null });
   });
 
+  test("a stored call carrying her words clears the words streamed, and the next round streams on", () => {
+    const call = (seq: number, turn: string, said?: string): ChatEvent => ({
+      type: "tool-call",
+      seq,
+      at: seq,
+      persona: "mio",
+      turn,
+      callId: `c${seq}`,
+      name: "recall_streams",
+      arguments: {},
+      ...(said === undefined ? {} : { said }),
+    });
+    const streaming = run([
+      { type: "started", turn: "t1", persona: "mio" },
+      { type: "delta", turn: "t1", text: "我查一下" },
+    ]);
+    const stored = run([{ type: "events", events: [call(3, "t1", "我查一下")] }], streaming);
+    expect(stored.turn?.text).toBe("");
+    // The log shows the stored words as her line, so they don't stream below it too.
+    expect(liveRows(stored, false)).toEqual([{ kind: "thinking" }]);
+    const result: ChatEvent = {
+      type: "tool-result",
+      seq: 4,
+      at: 4,
+      persona: "mio",
+      turn: "t1",
+      callId: "c3",
+      result: {},
+    };
+    const next = run(
+      [
+        { type: "events", events: [result] },
+        { type: "delta", turn: "t1", text: "那次是" },
+      ],
+      stored,
+    );
+    expect(liveRows(next, false)).toEqual([{ kind: "streamed", text: "那次是" }]);
+  });
+
+  test("a call with no words before it, or another turn's, leaves the words streamed", () => {
+    const streaming = run([
+      { type: "started", turn: "t1", persona: "mio" },
+      { type: "delta", turn: "t1", text: "嗯" },
+    ]);
+    const bare: ChatEvent = {
+      type: "tool-call",
+      seq: 3,
+      at: 3,
+      persona: "mio",
+      turn: "t1",
+      callId: "c1",
+      name: "take_selfie",
+      arguments: {},
+    };
+    expect(run([{ type: "events", events: [bare] }], streaming).turn?.text).toBe("嗯");
+    const empty = { ...bare, said: "" };
+    expect(run([{ type: "events", events: [empty] }], streaming).turn?.text).toBe("嗯");
+    const other = { ...bare, turn: "t0", said: "嗯" };
+    expect(run([{ type: "events", events: [other] }], streaming).turn?.text).toBe("嗯");
+  });
+
   test("a turn-failed event ends its turn", () => {
     const started = run([{ type: "started", turn: "t1", persona: "mio" }]);
     const failed = run(
@@ -344,6 +405,7 @@ describe("a line sent while a reply runs", () => {
       lateTools: [],
       hearingRefusal: null,
       groupCall: false,
+      defaultDisplay: "normal",
       call: null,
     };
     let live = IDLE;
@@ -534,6 +596,7 @@ describe("mergeEvents", () => {
     lateTools: [],
     hearingRefusal: null,
     groupCall: false,
+    defaultDisplay: "normal" as const,
     call: null,
   };
 
@@ -564,6 +627,7 @@ describe("latePoll", () => {
       hearingRefusal: null,
       call: null,
       groupCall: false,
+      defaultDisplay: "normal" as const,
     };
     expect(latePoll({ ...contents, lateTools: [] })).toBe(false);
     expect(latePoll({ ...contents, lateTools: ["take_selfie"] })).toBe(LATE_POLL_MS);
@@ -578,6 +642,7 @@ describe("callOn", () => {
     lateTools: [],
     hearingRefusal: null,
     groupCall: false,
+    defaultDisplay: "normal" as const,
     call: { id: "c1", persona: "mio" },
   };
 

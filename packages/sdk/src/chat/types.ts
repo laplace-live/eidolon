@@ -15,11 +15,20 @@ export const MAX_CHAIN_LIMIT = 6;
 /** The most hops the stateless /api/chat/* endpoint honors per viewer line. */
 export const PUBLIC_CHAIN_LIMIT = 3;
 
-/** The most events a turn's window carries, newest kept, besides the older state events. */
-export const CHAT_WINDOW_EVENTS = 120;
+/**
+ * The newest sendable events a turn's window is cut from: tool calls and results take at most
+ * `CHAT_WINDOW_TOOL_EVENTS` of them, and everything else the rest.
+ */
+export const CHAT_WINDOW_EVENTS = 180;
 
-/** The most those newest events weigh, summed over each event's JSON in UTF-8 bytes. */
+/** The most a window's events weigh, tool calls and results aside, as JSON in UTF-8 bytes. */
 export const CHAT_WINDOW_BYTES = 256 * 1024;
+
+/** The most tool calls and results a window carries, of its `CHAT_WINDOW_EVENTS`. */
+export const CHAT_WINDOW_TOOL_EVENTS = 60;
+
+/** The most those tool calls and results weigh, apart from `CHAT_WINDOW_BYTES`. */
+export const CHAT_WINDOW_TOOL_BYTES = 128 * 1024;
 
 /** The most message events the server reads from a window when rebuilding a persona's view. */
 export const CHAT_WINDOW_MESSAGES = 60;
@@ -122,6 +131,8 @@ export type ChatEvent =
       readonly callId: string;
       readonly name: string;
       readonly arguments: Readonly<Record<string, unknown>>;
+      /** Her words before this call in a text turn, on a round's first call only. */
+      readonly said?: string;
     })
   | (EventBase & {
       readonly type: "tool-result";
@@ -235,7 +246,7 @@ export interface ChatSummary {
   readonly openCall: string | null;
 }
 
-/** What a turn, a voice message or a call's offer sends: the header, older state events, and newest events. */
+/** What a turn, a voice message or a call's offer sends: the header, and the events `buildWindow` keeps. */
 export interface ChatWindow {
   readonly header: ChatHeader;
   readonly events: readonly WireEvent[];
@@ -288,6 +299,10 @@ export interface BrowserChatStore<TRecord extends BrowserChatRecord = BrowserCha
     options?: { readonly allowGap?: boolean },
   ): Promise<TRecord>;
   appendOwn(id: string, drafts: readonly OwnEventDraft[], at?: number): Promise<WireEvent[]>;
+  /**
+   * `buildWindow` over the log, or over no less of it than its newest `CHAT_WINDOW_EVENTS` events
+   * that aren't `NEVER_SENT` and every state event older than them, oldest first.
+   */
   window(id: string): Promise<ChatWindow>;
   remove(id: string): Promise<void>;
   putFile(chatId: string, name: string, blob: Blob): Promise<boolean>;

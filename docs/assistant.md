@@ -7,7 +7,8 @@ app she starts one with `start_task` when the owner asks her in a chat, or on a 
 hers alone; the task's card in that chat takes the owner's answers, and she reports there when it
 ends. While it runs, she says how it is going from a status block of her tasks that each of her
 turns rebuilds, reads its detail with `check_task`, passes the owner's changes on with
-`steer_task`, and stops it with `stop_task`. `laplace-task` runs one from a terminal.
+`steer_task`, and stops it with `stop_task`. The owner chooses how much of it each chat shows
+([Display](#display)). `laplace-task` runs one from a terminal.
 
 | Part | Where |
 | --- | --- |
@@ -19,6 +20,7 @@ turns rebuilds, reads its detail with `check_task`, passes the owner's changes o
 | `steer_task`, `stop_task` and `check_task` | `apps/bot/src/local/tasks/her-tools.ts` |
 | the status block, `后台的活` | `apps/bot/src/local/tasks/status.ts` |
 | what a call takes of her tasks | `apps/bot/src/local/tasks/calls.ts`, and the chat runner (`chats/runner.ts`) |
+| a chat's display: its milestones on a call, and the composer's commands | `apps/bot/src/local/tasks/milestones.ts`; `apps/web/src/features/chats/commands.ts` |
 | the task routes | `apps/bot/src/local/routes/tasks.ts` |
 | the task card, the waiting bar, the Tasks list | `apps/web/src/features/tasks/` ([web-app.md](web-app.md#tasks)) |
 | `laplace-task` | `apps/cli/src/task.ts` |
@@ -60,8 +62,9 @@ turns rebuilds, reads its detail with `check_task`, passes the owner's changes o
 - **A task's steps never enter the chat log.** The log holds her task tools' calls and results,
   `check_task`'s bounded summary included, and the status block; every step is in the task's
   transcript.
-- **Interruptions never stop a task.** Only a cancel does: the card's Stop, a Deny at its start,
-  turning Assistant Mode off, deleting its chat, or her `stop_task` on the owner's word.
+- **Interruptions never stop a task.** Only a cancel does: the card's Stop, or the same Stop in
+  `/stop`'s dialog, a Deny at its start, turning Assistant Mode off, deleting its chat, or her
+  `stop_task` on the owner's word.
 - **The worker has no persona:** the brief, the folder's `AGENTS.md` and `CLAUDE.md`, its tools'
   rules, the date and the folder. No `prompt.md`, Mem0 or persona facts.
 - **Every task request is billed as source `task`, with the task's id as its session.** `runTask`
@@ -335,6 +338,9 @@ a group or realtime call, `/call` and production's chat endpoint never offer the
   later view of hers until the `final` replaces it ([chat.md](chat.md#her-view-viewof)), so her
   line follows the status: under way, or waiting for the owner's Allow on the card. The task's
   origin is `{ id, persona, call }`: the chat, her, and her call.
+- **When her rounds run out** ([chat.md](chat.md#a-turn-runturn)), her answer round offers
+  `start_task` alone, so she can still hand the work to a task. A start there runs, and one more
+  round, offered nothing she may call, gives her line on it.
 - **A refusal** the manager explains (Assistant Mode off or not ready, a folder it won't grant, a
   file or a path under one, one another live task works in) is an error result she tells the
   owner; there is no task.
@@ -555,12 +561,17 @@ never resumes a task. `app.onStop` stops it before the chat runner shuts down.
   `waiting` hook, once `task.json` is written, which the runner passes on to a call of hers
   ([Calls](#calls)). It is never called at a start, an answer, an end or an interruption, nor for a
   pause a cancel has already asked to end; a throw is logged, and the pause stands.
-- **A cancel** (Stop, her `stop_task`, a Deny at the start, Assistant Mode off, a deleted chat)
-  aborts the run, which stores `end(cancelled)`, or stores it under the task's lock when no run
-  holds it, and drops the queued lines. A run already past its last check for the cancel stores
-  its pause anyway; the cancel then ends the paused task as well, so it never answers with a live
-  one. It works with Assistant Mode off, and on a damaged transcript. A cancelled task never runs
-  again, and no record is ever deleted: they say what was done on the computer.
+- **A plan getting further** calls the `progress` hook beside it, once the snapshot holds the
+  plan: each time a `todo` result raises its done count, never for the same count or a lower one,
+  a `todo` that failed, another tool, or the plan a resume reads back. The runner decides whether
+  a call is told ([Display](#display)); a throw is logged, and the run goes on.
+- **A cancel** (Stop, on the card or in `/stop`'s dialog, her `stop_task`, a Deny at the start,
+  Assistant Mode off, a deleted chat) aborts the run, which stores `end(cancelled)`, or stores it
+  under the task's lock when no run holds it, and drops the queued lines. A run already past its
+  last check for the cancel stores its pause anyway; the cancel then ends the paused task as well,
+  so it never answers with a live one. It works with Assistant Mode off, and on a damaged
+  transcript. A cancelled task never runs again, and no record is ever deleted: they say what was
+  done on the computer.
 - **An app task goes on from its card:** `laplace-task --resume` refuses one, exiting 2 before it
   takes the lock.
 
@@ -644,6 +655,8 @@ start reports the task again.
   ([chat.md](chat.md#her-view-viewof)): the worker's report may quote a page it fetched, so her
   view holds it only as a tool's output, never as a developer or user message, whether she started
   the task in text or on a call. A tool-less turn on an Anthropic account is the exception below.
+  Her view never makes a stub of it, or of the `started` result, as it does of her older results
+  she waited for, `check_task`'s included: the `final` is the one record of what the task did.
 - **Her report turn** runs as a greeting does: no viewer line, streamed through `GET live`, in text
   unless the chat's reply mode is voice, and offered none of her task tools and no hint. It answers
   a fixed nudge, `taskEndedNudge(call)` in `tool.ts`, stored as her developer `context` block:
@@ -689,14 +702,17 @@ takes her tasks away from it until it ends.
   during a call.
 - **A pause:** when a task of hers in the chat pauses for the owner (a path, a site, spend, a stall
   or an unpriced request), the manager's `waiting` hook has the runner hand the call
-  `taskWaitingNudge(call)`, once per pause, with her `tool-call` and `started` result first when
-  the call's log lacks them. It names no path or site:
+  `taskWaitingNudge(call)`, once per pause and whatever the chat's display, with her `tool-call`
+  and `started` result first when the call's log lacks them, the call without its `said`, which
+  the call's seed holds as her line already. It names no path or site:
   "你用 start_task 在电脑上做的事（调用 <call id>）停下来了，要等对方在聊天里的任务卡片上点一下才会
   接着做；嘴上答应不算，得在卡片上点。用一句话自然地提醒对方去看看卡片。"
   It is due only while the task still asks what it paused on, asked as a reply would take the
   nudge: answered on the card, or ended, before then, it is dropped. A reply that took it while it
   was due still speaks it, even when the owner answers the card before she does. With no call,
   nothing is said: the waiting bar shows it.
+- **A plan getting further,** in a verbose chat alone: the manager's `progress` hook has the
+  runner hand the call `taskProgressNudge(call)`, at most once every 30 s ([Display](#display)).
 - **An end during the call:** `report()` stores the `final`, then hands the call the end, with her
   `tool-call` and `started` result first when the call's log lacks them, and `taskEndedNudge(call)`.
   A cancel goes with no nudge, only settling her call there, and is never held.
@@ -724,8 +740,9 @@ takes her tasks away from it until it ends.
 - **Told on the call:** an end is told there only by a line of hers, cut off or whole, after a
   reply of hers recorded its nudge. The runner follows the call's log in its order through the
   binding's `onContext` and `onTranscript` ([chat.md](chat.md#the-binding)); a reply that took
-  several nudges records them joined by a blank line, and each counts. `call-ended` names the ends
-  she told in `told`, left out when there are none.
+  several nudges records them joined by a blank line, and each counts. Only `taskEndedNudge(call)`
+  itself counts, so a reply that took a milestone's nudge alone tells no end. `call-ended` names
+  the ends she told in `told`, left out when there are none.
 - **After the call,** once `call-ended` is stored and unless the server is stopping, the runner
   tells in text, one report turn at a time while the chat is hers alone, each end the call held,
   and each it was handed that she didn't tell there. It never scans the log for finals: it tells
@@ -751,6 +768,72 @@ takes her tasks away from it until it ends.
   ends she told on it stay untold, so the next call has her tell them again, unless a line of hers
   in text comes first.
 
+### Display
+
+How much of her tasks a chat shows, and what she says of them on a call. A chat's display is the
+last `settings` event that sets `display` (`displayOf`), else the app's `chats.display`
+(`CHAT_DISPLAY`, default `normal`, [personas.md](personas.md#settingsyaml)), read where each
+decision is made. The owner sets the chat's with `/focus`, `/normal` or `/verbose` in the
+composer, or with Task Display in its Chat Settings, the only control during a call, when the
+composer takes nothing; the app's is Task Display on Settings → Assistant Mode
+([web-app.md](web-app.md#tasks)). A command is never a line: it stores the `settings` event alone,
+starts no turn, and never reaches her.
+
+| Display | In the chat | On a call |
+| --- | --- | --- |
+| `focus` | Task cards are hidden, but for one Show Task or the Tasks list brings into view, until the display changes. Her lines, her words before her calls included, and the waiting bar stay | Her line on each start, her pointer at each pause, and each end |
+| `normal` | Each task is one card, its steps behind Show Steps | As in focus |
+| `verbose` | Her newest running task's card opens its steps, streamed live from the task and never stored | As in normal, and a short line each time its plan gets further |
+
+- **What no display changes:** her prompt, her hint, her tools, the status block and her nudges,
+  whose Chinese is load-bearing and checked only by billed runs; and the waiting bar, since a task
+  that waits on the owner must be seen. In focus, her lines and the status block still speak of
+  the task card: the waiting bar carries its question and buttons, and Show Task brings it back.
+- **In text, verbose adds no lines of hers:** the card shows the steps for nothing, while each line
+  would be a turn that bills, is stored, and feeds Mem0 progress chatter.
+- **Production ignores it:** its endpoint runs no tasks, and its window rebuilds a browser's
+  `settings` event from `replyMode` and `chainLimit` alone ([chat.md](chat.md#the-window)).
+
+#### `/stop`
+
+`/stop` opens a dialog of the chat's live tasks, read afresh, newest first: "Stop this task?" with
+one, "Stop which task?" with several. Each row's Stop is the card's Stop (`DELETE tasks/:id`), and
+Cancel stops nothing; with no live task a toast says so. It takes nothing after it: the cards show
+no number for the owner to name, so `/stop 2` is refused. She says nothing about it: a cancel gets
+its `final` and no turn, in text and on a call ([The report](#the-report)).
+
+#### Milestones on a call
+
+In a verbose chat, a call that takes her tasks ([Calls](#calls)) is told as a task's plan gets
+further, through the manager's `progress` hook and row 31 of the call's Floor
+([voice-engine.md](voice-engine.md#tools-and-async-results)), as a pause's pointer is:
+
+- **A milestone** is the done count of the task's plan (`todo`) rising past what this call was
+  last handed for that task, while some item is still to do. The plan's last item is the end's to
+  tell, and tool steps, files written and a task with no plan give none. The runner reads the task
+  as it stands when it hands the call one (`taskProgress`, `milestones.ts`), so steps done
+  meanwhile make one milestone, and a step done just before a pause or the end makes none.
+- **The display is read at each hand-off,** from the log: leaving verbose stops the next, though
+  one already handed may still be said, and turning it on counts from the next step done.
+- **At most one every 30 s per call** (`MILESTONE_GAP_MS`), with no timer: a step done inside the
+  gap is dropped, and the next one past it, or the end, says the count.
+- **`due`** holds while the task still runs, the milestone is the newest handed for it, and no
+  line of the owner's has been stored on the call since, so her answer to 到哪了 isn't followed by
+  the same step again.
+- **The nudge,** `taskProgressNudge(call)` in `tool.ts`, names no count, step or path: a count in
+  it would be stale by the time she speaks, and she reads the plan's count in the status block,
+  which her follow-up gets fresh:
+  "你用 start_task 在电脑上做的事（调用 <call id>）又往前做了一些。照「后台的活」里它那条的计划步数，
+  用一句话随口告诉对方现在做完几步了；具体是哪一步你看不到，别猜，也别念路径或文件名。"
+- **It never asks her to tell an end:** only `taskEndedNudge(call)` itself does ([Calls](#calls)).
+- **What it costs:** a follow-up reply each, with Mem0's store of the call's lines and a short line
+  spoken. On Gemini 3.8 Flash through OpenRouter with Mem0 on, the owner's ledger puts that at
+  about $0.016 ($0.0063 her mind, $0.0092 Mem0, under $0.001 of Fish's `drama-3`), about $0.019
+  once `drama-3`'s price rises after 2026-11-30, and $0.03 or more on `google/gemini-4-hydrogen`.
+  The gap holds it to 2 a minute, about $0.033.
+- **What is stored:** her milestone line, as heard, is a call line in the chat like any other, so
+  Mem0 may keep progress chatter. The nudge stays in the call's own log.
+
 ### The routes
 
 `apps/bot/src/local/routes/tasks.ts`, under `/api/local`, each needing the session. Every `:id` is
@@ -768,10 +851,10 @@ checked as a lowercase UUID before any lookup (400 `bad-request`), and an unknow
 
 ### Checking her side
 
-The tests script every mind, and `local-smoke` walks tasks in a chat and on a call with a fake
-mind ([web-app.md](web-app.md#the-browser-smoke-test)). Whether a real model follows her hint, her
-tools' descriptions, the status block and her nudges takes billed checks, after a change to any of
-them.
+The tests script every mind, and `local-smoke` walks tasks in a chat, in each display and on a
+call with a fake mind ([web-app.md](web-app.md#the-browser-smoke-test)). Whether a real model
+follows her hint, her tools' descriptions, the status block and her nudges takes billed checks,
+after a change to any of them.
 
 **A chat, on OpenRouter,** about $0.20, most of it the worker: Assistant Mode on a model you pick,
 her mind on the model to check, a temporary data home with `EIDOLON_NO_DOTENV=1` and only the
@@ -797,6 +880,9 @@ OpenRouter key exported, so Mem0 stays out. In one chat with milky-green:
 5. Ask 帮我打开它: no task starts.
 6. Hang Up. The log holds her call and its started result among the call's lines, the `final`, her
    line after it, a `call-ended` whose `told` names her call, and no report in text.
+7. Type `/verbose`, call again, and ask for a task whose plan takes three or more steps, such as a
+   page with a list, a form and a style sheet. As its steps finish she says short lines on how far
+   it has got, at most one every 30 s, never naming a step or a path and never twice for one.
 
 A change to the voice loop also needs its real calls
 ([voice-engine.md](voice-engine.md#real-calls)), billed the same way.

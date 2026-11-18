@@ -327,6 +327,40 @@ describe("an OpenAI-compatible mind", () => {
     expect(seen[0]?.headers.get("authorization")).toBeNull();
   });
 
+  test("her words before a call go as its message's content, beside its tool_calls, on every dialect", async () => {
+    reply = () => completions([{ choices: [{ delta: {}, finish_reason: "stop" }] }]);
+    const said = {
+      role: "assistant",
+      content: "我查查",
+      tool_calls: [
+        { id: "c1", type: "function", function: { name: "recall_streams", arguments: "{}" } },
+      ],
+    };
+    const view = [
+      { role: "user", content: "还记得吗" },
+      said,
+      { role: "tool", tool_call_id: "c1", content: "COMPLETED" },
+    ];
+    await drain(createMind(), ask({ messages: view }));
+    setEnv({ LLM_PROVIDER: "deepseek", DEEPSEEK_API_KEY: "dk", DEEPSEEK_BASE_URL: base() });
+    await drain(createMind(), ask({ messages: view }));
+    const sent = seen.map((request) => (request.body.messages as unknown[])[2]);
+    expect(sent).toEqual([said, { ...said, reasoning_content: "" }]);
+  });
+
+  test("toolChoice goes as tool_choice beside her tools, and never without them", async () => {
+    setEnv({ LLM_PROVIDER: "openai", OPENAI_API_KEY: "sk", OPENAI_BASE_URL: base() });
+    reply = () => completions([{ choices: [{ delta: {}, finish_reason: "stop" }] }]);
+    await drain(createMind(), ask({ tools: [SELFIE], toolChoice: "none" }));
+    await drain(createMind(), ask({ toolChoice: "none" }));
+    await drain(createMind(), ask({ tools: [SELFIE] }));
+    expect(seen.map(({ body }) => [body.tool_choice, "tools" in body])).toEqual([
+      ["none", true],
+      [undefined, false],
+      [undefined, true],
+    ]);
+  });
+
   /** A chunk carrying a fragment of call `index`. */
   const call = (index: number, fn: Record<string, string>, id?: string) => ({
     choices: [
@@ -898,6 +932,56 @@ describe("an Anthropic mind", () => {
       expect(sent(2)?.[1]?.content).toEqual([use("t1"), use("t2")]);
     });
 
+    test("goes back exactly as Claude sent it, words before the call included, when they are its message's content", async () => {
+      replying([
+        ...thought(0, "先看看", "sig-a"),
+        ...said(1, "我先拍"),
+        ...thought(2, "就这张", "sig-b"),
+        ...called(3, "t1", '{"scene":"t1"}'),
+        stopped("tool_use"),
+      ]);
+      const mind = createMind();
+      const asked = [{ role: "user", content: "拍一张" }];
+      await drain(mind, ask({ messages: asked, tools: [SELFIE] }));
+      const round = { ...calls("t1"), content: "我先拍" };
+      await drain(
+        mind,
+        ask({ messages: [...asked, round, result("t1", "海边")], tools: [SELFIE] }),
+      );
+      expect(sent(1)?.[1]?.content).toEqual([
+        signed("先看看", "sig-a"),
+        { type: "text", text: "我先拍" },
+        signed("就这张", "sig-b"),
+        use("t1"),
+      ]);
+      // The request ends on the result, so no filler turn follows it.
+      expect(sent(1)).toHaveLength(3);
+      // A mind that never saw the reply sends the turn as her view holds it.
+      await drain(
+        createMind(),
+        ask({ messages: [...asked, round, result("t1", "海边")], tools: [SELFIE] }),
+      );
+      expect(sent(2)?.[1]?.content).toEqual([{ type: "text", text: "我先拍" }, use("t1")]);
+    });
+
+    test("goes back under tool_choice none, which goes beside her tools and never without them", async () => {
+      replying([
+        ...thought(0, "先拍一张", "sig-1"),
+        ...called(1, "t1", '{"scene":"t1"}'),
+        stopped("tool_use"),
+      ]);
+      const mind = createMind();
+      const asked = [{ role: "user", content: "拍一张" }];
+      await drain(mind, ask({ messages: asked, tools: [SELFIE] }));
+      const answered = [...asked, calls("t1"), result("t1", "海边")];
+      await drain(mind, ask({ messages: answered, tools: [SELFIE], toolChoice: "none" }));
+      expect(seen[1]?.body.tool_choice).toEqual({ type: "none" });
+      expect(sent(1)?.[1]?.content).toEqual([signed("先拍一张", "sig-1"), use("t1")]);
+      await drain(createMind(), ask({ toolChoice: "none" }));
+      expect("tool_choice" in (seen[2]?.body ?? {})).toBe(false);
+      expect("tool_choice" in (seen[0]?.body ?? {})).toBe(false);
+    });
+
     test("redacted thinking goes back with the rest", async () => {
       replying([
         {
@@ -980,6 +1064,42 @@ describe("an Anthropic mind", () => {
       { role: "user", content: [{ type: "text", text: "在干嘛", ...marked }] },
     ]);
     expect(seen[0]?.body.tools).toEqual([]);
+  });
+
+  test("with no tools offered, the words she wrote before a call stay her line, ahead of its note", async () => {
+    reply = () => messages([start, { type: "message_delta", delta: { stop_reason: "end_turn" } }]);
+    const view = [
+      { role: "user", content: "温柔一点" },
+      {
+        role: "assistant",
+        content: "我换个声音",
+        tool_calls: [
+          {
+            id: "toolu_1",
+            type: "function",
+            function: { name: "change_voice_style", arguments: '{"style":"温柔"}' },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "toolu_1", content: "COMPLETED" },
+      { role: "assistant", content: "好呀" },
+      { role: "user", content: "在干嘛" },
+    ];
+    await drain(createMind(), ask({ messages: view }));
+    const marked = { cache_control: { type: "ephemeral" } };
+    expect(seen[0]?.body.messages).toEqual([
+      { role: "user", content: "温柔一点" },
+      { role: "assistant", content: "我换个声音" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: '（你调用了 change_voice_style {"style":"温柔"}）' },
+          { type: "text", text: "（change_voice_style 返回：COMPLETED）", ...marked },
+        ],
+      },
+      { role: "assistant", content: "好呀" },
+      { role: "user", content: [{ type: "text", text: "在干嘛", ...marked }] },
+    ]);
   });
 
   test("tools run only when Claude stopped to call them", async () => {

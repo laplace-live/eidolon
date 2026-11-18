@@ -1,7 +1,14 @@
 // The local web app's admin API on the wire, under /api/local: what apps/bot/src/local serves and
 // apps/web imports with `import type`. Its only import is @eidolon/chat's types, which are
 // browser-safe and erased, so the SPA's typecheck sees no Bun or Node.
-import type { ChatEvent, ChatHeader, ChatSummary, ParticipantId, ReplyMode } from "@eidolon/chat";
+import type {
+  ChatDisplay,
+  ChatEvent,
+  ChatHeader,
+  ChatSummary,
+  ParticipantId,
+  ReplyMode,
+} from "@eidolon/chat";
 
 /** Every route the local router serves, as `<METHOD> <path>`; `:name` is one path segment. */
 export const LOCAL_ROUTES = [
@@ -1066,6 +1073,11 @@ export interface ChatContents {
    * two or more, none of them on a realtime model.
    */
   readonly groupCall: boolean;
+  /**
+   * The app's chats.display as the read was made, which the chat shows her tasks by until a
+   * `settings` event of its own sets a `display`.
+   */
+  readonly defaultDisplay: ChatDisplay;
 }
 
 export interface ChatCallInfo {
@@ -1127,13 +1139,15 @@ export interface ChatVoiceQuery {
 
 /**
  * PATCH chats/:id, one field at a time: a `title` of 1 to 80 characters on one line, the
- * `chainLimit` of persona-to-persona hops after each viewer line, 0 to 6, or the `replyMode` that
- * overrides every persona's own; each setting is kept as a `settings` event.
+ * `chainLimit` of persona-to-persona hops after each viewer line, 0 to 6, the `replyMode` that
+ * overrides every persona's own, or the `display` of her tasks there, focus, normal or verbose; each
+ * setting is kept as a `settings` event.
  */
 export type ChatUpdateRequest =
   | { readonly title: string }
   | { readonly chainLimit: number }
-  | { readonly replyMode: ReplyMode };
+  | { readonly replyMode: ReplyMode }
+  | { readonly display: ChatDisplay };
 
 /**
  * POST chats/:id/participants: personas to add, who aren't in the chat, and to remove, who are,

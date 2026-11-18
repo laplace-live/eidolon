@@ -22,6 +22,7 @@ import {
   type TaskChat,
   type TaskSnapshot,
   type TaskStatus,
+  type TodoStatus,
   tasksDir,
   writeSnapshot,
 } from "@eidolon/assistant";
@@ -1850,5 +1851,102 @@ describe("waiting", () => {
     await until(() => logs.lines().some((each) => each.startsWith("ERROR") && each.includes(id)));
     expect((await onDisk(id))?.status).toBe("paused");
     expect((await tasks.approve(id, { answer: "deny" })).status).toBe("running");
+  });
+});
+
+describe("progress", () => {
+  /** todo's arguments: a plan whose steps are in `statuses`. */
+  const plan = (...statuses: TodoStatus[]) => ({
+    items: statuses.map((status, n) => ({ text: `Step ${n + 1}`, status })),
+  });
+  const todo = (id: string, args: Record<string, unknown>) => calls([call(id, "todo", args)]);
+  /** The plan's done count in each snapshot the hook was called with. */
+  const counts = (told: readonly TaskSnapshot[]) =>
+    told.map((each) => each.todo?.filter((item) => item.status === "done").length);
+
+  /** A manager whose progress hook records each snapshot it is called with. */
+  async function watched(): Promise<{ tasks: TaskManager; told: TaskSnapshot[] }> {
+    const told: TaskSnapshot[] = [];
+    const tasks = manager({ progress: (snapshot) => told.push(snapshot) });
+    await tasks.boot();
+    return { tasks, told };
+  }
+
+  test("is called each time a todo result raises the plan's done count, the snapshot holding it", async () => {
+    settings = { ...settings, folders: [work] };
+    minds.script("Plan", [
+      todo("t1", plan("in_progress", "pending", "pending")),
+      todo("t2", plan("done", "in_progress", "pending")),
+      todo("t3", plan("done", "done", "done")),
+      says("Done."),
+    ]);
+    const { tasks, told } = await watched();
+    const { id } = await tasks.start({ goal: "Plan", folder: join(work, "plan") }, ORIGIN);
+    await reach(tasks, id, "succeeded");
+    expect(counts(told)).toEqual([1, 3]);
+    expect(told[0]).toMatchObject({
+      id,
+      status: "running",
+      todo: plan("done", "in_progress", "pending").items,
+    });
+  });
+
+  test("is not called for the same count or a lower one, a todo that failed, or another tool", async () => {
+    settings = { ...settings, folders: [work] };
+    minds.script("Plan", [
+      todo("t1", plan("done", "in_progress", "pending")),
+      todo("t2", plan("done", "in_progress", "pending")),
+      todo("t3", plan("in_progress", "pending", "pending")),
+      todo("t4", { items: "not a list" }),
+      calls([call("l1", "ls", { path: "." })]),
+      // Past the lower count the plan was written over with.
+      todo("t5", plan("done", "in_progress", "pending")),
+      says("Done."),
+    ]);
+    const { tasks, told } = await watched();
+    const { id } = await tasks.start({ goal: "Plan", folder: join(work, "plan") }, ORIGIN);
+    await reach(tasks, id, "succeeded");
+    expect(
+      transcript(id).flatMap((entry) => (entry.type === "tool-result" ? [entry.isError] : [])),
+    ).toEqual([false, false, false, true, false, false]);
+    expect(counts(told)).toEqual([1, 1]);
+  });
+
+  test("is not called for the plan a resume reads back, only for what the run then does", async () => {
+    const items = plan("done", "in_progress", "pending").items;
+    const seeded = await seed({ status: "interrupted", todo: items }, [
+      { type: "assistant", text: "", calls: [call("t1", "todo", { items })] },
+      { type: "tool-start", callId: "t1", name: "todo" },
+      {
+        type: "tool-result",
+        callId: "t1",
+        name: "todo",
+        content: "Todo list (1/3 done)",
+        isError: false,
+        details: { items },
+      },
+    ]);
+    minds.script("Seeded", [todo("t2", plan("done", "done", "in_progress")), says("Done.")]);
+    const { tasks, told } = await watched();
+    await reach(tasks, seeded.id, "succeeded");
+    expect(counts(told)).toEqual([2]);
+  });
+
+  test("a throw is logged, and the run goes on", async () => {
+    settings = { ...settings, folders: [work] };
+    minds.script("Throws", [todo("t1", plan("done", "pending")), says("Done.")]);
+    const tasks = manager({
+      progress: () => {
+        throw new Error("no call to tell");
+      },
+    });
+    await tasks.boot();
+    const { id } = await tasks.start({ goal: "Throws", folder: join(work, "t") }, ORIGIN);
+    expect((await reach(tasks, id, "succeeded")).todo).toEqual(plan("done", "pending").items);
+    expect(
+      logs
+        .lines()
+        .some((each) => each.startsWith("ERROR") && each.includes(`${id}'s progress wasn't told`)),
+    ).toBe(true);
   });
 });

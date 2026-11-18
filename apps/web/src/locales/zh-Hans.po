@@ -43,6 +43,14 @@ msgstr "其中 {amount} 是按标价估算的。"
 msgid "{chars} characters · {lines} lines"
 msgstr "{chars} 个字符 · {lines} 行"
 
+#: src/features/chats/composer.tsx
+msgid "{command} isn't a command"
+msgstr "{command} 不是命令"
+
+#: src/features/chats/composer.tsx
+msgid "{command} takes nothing after it"
+msgstr "{command} 后面不能跟别的内容"
+
 #: src/features/usage/tables.tsx
 msgid "{count, plural, one {{amount} character} other {{amount} characters}}"
 msgstr "{count, plural, other {{amount} 字符}}"
@@ -1068,6 +1076,7 @@ msgstr "无法连接 Eidolon，请确认它仍在终端中运行。"
 #: src/features/studio/references-section.tsx
 #: src/features/studio/video-table.tsx
 #: src/features/studio/voice-styles-card.tsx
+#: src/features/tasks/stop-picker.tsx
 msgid "Cancel"
 msgstr "取消"
 
@@ -1534,6 +1543,10 @@ msgstr "每个模型，以及它为她承担的任务。"
 msgid "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
 msgstr "每项分数都在 0 到 1 之间。被点名：这句话是对她说的。感兴趣：话题是她在意的。"
 
+#: src/features/chats/labels.ts
+msgid "Each task shows as one card that updates as it works. On a call, she tells you when a task starts, waits for you and ends."
+msgstr "每个任务显示为一张卡片，随着进展更新。通话中，任务开始、等你处理和结束时她会告诉你。"
+
 #: src/features/tasks/transcript-view.tsx
 msgid "Earlier steps summarized, from {tokens} tokens"
 msgstr "较早的步骤已概括（原 {tokens} token）"
@@ -1854,6 +1867,15 @@ msgstr "Fish 上有这个声音"
 msgid "Fix the highlighted values first."
 msgstr "请先修正标出的值。"
 
+#: src/features/chats/labels.ts
+msgctxt "chat display"
+msgid "Focus"
+msgstr "专注"
+
+#: src/features/chats/labels.ts
+msgid "Focus is on for this chat"
+msgstr "这个聊天已切换到专注"
+
 #: src/features/tasks/list.tsx
 #: src/features/tasks/task-card.tsx
 msgid "Folder"
@@ -1997,6 +2019,10 @@ msgstr "她的知识、直播存档和记忆要根据你说话的转写才能提
 msgid "Her Name"
 msgstr "她的名字"
 
+#: src/features/chats/labels.ts
+msgid "Her newest running task's card also shows its steps as they happen. On a call, she also tells you how far a task's plan has got as it goes, which costs a reply each time."
+msgstr "她最新在做的任务，卡片上还会实时显示每一步。通话中，她还会随时告诉你任务的计划做到哪了，每次都多花一次回复的费用。"
+
 #: src/features/home/persona-grid.tsx
 msgid "Her own name, prompt and voice."
 msgstr "全新的名字、提示词和声音。"
@@ -2018,8 +2044,8 @@ msgid "Her providers take no key."
 msgstr "她用的服务商都不需要密钥。"
 
 #: src/features/studio/advanced-section.tsx
-msgid "Her settings the other sections don't show: where her prompt and index live, and the ids Mem0 files her memories under."
-msgstr "其他部分没有显示的设置：她的提示词和索引存放在哪里，以及 Mem0 归档她的记忆所用的 id。"
+msgid "Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools."
+msgstr "其他部分没有显示的设置：她的提示词和索引存放在哪里、Mem0 归档她的记忆所用的 id，以及一次回复里最多几轮可以调用工具。"
 
 #: src/features/setup/new-persona.tsx
 msgid "Her Voice"
@@ -2070,9 +2096,17 @@ msgstr "通话时如何检索她知道的事：每个索引提供多少候选、
 msgid "How her videos become transcripts: the language and model Soniox transcribes with, and the model that refines them, with how many chunks it works on at once."
 msgstr "她的视频如何变成转写稿：Soniox 转写用的语言和模型，以及整理转写稿的模型和它同时处理的段数。"
 
+#: src/components/settings-form/labels.ts
+msgid "How many rounds of one reply may call her tools. Each round bills a request to her mind, or more when a malformed reply is asked for again. If the last still calls one, one more round asks her to answer, or to hand the work to a task. Default 8."
+msgstr "她一次回复里最多几轮可以调用工具。每轮向她的大脑计费请求一次，回复格式出错重新请求时会更多。最后一轮还在调用工具的话，会再给她一轮，让她直接回答，或者把活交给任务。默认 8。"
+
 #: src/features/chats/chat-settings.tsx
 msgid "How many times personas may answer each other after each of your lines, once two or more are in the chat. At 0 they only answer you."
 msgstr "聊天里有两个或更多人设时，你每说一句，她们之间最多可以互相接话几次。设为 0 时，她们只回答你。"
+
+#: src/components/settings-form/labels.ts
+msgid "How much of her tasks each chat shows, until the chat picks its own with /focus, /normal or /verbose. Focus hides task cards, and Verbose opens her newest running task's steps and, on a call, has her say how far a task's plan has got, which costs a reply each time. Default Normal."
+msgstr "每个聊天显示多少任务内容，直到这个聊天用 /focus、/normal 或 /verbose 选了自己的。专注会隐藏任务卡片；详细会展开她最新在做的任务的每一步，通话中还会让她说说任务的计划做到哪了，每次都多花一次回复的费用。默认普通。"
 
 #: src/components/settings-form/labels.ts
 msgid "How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5."
@@ -2307,6 +2341,7 @@ msgstr "它会替换环境变量 <0>{replacing}</0> 设置的同名风格。"
 msgid "It still hasn't stopped since you cancelled it. Force Stop ends it at once, without letting it finish what it is writing: an index it was building can be left half built, so run that job again afterwards."
 msgstr "取消之后它仍然没有停下。强制停止会立刻结束它，不等它写完手头的内容：正在构建的索引可能只完成一半，之后请重新运行那个作业。"
 
+#: src/features/tasks/stop-picker.tsx
 #: src/features/tasks/task-card.tsx
 msgid "It stops at once and can't go on afterwards. The files it already wrote stay."
 msgstr "它会立刻停止，之后无法再继续。已经写入的文件会保留。"
@@ -2859,6 +2894,10 @@ msgstr "{during}没有花费记录。通话、视频作业和 MCP 检索运行�
 msgid "No stream catalog yet."
 msgstr "还没有直播目录。"
 
+#: src/features/chats/chat-view.tsx
+msgid "No task in this chat is running or waiting for you."
+msgstr "这个聊天里没有正在做或在等你处理的任务。"
+
 #: src/features/tasks/list.tsx
 msgid "No tasks yet"
 msgstr "还没有任务"
@@ -2898,6 +2937,15 @@ msgstr "没有听清说了什么。"
 #: src/components/settings-form/labels.ts
 msgid "None"
 msgstr "不使用"
+
+#: src/features/chats/labels.ts
+msgctxt "chat display"
+msgid "Normal"
+msgstr "普通"
+
+#: src/features/chats/labels.ts
+msgid "Normal is on for this chat"
+msgstr "这个聊天已切换到普通"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Not built"
@@ -2968,6 +3016,10 @@ msgstr "没有可检查的内容：尚未保存密钥。"
 #: src/components/settings-form/settings-card.tsx
 msgid "Nothing to set here."
 msgstr "这里没有可设置的项。"
+
+#: src/features/chats/chat-view.tsx
+msgid "Nothing to stop"
+msgstr "没有可以停止的任务"
 
 #: src/features/usage/spend-chart.tsx
 msgid "Nothing was spent in this range."
@@ -3674,6 +3726,10 @@ msgstr "重试"
 msgid "Revert"
 msgstr "还原"
 
+#: src/components/settings-form/labels.ts
+msgid "Rounds per Reply"
+msgstr "每次回复轮数"
+
 #: src/features/studio/knowledge-section.tsx
 msgid "Rows"
 msgstr "行数"
@@ -3842,6 +3898,10 @@ msgstr "自拍"
 #: src/features/chats/composer.tsx
 msgid "Send"
 msgstr "发送"
+
+#: src/features/chats/composer.tsx
+msgid "Send it alone. To send a message, don't start it with a slash."
+msgstr "单独发送它。要发消息的话，开头别用斜杠。"
 
 #: src/features/chats/voice-recorder.tsx
 msgid "Send Voice Message"
@@ -4248,6 +4308,7 @@ msgstr "还在等{name}回应。如果一直没有回应，请再说一遍。"
 
 #: src/features/chats/composer.tsx
 #: src/features/studio/add-videos.tsx
+#: src/features/tasks/stop-picker.tsx
 #: src/features/tasks/task-card.tsx
 msgid "Stop"
 msgstr "停止"
@@ -4256,9 +4317,14 @@ msgstr "停止"
 msgid "Stop Task"
 msgstr "停止任务"
 
+#: src/features/tasks/stop-picker.tsx
 #: src/features/tasks/task-card.tsx
 msgid "Stop this task?"
 msgstr "停止这个任务？"
+
+#: src/features/tasks/stop-picker.tsx
+msgid "Stop which task?"
+msgstr "停止哪个任务？"
 
 #: src/features/tasks/labels.ts
 msgctxt "task status"
@@ -4379,6 +4445,15 @@ msgstr "正在和她聊天"
 #: src/features/usage/tables.tsx
 msgid "Task"
 msgstr "任务"
+
+#: src/features/chats/labels.ts
+msgid "Task cards are hidden, but a task that waits for you still shows above the message box. On a call, she still tells you when a task starts, waits for you and ends."
+msgstr "任务卡片会隐藏，但任务等你处理时，消息框上方仍会提示。通话中，任务开始、等你处理和结束时她照样会告诉你。"
+
+#: src/components/settings-form/labels.ts
+#: src/features/chats/chat-settings.tsx
+msgid "Task Display"
+msgstr "任务显示"
 
 #: src/features/tasks/task-card.tsx
 msgid "Task:"
@@ -5071,6 +5146,10 @@ msgstr "TURN 用户名"
 msgid "Turns a video's audio into a transcript with Soniox."
 msgstr "用 Soniox 把视频的音频转写成文字稿。"
 
+#: src/features/chats/composer.tsx
+msgid "Type /focus, /normal or /verbose to choose how much of her tasks this chat shows, or /stop to stop one."
+msgstr "输入 /focus、/normal 或 /verbose 选择这个聊天显示多少任务内容，或输入 /stop 停止一个任务。"
+
 #: src/features/call/call-controls.tsx
 msgid "Type a message to {name}"
 msgstr "给{name}发消息"
@@ -5094,6 +5173,10 @@ msgstr "有未保存的修改"
 #: src/features/chats/chat-settings.tsx
 msgid "Until you choose, each persona answers as her own settings say."
 msgstr "在你选择之前，每个人设按她自己的设置回复。"
+
+#: src/features/chats/chat-settings.tsx
+msgid "Until you choose, this chat follows Settings: {display}."
+msgstr "在你选择之前，这个聊天跟随设置：{display}。"
 
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/references-section.tsx
@@ -5175,6 +5258,15 @@ msgstr "用于：{roles}。"
 #: src/features/chats/labels.ts
 msgid "Using a tool…"
 msgstr "正在使用工具…"
+
+#: src/features/chats/labels.ts
+msgctxt "chat display"
+msgid "Verbose"
+msgstr "详细"
+
+#: src/features/chats/labels.ts
+msgid "Verbose is on for this chat"
+msgstr "这个聊天已切换到详细"
 
 #: src/features/settings/yt-dlp-state.tsx
 msgid "Version {tag}"
@@ -5508,6 +5600,10 @@ msgstr "我"
 msgctxt "chat speaker"
 msgid "You"
 msgstr "我"
+
+#: src/features/chats/chat-settings.tsx
+msgid "You can also type /focus, /normal or /verbose in the message box."
+msgstr "也可以在消息框里输入 /focus、/normal 或 /verbose。"
 
 #: src/features/tasks/task-card.tsx
 msgid "You denied it when it asked to start."

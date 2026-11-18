@@ -365,6 +365,65 @@ describe("a voice message from her", () => {
     });
   });
 
+  test("speaks her last round alone: the words before her call stay text on it, and the clip's transcript is that round's", async () => {
+    const selfie: LlmTool = {
+      schema: { name: "take_selfie", description: "", properties: {}, required: [] },
+      cancelOnInterruption: true,
+      timeoutSecs: null,
+      run: async () => ({ ok: true }),
+    };
+    const { mind } = fakeMind(
+      [
+        { type: "text", text: "等我一下" },
+        { type: "tool-calls", calls: [{ id: "c1", name: "take_selfie", arguments: {} }] },
+        DONE,
+      ],
+      [{ type: "text", text: "拍好啦" }, DONE],
+    );
+    const { speech, spoken } = fakeSpeech();
+    const engine = deps(mind, speech, { parts: async () => ({ ...PARTS, tools: [selfie] }) });
+    const outputs = await collect(runTurn(voiceTurn(chat(header("vera"), user("自拍"))), engine));
+    expect(spoken.map(({ text }) => text)).toEqual(["拍好啦"]);
+    const events = eventsOf(outputs);
+    expect(events[0]).toMatchObject({ type: "tool-call", said: "等我一下" });
+    expect(events.at(-1)).toMatchObject({ type: "message", text: "拍好啦", modality: "voice" });
+  });
+
+  test("a reply whose last round says nothing keeps her photo with no voice, after her words on the call", async () => {
+    const selfie: LlmTool = {
+      schema: { name: "take_selfie", description: "", properties: {}, required: [] },
+      cancelOnInterruption: true,
+      timeoutSecs: null,
+      run: async (_call, effects) => {
+        await effects.sendServerMessage({ type: "selfie", urls: ["/api/selfie/a.png"] });
+        return { ok: true };
+      },
+    };
+    const { mind } = fakeMind([
+      { type: "text", text: "等我一下" },
+      { type: "tool-calls", calls: [{ id: "c1", name: "take_selfie", arguments: {} }] },
+      DONE,
+    ]);
+    const { speech, spoken } = fakeSpeech();
+    const engine = deps(mind, speech, { parts: async () => ({ ...PARTS, tools: [selfie] }) });
+    const outputs = await collect(runTurn(voiceTurn(chat(header("vera"), user("自拍"))), engine));
+    expect(spoken).toEqual([]);
+    expect(outputs.some((output) => output.type === "tool" && output.name === "voice")).toBe(false);
+    expect(eventsOf(outputs).map((event) => event.type)).toEqual([
+      "tool-call",
+      "tool-result",
+      "message",
+    ]);
+    expect(eventsOf(outputs)[0]).toMatchObject({ said: "等我一下" });
+    expect(eventsOf(outputs).at(-1)).toEqual({
+      type: "message",
+      id: "id-2",
+      speaker: { kind: "persona", id: "vera" },
+      text: "",
+      attachments: [{ kind: "image", name: "photo.png", mime: "image/png" }],
+    });
+  });
+
   test("a reply with no words is stored as it would be in text, unspoken", async () => {
     const { speech, spoken } = fakeSpeech();
     for (const rounds of [[DONE], [{ type: "text", text: "  \n" }, DONE]] as MindChunk[][]) {

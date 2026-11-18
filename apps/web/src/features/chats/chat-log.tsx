@@ -1,4 +1,4 @@
-import type { Attachment, ParticipantId } from "@eidolon/chat";
+import type { Attachment, ChatDisplay, ParticipantId } from "@eidolon/chat";
 import { parseMarkup, trimTrailingPartialCue } from "@laplace.live/eidolon-sdk";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
@@ -31,7 +31,14 @@ import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { callLine } from "./call-line";
 import { type CallRow, callRows, type LiveCall, standsIn } from "./call-live";
-import { type AudioAttachment, type CallItem, type ChatItem, manyVoices, startsRun } from "./items";
+import {
+  type AudioAttachment,
+  type CallItem,
+  type ChatItem,
+  itemKey,
+  manyVoices,
+  startsRun,
+} from "./items";
 import { toolState } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
 import { type LiveRow, type LiveState, liveRows, type PendingLine, type VoiceClip } from "./stream";
@@ -405,6 +412,7 @@ function CallSeparator({
 const Item = memo(function Item({
   item,
   chatId,
+  display,
   personaOf,
   group,
   first,
@@ -414,6 +422,7 @@ const Item = memo(function Item({
 }: {
   readonly item: ChatItem;
   readonly chatId: string;
+  readonly display: ChatDisplay | null;
   readonly personaOf: (id: ParticipantId) => ChatPersona;
   readonly group: boolean;
   /** It starts a run of one speaker's lines. */
@@ -425,7 +434,7 @@ const Item = memo(function Item({
   readonly onAutoPlayEnd: AutoPlayEnd;
 }) {
   if (item.kind === "call") return <CallSeparator item={item} personaOf={personaOf} />;
-  if (item.kind === "task") return <TaskCard chatId={chatId} item={item} />;
+  if (item.kind === "task") return <TaskCard chatId={chatId} item={item} display={display} />;
   if (item.kind === "user") {
     return item.voice === null ? (
       <UserBubble text={item.text} call={item.call} />
@@ -604,6 +613,7 @@ function LiveCallRows({
  */
 export function ChatLog({
   chatId,
+  display,
   personas,
   personaOf,
   items,
@@ -621,9 +631,12 @@ export function ChatLog({
   onFocused,
 }: {
   readonly chatId: string;
+  /** The chat's display, which opens task cards' steps; null while it isn't known. */
+  readonly display: ChatDisplay | null;
   /** Who is in the chat now. */
   readonly personas: readonly ChatPersona[];
   readonly personaOf: (id: ParticipantId) => ChatPersona;
+  /** What the chat's display shows. */
   readonly items: readonly ChatItem[];
   readonly live: LiveState;
   /** The call this page holds, until the chat has stored all of it: shown as it is said. */
@@ -643,7 +656,7 @@ export function ChatLog({
   readonly onSendVoice: (clip: VoiceClip) => void;
   /** A task whose card to bring into view, once it is in the log. */
   readonly focusTask: string | null;
-  readonly onFocused: () => void;
+  readonly onFocused: (task: string) => void;
 }) {
   const { t } = useLingui();
   // Each line names its persona once the chat holds more than one, now or in its lines.
@@ -675,7 +688,7 @@ export function ChatLog({
     card.focus({ preventScroll: true });
     card.dataset.flash = "";
     setTimeout(() => card.removeAttribute("data-flash"), FLASH_MS);
-    onFocused();
+    onFocused(focusTask);
   }, [focusTask, shown, onFocused, contentRef, pinnedRef]);
 
   // Stable, so the memoized last item doesn't re-render with every streamed delta.
@@ -725,9 +738,10 @@ export function ChatLog({
         {empty && <Intro personas={personas} />}
         {shown.map((item, index) => (
           <Item
-            key={item.seq}
+            key={itemKey(item)}
             item={item}
             chatId={chatId}
+            display={display}
             personaOf={personaOf}
             group={group}
             first={startsRun(shown, index)}

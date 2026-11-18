@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { CHAT_DISPLAYS } from "@eidolon/chat";
 import {
+  DEFAULT_CHAT_DISPLAY,
+  DEFAULT_CHAT_MAX_ROUNDS,
   DEFAULT_CHAT_REPLY_MODE,
   DEFAULT_CHAT_TALKATIVENESS,
   PY_SPACE_CLASS,
@@ -15,6 +18,7 @@ import {
   cardSections,
   changes,
   controlFor,
+  DEFAULT_DISPLAY,
   DEFAULT_REPLY_MODE,
   DEFAULT_TALKATIVENESS,
   draftOf,
@@ -130,6 +134,37 @@ describe("the control for each kind", () => {
       fallback: DEFAULT_CHAT_REPLY_MODE,
     });
     expect(DEFAULT_REPLY_MODE).toBe(DEFAULT_CHAT_REPLY_MODE);
+  });
+
+  test("the task display is a select of the chat format's displays that names the bot's default while unset", () => {
+    expect(control("chats.display")).toEqual({
+      type: "select",
+      options: [...CHAT_DISPLAYS],
+      fallback: DEFAULT_CHAT_DISPLAY,
+    });
+    // @eidolon/config can't import the chat format, so its own copy is held to it here.
+    expect(CHAT_DISPLAYS).toContain(DEFAULT_CHAT_DISPLAY);
+    expect(DEFAULT_DISPLAY).toBe(DEFAULT_CHAT_DISPLAY);
+    expect(groupOf("chats.display", "app")).toBe("assistant");
+    for (const display of CHAT_DISPLAYS) {
+      expect(parseDraft(display, control("chats.display"))).toEqual({ ok: true, value: display });
+    }
+  });
+
+  test("her rounds per reply are a whole number of at least 1, as chatMaxRounds() takes", () => {
+    const rounds = control("chat.maxRounds");
+    expect(rounds).toEqual({ type: "integer", min: 1 });
+    expect(parseDraft("1", rounds)).toEqual({ ok: true, value: 1 });
+    expect(parseDraft(String(DEFAULT_CHAT_MAX_ROUNDS), rounds)).toEqual({
+      ok: true,
+      value: DEFAULT_CHAT_MAX_ROUNDS,
+    });
+    expect(parseDraft("0", rounds)).toEqual({ ok: false, error: "settings.form.invalid.min" });
+    expect(parseDraft("2.5", rounds)).toEqual({
+      ok: false,
+      error: "settings.form.invalid.integer",
+    });
+    expect(parseDraft("", rounds)).toEqual({ ok: true, value: null });
   });
 
   test("a select keeps a file's value that isn't one of its choices", () => {

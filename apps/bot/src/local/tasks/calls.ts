@@ -36,7 +36,8 @@ export function staleTaskContext(events: readonly ChatEvent[], turn: string): Ch
 }
 
 function draftOf(event: ChatEvent): ChatEventDraft {
-  const { seq: _, at: __, sig: ___, ...draft } = event;
+  // Her words before a call are a line of hers in the call's seed already.
+  const { seq: _, at: __, sig: ___, said: ____, ...draft } = event as ChatEvent & { said?: string };
   return draft as ChatEventDraft;
 }
 

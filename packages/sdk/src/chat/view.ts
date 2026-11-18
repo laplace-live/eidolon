@@ -1,6 +1,7 @@
 import { isChatEvent } from "./parse.ts";
 import type {
   Attachment,
+  ChatEventOf,
   ChatStreamLine,
   CutOff,
   ParticipantId,
@@ -85,9 +86,38 @@ function settleLiveTurns(
   return changed ? next : live;
 }
 
+function isToolCall(event: WireEvent): event is ChatEventOf<"tool-call"> {
+  return event.type === "tool-call" && isChatEvent(event);
+}
+
+/**
+ * `live` with the words of each turn a newly stored call holds as `said` cleared: the call's row
+ * shows them now, and her next round streams on after it. A call already stored clears nothing, so
+ * a reload can't take the words streamed since.
+ */
+function clearSaid(
+  live: readonly LiveTurn[],
+  stored: readonly WireEvent[],
+  incoming: readonly WireEvent[],
+): readonly LiveTurn[] {
+  const turns = new Set<string>();
+  for (const event of incoming) {
+    if (!isToolCall(event) || !event.said) continue;
+    if (!stored.some((known) => known.seq === event.seq)) turns.add(event.turn);
+  }
+  if (turns.size === 0) return live;
+  let changed = false;
+  const next = live.map((turn) => {
+    if (!turns.has(turn.turn) || turn.text === "") return turn;
+    changed = true;
+    return { ...turn, text: "" };
+  });
+  return changed ? next : live;
+}
+
 function receiveEvents(state: ChatViewState, incoming: readonly WireEvent[]): ChatViewState {
   const events = mergeEvents(state.events, incoming);
-  const live = settleLiveTurns(state.live, incoming);
+  const live = settleLiveTurns(clearSaid(state.live, state.events, incoming), incoming);
   return events === state.events && live === state.live ? state : { ...state, events, live };
 }
 
@@ -219,14 +249,16 @@ type MessageItem = Extract<ChatItem, { readonly kind: "message" }>;
 
 const RENDERED_EVENT_TYPES: ReadonlySet<string> = new Set([
   "message",
+  "tool-call",
   "turn-failed",
   "call-started",
   "call-ended",
 ]);
 
 /**
- * The rows a chat's stored events show, in log order: messages, failures and call marks, a call's
- * start only until it ends. Hidden events and empty messages are omitted.
+ * The rows a chat's stored events show, in log order: messages, her words before a tool call as
+ * her message at the call's seq, failures and call marks, a call's start only until it ends.
+ * Hidden events and empty messages are omitted.
  */
 export function eventItems(events: readonly WireEvent[]): ChatItem[] {
   const items: ChatItem[] = [];
@@ -272,6 +304,24 @@ export function eventItems(events: readonly WireEvent[]): ChatItem[] {
         items.push(item);
         break;
       }
+      case "tool-call":
+        if (event.said) {
+          items.push({
+            kind: "message",
+            key,
+            seq,
+            at,
+            speaker: { kind: "persona", id: event.persona },
+            text: event.said,
+            modality: "text",
+            audio: null,
+            images: [],
+            interrupted: false,
+            cutOff: null,
+            sentAsText: false,
+          });
+        }
+        break;
       case "turn-failed": {
         if (event.code !== "voice-failed") {
           items.push({ kind: "failed", key, seq, at, persona: event.persona });

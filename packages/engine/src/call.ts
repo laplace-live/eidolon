@@ -8,16 +8,33 @@ import type { EngineDeps, TurnRequest } from "./types.ts";
 /**
  * Her view of the chat as her next turn would read it, less her tool calls and their results: what
  * a call bound to it opens on. The call may offer no tools, and Anthropic refuses a request that
- * holds a tool_use block then.
+ * holds a tool_use block then. What she said before her calls joins her next line into one when no
+ * other line comes between, and stands as a line of hers before the next one otherwise.
  */
 export function callSeed(
   chat: TurnRequest["chat"],
   persona: ParticipantId,
   viewerName: string,
 ): ViewMessage[] {
-  return turnView(chat, persona, viewerName).messages.filter(
-    (message) => message.role !== "tool" && !("tool_calls" in message),
-  );
+  const seed: ViewMessage[] = [];
+  let said = "";
+  for (const message of turnView(chat, persona, viewerName).messages) {
+    if (message.role === "tool") continue;
+    if ("tool_calls" in message) {
+      said += message.content ?? "";
+    } else if (message.role === "assistant") {
+      seed.push({ role: "assistant", content: said + message.content });
+      said = "";
+    } else {
+      if (message.role === "user" && said !== "") {
+        seed.push({ role: "assistant", content: said });
+        said = "";
+      }
+      seed.push(message);
+    }
+  }
+  if (said !== "") seed.push({ role: "assistant", content: said });
+  return seed;
 }
 
 /** A finished line of her call, the viewer's or hers, as a `call` message. */

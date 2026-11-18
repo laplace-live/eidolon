@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ChatDisplay } from "@eidolon/chat";
 import type { TaskPending, TaskSnapshot, TaskStatus } from "@/lib/api";
 import { STEER_PREFIX } from "../../../../bot/src/local/api.ts";
 import {
@@ -6,6 +7,7 @@ import {
   ended,
   endedSince,
   followsSteps,
+  keepsLiveSteps,
   listOrder,
   modeRefuses,
   needsAnswer,
@@ -15,6 +17,8 @@ import {
   pauseKind,
   queuedLines,
   RUNNING_POLL_MS,
+  stepsShown,
+  stopChoice,
   tasksPoll,
   WAITING_POLL_MS,
   waitingCount,
@@ -328,5 +332,79 @@ describe("the cards that follow their steps", () => {
   test("none follows while no task runs and no steps are open", () => {
     const tasks = [task("1", "paused"), task("2", "awaiting-approval"), task("3", "succeeded")];
     expect(following(tasks, false)).toEqual([]);
+  });
+});
+
+describe("the steps a card opens", () => {
+  const shown = (
+    display: ChatDisplay,
+    more: Partial<Parameters<typeof stepsShown>[0]> = {},
+  ): boolean => stepsShown({ display, chosen: null, newest: false, shownLive: false, ...more });
+
+  test("in verbose, the newest running task's card opens its steps, and no other", () => {
+    const tasks = [task("1", "running"), task("2", "running"), task("3", "paused")];
+    const opened = tasks.filter((entry) =>
+      shown("verbose", { newest: followsSteps(entry.id, tasks, false) }),
+    );
+    expect(opened.map((entry) => entry.id)).toEqual(["2"]);
+  });
+
+  test("in normal and focus, only the owner's own choice opens them", () => {
+    for (const display of ["normal", "focus"] as const) {
+      expect(shown(display, { newest: true, shownLive: true })).toBe(false);
+      expect(shown(display, { chosen: true })).toBe(true);
+    }
+  });
+
+  test("the owner's choice wins over verbose's, either way", () => {
+    expect(shown("verbose", { newest: true, chosen: false })).toBe(false);
+    expect(shown("verbose", { chosen: true })).toBe(true);
+  });
+
+  test("steps shown live stay once the task pauses or ends, until another running task is newest", () => {
+    const step = (before: boolean, newest: boolean, running: boolean) =>
+      keepsLiveSteps(before, { display: "verbose", newest, running });
+    const watched = step(false, true, true);
+    expect(watched).toBe(true);
+    const paused = step(watched, false, false);
+    expect(shown("verbose", { shownLive: paused })).toBe(true);
+    const ended = step(paused, false, false);
+    expect(shown("verbose", { shownLive: ended })).toBe(true);
+    // Another task runs as the newest while this one still runs: this card lets go of its stream.
+    expect(step(watched, false, true)).toBe(false);
+  });
+
+  test("a card read afresh, its task waiting, running behind a newer one, or ended, keeps Show Steps", () => {
+    for (const running of [false, true]) {
+      expect(keepsLiveSteps(false, { display: "verbose", newest: false, running })).toBe(false);
+    }
+    expect(shown("verbose")).toBe(false);
+  });
+
+  test("leaving verbose drops the steps shown live", () => {
+    expect(keepsLiveSteps(true, { display: "normal", newest: true, running: true })).toBe(false);
+    expect(keepsLiveSteps(true, { display: "focus", newest: false, running: false })).toBe(false);
+    expect(keepsLiveSteps(true, { display: null, newest: false, running: false })).toBe(false);
+  });
+});
+
+describe("/stop's choice", () => {
+  test("is every task that hasn't ended, newest first", () => {
+    const tasks = [
+      task("1", "running"),
+      task("2", "succeeded"),
+      task("3", "awaiting-approval"),
+      task("4", "paused"),
+      task("5", "cancelled"),
+      task("6", "interrupted"),
+      task("7", "failed"),
+    ];
+    expect(stopChoice(tasks).map((entry) => entry.id)).toEqual(["6", "4", "3", "1"]);
+  });
+
+  test("is the one task the chat has live, or none", () => {
+    expect(stopChoice([task("1", "running")]).map((entry) => entry.id)).toEqual(["1"]);
+    expect(stopChoice([task("1", "succeeded"), task("2", "failed")])).toEqual([]);
+    expect(stopChoice([])).toEqual([]);
   });
 });

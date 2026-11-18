@@ -204,6 +204,7 @@ export const SETTINGS: readonly SettingField[] = [
     "Assistant spend pause",
   ),
   field("app", "assistant.contextTokens", "ASSISTANT_CONTEXT_TOKENS", "int", "Assistant context"),
+  field("app", "chats.display", "CHAT_DISPLAY", "string", "Task display"),
 
   field("persona", "prompt", "PERSONA_FILE", "path", "System prompt file"),
   field("persona", "identity.timezone", "PERSONA_TIMEZONE", "string", "Time zone"),
@@ -348,6 +349,7 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "chat.interests", "CHAT_INTERESTS", "string", "Chat interests"),
   field("persona", "chat.talkativeness", "CHAT_TALKATIVENESS", "float", "Chat talkativeness"),
   field("persona", "chat.replyMode", "CHAT_REPLY_MODE", "string", "Chat reply mode"),
+  field("persona", "chat.maxRounds", "CHAT_MAX_ROUNDS", "int", "Chat reply rounds"),
 ];
 
 /** `voice.styles.<name>`, a voice id or `{voiceId, hint}`, sets `TTS_VOICE_ID_<NAME>`. */

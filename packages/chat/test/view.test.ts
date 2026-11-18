@@ -698,3 +698,217 @@ describe("viewOf, labelling the viewer", () => {
     expect(view(left, "milky", CHAT_WINDOW_MESSAGES, GROUP, "小明")).toEqual(view(chat()));
   });
 });
+
+describe("viewOf, her words before a call", () => {
+  const said = (
+    persona: string,
+    callId: string,
+    text: string,
+    args: Record<string, unknown> = {},
+  ): ChatEventDraft => ({
+    type: "tool-call",
+    persona,
+    turn: "t",
+    callId,
+    name: "take_selfie",
+    arguments: args,
+    said: text,
+  });
+
+  test("her said is her call message's content, before its result, and her line follows it", () => {
+    const events = log(
+      user("自拍一张"),
+      said("milky", "c1", "等我一下"),
+      result("milky", "c1", { ok: true }),
+      from("milky", "拍好啦"),
+    );
+    expect(view(events)).toEqual([
+      { role: "user", content: "自拍一张" },
+      { ...toolCall("c1"), content: "等我一下" },
+      { role: "tool", tool_call_id: "c1", content: '{"ok": true}' },
+      { role: "assistant", content: "拍好啦" },
+    ]);
+  });
+
+  test("a final whose call left the window brings the call back without its said", () => {
+    const events = log(
+      user("u1"),
+      said("milky", "c1", "我去弄", { goal: "网页" }),
+      staged("milky", "c1", "started", STARTED),
+      from("milky", "a1"),
+      user("u2"),
+      from("milky", "a2"),
+      staged("milky", "c1", "final", { status: "succeeded" }),
+    );
+    expect(view(events, "milky", 2)).toEqual([
+      { role: "user", content: "u2" },
+      { role: "assistant", content: "a2" },
+      toolCall("c1", '{"goal": "网页"}'),
+      { role: "tool", tool_call_id: "c1", content: '{"status": "succeeded"}' },
+    ]);
+  });
+
+  test("another persona's said joins her line after it as one 名字：line, as her message held them", () => {
+    const events = log(
+      user("还记得吗"),
+      said("ruby", "r1", "我查查。"),
+      result("ruby", "r1", { ok: true }),
+      said("ruby", "r2", "再看看。"),
+      result("ruby", "r2", { ok: true }),
+      from("ruby", "是那次"),
+      from("ken", "对"),
+    );
+    expect(groupView(events)).toEqual([
+      { role: "user", content: "小明：还记得吗" },
+      { role: "user", content: "露比：我查查。再看看。是那次\nKen：对" },
+    ]);
+    expect(groupView(events, "ruby").slice(1, 3)).toEqual([
+      { ...toolCall("r1"), content: "我查查。" },
+      { role: "tool", tool_call_id: "r1", content: '{"ok": true}' },
+    ]);
+  });
+
+  test("another persona's said that no line of hers follows is a line of its own, kept apart from what comes next", () => {
+    const events = log(
+      user("还记得吗"),
+      said("ruby", "r1", "我查查。"),
+      result("ruby", "r1", {}),
+      from("ken", "我记得"),
+      from("ruby", "是那次"),
+      user("哦"),
+      said("ruby", "r2", "等等"),
+    );
+    expect(groupView(events)).toEqual([
+      { role: "user", content: "小明：还记得吗" },
+      { role: "user", content: "露比：我查查。\nKen：我记得\n露比：是那次" },
+      { role: "user", content: "小明：哦" },
+      { role: "user", content: "露比：等等" },
+    ]);
+  });
+});
+
+describe("viewOf, older results as stubs", () => {
+  const LONG = { content: "回".repeat(100) };
+  const WHOLE = `{"content": "${"回".repeat(100)}"}`;
+  const recall = (callId: string, name = "recall_streams"): ChatEventDraft => ({
+    type: "tool-call",
+    persona: "milky",
+    turn: "t",
+    callId,
+    name,
+    arguments: {},
+  });
+  const whole = (callId: string): ViewMessage => ({
+    role: "tool",
+    tool_call_id: callId,
+    content: WHOLE,
+  });
+  const stub = (callId: string, name = "recall_streams"): ViewMessage => ({
+    role: "tool",
+    tool_call_id: callId,
+    content: `[${name} result elided, ${WHOLE.length} characters]`,
+  });
+  /** A turn of hers: the viewer's line, her recall and its result, then her line. */
+  const turn = (n: number): ChatEventDraft[] => [
+    user(`问${n}`),
+    recall(`c${n}`),
+    result("milky", `c${n}`, LONG),
+    from("milky", `答${n}`),
+  ];
+  const tools = (events: readonly ChatEvent[]): ViewMessage[] =>
+    view(events).filter((message) => message.role === "tool");
+
+  test("a result she waited for, from before her last two turns, reads as its stub; theirs stay whole", () => {
+    expect(tools(log(...turn(1), ...turn(2)))).toEqual([whole("c1"), whole("c2")]);
+    expect(tools(log(...turn(1), ...turn(2), ...turn(3), user("问4")))).toEqual([
+      stub("c1"),
+      whole("c2"),
+      whole("c3"),
+    ]);
+    expect(tools(log(...turn(1), ...turn(2), ...turn(3), ...turn(4)))).toEqual([
+      stub("c1"),
+      stub("c2"),
+      whole("c3"),
+      whole("c4"),
+    ]);
+  });
+
+  test("a stub reads the same in every later view", () => {
+    const earlier = tools(log(...turn(1), ...turn(2), ...turn(3)))[0];
+    const later = tools(log(...turn(1), ...turn(2), ...turn(3), ...turn(4), ...turn(5)))[0];
+    expect([earlier, later]).toEqual([stub("c1"), stub("c1")]);
+  });
+
+  test("check_task is stubbed, but never a started, final or cancelled result, pipedog's placeholder, CANCELLED, or a result shorter than its stub", () => {
+    const events = log(
+      user("帮我写个网页"),
+      recall("b1", "start_task"),
+      staged("milky", "b1", "started", { task: "t1", status: "running", note: "回".repeat(100) }),
+      recall("a1", "take_selfie"),
+      staged("milky", "a1", "started"),
+      recall("x1"),
+      recall("s1"),
+      result("milky", "s1", {}),
+      recall("k1", "check_task"),
+      result("milky", "k1", LONG),
+      recall("q1", "start_task"),
+      staged("milky", "q1", "started", STARTED),
+      staged("milky", "q1", "cancelled"),
+      from("milky", "好"),
+      ...turn(2),
+      ...turn(3),
+      staged("milky", "b1", "final", { status: "succeeded", report: "回".repeat(100) }),
+    );
+    expect(tools(events)).toEqual([
+      {
+        role: "tool",
+        tool_call_id: "b1",
+        content: `{"status": "succeeded", "report": "${"回".repeat(100)}"}`,
+      },
+      { role: "tool", tool_call_id: "a1", content: startedEnvelope("a1") },
+      { role: "tool", tool_call_id: "x1", content: "CANCELLED" },
+      { role: "tool", tool_call_id: "s1", content: "COMPLETED" },
+      stub("k1", "check_task"),
+      { role: "tool", tool_call_id: "q1", content: '{"task": "t1", "status": "running"}' },
+      whole("c2"),
+      whole("c3"),
+    ]);
+  });
+
+  test("her lines alone move the boundary: the viewer's, another persona's, her photo-only messages and a turn with no line don't", () => {
+    const photo = {
+      attachments: [{ kind: "image", name: `${"c".repeat(64)}.png`, mime: "image/png" }],
+    };
+    const quiet = [
+      ...turn(1),
+      user("还有呢"),
+      from("ruby", "我来说"),
+      from("milky", "", photo),
+      recall("c2"),
+      result("milky", "c2", LONG),
+      user("问3"),
+      from("milky", "答3"),
+      user("问4"),
+      from("milky", "答4"),
+    ];
+    expect(tools(log(...quiet))).toEqual([stub("c1"), whole("c2")]);
+    expect(tools(log(...quiet, user("问5"), from("milky", "答5")))).toEqual([
+      stub("c1"),
+      stub("c2"),
+    ]);
+  });
+
+  test("a late result is judged by its call's turn", () => {
+    const events = log(
+      user("问1"),
+      recall("c1"),
+      from("milky", "我查", { interrupted: true }),
+      user("问2"),
+      from("milky", "答2"),
+      result("milky", "c1", LONG),
+      user("问3"),
+      from("milky", "答3"),
+    );
+    expect(tools(events)).toEqual([stub("c1")]);
+  });
+});

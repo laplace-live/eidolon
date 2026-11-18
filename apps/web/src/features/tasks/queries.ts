@@ -3,8 +3,10 @@ import {
   queryOptions,
   useIsMutating,
   useMutation,
+  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useCallback } from "react";
 import {
   call,
   type TaskApproveRequest,
@@ -30,6 +32,16 @@ export function chatTasksQuery(chat: string) {
     queryKey: ["tasks", "chat", chat],
     queryFn: ({ signal }) => call("GET /api/local/tasks", { query: { chat }, signal }),
   });
+}
+
+/** One of the chat's tasks, as the chat's page last read them. */
+export function useChatTask(chat: string, id: string): TaskSnapshot | undefined {
+  const select = useCallback(
+    (data: TasksResponse) => data.tasks.find((task) => task.id === id),
+    [id],
+  );
+  // The chat's page polls the list; a card only reads it.
+  return useQuery({ ...chatTasksQuery(chat), select, refetchOnMount: false }).data;
 }
 
 export function fetchTask(id: string): Promise<TaskSnapshot> {

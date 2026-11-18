@@ -53,7 +53,7 @@ const CHAT_TURN_PATH = "/api/chat/turn";
 const CHAT_VOICE_PATH = "/api/chat/voice";
 
 const MAX_TEXT = 4000;
-/** A window is at most 256 KB of events; this leaves room for the rest of the body. */
+/** A window is at most 384 KB of events; this leaves room for the rest of the body. */
 const BODY_LIMIT = 1024 * 1024;
 const MAX_VOICE_BYTES = 10 * 1024 * 1024;
 /**

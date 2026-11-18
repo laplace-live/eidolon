@@ -308,7 +308,17 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - A row and the chat's header each have a menu with **Rename** and **Delete**. Delete confirms in
     the page. The header's menu also has **Chat Settings**, a sheet saved as soon as a value is
     picked: **Reply Mode** (Auto, Text or Voice), which overrides every persona's own until it is
-    changed, and **Replies between Personas**, 0 to 6, the chain limit.
+    changed; **Task Display** (Focus, Normal or Verbose), how much of her tasks the chat shows
+    ([Tasks](#tasks)), which until it is chosen names the display Settings gives it; and
+    **Replies between Personas**, 0 to 6, the chain limit. Task Display shows in every chat, and is
+    the one way to change it during a call.
+- **Commands:** the composer runs `/focus`, `/normal`, `/verbose` and `/stop` typed alone, in any
+  case, after `/` or `／` ([Tasks](#tasks)). A command is never sent to her: a display command
+  stores the chat's display, with a toast, and starts no reply, and one for the display the chat
+  has set already only says so. A known command with anything after it (`/stop 2`), or a slash and
+  ASCII letters alone that name none (`/foo`), is refused with a toast, and the draft stays.
+  Anything else that starts with a slash, a path or a slash before words, is a line like any
+  other (`features/chats/commands.ts`).
 - **A group chat:**
   - The header's avatars open **In This Chat**, with **Add Persona** and **Remove Persona**.
   - Each run of a persona's lines starts with her avatar and short name, and the streaming text
@@ -346,13 +356,15 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - **Retry** after a failed reply sends a voice message's transcript as text.
 - **The studio's Chats section** edits a persona's `chat.replyMode`, `chat.interests` and
   `chat.talkativeness` ([personas.md](personas.md#personayaml)), showing where each value
-  comes from.
+  comes from. Her `chat.maxRounds`, **Rounds per Reply**, is in its Advanced card.
 - **Her lines** render through the SDK's `parseMarkup` like a call's transcript: cues as chips and
   directions as small labels, never as HTML. A selfie shows as a photo, served from the chat's
   `files/`.
 - **While she replies:**
   - Her words stream in, and a quiet line names the tool she is using, her task tools' included
-    ([Tasks](#tasks)).
+    ([Tasks](#tasks)). Once a round of hers ends in a tool call, its words stay where she said
+    them, as a line of hers above the tool's card, with no Why She Answered, and her next words
+    stream in below it.
   - **Stop** cuts everyone off at once, even one finishing her message before a line just sent:
     what she said stays, marked **Interrupted**, and no line still waiting is answered.
   - Sending while she replies is allowed, and cuts no one off mid-sentence: a persona whose words
@@ -373,6 +385,8 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - A failed reply shows its error with **Retry**, which sends the viewer's last line again.
   - A reply her provider stopped short, at its token limit or refusing, is marked **Cut off**, with
     the same **Retry**.
+  - Neither offers **Retry** once that reply showed her words before a tool call, nor once it
+    started a task: sending the line again would call the tool again.
   - A mind with no key shows a notice with a link to Settings → Providers.
 - **Reopening a chat mid-reply** picks the reply up again through `GET chats/:id/live`. The reply
   keeps running when the tab closes.
@@ -455,14 +469,31 @@ tools.
   - While Assistant Mode is off or not ready, Continue and every answer but a Deny at the start are
     disabled, as the server would refuse them, and a note says why, with a link to Settings; Stop
     still works.
-- **The waiting bar** sits above the composer while a task of the open chat waits on the owner:
-  awaiting approval, paused or interrupted. It says what the oldest one waits for ("Waiting for
-  your OK to work in ~/Git/x"; for a path, what an Allow grants: "Waiting for your OK to read
-  everything in ~/Documents", "read and write" for a write, or the path alone) and how many more
-  wait, with the card's buttons, which share the card's model, web access and spend-pause field,
-  and **Show Task**, which scrolls to the card. Above its buttons it lists her queued lines as the
-  card does, since its Allow or Continue lets the task read them too. During a call it sits above
-  the dock. The Tasks list's waiting row says the same line.
+- **The chat's display** ([assistant.md](assistant.md#display)) changes only what the page draws
+  from the same events, and is set by the composer's commands or Chat Settings
+  ([Chats](#chats)):
+  - **Focus** leaves the cards out of the log (`displayedItems`, `features/chats/items.ts`), but
+    for one Show Task or the Tasks list's `?task=` brings into view, which stays until the display
+    changes. Her words before her calls and the waiting bar stay, and Retry still reads every item.
+  - **Normal** is the card as above.
+  - **Verbose** opens the steps of the newest running task's card by itself, on the follow it
+    holds anyway. They stay shown through its pauses and its end while the page watched them, but
+    close while it runs behind a newer running task, so the page follows one running task at most.
+    A card read afresh keeps Show Steps, so a page never reads every ended task's transcript at
+    once.
+  - The owner's own Show Steps or Hide Steps holds until the display changes.
+- **`/stop`** reads the chat's tasks afresh and opens a dialog of the live ones, newest first:
+  **Stop this task?**, or **Stop which task?** with several, each row with its goal, its status
+  and the card's **Stop**, and **Cancel**. A Stop closes it; with no live task, a toast says so
+  (`features/tasks/stop-picker.tsx`).
+- **The waiting bar** sits above the composer, in every display, while a task of the open chat
+  waits on the owner: awaiting approval, paused or interrupted. It says what the oldest one waits
+  for ("Waiting for your OK to work in ~/Git/x"; for a path, what an Allow grants: "Waiting for
+  your OK to read everything in ~/Documents", "read and write" for a write, or the path alone) and
+  how many more wait, with the card's buttons, which share the card's model, web access and
+  spend-pause field, and **Show Task**, which scrolls to the card. Above its buttons it lists her
+  queued lines as the card does, since its Allow or Continue lets the task read them too. During a
+  call it sits above the dock. The Tasks list's waiting row says the same line.
 - **Her task tools** show in the page's log only as `start_task`'s card. While one runs, her
   reply's quiet line reads **Starting a task…**, **Passing it on to the task…**, **Stopping the
   task…** or **Checking on the task…**, each with its icon (`TOOL_STATES`,
@@ -489,11 +520,12 @@ tools.
 - **Settings → Assistant Mode** holds the switch, the account and model (the role's picker), the
   folders (full paths, never `/` or `~`; PUT settings also refuses, 400 `invalid-setting` with
   `GrantRefused`'s reason, any folder that is or holds home on disk, such as `/Users/<you>`,
-  `/Users`, `~/.` or `~/..`), the spend pause and the context, says she starts tasks when asked in
-  a chat, shows the problem while the mode isn't ready, and links to the Tasks list while it is
-  on. Saving the switch off asks first while any task hasn't ended, counted from a fresh
-  `GET tasks` ("2 tasks are running or waiting for you. Turning Assistant Mode off stops them."),
-  and asks anyway when the list can't be read.
+  `/Users`, `~/.` or `~/..`), the spend pause, the context and **Task Display**, the display each
+  chat shows until it picks its own, says she starts tasks when asked in a chat, shows the problem
+  while the mode isn't ready, and links to the Tasks list while it is on. Saving the switch off
+  asks first while any task hasn't ended, counted from a fresh `GET tasks` ("2 tasks are running or
+  waiting for you. Turning Assistant Mode off stops them."), and asks anyway when the list can't be
+  read.
 - **Spend:** a task's requests are recorded with `source: "task"` and the task's id.
 
 ## Jobs
@@ -698,8 +730,18 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   - a second task she starts, then stops with `stop_task` before it was allowed, after a block
     that lists it alone, waiting to start: cancelled and not denied, its `final` after her answer
     and no turn telling of it, the waiting bar gone, and the card showing it stopped with no Stop;
+  - the chat's display, each command storing one `settings` event and asking her mind nothing:
+    `/verbose`; a third task she starts with words before her call, stored as its `said`, read on
+    her call message by her next round, which ends on its result, and shown once, above its card,
+    whose steps stay closed while it waits; `/focus`, leaving no card in the log while her words,
+    the waiting bar and her status block stay; **Allow Once** on the bar, then `/verbose` again,
+    opening the steps of its card alone while it runs; `/stop`'s dialog of that one task, its
+    **Cancel** leaving it running, then its **Stop** cancelling it with no line of hers and no
+    mind request, its steps still shown; `/stop` with nothing left; `/foo` and `/stop 2` refused
+    with the draft kept; then `/focus`;
   - the Tasks list showing the first done and the second stopped, with no button or field, the
-    first's row opening the chat with the card in view;
+    first's row opening the chat with the card in view, in focus its card alone, until `/normal`
+    brings every card back;
   - a call in that chat, whose greeting holds none of the status blocks the chat stored, and no
     task tool; a line its fake hearing hears (`say`), and her `start_task` for it, with the hint,
     her next round reading the started result, and her call and its result stored in the chat

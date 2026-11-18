@@ -110,13 +110,17 @@ function turnOf(message: Record<string, unknown>): Turn {
     };
   }
   if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+    const said = typeof message.content === "string" ? message.content : "";
     return {
       role: "assistant",
-      content: message.tool_calls.filter(isPlainObject).map((call) => {
-        const fn = isPlainObject(call.function) ? call.function : {};
-        const input = pyJsonLoads(String(fn.arguments));
-        return { type: "tool_use", id: call.id, name: fn.name, input };
-      }),
+      content: [
+        ...(said === "" ? [] : [{ type: "text", text: said }]),
+        ...message.tool_calls.filter(isPlainObject).map((call) => {
+          const fn = isPlainObject(call.function) ? call.function : {};
+          const input = pyJsonLoads(String(fn.arguments));
+          return { type: "tool_use", id: call.id, name: fn.name, input };
+        }),
+      ],
     };
   }
   const { content } = message;
@@ -136,22 +140,24 @@ function turnOf(message: Record<string, unknown>): Turn {
 /**
  * Her tool calls and their results as notes in the user's turns, for a request that offers no
  * tools: Anthropic refuses tool_use and tool_result blocks without tools. Written as her own lines,
- * they would teach her to write them.
+ * they would teach her to write them; the words she wrote before a call stay her line.
  */
 function callsAsNotes(messages: readonly Record<string, unknown>[]): Record<string, unknown>[] {
   const names = new Map<unknown, string>();
-  return messages.map((message) => {
+  return messages.flatMap((message) => {
     if (message.role === "tool") {
       const name = names.get(message.tool_call_id) ?? "tool";
-      return { role: "user", content: `（${name} 返回：${textOf(message.content)}）` };
+      return [{ role: "user", content: `（${name} 返回：${textOf(message.content)}）` }];
     }
-    if (!Array.isArray(message.tool_calls) || message.tool_calls.length === 0) return message;
+    if (!Array.isArray(message.tool_calls) || message.tool_calls.length === 0) return [message];
     const notes = message.tool_calls.filter(isPlainObject).map((call) => {
       const fn = isPlainObject(call.function) ? call.function : {};
       names.set(call.id, String(fn.name));
       return `（你调用了 ${fn.name} ${fn.arguments}）`;
     });
-    return { role: "user", content: notes.join("\n") };
+    const note = { role: "user", content: notes.join("\n") };
+    const said = typeof message.content === "string" ? message.content : "";
+    return said === "" ? [note] : [{ role: "assistant", content: said }, note];
   });
 }
 
@@ -339,6 +345,11 @@ function bodyFor(
   }
   body.messages = withCacheMarkers(turns);
   body.tools = request.tools.map(toolFor);
+  // tool_choice lies outside what a thinking block is bound to (`Thought`), so `prefix` leaves it
+  // out and her thinking still goes back under "none".
+  if (request.toolChoice !== undefined && request.tools.length > 0) {
+    body.tool_choice = { type: request.toolChoice };
+  }
   if (request.stop?.length) body.stop_sequences = [...request.stop];
   Object.assign(body, options.extra);
   const effort = isPlainObject(body.output_config) && "effort" in body.output_config;

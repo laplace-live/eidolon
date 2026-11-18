@@ -58,6 +58,7 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
         ["assistant.provider", "assistant.model"],
         "assistant.folders",
         ["assistant.spendPauseUsd", "assistant.contextTokens"],
+        "chats.display",
       ],
     },
   ],

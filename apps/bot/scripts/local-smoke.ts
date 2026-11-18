@@ -2,12 +2,12 @@
 // in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
 // prompt, a voice style added and removed, a facts index built through the studio, a text chat
 // from greeting to delete, a group chat with a second persona, voice messages both ways, a call
-// inside a chat, a task she starts, checks, steers and reports in a chat, a second she stops, and
-// a third she starts by voice on a call there. The keys are fake, so the providers refuse them for
-// free, and the embeddings, the chats' replies, the director's decisions, the voice messages'
-// speech, the calls' hearing, mind and voice and the tasks' worker come from a fake server, so
-// nothing is billed. --call instead places a real call from the call page with the .env's keys,
-// which bills them.
+// inside a chat, a task she starts, checks, steers and reports in a chat, a second she stops, a
+// third shown in each of the chat's displays and stopped with /stop, and a fourth she starts by
+// voice on a call there. The keys are fake, so the providers refuse them for free, and the
+// embeddings, the chats' replies, the director's decisions, the voice messages' speech, the calls'
+// hearing, mind and voice and the tasks' worker come from a fake server, so nothing is billed.
+// --call instead places a real call from the call page with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -313,6 +313,24 @@ const TASK2_ACK = "好，这个也要你在卡片上点一下允许哦。";
 const STOP_LINE = "算了，不用做了";
 const STOP_CALL = "call_stop_task";
 const STOP_ACK = "好，那个我停掉啦。";
+/**
+ * A third task, which the display walk shows in each display and stops with /stop: the words her
+ * round writes before its start_task call, and her line on its result.
+ */
+const TASK3_LINE = "再帮我做个读书清单网页吧";
+const TASK3_GOAL = "做一个单文件的读书清单网页 index.html";
+const START_CALL_3 = "call_third_task";
+const TASK3_SAID = "好呀，我交给电脑去做。";
+const TASK3_ACK = "卡片上点一下允许它就开始啦。";
+/** The viewer asking after the third task in focus, its card hidden, and her answer. */
+const FOCUS_LINE = "那个读书清单呢？";
+const FOCUS_ACK = "还在等你点允许呢。";
+/** The toast each display command shows once the chat's display is set. */
+const DISPLAY_TOLD = {
+  focus: "Focus is on for this chat",
+  normal: "Normal is on for this chat",
+  verbose: "Verbose is on for this chat",
+} as const;
 /** What a greeting's request ends on, Mem0 being off. */
 const GREETING_KICKOFF = "用一两句话简短自然地打个招呼。";
 /**
@@ -339,6 +357,7 @@ const AFTER_RESULT: Readonly<Record<string, string>> = {
   [STEER_CALL]: STEER_ACK,
   [START_CALL_2]: TASK2_ACK,
   [STOP_CALL]: STOP_ACK,
+  [START_CALL_3]: TASK3_ACK,
   [CALL_TASK_CALL]: CALL_TASK_ACK,
 };
 
@@ -429,7 +448,10 @@ interface ChatRequest {
   readonly messages?: readonly {
     readonly role?: unknown;
     readonly content?: unknown;
-    readonly tool_calls?: readonly { readonly function?: { readonly name?: unknown } }[];
+    readonly tool_calls?: readonly {
+      readonly id?: unknown;
+      readonly function?: { readonly name?: unknown };
+    }[];
     readonly tool_call_id?: unknown;
   }[];
 }
@@ -440,6 +462,8 @@ interface TaskPlaces {
   readonly notes: string;
   /** The second task's, which she stops before it starts. */
   readonly second: string;
+  /** The third's, which /stop stops while it runs. */
+  readonly third: string;
   /** The task she starts on a call. */
   readonly call: string;
 }
@@ -560,13 +584,14 @@ function scriptedStream(
   return new Response(body, { headers: { "content-type": "text/event-stream" } });
 }
 
-/** A streamed call of `name` with `args`, as `model` makes one. */
+/** A streamed call of `name` with `args`, as `model` makes one, after `said` when there is some. */
 function toolCallStream(
   model: string,
   id: string,
   name: string,
   args: object,
   usage: Readonly<Record<string, number>>,
+  said = "",
 ): Response {
   const call = {
     index: 0,
@@ -574,7 +599,8 @@ function toolCallStream(
     type: "function",
     function: { name, arguments: JSON.stringify(args) },
   };
-  return scriptedStream(model, { tool_calls: [call] }, "tool_calls", usage);
+  const words = said === "" ? {} : { content: said };
+  return scriptedStream(model, { ...words, tool_calls: [call] }, "tool_calls", usage);
 }
 
 const UNPRICED_USAGE = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
@@ -621,6 +647,17 @@ function herTaskAnswer(body: ChatRequest, places: TaskPlaces): Response | null {
       return call(START_CALL_2, "start_task", { goal: TASK2_GOAL, folder: places.second });
     case STOP_LINE:
       return call(STOP_CALL, "stop_task", {});
+    case TASK3_LINE:
+      return toolCallStream(
+        MIND_MODEL,
+        START_CALL_3,
+        "start_task",
+        { goal: TASK3_GOAL, folder: places.third },
+        UNPRICED_USAGE,
+        TASK3_SAID,
+      );
+    case FOCUS_LINE:
+      return say(FOCUS_ACK);
     case CALL_TASK_LINE:
       return call(CALL_TASK_CALL, "start_task", { goal: CALL_TASK_GOAL, folder: places.call });
   }
@@ -1618,6 +1655,7 @@ interface LoggedEvent {
   }[];
   readonly code?: string;
   readonly replyMode?: string;
+  readonly display?: string;
   readonly call?: string;
   readonly persona?: string;
   readonly reason?: string;
@@ -1626,6 +1664,8 @@ interface LoggedEvent {
   readonly turn?: string;
   readonly callId?: string;
   readonly arguments?: Readonly<Record<string, unknown>>;
+  /** A tool-call's: her words before it. */
+  readonly said?: string;
   readonly stage?: string;
   readonly result?: Readonly<Record<string, unknown>>;
   /** A context block's text, and the blocks a context-removed takes out, by seq. */
@@ -2605,6 +2645,15 @@ function startedTask(events: readonly LoggedEvent[], callId: string): string | n
   return typeof task === "string" ? task : null;
 }
 
+/** The tasks her start_task calls started, in the order they started: her task numbers there. */
+function tasksStarted(events: readonly LoggedEvent[]): string[] {
+  return events.flatMap((e) =>
+    e.type === "tool-result" && e.stage === "started" && typeof e.result?.task === "string"
+      ? [e.result.task]
+      : [],
+  );
+}
+
 function lastContent(request: ChatRequest | undefined): string {
   return String(request?.messages?.at(-1)?.content ?? "");
 }
@@ -3237,6 +3286,354 @@ async function stopWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
   );
 }
 
+type Display = keyof typeof DISPLAY_TOLD;
+
+/** What typing a display command into the task's chat did. */
+interface DisplayTyped {
+  /** Its PATCH's status. */
+  readonly status: number;
+  /** Whether the page said the display is on. */
+  readonly told: boolean;
+  /** The events the log gained. */
+  readonly added: readonly LoggedEvent[];
+  /** The requests her mind took meanwhile. */
+  readonly minded: number;
+}
+
+/** Types `/<display>` into the task's chat, and waits for the event it stores. */
+async function typeDisplay(
+  walk: Walk,
+  chat: TaskChatPage,
+  display: Display,
+): Promise<DisplayTyped> {
+  const { page, origin } = walk;
+  const { chats } = walk.embeddings.seen;
+  const before = (await chatLog(walk, chat.id)).length;
+  const minded = chats.length;
+  const patched = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url() === `${origin}/api/local/chats/${chat.id}`,
+  );
+  await chat.box.fill(`/${display}`);
+  await chat.box.press("Enter");
+  const status = (await patched).status();
+  const told = await shows(page.getByText(t("en", DISPLAY_TOLD[display]), { exact: true }), 10_000);
+  const events = await poll(
+    () => chatLog(walk, chat.id),
+    (read) => read.length > before,
+    10_000,
+  );
+  return { status, told, added: events.slice(before), minded: chats.length - minded };
+}
+
+/** Whether typing `/<display>` stored that one settings event alone, asking her nothing. */
+function setsOnly(typed: DisplayTyped, display: Display): boolean {
+  const [event] = typed.added;
+  return (
+    typed.status === 200 &&
+    typed.told &&
+    typed.added.length === 1 &&
+    event?.type === "settings" &&
+    event.display === display &&
+    typed.minded === 0
+  );
+}
+
+/** What typing `/<display>` did, as a check's detail says it. */
+function typedText(typed: DisplayTyped, display: Display): string {
+  const stored = typed.added.map((e) =>
+    e.type === "settings" ? `settings ${String(e.display)}` : e.type,
+  );
+  return (
+    `/${display} answered ${typed.status}, ${typed.told ? "with" : "without"} its toast, storing ` +
+    `${JSON.stringify(stored)} and asking her mind ${typed.minded} time(s)`
+  );
+}
+
+/** Whether `first`'s element comes before `then`'s in the page; false while either is missing. */
+async function precedes(first: Locator, then: Locator): Promise<boolean> {
+  if ((await first.count()) === 0 || (await then.count()) === 0) return false;
+  const after = await then.first().elementHandle();
+  if (after === null) return false;
+  return first
+    .first()
+    .evaluate(
+      (node, other) =>
+        (node.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      after,
+    );
+}
+
+/**
+ * How much of her tasks the task's chat shows, set by the composer's commands, none of which
+ * reaches her: /verbose; a third task she starts with words before her call, which show as her
+ * line above its card, its steps closed while it waits; /focus, which hides every card but not her
+ * words, the waiting bar or her status block; Allow Once there and /verbose, which opens its steps
+ * live while it runs; /stop's dialog, Cancel, then its Stop; /stop with nothing left; /foo and
+ * /stop 2 refused; then /focus, for the Tasks list's row to bring its card back.
+ */
+async function displayWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats, workers } = walk.embeddings.seen;
+
+  const verbose = await typeDisplay(walk, chat, "verbose");
+  checks.add("display verbose", setsOnly(verbose, "verbose"), typedText(verbose, "verbose"));
+
+  const asked = await askHer(walk, chat, TASK3_LINE, TASK3_ACK);
+  const started = await chatLog(walk, chat.id);
+  const task = startedTask(started, START_CALL_3);
+  if (task === null) throw new Error("her third start_task call started no task");
+  const call = started.find((e) => e.type === "tool-call" && e.callId === START_CALL_3);
+  const glued = started.some((e) => e.type === "message" && e.text?.includes(TASK3_SAID));
+  const after = asked.find((request) => resultFor(request) === START_CALL_3);
+  const read = `{"task": "${task}", "status": "awaiting-approval"}`;
+  // Her next round reads her words on her call, and ends on its result.
+  const onCall = after?.messages?.find((m) =>
+    (m.tool_calls ?? []).some((each) => each.id === START_CALL_3),
+  );
+  const card = chat.log.locator(`article[data-task="${task}"]`);
+  const steps = card.locator('[data-action="steps"]');
+  const saidLine = chat.log.getByText(TASK3_SAID, { exact: true });
+  const carded = await shows(card, 15_000);
+  const lines = await saidLine.count();
+  const above = carded && (await precedes(saidLine, card));
+  const below = carded && (await precedes(card, chat.log.getByText(TASK3_ACK, { exact: true })));
+  const waitingSteps = carded ? await steps.getAttribute("aria-expanded") : null;
+  checks.add(
+    "display said",
+    call?.said === TASK3_SAID &&
+      !glued &&
+      onCall?.content === TASK3_SAID &&
+      lastContent(after) === read &&
+      lines === 1 &&
+      above &&
+      below &&
+      waitingSteps === "false",
+    `her call ${call?.said === undefined ? "carries no said" : `carries said ${quote(call.said)}`}` +
+      `${glued ? ", and a message of hers repeats it" : ""}; her next round read it on ` +
+      `${onCall === undefined ? "no call message" : `a call message whose content is ${quote(String(onCall.content ?? ""))}`}` +
+      ` and ended on ${quote(lastContent(after))}; the page shows it ${lines} time(s), ` +
+      `${above ? "above" : "not above"} the card, and her line after it ${below ? "below" : "not below"}; ` +
+      `the waiting card's steps are ${waitingSteps === "false" ? "closed" : `aria-expanded=${String(waitingSteps)}`}`,
+  );
+
+  const focus = await typeDisplay(walk, chat, "focus");
+  const cards = chat.log.locator("article[data-task]");
+  const left = await poll(
+    () => cards.count(),
+    (count) => count === 0,
+    10_000,
+  );
+  const saidKept = await shows(saidLine, 5_000);
+  const bar = page.locator(`section[data-waiting="${task}"]`);
+  const barKept = await shows(bar, 10_000);
+  // Her status block is the same in every display, and this one stays in her view after the stop,
+  // for the call's seed to leave out.
+  const asking = (await askHer(walk, chat, FOCUS_LINE, FOCUS_ACK)).find(
+    (request) => lastContent(request) === FOCUS_LINE,
+  );
+  const block = statusBlock(asking);
+  const nth = tasksStarted(started).indexOf(task) + 1;
+  checks.add(
+    "display focus",
+    setsOnly(focus, "focus") &&
+      left === 0 &&
+      saidKept &&
+      barKept &&
+      block.includes(`任务${nth}「`) &&
+      block.includes(WAITS_TO_START),
+    `${typedText(focus, "focus")}; ${left} card(s) left in the log, her words before her call ` +
+      `${saidKept ? "still shown" : "gone"}, the waiting bar ${barKept ? "still up" : "gone"}; ` +
+      `asked after it, she answered after ${block === "" ? "no status block" : quote(block, 400)}`,
+  );
+
+  const worked = workers.length;
+  const dialog = page.getByRole("alertdialog");
+  const release = walk.embeddings.holdWorker();
+  let allowStatus = 0;
+  let running: TaskSnapshot | null = null;
+  let barGone = false;
+  let again: DisplayTyped | null = null;
+  let opened: string | null = null;
+  let stepsLog = false;
+  let others: (string | null)[] = [];
+  let quiet = false;
+  let asks = false;
+  let rows: (string | null)[] = [];
+  let cancelClosed = false;
+  let kept: TaskSnapshot | null = null;
+  let stopStatus = 0;
+  let stopClosed = false;
+  /** The log's last seq as Stop was pressed. */
+  let stoppedAfter = 0;
+  const stopFrom = chats.length;
+  try {
+    const allowed = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url() === `${origin}/api/local/tasks/${task}/approve`,
+    );
+    await bar.locator('[data-answer="once"]').click();
+    allowStatus = (await allowed).status();
+    await poll(
+      async () => workers.length,
+      (count) => count > worked,
+      20_000,
+    );
+    running = await taskOf(walk, task);
+    barGone = await bar
+      .waitFor({ state: "detached", timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    const minded = chats.length;
+    again = await typeDisplay(walk, chat, "verbose");
+    opened = await poll(
+      () => steps.getAttribute("aria-expanded").catch(() => null),
+      (expanded) => expanded === "true",
+      10_000,
+    );
+    stepsLog = await shows(card.getByRole("log", { name: t("en", "Steps"), exact: true }), 10_000);
+    others = await chat.log
+      .locator(`article[data-task]:not([data-task="${task}"]) [data-action="steps"]`)
+      .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-expanded")));
+    quiet = chats.length === minded;
+
+    await chat.box.fill("/stop");
+    await chat.box.press("Enter");
+    asks = await shows(dialog.getByText(t("en", "Stop this task?"), { exact: true }), 10_000);
+    rows = await dialog
+      .locator("li[data-stop]")
+      .evaluateAll((items) => items.map((item) => item.getAttribute("data-stop")));
+    await dialog.getByRole("button", { name: t("en", "Cancel"), exact: true }).click();
+    cancelClosed = await dialog
+      .waitFor({ state: "hidden", timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    kept = await taskOf(walk, task);
+
+    await chat.box.fill("/stop");
+    await chat.box.press("Enter");
+    const row = dialog.locator(`li[data-stop="${task}"]`);
+    await row.waitFor({ timeout: 10_000 });
+    const deleted = page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" &&
+        response.url() === `${origin}/api/local/tasks/${task}`,
+    );
+    stoppedAfter = (await chatLog(walk, chat.id)).at(-1)?.seq ?? 0;
+    await row.getByRole("button", { name: t("en", "Stop"), exact: true }).click();
+    stopStatus = (await deleted).status();
+    stopClosed = await dialog
+      .waitFor({ state: "hidden", timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+  } finally {
+    release();
+  }
+  checks.add(
+    "display steps",
+    allowStatus === 200 &&
+      running?.status === "running" &&
+      barGone &&
+      again !== null &&
+      setsOnly(again, "verbose") &&
+      opened === "true" &&
+      stepsLog &&
+      others.length > 0 &&
+      others.every((expanded) => expanded === "false") &&
+      quiet,
+    `Allow Once on the waiting bar answered ${allowStatus}, and the task ` +
+      `${String(running?.status)} with the bar ${barGone ? "gone" : "still up"}; ` +
+      `${again === null ? "/verbose never ran" : typedText(again, "verbose")}; its card's steps ` +
+      `${opened === "true" ? "opened" : "stayed closed"}${stepsLog ? ", following its steps" : ""}, ` +
+      `the other cards' steps ${JSON.stringify(others)}; her mind took ` +
+      `${quiet ? "no request" : "requests"} while it ran`,
+  );
+
+  const stopped = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot?.status === "cancelled" && snapshot.reported === true,
+    15_000,
+  );
+  // A stop the owner made is told by no one.
+  await Bun.sleep(QUIET_MS);
+  const ended = await chatLog(walk, chat.id);
+  const spoke = ended.filter(
+    (e) => e.type === "message" && e.speaker?.kind === "persona" && e.seq > stoppedAfter,
+  );
+  const final = ended.find(
+    (e) => e.type === "tool-result" && e.callId === START_CALL_3 && e.stage === "final",
+  );
+  const shownEnded = await steps.getAttribute("aria-expanded").catch(() => null);
+  checks.add(
+    "display stop",
+    asks &&
+      JSON.stringify(rows) === JSON.stringify([task]) &&
+      cancelClosed &&
+      kept?.status === "running" &&
+      stopStatus === 200 &&
+      stopClosed &&
+      stopped?.status === "cancelled" &&
+      final?.result?.status === "cancelled" &&
+      spoke.length === 0 &&
+      chats.length === stopFrom &&
+      shownEnded === "true",
+    `/stop ${asks ? "asked to stop this task" : "never asked"}, listing ${JSON.stringify(rows)}; ` +
+      `Cancel ${cancelClosed ? "closed it" : "didn't close it"}, the task then ` +
+      `${String(kept?.status)}; the second /stop's Stop answered ${stopStatus} and ` +
+      `${stopClosed ? "closed" : "didn't close"} the dialog; the task ${String(stopped?.status)}, ` +
+      `its final ${String(final?.result?.status)}, then ${spoke.length} line(s) of hers and ` +
+      `${chats.length - stopFrom} mind request(s); its card's steps ` +
+      `${shownEnded === "true" ? "still shown" : `aria-expanded=${String(shownEnded)}`} once it ended`,
+  );
+
+  const before = ended.length;
+  const minded = chats.length;
+  await chat.box.fill("/stop");
+  await chat.box.press("Enter");
+  const nothing = await shows(page.getByText(t("en", "Nothing to stop"), { exact: true }), 10_000);
+  await chat.box.fill("/foo");
+  await chat.box.press("Enter");
+  const unknown = await shows(
+    page.getByText(t("en", "{command} isn't a command", { command: "/foo" }), { exact: true }),
+    10_000,
+  );
+  const fooKept = await chat.box.inputValue();
+  await chat.box.fill("/stop 2");
+  await chat.box.press("Enter");
+  const trailing = await shows(
+    page.getByText(t("en", "{command} takes nothing after it", { command: "/stop" }), {
+      exact: true,
+    }),
+    10_000,
+  );
+  const stopKept = await chat.box.inputValue();
+  await Bun.sleep(QUIET_MS);
+  const added = (await chatLog(walk, chat.id)).length - before;
+  const dialogs = await dialog.count();
+  const requested = chats.length - minded;
+  await chat.box.fill("");
+  const refocus = await typeDisplay(walk, chat, "focus");
+  checks.add(
+    "display commands",
+    nothing &&
+      unknown &&
+      fooKept === "/foo" &&
+      trailing &&
+      stopKept === "/stop 2" &&
+      added === 0 &&
+      dialogs === 0 &&
+      requested === 0 &&
+      setsOnly(refocus, "focus"),
+    `/stop with nothing live ${nothing ? "said so" : "said nothing"}; /foo ` +
+      `${unknown ? "was refused" : "wasn't refused"}, the draft reading ${quote(fooKept)}; /stop 2 ` +
+      `${trailing ? "was refused" : "wasn't refused"}, the draft reading ${quote(stopKept)}; the ` +
+      `log gained ${added} event(s), ${dialogs} dialog(s) opened and her mind took ${requested} ` +
+      `request(s); then ${typedText(refocus, "focus")}`,
+  );
+}
+
 /**
  * The read-only Tasks list: the first task done and the second stopped, with no button or field,
  * and the first's row opening the chat at its card.
@@ -3289,6 +3686,29 @@ async function taskList(walk: Walk, chat: TaskChatPage): Promise<void> {
       `button(s) and ${fields} field(s); the first's row ${linked ? "links" : "doesn't link"} to ` +
       `the chat at the card, which ${opened ? (inView ? "opened in view" : "opened out of view") : "never opened"}` +
       `${settled ? "" : ", ?task= still in the address"}`,
+  );
+}
+
+/**
+ * The task's chat in focus, opened from the Tasks list's row: that row's card alone shows, the one
+ * brought into view; then /normal brings every card back, for the call after it.
+ */
+async function revealWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
+  const cards = chat.log.locator("article[data-task]");
+  const shown = () =>
+    cards.evaluateAll((articles) => articles.map((article) => article.getAttribute("data-task")));
+  const focused = await shown();
+  const all = tasksStarted(await chatLog(walk, chat.id));
+  const normal = await typeDisplay(walk, chat, "normal");
+  const back = await poll(shown, (tasks) => tasks.length === all.length, 10_000);
+  walk.checks.add(
+    "display reveal",
+    JSON.stringify(focused) === JSON.stringify([chat.first]) &&
+      setsOnly(normal, "normal") &&
+      JSON.stringify(back) === JSON.stringify(all),
+    `in focus, the Tasks list's row left ${JSON.stringify(focused)} shown of ` +
+      `${JSON.stringify(all)}, its own being ${chat.first}; ${typedText(normal, "normal")}, ` +
+      `showing ${JSON.stringify(back)}`,
   );
 }
 
@@ -3445,6 +3865,8 @@ async function callTaskWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
     return nudge?.callId === CALL_TASK_CALL && !nudge.ended;
   });
   const block = statusBlocks(pointed)[0] ?? "";
+  // Her task's number there, the earlier walks' tasks counted.
+  const nth = tasksStarted(started).indexOf(task) + 1;
   const pausedTask = await taskOf(walk, task);
   const granted = { folder: realpathSync(dirname(notes)) };
   const barAsks = await shows(
@@ -3459,7 +3881,7 @@ async function callTaskWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
       saidOnCall(paused, "persona", CALL_WAIT_LINE) &&
       lastContent(pointed) === waitingNudge(CALL_TASK_CALL) &&
       taskToolsOf(pointed).length === 0 &&
-      block.includes("任务3「") &&
+      block.includes(`任务${nth}「`) &&
       block.includes(ASKS_TO_READ) &&
       block.endsWith(NO_TOOLS_TAIL) &&
       pausedTask?.status === "paused" &&
@@ -3611,6 +4033,7 @@ async function smoke(options: Options): Promise<Checks> {
     site: join(run.temp, "task-site"),
     notes: join(run.temp, "task-notes", "notes.txt"),
     second: join(run.temp, "task-second"),
+    third: join(run.temp, "task-third"),
     call: join(run.temp, "task-call"),
   });
   run.defer(embeddings.stop);
@@ -3717,7 +4140,10 @@ async function smoke(options: Options): Promise<Checks> {
         }
         const { chat } = tasked;
         if (chat !== undefined && (await checks.step("task stop", () => stopWalk(walk, chat)))) {
+          await checks.step("chat display", () => displayWalk(walk, chat));
+          // In focus, which the display walk leaves on: the row must bring its card back.
           await checks.step("task list", () => taskList(walk, chat));
+          await checks.step("display reveal", () => revealWalk(walk, chat));
           // In the task's chat, whose stored status block the call must leave out.
           if (called) await checks.step("task call", () => callTaskWalk(walk, chat));
         }

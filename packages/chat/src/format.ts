@@ -48,6 +48,14 @@ export function isReplyMode(value: unknown): value is ReplyMode {
   return REPLY_MODES.some((mode) => mode === value);
 }
 
+/** How much of her tasks a chat shows: focus hides their cards, verbose adds their steps. */
+export const CHAT_DISPLAYS = ["focus", "normal", "verbose"] as const;
+export type ChatDisplay = (typeof CHAT_DISPLAYS)[number];
+
+export function isChatDisplay(value: unknown): value is ChatDisplay {
+  return CHAT_DISPLAYS.some((display) => display === value);
+}
+
 export type CutOff = "length" | "refusal";
 
 interface EventBase {
@@ -96,6 +104,8 @@ export type ChatEvent =
       readonly callId: string;
       readonly name: string;
       readonly arguments: Readonly<Record<string, unknown>>;
+      /** Her words before this call in a text turn, on a round's first call only. */
+      readonly said?: string;
     })
   | (EventBase & {
       readonly type: "tool-result";
@@ -147,6 +157,8 @@ export type ChatEvent =
       readonly type: "settings";
       readonly replyMode?: ReplyMode;
       readonly chainLimit?: number;
+      /** Only the local app writes it. */
+      readonly display?: ChatDisplay;
     })
   | (EventBase & {
       readonly type: "call-started";

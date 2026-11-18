@@ -1,4 +1,4 @@
-import type { ParticipantId, ReplyMode } from "@eidolon/chat";
+import type { ChatDisplay, ParticipantId, ReplyMode } from "@eidolon/chat";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   changeParticipants,
@@ -8,6 +8,7 @@ import {
   readChat,
   renameChat,
   setChainLimit,
+  setDisplay,
   setReplyMode,
 } from "@/lib/chats";
 import { toastError } from "@/lib/feedback";
@@ -76,6 +77,16 @@ export function useSetReplyMode() {
   return useMutation({
     mutationFn: ({ id, replyMode }: { readonly id: string; readonly replyMode: ReplyMode }) =>
       setReplyMode(id, replyMode),
+    onSuccess: (_, { id }) => changed(id),
+    onError: toastError,
+  });
+}
+
+export function useSetDisplay() {
+  const changed = useChanged();
+  return useMutation({
+    mutationFn: ({ id, display }: { readonly id: string; readonly display: ChatDisplay }) =>
+      setDisplay(id, display),
     onSuccess: (_, { id }) => changed(id),
     onError: toastError,
   });

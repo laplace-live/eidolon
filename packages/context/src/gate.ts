@@ -121,15 +121,33 @@ export interface GateState {
   readonly viewer_latest_message: string;
 }
 
-/** What Jev sees: the latest user line and the turns just before it. */
+/**
+ * What Jev sees: the latest user line and the turns just before it. What she said before her
+ * calls, their messages' content, joins her next line into one streamer turn when no user line
+ * comes between, so a recall follow-up keeps the viewer line before it.
+ */
 export function gateState(messages: readonly unknown[]): GateState | null {
   const turns: { role: "user" | "assistant"; text: string }[] = [];
+  const push = (role: "user" | "assistant", content: string): void => {
+    const text = pyStrip(content);
+    if (text) turns.push({ role, text });
+  };
+  let said = "";
   for (const message of messages) {
     if (!isMessage(message) || typeof message.content !== "string") continue;
     if (message.role !== "user" && message.role !== "assistant") continue;
-    const text = pyStrip(message.content);
-    if (text) turns.push({ role: message.role, text });
+    if (message.role === "assistant" && Array.isArray(message.tool_calls)) {
+      said += message.content;
+    } else if (message.role === "assistant") {
+      push("assistant", said + message.content);
+      said = "";
+    } else {
+      if (said !== "") push("assistant", said);
+      said = "";
+      push("user", message.content);
+    }
   }
+  if (said !== "") push("assistant", said);
   const latest = turns.findLastIndex((turn) => turn.role === "user");
   if (latest < 0) return null;
   return {

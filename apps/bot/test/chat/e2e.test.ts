@@ -30,7 +30,14 @@ const IP = "198.51.100.77";
 interface Sent {
   readonly role: string;
   readonly content: unknown;
+  readonly tool_calls?: readonly { readonly id: string }[];
 }
+
+/** The viewer's line her mind answers with words and a call, then a line on the call's result. */
+const LOOK_UP = "帮我查一下";
+const LOOKING = "我查一下";
+const FOUND = "查到了";
+const LOOK_CALL = "call_look_up";
 
 /** What her mind was sent, one request per mind call. */
 const asked: { readonly messages: readonly Sent[] }[] = [];
@@ -44,10 +51,22 @@ beforeAll(() => {
       if (new URL(request.url).pathname !== "/v1/chat/completions") {
         return new Response("not here", { status: 404 });
       }
-      asked.push((await request.json()) as { messages: Sent[] });
+      const sent = (await request.json()) as { messages: Sent[] };
+      asked.push(sent);
+      const last = sent.messages.at(-1);
+      const call = {
+        index: 0,
+        id: LOOK_CALL,
+        type: "function",
+        function: { name: "look_up", arguments: "{}" },
+      };
+      const delta =
+        last?.content === LOOK_UP
+          ? { role: "assistant", content: LOOKING, tool_calls: [call] }
+          : { role: "assistant", content: last?.role === "tool" ? FOUND : `第${asked.length}句` };
       const chunks = [
-        { choices: [{ delta: { role: "assistant", content: `第${asked.length}句` } }] },
-        { choices: [{ delta: {}, finish_reason: "stop" }] },
+        { choices: [{ delta }] },
+        { choices: [{ delta: {}, finish_reason: "tool_calls" in delta ? "tool_calls" : "stop" }] },
         { choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, cost: 0.0001 } },
       ];
       const body = [...chunks.map((chunk) => JSON.stringify(chunk)), "[DONE]"]
@@ -266,6 +285,46 @@ describe("with EIDOLON_CHAT_SECRET set", () => {
     );
     expect(homeFiles()).toEqual(before);
     expect(existsSync(join(dataHome(), "chats"))).toBe(false);
+  });
+
+  test("her words before a tool call come back signed on the call, reach her next view as its message's content, and leave it once edited", async () => {
+    process.env.EIDOLON_CHAT_SECRET = SECRET;
+    const signer = await ChatSigner.create(SECRET);
+    const base = await boot();
+    const browser = new Browser(base, activePersona().id);
+
+    await browser.send(LOOK_UP);
+    const stored = browser.events as ChatEvent[];
+    const call = stored.find((event) => event.type === "tool-call");
+    expect(call?.type === "tool-call" && call.said).toBe(LOOKING);
+    expect(call !== undefined && (await signer.verify(CHAT_ID, call))).toBe(true);
+    const hers = stored.flatMap((event) =>
+      event.type === "message" && event.speaker.kind === "persona" ? [event.text] : [],
+    );
+    expect(hers).toEqual([FOUND]);
+
+    await browser.send("然后呢");
+    const words = view(asked.length - 1).map((message) => [
+      message.role,
+      message.content,
+      message.tool_calls?.map((each) => each.id) ?? null,
+    ]);
+    expect(words).toEqual([
+      ["user", LOOK_UP, null],
+      ["assistant", LOOKING, [LOOK_CALL]],
+      ["tool", expect.any(String), null],
+      ["assistant", FOUND, null],
+      ["user", "然后呢", null],
+    ]);
+
+    // An edited said fails the call's signature, and the call leaves her view with its result.
+    const at = stored.indexOf(call as ChatEvent);
+    browser.events[at] = { ...(call as object), said: "我不查" };
+    await browser.send("还在吗");
+    const edited = view(asked.length - 1);
+    expect(edited.some((message) => message.tool_calls !== undefined)).toBe(false);
+    expect(edited.some((message) => message.role === "tool")).toBe(false);
+    expect(JSON.stringify(edited)).not.toContain("我不查");
   });
 
   test("two viewers who send the same chat id each get parts of their own", async () => {

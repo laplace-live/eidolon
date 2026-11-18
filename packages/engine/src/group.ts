@@ -4,6 +4,7 @@
 import {
   CHAT_WINDOW_MESSAGES,
   type ChatEvent,
+  type ChatEventOf,
   type ChatHeader,
   type ParticipantId,
   summarize,
@@ -69,13 +70,55 @@ export function groupOf(
 /** What Mem0 stores of a group's `events` for `persona`: the viewer's lines and hers alone. */
 export function groupMemory(events: readonly ChatEvent[], persona: ParticipantId): Group["memory"] {
   const memory: { role: "user" | "assistant"; content: string }[] = [];
-  for (const event of events) {
-    if (event.type !== "message" || event.text === "") continue;
-    const { speaker } = event;
-    if (speaker.kind === "user") memory.push({ role: "user", content: event.text });
-    else if (speaker.id === persona) memory.push({ role: "assistant", content: event.text });
+  for (const { speaker, text } of linesOf(events)) {
+    if (speaker.kind === "user") memory.push({ role: "user", content: text });
+    else if (speaker.id === persona) memory.push({ role: "assistant", content: text });
   }
   return memory.slice(-CHAT_WINDOW_MESSAGES);
+}
+
+type Line = Pick<ChatEventOf<"message">, "speaker" | "text" | "modality">;
+
+/** What a persona said before her calls, waiting for her next line. */
+interface Said {
+  readonly persona: ParticipantId;
+  text: string;
+}
+
+const saidLine = ({ persona, text }: Said): Line => ({
+  speaker: { kind: "persona", id: persona },
+  text,
+});
+
+/**
+ * The lines of `events`, its messages with words, in order. What a persona said before her calls
+ * joins her next line into one when no other line comes between, and stands as a line of hers
+ * before the next one otherwise.
+ */
+export function linesOf(events: readonly ChatEvent[]): Line[] {
+  const lines: Line[] = [];
+  let said = null as Said | null;
+  for (const event of events) {
+    if (event.type === "tool-call" && event.said) {
+      if (said?.persona === event.persona) {
+        said.text += event.said;
+      } else {
+        if (said !== null) lines.push(saidLine(said));
+        said = { persona: event.persona, text: event.said };
+      }
+    } else if (event.type === "message" && event.text !== "") {
+      const { speaker, modality } = event;
+      let { text } = event;
+      if (said !== null) {
+        if (speaker.kind === "persona" && speaker.id === said.persona) text = said.text + text;
+        else lines.push(saidLine(said));
+        said = null;
+      }
+      lines.push({ speaker, text, ...(modality ? { modality } : {}) });
+    }
+  }
+  if (said !== null) lines.push(saidLine(said));
+  return lines;
 }
 
 /**

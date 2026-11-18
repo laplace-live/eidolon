@@ -115,6 +115,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         problem: assistantProblem,
         report: (snapshot) => chats().report(snapshot),
         waiting: (snapshot) => chats().taskWaiting(snapshot),
+        progress: (snapshot) => chats().taskProgress(snapshot),
       });
       manager = tasks;
       const chats = chatRunner({ onStop }, { tasks });

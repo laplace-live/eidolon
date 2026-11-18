@@ -2,7 +2,7 @@
 // recognizer and voice, with her turns scripted. She opens on her view of the chat, and the runner
 // stores each line and photo between the call's ends; in a chat of hers alone, her start_task on
 // the call too, and a task's end reaches her there, told there only by a line after a reply of hers
-// recorded its nudge, else in text after the call.
+// recorded its nudge, else in text after the call; in a verbose chat, so does its plan's progress.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -25,7 +25,7 @@ import { FakeClock } from "../../../../packages/voice/test/input/clock.ts";
 import { SILERO_MODEL, SMART_TURN_MODEL } from "../../../../packages/voice/test/input/speech.ts";
 import type { TaskChat, TaskSnapshot } from "../../src/local/api.ts";
 import { ChatRunner, type ChatRunnerOptions, type ChatTurn } from "../../src/local/chats/runner.ts";
-import { START_TASK, taskEndedNudge } from "../../src/local/tasks/tool.ts";
+import { START_TASK, taskEndedNudge, taskProgressNudge } from "../../src/local/tasks/tool.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 
 const PERSONA = "milky-green";
@@ -297,6 +297,102 @@ test("her answer on the call may start a task, which the chat stores, and she te
     ["persona", "网页做好啦", "call", null],
     ["call-ended", "hangup"],
   ]);
+  expect(
+    logs.lines().filter((line) => line.startsWith("ERROR") || line.startsWith("WARNING")),
+  ).toEqual([]);
+}, 20_000);
+
+test("in a verbose chat, a step of her task's plan done is told in a follow-up offered no task tools, which tells no end", async () => {
+  const running: TaskSnapshot = {
+    v: 1,
+    id: "0190f5c8-0000-7000-8000-00000000a001",
+    createdAt: 1000,
+    status: "running",
+    brief: { goal: "写一个待办网页", deliverable: "写一个待办网页", folder: "/site", check: "c" },
+    model: { account: "openrouter", model: "test/model" },
+    grants: [],
+    spendPauseUsd: 1,
+    spentUsd: 0,
+    files: { read: [], written: [] },
+  };
+  let snapshots: TaskSnapshot[] = [];
+  const tasks: NonNullable<ChatRunnerOptions["tasks"]> = {
+    ready: () => true,
+    start: async () => running,
+    cancelChat: async () => {},
+    list: async () => snapshots,
+    snapshotsOf: () => snapshots,
+    steer: async () => running,
+    cancel: async () => running,
+  };
+  let told = 0;
+  const runner = new ChatRunner({
+    root: ROOT(),
+    turn: (request, save) => {
+      told++;
+      return greets(request, save);
+    },
+    tasks,
+  });
+  const id = await runner.create([PERSONA]);
+  await runner.live(id)?.ended;
+  await runner.changeSettings(id, { display: "verbose" });
+  const { transport, turns, speaks, done } = await onCall(runner, id);
+  await speaks(turns[0] as FakeTurn, "又见面了");
+  transport.rtvi("send-text", { content: "帮我写个网页", options: { run_immediately: true } });
+  await until(() => turns.length === 2);
+  const answer = turns[1] as FakeTurn;
+  const start = answer.request.background?.tools[0];
+  const args = { goal: "写一个待办网页", folder: "~/site" };
+  const ids = { persona: PERSONA, turn: answer.id, callId: "call-1" };
+  answer.events({ type: "tool-call", ...ids, name: START_TASK, arguments: args });
+  const context = { getMessages: () => [], setMessages: () => {}, setHiddenTools: () => {} };
+  const result = await start?.run(
+    { arguments: args, context, signal: new AbortController().signal, callId: "call-1" },
+    answer.request.effects,
+  );
+  answer.events({ type: "tool-result", ...ids, result: result ?? {}, stage: "started" });
+  await speaks(answer, "交给我吧");
+  // The first step of its plan is done.
+  const furthered: TaskSnapshot = {
+    ...running,
+    chat: { id, persona: PERSONA, call: "call-1" },
+    todo: [
+      { text: "写页面", status: "done" },
+      { text: "检查", status: "in_progress" },
+    ],
+  };
+  snapshots = [furthered];
+  runner.taskProgress(furthered);
+  await until(() => turns.length === 3);
+  const tells = turns[2] as FakeTurn;
+  expect(tells.request.nudge).toBe(taskProgressNudge("call-1"));
+  expect(tells.request.background).toBeUndefined();
+  expect(tells.request.tools).toBeUndefined();
+  expect(tells.request.providers?.map((entry) => entry.label)).toEqual(["TasksStatus"]);
+  recordsNudge(tells);
+  await speaks(tells, "做完一步啦，还在弄");
+  transport.leave();
+  await done;
+  await until(() => runner.callIn(id) === null);
+  await Bun.sleep(50);
+  await runner.shutdown();
+
+  expect(told).toBe(1);
+  const stored = (await runner.store.read(id)).events;
+  expect(stored.map(brief)).toEqual([
+    ["persona", "你好", "text", null],
+    ["settings"],
+    ["call-started", PERSONA],
+    ["persona", "又见面了", "call", null],
+    ["user", "帮我写个网页", "call", null],
+    ["tool-call", START_TASK],
+    ["tool-result", "started"],
+    ["persona", "交给我吧", "call", null],
+    ["persona", "做完一步啦，还在弄", "call", null],
+    ["call-ended", "hangup"],
+  ]);
+  expect(stored.at(-1)).not.toHaveProperty("told");
   expect(
     logs.lines().filter((line) => line.startsWith("ERROR") || line.startsWith("WARNING")),
   ).toEqual([]);

@@ -14,7 +14,14 @@ import {
   toolCallMessages,
   viewWithBlocks,
 } from "@eidolon/chat";
-import { errorText, logger, raceAbort, readPersonaIdentity, withPersona } from "@eidolon/config";
+import {
+  chatMaxRounds,
+  errorText,
+  logger,
+  raceAbort,
+  readPersonaIdentity,
+  withPersona,
+} from "@eidolon/config";
 import { buildGreetingKickoff } from "@eidolon/context";
 import type {
   ConversationContext,
@@ -48,9 +55,6 @@ import { timed, withUnheard } from "./voice.ts";
 
 /** The `tool` stream line's name while her voice role speaks a voice message. */
 const SPEAKING = "voice";
-
-/** Mind calls per turn; tool calls the last one asks for are not run. */
-export const MAX_ROUNDS = 4;
 
 /** pipedog's tool results for a call with no handler, and for one whose handler threw. */
 const missingResult = (name: string): ToolResult => ({
@@ -628,6 +632,11 @@ class Turn {
     };
   }
 
+  /**
+   * Her rounds. Each of her first chat.maxRounds may call her tools; when the last of them still
+   * calls, an answer round follows, offering her background tools alone, or her tools with none to
+   * call, and a background call it makes is followed by one more round that calls none.
+   */
   async #converse(
     parts: PersonaParts,
     mind: Mind,
@@ -636,8 +645,14 @@ class Turn {
   ): Promise<void> {
     const signal = this.#signal;
     const cut = group === null ? null : new SpeakerCut(group.names);
+    const rounds = chatMaxRounds();
     for (let round = 1; ; round++) {
       const hidden = conversation.hiddenTools;
+      const visible = parts.tools.filter((tool) => !hidden.includes(tool.schema.name));
+      const answering = round > rounds;
+      const background = answering ? visible.filter((tool) => this.#isBackground(tool)) : [];
+      const offered = background.length > 0 ? background : visible;
+      const none = answering && (background.length === 0 || round > rounds + 1);
       let text = "";
       let calls: MindToolCall[] = [];
       let finishReason: string | null = null;
@@ -652,9 +667,8 @@ class Turn {
         for await (const chunk of mind.stream({
           system: parts.systemInstruction,
           messages: conversation.getMessages(),
-          tools: parts.tools
-            .filter((tool) => !hidden.includes(tool.schema.name))
-            .map((tool) => tool.schema),
+          tools: offered.map((tool) => tool.schema),
+          ...(none ? { toolChoice: "none" } : {}),
           ...(group === null ? {} : { stop: group.stop }),
           signal,
         })) {
@@ -675,36 +689,45 @@ class Turn {
         throw error;
       }
       let running: Promise<RoundResult | typeof RUNS_ON>[];
+      let kept: MindToolCall[];
       try {
         if (cut?.cut) {
           logger.info(`[chat] ${this.#persona}'s reply was cut where she wrote as someone else`);
           return;
         }
         if (cut !== null) say(cut.flush());
-        if (calls.length === 0) {
+        // A provider may call what an answer round doesn't offer: unrecorded, it needs no result.
+        kept = !answering
+          ? calls
+          : calls.filter((call) => !none && offered.some((tool) => tool.schema.name === call.name));
+        if (kept.length < calls.length) {
+          const names = calls.filter((call) => !kept.includes(call)).map((call) => call.name);
+          logger.warning(
+            `[chat] ${this.#persona} called ${names.join(", ")} past her ${rounds} tool rounds; ` +
+              "not run",
+          );
+        }
+        if (kept.length === 0) {
           this.#cutOff = CUT_OFF.get(finishReason);
           return;
         }
-        if (round === MAX_ROUNDS) {
-          logger.warning(
-            `[chat] ${this.#persona} called ${calls.map((call) => call.name).join(", ")} ` +
-              `after ${MAX_ROUNDS} rounds; not run`,
-          );
-          return;
-        }
+        // A call's message is what was heard, which the round's words may not have reached yet.
+        const said = this.#call === null ? text : "";
         this.#record(
-          calls.map((call) => ({
+          kept.map((call, i) => ({
             type: "tool-call",
             persona: this.#persona,
             turn: this.#id,
             callId: call.id,
             name: call.name,
             arguments: call.arguments,
+            ...(i === 0 && said !== "" ? { said } : {}),
           })),
         );
+        if (this.#call === null) this.#text = "";
         // pipedog runs a round's calls in parallel too, and ends the mind's response once they
         // have started.
-        running = calls.map((call) => this.#runTool(parts, call, conversation));
+        running = kept.map((call) => this.#runTool(parts, call, conversation));
       } finally {
         ended();
       }
@@ -716,13 +739,22 @@ class Turn {
         this.#record(conversation.takeRecorded());
         return;
       }
-      calls.forEach((call, i) => {
-        conversation.append(...toolCallMessages({ callId: call.id, ...call }, results[i] ?? null));
+      // As her next view holds the round: its words on its first call, its results last.
+      kept.forEach((call, i) => {
+        conversation.append(
+          ...toolCallMessages(
+            { callId: call.id, ...call },
+            results[i] ?? null,
+            i === 0 ? text : "",
+          ),
+        );
       });
-      // A call's text lands after its tool messages, as pipedog's assistant aggregator orders it.
-      if (text !== "") conversation.append({ role: "assistant", content: text });
       this.#record(conversation.takeRecorded());
     }
+  }
+
+  #isBackground(tool: LlmTool): boolean {
+    return this.#background?.tools.includes(tool) ?? false;
   }
 
   /** A call names a tool that timed out cancelled; a chat, failed. */
@@ -749,7 +781,7 @@ class Turn {
     const turnSignal = this.#signal;
     const hooks = this.#call;
     const tool = parts.tools.find((candidate) => candidate.schema.name === call.name);
-    const background = tool !== undefined && (this.#background?.tools.includes(tool) ?? false);
+    const background = tool !== undefined && this.#isBackground(tool);
     // In a call, only her own async tools take pipedog's path; handed tools run as in a chat.
     const runsOn =
       hooks !== null &&

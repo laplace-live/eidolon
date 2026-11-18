@@ -68,6 +68,7 @@ import {
   type TasksQuery,
 } from "../api.ts";
 import { readLines } from "../jobs/events.ts";
+import { doneOf } from "./milestones.ts";
 import { SnapshotFile } from "./snapshot-file.ts";
 
 /** newTaskId's UUIDv7: an id a route may look up. */
@@ -107,6 +108,11 @@ export interface TaskManagerOptions {
    * answer or an end, nor for a pause a cancel has already asked to end. A throw is logged.
    */
   readonly waiting?: (snapshot: TaskSnapshot) => void;
+  /**
+   * Told when a todo result raises the done count of a task's plan, once the snapshot holds it;
+   * never for one a resume reads back. A throw is logged.
+   */
+  readonly progress?: (snapshot: TaskSnapshot) => void;
 }
 
 type RefusalStatus = 400 | 404 | 409 | 416;
@@ -391,6 +397,7 @@ export class TaskManager {
   readonly #now: () => number;
   readonly #report: (snapshot: TaskSnapshot) => Promise<void>;
   readonly #waiting: ((snapshot: TaskSnapshot) => void) | undefined;
+  readonly #progress: ((snapshot: TaskSnapshot) => void) | undefined;
   readonly #tasks = new Map<string, Task>();
   readonly #streams = new Set<() => void>();
   #loaded: Promise<void> | null = null;
@@ -408,6 +415,7 @@ export class TaskManager {
     this.#now = options.now ?? Date.now;
     this.#report = options.report;
     this.#waiting = options.waiting;
+    this.#progress = options.progress;
   }
 
   /**
@@ -1169,8 +1177,11 @@ export class TaskManager {
       run.last = { status: "paused", reason: entry.reason, detail: entry.detail };
     }
     if (entry.type === "end") run.last = entry.outcome;
+    const furthered =
+      changes.todo !== undefined && doneOf(changes.todo) > doneOf(task.snapshot.todo);
     void this.#change(task, changes);
     for (const wake of task.readers) wake();
+    if (furthered) this.#tell(task, this.#progress, "progress");
   }
 
   async #settle(task: Task, run: Run, outcome: TaskOutcome | null): Promise<void> {
@@ -1190,14 +1201,14 @@ export class TaskManager {
     if (outcome === null) return;
     if (outcome.status !== "paused") void this.#reportEnd(task);
     // A cancel that came as the run decided to pause ends the task next: nothing waits on the owner.
-    else if (!run.cancel.signal.aborted) this.#tellWaiting(task);
+    else if (!run.cancel.signal.aborted) this.#tell(task, this.#waiting, "pause");
   }
 
-  #tellWaiting(task: Task): void {
+  #tell(task: Task, hook: ((snapshot: TaskSnapshot) => void) | undefined, what: string): void {
     try {
-      this.#waiting?.(task.snapshot);
+      hook?.(task.snapshot);
     } catch (error) {
-      logger.exception(`Task ${task.snapshot.id}'s pause wasn't told to its chat`, error);
+      logger.exception(`Task ${task.snapshot.id}'s ${what} wasn't told to its chat`, error);
     }
   }
 

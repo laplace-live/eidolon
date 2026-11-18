@@ -1,7 +1,7 @@
 // How the settings form shows a SETTINGS row and what it saves. A value is written so the bot reads
 // it back from the file exactly as from the variable: @eidolon/config's asEnvValue joins a list
 // with "," and resolves each path, and the readers split on "," and strip Python whitespace.
-import { REPLY_MODES } from "@eidolon/chat";
+import { CHAT_DISPLAYS, REPLY_MODES } from "@eidolon/chat";
 import type { SettingKind, SettingRow, SettingScope } from "@/lib/api";
 import {
   defaultModel,
@@ -50,6 +50,9 @@ export const DEFAULT_TALKATIVENESS = 0.5;
 /** @eidolon/config's DEFAULT_CHAT_REPLY_MODE. */
 export const DEFAULT_REPLY_MODE = "auto";
 
+/** @eidolon/config's DEFAULT_CHAT_DISPLAY. */
+export const DEFAULT_DISPLAY = "normal";
+
 /** The browsers yt-dlp's --cookies-from-browser reads, and `none` for no cookies. */
 export const COOKIE_BROWSERS = [
   "none",
@@ -80,8 +83,10 @@ const BY_PATH: Readonly<Record<string, Control>> = {
     slider: { min: 0, max: 1, step: 0.05, fallback: DEFAULT_TALKATIVENESS },
   },
   "chat.replyMode": { type: "select", options: REPLY_MODES, fallback: DEFAULT_REPLY_MODE },
+  "chat.maxRounds": { type: "integer", min: 1 },
   "assistant.enabled": { type: "flag", fallback: "on" },
   "assistant.folders": { type: "paths", inPersona: false, folders: true },
+  "chats.display": { type: "select", options: CHAT_DISPLAYS, fallback: DEFAULT_DISPLAY },
 };
 
 function byKind(kind: SettingKind, scope: SettingScope): Control {
@@ -459,6 +464,8 @@ const GROUP_OF: Readonly<Record<string, Group>> = {
   transcription: "videos",
   selfie: "selfie",
   assistant: "assistant",
+  // chats.display only changes how her tasks show.
+  chats: "assistant",
   providers: "providers",
   embeddings: "providers",
   rerank: "providers",

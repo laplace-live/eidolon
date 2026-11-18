@@ -1,5 +1,6 @@
 // What a task's state means for the pages: whether it waits on the owner and for what, what its
-// card offers and lists, the Tasks list's order, and how often a page asks again.
+// card offers, lists and opens, the Tasks list's order, and how often a page asks again.
+import type { ChatDisplay } from "@eidolon/chat";
 import type {
   AssistantStatus,
   STEER_PREFIX as SteerPrefix,
@@ -183,6 +184,53 @@ export function followsSteps(
   if (open) return true;
   const [newest] = tasks.filter((task) => task.status === "running").sort(newestFirst);
   return newest?.id === id;
+}
+
+/**
+ * Whether a card shows its task's steps: as the owner last chose under this display, else in verbose
+ * while its task is the newest running one, or while it keeps the steps it showed live.
+ */
+export function stepsShown({
+  display,
+  chosen,
+  newest,
+  shownLive,
+}: {
+  readonly display: ChatDisplay | null;
+  /** The owner's own Show Steps or Hide Steps under this display; null for none. */
+  readonly chosen: boolean | null;
+  /** Its task is the newest running one, as followsSteps decides with its steps closed. */
+  readonly newest: boolean;
+  /** As keepsLiveSteps says. */
+  readonly shownLive: boolean;
+}): boolean {
+  if (chosen !== null) return chosen;
+  return display === "verbose" && (newest || shownLive);
+}
+
+/**
+ * Whether a card in verbose keeps the steps it showed live, given whether it did until now: from
+ * while its task is the newest running one, through its pauses and its end, until another running
+ * task is the newest or the display leaves verbose. A card read afresh shows none, so a page never
+ * reads every ended task's transcript at once.
+ */
+export function keepsLiveSteps(
+  before: boolean,
+  {
+    display,
+    newest,
+    running,
+  }: { readonly display: ChatDisplay | null; readonly newest: boolean; readonly running: boolean },
+): boolean {
+  if (display !== "verbose") return false;
+  return running ? newest : before;
+}
+
+/** The tasks a /stop offers to stop: those that haven't ended, newest first. */
+export function stopChoice<T extends Pick<TaskSnapshot, "status" | "createdAt">>(
+  tasks: readonly T[],
+): T[] {
+  return tasks.filter((task) => !ended(task.status)).sort(newestFirst);
 }
 
 /** The tasks of `tasks` that were live in `before`, the statuses last seen, and have ended. */

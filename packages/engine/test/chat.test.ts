@@ -300,6 +300,59 @@ describe("runChat", () => {
     ]);
   });
 
+  test("the director reads a turn's words before its call and her line as one line, and a hop asks about her line", async () => {
+    let asked = 0;
+    const { createMind } = minds({
+      ann: async function* () {
+        asked++;
+        if (asked === 1) {
+          yield { type: "text", text: "我查查。" };
+          yield {
+            type: "tool-calls",
+            calls: [{ id: "c1", name: "recall_streams", arguments: {} }],
+          };
+        } else {
+          yield { type: "text", text: "是那次" };
+        }
+        yield DONE;
+      },
+    });
+    const director = scripted(["ann"], []);
+    const chat = chatOf(header("ann", "bea"), user("还记得吗"));
+    await chat.drive(runChat(request(chat), deps(createMind, director.decide)));
+    expect(director.inputs[1]?.lines).toEqual([
+      { speaker: { kind: "user" }, text: "还记得吗" },
+      { speaker: { kind: "persona", id: "ann" }, text: "我查查。是那次" },
+    ]);
+    const line = chat.events.findLast((event) => event.type === "message") as ChatEvent;
+    expect(decisions(chat.events).map((decision) => decision.after)).toEqual([1, line.seq]);
+  });
+
+  test("the director reads words before a call with no line of hers after them as her line, before the next", async () => {
+    let asked = 0;
+    const { createMind } = minds({
+      ann: async function* () {
+        if (++asked === 1) {
+          yield { type: "text", text: "我查查。" };
+          yield {
+            type: "tool-calls",
+            calls: [{ id: "c1", name: "recall_streams", arguments: {} }],
+          };
+        }
+        yield DONE;
+      },
+    });
+    const director = scripted(["ann", "bea"], []);
+    const chat = chatOf(header("ann", "bea"), user("还记得吗"));
+    await chat.drive(runChat(request(chat), deps(createMind, director.decide)));
+    expect(messages(chat.events)).toEqual(["viewer: 还记得吗", "bea: 露比说1"]);
+    expect(director.inputs[1]?.lines).toEqual([
+      { speaker: { kind: "user" }, text: "还记得吗" },
+      { speaker: { kind: "persona", id: "ann" }, text: "我查查。" },
+      { speaker: { kind: "persona", id: "bea" }, text: "露比说1" },
+    ]);
+  });
+
   test("chains up to the chat's limit, the default 3 hops after the viewer's line", async () => {
     const { createMind } = minds();
     const run = async (...settings: ChatEventDraft[]) => {

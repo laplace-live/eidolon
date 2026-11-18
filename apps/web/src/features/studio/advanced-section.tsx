@@ -21,7 +21,7 @@ export function AdvancedSection({ persona }: { readonly persona: PersonaSummary 
         persona={persona.id}
         exclude={SHOWN_PATHS}
         title={t`Advanced`}
-        description={t`Her settings the other sections don't show: where her prompt and index live, and the ids Mem0 files her memories under.`}
+        description={t`Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools.`}
       />
     </>
   );

@@ -210,6 +210,45 @@ describe("a turn in a group chat", () => {
     ]);
   });
 
+  test("hands Mem0 a turn's words before its call and her line as one entry, and words no line of hers follows as their own", async () => {
+    const { mind } = fakeMind([DONE]);
+    const seen: Seen = {};
+    const recall = (callId: string, said: string): ChatEventDraft[] => [
+      {
+        type: "tool-call",
+        persona: "ann",
+        turn: callId,
+        callId,
+        name: "recall_streams",
+        arguments: {},
+        said,
+      },
+      { type: "tool-result", persona: "ann", turn: callId, callId, result: {} },
+    ];
+    await collect(
+      runTurn(
+        request(
+          GROUP,
+          user("还记得吗"),
+          ...recall("c1", "我查查。"),
+          from("ann", "是那次"),
+          user("还有呢"),
+          ...recall("c2", "等等"),
+          from("bea", "我也记得"),
+          user("嗯"),
+        ),
+        deps(mind, seen),
+      ),
+    );
+    expect(seen.metadata?.[MEM0_STORE_KEY]).toEqual([
+      { role: "user", content: "还记得吗" },
+      { role: "assistant", content: "我查查。是那次" },
+      { role: "user", content: "还有呢" },
+      { role: "assistant", content: "等等" },
+      { role: "user", content: "嗯" },
+    ]);
+  });
+
   test("cuts her reply at a line she writes as another, the rest of the stream unread", async () => {
     const ran: string[] = [];
     const selfie: LlmTool = {

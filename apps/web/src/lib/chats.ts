@@ -1,5 +1,11 @@
 // The chats API at /api/local/chats, whose wire types carry @eidolon/chat's format.
-import type { ChatStreamLine, ChatSummary, ParticipantId, ReplyMode } from "@eidolon/chat";
+import type {
+  ChatDisplay,
+  ChatStreamLine,
+  ChatSummary,
+  ParticipantId,
+  ReplyMode,
+} from "@eidolon/chat";
 import { ApiError, type ChatContents, call, send, stream, url } from "./api";
 import { readNdjson } from "./ndjson";
 
@@ -87,6 +93,11 @@ export async function setChainLimit(id: string, chainLimit: number): Promise<voi
 /** How every persona in the chat answers from the next line on, over each one's own setting. */
 export async function setReplyMode(id: string, replyMode: ReplyMode): Promise<void> {
   await call("PATCH /api/local/chats/:id", { params: { id }, body: { replyMode } });
+}
+
+/** How much of her tasks the chat shows from now on, over the app's chats.display. */
+export async function setDisplay(id: string, display: ChatDisplay): Promise<void> {
+  await call("PATCH /api/local/chats/:id", { params: { id }, body: { display } });
 }
 
 /** Adds personas to the chat and removes others, leaving it 1 to 6. */

@@ -2,6 +2,7 @@
 // Chinese is live prompt text: these hold it word for word.
 import { describe, expect, test } from "bun:test";
 import type { BackgroundTool } from "@eidolon/engine";
+import { TASKS_BLOCK_NAME } from "../../src/local/tasks/status.ts";
 import {
   assistantPromptHint,
   START_TASK,
@@ -10,6 +11,7 @@ import {
   startTaskTool,
   TASK_NUDGE_LEAD,
   taskEndedNudge,
+  taskProgressNudge,
   taskWaitingNudge,
 } from "../../src/local/tasks/tool.ts";
 
@@ -59,9 +61,23 @@ describe("the nudges", () => {
     );
   });
 
-  test("both start with the lead a call's seed drops them by", () => {
+  test("her task's plan getting further, on a verbose call: the block's count, never which step", () => {
+    expect(taskProgressNudge("call_7")).toBe(
+      "你用 start_task 在电脑上做的事（调用 call_7）又往前做了一些。照「后台的活」里它那条的计划步数，" +
+        "用一句话随口告诉对方现在做完几步了；具体是哪一步你看不到，别猜，也别念路径或文件名。",
+    );
+  });
+
+  test("the plan's points her to the block by its name, and only its call varies", () => {
+    expect(taskProgressNudge("call_7")).toContain(`「${TASKS_BLOCK_NAME}」`);
+    expect(taskProgressNudge("call_7").replace("call_7", "call_8")).toBe(
+      taskProgressNudge("call_8"),
+    );
+  });
+
+  test("all three start with the lead a call's seed drops them by", () => {
     expect(TASK_NUDGE_LEAD).toBe("你用 start_task 在电脑上做的事（调用 ");
-    for (const nudge of [taskEndedNudge("x"), taskWaitingNudge("x")]) {
+    for (const nudge of [taskEndedNudge("x"), taskWaitingNudge("x"), taskProgressNudge("x")]) {
       expect(nudge.startsWith(TASK_NUDGE_LEAD)).toBe(true);
     }
   });

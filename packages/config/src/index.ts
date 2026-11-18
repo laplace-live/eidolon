@@ -14,9 +14,13 @@ export {
 } from "./assistant.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
 export {
+  chatDisplay,
   chatInterests,
+  chatMaxRounds,
   chatReplyMode,
   chatTalkativeness,
+  DEFAULT_CHAT_DISPLAY,
+  DEFAULT_CHAT_MAX_ROUNDS,
   DEFAULT_CHAT_REPLY_MODE,
   DEFAULT_CHAT_TALKATIVENESS,
 } from "./chat.ts";

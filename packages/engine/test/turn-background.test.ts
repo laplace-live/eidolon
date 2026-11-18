@@ -2,7 +2,7 @@
 // hint, their result stored as `started` while the work goes on outside the turn, and her next
 // round reading what they started, in a chat and in a call alike.
 import "../../config/test/isolated-guard.ts";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { UserContext } from "@eidolon/access";
@@ -15,7 +15,7 @@ import {
   stampEvents,
   viewOf,
 } from "@eidolon/chat";
-import { dataHome, resetSettings } from "@eidolon/config";
+import { consoleSink, dataHome, logger, resetSettings } from "@eidolon/config";
 import type { LlmTool, ToolResult } from "@eidolon/core";
 import { ASYNC_TOOL_INSTRUCTIONS } from "../src/async_tool.ts";
 import { type ChatDeps, type ChatOutput, runChat } from "../src/chat.ts";
@@ -365,6 +365,149 @@ describe("a text turn's background tools", () => {
   });
 });
 
+describe("her answer round", () => {
+  const saved = process.env.CHAT_MAX_ROUNDS;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.CHAT_MAX_ROUNDS;
+    else process.env.CHAT_MAX_ROUNDS = saved;
+  });
+
+  const callSelfie: MindChunk = {
+    type: "tool-calls",
+    calls: [{ id: "s1", name: "take_selfie", arguments: {} }],
+  };
+
+  test("offers her background tools alone; a start_task there runs, and one more round, calling none, gives her line", async () => {
+    process.env.CHAT_MAX_ROUNDS = "1";
+    const { mind, requests } = fakeMind(
+      [callSelfie, DONE],
+      [{ type: "text", text: "顺便帮你弄" }, callStart, DONE],
+      [{ type: "text", text: "点一下允许就开始" }, DONE],
+    );
+    const { engine } = deps(mind);
+    const runs: unknown[] = [];
+    const tool = startTask(async ({ callId }) => {
+      runs.push(callId);
+      return { task: "t1", status: "awaiting-approval" };
+    });
+    const outputs = await collect(
+      runTurn(
+        {
+          chat: chat(user("拍张照，再帮我写个网页")),
+          persona: PERSONA,
+          viewer: VIEWER,
+          signal: new AbortController().signal,
+          background: { tools: [tool], hint: HINT },
+        },
+        engine,
+      ),
+    );
+    expect(runs).toEqual(["c1"]);
+    expect(requests.map((asked) => [toolNames(asked), asked.toolChoice])).toEqual([
+      [["take_selfie", "start_task"], undefined],
+      [["start_task"], undefined],
+      [["start_task"], "none"],
+    ]);
+    expect(requests[2]?.messages.at(-1)).toEqual({
+      role: "tool",
+      tool_call_id: "c1",
+      content: '{"task": "t1", "status": "awaiting-approval"}',
+    });
+    const events = eventsOf(outputs);
+    expect(events.map((event) => event.type)).toEqual([
+      "tool-call",
+      "tool-result",
+      "tool-call",
+      "tool-result",
+      "message",
+    ]);
+    expect(events[2]).toMatchObject({ callId: "c1", said: "顺便帮你弄" });
+    expect(events[3]).toMatchObject({ callId: "c1", stage: "started" });
+    expect(events[4]).toMatchObject({ text: "点一下允许就开始" });
+  });
+
+  test("a call there to her own tool is neither run nor stored, and a start_task beside it runs", async () => {
+    process.env.CHAT_MAX_ROUNDS = "1";
+    let selfies = 0;
+    const counted: LlmTool = {
+      ...selfie,
+      run: async () => {
+        selfies++;
+        return { ok: true };
+      },
+    };
+    const { mind, requests } = fakeMind(
+      [callSelfie, DONE],
+      [
+        {
+          type: "tool-calls",
+          calls: [
+            { id: "s2", name: "take_selfie", arguments: {} },
+            { id: "c1", name: "start_task", arguments: ARGS },
+          ],
+        },
+        DONE,
+      ],
+      [{ type: "text", text: "去弄啦" }, DONE],
+    );
+    const { engine } = deps(mind, [counted]);
+    const tool = startTask(async () => ({ task: "t1", status: "running" }));
+    const warnings: string[] = [];
+    logger.setSink((record) => {
+      if (record.level === "WARNING") warnings.push(record.message);
+    });
+    let outputs: TurnOutput[];
+    try {
+      outputs = await collect(
+        runTurn(
+          {
+            chat: chat(user("拍张照，再帮我写个网页")),
+            persona: PERSONA,
+            viewer: VIEWER,
+            signal: new AbortController().signal,
+            background: { tools: [tool], hint: HINT },
+          },
+          engine,
+        ),
+      );
+    } finally {
+      logger.setSink(consoleSink);
+    }
+    expect([selfies, requests.length]).toEqual([1, 3]);
+    expect(
+      eventsOf(outputs).flatMap((event) => (event.type === "tool-call" ? [event.callId] : [])),
+    ).toEqual(["s1", "c1"]);
+    expect(warnings).toEqual([
+      `[chat] ${PERSONA} called take_selfie past her 1 tool rounds; not run`,
+    ]);
+  });
+
+  test("with no background tools, the answer round offers hers with tool_choice none and ends the turn", async () => {
+    process.env.CHAT_MAX_ROUNDS = "1";
+    const { mind, requests } = fakeMind(
+      [callSelfie, DONE],
+      [{ type: "text", text: "拍好啦" }, DONE],
+    );
+    const { engine } = deps(mind);
+    const outputs = await collect(
+      runTurn(
+        {
+          chat: chat(user("拍张照")),
+          persona: PERSONA,
+          viewer: VIEWER,
+          signal: new AbortController().signal,
+        },
+        engine,
+      ),
+    );
+    expect(requests.map((asked) => [toolNames(asked), asked.toolChoice])).toEqual([
+      [["take_selfie"], undefined],
+      [["take_selfie"], "none"],
+    ]);
+    expect(eventsOf(outputs).at(-1)).toMatchObject({ type: "message", text: "拍好啦" });
+  });
+});
+
 describe("a call's background tools", () => {
   test("come after her own tools, with their hint in her prefix and pipedog's async guidance only for hers", async () => {
     for (const own of [[selfie], []]) {
@@ -461,6 +604,72 @@ describe("a call's background tools", () => {
     ]);
     // Its final comes from whoever does the work, never through the call's async results.
     expect(results).toEqual([]);
+  });
+
+  test("a reply handed them offers them alone in its answer round, and a start there is followed by one more spoken round", async () => {
+    const saved = process.env.CHAT_MAX_ROUNDS;
+    process.env.CHAT_MAX_ROUNDS = "1";
+    try {
+      // A sync tool of hers: her async one would end the reply with its round.
+      const recall: LlmTool = {
+        schema: { name: "recall_streams", description: "recall", properties: {}, required: [] },
+        cancelOnInterruption: true,
+        timeoutSecs: null,
+        run: async () => ({}),
+      };
+      const { mind, requests } = fakeMind(
+        [
+          { type: "tool-calls", calls: [{ id: "r1", name: "recall_streams", arguments: {} }] },
+          DONE,
+        ],
+        [{ type: "text", text: "我去弄。" }, callStart, DONE],
+        [{ type: "text", text: "弄好告诉你" }, DONE],
+      );
+      const { engine } = deps(mind, [recall]);
+      const tool = startTask(async () => ({ task: "t1", status: "running" }));
+      const { hooks } = callHooks("我去弄。弄好告诉你");
+      const outputs = await collect(
+        runTurn(
+          {
+            chat: chat(user("拍张照，再帮我写个网页")),
+            persona: PERSONA,
+            viewer: VIEWER,
+            signal: new AbortController().signal,
+            ...hooks,
+            background: { tools: [tool], hint: HINT },
+          },
+          engine,
+        ),
+      );
+      expect(requests.map((asked) => [toolNames(asked), asked.toolChoice])).toEqual([
+        [["recall_streams", "start_task"], undefined],
+        [["start_task"], undefined],
+        [["start_task"], "none"],
+      ]);
+      expect(outputs.flatMap((output) => (output.type === "delta" ? [output.text] : []))).toEqual([
+        "我去弄。",
+        "弄好告诉你",
+      ]);
+      // A call's line is what was heard; its calls carry none of it.
+      expect(
+        eventsOf(outputs).find((event) => event.type === "tool-call" && event.callId === "c1"),
+      ).toEqual({
+        type: "tool-call",
+        persona: PERSONA,
+        turn: "id-1",
+        callId: "c1",
+        name: "start_task",
+        arguments: ARGS,
+      });
+      expect(eventsOf(outputs).at(-1)).toMatchObject({
+        type: "message",
+        text: "我去弄。弄好告诉你",
+        modality: "call",
+      });
+    } finally {
+      if (saved === undefined) delete process.env.CHAT_MAX_ROUNDS;
+      else process.env.CHAT_MAX_ROUNDS = saved;
+    }
   });
 
   test("run on past a barge-in, their started result reaching onAsyncResult; one the call's end cuts off brings nothing", async () => {

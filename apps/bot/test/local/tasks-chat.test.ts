@@ -2,8 +2,8 @@
 // while a task of hers is live there, in her answers to a chat of one's lines while the manager is
 // ready, never in a group or a listed origin's request; the 后台的活 block in every turn of hers; a
 // task's end stored as her call's final and told in a turn of hers, or on her call; what a call in
-// the chat takes of her tasks; a deleted chat's tasks stopped. A fake manager and a scripted mind:
-// nothing reaches a network.
+// the chat takes of her tasks, in a verbose chat their plans' progress too; a deleted chat's tasks
+// stopped. A fake manager and a scripted mind: nothing reaches a network.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -37,6 +37,7 @@ import {
   type TaskChat,
   type TaskSnapshot,
   type TasksQuery,
+  type TaskTodoItem,
 } from "../../src/local/api.ts";
 import {
   type ChatAnswer,
@@ -48,6 +49,7 @@ import {
 } from "../../src/local/chats/runner.ts";
 import { allowedHosts, guardRequest, parseListedOrigins } from "../../src/local/guard.ts";
 import { type TaskBriefInput, TaskRefused } from "../../src/local/tasks/manager.ts";
+import { MILESTONE_GAP_MS } from "../../src/local/tasks/milestones.ts";
 import { TASKS_BLOCK_PREFIX } from "../../src/local/tasks/status.ts";
 import {
   assistantPromptHint,
@@ -59,6 +61,7 @@ import {
   TASK_NUDGE_LEAD,
   taskEndedNudge,
   taskFinal,
+  taskProgressNudge,
   taskWaitingNudge,
 } from "../../src/local/tasks/tool.ts";
 import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
@@ -272,12 +275,15 @@ let runner: ChatRunner;
 let logs: CapturedLogs;
 let turns: TurnRequest[];
 let answers: ChatRequest[];
+/** The runner's clock, which spaces a call's milestones. */
+let clock: number;
 
 beforeEach(() => {
   logs = captureLogs();
   asked = [];
   turns = [];
   answers = [];
+  clock = 1_700_000_000_000;
 });
 
 afterEach(async () => {
@@ -311,7 +317,7 @@ const voiceLine: ChatHear = async () => ({
 });
 
 function serve(options: ChatRunnerOptions): ChatRunner {
-  runner = new ChatRunner({ root: chatsRoot(), ...options });
+  runner = new ChatRunner({ root: chatsRoot(), now: () => clock, ...options });
   return runner;
 }
 
@@ -1983,6 +1989,282 @@ describe("an end she tells on a call", () => {
     await idle(id);
     expect(mind.requests).toHaveLength(4);
     expect(await callEnded(id)).toMatchObject({ told: ["c1", "c2"] });
+  });
+});
+
+/** Her task of call c1 in chat `id`, running, the first `done` of its plan's `steps` done. */
+const planned = (id: string, done: number, steps = 4): TaskSnapshot =>
+  hers(id, {
+    todo: Array.from(
+      { length: steps },
+      (_, n): TaskTodoItem => ({
+        text: `第${n + 1}步`,
+        status: n < done ? "done" : n === done ? "in_progress" : "pending",
+      }),
+    ),
+  });
+
+/** The manager's word that `task`'s plan got further, `task` standing as it now is. */
+function furthered(tasks: FakeTasks, task: TaskSnapshot): void {
+  const at = tasks.snapshots.findIndex((each) => each.id === task.id);
+  if (at === -1) tasks.snapshots.push(task);
+  else tasks.snapshots[at] = task;
+  runner.taskProgress(task);
+}
+
+describe("the chat's display on a call", () => {
+  test("in focus, a pause still points her to the card and an end is still handed, as in normal", async () => {
+    const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好，我去弄啦"));
+    const tasks = new FakeTasks();
+    const id = await startedIn(mind, tasks);
+    await runner.changeSettings(id, { display: "focus" });
+    const { handed } = await onCall(id);
+    const paused = hers(id, {
+      status: "paused",
+      pending: { kind: "path", path: "/etc/hosts", access: "read", folder: "/etc" },
+    });
+    tasks.snapshots = [paused];
+    runner.taskWaiting(paused);
+    await until(() => handed.length === 1);
+    expect(handed).toEqual([
+      {
+        drafts: ofCall(await events(id), "c1"),
+        nudge: taskWaitingNudge("c1"),
+        due: expect.any(Function),
+      },
+    ]);
+    expect(handed[0]?.due?.()).toBe(true);
+    tasks.snapshots = [ended(id, SUCCESS)];
+    await runner.report(ended(id, SUCCESS));
+    await until(() => handed.length === 2);
+    expect(handed[1]).toEqual({
+      drafts: finals(await events(id)).map(({ seq: _, at: __, ...draft }) => draft),
+      nudge: taskEndedNudge("c1"),
+    });
+  });
+
+  test("set during the call, it is stored and goes out on the call's feed", async () => {
+    serve({ turn: fakeTurn, answer: fakeAnswer, tasks: new FakeTasks() });
+    const id = await greeted();
+    const { call } = await onCall(id);
+    const feed = runner.live(id);
+    await runner.changeSettings(id, { display: "verbose" });
+    expect((await events(id)).at(-1)).toMatchObject({ type: "settings", display: "verbose" });
+    await call.onEnded("hangup");
+    const fed = (await new Response(feed?.stream()).text())
+      .trim()
+      .split("\n")
+      .flatMap((line) => {
+        const parsed = JSON.parse(line) as { type: string; events?: ChatEvent[] };
+        return parsed.events ?? [];
+      });
+    expect(fed.map((event) => event.type)).toEqual(["call-started", "settings", "call-ended"]);
+  });
+});
+
+describe("her task's plan on a call", () => {
+  const SECOND = `${TASK.slice(0, -1)}2`;
+  /** Her second task, of call c2 in chat `id`, running, the first `done` of four steps done. */
+  const second = (id: string, done: number): TaskSnapshot => ({
+    ...planned(id, done),
+    id: SECOND,
+    chat: { id, persona: PERSONA, call: "c2" },
+  });
+  /** Her answer starting a task at c1 and another at c2. */
+  const startsBoth: MindChunk[] = [
+    {
+      type: "tool-calls",
+      calls: ["c1", "c2"].map((id) => ({ id, name: START_TASK, arguments: BRIEF })),
+    },
+    { type: "done", finishReason: "tool_calls" },
+  ];
+
+  /** A chat of hers, verbose, where her answer started her task at c1, and a call in it. */
+  async function verboseCall(mind = new ScriptedMind(says("你好呀"), callsStart(), says("好"))) {
+    const tasks = new FakeTasks();
+    const id = await startedIn(mind, tasks);
+    await runner.changeSettings(id, { display: "verbose" });
+    return { id, tasks, mind, ...(await onCall(id)) };
+  }
+
+  test("in verbose, a step of its plan done hands her call taskProgressNudge, her start first when the call lacks it", async () => {
+    const { id, tasks, mind, handed } = await verboseCall();
+    furthered(tasks, planned(id, 1));
+    await until(() => handed.length === 1);
+    const due = expect.any(Function);
+    expect(handed).toEqual([
+      { drafts: ofCall(await events(id), "c1"), nudge: taskProgressNudge("c1"), due },
+    ]);
+    expect(handed[0]?.due?.()).toBe(true);
+    clock += MILESTONE_GAP_MS;
+    furthered(tasks, planned(id, 2));
+    await until(() => handed.length === 2);
+    expect(handed[1]).toEqual({ drafts: [], nudge: taskProgressNudge("c1"), due });
+    // Only the call's Floor answers them: no turn of hers ran.
+    expect(mind.requests).toHaveLength(3);
+  });
+
+  test("hands nothing unless the chat's display, or else the app's, is verbose; set on the call, it counts from the next step", async () => {
+    const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好"));
+    const tasks = new FakeTasks();
+    const id = await startedIn(mind, tasks);
+    const { handed } = await onCall(id);
+    furthered(tasks, planned(id, 1));
+    await Bun.sleep(30);
+    expect(handed).toEqual([]);
+    const saved = process.env.CHAT_DISPLAY;
+    process.env.CHAT_DISPLAY = "verbose";
+    try {
+      // The app's, for a chat that never set its own.
+      furthered(tasks, planned(id, 1));
+      await until(() => handed.length === 1);
+      // The chat's own wins over it.
+      await runner.changeSettings(id, { display: "focus" });
+      clock += MILESTONE_GAP_MS;
+      furthered(tasks, planned(id, 2));
+      await Bun.sleep(30);
+      expect(handed).toHaveLength(1);
+    } finally {
+      if (saved === undefined) delete process.env.CHAT_DISPLAY;
+      else process.env.CHAT_DISPLAY = saved;
+    }
+    await runner.changeSettings(id, { display: "verbose" });
+    furthered(tasks, planned(id, 3));
+    await until(() => handed.length === 2);
+    expect(handed[1]?.nudge).toBe(taskProgressNudge("c1"));
+  });
+
+  test("hands nothing with no call, for the plan's last step, for a count already handed, or once the call takes no tasks", async () => {
+    const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好"));
+    const tasks = new FakeTasks();
+    const id = await startedIn(mind, tasks);
+    await runner.changeSettings(id, { display: "verbose" });
+    const before = await events(id);
+    furthered(tasks, planned(id, 1));
+    await Bun.sleep(30);
+    expect(await events(id)).toEqual(before);
+    const { call, handed } = await onCall(id);
+    // The plan's last step, which her end tells.
+    furthered(tasks, planned(id, 4));
+    await Bun.sleep(30);
+    expect(handed).toEqual([]);
+    furthered(tasks, planned(id, 2));
+    await until(() => handed.length === 1);
+    clock += MILESTONE_GAP_MS;
+    furthered(tasks, planned(id, 2));
+    await Bun.sleep(30);
+    expect(handed).toHaveLength(1);
+    expect(await runner.changeParticipants(id, ["beta"], [])).toBe(true);
+    furthered(tasks, planned(id, 3));
+    await Bun.sleep(30);
+    expect(handed).toHaveLength(1);
+    await call.onEnded("hangup");
+  });
+
+  test("hands a call one at most every 30 s: a step done inside the gap, of any task, is dropped", async () => {
+    const { id, tasks, handed } = await verboseCall(
+      new ScriptedMind(says("你好呀"), startsBoth, says("好")),
+    );
+    furthered(tasks, planned(id, 1));
+    await until(() => handed.length === 1);
+    clock += 10_000;
+    furthered(tasks, planned(id, 2));
+    clock += 10_000;
+    furthered(tasks, second(id, 1));
+    await Bun.sleep(30);
+    expect(handed).toHaveLength(1);
+    clock += 9_999;
+    furthered(tasks, second(id, 2));
+    await Bun.sleep(30);
+    expect(handed).toHaveLength(1);
+    clock += 1;
+    furthered(tasks, planned(id, 3));
+    await until(() => handed.length === 2);
+    expect(handed[1]).toEqual({
+      drafts: [],
+      nudge: taskProgressNudge("c1"),
+      due: expect.any(Function),
+    });
+  });
+
+  test("lapses once a newer one of the task is handed, or the task stops running", async () => {
+    const { id, tasks, handed } = await verboseCall();
+    furthered(tasks, planned(id, 1));
+    await until(() => handed.length === 1);
+    const first = handed[0]?.due ?? (() => null);
+    expect(first()).toBe(true);
+    clock += MILESTONE_GAP_MS;
+    furthered(tasks, planned(id, 2));
+    await until(() => handed.length === 2);
+    expect(first()).toBe(false);
+    const latest = handed[1]?.due ?? (() => null);
+    expect(latest()).toBe(true);
+    tasks.snapshots = [
+      { ...planned(id, 2), status: "paused", pause: { reason: "spend", detail: "Spent $1." } },
+    ];
+    expect(latest()).toBe(false);
+    tasks.snapshots = [ended(id, SUCCESS)];
+    expect(latest()).toBe(false);
+  });
+
+  test("lapses once the owner speaks on the call, never at her own line; one handed after the owner's is due", async () => {
+    const { id, tasks, call, handed } = await verboseCall();
+    furthered(tasks, planned(id, 1));
+    await until(() => handed.length === 1);
+    const before = handed[0]?.due ?? (() => null);
+    call.onTranscript({ role: "assistant", text: "我在呢", interrupted: false });
+    expect(before()).toBe(true);
+    call.onTranscript({ role: "user", text: "到哪了", interrupted: false });
+    expect(before()).toBe(false);
+    clock += MILESTONE_GAP_MS;
+    furthered(tasks, planned(id, 2));
+    await until(() => handed.length === 2);
+    expect(handed[1]?.due?.()).toBe(true);
+  });
+
+  test("never asks her to tell its own end: a reply that took its nudge as the task ended tells nothing", async () => {
+    const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好"), says("做好啦"));
+    const { id, tasks, call, handed } = await verboseCall(mind);
+    furthered(tasks, planned(id, 1));
+    await until(() => handed.length === 1);
+    // Her follow-up took the step's nudge; the task ends before that reply records it.
+    tasks.snapshots = [ended(id, SUCCESS)];
+    await runner.report(ended(id, SUCCESS));
+    await until(() => handed.length === 2);
+    call.onContext?.(taskProgressNudge("c1"));
+    call.onTranscript({ role: "assistant", text: "做完一步啦", interrupted: false });
+    await call.onEnded("hangup");
+    await until(() => mind.requests.length === 4);
+    await idle(id);
+    const callEnded = (await events(id)).findLast((event) => event.type === "call-ended");
+    expect(callEnded).not.toHaveProperty("told");
+    expect(mind.requests[3]?.messages.at(-1)).toEqual({
+      role: "developer",
+      content: taskEndedNudge("c1"),
+    });
+  });
+
+  test("never asks her to tell another's end: one handed while she speaks of a step is told in text after the call", async () => {
+    const mind = new ScriptedMind(says("你好呀"), startsBoth, says("好"), says("第一个做好啦"));
+    const { id, tasks, call, handed } = await verboseCall(mind);
+    furthered(tasks, second(id, 1));
+    await until(() => handed.length === 1);
+    // Her follow-up records the second task's milestone; the first task ends as she speaks.
+    call.onContext?.(taskProgressNudge("c2"));
+    tasks.snapshots = [ended(id, SUCCESS), second(id, 1)];
+    await runner.report(ended(id, SUCCESS));
+    await until(() => handed.length === 2);
+    expect(handed[1]?.nudge).toBe(taskEndedNudge("c1"));
+    call.onTranscript({ role: "assistant", text: "第二个做完一步啦", interrupted: false });
+    await call.onEnded("hangup");
+    await until(() => mind.requests.length === 4);
+    await idle(id);
+    const callEnded = (await events(id)).findLast((event) => event.type === "call-ended");
+    expect(callEnded).not.toHaveProperty("told");
+    expect(mind.requests[3]?.messages.at(-1)).toEqual({
+      role: "developer",
+      content: taskEndedNudge("c1"),
+    });
   });
 });
 

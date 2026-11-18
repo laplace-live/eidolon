@@ -99,6 +99,7 @@ test("so does the task's card", () => {
   const card = render(
     createElement(TaskCard, {
       chatId: CHAT,
+      display: "normal",
       item: {
         kind: "task",
         seq: 3,

@@ -3,15 +3,17 @@
 // her word on a task she started. A reply runs to its end whether or not anyone still reads it; only
 // stop, delete, a call, shutdown and a newer viewer line stop one. A call takes the chat over while
 // it is on: it opens on her view, and stores its lines and her task starts; her tasks' ends and
-// pauses reach her on it.
+// pauses reach her on it, and in a verbose chat their plans' progress.
 import { join } from "node:path";
 import {
   CHAT_FORMAT,
+  type ChatDisplay,
   type ChatEvent,
   type ChatEventDraft,
   type ChatHeader,
   ChatStoreError,
   type ChatSummary,
+  displayOf,
   MAX_PARTICIPANTS,
   type ParticipantId,
   type ReplyMode,
@@ -20,7 +22,7 @@ import {
   type ViewMessage,
 } from "@eidolon/chat";
 import { JsonlChatStore } from "@eidolon/chat/jsonl";
-import { AsyncQueue, dataHome, errorText, logger } from "@eidolon/config";
+import { AsyncQueue, chatDisplay, dataHome, errorText, logger } from "@eidolon/config";
 import type { DirectorReply } from "@eidolon/context";
 import {
   type ChatOutput,
@@ -54,6 +56,7 @@ import { localViewer } from "../identity.ts";
 import { herStart, staleTaskContext, untoldEnds, withoutTaskContext } from "../tasks/calls.ts";
 import { herTaskTools } from "../tasks/her-tools.ts";
 import type { TaskManager } from "../tasks/manager.ts";
+import { gapPassed, milestoneOf } from "../tasks/milestones.ts";
 import { herTasks, isLive, tasksStatusProvider } from "../tasks/status.ts";
 import {
   assistantPromptHint,
@@ -63,6 +66,7 @@ import {
   startTaskTool,
   taskEndedNudge,
   taskFinal,
+  taskProgressNudge,
   taskWaitingNudge,
 } from "../tasks/tool.ts";
 import { type GroupCallRefusal, groupCallRefusal } from "./group.ts";
@@ -159,6 +163,8 @@ export interface ChatRunnerOptions {
     TaskManager,
     "ready" | "start" | "cancelChat" | "list" | "steer" | "cancel" | "snapshotsOf"
   >;
+  /** ms since the epoch, which spaces a call's milestones. Default: Date.now. */
+  readonly now?: () => number;
 }
 
 type Tasks = NonNullable<ChatRunnerOptions["tasks"]>;
@@ -232,6 +238,18 @@ interface ActiveCall {
   readonly ends: HandOff[];
   /** Her starts on it that the chat has yet to store. */
   readonly starts: Set<Promise<unknown>>;
+  /** The owner's lines it stored: a milestone handed before the latest has lapsed. */
+  ownerLines: number;
+  /** When it was last handed a milestone; null before its first. */
+  milestoneAt: number | null;
+  /** The latest milestone it was handed of each task of hers, by task id. */
+  readonly milestones: Map<string, Milestone>;
+}
+
+/** A milestone a call was handed: its plan's done count, and the owner's lines stored by then. */
+interface Milestone {
+  readonly done: number;
+  readonly ownerLines: number;
 }
 
 /**
@@ -305,6 +323,7 @@ export class ChatRunner {
   readonly #answer: ChatAnswer;
   readonly #hear: ChatHear;
   readonly #tasks: ChatRunnerOptions["tasks"];
+  readonly #now: () => number;
   readonly #chats = new Map<string, Chat>();
   /** Shutdown has begun: a task's end waits for the next start. */
   #closed = false;
@@ -319,6 +338,7 @@ export class ChatRunner {
     this.#answer = options.answer ?? engineAnswer;
     this.#hear = options.hear ?? engineHear;
     this.#tasks = options.tasks;
+    this.#now = options.now ?? Date.now;
   }
 
   list(): Promise<ChatSummary[]> {
@@ -341,7 +361,8 @@ export class ChatRunner {
             ...(active.group ? { group: true as const } : {}),
           };
     const groupCall = groupCallRefusal(participants) === null;
-    return { ...contents, lateTools, hearingRefusal: refusal, call, groupCall };
+    const defaultDisplay = chatDisplay();
+    return { ...contents, lateTools, hearingRefusal: refusal, call, groupCall, defaultDisplay };
   }
 
   /** Why the personas of chat `id` can't be called together now; null when they can. */
@@ -406,40 +427,93 @@ export class ChatRunner {
 
   /**
    * The manager's word that a task paused for the owner: on a call of hers in its chat that takes
-   * her tasks, her next reply without task tools points the owner to the task's card, her start
-   * first when the call's log lacks it, unless the card is answered or the task ends first. Nothing
-   * otherwise: the chat's waiting bar shows it.
+   * her tasks, whatever the chat's display, her next reply without task tools points the owner to
+   * the task's card, her start first when the call's log lacks it, unless the card is answered or
+   * the task ends first. Nothing otherwise: the chat's waiting bar shows it.
    */
   taskWaiting(snapshot: TaskSnapshot): void {
+    const asks = JSON.stringify([snapshot.pending, snapshot.pause]);
+    this.#handOnCall(snapshot, "pause", ({ origin, tasks }) => ({
+      nudge: taskWaitingNudge(origin.call),
+      due: () =>
+        tasks
+          .snapshotsOf(origin.id)
+          .some(
+            (now) =>
+              now.id === snapshot.id &&
+              now.status === "paused" &&
+              JSON.stringify([now.pending, now.pause]) === asks,
+          ),
+    }));
+  }
+
+  /**
+   * The manager's word that a task's plan got further: in a verbose chat, on a call of hers there
+   * that takes her tasks, her next reply without task tools tells the owner how far it is, her start
+   * first when the call's log lacks it. A call is handed one at most every MILESTONE_GAP_MS, and it
+   * lapses once the task stops running, a newer one of the task is handed, or the owner speaks.
+   */
+  taskProgress(snapshot: TaskSnapshot): void {
+    const task = snapshot.id;
+    this.#handOnCall(snapshot, "progress", ({ origin, tasks, call, events }) => {
+      // Read at each hand-off: leaving verbose stops the next, not one already handed.
+      if ((displayOf(events) ?? chatDisplay()) !== "verbose") return null;
+      const current = tasks.snapshotsOf(origin.id).find((each) => each.id === task);
+      const handed = call.milestones.get(task)?.done ?? 0;
+      const done = current === undefined ? null : milestoneOf(current, handed);
+      const at = this.#now();
+      if (done === null || !gapPassed(call.milestoneAt, at)) return null;
+      const milestone: Milestone = { done, ownerLines: call.ownerLines };
+      call.milestones.set(task, milestone);
+      call.milestoneAt = at;
+      return {
+        nudge: taskProgressNudge(origin.call),
+        due: () =>
+          call.milestones.get(task) === milestone &&
+          call.ownerLines === milestone.ownerLines &&
+          tasks
+            .snapshotsOf(origin.id)
+            .some((each) => each.id === task && each.status === "running"),
+      };
+    });
+  }
+
+  /**
+   * Hands the call of hers in `snapshot`'s chat, when it takes her tasks, the nudge `make` makes of
+   * the chat's log in the chat's slot, once her starts on the call are stored: her start first when
+   * the call's log lacks it. Nothing when `make` gives null.
+   */
+  #handOnCall(
+    snapshot: TaskSnapshot,
+    what: string,
+    make: (on: {
+      readonly origin: TaskChat;
+      readonly tasks: Tasks;
+      readonly call: ActiveCall;
+      readonly events: readonly ChatEvent[];
+    }) => { readonly nudge: string; readonly due: () => boolean } | null,
+  ): void {
     const origin = snapshot.chat;
     const chat = origin === undefined ? undefined : this.#chats.get(origin.id);
     const call = chat?.call ?? null;
     const tasks = this.#tasks;
     if (origin === undefined || chat === undefined || call === null || tasks === undefined) return;
     if (!this.#takesTasks(call, origin.persona)) return;
-    const asks = JSON.stringify([snapshot.pending, snapshot.pause]);
-    const due = () =>
-      tasks
-        .snapshotsOf(origin.id)
-        .some(
-          (now) =>
-            now.id === snapshot.id &&
-            now.status === "paused" &&
-            JSON.stringify([now.pending, now.pause]) === asks,
-        );
     void this.#serial(chat, async () => {
       // A start on the call may still be being stored.
       await Promise.allSettled([...chat.starts]);
       const { events } = await this.store.read(origin.id);
       if (chat.call !== call || !this.#takesTasks(call, origin.persona)) return;
+      const made = make({ origin, tasks, call, events });
+      if (made === null) return;
       const drafts = call.known.has(origin.call)
         ? []
         : herStart(events, origin.persona, origin.call);
       call.known.add(origin.call);
-      call.outside.push({ drafts, nudge: taskWaitingNudge(origin.call), due });
+      call.outside.push({ drafts, ...made });
     }).catch((error: unknown) => {
       logger.exception(
-        `Chat ${origin.id}: task ${snapshot.id}'s pause didn't reach its call`,
+        `Chat ${origin.id}: task ${snapshot.id}'s ${what} didn't reach its call`,
         error,
       );
     });
@@ -648,6 +722,9 @@ export class ChatRunner {
         known: new Set(),
         ends: [],
         starts: new Set(),
+        ownerLines: 0,
+        milestoneAt: null,
+        milestones: new Map(),
       };
       chat.call = call;
       try {
@@ -693,10 +770,13 @@ export class ChatRunner {
     await this.#append(id, this.#chat(id), [{ type: "title", title }]);
   }
 
-  /** The chat's chain limit or reply mode, as a `settings` event. */
+  /** The chat's chain limit, reply mode or display, as a `settings` event. */
   async changeSettings(
     id: string,
-    change: { readonly chainLimit: number } | { readonly replyMode: ReplyMode },
+    change:
+      | { readonly chainLimit: number }
+      | { readonly replyMode: ReplyMode }
+      | { readonly display: ChatDisplay },
   ): Promise<void> {
     await this.#append(id, this.#chat(id), [{ type: "settings", ...change }]);
   }
@@ -827,13 +907,13 @@ export class ChatRunner {
 
   /**
    * Stores a finished line of `call` as a `call` message; one after its end is dropped. A line of
-   * hers tells each end she was asked to tell there.
+   * the owner's lapses the milestones handed before it; a line of hers tells each end she was asked
+   * to tell there.
    */
   #callLine(id: string, chat: Chat, call: ActiveCall, line: TranscriptLine): void {
     if (!this.#takes(id, call, `${line.role === "user" ? "the viewer's" : "her"} line`)) return;
-    if (line.role === "assistant") {
-      for (const end of call.ends) if (end.state === "asked") end.state = "told";
-    }
+    if (line.role === "user") call.ownerLines += 1;
+    else for (const end of call.ends) if (end.state === "asked") end.state = "told";
     void this.#append(id, chat, [callLine(line, call.persona)]).catch((error: unknown) => {
       logger.exception(`Chat ${id}: a line of call ${call.id} wasn't stored`, error);
     });

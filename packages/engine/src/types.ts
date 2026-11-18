@@ -24,6 +24,8 @@ export interface MindRequest {
   /** OpenAI-shaped, with no system message: `system` carries it. */
   readonly messages: readonly unknown[];
   readonly tools: readonly ToolSchema[];
+  /** "none": `tools` are still sent, but she may call none of them. Absent means "auto". */
+  readonly toolChoice?: "auto" | "none";
   /** Ends her reply where one appears, unwritten, where her provider takes it; at most 4. */
   readonly stop?: readonly string[];
   readonly signal: AbortSignal;

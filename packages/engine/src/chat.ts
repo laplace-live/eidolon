@@ -22,6 +22,7 @@ import {
   directorParticipant,
 } from "@eidolon/context";
 import { type UsageScope, withUsageScope } from "@eidolon/providers";
+import { linesOf } from "./group.ts";
 import { runTurn } from "./turn.ts";
 import type {
   BackgroundTools,
@@ -103,17 +104,7 @@ function defaultDirector(): Director {
 
 /** The chat's lines through seq `last`, oldest first, as the director reads them. */
 function linesThrough(events: readonly ChatEvent[], last: number): DirectorLine[] {
-  return withUnheard(events).flatMap((event) =>
-    event.type === "message" && event.text !== "" && event.seq <= last
-      ? [
-          {
-            speaker: event.speaker,
-            text: event.text,
-            ...(event.modality ? { modality: event.modality } : {}),
-          },
-        ]
-      : [],
-  );
+  return linesOf(withUnheard(events).filter((event) => event.seq <= last));
 }
 
 /** The seq of the last persona line after seq `line`, or null when no persona spoke. */

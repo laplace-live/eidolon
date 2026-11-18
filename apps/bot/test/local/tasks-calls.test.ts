@@ -122,6 +122,18 @@ describe("herStart", () => {
     // Nor is another tool's call hers to start a task with.
     expect(herStart([callOf("c3", HER, "take_selfie")], HER, "c3")).toEqual([]);
   });
+
+  test("herStart and untoldEnds hand a call her start_task call without the words she said before it, which its seed holds", () => {
+    seq = 0;
+    const call = at({ ...callOf("c1"), said: "好嘞，我去弄" });
+    const started = resultOf("c1", "started", { task: "t1", status: "running" });
+    const final = resultOf("c1", "final", SUCCEEDED);
+    const { said: _, ...unsaid } = call;
+    expect(herStart([call, started], HER, "c1")).toEqual(drafted(unsaid, started));
+    expect(untoldEnds([call, started, final], HER)).toEqual([
+      { callId: "c1", drafts: drafted(unsaid, started, final) },
+    ]);
+  });
 });
 
 describe("untoldEnds", () => {

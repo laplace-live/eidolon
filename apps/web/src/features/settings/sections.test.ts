@@ -42,7 +42,7 @@ describe("the cards", () => {
     expect(listed).not.toContain("providers.openrouter.apiBase");
   });
 
-  test("Assistant Mode has a section of its own, with every assistant row", () => {
+  test("Assistant Mode has a section of its own, with every assistant row and the task display last", () => {
     const [card, ...others] = CARDS.assistant;
     expect(others).toEqual([]);
     expect(card?.paths).toEqual([
@@ -50,8 +50,11 @@ describe("the cards", () => {
       ["assistant.provider", "assistant.model"],
       "assistant.folders",
       ["assistant.spendPauseUsd", "assistant.contextTokens"],
+      "chats.display",
     ]);
-    const rows = SETTINGS.filter((setting) => setting.path.startsWith("assistant."));
+    const rows = SETTINGS.filter(
+      (setting) => setting.path.startsWith("assistant.") || setting.path === "chats.display",
+    );
     expect(rows.map((setting) => setting.path).toSorted()).toEqual(
       card?.paths.flat().toSorted() ?? [],
     );

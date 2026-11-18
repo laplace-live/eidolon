@@ -232,6 +232,7 @@ is unset, and the other providers use `transcription.language`, else `zh`.
 | `chat.interests` | `CHAT_INTERESTS` | string | Chat interests |
 | `chat.talkativeness` | `CHAT_TALKATIVENESS` | float | Chat talkativeness |
 | `chat.replyMode` | `CHAT_REPLY_MODE` | string | Chat reply mode |
+| `chat.maxRounds` | `CHAT_MAX_ROUNDS` | int | Chat reply rounds |
 
 `knowledge.facts.files` lists name patterns for the fact files in `sources/<id>/facts/` (default
 `*.txt`). A pattern matches a file name as Python's pathlib glob does: `*`, `?`, `[…]` and `[!…]`,
@@ -259,6 +260,15 @@ with its transcript), or `auto` (the default), where the director judges whether
 voice message. A chat's own reply mode, from its settings, overrides hers. `voice` and `auto` fall
 back to text while her voice role has no key or its provider can't speak a whole reply; any other
 value reads as `auto`, with a warning.
+`chat.maxRounds` (default 8; a value below 1 reads as 8, with a warning) is how many rounds of one
+reply may call her tools, in a chat or on a call, in the local app and in production. Each round
+bills a request to her mind, or more where a malformed reply is asked for again
+([chat.md](chat.md#a-turn-runturn)). If the last of them still calls one, a final round asks her
+to answer: it offers only `start_task`, when Assistant Mode gives her it on that reply, and
+otherwise lets her call nothing. A task she starts there is followed by one more round, so she
+still says her line. A realtime call's model runs its own loop instead. The template's
+`persona.yaml` sets none, so a server's `CHAT_MAX_ROUNDS` decides there; 3 holds a reply to 4
+requests.
 
 ## settings.yaml
 
@@ -315,6 +325,7 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `assistant.folders` | `ASSISTANT_FOLDERS` | paths | Assistant folders |
 | `assistant.spendPauseUsd` | `ASSISTANT_SPEND_PAUSE_USD` | float | Assistant spend pause |
 | `assistant.contextTokens` | `ASSISTANT_CONTEXT_TOKENS` | int | Assistant context |
+| `chats.display` | `CHAT_DISPLAY` | string | Task display |
 
 `local.viewerName` is what the persona calls you in the local web app's calls; the bot that
 `bun run start` and the Docker image run never reads it.
@@ -342,6 +353,13 @@ task may read and write besides its own, where a task she starts runs without as
 spend crosses a multiple of `assistant.spendPauseUsd` (default 1, in US dollars; 0 never
 pauses), or after its first request on a model with no known price, whose spend can't be
 counted, and keeps its requests within `assistant.contextTokens` tokens (default 128000).
+
+`chats.display` is how much of her tasks a chat in the local app shows, until the chat picks its
+own with `/focus`, `/normal` or `/verbose` ([assistant.md](assistant.md#display)). `normal`, the
+default, shows each task as a card; `focus` hides the cards; `verbose` opens the steps of her
+newest running task, and on a call has her say how far a task's plan has got, a billed reply each
+time. Any other value reads as `normal`, with a warning. No mode hides a task that waits on you.
+Production's chat endpoint, which runs no tasks, never reads it.
 
 ## Deploying a persona
 

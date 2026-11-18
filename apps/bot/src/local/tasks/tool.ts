@@ -152,6 +152,17 @@ export function taskWaitingNudge(callId: string): string {
   );
 }
 
+/**
+ * What her reply on a verbose chat's call answers when task `callId`'s plan gets further. A count
+ * here would be stale by the time she speaks, and nothing she sees names the step that finished.
+ */
+export function taskProgressNudge(callId: string): string {
+  return (
+    `${TASK_NUDGE_LEAD}${callId}）又往前做了一些。照「后台的活」里它那条的计划步数，` +
+    "用一句话随口告诉对方现在做完几步了；具体是哪一步你看不到，别猜，也别念路径或文件名。"
+  );
+}
+
 /** `text`, cut at REPORT_MAX_CHARS characters with a note. */
 function cut(text: string): string {
   const chars = [...text];

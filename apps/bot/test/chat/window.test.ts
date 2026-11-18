@@ -28,10 +28,12 @@ import { ChatSigner, MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
 import {
   CHAT_WINDOW_BYTES,
   CHAT_WINDOW_EVENTS,
-  newestThatFit,
+  CHAT_WINDOW_TOOL_BYTES,
+  CHAT_WINDOW_TOOL_EVENTS,
   openChatWindow,
   PUBLIC_CHAIN_LIMIT,
   type RequestChatStore,
+  windowOf,
 } from "../../src/chat/window.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 
@@ -71,6 +73,31 @@ const hers = (seq: number, text: string): ChatEventOf<"message"> => ({
   text,
 });
 
+const call = (seq: number, callId: string, said?: string): ChatEventOf<"tool-call"> => ({
+  seq,
+  at: 1000 + seq,
+  type: "tool-call",
+  persona: "milky-green",
+  turn: "t",
+  callId,
+  name: "recall_streams",
+  arguments: { query: "上次" },
+  ...(said === undefined ? {} : { said }),
+});
+const result = (seq: number, callId: string, text = "好"): ChatEventOf<"tool-result"> => ({
+  seq,
+  at: 1000 + seq,
+  type: "tool-result",
+  persona: "milky-green",
+  turn: "t",
+  callId,
+  result: { text },
+});
+
+const isTool = (event: ChatEvent) => event.type === "tool-call" || event.type === "tool-result";
+const bytesOf = (event: unknown) => Buffer.byteLength(JSON.stringify(event));
+const LINES = CHAT_WINDOW_EVENTS - CHAT_WINDOW_TOOL_EVENTS;
+
 async function open(events: readonly unknown[], header: unknown = HEADER) {
   const opened = await openChatWindow({ header, events }, signer, () => 9000);
   if (!opened.ok) throw new Error(opened.message);
@@ -81,28 +108,127 @@ async function eventsOf(store: RequestChatStore): Promise<ChatEvent[]> {
   return (await store.read(CHAT)).events;
 }
 
-describe("newestThatFit", () => {
-  test("keeps the newest 120 events", () => {
-    const events = Array.from({ length: 130 }, (_, i) => user(i + 1, "嗯"));
-    const kept = newestThatFit(events);
-    expect(kept).toHaveLength(CHAT_WINDOW_EVENTS);
-    expect(kept[0]).toBe(events[10]);
-    expect(kept.at(-1)).toBe(events[129]);
+describe("windowOf", () => {
+  test("a chat with no tool events keeps its newest 120, though the window reads 180", () => {
+    const events = Array.from({ length: 200 }, (_, i) => user(i + 1, "嗯"));
+    expect(LINES).toBe(120);
+    expect(windowOf(events)).toEqual(events.slice(80));
   });
 
-  test("keeps the newest that fit in 256 KB of JSON, and none past one that doesn't", () => {
+  test("keeps the newest lines that fit in 256 KB of JSON, and none past one that doesn't", () => {
     // Each about 10 KB of UTF-8: three bytes a character.
     const events = Array.from({ length: 40 }, (_, i) => user(i + 1, "好".repeat(3400)));
-    const size = Buffer.byteLength(JSON.stringify(events[0]));
-    const fit = Math.floor(CHAT_WINDOW_BYTES / size);
-    expect(newestThatFit(events)).toEqual(events.slice(40 - fit));
+    const fit = Math.floor(CHAT_WINDOW_BYTES / bytesOf(events[0]));
+    expect(windowOf(events)).toEqual(events.slice(40 - fit));
     const huge = user(41, "x".repeat(CHAT_WINDOW_BYTES));
-    expect(newestThatFit([...events, huge])).toEqual([]);
+    expect(windowOf([...events, huge])).toEqual([]);
   });
 
   test("stops at nesting too deep to measure", () => {
     const deep = JSON.parse(`${"[".repeat(200_000)}${"]".repeat(200_000)}`) as unknown;
-    expect(newestThatFit([user(1, "a"), deep, user(3, "c")])).toEqual([user(3, "c")]);
+    expect(windowOf([user(1, "a"), deep, user(3, "c")])).toEqual([user(3, "c")]);
+  });
+
+  test("tool results can't crowd out lines: they fill 128 KB of their own, newest first", () => {
+    // 45 turns read whole: the viewer's line, her call, its result of about 10 KB, her line.
+    const events = Array.from({ length: 45 }, (_, i) => [
+      user(4 * i + 1, "上次播了什么"),
+      call(4 * i + 2, `c${i}`),
+      result(4 * i + 3, `c${i}`, "好".repeat(3400)),
+      hers(4 * i + 4, "播了游戏"),
+    ]).flat();
+    const kept = windowOf(events) as ChatEvent[];
+    expect(kept.filter((event) => !isTool(event))).toEqual(events.filter((e) => !isTool(e)));
+    const tools = events.filter(isTool);
+    const keptTools = kept.filter(isTool);
+    expect(keptTools).toEqual(tools.slice(tools.length - keptTools.length));
+    const bytes = keptTools.reduce((sum, event) => sum + bytesOf(event), 0);
+    expect(bytes).toBeLessThanOrEqual(CHAT_WINDOW_TOOL_BYTES);
+    expect(bytes + bytesOf(tools.at(-keptTools.length - 1))).toBeGreaterThan(
+      CHAT_WINDOW_TOOL_BYTES,
+    );
+    expect(keptTools[0]?.type).toBe("tool-call");
+  });
+
+  test("a result that doesn't fit leaves out its call and every older tool event", () => {
+    const events = [
+      user(1, "一"),
+      call(2, "a"),
+      result(3, "a"),
+      user(4, "二"),
+      call(5, "b"),
+      result(6, "b", "x".repeat(CHAT_WINDOW_TOOL_BYTES)),
+      hers(7, "三"),
+    ];
+    expect(windowOf(events)).toEqual([user(1, "一"), user(4, "二"), hers(7, "三")]);
+  });
+
+  test("a share full mid-batch keeps results without their calls, never a call without its result", () => {
+    const batch = [call(1, "a"), call(2, "b"), result(3, "a"), result(4, "b")];
+    const newer = Array.from({ length: 29 }, (_, i) => [
+      call(5 + 2 * i, `n${i}`),
+      result(6 + 2 * i, `n${i}`),
+    ]).flat();
+    expect(windowOf([...batch, ...newer])).toEqual([result(3, "a"), result(4, "b"), ...newer]);
+  });
+
+  test("every participants, title and settings event is kept, in log order among both shares", () => {
+    const title = { seq: 3, at: 1003, type: "title", title: "旧标题" };
+    const settings = { seq: 7, at: 1007, type: "settings", replyMode: "voice" };
+    const events = [
+      call(1, "a"),
+      result(2, "a"),
+      title,
+      // Too big for the lines' share, which closes here while tool events reach further back.
+      user(4, "x".repeat(CHAT_WINDOW_BYTES)),
+      call(5, "b"),
+      result(6, "b"),
+      settings,
+      hers(8, "八"),
+    ];
+    expect(windowOf(events)).toEqual([
+      call(1, "a"),
+      result(2, "a"),
+      title,
+      call(5, "b"),
+      result(6, "b"),
+      settings,
+      hers(8, "八"),
+    ]);
+  });
+
+  test("reads only the newest 180 events that aren't context, though the lines' share has room", () => {
+    const older = Array.from({ length: 100 }, (_, i) => user(i + 1, "嗯"));
+    const tools = Array.from({ length: 75 }, (_, i) => [
+      call(101 + 2 * i, `c${i}`),
+      result(102 + 2 * i, `c${i}`),
+    ]).flat();
+    const context = {
+      seq: 251,
+      at: 1251,
+      type: "context",
+      persona: "milky-green",
+      turn: "t",
+      position: 0,
+      role: "system",
+      content: "回忆",
+    };
+    const events = [...older, ...tools, context, user(252, "新")];
+    expect(windowOf(events)).toEqual([...older.slice(71), ...tools.slice(90), user(252, "新")]);
+  });
+
+  test("an old client's 120 events keep every line, and the newest 60 tool events", () => {
+    // An SDK from before the tool share sent its newest 120 events, whatever their kind.
+    const events = Array.from({ length: 24 }, (_, i) => [
+      user(5 * i + 1, "查一下"),
+      call(5 * i + 2, `a${i}`),
+      call(5 * i + 3, `b${i}`),
+      result(5 * i + 4, `a${i}`),
+      result(5 * i + 5, `b${i}`),
+    ]).flat();
+    const kept = windowOf(events) as ChatEvent[];
+    expect(kept.filter((event) => !isTool(event))).toHaveLength(24);
+    expect(kept.filter(isTool)).toEqual(events.filter(isTool).slice(36));
   });
 });
 
@@ -174,8 +300,20 @@ describe("openChatWindow", () => {
     expect(await eventsOf(store)).toEqual([user(1, "一"), good, user(12, "十二")]);
     expect(store.lastSeq).toBe(13);
     expect(logs.lines()).toEqual([
-      `WARNING [chat] Chat ${CHAT}: kept 3 of the request's 15 events (dropped 4 unsigned, ` +
-        "2 context, 5 malformed, 1 unordered)",
+      `WARNING [chat] Chat ${CHAT}: kept 3 of the request's 15 events (dropped 2 context, ` +
+        "4 unsigned, 5 malformed, 1 unordered)",
+    ]);
+  });
+
+  test("a tool call's said is signed with it: kept whole, and its call lost once it is edited", async () => {
+    const asked = await signer.sign(CHAT, call(2, "c", "我查一下"));
+    const answer = await signer.sign(CHAT, result(3, "c"));
+    const sent = [user(1, "上次播了什么"), asked, answer];
+    expect(await eventsOf(await open(JSON.parse(JSON.stringify(sent))))).toEqual(sent);
+    const edited = [user(1, "上次播了什么"), { ...asked, said: "我不查" }, answer];
+    expect(await eventsOf(await open(edited))).toEqual([user(1, "上次播了什么"), answer]);
+    expect(logs.lines()).toEqual([
+      `WARNING [chat] Chat ${CHAT}: kept 2 of the request's 3 events (dropped 1 unsigned)`,
     ]);
   });
 
@@ -235,7 +373,7 @@ describe("openChatWindow", () => {
       { seq: 4, at: 1004, type: "title", title: "旧标题" },
       { seq: 5, at: 1005, type: "participants", added: [7] },
     ];
-    const newer = Array.from({ length: CHAT_WINDOW_EVENTS }, (_, i) => user(i + 6, "嗯"));
+    const newer = Array.from({ length: LINES }, (_, i) => user(i + 6, "嗯"));
     const store = await open([...state, ...newer], header);
     const { events } = await store.read(CHAT);
     expect(events.slice(0, 3)).toEqual([state[0], state[2], state[3]] as ChatEvent[]);
@@ -254,7 +392,7 @@ describe("openChatWindow", () => {
     const events: unknown[] = [
       { seq: 1, at: 1001, type: "participants", added: seven },
       { seq: 2, at: 1002, type: "participants", removed: seven },
-      ...Array.from({ length: CHAT_WINDOW_EVENTS }, (_, i) => user(i + 3, "嗯")),
+      ...Array.from({ length: LINES }, (_, i) => user(i + 3, "嗯")),
     ];
     expect(await openChatWindow({ header: HEADER, events }, signer)).toEqual({
       ok: false,

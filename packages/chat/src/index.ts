@@ -6,7 +6,9 @@ export {
   attachmentExtension,
   attachmentKind,
   attachmentMime,
+  CHAT_DISPLAYS,
   CHAT_FORMAT,
+  type ChatDisplay,
   type ChatEvent,
   type ChatEventDraft,
   type ChatEventOf,
@@ -18,6 +20,7 @@ export {
   type ChatSummary,
   type CutOff,
   DEFAULT_CHAIN_LIMIT,
+  isChatDisplay,
   isChatId,
   isReplyMode,
   MAX_CHAIN_LIMIT,
@@ -33,7 +36,7 @@ export { joinSegments, separator } from "./join.ts";
 export { MemoryChatStore } from "./memory.ts";
 export { type MentionTarget, parseMentions } from "./mentions.ts";
 export { canonicalForSig } from "./sig.ts";
-export { chainLimitOf, replyModeOf, summarize } from "./summary.ts";
+export { chainLimitOf, displayOf, replyModeOf, summarize } from "./summary.ts";
 export {
   CHAT_WINDOW_MESSAGES,
   startedResult,

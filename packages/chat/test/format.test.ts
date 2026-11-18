@@ -9,6 +9,8 @@ import {
   canonicalForSig,
   chainLimitOf,
   DEFAULT_CHAIN_LIMIT,
+  displayOf,
+  isChatDisplay,
   isChatId,
   isReplyMode,
   replyModeOf,
@@ -116,6 +118,36 @@ describe("replyModeOf", () => {
   test("isReplyMode takes the three modes only", () => {
     expect(["auto", "text", "voice"].every(isReplyMode)).toBe(true);
     expect([" auto", "Voice", "audio", null, 1].some(isReplyMode)).toBe(false);
+  });
+});
+
+describe("displayOf", () => {
+  test("is the last settings event that sets one, else null: the app's display then applies", () => {
+    expect(displayOf([])).toBeNull();
+    const events: ChatEvent[] = [
+      { type: "settings", seq: 1, at: 1, replyMode: "voice" },
+      { type: "settings", seq: 2, at: 2, display: "focus" },
+    ];
+    expect(displayOf(events.slice(0, 1))).toBeNull();
+    expect(displayOf(events)).toBe("focus");
+    expect(displayOf([...events, { type: "settings", seq: 3, at: 3, display: "verbose" }])).toBe(
+      "verbose",
+    );
+  });
+
+  test("a later reply-mode or chain-limit change keeps the chat's display", () => {
+    const events: ChatEvent[] = [
+      { type: "settings", seq: 1, at: 1, display: "verbose" },
+      { type: "settings", seq: 2, at: 2, replyMode: "text" },
+      { type: "settings", seq: 3, at: 3, chainLimit: 0 },
+    ];
+    expect(displayOf(events)).toBe("verbose");
+    expect([replyModeOf(events), chainLimitOf(events)]).toEqual(["text", 0]);
+  });
+
+  test("isChatDisplay takes the three displays only", () => {
+    expect(["focus", "normal", "verbose"].every(isChatDisplay)).toBe(true);
+    expect([" focus", "Verbose", "quiet", "", null, 1].some(isChatDisplay)).toBe(false);
   });
 });
 

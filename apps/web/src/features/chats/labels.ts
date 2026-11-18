@@ -1,4 +1,4 @@
-import type { ChatEventOf, ReplyMode } from "@eidolon/chat";
+import type { ChatDisplay, ChatEventOf, ReplyMode } from "@eidolon/chat";
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import type { RecorderProblem } from "./use-recorder";
@@ -39,6 +39,27 @@ export const REPLY_MODE_HELP: Readonly<Record<ReplyMode, MessageDescriptor>> = {
   auto: msg`Replies come as voice messages when a line suits one, more often after one of yours, and as text otherwise.`,
   text: msg`Replies always come as text.`,
   voice: msg`Replies always come as voice messages.`,
+};
+
+/** Each display's name, as a chat's settings and Settings offer it. */
+export const DISPLAY_LABELS: Readonly<Record<ChatDisplay, MessageDescriptor>> = {
+  focus: msg({ message: "Focus", context: "chat display" }),
+  normal: msg({ message: "Normal", context: "chat display" }),
+  verbose: msg({ message: "Verbose", context: "chat display" }),
+};
+
+/** What each display shows, in the chat and on a call. */
+export const DISPLAY_HELP: Readonly<Record<ChatDisplay, MessageDescriptor>> = {
+  focus: msg`Task cards are hidden, but a task that waits for you still shows above the message box. On a call, she still tells you when a task starts, waits for you and ends.`,
+  normal: msg`Each task shows as one card that updates as it works. On a call, she tells you when a task starts, waits for you and ends.`,
+  verbose: msg`Her newest running task's card also shows its steps as they happen. On a call, she also tells you how far a task's plan has got as it goes, which costs a reply each time.`,
+};
+
+/** What a toast says once a command has set the chat's display. */
+export const DISPLAY_CHANGED: Readonly<Record<ChatDisplay, MessageDescriptor>> = {
+  focus: msg`Focus is on for this chat`,
+  normal: msg`Normal is on for this chat`,
+  verbose: msg`Verbose is on for this chat`,
 };
 
 /** Why a recording didn't start or send, as a toast's title and line. */

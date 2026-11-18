@@ -183,7 +183,6 @@ function blockMessages(block: Block): ContextMessage[] {
   if (block.kind === "line") return [{ role: "user", content: block.text }];
   const { text, calls, finishReason } = block.entry;
   const messages: ContextMessage[] = [];
-  // Two messages, not one with both: Anthropic's adapter drops the text of a message with calls.
   if (text !== "") messages.push({ role: "assistant", content: text });
   if (calls.length > 0) messages.push(toolCallsMessage(calls));
   calls.forEach((call, at) => {

@@ -282,7 +282,14 @@ In a call, the engine runs her turn in call mode (`CallHooks`, [chat.md](chat.md
   selfie renders in the background. When it settles, its `final` or `cancelled` result is stored
   and starts a follow-up reply once the floor is free (rows 22–23). The call's end cancels it;
 - `ASYNC_TOOL_INSTRUCTIONS` joins her system instruction while one of her own tools is async, as
-  pipedog's call prompt had it, never for a tool a reply is handed.
+  pipedog's call prompt had it, never for a tool a reply is handed;
+- her rounds are a chat's ([chat.md](chat.md#a-turn-runturn), step 5): `chat.maxRounds` of them
+  may call her tools, then an answer round offers `start_task` alone to a reply handed it, and to
+  any other reply her tools with `tool_choice: "none"`, so a reply that reaches the limit still
+  speaks;
+- within the turn, the words she wrote before a call sit on that call's message, as in a chat, but
+  a call's turns store no `said`: her line is what was heard, which her written words may not have
+  reached when the call is stored.
 
 Her tools act on the call through effects: a voice switch reaches her speech, and a selfie's
 `server-message` goes to the client.
@@ -323,7 +330,10 @@ a blank line.
   does ([assistant.md](assistant.md#steer_task)).
 - **`due`,** when the result has one, is asked as a reply would take the nudge, and as the floor
   decides whether a follow-up is owed for it: one no longer due is dropped. The local app's pointer
-  to a task's card lapses this way once the card is answered or the task ends.
+  to a task's card lapses this way once the card is answered or the task ends, and its line on how
+  far a task's plan has got, in a verbose chat, once a newer one of the task is handed, the task
+  stops running, or the caller's next line is stored
+  ([assistant.md](assistant.md#milestones-on-a-call)).
 - **A reply cut before its turn records the nudges it took,** such as a greeting the caller speaks
   over while it reads her memories, leaves them waiting for her next reply without the plan's tools.
   One whose turn fails uncut drops them, so a turn that can't start isn't started again and again.
@@ -395,8 +405,10 @@ A call bound to a chat runs through a `CallBinding` ([chat.md](chat.md#the-bindi
 - **She runs as herself:** the whole call runs inside `withPersona(binding.persona)`, so her
   roles, not the active persona's, make the call, and settings of hers that can't be read fail it.
 - **The seed opens the call's log:** the viewer's lines and hers as messages, a system or developer
-  message as her context block where it stands. Her view is the seed, then the call, in the text
-  chat's 60-line window, which counts the chat's lines too (D1). A realtime call packs that view
+  message as her context block where it stands. The words she wrote before a tool call in text
+  join her next line, or stand as her line before the viewer's next one (`callSeed`). Her view is
+  the seed, then the call, in the text chat's 60-line window, which counts the chat's lines too
+  (D1). A realtime call packs that view
   into its history item ([Realtime](#realtime)).
 - **The lines:** each message the call stores, the viewer's spoken or typed line or hers, goes to
   `onTranscript` as the log takes it. Hers is what was heard, `interrupted` when the viewer or a

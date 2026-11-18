@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { closedAt, EMPTY_DRAFT, mentionName, picked, retyped, suggestions } from "./autocomplete";
+import { type ChatCommand, parseCommand } from "./commands";
 import { RECORDER_PROBLEMS } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
 import type { VoiceClip } from "./stream";
@@ -33,7 +34,7 @@ const TEXT_MAX = 4000;
  * more personas, an `@` offers their names, and whoever the line mentions answers first. While the
  * box is empty, the microphone takes the send button's place, and a take replaces the box while it
  * records. During a call it is disabled, keeping any draft, and it takes the focus back when the
- * call ends.
+ * call ends. A command goes to `onCommand`, never to her; one it can't run keeps the draft.
  */
 export function Composer({
   placeholder,
@@ -44,6 +45,7 @@ export function Composer({
   onSend,
   onSendVoice,
   onStop,
+  onCommand,
 }: {
   readonly placeholder: string;
   readonly participants: readonly ChatPersona[];
@@ -53,6 +55,7 @@ export function Composer({
   readonly onSend: (text: string) => void;
   readonly onSendVoice: (clip: VoiceClip) => void;
   readonly onStop: () => void;
+  readonly onCommand: (command: ChatCommand) => void;
 }) {
   const { t } = useLingui();
   const recorder = useRecorder({
@@ -114,7 +117,27 @@ export function Composer({
   function submit(event?: FormEvent) {
     event?.preventDefault();
     if (trimmed === "" || inCall) return;
-    onSend(trimmed);
+    const parsed = parseCommand(trimmed);
+    switch (parsed.kind) {
+      case "command":
+        onCommand(parsed.command);
+        break;
+      case "trailing": {
+        const command = `/${parsed.command}`;
+        toast.error(t`${ph({ command })} takes nothing after it`, {
+          description: t`Send it alone. To send a message, don't start it with a slash.`,
+        });
+        return;
+      }
+      case "unknown":
+        toast.error(t`${ph({ command: parsed.typed })} isn't a command`, {
+          description: t`Type /focus, /normal or /verbose to choose how much of her tasks this chat shows, or /stop to stop one.`,
+        });
+        return;
+      case "line":
+        onSend(trimmed);
+        break;
+    }
     edit("", 0);
   }
 
