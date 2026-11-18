@@ -2,22 +2,12 @@
 import { expect, mock, test } from "bun:test";
 import type { ChatDisplay } from "@eidolon/chat";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, type ReactNode } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { linguiMacro } from "@/test/lingui-macro";
+import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 mock.module("@lingui/core/macro", linguiMacro);
-mock.module("@lingui/react/macro", () => {
-  const { t } = linguiMacro();
-  const translate = (descriptor: unknown) =>
-    typeof descriptor === "string"
-      ? descriptor
-      : ((descriptor as { message?: string }).message ?? "");
-  return {
-    useLingui: () => ({ t, i18n: { _: translate, locale: "en" } }),
-    Trans: ({ children }: { children?: ReactNode }) => children,
-  };
-});
+mock.module("@lingui/react/macro", linguiReactMacro);
 const { DisplayField } = await import("./chat-settings");
 const { DISPLAY_HELP } = await import("./labels");
 

@@ -188,7 +188,8 @@ function buildRules(tools: readonly AssistantTool[]): string {
  * (OpenClaw's rule for prompt data).
  */
 function inert(text: string): string {
-  return text.replace(/<(?=\s*\/?\s*(?:project_(?:instructions|context)|skills?)\b)/gi, "&lt;");
+  // One run of whitespace before the slash: two adjacent `\s*` backtrack quadratically on a long one.
+  return text.replace(/<(?=\s*(?:\/\s*)?(?:project_(?:instructions|context)|skills?)\b)/gi, "&lt;");
 }
 
 function attribute(value: string): string {

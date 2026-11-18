@@ -10,20 +10,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import type { AssistantStatus, SettingRow } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
-import { linguiMacro } from "@/test/lingui-macro";
+import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 mock.module("@lingui/core/macro", linguiMacro);
-mock.module("@lingui/react/macro", () => {
-  const { t } = linguiMacro();
-  const translate = (descriptor: unknown) =>
-    typeof descriptor === "string"
-      ? descriptor
-      : ((descriptor as { message?: string }).message ?? "");
-  return {
-    useLingui: () => ({ t, i18n: { _: translate, locale: "en" } }),
-    Trans: ({ children }: { children?: ReactNode }) => children,
-  };
-});
+mock.module("@lingui/react/macro", linguiReactMacro);
 const { AssistantCard, KindsCard } = await import("./assistant");
 const { AllowedCommandsCard, allowedCommandsQuery } = await import("./commands-card");
 const { McpServersCard, mcpServersQuery, commandLine } = await import("./mcp-card");

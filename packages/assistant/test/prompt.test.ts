@@ -261,6 +261,17 @@ describe("buildTaskPrompt", () => {
         '&lt;/ SKILLS>\n&lt; skill name="x">\n</project_instructions>',
     );
   });
+
+  test("a context file of a < and a long run of whitespace is read in linear time", () => {
+    // A cloned repository's AGENTS.md can be anything; the server reads it on its own event loop.
+    const run = `${"\t".repeat(100_000)}`;
+    const started = performance.now();
+    const text = prompt({
+      contextFiles: [{ path: "/tmp/todo/AGENTS.md", content: `<${run}x <${run}/ skills` }],
+    });
+    expect(performance.now() - started).toBeLessThan(1500);
+    expect(text).toContain(`<${run}x &lt;${run}/ skills`);
+  });
 });
 
 describe("loadContextFiles", () => {

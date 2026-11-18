@@ -60,10 +60,11 @@ export interface WebSearchOptions {
  * when it isn't one. A URL's scheme is dropped, as models often send one.
  */
 function siteOf(text: string): string | null {
-  const bare = text
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/\/+$/, "");
+  const unschemed = text.trim().replace(/^https?:\/\//i, "");
+  // Trailing slashes cut by hand: /\/+$/ is quadratic on a long run of them that doesn't end it.
+  let end = unschemed.length;
+  while (end > 0 && unschemed[end - 1] === "/") end--;
+  const bare = unschemed.slice(0, end);
   const parts = /^(\*\.)?([^/\s*@:?#]+)(\/\S*)?$/.exec(bare);
   if (parts === null) return null;
   let host: string;

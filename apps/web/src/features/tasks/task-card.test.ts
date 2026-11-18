@@ -5,26 +5,16 @@ import type { ChatDisplay } from "@eidolon/chat";
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, type ReactNode } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import type { TaskSnapshot, TaskStatus } from "@/lib/api";
 import { formatClock } from "@/lib/format";
 import { statusQuery } from "@/lib/query";
-import { linguiMacro } from "@/test/lingui-macro";
+import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 mock.module("@lingui/core/macro", linguiMacro);
-mock.module("@lingui/react/macro", () => {
-  const { t } = linguiMacro();
-  const translate = (descriptor: unknown) =>
-    typeof descriptor === "string"
-      ? descriptor
-      : ((descriptor as { message?: string }).message ?? "");
-  return {
-    useLingui: () => ({ t, i18n: { _: translate, locale: "en" } }),
-    Trans: ({ children }: { children?: ReactNode }) => children,
-  };
-});
+mock.module("@lingui/react/macro", linguiReactMacro);
 // The drafts' store has no server snapshot, and they aren't what this checks.
 mock.module("./draft", () => ({
   useDraft: <T>(_key: string, initial: T) => [initial, () => {}] as const,

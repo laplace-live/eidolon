@@ -1,9 +1,9 @@
 // The Usage page's line of what was used, with the macros stubbed.
 import { expect, mock, test } from "bun:test";
-import { linguiMacro } from "@/test/lingui-macro";
+import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 mock.module("@lingui/core/macro", linguiMacro);
-mock.module("@lingui/react/macro", () => ({ useLingui: () => ({ t: linguiMacro().t }) }));
+mock.module("@lingui/react/macro", linguiReactMacro);
 const { unitsText } = await import("./tables");
 const { totalsOf } = await import("./summary");
 

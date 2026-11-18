@@ -155,6 +155,16 @@ describe("web_search", () => {
     expect(asked).toEqual([]);
   });
 
+  test("a site of a long run of slashes is refused in linear time", async () => {
+    // The worker writes its sites, and a page it read may have told it what to write.
+    const { run, asked } = webSearch();
+    const started = performance.now();
+    const result = await run({ query: "q", domains: [`a${"/".repeat(200_000)}b`] });
+    expect(performance.now() - started).toBeLessThan(1500);
+    expect(result.isError).toBe(true);
+    expect(asked).toEqual([]);
+  });
+
   test("a searcher's failure is an error result naming it", async () => {
     const { run } = webSearch([], {
       answer: async () => {
