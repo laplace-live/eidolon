@@ -265,6 +265,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `range-not-satisfiable` | 416 | A task's events asked for from past the transcript's end |
 | `unknown-mcp-server` | 404 | Changing a server `mcp.json` doesn't hold; the message never names what was sent |
 | `invalid-mcp-config` | 409 | Changing `mcp.json` from Settings, or answering Always on an MCP call's card, while it doesn't parse |
+| `linked-mcp-config` | 409 | The same, while `mcp.json` is a symbolic or hard link to another file, which a write would replace with a copy |
 
 ## The local viewer and memory
 
@@ -454,7 +455,10 @@ tools.
     Web**) can be changed first;
   - for a command, **Let it run this command?**: the command whole, in one bounded box that
     scrolls rather than cuts, its hidden and control characters spelled out (`\u{202E}`,
-    `visibleCommand`, `labels.ts`); the folder it runs in; that a command runs as the owner with
+    `visibleCommand`, `labels.ts`), its size above it ("312 characters · 15 lines") and, while
+    more of it is below what the box shows, a fade and a line saying so, since an overlay scrollbar
+    shows only once the box is scrolled (`CommandText`, `parts.tsx`, as on the bar and in
+    Allowed Commands); the folder it runs in; that a command runs as the owner with
     no sandbox; **Stops at** the time its timeout would stop it, counted from now; and what each
     answer grants. **Deny**, **Always in This Folder** and **Run Once**. When the owner allowed it
     for good but the task has read outside content (`granted`), the card says why it asks again;
@@ -557,12 +561,16 @@ tools.
   - **Models by Kind**: an account and model for quick, coding and research tasks, each "Same as
     Assistant Tasks" until set, and for a kind that falls back, why
     (`features/settings/assistant.tsx`);
-  - **Allowed Commands**: each command allowed for good, escaped in its box, with its folder and
-    **Remove** (`commands-card.tsx`);
-  - **MCP Servers**: "Only Add Programs You Trust"; each server with its description and command
-    line as `mcp.json` writes it, an **Enabled** switch, its **Always Allowed** tools as chips whose
-    × takes one back ("Stop Always Allowing <tool>"), each `${NAME}` it needs that isn't set, and
-    its problem; a file that doesn't parse says no server starts until it is fixed; with none, where
+  - **Allowed Commands**: each command allowed for good, escaped in its box with its size, with its
+    folder and **Remove** (`commands-card.tsx`); the help says what sets the grants aside: a page
+    fetched, a web search or an MCP call, never what a command downloads;
+  - **MCP Servers**: "Only Add Programs You Trust", which says too that every task reads a
+    server's tool descriptions and that, unlike a web page, they don't make a grant ask again;
+    each server with its description and command line as `mcp.json` writes it, an **Enabled**
+    switch, its **Always Allowed** tools as chips whose × takes one back ("Stop Always Allowing
+    <tool>"), each `${NAME}` it needs that isn't set, and its problem; a switch or a chip is
+    refused while `mcp.json` doesn't parse or is a link; a file that doesn't parse says no server
+    starts until it is fixed; with none, where
     `mcp.json` goes and an example with `npx` and `docker run -i --rm --init` (`mcp-card.tsx`).
     The list is read again on focus, since the file is edited by hand.
 - **Spend:** a task's requests are recorded with `source: "task"` and the task's id.
@@ -798,9 +806,11 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
     starts, her `start_task` schema requiring `profile`, whose card shows **Coding** and runs it on
     that model; its worker loading the owner's skill, written into the temporary home, from its
     prompt's catalog; then commands, each appending to a file in the task's folder: the first's
-    card (the command in its box, the folder, **Stops at**, **Deny**, **Always in This Folder**
-    and **Run Once**, the waiting bar naming the folder, and her answer meanwhile after a block
-    saying it asks to run a command) answered **Run Once**; the same command asking again,
+    card (the command in its box, padded with comment lines past what the box shows, with its size
+    and, on the card and the bar, the line saying more is below, gone once the card's box is
+    scrolled to its end; the folder, **Stops at**, **Deny**, **Always in This Folder** and **Run
+    Once**, the waiting bar naming the folder, and her answer meanwhile after a block saying it
+    asks to run a command) answered **Run Once**; the same command asking again,
     answered **Deny**, which `task.json` keeps; the next answered **Always in This Folder**, which
     `GET assistant/commands` lists, and run again unasked; online, a fetch of example.com allowed
     once, after which that command asks again with `granted` and the card says why; and a

@@ -63,7 +63,7 @@ msgstr "{count, plural, other {{amount} token}}"
 msgid "{count, plural, one {# batch is waiting; this downloads it.} other {# batches are waiting; this downloads the oldest first.}}"
 msgstr "{count, plural, other {有 # 个批次在等待；会先下载最早的那个。}}"
 
-#: src/features/tasks/cards.tsx
+#: src/features/tasks/parts.tsx
 msgid "{count, plural, one {# character} other {# characters}}"
 msgstr "{count, plural, other {# 个字符}}"
 
@@ -87,7 +87,7 @@ msgstr "{count, plural, other {上次索引后有 # 个文件被移除。}}"
 msgid "{count, plural, one {# image} other {# images}}"
 msgstr "{count, plural, other {# 张图片}}"
 
-#: src/features/tasks/cards.tsx
+#: src/features/tasks/parts.tsx
 msgid "{count, plural, one {# line} other {# lines}}"
 msgstr "{count, plural, other {# 行}}"
 
@@ -795,8 +795,8 @@ msgid "An earlier run of Eidolon started this job, so this one can't stop it. It
 msgstr "这个作业是之前运行的 Eidolon 启动的，现在的 Eidolon 无法停止它。它会自行完成，或被标记为已中断。"
 
 #: src/features/settings/mcp-card.tsx
-msgid "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool."
-msgstr "MCP 服务器是这台电脑上的程序。每当有任务开始，Eidolon 就用 mcp.json 里的命令启动它，它以你的权限运行，不受任务文件夹的限制。每次调用都会先问你，除非你为那个工具选了「始终允许这个工具」。"
+msgid "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again."
+msgstr "MCP 服务器是这台电脑上的程序。每当有任务开始，Eidolon 就用 mcp.json 里的命令启动它，它以你的权限运行，不受任务文件夹的限制。每次调用都会先问你，除非你为那个工具选了「始终允许这个工具」。每个任务都会读到它对自己工具的描述；和网页不同，读过这些描述不会让你始终允许的命令和工具重新询问。"
 
 #: src/features/jobs/parts.tsx
 msgid "and {count} more"
@@ -1336,8 +1336,8 @@ msgid "Coding tasks run on Assistant Mode's model for now"
 msgstr "编程任务暂时使用助手模式的模型"
 
 #: src/features/settings/commands-card.tsx
-msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has read the web or an MCP server. Always in This Folder on a task's card adds one."
-msgstr "任务无需询问就能运行的命令，每条只在它的文件夹里、只按原样生效；任务读过网页或 MCP 服务器的内容后仍会询问。在任务卡片上选择「在这个文件夹里始终允许」就会加到这里。"
+msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one."
+msgstr "任务无需询问就能运行的命令，每条只在它的文件夹里、只按原样生效；任务抓取过网页、搜索过网络或调用过 MCP 服务器后仍会询问，它自己运行的命令下载的内容不算在内。在任务卡片上选择「在这个文件夹里始终允许」就会加到这里。"
 
 #: src/features/tasks/cards.tsx
 msgid "Commands run as you, with no sandbox: this one can read, change or delete any of your files, not only this folder's, and reach the network."
@@ -2394,6 +2394,10 @@ msgstr "它不能搜索网页，也不能从网上获取内容，每次调用 MC
 msgid "It ended before reporting a result. The end of its technical log usually says why."
 msgstr "它在报告结果之前就结束了。技术日志的末尾通常会说明原因。"
 
+#: src/features/tasks/parts.tsx
+msgid "It goes on below: scroll the box to read all of it."
+msgstr "下面还有内容：滚动这个框，读完全部。"
+
 #: src/features/tasks/cards.tsx
 msgid "It has spent {spent}, and pauses each time its spend crosses another {each}."
 msgstr "它已花费 {spent}，花费每再增加 {each} 就会暂停一次。"
@@ -2756,6 +2760,10 @@ msgstr "mcp.json 无法解析，修好之前什么都存不进去。"
 #: src/lib/labels.ts
 msgid "mcp.json has no server by that name."
 msgstr "mcp.json 里没有这个名字的服务器。"
+
+#: src/lib/labels.ts
+msgid "mcp.json links to another file, which Eidolon doesn't change. Change that file instead."
+msgstr "mcp.json 是指向另一个文件的链接，Eidolon 不会改动它。请直接修改那个文件。"
 
 #: src/components/settings-form/labels.ts
 msgid "Mem0 Agent ID"

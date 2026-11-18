@@ -5,11 +5,14 @@ import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
+  lstatSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -525,6 +528,31 @@ describe("the answers", () => {
     expect([always.status, always.code]).toEqual([409, "invalid-mcp-config"]);
     expect(readFileSync(MCP_JSON(), "utf8")).toBe("{ not json");
     expect(await tasks.get(id)).toMatchObject({ status: "paused", pending: echoAsked("m1", "hi") });
+  });
+
+  test("Always while mcp.json links to another client's config is refused, and neither file changes", async () => {
+    // The shared file another client keeps, which honors the same alwaysAllow.
+    const shared = join(work, "cline_mcp_settings.json");
+    writeMcp({ fake: fake([], { tools: ["echo"] }) });
+    renameSync(MCP_JSON(), shared);
+    symlinkSync(shared, MCP_JSON());
+    const text = readFileSync(shared, "utf8");
+    minds.script("Linked", [calls([echo("m1", "hi")])]);
+    const tasks = await booted();
+    const { id } = await tasks.start({ goal: "Linked", folder: join(work, "linked") }, ORIGIN);
+    await reach(tasks, id, "paused");
+
+    const always = await refused(
+      tasks.approve(id, { answer: "always", pending: echoAsked("m1", "hi") }),
+    );
+    expect([always.status, always.code]).toEqual([409, "linked-mcp-config"]);
+    expect(lstatSync(MCP_JSON()).isSymbolicLink()).toBe(true);
+    expect(readFileSync(shared, "utf8")).toBe(text);
+    expect(await tasks.get(id)).toMatchObject({ status: "paused", pending: echoAsked("m1", "hi") });
+    // Run Once still runs it.
+    await tasks.approve(id, { answer: "once", pending: echoAsked("m1", "hi") });
+    await until(() => results(id).length === 1);
+    expect(results(id)).toEqual([["m1", "hi"]]);
   });
 });
 

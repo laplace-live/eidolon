@@ -4,7 +4,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createBashKillTool, createBashOutputTool } from "../src/tools/bash.ts";
+import {
+  createBashKillTool,
+  createBashOutputTool,
+  createLocalBashOperations,
+} from "../src/tools/bash.ts";
 import { type BackgroundCommand, BashJobs, type BashJobsOptions } from "../src/tools/jobs.ts";
 import { bashOffered } from "../src/tools/shell.ts";
 import type { PathGuard } from "../src/types.ts";
@@ -63,13 +67,14 @@ async function setup(options: BashJobsOptions = {}): Promise<Setup> {
 function start(
   { jobs, guard }: Setup,
   command: string,
-  more: { timeoutMs?: number; wait?: boolean; signal?: AbortSignal } = {},
+  more: { timeoutMs?: number; wait?: boolean; signal?: AbortSignal; steered?: () => boolean } = {},
 ) {
   return jobs.run(command, {
     guard,
     timeoutMs: more.timeoutMs ?? 10_000,
     wait: more.wait ?? false,
     signal: more.signal ?? new AbortController().signal,
+    ...(more.steered === undefined ? {} : { steered: more.steered }),
   });
 }
 
@@ -165,6 +170,82 @@ describe.skipIf(!bashOffered())("BashJobs", () => {
     expect(jobs.background()).toHaveLength(4);
     expect(jobs.takeEnded()).toEqual([]);
     await jobs.killAll("stopped");
+  });
+
+  test("with 4 in the background, a steering line waits for a command's end or the yield", async () => {
+    const setup_ = await setup({ yieldMs: 1000, pollMs: 50 });
+    const { jobs } = setup_;
+    for (let i = 0; i < 4; i++) await start(setup_, "sleep 30", { steered: () => true });
+    expect(jobs.background().map((command) => command.id)).toEqual([1, 2, 3, 4]);
+    let line = false;
+    setTimeout(() => {
+      line = true;
+    }, 100);
+    // A test run the owner allowed, which ends before the yield: the line costs it nothing.
+    const tests = await start(setup_, "sleep 0.5; echo tests-passed", {
+      wait: true,
+      steered: () => line,
+    });
+    expect(tests).toMatchObject({ content: "tests-passed\n", details: { id: 5, end: "exit" } });
+    // A waited one still running at the yield runs to its end, as it would without the line.
+    const built = await start(setup_, "sleep 1.5; echo built", { wait: true, steered: () => true });
+    expect(built).toMatchObject({ content: "built\n", details: { id: 6, end: "exit" } });
+    // One not waited on is stopped at the yield, as without a steering line.
+    const started = Date.now();
+    const slow = await start(setup_, "sleep 30", { steered: () => true });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(900);
+    expect(slow.content).toBe(
+      "Command 7 was stopped rather than moved to the background, where 4 commands already run " +
+        "(ids 1, 2, 3 and 4). Stop one with bash_kill, or wait for one to end, before you run it " +
+        "again.",
+    );
+    expect(jobs.background()).toHaveLength(4);
+    await jobs.killAll("stopped");
+  });
+
+  test("the server's stop while a command's shell starts kills it, moving nothing to the background", async () => {
+    const local = createLocalBashOperations();
+    let stopping: Promise<void> | undefined;
+    // The stop lands while exec checks the folder, before the shell is spawned: where it lands
+    // when the folder's stat is slow, as on a network share.
+    const setup_ = await setup({
+      operations: {
+        exec(command, cwd, options) {
+          const running = local.exec(command, cwd, options);
+          stopping = setup_.jobs.killAll("shutdown");
+          return running;
+        },
+      },
+    });
+    const started = Date.now();
+    const result = await start(setup_, "sleep 2.5");
+    await stopping;
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(result.content).toBe("Command stopped: Eidolon is stopping");
+    expect(setup_.jobs.background()).toEqual([]);
+  });
+
+  test("a command stopped as it would move to the background ends in its call", async () => {
+    // A kill that takes 0.4 s, as a sandbox's can: the yield comes before the command is gone.
+    const setup_ = await setup({
+      operations: {
+        exec: (_command, _cwd, { signal }) =>
+          new Promise((_resolve, reject) => {
+            const fail = () => setTimeout(() => reject(new Error("aborted")), 400);
+            signal?.addEventListener("abort", fail, { once: true });
+          }),
+      },
+    });
+    const result = start(setup_, "sleep 30");
+    await Bun.sleep(100);
+    const stopping = setup_.jobs.killAll("shutdown");
+    expect(await result).toMatchObject({
+      content: "Command stopped: Eidolon is stopping",
+      isError: true,
+      details: { id: 1, background: false, end: "shutdown" },
+    });
+    expect(setup_.jobs.background()).toEqual([]);
+    await stopping;
   });
 
   test("a timeout past the yield kills the command, and its notice says so", async () => {

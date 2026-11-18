@@ -2,7 +2,7 @@
 // a command or an MCP server's tool, and Continue for one paused or interrupted. Its card shows the
 // prompt whole; the waiting bar above the composer shows it in one line, sharing the card's draft.
 
-import { ph, plural } from "@lingui/core/macro";
+import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { CircleAlertIcon, CirclePauseIcon, TriangleAlertIcon } from "lucide-react";
@@ -34,6 +34,7 @@ import {
   CommandText,
   Escaped,
   ModelChoiceFields,
+  useSizeText,
   WebAccessField,
 } from "./parts";
 import { useAnswering, useApproveTask, useContinueTask } from "./queries";
@@ -167,17 +168,6 @@ function StopsAt({ seconds }: { readonly seconds: number }) {
   const now = useNow(true, 15_000);
   const time = formatClockMinute(now + seconds * 1000, lang);
   return <p className="text-muted-foreground text-xs">{t`Stops at ${ph({ time })}`}</p>;
-}
-
-/** An argument's size: its characters, and its lines when it has more than one. */
-function useSizeText(): (arg: McpArgument) => string {
-  const { t } = useLingui();
-  return (arg) => {
-    const characters = t`${plural(ph({ count: arg.chars }), { one: "# character", other: "# characters" })}`;
-    if (arg.lines <= 1) return characters;
-    const lines = t`${plural(ph({ count: arg.lines }), { one: "# line", other: "# lines" })}`;
-    return `${characters} · ${lines}`;
-  };
 }
 
 /** An argument's value whole: a string as it is, anything else as indented JSON. */
@@ -412,11 +402,11 @@ function ApprovalPrompt({
           icon={icon}
           question={t`Let it run this command?`}
           line={line}
-          bar={<CommandText command={pending.command} className="max-h-24" />}
+          bar={<CommandText command={pending.command} className="max-h-24" sized />}
           note={note}
           actions={actions}
         >
-          <CommandText command={pending.command} />
+          <CommandText command={pending.command} sized />
           <p className="text-muted-foreground text-xs">{t`It runs in this folder:`}</p>
           <Asked>{task.brief.folder}</Asked>
           <p className="flex items-start gap-2 text-xs">

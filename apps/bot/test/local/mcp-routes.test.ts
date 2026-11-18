@@ -3,7 +3,16 @@
 // The booted server's guard is in tasks-server.test.ts.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  linkSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TaskSnapshot, tasksDir } from "@eidolon/assistant";
@@ -354,6 +363,37 @@ describe("PUT mcp/servers/:name", () => {
         )
       ).slice(0, 2),
     ).toEqual([404, "unknown-mcp-server"]);
+  });
+
+  test("an mcp.json linked to another client's config is 409, and neither file changes", async () => {
+    // Another client's config, linked so that both read one file.
+    const shared = join(work, "cline_mcp_settings.json");
+    const text = `${JSON.stringify({ mcpServers: { github: GITHUB } }, null, 2)}\n`;
+    writeFileSync(shared, text);
+    symlinkSync(shared, MCP_JSON());
+    const call = serve(manager());
+    for (const body of [{ enabled: false }, { revoke: "get_issue" }]) {
+      const [status, code] = await refusal(
+        await call("PUT", "/api/local/mcp/servers/github", { body }),
+      );
+      expect([status, code]).toEqual([409, "linked-mcp-config"]);
+    }
+    expect(lstatSync(MCP_JSON()).isSymbolicLink()).toBe(true);
+    expect(readFileSync(shared, "utf8")).toBe(text);
+  });
+
+  test("so is one hard-linked to it: a write would fork the two", async () => {
+    const shared = join(work, "cline_mcp_settings.json");
+    const text = `${JSON.stringify({ mcpServers: { github: GITHUB } }, null, 2)}\n`;
+    writeFileSync(shared, text);
+    linkSync(shared, MCP_JSON());
+    const call = serve(manager());
+    const [status, code] = await refusal(
+      await call("PUT", "/api/local/mcp/servers/github", { body: { enabled: false } }),
+    );
+    expect([status, code]).toEqual([409, "linked-mcp-config"]);
+    expect(statSync(MCP_JSON()).nlink).toBe(2);
+    expect(readFileSync(shared, "utf8")).toBe(text);
   });
 
   test("without the session, 401", async () => {

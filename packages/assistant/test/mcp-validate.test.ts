@@ -69,6 +69,14 @@ describe("validateMcpServerConfig", () => {
         { command: "x", timeout: 0 },
         'server "s": timeout must be a positive number of seconds',
       ],
+      // Past setTimeout's 2^31 - 1 ms: an hour in milliseconds, and 1e400 as JSON reads it.
+      ...[2_147_484, 3_600_000, Number.POSITIVE_INFINITY].map(
+        (timeout): [string, unknown, string] => [
+          "s",
+          { command: "x", timeout },
+          'server "s": timeout must be at most 2147483 seconds',
+        ],
+      ),
       ["s", { command: "x", args: "a b" }, 'server "s": args must be an array of strings'],
       ["s", { command: "x", env: { A: 1 } }, 'server "s": env must map names to strings'],
       ["s", { command: "x", cwd: 1 }, 'server "s": cwd must be a string'],
@@ -77,6 +85,7 @@ describe("validateMcpServerConfig", () => {
     for (const [name, raw, error] of cases) {
       expect(errorOf(validateMcpServerConfig(name, raw))).toBe(error);
     }
+    expect(validateMcpServerConfig("s", { command: "x", timeout: 2_147_483 }).kind).toBe("stdio");
   });
 });
 

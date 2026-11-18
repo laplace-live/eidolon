@@ -14,10 +14,22 @@ import { type McpTransport, TransportEvents } from "./transport.ts";
 const DEFAULT_CLOSE_TIMEOUT_MS = 2_000;
 /** How long a server gets to exit on its own after stdin closes, before it is sent SIGTERM. */
 const STDIN_CLOSE_GRACE_MS = 500;
+/** After the SIGKILL, how long the server's pipes get to close before they are let go. */
+const PIPE_DRAIN_MS = 1_000;
 
 /** Process groups of running servers, killed if the host exits without closing them. */
 const liveProcessGroups = new Set<number>();
 let exitHookInstalled = false;
+
+/** Signals process group `pid`; false once no process is left in it. */
+function signalGroup(pid: number, signal: NodeJS.Signals): boolean {
+  try {
+    process.kill(-pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function killProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
   const pid = child.pid;
@@ -104,8 +116,6 @@ export class StdioTransport extends TransportEvents implements McpTransport {
     if (pid !== undefined) {
       installExitHook();
       liveProcessGroups.add(pid);
-      // Not on "exit": children of the server can outlive it while still holding its pipes.
-      child.once("close", () => liveProcessGroups.delete(pid));
     }
     child.stdout?.on("data", (chunk: Buffer) => this.#lines.readStdout(chunk));
     child.stdout?.on("error", (error) => this.emitError(error));
@@ -114,9 +124,14 @@ export class StdioTransport extends TransportEvents implements McpTransport {
     });
     child.stderr?.on("data", (chunk: Buffer) => this.#lines.readStderr(chunk));
     child.stderr?.on("error", (error) => this.emitError(error));
+    // Not on "exit": children of the server can outlive it while still holding its pipes.
     child.on("close", () => {
       this.#child = undefined;
       this.#lines.end();
+      if (pid !== undefined) {
+        if (this.#closed) liveProcessGroups.delete(pid);
+        else this.#reap(pid);
+      }
       this.emitClose();
     });
 
@@ -169,7 +184,35 @@ export class StdioTransport extends TransportEvents implements McpTransport {
       const grace = Math.min(STDIN_CLOSE_GRACE_MS, closeTimeoutMs);
       timers.push(setTimeout(() => killProcessTree(child, "SIGTERM"), grace));
       timers.push(setTimeout(() => killProcessTree(child, "SIGKILL"), grace + closeTimeoutMs));
+      // A process that left the group, a daemon the server started, holds its pipes past every
+      // kill, and "close" waits for them: they are let go, as a command's are.
+      timers.push(
+        setTimeout(
+          () => {
+            for (const stream of [child.stdin, child.stdout, child.stderr]) stream?.destroy();
+            resolve();
+          },
+          grace + closeTimeoutMs + PIPE_DRAIN_MS,
+        ),
+      );
       child.stdin?.end();
     });
+  }
+
+  /**
+   * Ends what a server that exited on its own left in its group, as a close would: processes with
+   * pipes of their own, or none, don't hold the transport open and would outlive the task.
+   */
+  #reap(pid: number): void {
+    if (!signalGroup(pid, "SIGTERM")) {
+      liveProcessGroups.delete(pid);
+      return;
+    }
+    const closeTimeoutMs = this.options.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS;
+    // The exit hook names the group until the SIGKILL has gone.
+    setTimeout(() => {
+      signalGroup(pid, "SIGKILL");
+      liveProcessGroups.delete(pid);
+    }, closeTimeoutMs).unref();
   }
 }

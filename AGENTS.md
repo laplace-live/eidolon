@@ -353,10 +353,12 @@ the layout's one line.
   `readOnlyHint` or `destructiveHint` never skips the card
   ([assistant.md](docs/assistant.md#approvals)).
 - **A command, and an MCP server's process, run on `shellEnv()`, never `process.env`:** the
-  allowed names, every `LC_*`, `TERM=dumb`, and a `PATH` with no folder a task may write, so no
-  `.env` key reaches one unless an `mcp.json` entry names it.
-- **Only `skill` reads in the data home,** and only a listed skill's own files, never a dot-file;
-  every other tool is still denied it, and no skill reaches her prompt, her tools or production.
+  allowed names, every `LC_*`, `TERM=dumb`, and a `PATH` with no folder the task may write (an MCP
+  server's as the task's first run found it), so no `.env` key reaches one unless an `mcp.json`
+  entry names it.
+- **Of the file tools, only `skill` reads in the data home,** and only a listed skill's own files,
+  never a dot-file; `bash_output` reads only its task's logs there, commands and MCP servers run
+  outside `FolderPolicy`, and no skill reaches her prompt, her tools or production.
 - **A tool's own spend reaches the task's meter through `UsageMeter.charge`, never `tap`:** `tap`
   stands for a worker request's usage and sets the context's size, which steers compaction.
 - **Her `start_task` description and hint come in two, commands on and off

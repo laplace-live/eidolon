@@ -14,6 +14,7 @@ const FIXTURES = join(import.meta.dir, "fixtures");
 const fixture = join(FIXTURES, "mcp-stdio-server.mjs");
 const stubborn = join(FIXTURES, "mcp-stubborn-server.mjs");
 const exitingParent = join(FIXTURES, "mcp-exiting-parent-server.mjs");
+const daemon = join(FIXTURES, "mcp-daemon-server.mjs");
 
 function isAlive(pid: number): boolean {
   try {
@@ -97,6 +98,32 @@ describe("StdioTransport", () => {
       await transport.close();
       expect(await waitFor(() => !isAlive(helper as number))).toBe(true);
       expect(closeEvents).toBe(1);
+    } finally {
+      try {
+        process.kill(helper as number, "SIGKILL");
+      } catch {}
+    }
+  }, 10_000);
+
+  it("lets go of the pipes a process outside the server's group holds, so close() still ends", async () => {
+    const transport = new StdioTransport({
+      command: process.execPath,
+      args: ["--no-env-file", daemon],
+      closeTimeoutMs: 100,
+    });
+    const client = new McpClient({ name: "stdio-test", version: "1.0.0" });
+    await client.connect(transport);
+    let helper: number | undefined;
+    await waitFor(() => {
+      const match = /helper (\d+)/.exec(transport.stderr);
+      if (match) helper = Number(match[1]);
+      return helper !== undefined;
+    });
+    try {
+      const closed = client.close().then(() => "closed");
+      expect(await Promise.race([closed, Bun.sleep(4_000).then(() => "pending")])).toBe("closed");
+      // It left the group, so no close reaches it.
+      expect(isAlive(helper as number)).toBe(true);
     } finally {
       try {
         process.kill(helper as number, "SIGKILL");

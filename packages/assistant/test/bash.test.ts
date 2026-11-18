@@ -447,6 +447,31 @@ describe.skipIf(posix)("real process-group kills", () => {
     expect(await deadWithin(sleep, 1000)).toBe(true);
   });
 
+  test("a call's abort that lands while the shell starts still kills it", async () => {
+    const call = new AbortController();
+    const local = createLocalBashOperations();
+    // The abort lands while exec checks the folder, before the shell is spawned: where a Stop
+    // lands when the folder's stat is slow, as on a network share.
+    const { tool, dir } = await setup({
+      operations: {
+        exec(command, cwd, options) {
+          const running = local.exec(command, cwd, options);
+          call.abort();
+          return running;
+        },
+      },
+    });
+    const started = Date.now();
+    const result = await bash(
+      tool,
+      { command: "sleep 2; echo still-ran", timeout: 1, wait: true },
+      { signal: call.signal },
+    );
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(result).toMatchObject({ content: "Command aborted", isError: true });
+    expect(readFileSync(join(dir, "1.log"), "utf8")).toBe("");
+  });
+
   test("a timeout kills the shell and what it started", async () => {
     const { tool, dir } = await setup();
     const result = bash(tool, {

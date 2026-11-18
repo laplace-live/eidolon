@@ -511,7 +511,16 @@ interface Reach {
   readonly interfaces: WebInterfaces;
 }
 
-async function fetchPage(first: URL, reach: Reach, signal: AbortSignal): Promise<TaskToolResult> {
+/**
+ * Fetches `first`, following its redirects. `answered` holds the latest hop that answered: once one
+ * has, a failure can carry what it said, such as a Location.
+ */
+async function fetchPage(
+  first: URL,
+  reach: Reach,
+  signal: AbortSignal,
+  answered: { details?: WebFetchDetails },
+): Promise<TaskToolResult> {
   const refused = refusal(first, reach.interfaces);
   if (refused !== null) throw new Stopped(refused);
   if (!reach.web.allows(siteOf(first))) {
@@ -524,6 +533,13 @@ async function fetchPage(first: URL, reach: Reach, signal: AbortSignal): Promise
     const resolved = await addressesOf(current, reach, signal);
     if (typeof resolved === "string") throw new Stopped(`${via}${resolved}`);
     const response = await connect(current, resolved, reach.fetch, signal);
+    answered.details = {
+      url: first.href,
+      finalUrl: current.href,
+      status: response.status,
+      contentType: mediaType(response.headers.get("content-type"))?.essence ?? null,
+      bytes: 0,
+    };
     const location = REDIRECTS.has(response.status) ? response.headers.get("location") : null;
     if (location === null) return await answer(first, current, response);
     await response.body?.cancel().catch(() => {});
@@ -594,20 +610,24 @@ export function createWebFetchTool(options: WebFetchOptions): AssistantTool {
       }
       if (signal.aborted) return errorResult(ABORTED);
       const deadline = AbortSignal.timeout(timeoutMs);
+      const answered: { details?: WebFetchDetails } = {};
       try {
-        return await fetchPage(url, reach, AbortSignal.any([signal, deadline]));
+        return await fetchPage(url, reach, AbortSignal.any([signal, deadline]), answered);
       } catch (error) {
         if (signal.aborted) return errorResult(ABORTED);
+        // Once a server answered, the failure can repeat what it said: the task has read it.
+        const failed = (message: string): TaskToolResult => ({
+          ...errorResult(message),
+          ...(answered.details === undefined ? {} : { details: answered.details }),
+        });
         if (deadline.aborted) {
           // Only DNS over HTTPS stops on an abort, to say what it was waiting for.
           const waiting = error instanceof Stopped ? `: ${error.message}` : "";
-          return errorResult(
-            `Timed out after ${timeoutMs / 1000} s fetching ${url.href}${waiting}`,
-          );
+          return failed(`Timed out after ${timeoutMs / 1000} s fetching ${url.href}${waiting}`);
         }
-        if (error instanceof Stopped) return errorResult(error.message);
+        if (error instanceof Stopped) return failed(error.message);
         const why = error instanceof Error ? error.message : String(error);
-        return errorResult(`Couldn't fetch ${url.href}: ${why}`);
+        return failed(`Couldn't fetch ${url.href}: ${why}`);
       }
     },
   };

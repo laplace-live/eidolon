@@ -104,6 +104,7 @@ const ERRORS: Readonly<Record<ErrorCode | ClientErrorCode | "unknown", MessageDe
   "unknown-mcp-server": msg`mcp.json has no server by that name.`,
   // From Settings' switches and chips, and from Always on an MCP call's card.
   "invalid-mcp-config": msg`mcp.json doesn't parse, so nothing can be saved in it until it's fixed.`,
+  "linked-mcp-config": msg`mcp.json links to another file, which Eidolon doesn't change. Change that file instead.`,
 };
 
 /** What an error says to the viewer: its code's sentence, else a general one. */

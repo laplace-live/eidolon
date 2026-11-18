@@ -79,6 +79,8 @@ export function createLocalBashOperations(): BashOperations {
       });
       const kill = () => killProcessTree(child.pid);
       signal?.addEventListener("abort", kill, { once: true });
+      // An abort that landed while the folder was checked fires no listener added after it.
+      if (signal?.aborted) kill();
       const readers = [child.stdout.getReader(), child.stderr.getReader()];
       const pumped = Promise.all(
         readers.map(async (reader) => {

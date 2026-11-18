@@ -140,6 +140,7 @@ export const ERROR_CODES = [
   "range-not-satisfiable",
   "unknown-mcp-server",
   "invalid-mcp-config",
+  "linked-mcp-config",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -1066,7 +1067,7 @@ export interface LocalApi {
   /**
    * Turns one on or off, or takes back one tool's Always, answering as GET does. 400 bad-request
    * for anything else; 404 unknown-mcp-server; 409 invalid-mcp-config while mcp.json doesn't
-   * parse, which is never written over.
+   * parse, and linked-mcp-config while it is a link, neither ever written over.
    */
   "PUT /api/local/mcp/servers/:name": Endpoint<McpServerChange, McpServersResponse>;
 }
@@ -1563,8 +1564,9 @@ export interface TaskApproveRequest {
    * other path question it is `once`); a site's answer turns the task's web mode to `any`; a
    * command runs, and is allowed in the task's folder for good (GET assistant/commands); an MCP
    * call runs, and its tool joins its server's `alwaysAllow` in mcp.json (409 invalid-mcp-config
-   * while that file doesn't parse). `deny`: a start ends `cancelled` and `denied`; a path, a site,
-   * a command or an MCP call with these arguments is refused, and the run goes on.
+   * while that file doesn't parse, linked-mcp-config while it is a link). `deny`: a start ends
+   * `cancelled` and `denied`; a path, a site, a command or an MCP call with these arguments is
+   * refused, and the run goes on.
    */
   readonly answer: "once" | "always" | "deny";
   /**

@@ -6,7 +6,6 @@ import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { errorText, isPlainObject, logger } from "@eidolon/config";
 import type { AllowedCommand } from "../api.ts";
-import { fold } from "./places.ts";
 
 export const ALLOWED_COMMANDS_FILE = "allowed-commands.json";
 
@@ -115,5 +114,7 @@ export class AllowedCommands {
 }
 
 function matching(folder: string, command: string): (each: AllowedCommand) => boolean {
-  return (each) => each.command === command && fold(each.folder) === fold(folder);
+  // Exactly: a realpath already has a case-insensitive volume's own case, and on a case-sensitive
+  // one App and app are two folders.
+  return (each) => each.command === command && each.folder === folder;
 }

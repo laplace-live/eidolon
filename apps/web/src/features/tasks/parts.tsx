@@ -2,7 +2,7 @@
 // her lines it waits to read, its plan and files, a command as it runs, and the fields a start's
 // approval changes its model and web access with.
 
-import { ph } from "@lingui/core/macro";
+import { ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -15,7 +15,7 @@ import {
   CircleXIcon,
   LoaderCircleIcon,
 } from "lucide-react";
-import { useId } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { ModelPicker } from "@/components/settings-form/model-picker";
 import { Badge } from "@/components/ui/badge";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
@@ -212,28 +212,94 @@ export function Escaped({ text }: { readonly text: string }) {
   );
 }
 
+/** A text's characters and lines, counted as a tool call's arguments count theirs. */
+export function textSize(text: string): { readonly chars: number; readonly lines: number } {
+  const lines = text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
+  return { chars: text.length, lines };
+}
+
+/** A text's size as a card says it: its characters, and its lines when it has more than one. */
+export function useSizeText(): (size: {
+  readonly chars: number;
+  readonly lines: number;
+}) => string {
+  const { t } = useLingui();
+  return (size) => {
+    const characters = t`${plural(ph({ count: size.chars }), { one: "# character", other: "# characters" })}`;
+    if (size.lines <= 1) return characters;
+    const lines = t`${plural(ph({ count: size.lines }), { one: "# line", other: "# lines" })}`;
+    return `${characters} · ${lines}`;
+  };
+}
+
+/** Whether `box` holds more below what it shows. */
+function goesOn(box: HTMLElement): boolean {
+  return box.scrollHeight - box.scrollTop - box.clientHeight > 1;
+}
+
 /**
  * A command whole, its hidden characters spelled out, wrapped in a box that scrolls once it is
- * taller than its bound: nothing of it is ever cut off where the owner allows it.
+ * taller than its bound: nothing of it is ever cut off where the owner allows it. While more of it
+ * is below, it says so, since an overlay scrollbar shows only once the box is scrolled.
  */
 export function CommandText({
   command,
   className,
+  sized = false,
 }: {
   readonly command: string;
   /** A max-height of its own, such as the waiting bar's lower one. */
   readonly className?: string;
+  /** Its size above it: a command's, where no other line gives it. */
+  readonly sized?: boolean;
 }) {
+  const { t } = useLingui();
+  const sizeText = useSizeText();
+  const box = useRef<HTMLPreElement>(null);
+  const [below, setBelow] = useState(false);
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (element === null) return;
+    // The box and what it holds: a box at its bound keeps its size while its text grows.
+    const observer = new ResizeObserver(() => setBelow(goesOn(element)));
+    observer.observe(element);
+    if (element.firstElementChild !== null) observer.observe(element.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <pre
-      data-command
-      className={cn(
-        "max-h-48 overflow-y-auto whitespace-pre-wrap wrap-anywhere rounded-md border bg-card px-2.5 py-1.5 font-mono text-xs leading-relaxed",
-        className,
+    <div className="flex min-w-0 flex-col gap-1">
+      {sized && (
+        <p className="text-muted-foreground text-xs" data-command-size>
+          {sizeText(textSize(command))}
+        </p>
       )}
-    >
-      <Escaped text={command} />
-    </pre>
+      <div className="relative">
+        <pre
+          data-command
+          ref={box}
+          onScroll={(event) => setBelow(goesOn(event.currentTarget))}
+          className={cn(
+            "max-h-48 overflow-y-auto whitespace-pre-wrap wrap-anywhere rounded-md border bg-card px-2.5 py-1.5 font-mono text-xs leading-relaxed",
+            className,
+          )}
+        >
+          <span className="block">
+            <Escaped text={command} />
+          </span>
+        </pre>
+        {below && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-px bottom-px h-8 rounded-b-md bg-linear-to-t from-card"
+          />
+        )}
+      </div>
+      {below && (
+        <p className="text-warning text-xs" data-command-more>
+          {t`It goes on below: scroll the box to read all of it.`}
+        </p>
+      )}
+    </div>
   );
 }
 

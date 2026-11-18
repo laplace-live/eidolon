@@ -81,7 +81,8 @@ function isBunNodeShim(entry: string): boolean {
  * `path` without the folders a task could put a program in, ahead of the owner's own: empty and
  * relative entries (the folder a command starts in), every node_modules/.bin (npx and bun run add
  * the server's folder's and each one's above it), Bun's node shim, and every folder `guard` lets
- * the task write. Without them, a file a task writes can't stand in for a command the owner OKs.
+ * the task write. Only this task's: another task's folders stay, and so does a link from a folder
+ * kept into one this task writes.
  */
 async function commandPath(path: string, guard: PathGuard | undefined): Promise<string> {
   const entries = [...new Set(path.split(delimiter))].filter(

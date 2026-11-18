@@ -5,7 +5,7 @@
 //
 // One task's MCP servers, started together at its first run and killed, process groups and all,
 // when it ends. Each runs in a folder no task can write, with the task's cut environment plus its
-// entry's own, and every secret one was given is hidden in the results and errors it hands back.
+// entry's own, and every secret one was given is hidden in the errors and stderr it hands back.
 import { mkdir } from "node:fs/promises";
 import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -72,13 +72,18 @@ interface Started {
   readonly client: McpClient;
   readonly transport: StdioTransport;
   readonly tools: readonly Tool[];
+  /** Hides the values this server's references resolved to. */
+  readonly redact: (text: string) => string;
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Each resolved value in `text` replaced by the `${NAME}` it came from, the longest first. */
+/**
+ * Each resolved value in `text` replaced by the `${NAME}` it came from, the longest first. Only
+ * the server's own: a reference can hold what isn't a secret, such as a folder.
+ */
 function redactor(secrets: ReadonlyMap<string, string>): (text: string) => string {
   const hidden = [...secrets]
     .filter(([, value]) => value.length >= MIN_SECRET_CHARS)
@@ -97,9 +102,9 @@ async function start(
   server: McpServer,
   resolved: ResolvedMcpServer,
   env: Readonly<Record<string, string>>,
-  redact: (text: string) => string,
   options: McpSessionOptions,
 ): Promise<Started | McpFailure> {
+  const redact = redactor(resolved.secrets);
   const transport = new StdioTransport({
     command: resolved.command,
     args: resolved.args,
@@ -131,14 +136,15 @@ async function start(
     // Servers without the tools capability (prompts or resources only) don't answer tools/list.
     const tools = client.serverCapabilities?.tools ? await client.listTools() : [];
     if (client.connectionState !== "connected") throw new Error("connection closed during setup");
-    return { server, client, transport, tools };
+    return { server, client, transport, tools, redact };
   } catch (error) {
     await close();
-    const why = timedOut
-      ? `didn't answer within ${server.timeoutMs / 1000} s`
-      : errorMessage(error);
-    const stderr = sliceTail(transport.stderr.trim(), STDERR_TAIL_CHARS);
-    return { server: server.name, error: redact(stderr ? `${why}\n${stderr}` : why) };
+    const why = redact(
+      timedOut ? `didn't answer within ${server.timeoutMs / 1000} s` : errorMessage(error),
+    );
+    // Hidden before it is cut, so no cut splits a secret.
+    const stderr = sliceTail(redact(transport.stderr.trim()), STDERR_TAIL_CHARS);
+    return { server: server.name, error: stderr ? `${why}\n${stderr}` : why };
   } finally {
     clearTimeout(timer);
     options.signal.removeEventListener("abort", close);
@@ -154,11 +160,7 @@ export class McpSession {
   readonly #started: readonly Started[];
   #closing: Promise<void> | undefined;
 
-  private constructor(
-    started: readonly Started[],
-    failed: readonly McpFailure[],
-    redact: (text: string) => string,
-  ) {
+  private constructor(started: readonly Started[], failed: readonly McpFailure[]) {
     this.#started = started;
     this.failed = failed;
     const listed: { from: Started; tool: Tool }[] = [];
@@ -191,7 +193,7 @@ export class McpSession {
         client: from.client,
         timeoutMs: from.server.timeoutMs,
         stderr: () => from.transport.stderr,
-        redact,
+        redact: from.redact,
       }),
     );
     this.#refs = new Map(
@@ -214,7 +216,6 @@ export class McpSession {
       .filter((problem) => !problem.off)
       .map(({ server, error }) => (server === undefined ? { error } : { server, error }));
     const ready: { server: McpServer; resolved: ResolvedMcpServer }[] = [];
-    const secrets = new Map<string, string>();
     for (const server of config.servers) {
       if (!server.enabled) continue;
       const resolved = resolveMcpServer(server, options.secrets);
@@ -225,24 +226,30 @@ export class McpSession {
         });
         continue;
       }
-      for (const [name, value] of resolved.secrets) secrets.set(name, value);
       ready.push({ server, resolved });
     }
-    const redact = redactor(secrets);
-    if (ready.length === 0) return new McpSession([], failed, redact);
+    if (ready.length === 0) return new McpSession([], failed);
     await mkdir(options.cwd, { recursive: true, mode: 0o700 });
     const env = await shellEnv(options.guard);
     signal.throwIfAborted();
     const outcomes = await Promise.all(
-      ready.map(({ server, resolved }) => start(server, resolved, env, redact, options)),
+      ready.map(({ server, resolved }) => start(server, resolved, env, options)),
     );
     const started = outcomes.filter((outcome): outcome is Started => "client" in outcome);
+    const closeStarted = () =>
+      Promise.all(started.map(({ client }) => client.close().catch(() => {})));
     if (signal.aborted) {
-      await Promise.all(started.map(({ client }) => client.close().catch(() => {})));
+      await closeStarted();
       throw signal.reason;
     }
     for (const outcome of outcomes) if (!("client" in outcome)) failed.push(outcome);
-    return new McpSession(started, failed, redact);
+    try {
+      return new McpSession(started, failed);
+    } catch (error) {
+      // What the servers listed is read here: a listing nothing expected leaves none running.
+      await closeStarted();
+      throw error;
+    }
   }
 
   /** The server and tool a worker's tool name calls; undefined for a name that isn't MCP's. */

@@ -109,7 +109,10 @@ export interface BashRunOptions {
   readonly wait: boolean;
   /** The call's: while the call waits on the command, an abort kills it. */
   readonly signal: AbortSignal;
-  /** Whether a steering line waits for the run: the command then moves to the background. */
+  /**
+   * Whether a steering line waits for the run: the command then moves to the background, or, with
+   * the background full, ends or reaches the yield first.
+   */
   readonly steered?: () => boolean;
 }
 
@@ -419,8 +422,20 @@ export class BashJobs implements TaskBackground {
         recorded();
       });
 
-    const moved = await this.#untilMoved(job, wait, steered);
-    if (moved === null || job.settled) {
+    let moved = await this.#untilMoved(job, wait, steered);
+    // The limit holds at the yield (L1): a steering line that finds the background full costs no
+    // run that would have finished. A waited command, which never yields, runs to its end; another
+    // waits for its end or the yield.
+    if (
+      moved === "steered" &&
+      !job.settled &&
+      !stop.signal.aborted &&
+      this.#backgroundIds().length >= MAX_BACKGROUND
+    ) {
+      moved = wait ? await job.ended.then(() => null) : await this.#untilYield(job);
+    }
+    // A command stopped as it would move ends here: a closed registry keeps no background.
+    if (moved === null || job.settled || stop.signal.aborted) {
       await job.ended;
       return await this.#ended(job);
     }
@@ -462,6 +477,20 @@ export class BashJobs implements TaskBackground {
           if (steered()) finish("steered");
         }, this.#pollMs);
       }
+    });
+  }
+
+  /** Resolves when the command ends (null), or at the yield, counted from its start. */
+  #untilYield(job: Job): Promise<"steered" | null> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(
+        () => resolve("steered"),
+        job.run.startedAt + this.#yieldMs - Date.now(),
+      );
+      void job.ended.then(() => {
+        clearTimeout(timer);
+        resolve(null);
+      });
     });
   }
 

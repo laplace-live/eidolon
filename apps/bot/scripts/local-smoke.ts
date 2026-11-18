@@ -375,8 +375,17 @@ const TOOLS_WORKER_REPORT = "Ran the commands; ran.txt holds what they printed."
 const SKILL_NAME = "smoke-style";
 const SKILL_DESCRIPTION = "How the smoke's tasks keep their notes";
 const SKILL_BODY = "Write what each command printed into ran.txt, one line each.";
-/** Each appends a line to ran.txt in the task's folder, so the file tells which of them ran. */
-const ONCE_COMMAND = "printf 'once\\n' >> ran.txt";
+/**
+ * Each appends a line to ran.txt in the task's folder, so the file tells which of them ran. The
+ * first comes padded, as a worker talked into it could pad one: what it runs is below what its
+ * card's box shows at first.
+ */
+const ONCE_RUNS = "printf 'once\\n' >> ran.txt";
+const ONCE_PADDING = 14;
+const ONCE_COMMAND = [
+  ...Array.from({ length: ONCE_PADDING }, (_, n) => `# step ${n + 1}: nothing to see here`),
+  ONCE_RUNS,
+].join("\n");
 const ALWAYS_COMMAND = "printf 'always\\n' >> ran.txt";
 /** Past the 10 s after which a command moves to the background, with time to see it there. */
 const LATE_COMMAND = "sleep 20; printf 'late\\n' >> ran.txt";
@@ -4309,11 +4318,12 @@ async function kindsWalk(walk: Walk): Promise<void> {
 
 /**
  * A coding task she starts in the task's chat: its card names the kind, and it runs on the kind's
- * model. Its worker reads the owner's skill, then runs commands: the first asks on the card, where
- * Run Once runs it; the same command asks again and is denied; the next is allowed for good and
- * then runs unasked, until the worker reads a page, after which it asks again, saying why; the last
- * moves to the background, which the card lists, and its end wakes the task. Then Settings' Allowed
- * Commands lists the one allowed for good, and Remove takes it back.
+ * model. Its worker reads the owner's skill, then runs commands: the first asks on the card, which
+ * says that more of it is below what its box shows, and Run Once runs it; the same command asks
+ * again and is denied; the next is allowed for good and then runs unasked, until the worker reads
+ * a page, after which it asks again, saying why; the last moves to the background, which the card
+ * lists, and its end wakes the task. Then Settings' Allowed Commands lists the one allowed for
+ * good, and Remove takes it back.
  */
 async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
   const { page, checks, origin, home } = walk;
@@ -4386,10 +4396,7 @@ async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
     card.getByText(t("en", "Let it run this command?"), { exact: true }),
     15_000,
   );
-  const boxed = await shows(
-    card.locator("[data-command]").filter({ hasText: ONCE_COMMAND }),
-    5_000,
-  );
+  const boxed = await shows(card.locator("[data-command]").filter({ hasText: ONCE_RUNS }), 5_000);
   const where = await shows(card.getByText(folder, { exact: true }), 5_000);
   const stopsAt = t("en", "Stops at {time}", { time: "" });
   const stops = await shows(card.getByText(new RegExp(`^${escapeRegExp(stopsAt)}`)), 5_000);
@@ -4403,6 +4410,25 @@ async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
   const answers = await card
     .locator("[data-answer]")
     .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("data-answer")));
+  // What it runs is below what either box shows: each says so, with its size, until read whole.
+  const sizeShown = await visibleText(card.locator("[data-command-size]"));
+  const sizeAsked = `${ONCE_COMMAND.length.toLocaleString("en")} characters · ${ONCE_PADDING + 1} lines`;
+  const more = card.locator("[data-command-more]");
+  const cardMore = await shows(more, 5_000);
+  const barMore = await shows(bar.locator("[data-command-more]"), 5_000);
+  await card
+    .locator("[data-command]")
+    .first()
+    .evaluate((box) => {
+      box.scrollTop = box.scrollHeight;
+    });
+  const readWhole = await more
+    .first()
+    .waitFor({ state: "hidden", timeout: 5_000 })
+    .then(
+      () => true,
+      () => false,
+    );
   const toldAt = (await askHer(walk, chat, COMMAND_LINE, COMMAND_ACK)).find(
     (request) => lastContent(request) === COMMAND_LINE,
   );
@@ -4425,6 +4451,10 @@ async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
       stops &&
       barLine &&
       JSON.stringify(answers) === '["deny","always","once"]' &&
+      sizeShown === sizeAsked &&
+      cardMore &&
+      barMore &&
+      readWhole &&
       block.includes(ASKS_TO_RUN) &&
       notYet === "" &&
       runOnce.status === 200 &&
@@ -4433,7 +4463,10 @@ async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
       `the card ${question ? "asks" : "doesn't ask"} to run it, ${boxed ? "showing" : "not showing"} ` +
       `it, ${where ? "naming" : "not naming"} the folder, ${stops ? "with" : "without"} when it ` +
       `stops, and answers ${JSON.stringify(answers)}; the waiting bar ${barLine ? "names the folder" : "doesn't"}; ` +
-      `her answer came after ${block === "" ? "no status block" : quote(block, 300)}; ran.txt held ` +
+      `its size reads ${quote(sizeShown)}, and that more is below ${cardMore ? "shows" : "doesn't show"} ` +
+      `on the card and ${barMore ? "shows" : "doesn't show"} on the bar, ${readWhole ? "going" : "not going"} ` +
+      `once the card's box is scrolled to its end; her answer came after ` +
+      `${block === "" ? "no status block" : quote(block, 300)}; ran.txt held ` +
       `${quote(notYet)} before Run Once (${runOnce.status}) and ${quote(afterOnce)} after`,
   );
 

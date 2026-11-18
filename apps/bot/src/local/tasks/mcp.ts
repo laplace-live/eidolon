@@ -1,7 +1,7 @@
 // The owner's MCP servers as the app shows and changes them: mcp.json in the data home, which the
 // owner edits by hand. The app switches a server and adds or takes back a tool's Always, keeping
-// the rest of the file, and never writes over one that doesn't parse.
-import { readFile } from "node:fs/promises";
+// the rest of the file, and never writes over one that doesn't parse, or one that is a link.
+import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type McpConfig,
@@ -49,8 +49,8 @@ export function mcpServersView(config: McpConfig, secrets: McpSecrets): McpServe
   return { path: config.path, servers, errors };
 }
 
-/** What became of a change: unknown-server and invalid-config leave the file as it was. */
-export type McpFileChange = "patched" | "unknown-server" | "invalid-config";
+/** What became of a change: anything but patched leaves the file as it was. */
+export type McpFileChange = "patched" | "unknown-server" | "invalid-config" | "linked";
 
 /** mcp.json's changes, one after another, so that two can't drop each other's. */
 export class McpFile {
@@ -69,6 +69,13 @@ export class McpFile {
   }
 
   async #change(name: string, patch: McpServerPatch): Promise<McpFileChange> {
+    // An mcp.json linked to another client's config, symbolically or hard, would be replaced by a
+    // copy: that config then never gets the change, and its own changes no longer reach tasks.
+    const linked = await lstat(this.#path).then(
+      (found) => found.isSymbolicLink() || found.nlink > 1,
+      () => false,
+    );
+    if (linked) return "linked";
     let text: string | undefined;
     try {
       text = await readFile(this.#path, "utf8");

@@ -155,6 +155,8 @@ test("a command's bar shows it whole and escaped, in a box that scrolls, with it
   expect(bar).toContain("\\u{202E}</mark>");
   expect(bar).not.toContain("\u202E");
   expect(bar).toContain("; rm -rf ~/x");
+  // Its size, so a tail out of the box's view is never news.
+  expect(bar).toContain("20 characters");
   // Never cut off: the box wraps and scrolls within the bar's height.
   const box = classesOf(bar, "data-command");
   expect(box).toContain("overflow-y-auto");

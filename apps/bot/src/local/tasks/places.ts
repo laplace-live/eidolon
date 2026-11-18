@@ -3,7 +3,7 @@ import { realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
 // APFS and NTFS match names in any case.
-export const fold =
+const fold =
   process.platform === "darwin" || process.platform === "win32"
     ? (path: string) => path.toLowerCase()
     : (path: string) => path;

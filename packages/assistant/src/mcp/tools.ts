@@ -78,11 +78,17 @@ export function nameMcpTools(tools: readonly { server: string; tool: string }[])
   );
 }
 
-/** A listed tool as a task's ToolSchema, its local references inlined. */
+/**
+ * A listed tool as a task's ToolSchema, its local references inlined. A description or title that
+ * isn't a string, which a server can send, counts as none.
+ */
 export function mcpToolSchema(name: string, server: string, tool: Tool): ToolSchema {
-  const title = tool.title ?? tool.annotations?.title;
+  const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
   const description =
-    tool.description?.trim() || title || `MCP tool ${tool.name} from server ${server}`;
+    text(tool.description) ||
+    text(tool.title) ||
+    text(tool.annotations?.title) ||
+    `MCP tool ${tool.name} from server ${server}`;
   const schema = normalizeMcpInputSchema(inlineSchemaRefs(tool.inputSchema));
   return {
     name,
@@ -145,8 +151,9 @@ function blockText(block: ContentBlock): string {
 }
 
 /**
- * A server's result as the worker reads it, `redact`ed before its middle is cut so that no cut
- * splits a secret. With no content blocks, its structured content as JSON.
+ * A server's result as the worker reads it. An error, the server's own message, is `redact`ed
+ * before its middle is cut, so that no cut splits a secret. With no content blocks, its structured
+ * content as JSON.
  */
 export function convertMcpResult(
   server: string,
@@ -161,7 +168,7 @@ export function convertMcpResult(
   let text = texts.join("\n");
   const isError = result.isError === true;
   if (isError && text === "") text = `MCP tool ${server}/${tool} returned an error`;
-  const limited = limitMcpText(redact(text));
+  const limited = limitMcpText(isError ? redact(text) : text);
   return {
     content: limited.text,
     ...(isError ? { isError: true } : {}),
@@ -223,14 +230,14 @@ export function createMcpTool(options: McpToolOptions): AssistantTool {
       } catch (error) {
         if (signal.aborted) return errorResult(ABORTED);
         const message = error instanceof Error ? error.message : String(error);
-        // The server has exited: what it said last is why.
+        // The server has exited: what it said last is why, hidden before it is cut so that no
+        // cut splits a secret.
         const tail =
           client.connectionState === "closed"
-            ? sliceTail(options.stderr().trim(), STDERR_TAIL_CHARS)
+            ? sliceTail(redact(options.stderr().trim()), STDERR_TAIL_CHARS)
             : "";
-        return errorResult(
-          redact(`${server}'s ${tool.name} failed: ${message}${tail ? `\n${tail}` : ""}`),
-        );
+        const failed = redact(`${server}'s ${tool.name} failed: ${message}`);
+        return errorResult(tail ? `${failed}\n${tail}` : failed);
       }
     },
   };

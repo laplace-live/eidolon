@@ -1,10 +1,20 @@
 // The commands the owner allowed for good from tasks' cards: what each allows, the file they live
 // in, and that answers given at once never lose one another's.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AllowedCommands } from "../../src/local/tasks/commands.ts";
+import { placeOf } from "../../src/local/tasks/places.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 
 let root = "";
@@ -47,9 +57,19 @@ describe("allowed commands", () => {
         false,
       ]);
     }
-    // APFS matches names in any case; Linux's file systems don't.
-    expect(await allowed.allows("/WORK/Site", "npm test")).toBe(process.platform === "darwin");
+    // The folders are realpaths, which give a case-insensitive volume's own case: on a
+    // case-sensitive one, /Volumes/Code/App and /Volumes/Code/app are two folders.
+    expect(await allowed.allows("/WORK/Site", "npm test")).toBe(false);
     expect(await allowed.allows("/work/site", "NPM TEST")).toBe(false);
+  });
+
+  test("a folder named in another case keeps its grant where the volume ignores case, through its realpath", async () => {
+    mkdirSync(join(root, "Site"));
+    const allowed = store();
+    await allowed.add(await placeOf(join(root, "Site")), "npm test", "task-1");
+    // A case-sensitive volume has no such folder, and the realpath keeps the case asked for.
+    const ignoresCase = existsSync(join(root, "site"));
+    expect(await allowed.allows(await placeOf(join(root, "site")), "npm test")).toBe(ignoresCase);
   });
 
   test("are listed newest first, each once, with the task whose card added it", async () => {

@@ -61,7 +61,8 @@ searches: `auto` and `native` would search at the carrier model's own provider's
 OpenRouter searches only inside a model's request, so `openRouterSearcher` (`search.ts`) sends
 one small carrier request a search, `openai/gpt-6-luna` with reasoning off, the tool forced once
 (`max_uses: 1`, `max_total_results`, `max_tool_calls: 1`), and reads the results from the
-reply's `url_citation` annotations, each page's title, URL and Exa's excerpt. It goes through
+reply's `url_citation` annotations, each page's title, URL and Exa's excerpt, so the query
+reaches OpenRouter, the carrier model's provider (OpenAI) and Exa. It goes through
 `OpenAIChatClient`, with OpenRouter's attribution headers and the client's retries, and reports
 one record: role `search`, model `exa`, the carrier's tokens, the searches billed and
 OpenRouter's `usage.cost`, about $0.007. A reply that counts several searches is recorded as one,

@@ -285,6 +285,14 @@ const NAMES = { "site.test": [SITE_IP] };
 
 const ANY: WebAccess = { allows: () => true };
 
+/**
+ * The details of a call stopped at `url`'s redirect: that server answered, so what the call says
+ * of its Location came from outside.
+ */
+function redirectedAt(url: string): WebFetchDetails {
+  return { url, finalUrl: url, status: 302, contentType: null, bytes: 0 };
+}
+
 function webFetch(options: Partial<WebFetchOptions> = {}) {
   const dial = dialer();
   const names = resolver(NAMES);
@@ -601,11 +609,13 @@ describe("web_fetch", () => {
         "http://site.test/redirect?to=ftp://files.test/a redirected to ftp://files.test/a, which " +
         "web_fetch can't follow: it fetches http and https only.",
       isError: true,
+      details: redirectedAt("http://site.test/redirect?to=ftp://files.test/a"),
     });
     expect(await run({ url: "http://site.test/redirect?to=http://%5B::1" })).toEqual({
       content:
         "http://site.test/redirect?to=http://%5B::1 redirected to http://[::1, which isn't a URL.",
       isError: true,
+      details: redirectedAt("http://site.test/redirect?to=http://%5B::1"),
     });
   });
 
@@ -623,6 +633,9 @@ describe("web_fetch", () => {
         "http://127.0.0.1:7860/api/local/settings: 127.0.0.1 is an address on this computer or its " +
         "network, which web_fetch never reaches.",
       isError: true,
+      details: redirectedAt(
+        "http://site.test/redirect?to=http://127.0.0.1:7860/api/local/settings",
+      ),
     });
     expect(await run("http://site.test/redirect?to=http://inside.test/admin")).toEqual({
       content:
@@ -630,6 +643,7 @@ describe("web_fetch", () => {
         "inside.test resolves to 192.168.1.20, an address on this computer or its network, which " +
         "web_fetch never reaches.",
       isError: true,
+      details: redirectedAt("http://site.test/redirect?to=http://inside.test/admin"),
     });
     const local = await run("http://site.test/redirect?to=http://localhost/");
     expect(local.content).toEndWith(
@@ -661,6 +675,7 @@ describe("web_fetch", () => {
         "To follow it, call web_fetch on https://elsewhere.test./doc%201 itself, which asks the " +
         "owner for that site.",
       isError: true,
+      details: redirectedAt("http://site.test/redirect?to=https://Elsewhere.TEST./doc%201"),
     });
     expect(asks).toEqual(["site.test", "elsewhere.test"]);
     expect(asked).toEqual(["site.test"]);
@@ -686,6 +701,10 @@ describe("web_fetch", () => {
     expect(result.content).toBe(
       "Stopped after 5 redirects: http://site.test/redirect?to=%2Fhello redirected again, to http://site.test/hello.",
     );
+    expect(result.details).toMatchObject({
+      finalUrl: "http://site.test/redirect?to=%2Fhello",
+      status: 302,
+    });
 
     // Five are followed.
     url = "/hello";
@@ -830,11 +849,16 @@ describe("web_fetch", () => {
   test("gives up when its whole time runs out, waiting for the answer or for the body", async () => {
     const { run } = webFetch({ timeoutMs: 200 });
     for (const path of ["/stall", "/stall-body"]) {
+      const url = `http://site.test${path}`;
       const started = Date.now();
-      const result = await run({ url: `http://site.test${path}` });
+      const result = await run({ url });
       expect(result).toEqual({
-        content: `Timed out after 0.2 s fetching http://site.test${path}`,
+        content: `Timed out after 0.2 s fetching ${url}`,
         isError: true,
+        // The body's server answered, its status and type before it stalled.
+        ...(path === "/stall-body"
+          ? { details: { url, finalUrl: url, status: 200, contentType: "text/plain", bytes: 0 } }
+          : {}),
       });
       expect(Date.now() - started).toBeLessThan(2000);
     }
@@ -1043,6 +1067,7 @@ describe("web_fetch behind a fake-IP proxy", () => {
     expect(result).toEqual({
       content: `http://site.test/redirect?to=${target} redirected to ${target}: localtest.me resolves to 127.0.0.1, ${LOCAL}`,
       isError: true,
+      details: redirectedAt(`http://site.test/redirect?to=${target}`),
     });
     expect(seen.slice(served).map(({ path }) => path)).toEqual([`/redirect?to=${target}`]);
     expect(tun.dialed.map(({ url }) => url)).toEqual([`http://${SITE_IP}/redirect?to=${target}`]);

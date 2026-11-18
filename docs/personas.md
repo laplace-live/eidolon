@@ -368,10 +368,11 @@ for either, and her chat model is never the fallback. `assistant.folders` lists 
 task may read and write besides its own, where a task she starts runs without asking first
 ([assistant.md](assistant.md)). `assistant.bash` (default on) lets a task ask to run commands on
 macOS and Linux, each waiting for your OK on its card unless you allowed that exact command in its
-folder for good; off, no task runs any. A task pauses to ask before going on each time its
-spend crosses a multiple of `assistant.spendPauseUsd` (default 1, in US dollars; 0 never
-pauses), or after its first request on a model with no known price, whose spend can't be
-counted, and keeps its requests within `assistant.contextTokens` tokens (default 128000).
+folder for good; off, no task starts one, and one already running goes on to its end or its
+timeout. A task pauses to ask before going on each time its spend crosses a multiple of
+`assistant.spendPauseUsd` (default 1, in US dollars; 0 never pauses), or after its first request
+on a model with no known price, whose spend can't be counted, and keeps its requests within
+`assistant.contextTokens` tokens (default 128000).
 
 `assistant.quick`, `assistant.coding` and `assistant.research` name the account and model for the
 tasks she marks quick, coding or research. Unset, they follow `assistant.provider` and

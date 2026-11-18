@@ -36,6 +36,11 @@ export const HTTP_SERVERS_LATER = "HTTP servers come later: run it through mcp-r
 
 const SERVER_NAME = /^[A-Za-z0-9_-]+$/;
 const HTTP_TYPES: readonly unknown[] = ["http", "streamable-http", "sse"];
+/**
+ * setTimeout's longest delay, 2^31 - 1 ms, in whole seconds: a longer one fires at once, so every
+ * request would time out. An hour in milliseconds, as some clients count it, is past it.
+ */
+const MAX_TIMEOUT_SECONDS = 2_147_483;
 
 /**
  * Validate one entry of the `mcpServers` shape. Server names are letters, digits, `_` and `-`,
@@ -75,6 +80,9 @@ function validateBaseFields(entry: Record<string, unknown>): string | undefined 
   }
   if (timeout !== undefined && (typeof timeout !== "number" || !(timeout > 0))) {
     return "timeout must be a positive number of seconds";
+  }
+  if (typeof timeout === "number" && !(timeout <= MAX_TIMEOUT_SECONDS)) {
+    return `timeout must be at most ${MAX_TIMEOUT_SECONDS} seconds`;
   }
   return undefined;
 }

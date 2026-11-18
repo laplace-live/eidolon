@@ -22,6 +22,7 @@ import {
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures/mcp-server.mjs");
+const DAEMON = join(import.meta.dir, "fixtures/mcp-daemon-server.mjs");
 const TOKEN = "EIDOLON_MCP_TEST_TOKEN";
 const SECRET = "EIDOLON_MCP_TEST_SECRET";
 
@@ -340,18 +341,24 @@ describe("results", () => {
     });
   });
 
-  test("hides each secret before the middle is cut, so no cut splits one", () => {
+  test("hides each secret in an error before the middle is cut, so no cut splits one", () => {
     // The head ends at byte 10,240, inside the secret and past its reference.
     const secret = "s".repeat(60);
     const text = `${"a".repeat(10_200)}${secret}${"b".repeat(20_000)}`;
-    const result = convertMcpResult(
+    const hide = (value: string) => value.replaceAll(secret, ref(TOKEN));
+    const failed = convertMcpResult(
       "fake",
       "big",
-      { content: [{ type: "text", text }] } satisfies CallToolResult,
-      (value) => value.replaceAll(secret, ref(TOKEN)),
+      { content: [{ type: "text", text }], isError: true } satisfies CallToolResult,
+      hide,
     );
-    expect(result.content).not.toContain("sssss");
-    expect(result.content).toContain(ref(TOKEN));
+    expect(failed.content).not.toContain("sssss");
+    expect(failed.content).toContain(ref(TOKEN));
+    // A result that isn't an error is the server's answer, kept as it sent it.
+    const short = `found ${secret}`;
+    expect(
+      convertMcpResult("fake", "big", { content: [{ type: "text", text: short }] }, hide).content,
+    ).toBe(short);
   });
 });
 
@@ -412,12 +419,67 @@ describe("the servers' processes", () => {
     expect(names).not.toContain("EIDOLON_HOME");
     expect(values).toEqual({
       GREETING: "hi",
-      // A secret it was given comes back hidden, whatever the server does with it.
-      TOKEN: ref(SECRET),
+      // What a result says is the server's own: only errors and stderr are hidden.
+      TOKEN: "a longer secret",
       // The entry's own TERM wins over the cut environment's.
       TERM: "xterm",
       HOME: process.env.HOME,
     });
+  });
+
+  test("a result comes back as its server sent it, whatever a reference of any server's holds", async () => {
+    // A reference can name what isn't a secret, such as a folder the worker then uses.
+    const docs = "/Users/owner/Documents";
+    const { session } = await open(
+      { fs: fake(["--root", ref("DOCS")]), other: fake() },
+      { secrets: { DOCS: docs } },
+    );
+    for (const [name, text] of [
+      ["mcp__fs__echo", `Found ${docs}/report.pdf`],
+      ["mcp__other__echo", `Saved ${docs}/notes.md`],
+    ] as const) {
+      expect(await call(session, name, { text })).toEqual({
+        content: text,
+        details: { server: name.split("__")[1], tool: "echo", isError: false },
+      });
+    }
+  });
+
+  test("a tool whose description isn't a string gets the default one, and every server still serves", async () => {
+    const folder = await tempFolder();
+    const pidfiles = [join(folder, "good"), join(folder, "odd")];
+    const { session } = await open({
+      good: fake(["--pidfile", pidfiles[0] as string]),
+      odd: fake(["--pidfile", pidfiles[1] as string, "--description", "42"]),
+    }).catch(async (error: unknown) => {
+      // A failed open can leave its servers running: these are this test's own.
+      for (const pid of (await Promise.all(pidfiles.map(pidsIn))).flat()) {
+        if (isAlive(pid)) process.kill(pid, "SIGKILL");
+      }
+      throw error;
+    });
+    expect(session.failed).toEqual([]);
+    const odd = session.tools.find((tool) => tool.schema.name === "mcp__odd__echo");
+    expect(odd?.schema.description).toBe("MCP tool echo from server odd");
+    expect((await call(session, "mcp__odd__echo", { text: "hi" })).content).toBe("hi");
+  });
+
+  test("a listing the session can't take ends the open with every server it started closed", async () => {
+    const folder = await tempFolder();
+    const pidfiles = [join(folder, "good"), join(folder, "deep")];
+    // A schema nested past the call stack, which JSON still parses.
+    const opening = open({
+      good: fake(["--pidfile", pidfiles[0] as string]),
+      deep: fake(["--pidfile", pidfiles[1] as string, "--deep", "20000"]),
+    });
+    await expect(opening).rejects.toThrow(RangeError);
+    const pids = (await Promise.all(pidfiles.map(pidsIn))).flat();
+    try {
+      expect(pids).toHaveLength(2);
+      expect(await gone(pids)).toBe(true);
+    } finally {
+      for (const pid of pids) if (isAlive(pid)) process.kill(pid, "SIGKILL");
+    }
   });
 
   test("the PATH a server gets leaves out the folders the task may write", async () => {
@@ -479,6 +541,47 @@ describe("the servers' processes", () => {
     await expect(opening).rejects.toThrow("stopped");
     expect(Date.now() - stoppedAt).toBeLessThan(1_000);
     expect(await gone(pids, 1_000)).toBe(true);
+  });
+
+  test("Stop while a server whose daemon keeps its pipes hangs starting still ends the open", async () => {
+    const pidfile = join(await tempFolder(), "pids");
+    const controller = new AbortController();
+    const opening = open(
+      {
+        held: {
+          command: process.execPath,
+          args: ["--no-env-file", DAEMON, "--hang", "--pidfile", pidfile],
+        },
+      },
+      { signal: controller.signal },
+    );
+    const [server, helper] = (await pidsIn(pidfile)) as [number, number];
+    try {
+      controller.abort(new Error("stopped"));
+      const ended = opening.then(
+        () => "opened",
+        () => "stopped",
+      );
+      // Within its close's SIGTERM, SIGKILL and the second its pipes then get.
+      expect(await Promise.race([ended, Bun.sleep(6_000).then(() => "pending")])).toBe("stopped");
+      expect(isAlive(server)).toBe(false);
+    } finally {
+      for (const pid of [server, helper]) if (isAlive(pid)) process.kill(pid, "SIGKILL");
+    }
+  }, 15_000);
+
+  test("a server that exits mid-task takes what it started in its group with it", async () => {
+    const pidfile = join(await tempFolder(), "pids");
+    const { session } = await open({ fake: fake(["--child", "--pidfile", pidfile]) });
+    const [server, child] = (await pidsIn(pidfile)) as [number, number];
+    try {
+      expect((await call(session, "mcp__fake__crash")).isError).toBe(true);
+      // Its child holds none of the server's pipes, so the transport ended with the server: the
+      // server's exit takes it, with no close of the session's.
+      expect(await gone([server, child])).toBe(true);
+    } finally {
+      for (const pid of [server, child]) if (isAlive(pid)) process.kill(pid, "SIGKILL");
+    }
   });
 
   test("an open already stopped starts nothing", async () => {
@@ -592,6 +695,24 @@ describe("mcp.json's word at the opening", () => {
     const crashed = await call(session, "mcp__gh__crash");
     expect(crashed.content).toEndWith(`crashing now with ${ref(TOKEN)}`);
     expect(crashed.content).not.toContain("ghp_");
+  });
+
+  test("a token the stderr tail's cut would split is hidden whole, at the start and after a call", async () => {
+    // 1,990 characters after it: the 2,000-character tail starts inside the token.
+    const token = "ghp_0123456789abcdefghij";
+    const entry = { env: { TOKEN: ref(TOKEN) } };
+    const secrets = { [TOKEN]: token };
+    const failed = await open(
+      { gh: fake(["--print", "TOKEN", "--trail", "1990"], entry) },
+      { secrets },
+    );
+    const error = failed.session.failed[0]?.error ?? "";
+    expect(error).toEndWith(`\n${"y".repeat(1990)}`);
+    expect(error).not.toContain(token.slice(-6));
+    const { session } = await open({ gh: fake(["--trail", "1990"], entry) }, { secrets });
+    const crashed = await call(session, "mcp__gh__crash");
+    expect(crashed.content).toEndWith(`\n${"y".repeat(1990)}`);
+    expect(crashed.content).not.toContain(token.slice(-6));
   });
 
   test("takes only the tools its tools list names", async () => {

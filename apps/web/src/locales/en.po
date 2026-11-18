@@ -63,7 +63,7 @@ msgstr "{count, plural, one {{amount} token} other {{amount} tokens}}"
 msgid "{count, plural, one {# batch is waiting; this downloads it.} other {# batches are waiting; this downloads the oldest first.}}"
 msgstr "{count, plural, one {# batch is waiting; this downloads it.} other {# batches are waiting; this downloads the oldest first.}}"
 
-#: src/features/tasks/cards.tsx
+#: src/features/tasks/parts.tsx
 msgid "{count, plural, one {# character} other {# characters}}"
 msgstr "{count, plural, one {# character} other {# characters}}"
 
@@ -87,7 +87,7 @@ msgstr "{count, plural, one {# file was removed since the last index.} other {# 
 msgid "{count, plural, one {# image} other {# images}}"
 msgstr "{count, plural, one {# image} other {# images}}"
 
-#: src/features/tasks/cards.tsx
+#: src/features/tasks/parts.tsx
 msgid "{count, plural, one {# line} other {# lines}}"
 msgstr "{count, plural, one {# line} other {# lines}}"
 
@@ -795,8 +795,8 @@ msgid "An earlier run of Eidolon started this job, so this one can't stop it. It
 msgstr "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
 
 #: src/features/settings/mcp-card.tsx
-msgid "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool."
-msgstr "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool."
+msgid "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again."
+msgstr "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again."
 
 #: src/features/jobs/parts.tsx
 msgid "and {count} more"
@@ -1336,8 +1336,8 @@ msgid "Coding tasks run on Assistant Mode's model for now"
 msgstr "Coding tasks run on Assistant Mode's model for now"
 
 #: src/features/settings/commands-card.tsx
-msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has read the web or an MCP server. Always in This Folder on a task's card adds one."
-msgstr "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has read the web or an MCP server. Always in This Folder on a task's card adds one."
+msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one."
+msgstr "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one."
 
 #: src/features/tasks/cards.tsx
 msgid "Commands run as you, with no sandbox: this one can read, change or delete any of your files, not only this folder's, and reach the network."
@@ -2394,6 +2394,10 @@ msgstr "It can't search or fetch from the web, and each call to an MCP server as
 msgid "It ended before reporting a result. The end of its technical log usually says why."
 msgstr "It ended before reporting a result. The end of its technical log usually says why."
 
+#: src/features/tasks/parts.tsx
+msgid "It goes on below: scroll the box to read all of it."
+msgstr "It goes on below: scroll the box to read all of it."
+
 #: src/features/tasks/cards.tsx
 msgid "It has spent {spent}, and pauses each time its spend crosses another {each}."
 msgstr "It has spent {spent}, and pauses each time its spend crosses another {each}."
@@ -2756,6 +2760,10 @@ msgstr "mcp.json doesn't parse, so nothing can be saved in it until it's fixed."
 #: src/lib/labels.ts
 msgid "mcp.json has no server by that name."
 msgstr "mcp.json has no server by that name."
+
+#: src/lib/labels.ts
+msgid "mcp.json links to another file, which Eidolon doesn't change. Change that file instead."
+msgstr "mcp.json links to another file, which Eidolon doesn't change. Change that file instead."
 
 #: src/components/settings-form/labels.ts
 msgid "Mem0 Agent ID"

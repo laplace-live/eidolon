@@ -135,7 +135,7 @@ export function McpServersCard() {
       <Alert>
         <TriangleAlertIcon />
         <AlertTitle>{t`Only Add Programs You Trust`}</AlertTitle>
-        <AlertDescription>{t`An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool.`}</AlertDescription>
+        <AlertDescription>{t`An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again.`}</AlertDescription>
       </Alert>
       {servers.isPending ? (
         <FieldSkeletons rows={2} />

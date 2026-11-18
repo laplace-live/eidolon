@@ -1,7 +1,9 @@
 // A fake MCP server over stdio for the MCP client's tests. It prints its pid to stderr, then:
 // --child starts a child in its process group; --pidfile PATH writes both pids there; --hang never
-// answers initialize; --print NAME prints $NAME to stderr and exits; --tools N lists N more tools,
-// each with --pad characters of description; --name a,b lists tools named a and b first.
+// answers initialize; --print NAME prints $NAME to stderr and exits; --trail N prints N more
+// characters of stderr after a token it prints; --tools N lists N more tools, each with --pad
+// characters of description; --name a,b lists tools named a and b first; --description JSON is
+// echo's description; --deep N lists a tool whose schema nests N deep.
 import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -19,9 +21,14 @@ const child = flag("--child")
   : undefined;
 const pidfile = option("--pidfile");
 if (pidfile !== undefined) writeFileSync(pidfile, JSON.stringify([process.pid, child?.pid]));
+const trail = () => {
+  const count = Number(option("--trail") ?? 0);
+  if (count > 0) console.error("y".repeat(count));
+};
 const printed = option("--print");
 if (printed !== undefined) {
   console.error(`starting with token ${process.env[printed]}`);
+  trail();
   process.exit(1);
 }
 // Keeps the process alive once stdin closes, as a server busy at startup is.
@@ -31,12 +38,14 @@ const object = (properties = {}, required = []) => ({ type: "object", properties
 const named = (option("--name") ?? "").split(",").filter(Boolean);
 const extra = Number(option("--tools") ?? 0);
 const pad = "x".repeat(Number(option("--pad") ?? 0));
+const description = option("--description");
+const deep = Number(option("--deep") ?? 0);
 
 const TOOLS = [
   ...named.map((name) => ({ name, inputSchema: object() })),
   {
     name: "echo",
-    description: "Says the text back.",
+    description: description === undefined ? "Says the text back." : JSON.parse(description),
     inputSchema: object({ text: { type: "string" } }, ["text"]),
     annotations: { readOnlyHint: true },
   },
@@ -82,6 +91,17 @@ const TOOLS = [
     description: `Tool ${index}. ${pad}`,
     inputSchema: object(),
   })),
+  ...(deep > 0
+    ? [
+        {
+          name: "deep",
+          description: "Takes a schema nested past any stack.",
+          inputSchema: object({
+            x: Array.from({ length: deep }).reduce((inner) => ({ a: inner }), {}),
+          }),
+        },
+      ]
+    : []),
 ];
 
 const cancelled = [];
@@ -167,6 +187,7 @@ async function call(id, name, args) {
       return text(JSON.stringify(await ask("roots/list")));
     case "crash":
       console.error(`crashing now${process.env.TOKEN ? ` with ${process.env.TOKEN}` : ""}`);
+      trail();
       process.exit(3);
       break;
     default:

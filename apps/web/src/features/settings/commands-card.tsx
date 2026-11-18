@@ -35,7 +35,7 @@ export function AllowedCommandsCard() {
   return (
     <SectionCard
       title={t`Allowed Commands`}
-      description={t`Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has read the web or an MCP server. Always in This Folder on a task's card adds one.`}
+      description={t`Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one.`}
     >
       {commands.isPending ? (
         <FieldSkeletons rows={2} />
@@ -54,7 +54,7 @@ export function AllowedCommandsCard() {
                 className="flex flex-wrap items-start gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0"
               >
                 <div className="flex min-w-0 flex-1 basis-64 flex-col gap-1.5">
-                  <CommandText command={entry.command} className="max-h-32" />
+                  <CommandText command={entry.command} className="max-h-32" sized />
                   <p className="wrap-anywhere font-mono text-muted-foreground text-xs">
                     {entry.folder}
                   </p>

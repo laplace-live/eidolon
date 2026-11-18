@@ -72,6 +72,7 @@ import {
   type MindToolCall,
   runTask,
   type TaskBrief,
+  type TaskEntry,
   type TaskEvent,
   type TaskGateDecision,
   type TaskInbox,
@@ -180,6 +181,7 @@ type RefusalCode = Extract<
   | "unknown-command"
   | "unknown-mcp-server"
   | "invalid-mcp-config"
+  | "linked-mcp-config"
 >;
 
 /**
@@ -217,6 +219,8 @@ const MCP_CROWDED =
  * route that takes 16 KB.
  */
 const CARD_ARGUMENTS_BYTES = 12 * 1024;
+/** How every MCP tool's name starts, whichever server's (createMcpToolName). */
+const MCP_TOOL_PREFIX = "mcp__";
 
 const LIVE: ReadonlySet<TaskStatus> = new Set([
   "running",
@@ -381,19 +385,28 @@ function untilLeft(store: TaskStore, left: AbortSignal): TaskStore {
 }
 
 /**
- * `store`, keeping on `run` the calls of the last reply it holds: a resume runs them. `replied` is
- * told of each new reply as it is stored, before the run gates its calls.
+ * `store`, keeping on `run` the calls of the last reply it holds: a resume runs them. `read` is told
+ * of the entries the run starts from, and `replied` of each new reply as it is stored, before the
+ * run gates its calls.
  */
-function noting(store: TaskStore, run: Run, replied: () => void): TaskStore {
+function noting(
+  store: TaskStore,
+  run: Run,
+  hooks: {
+    readonly read: (entries: readonly TaskEntry[]) => void;
+    readonly replied: () => void;
+  },
+): TaskStore {
   return {
     entries: async () => {
       const entries = await store.entries();
       const last = entries.findLast((entry) => entry.type === "assistant");
       if (last?.type === "assistant") run.calls = last.calls;
+      hooks.read(entries);
       return entries;
     },
     append: (draft) => {
-      if (draft.type === "assistant") replied();
+      if (draft.type === "assistant") hooks.replied();
       return store.append(draft);
     },
   };
@@ -457,6 +470,19 @@ function asks(pending: TaskPending, asked: unknown): boolean {
 function readsOutside(name: string, isError: boolean, details: unknown): boolean {
   if (name === WEB_FETCH) return details !== undefined;
   return name === WEB_SEARCH && !isError;
+}
+
+/**
+ * Whether a transcript holds outside content: readsOutside's results, or an MCP call that started.
+ * task.json says so within a second of the result, so a server that died in between leaves only
+ * the transcript knowing.
+ */
+function heldOutside(entries: readonly TaskEntry[]): boolean {
+  return entries.some((entry) =>
+    entry.type === "tool-result"
+      ? readsOutside(entry.name, entry.isError, entry.details)
+      : entry.type === "tool-start" && entry.name.startsWith(MCP_TOOL_PREFIX),
+  );
 }
 
 /** The search role's searcher, as its settings stand: none until it has an account and its key. */
@@ -639,6 +665,13 @@ export class TaskManager {
         409,
         "invalid-mcp-config",
         "mcp.json doesn't parse, so it isn't changed: fix it, then try again",
+      );
+    }
+    if (result === "linked") {
+      throw new TaskRefused(
+        409,
+        "linked-mcp-config",
+        "mcp.json is a link, so it isn't changed: change the file it leads to",
       );
     }
     return this.mcpServers();
@@ -1163,14 +1196,19 @@ export class TaskManager {
       const denied = mcp?.denied ?? [];
       return { mcp: { ...mcp, denied: denied.includes(key) ? denied : [...denied, key] } };
     }
-    if (
-      answer === "always" &&
-      (await this.#mcpFile.change(server, { allow: tool })) === "invalid-config"
-    ) {
+    const saved = answer === "always" ? await this.#mcpFile.change(server, { allow: tool }) : null;
+    if (saved === "invalid-config") {
       throw new TaskRefused(
         409,
         "invalid-mcp-config",
         "mcp.json doesn't parse, so Always can't be saved in it: fix it, or answer Run Once",
+      );
+    }
+    if (saved === "linked") {
+      throw new TaskRefused(
+        409,
+        "linked-mcp-config",
+        "mcp.json is a link, so Always can't be saved in it: change the file it leads to, or answer Run Once",
       );
     }
     // Always too: under No Web, or in a task that has read outside content, the grant doesn't apply.
@@ -1376,11 +1414,18 @@ export class TaskManager {
         folder: brief.folder,
       }),
       tools,
-      // A Run Once is for the call the run resumes with: some providers reuse call ids.
       store: untilLeft(
-        noting(openTaskStore(task.dir), run, () => {
-          task.once = [];
-          task.mcpOnce = [];
+        noting(openTaskStore(task.dir), run, {
+          read: (entries) => {
+            if (task.snapshot.external !== true && heldOutside(entries)) {
+              void this.#change(task, { external: true });
+            }
+          },
+          // A Run Once is for the call the run resumes with: some providers reuse call ids.
+          replied: () => {
+            task.once = [];
+            task.mcpOnce = [];
+          },
         }),
         left,
       ),

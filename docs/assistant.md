@@ -60,18 +60,21 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
 - **A command and an MCP server run as the owner, outside `FolderPolicy`,** so each command and
   each MCP call waits on the task's card first, unless the owner allowed that exact command in
   that folder, or always allows that tool, for good. Such a grant stops applying once the task has
-  read outside content (a page `web_fetch` got, `web_search`'s results, any MCP server's answer),
-  which could have talked the worker into the call; an MCP grant doesn't apply under No Web either.
-  A server's `readOnlyHint` or `destructiveHint` is shown as its claim and never skips the card.
+  read outside content (a page `web_fetch` got, a redirect it stopped at included, `web_search`'s
+  results, any MCP call's result), which could have talked the worker into the call; an MCP grant
+  doesn't apply under No Web either. A server's tool descriptions, which reach every request, and
+  what a command prints or downloads, don't count. A server's `readOnlyHint` or `destructiveHint`
+  is shown as its claim and never skips the card.
 - **A command, and an MCP server's process, get a cut environment** (`shellEnv`, `shell.ts`):
   `HOME`, `USER`, `SHELL`, `LANG`, `TMPDIR`, every `LC_*`, `SSH_AUTH_SOCK` and the proxy variables
-  in both cases, `TERM=dumb`, and a `PATH` without a folder a task may write, a `node_modules/.bin`
-  or Bun's node shim (`/usr/bin:/bin` when nothing is left, since bash runs a program from the
-  folder it starts in on an empty one). No key the `.env` put in the server's environment reaches
-  either, unless an mcp.json entry names it.
-- **Only `skill` reads in the data home,** and only a listed skill's own files, never a dot-file or
-  a dot-folder: every other tool is still denied the data home. No skill reaches her prompt, her
-  tools or production.
+  in both cases, `TERM=dumb`, and a `PATH` without a folder the task may write (an MCP server's as
+  the task's first run found it), a `node_modules/.bin` or Bun's node shim (`/usr/bin:/bin` when
+  nothing is left, since bash runs a program from the folder it starts in on an empty one). No key
+  the `.env` put in the server's environment reaches either, unless an mcp.json entry names it.
+- **Of the file tools, only `skill` reads in the data home,** and only a listed skill's own files,
+  never a dot-file or a dot-folder; `bash_output` reads only its task's own logs there, and
+  commands and MCP servers run outside `FolderPolicy`. No skill reaches her prompt, her tools or
+  production.
 - **Every entry is stored before it is shown,** and the outcome comes from the runtime, never from
   the worker's text.
 - **Nothing the worker wrote reaches her above a tool's output.** Its report, plan, steps, file
@@ -291,8 +294,9 @@ call that started it. Each command waits for the owner's OK first ([Approvals](#
 - **The background:** a command still running after 10 s, or once a steering line comes in
   (polled each second), moves to the background, and the call returns its id with what it printed
   so far. `wait: true` keeps the call open until the command ends or times out, or a steering line
-  comes. At most 4 run in the background: a fifth is stopped at its move, its result naming the
-  others' ids.
+  comes. At most 4 run in the background: a fifth still running at the yield is stopped, its
+  result naming the others' ids. A steering line that comes while 4 run stops nothing: a
+  `wait: true` command runs on to its end, and any other to its end or the yield.
 - **The run waits for them:** a reply with no calls doesn't end the run while one runs in the
   background ([The loop](#the-loop)). As each ends, the worker reads a notice that carries its id
   and how it ended, never its output or its text: `[Command 3 ended with code 0 after 47 s.
@@ -303,19 +307,23 @@ call that started it. Each command waits for the owner's OK first ([Approvals](#
   there, `seen` false, for its next run.
 - **Kills take the whole process group:** a Stop, the timeout, `bash_kill`, the task's end, the
   server's stop, and the shell's own exit, so what a command left running dies with it (a process
-  that left the group gets 1 s before its pipes are let go). A paused task keeps its commands. At
-  the server's next start, a crash's unended runs end `lost`, and the background one's notice says
-  it may still be running and holding its ports.
+  that left the group gets 1 s before its pipes are let go). One that lands while the shell is
+  still starting kills it as it spawns. A paused task keeps its commands. At the server's next
+  start, a crash's unended runs end `lost`, and the background one's notice says it may still be
+  running and holding its ports.
 - **Not covered:** a process that leaves its group (`setsid`, a daemon) outlives every kill; after
   the server dies outright its commands run on as orphans until they end; and what a command
-  writes isn't in the task's `files.written`.
+  writes isn't in the task's `files.written`. The PATH filter drops only the folders this task may
+  write: a PATH folder inside another task's folder, or a link in a PATH folder into a folder a
+  task writes (`npm link`, `ln -s`), runs what that task wrote, under an Always grant too, in a
+  task that read nothing from outside.
 
 ### Web search
 
 `web_search` is offered right after `web_fetch` while the task may use the web and the `search`
 role has an account with its key (`TaskManagerOptions.searcher`, else the role's); No Web leaves
-out both. It has no card: the query reaches only the provider the owner chose, it changes nothing,
-and the spend pause bounds its cost.
+out both. It has no card: it changes nothing, and the spend pause bounds its cost. The query goes
+to OpenRouter, to the carrier model's provider (OpenAI, for `openai/gpt-6-luna`) and to Exa.
 
 - **One search is one carrier request** (`openRouterSearcher`, `packages/providers/src/search.ts`)
   on OpenRouter's chat completions: `openai/gpt-6-luna` with reasoning off carries the
@@ -367,29 +375,35 @@ the task's card unless the owner always allows that tool ([Approvals](#approvals
   parse starts nothing and decides nothing.
 - **Secrets** are `${NAME}` in an entry's `args` and `env`, resolved from the environment (blank
   is unset), then `credentials.json`'s `mcpSecrets`; a missing one keeps that server from
-  starting and says where to set it. Values of 6 characters or more are hidden as `${NAME}` in the
-  server's errors, its stderr's tail and its results. `~` is expanded in `command`, `args` and
-  `cwd`.
+  starting and says where to set it. Values of 6 characters or more are hidden as `${NAME}` in
+  that server's errors, an error result included, and in its stderr's tail before the tail is
+  cut. A result that isn't an error reaches the worker as the server sent it, since a reference
+  can hold a folder as well as a key. `~` is expanded in `command`, `args` and `cwd`.
 - **Where it runs:** in `<data home>/mcp/`, 0700 and denied to every task, unless its `cwd` is
   absolute or starts with `~/`; a relative one is refused. Its environment is `shellEnv()`, with
-  the PATH a command of the task gets, plus the entry's own `env`; its roots are the task's
-  folder. The manager passes nothing of its own environment.
+  the PATH a command of the task got when the task's first run started the server (a folder
+  granted later stays on it), plus the entry's own `env`; its roots are the task's folder. The
+  manager passes nothing of its own environment.
 - **One session per task** (`McpSession`), opened at its first run, every server at once within
-  its `timeout` (in seconds, default 60, which also bounds each call and a server's progress
-  renews). The run's Stop and the server's stop abort an open, so a server that hangs starting
-  never holds either up. A session is kept through pauses and closed, every process group with
-  it, whenever the task ends, by Stop, a deleted chat, Assistant Mode off or the app's stop; a
+  its `timeout` (in seconds, default 60, at most 2,147,483, `setTimeout`'s limit; it also bounds
+  each call and a server's progress renews). The run's Stop and the server's stop abort an open,
+  so a server that hangs starting never holds either up. A session is kept through pauses and
+  closed, every process group with it, whenever the task ends, by Stop, a deleted chat, Assistant
+  Mode off or the app's stop; a close lets go of a server's pipes a second after its SIGKILL. A
   task resumed after a restart opens a new one. A server that fails to start leaves the task
-  without it, which the card notes (`mcp.failed`); one that exits later fails the calls after it
-  with its stderr's tail. Neither is started again, and `tools/list_changed` is ignored.
+  without it, which the card notes (`mcp.failed`), and a listing the session can't take ends the
+  open with every server it started closed; one that exits later fails the calls after it with
+  its stderr's tail, and takes its process group with it. Neither is started again, and
+  `tools/list_changed` is ignored.
 - **Tools** reach the worker as `mcp__<server>__<tool>`, a hash suffix on every name that collides
   or passes 64 characters, after the built-in tools so a provider's prompt cache keeps their
   prefix. Descriptions are cut at 2,000 characters, and a task takes at most 64 tools and 40,000
   characters of schema, the rest counted on the card (`mcp.left`): list what tasks need in
   `tools`. The worker's prompt gives their rule once: a call may wait for the owner, and what it
   returns is untrusted.
-- **Not covered:** what a server does on the computer isn't in the task's files, and detached
-  servers outlive an app that dies outright.
+- **Not covered:** what a server does on the computer isn't in the task's files; detached
+  servers outlive an app that dies outright; and a process a server starts outside its group (a
+  daemon, `setsid`) outlives every close.
 
 ## The loop
 
@@ -416,7 +430,8 @@ What it adds to pi:
   asked again, with a note after it saying why.
 - **Steering doesn't wait out a sequential batch:** the calls not yet started get "Skipped to
   process an incoming message." A tool sees it coming through `TaskToolContext.steered()`, so a
-  command moves to the background rather than hold it up.
+  command moves to the background rather than hold it up, unless 4 already run there: then it
+  holds the line until its end or the yield ([Commands](#commands)).
 - **Work in the background** (`TaskRequest.background`, a `TaskBackground`: `running()` and
   `takeEnded()`): before each request the loop stores the lines `takeEnded()` gives as `notice`
   entries, which the worker reads as user lines. A run that would end while something still runs
@@ -873,10 +888,14 @@ and so is one from a view that showed another folder for the same path.
 
   Run Once runs that call alone: it is kept in memory, never in `task.json`, and dropped when the
   worker's next reply is stored (the store's `append` hears it before the loop gates that reply's
-  calls, since some providers reuse call ids) and when the run ends or pauses. Always in This
-  Folder adds the exact command in the folder as it lies on disk (its realpath, compared in any
-  case on macOS) to `<data home>/tasks/allowed-commands.json` (0600, read once, then written whole
-  and one at a time), and runs this call too, as a Run Once, since in a task that has read outside
+  calls, since some providers reuse call ids) and when the run ends or pauses. A steering line
+  that waits under the card skips the call when the run goes on only if an earlier call of the
+  same reply already ran, as it skips the rest of a sequential batch ([The loop](#the-loop)): the
+  Run Once then goes unused, and the call made again asks again. A call that comes first in its
+  reply, or alone, runs with the Run Once, and the line is read after. Always in This Folder adds the exact command in the folder as it
+  lies on disk (its realpath, compared exactly: on a case-sensitive volume `App` and `app` are two
+  folders) to `<data home>/tasks/allowed-commands.json` (0600, read once, then written whole and
+  one at a time), and runs this call too, as a Run Once, since in a task that has read outside
   content the grant itself doesn't apply. Deny adds the command to `bash.denied`, and the run goes
   on with the refusal as its call's result. GET and DELETE `assistant/commands` list and take back
   the grants; Settings shows them.
@@ -898,13 +917,18 @@ and so is one from a view that showed another folder for the same path.
   runs once, and dropped at the worker's next reply and the task's end. Always Allow This Tool adds
   the tool to the server's `alwaysAllow` in `mcp.json` through `McpFile`, the file's one writer
   (0600, other keys and the indentation kept, a change that changes nothing never written), and
-  runs this call too; while the file doesn't parse it is refused `409 invalid-mcp-config`, the
-  task still waiting, and a server taken out since the card asked gets nothing written. Deny adds
-  the key to `mcp.denied`.
-- **Outside content:** once a `web_fetch` reached a server (its `details` set, an error page's
-  included), a `web_search` returned results, or an MCP call ran (its `tool-start` stored, an error
-  result included), the task is `external` for good, and the command and tool grants stop applying
-  in it. A call the gate refused reached nothing, and taints nothing.
+  runs this call too; while the file doesn't parse it is refused `409 invalid-mcp-config`, and
+  while it is a symbolic or hard link, to another client's config say, `409 linked-mcp-config`,
+  since a write would replace the link with a copy; either way the task still waits, and Run Once still runs the call.
+  A server taken out since the card asked gets nothing written. Deny adds the key to
+  `mcp.denied`.
+- **Outside content:** once a `web_fetch` reached a server (its `details` set: an error page's,
+  and a redirect it stopped at, included), a `web_search` returned results, or an MCP call ran
+  (its `tool-start` stored, an error result included), the task is `external` for good, and the
+  command and tool grants stop applying in it. `task.json` says so within a second, and each run
+  reads it back from the transcript too, so a server that died first loses nothing. A call the
+  gate refused reached nothing, and taints nothing; nor does a server's tool listing, which
+  every request carries, or what a command prints, `curl` and `gh` included.
 - **Always Allow on a start or a path** writes `settings.yaml`'s `assistant.folders` through
   `addAssistantFolder` (`routes/tasks.ts`), unless the file lists the folder already, then
   installs the settings again for the next run's grants. A folder whose path holds a comma, or whitespace at either end, is
@@ -1134,13 +1158,13 @@ and an unknown id, a `laplace-task` task's included, is 404 `unknown-task`. Bodi
 | `GET tasks?chat=<id>` | | `{ tasks }`, newest first: the app's, or one chat's. 400 for a `chat` that isn't a chat id |
 | `GET tasks/:id` | | The snapshot |
 | `GET tasks/:id/events?after=<offset>` | | NDJSON: each transcript entry as `transcript.jsonl` holds it, from byte `after` (default 0), then each one the run stores; it ends when the run stops: it ends, pauses, waits for an answer, or the server stops. 400 for an `after` that isn't a byte offset, 416 `range-not-satisfiable` past the file's end |
-| `POST tasks/:id/approve` | `{ answer, pending?, model?, web? }` | The snapshot, `running` at once while the run goes on, or `cancelled` for a start's Deny. 400 `bad-request` for a body of the wrong shape, a model `createMind` refuses or an Always that `assistant.folders` can't hold, 400 `unknown-account`; 409 `nothing-pending` (it runs, waits for nothing, or asks something other than `pending`), `assistant-off`, `assistant-not-ready` or `task-locked`, `conflict` when Always meets a `settings.yaml` that doesn't parse, and `invalid-mcp-config` when an MCP call's Always meets an `mcp.json` that doesn't |
+| `POST tasks/:id/approve` | `{ answer, pending?, model?, web? }` | The snapshot, `running` at once while the run goes on, or `cancelled` for a start's Deny. 400 `bad-request` for a body of the wrong shape, a model `createMind` refuses or an Always that `assistant.folders` can't hold, 400 `unknown-account`; 409 `nothing-pending` (it runs, waits for nothing, or asks something other than `pending`), `assistant-off`, `assistant-not-ready` or `task-locked`, `conflict` when Always meets a `settings.yaml` that doesn't parse, `invalid-mcp-config` when an MCP call's Always meets an `mcp.json` that doesn't, and `linked-mcp-config` when it meets one that is a link |
 | `POST tasks/:id/continue` | `{ spendPauseUsd? }`, `{}` at least | The snapshot, `running` at once. 400 for a `spendPauseUsd` that isn't 0 or more; 409 `pending`, `not-paused`, `assistant-off`, `assistant-not-ready` or `task-locked` |
 | `DELETE tasks/:id` | | The card's Stop: the snapshot once the run has stored its end, `cancelled` if it was live and as it was if it had ended. Works with Assistant Mode off; 409 `task-locked` while `laplace-task` holds the task |
 | `GET assistant/commands` | | `{ commands }`, the commands Always in This Folder allowed, newest first: `{ id, folder, command, addedAt, task }` |
 | `DELETE assistant/commands/:id` | | Takes one back, answering with the rest; 400 `bad-request` for an id that isn't a UUIDv7, 404 `unknown-command` |
 | `GET mcp` | | `{ path, servers, errors }`: each server as `mcp.json` writes it (`command`, `args`, `enabled`, `description`, `alwaysAllow`), each `${NAME}` it needs and whether it is set, and its problem; never an `env` value or a resolved secret. A broken entry comes after the valid ones, with its name, switch and problem alone; `errors` says why a file that doesn't parse starts nothing |
-| `PUT mcp/servers/:name` | `{ enabled?, revoke? }`, one at least | Turns a server on (deleting `enabled` and Cline's `disabled`) or off (`enabled: false`), or takes one tool out of `alwaysAllow`, answering as GET does. Always is added only from a card: 400 `bad-request` for anything else; 404 `unknown-mcp-server`; 409 `invalid-mcp-config` while the file doesn't parse, which is never written over |
+| `PUT mcp/servers/:name` | `{ enabled?, revoke? }`, one at least | Turns a server on (deleting `enabled` and Cline's `disabled`) or off (`enabled: false`), or takes one tool out of `alwaysAllow`, answering as GET does. Always is added only from a card: 400 `bad-request` for anything else; 404 `unknown-mcp-server`; 409 `invalid-mcp-config` while the file doesn't parse, and `linked-mcp-config` while it is a link, neither ever written over |
 
 ### Checking her side
 
