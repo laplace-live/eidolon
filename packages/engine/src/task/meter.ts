@@ -51,10 +51,18 @@ export class UsageMeter implements TaskMeter {
     // A server may ignore the request for usage (stream_options.include_usage).
     if (this.#records === 0) {
       this.#input = null;
-      this.#cannotCount(`No usage was reported for ${this.#model} at ${this.#account}`);
+      this.#unreported();
     }
     this.#records = 0;
   }
+
+  /**
+   * A request of the task's on its model that isn't one of its mind's, such as a review, came back
+   * whole with no usage record to charge: its spend can't be counted.
+   */
+  readonly unreported = (): void => {
+    this.#unreported();
+  };
 
   spentUsd(): number {
     return this.#spent;
@@ -66,6 +74,10 @@ export class UsageMeter implements TaskMeter {
 
   unpriced(): string | null {
     return this.#uncounted;
+  }
+
+  #unreported(): void {
+    this.#cannotCount(`No usage was reported for ${this.#model} at ${this.#account}`);
   }
 
   #cannotCount(why: string): void {

@@ -504,7 +504,8 @@ What it adds to pi:
   summary's included, never a failed attempt's. A request with no usage record leaves the
   context's size to the loop's estimate. `charge(record)` adds a tool's own spend, a search's, to
   the task's, or makes the task unpriced when it has no cost, and never stands for a request's
-  usage or the context's size.
+  usage or the context's size. `unreported()` makes it unpriced for a request outside its mind's,
+  a review's, whose reply came back whole with no usage record.
 - **Pauses:**
   - **Spend:** at each multiple of `assistant.spendPauseUsd` (0 never). A resumed run goes on to
     the next multiple past what was spent; a new one pauses at the first, before its first request
@@ -950,7 +951,10 @@ until the owner answers it. A level that can't be read asks.
   retry, under the run's Stop and the server's stop, a start's under the server's stop alone, and
   failing past a minute (`reviewTimeoutMs`), since a stalled start holds every start after it. It
   is billed as source `task`, the task's id its session, and counted in its spend through
-  `UsageMeter.charge`: a start's review is the first spend the task's snapshot shows.
+  `UsageMeter.charge`: a start's review is the first spend the task's snapshot shows. A review
+  whose reply carries no usage record makes the task's spend uncountable (`unreported()`), as a
+  worker request's does, so the unpriced pause comes before the next request; a start waiting on
+  its card keeps the meter that heard it, for its Allow.
 - **What it costs:** a short request for each question it decides, on the task's own model; the
   owner's grants skip it. On the 36 labelled actions of
   [its benchmark](benchmarks/2026-11-19-approve-for-me/README.md), `deepseek-flash` took a median

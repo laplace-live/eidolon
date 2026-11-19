@@ -113,6 +113,7 @@ import {
   ProviderConfigError,
   roleSearcher,
   selectTask,
+  type UsageRecord,
   type UsageSink,
   withUsageScope,
 } from "@eidolon/providers";
@@ -1303,6 +1304,8 @@ export class TaskManager {
       throw error;
     }
     const task = this.#track(dir, snapshot);
+    // A waiting start keeps it too: its review's uncounted spend still pauses the first request.
+    task.meter = meter;
     if (equipped !== null) this.#launch(task, equipped);
     return task.snapshot;
   }
@@ -1357,13 +1360,20 @@ export class TaskManager {
     }
     let verdict: ReviewVerdict;
     try {
+      let reported = false;
       // `charge`, never `tap`: a review is no worker request, and its size isn't the context's.
-      const mind = this.#createMind("assistant", { ...model, tap: meter.charge });
+      const charge = (record: UsageRecord) => {
+        reported = true;
+        meter.charge(record);
+      };
+      const mind = this.#createMind("assistant", { ...model, tap: charge });
       const prompt = reviewPrompt({ brief, external: task.external === true, action });
       const deadline = AbortSignal.any([signal, AbortSignal.timeout(this.#reviewTimeoutMs)]);
       verdict = parseReview(
         await completeText(mind, { system: REVIEW_SYSTEM, prompt, signal: deadline }),
       );
+      // A server may ignore the request for usage, as the worker's requests hear of.
+      if (!reported) meter.unreported();
     } catch (error) {
       logger.warning(
         `Task ${id}: Approve for Me couldn't review ${actionHead(action)}, so it asks: ${errorText(error)}`,

@@ -107,6 +107,17 @@ class Minds {
             .map((m) => m.content)
             .join("\n");
           minds.reviewed.push(prompt);
+          // Priced, as the task's requests are: one with no usage would pause it unpriced.
+          reportUsage(
+            {
+              role: "assistant",
+              provider: "openrouter",
+              model: "test/model",
+              units: { inputTokens: 900, outputTokens: 10 },
+              costUsd: 0,
+            },
+            (record) => options.tap?.(record),
+          );
           yield* says(minds.review(prompt));
           return;
         }

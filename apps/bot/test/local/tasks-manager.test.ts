@@ -102,6 +102,8 @@ class Minds {
   readonly reviewed: string[] = [];
   /** A review's reply to its prompt, or the turn that answers it. Default: an allow. */
   review: (prompt: string) => string | Turn = () => '{"verdict":"allow"}';
+  /** Whether a review's request reports its usage, as a server may not. */
+  reviewUsage = true;
   readonly #scripts = new Map<string, readonly Turn[]>();
   readonly #served = new Map<string, number>();
   /** Each request's cost: null for a model with no price. */
@@ -129,7 +131,8 @@ class Minds {
     return {
       async *stream(request: MindRequest): AsyncGenerator<MindChunk> {
         let turn: Turn;
-        if (request.system === REVIEW_SYSTEM) {
+        const reviewing = request.system === REVIEW_SYSTEM;
+        if (reviewing) {
           const prompt = userLines(request).join("\n");
           minds.reviewed.push(prompt);
           const answer = minds.review(prompt);
@@ -139,19 +142,21 @@ class Minds {
           minds.requests.push({ goal, request });
           turn = turnFor(goal);
         }
-        reportUsage(
-          {
-            role: "assistant",
-            provider: "openrouter",
-            model: "test/model",
-            units: { inputTokens: 900, outputTokens: 10 },
-            costUsd: minds.cost ?? undefined,
-          },
-          (record) => {
-            minds.records.push(record);
-            options.tap?.(record);
-          },
-        );
+        if (!reviewing || minds.reviewUsage) {
+          reportUsage(
+            {
+              role: "assistant",
+              provider: "openrouter",
+              model: "test/model",
+              units: { inputTokens: 900, outputTokens: 10 },
+              costUsd: minds.cost ?? undefined,
+            },
+            (record) => {
+              minds.records.push(record);
+              options.tap?.(record);
+            },
+          );
+        }
         if (turn instanceof Error) throw turn;
         if (typeof turn === "function") yield* turn(request);
         else yield* turn;
@@ -3502,6 +3507,31 @@ describe("permission levels", () => {
       detail: "Spent $0.02; it pauses at every $0.01.",
     });
     expect(minds.for("Pricey")).toEqual([]);
+  });
+
+  test("a review whose reply reports no usage pauses the task before its first request", async () => {
+    level = "auto";
+    minds.reviewUsage = false;
+    const tasks = await leveled();
+    const started = await tasks.start({ goal: "Quiet", folder: join(work, "quiet") }, ORIGIN);
+    expect(started.status).toBe("running");
+    const paused = await reach(tasks, started.id, "paused");
+    expect(paused.pause).toMatchObject({ reason: "unpriced" });
+    expect(paused.pause?.detail).toStartWith("No usage was reported for test/model at openrouter");
+    expect(minds.for("Quiet")).toEqual([]);
+  });
+
+  test("a start waiting on its card keeps its review's uncounted spend: Allow pauses before the first request", async () => {
+    level = "auto";
+    minds.cost = null;
+    minds.review = () => ask("delete");
+    const tasks = await leveled();
+    const started = await tasks.start({ goal: "Unpriced", folder: join(work, "unpriced") }, ORIGIN);
+    expect(started.pending).toEqual({ kind: "start", review: "delete" });
+    await tasks.approve(started.id, { answer: "once" });
+    const paused = await reach(tasks, started.id, "paused");
+    expect(paused.pause).toMatchObject({ reason: "unpriced" });
+    expect(minds.for("Unpriced")).toEqual([]);
   });
 
   test("a level that can't be read asks, as Ask for Approval does", async () => {
