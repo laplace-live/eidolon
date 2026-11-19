@@ -300,7 +300,7 @@ memory at the saved one.
 ## The layout
 
 The app is a sidebar and the page beside it, as a desktop chat app is (`components/app-shell.tsx`
-and `app-sidebar.tsx`, on shadcn's `Sidebar`):
+and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
 
 - **The sidebar**, top to bottom: the logo, which leads home, and the button that collapses it;
   the persona calls reach, whose menu switches her and has **New Persona** and **Open the
