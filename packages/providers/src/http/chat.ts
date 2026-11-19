@@ -104,6 +104,13 @@ export function anthropicUnits(usage: Readonly<Record<string, unknown>>): Units 
   };
 }
 
+/** `url` without its trailing slashes, cut by hand: /\/+$/ is quadratic on a long run of them. */
+function withoutTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === "/") end--;
+  return url.slice(0, end);
+}
+
 function linked(signal: AbortSignal | null | undefined): AbortController {
   const controller = new AbortController();
   if (signal) {
@@ -145,7 +152,7 @@ export class OpenAIChatClient {
     const payload = { ...options.extraBody, ...body };
     const response = await send(
       options,
-      `${options.baseUrl.replace(/\/+$/, "")}/chat/completions`,
+      `${withoutTrailingSlashes(options.baseUrl)}/chat/completions`,
       {
         method: "POST",
         headers: {
@@ -242,7 +249,7 @@ export class AnthropicClient {
     const controller = linked(request.signal);
     const response = await send(
       options,
-      `${options.baseUrl.replace(/\/+$/, "")}/messages`,
+      `${withoutTrailingSlashes(options.baseUrl)}/messages`,
       {
         method: "POST",
         headers: {

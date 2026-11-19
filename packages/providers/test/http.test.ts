@@ -229,6 +229,17 @@ describe("AnthropicClient", () => {
   });
 });
 
+test("a base URL keeps none of its trailing slashes, however many it has", async () => {
+  seen.length = 0;
+  reply = () => Response.json({ ok: true });
+  const slashed = `${base()}///`;
+  const openai = new OpenAIChatClient({ provider: "P", baseUrl: slashed, apiKey: "k" });
+  await openai.chat.completions.create({ model: "m" });
+  const anthropic = new AnthropicClient({ provider: "Anthropic", baseUrl: slashed, apiKey: "ak" });
+  await anthropic.beta.messages.create({ model: "claude-x" });
+  expect(seen.map((request) => request.path)).toEqual(["/v1/chat/completions", "/v1/messages"]);
+});
+
 test("OpenAI's own API gets a completion cap, and its reasoning models no sampling settings", () => {
   const body = { model: "gpt-6-luna", max_tokens: 8192, temperature: 0.1, top_p: 0.1 };
   expect(forOpenAI(body)).toEqual({ model: "gpt-6-luna", max_completion_tokens: 8192 });
