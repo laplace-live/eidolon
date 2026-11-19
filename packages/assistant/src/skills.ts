@@ -3,11 +3,12 @@
 //
 // Ported from pi-mono packages/coding-agent/src/core/skills.ts@ac78a60 and packages/coding-agent/src/utils/frontmatter.ts@ac78a60
 //
-// The Agent Skills a task may load (agentskills.io): the owner's, in the data home's skills folder,
-// and the task folder's own, in its .agents/skills. The worker's prompt lists each one's name and
-// description; the skill tool reads the rest.
+// The Agent Skills a task may load (agentskills.io): the owner's, in the data home's skills folder
+// and in the folder the owner's agents share, and the task folder's own, in its .agents/skills. The
+// worker's prompt lists each one's name and description, and carries whole the ones she named; the
+// skill tool reads the rest. The owner switches skills off by name, in the data home's skills.json.
 import type { Dirent } from "node:fs";
-import { open, readdir, realpath, stat } from "node:fs/promises";
+import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { errorText, isPlainObject } from "@eidolon/config";
 import { estimateTokens } from "@eidolon/engine";
@@ -19,17 +20,18 @@ export const SKILL_FILE = "SKILL.md";
 // agentskills.io's limits on a skill's name and description, and on a scan: a SKILL.md at most
 // 4 folders below where it starts, and 2,000 folders.
 const MAX_NAME_LENGTH = 64;
-const MAX_DESCRIPTION_LENGTH = 1024;
+export const MAX_DESCRIPTION_LENGTH = 1024;
 const MAX_DEPTH = 4;
 const MAX_FOLDERS = 2000;
 // OpenClaw's caps: 256 KB for a SKILL.md, and for a prompt's catalog 150 skills and 18,000
 // characters, which is 4,500 tokens of English in the engine's estimate; it counts each CJK
 // character a token.
-const MAX_SKILL_BYTES = 256 * 1024;
+export const MAX_SKILL_BYTES = 256 * 1024;
 const MAX_LISTED = 150;
 const MAX_CATALOG_TOKENS = 4500;
 
-export type SkillSource = "owner" | "folder";
+/** The data home's skills folder, the folder the owner's agents share, and the task folder's. */
+export type SkillSource = "owner" | "shared" | "folder";
 
 export interface Skill {
   readonly name: string;
@@ -47,16 +49,60 @@ export interface SkillProblem {
   readonly skipped: boolean;
 }
 
-export interface SkillCatalog {
-  /** The ones the worker's prompt lists, in its order: the owner's by name, then the folder's. */
-  readonly skills: readonly Skill[];
-  /** Found, but past 150 skills or 4,500 tokens. */
-  readonly unlisted: number;
+/** A skill she named for a task, with its SKILL.md as the skill tool reads it. */
+export interface RequestedSkill {
+  readonly skill: Skill;
+  readonly text: string;
+}
+
+/** A skill a scan found, whether or not it wins its name and is switched on. */
+export interface FoundSkill {
+  readonly skill: Skill;
+  /** Its SKILL.md, as the scan reached it. */
+  readonly path: string;
+  /** disable-model-invocation: only her naming it loads it, and no catalog lists it. */
+  readonly explicit: boolean;
+}
+
+export interface SkillScan {
+  /** Every skill found: the owner's, then the shared folder's, then the task folder's. */
+  readonly found: readonly FoundSkill[];
+  /** The skill each name goes to: the owner's, then the shared folder's, else the first found. */
+  readonly winners: ReadonlyMap<string, FoundSkill>;
+  /** Each SKILL.md left out or listed with a fault, a shadowed skill's included. */
   readonly problems: readonly SkillProblem[];
+  /** The names the owner switched off, wherever a skill by that name is found. */
+  readonly disabled: ReadonlySet<string>;
+  /** Why skills.json can't be read, which then switches nothing off; null when it reads. */
+  readonly switchesProblem: string | null;
+}
+
+export interface SkillCatalog {
+  /**
+   * The ones the worker's prompt lists, in its order: the owner's by name, then the shared
+   * folder's, then the task folder's.
+   */
+  readonly skills: readonly Skill[];
+  /** The skills of the owner's that `requested` names and that are on, in the order named. */
+  readonly requested: readonly Skill[];
+  /** The names `requested` gave that no such skill has. */
+  readonly missing: readonly string[];
+  /** Of `missing`, those whose skill the owner switched off. */
+  readonly off: readonly string[];
+  /** Found and on, but past 150 skills or 4,500 tokens. */
+  readonly unlisted: readonly Skill[];
+  readonly problems: readonly SkillProblem[];
+  /** Why skills.json can't be read, which then switches nothing off; null when it reads. */
+  readonly switchesProblem: string | null;
 }
 
 export function skillsDir(dataHome: string): string {
   return join(dataHome, "skills");
+}
+
+/** The owner's switches: this package reads them, the local app writes them. */
+export function skillSwitchesPath(dataHome: string): string {
+  return join(dataHome, "skills.json");
 }
 
 /** Whether `path` is `root` or lies under it, matching names as the disk does. */
@@ -69,15 +115,17 @@ function unreadable(path: string, error: unknown): SkillProblem {
   return { path, message: `can't be read: ${errorText(error)}`, skipped: true };
 }
 
-function oneLine(text: string): string {
+/** `text` as a skill's name and description are read: whitespace collapsed, on one line. */
+export function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-function byName(a: string, b: string): number {
+export function byName(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function validateName(name: string): string[] {
+/** Why `name` breaks agentskills.io's naming rules; none when it keeps them. */
+export function validateName(name: string): string[] {
   const errors: string[] = [];
   if (name.length > MAX_NAME_LENGTH) {
     errors.push(`name exceeds ${MAX_NAME_LENGTH} characters (${name.length})`);
@@ -142,14 +190,6 @@ function lineFields(yaml: string): Record<string, unknown> {
   return fields;
 }
 
-interface Found {
-  readonly skill: Skill;
-  /** Its SKILL.md, as the scan reached it. */
-  readonly path: string;
-  /** disable-model-invocation: only an explicit invocation would load it, and a task has none. */
-  readonly disabled: boolean;
-}
-
 /**
  * The skill whose folder is `dir`, `real` on disk, from its SKILL.md; null when it is left out,
  * with why in `problems`. Its fields but name, description and disable-model-invocation are
@@ -160,7 +200,7 @@ async function readSkill(
   real: string,
   source: SkillSource,
   problems: SkillProblem[],
-): Promise<Found | null> {
+): Promise<FoundSkill | null> {
   const path = join(dir, SKILL_FILE);
   const note = (message: string, skipped = false) => problems.push({ path, message, skipped });
   let text: string;
@@ -216,12 +256,12 @@ async function readSkill(
   return {
     skill: { name, description: sliceHead(description, MAX_DESCRIPTION_LENGTH), source, dir: real },
     path,
-    disabled: fields["disable-model-invocation"] === true,
+    explicit: fields["disable-model-invocation"] === true,
   };
 }
 
 interface Scan {
-  readonly found: Found[];
+  readonly found: FoundSkill[];
   readonly problems: SkillProblem[];
   /** The folders scanned, by realpath, so one reached twice through links is scanned once. */
   readonly visited: Set<string>;
@@ -304,17 +344,58 @@ async function scan(
 }
 
 /**
- * The skills a task in `folder` may load, from `<dataHome>/skills` and the folder's
- * .agents/skills, each scanned 4 folders deep and 2,000 folders at most. A name found twice goes
- * to the owner's skill, else to the first found. Never throws: a source, folder or file it can't
- * read is a problem, and is left out.
+ * The owner's switches in `dataHome`'s skills.json, `{disabled: [names]}`: none while it is
+ * missing, and none, with why, while it can't be read.
  */
-export async function loadSkills(options: {
+async function readSwitches(
+  dataHome: string,
+): Promise<{ disabled: ReadonlySet<string>; problem: string | null }> {
+  const none = (problem: string | null) => ({ disabled: new Set<string>(), problem });
+  let text: string;
+  try {
+    text = await readFile(skillSwitchesPath(dataHome), "utf8");
+  } catch (error) {
+    return none(isMissing(error) ? null : `can't be read: ${errorText(error)}`);
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return none("isn't JSON");
+  }
+  // `{}` switches nothing off; a `disabled` that isn't a list of names, null too, is a problem.
+  const disabled = !isPlainObject(value)
+    ? null
+    : value.disabled === undefined
+      ? []
+      : value.disabled;
+  if (!Array.isArray(disabled) || !disabled.every((name) => typeof name === "string")) {
+    return none("isn't {disabled: [the names of skills switched off]}");
+  }
+  return { disabled: new Set(disabled), problem: null };
+}
+
+const WHOSE: Readonly<Record<SkillSource, string>> = {
+  owner: "the owner's ",
+  shared: "the shared folder's ",
+  folder: "the task folder's ",
+};
+
+/**
+ * The skills a task in `folder` may find: `<dataHome>/skills`, then `shared`, the folder the
+ * owner's agents share, then the folder's .agents/skills, each scanned 4 folders deep and 2,000
+ * folders at most, with the owner's switches. A name found twice goes to the owner's skill, then the
+ * shared folder's, else to the first found. Never throws: a source, folder or file it can't read is
+ * a problem, and is left out.
+ */
+export async function scanSkills(options: {
   readonly dataHome: string;
+  readonly shared?: string;
   readonly folder?: string;
-}): Promise<SkillCatalog> {
+}): Promise<SkillScan> {
   const state: Scan = { found: [], problems: [], visited: new Set() };
   await scan(skillsDir(options.dataHome), "owner", null, state);
+  if (options.shared !== undefined) await scan(resolve(options.shared), "shared", null, state);
   if (options.folder !== undefined) {
     const folder = resolve(options.folder);
     const root = join(folder, ".agents", "skills");
@@ -326,28 +407,47 @@ export async function loadSkills(options: {
     }
     if (within !== null) await scan(root, "folder", within, state);
   }
-  const named = new Map<string, Found>();
+  const winners = new Map<string, FoundSkill>();
   for (const found of state.found) {
-    const winner = named.get(found.skill.name);
+    const winner = winners.get(found.skill.name);
     if (winner === undefined) {
-      named.set(found.skill.name, found);
+      winners.set(found.skill.name, found);
       continue;
     }
-    const whose = winner.skill.source === found.skill.source ? "" : "the owner's ";
+    const whose = winner.skill.source === found.skill.source ? "" : WHOSE[winner.skill.source];
     state.problems.push({
       path: found.path,
       message: `shadowed by ${whose}${winner.path}`,
       skipped: true,
     });
   }
-  const offered = [...named.values()]
-    .filter((found) => !found.disabled)
+  const switches = await readSwitches(options.dataHome);
+  return {
+    found: state.found,
+    winners,
+    problems: state.problems,
+    disabled: switches.disabled,
+    switchesProblem: switches.problem,
+  };
+}
+
+/** The skills of `scan` a task may use: the winners of their names that aren't switched off. */
+function usable(scan: SkillScan): FoundSkill[] {
+  return [...scan.winners.values()].filter((found) => !scan.disabled.has(found.skill.name));
+}
+
+/**
+ * `scan`'s catalog for a task's prompt, and the skills of the owner's that `requested` names. Only
+ * an owner's or a shared skill can be named, one that opts out of model use included.
+ */
+export function catalogOf(scan: SkillScan, requested: readonly string[] = []): SkillCatalog {
+  const offered = usable(scan)
+    .filter((found) => !found.explicit)
     .map((found) => found.skill)
     .sort((a, b) => byName(a.name, b.name));
-  const ordered = [
-    ...offered.filter((skill) => skill.source === "owner"),
-    ...offered.filter((skill) => skill.source === "folder"),
-  ];
+  const ordered = (["owner", "shared", "folder"] as const).flatMap((source) =>
+    offered.filter((skill) => skill.source === source),
+  );
   const skills: Skill[] = [];
   let tokens = 0;
   for (const skill of ordered) {
@@ -356,7 +456,56 @@ export async function loadSkills(options: {
     skills.push(skill);
     tokens += cost;
   }
-  return { skills, unlisted: ordered.length - skills.length, problems: state.problems };
+  const named: Skill[] = [];
+  const missing: string[] = [];
+  const off: string[] = [];
+  for (const name of new Set(requested)) {
+    const found = scan.winners.get(name);
+    if (found === undefined || found.skill.source === "folder") {
+      missing.push(name);
+    } else if (scan.disabled.has(name)) {
+      missing.push(name);
+      off.push(name);
+    } else {
+      named.push(found.skill);
+    }
+  }
+  return {
+    skills,
+    requested: named,
+    missing,
+    off,
+    unlisted: ordered.slice(skills.length),
+    problems: scan.problems,
+    switchesProblem: scan.switchesProblem,
+  };
+}
+
+/**
+ * The skills a task in `folder` may load, as `scanSkills` finds them, with the owner's skills that
+ * `requested` names for its prompt to carry whole.
+ */
+export async function loadSkills(options: {
+  readonly dataHome: string;
+  readonly shared?: string;
+  readonly folder?: string;
+  readonly requested?: readonly string[];
+}): Promise<SkillCatalog> {
+  return catalogOf(await scanSkills(options), options.requested);
+}
+
+/**
+ * The names she may give start_task: the owner's and the shared folder's skills that keep the
+ * naming rules and aren't switched off, those that opt out of model use included, 150 at most, by
+ * name. A task folder's skills are never among them.
+ */
+export function skillNames(scan: SkillScan): string[] {
+  return usable(scan)
+    .map((found) => found.skill)
+    .filter((skill) => skill.source !== "folder" && validateName(skill.name).length === 0)
+    .map((skill) => skill.name)
+    .sort(byName)
+    .slice(0, MAX_LISTED);
 }
 
 /** pi's escapeXml, but quotes stay, as text outside an attribute may keep them. */
@@ -364,8 +513,12 @@ function escapeText(text: string): string {
   return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-/** How the worker's prompt lists `skill`: escaped, so its text can't close the list or add to it. */
+/**
+ * How the worker's prompt lists `skill`: escaped, so its text can't close the list or add to it. A
+ * shared skill is the owner's as much as one in the data home.
+ */
 export function skillEntry(skill: Skill): string {
   const name = escapeText(skill.name).replaceAll('"', "&quot;");
-  return `<skill name="${name}" from="${skill.source}">${escapeText(skill.description)}</skill>`;
+  const from = skill.source === "folder" ? "folder" : "owner";
+  return `<skill name="${name}" from="${from}">${escapeText(skill.description)}</skill>`;
 }

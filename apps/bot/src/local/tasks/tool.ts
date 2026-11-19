@@ -44,9 +44,11 @@ export const TASK_NUDGE_LEAD = `你用 ${START_TASK} 在电脑上做的事（调
 export interface TaskAbilities {
   /** Run commands, each after the owner's OK on the task's card: the manager's offersCommands. */
   readonly commands: boolean;
+  /** The names of the owner's skills she may give a task: the manager's skillNames. */
+  readonly skills?: readonly string[];
 }
 
-function startTaskSchema({ commands }: TaskAbilities): BackgroundTool["schema"] {
+function startTaskSchema({ commands, skills = [] }: TaskAbilities): BackgroundTool["schema"] {
   const what = commands
     ? "在这台电脑上动手做一件事：写代码、做网页、写或修改文件、在文件夹里找东西、上网看网页查资料，" +
       "还能运行命令和程序，比如跑测试、装依赖、用 git、删除或移动文件；" +
@@ -90,6 +92,18 @@ function startTaskSchema({ commands }: TaskAbilities): BackgroundTool["schema"] 
           "quick 是几分钟就能做完的小活，比如写个清单、改几处文字、在文件夹里找东西；" +
           "三类都不像就选 other。拿不准就选最接近的",
       },
+      // Only while the owner has a skill to name: an empty enum draws names no task has.
+      ...(skills.length === 0
+        ? {}
+        : {
+            skills: {
+              type: "array",
+              items: { type: "string", enum: [...skills] },
+              description:
+                "对方点名要你用的技能（skill），照这里的名字填，可以填几个；" +
+                "对方没点名就不填，后台干活时会自己挑合适的",
+            },
+          }),
     },
     required: ["goal", "folder", "profile"],
   };
@@ -113,6 +127,19 @@ function profileOf(given: unknown): TaskProfile | undefined {
   return undefined;
 }
 
+/**
+ * Her `skills`, trimmed and each once; one name alone is taken as a list of one. The manager checks
+ * them against the owner's skills, since her chat tools aren't checked against their schema.
+ */
+function skillsOf(given: unknown): string[] | string {
+  if (given === undefined || given === null) return [];
+  const names = typeof given === "string" ? [given] : given;
+  if (!Array.isArray(names) || !names.every((name) => typeof name === "string")) {
+    return "start_task's skills is a list of skill names";
+  }
+  return [...new Set(names.map((name) => name.trim()).filter((name) => name !== ""))];
+}
+
 /** Her arguments as the manager takes them, or why they can't be; null stands for an absent field. */
 function briefOf(args: Readonly<Record<string, unknown>>): TaskBriefInput | string {
   const { goal, deliverable, folder, check } = args;
@@ -124,8 +151,16 @@ function briefOf(args: Readonly<Record<string, unknown>>): TaskBriefInput | stri
     if (typeof value === "string") optional[name] = value;
     else if (value !== undefined && value !== null) return `start_task's ${name} is text`;
   }
+  const skills = skillsOf(args.skills);
+  if (typeof skills === "string") return skills;
   const profile = profileOf(args.profile);
-  return { goal, folder, ...optional, ...(profile === undefined ? {} : { profile }) };
+  return {
+    goal,
+    folder,
+    ...optional,
+    ...(profile === undefined ? {} : { profile }),
+    ...(skills.length === 0 ? {} : { skills }),
+  };
 }
 
 /**

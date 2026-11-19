@@ -97,6 +97,36 @@ describe("her text for start_task", () => {
       });
     }
   });
+
+  test("she names the owner's skills only when the owner has some, by name alone", () => {
+    for (const commands of [true, false]) {
+      const none = startTaskTool(async () => ({ id: "t", status: "running" }), {
+        commands,
+        skills: [],
+      });
+      expect(Object.keys(none.schema.properties)).not.toContain("skills");
+      const { schema } = startTaskTool(async () => ({ id: "t", status: "running" }), {
+        commands,
+        skills: ["house-style", "ship"],
+      });
+      expect(schema.required).toEqual(["goal", "folder", "profile"]);
+      expect(Object.keys(schema.properties)).toEqual([
+        "goal",
+        "deliverable",
+        "folder",
+        "check",
+        "profile",
+        "skills",
+      ]);
+      expect(schema.properties.skills).toEqual({
+        type: "array",
+        items: { type: "string", enum: ["house-style", "ship"] },
+        description:
+          "对方点名要你用的技能（skill），照这里的名字填，可以填几个；" +
+          "对方没点名就不填，后台干活时会自己挑合适的",
+      });
+    }
+  });
 });
 
 describe("the nudges", () => {
@@ -203,6 +233,32 @@ describe("start_task", () => {
     } finally {
       logs.restore();
     }
+  });
+
+  test("her skills reach the manager trimmed and each once, one name as a list of one; anything but names is no start", async () => {
+    const given: unknown[] = [];
+    const tool = startTaskTool(async (input) => {
+      given.push(input.skills);
+      return { id: "t1", status: "running" };
+    }, COMMANDS);
+    const run = (skills: unknown) =>
+      tool.run(
+        {
+          arguments: { goal: "写一个网页", folder: "~/site", profile: "coding", skills },
+          callId: "call_1",
+          context: {} as never,
+          signal: new AbortController().signal,
+        },
+        effects,
+      );
+    for (const skills of [[" ship ", "house-style", "ship", ""], "ship", [], null, undefined]) {
+      expect(await run(skills)).toEqual({ task: "t1", status: "running" });
+    }
+    expect(given).toEqual([["ship", "house-style"], ["ship"], undefined, undefined, undefined]);
+    for (const skills of [7, ["ship", 7], { name: "ship" }]) {
+      expect(await run(skills)).toEqual({ error: "start_task's skills is a list of skill names" });
+    }
+    expect(given).toHaveLength(5);
   });
 
   test("startedOf: what a start returns, from the task as the manager answered it", () => {

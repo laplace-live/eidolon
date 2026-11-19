@@ -21,7 +21,7 @@ export interface TaskToolsOptions {
   readonly search?: WebSearcher;
   /** The task's commands; without them, or off macOS and Linux, the task has no bash. */
   readonly bash?: BashJobs;
-  /** The skills its prompt lists; without any, the task has no skill tool. */
+  /** The skills its prompt lists or carries whole; without any, the task has no skill tool. */
   readonly skills?: readonly Skill[];
 }
 

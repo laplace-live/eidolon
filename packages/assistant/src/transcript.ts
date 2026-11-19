@@ -179,6 +179,8 @@ export interface TaskSnapshot {
   readonly web?: TaskWebAccess;
   /** The kind of task she said it is, whose account and model it runs on; absent for any other. */
   readonly profile?: TaskProfile;
+  /** The owner's skills she named for it, whose SKILL.md each run's prompt carries whole. */
+  readonly skills?: readonly string[];
   /** The commands the owner refused it, which it may not run again. */
   readonly bash?: { readonly denied: readonly string[] };
   /** Its commands running in the background. */
@@ -344,6 +346,7 @@ function isSnapshot(value: unknown): value is TaskSnapshot {
     (value.inbox === undefined || isInbox(value.inbox)) &&
     (value.web === undefined || isWebAccess(value.web)) &&
     (value.profile === undefined || isOneOf(TASK_PROFILES, value.profile)) &&
+    (value.skills === undefined || isStrings(value.skills)) &&
     (value.bash === undefined || (isPlainObject(value.bash) && isStrings(value.bash.denied))) &&
     (value.background === undefined || isBackground(value.background)) &&
     (value.external === undefined || value.external === true) &&

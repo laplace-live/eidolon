@@ -39,3 +39,9 @@ export async function insideAny(place: string, folders: readonly string[]): Prom
   for (const folder of folders) if (isInside(place, await placeOf(folder))) return true;
   return false;
 }
+
+/** `path` with `home`, the home folder, written as `~`. */
+export function homed(path: string, home: string): string {
+  if (path === home) return "~";
+  return path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path;
+}

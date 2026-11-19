@@ -164,6 +164,7 @@ export interface ChatRunnerOptions {
     TaskManager,
     | "ready"
     | "offersCommands"
+    | "skillNames"
     | "start"
     | "cancelChat"
     | "list"
@@ -1130,7 +1131,7 @@ export class ChatRunner {
     const live = herTasks(tasks.snapshotsOf(id), id, persona).some(({ snapshot }) =>
       isLive(snapshot.status),
     );
-    const abilities = { commands: tasks.offersCommands() };
+    const abilities = { commands: tasks.offersCommands(), skills: tasks.skillNames() };
     return {
       background: {
         tools: [startTaskTool(start, abilities)],

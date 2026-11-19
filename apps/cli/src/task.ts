@@ -9,6 +9,7 @@ import {
   buildTaskPrompt,
   COMPACTION_INSTRUCTIONS,
   COMPACTION_SYSTEM,
+  catalogOf,
   createTaskTools,
   type FolderGrant,
   FolderPolicy,
@@ -21,10 +22,13 @@ import {
   openTaskStore,
   PathRefused,
   readSnapshot,
+  scanSkills,
+  skillNames,
   type TaskSnapshot,
   type TaskStatus,
   taskDate,
   taskLockKey,
+  taskSkills,
   tasksDir,
   type WebAccess,
   writeSnapshot,
@@ -39,6 +43,7 @@ import {
   logger,
   pyRepr,
   pyStrip,
+  sharedSkillsDir,
   shippedPath,
 } from "@eidolon/config";
 import { acquireLock, LockedError } from "@eidolon/config/lock";
@@ -62,7 +67,7 @@ import { type CliIo, type CommandDeps, reportExit, resolveIo } from "./io.ts";
 const PROG = "laplace-task";
 
 const USAGE = `usage: laplace-task [-h] [--folder FOLDER] [--allow PATH] [--web {any,off}]
-                    [--model ACCOUNT/MODEL] [--deliverable TEXT]
+                    [--model ACCOUNT/MODEL] [--skill NAME] [--deliverable TEXT]
                     [--check TEXT] [--resume ID] [--json]
                     [goal]
 `;
@@ -90,6 +95,9 @@ options:
                         The account and model to run on, as in
                         openrouter/anthropic/claude-sonnet-5.5 (default:
                         assistant.provider and assistant.model)
+  --skill NAME          A skill of yours, in the data home or the folder your
+                        agents share, that the task follows from its start,
+                        as if she had named it; repeat for more
   --deliverable TEXT    What the task should leave in the folder (default:
                         whatever the goal asks for)
   --check TEXT          How the task should check its work (default: that
@@ -115,6 +123,7 @@ const PARSER: ParserSpec = {
     { dest: "allow", flags: ["--allow"], kind: "append" },
     { dest: "web", flags: ["--web"], kind: "store", choices: ["any", "off"] },
     { dest: "model", flags: ["--model"], kind: "store" },
+    { dest: "skill", flags: ["--skill"], kind: "append" },
     { dest: "deliverable", flags: ["--deliverable"], kind: "store" },
     { dest: "check", flags: ["--check"], kind: "store" },
     { dest: "resume", flags: ["--resume"], kind: "store" },
@@ -157,6 +166,8 @@ export type TaskArgs =
       readonly check: string;
       readonly model: ModelChoice | null;
       readonly web: WebChoice;
+      /** The skills of the owner's it follows from its start, as if she had named them. */
+      readonly skills: readonly string[];
       readonly json: boolean;
     }
   | {
@@ -197,6 +208,7 @@ export function parseTaskArgs(argv: readonly string[]): TaskArgs {
         ["--allow", ns.allow],
         ["--deliverable", ns.deliverable],
         ["--check", ns.check],
+        ["--skill", ns.skill],
       ] as const
     ).find(([, value]) => value !== null);
     if (given !== undefined) {
@@ -228,8 +240,28 @@ export function parseTaskArgs(argv: readonly string[]): TaskArgs {
     check: text(ns.check) ?? DEFAULT_CHECK,
     model,
     web: web ?? "off",
+    skills: [...new Set(((ns.skill as string[] | null) ?? []).map((name) => pyStrip(name)))],
     json,
   };
+}
+
+/**
+ * The owner's skills `names` gives, as the task keeps them: a usage error names one the owner
+ * doesn't have, or has switched off.
+ */
+async function namedSkills(names: readonly string[]): Promise<readonly string[]> {
+  if (names.length === 0) return [];
+  const scan = await scanSkills({ dataHome: dataHome(), shared: sharedSkillsDir() });
+  const { requested, missing, off } = catalogOf(scan, names);
+  if (missing.length === 0) return requested.map((skill) => skill.name);
+  const why = missing.map((name) =>
+    off.includes(name)
+      ? `${pyRepr(name)} is switched off in the app's Settings`
+      : `no skill ${pyRepr(name)}`,
+  );
+  const offered = skillNames(scan);
+  const choose = offered.length === 0 ? "" : ` (choose from ${offered.map(pyRepr).join(", ")})`;
+  throw parserError(PARSER, `argument --skill: ${why.join("; ")}${choose}`);
 }
 
 /** The assistant role's account and model as the settings name them; null while either is unset. */
@@ -330,6 +362,7 @@ async function equip(
   choice: ModelChoice,
   meter: UsageMeter,
   web: WebChoice,
+  named: readonly string[],
   deps: TaskDeps,
 ): Promise<Omit<TaskRequest, "store" | "limits" | "signal">> {
   const home = homedir();
@@ -365,23 +398,40 @@ async function equip(
     throw parserError(PARSER, `${brief.folder} can't be the task's folder: ${errorText(error)}`);
   }
   const search = web === "any" ? roleSearcher(meter.charge) : undefined;
-  const skills = await loadSkills({ dataHome: dataHome(), folder: brief.folder });
-  for (const { path, message, skipped } of skills.problems) {
+  const skills = await loadSkills({
+    dataHome: dataHome(),
+    shared: sharedSkillsDir(),
+    folder: brief.folder,
+    requested: named,
+  });
+  const { loadable, requested, unreadable } = await taskSkills(
+    skills,
+    policy,
+    assistantSettings().contextTokens,
+  );
+  if (skills.switchesProblem !== null) {
+    logger.warning(visible(`skills.json ${skills.switchesProblem}, so no skill is switched off`));
+  }
+  for (const { path, message, skipped } of [...skills.problems, ...unreadable]) {
     logger.warning(visible(`${skipped ? "Skipping " : ""}skill ${path}: ${message}`));
   }
-  if (skills.unlisted > 0) {
-    logger.warning(`${skills.unlisted} more skills aren't listed: the catalog is full`);
+  if (skills.unlisted.length > 0) {
+    logger.warning(`${skills.unlisted.length} more skills aren't listed: the catalog is full`);
+  }
+  if (skills.missing.length > 0) {
+    logger.warning(`No longer has the skills it was given: ${skills.missing.join(", ")}`);
   }
   const tools = createTaskTools(policy, {
     ...(web === "any" ? { web: ANY_SITE } : {}),
     ...(search === undefined ? {} : { search }),
-    skills: skills.skills,
+    skills: loadable,
   });
   const system = buildTaskPrompt({
     brief,
     tools,
     contextFiles: await loadContextFiles(brief.folder, home, policy),
     skills: skills.skills,
+    requested,
     date: taskDate(),
   });
   return {
@@ -412,9 +462,10 @@ async function newTask(
     folder: args.folder,
     check: args.check,
   };
+  const skills = await namedSkills(args.skills);
   const id = newTaskId();
   const meter = new UsageMeter(model);
-  const equipped = await equip(id, brief, grants, model, meter, args.web, deps);
+  const equipped = await equip(id, brief, grants, model, meter, args.web, skills, deps);
   const dir = join(tasksDir(), id);
   const release = acquireLock(taskLockKey(id), PROG);
   try {
@@ -432,6 +483,7 @@ async function newTask(
       spentUsd: 0,
       files: { read: [], written: [] },
       web: { mode: args.web, hosts: [], denied: [] },
+      ...(skills.length === 0 ? {} : { skills }),
     };
     const snapshots = new Snapshots(dir, snapshot, meter);
     await snapshots.save("running");
@@ -473,7 +525,16 @@ async function resumedTask(
     const model = args.model ?? found.model;
     const meter = new UsageMeter({ ...model, spentUsd: found.spentUsd });
     const web = args.web ?? (found.web?.mode === "any" ? "any" : "off");
-    const equipped = await equip(id, found.brief, found.grants, model, meter, web, deps);
+    const equipped = await equip(
+      id,
+      found.brief,
+      found.grants,
+      model,
+      meter,
+      web,
+      found.skills ?? [],
+      deps,
+    );
     const chosen = args.web && { web: { mode: args.web, hosts: [], denied: [] } };
     const snapshots = new Snapshots(dir, { ...found, model, ...chosen }, meter);
     // A crash can come between a result's entry and task.json: the transcript has its files.

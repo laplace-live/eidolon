@@ -2,7 +2,6 @@
 // line she answers. It holds runtime facts and her own words alone: what the worker wrote may quote
 // a page it read, so her view holds it only as tool output (check_task, her start_task's final).
 import { homedir } from "node:os";
-import { sep } from "node:path";
 import { isLive } from "@eidolon/assistant";
 import type { ParticipantId } from "@eidolon/chat";
 import { activePersona, errorText, isPlainObject, raceAbort } from "@eidolon/config";
@@ -10,6 +9,7 @@ import type { PersonaParts } from "@eidolon/engine";
 import { STEER_PREFIX, type TaskSnapshot } from "../api.ts";
 import type { TaskManager } from "./manager.ts";
 import { doneOf } from "./milestones.ts";
+import { homed } from "./places.ts";
 import { CHECK_TASK, START_TASK, STEER_TASK, STOP_TASK } from "./tool.ts";
 
 export const TASKS_BLOCK_NAME = "后台的活";
@@ -70,11 +70,6 @@ export function cut(text: string, max: number): string {
 /** `text` on one line, cut at `max` characters. */
 function clip(text: string, max: number): string {
   return cut(text.replace(/\s+/g, " ").trim(), max);
-}
-
-function homed(folder: string, home: string): string {
-  if (folder === home) return "~";
-  return folder.startsWith(`${home}${sep}`) ? `~${folder.slice(home.length)}` : folder;
 }
 
 function progress({ todo, files, step, background, spentUsd }: TaskSnapshot): string {

@@ -205,6 +205,7 @@ test("her answer on the call may start a task, which the chat stores, and she te
   const tasks: NonNullable<ChatRunnerOptions["tasks"]> = {
     ready: () => true,
     offersCommands: () => true,
+    skillNames: () => [],
     start: async (_input, origin) => {
       origins.push(origin);
       return waiting;
@@ -320,6 +321,7 @@ test("in a verbose chat, a step of her task's plan done is told in a follow-up o
   const tasks: NonNullable<ChatRunnerOptions["tasks"]> = {
     ready: () => true,
     offersCommands: () => true,
+    skillNames: () => [],
     start: async () => running,
     cancelChat: async () => {},
     list: async () => snapshots,
@@ -423,6 +425,7 @@ async function sayingGoodbye() {
   const tasks: NonNullable<ChatRunnerOptions["tasks"]> = {
     ready: () => true,
     offersCommands: () => true,
+    skillNames: () => [],
     start: async () => running,
     cancelChat: async () => {},
     list: async () => [],

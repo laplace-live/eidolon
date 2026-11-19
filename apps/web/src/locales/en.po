@@ -107,6 +107,10 @@ msgstr "{count, plural, one {# request has no price, so it isn't counted.} other
 msgid "{count, plural, one {# search} other {# searches}}"
 msgstr "{count, plural, one {# search} other {# searches}}"
 
+#: src/features/settings/skills-card.tsx
+msgid "{count, plural, one {# skill couldn't be loaded} other {# skills couldn't be loaded}}"
+msgstr "{count, plural, one {# skill couldn't be loaded} other {# skills couldn't be loaded}}"
+
 #: src/features/settings/assistant.tsx
 msgid "{count, plural, one {# task is running or waiting for you. Turning Assistant Mode off stops it.} other {# tasks are running or waiting for you. Turning Assistant Mode off stops them.}}"
 msgstr "{count, plural, one {# task is running or waiting for you. Turning Assistant Mode off stops it.} other {# tasks are running or waiting for you. Turning Assistant Mode off stops them.}}"
@@ -126,6 +130,10 @@ msgstr "{count, plural, one {# video} other {# videos}}"
 #: src/components/voice-picker/voices.ts
 msgid "{count, plural, one {# voice} other {# voices}}"
 msgstr "{count, plural, one {# voice} other {# voices}}"
+
+#: src/features/settings/skills-card.tsx
+msgid "{count, plural, one {A task lists 150 skills, or about 4,500 tokens of them, at most, so # skill that is on is left out. Switch off skills tasks don't need.} other {A task lists 150 skills, or about 4,500 tokens of them, at most, so # skills that are on are left out. Switch off skills tasks don't need.}}"
+msgstr "{count, plural, one {A task lists 150 skills, or about 4,500 tokens of them, at most, so # skill that is on is left out. Switch off skills tasks don't need.} other {A task lists 150 skills, or about 4,500 tokens of them, at most, so # skills that are on are left out. Switch off skills tasks don't need.}}"
 
 #: src/features/studio/add-videos.tsx
 msgid "{count, plural, one {Add # video} other {Add # videos}}"
@@ -226,6 +234,10 @@ msgstr "{model} doesn't perform every delivery cue"
 #: src/features/studio/voice-section.tsx
 msgid "{model}, which she inherits from {env}, doesn't perform every delivery cue"
 msgstr "{model}, which she inherits from {env}, doesn't perform every delivery cue"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "{name} added."
+msgstr "{name} added."
 
 #: src/components/settings-form/account-key-field.tsx
 msgid "{name} API Key"
@@ -555,6 +567,14 @@ msgstr "A selfie from {name}"
 msgid "A service Eidolon relies on failed. Try again later."
 msgstr "A service Eidolon relies on failed. Try again later."
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "A skill needs a name."
+msgstr "A skill needs a name."
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "A skill needs instructions."
+msgstr "A skill needs instructions."
+
 #: src/features/studio/knowledge-section.tsx
 msgid "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
 msgstr "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
@@ -562,6 +582,10 @@ msgstr "A table built with another embedding model or size than the settings now
 #: src/components/settings-form/labels.ts
 msgid "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
 msgstr "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "A task reads them once it chooses the skill, or from its start when you name the skill to her."
+msgstr "A task reads them once it chooses the skill, or from its start when you name the skill to her."
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "A voice she switches to when you ask for it. Name it, say how you'd ask, and pick its voice."
@@ -657,6 +681,11 @@ msgstr "Add Pictures"
 msgid "Add Provider"
 msgstr "Add Provider"
 
+#: src/features/settings/new-skill-dialog.tsx
+#: src/features/settings/skills-card.tsx
+msgid "Add Skill"
+msgstr "Add Skill"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Add Style"
 msgstr "Add Style"
@@ -700,6 +729,10 @@ msgstr "All of these videos are listed already."
 #: src/features/usage/route.tsx
 msgid "All Personas"
 msgstr "All Personas"
+
+#: src/features/settings/skills-card.tsx
+msgid "All Skills"
+msgstr "All Skills"
 
 #: src/features/usage/route.tsx
 msgid "All Time"
@@ -1117,6 +1150,7 @@ msgstr "Can't reach Eidolon. Check that it's still running in the terminal."
 #: src/features/chats/chat-menu.tsx
 #: src/features/jobs/parts.tsx
 #: src/features/settings/accounts-card.tsx
+#: src/features/settings/new-skill-dialog.tsx
 #: src/features/setup/new-persona.tsx
 #: src/features/studio/references-section.tsx
 #: src/features/studio/video-table.tsx
@@ -1524,6 +1558,10 @@ msgstr "demo"
 msgid "Deny"
 msgstr "Deny"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Description"
+msgstr "Description"
+
 #: src/features/jobs/parts.tsx
 #: src/features/studio/add-videos.tsx
 msgid "Details"
@@ -1648,6 +1686,10 @@ msgstr "Edit {name}"
 msgid "Edit the {name} Style"
 msgstr "Edit the {name} Style"
 
+#: src/features/settings/skills-card.tsx
+msgid "Eidolon"
+msgstr "Eidolon"
+
 #: src/features/home/route.tsx
 msgid "Eidolon {version}"
 msgstr "Eidolon {version}"
@@ -1723,6 +1765,22 @@ msgstr "Eidolon stopped while this task ran. Continue picks it up where it stopp
 #: src/features/setup/persona-fields.tsx
 msgid "Eidolon uses that word itself. Pick another id."
 msgstr "Eidolon uses that word itself. Pick another id."
+
+#: src/features/settings/skills-card.tsx
+msgid "Eidolon's Folder"
+msgstr "Eidolon's Folder"
+
+#: src/features/settings/skills-card.tsx
+msgid "Eidolon's folder:"
+msgstr "Eidolon's folder:"
+
+#: src/lib/labels.ts
+msgid "Eidolon's skills folder already has a skill by that name."
+msgstr "Eidolon's skills folder already has a skill by that name."
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Eidolon's skills folder already has a skill by this name."
+msgstr "Eidolon's skills folder already has a skill by this name."
 
 #: src/features/jobs/labels.ts
 msgid "Embedding API"
@@ -2141,6 +2199,10 @@ msgstr "Her Voice"
 msgid "Her voice ({id}) hasn't been checked with Fish Audio yet."
 msgstr "Her voice ({id}) hasn't been checked with Fish Audio yet."
 
+#: src/features/settings/skills-card.tsx
+msgid "Hidden by the skill of the same name in {shadowedBy}."
+msgstr "Hidden by the skill of the same name in {shadowedBy}."
+
 #: src/features/jobs/detail.tsx
 msgid "Hide"
 msgstr "Hide"
@@ -2349,6 +2411,14 @@ msgstr "Installs itself on the first download."
 msgid "Installs on the first download"
 msgstr "Installs on the first download"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Instructions"
+msgstr "Instructions"
+
+#: src/features/settings/skills-card.tsx
+msgid "Instructions a task follows for one kind of work, such as your house style or how you ship a change. A task loads a skill when its work calls for it, or from its start when you name the skill to her. A task also finds the skills in its own folder's .agents/skills."
+msgstr "Instructions a task follows for one kind of work, such as your house style or how you ship a change. A task loads a skill when its work calls for it, or from its start when you name the skill to her. A task also finds the skills in its own folder's .agents/skills."
+
 #: src/features/chats/why-answered.tsx
 msgid "Interested"
 msgstr "Interested"
@@ -2471,6 +2541,10 @@ msgstr "It stops once it has finished what it is writing."
 #: src/features/tasks/labels.ts
 msgid "It waited for your answer."
 msgstr "It waited for your answer."
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "It will be used instead of the shared skill of the same name."
+msgstr "It will be used instead of the shared skill of the same name."
 
 #: src/features/tasks/cards.tsx
 msgid "It works in this folder on its own once you allow it. Eidolon makes the folder if it doesn't exist yet."
@@ -2658,6 +2732,10 @@ msgstr "Let it run this command?"
 msgid "Let it write outside its folders?"
 msgstr "Let it write outside its folders?"
 
+#: src/features/settings/skills-card.tsx
+msgid "Let Tasks Use {name}"
+msgstr "Let Tasks Use {name}"
+
 #: src/components/preferences.tsx
 msgid "Light"
 msgstr "Light"
@@ -2677,6 +2755,10 @@ msgstr "Links"
 #: src/features/studio/add-videos.tsx
 msgid "Links Checked"
 msgstr "Links Checked"
+
+#: src/features/settings/skills-card.tsx
+msgid "Links to"
+msgstr "Links to"
 
 #: src/features/call/call-controls.tsx
 msgid "Listening…"
@@ -2712,6 +2794,10 @@ msgstr "Looking things up on the web and writing up what it found."
 #: src/features/chats/labels.ts
 msgid "Looking through the stream archive…"
 msgstr "Looking through the stream archive…"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Lowercase letters, digits and hyphens. Saved as {path}."
+msgstr "Lowercase letters, digits and hyphens. Saved as {path}."
 
 #: src/features/studio/videos-section.tsx
 msgid "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
@@ -2888,6 +2974,7 @@ msgid "Mute your mic"
 msgstr "Mute your mic"
 
 #: src/features/settings/account-dialog.tsx
+#: src/features/settings/new-skill-dialog.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Name"
 msgstr "Name"
@@ -3048,6 +3135,18 @@ msgstr "No sample"
 #: src/features/settings/mcp-card.tsx
 msgid "No servers yet. Add them to {path}, in the mcpServers shape other MCP clients use."
 msgstr "No servers yet. Add them to {path}, in the mcpServers shape other MCP clients use."
+
+#: src/lib/labels.ts
+msgid "No skill of yours has that name anymore."
+msgstr "No skill of yours has that name anymore."
+
+#: src/features/settings/skills-card.tsx
+msgid "No skills match."
+msgstr "No skills match."
+
+#: src/features/settings/skills-card.tsx
+msgid "No skills yet"
+msgstr "No skills yet"
 
 #: src/features/studio/video-table.tsx
 msgid "No speech"
@@ -3286,6 +3385,10 @@ msgstr "Only {free} free on the data home's disk. Downloaded audio takes a lot o
 msgid "Only Add Programs You Trust"
 msgstr "Only Add Programs You Trust"
 
+#: src/features/settings/skills-card.tsx
+msgid "Only When Named"
+msgstr "Only When Named"
+
 #: src/components/locked-screen.tsx
 msgid "Open"
 msgstr "Open"
@@ -3384,6 +3487,10 @@ msgstr "Other"
 #: src/features/settings/account-dialog.tsx
 msgid "Other Provider"
 msgstr "Other Provider"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Our house style for web pages. Use when making or editing any HTML page."
+msgstr "Our house style for web pages. Use when making or editing any HTML page."
 
 #: src/features/home/readiness-labels.ts
 msgid "Outfit references: {count}."
@@ -3754,6 +3861,7 @@ msgstr "Refined {done}/{total}"
 
 #: src/features/home/memory-panel.tsx
 #: src/features/jobs/detail.tsx
+#: src/features/settings/skills-card.tsx
 msgid "Refresh"
 msgstr "Refresh"
 
@@ -4089,6 +4197,10 @@ msgstr "Say something to {name}, in text or with your voice. This chat keeps wha
 msgid "Say something to everyone here. Whoever it's for answers, and they may answer each other too."
 msgstr "Say something to everyone here. Whoever it's for answers, and they may answer each other too."
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Say what it does and when to use it."
+msgstr "Say what it does and when to use it."
+
 #: src/components/settings-form/labels.ts
 msgid "Scene Types Left Out of the Index"
 msgstr "Scene Types Left Out of the Index"
@@ -4104,6 +4216,14 @@ msgstr "Search models"
 #: src/features/settings/account-dialog.tsx
 msgid "Search providers"
 msgstr "Search providers"
+
+#: src/features/settings/skills-card.tsx
+msgid "Search skills"
+msgstr "Search skills"
+
+#: src/features/settings/skills-card.tsx
+msgid "Search Skills"
+msgstr "Search Skills"
 
 #: src/components/voice-picker/index.tsx
 msgid "Search Voices"
@@ -4241,6 +4361,18 @@ msgstr "Setup Steps"
 msgid "Share"
 msgstr "Share"
 
+#: src/features/settings/skills-card.tsx
+msgid "Shared"
+msgstr "Shared"
+
+#: src/features/settings/skills-card.tsx
+msgid "Shared Folder"
+msgstr "Shared Folder"
+
+#: src/features/settings/skills-card.tsx
+msgid "Shared folder:"
+msgstr "Shared folder:"
+
 #: src/features/chats/why-answered.tsx
 msgid "She answered {name}'s line."
 msgstr "She answered {name}'s line."
@@ -4248,6 +4380,10 @@ msgstr "She answered {name}'s line."
 #: src/features/chats/why-answered.tsx
 msgid "She answered your line."
 msgstr "She answered your line."
+
+#: src/features/settings/skills-card.tsx
+msgid "She can name 150 skills at most, so she can't ask for this one by name."
+msgstr "She can name 150 skills at most, so she can't ask for this one by name."
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "She can't switch to it anymore, and its voice is removed from her settings."
@@ -4319,6 +4455,7 @@ msgid "Short Name"
 msgstr "Short Name"
 
 #: src/features/jobs/detail.tsx
+#: src/features/settings/skills-card.tsx
 msgid "Show"
 msgstr "Show"
 
@@ -4373,6 +4510,11 @@ msgstr "Shown only: set it in settings.yaml or with <0>{env}</0>."
 #: src/features/usage/route.tsx
 msgid "since recording began"
 msgstr "since recording began"
+
+#: src/features/settings/route.tsx
+#: src/features/settings/skills-card.tsx
+msgid "Skills"
+msgstr "Skills"
 
 #: src/features/setup/memory-step.tsx
 msgid "Skip"
@@ -4563,6 +4705,10 @@ msgstr "State"
 msgid "Steps"
 msgstr "Steps"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Steps, rules and examples, in Markdown"
+msgstr "Steps, rules and examples, in Markdown"
+
 #: src/features/call/transcript-view.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Still waiting for {name}. If nothing comes, say it again."
@@ -4676,6 +4822,10 @@ msgstr "Summary"
 msgid "Switch to Her Now"
 msgstr "Switch to Her Now"
 
+#: src/features/settings/skills-card.tsx
+msgid "Switched Off"
+msgstr "Switched Off"
+
 #: src/components/preferences.tsx
 msgid "System"
 msgstr "System"
@@ -4739,6 +4889,18 @@ msgstr "Tasks"
 #: src/features/tasks/list.tsx
 msgid "Tasks can't start yet"
 msgstr "Tasks can't start yet"
+
+#: src/features/settings/skills-card.tsx
+msgid "Tasks' list of skills is full"
+msgstr "Tasks' list of skills is full"
+
+#: src/features/settings/skills-card.tsx
+msgid "Tasks' list of skills is full without it, and she can name 150 skills at most, so no task can use it. Switch off skills tasks don't need."
+msgstr "Tasks' list of skills is full without it, and she can name 150 skills at most, so no task can use it. Switch off skills tasks don't need."
+
+#: src/features/settings/skills-card.tsx
+msgid "Tasks' list of skills is full without it, so only naming it to her reaches a task. Switch off skills tasks don't need."
+msgstr "Tasks' list of skills is full without it, so only naming it to her reaches a task. Switch off skills tasks don't need."
 
 #: src/features/jobs/detail.tsx
 msgid "Technical Log"
@@ -5534,6 +5696,10 @@ msgstr "Use a two-letter language code such as zh, or none."
 msgid "Use It"
 msgstr "Use It"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Use lowercase letters, digits and single hyphens, 64 at most."
+msgstr "Use lowercase letters, digits and single hyphens, 64 at most."
+
 #: src/features/setup/keys-step.tsx
 msgid "Use Other Providers (Optional)"
 msgstr "Use Other Providers (Optional)"
@@ -5785,6 +5951,10 @@ msgstr "What every persona knows about you."
 msgid "What it already finished is kept, so resuming it later picks up where it stopped."
 msgstr "What it already finished is kept, so resuming it later picks up where it stopped."
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "What it does and when to use it: a task picks a skill by this alone."
+msgstr "What it does and when to use it: a task picks a skill by this alone."
+
 #: src/features/setup/persona-fields.tsx
 msgid "What prompts shorten her name to, and her avatar's letters. Empty uses her name."
 msgstr "What prompts shorten her name to, and her avatar's letters. Empty uses her name."
@@ -5913,6 +6083,14 @@ msgstr "Working…"
 msgid "Works out what the video pipeline would do and what it would cost, without running it."
 msgstr "Works out what the video pipeline would do and what it would cost, without running it."
 
+#: src/features/settings/skills-card.tsx
+msgid "Write one here, or put a skill's folder, with its SKILL.md, in Eidolon's skills folder, or in the shared folder for your other agents too."
+msgstr "Write one here, or put a skill's folder, with its SKILL.md, in Eidolon's skills folder, or in the shared folder for your other agents too."
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Written as a SKILL.md in Eidolon's skills folder, where you can edit it later. Tasks see its name and description, and read the rest when the work calls for it."
+msgstr "Written as a SKILL.md in Eidolon's skills folder, where you can edit it later. Tasks see its name and description, and read the rest when the work calls for it."
+
 #: src/components/settings-form/labels.ts
 #: src/features/settings/route.tsx
 msgid "You"
@@ -6002,6 +6180,10 @@ msgstr "Your providers"
 #: src/features/settings/account-dialog.tsx
 msgid "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
 msgstr "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
+
+#: src/features/settings/skills-card.tsx
+msgid "Your switches can't be read"
+msgstr "Your switches can't be read"
 
 #: src/features/studio/text-editor.tsx
 msgid "Your unsaved changes will be lost."

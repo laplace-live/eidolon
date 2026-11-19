@@ -4,9 +4,16 @@
 import type { Dirent } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import type { TaskToolContext, TaskToolResult } from "@eidolon/engine";
+import { estimateTokens, type TaskToolContext, type TaskToolResult } from "@eidolon/engine";
 import { fold, isMissing } from "../policy.ts";
-import { isInside, SKILL_FILE, type Skill } from "../skills.ts";
+import {
+  isInside,
+  type RequestedSkill,
+  SKILL_FILE,
+  type Skill,
+  type SkillCatalog,
+  type SkillProblem,
+} from "../skills.ts";
 import type { AssistantTool, PathGuard } from "../types.ts";
 import { resolveToCwd } from "./path.ts";
 import { createReadTool } from "./read.ts";
@@ -24,7 +31,8 @@ const LISTED_FILES = 50;
 const LISTED_DEPTH = 3;
 
 /**
- * The skill tool for `skills`, those the worker's prompt lists; a task with none has no skill tool.
+ * The skill tool for `skills`, those the worker's prompt lists or carries whole; a task with none
+ * has no skill tool.
  * A folder skill's files also pass `guard`, the task's own.
  */
 export function createSkillTool(skills: readonly Skill[], guard: PathGuard): AssistantTool {
@@ -32,12 +40,12 @@ export function createSkillTool(skills: readonly Skill[], guard: PathGuard): Ass
   return {
     schema: {
       name: "skill",
-      description: `Load a skill listed in <skills>: its SKILL.md, or with path, another file in its folder, or the list of a folder in it. Output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit to read on.`,
+      description: `Load a skill listed in <skills> or <requested_skills>: its SKILL.md, or with path, another file in its folder, or the list of a folder in it. Output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit to read on.`,
       properties: {
         name: {
           type: "string",
           enum: skills.map((skill) => skill.name),
-          description: "The skill's name, as <skills> lists it",
+          description: "The skill's name, as <skills> or <requested_skills> gives it",
         },
         path: {
           type: "string",
@@ -131,7 +139,7 @@ async function load(
   ) {
     return read;
   }
-  const whose = skill.source === "owner" ? "the owner's" : "from the task's folder";
+  const whose = skill.source === "folder" ? "from the task's folder" : "the owner's";
   const files = (await filesIn(skill.dir, skill)).filter((file) => file !== SKILL_FILE);
   return {
     ...read,
@@ -140,6 +148,62 @@ async function load(
       read.content,
       ...(files.length > 0 ? [fileList("its folder", files)] : []),
     ].join("\n\n"),
+  };
+}
+
+export interface TaskSkills {
+  /** What skill may load: the catalog's, then the named ones it doesn't list. */
+  readonly loadable: readonly Skill[];
+  /**
+   * The named skills whose SKILL.md reads, each with it as skill answers for it, or, past the room
+   * a task's context leaves them, with a note to load it.
+   */
+  readonly requested: readonly RequestedSkill[];
+  /** The named skills whose SKILL.md doesn't read now, and why. */
+  readonly unreadable: readonly SkillProblem[];
+}
+
+/** What the prompt carries for a named skill its SKILL.md didn't fit beside. */
+export const SKILL_LEFT_TO_LOAD =
+  "Its SKILL.md didn't fit here: load it with skill before you do anything else.";
+
+/**
+ * A run's skills from `catalog`: what its skill tool loads, and what its prompt carries for each
+ * named skill, its SKILL.md as skill answers for it, cut as skill cuts a file. Together they fill
+ * at most a quarter of `contextTokens`, the task's context; a skill past that is named with
+ * SKILL_LEFT_TO_LOAD.
+ */
+export async function taskSkills(
+  catalog: SkillCatalog,
+  guard: PathGuard,
+  contextTokens: number,
+): Promise<TaskSkills> {
+  const listed = new Set(catalog.skills.map((skill) => skill.name));
+  const context: TaskToolContext = { signal: new AbortController().signal, onUpdate: () => {} };
+  const requested: RequestedSkill[] = [];
+  const unreadable: SkillProblem[] = [];
+  let room = contextTokens / 4;
+  for (const skill of catalog.requested) {
+    const { content, isError } = await load(skill, guard, { path: SKILL_FILE }, context);
+    if (isError) {
+      unreadable.push({ path: join(skill.dir, SKILL_FILE), message: content, skipped: true });
+      continue;
+    }
+    const cost = estimateTokens(content);
+    if (cost > room) {
+      requested.push({ skill, text: SKILL_LEFT_TO_LOAD });
+      continue;
+    }
+    room -= cost;
+    requested.push({ skill, text: content });
+  }
+  return {
+    loadable: [
+      ...catalog.skills,
+      ...requested.map(({ skill }) => skill).filter((skill) => !listed.has(skill.name)),
+    ],
+    requested,
+    unreadable,
   };
 }
 

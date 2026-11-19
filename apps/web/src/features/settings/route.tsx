@@ -12,6 +12,7 @@ import {
   PlugIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
+  WandSparklesIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, Navigate, useSearchParams } from "react-router";
@@ -27,6 +28,7 @@ import { AllowedCommandsCard } from "./commands-card";
 import { McpServersCard } from "./mcp-card";
 import { Notices } from "./notices";
 import { CARDS, type CardId, NAMED, resolveSection, SECTIONS, type SectionId } from "./sections";
+import { SkillsCard } from "./skills-card";
 import { YtDlpBadge, YtDlpProblem } from "./yt-dlp-state";
 
 const ICONS: Readonly<Record<SectionId, ReactNode>> = {
@@ -35,6 +37,7 @@ const ICONS: Readonly<Record<SectionId, ReactNode>> = {
   memory: <DatabaseIcon />,
   downloads: <DownloadIcon />,
   assistant: <BriefcaseIcon />,
+  skills: <WandSparklesIcon />,
   advanced: <SlidersHorizontalIcon />,
 };
 
@@ -44,6 +47,7 @@ const SECTION_LABELS: Readonly<Record<SectionId, MessageDescriptor>> = {
   memory: msg`Memory`,
   downloads: msg`Downloads`,
   assistant: msg`Assistant Mode`,
+  skills: msg`Skills`,
   advanced: msg`Advanced`,
 };
 
@@ -123,6 +127,7 @@ function Section({ section }: { readonly section: SectionId }) {
               <McpServersCard />
             </>
           )}
+          {section === "skills" && <SkillsCard />}
         </>
       );
   }

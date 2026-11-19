@@ -20,7 +20,8 @@ function refusal(error: unknown): Response {
   throw error;
 }
 
-async function answer(work: () => Promise<unknown>): Promise<Response> {
+/** What `work` gives, as a 200, or TaskRefused's answer. */
+export async function answer(work: () => Promise<unknown>): Promise<Response> {
   try {
     return localJson(200, await work());
   } catch (error) {

@@ -375,6 +375,8 @@ const TOOLS_WORKER_REPORT = "Ran the commands; ran.txt holds what they printed."
 const SKILL_NAME = "smoke-style";
 const SKILL_DESCRIPTION = "How the smoke's tasks keep their notes";
 const SKILL_BODY = "Write what each command printed into ran.txt, one line each.";
+/** A skill in the shared folder, which Settings lists as shared and switches off. */
+const SHARED_SKILL = "smoke-shared";
 /**
  * Each appends a line to ran.txt in the task's folder, so the file tells which of them ran. The
  * first comes padded, as a worker talked into it could pad one: what it runs is below what its
@@ -1109,8 +1111,8 @@ type FakeEmbeddings = ReturnType<typeof fakeEmbeddings>;
 
 /**
  * The server's environment, which its jobs inherit: this shell's, without anything a setting, a
- * credential or EIDOLON_* reads, plus the temporary data home and, unless `dotenv`, the .env
- * opt-out.
+ * credential or EIDOLON_* reads, plus the temporary data home, a shared skills folder beside it
+ * and, unless `dotenv`, the .env opt-out.
  */
 function childEnv(home: string, dotenv = false): Record<string, string> {
   const dropped = new Set<string>([
@@ -1127,9 +1129,13 @@ function childEnv(home: string, dotenv = false): Record<string, string> {
       env[name] = value;
     }
   }
-  return dotenv
-    ? { ...env, EIDOLON_HOME: home }
-    : { ...env, EIDOLON_NO_DOTENV: "1", EIDOLON_HOME: home };
+  const homes = { EIDOLON_HOME: home, EIDOLON_SHARED_SKILLS: sharedSkills(home) };
+  return dotenv ? { ...env, ...homes } : { ...env, EIDOLON_NO_DOTENV: "1", ...homes };
+}
+
+/** The folder the server reads as the one the owner's agents share: never the developer's own. */
+function sharedSkills(home: string): string {
+  return join(dirname(home), "shared-skills");
 }
 
 /** What one load-env.ts did, as the probe reports it. */
@@ -4335,6 +4341,12 @@ async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
     join(skill, "SKILL.md"),
     `---\nname: ${SKILL_NAME}\ndescription: ${SKILL_DESCRIPTION}\n---\n${SKILL_BODY}\n`,
   );
+  const shared = join(sharedSkills(home), SHARED_SKILL);
+  mkdirSync(shared, { recursive: true });
+  writeFileSync(
+    join(shared, "SKILL.md"),
+    `---\nname: ${SHARED_SKILL}\ndescription: A skill the owner's agents share\n---\nShare it.\n`,
+  );
   if (new URL(page.url()).pathname !== `/chats/${chat.id}`) {
     await page.goto(`${origin}/chats/${chat.id}`);
   }
@@ -4657,6 +4669,45 @@ async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
       `${shownFolder ? "with" : "without"} its folder; Remove answered ${removed} and the row ` +
       `${gone ? "went" : "stayed"}; allowed-commands.json (${modeOf(store)}) holds ` +
       `${stored.commands?.length ?? "no list of"} command(s)`,
+  );
+
+  await page.goto(`${origin}/settings?tab=skills`);
+  const own = page.locator(`li[data-skill="${SKILL_NAME}"][data-source="eidolon"]`);
+  const theirs = page.locator(`li[data-skill="${SHARED_SKILL}"][data-source="shared"]`);
+  const both = (await shows(own, 15_000)) && (await shows(theirs, 5_000));
+  const badges =
+    both &&
+    (await shows(own.getByText(t("en", "Eidolon"), { exact: true }), 5_000)) &&
+    (await shows(theirs.getByText(t("en", "Shared"), { exact: true }), 5_000));
+  const switching = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url() === `${origin}/api/local/skills/${SHARED_SKILL}`,
+  );
+  const off = theirs.getByRole("switch", {
+    name: t("en", "Let Tasks Use {name}", { name: SHARED_SKILL }),
+    exact: true,
+  });
+  await off.click();
+  const switched = (await switching).status();
+  const unchecked = await off
+    .and(page.locator('[data-state="unchecked"]'))
+    .waitFor({ timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  const switches = join(home, "skills.json");
+  checks.add(
+    "skills settings",
+    both &&
+      badges &&
+      switched === 200 &&
+      unchecked &&
+      textOf(switches).includes(`"${SHARED_SKILL}"`) &&
+      modeOf(switches) === "0600",
+    `Settings' Skills ${both ? "lists" : "doesn't list"} the data home's ${SKILL_NAME} and the ` +
+      `shared ${SHARED_SKILL}, ${badges ? "each with" : "without"} its source; switching ` +
+      `${SHARED_SKILL} off answered ${switched}, the switch ${unchecked ? "turned" : "stayed"} ` +
+      `off, and skills.json (${modeOf(switches)}) holds ${quote(textOf(switches), 80)}`,
   );
 }
 

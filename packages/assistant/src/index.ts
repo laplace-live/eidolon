@@ -47,13 +47,26 @@ export {
   taskDate,
 } from "./prompt.ts";
 export {
+  byName,
+  catalogOf,
+  type FoundSkill,
   isInside,
   loadSkills,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_SKILL_BYTES,
+  oneLine,
+  type RequestedSkill,
+  SKILL_FILE,
   type Skill,
   type SkillCatalog,
   type SkillProblem,
+  type SkillScan,
   type SkillSource,
+  scanSkills,
+  skillNames,
+  skillSwitchesPath,
   skillsDir,
+  validateName,
 } from "./skills.ts";
 export { createTaskTools, type TaskToolsOptions } from "./task-tools.ts";
 export {
@@ -83,7 +96,7 @@ export type { LsDetails } from "./tools/ls.ts";
 export { withFileMutationQueue } from "./tools/mutation-queue.ts";
 export { expandPath, pathExists, resolveReadPath, resolveToCwd } from "./tools/path.ts";
 export { bashOffered, killProcessTree, shellEnv } from "./tools/shell.ts";
-export { createSkillTool } from "./tools/skill.ts";
+export { createSkillTool, type TaskSkills, taskSkills } from "./tools/skill.ts";
 export { TODO_STATUSES, type TodoDetails, type TodoItem, type TodoStatus } from "./tools/todo.ts";
 export {
   DEFAULT_MAX_BYTES,

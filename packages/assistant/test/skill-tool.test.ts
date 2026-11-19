@@ -1,12 +1,12 @@
 // The skill tool, on skills loadSkills finds in temporary folders and under the policy a task runs
 // with: what it reads and lists, and what it refuses without ever asking the owner.
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { FolderPolicy } from "../src/policy.ts";
 import { loadSkills, type Skill, skillsDir } from "../src/skills.ts";
 import { createReadTool } from "../src/tools/read.ts";
-import { createSkillTool } from "../src/tools/skill.ts";
+import { createSkillTool, SKILL_LEFT_TO_LOAD, taskSkills } from "../src/tools/skill.ts";
 import { createWriteTool } from "../src/tools/write.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
 
@@ -255,12 +255,12 @@ describe("skill tool", () => {
     expect(skill.schema).toEqual({
       name: "skill",
       description:
-        "Load a skill listed in <skills>: its SKILL.md, or with path, another file in its folder, or the list of a folder in it. Output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit to read on.",
+        "Load a skill listed in <skills> or <requested_skills>: its SKILL.md, or with path, another file in its folder, or the list of a folder in it. Output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit to read on.",
       properties: {
         name: {
           type: "string",
           enum: ["house-style", "release-notes"],
-          description: "The skill's name, as <skills> lists it",
+          description: "The skill's name, as <skills> or <requested_skills> gives it",
         },
         path: {
           type: "string",
@@ -291,5 +291,80 @@ describe("skill tool", () => {
       content: "references/forms.md isn't in the skill house-style's folder",
       isError: true,
     });
+  });
+});
+
+describe("taskSkills", () => {
+  test("a skill she named is carried whole, as skill reads it, and loads although no catalog lists it", async () => {
+    const { dataHome, folder, ownerDir, policy } = await fixture();
+    const deployDir = join(skillsDir(dataHome), "deploy");
+    write(
+      join(deployDir, "SKILL.md"),
+      "---\nname: deploy\ndescription: Deploy the site.\ndisable-model-invocation: true\n---\n\nRun the deploy script.\n",
+    );
+    const catalog = await loadSkills({ dataHome, folder, requested: ["deploy", "house-style"] });
+    expect(catalog.skills.map((skill) => skill.name)).toEqual(["house-style", "release-notes"]);
+    const { loadable, requested, unreadable } = await taskSkills(catalog, policy, 128_000);
+    expect(loadable.map((skill) => skill.name)).toEqual(["house-style", "release-notes", "deploy"]);
+    expect(unreadable).toEqual([]);
+    const tool = createSkillTool(loadable, policy);
+    expect(requested.map(({ skill, text }) => [skill.name, text])).toEqual([
+      ["deploy", (await tool.execute({ name: "deploy" }, toolContext())).content],
+      ["house-style", (await tool.execute({ name: "house-style" }, toolContext())).content],
+    ]);
+    expect(requested[0]?.text).toStartWith(
+      `Skill deploy (the owner's), in ${deployDir}. Paths in it are relative to that folder;`,
+    );
+    expect(requested[1]?.text).toContain(`${ownerDir}`);
+  });
+
+  test("a long SKILL.md is carried cut where skill cuts it, saying where to read on; past a quarter of the context, a skill is named to load", async () => {
+    const { dataHome, folder, policy } = await fixture();
+    const rules = Array.from({ length: 2105 }, (_, i) => `- Rule ${i + 1}.`).join("\n");
+    write(
+      join(skillsDir(dataHome), "long-rules", "SKILL.md"),
+      `---\nname: long-rules\ndescription: Many rules.\ndisable-model-invocation: true\n---\n${rules}\n`,
+    );
+    const catalog = await loadSkills({
+      dataHome,
+      folder,
+      requested: ["long-rules", "house-style"],
+    });
+    const roomy = await taskSkills(catalog, policy, 128_000);
+    const [long, house] = roomy.requested;
+    expect(long?.text.includes("- Rule 1995.")).toBe(true);
+    expect(long?.text.includes("- Rule 2105.")).toBe(false);
+    expect(
+      long?.text.endsWith("\n\n[Showing lines 1-2000 of 2111. Use offset=2001 to continue.]"),
+    ).toBe(true);
+    expect(house?.text).toContain("font-family: Georgia");
+    // Cut, the long one is about 6,500 tokens: past a quarter of 20,000, so it is named to load.
+    const tight = await taskSkills(catalog, policy, 20_000);
+    expect(tight.requested.map(({ skill, text }) => [skill.name, text.slice(0, 40)])).toEqual([
+      ["long-rules", SKILL_LEFT_TO_LOAD.slice(0, 40)],
+      ["house-style", house?.text.slice(0, 40)],
+    ]);
+    // Named to load, it loads, though no catalog lists a skill that opts out of model use.
+    expect(tight.loadable.map((skill) => skill.name)).toEqual([
+      "house-style",
+      "release-notes",
+      "long-rules",
+    ]);
+  });
+
+  test("a named skill whose SKILL.md is gone since the scan is unreadable, and nothing else changes", async () => {
+    const { dataHome, folder, ownerDir, policy } = await fixture();
+    const catalog = await loadSkills({ dataHome, folder, requested: ["house-style"] });
+    renameSync(join(ownerDir, "SKILL.md"), join(ownerDir, "SKILL.md.old"));
+    const { loadable, requested, unreadable } = await taskSkills(catalog, policy, 128_000);
+    expect(loadable.map((skill) => skill.name)).toEqual(["house-style", "release-notes"]);
+    expect(requested).toEqual([]);
+    expect(unreadable).toEqual([
+      {
+        path: join(ownerDir, "SKILL.md"),
+        message: "SKILL.md isn't in the skill house-style's folder",
+        skipped: true,
+      },
+    ]);
   });
 });
