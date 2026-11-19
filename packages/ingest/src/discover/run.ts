@@ -1,9 +1,9 @@
 // What laplace-discover finds for a persona: her official channels' streams, others' full
 // recordings of the days those miss, and clips, less what her lists hold already; saved, one new
 // batch lists them, official first.
-import { closeSync, openSync, readSync } from "node:fs";
-import { basename } from "node:path";
-import { errorText, logger, zonedClock } from "@eidolon/config";
+import { closeSync, openSync, readFileSync, readSync } from "node:fs";
+import { basename, join } from "node:path";
+import { errorText, isPlainObject, logger, zonedClock } from "@eidolon/config";
 import { addDays } from "@eidolon/retrieval";
 import { knownIds, localIsoSeconds, writeBatch } from "../download/batches.ts";
 import { type ExpandOptions, expandPlaylist } from "../download/playlist.ts";
@@ -17,6 +17,7 @@ import {
 } from "./bilibili.ts";
 import {
   type BilibiliList,
+  batchHeader,
   batchSources,
   type Channel,
   listUrl,
@@ -33,6 +34,7 @@ export const DEFAULT_MIN_MINUTES = 60;
 export const DEFAULT_PAGES = 5;
 /** A space's lists that hold its streams: Bilibili's own 直播回放 series, or a 录播 list. */
 const REPLAY_LIST = /回放|录播/;
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Where an official channel came from: `--channel`, or a batch's `# Source:` line. */
 type From = "argument" | "batch";
@@ -42,6 +44,8 @@ export interface DiscoverOptions {
   readonly listsDir: string;
   /** Her transcripts: a day they hold a full stream of counts as covered. */
   readonly streamsDir: string;
+  /** Her downloads, whose `<id>.info.json` titles date the transcripts of videos no channel lists. */
+  readonly vodsDir: string;
   /** Her time zone, where a video's upload time falls on a day. */
   readonly timeZone: string;
   /** Official channels given, before those her batches' `# Source:` lines name. */
@@ -193,16 +197,37 @@ function head(path: string): string {
   }
 }
 
+/** The title in `<vodsDir>/<stem>.info.json`; "" when there is none. */
+function infoTitle(vodsDir: string, stem: string): string {
+  try {
+    const info: unknown = JSON.parse(readFileSync(join(vodsDir, `${stem}.info.json`), "utf8"));
+    return isPlainObject(info) && typeof info.title === "string" ? info.title : "";
+  } catch {
+    return "";
+  }
+}
+
 /**
- * The days her transcripts in `streamsDir` (`<YYYY-MM-DD>-<stem>.md`) cover: those whose parts run
- * `minSec` together. A transcribed clip doesn't cover its day's stream; one that doesn't say how
- * long it runs does.
+ * The days her transcripts in `streamsDir` cover: those whose parts run `minSec` together. A
+ * transcript is named `<upload date>-<stem>.md` by yt-dlp's upload date, in UTC, which can be the
+ * day after the stream; so one of a video `official` holds covers no day of its own, the video's
+ * day standing for it, and another's day is its info.json title's, else that upload date. A
+ * transcribed clip doesn't cover its day's stream; one that doesn't say how long it runs does.
  */
-function transcriptDates(streamsDir: string, minSec: number): string[] {
+function transcriptDates(
+  streamsDir: string,
+  vodsDir: string,
+  official: ReadonlyMap<string, Found>,
+  minSec: number,
+): string[] {
   const seconds = new Map<string, number>();
   for (const path of transcriptPaths(streamsDir)) {
-    const date = /^(\d{4}-\d{2}-\d{2})-.+\.md$/.exec(basename(path))?.[1];
-    if (date === undefined) continue;
+    const name = /^(\d{4}-\d{2}-\d{2})-(.+)\.md$/.exec(basename(path));
+    if (name === null) continue;
+    const stem = name[2] as string;
+    // A video's parts are `<id>_p<n>`.
+    if (official.has(stem.replace(/_p\d+$/, ""))) continue;
+    const date = titleDate(infoTitle(vodsDir, stem)) ?? (name[1] as string);
     const minutes = /^duration_min:\s*(\d+(?:\.\d+)?)\s*$/m.exec(head(path))?.[1];
     const length = minutes === undefined ? Number.POSITIVE_INFINITY : Number(minutes) * 60;
     seconds.set(date, (seconds.get(date) ?? 0) + length);
@@ -249,25 +274,41 @@ function newestFirst(a: Found, b: Found): number {
 }
 
 /**
+ * The days a recording may be of: its title's, else its upload's and the day before, as a stream
+ * ends after midnight at times; none when its day is unknown.
+ */
+function daysOf(found: Found): string[] {
+  const { date } = found;
+  if (date === null) return [];
+  return found.titled ? [date] : [date, addDays(date, -1)];
+}
+
+/**
  * One of `recordings` a day, for the days `covered` lacks, those whose title dates them first,
- * and every one of unknown day. One dated by its upload alone may be of the day before's stream,
- * which ends after midnight at times.
+ * and every one of unknown day. A pick takes every day it may be of, so of two dated by their
+ * uploads a day apart, which may hold the same stream, only one is picked.
  */
 function oneADay(recordings: readonly Found[], covered: ReadonlySet<string>): Found[] {
   const byDate = new Map<string, Found>();
+  /** The days the picks may be of. */
+  const taken = new Set<string>();
   const undated: Found[] = [];
   for (const titled of [true, false]) {
-    const taken = new Set(byDate.keys());
     for (const found of recordings.filter((each) => each.titled === titled)) {
       const { date } = found;
       if (date === null) {
         undated.push(found);
         continue;
       }
-      const days = titled ? [date] : [date, addDays(date, -1)];
-      if (days.some((day) => covered.has(day) || taken.has(day))) continue;
       const other = byDate.get(date);
-      if (other === undefined || preferred(found, other)) byDate.set(date, found);
+      if (other?.titled === titled) {
+        if (preferred(found, other)) byDate.set(date, found);
+        continue;
+      }
+      const days = daysOf(found);
+      if (days.some((day) => covered.has(day) || taken.has(day))) continue;
+      byDate.set(date, found);
+      for (const day of days) taken.add(day);
     }
   }
   return [...byDate.values(), ...undated];
@@ -351,9 +392,13 @@ export async function discoverVideos(options: DiscoverOptions): Promise<Discover
     if (channel.list !== null) {
       const given = channel.list;
       // Its name tells a 直播回放 list from another; listing it needs none.
-      const name = (await unlessStopped(spaceLists(mid), [])).find(
-        (list) => list.type === given.type && list.id === given.id,
-      )?.name;
+      const inSpace = await unlessStopped(spaceLists(mid), [], (why) =>
+        warn(
+          `Couldn't read the lists of ${spaceUrl(mid)}, so whether ${channel.url} is a ` +
+            `直播回放 list is unknown: ${why}`,
+        ),
+      );
+      const name = inSpace.find((list) => list.type === given.type && list.id === given.id)?.name;
       if (name !== undefined && !REPLAY_LIST.test(name)) {
         warn(
           `${channel.url} is ${name}, no 直播回放 or 录播 list, yet all its videos count as hers`,
@@ -387,7 +432,9 @@ export async function discoverVideos(options: DiscoverOptions): Promise<Discover
       listed.push({ url, site: "bilibili", from, mid, ...named, videos: videos.length });
       const first = videos[0]?.bvid;
       if (first !== undefined && !names.has(mid)) {
-        const owner = await unlessStopped(client.owner(first), { mid, name: "" });
+        const owner = await unlessStopped(client.owner(first), { mid, name: "" }, (why) =>
+          warn(`Couldn't read who uploaded https://www.bilibili.com/video/${first}: ${why}`),
+        );
         if (owner.name !== "") names.set(mid, owner.name);
       }
     }
@@ -406,14 +453,17 @@ export async function discoverVideos(options: DiscoverOptions): Promise<Discover
       count++;
       const url = youtubeVideoUrl(id);
       if (official.has(url)) continue;
+      const title = entry.title ?? "";
+      // A flat listing carries no upload date.
+      const date = titleDate(title);
       official.set(url, {
         key: url,
         url,
-        title: entry.title ?? "",
+        title,
         durationSec: entry.durationSec,
         pubdate: 0,
-        date: null,
-        titled: false,
+        date,
+        titled: date !== null,
         uploader: channel.name,
       });
     }
@@ -505,10 +555,14 @@ export async function discoverVideos(options: DiscoverOptions): Promise<Discover
     );
   }
 
-  const covered = new Set(transcriptDates(options.streamsDir, minSec));
+  const covered = new Set(transcriptDates(options.streamsDir, options.vodsDir, official, minSec));
   for (const found of official.values()) if (found.date !== null) covered.add(found.date);
+  // A saved recording's days, which a search may no longer return.
+  for (const covers of batchHeader(listsDir, "Covers")) {
+    for (const word of covers.split(/\s+/)) if (ISO_DAY.test(word)) covered.add(word);
+  }
   for (const found of recordings) {
-    if (found.date !== null && isKnown(found)) covered.add(found.date);
+    if (isKnown(found)) for (const day of daysOf(found)) covered.add(day);
   }
 
   const fresh = {
@@ -553,6 +607,10 @@ export async function discoverVideos(options: DiscoverOptions): Promise<Discover
       `Captured: ${localIsoSeconds(now)}`,
       `Official: ${fresh.official.length}; recordings: ${fresh.recordings.length}; ` +
         `clips: ${options.clips ? fresh.clips.length : 0}`,
+      ...fresh.recordings.flatMap((found) => {
+        const days = daysOf(found);
+        return days.length === 0 ? [] : [`Covers: ${days.join(" ")} ${found.url}`];
+      }),
     ];
     batch = writeBatch(
       listsDir,

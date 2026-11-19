@@ -159,6 +159,7 @@ export async function discoverMain(
       persona: { id: persona, name: identity.name, shortName: identity.shortName },
       listsDir: sourceFolder(persona, "lists"),
       streamsDir: sourceFolder(persona, "streams"),
+      vodsDir: sourceFolder(persona, "vods"),
       timeZone: personaTimeZone(),
       channels: (ns.channel as string[] | null) ?? [],
       clips: ns.clips as boolean,

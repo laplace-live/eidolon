@@ -80,7 +80,8 @@ A space's other lists (covers, highlights, a game's 合集) and fans' collection
    Nothing new means no batch: her sources are up to date.
 6. **Report**, in the owner's language:
    - the persona, and her official channels by their URLs, with how you found a new one;
-   - for each tier, how many videos and hours, and the newest date;
+   - for each tier, how many videos and hours, and the newest date where `date` gives one (a
+     YouTube replay's is often unknown);
    - the batch's file name, or that nothing was new;
    - what you left out and why: skipped videos, clips not asked for, and `warnings`;
    - what's next: in Eidolon's Studio, her Videos tab downloads the batch, then shows what

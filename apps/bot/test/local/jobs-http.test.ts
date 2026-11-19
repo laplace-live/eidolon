@@ -246,6 +246,20 @@ describe("the plan cache", () => {
     expect(fresh.id).not.toBe(plan.id);
     await server.settled(fresh.id);
   });
+
+  test("a batch written outside the app, as a task's discover --save writes one, makes the next plan run again", async () => {
+    const plan = await job(PLAN, "plan");
+    await server.settled(plan.id);
+    const batches = join(sourceFolder("milky-green", "lists"), "batches");
+    mkdirSync(batches, { recursive: true });
+    writeFileSync(
+      join(batches, "videos-2026-11-19-210000.txt"),
+      "# Source: https://space.bilibili.com/2132180406/lists/2484684?type=series\nBV1aaaaaaaa1\n",
+    );
+    const fresh = await job(PLAN, "plan");
+    expect(fresh.id).not.toBe(plan.id);
+    await server.settled(fresh.id);
+  });
 });
 
 describe("GET jobs/:id/events", () => {

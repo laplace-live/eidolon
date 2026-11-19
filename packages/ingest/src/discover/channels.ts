@@ -55,7 +55,8 @@ function bilibiliChannel(url: URL): Channel | null {
   const [mid, tab, id] = url.pathname.split("/").filter(Boolean);
   if (mid === undefined || !DIGITS.test(mid)) return null;
   let list: BilibiliList | null = null;
-  if (tab === "lists" && id !== undefined && DIGITS.test(id)) {
+  if (tab === "lists" && id !== undefined) {
+    if (!DIGITS.test(id)) return null;
     list = { type: url.searchParams.get("type") === "series" ? "series" : "season", id };
   } else if (tab === "channel" && (id === "seriesdetail" || id === "collectiondetail")) {
     const sid = url.searchParams.get("sid") ?? "";
@@ -99,7 +100,7 @@ function youtubeChannel(url: URL): Channel | null {
  * The official channel `text` names: a Bilibili space (any tab of it) or one of its lists
  * (`/lists/<id>?type=series|season`, or the older `/channel/seriesdetail?sid=` and
  * `/channel/collectiondetail?sid=`), or a YouTube channel (`/@handle`, `/channel/<id>`, `/c/…`,
- * `/user/…`, any tab of it); null for anything else.
+ * `/user/…`, any tab of it); null for anything else, a list's URL with a malformed id included.
  */
 export function parseChannel(text: string): Channel | null {
   const url = parsed(text);
@@ -110,9 +111,9 @@ export function parseChannel(text: string): Channel | null {
   return null;
 }
 
-/** The values of the `# Source:` lines of the batches under `listsDir`, oldest batch first. */
-export function batchSources(listsDir: string): string[] {
-  const sources: string[] = [];
+/** The values of the `# <key>:` lines of the batches under `listsDir`, oldest batch first. */
+export function batchHeader(listsDir: string, key: string): string[] {
+  const values: string[] = [];
   for (const path of batchLists(listsDir)) {
     let text: string;
     try {
@@ -121,11 +122,16 @@ export function batchSources(listsDir: string): string[] {
       continue;
     }
     for (const line of text.split(/\r?\n/)) {
-      const match = /^#\s*Source:\s*(.+?)\s*$/.exec(line);
-      if (match !== null) sources.push(match[1] as string);
+      const match = /^#\s*(\w+):\s*(.+?)\s*$/.exec(line);
+      if (match?.[1] === key) values.push(match[2] as string);
     }
   }
-  return sources;
+  return values;
+}
+
+/** The values of the `# Source:` lines of the batches under `listsDir`, oldest batch first. */
+export function batchSources(listsDir: string): string[] {
+  return batchHeader(listsDir, "Source");
 }
 
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;

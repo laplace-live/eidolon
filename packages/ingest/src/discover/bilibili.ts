@@ -17,6 +17,9 @@ const TIMEOUT_MS = 20_000;
 /** A list's pages read at most, 100 videos each. */
 const MAX_LIST_PAGES = 50;
 const LIST_PAGE_SIZE = 100;
+/** A space's pages of lists read at most, 20 lists each. */
+const MAX_SPACE_PAGES = 10;
+const SPACE_PAGE_SIZE = 20;
 
 export interface BilibiliVideo {
   readonly bvid: string;
@@ -63,10 +66,25 @@ const ENTITIES: Readonly<Record<string, string>> = {
   nbsp: " ",
 };
 
+/**
+ * `html`'s text outside its `<…>` tags, a `<` with no `>` after it kept as text. A scan, since
+ * CodeQL flags a regex that strips tags (js/incomplete-multi-character-sanitization).
+ */
+function textOutsideTags(html: string): string {
+  let text = "";
+  let at = 0;
+  for (;;) {
+    const open = html.indexOf("<", at);
+    const close = open === -1 ? -1 : html.indexOf(">", open);
+    if (close === -1) return text + html.slice(at);
+    text += html.slice(at, open);
+    at = close + 1;
+  }
+}
+
 /** A search result's title as text: its `<em class="keyword">` marks gone, its entities read. */
 export function cleanTitle(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, "")
+  return textOutsideTags(html)
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name: string) => {
       if (name.startsWith("#")) {
         const code =
@@ -193,24 +211,36 @@ export class BilibiliClient {
     return isPlainObject(body.data) ? body.data : {};
   }
 
-  /** The series and seasons of space `mid`, with their names and totals. */
+  /**
+   * The series and seasons of space `mid`, with their names and totals, series first: as many
+   * pages as its total of lists takes, 10 at most.
+   */
   async spaceLists(mid: string): Promise<NamedList[]> {
-    const data = await this.#api(
-      "/x/polymer/web-space/seasons_series_list",
-      { mid, page_num: 1, page_size: 20 },
-      spaceUrl(mid),
-    );
-    const lists = isPlainObject(data.items_lists) ? data.items_lists : {};
-    const named = (type: "series" | "season", key: string, idKey: string): NamedList[] =>
-      records(lists[key]).flatMap((item) => {
-        const meta = isPlainObject(item.meta) ? item.meta : {};
-        const id = text(meta[idKey]);
-        return id === "" ? [] : [{ type, id, name: text(meta.name), total: count(meta.total) }];
-      });
-    return [
-      ...named("series", "series_list", "series_id"),
-      ...named("season", "seasons_list", "season_id"),
-    ];
+    const series: NamedList[] = [];
+    const seasons: NamedList[] = [];
+    for (let page = 1; page <= MAX_SPACE_PAGES; page++) {
+      const data = await this.#api(
+        "/x/polymer/web-space/seasons_series_list",
+        { mid, page_num: page, page_size: SPACE_PAGE_SIZE },
+        spaceUrl(mid),
+      );
+      const lists = isPlainObject(data.items_lists) ? data.items_lists : {};
+      const take = (into: NamedList[], key: string, type: NamedList["type"], idKey: string) => {
+        const items = records(lists[key]);
+        for (const item of items) {
+          const meta = isPlainObject(item.meta) ? item.meta : {};
+          const id = text(meta[idKey]);
+          if (id !== "") into.push({ type, id, name: text(meta.name), total: count(meta.total) });
+        }
+        return items.length;
+      };
+      const onPage =
+        take(series, "series_list", "series", "series_id") +
+        take(seasons, "seasons_list", "season", "season_id");
+      const total = isPlainObject(lists.page) ? count(lists.page.total) : 0;
+      if (onPage < SPACE_PAGE_SIZE || page * SPACE_PAGE_SIZE >= total) break;
+    }
+    return [...series, ...seasons];
   }
 
   /** Every video of list `list` in space `mid`, as many pages as it takes, 50 at most. */

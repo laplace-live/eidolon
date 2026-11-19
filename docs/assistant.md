@@ -438,9 +438,9 @@ and `description` the worker's prompt lists, and whose body and files the worker
 ### The built-in skills
 
 Skills Eidolon ships, in `packages/assistant/skills/<name>/`, which the npm build copies to the
-package's `skills/` (`copyTracked`, so only tracked files ship). They are in every task's catalog
-and her `start_task` enum, so every task offers `skill`, and they are the owner's to switch off or
-replace by name. Production never loads them: it has no assistant.
+package's `skills/` (`copyTracked`, so only tracked files ship). Until the owner switches one off
+or replaces it with a skill of its name, each is in every task's catalog and her `start_task`
+enum, so every task offers `skill`. Production never loads them: it has no assistant.
 
 - **`persona-update`** finds a persona's new streams and saves them as a batch in her sources,
   which Studio's Videos tab then downloads, prices and transcribes. It runs `eidolon discover

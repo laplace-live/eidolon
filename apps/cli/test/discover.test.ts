@@ -19,11 +19,20 @@ beforeEach(() => {
 });
 afterEach(() => {
   logs.stop();
-  rmSync(sourceFolder("milky-green", "lists"), { recursive: true, force: true });
+  for (const folder of ["lists", "streams", "vods"] as const) {
+    rmSync(sourceFolder("milky-green", folder), { recursive: true, force: true });
+  }
 });
 
-function bilibili() {
+/** Bilibili with her 直播回放 list, and a search whose long videos are `long`. */
+function bilibili(long: readonly unknown[] = []) {
   return fakeBilibili({
+    "/x/polymer/web-space/seasons_series_list": () => ({
+      items_lists: {
+        page: { page_num: 1, page_size: 20, total: 1 },
+        series_list: [{ meta: { name: "直播回放", total: 2, series_id: 2484684 } }],
+      },
+    }),
     "/x/series/archives": () => ({
       archives: [
         {
@@ -42,8 +51,23 @@ function bilibili() {
       page: { total: 2 },
     }),
     "/x/web-interface/view": () => ({ owner: { mid: 2132180406, name: "明前奶绿" } }),
-    "/x/web-interface/search/type": () => ({ numPages: 0, result: [] }),
+    "/x/web-interface/search/type": (url) =>
+      url.searchParams.get("duration") === "4"
+        ? { numPages: 1, result: long }
+        : { numPages: 0, result: [] },
   });
+}
+
+/** Her lists: one batch, which names her 直播回放 list. */
+function writeLists(): string {
+  const lists = sourceFolder("milky-green", "lists");
+  mkdirSync(join(lists, "batches"), { recursive: true });
+  writeFileSync(join(lists, "video-full.txt"), "BV1aaaaaaaa2\n");
+  writeFileSync(
+    join(lists, "batches", "videos-2026-09-18-021237.txt"),
+    `# Source: ${SERIES}\nhttps://www.bilibili.com/video/BV1zzzzzzzz1\n`,
+  );
+  return lists;
 }
 
 test("-h prints the help", async () => {
@@ -60,6 +84,10 @@ test("a channel, a page count or a length it can't use is a usage error", async 
     [
       ["--channel", "https://example.com/x"],
       "argument --channel: not a Bilibili space or list, nor a YouTube channel: 'https://example.com/x'",
+    ],
+    [
+      ["--channel", "https://space.bilibili.com/1/lists/x?type=series"],
+      "argument --channel: not a Bilibili space or list, nor a YouTube channel: 'https://space.bilibili.com/1/lists/x?type=series'",
     ],
     [["--pages", "0"], "argument --pages: must be from 1 to 50"],
     [["--pages", "51"], "argument --pages: must be from 1 to 50"],
@@ -78,20 +106,23 @@ test("a channel, a page count or a length it can't use is a usage error", async 
 });
 
 test("prints what is new as JSON, and --save writes it into the persona's lists", async () => {
-  const lists = sourceFolder("milky-green", "lists");
-  mkdirSync(join(lists, "batches"), { recursive: true });
-  writeFileSync(join(lists, "video-full.txt"), "BV1aaaaaaaa2\n");
-  writeFileSync(
-    join(lists, "batches", "videos-2026-09-18-021237.txt"),
-    `# Source: ${SERIES}\nhttps://www.bilibili.com/video/BV1zzzzzzzz1\n`,
-  );
+  const lists = writeLists();
   const io = captureIo();
   const options = { bilibili: { fetch: bilibili().fetch, pauseMs: 0 }, now: () => NOW };
   expect(await discoverMain(["--save"], { ...io.io, options })).toBe(0);
   const batch = join(lists, "batches", download.batchName(NOW));
   expect(JSON.parse(io.stdout())).toEqual({
     persona: { id: "milky-green", name: "明前奶绿" },
-    channels: [{ url: SERIES, site: "bilibili", from: "batch", name: "明前奶绿", videos: 2 }],
+    channels: [
+      {
+        url: SERIES,
+        site: "bilibili",
+        from: "batch",
+        name: "明前奶绿",
+        list: "直播回放",
+        videos: 2,
+      },
+    ],
     candidates: [],
     official: {
       count: 1,
@@ -128,6 +159,40 @@ test("prints what is new as JSON, and --save writes it into the persona's lists"
       "",
     ].join("\n"),
   );
+});
+
+test("a transcript is dated by its info.json in the persona's vods", async () => {
+  writeLists();
+  // Uploaded on the 13th, of the 12th's stream.
+  const streams = sourceFolder("milky-green", "streams");
+  const vods = sourceFolder("milky-green", "vods");
+  mkdirSync(streams, { recursive: true });
+  mkdirSync(vods, { recursive: true });
+  writeFileSync(join(streams, "2026-11-13-BV1qqqqqqq01.md"), "---\nduration_min: 120\n---\n");
+  writeFileSync(
+    join(vods, "BV1qqqqqqq01.info.json"),
+    JSON.stringify({ title: "【明前奶绿】 2026年11月12日20点场" }),
+  );
+  const recording = (bvid: string, day: number) => ({
+    bvid,
+    mid: 9,
+    author: "搬运",
+    title: `【明前奶绿】 2026年11月${day}日20点场`,
+    duration: "150:0",
+    pubdate: Date.parse(`2026-11-${day}T15:00:00Z`) / 1000,
+  });
+  const io = captureIo();
+  const options = {
+    bilibili: {
+      fetch: bilibili([recording("BV1rrrrrrr13", 13), recording("BV1rrrrrrr12", 12)]).fetch,
+      pauseMs: 0,
+    },
+  };
+  expect(await discoverMain([], { ...io.io, options })).toBe(0);
+  const found = JSON.parse(io.stdout()) as { recordings: { videos: { url: string }[] } };
+  expect(found.recordings.videos.map(({ url }) => url)).toEqual([
+    "https://www.bilibili.com/video/BV1rrrrrrr13",
+  ]);
 });
 
 test("a list it can't read prints why and exits 1", async () => {

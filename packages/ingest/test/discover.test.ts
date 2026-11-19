@@ -12,12 +12,15 @@ import { fakeBilibili, type Route } from "./discover_helpers.ts";
 let work = "";
 let lists = "";
 let streams = "";
+let vods = "";
 beforeEach(() => {
   work = mkdtempSync(join(tmpdir(), "ingest-discover-"));
   lists = join(work, "lists");
   streams = join(work, "streams");
+  vods = join(work, "vods");
   mkdirSync(join(lists, "batches"), { recursive: true });
   mkdirSync(streams);
+  mkdirSync(vods);
   logger.setSink(() => {});
 });
 afterEach(() => {
@@ -145,27 +148,44 @@ function routes(overrides: Readonly<Record<string, Route>> = {}): Record<string,
   };
 }
 
-/** A yt-dlp that lists a channel's /streams tab as --flat-playlist prints it. */
-function fakeYtDlp(): string {
-  const path = join(work, "yt-dlp");
-  const entry = (id: string, title: string, extra: string) =>
-    `{"webpage_url": "https://www.youtube.com/watch?v=${id}", "id": "${id}", "title": "${title}"${extra}}`;
+interface Stream {
+  readonly id: string;
+  readonly title: string;
+  readonly duration?: number;
+  readonly live_status: string;
+}
+
+const STREAMS: readonly Stream[] = [
+  { id: "AAAAAAAAAA1", title: "past", duration: 7200, live_status: "was_live" },
+  { id: "AAAAAAAAAA2", title: "soon", live_status: "is_upcoming" },
+  { id: "AAAAAAAAAA3", title: "listed", duration: 3600, live_status: "was_live" },
+];
+
+/** yt-dlp options whose yt-dlp lists `streams` as a channel's /streams tab, as --flat-playlist prints it. */
+function youtube(streams: readonly Stream[] = STREAMS): discover.DiscoverOptions["expand"] {
+  const dir = mkdtempSync(join(work, "yt-dlp-"));
+  const listing = join(dir, "streams.jsonl");
+  writeFileSync(
+    listing,
+    streams
+      .map(({ id, ...rest }) =>
+        JSON.stringify({ webpage_url: `https://www.youtube.com/watch?v=${id}`, id, ...rest }),
+      )
+      .join("\n"),
+  );
+  const path = join(dir, "yt-dlp");
   writeFileSync(
     path,
     `#!/bin/sh
 for arg in "$@"; do url=$arg; done
 case $url in
-  */streams)
-    printf '%s\\n' '${entry("AAAAAAAAAA1", "past", ', "duration": 7200, "live_status": "was_live"')}'
-    printf '%s\\n' '${entry("AAAAAAAAAA2", "soon", ', "live_status": "is_upcoming"')}'
-    printf '%s\\n' '${entry("AAAAAAAAAA3", "listed", ', "duration": 3600, "live_status": "was_live"')}'
-    ;;
+  */streams) cat '${listing}' ;;
   *) echo "ERROR: unexpected $url" >&2; exit 1 ;;
 esac
 `,
   );
   chmodSync(path, 0o755);
-  return path;
+  return { ytDlp: { path, source: "setting" }, cookiesFromBrowser: null, cookiesFile: null };
 }
 
 function writeLists(): void {
@@ -196,15 +216,22 @@ function options(
     persona: PERSONA,
     listsDir: lists,
     streamsDir: streams,
+    vodsDir: vods,
     timeZone: "Asia/Shanghai",
     bilibili: { fetch, pauseMs: 0 },
-    expand: {
-      ytDlp: { path: fakeYtDlp(), source: "setting" },
-      cookiesFromBrowser: null,
-      cookiesFile: null,
-    },
+    expand: youtube(),
     ...extra,
   };
+}
+
+/** routes() with a search whose long videos are `long`, and no other video or user. */
+function searching(long: readonly unknown[]): Record<string, Route> {
+  return routes({
+    "/x/web-interface/search/type": (url) =>
+      url.searchParams.get("search_type") === "bili_user"
+        ? { result: [] }
+        : { numPages: 1, result: url.searchParams.get("duration") === "4" ? long : [] },
+  });
 }
 
 const video = (
@@ -342,22 +369,18 @@ describe("discoverVideos", () => {
       "https://www.bilibili.com/video/BV1cccccccc1",
       "https://www.bilibili.com/video/BV1cccccccc2",
     ]);
-    expect(found.batch).toBe(join(lists, "batches", download.batchName(now)));
-    expect(
-      readFileSync(found.batch as string, "utf8")
-        .split("\n")
-        .slice(0, 4),
-    ).toEqual([
+    const batch = found.batch as string;
+    expect(batch).toBe(join(lists, "batches", download.batchName(now)));
+    const lines = readFileSync(batch, "utf8").split("\n");
+    expect(lines.slice(0, 6)).toEqual([
       "# Source: https://www.youtube.com/@milky",
       `# Source: ${SERIES}`,
       `# Captured: ${download.localIsoSeconds(now)}`,
       "# Official: 4; recordings: 2; clips: 2",
+      "# Covers: 2026-11-18 https://www.bilibili.com/video/BV1bbbbbbbb1",
+      "# Covers: 2026-11-09 https://www.bilibili.com/video/BV1bbbbbbbb8",
     ]);
-    expect(
-      readFileSync(found.batch as string, "utf8")
-        .split("\n")
-        .slice(4, -1),
-    ).toEqual([
+    const saved = [
       "https://www.bilibili.com/video/BV1aaaaaaaa1",
       "https://www.bilibili.com/video/BV1aaaaaaaa3",
       "https://www.bilibili.com/video/BV1bbbbbbbb5",
@@ -366,6 +389,16 @@ describe("discoverVideos", () => {
       "https://www.bilibili.com/video/BV1bbbbbbbb8",
       "https://www.bilibili.com/video/BV1cccccccc1",
       "https://www.bilibili.com/video/BV1cccccccc2",
+    ];
+    expect(lines.slice(6, -1)).toEqual(saved);
+    // What reads a list's videos reads past the header.
+    const keys = saved.map((url) => download.listKey(url) as string);
+    expect(download.readIds(batch)).toEqual(keys);
+    expect([...download.knownIds(lists)]).toEqual(expect.arrayContaining(keys));
+    const capture = join(work, "capture.txt");
+    writeFileSync(capture, "BV1aaaaaaaa1\nBV1zzzzzzzz9\n");
+    expect(download.prepareBatch(lists, capture, 2, { dryRun: true }).new_ids).toEqual([
+      "BV1zzzzzzzz9",
     ]);
 
     // Run again: the batch is a list like the others, and remembers the YouTube channel.
@@ -407,14 +440,196 @@ describe("discoverVideos", () => {
       ["https://www.bilibili.com/video/BV1bbbbbbbb2", "2026-11-18"],
       ["https://www.bilibili.com/video/BV1bbbbbbbb8", "2026-11-09"],
     ]);
+    expect(download.readIds(found.batch as string)).toEqual([
+      "BV1aaaaaaaa3",
+      "BV1bbbbbbbb5",
+      "BV1bbbbbbbb2",
+      "BV1bbbbbbbb8",
+    ]);
+  });
+
+  test("a YouTube replay is dated by its title, and covers that day", async () => {
+    const found = await discover.discoverVideos(
+      options(
+        fakeBilibili(
+          searching([
+            result(
+              "BV1hhhhhhh01",
+              205,
+              "搬运",
+              "【明前奶绿】 2026年11月13日20点场",
+              "150:0",
+              "2026-11-13T15:00:00Z",
+            ),
+            result(
+              "BV1hhhhhhh02",
+              205,
+              "搬运",
+              "【明前奶绿】 2026年11月12日20点场",
+              "150:0",
+              "2026-11-12T15:00:00Z",
+            ),
+          ]),
+        ).fetch,
+        {
+          channels: ["https://www.youtube.com/@milky"],
+          expand: youtube([
+            {
+              id: "AAAAAAAAAA4",
+              title: "【歌回】2026年11月13日",
+              duration: 5400,
+              live_status: "was_live",
+            },
+            { id: "AAAAAAAAAA5", title: "雑談", duration: 3600, live_status: "was_live" },
+          ]),
+        },
+      ),
+    );
+    expect(found.official.videos.map(({ url, date }) => [url, date])).toEqual([
+      ["https://www.youtube.com/watch?v=AAAAAAAAAA4", "2026-11-13"],
+      ["https://www.youtube.com/watch?v=AAAAAAAAAA5", null],
+    ]);
+    expect(found.recordings.videos.map(({ url }) => url)).toEqual([
+      "https://www.bilibili.com/video/BV1hhhhhhh02",
+    ]);
+  });
+
+  test("a saved recording's # Covers: line keeps its days covered once the search misses it", async () => {
+    const now = new Date("2026-11-19T21:00:00Z");
+    const saved = await discover.discoverVideos(
+      options(
+        fakeBilibili(
+          searching([
+            result(
+              "BV1kkkkkkk01",
+              205,
+              "搬运",
+              "【明前奶绿】 2026年11月13日20点场",
+              "150:0",
+              "2026-11-13T15:00:00Z",
+            ),
+            // Uploaded at 01:00 on the 12th: maybe the 11th's stream.
+            result("BV1kkkkkkk02", 206, "路人", "奶绿的直播", "200:0", "2026-11-11T17:00:00Z"),
+          ]),
+        ).fetch,
+        { save: true, now: () => now },
+      ),
+    );
     expect(
-      readFileSync(found.batch as string, "utf8")
+      readFileSync(saved.batch as string, "utf8")
         .split("\n")
-        .slice(4, -1),
+        .filter((line) => line.startsWith("# Covers:")),
     ).toEqual([
-      "https://www.bilibili.com/video/BV1aaaaaaaa3",
-      "https://www.bilibili.com/video/BV1bbbbbbbb5",
-      "https://www.bilibili.com/video/BV1bbbbbbbb2",
+      "# Covers: 2026-11-13 https://www.bilibili.com/video/BV1kkkkkkk01",
+      "# Covers: 2026-11-12 2026-11-11 https://www.bilibili.com/video/BV1kkkkkkk02",
+    ]);
+
+    // Others' uploads of those days, the saved ones no longer among the results.
+    const later = await discover.discoverVideos(
+      options(
+        fakeBilibili(
+          searching([
+            result(
+              "BV1kkkkkkk03",
+              207,
+              "别人",
+              "【明前奶绿】 2026年11月13日 2000开播",
+              "160:0",
+              "2026-11-13T16:00:00Z",
+            ),
+            result(
+              "BV1kkkkkkk04",
+              207,
+              "别人",
+              "【明前奶绿】 2026年11月11日 2000开播",
+              "160:0",
+              "2026-11-11T16:00:00Z",
+            ),
+            result(
+              "BV1kkkkkkk05",
+              207,
+              "别人",
+              "【明前奶绿】 2026年11月10日 2000开播",
+              "160:0",
+              "2026-11-10T16:00:00Z",
+            ),
+          ]),
+        ).fetch,
+      ),
+    );
+    expect(later.recordings.videos.map(({ url }) => url)).toEqual([
+      "https://www.bilibili.com/video/BV1kkkkkkk05",
+    ]);
+  });
+
+  test("of two recordings dated by their uploads a day apart, which may hold one stream, one is picked", async () => {
+    const found = await discover.discoverVideos(
+      options(
+        fakeBilibili(
+          searching([
+            // 01:00 and 00:30 on the 13th, then 22:00 on the 12th: maybe all of the 12th's stream.
+            result("BV1mmmmmmm01", 206, "路人", "奶绿的直播", "100:0", "2026-11-12T17:00:00Z"),
+            result("BV1mmmmmmm02", 207, "路人乙", "奶绿 直播录像", "150:0", "2026-11-12T16:30:00Z"),
+            result("BV1mmmmmmm03", 208, "路人丙", "奶绿 录屏", "200:0", "2026-11-12T14:00:00Z"),
+            result("BV1mmmmmmm04", 208, "路人丙", "奶绿 录屏", "90:0", "2026-11-10T14:00:00Z"),
+          ]),
+        ).fetch,
+      ),
+    );
+    // Of the same day, the longer.
+    expect(found.recordings.videos.map(({ url, date }) => [url, date])).toEqual([
+      ["https://www.bilibili.com/video/BV1mmmmmmm02", "2026-11-13"],
+      ["https://www.bilibili.com/video/BV1mmmmmmm04", "2026-11-10"],
+    ]);
+  });
+
+  test("a recording her lists hold, dated by its upload, covers the day before too", async () => {
+    writeFileSync(join(lists, "video-full.txt"), "BV1nnnnnnn01\n");
+    const found = await discover.discoverVideos(
+      options(
+        fakeBilibili(
+          searching([
+            // Uploaded at 01:00 on the 14th: maybe the 13th's stream.
+            result("BV1nnnnnnn01", 206, "路人", "奶绿的直播", "200:0", "2026-11-13T17:00:00Z"),
+            result(
+              "BV1nnnnnnn02",
+              205,
+              "搬运",
+              "【明前奶绿】 2026年11月13日20点场",
+              "150:0",
+              "2026-11-13T15:00:00Z",
+            ),
+            result(
+              "BV1nnnnnnn03",
+              205,
+              "搬运",
+              "【明前奶绿】 2026年11月12日20点场",
+              "150:0",
+              "2026-11-12T15:00:00Z",
+            ),
+          ]),
+        ).fetch,
+      ),
+    );
+    expect(found.recordings.videos.map(({ url }) => url)).toEqual([
+      "https://www.bilibili.com/video/BV1nnnnnnn03",
+    ]);
+  });
+
+  test("a transcript covers its stream's day: an official video's as listed, another's by its info.json title", async () => {
+    writeLists();
+    // Named a day after their streams, by their uploads in UTC: a part of the official replay of
+    // the 17th, and a recording of the 8th.
+    writeFileSync(join(streams, "2026-11-18-BV1aaaaaaaa2_p1.md"), "---\nduration_min: 60\n---\n");
+    writeFileSync(join(streams, "2026-11-09-BV1fffffff01.md"), "---\nduration_min: 150\n---\n");
+    writeFileSync(
+      join(vods, "BV1fffffff01.info.json"),
+      JSON.stringify({ upload_date: "20261109", title: "【明前奶绿】 2026年11月08日20点场" }),
+    );
+    const found = await discover.discoverVideos(options(fakeBilibili(routes()).fetch));
+    // The 18th's and the 9th's, as without those transcripts.
+    expect(found.recordings.videos.map(({ url }) => url)).toEqual([
+      "https://www.bilibili.com/video/BV1bbbbbbbb1",
       "https://www.bilibili.com/video/BV1bbbbbbbb8",
     ]);
   });
@@ -461,6 +676,30 @@ describe("discoverVideos", () => {
       "Bilibili's search for videos failed at page 1: HTTP 412 from /x/web-interface/search/type",
     ]);
     expect([found.official.count, found.recordings.count, found.clips.count]).toEqual([0, 0, 0]);
+  });
+
+  test("a list given whose space's lists or uploader can't be read is listed, with warnings", async () => {
+    const bilibili = fakeBilibili(
+      routes({
+        "/x/polymer/web-space/seasons_series_list": () =>
+          Response.json({ code: -352, message: "-352" }),
+        "/x/web-interface/view": () => Response.json({ code: -404, message: "啥都木有" }),
+      }),
+    );
+    const found = await discover.discoverVideos(
+      options(bilibili.fetch, { channels: [SERIES], pages: 1 }),
+    );
+    // Her name from her own upload the search found.
+    expect(found.channels).toEqual([
+      { url: SERIES, site: "bilibili", from: "argument", name: "明前奶绿", videos: 3 },
+    ]);
+    expect(found.warnings).toEqual([
+      "Couldn't read the lists of https://space.bilibili.com/100, so whether " +
+        `${SERIES} is a 直播回放 list is unknown: ` +
+        "/x/polymer/web-space/seasons_series_list answered code -352",
+      "Couldn't read who uploaded https://www.bilibili.com/video/BV1aaaaaaaa1: " +
+        "/x/web-interface/view answered code -404 (啥都木有)",
+    ]);
   });
 
   test("with no official channel known, the users named like her are candidates, those with a 直播回放 list first", async () => {
@@ -674,7 +913,93 @@ describe("discoverVideos", () => {
     });
     expect(await client.listVideos(SPACE, { type: "series", id: "7" })).toHaveLength(101);
   });
+
+  test("a space's lists run to as many pages as their total takes, 10 at most", async () => {
+    const read = async (answer: (page: number) => unknown) => {
+      const bilibili = fakeBilibili({
+        "/x/polymer/web-space/seasons_series_list": (url) =>
+          answer(Number(url.searchParams.get("page_num"))),
+      });
+      const client = new discover.BilibiliClient({ fetch: bilibili.fetch, pauseMs: 0 });
+      const found = await client.spaceLists(SPACE);
+      const asked = bilibili.sent.filter(({ url }) => url.pathname.endsWith("seasons_series_list"));
+      return {
+        found,
+        pages: asked.map(({ url }) => [
+          url.searchParams.get("page_num"),
+          url.searchParams.get("page_size"),
+        ]),
+      };
+    };
+    const paged = await read(laterReplayList);
+    expect(paged.pages).toEqual([
+      ["1", "20"],
+      ["2", "20"],
+    ]);
+    expect(paged.found).toHaveLength(21);
+    expect(paged.found[0]).toEqual({ type: "series", id: "7", name: "直播回放", total: 3 });
+    const short = await read(() => ({
+      items_lists: { page: { total: 100 }, seasons_list: seasons(1, 5) },
+    }));
+    expect(short.pages).toHaveLength(1);
+    const long = await read((page) => ({
+      items_lists: { page: { total: 1000 }, seasons_list: seasons(page, 20) },
+    }));
+    expect(long.pages).toHaveLength(10);
+  });
+
+  test("a 直播回放 list on a later page of a space's lists is found, for the space given and its candidate", async () => {
+    const given = await discover.discoverVideos(
+      options(
+        fakeBilibili(
+          routes({
+            "/x/polymer/web-space/seasons_series_list": (url) =>
+              laterReplayList(Number(url.searchParams.get("page_num"))),
+          }),
+        ).fetch,
+        { channels: ["https://space.bilibili.com/100"], pages: 1 },
+      ),
+    );
+    expect(given.channels.map(({ url, list }) => [url, list])).toEqual([[SERIES, "直播回放"]]);
+    const searched = await discover.discoverVideos(
+      options(
+        fakeBilibili(
+          routes({
+            "/x/polymer/web-space/seasons_series_list": (url) =>
+              laterReplayList(Number(url.searchParams.get("page_num"))),
+            "/x/web-interface/search/type": (url) =>
+              url.searchParams.get("search_type") === "bili_user"
+                ? { result: [{ mid: 100, uname: "明前奶绿", fans: 1, videos: 1, room_id: 0 }] }
+                : { numPages: 0, result: [] },
+          }),
+        ).fetch,
+        { pages: 1 },
+      ),
+    );
+    expect(searched.candidates.map(({ replayLists }) => replayLists)).toEqual([
+      [{ url: SERIES, name: "直播回放", videos: 3 }],
+    ]);
+  });
 });
+
+/** `count` of a space's seasons as page `page` of its lists has them. */
+function seasons(page: number, count: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    meta: { name: `合集${page}-${i}`, total: 1, season_id: page * 100 + i },
+  }));
+}
+
+/** Page `page` of a space's 21 lists: 20 seasons, then its 直播回放 series. */
+function laterReplayList(page: number) {
+  return {
+    items_lists: {
+      page: { page_num: page, page_size: 20, total: 21 },
+      ...(page === 1
+        ? { seasons_list: seasons(1, 20) }
+        : { series_list: [{ meta: { name: "直播回放", total: 3, series_id: 7 } }] }),
+    },
+  };
+}
 
 describe("channels", () => {
   test("parseChannel normalizes a space, its lists and a YouTube channel", () => {
@@ -701,6 +1026,11 @@ describe("channels", () => {
         "https://space.bilibili.com/1/channel/collectiondetail?sid=9",
         "https://space.bilibili.com/1/lists/9?type=season",
       ],
+      // The lists tab is the space's; a list's URL with a malformed id is no channel.
+      ["https://space.bilibili.com/1/lists", "https://space.bilibili.com/1"],
+      ["https://space.bilibili.com/1/lists/7x?type=series", null],
+      ["https://space.bilibili.com/1/channel/seriesdetail?sid=x", null],
+      ["https://space.bilibili.com/1/channel/collectiondetail", null],
       ["https://space.bilibili.com/x", null],
       ["https://www.bilibili.com/video/BV1aaaaaaaa1", null],
       ["https://www.youtube.com/@hololive/streams", "https://www.youtube.com/@hololive"],
@@ -775,5 +1105,8 @@ describe("parsing", () => {
         '【<em class="keyword">灰泽满</em>Hazel】A &amp; B &#x4E00;&#20108; &bogus;',
       ),
     ).toBe("【灰泽满Hazel】A & B 一二 &bogus;");
+    // A tag runs to the first `>`; a `<` with none after it is text.
+    expect(discover.cleanTitle("<scr<b>ipt>x</b> &lt;i&gt;")).toBe("ipt>x <i>");
+    expect(discover.cleanTitle("奶绿<3 2026年11月19日")).toBe("奶绿<3 2026年11月19日");
   });
 });

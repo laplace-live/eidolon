@@ -95,7 +95,9 @@ channels are the ones `--channel` names and the ones on her batches' `# Source:`
 prepare-batch's series URL among them, so a persona whose batches name hers needs no
 `--channel`. `--save` writes the new videos into a new batch headed by a `# Source:` line for each
 channel it listed, a space given whole by its 直播回放 list's URL, which is how the next run finds
-them again; to forget a channel, delete its `# Source:` line from every batch that has one.
+them again; to forget a channel, delete its `# Source:` line from every batch that has one. Each
+recording it saves gets a `# Covers: <day>[ <day>] <url>` line there too, the days that recording
+covers, so no later run lists another upload of those days.
 
 ## Layers
 

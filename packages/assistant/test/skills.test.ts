@@ -732,7 +732,9 @@ describe("the built-in skills", () => {
     const builtin = join(root, "app", "skills");
     writeSkill(join(owner, "house-style"), "name: house-style\ndescription: The owner's style.");
     writeSkill(join(owner, "update"), "name: update\ndescription: The owner's own update.");
+    writeSkill(join(shared, "ship"), "name: ship\ndescription: The agents' way to ship.");
     const replaced = writeSkill(join(builtin, "update"), "name: update\ndescription: Update it.");
+    const outshared = writeSkill(join(builtin, "ship"), "name: ship\ndescription: Ship it.");
     writeSkill(join(builtin, "persona-update"), "name: persona-update\ndescription: New streams.");
     const planted = writeSkill(
       join(folder, ".agents", "skills", "persona-update"),
@@ -743,12 +745,14 @@ describe("the built-in skills", () => {
       ["persona-update", "builtin"],
       ["house-style", "owner"],
       ["update", "owner"],
+      ["ship", "shared"],
     ]);
     expect(messages(problems)).toEqual([
+      `shadowed by the shared folder's ${join(shared, "ship", "SKILL.md")}`,
       `shadowed by the owner's ${join(owner, "update", "SKILL.md")}`,
       `shadowed by the built-in ${join(builtin, "persona-update", "SKILL.md")}`,
     ]);
-    expect(problems.map((problem) => problem.path)).toEqual([replaced, planted]);
+    expect(problems.map((problem) => problem.path)).toEqual([outshared, replaced, planted]);
     expect(skillEntry(skills[0] as Skill)).toBe(
       '<skill name="persona-update" from="builtin">New streams.</skill>',
     );

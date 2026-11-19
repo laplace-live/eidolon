@@ -208,17 +208,18 @@ async function checkPackage(tarball: string, temp: string): Promise<void> {
       help.code === 0 && help.stdout.startsWith("usage: "),
       `exit ${help.code}${help.code === 0 ? "" : `: ${help.stderr.trim()}`}`,
     );
-    // As a task's command runs it: on the system's PATH alone, with no EIDOLON_HOME.
-    const command = join(env.EIDOLON_HOME, "bin", "eidolon");
+    // As a task's command runs it: a shell finding it first on a PATH of the system's folders
+    // otherwise, with no EIDOLON_HOME.
+    const commands = join(env.EIDOLON_HOME, "bin");
     const tasks = await run(
-      [command, "discover", "--help"],
-      { PATH: "/usr/bin:/bin", HOME: home },
+      ["/bin/sh", "-c", "eidolon discover --help"],
+      { PATH: `${commands}:/usr/bin:/bin`, HOME: home },
       temp,
     );
     check(
       "tasks' eidolon",
       tasks.code === 0 && tasks.stdout.startsWith("usage: "),
-      `${command} discover --help: exit ${tasks.code}` +
+      `eidolon discover --help with ${commands} first on PATH: exit ${tasks.code}` +
         `${tasks.code === 0 ? "" : `: ${tasks.stderr.trim()}`}`,
     );
     const skills = await fetch(`${app.origin}/api/local/skills`, { headers: session });
