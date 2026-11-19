@@ -1,5 +1,20 @@
 # @laplace.live/eidolon
 
+## 0.11.0
+
+### Minor Changes
+
+- e4da444: Choose per chat how much her tasks ask you, from Ask for Approval to Full Access
+- 3579673: Find the app's pages and your chats in a sidebar on the left, as in a chat app
+- 9e7d364: Type / in a chat to pick a command, or one of your skills for her task
+- 727445b: Manage skills in Settings, use ~/.agents/skills, and name a skill to her
+
+### Patch Changes
+
+- b7f210e: The local app is now LAPLACE Eidolon, with a new logo and tab icon
+- 2ed56dc: A blue theme for the local app
+- 1205a07: Hear and transcribe with Soniox's v6 models by default
+
 ## 0.10.0
 
 ### Minor Changes
