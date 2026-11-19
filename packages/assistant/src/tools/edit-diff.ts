@@ -394,14 +394,15 @@ export function applyEditsToNormalizedContent(
   const matchedEdits: MatchedEdit[] = [];
   for (let i = 0; i < normalizedEdits.length; i++) {
     const edit = normalizedEdits[i] as Edit;
-    // Whitespace alone normalizes to nothing, which is found anywhere: it is found and counted as
-    // it is.
+    // Whitespace alone normalizes to nothing, which is found anywhere, and trailing whitespace isn't
+    // in the view at all: it is found and counted as it is, in the text itself.
     const whitespace = fuzzyOldTexts[i] === "";
+    const searched = whitespace ? normalizedContent : replacementBaseContent;
     const fuzzyOldText = whitespace ? edit.oldText : (fuzzyOldTexts[i] as string);
-    const matchResult = fuzzyFindText(replacementBaseContent, edit.oldText, fuzzyOldText);
+    const matchResult = fuzzyFindText(searched, edit.oldText, fuzzyOldText);
     if (!matchResult.found) throw getNotFoundError(path, i, normalizedEdits.length);
 
-    const counted = whitespace ? replacementBaseContent : view.text;
+    const counted = whitespace ? normalizedContent : view.text;
     const occurrences = counted.split(fuzzyOldText).length - 1;
     if (occurrences > 1) throw getDuplicateError(path, i, normalizedEdits.length, occurrences);
 
@@ -412,7 +413,7 @@ export function applyEditsToNormalizedContent(
       newText: edit.newText,
     };
     matchedEdits.push(
-      usedFuzzyMatch ? { ...matched, ...replacementOfView(view, matched) } : matched,
+      usedFuzzyMatch && !whitespace ? { ...matched, ...replacementOfView(view, matched) } : matched,
     );
   }
 

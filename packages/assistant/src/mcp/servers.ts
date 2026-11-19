@@ -48,6 +48,8 @@ export interface McpProblem {
   readonly error: string;
   /** The entry is turned off, so no task tries to start it. */
   readonly off?: true;
+  /** The entry isn't an object, which patchMcpServer can't change: only an edit of the file does. */
+  readonly unchangeable?: true;
 }
 
 export interface McpConfig {
@@ -127,7 +129,12 @@ export function parseMcpConfig(text: string | undefined, path: string): McpConfi
   for (const [name, raw] of Object.entries(parsed.mcpServers ?? {})) {
     const off = isPlainObject(raw) && (raw.enabled === false || raw.disabled === true);
     const problem = (error: string) =>
-      problems.push({ server: name, error, ...(off ? { off: true as const } : {}) });
+      problems.push({
+        server: name,
+        error,
+        ...(off ? { off: true as const } : {}),
+        ...(isPlainObject(raw) ? {} : { unchangeable: true as const }),
+      });
     const result = validateMcpServerConfig(name, raw);
     if (result.kind === "invalid") {
       problem(result.error);

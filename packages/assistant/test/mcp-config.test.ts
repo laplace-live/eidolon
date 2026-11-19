@@ -118,6 +118,14 @@ describe("mcp.json", () => {
     ]);
   });
 
+  test("marks an entry that isn't an object unchangeable: only an edit of the file reaches it", () => {
+    const config = configOf({ listed: "npx some-server", odd: { command: "x", tools: "read" } });
+    expect(config.problems).toEqual([
+      { server: "listed", error: 'server "listed" must be an object', unchangeable: true },
+      { server: "odd", error: 'server "odd": tools must be an array of strings' },
+    ]);
+  });
+
   test("refuses two names that differ only in - and _", () => {
     const config = configOf({ "my-server": { command: "a" }, my_server: { command: "b" } });
     expect(config.servers.map((each) => each.name)).toEqual(["my-server"]);

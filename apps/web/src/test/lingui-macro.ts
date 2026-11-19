@@ -49,7 +49,7 @@ export function linguiMacro() {
 export function linguiReactMacro() {
   const { t } = linguiMacro();
   const translate = (descriptor: unknown): string =>
-    typeof descriptor === "string" ? descriptor : ((descriptor as Descriptor).message ?? "");
+    typeof descriptor === "string" ? descriptor : t(descriptor as Descriptor);
   return {
     useLingui: () => ({ t, i18n: { _: translate, locale: "en" } }),
     Trans: ({ children }: { readonly children?: unknown }) => children,

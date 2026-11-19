@@ -191,6 +191,7 @@ describe("GET mcp", () => {
           github: GITHUB,
           broken: { command: "x", cwd: "relative" },
           local: { command: "npx", args: ["-y", "some-server"] },
+          listed: "npx some-server",
         },
       }),
     );
@@ -237,6 +238,14 @@ describe("GET mcp", () => {
           needs: [],
           problem: 'server "broken": cwd must be an absolute path or start with ~/',
         },
+        {
+          name: "listed",
+          enabled: true,
+          alwaysAllow: [],
+          needs: [],
+          problem: 'server "listed" must be an object',
+          unchangeable: true,
+        },
       ],
       errors: [],
     });
@@ -271,6 +280,26 @@ describe("GET mcp", () => {
 });
 
 describe("PUT mcp/servers/:name", () => {
+  test("turns off an entry that doesn't check out, its other fields left for the owner to fix", async () => {
+    writeFileSync(
+      MCP_JSON(),
+      JSON.stringify({ mcpServers: { odd: { command: "x", tools: "read" } } }),
+    );
+    const call = serve(manager());
+    const off = await call("PUT", "/api/local/mcp/servers/odd", { body: { enabled: false } });
+    expect(off.status).toBe(200);
+    expect(((await off.json()) as McpServersResponse).servers).toEqual([
+      {
+        name: "odd",
+        enabled: false,
+        alwaysAllow: [],
+        needs: [],
+        problem: 'server "odd": tools must be an array of strings',
+      },
+    ]);
+    expect(readMcp().mcpServers.odd).toEqual({ command: "x", tools: "read", enabled: false });
+  });
+
   test("turns a server on, deleting Cline's disabled, and off; takes back one Always; the file keeps the rest, 0600", async () => {
     writeFileSync(
       MCP_JSON(),

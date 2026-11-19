@@ -34,7 +34,7 @@ export function mcpServersView(config: McpConfig, secrets: McpSecrets): McpServe
     problem: null,
   }));
   const errors: string[] = [];
-  for (const { server, error, off } of config.problems) {
+  for (const { server, error, off, unchangeable } of config.problems) {
     if (server === undefined) errors.push(error);
     else {
       servers.push({
@@ -43,6 +43,7 @@ export function mcpServersView(config: McpConfig, secrets: McpSecrets): McpServe
         alwaysAllow: [],
         needs: [],
         problem: error,
+        ...(unchangeable ? { unchangeable } : {}),
       });
     }
   }

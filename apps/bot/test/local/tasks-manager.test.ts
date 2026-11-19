@@ -1226,6 +1226,19 @@ describe("a restart", () => {
     await reach(tasks, seeded.id, "succeeded");
   });
 
+  test("a task a crash left running after its end was stored settles as it ended, never resumed", async () => {
+    // The owner's Stop reached the transcript; the crash came before task.json caught up.
+    const seeded = await seed({ status: "running" }, [
+      { type: "assistant", text: "", calls: [{ id: "c1", name: "write", arguments: {} }] },
+      { type: "tool-start", callId: "c1", name: "write" },
+      { type: "end", outcome: { status: "cancelled" } },
+    ]);
+    const tasks = await booted();
+    expect((await tasks.get(seeded.id)).status).toBe("cancelled");
+    expect((await onDisk(seeded.id))?.outcome).toEqual({ status: "cancelled" });
+    expect(minds.made).toEqual([]);
+  });
+
   test("a task another holder's lock holds is neither resumed nor continued", async () => {
     const seeded = await seed({ status: "interrupted" });
     const running = await seed({ status: "running" });

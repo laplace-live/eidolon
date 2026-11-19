@@ -75,8 +75,7 @@ function ServerRow({
           <Switch
             id={switchId}
             checked={server.enabled}
-            // The server refuses to change an entry that doesn't parse: the file needs fixing.
-            disabled={busy || Boolean(server.problem)}
+            disabled={busy || server.unchangeable === true}
             onCheckedChange={(enabled) => onChange({ enabled })}
           />
           <Label htmlFor={switchId}>{t`Enabled`}</Label>

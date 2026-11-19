@@ -340,19 +340,25 @@ function stepHead(args: Readonly<Record<string, unknown>>): string {
     : head.join("");
 }
 
+/** What an outcome other than a pause makes of its task. */
+function endedChanges(
+  outcome: Exclude<TaskOutcome, { status: "paused" }>,
+  endedAt: number,
+): Changes {
+  return {
+    status: outcome.status,
+    outcome,
+    endedAt,
+    pending: undefined,
+    pause: undefined,
+    inbox: undefined,
+  };
+}
+
 /** What `outcome` makes of a task whose run just ended; null: the server stopped it. */
 function settledChanges(run: Run, outcome: TaskOutcome | null, endedAt: number): Changes {
   if (outcome === null) return { status: "interrupted" };
-  if (outcome.status !== "paused") {
-    return {
-      status: outcome.status,
-      outcome,
-      endedAt,
-      pending: undefined,
-      pause: undefined,
-      inbox: undefined,
-    };
-  }
+  if (outcome.status !== "paused") return endedChanges(outcome, endedAt);
   let pending: TaskPending | undefined;
   if (outcome.reason === "approval") {
     if (run.asked !== null) pending = run.asked;
@@ -928,7 +934,13 @@ export class TaskManager {
       throw error;
     }
     try {
-      await this.#change(task, { status: "interrupted" }, true);
+      // A crash between storing the run's end and task.json: resumed, it would run again.
+      const last = (await openTaskStore(task.dir).entries()).at(-1);
+      const changes: Changes =
+        last?.type === "end" && last.outcome.status !== "paused"
+          ? endedChanges(last.outcome, last.at)
+          : { status: "interrupted" };
+      await this.#change(task, changes, true);
     } finally {
       release();
     }

@@ -409,6 +409,20 @@ describe("edit tool fuzzy matching", () => {
     expect(twice.content).toMatch(/Found 2 occurrences/);
   });
 
+  it("finds trailing whitespace alone beside an edit that needs fuzzy matching", async () => {
+    const testFile = join(testDir, "whitespace-beside-fuzzy.txt");
+    writeFileSync(testFile, "foo   \nsay \u{201c}hi\u{201d}\n");
+    const result = await edit({
+      path: testFile,
+      edits: [
+        { oldText: "   ", newText: "" },
+        { oldText: 'say "hi"', newText: 'say "bye"' },
+      ],
+    });
+    expect(result.content).toContain("Successfully replaced");
+    expect(readFileSync(testFile, "utf-8")).toBe('foo\nsay "bye"\n');
+  });
+
   it("should support fuzzy matching in multi-edit mode", async () => {
     const testFile = join(testDir, "fuzzy-multi.txt");
     writeFileSync(testFile, "console.log(\u{2018}hello\u{2019});\nhello\u{a0}world\n");

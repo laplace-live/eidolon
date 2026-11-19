@@ -227,6 +227,34 @@ describe("MCP Servers", () => {
     );
   });
 
+  test("a broken entry keeps its switch, unless it isn't an object, which only the file changes", () => {
+    const broken = { enabled: true, alwaysAllow: [], needs: [] };
+    const markup = render(createElement(McpServersCard), [
+      [
+        mcpServersQuery.queryKey,
+        {
+          path: "/h/mcp.json",
+          servers: [
+            { ...broken, name: "odd", problem: 'server "odd": tools must be an array of strings' },
+            {
+              ...broken,
+              name: "listed",
+              problem: 'server "listed" must be an object',
+              unchangeable: true,
+            },
+          ],
+          errors: [],
+        },
+      ],
+    ]);
+    const row = (name: string) =>
+      markup.split(`data-mcp-server="${name}"`)[1]?.split("</li>")[0] ?? "";
+    expect(row("odd")).toContain('role="switch"');
+    expect(row("odd")).not.toContain('disabled=""');
+    expect(row("listed")).toContain('role="switch"');
+    expect(row("listed")).toContain('disabled=""');
+  });
+
   test("a server's command reads as mcp.json writes it, its references unresolved", () => {
     expect(commandLine({ command: "npx", args: ["-y", `\${PKG}`] })).toBe(`npx -y \${PKG}`);
     expect(commandLine({ command: undefined, args: undefined })).toBe("");

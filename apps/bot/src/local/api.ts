@@ -1631,6 +1631,8 @@ export interface McpServerView {
   readonly needs: readonly { readonly name: string; readonly set: boolean }[];
   /** Why the entry can't start, in English; null when it checks out. */
   readonly problem: string | null;
+  /** The entry isn't an object, so a PUT can't change it: mcp.json needs fixing first. */
+  readonly unchangeable?: true;
 }
 
 /** GET mcp, and what a PUT leaves. */
