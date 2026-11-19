@@ -126,6 +126,7 @@ export const RESERVED_IDS: ReadonlySet<string> = new Set([
   "servers",
   "session",
   "settings",
+  "skills",
   "status",
   "stop",
   "tasks",

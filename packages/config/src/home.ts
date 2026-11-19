@@ -32,6 +32,15 @@ export function dataHome(): string {
   return configured ? resolve(expandUser(configured)) : join(homedir(), ".laplace", "eidolon");
 }
 
+/**
+ * The Agent Skills folder this computer's agents share: `EIDOLON_SHARED_SKILLS`, or
+ * `~/.agents/skills`. Read from the process environment only.
+ */
+export function sharedSkillsDir(): string {
+  const configured = process.env.EIDOLON_SHARED_SKILLS;
+  return configured ? resolve(expandUser(configured)) : join(homedir(), ".agents", "skills");
+}
+
 /** The personas that ship with the code. */
 export function templatesDir(): string {
   return shippedPath("personas", "personas");

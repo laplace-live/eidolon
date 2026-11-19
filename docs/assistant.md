@@ -17,7 +17,8 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
 | the loop, `runTask`, and its meter, `UsageMeter` | `packages/engine/src/task.ts` and `task/` |
 | the tools, `FolderPolicy`, the worker's prompt, the task's files | `packages/assistant` (`@eidolon/assistant`) |
 | commands: `bash`, `bash_output`, `bash_kill`, their registry `BashJobs`, and the environment they get | `packages/assistant/src/tools/{bash,jobs,shell,output}.ts` |
-| Agent Skills: finding them, and the `skill` tool | `packages/assistant/src/skills.ts`, `tools/skill.ts` |
+| Agent Skills: finding them, the `skill` tool and the skills she names | `packages/assistant/src/skills.ts`, `tools/skill.ts` |
+| the owner's skills for Settings and her names for them, and `skills.json`'s one writer | `apps/bot/src/local/tasks/skills.ts`; `routes/skills.ts` |
 | the MCP client and a task's servers, `McpSession` | `packages/assistant/src/mcp/` |
 | `web_search`, and OpenRouter's searcher | `packages/assistant/src/tools/web-search.ts`; `packages/providers/src/search.ts` |
 | the `assistant` role and its kinds' roles, `createMind("assistant")`, `selectTask` | `packages/providers`, `packages/engine/src/mind` |
@@ -71,10 +72,11 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
   the task's first run found it), a `node_modules/.bin` or Bun's node shim (`/usr/bin:/bin` when
   nothing is left, since bash runs a program from the folder it starts in on an empty one). No key
   the `.env` put in the server's environment reaches either, unless an mcp.json entry names it.
-- **Of the file tools, only `skill` reads in the data home,** and only a listed skill's own files,
-  never a dot-file or a dot-folder; `bash_output` reads only its task's own logs there, and
-  commands and MCP servers run outside `FolderPolicy`. No skill reaches her prompt, her tools or
-  production.
+- **Of the file tools, only `skill` reads in the data home,** and only a listed or named skill's
+  own files, never a dot-file or a dot-folder; `bash_output` reads only its task's own logs there,
+  and commands and MCP servers run outside `FolderPolicy`. Of a skill, only its name reaches her,
+  and only an owner's: `start_task`'s `skills` enum, never a description, a body or a task
+  folder's skill. No skill reaches production.
 - **Every entry is stored before it is shown,** and the outcome comes from the runtime, never from
   the worker's text.
 - **Nothing the worker wrote reaches her above a tool's output.** Its report, plan, steps, file
@@ -91,7 +93,8 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
   `/stop`'s dialog, a Deny at its start, turning Assistant Mode off, deleting its chat, or her
   `stop_task` on the owner's word.
 - **The worker has no persona:** the brief, the folder's `AGENTS.md` and `CLAUDE.md`, its tools'
-  rules, the skills catalog, the date and the folder. No `prompt.md`, Mem0 or persona facts.
+  rules, the skills catalog and the skills she named, the date and the folder. No `prompt.md`, Mem0
+  or persona facts.
 - **Every task request is billed as source `task`, with the task's id as its session.** `runTask`
   runs in that usage scope; `createMind`'s `tap` hands each record to the task's meter too, and a
   search's record reaches it through `UsageMeter.charge`.
@@ -213,7 +216,7 @@ task's MCP tools come after them all.
 | `ls` | `path`, `limit` | 500 entries or 50 KB; `/` after folders, dotfiles listed |
 | `find` | `pattern`, `path`, `limit` | 1,000 results or 50 KB; `Bun.Glob` with `.gitignore` rules (the `ignore` package), not pi's `fd` |
 | `grep` | `pattern`, `path`, `glob`, `ignoreCase`, `literal`, `limit` | 100 matches, 500 characters of a line around its match, 50 KB; JavaScript regexes in Unicode mode, not pi's `rg`, though a `]` or `}` that closes nothing matches itself, as in `rg`; skips binary files |
-| `skill` | `name` (an enum of the listed skills), `path` (default `SKILL.md`), `offset`, `limit` | a file in a listed skill's folder, read as `read` reads, or a folder's entries (50, 3 deep); never a dot-file or dot-folder ([Skills](#skills)) |
+| `skill` | `name` (an enum of the listed skills and those she named), `path` (default `SKILL.md`), `offset`, `limit` | a file in such a skill's folder, read as `read` reads, or a folder's entries (50, 3 deep); never a dot-file or dot-folder ([Skills](#skills)) |
 | `bash` | `command`, `timeout` (seconds, default 120, at most 1,800), `wait` | `bash -c` in the task's folder, with no input and no terminal; the last 2,000 lines or 50 KB of what it printed, all of it in its log; to the background after 10 s unless `wait`; killed at its timeout, its time in the background included, or once its output passes 16 MB; a command over 12 KB as JSON is refused unasked ([Commands](#commands)) |
 | `bash_output` | `id`, `offset`, `limit` | a command's state and its log: its last 2,000 lines or 50 KB, its last `limit` lines, or a page from `offset` |
 | `bash_kill` | `id` | stops a command in the background, with everything it started, and shows how it ended |
@@ -340,26 +343,49 @@ to OpenRouter, to the carrier model's provider (OpenAI, for `openai/gpt-6-luna`)
 
 [Agent Skills](https://agentskills.io): a folder holding a `SKILL.md`, whose frontmatter's `name`
 and `description` the worker's prompt lists, and whose body and files the worker loads with
-`skill` when the brief matches.
+`skill` when the brief matches, or finds in its prompt from the start when she named the skill.
 
-- **Where:** the owner's in `<data home>/skills/<name>/`, the task folder's in
-  `.agents/skills/<name>/`, which are untrusted, as its `AGENTS.md` is. A `SKILL.md` counts up to 4
-  folders below its source, at most 2,000 folders are scanned per source, and one over 256 KB is
-  skipped. Links are followed, but a folder skill must lie in the task's folder, and a `SKILL.md`
-  in its own skill's folder.
-- **Read at every run** (`loadSkills`), so a resume sees a skill added since. It never throws:
-  what it can't read is left out, and each skipped skill is logged as a warning with why; there is
-  no Settings card for them yet.
-- **A name clash:** the owner's skill wins, and the folder's is logged as shadowed.
+- **Where,** in this order:
+  - the data home's, in `<data home>/skills/<name>/`;
+  - the shared folder's, the [Agent Skills](https://agentskills.io) folder the owner's other
+    agents read too, pi among them: `EIDOLON_SHARED_SKILLS`, or `~/.agents/skills`, read from the
+    environment only; a folder that doesn't exist shares none;
+  - the task folder's, in `.agents/skills/<name>/`, which are untrusted, as its `AGENTS.md` is.
+
+  The first two are the owner's, whatever wrote them. A `SKILL.md` counts up to 4 folders below
+  its source, at most 2,000 folders are scanned per source, and one over 256 KB is skipped. Links
+  are followed, but a folder skill must lie in the task's folder, and a `SKILL.md` in its own
+  skill's folder.
+- **Read at every run** (`loadSkills`), so a resume sees a skill added since and none switched off
+  since. It never throws: what it can't read is left out, and each skipped skill is logged as a
+  warning with why, which Settings shows for the owner's two folders.
+- **A name clash:** the data home's skill wins, then the shared folder's, and the one it hides is
+  logged as shadowed.
+- **The owner's switches,** `<data home>/skills.json` (`{ "disabled": [names] }`), which only the
+  local app writes, from Settings: a name switched off is off wherever a skill by that name is
+  found, the task folder's included. One that doesn't read switches nothing off, Settings says
+  why, and the next switch writes it anew.
 - **The catalog,** `<skills>` after `<project_context>` in the worker's prompt, lists each as
-  `<skill name="…" from="owner">…</skill>`, escaped, the owner's first, at most 150 and about 4,500
-  tokens; those left out can't be loaded. The folder's are called untrusted there, and the file
-  text the prompt quotes can't open or close `<skills>` or `<skill>`.
-  `disable-model-invocation: true` leaves a skill out, and `allowed-tools` grants nothing.
-- **`skill`** reads only inside a listed skill's own folder, as it lies on disk, and never a
-  dot-file or dot-folder there; a folder skill's files must pass the task's policy too. It never
-  pauses the task. Skills get no environment, key or command of their own: a script a skill
-  names runs only as any other command does, through `bash` and its card.
+  `<skill name="…" from="owner">…</skill>`, escaped, the data home's first, then the shared
+  folder's (`from="owner"` too), then the task folder's, at most 150 and about 4,500 tokens; those
+  left out can't be loaded unless she named them. The folder's are called untrusted there, and the
+  file text the prompt quotes can't open or close `<skills>`, `<skill>` or `<requested_skills>`.
+  `disable-model-invocation: true` leaves a skill out of it, and `allowed-tools` grants nothing.
+- **The skills she names** ([`start_task`](#start_task)'s `skills`), only the owner's: the task
+  keeps their names (`task.json`'s `skills`), and each run's prompt carries each one's `SKILL.md`,
+  as `skill` answers for it, in `<requested_skills>` after `<skills>`, whether or not the catalog
+  lists it, `disable-model-invocation: true` included; `skill` loads the rest of its folder. A
+  start naming a skill switched off, or one the owner hasn't, is refused (400 `unknown-skill`),
+  saying which, so she can tell the owner; one switched off or gone since the start is left out of
+  the next run, with a warning.
+- **`skill`** reads only inside the folder of a skill the prompt lists or carries, as it lies on
+  disk, and never a dot-file or dot-folder there; a folder skill's files must pass the task's
+  policy too. It never pauses the task. Skills get no environment, key or command of their own: a
+  script a skill names runs only as any other command does, through `bash` and its card.
+- **Settings' Skills** (`apps/web/src/features/settings/skills-card.tsx`, the routes' `skills`)
+  lists the owner's two folders' skills, each with where it is from, its folder and its switch,
+  what hides it or keeps it out of the catalog, and the files left out; **Add Skill** writes a new
+  `SKILL.md` into the data home's folder. A task folder's skills are never listed there.
 
 ### MCP servers
 
@@ -512,6 +538,7 @@ What it adds to pi:
     anyway; or an `mcp` call with its `server`, `tool`, `call`, `key`, `args` and the server's
     `hint`) and `pause` (the latest pause's reason and detail);
   - `profile`, the kind she named it, absent for `other` ([Kinds](#kinds));
+  - `skills`, the owner's skills she named, which each run's prompt carries ([Skills](#skills));
   - `bash: { denied }`, the commands the owner refused it; `background`, its commands running in
     the background (`{ id, command, startedAt, endsAt }`); `external: true` once it has read
     outside content; and `mcp: { denied, failed?, left? }`, the MCP calls refused it by their key,
@@ -549,14 +576,19 @@ a group or realtime call, `/call` and production's chat endpoint never offer the
 
 #### `start_task`
 
-- **Arguments:** `{ goal, deliverable?, folder, check?, profile }`, OpenClaw's objective, output,
-  write scope and verification, and the kind of task ([Kinds](#kinds)); `goal`, `folder` and
-  `profile` are needed, the folder absolute or under `~`. Their descriptions are in Chinese, in her
-  register, and are live API surface, as the hint is. The tool's description also names what a
-  task can't do yet, so that she says so and starts nothing: open a file, a page or an app to show
-  the owner, or look at an image; and while commands are off (`offersCommands()`, read at each
-  turn), run a program or a command, or delete, move or rename a file. With them on, it says a task
-  runs commands too, each after the owner's Allow on the card, "（对方选过始终允许的除外）".
+- **Arguments:** `{ goal, deliverable?, folder, check?, profile, skills? }`, OpenClaw's objective,
+  output, write scope and verification, the kind of task ([Kinds](#kinds)), and the owner's skills
+  the owner asked for by name ([Skills](#skills)); `goal`, `folder` and `profile` are needed, the
+  folder absolute or under `~`. `skills` is offered only while the owner has a skill switched on
+  in the data home's or the shared folder's, as an enum of their names (the manager's
+  `skillNames()`, from the latest scan, which each of her turns starts again), never a
+  description; the manager checks the names at the start, since her tools aren't checked against
+  their schema. Their descriptions are in Chinese, in her register, and are live API surface, as
+  the hint is. The tool's description also names what a task can't do yet, so that she says so and
+  starts nothing: open a file, a page or an app to show the owner, or look at an image; and while
+  commands are off (`offersCommands()`, read at each turn), run a program or a command, or delete,
+  move or rename a file. With them on, it says a task runs commands too, each after the owner's
+  Allow on the card, "（对方选过始终允许的除外）".
 - **It answers at once:** `{ task, status }`, status `running` or `awaiting-approval`, stored as
   her `tool-result` with `stage: "started"`. Her next round reads it as it is, and so does each
   later view of hers until the `final` replaces it ([chat.md](chat.md#her-view-viewof)), so her
@@ -771,7 +803,8 @@ never resumes a task. `app.onStop` stops it before the chat runner shuts down.
     forgets an uncounted request;
   - its tools are `createTaskTools(policy, { web, search, bash, skills })`: `web` over the task's
     live web state and left out when the mode is `off`, with `search` the role's searcher; `bash`
-    the task's `BashJobs` while `offersCommands()`; `skills` what `loadSkills` lists at this run;
+    the task's `BashJobs` while `offersCommands()`; `skills` what `loadSkills` lists at this run,
+    with the skills it was given that the catalog leaves out (`taskSkills`);
     then its MCP session's tools. Its prompt is `buildTaskPrompt` with `loadContextFiles` and the
     skills;
   - `pauseOnRefused`, and a gate that pauses, before its `tool-start`, a `web_fetch` to a site not
@@ -1148,10 +1181,10 @@ further, through the manager's `progress` hook and row 31 of the call's Floor
 
 ### The routes
 
-`apps/bot/src/local/routes/tasks.ts` and `routes/mcp.ts`, under `/api/local`, each needing the
-session. Every task `:id` is checked as a lowercase UUID before any lookup (400 `bad-request`),
-and an unknown id, a `laplace-task` task's included, is 404 `unknown-task`. Bodies are JSON under
-16 KB.
+`apps/bot/src/local/routes/tasks.ts`, `routes/mcp.ts` and `routes/skills.ts`, under `/api/local`,
+each needing the session. Every task `:id` is checked as a lowercase UUID before any lookup (400
+`bad-request`), and an unknown id, a `laplace-task` task's included, is 404 `unknown-task`. Bodies
+are JSON under 16 KB, but a new skill's, under 512 KB.
 
 | Route | Body | Answers |
 | --- | --- | --- |
@@ -1165,6 +1198,9 @@ and an unknown id, a `laplace-task` task's included, is 404 `unknown-task`. Bodi
 | `DELETE assistant/commands/:id` | | Takes one back, answering with the rest; 400 `bad-request` for an id that isn't a UUIDv7, 404 `unknown-command` |
 | `GET mcp` | | `{ path, servers, errors }`: each server as `mcp.json` writes it (`command`, `args`, `enabled`, `description`, `alwaysAllow`), each `${NAME}` it needs and whether it is set, and its problem; never an `env` value or a resolved secret. A broken entry comes after the valid ones, with its name, switch and problem alone; `errors` says why a file that doesn't parse starts nothing |
 | `PUT mcp/servers/:name` | `{ enabled?, revoke? }`, one at least | Turns a server on (deleting `enabled` and Cline's `disabled`) or off (`enabled: false`), or takes one tool out of `alwaysAllow`, answering as GET does. Always is added only from a card: 400 `bad-request` for anything else; 404 `unknown-mcp-server`; 409 `invalid-mcp-config` while the file doesn't parse, and `linked-mcp-config` while it is a link, neither ever written over |
+| `GET skills` | | `{ sources, skills, skipped, errors }`: the data home's and the shared folder's skills, each with its source, its folder (`~` for home) and where a link leads, its switch, whether it opts out of model use, the folder of the skill that hides it, and whether the catalog leaves it out though it is on; the `SKILL.md` files left out and why; why `skills.json` can't be read |
+| `PUT skills/:name` | `{ enabled }` | Switches the name on or off in `skills.json`, answering as GET does; 400 `bad-request` for any other body, 404 `unknown-skill` when neither folder has a skill by that name |
+| `POST skills` | `{ name, description, instructions }` | Writes `<data home>/skills/<name>/SKILL.md`, the description quoted, answering as GET does; 400 `bad-request` for a name that breaks the naming rules, a blank description or one over 1,024 characters, blank instructions or a file over 256 KB; 409 `skill-exists` when the folder is there |
 
 ### Checking her side
 
@@ -1192,6 +1228,10 @@ OpenRouter key exported, so Mem0 stays out. In one chat with milky-green:
    查一下 Bun 最新版本，在新文件夹里写个 hello.ts，用 bun 跑一下: she names a kind, which the card
    shows; the task runs on that kind's model; its command waits on the card (Run Once); the worker
    searches the web, about $0.007 a search, which the Usage page counts.
+9. With a skill in the data home, say `house-style` (Settings' **Add Skill** writes one), ask for
+   a page 用 house-style 那个技能: her `start_task` names it in `skills`, and the worker's first
+   request carries it in `<requested_skills>`. Ask for one named nope: she says there is no such
+   skill, and no task starts. Ask for a page and name no skill: `skills` is left out.
 
 **A call, by hand,** with the owner's go-ahead, since it bills Soniox and Fish besides OpenRouter:
 `bun run app` with the `.env`'s keys, a chat with milky-green alone, then Call.
@@ -1230,9 +1270,12 @@ bun run laplace-task --resume <id> [--model <account>/<model>] [--web any|off] [
   the task's; `off`, the default, leaves both out. No site is asked about, as this is an explicit
   command. `task.json` keeps the choice, so `--resume` keeps a task's `any` until `--web off` is
   given.
-- **Skills:** each run lists the data home's and the folder's, as the app's tasks do, and logs
-  what it skipped. It has no commands and no MCP servers, which ask the owner on a card, and no
-  kind: `--model` picks the model.
+- **Skills:** each run lists the data home's, the shared folder's and the folder's, as the app's
+  tasks do, leaves out the names switched off in `skills.json`, and logs what it skipped. `--skill
+  NAME`, repeated for more, gives the task an owner's skill as if she had named it, kept for
+  `--resume`; one the owner hasn't, or has switched off, is a usage error naming the skills there
+  are. It has no commands and no MCP servers, which ask the owner on a card, and no kind:
+  `--model` picks the model.
 - **Output:** the worker's words as they stream and a line per tool on stdout, then how it ended;
   logs on stderr. Under `--json`, stdout carries only NDJSON: `task`, each `TaskEvent`, then
   `outcome`.

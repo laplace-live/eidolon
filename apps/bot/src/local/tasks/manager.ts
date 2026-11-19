@@ -16,6 +16,7 @@ import {
   buildTaskPrompt,
   COMPACTION_INSTRUCTIONS,
   COMPACTION_SYSTEM,
+  catalogOf,
   createTaskTools,
   type FolderGrant,
   FolderPolicy,
@@ -44,17 +45,21 @@ import {
   readMcpSecrets,
   readSnapshot,
   type SkillCatalog,
+  scanSkills,
+  skillNames,
   sliceHead,
   TASK_WEB_MODES,
   type TaskChat,
   type TaskInboxLines,
   type TaskPending,
   type TaskProfile,
+  type TaskSkills,
   type TaskSnapshot,
   type TaskWebAccess,
   type TodoDetails,
   taskDate,
   taskLockKey,
+  taskSkills,
   tasksDir,
   transcriptPath,
   WEB_FETCH,
@@ -72,6 +77,7 @@ import {
   logger,
   pyStrip,
   raceAbort,
+  sharedSkillsDir,
   shippedPath,
 } from "@eidolon/config";
 import { acquireLock, LockedError } from "@eidolon/config/lock";
@@ -103,6 +109,8 @@ import {
   type ErrorCode,
   type McpServerChange,
   type McpServersResponse,
+  type SkillCreate,
+  type SkillsResponse,
   STEER_PREFIX,
   type TaskApproveRequest,
   type TaskContinueRequest,
@@ -114,6 +122,7 @@ import { ALLOWED_COMMANDS_FILE, AllowedCommands } from "./commands.ts";
 import { MCP_FOLDER, McpFile, mcpServersView } from "./mcp.ts";
 import { doneOf } from "./milestones.ts";
 import { insideAny, placeOf } from "./places.ts";
+import { OwnerSkills } from "./skills.ts";
 import { SnapshotFile } from "./snapshot-file.ts";
 
 /** start_task's arguments: OpenClaw's objective, output, write scope and verification. */
@@ -126,6 +135,8 @@ export interface TaskBriefInput {
   readonly check?: string;
   /** The kind of task she says it is, whose model it runs on; Assistant Mode's own when absent. */
   readonly profile?: TaskProfile;
+  /** The owner's skills she named for it, whose SKILL.md its prompt carries whole. */
+  readonly skills?: readonly string[];
 }
 
 export interface TaskManagerOptions {
@@ -186,6 +197,8 @@ type RefusalCode = Extract<
   | "unknown-mcp-server"
   | "invalid-mcp-config"
   | "linked-mcp-config"
+  | "unknown-skill"
+  | "skill-exists"
 >;
 
 /**
@@ -495,13 +508,20 @@ function filesHeld(
   return read === files.read && written === files.written ? files : { read, written };
 }
 
-/** What a run's skills catalog left out, and why: the owner learns of it only from the log. */
-function logSkills(id: string, { problems, unlisted }: SkillCatalog): void {
-  for (const { path, message, skipped } of problems) {
+/** What a run's skills left out, and why: Settings shows the owner's, the log the rest. */
+function logSkills(
+  id: string,
+  { problems, unlisted, missing }: SkillCatalog,
+  { unreadable }: TaskSkills,
+): void {
+  for (const { path, message, skipped } of [...problems, ...unreadable]) {
     logger.warning(`Task ${id}: ${skipped ? "skipping " : ""}skill ${path}: ${message}`);
   }
-  if (unlisted > 0) {
-    logger.warning(`Task ${id}: ${unlisted} more skills aren't listed: its catalog is full`);
+  if (unlisted.length > 0) {
+    logger.warning(`Task ${id}: ${unlisted.length} more skills aren't listed: its catalog is full`);
+  }
+  if (missing.length > 0) {
+    logger.warning(`Task ${id}: no longer has the skills it was given: ${missing.join(", ")}`);
   }
 }
 
@@ -549,6 +569,8 @@ export class TaskManager {
   readonly #allowed: AllowedCommands;
   /** mcp.json, where Always Allow This Tool goes. */
   readonly #mcpFile: McpFile;
+  /** The owner's skills and their switches. */
+  readonly #skills: OwnerSkills;
   readonly #tasks = new Map<string, Task>();
   readonly #streams = new Set<() => void>();
   #loaded: Promise<void> | null = null;
@@ -571,6 +593,9 @@ export class TaskManager {
     this.#bash = options.bash ?? {};
     this.#allowed = new AllowedCommands(join(this.#root, ALLOWED_COMMANDS_FILE), this.#now);
     this.#mcpFile = new McpFile(options.dataHome);
+    this.#skills = new OwnerSkills(options.dataHome);
+    // Scanned now, so her first turn's start_task can name them.
+    this.#skills.names();
   }
 
   /**
@@ -677,6 +702,38 @@ export class TaskManager {
       );
     }
     return this.mcpServers();
+  }
+
+  /** The names of the owner's skills she may give start_task, without waiting on a scan. */
+  skillNames(): readonly string[] {
+    return this.#skills.names();
+  }
+
+  /** The owner's skills as their folders hold them now, with their switches. */
+  skills(): Promise<SkillsResponse> {
+    return this.#skills.view();
+  }
+
+  /**
+   * The owner's switch for the skills named `name`, answering with the skills. A task's next run
+   * leaves a skill switched off out, and her next turn can't name it.
+   */
+  async changeSkill(name: string, enabled: boolean): Promise<SkillsResponse> {
+    const result = await this.#skills.change(name, enabled);
+    if (result === null) {
+      throw new TaskRefused(404, "unknown-skill", "No skill of yours has that name");
+    }
+    return result;
+  }
+
+  /** A new skill of the owner's, in the data home's skills folder, answering with the skills. */
+  async createSkill(input: SkillCreate): Promise<SkillsResponse> {
+    const result = await this.#skills.create(input);
+    if (result === "exists") {
+      throw new TaskRefused(409, "skill-exists", "The skills folder has one by that name already");
+    }
+    if ("invalid" in result) throw new TaskRefused(400, "bad-request", result.invalid);
+    return result;
   }
 
   /** The app's tasks whose status is `running`. */
@@ -1086,6 +1143,7 @@ export class TaskManager {
         );
       }
     }
+    const skills = await this.#named(input.skills ?? []);
     const runs = await insideAny(place, settings.folders);
     const { profile } = input;
     let model: TaskModel;
@@ -1117,6 +1175,7 @@ export class TaskManager {
       files: { read: [], written: [] },
       web: ASK_EACH_SITE,
       ...(profile === undefined ? {} : { profile }),
+      ...(skills.length === 0 ? {} : { skills }),
       ...(runs ? {} : { pending: { kind: "start" } }),
     };
     const equipped = runs ? this.#equip(id, model, new UsageMeter(model)) : null;
@@ -1130,6 +1189,33 @@ export class TaskManager {
     const task = this.#track(dir, snapshot);
     if (equipped !== null) this.#launch(task, equipped);
     return task.snapshot;
+  }
+
+  /**
+   * The owner's skills `names` gives, as a task keeps them. Refused, so she can tell the owner, when
+   * one is switched off or the owner has none by that name.
+   */
+  async #named(names: readonly string[]): Promise<readonly string[]> {
+    if (names.length === 0) return [];
+    const scan = await scanSkills({ dataHome: this.#dataHome, shared: sharedSkillsDir() });
+    const { requested, missing, off } = catalogOf(scan, names);
+    if (missing.length === 0) return requested.map((skill) => skill.name);
+    const unknown = missing.filter((name) => !off.includes(name));
+    if (unknown.length === 0) {
+      const one = off.length === 1;
+      throw new TaskRefused(
+        400,
+        "unknown-skill",
+        `The skill${one ? "" : "s"} ${off.join(", ")} ${one ? "is" : "are"} switched off in Settings, so no task can use ${one ? "it" : "them"}.`,
+      );
+    }
+    const offered = skillNames(scan);
+    throw new TaskRefused(
+      400,
+      "unknown-skill",
+      `There is no skill named ${unknown.join(" or ")}. ` +
+        (offered.length === 0 ? "There are no skills." : `The skills are ${offered.join(", ")}.`),
+    );
   }
 
   async #allowStart(task: Task, body: TaskApproveRequest): Promise<TaskSnapshot> {
@@ -1398,16 +1484,22 @@ export class TaskManager {
     const search = web ? this.#searcher(run.meter.charge) : undefined;
     const commands = this.offersCommands();
     if (commands) task.jobs ??= await this.#openCommands(task);
-    // Read at each run, so a resumed task finds a skill added since.
-    const skills = await loadSkills({ dataHome: this.#dataHome, folder: brief.folder });
-    logSkills(id, skills);
+    // Read at each run, so a resumed task finds a skill added since, and none switched off since.
+    const skills = await loadSkills({
+      dataHome: this.#dataHome,
+      shared: sharedSkillsDir(),
+      folder: brief.folder,
+      requested: task.snapshot.skills ?? [],
+    });
+    const named = await taskSkills(skills, policy);
+    logSkills(id, skills, named);
     const mcp = await this.#mcpOf(task, run, policy);
     const tools = [
       ...createTaskTools(policy, {
         ...(web ? { web: site } : {}),
         ...(search === undefined ? {} : { search }),
         ...(commands && task.jobs !== null ? { bash: task.jobs } : {}),
-        skills: skills.skills,
+        skills: named.loadable,
       }),
       // Last, so the built-ins keep their place in the provider's prompt cache.
       ...(mcp?.tools ?? []),
@@ -1426,6 +1518,7 @@ export class TaskManager {
         tools,
         contextFiles,
         skills: skills.skills,
+        requested: named.requested,
         date: taskDate(new Date(this.#now())),
       }),
       tools,

@@ -20,6 +20,7 @@ import {
   newTaskId,
   openTaskStore,
   readSnapshot,
+  skillSwitchesPath,
   type TaskChat,
   type TaskPending,
   type TaskSnapshot,
@@ -28,7 +29,7 @@ import {
   tasksDir,
   writeSnapshot,
 } from "@eidolon/assistant";
-import { type AssistantSettings, dataHome } from "@eidolon/config";
+import { type AssistantSettings, dataHome, sharedSkillsDir } from "@eidolon/config";
 import { acquireLock } from "@eidolon/config/lock";
 import type {
   createMind,
@@ -2803,6 +2804,224 @@ describe("skills", () => {
     const ended = await reach(tasks, id, "succeeded");
     expect(ended.step).toEqual({ tool: "skill", head: "house-style" });
     expect(toolMessages(minds.for("Load it")[1])[0]?.[1]).toContain("The house-style steps.");
+  });
+
+  describe("the shared folder, the owner's switches and the skills she names", () => {
+    const shared = (name: string) => join(sharedSkillsDir(), name);
+
+    afterEach(() => {
+      rmSync(sharedSkillsDir(), { recursive: true, force: true });
+      rmSync(skillSwitchesPath(dataHome()), { force: true });
+    });
+
+    test("her names are the owner's and the shared folder's skills switched on, as the latest scan found them", async () => {
+      skill(owner("house-style"), "house-style", "The owner's house style.");
+      skill(shared("ship"), "ship", "Ship a change.");
+      skill(shared("house-style"), "house-style", "Another house style.");
+      const tasks = manager();
+      await until(() => tasks.skillNames().length === 2);
+      expect(tasks.skillNames()).toEqual(["house-style", "ship"]);
+      await tasks.changeSkill("ship", false);
+      expect(tasks.skillNames()).toEqual(["house-style"]);
+      expect(JSON.parse(readFileSync(skillSwitchesPath(dataHome()), "utf8"))).toEqual({
+        disabled: ["ship"],
+      });
+      skill(owner("tables"), "tables", "Tables.");
+      await until(() => tasks.skillNames().includes("tables"));
+    });
+
+    test("a skill she named is carried whole in every run's prompt, and loads although it opts out of model use", async () => {
+      settings = { ...settings, folders: [work] };
+      skill(owner("house-style"), "house-style", "The owner's house style.");
+      mkdirSync(shared("deploy"), { recursive: true });
+      writeFileSync(
+        join(shared("deploy"), "SKILL.md"),
+        "---\nname: deploy\ndescription: Deploy it.\ndisable-model-invocation: true\n---\n\nRun deploy.sh.\n",
+      );
+      minds.script("Named", [
+        calls([call("f1", "web_fetch", { url: "https://203.0.113.7/" })]),
+        calls([call("k1", "skill", { name: "deploy", path: "." })]),
+        says("Done."),
+      ]);
+      const tasks = await booted();
+      const { id } = await tasks.start(
+        { goal: "Named", folder: join(work, "named"), skills: ["deploy"] },
+        ORIGIN,
+      );
+      expect((await tasks.get(id)).skills).toEqual(["deploy"]);
+      expect((await onDisk(id))?.skills).toEqual(["deploy"]);
+      await reach(tasks, id, "paused");
+      await tasks.approve(id, { answer: "deny" });
+      await reach(tasks, id, "succeeded");
+      const requests = minds.for("Named");
+      for (const request of requests) {
+        const system = request.system;
+        expect(system).toContain(
+          `<requested_skills>\nThe owner asked for these skills for this task: follow each one.`,
+        );
+        expect(system).toContain(
+          `<skill name="deploy">\nSkill deploy (the owner's), in ${realpathSync(shared("deploy"))}.`,
+        );
+        expect(system).toContain("Run deploy.sh.");
+        // Not in the catalog: it opts out of model use.
+        expect(system).not.toContain('<skill name="deploy" from=');
+        expect(system).toContain('<skill name="house-style" from="owner">');
+      }
+      expect(requests).toHaveLength(3);
+      expect(toolMessages(requests[2]).at(-1)?.[1]).toBe("Files in its folder: SKILL.md");
+    });
+
+    test("a skill switched off or unknown is no start, and she hears why", async () => {
+      settings = { ...settings, folders: [work] };
+      skill(owner("house-style"), "house-style", "The owner's house style.");
+      skill(shared("ship"), "ship", "Ship a change.");
+      const tasks = await booted();
+      await tasks.changeSkill("ship", false);
+      const start = (skills: string[]) =>
+        refused(tasks.start({ goal: "Refused", folder: join(work, "refused"), skills }, ORIGIN));
+      const off = await start(["ship"]);
+      expect([off.status, off.code, off.message]).toEqual([
+        400,
+        "unknown-skill",
+        "The skill ship is switched off in Settings, so no task can use it.",
+      ]);
+      const unknown = await start(["house-style", "nope", "ship"]);
+      expect(unknown.message).toBe("There is no skill named nope. The skills are house-style.");
+      expect(await tasks.list()).toEqual([]);
+    });
+
+    test("a named skill switched off or gone since its start is left out of the next run, with a warning", async () => {
+      settings = { ...settings, folders: [work] };
+      skill(shared("ship"), "ship", "Ship a change.");
+      minds.script("Gone", [calls([call("f1", "web_fetch", { url: "https://203.0.113.7/" })])]);
+      const tasks = await booted();
+      const { id } = await tasks.start(
+        { goal: "Gone", folder: join(work, "gone"), skills: ["ship"] },
+        ORIGIN,
+      );
+      await reach(tasks, id, "paused");
+      expect(minds.for("Gone")[0]?.system).toContain('<skill name="ship">');
+      await tasks.changeSkill("ship", false);
+      await tasks.approve(id, { answer: "deny" });
+      await reach(tasks, id, "succeeded");
+      const resumed = minds.for("Gone")[1];
+      expect(resumed?.system).not.toContain("<requested_skills>");
+      expect(resumed?.tools.map((tool) => tool.name)).not.toContain("skill");
+      expect(logs.lines()).toContain(
+        `WARNING Task ${id}: no longer has the skills it was given: ship`,
+      );
+    });
+
+    test("Settings sees each source's skills with their switches, what shadows what, and what was skipped", async () => {
+      skill(owner("house-style"), "house-style", "The owner's house style.");
+      skill(shared("house-style"), "house-style", "Another house style.");
+      skill(shared("ship"), "ship", "Ship a change.");
+      mkdirSync(shared("broken"), { recursive: true });
+      writeFileSync(
+        join(shared("broken"), "SKILL.md"),
+        "---\nname: broken\n---\nNo description.\n",
+      );
+      mkdirSync(join(work, "elsewhere", "notes"), { recursive: true });
+      writeFileSync(
+        join(work, "elsewhere", "notes", "SKILL.md"),
+        "---\nname: notes\ndescription: Notes.\ndisable-model-invocation: true\n---\nKeep notes.\n",
+      );
+      mkdirSync(owner(""), { recursive: true });
+      symlinkSync(join(work, "elsewhere", "notes"), owner("notes"));
+      const tasks = manager();
+      await tasks.changeSkill("ship", false);
+      const view = await tasks.skills();
+      const ownPath = (name: string) => join(dataHome(), "skills", name);
+      expect(view.sources).toEqual([
+        { id: "eidolon", path: join(dataHome(), "skills") },
+        { id: "shared", path: sharedSkillsDir() },
+      ]);
+      expect(view.skills).toEqual([
+        {
+          name: "house-style",
+          description: "The owner's house style.",
+          source: "eidolon",
+          folder: ownPath("house-style"),
+          enabled: true,
+          problems: [],
+        },
+        {
+          name: "house-style",
+          description: "Another house style.",
+          source: "shared",
+          folder: shared("house-style"),
+          enabled: true,
+          shadowedBy: ownPath("house-style"),
+          problems: [],
+        },
+        {
+          name: "notes",
+          description: "Notes.",
+          source: "eidolon",
+          folder: ownPath("notes"),
+          linksTo: realpathSync(join(work, "elsewhere", "notes")),
+          enabled: true,
+          onlyWhenNamed: true,
+          problems: [],
+        },
+        {
+          name: "ship",
+          description: "Ship a change.",
+          source: "shared",
+          folder: shared("ship"),
+          enabled: false,
+          problems: [],
+        },
+      ]);
+      expect(view.skipped).toEqual([
+        { path: join(shared("broken"), "SKILL.md"), message: "description is required" },
+      ]);
+      expect(view.errors).toEqual([]);
+      expect((await refused(tasks.changeSkill("nope", true))).code).toBe("unknown-skill");
+      writeFileSync(skillSwitchesPath(dataHome()), "{");
+      const damaged = await tasks.skills();
+      expect(damaged.errors).toEqual([
+        "skills.json isn't JSON, so every skill is on until it's fixed or a switch is changed, which writes it anew",
+      ]);
+      expect(damaged.skills.every((each) => each.enabled)).toBe(true);
+    });
+
+    test("a skill the owner writes in Settings is theirs, and is refused when its name or text won't do", async () => {
+      const tasks = manager();
+      const view = await tasks.createSkill({
+        name: "house-style",
+        description: 'Our "house" style:\nfor every page.',
+        instructions: "\n# House style\n\nSet Georgia.\n\n",
+      });
+      expect(
+        view.skills.map(({ name, description, source }) => [name, description, source]),
+      ).toEqual([["house-style", 'Our "house" style: for every page.', "eidolon"]]);
+      expect(readFileSync(join(owner("house-style"), "SKILL.md"), "utf8")).toBe(
+        '---\nname: house-style\ndescription: "Our \\"house\\" style: for every page."\n---\n\n# House style\n\nSet Georgia.\n',
+      );
+      expect(tasks.skillNames()).toEqual(["house-style"]);
+      const again = await refused(
+        tasks.createSkill({ name: "house-style", description: "Again.", instructions: "Again." }),
+      );
+      expect([again.status, again.code]).toEqual([409, "skill-exists"]);
+      for (const [input, message] of [
+        [{ name: "", description: "D.", instructions: "I." }, "A skill needs a name"],
+        [
+          { name: "House Style", description: "D.", instructions: "I." },
+          "Its name contains invalid characters (must be lowercase a-z, 0-9, hyphens only)",
+        ],
+        [{ name: "notes", description: " \n", instructions: "I." }, "A skill needs a description"],
+        [
+          { name: "notes", description: "x".repeat(1025), instructions: "I." },
+          "A description is 1024 characters at most",
+        ],
+        [{ name: "notes", description: "D.", instructions: "  " }, "A skill needs instructions"],
+      ] as const) {
+        const bad = await refused(tasks.createSkill(input));
+        expect([bad.status, bad.code, bad.message]).toEqual([400, "bad-request", message]);
+      }
+      expect(existsSync(owner("notes"))).toBe(false);
+    });
   });
 });
 

@@ -50,6 +50,7 @@ export {
   personaTemplateDir,
   resolvePersonaPath,
   type SourceFolder,
+  sharedSkillsDir,
   sourceFolder,
   sourcesDir,
   templatesDir,

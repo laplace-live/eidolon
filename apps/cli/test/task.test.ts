@@ -13,8 +13,14 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { readSnapshot, type TaskSnapshot, tasksDir, writeSnapshot } from "@eidolon/assistant";
-import { dataHome } from "@eidolon/config";
+import {
+  readSnapshot,
+  skillSwitchesPath,
+  type TaskSnapshot,
+  tasksDir,
+  writeSnapshot,
+} from "@eidolon/assistant";
+import { dataHome, sharedSkillsDir } from "@eidolon/config";
 import { acquireLock, LockedError } from "@eidolon/config/lock";
 import type { createMind, MindChunk, MindRequest, MindToolCall, TaskEntry } from "@eidolon/engine";
 import {
@@ -99,6 +105,14 @@ function transcript(dir: string): TaskEntry[] {
     .trimEnd()
     .split("\n")
     .map((line) => JSON.parse(line) as TaskEntry);
+}
+
+function writeSkill(dir: string, name: string, description: string): void {
+  mkdirSync(join(dir, name), { recursive: true });
+  writeFileSync(
+    join(dir, name, "SKILL.md"),
+    `---\nname: ${name}\ndescription: ${description}\n---\nThe ${name} steps.\n`,
+  );
 }
 
 let work = "";
@@ -852,16 +866,9 @@ describe("laplace-task", () => {
   });
 
   test("laplace-task lists the data home's and the folder's skills, and offers skill after grep", async () => {
-    const skill = (dir: string, name: string, description: string) => {
-      mkdirSync(join(dir, name), { recursive: true });
-      writeFileSync(
-        join(dir, name, "SKILL.md"),
-        `---\nname: ${name}\ndescription: ${description}\n---\nSteps.\n`,
-      );
-    };
     const owner = join(dataHome(), "skills");
-    skill(owner, "owner-style", "How the owner likes pages laid out");
-    skill(join(folder, ".agents", "skills"), "repo-build", "How this folder builds");
+    writeSkill(owner, "owner-style", "How the owner likes pages laid out");
+    writeSkill(join(folder, ".agents", "skills"), "repo-build", "How this folder builds");
     try {
       const mind = scripted([says("Done.")]);
       const io = captureIo();
@@ -883,6 +890,45 @@ describe("laplace-task", () => {
       );
     } finally {
       rmSync(owner, { recursive: true, force: true });
+    }
+  });
+
+  test("--skill carries an owner's skill whole in every run's prompt, kept for --resume; one switched off or unknown is a usage error", async () => {
+    writeSkill(sharedSkillsDir(), "ship", "Ship a change");
+    writeSkill(sharedSkillsDir(), "audit", "Audit the change");
+    writeFileSync(skillSwitchesPath(dataHome()), JSON.stringify({ disabled: ["audit"] }));
+    try {
+      const usage = async (argv: string[]) => {
+        const io = captureIo();
+        const code = await taskMain(argv, { ...io.io, confirm: null });
+        return [code, io.stderr().trim().split("\n").at(-1)];
+      };
+      expect(await usage(["--folder", folder, "--skill", "nope", "Ship it"])).toEqual([
+        2,
+        "laplace-task: error: argument --skill: no skill 'nope' (choose from 'ship')",
+      ]);
+      expect(await usage(["--folder", folder, "--skill", "audit", "Ship it"])).toEqual([
+        2,
+        "laplace-task: error: argument --skill: 'audit' is switched off in the app's Settings (choose from 'ship')",
+      ]);
+      const mind = scripted([says("Done.")]);
+      const io = captureIo();
+      expect(
+        await taskMain(["--folder", folder, "--skill", "ship", "Ship it"], {
+          ...io.io,
+          createMind: mind.createMind,
+          confirm: null,
+        }),
+      ).toBe(0);
+      const system = mind.requests[0]?.system ?? "";
+      expect(system).toContain(
+        `<requested_skills>\nThe owner asked for these skills for this task: follow each one.`,
+      );
+      expect(system).toContain("The ship steps.");
+      expect((await readSnapshot(onlyTask().dir))?.skills).toEqual(["ship"]);
+    } finally {
+      rmSync(sharedSkillsDir(), { recursive: true, force: true });
+      rmSync(skillSwitchesPath(dataHome()), { force: true });
     }
   });
 
@@ -1315,8 +1361,21 @@ describe("parseTaskArgs", () => {
       check: "The result does what the goal asks",
       model: null,
       web: "off",
+      skills: [],
       json: true,
     });
+    const named = parseTaskArgs([
+      "--folder",
+      "/tmp/x",
+      "--skill",
+      " ship ",
+      "--skill",
+      "house-style",
+      "--skill",
+      "ship",
+      "x",
+    ]);
+    expect(named.kind === "new" && named.skills).toEqual(["ship", "house-style"]);
   });
 
   test("--model names an account, then a model; --resume takes a task's id and no brief", () => {

@@ -26,6 +26,7 @@ import { mcpRoutes } from "./routes/mcp.ts";
 import { memoriesRoutes } from "./routes/memories.ts";
 import { personasRoutes } from "./routes/personas.ts";
 import { settingsRoutes } from "./routes/settings.ts";
+import { skillsRoutes } from "./routes/skills.ts";
 import { statusRoutes } from "./routes/status.ts";
 import { addAssistantFolder, tasksRoutes } from "./routes/tasks.ts";
 import { usageRoutes } from "./routes/usage.ts";
@@ -55,6 +56,7 @@ export function localRouteModules(
     ...chatsRoutes(chats),
     ...tasksRoutes(tasks),
     ...mcpRoutes(tasks),
+    ...skillsRoutes(tasks),
   ];
 }
 

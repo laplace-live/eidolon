@@ -82,6 +82,9 @@ export const LOCAL_ROUTES = [
   "DELETE /api/local/assistant/commands/:id",
   "GET /api/local/mcp",
   "PUT /api/local/mcp/servers/:name",
+  "GET /api/local/skills",
+  "POST /api/local/skills",
+  "PUT /api/local/skills/:name",
 ] as const satisfies readonly (keyof LocalApi)[];
 
 export type LocalRoute = (typeof LOCAL_ROUTES)[number];
@@ -141,6 +144,8 @@ export const ERROR_CODES = [
   "unknown-mcp-server",
   "invalid-mcp-config",
   "linked-mcp-config",
+  "unknown-skill",
+  "skill-exists",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -1070,6 +1075,19 @@ export interface LocalApi {
    * parse, and linked-mcp-config while it is a link, neither ever written over.
    */
   "PUT /api/local/mcp/servers/:name": Endpoint<McpServerChange, McpServersResponse>;
+  /** The owner's skills as their folders hold them now, each with its switch. */
+  "GET /api/local/skills": Endpoint<undefined, SkillsResponse>;
+  /**
+   * Writes a new skill into the data home's skills folder, answering as GET does. 400 bad-request
+   * for a name that breaks the naming rules, a blank description or one over 1,024 characters;
+   * 409 skill-exists when the data home already has a skill folder by that name.
+   */
+  "POST /api/local/skills": Endpoint<SkillCreate, SkillsResponse>;
+  /**
+   * Switches the skills named `name` on or off, answering as GET does. 400 bad-request for
+   * anything but `{enabled}`; 404 unknown-skill when no skill of the owner's has that name.
+   */
+  "PUT /api/local/skills/:name": Endpoint<SkillChange, SkillsResponse>;
 }
 
 /**
@@ -1464,6 +1482,8 @@ export interface TaskSnapshot {
    * called it anything else, which runs on Assistant Mode's own.
    */
   readonly profile?: TaskProfile;
+  /** The owner's skills she named for it, which it follows from its start; absent for none. */
+  readonly skills?: readonly string[];
   /** The commands the owner refused it on its card: it may not run them again. */
   readonly bash?: { readonly denied: readonly string[] };
   /** Its commands running in the background, oldest first; the card's Stop ends them too. */
@@ -1654,6 +1674,67 @@ export interface McpServerChange {
   readonly enabled?: boolean;
   /** A tool to take out of `alwaysAllow`: its calls ask again. */
   readonly revoke?: string;
+}
+
+/** Where an owner's skill is: the data home's skills folder, or the one their agents share. */
+export type SkillOrigin = "eidolon" | "shared";
+
+export interface SkillSourceView {
+  readonly id: SkillOrigin;
+  /** Absolute, `~` standing for the home folder. */
+  readonly path: string;
+}
+
+/** A skill in one of the owner's skill folders. A task folder's own skills are never listed. */
+export interface SkillView {
+  readonly name: string;
+  /** One line, as tasks read it. */
+  readonly description: string;
+  readonly source: SkillOrigin;
+  /** As found in its source, `~` standing for the home folder. */
+  readonly folder: string;
+  /** Where its files are, when a link on the way there leads elsewhere. */
+  readonly linksTo?: string;
+  /**
+   * The owner's switch, which goes by name: off, no task uses a skill by this name and she can't
+   * name it.
+   */
+  readonly enabled: boolean;
+  /** It opts out of model use: a task follows it only when she names it. */
+  readonly onlyWhenNamed?: true;
+  /** On, but tasks' list of skills is full without it: only her naming it reaches a task. */
+  readonly unlisted?: true;
+  /** The folder of the skill by this name that is used instead. */
+  readonly shadowedBy?: string;
+  /** What is off about it, in English, such as a name that breaks the naming rules. */
+  readonly problems: readonly string[];
+}
+
+/** GET skills, and what a POST or PUT leaves. */
+export interface SkillsResponse {
+  /** The data home's skills folder, then the folder the owner's agents share. */
+  readonly sources: readonly SkillSourceView[];
+  /** By name, a skill used before one it shadows. */
+  readonly skills: readonly SkillView[];
+  /** SKILL.md files and folders left out, and why, such as a SKILL.md with no description. */
+  readonly skipped: readonly { readonly path: string; readonly message: string }[];
+  /** Why skills.json can't be read, which then switches nothing off. */
+  readonly errors: readonly string[];
+}
+
+/** PUT skills/:name. */
+export interface SkillChange {
+  readonly enabled: boolean;
+}
+
+/** POST skills: a skill of the owner's own, written to the data home's skills folder. */
+export interface SkillCreate {
+  /** Lowercase letters, digits and single hyphens, at most 64 characters: its folder's name too. */
+  readonly name: string;
+  /** What it does and when to use it: tasks choose a skill by it. At most 1,024 characters. */
+  readonly description: string;
+  /** SKILL.md's body, in Markdown. */
+  readonly instructions: string;
 }
 
 /** The name of her tool that starts a task, as her `tool-call` events carry it. */

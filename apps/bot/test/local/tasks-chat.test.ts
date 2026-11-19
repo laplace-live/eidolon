@@ -8,6 +8,7 @@ import "../../../../packages/config/test/isolated-guard.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { scanSkills, skillNames } from "@eidolon/assistant";
 import {
   CHAT_WINDOW_MESSAGES,
   type ChatEvent,
@@ -108,6 +109,13 @@ class FakeTasks {
 
   offersCommands(): boolean {
     return this.commands;
+  }
+
+  /** The names of the owner's skills she may give start_task. */
+  skills: string[] = [];
+
+  skillNames(): readonly string[] {
+    return this.skills;
   }
 
   async start(input: TaskBriefInput, origin: TaskChat): Promise<TaskSnapshot> {
@@ -744,23 +752,33 @@ describe("a task she starts in a chat", () => {
     expect(mind.requests.map(toolNames)).toEqual([[], [START_TASK], [START_TASK]]);
   });
 
-  test("her turns carry no skill, whatever the data home holds", async () => {
-    const SENTINEL = "zz-sentinel-skill";
-    const folder = join(dataHome(), "skills", SENTINEL);
+  test("her start_task names the owner's skills, and no skill's description or text reaches her", async () => {
+    const NAME = "zz-sentinel-skill";
+    const DESCRIPTION = "zz-sentinel-description";
+    const BODY = "zz-sentinel-instructions";
+    const folder = join(dataHome(), "skills", NAME);
     mkdirSync(folder, { recursive: true });
     writeFileSync(
       join(folder, "SKILL.md"),
-      `---\nname: ${SENTINEL}\ndescription: ${SENTINEL} for every page.\n---\n${SENTINEL}\n`,
+      `---\nname: ${NAME}\ndescription: ${DESCRIPTION} for every page.\n---\n${BODY}\n`,
     );
     try {
       const tasks = new FakeTasks();
+      tasks.skills = skillNames(await scanSkills({ dataHome: dataHome() }));
+      expect(tasks.skills).toEqual([NAME]);
       const mind = new ScriptedMind(says("你好呀"), callsStart(), says("好，等你点允许"));
       serve({ ...engine(mind), tasks });
       const id = await greeted();
       await send(id, ASK);
       expect(mind.requests).toHaveLength(3);
-      expect(JSON.stringify(mind.requests)).not.toContain(SENTINEL);
-      expect(JSON.stringify(asked)).not.toContain(SENTINEL);
+      const [greeting, answer] = mind.requests;
+      expect(JSON.stringify(greeting)).not.toContain(NAME);
+      const start = answer?.tools.find((tool) => tool.name === START_TASK);
+      expect(start?.properties.skills).toMatchObject({ items: { enum: [NAME] } });
+      for (const text of [DESCRIPTION, BODY]) {
+        expect(JSON.stringify(mind.requests)).not.toContain(text);
+        expect(JSON.stringify(asked)).not.toContain(text);
+      }
     } finally {
       rmSync(join(dataHome(), "skills"), { recursive: true, force: true });
     }

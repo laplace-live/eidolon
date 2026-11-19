@@ -232,7 +232,7 @@ describe("task.json", () => {
     }
   });
 
-  test("its kind, its command question, the commands it was refused or runs in the background, and its outside reading read back", async () => {
+  test("its kind, the skills she named, its command question, the commands it was refused or runs in the background, and its outside reading read back", async () => {
     const dir = taskDir();
     const background = [{ id: 2, command: "npm run dev", startedAt: 1_000, endsAt: 121_000 }];
     const snapshots: TaskSnapshot[] = [
@@ -240,6 +240,7 @@ describe("task.json", () => {
         ...snapshot("t1"),
         status: "paused",
         profile: "coding",
+        skills: ["house-style", "deploy"],
         pending: { kind: "command", call: "call_9", command: "npm test", timeout: 120 },
         bash: { denied: ["rm -rf build"] },
         background,
@@ -352,6 +353,8 @@ describe("task.json", () => {
       { ...snapshot("t1"), reported: false },
       { ...snapshot("t1"), profile: "other" },
       { ...snapshot("t1"), profile: "Coding" },
+      { ...snapshot("t1"), skills: "house-style" },
+      { ...snapshot("t1"), skills: [7] },
       { ...snapshot("t1"), pending: { kind: "command", call: "c", command: "ls" } },
       { ...snapshot("t1"), pending: { kind: "command", command: "ls", timeout: 120 } },
       {

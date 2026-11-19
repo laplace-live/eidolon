@@ -10,7 +10,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { estimateTokens } from "@eidolon/engine";
-import { loadSkills, type SkillProblem, skillEntry, skillsDir } from "../src/skills.ts";
+import {
+  loadSkills,
+  type SkillProblem,
+  scanSkills,
+  skillEntry,
+  skillNames,
+  skillSwitchesPath,
+  skillsDir,
+} from "../src/skills.ts";
 import { removeTempFolders, tempFolder } from "./tool-folder.ts";
 
 afterEach(removeTempFolders);
@@ -28,10 +36,22 @@ function writeSkill(dir: string, frontmatter: string, body = "# Instructions\n")
 }
 
 /** A data home, with the owner's skills folder, and a task folder, none of them made yet. */
-async function places(): Promise<{ home: string; owner: string; folder: string; root: string }> {
+async function places(): Promise<{
+  home: string;
+  owner: string;
+  shared: string;
+  folder: string;
+  root: string;
+}> {
   const root = await tempFolder();
   const home = join(root, "home", ".laplace", "eidolon");
-  return { home, owner: skillsDir(home), folder: join(root, "home", "proj"), root };
+  return {
+    home,
+    owner: skillsDir(home),
+    shared: join(root, "home", ".agents", "skills"),
+    folder: join(root, "home", "proj"),
+    root,
+  };
 }
 
 function messages(problems: readonly SkillProblem[]): string[] {
@@ -52,7 +72,10 @@ describe("loadSkills", () => {
           dir,
         },
       ],
-      unlisted: 0,
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
       problems: [],
     });
   });
@@ -124,7 +147,10 @@ describe("loadSkills", () => {
     write(bare, "# No Frontmatter\n\nThis skill has no YAML frontmatter at all.\n");
     expect(await loadSkills({ dataHome: home })).toEqual({
       skills: [],
-      unlisted: 0,
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
       problems: [
         { path: missing, message: "description is required", skipped: true },
         { path: bare, message: "description is required", skipped: true },
@@ -140,7 +166,10 @@ describe("loadSkills", () => {
     );
     expect(await loadSkills({ dataHome: home })).toEqual({
       skills: [],
-      unlisted: 0,
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
       problems: [
         {
           path,
@@ -246,7 +275,10 @@ describe("loadSkills", () => {
     );
     expect(await loadSkills({ dataHome: home })).toEqual({
       skills: [{ name: "cleanup", description: "Clean the build folder.", source: "owner", dir }],
-      unlisted: 0,
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
       problems: [],
     });
   });
@@ -287,7 +319,7 @@ describe("loadSkills", () => {
 
   test("no folders, no skills and no problems", async () => {
     const { home, folder } = await places();
-    const empty = { skills: [], unlisted: 0, problems: [] };
+    const empty = { skills: [], requested: [], missing: [], off: [], unlisted: [], problems: [] };
     expect(await loadSkills({ dataHome: home })).toEqual(empty);
     expect(await loadSkills({ dataHome: home, folder })).toEqual(empty);
     mkdirSync(folder, { recursive: true });
@@ -318,7 +350,10 @@ describe("loadSkills", () => {
     symlinkSync("fifo", join(owner, "inside", "SKILL.md"));
     expect(await loadSkills({ dataHome: home })).toEqual({
       skills: [],
-      unlisted: 0,
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
       problems: [
         { path: join(owner, "inside", "SKILL.md"), message: "isn't a file", skipped: true },
         {
@@ -345,7 +380,10 @@ describe("loadSkills", () => {
           dir: join(folder, ".agents", "skills", "own"),
         },
       ],
-      unlisted: 0,
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
       problems: [{ path: owner, message: "stopped scanning after 2000 folders", skipped: true }],
     });
   });
@@ -401,7 +439,10 @@ describe("loadSkills", () => {
     symlinkSync(dir, join(folder, ".agents", "skills", "real"));
     expect(await loadSkills({ dataHome: home, folder })).toEqual({
       skills: [{ name: "real", description: "Reached twice.", source: "owner", dir }],
-      unlisted: 0,
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
       problems: [],
     });
   });
@@ -427,7 +468,10 @@ describe("loadSkills", () => {
           dir: linkedTarget,
         },
       ],
-      unlisted: 0,
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
       problems: [
         {
           path: join(folder, ".agents", "skills", "keys"),
@@ -460,7 +504,10 @@ describe("loadSkills", () => {
     symlinkSync("../notes.md", join(owner, "linked", "SKILL.md"));
     expect(await loadSkills({ dataHome: home })).toEqual({
       skills: [],
-      unlisted: 0,
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
       problems: [
         {
           path: join(owner, "linked", "SKILL.md"),
@@ -512,7 +559,7 @@ describe("loadSkills", () => {
     }
     const { skills, unlisted, problems } = await loadSkills({ dataHome: home, folder });
     expect(skills).toHaveLength(150);
-    expect(unlisted).toBe(5);
+    expect(unlisted).toHaveLength(5);
     expect(problems).toEqual([]);
     expect(skills.slice(0, 145).every((skill) => skill.source === "owner")).toBe(true);
     expect(skills.slice(0, 3).map((skill) => skill.name)).toEqual([
@@ -543,7 +590,118 @@ describe("loadSkills", () => {
     expect(skills.map((skill) => skill.name)).toEqual(
       Array.from({ length: 22 }, (_, i) => `zh-${String(i).padStart(2, "0")}`),
     );
-    expect(unlisted).toBe(18);
+    expect(unlisted).toHaveLength(18);
+  });
+});
+
+describe("the shared folder, the owner's switches and the skills she names", () => {
+  test("the shared folder's skills come after the owner's and before the task folder's, and the owner's wins a name clash", async () => {
+    const { home, owner, shared, folder } = await places();
+    const ownerPath = writeSkill(
+      join(owner, "house-style"),
+      "name: house-style\ndescription: The owner's own house style.",
+    );
+    const sharedPath = writeSkill(
+      join(shared, "house-style"),
+      "name: house-style\ndescription: The house style other agents use.",
+    );
+    writeSkill(join(shared, "ship"), "name: ship\ndescription: Ship a change.");
+    const planted = writeSkill(
+      join(folder, ".agents", "skills", "ship"),
+      "name: ship\ndescription: A planted ship.",
+    );
+    writeSkill(join(folder, ".agents", "skills", "audit"), "name: audit\ndescription: Audit it.");
+    const { skills, problems } = await loadSkills({ dataHome: home, shared, folder });
+    expect(skills.map(({ name, source }) => [name, source])).toEqual([
+      ["house-style", "owner"],
+      ["ship", "shared"],
+      ["audit", "folder"],
+    ]);
+    expect(problems).toEqual([
+      { path: sharedPath, message: `shadowed by the owner's ${ownerPath}`, skipped: true },
+      {
+        path: planted,
+        message: `shadowed by the shared folder's ${join(shared, "ship", "SKILL.md")}`,
+        skipped: true,
+      },
+    ]);
+    // Trusted as the owner's own: only a task folder's skill is marked untrusted.
+    expect(skills.map(skillEntry)).toEqual([
+      `<skill name="house-style" from="owner">The owner's own house style.</skill>`,
+      `<skill name="ship" from="owner">Ship a change.</skill>`,
+      `<skill name="audit" from="folder">Audit it.</skill>`,
+    ]);
+  });
+
+  test("a shared folder that doesn't exist has no skills and no problems", async () => {
+    const { home, owner, shared } = await places();
+    writeSkill(join(owner, "notes"), "name: notes\ndescription: Notes.");
+    const { skills, problems } = await loadSkills({ dataHome: home, shared });
+    expect(skills.map((skill) => skill.name)).toEqual(["notes"]);
+    expect(problems).toEqual([]);
+  });
+
+  test("a name switched off in skills.json is off wherever it is found, and she can't name it", async () => {
+    const { home, owner, shared, folder } = await places();
+    writeSkill(join(owner, "notes"), "name: notes\ndescription: Notes.");
+    writeSkill(join(shared, "ship"), "name: ship\ndescription: Ship a change.");
+    writeSkill(join(folder, ".agents", "skills", "ship"), "name: ship\ndescription: Planted.");
+    write(skillSwitchesPath(home), JSON.stringify({ disabled: ["ship"] }));
+    const scan = await scanSkills({ dataHome: home, shared, folder });
+    expect([...scan.disabled]).toEqual(["ship"]);
+    expect(scan.switchesProblem).toBeNull();
+    const catalog = await loadSkills({ dataHome: home, shared, folder, requested: ["ship"] });
+    expect(catalog.skills.map((skill) => skill.name)).toEqual(["notes"]);
+    expect(catalog.requested).toEqual([]);
+    expect(catalog.missing).toEqual(["ship"]);
+    expect(catalog.off).toEqual(["ship"]);
+    expect(skillNames(scan)).toEqual(["notes"]);
+  });
+
+  test("a skills.json that doesn't read switches nothing off, and says why", async () => {
+    const { home, owner } = await places();
+    writeSkill(join(owner, "notes"), "name: notes\ndescription: Notes.");
+    for (const [text, problem] of [
+      ["{disabled: [notes]", "isn't JSON"],
+      ['{"disabled": "notes"}', "isn't {disabled: [the names of skills switched off]}"],
+      ['["notes"]', "isn't {disabled: [the names of skills switched off]}"],
+    ] as const) {
+      write(skillSwitchesPath(home), text);
+      const scan = await scanSkills({ dataHome: home });
+      expect([scan.switchesProblem, [...scan.disabled]]).toEqual([problem, []]);
+      expect(skillNames(scan)).toEqual(["notes"]);
+    }
+    write(skillSwitchesPath(home), "{}");
+    expect((await scanSkills({ dataHome: home })).switchesProblem).toBeNull();
+  });
+
+  test("she names the owner's and the shared folder's skills, one that opts out of model use included, never a task folder's", async () => {
+    const { home, owner, shared, folder } = await places();
+    const notes = join(owner, "notes");
+    writeSkill(notes, "name: notes\ndescription: Notes.");
+    const deploy = join(shared, "deploy");
+    writeSkill(
+      deploy,
+      "name: deploy\ndescription: Deploy the site.\ndisable-model-invocation: true",
+    );
+    writeSkill(join(shared, "Bad Name"), "name: Bad Name\ndescription: Not a name she can give.");
+    writeSkill(join(folder, ".agents", "skills", "audit"), "name: audit\ndescription: Audit it.");
+    const scan = await scanSkills({ dataHome: home, shared, folder });
+    expect(skillNames(scan)).toEqual(["deploy", "notes"]);
+    const catalog = await loadSkills({
+      dataHome: home,
+      shared,
+      folder,
+      requested: ["deploy", "notes", "deploy", "audit", "nope"],
+    });
+    expect(catalog.requested).toEqual([
+      { name: "deploy", description: "Deploy the site.", source: "shared", dir: deploy },
+      { name: "notes", description: "Notes.", source: "owner", dir: notes },
+    ]);
+    expect(catalog.missing).toEqual(["audit", "nope"]);
+    expect(catalog.off).toEqual([]);
+    // Named or not, a skill that opts out of model use is never in the catalog.
+    expect(catalog.skills.map((skill) => skill.name)).toEqual(["notes", "Bad Name", "audit"]);
   });
 });
 

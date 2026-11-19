@@ -92,7 +92,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
 | anything under `apps/` or `packages/` | [typescript.md](docs/typescript.md) |
 | a provider, an account, a role's provider or model, model lists, prices, realtime models, the usage ledger or the Usage page | [providers.md](docs/providers.md) |
-| the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), a task's commands (`bash`), skills, MCP servers (`mcp.json`), web search or kind, the task loop (`packages/engine/src/task.ts`), the app's tasks, her task tools (`start_task`, `steer_task`, `stop_task`, `check_task`), the status block, tasks on a call and the task routes (`apps/bot/src/local/tasks`, `routes/tasks.ts`), a chat's task display (`/focus`, `/normal`, `/verbose`), `/stop` and milestones on a call, or `laplace-task` | [assistant.md](docs/assistant.md) |
+| the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), a task's commands (`bash`), skills (Settings' Skills, `skills.json`, `EIDOLON_SHARED_SKILLS`), MCP servers (`mcp.json`), web search or kind, the task loop (`packages/engine/src/task.ts`), the app's tasks, her task tools (`start_task`, `steer_task`, `stop_task`, `check_task`), the status block, tasks on a call and the task routes (`apps/bot/src/local/tasks`, `routes/tasks.ts`), a chat's task display (`/focus`, `/normal`, `/verbose`), `/stop` and milestones on a call, or `laplace-task` | [assistant.md](docs/assistant.md) |
 
 ## Commands
 
@@ -359,9 +359,11 @@ the layout's one line.
   allowed names, every `LC_*`, `TERM=dumb`, and a `PATH` with no folder the task may write (an MCP
   server's as the task's first run found it), so no `.env` key reaches one unless an `mcp.json`
   entry names it.
-- **Of the file tools, only `skill` reads in the data home,** and only a listed skill's own files,
-  never a dot-file; `bash_output` reads only its task's logs there, commands and MCP servers run
-  outside `FolderPolicy`, and no skill reaches her prompt, her tools or production.
+- **Of the file tools, only `skill` reads in the data home,** and only a listed or named skill's own
+  files, never a dot-file; `bash_output` reads only its task's logs there, and commands and MCP
+  servers run outside `FolderPolicy`. Of a skill only its name reaches her, and only an owner's
+  (`start_task`'s `skills` enum): never a description, a body or a task folder's skill, and no
+  skill reaches production.
 - **A tool's own spend reaches the task's meter through `UsageMeter.charge`, never `tap`:** `tap`
   stands for a worker request's usage and sets the context's size, which steers compaction.
 - **Her `start_task` description and hint come in two, commands on and off

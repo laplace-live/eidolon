@@ -107,6 +107,10 @@ msgstr "{count, plural, other {# 个请求没有价格，未计入花费。}}"
 msgid "{count, plural, one {# search} other {# searches}}"
 msgstr "{count, plural, other {# 次网页搜索}}"
 
+#: src/features/settings/skills-card.tsx
+msgid "{count, plural, one {# skill couldn't be loaded} other {# skills couldn't be loaded}}"
+msgstr "{count, plural, other {# 个技能无法加载}}"
+
 #: src/features/settings/assistant.tsx
 msgid "{count, plural, one {# task is running or waiting for you. Turning Assistant Mode off stops it.} other {# tasks are running or waiting for you. Turning Assistant Mode off stops them.}}"
 msgstr "{count, plural, other {有 # 个任务正在运行或等你处理。关闭助手模式会停止它们。}}"
@@ -126,6 +130,10 @@ msgstr "{count, plural, other {# 个视频}}"
 #: src/components/voice-picker/voices.ts
 msgid "{count, plural, one {# voice} other {# voices}}"
 msgstr "{count, plural, other {共 # 个声音}}"
+
+#: src/features/settings/skills-card.tsx
+msgid "{count, plural, one {A task lists 150 skills, or about 4,500 tokens of them, at most, so # skill that is on is left out. Switch off skills tasks don't need.} other {A task lists 150 skills, or about 4,500 tokens of them, at most, so # skills that are on are left out. Switch off skills tasks don't need.}}"
+msgstr "{count, plural, other {一个任务最多列出 150 个技能，约 4,500 个 token，所以有 # 个已开启的技能没被列进去。把任务用不上的技能关掉吧。}}"
 
 #: src/features/studio/add-videos.tsx
 msgid "{count, plural, one {Add # video} other {Add # videos}}"
@@ -226,6 +234,10 @@ msgstr "{model} 不能演绎所有表演提示"
 #: src/features/studio/voice-section.tsx
 msgid "{model}, which she inherits from {env}, doesn't perform every delivery cue"
 msgstr "她从 {env} 继承的 {model} 不能演绎所有表演提示"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "{name} added."
+msgstr "已添加 {name}。"
 
 #: src/components/settings-form/account-key-field.tsx
 msgid "{name} API Key"
@@ -555,6 +567,14 @@ msgstr "{name}发来的自拍"
 msgid "A service Eidolon relies on failed. Try again later."
 msgstr "Eidolon 依赖的服务出错了，请稍后再试。"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "A skill needs a name."
+msgstr "技能需要一个名称。"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "A skill needs instructions."
+msgstr "技能需要写上说明。"
+
 #: src/features/studio/knowledge-section.tsx
 msgid "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
 msgstr "用与当前设置不同的嵌入模型或维度建立的表无法检索。请重新运行对应的作业。"
@@ -562,6 +582,10 @@ msgstr "用与当前设置不同的嵌入模型或维度建立的表无法检索
 #: src/components/settings-form/labels.ts
 msgid "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
 msgstr "任务的花费每越过这个金额的一个整数倍，都会先问过你再继续。单位为美元，0 表示从不询问。默认 1。"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "A task reads them once it chooses the skill, or from its start when you name the skill to her."
+msgstr "任务选中这个技能后会读这些内容；你跟她点名要用这个技能时，任务一开始就会读。"
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "A voice she switches to when you ask for it. Name it, say how you'd ask, and pick its voice."
@@ -657,6 +681,11 @@ msgstr "添加图片"
 msgid "Add Provider"
 msgstr "添加服务商"
 
+#: src/features/settings/new-skill-dialog.tsx
+#: src/features/settings/skills-card.tsx
+msgid "Add Skill"
+msgstr "添加技能"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Add Style"
 msgstr "添加风格"
@@ -700,6 +729,10 @@ msgstr "这些视频都已经列过了。"
 #: src/features/usage/route.tsx
 msgid "All Personas"
 msgstr "所有人设"
+
+#: src/features/settings/skills-card.tsx
+msgid "All Skills"
+msgstr "全部技能"
 
 #: src/features/usage/route.tsx
 msgid "All Time"
@@ -1117,6 +1150,7 @@ msgstr "无法连接 Eidolon，请确认它仍在终端中运行。"
 #: src/features/chats/chat-menu.tsx
 #: src/features/jobs/parts.tsx
 #: src/features/settings/accounts-card.tsx
+#: src/features/settings/new-skill-dialog.tsx
 #: src/features/setup/new-persona.tsx
 #: src/features/studio/references-section.tsx
 #: src/features/studio/video-table.tsx
@@ -1524,6 +1558,10 @@ msgstr "演示"
 msgid "Deny"
 msgstr "拒绝"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Description"
+msgstr "描述"
+
 #: src/features/jobs/parts.tsx
 #: src/features/studio/add-videos.tsx
 msgid "Details"
@@ -1648,6 +1686,10 @@ msgstr "编辑 {name}"
 msgid "Edit the {name} Style"
 msgstr "编辑风格 {name}"
 
+#: src/features/settings/skills-card.tsx
+msgid "Eidolon"
+msgstr "Eidolon"
+
 #: src/features/home/route.tsx
 msgid "Eidolon {version}"
 msgstr "Eidolon {version}"
@@ -1723,6 +1765,22 @@ msgstr "这个任务运行期间 Eidolon 停止了。继续会从它停下的地
 #: src/features/setup/persona-fields.tsx
 msgid "Eidolon uses that word itself. Pick another id."
 msgstr "Eidolon 自己要用这个词，请换一个 ID。"
+
+#: src/features/settings/skills-card.tsx
+msgid "Eidolon's Folder"
+msgstr "Eidolon 的文件夹"
+
+#: src/features/settings/skills-card.tsx
+msgid "Eidolon's folder:"
+msgstr "Eidolon 的文件夹："
+
+#: src/lib/labels.ts
+msgid "Eidolon's skills folder already has a skill by that name."
+msgstr "Eidolon 的技能文件夹里已经有同名的技能了。"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Eidolon's skills folder already has a skill by this name."
+msgstr "Eidolon 的技能文件夹里已经有同名的技能了。"
 
 #: src/features/jobs/labels.ts
 msgid "Embedding API"
@@ -2141,6 +2199,10 @@ msgstr "她的声音"
 msgid "Her voice ({id}) hasn't been checked with Fish Audio yet."
 msgstr "她的声音（{id}）尚未经过 Fish Audio 检查。"
 
+#: src/features/settings/skills-card.tsx
+msgid "Hidden by the skill of the same name in {shadowedBy}."
+msgstr "被 {shadowedBy} 里的同名技能盖过了。"
+
 #: src/features/jobs/detail.tsx
 msgid "Hide"
 msgstr "隐藏"
@@ -2349,6 +2411,14 @@ msgstr "会在第一次下载时自动安装。"
 msgid "Installs on the first download"
 msgstr "首次下载时安装"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Instructions"
+msgstr "说明"
+
+#: src/features/settings/skills-card.tsx
+msgid "Instructions a task follows for one kind of work, such as your house style or how you ship a change. A task loads a skill when its work calls for it, or from its start when you name the skill to her. A task also finds the skills in its own folder's .agents/skills."
+msgstr "任务做某一类活时照着做的说明，比如你的排版风格，或者你提交改动的流程。任务在活需要时加载技能；你跟她点名要用某个技能时，任务一开始就会加载。任务也会用到它自己文件夹里 .agents/skills 中的技能。"
+
 #: src/features/chats/why-answered.tsx
 msgid "Interested"
 msgstr "感兴趣"
@@ -2471,6 +2541,10 @@ msgstr "写完手头的内容后，它就会停止。"
 #: src/features/tasks/labels.ts
 msgid "It waited for your answer."
 msgstr "它在等你答复。"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "It will be used instead of the shared skill of the same name."
+msgstr "它会代替共享文件夹里的同名技能。"
 
 #: src/features/tasks/cards.tsx
 msgid "It works in this folder on its own once you allow it. Eidolon makes the folder if it doesn't exist yet."
@@ -2658,6 +2732,10 @@ msgstr "让它运行这条命令？"
 msgid "Let it write outside its folders?"
 msgstr "让它写入文件夹以外的位置？"
 
+#: src/features/settings/skills-card.tsx
+msgid "Let Tasks Use {name}"
+msgstr "让任务使用 {name}"
+
 #: src/components/preferences.tsx
 msgid "Light"
 msgstr "浅色"
@@ -2677,6 +2755,10 @@ msgstr "链接"
 #: src/features/studio/add-videos.tsx
 msgid "Links Checked"
 msgstr "已检查的链接"
+
+#: src/features/settings/skills-card.tsx
+msgid "Links to"
+msgstr "链接到"
 
 #: src/features/call/call-controls.tsx
 msgid "Listening…"
@@ -2712,6 +2794,10 @@ msgstr "上网查资料，再把查到的整理成文。"
 #: src/features/chats/labels.ts
 msgid "Looking through the stream archive…"
 msgstr "正在翻看直播回放…"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Lowercase letters, digits and hyphens. Saved as {path}."
+msgstr "用小写字母、数字和连字符。会保存为 {path}。"
 
 #: src/features/studio/videos-section.tsx
 msgid "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
@@ -2888,6 +2974,7 @@ msgid "Mute your mic"
 msgstr "关闭麦克风"
 
 #: src/features/settings/account-dialog.tsx
+#: src/features/settings/new-skill-dialog.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Name"
 msgstr "名称"
@@ -3048,6 +3135,18 @@ msgstr "无样本"
 #: src/features/settings/mcp-card.tsx
 msgid "No servers yet. Add them to {path}, in the mcpServers shape other MCP clients use."
 msgstr "还没有服务器。把它们加到 {path}，格式和其他 MCP 客户端用的 mcpServers 一样。"
+
+#: src/lib/labels.ts
+msgid "No skill of yours has that name anymore."
+msgstr "你已经没有叫这个名字的技能了。"
+
+#: src/features/settings/skills-card.tsx
+msgid "No skills match."
+msgstr "没有匹配的技能。"
+
+#: src/features/settings/skills-card.tsx
+msgid "No skills yet"
+msgstr "还没有技能"
 
 #: src/features/studio/video-table.tsx
 msgid "No speech"
@@ -3286,6 +3385,10 @@ msgstr "数据目录所在磁盘只剩 {free}。下载的音频会占用大量�
 msgid "Only Add Programs You Trust"
 msgstr "只添加你信任的程序"
 
+#: src/features/settings/skills-card.tsx
+msgid "Only When Named"
+msgstr "点名才用"
+
 #: src/components/locked-screen.tsx
 msgid "Open"
 msgstr "打开"
@@ -3384,6 +3487,10 @@ msgstr "其他"
 #: src/features/settings/account-dialog.tsx
 msgid "Other Provider"
 msgstr "换个服务商"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Our house style for web pages. Use when making or editing any HTML page."
+msgstr "我们网页的排版风格。做或改任何 HTML 页面时使用。"
 
 #: src/features/home/readiness-labels.ts
 msgid "Outfit references: {count}."
@@ -3754,6 +3861,7 @@ msgstr "已整理 {done}/{total}"
 
 #: src/features/home/memory-panel.tsx
 #: src/features/jobs/detail.tsx
+#: src/features/settings/skills-card.tsx
 msgid "Refresh"
 msgstr "刷新"
 
@@ -4089,6 +4197,10 @@ msgstr "跟{name}说点什么吧，打字或者发语音都行。这个聊天会
 msgid "Say something to everyone here. Whoever it's for answers, and they may answer each other too."
 msgstr "和大家说点什么吧。话是对谁说的，谁就来回答，她们之间也可能互相接话。"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Say what it does and when to use it."
+msgstr "写清它做什么、什么时候用。"
+
 #: src/components/settings-form/labels.ts
 msgid "Scene Types Left Out of the Index"
 msgstr "不纳入索引的场景类型"
@@ -4104,6 +4216,14 @@ msgstr "搜索模型"
 #: src/features/settings/account-dialog.tsx
 msgid "Search providers"
 msgstr "搜索服务商"
+
+#: src/features/settings/skills-card.tsx
+msgid "Search skills"
+msgstr "搜索技能"
+
+#: src/features/settings/skills-card.tsx
+msgid "Search Skills"
+msgstr "搜索技能"
 
 #: src/components/voice-picker/index.tsx
 msgid "Search Voices"
@@ -4241,6 +4361,18 @@ msgstr "设置步骤"
 msgid "Share"
 msgstr "占比"
 
+#: src/features/settings/skills-card.tsx
+msgid "Shared"
+msgstr "共享"
+
+#: src/features/settings/skills-card.tsx
+msgid "Shared Folder"
+msgstr "共享文件夹"
+
+#: src/features/settings/skills-card.tsx
+msgid "Shared folder:"
+msgstr "共享文件夹："
+
 #: src/features/chats/why-answered.tsx
 msgid "She answered {name}'s line."
 msgstr "她回应的是{name}的话。"
@@ -4319,6 +4451,7 @@ msgid "Short Name"
 msgstr "简称"
 
 #: src/features/jobs/detail.tsx
+#: src/features/settings/skills-card.tsx
 msgid "Show"
 msgstr "显示"
 
@@ -4373,6 +4506,11 @@ msgstr "仅供查看：请在 settings.yaml 中或用 <0>{env}</0> 设置。"
 #: src/features/usage/route.tsx
 msgid "since recording began"
 msgstr "开始记录以来"
+
+#: src/features/settings/route.tsx
+#: src/features/settings/skills-card.tsx
+msgid "Skills"
+msgstr "技能"
 
 #: src/features/setup/memory-step.tsx
 msgid "Skip"
@@ -4563,6 +4701,10 @@ msgstr "状态"
 msgid "Steps"
 msgstr "步骤"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Steps, rules and examples, in Markdown"
+msgstr "步骤、规则和示例，用 Markdown 写"
+
 #: src/features/call/transcript-view.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Still waiting for {name}. If nothing comes, say it again."
@@ -4676,6 +4818,10 @@ msgstr "简介"
 msgid "Switch to Her Now"
 msgstr "立即切换到她"
 
+#: src/features/settings/skills-card.tsx
+msgid "Switched Off"
+msgstr "已关闭"
+
 #: src/components/preferences.tsx
 msgid "System"
 msgstr "跟随系统"
@@ -4739,6 +4885,14 @@ msgstr "任务"
 #: src/features/tasks/list.tsx
 msgid "Tasks can't start yet"
 msgstr "任务还不能开始"
+
+#: src/features/settings/skills-card.tsx
+msgid "Tasks' list of skills is full"
+msgstr "任务的技能列表已满"
+
+#: src/features/settings/skills-card.tsx
+msgid "Tasks' list of skills is full without it, so only naming it to her reaches a task. Switch off skills tasks don't need."
+msgstr "任务的技能列表已满，没列进它，只有你跟她点名时任务才会用到。把任务用不上的技能关掉吧。"
 
 #: src/features/jobs/detail.tsx
 msgid "Technical Log"
@@ -5534,6 +5688,10 @@ msgstr "请使用两个字母的语言代码，例如 zh，或填写 none。"
 msgid "Use It"
 msgstr "改用"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Use lowercase letters, digits and single hyphens, 64 at most."
+msgstr "只能用小写字母、数字和单个连字符，最多 64 个字符。"
+
 #: src/features/setup/keys-step.tsx
 msgid "Use Other Providers (Optional)"
 msgstr "使用其他服务商（可选）"
@@ -5785,6 +5943,10 @@ msgstr "所有人设都知道的关于你的信息。"
 msgid "What it already finished is kept, so resuming it later picks up where it stopped."
 msgstr "已经完成的部分会保留，之后继续时会从停下的地方接着做。"
 
+#: src/features/settings/new-skill-dialog.tsx
+msgid "What it does and when to use it: a task picks a skill by this alone."
+msgstr "它做什么、什么时候用：任务只凭这一段来挑技能。"
+
 #: src/features/setup/persona-fields.tsx
 msgid "What prompts shorten her name to, and her avatar's letters. Empty uses her name."
 msgstr "提示词中对她名字的简称，也是头像上显示的字。留空则使用全名。"
@@ -5913,6 +6075,14 @@ msgstr "工作中…"
 msgid "Works out what the video pipeline would do and what it would cost, without running it."
 msgstr "估算视频流水线会做什么、要花多少钱，但不会真正运行。"
 
+#: src/features/settings/skills-card.tsx
+msgid "Write one here, or put a skill's folder, with its SKILL.md, in Eidolon's skills folder, or in the shared folder for your other agents too."
+msgstr "在这里写一个，或者把带 SKILL.md 的技能文件夹放进 Eidolon 的技能文件夹；放进共享文件夹的话，你的其他智能体也能用。"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "Written as a SKILL.md in Eidolon's skills folder, where you can edit it later. Tasks see its name and description, and read the rest when the work calls for it."
+msgstr "会写成 Eidolon 技能文件夹里的一个 SKILL.md，之后也可以在那里修改。任务会看到它的名称和描述，活需要时再读其余内容。"
+
 #: src/components/settings-form/labels.ts
 #: src/features/settings/route.tsx
 msgid "You"
@@ -6002,6 +6172,10 @@ msgstr "你的服务商"
 #: src/features/settings/account-dialog.tsx
 msgid "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
 msgstr "你的服务器的 OpenAI 兼容地址，例如 http://127.0.0.1:1234/v1。"
+
+#: src/features/settings/skills-card.tsx
+msgid "Your switches can't be read"
+msgstr "读不了你的技能开关"
 
 #: src/features/studio/text-editor.tsx
 msgid "Your unsaved changes will be lost."

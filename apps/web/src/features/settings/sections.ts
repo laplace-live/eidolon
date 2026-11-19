@@ -9,6 +9,7 @@ export const SECTIONS = [
   "memory",
   "downloads",
   "assistant",
+  "skills",
   "advanced",
 ] as const;
 export type SectionId = (typeof SECTIONS)[number];
@@ -73,6 +74,8 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
       ],
     },
   ],
+  // No rows: its card is the owner's skill folders.
+  skills: [],
 };
 
 /** Every row a card names, which Advanced leaves out. */
