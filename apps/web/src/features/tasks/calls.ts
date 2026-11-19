@@ -71,11 +71,11 @@ export function taskCalls(events: readonly ChatEvent[]): TaskCall[] {
 
 /**
  * Her report on `call` is in the log, or none is coming: its final, then for a task that ended on
- * its own, a call's end naming it as told there, or her report turn's nudge and after it her line,
- * not on a call, her words before a tool call included, or her failed turn. A line of hers that
- * answers another isn't her report; one after the nudge is, even when the owner's line cut her
- * report turn short. Her report turn records the nudge before it can fail, so a failure with none
- * before it was another turn's.
+ * its own, a call's end naming it as told there, or her report turn's nudge and after it her line
+ * with words, not on a call, her words before a tool call included, or her failed turn. A line of
+ * hers that answers another isn't her report; one after the nudge is, even when the owner's line
+ * cut her report turn short. Her report turn records the nudge before it can fail, so a failure
+ * with none before it was another turn's.
  */
 export function reportStored(events: readonly ChatEvent[], call: TaskCall): boolean {
   const { final } = call;
@@ -91,7 +91,9 @@ export function reportStored(events: readonly ChatEvent[], call: TaskCall): bool
       if (event.persona === call.persona && event.content.startsWith(nudge)) asked = true;
     } else if (event.type === "message") {
       const hers = event.speaker.kind === "persona" && event.speaker.id === call.persona;
-      if (asked && hers && event.modality !== "call") return true;
+      // A call opened on a seed without the nudge: her lines there, and after it, answer others.
+      if (hers && event.modality === "call") asked = false;
+      else if (asked && hers && event.text.trim() !== "") return true;
     } else if (event.type === "tool-call") {
       const hers = event.persona === call.persona && (event.said ?? "").trim() !== "";
       if (asked && hers) return true;

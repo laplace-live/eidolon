@@ -133,8 +133,8 @@ import {
 
 - **What it reads:** the log's newest `CHAT_WINDOW_EVENTS` (180) events that aren't `NEVER_SENT`,
   newest first.
-- **Two shares,** each closing at its first event that doesn't fit, so a call never goes without
-  its result:
+- **Two shares,** each closing at its first event that doesn't fit, so a call never goes while its
+  result stays behind (a call cut off has none):
   - tool calls and results: `CHAT_WINDOW_TOOL_EVENTS` (60) and `CHAT_WINDOW_TOOL_BYTES` (128 KB of
     JSON);
   - every other event: the other 120 and `CHAT_WINDOW_BYTES` (256 KB).

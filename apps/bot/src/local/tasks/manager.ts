@@ -372,8 +372,8 @@ function untilLeft(store: TaskStore, left: AbortSignal): TaskStore {
 
 /**
  * `store`, keeping on `run` the calls of the last reply it holds: a resume runs them. `read` is told
- * of the entries the run starts from, and `replied` of each new reply as it is stored, before the
- * run gates its calls.
+ * of the entries the run starts from, `replied` of each new reply as it is stored, before the run
+ * gates its calls, and `took` of each line from the inbox once it is stored.
  */
 function noting(
   store: TaskStore,
@@ -381,6 +381,7 @@ function noting(
   hooks: {
     readonly read: (entries: readonly TaskEntry[]) => void;
     readonly replied: () => void;
+    readonly took: (kind: keyof TaskInboxLines) => void;
   },
 ): TaskStore {
   return {
@@ -391,9 +392,12 @@ function noting(
       hooks.read(entries);
       return entries;
     },
-    append: (draft) => {
+    append: async (draft) => {
       if (draft.type === "assistant") hooks.replied();
-      return store.append(draft);
+      const entry = await store.append(draft);
+      if (draft.type === "steer") hooks.took("steer");
+      else if (draft.type === "follow-up") hooks.took("followUp");
+      return entry;
     },
   };
 }
@@ -469,6 +473,20 @@ function heldOutside(entries: readonly TaskEntry[]): boolean {
       ? readsOutside(entry.name, entry.isError, entry.details)
       : entry.type === "tool-start" && entry.name.startsWith(MCP_TOOL_PREFIX),
   );
+}
+
+/** `files` with each file a transcript's results read or wrote, which task.json lags as it does. */
+function filesHeld(
+  files: TaskSnapshot["files"],
+  entries: readonly TaskEntry[],
+): TaskSnapshot["files"] {
+  let { read, written } = files;
+  for (const entry of entries) {
+    if (entry.type !== "tool-result") continue;
+    read = adding(read, entry.files?.read);
+    written = adding(written, entry.files?.written);
+  }
+  return read === files.read && written === files.written ? files : { read, written };
 }
 
 /** What a run's skills catalog left out, and why: the owner learns of it only from the log. */
@@ -1394,15 +1412,18 @@ export class TaskManager {
       store: untilLeft(
         noting(openTaskStore(task.dir), run, {
           read: (entries) => {
-            if (task.snapshot.external !== true && heldOutside(entries)) {
-              void this.#change(task, { external: true });
-            }
+            const changes: Changes = {};
+            const files = filesHeld(task.snapshot.files, entries);
+            if (files !== task.snapshot.files) changes.files = files;
+            if (task.snapshot.external !== true && heldOutside(entries)) changes.external = true;
+            if (Object.keys(changes).length > 0) void this.#change(task, changes);
           },
           // A Run Once is for the call the run resumes with: some providers reuse call ids.
           replied: () => {
             task.once = [];
             task.mcpOnce = [];
           },
+          took: (kind) => this.#took(task, kind),
         }),
         left,
       ),
@@ -1552,24 +1573,29 @@ export class TaskManager {
   }
 
   /**
-   * The run's inbox over task.json's: a line the run takes is gone from it at once. A run that was
-   * left takes none, as its store would refuse the line's entry.
+   * The run's inbox over task.json's: a line the run takes stays there until the transcript holds
+   * it, which the loop stores before it looks again. A run that was left takes none, as its store
+   * would refuse the line's entry.
    */
   #inbox(task: Task, run: Run): TaskInbox {
     const take = (kind: keyof TaskInboxLines, all: boolean): readonly string[] => {
-      const { inbox } = task.snapshot;
-      if (run.leave.signal.aborted || inbox === undefined || inbox[kind].length === 0) return [];
-      const taken = all ? inbox[kind] : inbox[kind].slice(0, 1);
-      const rest = { ...inbox, [kind]: inbox[kind].slice(taken.length) };
-      const empty = rest.steer.length === 0 && rest.followUp.length === 0;
-      void this.#change(task, { inbox: empty ? undefined : rest }, true);
-      return taken;
+      const lines = run.leave.signal.aborted ? [] : (task.snapshot.inbox?.[kind] ?? []);
+      return all ? lines : lines.slice(0, 1);
     };
     return {
       hasSteering: () => !run.leave.signal.aborted && (task.snapshot.inbox?.steer.length ?? 0) > 0,
       takeSteering: (all) => take("steer", all),
       takeFollowUps: (all) => take("followUp", all),
     };
+  }
+
+  /** Drops the first of the inbox's `kind` lines from task.json, once the transcript holds it. */
+  #took(task: Task, kind: keyof TaskInboxLines): void {
+    const { inbox } = task.snapshot;
+    if (inbox === undefined) return;
+    const rest = { ...inbox, [kind]: inbox[kind].slice(1) };
+    const empty = rest.steer.length === 0 && rest.followUp.length === 0;
+    void this.#change(task, { inbox: empty ? undefined : rest }, true);
   }
 
   /** Reads the run's events until it ends; null once the server stops reading it. */

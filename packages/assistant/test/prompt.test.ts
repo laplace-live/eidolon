@@ -375,6 +375,16 @@ describe("loadContextFiles", () => {
     ]);
   });
 
+  test("an AGENTS.md that is a FIFO is skipped without waiting for a writer", async () => {
+    const home = join(root, "fifo");
+    mkdirSync(join(home, "proj"), { recursive: true });
+    expect(Bun.spawnSync(["mkfifo", join(home, "proj", "AGENTS.md")]).exitCode).toBe(0);
+    write(join(home, "proj", "CLAUDE.md"), "Fallback instructions");
+    expect(await contextFiles(join(home, "proj"), home)).toEqual([
+      { path: join(home, "proj", "CLAUDE.md"), content: "Fallback instructions" },
+    ]);
+  }, 5000);
+
   test("each file is cut at 20,000 characters and all at 60,000, the nearest kept first", async () => {
     const home = join(root, "caps");
     const folder = join(home, "a", "b", "c");

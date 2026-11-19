@@ -1070,10 +1070,10 @@ temporary data home and find it unchanged.
 - **Why tool events have a share:** a `recall_streams` overview runs to 10,000 characters, about
   30 KB of JSON, so two a turn would fill a shared 256 KB in about four turns and push her older
   lines out. A chat with no tool calls keeps its newest 120 events.
-- **A call is never kept without its result,** which would read to her as a call that never
-  returned: the result is newer, so the walk meets it first, and one that doesn't fit closes the
-  share before its call. A result can stay without its call when the share fills, or the cut ends,
-  between them; her view leaves such a result out.
+- **A call is never kept while its result is left out,** which would read to her as a call that
+  never returned: the result is newer, so the walk meets it first, and one that doesn't fit closes
+  the share before its call. A result can stay without its call when the share fills, or the cut
+  ends, between them; her view leaves such a result out.
 - **Her words before a call ride its share.** A call's `said` is part of the signed call, so once
   the tool share leaves an older call out, the words she wrote before it leave her view with it,
   while her line after them stays.

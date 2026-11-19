@@ -253,7 +253,10 @@ function shownOutput(tail: LogTail, rest: Rest): string {
   if (tail.binary) {
     return `(binary output: ${formatSize(tail.truncation.totalBytes)}, not shown; ${rest.binary})`;
   }
-  return tail.content === "" ? "" : sanitize(tail.content) + truncationNote(tail, rest);
+  // A tail cut down to one blank line is empty, and its note still says where the rest is.
+  return tail.content === "" && !tail.truncation.truncated
+    ? ""
+    : sanitize(tail.content) + truncationNote(tail, rest);
 }
 
 function details(run: BashRun, tail?: LogTail): BashDetails {

@@ -296,10 +296,11 @@ Each record carries the persona active in the process that spent it. A ledger th
 logs one warning and records nothing; a request never fails for it.
 
 The local app's **Usage** page reads it through `GET /api/local/usage?from=&to=&persona=`: spend
-per day or month stacked by provider, then tables by provider, by model and task, and by persona,
-each line saying what it used in its own units, searches included. Estimated spend is marked
-`≈`, and the totals say how much of it is estimated and how many records had no price. A provider keeps its color whatever the filter, from its place in the catalog among
-every provider the ledger knows.
+per day or month stacked by provider, then tables by provider, by model and task, and by persona.
+A provider's or a model's line says what it used in its own units, searches included; a persona's
+gives her requests and spend. Estimated spend is marked `≈`, and the totals say how much of it is
+estimated and how many records had no price. A provider keeps its color whatever the filter, from
+its place in the catalog among every provider the ledger knows.
 
 ## Production
 

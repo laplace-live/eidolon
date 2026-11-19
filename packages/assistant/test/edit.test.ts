@@ -394,6 +394,21 @@ describe("edit tool fuzzy matching", () => {
     expect(result.content).toMatch(/Found 2 occurrences/);
   });
 
+  it("matches whitespace-only text as it is, since it normalizes to nothing", async () => {
+    const testFile = join(testDir, "whitespace-only.txt");
+    writeFileSync(testFile, "a");
+    const missing = await edit({ path: testFile, edits: [{ oldText: " ", newText: "X" }] });
+    expect(missing.content).toMatch(/Could not find the exact text/);
+    expect(readFileSync(testFile, "utf-8")).toBe("a");
+
+    writeFileSync(testFile, "a\tb  \nc  \n");
+    const unique = await edit({ path: testFile, edits: [{ oldText: "\t", newText: " " }] });
+    expect(unique.content).toContain("Successfully replaced");
+    expect(readFileSync(testFile, "utf-8")).toBe("a b  \nc  \n");
+    const twice = await edit({ path: testFile, edits: [{ oldText: "  ", newText: "" }] });
+    expect(twice.content).toMatch(/Found 2 occurrences/);
+  });
+
   it("should support fuzzy matching in multi-edit mode", async () => {
     const testFile = join(testDir, "fuzzy-multi.txt");
     writeFileSync(testFile, "console.log(\u{2018}hello\u{2019});\nhello\u{a0}world\n");

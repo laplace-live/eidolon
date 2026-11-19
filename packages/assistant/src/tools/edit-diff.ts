@@ -394,11 +394,15 @@ export function applyEditsToNormalizedContent(
   const matchedEdits: MatchedEdit[] = [];
   for (let i = 0; i < normalizedEdits.length; i++) {
     const edit = normalizedEdits[i] as Edit;
-    const fuzzyOldText = fuzzyOldTexts[i] as string;
+    // Whitespace alone normalizes to nothing, which is found anywhere: it is found and counted as
+    // it is.
+    const whitespace = fuzzyOldTexts[i] === "";
+    const fuzzyOldText = whitespace ? edit.oldText : (fuzzyOldTexts[i] as string);
     const matchResult = fuzzyFindText(replacementBaseContent, edit.oldText, fuzzyOldText);
     if (!matchResult.found) throw getNotFoundError(path, i, normalizedEdits.length);
 
-    const occurrences = view.text.split(fuzzyOldText).length - 1;
+    const counted = whitespace ? replacementBaseContent : view.text;
+    const occurrences = counted.split(fuzzyOldText).length - 1;
     if (occurrences > 1) throw getDuplicateError(path, i, normalizedEdits.length, occurrences);
 
     const matched = {

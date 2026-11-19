@@ -39,6 +39,7 @@ describe("isContextOverflow", () => {
     "Rate limit exceeded, please retry after 30 seconds.",
     "Too many requests. Please slow down.",
     "`model runner crashed unexpectedly`",
+    "Tokens per minute limit exceeded - too many tokens processed.",
   ])("doesn't mistake %s for an overflow", (message) => {
     expect(isContextOverflow(http(429, message))).toBe(false);
   });

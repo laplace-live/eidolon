@@ -1,7 +1,7 @@
 // runTask beyond pi's loop: a transcript it resumes from, steering that skips a sequential batch,
 // spend, stall and approval pauses, retries, and an outcome the runtime decides.
 import { describe, expect, test } from "bun:test";
-import { ProviderHttpError, type UsageRecord, usageRecord } from "@eidolon/providers";
+import { httpError, ProviderHttpError, type UsageRecord, usageRecord } from "@eidolon/providers";
 import { runTask, type TaskEntry, type TaskEvent } from "../src/task.ts";
 import {
   anthropicMind,
@@ -759,6 +759,33 @@ describe("runTask's retries", () => {
     const { outcome } = await drain(taskRequest(mind, { sleep: async () => {} }));
     expect(mind.requests).toHaveLength(1);
     expect(outcome).toMatchObject({ status: "failed" });
+  });
+
+  test("retries a rate limit whose words name tokens, as any 429", async () => {
+    // Cerebras's answer past its tokens per minute.
+    const limited = await httpError(
+      "OpenAI-compatible endpoint",
+      Response.json(
+        {
+          message: "Tokens per minute limit exceeded - too many tokens processed.",
+          type: "too_many_tokens_error",
+          param: "quota",
+          code: "token_quota_exceeded",
+        },
+        { status: 429 },
+      ),
+    );
+    const waits: number[] = [];
+    const mind = new ScriptedMind([limited, says("done")]);
+    const { outcome } = await drain(
+      taskRequest(mind, {
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      }),
+    );
+    expect(waits).toEqual([1000]);
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
   });
 
   test("a cancel during the wait ends the task cancelled", async () => {

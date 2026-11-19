@@ -313,9 +313,9 @@ export function browserTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-/** Absolute, or from the home folder with `~`: never resolved against a folder of Eidolon's. */
+/** Absolute, or from the home folder by `~` or `~/`: never resolved in a folder of Eidolon's. */
 export function isFullPath(path: string): boolean {
-  return /^[/\\~]/.test(path) || /^[A-Za-z]:[/\\]/.test(path);
+  return /^(?:[/\\]|~(?:\/|$))/.test(path) || /^[A-Za-z]:[/\\]/.test(path);
 }
 
 /** The whole disk, or the home folder itself. */

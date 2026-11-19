@@ -82,7 +82,11 @@ function useTaskMutation<T>(id: string, send: (input: T) => Promise<TaskSnapshot
   return useMutation({
     mutationKey: mutationKey(id),
     mutationFn: send,
-    onSuccess: (task) => remember(queryClient, task),
+    onSuccess: (task) => {
+      remember(queryClient, task);
+      // A poll sent before the answer would land its older snapshot over this one.
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
     onError: (error) => {
       toastError(error);
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });

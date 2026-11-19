@@ -25,7 +25,8 @@ export function AllowedCommandsCard() {
   const remove = useMutation({
     mutationFn: (id: string) =>
       call("DELETE /api/local/assistant/commands/:id", { params: { id } }),
-    onSuccess: (data) => queryClient.setQueryData(allowedCommandsQuery.queryKey, data),
+    // Read again rather than installed: two Removes' answers can arrive out of order.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: allowedCommandsQuery.queryKey }),
     onError: (error) => {
       toastError(error);
       void queryClient.invalidateQueries({ queryKey: allowedCommandsQuery.queryKey });

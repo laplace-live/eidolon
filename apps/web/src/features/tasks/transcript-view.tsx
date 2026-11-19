@@ -332,12 +332,14 @@ export function TranscriptLog({
   const { t } = useLingui();
   const box = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
-  const count = rows.length;
 
+  // On every change of the rows, not only their count: a result filled in, or the Working… row,
+  // grows the log as much as a new row does.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rows and running only trigger it.
   useLayoutEffect(() => {
     const element = box.current;
-    if (element && atBottom.current && count > 0) element.scrollTop = element.scrollHeight;
-  }, [count]);
+    if (element && atBottom.current && rows.length > 0) element.scrollTop = element.scrollHeight;
+  }, [rows, running]);
 
   return (
     <div

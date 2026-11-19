@@ -31,8 +31,8 @@ export type Block =
   | { readonly kind: "code"; readonly at: number; readonly lang: string; readonly text: string }
   | { readonly kind: "rule"; readonly at: number };
 
-const FENCE = /^\s*(```|~~~)\s*([^`\s]*)/;
-const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+const FENCE = /^\s*(`{3,}|~{3,})\s*([^`\s]*)/;
+const HEADING = /^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
 const BULLET = /^\s*[-*+]\s+(.*)$/;
 const NUMBERED = /^\s*(\d{1,9})[.)]\s+(.*)$/;
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
@@ -65,6 +65,12 @@ export function parseInline(line: string): Inline[] {
   }
   strongs(rest, at, out);
   return out;
+}
+
+/** Whether `line` ends a fence opened with `mark`: its character alone, at least as many. */
+function closes(line: string, mark: string): boolean {
+  const run = line.trim();
+  return run.length >= mark.length && run === (mark[0] as string).repeat(run.length);
 }
 
 interface Open {
@@ -105,7 +111,7 @@ export function parseMarkdown(markdown: string): Block[] {
       const opened = at;
       const mark = fence[1] as string;
       const body: string[] = [];
-      for (at++; at < lines.length && !(lines[at] as string).trim().startsWith(mark); at++) {
+      for (at++; at < lines.length && !closes(lines[at] as string, mark); at++) {
         body.push(lines[at] as string);
       }
       blocks.push({ kind: "code", at: opened, lang: fence[2] ?? "", text: body.join("\n") });

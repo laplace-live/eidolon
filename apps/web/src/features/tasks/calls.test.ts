@@ -231,6 +231,24 @@ describe("reportStored", () => {
     expect(reportStored([...asked, before(7, "Done!", "bea")], callOf(asked))).toBe(false);
   });
 
+  test("a message of hers with no words after the nudge isn't her report", () => {
+    // A selfie her interrupted turn left rendering, stored through the chat's queue as it lands.
+    const photos: ChatEvent = {
+      type: "message",
+      seq: 7,
+      at: 7,
+      id: "m7",
+      speaker: { kind: "persona", id: "mio" },
+      text: "",
+      attachments: [{ kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" }],
+    };
+    const asked = [...started, result(5, "c1", final, "final"), nudged(6, "c1")];
+    expect(reportStored([...asked, photos], callOf(asked))).toBe(false);
+    expect(reportStored([...asked, said(7, "mio", " \n")], callOf(asked))).toBe(false);
+    const told = [...asked, photos, said(8, "mio", "Done! Open index.html.")];
+    expect(reportStored(told, callOf(told))).toBe(true);
+  });
+
   test("a task the owner stopped gets its final and no turn", () => {
     const events = [...started, result(5, "c1", { ...final, status: "cancelled" }, "final")];
     expect(reportStored(events, callOf(events))).toBe(true);
@@ -278,6 +296,9 @@ describe("reportStored", () => {
     // Her report turn cut by a call before she wrote: the call is handed the end.
     const redialed = [...untold, nudged(9, "c1"), said(10, "mio", "Hi again!", "call")];
     expect(reportStored(redialed, callOf(redialed))).toBe(false);
+    // Nor does her answer in text after that call: its seed held no nudge.
+    const after = [...redialed, callEnded(11), said(12, "user", "Hi"), said(13, "mio", "Hello!")];
+    expect(reportStored(after, callOf(after))).toBe(false);
   });
 
   test("another task's report, or another persona's nudge, doesn't end the wait", () => {

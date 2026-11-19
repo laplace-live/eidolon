@@ -51,10 +51,15 @@ const SPENT = /insufficient_quota|quota exceeded|out of budget|billing|usage lim
 const TRANSIENT =
   /overloaded|server_busy|servers are currently busy|high demand|at capacity|rate.?limit|too many requests|service.?(?:is.?)?(?:temporarily.?)?unavailable|server.?error|internal.?error|provider.?returned.?(?:an.?)?error|upstream|stream was interrupted|connection.?(?:error|refused|lost|closed|reset)|disconnected|other side closed|fetch failed/i;
 
-/** A provider refused the request as longer than its model's context: a 413, or one of OVERFLOW. */
+/**
+ * A provider refused the request as longer than its model's context: a 413, or one of OVERFLOW in
+ * any answer but a 429. A 429 is a rate limit whatever it says, and Cerebras's says "too many
+ * tokens processed" (https://github.com/anomalyco/opencode/issues/13015).
+ */
 export function isContextOverflow(error: unknown): boolean {
   if (!(error instanceof ProviderHttpError)) return false;
   if (error.status === 413) return true;
+  if (error.status === 429) return false;
   return !THROTTLED.test(error.message) && OVERFLOW.some((pattern) => pattern.test(error.message));
 }
 

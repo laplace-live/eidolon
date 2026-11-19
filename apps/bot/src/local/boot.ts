@@ -276,6 +276,9 @@ export async function bootLocal(
     },
   };
   shutdown = shutdownOnce(bot, (code) => io.exit(code));
+  const stop = shutdown;
+  // Before the tasks load: the supervisor's disconnect comes once, so a later handler misses it.
+  io.onShutdown(() => stop(0));
   const port = bot.server.port as number;
   try {
     recordServerPort(port);
@@ -287,7 +290,5 @@ export async function bootLocal(
   const url = linkUrl(host, port, token, io.nowSeconds());
   io.stdout(`Eidolon is ready: ${url}\n`);
   if (args.open && !envOptional("SSH_CONNECTION")) io.openBrowser(url);
-  const stop = shutdown;
-  io.onShutdown(() => stop(0));
   return { bot, url, restart };
 }

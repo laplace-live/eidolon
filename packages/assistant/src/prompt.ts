@@ -6,7 +6,7 @@
 // The worker's system prompt: what it is for, its tools and rules, the brief, the AGENTS.md and
 // CLAUDE.md files around its folder, the skills it may load, the date and the folder. Nothing of
 // the persona reaches it.
-import { open } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { TaskBrief } from "@eidolon/engine";
 import { fold } from "./policy.ts";
@@ -66,9 +66,10 @@ async function contextPlace(path: string, guard: PathGuard): Promise<string | nu
 
 /** The regular file at `path` as text: its first `max` characters, and how many it has. */
 async function readHead(path: string, max: number): Promise<{ head: string; length: number }> {
+  // Stat first: opening a FIFO waits for a writer.
+  if (!(await stat(path)).isFile()) return { head: "", length: 0 };
   const handle = await open(path, "r");
   try {
-    if (!(await handle.stat()).isFile()) return { head: "", length: 0 };
     // Drops a byte order mark; reads in chunks, so a huge file isn't held whole.
     const decoder = new TextDecoder();
     const buffer = Buffer.allocUnsafe(64 * 1024);

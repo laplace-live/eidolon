@@ -16,7 +16,7 @@ import {
 } from "@eidolon/assistant";
 import { PROOF_HEADER, type Status, type TasksResponse } from "../../src/local/api.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
-import { type Booted, bootFixture, cleanUpBoot } from "./harness.ts";
+import { type Booted, bootFixture, cleanUpBoot, fakeIo } from "./harness.ts";
 
 const SITE = "http://localhost:3000";
 const ORIGIN = { id: Bun.randomUUIDv7(), persona: "milky-green", call: "call-1" };
@@ -236,6 +236,22 @@ describe("the manager", () => {
       search: { on: false, problem: null },
       kinds: { quick: null, coding: null, research: null },
     });
+  });
+
+  test("starts once the server has its shutdown: a supervisor gone while the tasks load still stops it", async () => {
+    const crashed = await seed({ status: "running" });
+    const status = () =>
+      (JSON.parse(readFileSync(join(tasksDir(), crashed.id, "task.json"), "utf8")) as TaskSnapshot)
+        .status;
+    const io = fakeIo();
+    let atShutdown: string | null = null;
+    io.onShutdown = (handler) => {
+      io.shutdown = handler;
+      atShutdown = status();
+    };
+    booted = await bootFixture({ io });
+    // The load marks the task a crash left running interrupted: the handler came before it.
+    expect([atShutdown, status()]).toEqual(["running", "interrupted"]);
   });
 
   test("resumes an interrupted task once the server is up; turning Assistant Mode off stops it before the answer", async () => {

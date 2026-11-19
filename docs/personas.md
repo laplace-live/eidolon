@@ -49,7 +49,7 @@ set `EIDOLON_HOME=/data`.
   tasks/<id>/           assistant tasks' records; tasks/allowed-commands.json, the commands
                         allowed for good from their cards (assistant.md)
   skills/<name>/        the owner's Agent Skills, each a SKILL.md, which tasks may load
-  mcp.json              the MCP servers tasks may call; mcp/ (0700) is where they run
+  mcp.json              the MCP servers tasks may call; mcp/ (0700) is where one with no cwd runs
   mem0/history.db       Mem0's change log (the TypeScript bot's default)
 ```
 

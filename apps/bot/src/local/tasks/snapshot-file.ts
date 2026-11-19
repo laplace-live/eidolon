@@ -22,8 +22,9 @@ export class SnapshotFile {
   }
 
   /**
-   * Writes `snapshot` now, or with `soon`, once a second has passed since the last write. Resolves
-   * once the write it asks for is done; a failed one is logged, as the transcript still holds it.
+   * Writes `snapshot` now, or with `soon`, once a second has passed since the last write. A write
+   * now resolves once it is done; one held for its second resolves with the write before it, as
+   * nothing waits on progress. A failed write is logged, as the transcript still holds it.
    */
   save(snapshot: TaskSnapshot, soon: boolean): Promise<void> {
     this.#latest = snapshot;

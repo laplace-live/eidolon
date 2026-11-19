@@ -15,6 +15,8 @@ const fixture = join(FIXTURES, "mcp-stdio-server.mjs");
 const stubborn = join(FIXTURES, "mcp-stubborn-server.mjs");
 const exitingParent = join(FIXTURES, "mcp-exiting-parent-server.mjs");
 const daemon = join(FIXTURES, "mcp-daemon-server.mjs");
+const leftover = join(FIXTURES, "mcp-leftover-server.mjs");
+const STDIO = join(import.meta.dir, "../src/mcp/transports/stdio.ts");
 
 function isAlive(pid: number): boolean {
   try {
@@ -32,6 +34,30 @@ async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<boo
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   return true;
+}
+
+/**
+ * The pids `body` returns, run in a Bun process of its own with StdioTransport imported, once that
+ * process has ended by process.exit, as the app's shutdown ends it.
+ */
+function pidsAfterExit(body: string): number[] {
+  const host = Bun.spawnSync([
+    process.execPath,
+    "--no-env-file",
+    "-e",
+    `const { StdioTransport } = await import(${JSON.stringify(STDIO)});
+    const pids = await (async () => { ${body} })();
+    process.stdout.write(JSON.stringify(pids), () => process.exit(0));`,
+  ]);
+  return JSON.parse(host.stdout.toString()) as number[];
+}
+
+function killAll(pids: readonly number[]): void {
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {}
+  }
 }
 
 describe("StdioTransport", () => {
@@ -128,6 +154,66 @@ describe("StdioTransport", () => {
       try {
         process.kill(helper as number, "SIGKILL");
       } catch {}
+    }
+  }, 10_000);
+
+  it("kills what a server that exits on its stdin closing leaves in its group, SIGTERM or not", async () => {
+    const transport = new StdioTransport({
+      command: process.execPath,
+      args: ["--no-env-file", leftover],
+      closeTimeoutMs: 100,
+    });
+    await transport.start();
+    let helper: number | undefined;
+    await waitFor(() => {
+      const match = /helper (\d+)/.exec(transport.stderr);
+      if (match) helper = Number(match[1]);
+      return helper !== undefined;
+    });
+    expect(helper).toBeTypeOf("number");
+    try {
+      await transport.close();
+      expect(await waitFor(() => !isAlive(helper as number))).toBe(true);
+    } finally {
+      killAll([helper as number]);
+    }
+  }, 10_000);
+
+  it("kills a server that ignores SIGTERM, and its children, when the host exits without closing it", async () => {
+    const pids = pidsAfterExit(`
+      const transport = new StdioTransport({
+        command: process.execPath,
+        args: ["--no-env-file", ${JSON.stringify(stubborn)}],
+      });
+      await transport.start();
+      while (!/grandchild \\d+/.test(transport.stderr)) await Bun.sleep(10);
+      return [transport.pid, Number(/grandchild (\\d+)/.exec(transport.stderr)[1])];
+    `);
+    try {
+      expect(pids).toHaveLength(2);
+      expect(await waitFor(() => !pids.some(isAlive))).toBe(true);
+    } finally {
+      killAll(pids);
+    }
+  }, 10_000);
+
+  it("kills what an exited server left in its group when the host exits before its SIGKILL is due", async () => {
+    const pids = pidsAfterExit(`
+      const transport = new StdioTransport({
+        command: process.execPath,
+        args: ["--no-env-file", ${JSON.stringify(leftover)}, "--exit"],
+        closeTimeoutMs: 60_000,
+      });
+      const closed = new Promise((resolve) => transport.onClose(resolve));
+      await transport.start();
+      await closed;
+      return [Number(/helper (\\d+)/.exec(transport.stderr)[1])];
+    `);
+    try {
+      expect(pids).toHaveLength(1);
+      expect(await waitFor(() => !pids.some(isAlive))).toBe(true);
+    } finally {
+      killAll(pids);
     }
   }, 10_000);
 

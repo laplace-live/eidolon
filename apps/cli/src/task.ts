@@ -544,8 +544,9 @@ function toolLine(
 }
 
 /**
- * `text` with its control characters, but newlines and tabs, as \u escapes: a file name or the
- * worker's words could otherwise drive the terminal, as OSC 52 writes the clipboard.
+ * `text` with its control characters, but newlines and tabs, as \u escapes: a file name, the
+ * worker's words or a provider's error could otherwise drive the terminal, as OSC 52 writes the
+ * clipboard.
  */
 function visible(text: string): string {
   return text.replace(
@@ -570,8 +571,10 @@ class HumanReport implements Report {
   start(): void {
     const { id, dir, model, resumed, brief } = this.#task;
     logger.info(
-      `${resumed ? "Resuming" : "Starting"} task ${id} in ${brief.folder} on ` +
-        `${model.account}/${model.model}; its transcript is in ${dir}`,
+      visible(
+        `${resumed ? "Resuming" : "Starting"} task ${id} in ${brief.folder} on ` +
+          `${model.account}/${model.model}; its transcript is in ${dir}`,
+      ),
     );
   }
 
@@ -713,7 +716,7 @@ async function runInForeground(
     if (event.type === "request" && event.error !== undefined) {
       const retry =
         event.retryInMs === undefined ? "" : `; retrying in ${event.retryInMs / 1000} s`;
-      logger.warning(`The task's request failed${retry}: ${event.error}`);
+      logger.warning(visible(`The task's request failed${retry}: ${event.error}`));
     }
     if (event.type !== "entry") return;
     if (event.entry.type === "compaction") {

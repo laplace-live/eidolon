@@ -358,8 +358,9 @@ describe("Assistant Mode", () => {
       ok: true,
       value: ["~/Projects", "/Users/me/work", "C:\\work"],
     });
-    // The settings file resolves a relative one in the data home, where every task is refused.
-    for (const relative of ["Projects", "./work", "../x"]) {
+    // The settings file resolves a relative one in the data home, where every task is refused;
+    // expandUser reads `~` and `~/` alone, so `~Projects` is one.
+    for (const relative of ["Projects", "./work", "../x", "~Projects", "~me/work", "~\\Projects"]) {
       expect(parseDraft(relative, folders)).toEqual({
         ok: false,
         error: "settings.form.invalid.fullPath",
@@ -383,7 +384,9 @@ describe("Assistant Mode", () => {
 
   test("isFullPath", () => {
     for (const path of ["/a", "~", "~/a", "C:\\a", "c:/a"]) expect(isFullPath(path)).toBe(true);
-    for (const path of ["a", "./a", "", "C:", "C:a"]) expect(isFullPath(path)).toBe(false);
+    for (const path of ["a", "./a", "", "C:", "C:a", "~a", "~me/a"]) {
+      expect(isFullPath(path)).toBe(false);
+    }
   });
 
   test("its commands are on while nothing sets them, as assistantSettings reads them", () => {

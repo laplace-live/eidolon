@@ -11,6 +11,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -504,6 +505,21 @@ describe("a task she starts", () => {
     await tasks.cancel(first.id);
     const after = await tasks.start({ goal: "Again", folder: join(work, "a", "b") }, ORIGIN);
     expect(after.status).toBe("awaiting-approval");
+  });
+
+  test("in the folder a waiting task's dangling link leads to, which its Allow would make, is refused", async () => {
+    symlinkSync("real", join(work, "link"));
+    const tasks = await booted();
+    await tasks.start({ goal: "Build the site", folder: join(work, "link") }, ORIGIN);
+
+    for (const folder of [join(work, "real"), join(work, "real", "b")]) {
+      const busy = await refused(tasks.start({ goal: "Another", folder }, ELSEWHERE));
+      expect([busy.status, busy.code, busy.message]).toEqual([
+        409,
+        "conflict",
+        `A task is already working in ${join(work, "link")}: Build the site.`,
+      ]);
+    }
   });
 
   test("two starts at once in one folder: the second is refused", async () => {
@@ -1236,6 +1252,33 @@ describe("a restart", () => {
     }
   });
 
+  test("files a crash kept out of task.json are read back from the transcript, so its end names them", async () => {
+    // What a server killed within a second of a write leaves: the result in the transcript, and
+    // task.json not yet listing its file.
+    const page = join(work, "seeded", "index.html");
+    const seeded = await seed({ status: "running" }, [
+      {
+        type: "assistant",
+        text: "",
+        calls: [call("w1", "write", { path: "index.html", content: "<p>Hi</p>" })],
+      },
+      { type: "tool-start", callId: "w1", name: "write" },
+      {
+        type: "tool-result",
+        callId: "w1",
+        name: "write",
+        content: "Wrote index.html",
+        isError: false,
+        files: { written: [page] },
+      },
+    ]);
+    const tasks = await booted();
+    const ended = await reach(tasks, seeded.id, "succeeded");
+    expect(ended.files).toEqual({ read: [], written: [page] });
+    await until(() => reports.length === 1);
+    expect(reports[0]?.files.written).toEqual([page]);
+  });
+
   test("the inbox stays in task.json while the task isn't running, and its run takes it", async () => {
     const seeded = await seed({
       status: "paused",
@@ -1709,6 +1752,30 @@ describe("her steering", () => {
     const second = await booted();
     await reach(second, seeded.id, "succeeded");
     expect(userLines(minds.for("Seeded")[0]).at(-1)).toBe(line("Use the old logo."));
+  });
+
+  test("a line the run took stays in task.json until its transcript holds it, so a stop between loses none", async () => {
+    const lines = [line("Make it blue."), line("Use tabs.")];
+    const first = await booted();
+    const { id } = await first.start({ goal: "Two lines", folder: join(work, "two") }, ORIGIN);
+    await first.steer(id, "Make it blue.");
+    await first.steer(id, "Use tabs.");
+    await first.approve(id, { answer: "once" });
+    // The run takes both, then stores them one at a time: the server stops as soon as it has taken
+    // any, before it can store the second.
+    const queued = () => first.snapshotsOf(ORIGIN.id).find((each) => each.id === id)?.inbox?.steer;
+    while (queued()?.length === 2) await new Promise((resolve) => setImmediate(resolve));
+    await first.stop();
+    const kept = async () => [
+      ...transcript(id).flatMap((entry) => (entry.type === "steer" ? [entry.text] : [])),
+      ...((await onDisk(id))?.inbox?.steer ?? []),
+    ];
+    // An append the stop caught under way still lands, and drops its line from the inbox.
+    await until(async () => JSON.stringify(await kept()) === JSON.stringify(lines), 2000);
+
+    const second = await booted();
+    await reach(second, id, "succeeded");
+    expect(userLines(minds.for("Two lines").at(-1)).slice(1)).toEqual(lines);
   });
 
   test("an ended task is refused, and nothing changes", async () => {

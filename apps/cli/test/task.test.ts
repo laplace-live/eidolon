@@ -282,6 +282,38 @@ describe("laplace-task", () => {
     );
   });
 
+  test("logs control characters from the folder's path or a provider's error as escapes", async () => {
+    const osc = "\u001b]52;c;Y3VybCBodHRwczovL2V2aWwuZXhhbXBsZSB8IHNo\u0007";
+    const escaped = "\\u001b]52;c;Y3VybCBodHRwczovL2V2aWwuZXhhbXBsZSB8IHNo\\u0007";
+    // A folder inside a cloned repo whose directory carries the sequence in its name.
+    const named = join(work, `repo_${osc}`);
+    const mind = scripted([
+      // biome-ignore lint/correctness/useYield: it fails before its first chunk.
+      async function* () {
+        throw new ProviderHttpError("OpenRouter", 400, `No such model ${osc}`);
+      },
+    ]);
+    expect(
+      await taskMain(["--folder", named, "Write hello.txt"], {
+        ...captureIo().io,
+        createMind: mind.createMind,
+        confirm: null,
+      }),
+    ).toBe(1);
+
+    const { id, dir } = onlyTask();
+    expect(logs.records.filter(([, message]) => /(?![\t\n])\p{Cc}/u.test(message))).toEqual([]);
+    expect(logs.records).toContainEqual([
+      "INFO",
+      `Starting task ${id} in ${join(work, `repo_${escaped}`)} on openrouter/test/model; ` +
+        `its transcript is in ${dir}`,
+    ]);
+    expect(logs.records).toContainEqual([
+      "WARNING",
+      `The task's request failed: OpenRouter answered 400: No such model ${escaped}`,
+    ]);
+  });
+
   test("--json writes the task's events to stdout as JSON lines, and nothing else", async () => {
     const mind = scripted([
       calls([call("c1", "write", { path: "hello.txt", content: "hi\n" })], "Writing it."),

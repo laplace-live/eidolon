@@ -245,6 +245,19 @@ describe.skipIf(posix)("bash, as pi has it", () => {
     expect(result.content).toMatch(/\[Showing the last 50\.0KB of line 2, which is 213\.9KB\. /);
   });
 
+  test("says where the rest is, not (no output), when only a blank last line fits", async () => {
+    const { tool } = await setup({
+      operations: fake(async (_command, _cwd, { onData }) => {
+        onData(Buffer.from(`${"y".repeat(60_000)}\n\n`, "utf-8"));
+        return { exitCode: 0 };
+      }),
+    });
+    const result = await bash(tool, { command: "curl -s https://example.com/data.json; echo" });
+    expect(result.content).toBe(
+      `\n\n[Showing lines 2-2 of 2 (50.0KB limit). ${BASH_OUTPUT} with id 1 and an offset reads the rest.]`,
+    );
+  });
+
   test("decodes UTF-8 characters split across output chunks", async () => {
     const euro = Buffer.from("€\n", "utf-8");
     const { tool } = await setup({

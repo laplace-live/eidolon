@@ -17,7 +17,7 @@ const STDIN_CLOSE_GRACE_MS = 500;
 /** After the SIGKILL, how long the server's pipes get to close before they are let go. */
 const PIPE_DRAIN_MS = 1_000;
 
-/** Process groups of running servers, killed if the host exits without closing them. */
+/** Process groups that may still hold a server or what it started, killed if the host exits. */
 const liveProcessGroups = new Set<number>();
 let exitHookInstalled = false;
 
@@ -50,12 +50,9 @@ function killProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
 function installExitHook(): void {
   if (exitHookInstalled) return;
   exitHookInstalled = true;
+  // Not SIGTERM: once this process is gone, no SIGKILL follows it for a group that ignores it.
   process.once("exit", () => {
-    for (const pid of liveProcessGroups) {
-      try {
-        process.kill(-pid, "SIGTERM");
-      } catch {}
-    }
+    for (const pid of liveProcessGroups) signalGroup(pid, "SIGKILL");
   });
 }
 
@@ -128,10 +125,8 @@ export class StdioTransport extends TransportEvents implements McpTransport {
     child.on("close", () => {
       this.#child = undefined;
       this.#lines.end();
-      if (pid !== undefined) {
-        if (this.#closed) liveProcessGroups.delete(pid);
-        else this.#reap(pid);
-      }
+      // Closed or not: a process it left in its group that ignores SIGTERM still needs the SIGKILL.
+      if (pid !== undefined) this.#reap(pid);
       this.emitClose();
     });
 
@@ -177,8 +172,6 @@ export class StdioTransport extends TransportEvents implements McpTransport {
       const timers: ReturnType<typeof setTimeout>[] = [];
       child.once("close", () => {
         for (const timer of timers) clearTimeout(timer);
-        // Children of the server that ignored stdin closing would otherwise outlive it.
-        killProcessTree(child, "SIGTERM");
         resolve();
       });
       const grace = Math.min(STDIN_CLOSE_GRACE_MS, closeTimeoutMs);
@@ -200,8 +193,8 @@ export class StdioTransport extends TransportEvents implements McpTransport {
   }
 
   /**
-   * Ends what a server that exited on its own left in its group, as a close would: processes with
-   * pipes of their own, or none, don't hold the transport open and would outlive the task.
+   * Ends what a server that exited, closed or on its own, left in its group: processes with pipes
+   * of their own, or none, don't hold the transport open and would outlive the task.
    */
   #reap(pid: number): void {
     if (!signalGroup(pid, "SIGTERM")) {

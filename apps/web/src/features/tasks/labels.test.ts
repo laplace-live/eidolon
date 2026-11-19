@@ -88,6 +88,7 @@ describe("visibleCommand", () => {
       "echo safe[\\u{202E}];rm -rf ~[\\u{202C}]",
     );
     expect(shown("rm -rf /tmp/a\u200Bb")).toBe("rm -rf /tmp/a[\\u{200B}]b");
+    expect(shown("rm -rf /tmp/a\u034Fb")).toBe("rm -rf /tmp/a[\\u{034F}]b");
     expect(shown("printf '\u001B[2Kok'")).toBe("printf '[\\u{001B}][2Kok'");
     expect(shown("make\r\n")).toBe("make[\\u{000D}]\n");
   });
@@ -100,8 +101,8 @@ describe("visibleCommand", () => {
 
   test("spells out the other invisible characters, each in full", () => {
     const hidden = [
-      0x00, 0x07, 0x0b, 0x1f, 0x7f, 0x85, 0x9f, 0xad, 0x61c, 0x200e, 0x200f, 0x2028, 0x2029, 0x202a,
-      0x2060, 0x2064, 0x2066, 0x2069, 0xfeff, 0xe0001, 0xe007f,
+      0x00, 0x07, 0x0b, 0x1f, 0x7f, 0x85, 0x9f, 0xad, 0x34f, 0x61c, 0x200e, 0x200f, 0x2028, 0x2029,
+      0x202a, 0x2060, 0x2064, 0x2066, 0x2069, 0xfeff, 0xe0001, 0xe007f,
     ];
     for (const code of hidden) {
       const parts = visibleCommand(`a${String.fromCodePoint(code)}b`);
@@ -109,7 +110,9 @@ describe("visibleCommand", () => {
       expect(parts[1]?.text).toBe(`\\u{${code.toString(16).toUpperCase().padStart(4, "0")}}`);
     }
     // Their neighbours show as they are.
-    for (const code of [0x20, 0x7e, 0xa0, 0xae, 0x200a, 0x2030, 0x2065, 0x206a, 0xe0080]) {
+    for (const code of [
+      0x20, 0x7e, 0xa0, 0xae, 0x34e, 0x350, 0x200a, 0x2030, 0x2065, 0x206a, 0xe0080,
+    ]) {
       expect([code, visibleCommand(`a${String.fromCodePoint(code)}b`).length]).toEqual([code, 1]);
     }
   });

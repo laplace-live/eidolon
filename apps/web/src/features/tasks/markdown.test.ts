@@ -63,6 +63,26 @@ test("a fence keeps its lines as they are, to its end or the text's", () => {
   expect(shape(parseMarkdown("~~~\nopen"))).toEqual([{ kind: "code", lang: "", text: "open" }]);
 });
 
+test("a fence ends only at a line of its own mark, as long or longer, so it can hold a shorter one", () => {
+  // The worker quoting a README it wrote, whose own fence opens and closes inside.
+  const quoted = "````markdown\n# Setup\n```bash\nbun run app\n```\n````\nDone";
+  expect(shape(parseMarkdown(quoted))).toEqual([
+    { kind: "code", lang: "markdown", text: "# Setup\n```bash\nbun run app\n```" },
+    { kind: "paragraph", lines: [line(text("Done"))] },
+  ]);
+  expect(shape(parseMarkdown("```\n```js\n~~~\n````"))).toEqual([
+    { kind: "code", lang: "", text: "```js\n~~~" },
+  ]);
+});
+
+test("a heading keeps the # its words end with; only a closing run after a space goes", () => {
+  expect(shape(parseMarkdown("## Ported it to C#\n# Done ##\n### F# #"))).toEqual([
+    { kind: "heading", level: 2, content: [text("Ported it to C#")] },
+    { kind: "heading", level: 1, content: [text("Done")] },
+    { kind: "heading", level: 3, content: [text("F#")] },
+  ]);
+});
+
 test("code spans and bold inside a line", () => {
   expect(shape(parseInline("Open **index.html** with `bun run app`."))).toEqual([
     text("Open "),
