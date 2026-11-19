@@ -1,10 +1,11 @@
 import { parseMentions } from "@eidolon/chat";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { ArrowUpIcon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, ScrollTextIcon, SquareIcon, SquareSlashIcon } from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
   useId,
   useLayoutEffect,
@@ -17,9 +18,25 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import { closedAt, EMPTY_DRAFT, mentionName, picked, retyped, suggestions } from "./autocomplete";
-import { type ChatCommand, parseCommand } from "./commands";
-import { RECORDER_PROBLEMS } from "./labels";
+import {
+  closedAt,
+  type Draft,
+  EMPTY_DRAFT,
+  mentionName,
+  mentionSuggestions,
+  picked,
+  retyped,
+  slashSuggestions,
+  type Trigger,
+} from "./autocomplete";
+import {
+  type ChatCommand,
+  parseCommand,
+  type SlashEntry,
+  type SlashSkill,
+  slashEntries,
+} from "./commands";
+import { COMMAND_HELP, RECORDER_PROBLEMS } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
 import type { VoiceClip } from "./stream";
 import { useRecorder } from "./use-recorder";
@@ -28,17 +45,117 @@ import { MicButton, type MicState, RecordingBar } from "./voice-recorder";
 /** The server's limit, in code points; maxLength counts UTF-16 units, which is stricter. */
 const TEXT_MAX = 4000;
 
+type Open =
+  | { readonly kind: "mention"; readonly at: Trigger; readonly options: readonly ChatPersona[] }
+  | { readonly kind: "slash"; readonly at: Trigger; readonly options: readonly SlashEntry[] };
+
+/**
+ * What `draft`'s caret could complete, while anything matches: in a group, the participants after
+ * an `@`; after the `/` a draft starts with, the commands and `skills`.
+ */
+function openAt(
+  draft: Draft,
+  participants: readonly ChatPersona[],
+  skills: readonly SlashSkill[],
+): Open | null {
+  if (participants.length > 1) {
+    const { at, options } = mentionSuggestions(draft, participants);
+    if (at !== null && options.length > 0) return { kind: "mention", at, options };
+  }
+  const alone = draft.text.slice(draft.caret).trim() === "";
+  const { at, options } = slashSuggestions(draft, slashEntries(skills, alone));
+  return at !== null && options.length > 0 ? { kind: "slash", at, options } : null;
+}
+
+/**
+ * Suggestions above the text box. A click keeps the focus, and so the caret, in the box; only the
+ * main button picks. The arrow keys scroll a long list to the option they reach.
+ */
+function SuggestionList<T>({
+  id,
+  label,
+  options,
+  active,
+  keyOf,
+  onChoose,
+  onHover,
+  className,
+  children,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly options: readonly T[];
+  readonly active: number;
+  readonly keyOf: (option: T) => string;
+  readonly onChoose: (index: number) => void;
+  readonly onHover: (index: number) => void;
+  readonly className: string;
+  readonly children: (option: T) => ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Not on every redraw: one each time her streaming reply grows would undo the owner's scrolling.
+  const shown = options.map(keyOf).join("\n");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: shown only triggers it.
+  useLayoutEffect(() => {
+    const list = ref.current;
+    const option = list?.children[active];
+    if (list === null || !(option instanceof HTMLElement)) return;
+    const bottom = option.offsetTop + option.offsetHeight;
+    if (option.offsetTop < list.scrollTop) list.scrollTop = option.offsetTop;
+    else if (bottom > list.scrollTop + list.clientHeight) {
+      list.scrollTop = bottom - list.clientHeight;
+    }
+  }, [active, shown]);
+  return (
+    <div
+      ref={ref}
+      id={id}
+      role="listbox"
+      aria-label={label}
+      className={cn(
+        "absolute bottom-full left-0 z-10 mb-2 flex flex-col overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10",
+        className,
+      )}
+    >
+      {options.map((option, index) => (
+        <div
+          key={keyOf(option)}
+          id={`${id}-${index}`}
+          role="option"
+          tabIndex={-1}
+          aria-selected={index === active}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            if (event.button === 0) onChoose(index);
+          }}
+          // Not mouseenter: Chrome fires that when a list opens or narrows under a pointer at rest,
+          // which would move the highlight off the first match that Enter takes.
+          onMouseMove={() => onHover(index)}
+          className={cn(
+            "flex min-w-0 shrink-0 cursor-default items-center gap-2 rounded-md px-1.5 py-1.5 text-sm",
+            index === active && "bg-accent text-accent-foreground",
+          )}
+        >
+          {children(option)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * The text box: Enter sends and Shift+Enter breaks the line. A send while a reply runs is allowed,
  * since the server stops it and still answers every line; Stop shows while one does. With two or
- * more personas, an `@` offers their names, and whoever the line mentions answers first. While the
- * box is empty, the microphone takes the send button's place, and a take replaces the box while it
- * records. During a call it is disabled, keeping any draft, and it takes the focus back when the
- * call ends. A command goes to `onCommand`, never to her; one it can't run keeps the draft.
+ * more personas, an `@` offers their names, and whoever the line mentions answers first. A `/` that
+ * starts the draft offers the commands and `skills`. While the box is empty, the microphone takes
+ * the send button's place, and a take replaces the box while it records. During a call it is
+ * disabled, keeping any draft, and it takes the focus back when the call ends. A command goes to
+ * `onCommand`, never to her; one it can't run keeps the draft.
  */
 export function Composer({
   placeholder,
   participants,
+  skills,
   busy,
   mic,
   inCall,
@@ -49,6 +166,8 @@ export function Composer({
 }: {
   readonly placeholder: string;
   readonly participants: readonly ChatPersona[];
+  /** The owner's skills she can be asked for by name in this chat. */
+  readonly skills: readonly SlashSkill[];
   readonly busy: boolean;
   readonly mic: MicState;
   readonly inCall: boolean;
@@ -77,10 +196,8 @@ export function Composer({
   const trimmed = text.trim();
 
   const group = participants.length > 1;
-  const open = group && focused ? suggestions(draft, participants) : null;
-  const at = open?.at ?? null;
-  const options = open?.options ?? [];
-  const active = Math.min(highlight, options.length - 1);
+  const open = focused ? openAt(draft, participants, skills) : null;
+  const active = open === null ? 0 : Math.min(highlight, open.options.length - 1);
   const mentioned = group ? parseMentions(text, participants) : [];
 
   // A phone's keyboard would cover the chat it just opened, or the call just ended.
@@ -106,22 +223,42 @@ export function Composer({
     setHighlight(0);
   }
 
-  function pick(target: ChatPersona) {
-    if (at === null) return;
-    const next = picked(draft, at, mentionName(target, participants));
+  function pick(at: Trigger, name: string) {
+    const next = picked(draft, at, name);
     placeCaret.current = next.caret;
     setDraft(next);
     setHighlight(0);
   }
 
+  function run(command: ChatCommand) {
+    onCommand(command);
+    edit("", 0);
+  }
+
+  /**
+   * Takes option `index` of `list`: a name goes in after its `@` or `/`, and a command runs, unless
+   * `complete`, which only puts it in.
+   */
+  function choose(list: Open, index: number, complete: boolean) {
+    if (list.kind === "mention") {
+      const persona = list.options[index];
+      if (persona !== undefined) pick(list.at, mentionName(persona, participants));
+      return;
+    }
+    const entry = list.options[index];
+    if (entry === undefined) return;
+    if (entry.kind === "command" && !complete) run(entry.name);
+    else pick(list.at, entry.name);
+  }
+
   function submit(event?: FormEvent) {
     event?.preventDefault();
     if (trimmed === "" || inCall) return;
-    const parsed = parseCommand(trimmed);
+    const parsed = parseCommand(trimmed, skills);
     switch (parsed.kind) {
       case "command":
-        onCommand(parsed.command);
-        break;
+        run(parsed.command);
+        return;
       case "trailing": {
         const command = `/${parsed.command}`;
         toast.error(t`${ph({ command })} takes nothing after it`, {
@@ -136,30 +273,30 @@ export function Composer({
         return;
       case "line":
         onSend(trimmed);
-        break;
+        edit("", 0);
+        return;
     }
-    edit("", 0);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // Safari ends an IME composition before the Enter that confirms it.
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-    const chosen = options[active];
-    if (at !== null && chosen !== undefined) {
+    if (open !== null) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         const step = event.key === "ArrowDown" ? 1 : -1;
-        setHighlight((active + step + options.length) % options.length);
+        const count = open.options.length;
+        setHighlight((active + step + count) % count);
         return;
       }
       if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
         event.preventDefault();
-        pick(chosen);
+        choose(open, active, event.key === "Tab");
         return;
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        setDraft({ ...draft, closed: closedAt(draft.text, at) });
+        setDraft({ ...draft, closed: closedAt(draft.text, open.at) });
         return;
       }
     }
@@ -175,6 +312,7 @@ export function Composer({
       return persona === undefined ? [] : [shortNameOf(persona)];
     }),
   );
+  const listProps = { id: listId, active, onHover: setHighlight };
   return (
     <form className="flex flex-col gap-1.5" onSubmit={submit}>
       {mentioned.length > 0 && (
@@ -183,31 +321,17 @@ export function Composer({
       <div className="flex items-end gap-2">
         {recording && <RecordingBar recorder={recorder} holding={holding} />}
         <div className="relative min-w-0 flex-1" hidden={recording}>
-          {options.length > 0 && (
-            <div
-              id={listId}
-              role="listbox"
-              aria-label={t`Mention`}
-              className="absolute bottom-full left-0 z-10 mb-2 flex w-64 max-w-full flex-col rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+          {open?.kind === "mention" && (
+            <SuggestionList
+              {...listProps}
+              label={t`Mention`}
+              options={open.options}
+              keyOf={(persona) => persona.id}
+              onChoose={(index) => choose(open, index, false)}
+              className="w-64 max-w-full"
             >
-              {options.map((persona, index) => (
-                <div
-                  key={persona.id}
-                  id={`${listId}-${index}`}
-                  role="option"
-                  tabIndex={-1}
-                  aria-selected={index === active}
-                  // Keeps the focus, and so the caret, in the text box.
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    pick(persona);
-                  }}
-                  onMouseEnter={() => setHighlight(index)}
-                  className={cn(
-                    "flex cursor-default items-center gap-2 rounded-md px-1.5 py-1.5 text-sm",
-                    index === active && "bg-accent text-accent-foreground",
-                  )}
-                >
+              {(persona) => (
+                <>
                   <PersonaAvatar persona={persona} size="xs" />
                   <span className="truncate">{persona.name}</span>
                   {mentionName(persona, participants) !== persona.name && (
@@ -215,9 +339,33 @@ export function Composer({
                       @{mentionName(persona, participants)}
                     </span>
                   )}
-                </div>
-              ))}
-            </div>
+                </>
+              )}
+            </SuggestionList>
+          )}
+          {open?.kind === "slash" && (
+            <SuggestionList
+              {...listProps}
+              label={t`Commands and Skills`}
+              options={open.options}
+              keyOf={(entry) => entry.name}
+              onChoose={(index) => choose(open, index, false)}
+              className="max-h-72 w-full max-w-md"
+            >
+              {(entry) => (
+                <>
+                  {entry.kind === "command" ? (
+                    <SquareSlashIcon className="size-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ScrollTextIcon className="size-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="min-w-0 truncate font-medium">/{entry.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
+                    {entry.kind === "command" ? t(COMMAND_HELP[entry.name]) : entry.description}
+                  </span>
+                </>
+              )}
+            </SuggestionList>
           )}
           <Textarea
             ref={ref}
@@ -233,9 +381,9 @@ export function Composer({
             placeholder={shown}
             aria-label={shown}
             disabled={inCall}
-            aria-autocomplete={group ? "list" : undefined}
-            aria-controls={options.length > 0 ? listId : undefined}
-            aria-activedescendant={options.length > 0 ? `${listId}-${active}` : undefined}
+            aria-autocomplete="list"
+            aria-controls={open === null ? undefined : listId}
+            aria-activedescendant={open === null ? undefined : `${listId}-${active}`}
             maxLength={TEXT_MAX}
             rows={1}
             enterKeyHint="send"

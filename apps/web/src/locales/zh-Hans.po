@@ -786,6 +786,10 @@ msgstr "已允许的命令"
 msgid "Already added"
 msgstr "已添加"
 
+#: src/features/chats/labels.ts
+msgid "Also show a running task's steps"
+msgstr "还会实时显示在做的任务的每一步"
+
 #: src/features/tasks/cards.tsx
 msgid "Always Allow This Folder"
 msgstr "始终允许这个文件夹"
@@ -1373,6 +1377,10 @@ msgstr "编程任务暂时使用助手模式的模型"
 #: src/features/settings/commands-card.tsx
 msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one."
 msgstr "任务无需询问就能运行的命令，每条只在它的文件夹里、只按原样生效；任务抓取过网页、搜索过网络或调用过 MCP 服务器后仍会询问，它自己运行的命令下载的内容不算在内。在任务卡片上选择「在这个文件夹里始终允许」就会加到这里。"
+
+#: src/features/chats/composer.tsx
+msgid "Commands and Skills"
+msgstr "命令和技能"
 
 #: src/features/tasks/cards.tsx
 msgid "Commands run as you, with no sandbox: this one can read, change or delete any of your files, not only this folder's, and reach the network."
@@ -2210,6 +2218,10 @@ msgstr "隐藏"
 #: src/features/tasks/task-card.tsx
 msgid "Hide Steps"
 msgstr "收起步骤"
+
+#: src/features/chats/labels.ts
+msgid "Hide this chat's task cards"
+msgstr "隐藏这个聊天里的任务卡片"
 
 #: src/features/chats/voice-bubble.tsx
 msgid "Hide Transcript"
@@ -4475,6 +4487,10 @@ msgstr "显示全部 {count} 条"
 msgid "Show Chats"
 msgstr "显示聊天列表"
 
+#: src/features/chats/labels.ts
+msgid "Show each task as one card"
+msgstr "每个任务显示为一张卡片"
+
 #: src/features/studio/video-table.tsx
 msgid "Show Finished"
 msgstr "显示已完成的"
@@ -4720,6 +4736,10 @@ msgstr "还在等{name}回应。如果一直没有回应，请再说一遍。"
 #: src/features/tasks/task-card.tsx
 msgid "Stop"
 msgstr "停止"
+
+#: src/features/chats/labels.ts
+msgid "Stop a task in this chat"
+msgstr "停止这个聊天里的任务"
 
 #: src/features/settings/mcp-card.tsx
 msgid "Stop Always Allowing {tool}"

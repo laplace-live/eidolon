@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { CHAT_DISPLAYS } from "@eidolon/chat";
-import { CHAT_COMMANDS, parseCommand } from "./commands";
+import { CHAT_COMMANDS, parseCommand, slashEntries } from "./commands";
+
+const PDF = { name: "pdf", description: "Read and make PDFs" };
+const DOCX = { name: "docx", description: "Read and make Word documents" };
+const STOP = { name: "stop", description: "A skill named as a command" };
 
 describe("parseCommand", () => {
   test("the three displays and stop, each alone, run", () => {
@@ -48,5 +52,37 @@ describe("parseCommand", () => {
     ]) {
       expect(parseCommand(draft)).toEqual({ kind: "line" });
     }
+  });
+});
+
+describe("a skill after a slash", () => {
+  test("is a line for her, alone or with words after it, in any case", () => {
+    for (const draft of ["/pdf", "/PDF", " ／pdf ", "/pdf 把报告做成 PDF"]) {
+      expect(parseCommand(draft, [PDF])).toEqual({ kind: "line" });
+    }
+  });
+
+  test("is refused alone where she can't be asked for it, and a command keeps its name", () => {
+    expect(parseCommand("/pdf")).toEqual({ kind: "unknown", typed: "/pdf" });
+    expect(parseCommand("/pdf", [DOCX])).toEqual({ kind: "unknown", typed: "/pdf" });
+    expect(parseCommand("/stop", [STOP])).toEqual({ kind: "command", command: "stop" });
+  });
+});
+
+describe("slashEntries", () => {
+  test("offers the commands while the slash word is alone, then the skills", () => {
+    expect(slashEntries([PDF], true)).toEqual([
+      ...CHAT_COMMANDS.map((name) => ({ kind: "command" as const, name })),
+      { kind: "skill", ...PDF },
+    ]);
+  });
+
+  test("offers only the skills before what the draft already says", () => {
+    expect(slashEntries([PDF], false)).toEqual([{ kind: "skill", ...PDF }]);
+    expect(slashEntries([], false)).toEqual([]);
+  });
+
+  test("leaves out a skill named as a command, which would run instead", () => {
+    expect(slashEntries([STOP, PDF], false)).toEqual([{ kind: "skill", ...PDF }]);
   });
 });

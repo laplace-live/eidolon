@@ -5,7 +5,7 @@
 import type { MessageDescriptor } from "@lingui/core";
 import { msg, ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDownIcon,
   PlusIcon,
@@ -36,14 +36,7 @@ import { call, type SkillOrigin, type SkillsResponse, type SkillView } from "@/l
 import { toastError } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 import { NewSkillDialog } from "./new-skill-dialog";
-import { SKILL_FILTERS, type SkillFilter, visibleSkills } from "./skills";
-
-const skillsQuery = queryOptions({
-  queryKey: ["assistant", "skills"],
-  queryFn: ({ signal }) => call("GET /api/local/skills", { signal }),
-  // Skill folders change outside the app.
-  refetchOnWindowFocus: true,
-});
+import { SKILL_FILTERS, type SkillFilter, skillsQuery, visibleSkills } from "./skills";
 
 const SOURCE_LABELS: Readonly<Record<SkillOrigin, MessageDescriptor>> = {
   eidolon: msg`Eidolon`,

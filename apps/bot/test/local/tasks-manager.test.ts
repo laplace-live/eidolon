@@ -2964,6 +2964,7 @@ describe("skills", () => {
           source: "eidolon",
           folder: ownPath("house-style"),
           enabled: true,
+          nameable: true,
           problems: [],
         },
         {
@@ -2983,6 +2984,7 @@ describe("skills", () => {
           linksTo: realpathSync(join(work, "elsewhere", "notes")),
           enabled: true,
           onlyWhenNamed: true,
+          nameable: true,
           problems: [],
         },
         {
@@ -3061,7 +3063,7 @@ describe("skills", () => {
       expect(readdirSync(owner(""))).toEqual(["notes"]);
     });
 
-    test("past the 150 names she can give, Settings marks the skills she can't name", async () => {
+    test("past the 150 names she can give, the view marks those she can name and those she can't", async () => {
       for (let i = 0; i < 152; i++) {
         const name = `s${String(i).padStart(3, "0")}`;
         skill(shared(name), name, `Skill ${name}.`);
@@ -3069,6 +3071,9 @@ describe("skills", () => {
       const tasks = manager();
       const view = await tasks.skills();
       expect(tasks.skillNames()).toHaveLength(150);
+      expect(tasks.skillNames()).toEqual(
+        view.skills.filter((each) => each.nameable).map((each) => each.name),
+      );
       expect(view.skills.filter((each) => each.unnameable).map((each) => each.name)).toEqual([
         "s150",
         "s151",

@@ -1,6 +1,7 @@
 import type { ChatDisplay, ChatEventOf, ReplyMode } from "@eidolon/chat";
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
+import type { ChatCommand } from "./commands";
 import type { RecorderProblem } from "./use-recorder";
 
 /** What she is doing while a tool runs, by the tool's name. */
@@ -60,6 +61,14 @@ export const DISPLAY_CHANGED: Readonly<Record<ChatDisplay, MessageDescriptor>> =
   focus: msg`Focus is on for this chat`,
   normal: msg`Normal is on for this chat`,
   verbose: msg`Verbose is on for this chat`,
+};
+
+/** What each command does, as the composer's `/` list says it. */
+export const COMMAND_HELP: Readonly<Record<ChatCommand, MessageDescriptor>> = {
+  focus: msg`Hide this chat's task cards`,
+  normal: msg`Show each task as one card`,
+  verbose: msg`Also show a running task's steps`,
+  stop: msg`Stop a task in this chat`,
 };
 
 /** Why a recording didn't start or send, as a toast's title and line. */

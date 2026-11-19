@@ -786,6 +786,10 @@ msgstr "Allowed Commands"
 msgid "Already added"
 msgstr "Already added"
 
+#: src/features/chats/labels.ts
+msgid "Also show a running task's steps"
+msgstr "Also show a running task's steps"
+
 #: src/features/tasks/cards.tsx
 msgid "Always Allow This Folder"
 msgstr "Always Allow This Folder"
@@ -1373,6 +1377,10 @@ msgstr "Coding tasks run on Assistant Mode's model for now"
 #: src/features/settings/commands-card.tsx
 msgid "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one."
 msgstr "Commands a task runs without asking, each only in its folder and only exactly as written, unless the task has fetched a page, searched the web or called an MCP server; what its own commands download doesn't count. Always in This Folder on a task's card adds one."
+
+#: src/features/chats/composer.tsx
+msgid "Commands and Skills"
+msgstr "Commands and Skills"
 
 #: src/features/tasks/cards.tsx
 msgid "Commands run as you, with no sandbox: this one can read, change or delete any of your files, not only this folder's, and reach the network."
@@ -2210,6 +2218,10 @@ msgstr "Hide"
 #: src/features/tasks/task-card.tsx
 msgid "Hide Steps"
 msgstr "Hide Steps"
+
+#: src/features/chats/labels.ts
+msgid "Hide this chat's task cards"
+msgstr "Hide this chat's task cards"
 
 #: src/features/chats/voice-bubble.tsx
 msgid "Hide Transcript"
@@ -4475,6 +4487,10 @@ msgstr "Show All {count}"
 msgid "Show Chats"
 msgstr "Show Chats"
 
+#: src/features/chats/labels.ts
+msgid "Show each task as one card"
+msgstr "Show each task as one card"
+
 #: src/features/studio/video-table.tsx
 msgid "Show Finished"
 msgstr "Show Finished"
@@ -4720,6 +4736,10 @@ msgstr "Still waiting for {name}. If nothing comes, say it again."
 #: src/features/tasks/task-card.tsx
 msgid "Stop"
 msgstr "Stop"
+
+#: src/features/chats/labels.ts
+msgid "Stop a task in this chat"
+msgstr "Stop a task in this chat"
 
 #: src/features/settings/mcp-card.tsx
 msgid "Stop Always Allowing {tool}"

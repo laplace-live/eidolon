@@ -180,6 +180,7 @@ export class OwnerSkills {
         enabled,
         ...(each.explicit ? { onlyWhenNamed: true as const } : {}),
         ...(unlisted.has(skill) ? { unlisted: true as const } : {}),
+        ...(winner === each && nameable.has(skill.name) ? { nameable: true as const } : {}),
         ...(unnameable ? { unnameable: true as const } : {}),
         ...(winner === undefined || winner === each
           ? {}

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { MicPill } from "@/features/call/call-controls";
 import { useCall } from "@/features/call/use-call";
+import { nameableSkills, skillsQuery } from "@/features/settings/skills";
 import { chatTasksQuery } from "@/features/tasks/queries";
 import { stopChoice } from "@/features/tasks/state";
 import { StopPicker } from "@/features/tasks/stop-picker";
@@ -238,6 +239,12 @@ export function ChatView({
   );
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
   const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
+  // She is asked for a skill by name only in a chat of hers alone, while her tasks can start.
+  const assistant = status?.assistant;
+  const named = personas.length === 1 && assistant?.enabled === true && assistant.ready;
+  const nameable = useQuery({ ...skillsQuery, select: nameableSkills, enabled: named });
+  // A disabled query still answers from the cache that Settings fills.
+  const skills = named ? (nameable.data ?? []) : [];
 
   // While this page's call is up, the chat holds no other: the call a read made then says it holds
   // is this page's. Neither the offer's answer nor the page's clock names it, and the cached log may
@@ -417,6 +424,7 @@ export function ChatView({
         <Composer
           placeholder={placeholder}
           participants={personas}
+          skills={skills}
           busy={turns.busy}
           mic={mic}
           inCall={inCall}
