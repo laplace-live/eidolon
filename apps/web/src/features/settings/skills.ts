@@ -10,7 +10,7 @@ export const skillsQuery = queryOptions({
   refetchOnWindowFocus: true,
 });
 
-export const SKILL_FILTERS = ["all", "eidolon", "shared", "off"] as const;
+export const SKILL_FILTERS = ["all", "eidolon", "shared", "builtin", "off"] as const;
 export type SkillFilter = (typeof SKILL_FILTERS)[number];
 
 /**

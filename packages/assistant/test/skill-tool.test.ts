@@ -87,6 +87,30 @@ describe("skill tool", () => {
     });
   });
 
+  test("loads a built-in skill from the app, which the file tools may not read", async () => {
+    const { dataHome, folder, policy } = await fixture();
+    // The policy's app root, where the built-in skills ship.
+    const dir = join(dirname(dataHome), "..", "Git", "laplace-eidolon", "skills", "update");
+    const text = "---\nname: update\ndescription: Update a persona.\n---\n\nRun discover.\n";
+    write(join(dir, "SKILL.md"), text);
+    const catalog = await loadSkills({ dataHome, builtin: dirname(dir), folder });
+    const update = catalog.skills.find((skill) => skill.name === "update");
+    expect(update?.source).toBe("builtin");
+    const skill = createSkillTool(catalog.skills, policy);
+    const real = update?.dir ?? "";
+    expect(await skill.execute({ name: "update" }, toolContext())).toEqual({
+      content:
+        `Skill update (built into Eidolon), in ${real}. Paths in it are relative to that folder; read its files with skill and their path.\n\n` +
+        `${text}`,
+      files: { read: [join(real, "SKILL.md")] },
+    });
+    const read = await createReadTool(policy).execute(
+      { path: join(real, "SKILL.md") },
+      toolContext(),
+    );
+    expect(read.isError).toBe(true);
+  });
+
   test("reads a file of the skill by its path, relative or absolute", async () => {
     const { ownerDir, policy, skills } = await fixture();
     const skill = createSkillTool(skills, policy);

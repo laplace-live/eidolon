@@ -18,6 +18,7 @@ export {
 } from "./argparse.ts";
 export { buildStreamCatalogMain } from "./build_stream_catalog.ts";
 export { CLI_USAGE, COMMANDS, cleanupLimitMs, runCli } from "./cli.ts";
+export { DISCOVER_PARSER, type DiscoverDeps, discoverMain } from "./discover.ts";
 export { downloadMain } from "./download.ts";
 export {
   ALL_MODES,

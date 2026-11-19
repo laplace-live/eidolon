@@ -620,9 +620,10 @@ tools.
     `mcp.json` goes and an example with `npx` and `docker run -i --rm --init` (`mcp-card.tsx`).
     The list is read again on focus, since the file is edited by hand.
 - **Settings → Skills** (`skills-card.tsx`) lists the owner's skills from the data home's folder
-  and the shared one ([assistant.md](assistant.md#skills)), searched by name, description or
-  folder and filtered by source or by those switched off. A row has the name, its source as a
-  badge (**Eidolon** or **Shared**), **Only When Named** for one that opts out of model use, its
+  and the shared one, and the built-in ones ([assistant.md](assistant.md#skills)), searched by
+  name, description or folder and filtered by source or by those switched off. A row has the name,
+  its source as a badge (**Eidolon**, **Shared** or **Built In**), **Only When Named** for one that
+  opts out of model use, its
   folder, the start of its description and its switch, and below, where a link leads, the skill of
   the same name that hides it (which has no switch), the catalog or her 150 names leaving it out,
   and its problems; the card warns once tasks' catalog is full, lists the `SKILL.md` files left

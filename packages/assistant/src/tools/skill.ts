@@ -1,6 +1,6 @@
 // The skill tool: a listed skill's SKILL.md, or another file or folder in its folder, read as read
-// reads them. It is the one tool that reads in the data home, and only inside a listed skill's
-// folder, never a dot-file there.
+// reads them. It is the one tool that reads in the data home or the app, and only inside a listed
+// skill's folder, never a dot-file there.
 import type { Dirent } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
@@ -13,6 +13,7 @@ import {
   type Skill,
   type SkillCatalog,
   type SkillProblem,
+  type SkillSource,
 } from "../skills.ts";
 import type { AssistantTool, PathGuard } from "../types.ts";
 import { resolveToCwd } from "./path.ts";
@@ -29,6 +30,14 @@ import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES } from "./truncate.ts";
 // As agentskills.io advises, a skill's bundled files are listed for the worker, not read to it.
 const LISTED_FILES = 50;
 const LISTED_DEPTH = 3;
+
+/** Whose a skill is, as its SKILL.md's heading says. */
+const WHOSE: Readonly<Record<SkillSource, string>> = {
+  owner: "the owner's",
+  shared: "the owner's",
+  builtin: "built into Eidolon",
+  folder: "from the task's folder",
+};
 
 /**
  * The skill tool for `skills`, those the worker's prompt lists or carries whole; a task with none
@@ -139,12 +148,11 @@ async function load(
   ) {
     return read;
   }
-  const whose = skill.source === "folder" ? "from the task's folder" : "the owner's";
   const files = (await filesIn(skill.dir, skill)).filter((file) => file !== SKILL_FILE);
   return {
     ...read,
     content: [
-      `Skill ${skill.name} (${whose}), in ${skill.dir}. Paths in it are relative to that folder; read its files with skill and their path.`,
+      `Skill ${skill.name} (${WHOSE[skill.source]}), in ${skill.dir}. Paths in it are relative to that folder; read its files with skill and their path.`,
       read.content,
       ...(files.length > 0 ? [fileList("its folder", files)] : []),
     ].join("\n\n"),

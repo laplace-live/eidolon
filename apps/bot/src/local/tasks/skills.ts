@@ -1,6 +1,6 @@
 // The owner's skills, for Settings and for her start_task: what the data home's skills folder and
-// the folder the owner's agents share hold, and the owner's switches, which this process alone
-// writes, to the data home's skills.json.
+// the folder the owner's agents share hold, the skills Eidolon ships, and the owner's switches,
+// which this process alone writes, to the data home's skills.json.
 import { randomBytes } from "node:crypto";
 import { lstat, mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -15,6 +15,7 @@ import {
   replaceJsonFile,
   SKILL_FILE,
   type SkillScan,
+  type SkillSource,
   scanSkills,
   skillNames,
   skillSwitchesPath,
@@ -25,15 +26,21 @@ import { sharedSkillsDir } from "@eidolon/config";
 import type { SkillCreate, SkillOrigin, SkillsResponse, SkillView } from "../api.ts";
 import { homed } from "./places.ts";
 
-const ORIGINS = { owner: "eidolon", shared: "shared" } as const satisfies Record<
-  "owner" | "shared",
-  SkillOrigin
->;
+/** The sources Settings lists; a task folder's skills are never among them. */
+type ListedSource = Exclude<SkillSource, "folder">;
+
+const ORIGINS = {
+  owner: "eidolon",
+  shared: "shared",
+  builtin: "builtin",
+} as const satisfies Record<ListedSource, SkillOrigin>;
 
 type SkillCreateResult = SkillsResponse | "exists" | { readonly invalid: string };
 
 export class OwnerSkills {
   readonly #dataHome: string;
+  /** The folder of the skills Eidolon ships. */
+  readonly #builtin: string;
   readonly #home = homedir();
   /** Her names for start_task as the latest scan found them. */
   #names: readonly string[] = [];
@@ -43,8 +50,14 @@ export class OwnerSkills {
   #background: Promise<unknown> | null = null;
   #writes: Promise<unknown> = Promise.resolve();
 
-  constructor(dataHome: string) {
+  constructor(dataHome: string, builtin: string) {
     this.#dataHome = dataHome;
+    this.#builtin = builtin;
+  }
+
+  /** The folders scanSkills reads them in, the shared one as the environment names it now. */
+  folders(): { readonly dataHome: string; readonly shared: string; readonly builtin: string } {
+    return { dataHome: this.#dataHome, shared: sharedSkillsDir(), builtin: this.#builtin };
   }
 
   /**
@@ -125,7 +138,7 @@ export class OwnerSkills {
 
   #scan(): Promise<SkillScan> {
     const turn = ++this.#started;
-    return scanSkills({ dataHome: this.#dataHome, shared: sharedSkillsDir() }).then((scan) => {
+    return scanSkills(this.folders()).then((scan) => {
       if (turn > this.#applied) {
         this.#applied = turn;
         this.#names = skillNames(scan);
@@ -142,11 +155,16 @@ export class OwnerSkills {
 
   async #view(scan: SkillScan): Promise<SkillsResponse> {
     const home = this.#home;
-    const roots = { owner: skillsDir(this.#dataHome), shared: sharedSkillsDir() };
+    const roots: Record<ListedSource, string> = {
+      owner: skillsDir(this.#dataHome),
+      shared: sharedSkillsDir(),
+      builtin: this.#builtin,
+    };
     // So a link on the way to a skill shows where its files are, and the roots' own links don't.
-    const real = {
+    const real: Record<ListedSource, string> = {
       owner: await realpath(roots.owner).catch(() => roots.owner),
       shared: await realpath(roots.shared).catch(() => roots.shared),
+      builtin: await realpath(roots.builtin).catch(() => roots.builtin),
     };
     const unlisted = new Set(catalogOf(scan).unlisted);
     const nameable = new Set(skillNames(scan));
@@ -160,7 +178,8 @@ export class OwnerSkills {
     }
     const view = (each: FoundSkill): SkillView => {
       const { skill } = each;
-      const source = skill.source === "shared" ? "shared" : "owner";
+      // The scan reads no task folder.
+      const source = skill.source as ListedSource;
       const folder = dirname(each.path);
       const winner = scan.winners.get(skill.name);
       const enabled = !scan.disabled.has(skill.name);
@@ -192,6 +211,7 @@ export class OwnerSkills {
       sources: [
         { id: ORIGINS.owner, path: homed(roots.owner, home) },
         { id: ORIGINS.shared, path: homed(roots.shared, home) },
+        { id: ORIGINS.builtin, path: homed(roots.builtin, home) },
       ],
       // Stable: a skill and one it shadows keep the scan's order.
       skills: scan.found.map(view).sort((a, b) => byName(a.name, b.name)),

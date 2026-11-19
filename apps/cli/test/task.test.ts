@@ -217,6 +217,7 @@ describe("laplace-task", () => {
       { source: "task", session: id },
     ]);
     const [first] = mind.requests;
+    // skill, for the built-in skills, which every task lists.
     expect(first?.tools.map((tool) => tool.name)).toEqual([
       "read",
       "write",
@@ -224,6 +225,7 @@ describe("laplace-task", () => {
       "ls",
       "find",
       "grep",
+      "skill",
       "todo",
     ]);
     expect(first?.system).toContain("<brief>\nGoal: Write hello.txt\n");
@@ -798,6 +800,7 @@ describe("laplace-task", () => {
       "ls",
       "find",
       "grep",
+      "skill",
       "web_fetch",
       "todo",
     ]);
@@ -895,14 +898,38 @@ describe("laplace-task", () => {
     }
   });
 
+  test("laplace-task finds the built-in skills too, first in its catalog, and --skill names one", async () => {
+    const builtinSkills = join(work, "built-in");
+    writeSkill(builtinSkills, "persona-update", "Find a persona's new streams");
+    const mind = scripted([says("Done.")]);
+    const io = captureIo();
+    expect(
+      await taskMain(["--folder", folder, "--skill", "persona-update", "Update her"], {
+        ...io.io,
+        createMind: mind.createMind,
+        confirm: null,
+        builtinSkills,
+      }),
+    ).toBe(0);
+    const system = mind.requests[0]?.system ?? "";
+    expect(system).toContain(
+      '<skill name="persona-update" from="builtin">Find a persona\'s new streams</skill>',
+    );
+    expect(system).toContain(
+      `<skill name="persona-update">\nSkill persona-update (built into Eidolon), in ${realpathSync(join(builtinSkills, "persona-update"))}.`,
+    );
+  });
+
   test("--skill carries an owner's skill whole in every run's prompt, kept for --resume; one switched off or unknown is a usage error", async () => {
     writeSkill(sharedSkillsDir(), "ship", "Ship a change", true);
     writeSkill(sharedSkillsDir(), "audit", "Audit the change");
     writeFileSync(skillSwitchesPath(dataHome()), JSON.stringify({ disabled: ["audit"] }));
     try {
+      // No built-in skills, so the names to choose from are the shared folder's alone.
+      const builtinSkills = join(work, "no-built-in-skills");
       const usage = async (argv: string[]) => {
         const io = captureIo();
-        const code = await taskMain(argv, { ...io.io, confirm: null });
+        const code = await taskMain(argv, { ...io.io, confirm: null, builtinSkills });
         return [code, io.stderr().trim().split("\n").at(-1)];
       };
       expect(await usage(["--folder", folder, "--skill", "nope", "Ship it"])).toEqual([

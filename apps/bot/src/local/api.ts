@@ -1076,7 +1076,7 @@ export interface LocalApi {
    * parse, and linked-mcp-config while it is a link, neither ever written over.
    */
   "PUT /api/local/mcp/servers/:name": Endpoint<McpServerChange, McpServersResponse>;
-  /** The owner's skills as their folders hold them now, each with its switch. */
+  /** The owner's skills and the built-in ones as their folders hold them now, each with its switch. */
   "GET /api/local/skills": Endpoint<undefined, SkillsResponse>;
   /**
    * Writes a new skill into the data home's skills folder, answering as GET does. 400 bad-request
@@ -1086,7 +1086,8 @@ export interface LocalApi {
   "POST /api/local/skills": Endpoint<SkillCreate, SkillsResponse>;
   /**
    * Switches the skills named `name` on or off, answering as GET does. 400 bad-request for
-   * anything but `{enabled}`; 404 unknown-skill when no skill of the owner's has that name.
+   * anything but `{enabled}`; 404 unknown-skill when no skill, the owner's or built in, has that
+   * name.
    */
   "PUT /api/local/skills/:name": Endpoint<SkillChange, SkillsResponse>;
 }
@@ -1709,8 +1710,11 @@ export interface McpServerChange {
   readonly revoke?: string;
 }
 
-/** Where an owner's skill is: the data home's skills folder, or the one their agents share. */
-export type SkillOrigin = "eidolon" | "shared";
+/**
+ * Where a skill tasks may use is: the data home's skills folder, the one the owner's agents share,
+ * or the skills that ship with Eidolon.
+ */
+export type SkillOrigin = "eidolon" | "shared" | "builtin";
 
 export interface SkillSourceView {
   readonly id: SkillOrigin;
@@ -1718,7 +1722,10 @@ export interface SkillSourceView {
   readonly path: string;
 }
 
-/** A skill in one of the owner's skill folders. A task folder's own skills are never listed. */
+/**
+ * A skill in one of the owner's skill folders, or one that ships with Eidolon. A task folder's own
+ * skills are never listed.
+ */
 export interface SkillView {
   readonly name: string;
   /** One line, as tasks read it. */
@@ -1749,7 +1756,10 @@ export interface SkillView {
 
 /** GET skills, and what a POST or PUT leaves. */
 export interface SkillsResponse {
-  /** The data home's skills folder, then the folder the owner's agents share. */
+  /**
+   * The data home's skills folder, then the folder the owner's agents share, then the built-in
+   * skills' folder.
+   */
   readonly sources: readonly SkillSourceView[];
   /** By name, a skill used before one it shadows. */
   readonly skills: readonly SkillView[];

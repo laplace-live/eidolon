@@ -114,6 +114,22 @@ describe.skipIf(!bashOffered())("BashJobs", () => {
     expect(jobs.takeEnded()).toEqual([]);
   });
 
+  test("its bin folder leads each command's PATH, unless the task may write it, and its variables are set", async () => {
+    const bin = await tempFolder();
+    writeFileSync(join(bin, "eidolon"), "#!/bin/sh\necho ran eidolon\n", { mode: 0o700 });
+    const ran = await setup({ bin, variables: { EIDOLON_TASK_PERSONA: "milky-green" } });
+    const command = 'eidolon; echo "$EIDOLON_TASK_PERSONA" "$(echo "$PATH" | cut -d: -f1)"';
+    const result = await start(ran, command, { wait: true });
+    expect(result.content).toBe(`ran eidolon\nmilky-green ${bin}\n`);
+    // One in the task's folder is dropped, as any PATH folder the task may write is.
+    const folder = await tempFolder();
+    const writable = await setup({ bin: join(folder, "bin") });
+    const path = await start({ ...writable, guard: folderGuard(folder) }, 'echo "$PATH"', {
+      wait: true,
+    });
+    expect(path.content).not.toContain(join(folder, "bin"));
+  });
+
   test("bash_output shows the latest output, pages it, and marks an end seen", async () => {
     const setup_ = await setup();
     const { jobs } = setup_;

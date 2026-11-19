@@ -32,6 +32,11 @@ export function dataHome(): string {
   return configured ? resolve(expandUser(configured)) : join(homedir(), ".laplace", "eidolon");
 }
 
+/** `<home>/bin`: the managed yt-dlp, and the `eidolon` command a task's commands run. */
+export function binDir(home: string = dataHome()): string {
+  return join(home, "bin");
+}
+
 /**
  * The Agent Skills folder this computer's agents share: `EIDOLON_SHARED_SKILLS`, or
  * `~/.agents/skills`. Read from the process environment only.

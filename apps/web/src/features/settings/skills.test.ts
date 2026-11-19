@@ -16,15 +16,22 @@ const SKILLS = [
   skill("house-style", { description: "Our house style for every web page." }),
   skill("ship", { source: "shared", folder: "~/.agents/skills/ship" }),
   skill("deploy", { source: "shared", folder: "~/.agents/skills/deploy", enabled: false }),
+  skill("persona-update", { source: "builtin", folder: "~/eidolon/skills/persona-update" }),
 ];
 
 const names = (skills: readonly SkillView[]) => skills.map((each) => each.name);
 
 describe("visibleSkills", () => {
-  test("a source keeps its own, and off keeps those switched off from either", () => {
-    expect(names(visibleSkills(SKILLS, "all", ""))).toEqual(["house-style", "ship", "deploy"]);
+  test("a source keeps its own, and off keeps those switched off from any", () => {
+    expect(names(visibleSkills(SKILLS, "all", ""))).toEqual([
+      "house-style",
+      "ship",
+      "deploy",
+      "persona-update",
+    ]);
     expect(names(visibleSkills(SKILLS, "eidolon", ""))).toEqual(["house-style"]);
     expect(names(visibleSkills(SKILLS, "shared", ""))).toEqual(["ship", "deploy"]);
+    expect(names(visibleSkills(SKILLS, "builtin", ""))).toEqual(["persona-update"]);
     expect(names(visibleSkills(SKILLS, "off", ""))).toEqual(["deploy"]);
   });
 

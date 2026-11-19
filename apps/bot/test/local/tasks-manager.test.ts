@@ -11,6 +11,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -235,6 +236,7 @@ afterEach(async () => {
 function manager(overrides: Partial<TaskManagerOptions> = {}): TaskManager {
   const made = new TaskManager({
     dataHome: dataHome(),
+    builtinSkills: join(dataHome(), "builtin-skills"),
     settings: () => settings,
     addFolder: (folder) => {
       added.push(folder);
@@ -2153,6 +2155,27 @@ describe("commands", () => {
     ]);
   });
 
+  test("a command finds the eidolon command first on its PATH, and the persona whose chat started the task", async () => {
+    settings = { ...settings, folders: [work] };
+    const folder = join(work, "env");
+    const first = '"$(echo "$PATH" | cut -d: -f1)"';
+    const command = `printf "%s\\n" "$EIDOLON_TASK_PERSONA" ${first} "$(command -v eidolon)" > env.txt`;
+    minds.script("Env", [calls([bash("b1", command)]), says("Done.")]);
+    const tasks = await booted();
+    const script = join(dataHome(), "bin", "eidolon");
+    expect(statSync(script).mode & 0o777).toBe(0o700);
+    expect(readFileSync(script, "utf8")).toContain(
+      `EIDOLON_HOME='${dataHome()}'; export EIDOLON_HOME`,
+    );
+    const { id } = await tasks.start({ goal: "Env", folder }, ORIGIN);
+    await reach(tasks, id, "paused");
+    await tasks.approve(id, { answer: "once" });
+    await reach(tasks, id, "succeeded");
+    expect(readFileSync(join(folder, "env.txt"), "utf8")).toBe(
+      `milky-green\n${join(dataHome(), "bin")}\n${script}\n`,
+    );
+  });
+
   test("Run Once runs it for its call alone: the same command asks again in a later call, even one reusing the id", async () => {
     settings = { ...settings, folders: [work] };
     const folder = join(work, "once");
@@ -2752,9 +2775,12 @@ describe("skills", () => {
     );
   }
   const owner = (name: string) => join(dataHome(), "skills", name);
+  /** The manager's built-in folder, as manager() gives it. */
+  const builtin = (name: string) => join(dataHome(), "builtin-skills", name);
 
   afterEach(() => {
     rmSync(join(dataHome(), "skills"), { recursive: true, force: true });
+    rmSync(builtin(""), { recursive: true, force: true });
   });
 
   test("a run's prompt lists the owner's and its folder's skills, offering skill, and a resumed run finds one added since", async () => {
@@ -2822,6 +2848,38 @@ describe("skills", () => {
     );
     expect(resumed).not.toContain("Planted.");
     expect(logs.lines().some((line) => line.includes("shadowed by the owner's"))).toBe(true);
+  });
+
+  test("a built-in skill leads the catalog and she may name it, and an owner's skill of its name is used instead", async () => {
+    settings = { ...settings, folders: [work] };
+    skill(builtin("persona-update"), "persona-update", "Find a persona's new streams.");
+    skill(owner("a-first"), "a-first", "Before it by name.");
+    minds.script("Built in", [says("Done.")]);
+    minds.script("Mine", [says("Done.")]);
+    const tasks = await booted();
+    await until(() => tasks.skillNames().length === 2);
+    expect(tasks.skillNames()).toEqual(["a-first", "persona-update"]);
+    const { id } = await tasks.start(
+      { goal: "Built in", folder: join(work, "built-in"), skills: ["persona-update"] },
+      ORIGIN,
+    );
+    await reach(tasks, id, "succeeded");
+    const system = minds.for("Built in")[0]?.system ?? "";
+    const entry = system.indexOf(
+      '<skill name="persona-update" from="builtin">Find a persona\'s new streams.</skill>',
+    );
+    expect(entry).toBeGreaterThan(-1);
+    expect(entry).toBeLessThan(system.indexOf('<skill name="a-first" from="owner">'));
+    expect(system).toContain(
+      `<skill name="persona-update">\nSkill persona-update (built into Eidolon), in ${realpathSync(builtin("persona-update"))}.`,
+    );
+
+    skill(owner("persona-update"), "persona-update", "The owner's own.");
+    const mine = await tasks.start({ goal: "Mine", folder: join(work, "mine") }, ORIGIN);
+    await reach(tasks, mine.id, "succeeded");
+    const own = minds.for("Mine")[0]?.system ?? "";
+    expect(own).toContain('<skill name="persona-update" from="owner">The owner\'s own.</skill>');
+    expect(own).not.toContain('from="builtin"');
   });
 
   test("a skill call's step names the skill", async () => {
@@ -2976,6 +3034,8 @@ describe("skills", () => {
       );
       mkdirSync(owner(""), { recursive: true });
       symlinkSync(join(work, "elsewhere", "notes"), owner("notes"));
+      skill(builtin("ship"), "ship", "Eidolon's way to ship.");
+      skill(builtin("update"), "update", "Update a persona.");
       const tasks = manager();
       await tasks.changeSkill("ship", false);
       const view = await tasks.skills();
@@ -2983,6 +3043,7 @@ describe("skills", () => {
       expect(view.sources).toEqual([
         { id: "eidolon", path: join(dataHome(), "skills") },
         { id: "shared", path: sharedSkillsDir() },
+        { id: "builtin", path: join(dataHome(), "builtin-skills") },
       ]);
       expect(view.skills).toEqual([
         {
@@ -3020,6 +3081,24 @@ describe("skills", () => {
           source: "shared",
           folder: shared("ship"),
           enabled: false,
+          problems: [],
+        },
+        {
+          name: "ship",
+          description: "Eidolon's way to ship.",
+          source: "builtin",
+          folder: builtin("ship"),
+          enabled: false,
+          shadowedBy: shared("ship"),
+          problems: [],
+        },
+        {
+          name: "update",
+          description: "Update a persona.",
+          source: "builtin",
+          folder: builtin("update"),
+          enabled: true,
+          nameable: true,
           problems: [],
         },
       ]);

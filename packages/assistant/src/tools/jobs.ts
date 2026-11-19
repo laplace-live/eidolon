@@ -2,7 +2,7 @@
 // runs.json saying how each ended and whether the worker was told. One still running at the yield
 // goes on in the background, and the task's runs wait for it and hear how it ended.
 import { type FileHandle, mkdir, open, readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { errorText, isPlainObject } from "@eidolon/config";
 import type { TaskBackground, TaskToolResult } from "@eidolon/engine";
 import { replaceJsonFile } from "../transcript.ts";
@@ -95,6 +95,10 @@ export interface BashJobsOptions {
   readonly onChange?: (background: readonly BackgroundCommand[]) => void;
   /** How commands run: the local shell, unless a test stands in for it. */
   readonly operations?: BashOperations;
+  /** A folder of Eidolon's own commands, first on each command's PATH. */
+  readonly bin?: string;
+  /** Set for each command besides the cut environment. */
+  readonly variables?: Readonly<Record<string, string>>;
   /** Tests shorten these. */
   readonly yieldMs?: number;
   readonly outputCapBytes?: number;
@@ -281,6 +285,8 @@ export class BashJobs implements TaskBackground {
   readonly #jobs = new Map<number, Job>();
   readonly #onChange: BashJobsOptions["onChange"];
   readonly #operations: BashOperations;
+  readonly #bin: string | undefined;
+  readonly #variables: Readonly<Record<string, string>>;
   readonly #yieldMs: number;
   readonly #outputCap: number;
   readonly #pollMs: number;
@@ -295,6 +301,8 @@ export class BashJobs implements TaskBackground {
     this.#lastId = lastId;
     this.#onChange = options.onChange;
     this.#operations = options.operations ?? createLocalBashOperations();
+    this.#bin = options.bin;
+    this.#variables = options.variables ?? {};
     this.#yieldMs = options.yieldMs ?? YIELD_MS;
     this.#outputCap = options.outputCapBytes ?? OUTPUT_CAP_BYTES;
     this.#pollMs = options.pollMs ?? POLL_MS;
@@ -342,7 +350,12 @@ export class BashJobs implements TaskBackground {
     const writer = new LogWriter(await open(log, "w", 0o600));
     const run: BashRun = { id, command, startedAt: Date.now(), timeoutMs, background: false };
     this.#runs.push(run);
-    const env = await shellEnv(guard);
+    const path = [this.#bin, process.env.PATH].filter((entry) => entry !== undefined);
+    // The bin folder passes PATH's filter like any other, so one the task could write is dropped.
+    const env = {
+      ...(await shellEnv(guard, { ...process.env, PATH: path.join(delimiter) })),
+      ...this.#variables,
+    };
     // Recorded before it starts: a server that dies while it runs leaves it to be found `lost`.
     await this.#save();
     if (this.#closed || signal.aborted) {

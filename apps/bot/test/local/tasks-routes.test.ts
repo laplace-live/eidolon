@@ -195,6 +195,7 @@ afterEach(async () => {
 function manager(overrides: Partial<TaskManagerOptions> = {}): TaskManager {
   const made = new TaskManager({
     dataHome: dataHome(),
+    builtinSkills: join(dataHome(), "builtin-skills"),
     settings: () => readSettings(),
     addFolder: () => {},
     problem: () => problem,

@@ -2,6 +2,7 @@
 import { pyRepr } from "@eidolon/config";
 import { CLEANUP_LIMIT_MS } from "@eidolon/ingest";
 import { buildStreamCatalogMain } from "./build_stream_catalog.ts";
+import { discoverMain } from "./discover.ts";
 import { downloadMain } from "./download.ts";
 import { evalRetrievalMain } from "./eval_retrieval.ts";
 import { extractUsersMain } from "./extract_users.ts";
@@ -33,6 +34,7 @@ export const COMMANDS: Readonly<Record<string, Command>> = {
   pipeline: pipelineMain,
   "extract-users": extractUsersMain,
   "prepare-batch": prepareBatchMain,
+  discover: discoverMain,
   task: taskMain,
 };
 
@@ -54,8 +56,8 @@ export function cleanupLimitMs(argv: readonly string[]): number {
 const NAMES = Object.keys(COMMANDS);
 export const CLI_USAGE = `usage: main.ts [-h]\n               {${NAMES.join(",")}} ...\n`;
 const CLI_HELP = `${CLI_USAGE}
-The TypeScript ports of the Python CLIs, each taking its Python flags, and
-laplace-task.
+The TypeScript ports of the Python CLIs, each taking its Python flags,
+laplace-discover and laplace-task.
 
 positional arguments:
   {${NAMES.join(",")}}
@@ -73,6 +75,7 @@ positional arguments:
     pipeline            laplace-pipeline
     extract-users       laplace-extract-users
     prepare-batch       laplace-prepare-batch
+    discover            laplace-discover
     task                laplace-task
 
 options:

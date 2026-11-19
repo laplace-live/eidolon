@@ -49,7 +49,8 @@ apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, an
                       bundles the local app and the CLI with the web app, templates and jieba
 packages/             subsystems, one Bun workspace package each (docs/typescript.md);
                       packages/ingest is the offline chain, packages/assistant the tools,
-                      folder policy and files of the assistant's tasks
+                      folder policy and files of the assistant's tasks, and in its skills/ the
+                      skills Eidolon ships
 laplace_eidolon/      the Python, with tests/: for human readers only ("The Python" under Rules)
 personas/<id>/        a persona's template: persona.yaml, prompt.md (the system
                       prompt), glossary.toml, references/outfits/ (what take_selfie
@@ -92,7 +93,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
 | anything under `apps/` or `packages/` | [typescript.md](docs/typescript.md) |
 | a provider, an account, a role's provider or model, model lists, prices, realtime models, the usage ledger or the Usage page | [providers.md](docs/providers.md) |
-| the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), a task's commands (`bash`), skills (Settings' Skills, `skills.json`, `EIDOLON_SHARED_SKILLS`), MCP servers (`mcp.json`), web search or kind, the task loop (`packages/engine/src/task.ts`), the app's tasks, permission levels and Approve for Me's review, her task tools (`start_task`, `steer_task`, `stop_task`, `check_task`), the status block, tasks on a call and the task routes (`apps/bot/src/local/tasks`, `routes/tasks.ts`), a chat's task display (`/focus`, `/normal`, `/verbose`), `/stop` and milestones on a call, or `laplace-task` | [assistant.md](docs/assistant.md) |
+| the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), a task's commands (`bash`) and the `eidolon` command they run, skills (Settings' Skills, `skills.json`, `EIDOLON_SHARED_SKILLS`, the built-in skills in `packages/assistant/skills`), MCP servers (`mcp.json`), web search or kind, the task loop (`packages/engine/src/task.ts`), the app's tasks, permission levels and Approve for Me's review, her task tools (`start_task`, `steer_task`, `stop_task`, `check_task`), the status block, tasks on a call and the task routes (`apps/bot/src/local/tasks`, `routes/tasks.ts`), a chat's task display (`/focus`, `/normal`, `/verbose`), `/stop` and milestones on a call, or `laplace-task` | [assistant.md](docs/assistant.md) |
 
 ## Commands
 
@@ -130,6 +131,7 @@ bun run laplace-ingest-streams         # → stream_chunks.lance
 bun run laplace-ingest-facts           # facts/ → persona_facts.lance
 bun run laplace-build-stream-catalog   # → stream_catalog.json
 bun run laplace-prepare-batch          # a series capture's new videos → lists/batches/
+bun run laplace-discover               # her new streams on Bilibili/YouTube, ranked; --save → a batch
 bun run laplace-extract-users          # mine danmaku JSON for glossary.toml terms
 ```
 
@@ -371,12 +373,15 @@ the layout's one line.
 - **A command, and an MCP server's process, run on `shellEnv()`, never `process.env`:** the
   allowed names, every `LC_*`, `TERM=dumb`, and a `PATH` with no folder the task may write (an MCP
   server's as the task's first run found it), so no `.env` key reaches one unless an `mcp.json`
-  entry names it.
-- **Of the file tools, only `skill` reads in the data home,** and only a listed or named skill's own
-  files, never a dot-file; `bash_output` reads only its task's logs there, and commands and MCP
-  servers run outside `FolderPolicy`. Of a skill only its name reaches her, and only an owner's
-  (`start_task`'s `skills` enum): never a description, a body or a task folder's skill, and no
-  skill reaches production.
+  entry names it. A command's `PATH` starts with `<data home>/bin`, where the app writes the
+  `eidolon` command at each start beside the managed yt-dlp, and it gets `EIDOLON_TASK_PERSONA`,
+  its chat's persona; `eidolon` sets its own data home and never reads the task folder's
+  `bunfig.toml`.
+- **Of the file tools, only `skill` reads in the data home or the app's folder,** and only a listed
+  or named skill's own files, never a dot-file; `bash_output` reads only its task's logs there, and
+  commands and MCP servers run outside `FolderPolicy`. Of a skill only its name reaches her, and
+  only an owner's or a built-in one (`start_task`'s `skills` enum): never a description, a body or
+  a task folder's skill, and no skill reaches production.
 - **A tool's own spend reaches the task's meter through `UsageMeter.charge`, never `tap`:** `tap`
   stands for a worker request's usage and sets the context's size, which steers compaction.
 - **Her `start_task` description and hint come in two, commands on and off

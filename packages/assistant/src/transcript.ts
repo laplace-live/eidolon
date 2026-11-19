@@ -388,13 +388,13 @@ export async function readSnapshot(dir: string): Promise<TaskSnapshot | null> {
   return value;
 }
 
-/** Replaces the file at `path` whole with `value` as JSON, 0600: a reader sees the old or the new. */
-export async function replaceJsonFile(path: string, value: unknown): Promise<void> {
+/** Replaces the file at `path` whole with `text`, as `mode`: a reader sees the old or the new. */
+export async function replaceFile(path: string, text: string, mode = 0o600): Promise<void> {
   const temp = `${path}.${randomBytes(6).toString("hex")}.tmp`;
   try {
-    const handle = await open(temp, "wx", 0o600);
+    const handle = await open(temp, "wx", mode);
     try {
-      await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`);
+      await handle.writeFile(text);
       await handle.datasync();
     } finally {
       await handle.close();
@@ -404,6 +404,11 @@ export async function replaceJsonFile(path: string, value: unknown): Promise<voi
     await rm(temp, { force: true });
     throw error;
   }
+}
+
+/** Replaces the file at `path` whole with `value` as JSON, 0600: a reader sees the old or the new. */
+export async function replaceJsonFile(path: string, value: unknown): Promise<void> {
+  await replaceFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 /** Replaces the task's task.json whole: a reader sees the old snapshot or the new one. */

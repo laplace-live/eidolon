@@ -12,6 +12,7 @@ import {
 import { isBuiltin } from "node:module";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import {
+  builtinSkillsDir,
   cliEntry,
   jiebaDir,
   resamplerDir,
@@ -368,6 +369,7 @@ async function stage(): Promise<Manifest> {
   checkImports(PACK_DIR, manifest);
   const web = await buildWeb(inPackage(PACK_DIR, webDist));
   copyTracked(templatesDir(), inPackage(PACK_DIR, templatesDir));
+  copyTracked(builtinSkillsDir(), inPackage(PACK_DIR, builtinSkillsDir));
   copyTracked(jiebaDir(), inPackage(PACK_DIR, jiebaDir));
   copyTracked(resamplerDir(), inPackage(PACK_DIR, resamplerDir));
   copyTracked(voiceModelsDir(), inPackage(PACK_DIR, voiceModelsDir));

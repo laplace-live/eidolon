@@ -15,7 +15,7 @@ import type { LockedError } from "@eidolon/config/lock";
 import { INDEX_DIR } from "@eidolon/retrieval";
 import type { ProgressSink, Stage } from "./progress.ts";
 
-export { type SourceFolder, sourceFolder, sourcesDir } from "@eidolon/config";
+export { binDir, type SourceFolder, sourceFolder, sourcesDir } from "@eidolon/config";
 export { acquireLock, LockedError, lockInfoPath } from "@eidolon/config/lock";
 
 /**
@@ -63,11 +63,6 @@ function privateDir(name: string): string {
 /** The embedding cache every persona shares; the key holds the model and dimension. */
 export function embedCachePath(): string {
   return join(privateDir("cache"), "embed_cache.db");
-}
-
-/** Where the managed yt-dlp lives. */
-export function binDir(): string {
-  return join(dataHome(), "bin");
 }
 
 /** Writes `text` to `path` through a temporary file beside it, so no reader sees half a file. */

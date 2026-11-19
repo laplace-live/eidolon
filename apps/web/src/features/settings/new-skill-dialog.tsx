@@ -116,9 +116,11 @@ export function NewSkillDialog({ open, folder, skills, onClose, onAdded }: NewSk
                 <FieldError>{nameProblem}</FieldError>
               ) : (
                 <FieldDescription className="wrap-anywhere">
-                  {same.length > 0
+                  {same.some((skill) => skill.source === "shared")
                     ? t`It will be used instead of the shared skill of the same name.`
-                    : t`Lowercase letters, digits and hyphens. Saved as ${ph({ path: `${folder}/${trimmed || "…"}/SKILL.md` })}.`}
+                    : same.some((skill) => skill.source === "builtin")
+                      ? t`It will be used instead of the built-in skill of the same name.`
+                      : t`Lowercase letters, digits and hyphens. Saved as ${ph({ path: `${folder}/${trimmed || "…"}/SKILL.md` })}.`}
                 </FieldDescription>
               )}
             </Field>

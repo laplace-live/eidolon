@@ -35,6 +35,7 @@ import {
 } from "@eidolon/assistant";
 import {
   assistantSettings,
+  builtinSkillsDir,
   dataHome,
   envOptional,
   errorText,
@@ -96,8 +97,9 @@ options:
                         openrouter/anthropic/claude-sonnet-5.5 (default:
                         assistant.provider and assistant.model)
   --skill NAME          A skill of yours, in the data home or the folder your
-                        agents share, that the task follows from its start,
-                        as if she had named it; repeat for more
+                        agents share, or one built into Eidolon, that the task
+                        follows from its start, as if she had named it; repeat
+                        for more
   --deliverable TEXT    What the task should leave in the folder (default:
                         whatever the goal asks for)
   --check TEXT          How the task should check its work (default: that
@@ -245,13 +247,26 @@ export function parseTaskArgs(argv: readonly string[]): TaskArgs {
   };
 }
 
+/** The folders scanSkills reads a task's skills in, but the task folder's. */
+function skillFolders(deps: TaskDeps): {
+  readonly dataHome: string;
+  readonly shared: string;
+  readonly builtin: string;
+} {
+  return {
+    dataHome: dataHome(),
+    shared: sharedSkillsDir(),
+    builtin: deps.builtinSkills ?? builtinSkillsDir(),
+  };
+}
+
 /**
- * The owner's skills `names` gives, as the task keeps them: a usage error names one the owner
- * doesn't have, or has switched off.
+ * The owner's and the built-in skills `names` gives, as the task keeps them: a usage error names
+ * one there is no skill by, or one switched off.
  */
-async function namedSkills(names: readonly string[]): Promise<readonly string[]> {
+async function namedSkills(names: readonly string[], deps: TaskDeps): Promise<readonly string[]> {
   if (names.length === 0) return [];
-  const scan = await scanSkills({ dataHome: dataHome(), shared: sharedSkillsDir() });
+  const scan = await scanSkills(skillFolders(deps));
   const { requested, missing, off } = catalogOf(scan, names);
   if (missing.length === 0) return requested.map((skill) => skill.name);
   const why = missing.map((name) =>
@@ -399,8 +414,7 @@ async function equip(
   }
   const search = web === "any" ? roleSearcher(meter.charge) : undefined;
   const skills = await loadSkills({
-    dataHome: dataHome(),
-    shared: sharedSkillsDir(),
+    ...skillFolders(deps),
     folder: brief.folder,
     requested: named,
   });
@@ -462,7 +476,7 @@ async function newTask(
     folder: args.folder,
     check: args.check,
   };
-  const skills = await namedSkills(args.skills);
+  const skills = await namedSkills(args.skills, deps);
   const id = newTaskId();
   const meter = new UsageMeter(model);
   const equipped = await equip(id, brief, grants, model, meter, args.web, skills, deps);
@@ -751,6 +765,8 @@ export type Confirm = (question: string, signal: AbortSignal) => Promise<boolean
 export interface TaskDeps extends CommandDeps {
   /** createMind, unless a test scripts the task's mind. */
   readonly createMind?: typeof createMind;
+  /** The folder of the skills Eidolon ships (builtinSkillsDir), unless a test gives its own. */
+  readonly builtinSkills?: string;
   /**
    * Whether a task its spend paused goes on. Default: the question on the terminal, when stdin
    * and stderr are one; null never asks, and the command exits 3. --json never asks.

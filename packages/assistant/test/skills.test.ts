@@ -13,6 +13,7 @@ import { estimateTokens } from "@eidolon/engine";
 import {
   catalogOf,
   loadSkills,
+  type Skill,
   type SkillProblem,
   scanSkills,
   skillEntry,
@@ -722,6 +723,56 @@ describe("the shared folder, the owner's switches and the skills she names", () 
     expect(catalog.off).toEqual([]);
     // Named or not, a skill that opts out of model use is never in the catalog.
     expect(catalog.skills.map((skill) => skill.name)).toEqual(["notes", "Bad Name", "audit"]);
+  });
+});
+
+describe("the built-in skills", () => {
+  test("they lead the catalog; an owner's or shared skill takes a built-in's name, a task folder's never does", async () => {
+    const { home, owner, shared, folder, root } = await places();
+    const builtin = join(root, "app", "skills");
+    writeSkill(join(owner, "house-style"), "name: house-style\ndescription: The owner's style.");
+    writeSkill(join(owner, "update"), "name: update\ndescription: The owner's own update.");
+    const replaced = writeSkill(join(builtin, "update"), "name: update\ndescription: Update it.");
+    writeSkill(join(builtin, "persona-update"), "name: persona-update\ndescription: New streams.");
+    const planted = writeSkill(
+      join(folder, ".agents", "skills", "persona-update"),
+      "name: persona-update\ndescription: Planted.",
+    );
+    const { skills, problems } = await loadSkills({ dataHome: home, shared, builtin, folder });
+    expect(skills.map(({ name, source }) => [name, source])).toEqual([
+      ["persona-update", "builtin"],
+      ["house-style", "owner"],
+      ["update", "owner"],
+    ]);
+    expect(messages(problems)).toEqual([
+      `shadowed by the owner's ${join(owner, "update", "SKILL.md")}`,
+      `shadowed by the built-in ${join(builtin, "persona-update", "SKILL.md")}`,
+    ]);
+    expect(problems.map((problem) => problem.path)).toEqual([replaced, planted]);
+    expect(skillEntry(skills[0] as Skill)).toBe(
+      '<skill name="persona-update" from="builtin">New streams.</skill>',
+    );
+  });
+
+  test("she may name one, and past 150 skills it is still listed and nameable", async () => {
+    const { home, owner, root } = await places();
+    const builtin = join(root, "app", "skills");
+    for (let i = 0; i < 160; i++) {
+      writeSkill(join(owner, `a-${String(i).padStart(3, "0")}`), `description: Skill ${i}.`);
+    }
+    const update = join(builtin, "persona-update");
+    writeSkill(update, "name: persona-update\ndescription: New streams.");
+    const scan = await scanSkills({ dataHome: home, builtin });
+    const catalog = catalogOf(scan, ["persona-update"]);
+    expect(catalog.skills).toHaveLength(150);
+    expect(catalog.skills[0]?.name).toBe("persona-update");
+    expect(catalog.requested).toEqual([
+      { name: "persona-update", description: "New streams.", source: "builtin", dir: update },
+    ]);
+    const names = skillNames(scan);
+    expect(names).toHaveLength(150);
+    expect(names).toContain("persona-update");
+    expect(names.at(-2)).toBe("a-148");
   });
 });
 

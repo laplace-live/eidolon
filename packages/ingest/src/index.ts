@@ -1,7 +1,8 @@
-// The offline chain that builds a persona's index from videos and fact files: download, transcribe,
-// refine, ingest and the stream catalog. A library: it reports through progress events and never
-// parses argv or prints.
+// The offline chain that builds a persona's index from videos and fact files: finding them,
+// download, transcribe, refine, ingest and the stream catalog. A library: it reports through
+// progress events and never parses argv or prints.
 export * as catalog from "./catalog.ts";
+export * as discover from "./discover/index.ts";
 export * as download from "./download/index.ts";
 export * as extractUsers from "./extract_users.ts";
 export { type Failure, failureOf, sharedFailure } from "./failure.ts";
