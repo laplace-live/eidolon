@@ -1,5 +1,11 @@
 # @laplace.live/eidolon-sdk
 
+## 0.1.2
+
+### Patch Changes
+
+- aba36d6: Show her words before a tool call, and give tool events their own window share
+
 ## 0.1.1
 
 ### Patch Changes
