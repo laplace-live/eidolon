@@ -6,13 +6,13 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** "now", "5 min. ago", "yesterday"; past a week, the date. */
+/** "now", "5m ago", "yesterday"; past a week, the date. */
 export function relativeTime(at: number, now: number, lang: Lang): string {
   const ago = Math.max(0, now - at);
   if (ago >= 7 * DAY) return shortDate(at, lang, now);
   const format = cached(
     `chatRelative:${lang}`,
-    () => new Intl.RelativeTimeFormat(lang, { numeric: "auto", style: "short" }),
+    () => new Intl.RelativeTimeFormat(lang, { numeric: "auto", style: "narrow" }),
   );
   if (ago < MINUTE) return format.format(0, "second");
   if (ago < HOUR) return format.format(-Math.floor(ago / MINUTE), "minute");

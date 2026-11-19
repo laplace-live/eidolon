@@ -1,15 +1,12 @@
-import { MAX_PARTICIPANTS } from "@eidolon/chat";
+import { type ChatSummary, MAX_PARTICIPANTS, type ParticipantId } from "@eidolon/chat";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { MessageSquarePlusIcon, MessagesSquareIcon, PlusIcon } from "lucide-react";
-import { type ComponentProps, useState } from "react";
-import { useNavigate } from "react-router";
+import { MessageSquarePlusIcon } from "lucide-react";
+import { memo, type ReactElement, useState } from "react";
+import { Link, useMatch, useNavigate } from "react-router";
 import { PersonaAvatar } from "@/components/avatar";
-import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
-import { ListCard, ListRow } from "@/components/list";
 import { personasQuery } from "@/components/settings-form/queries";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -19,18 +16,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
+import {
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+} from "@/components/ui/sidebar";
 import { ApiError } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
 import { useNow } from "@/lib/use-now";
-import { cn } from "@/lib/utils";
-import { useLang } from "@/locales/i18n";
+import { type Lang, useLang } from "@/locales/i18n";
 import { ChatMenu } from "./chat-menu";
 import { chatName, relativeTime } from "./format";
 import { previewText } from "./items";
 import { ChatAvatar } from "./participants";
-import { chatWith, usePersonaOf } from "./persona";
+import { type ChatPersona, chatWith, usePersonaOf } from "./persona";
 import { chatsQuery, useCreateChat } from "./queries";
 
 /** A list's relative times move on about this often. */
@@ -42,10 +44,18 @@ export function chatPath(id: string): string {
 
 /** New Chat: tick who it is with, the active persona listed first, then start it. */
 export function NewChatMenu({
-  variant = "default",
-  size = "default",
-  className,
-}: Pick<ComponentProps<typeof Button>, "variant" | "size" | "className">) {
+  side = "bottom",
+  align = "end",
+  children,
+}: {
+  readonly side?: "bottom" | "right";
+  readonly align?: "start" | "end";
+  /** The button that opens it, told whether a chat is starting and whether it can open. */
+  readonly children: (trigger: {
+    readonly pending: boolean;
+    readonly disabled: boolean;
+  }) => ReactElement;
+}) {
   const { t } = useLingui();
   const navigate = useNavigate();
   const personas = useQuery(personasQuery);
@@ -70,17 +80,9 @@ export function NewChatMenu({
   return (
     <DropdownMenu onOpenChange={(open) => open && setChosen(new Set())}>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant={variant}
-          size={size}
-          className={className}
-          disabled={create.isPending || list.length === 0}
-        >
-          {create.isPending ? <Spinner /> : <PlusIcon />}
-          {t`New Chat`}
-        </Button>
+        {children({ pending: create.isPending, disabled: create.isPending || list.length === 0 })}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent side={side} align={align} className="w-64">
         <DropdownMenuLabel>{t`Chat With`}</DropdownMenuLabel>
         {list.map((persona) => {
           const on = chosen.has(persona.id);
@@ -109,110 +111,109 @@ export function NewChatMenu({
   );
 }
 
-function ListSkeleton() {
-  const { t } = useLingui();
+function ChatRow({
+  chat,
+  open,
+  now,
+  lang,
+  personaOf,
+}: {
+  readonly chat: ChatSummary;
+  readonly open: boolean;
+  readonly now: number;
+  readonly lang: Lang;
+  readonly personaOf: (id: ParticipantId) => ChatPersona;
+}) {
+  const personas = chat.participants.map(personaOf);
+  const name = chatName(chat.title, chatWith(personas), chat.createdAt, lang, now);
   return (
-    <div role="status" aria-busy="true" className="divide-y">
-      <span className="sr-only">{t`Loading…`}</span>
-      {["a", "b", "c"].map((key) => (
-        <div key={key} className="flex items-center gap-3 px-4 py-3">
-          <Skeleton className="size-8 rounded-full" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3.5 w-44" />
-          </div>
-        </div>
-      ))}
-    </div>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        size="lg"
+        isActive={open}
+        tooltip={name}
+        className="h-auto gap-2.5 py-1.5 data-active:font-normal"
+      >
+        <Link to={chatPath(chat.id)}>
+          <ChatAvatar personas={personas} />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex items-baseline gap-2">
+              <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
+              {/* Its time gives way to its menu, which a touch screen always shows. */}
+              <time
+                dateTime={new Date(chat.updatedAt).toISOString()}
+                className="shrink-0 text-sidebar-foreground/60 text-xs group-hover/menu-item:invisible group-has-focus-visible/menu-item:invisible group-has-data-[state=open]/menu-item:invisible pointer-coarse:invisible"
+              >
+                {relativeTime(chat.updatedAt, now, lang)}
+              </time>
+            </span>
+            <span className="truncate text-sidebar-foreground/60 text-xs">
+              {chat.lastText === null ? "" : previewText(chat.lastText)}
+            </span>
+          </span>
+        </Link>
+      </SidebarMenuButton>
+      <ChatMenu
+        id={chat.id}
+        name={name}
+        className="absolute top-1.5 right-1.5 size-6 opacity-0 hover:bg-sidebar-border group-hover/menu-item:opacity-100 group-has-focus-visible/menu-item:opacity-100 group-data-[collapsible=icon]:hidden data-[state=open]:opacity-100 pointer-coarse:opacity-100 dark:hover:bg-sidebar-border"
+      />
+    </SidebarMenuItem>
   );
 }
 
-/** The chats, newest first, the open one lit. */
-function ChatList({
-  current,
-  onDeleted,
-}: {
-  readonly current: string | undefined;
-  readonly onDeleted: (id: string) => void;
-}) {
+/**
+ * The sidebar's chats, newest first, the open one lit; their avatars alone while it is collapsed.
+ * Memoized: the sidebar re-renders on every tasks and status poll, which changes no row.
+ */
+export const SidebarChats = memo(function SidebarChats() {
   const { t } = useLingui();
   const lang = useLang();
+  const personaOf = usePersonaOf();
   const now = useNow(true, CLOCK_MS);
   const chats = useQuery(chatsQuery);
-  const personaOf = usePersonaOf();
+  const current = useMatch("/chats/:id")?.params.id;
 
-  if (chats.isPending) return <ListSkeleton />;
-  if (chats.error) {
-    if (chats.error instanceof ApiError && chats.error.status === 401) return null;
-    return (
-      <div className="p-4">
-        <ErrorAlert error={chats.error} />
-      </div>
-    );
-  }
-  if (chats.data.length === 0) {
-    return (
-      <EmptyState
-        className="m-4"
-        icon={<MessagesSquareIcon />}
-        title={t`No chats yet`}
-        description={t`Start one with any persona, or with several at once. Each chat keeps its own history.`}
-      />
-    );
-  }
-  return (
-    <ListCard label={t`Chats`} className="rounded-none border-0 bg-transparent">
-      {chats.data.map((chat) => {
-        const personas = chat.participants.map(personaOf);
-        const name = chatName(chat.title, chatWith(personas), chat.createdAt, lang, now);
-        return (
-          <ListRow
-            key={chat.id}
-            href={chatPath(chat.id)}
-            className={cn("min-h-0 gap-x-3 px-4 py-3 sm:px-4", chat.id === current && "bg-muted")}
-            leading={<ChatAvatar personas={personas} />}
-            title={<span className="line-clamp-1 break-all">{name}</span>}
-            description={
-              <span className="flex items-baseline gap-2">
-                <span className="min-w-0 flex-1 truncate">
-                  {chat.lastText === null ? "" : previewText(chat.lastText)}
-                </span>
-                <time
-                  dateTime={new Date(chat.updatedAt).toISOString()}
-                  className="shrink-0 text-xs"
-                >
-                  {relativeTime(chat.updatedAt, now, lang)}
-                </time>
-              </span>
-            }
-            trailing={<ChatMenu id={chat.id} name={name} onDeleted={onDeleted} />}
-          />
-        );
-      })}
-    </ListCard>
-  );
-}
+  if (chats.error instanceof ApiError && chats.error.status === 401) return null;
 
-/** The list with its heading and New Chat: the page's left column, or a sheet on a phone. */
-export function ChatListPanel({
-  current,
-  onDeleted,
-  className,
-}: {
-  readonly current: string | undefined;
-  readonly onDeleted: (id: string) => void;
-  readonly className?: string;
-}) {
-  const { t } = useLingui();
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4">
-        <h2 className="font-semibold text-base tracking-tight">{t`Chats`}</h2>
-        <NewChatMenu variant="outline" size="sm" />
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <ChatList current={current} onDeleted={onDeleted} />
-      </div>
-    </div>
+    <SidebarGroup>
+      <SidebarGroupLabel
+        asChild
+        className="hover:text-sidebar-foreground group-data-[collapsible=icon]:invisible"
+      >
+        <Link to="/chats">{t`Chats`}</Link>
+      </SidebarGroupLabel>
+      {chats.isPending ? (
+        <div role="status" aria-busy="true" className="flex flex-col gap-0.5">
+          <span className="sr-only">{t`Loading…`}</span>
+          {["a", "b", "c"].map((key) => (
+            <SidebarMenuSkeleton key={key} showIcon className="h-12" />
+          ))}
+        </div>
+      ) : chats.isError ? (
+        <div className="group-data-[collapsible=icon]:hidden">
+          <ErrorAlert error={chats.error} />
+        </div>
+      ) : chats.data.length === 0 ? (
+        <p className="px-2 text-sidebar-foreground/60 text-xs group-data-[collapsible=icon]:hidden">
+          {t`No chats yet`}
+        </p>
+      ) : (
+        <SidebarMenu aria-label={t`Chats`} className="gap-0.5">
+          {chats.data.map((chat) => (
+            <ChatRow
+              key={chat.id}
+              chat={chat}
+              open={chat.id === current}
+              now={now}
+              lang={lang}
+              personaOf={personaOf}
+            />
+          ))}
+        </SidebarMenu>
+      )}
+    </SidebarGroup>
   );
-}
+});

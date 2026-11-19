@@ -11,14 +11,16 @@ import {
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRoundIcon, MessageSquareOffIcon, PanelLeftIcon } from "lucide-react";
+import { KeyRoundIcon, MessageSquareOffIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
+import { MobileBar } from "@/components/mobile-bar";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 import { MicPill } from "@/features/call/call-controls";
 import { useCall } from "@/features/call/use-call";
@@ -94,36 +96,12 @@ function LiveNotice({
   return <ErrorAlert error={new ApiError(0, error.code as ErrorCode, error.message)} />;
 }
 
-/** Opens the list, which a phone keeps in a sheet. */
-function ListButton({ onClick }: { readonly onClick: () => void }) {
-  const { t } = useLingui();
-  return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      className="md:hidden"
-      aria-label={t`Show Chats`}
-      onClick={onClick}
-    >
-      <PanelLeftIcon />
-    </Button>
-  );
-}
-
 /** The pane while there is no chat to show: loading, gone, or failed. */
-export function ChatPlaceholder({
-  state,
-  onShowList,
-}: {
-  readonly state: "loading" | "missing" | Error;
-  readonly onShowList: () => void;
-}) {
+export function ChatPlaceholder({ state }: { readonly state: "loading" | "missing" | Error }) {
   const { t } = useLingui();
   return (
     <>
-      <div className="flex h-14 shrink-0 items-center border-b px-4">
-        <ListButton onClick={onShowList} />
-      </div>
+      <MobileBar />
       <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         {state === "loading" ? (
           <Spinner className="size-6 text-muted-foreground" />
@@ -144,15 +122,7 @@ export function ChatPlaceholder({
   );
 }
 
-export function ChatView({
-  id,
-  onShowList,
-  onDeleted,
-}: {
-  readonly id: string;
-  readonly onShowList: () => void;
-  readonly onDeleted: (id: string) => void;
-}) {
+export function ChatView({ id }: { readonly id: string }) {
   const { t } = useLingui();
   const lang = useLang();
   const queryClient = useQueryClient();
@@ -282,7 +252,7 @@ export function ChatView({
         : chat.error instanceof ApiError && chat.error.status === 404
           ? "missing"
           : chat.error;
-    return <ChatPlaceholder state={state} onShowList={onShowList} />;
+    return <ChatPlaceholder state={state} />;
   }
 
   const { createdAt, participants, title } = summary;
@@ -356,7 +326,7 @@ export function ChatView({
   return (
     <>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
-        <ListButton onClick={onShowList} />
+        <SidebarTrigger className="-ml-1.5 md:hidden" />
         <ParticipantsMenu chatId={id} participants={participants} personaOf={personaOf} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-semibold text-sm leading-tight">{title ?? who}</h2>
@@ -370,12 +340,7 @@ export function ChatView({
           disabled={inCall}
           onCall={startCall}
         />
-        <ChatMenu
-          id={id}
-          name={menuName}
-          onDeleted={onDeleted}
-          onSettings={() => setSettingsOpen(true)}
-        />
+        <ChatMenu id={id} name={menuName} onSettings={() => setSettingsOpen(true)} />
       </header>
       <div className="relative min-h-0 flex-1">
         <ChatLog
@@ -399,53 +364,55 @@ export function ChatView({
         />
         <MicPill call={call} />
       </div>
-      <footer className="flex shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3">
-        {tasks.bar !== null && (
-          <WaitingBar
-            task={tasks.bar.task}
-            others={tasks.bar.others}
-            onShow={() => setFocus(tasks.bar?.task.id ?? null)}
-          />
-        )}
-        {docked && (
-          <CallDock
-            call={call}
-            persona={personaOf(callee.persona)}
-            group={callee.group ? personas : null}
-            status={status}
-            onCallAgain={() => startCall(callee.persona, callee.group)}
-            onClose={() => setCallee(null)}
-          />
-        )}
-        {turns.live.error !== null && (
-          <LiveNotice
-            error={turns.live.error}
-            name={solo === null ? null : shortNameOf(solo)}
-            unheard={chat.data.hearingRefusal !== null}
-          />
-        )}
-        <Composer
-          placeholder={placeholder}
-          participants={personas}
-          skills={skills}
-          busy={turns.busy}
-          mic={mic}
-          inCall={inCall}
-          onSend={turns.send}
-          onSendVoice={turns.sendVoice}
-          onStop={turns.stop}
-          onCommand={runCommand}
-        />
-        {/* Only a chat of hers alone starts tasks. */}
-        {status?.assistant.enabled && solo !== null && (
-          <div className="-mt-2 flex">
-            <PermissionsPicker
-              id={id}
-              own={ownPermissions}
-              fallback={chat.data.defaultPermissions}
+      <footer className="shrink-0 border-t bg-muted/50 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+          {tasks.bar !== null && (
+            <WaitingBar
+              task={tasks.bar.task}
+              others={tasks.bar.others}
+              onShow={() => setFocus(tasks.bar?.task.id ?? null)}
             />
-          </div>
-        )}
+          )}
+          {docked && (
+            <CallDock
+              call={call}
+              persona={personaOf(callee.persona)}
+              group={callee.group ? personas : null}
+              status={status}
+              onCallAgain={() => startCall(callee.persona, callee.group)}
+              onClose={() => setCallee(null)}
+            />
+          )}
+          {turns.live.error !== null && (
+            <LiveNotice
+              error={turns.live.error}
+              name={solo === null ? null : shortNameOf(solo)}
+              unheard={chat.data.hearingRefusal !== null}
+            />
+          )}
+          <Composer
+            placeholder={placeholder}
+            participants={personas}
+            skills={skills}
+            busy={turns.busy}
+            mic={mic}
+            inCall={inCall}
+            onSend={turns.send}
+            onSendVoice={turns.sendVoice}
+            onStop={turns.stop}
+            onCommand={runCommand}
+          />
+          {/* Only a chat of hers alone starts tasks. */}
+          {status?.assistant.enabled && solo !== null && (
+            <div className="-mt-2 flex">
+              <PermissionsPicker
+                id={id}
+                own={ownPermissions}
+                fallback={chat.data.defaultPermissions}
+              />
+            </div>
+          )}
+        </div>
       </footer>
       <ChatSettingsSheet
         id={id}

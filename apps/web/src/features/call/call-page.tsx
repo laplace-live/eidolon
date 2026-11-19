@@ -4,13 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { AudioLinesIcon, BrainIcon, KeyRoundIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect } from "react";
 import { Link, useRevalidator } from "react-router";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { MemoryStatus, Status } from "@/lib/api";
-import { errorMessage, listOf } from "@/lib/labels";
+import { listOf } from "@/lib/labels";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
@@ -45,10 +44,7 @@ function MemoryChip({ memory, name }: { readonly memory: MemoryStatus; readonly 
   );
 }
 
-/**
- * The call's one panel, as tall as the window leaves it: who she is and how the call stands, what
- * is said, then the controls.
- */
+/** The call, filling the frame: who she is and how it stands, what is said, then the controls. */
 function Frame({
   persona,
   speaking,
@@ -65,8 +61,9 @@ function Frame({
   readonly children: ReactNode;
 }) {
   return (
-    <section className="flex h-[calc(100svh-var(--app-header-height)-5rem)] max-h-[56rem] min-h-[30rem] flex-col overflow-hidden rounded-xl border bg-card text-card-foreground">
-      <header className="flex items-center gap-3 border-b px-4 py-3 sm:px-6 sm:py-4">
+    <section className="flex min-h-0 flex-1 flex-col">
+      <header className="flex items-center gap-3 border-b px-4 py-3 sm:px-6">
+        <SidebarTrigger className="-ml-1.5 md:hidden" />
         <Face persona={persona} size="md" speaking={speaking} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-semibold text-base tracking-tight">{persona.name}</h2>
@@ -75,7 +72,9 @@ function Frame({
         {aside}
       </header>
       {children}
-      <footer className="border-t bg-muted/50">{footer}</footer>
+      <footer className="border-t bg-muted/50">
+        <div className="mx-auto w-full max-w-3xl">{footer}</div>
+      </footer>
     </section>
   );
 }
@@ -126,7 +125,7 @@ function CallRoom({ status, onEnded }: { readonly status: Status; readonly onEnd
       : t`${ph({ name: short })} speaks first once the call connects.`;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col">
+    <>
       <h1 className="sr-only">{t`Call`}</h1>
       <Frame
         persona={persona}
@@ -154,7 +153,7 @@ function CallRoom({ status, onEnded }: { readonly status: Status; readonly onEnd
       </Frame>
       {/* biome-ignore lint/a11y/useMediaCaption: a live MediaStream takes no track; the transcript is its caption. */}
       <audio ref={call.audioRef} autoPlay hidden />
-    </div>
+    </>
   );
 }
 
@@ -178,7 +177,7 @@ function Blocker({
 }) {
   const { t } = useLingui();
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col">
+    <>
       <h1 className="sr-only">{t`Call`}</h1>
       <Frame
         persona={persona}
@@ -203,30 +202,16 @@ function Blocker({
           />
         </div>
       </Frame>
-    </div>
+    </>
   );
 }
 
 export function CallPage() {
   const { t } = useLingui();
-  const { data: status, error, refetch } = useQuery(statusQuery);
+  const { data: status, refetch } = useQuery(statusQuery);
   const onEnded = useCallback(() => void refetch(), [refetch]);
-
-  if (status === undefined) {
-    if (error === null) {
-      return (
-        <div className="flex justify-center py-16">
-          <Spinner className="size-6 text-muted-foreground" />
-        </div>
-      );
-    }
-    return (
-      <Alert variant="destructive" className="mx-auto max-w-lg">
-        <AlertTitle>{t`Something went wrong`}</AlertTitle>
-        <AlertDescription>{t(errorMessage(error))}</AlertDescription>
-      </Alert>
-    );
-  }
+  // The root loader primes it, so it is known from the first render.
+  if (status === undefined) return null;
 
   const { persona } = status;
   const short = persona.shortName.trim() || persona.name;

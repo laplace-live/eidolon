@@ -36,7 +36,7 @@ export function ChatAvatar({ personas }: { readonly personas: readonly ChatPerso
       <PersonaAvatar
         persona={second}
         size="xs"
-        className={cn(SMALL, "absolute right-0 bottom-0 ring-2 ring-card")}
+        className={cn(SMALL, "absolute right-0 bottom-0 ring-2 ring-sidebar")}
       />
     </div>
   );
@@ -74,11 +74,11 @@ export function ParticipantsMenu({
           aria-label={t`Participants`}
           className="shrink-0 rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          <AvatarGroup className="*:data-[slot=avatar]:ring-card">
+          <AvatarGroup>
             {inChat.slice(0, more > 0 ? SHOWN - 1 : SHOWN).map((persona) => (
               <PersonaAvatar key={persona.id} persona={persona} size="sm" />
             ))}
-            {more > 0 && <AvatarGroupCount className="ring-card">+{more + 1}</AvatarGroupCount>}
+            {more > 0 && <AvatarGroupCount>+{more + 1}</AvatarGroupCount>}
           </AvatarGroup>
         </button>
       </DropdownMenuTrigger>

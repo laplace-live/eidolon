@@ -107,7 +107,10 @@ export function TranscriptView({
         onScroll={onScroll}
         className="absolute inset-0 overflow-y-auto px-4 pt-5 pb-12 sm:px-6"
       >
-        <div ref={contentRef} className="flex min-h-full flex-col justify-end gap-3">
+        <div
+          ref={contentRef}
+          className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end gap-3"
+        >
           {transcript.entries.map((entry) => (
             <EntryView key={entry.id} entry={entry} name={name} />
           ))}

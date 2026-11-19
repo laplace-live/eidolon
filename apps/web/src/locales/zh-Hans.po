@@ -14,7 +14,7 @@ msgctxt "list separator"
 msgid ", "
 msgstr "、"
 
-#: src/components/app-shell.tsx
+#: src/components/app-sidebar.tsx
 msgid ", {count} waiting for you"
 msgstr "，{count} 个在等你"
 
@@ -607,6 +607,7 @@ msgstr "账号"
 msgid "Active"
 msgstr "当前"
 
+#: src/components/persona-switcher.tsx
 #: src/components/settings-form/labels.ts
 msgid "Active Persona"
 msgstr "当前人设"
@@ -1118,7 +1119,7 @@ msgstr "按人设"
 msgid "By Provider"
 msgstr "按服务商"
 
-#: src/components/app-shell.tsx
+#: src/components/app-sidebar.tsx
 #: src/features/call/call-page.tsx
 #: src/features/chats/call-dock.tsx
 msgid "Call"
@@ -1298,7 +1299,6 @@ msgstr "聊天设置"
 msgid "Chat With"
 msgstr "和谁聊天"
 
-#: src/components/app-shell.tsx
 #: src/features/chats/chat-list.tsx
 #: src/features/chats/route.tsx
 #: src/features/studio/chat-section.tsx
@@ -1957,6 +1957,10 @@ msgstr "大家都在听，说点什么开始吧。"
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "其他分区没有列出的设置。大多数情况下无需修改。"
 
+#: src/components/app-sidebar.tsx
+msgid "Expand Sidebar"
+msgstr "展开侧边栏"
+
 #: src/features/studio/models-section.tsx
 msgid "Experimental, and not yet tried in a real call."
 msgstr "实验性功能，尚未在真实通话中验证。"
@@ -2299,7 +2303,7 @@ msgstr "画质越高越贵，通话中等待的时间也越长。"
 msgid "Hold the microphone button while you talk, or click it to start and again to send."
 msgstr "说话时按住麦克风按钮，或者点一下开始、再点一下发送。"
 
-#: src/components/app-shell.tsx
+#: src/components/app-sidebar.tsx
 msgid "Home"
 msgstr "首页"
 
@@ -2674,7 +2678,7 @@ msgstr "它的声音"
 msgid "Japanese"
 msgstr "日文"
 
-#: src/components/app-shell.tsx
+#: src/components/app-sidebar.tsx
 #: src/features/jobs/list.tsx
 msgid "Jobs"
 msgstr "作业"
@@ -2887,7 +2891,7 @@ msgstr "用小写字母、数字和连字符。会保存为 {path}。"
 msgid "macOS: brew install ffmpeg · Windows: winget install ffmpeg · Linux: your package manager's ffmpeg."
 msgstr "macOS：brew install ffmpeg · Windows：winget install ffmpeg · Linux：用包管理器安装 ffmpeg。"
 
-#: src/components/app-shell.tsx
+#: src/components/app-sidebar.tsx
 msgid "Main"
 msgstr "主导航"
 
@@ -3104,7 +3108,8 @@ msgstr "需要 ffmpeg"
 msgid "Needs prepaid credit."
 msgstr "需要预付余额。"
 
-#: src/features/chats/chat-list.tsx
+#: src/components/app-sidebar.tsx
+#: src/features/chats/route.tsx
 msgid "New Chat"
 msgstr "新聊天"
 
@@ -3131,6 +3136,7 @@ msgid "No API credit, and the voice model is a paid one. Add credit on fish.audi
 msgstr "没有 API 余额，而当前声音模型需要付费。请在 fish.audio 充值。"
 
 #: src/features/chats/chat-list.tsx
+#: src/features/chats/route.tsx
 msgid "No chats yet"
 msgstr "还没有聊天"
 
@@ -4415,7 +4421,7 @@ msgstr "开始使用 Eidolon"
 msgid "Set up, but Qdrant hasn't been checked yet."
 msgstr "已设置，但尚未检查 Qdrant。"
 
-#: src/components/app-shell.tsx
+#: src/components/app-sidebar.tsx
 #: src/features/settings/route.tsx
 msgid "Settings"
 msgstr "设置"
@@ -4555,10 +4561,6 @@ msgstr "显示全部"
 msgid "Show All {count}"
 msgstr "显示全部 {count} 条"
 
-#: src/features/chats/chat-view.tsx
-msgid "Show Chats"
-msgstr "显示聊天列表"
-
 #: src/features/chats/labels.ts
 msgid "Show each task as one card"
 msgstr "每个任务显示为一张卡片"
@@ -4594,6 +4596,10 @@ msgstr "显示文字"
 #: src/components/settings-form/field.tsx
 msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
 msgstr "仅供查看：请在 settings.yaml 中或用 <0>{env}</0> 设置。"
+
+#: src/components/ui/sidebar.tsx
+msgid "Sidebar"
+msgstr "侧边栏"
 
 #: src/features/usage/route.tsx
 msgid "since recording began"
@@ -4649,7 +4655,6 @@ msgid "Something answers there, but it isn't Qdrant."
 msgstr "该地址有服务应答，但不是 Qdrant。"
 
 #: src/components/route-error.tsx
-#: src/features/call/call-page.tsx
 msgid "Something went wrong"
 msgstr "出了点问题"
 
@@ -4739,7 +4744,7 @@ msgstr "开始聊天"
 msgid "Start Group Chat"
 msgstr "开始群聊"
 
-#: src/features/chats/chat-list.tsx
+#: src/features/chats/route.tsx
 msgid "Start one with any persona, or with several at once. Each chat keeps its own history."
 msgstr "和任意人设开始聊天，也可以同时拉上几位。每个聊天都有自己的记录。"
 
@@ -4893,7 +4898,7 @@ msgstr "直播日期"
 msgid "Streamed"
 msgstr "直播日期"
 
-#: src/components/app-shell.tsx
+#: src/components/app-sidebar.tsx
 msgid "Studio"
 msgstr "工作室"
 
@@ -4977,7 +4982,7 @@ msgstr "任务权限"
 msgid "Task:"
 msgstr "任务："
 
-#: src/components/app-shell.tsx
+#: src/components/app-sidebar.tsx
 #: src/features/tasks/list.tsx
 msgid "Tasks"
 msgstr "任务"
@@ -5123,6 +5128,10 @@ msgstr "任务搜索网页用的账号。关闭时任务仍能读取你允许的
 #: src/features/settings/accounts-card.tsx
 msgid "The accounts Eidolon calls, each with its own key and API base. Add as many of one provider as you have; a persona picks which account does each part of her work in her studio."
 msgstr "Eidolon 调用的账号，每个都有自己的密钥和 API 地址。同一个服务商可以添加多个账号；每个人设在她的工作室里选择用哪个账号做哪件事。"
+
+#: src/components/ui/sidebar.tsx
+msgid "The app's navigation."
+msgstr "应用的导航。"
 
 #: src/features/home/readiness-labels.ts
 msgid "The archive is built."
@@ -5601,6 +5610,10 @@ msgstr "待索引"
 msgid "To transcribe"
 msgstr "待转写"
 
+#: src/components/ui/sidebar.tsx
+msgid "Toggle Sidebar"
+msgstr "展开或收起侧边栏"
+
 #: src/features/chats/labels.ts
 msgid "Too short to send"
 msgstr "太短了，没有发送"
@@ -5753,7 +5766,7 @@ msgstr "上传"
 msgid "Upload an Avatar"
 msgstr "上传头像"
 
-#: src/components/app-shell.tsx
+#: src/components/app-sidebar.tsx
 #: src/components/settings-form/labels.ts
 #: src/features/usage/route.tsx
 #: src/features/usage/tables.tsx
@@ -6234,10 +6247,6 @@ msgstr "你的 API 密钥"
 #: src/features/call/call-notices.tsx
 msgid "Your browser is holding back {name}'s voice."
 msgstr "浏览器暂停了{name}的声音。"
-
-#: src/features/chats/route.tsx
-msgid "Your chats, newest first."
-msgstr "你的聊天，最新的在前。"
 
 #: src/features/settings/route.tsx
 msgid "Your keys and the settings every persona shares."

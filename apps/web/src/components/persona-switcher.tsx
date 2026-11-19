@@ -1,4 +1,4 @@
-// The header's persona menu: who calls reach, switched in place. In a studio it follows the switch
+// The sidebar's persona menu: who calls reach, switched in place. In a studio it follows the switch
 // to the same section of the newly active persona's.
 
 import { ph } from "@lingui/core/macro";
@@ -9,7 +9,6 @@ import { useRef, useState } from "react";
 import { Link, useMatch, useNavigate } from "react-router";
 import { PersonaAvatar } from "@/components/avatar";
 import { personasQuery } from "@/components/settings-form/queries";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,13 +19,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
 import { useActivatePersona } from "@/features/setup/personas";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 
-export function PersonaSwitcher() {
+export function PersonaSwitcher({ side }: { readonly side: "bottom" | "right" }) {
   const { t } = useLingui();
   const navigate = useNavigate();
   const studio = useMatch("/personas/:id/:tab?");
@@ -49,68 +49,78 @@ export function PersonaSwitcher() {
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            className="min-w-0 max-w-[60vw] gap-2 px-1.5 sm:max-w-64"
-            aria-label={t`Active Persona: ${ph({ name: active.name })}`}
-          >
-            <PersonaAvatar persona={active} size="xs" />
-            <span className="truncate font-medium">{active.name}</span>
-            {activate.isPending ? (
-              <Spinner className="size-3.5 text-muted-foreground" />
-            ) : (
-              <ChevronsUpDownIcon className="size-3.5 text-muted-foreground" />
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="w-64"
-          onCloseAutoFocus={(event) => {
-            if (!openingDialog.current) return;
-            openingDialog.current = false;
-            event.preventDefault();
-            setCreating(true);
-          }}
-        >
-          <DropdownMenuLabel>{t`Personas`}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={activeId}
-            onValueChange={(id) => {
-              if (id !== activeId) activate.mutate(id);
-            }}
-          >
-            {list.map((persona) => (
-              <DropdownMenuRadioItem
-                key={persona.id}
-                value={persona.id}
-                disabled={activate.isPending}
-                className="gap-2 py-1.5"
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <SidebarMenuButton
+                size="lg"
+                className="data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground"
+                aria-label={t`Active Persona: ${ph({ name: active.name })}`}
               >
-                <PersonaAvatar persona={persona} size="xs" />
-                <span className="truncate">{persona.name}</span>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={() => {
-              openingDialog.current = true;
-            }}
-          >
-            <PlusIcon />
-            {t`New Persona`}
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link to={studioPath(activeId)}>
-              <BookOpenIcon />
-              {t`Open the Studio`}
-            </Link>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+                <PersonaAvatar persona={active} size="sm" />
+                <span className="grid min-w-0 flex-1 leading-tight">
+                  <span className="truncate font-medium">{active.name}</span>
+                  <span className="truncate text-sidebar-foreground/60 text-xs">
+                    {t`Active Persona`}
+                  </span>
+                </span>
+                {activate.isPending ? (
+                  <Spinner className="text-sidebar-foreground/60" />
+                ) : (
+                  <ChevronsUpDownIcon className="text-sidebar-foreground/60" />
+                )}
+              </SidebarMenuButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side={side}
+              align="start"
+              className="w-64"
+              onCloseAutoFocus={(event) => {
+                if (!openingDialog.current) return;
+                openingDialog.current = false;
+                event.preventDefault();
+                setCreating(true);
+              }}
+            >
+              <DropdownMenuLabel>{t`Personas`}</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={activeId}
+                onValueChange={(id) => {
+                  if (id !== activeId) activate.mutate(id);
+                }}
+              >
+                {list.map((persona) => (
+                  <DropdownMenuRadioItem
+                    key={persona.id}
+                    value={persona.id}
+                    disabled={activate.isPending}
+                    className="gap-2 py-1.5"
+                  >
+                    <PersonaAvatar persona={persona} size="xs" />
+                    <span className="truncate">{persona.name}</span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  openingDialog.current = true;
+                }}
+              >
+                <PlusIcon />
+                {t`New Persona`}
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to={studioPath(activeId)}>
+                  <BookOpenIcon />
+                  {t`Open the Studio`}
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </SidebarMenuItem>
+      </SidebarMenu>
       <NewPersonaDialog
         open={creating}
         onOpenChange={setCreating}

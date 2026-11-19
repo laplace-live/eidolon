@@ -202,7 +202,7 @@ export function CallNotices({
 
   if (!end && !mic && !botError && !call.audioBlocked && voice?.ok !== false) return null;
   return (
-    <div className="flex flex-col gap-2 border-b px-4 py-3 sm:px-6">
+    <div className="flex flex-col gap-2 border-b px-4 py-3 *:mx-auto *:w-full *:max-w-3xl sm:px-6">
       {end && <EndingNotice ending={end} />}
       {mic && <EndingNotice ending={mic} />}
       {call.audioBlocked && (
