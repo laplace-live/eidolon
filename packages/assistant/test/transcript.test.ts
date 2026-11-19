@@ -243,6 +243,7 @@ describe("task.json", () => {
         skills: ["house-style", "deploy"],
         pending: { kind: "command", call: "call_9", command: "npm test", timeout: 120 },
         bash: { denied: ["rm -rf build"] },
+        paths: { denied: ["/x/notes"] },
         background,
       },
       {
@@ -371,6 +372,8 @@ describe("task.json", () => {
       },
       { ...snapshot("t1"), bash: { denied: "ls" } },
       { ...snapshot("t1"), bash: {} },
+      { ...snapshot("t1"), paths: { denied: "/x" } },
+      { ...snapshot("t1"), paths: {} },
       { ...snapshot("t1"), background: [{ id: 1, command: "ls", startedAt: 1 }] },
       { ...snapshot("t1"), background: [{ id: "1", command: "ls", startedAt: 1, endsAt: 2 }] },
       { ...snapshot("t1"), external: false },
