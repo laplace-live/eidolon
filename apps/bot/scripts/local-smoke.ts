@@ -424,11 +424,36 @@ const MCP2_ACK = "再回一次声，这次也要你在卡片上点允许。";
 const MCP2_REPORT = "这次工具没问你就回声了。";
 /** What the workers have the tool echo, in order. */
 const ECHOES = ["你好", "再来一次"] as const;
+/**
+ * The permission walk's tasks, each outside assistant.folders. Under Approve for Me, the fake
+ * review lets the first start and its first command through and asks about its second, which
+ * writes outside its folder; under Full Access the second task starts and runs its command
+ * unasked.
+ */
+const AUTO_LINE = "这次让审核先看一遍，帮我在新文件夹里跑两条命令";
+const AUTO_GOAL = "在新文件夹里写 ok.txt，再试着往文件夹外面写 outside.txt";
+const START_CALL_AUTO = "call_auto_task";
+const AUTO_ACK = "好，这次先让审核看一遍再跑。";
+const AUTO_REPORT = "审核放行了一条，外面那个文件没让写。";
+const AUTO_INSIDE = "printf ok > ok.txt";
+const AUTO_OUTSIDE = "printf no > ../outside.txt";
+const FULL_LINE = "这次给你完全权限，再跑一条";
+const FULL_GOAL = "在另一个新文件夹里写 full.txt";
+const START_CALL_FULL = "call_full_task";
+const FULL_ACK = "收到，完全权限，这次不用你点了。";
+const FULL_REPORT = "完全权限那个也跑完了。";
+const FULL_COMMAND = "printf full > full.txt";
+/** How Approve for Me's review prompt starts, which the fake server answers as a review. */
+const REVIEW_LEAD = "You review one action";
+/** Her start_task description's word on commands under Full Access. */
+const FULL_TEXT = "这个聊天里对方给了完全权限";
 /** Her word once each of these tasks ends, by her start_task call. */
 const REPORTS: Readonly<Record<string, string>> = {
   [START_CALL_TOOLS]: TOOLS_REPORT,
   [START_CALL_MCP]: MCP_REPORT,
   [START_CALL_MCP2]: MCP2_REPORT,
+  [START_CALL_AUTO]: AUTO_REPORT,
+  [START_CALL_FULL]: FULL_REPORT,
 };
 
 /** Her line on the result of each of her calls the fake mind makes, by its id. */
@@ -443,6 +468,8 @@ const AFTER_RESULT: Readonly<Record<string, string>> = {
   [START_CALL_TOOLS]: TOOLS_ACK,
   [START_CALL_MCP]: MCP_ACK,
   [START_CALL_MCP2]: MCP2_ACK,
+  [START_CALL_AUTO]: AUTO_ACK,
+  [START_CALL_FULL]: FULL_ACK,
 };
 
 /** The runner's word that her start_task call `callId` ended, which her report answers. */
@@ -531,6 +558,7 @@ interface ChatRequest {
   readonly tools?: readonly {
     readonly function?: {
       readonly name?: unknown;
+      readonly description?: unknown;
       readonly parameters?: { readonly required?: unknown };
     };
   }[];
@@ -563,6 +591,9 @@ interface TaskPlaces {
   /** The MCP tasks'. */
   readonly mcp: string;
   readonly mcp2: string;
+  /** The permission walk's, under Approve for Me and then Full Access. */
+  readonly auto: string;
+  readonly full: string;
   /** Null offline, where the tools task's worker fetches nothing. */
   readonly fetch: string | null;
 }
@@ -784,6 +815,18 @@ function herTaskAnswer(body: ChatRequest, places: TaskPlaces): Response | null {
         folder: places.mcp2,
         profile: "other",
       });
+    case AUTO_LINE:
+      return call(START_CALL_AUTO, "start_task", {
+        goal: AUTO_GOAL,
+        folder: places.auto,
+        profile: "other",
+      });
+    case FULL_LINE:
+      return call(START_CALL_FULL, "start_task", {
+        goal: FULL_GOAL,
+        folder: places.full,
+        profile: "other",
+      });
   }
   // Only the call in the task's chat greets with that chat's lines in her view.
   if (content.startsWith(GREETING_KICKOFF) && heard(body, TASK_LINE)) {
@@ -822,6 +865,14 @@ function workerAnswer(body: ChatRequest, places: TaskPlaces): Response {
   if (about(TOOLS_GOAL)) return toolsWorker(body, places);
   if (about(MCP_GOAL)) return mcpWorker(body, 2);
   if (about(MCP2_GOAL)) return mcpWorker(body, 1);
+  if (about(AUTO_GOAL)) {
+    return commandsWorker(
+      body,
+      [AUTO_INSIDE, AUTO_OUTSIDE],
+      "Wrote ok.txt; outside.txt was refused.",
+    );
+  }
+  if (about(FULL_GOAL)) return commandsWorker(body, [FULL_COMMAND], "Wrote full.txt.");
   const onCall = messages.some((m) => String(m.content ?? "").includes(CALL_TASK_GOAL));
   const [folder, report] = onCall
     ? [places.call, CALL_WORKER_REPORT]
@@ -912,6 +963,30 @@ function mcpWorker(body: ChatRequest, count: number): Response {
   return scriptedStream(WORKER_MODEL, report, "stop", WORKER_USAGE);
 }
 
+/** A worker that runs `commands` one after another, each once the one before has its result. */
+function commandsWorker(body: ChatRequest, commands: readonly string[], report: string): Response {
+  const results = (body.messages ?? []).filter((m) => m.role === "tool").length;
+  const command = commands[results];
+  if (command === undefined) {
+    return scriptedStream(WORKER_MODEL, { content: report }, "stop", WORKER_USAGE);
+  }
+  const id = `call_command_${results + 1}`;
+  return toolCallStream(WORKER_MODEL, id, "bash", { command }, WORKER_USAGE);
+}
+
+/** Approve for Me's review: it asks about the command writing outside its folder, and allows the rest. */
+function reviewAnswer(body: ChatRequest): Response {
+  const verdict = lastContent(body).includes(JSON.stringify(AUTO_OUTSIDE))
+    ? { verdict: "ask", risk: "outside" }
+    : { verdict: "allow" };
+  return scriptedStream(
+    String(body.model),
+    { content: JSON.stringify(verdict) },
+    "stop",
+    WORKER_USAGE,
+  );
+}
+
 /** `seconds` of silent MPEG-1 Layer III frames, mono, 44.1 kHz at 128 kbps: the fake voice. */
 function silentMp3(seconds: number): Uint8Array<ArrayBuffer> {
   // 144 × 128000 / 44100, unpadded; all-zero side info decodes as silence.
@@ -949,6 +1024,8 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
     models: new Set<string>(),
     chats: [] as ChatRequest[],
     workers: [] as ChatRequest[],
+    /** Approve for Me's reviews, on a worker's model. */
+    reviews: [] as ChatRequest[],
     decisions: [] as DecisionsRequest[],
     speech: [] as SpeechRequest[],
     heard: [] as HeardUpload[],
@@ -968,6 +1045,10 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
       }
       if (route === "POST /v1/chat/completions") {
         const body = (await request.json()) as ChatRequest;
+        if (WORKER_MODELS.has(String(body.model)) && systemOf(body).startsWith(REVIEW_LEAD)) {
+          seen.reviews.push(body);
+          return reviewAnswer(body);
+        }
         if (WORKER_MODELS.has(String(body.model))) {
           seen.workers.push(body);
           if (held !== null) await held;
@@ -1850,6 +1931,7 @@ interface LoggedEvent {
   readonly code?: string;
   readonly replyMode?: string;
   readonly display?: string;
+  readonly permissions?: string;
   readonly call?: string;
   readonly persona?: string;
   readonly reason?: string;
@@ -4913,6 +4995,146 @@ async function mcpWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
 }
 
 /**
+ * The chat's permission level, from the picker under its message box. Under Approve for Me, a task
+ * outside assistant.folders starts with no card and runs the command its review allows, and the
+ * card asks about the one it won't, saying why; Deny ends it. Under Full Access, her start_task
+ * description says commands run unasked, and a task starts and runs its command with no review and
+ * no pause. Ask for Approval again leaves the chat as it was.
+ */
+async function permissionsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { chats, reviews } = walk.embeddings.seen;
+  const { auto, full } = walk.embeddings.places;
+  if (new URL(page.url()).pathname !== `/chats/${chat.id}`) {
+    await page.goto(`${origin}/chats/${chat.id}`);
+  }
+  const picker = page.locator("footer button[data-permissions]");
+  const chatUrl = `${origin}/api/local/chats/${chat.id}`;
+  const pick = async (level: string, label: string): Promise<number> => {
+    await picker.click();
+    const patched = page.waitForResponse(
+      (response) => response.request().method() === "PATCH" && response.url() === chatUrl,
+    );
+    await page.getByRole("menuitemradio", { name: new RegExp(`^${escapeRegExp(label)}`) }).click();
+    const status = (await patched).status();
+    await poll(
+      () => picker.getAttribute("data-permissions"),
+      (shown) => shown === level,
+      10_000,
+    );
+    return status;
+  };
+  const levelOf = (events: readonly LoggedEvent[]) =>
+    (events.findLast((e) => e.type === "settings" && e.permissions !== undefined)?.permissions ??
+      null) as string | null;
+
+  const pickerShown = await shows(picker, 15_000);
+  const before = await picker.getAttribute("data-permissions");
+  const autoStatus = await pick("auto", t("en", "Approve for Me"));
+  const autoStored = levelOf(await chatLog(walk, chat.id));
+  const reviewed = reviews.length;
+  await askHer(walk, chat, AUTO_LINE, AUTO_ACK);
+  const task = startedTask(await chatLog(walk, chat.id), START_CALL_AUTO);
+  if (task === null) throw new Error("her start_task under Approve for Me started no task");
+  const card = chat.log.locator(`article[data-task="${task}"]`);
+  const asking = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot?.pending?.kind === "command",
+    60_000,
+  );
+  const pending = asking?.pending?.kind === "command" ? asking.pending : null;
+  const because = await shows(
+    card.getByText(
+      t("en", "Approve for Me asks you: this changes files outside the task's folder."),
+      { exact: true },
+    ),
+    15_000,
+  );
+  const inside = textOf(join(auto, "ok.txt"));
+  const denied = await answerCard(walk, card, task, "deny", (asked) => asked.kind === "command");
+  const ended = await poll(
+    () => taskOf(walk, task),
+    (snapshot) => snapshot !== null && ENDED_TASK.has(snapshot.status),
+    30_000,
+  );
+  const autoReviews = reviews.length - reviewed;
+  const outside = existsSync(join(dirname(auto), "outside.txt"));
+  checks.add(
+    "approve for me",
+    pickerShown &&
+      before === "ask" &&
+      autoStatus === 200 &&
+      autoStored === "auto" &&
+      pending?.command === AUTO_OUTSIDE &&
+      pending.review === "outside" &&
+      because &&
+      inside === "ok" &&
+      denied.status === 200 &&
+      ended?.status === "succeeded" &&
+      autoReviews === 3 &&
+      !outside,
+    `the picker ${pickerShown ? "showed" : "never showed"} ${String(before)}; Approve for Me ` +
+      `answered ${autoStatus}, the log storing ${String(autoStored)}; the task started with no ` +
+      `card and ran its first command (ok.txt holds ${quote(inside)}), then asked about ` +
+      `${quote(pending?.command ?? "nothing")} for ${String(pending?.review)}, the card ` +
+      `${because ? "saying why" : "not saying why"}; Deny answered ${denied.status}; it ` +
+      `${String(ended?.status)} after ${autoReviews} review(s), outside.txt ` +
+      `${outside ? "written" : "never written"}`,
+  );
+  await poll(
+    () => chatLog(walk, chat.id),
+    (events) => said(events, "persona", AUTO_REPORT),
+    30_000,
+  );
+
+  const fullStatus = await pick("full", t("en", "Full Access"));
+  const warned = (await picker.getAttribute("class"))?.includes("text-warning") ?? false;
+  const reviewed2 = reviews.length;
+  const asked = chats.length;
+  await askHer(walk, chat, FULL_LINE, FULL_ACK);
+  const line = chats.slice(asked).find((request) => lastContent(request) === FULL_LINE);
+  const described = String(
+    (line?.tools ?? []).find((tool) => tool.function?.name === "start_task")?.function
+      ?.description ?? "",
+  );
+  const task2 = startedTask(await chatLog(walk, chat.id), START_CALL_FULL);
+  if (task2 === null) throw new Error("her start_task under Full Access started no task");
+  const ended2 = await poll(
+    () => taskOf(walk, task2),
+    (snapshot) => snapshot !== null && ENDED_TASK.has(snapshot.status),
+    30_000,
+  );
+  const events = await walk.api("GET", `/api/local/tasks/${task2}/events`);
+  const paused = (await events.text()).includes('"type":"pause"');
+  const ran = textOf(join(full, "full.txt"));
+  const fullReviews = reviews.length - reviewed2;
+  await poll(
+    () => chatLog(walk, chat.id),
+    (logged) => said(logged, "persona", FULL_REPORT),
+    30_000,
+  );
+  const backStatus = await pick("ask", t("en", "Ask for Approval"));
+  const backStored = levelOf(await chatLog(walk, chat.id));
+  checks.add(
+    "full access",
+    fullStatus === 200 &&
+      warned &&
+      described.includes(FULL_TEXT) &&
+      ended2?.status === "succeeded" &&
+      !paused &&
+      ran === "full" &&
+      fullReviews === 0 &&
+      backStatus === 200 &&
+      backStored === "ask",
+    `Full Access answered ${fullStatus}, the picker ${warned ? "in" : "not in"} the warning ` +
+      `color; her start_task description ${described.includes(FULL_TEXT) ? "says" : "doesn't say"} ` +
+      `commands run unasked; the task ${String(ended2?.status)} ${paused ? "after a pause" : "with no pause"}, ` +
+      `full.txt holding ${quote(ran)}, after ${fullReviews} review(s); Ask for Approval answered ` +
+      `${backStatus}, the log storing ${String(backStored)}`,
+  );
+}
+
+/**
  * Settles the bodies read so far, each on its own: null for one the browser couldn't give, or one
  * still streaming after 10 s.
  */
@@ -4944,6 +5166,8 @@ async function smoke(options: Options): Promise<Checks> {
     commands: join(run.temp, "task-commands"),
     mcp: join(run.temp, "task-mcp"),
     mcp2: join(run.temp, "task-mcp-again"),
+    auto: join(run.temp, "task-auto"),
+    full: join(run.temp, "task-full"),
     fetch: options.offline ? null : FETCH_URL,
   });
   run.defer(embeddings.stop);
@@ -5063,6 +5287,7 @@ async function smoke(options: Options): Promise<Checks> {
             await checks.step("task tools", () => toolsWalk(walk, chat));
           }
           await checks.step("task mcp", () => mcpWalk(walk, chat));
+          await checks.step("task permissions", () => permissionsWalk(walk, chat));
         }
       }
     }

@@ -243,6 +243,7 @@ describe("task.json", () => {
         skills: ["house-style", "deploy"],
         pending: { kind: "command", call: "call_9", command: "npm test", timeout: 120 },
         bash: { denied: ["rm -rf build"] },
+        paths: { denied: ["/x/notes"] },
         background,
       },
       {
@@ -255,8 +256,14 @@ describe("task.json", () => {
           command: "npm test",
           timeout: 1800,
           granted: true,
+          review: "send",
         },
         external: true,
+      },
+      {
+        ...snapshot("t1"),
+        status: "awaiting-approval",
+        pending: { kind: "start", review: "failed" },
       },
     ];
     for (const value of snapshots) {
@@ -335,6 +342,8 @@ describe("task.json", () => {
       { ...snapshot("t1"), pending: { kind: "path", path: "/x", access: "read-write" } },
       { ...snapshot("t1"), pending: { kind: "path", path: "/x/y", access: "read", folder: 7 } },
       { ...snapshot("t1"), pending: { kind: "fetch" } },
+      { ...snapshot("t1"), pending: { kind: "fetch", host: "a.b", review: "risky" } },
+      { ...snapshot("t1"), pending: { kind: "start", review: null } },
       { ...snapshot("t1"), pause: { reason: "bored", detail: "" } },
       { ...snapshot("t1"), pause: { reason: "spend" } },
       { ...snapshot("t1"), todo: [{ text: "x", status: "doing" }] },
@@ -363,6 +372,8 @@ describe("task.json", () => {
       },
       { ...snapshot("t1"), bash: { denied: "ls" } },
       { ...snapshot("t1"), bash: {} },
+      { ...snapshot("t1"), paths: { denied: "/x" } },
+      { ...snapshot("t1"), paths: {} },
       { ...snapshot("t1"), background: [{ id: 1, command: "ls", startedAt: 1 }] },
       { ...snapshot("t1"), background: [{ id: "1", command: "ls", startedAt: 1, endsAt: 2 }] },
       { ...snapshot("t1"), external: false },

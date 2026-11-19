@@ -235,6 +235,7 @@ export const SETTINGS: readonly SettingField[] = [
   ),
   field("app", "assistant.folders", "ASSISTANT_FOLDERS", "paths", "Assistant folders"),
   field("app", "assistant.bash", "ASSISTANT_BASH", "flag", "Assistant commands"),
+  field("app", "assistant.permissions", "ASSISTANT_PERMISSIONS", "string", "Task permissions"),
   field(
     "app",
     "assistant.spendPauseUsd",

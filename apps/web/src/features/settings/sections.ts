@@ -60,6 +60,7 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
         ["assistant.search.provider", "assistant.search.model"],
         "assistant.folders",
         "assistant.bash",
+        "assistant.permissions",
         ["assistant.spendPauseUsd", "assistant.contextTokens"],
         "chats.display",
       ],

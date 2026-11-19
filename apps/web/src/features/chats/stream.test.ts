@@ -406,6 +406,7 @@ describe("a line sent while a reply runs", () => {
       hearingRefusal: null,
       groupCall: false,
       defaultDisplay: "normal",
+      defaultPermissions: "ask",
       call: null,
     };
     let live = IDLE;
@@ -597,6 +598,7 @@ describe("mergeEvents", () => {
     hearingRefusal: null,
     groupCall: false,
     defaultDisplay: "normal" as const,
+    defaultPermissions: "ask" as const,
     call: null,
   };
 
@@ -628,6 +630,7 @@ describe("latePoll", () => {
       call: null,
       groupCall: false,
       defaultDisplay: "normal" as const,
+      defaultPermissions: "ask" as const,
     };
     expect(latePoll({ ...contents, lateTools: [] })).toBe(false);
     expect(latePoll({ ...contents, lateTools: ["take_selfie"] })).toBe(LATE_POLL_MS);
@@ -643,6 +646,7 @@ describe("callOn", () => {
     hearingRefusal: null,
     groupCall: false,
     defaultDisplay: "normal" as const,
+    defaultPermissions: "ask" as const,
     call: { id: "c1", persona: "mio" },
   };
 

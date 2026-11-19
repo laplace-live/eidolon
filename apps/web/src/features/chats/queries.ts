@@ -1,4 +1,4 @@
-import type { ChatDisplay, ParticipantId, ReplyMode } from "@eidolon/chat";
+import type { ChatDisplay, ParticipantId, PermissionLevel, ReplyMode } from "@eidolon/chat";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   changeParticipants,
@@ -9,6 +9,7 @@ import {
   renameChat,
   setChainLimit,
   setDisplay,
+  setPermissions,
   setReplyMode,
 } from "@/lib/chats";
 import { toastError } from "@/lib/feedback";
@@ -87,6 +88,21 @@ export function useSetDisplay() {
   return useMutation({
     mutationFn: ({ id, display }: { readonly id: string; readonly display: ChatDisplay }) =>
       setDisplay(id, display),
+    onSuccess: (_, { id }) => changed(id),
+    onError: toastError,
+  });
+}
+
+export function useSetPermissions() {
+  const changed = useChanged();
+  return useMutation({
+    mutationFn: ({
+      id,
+      permissions,
+    }: {
+      readonly id: string;
+      readonly permissions: PermissionLevel;
+    }) => setPermissions(id, permissions),
     onSuccess: (_, { id }) => changed(id),
     onError: toastError,
   });

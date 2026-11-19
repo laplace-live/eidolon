@@ -4,6 +4,7 @@ import {
   chainLimitOf,
   displayOf,
   type ParticipantId,
+  permissionsOf,
   replyModeOf,
   summarize,
 } from "@eidolon/chat";
@@ -44,6 +45,7 @@ import { nextUp } from "./group";
 import { chatItems, displayedItems, retryText } from "./items";
 import { DISPLAY_CHANGED, DISPLAY_HELP } from "./labels";
 import { ParticipantsMenu } from "./participants";
+import { PermissionsPicker } from "./permissions-picker";
 import { chatWith, shortNameOf, usePersonaOf } from "./persona";
 import { chatQuery, useSetDisplay } from "./queries";
 import { callOn, type LiveError } from "./stream";
@@ -182,6 +184,7 @@ export function ChatView({
   const display: ChatDisplay | null =
     chat.data === undefined ? null : (ownDisplay ?? chat.data.defaultDisplay);
   const setDisplay = useSetDisplay();
+  const ownPermissions = useMemo(() => permissionsOf(events ?? []), [events]);
   const [stopping, setStopping] = useState<{
     readonly open: boolean;
     readonly tasks: readonly TaskSnapshot[];
@@ -433,6 +436,16 @@ export function ChatView({
           onStop={turns.stop}
           onCommand={runCommand}
         />
+        {/* Only a chat of hers alone starts tasks. */}
+        {status?.assistant.enabled && solo !== null && (
+          <div className="-mt-2 flex">
+            <PermissionsPicker
+              id={id}
+              own={ownPermissions}
+              fallback={chat.data.defaultPermissions}
+            />
+          </div>
+        )}
       </footer>
       <ChatSettingsSheet
         id={id}
@@ -440,6 +453,8 @@ export function ChatView({
         replyMode={replyMode}
         display={ownDisplay}
         defaultDisplay={chat.data.defaultDisplay}
+        permissions={ownPermissions}
+        defaultPermissions={chat.data.defaultPermissions}
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
       />

@@ -19,7 +19,7 @@ import type {
   TaskToolContext,
   TaskToolResult,
 } from "../task.ts";
-import type { MindRequest, MindToolCall } from "../types.ts";
+import type { Mind, MindRequest, MindToolCall } from "../types.ts";
 import {
   argumentsHead,
   type ContextMessage,
@@ -131,6 +131,42 @@ function keepTokens(contextTokens: number): number {
   return Math.min(KEEP_TOKENS, Math.floor(compactAbove(contextTokens) / 2));
 }
 
+/**
+ * `mind`'s whole reply to `request`, each piece of its text handed to `onText` as it streams;
+ * throws once `signal` aborts, or when the reply never ends.
+ */
+export async function readReply(
+  mind: Mind,
+  request: MindRequest,
+  signal: AbortSignal,
+  onText?: (text: string) => void,
+): Promise<Reply> {
+  let text = "";
+  const calls: MindToolCall[] = [];
+  let finishReason: string | null = null;
+  for await (const chunk of mind.stream(request)) {
+    signal.throwIfAborted();
+    if (chunk.type === "text") {
+      text += chunk.text;
+      if (chunk.text !== "") onText?.(chunk.text);
+    } else if (chunk.type === "tool-calls") {
+      calls.push(...chunk.calls);
+    } else {
+      finishReason = chunk.finishReason;
+    }
+  }
+  signal.throwIfAborted();
+  // pi's "Stream ended without finish_reason": a failed attempt, which a retry may get past.
+  if (!endedReply(finishReason)) {
+    throw new Error(
+      finishReason === null
+        ? "The model's reply ended with no finish reason"
+        : `The model's reply ended with finish reason ${JSON.stringify(finishReason)}`,
+    );
+  }
+  return { text, calls, finishReason };
+}
+
 /** The events a running task has produced and its reader hasn't taken yet. */
 class Events implements AsyncIterable<TaskEvent> {
   readonly #queue: TaskEvent[] = [];
@@ -227,8 +263,11 @@ class TaskRun {
     this.#entries.push(...stored);
     this.#turns = stored.filter((entry) => entry.type === "assistant").length;
     const step = this.#request.limits.spendPauseUsd;
+    // A resumed run goes on past the spend the owner continued from; a new one owes the first
+    // multiple, which what was spent before it (a start's review) may have crossed already.
     if (step > 0) {
-      this.#spendLimit = (Math.floor(this.#request.meter.spentUsd() / step) + 1) * step;
+      this.#spendLimit =
+        stored.length === 1 ? step : (Math.floor(this.#request.meter.spentUsd() / step) + 1) * step;
     }
     if (stored.length === 1) return await this.#loop(null);
     await this.#append({ type: "resume" });
@@ -278,7 +317,7 @@ class TaskRun {
     for (let first = true; ; first = false) {
       const turn = first && resumed !== null ? await this.#rerun(resumed) : await this.#turn();
       if ("status" in turn) return turn;
-      const stop = this.#guard(turn);
+      const stop = await this.#guard(turn);
       if (stop !== null) return stop;
       if (turn.batch !== null && !terminates(turn.batch)) continue;
       if (this.#request.inbox.hasSteering()) continue;
@@ -400,20 +439,22 @@ class TaskRun {
   }
 
   /** The pause a finished batch calls for: the gate's, a refused path's, or a stall's. */
-  #guard({ assistant, batch }: Turn): TaskOutcome | null {
+  async #guard({ assistant, batch }: Turn): Promise<TaskOutcome | null> {
     if (batch === null) {
       this.#signatures.push("");
       return null;
     }
     if (batch.paused !== undefined) return paused("approval", batch.paused);
-    if (this.#request.pauseOnRefused) {
+    const { pauseOnRefused } = this.#request;
+    if (pauseOnRefused !== undefined) {
       const refused = batch.settled.flatMap(({ result }) =>
         result.refused ? [result.refused] : [],
       );
-      if (refused.length > 0) {
+      if (refused.length > 0 && (await pauseOnRefused(refused))) {
         const asked = refused.map(({ path, access }) => `${access} access to ${path}`);
         return paused("approval", asked.join("\n"));
       }
+      this.#signal.throwIfAborted();
     }
     if (terminates(batch)) return null;
     const signature = signatureOf(assistant.calls);
@@ -521,32 +562,11 @@ class TaskRun {
   }
 
   async #stream(request: MindRequest, live: boolean): Promise<Reply> {
-    let text = "";
-    const calls: MindToolCall[] = [];
-    let finishReason: string | null = null;
-    for await (const chunk of this.#request.mind.stream(request)) {
-      this.#signal.throwIfAborted();
-      if (chunk.type === "text") {
-        text += chunk.text;
-        if (live && chunk.text !== "") this.#emit({ type: "delta", text: chunk.text });
-      } else if (chunk.type === "tool-calls") {
-        calls.push(...chunk.calls);
-      } else {
-        finishReason = chunk.finishReason;
-      }
-    }
-    this.#signal.throwIfAborted();
-    // pi's "Stream ended without finish_reason": a failed attempt, which a retry may get past.
-    if (!endedReply(finishReason)) {
-      throw new Error(
-        finishReason === null
-          ? "The model's reply ended with no finish reason"
-          : `The model's reply ended with finish reason ${JSON.stringify(finishReason)}`,
-      );
-    }
+    const onText = live ? (text: string) => this.#emit({ type: "delta", text }) : undefined;
+    const reply = await readReply(this.#request.mind, request, this.#signal, onText);
     // Only a whole reply: a cut stream seldom carries its usage, and its retry may.
     this.#request.meter.requestEnded();
-    return { text, calls, finishReason };
+    return reply;
   }
 
   /**

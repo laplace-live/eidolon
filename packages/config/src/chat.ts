@@ -1,7 +1,7 @@
 // How the active persona joins a chat: what the director weighs her by, whether she answers in text
 // or voice, and how many rounds her reply may take. withPersona picks whose settings these read,
 // but for chats.display, the install's.
-import { envFloat, envInt, envOptional } from "./env.ts";
+import { envChoice, envFloat, envInt, envOptional } from "./env.ts";
 import { logger } from "./logger.ts";
 import { pyRepr } from "./py.ts";
 
@@ -31,14 +31,7 @@ export function chatTalkativeness(): number {
 
 /** Her chat.replyMode, any case; auto when unset or none of the three, which warns. */
 export function chatReplyMode(): (typeof REPLY_MODES)[number] {
-  const raw = envOptional("CHAT_REPLY_MODE");
-  if (raw === undefined) return DEFAULT_CHAT_REPLY_MODE;
-  const mode = REPLY_MODES.find((known) => known === raw.trim().toLowerCase());
-  if (mode !== undefined) return mode;
-  logger.warning(
-    `CHAT_REPLY_MODE=${pyRepr(raw)} is not auto, text or voice; using ${DEFAULT_CHAT_REPLY_MODE}`,
-  );
-  return DEFAULT_CHAT_REPLY_MODE;
+  return envChoice("CHAT_REPLY_MODE", REPLY_MODES, DEFAULT_CHAT_REPLY_MODE);
 }
 
 /**
@@ -46,14 +39,7 @@ export function chatReplyMode(): (typeof REPLY_MODES)[number] {
  * three, which warns.
  */
 export function chatDisplay(): (typeof CHAT_DISPLAYS)[number] {
-  const raw = envOptional("CHAT_DISPLAY");
-  if (raw === undefined) return DEFAULT_CHAT_DISPLAY;
-  const display = CHAT_DISPLAYS.find((known) => known === raw.trim().toLowerCase());
-  if (display !== undefined) return display;
-  logger.warning(
-    `CHAT_DISPLAY=${pyRepr(raw)} is not focus, normal or verbose; using ${DEFAULT_CHAT_DISPLAY}`,
-  );
-  return DEFAULT_CHAT_DISPLAY;
+  return envChoice("CHAT_DISPLAY", CHAT_DISPLAYS, DEFAULT_CHAT_DISPLAY);
 }
 
 /**

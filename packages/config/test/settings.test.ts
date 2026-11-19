@@ -540,13 +540,14 @@ describe("chat settings", () => {
 });
 
 describe("assistant settings", () => {
-  test("unset: on, no folders of its own, commands on, a $1 spend pause and a 128,000-token context", () => {
+  test("unset: on, no folders of its own, commands on, a $1 spend pause, a 128,000-token context, and asking", () => {
     expect(assistantSettings()).toEqual({
       enabled: true,
       folders: [],
       bash: true,
       spendPauseUsd: 1,
       contextTokens: 128_000,
+      permissions: "ask",
     });
   });
 
@@ -560,6 +561,7 @@ describe("assistant settings", () => {
         "  bash: false",
         "  spendPauseUsd: 2.5",
         "  contextTokens: 64000",
+        "  permissions: auto",
         "",
       ].join("\n"),
     );
@@ -570,16 +572,34 @@ describe("assistant settings", () => {
       bash: false,
       spendPauseUsd: 2.5,
       contextTokens: 64_000,
+      permissions: "auto",
     });
     setEnv("ASSISTANT_ENABLED", "on");
     setEnv("ASSISTANT_FOLDERS", " ~/a, /b ,,");
     setEnv("ASSISTANT_BASH", "yes");
+    setEnv("ASSISTANT_PERMISSIONS", "full");
     expect(assistantSettings()).toMatchObject({
       enabled: true,
       folders: [join(homedir(), "a"), "/b"],
       bash: true,
+      permissions: "full",
     });
     expect(warnings).toEqual([]);
+  });
+
+  test("the permission level is ask, auto or full in any case; anything else asks, with a warning", () => {
+    for (const [value, read] of [
+      ["ask", "ask"],
+      [" Auto ", "auto"],
+      ["FULL", "full"],
+    ] as const) {
+      setEnv("ASSISTANT_PERMISSIONS", value);
+      expect([value, assistantSettings().permissions]).toEqual([value, read]);
+    }
+    expect(warnings).toEqual([]);
+    setEnv("ASSISTANT_PERMISSIONS", "yolo");
+    expect(assistantSettings().permissions).toBe("ask");
+    expect(warnings).toEqual(["ASSISTANT_PERMISSIONS='yolo' is not ask, auto or full; using ask"]);
   });
 
   test("only 0 turns the spend pauses off; a pause or context that is no amount is the default", () => {

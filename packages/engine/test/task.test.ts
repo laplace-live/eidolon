@@ -2,12 +2,13 @@
 // spend, stall and approval pauses, retries, and an outcome the runtime decides.
 import { describe, expect, test } from "bun:test";
 import { httpError, ProviderHttpError, type UsageRecord, usageRecord } from "@eidolon/providers";
-import { runTask, type TaskEntry, type TaskEvent } from "../src/task.ts";
+import { completeText, runTask, type TaskEntry, type TaskEvent } from "../src/task.ts";
 import {
   anthropicMind,
   BRIEF,
   call,
   calls,
+  DONE,
   deferred,
   drain,
   FakeMeter,
@@ -445,6 +446,24 @@ describe("runTask's pauses", () => {
     expect(userLines(mind.requests[2]).at(-1)).toBe("one more thing");
   });
 
+  test("a new task pauses before its first request once what was spent before it crossed a step", async () => {
+    const mind = new ScriptedMind([says("done")]);
+    const request = taskRequest(mind, { limits: { contextTokens: 128_000, spendPauseUsd: 0.01 } });
+    request.meter.spent = 0.02;
+    expect((await drain(request)).outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $0.02; it pauses at every $0.01.",
+    });
+    expect(mind.requests).toHaveLength(0);
+
+    const under = taskRequest(new ScriptedMind([says("done")]), {
+      limits: { contextTokens: 128_000, spendPauseUsd: 0.05 },
+    });
+    under.meter.spent = 0.02;
+    expect((await drain(under)).outcome).toEqual({ status: "succeeded", report: "done" });
+  });
+
   test("never pauses for spend with a step of 0", async () => {
     const mind = new ScriptedMind([says("done")]);
     const request = taskRequest(mind);
@@ -621,7 +640,7 @@ describe("runTask's pauses", () => {
     );
     const script = () =>
       new ScriptedMind([calls([call("c1", "write", { value: "/etc/hosts" })]), says("done")]);
-    const asked = taskRequest(script(), { tools: [refusing], pauseOnRefused: true });
+    const asked = taskRequest(script(), { tools: [refusing], pauseOnRefused: async () => true });
     expect((await drain(asked)).outcome).toEqual({
       status: "paused",
       reason: "approval",
@@ -633,6 +652,105 @@ describe("runTask's pauses", () => {
 
     const told = taskRequest(script(), { tools: [refusing] });
     expect((await drain(told)).outcome).toEqual({ status: "succeeded", report: "done" });
+  });
+
+  test("a pauseOnRefused that answers false goes on, with the line it queued read next", async () => {
+    let granted = false;
+    const writing = tool("write", async () =>
+      granted
+        ? result("Wrote /srv/notes.md")
+        : result("/srv/notes.md is outside the folders this task may write", {
+            isError: true,
+            refused: { path: "/srv/notes.md", access: "write" },
+          }),
+    );
+    const mind = new ScriptedMind([
+      calls([call("c1", "write", { value: "/srv/notes.md" })]),
+      calls([call("c2", "write", { value: "/srv/notes.md" })]),
+      says("Wrote it."),
+    ]);
+    const asked: unknown[] = [];
+    const request = taskRequest(mind, { tools: [writing] });
+    const going = {
+      ...request,
+      pauseOnRefused: async (refused: readonly unknown[]) => {
+        asked.push(...refused);
+        granted = true;
+        request.inbox.steering.push("Write access to /srv was allowed. Try again.");
+        return false;
+      },
+    };
+    expect((await drain(going)).outcome).toEqual({ status: "succeeded", report: "Wrote it." });
+    expect(asked).toEqual([{ path: "/srv/notes.md", access: "write" }]);
+    expect(userLines(mind.requests[1]).at(-1)).toBe("Write access to /srv was allowed. Try again.");
+    expect(request.store.types()).not.toContain("pause");
+
+    const paused = taskRequest(
+      new ScriptedMind([calls([call("c1", "write", { value: "/etc/hosts" })])]),
+      {
+        tools: [
+          tool("write", async () =>
+            result("refused", { isError: true, refused: { path: "/etc/hosts", access: "write" } }),
+          ),
+        ],
+        pauseOnRefused: async () => true,
+      },
+    );
+    expect((await drain(paused)).outcome).toEqual({
+      status: "paused",
+      reason: "approval",
+      detail: "write access to /etc/hosts",
+    });
+  });
+
+  test("a pauseOnRefused still deciding when the task is cancelled ends it cancelled", async () => {
+    const controller = new AbortController();
+    const request = taskRequest(
+      new ScriptedMind([calls([call("c1", "write", { value: "/etc/hosts" })])]),
+      {
+        tools: [
+          tool("write", async () =>
+            result("refused", { isError: true, refused: { path: "/etc/hosts", access: "write" } }),
+          ),
+        ],
+        pauseOnRefused: async () => {
+          controller.abort();
+          return false;
+        },
+        signal: controller.signal,
+      },
+    );
+    expect((await drain(request)).outcome).toEqual({ status: "cancelled" });
+    expect(request.store.types().at(-1)).toBe("end");
+  });
+});
+
+describe("completeText", () => {
+  test("is the reply's whole text to one user message, offered no tools", async () => {
+    const mind = new ScriptedMind([
+      [{ type: "text", text: '{"verdict":' }, { type: "text", text: '"allow"}' }, DONE],
+    ]);
+    const signal = new AbortController().signal;
+    expect(await completeText(mind, { system: "Review.", prompt: "The action.", signal })).toBe(
+      '{"verdict":"allow"}',
+    );
+    expect(mind.requests[0]).toMatchObject({
+      system: "Review.",
+      messages: [{ role: "user", content: "The action." }],
+      tools: [],
+    });
+  });
+
+  test("a reply that never ends, or a failed request, throws", async () => {
+    const signal = new AbortController().signal;
+    const broken = new ScriptedMind([[{ type: "text", text: "{" }]]);
+    await expect(completeText(broken, { system: "s", prompt: "p", signal })).rejects.toThrow(
+      "The model's reply ended with no finish reason",
+    );
+    const failing = new ScriptedMind([new ProviderHttpError("openai", 429, "Rate limited")]);
+    await expect(completeText(failing, { system: "s", prompt: "p", signal })).rejects.toThrow(
+      "Rate limited",
+    );
   });
 });
 

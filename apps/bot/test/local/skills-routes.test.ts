@@ -52,6 +52,7 @@ function serve(): (method: string, path: string, body?: unknown) => Promise<Resp
       bash: true,
       spendPauseUsd: 1,
       contextTokens: 128_000,
+      permissions: "ask",
     }),
     addFolder: () => {},
     problem: () => null,

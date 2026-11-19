@@ -120,6 +120,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         report: (snapshot) => chats().report(snapshot),
         waiting: (snapshot) => chats().taskWaiting(snapshot),
         progress: (snapshot) => chats().taskProgress(snapshot),
+        permissions: (chat) => chats().permissionsOf(chat.id),
       });
       manager = tasks;
       const chats = chatRunner({ onStop }, { tasks });

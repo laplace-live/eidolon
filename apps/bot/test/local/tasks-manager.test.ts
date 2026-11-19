@@ -19,6 +19,7 @@ import { join } from "node:path";
 import {
   newTaskId,
   openTaskStore,
+  REVIEW_SYSTEM,
   readSnapshot,
   skillSwitchesPath,
   type TaskChat,
@@ -29,6 +30,7 @@ import {
   tasksDir,
   writeSnapshot,
 } from "@eidolon/assistant";
+import type { PermissionLevel } from "@eidolon/chat";
 import { type AssistantSettings, dataHome, sharedSkillsDir } from "@eidolon/config";
 import { acquireLock } from "@eidolon/config/lock";
 import type {
@@ -90,11 +92,18 @@ function held(open: Promise<void>, then: readonly MindChunk[] = says("Done.")): 
 /**
  * createMind for every task: each request answered from its task's script, found by the goal in
  * the worker's prompt, and billed `cost` as the assistant, through the mind's tap as a real one is.
+ * Approve for Me's reviews are answered by `review` instead.
  */
 class Minds {
   readonly made: { role: string; account?: string; model?: string }[] = [];
   readonly requests: { readonly goal: string; readonly request: MindRequest }[] = [];
   readonly records: UsageRecord[] = [];
+  /** Each review's prompt. */
+  readonly reviewed: string[] = [];
+  /** A review's reply to its prompt, or the turn that answers it. Default: an allow. */
+  review: (prompt: string) => string | Turn = () => '{"verdict":"allow"}';
+  /** Whether a review's request reports its usage, as a server may not. */
+  reviewUsage = true;
   readonly #scripts = new Map<string, readonly Turn[]>();
   readonly #served = new Map<string, number>();
   /** Each request's cost: null for a model with no price. */
@@ -121,22 +130,33 @@ class Minds {
     const minds = this;
     return {
       async *stream(request: MindRequest): AsyncGenerator<MindChunk> {
-        const goal = /^Goal: (.*)$/m.exec(request.system)?.[1] ?? "";
-        minds.requests.push({ goal, request });
-        const turn = turnFor(goal);
-        reportUsage(
-          {
-            role: "assistant",
-            provider: "openrouter",
-            model: "test/model",
-            units: { inputTokens: 900, outputTokens: 10 },
-            costUsd: minds.cost ?? undefined,
-          },
-          (record) => {
-            minds.records.push(record);
-            options.tap?.(record);
-          },
-        );
+        let turn: Turn;
+        const reviewing = request.system === REVIEW_SYSTEM;
+        if (reviewing) {
+          const prompt = userLines(request).join("\n");
+          minds.reviewed.push(prompt);
+          const answer = minds.review(prompt);
+          turn = typeof answer === "string" ? says(answer) : answer;
+        } else {
+          const goal = /^Goal: (.*)$/m.exec(request.system)?.[1] ?? "";
+          minds.requests.push({ goal, request });
+          turn = turnFor(goal);
+        }
+        if (!reviewing || minds.reviewUsage) {
+          reportUsage(
+            {
+              role: "assistant",
+              provider: "openrouter",
+              model: "test/model",
+              units: { inputTokens: 900, outputTokens: 10 },
+              costUsd: minds.cost ?? undefined,
+            },
+            (record) => {
+              minds.records.push(record);
+              options.tap?.(record);
+            },
+          );
+        }
         if (turn instanceof Error) throw turn;
         if (typeof turn === "function") yield* turn(request);
         else yield* turn;
@@ -175,7 +195,14 @@ afterAll(() => {
 beforeEach(() => {
   work = mkdtempSync(join(tmpdir(), "eidolon-tasks-"));
   clock = 1_700_000_000_000;
-  settings = { enabled: true, folders: [], bash: true, spendPauseUsd: 1, contextTokens: 128_000 };
+  settings = {
+    enabled: true,
+    folders: [],
+    bash: true,
+    spendPauseUsd: 1,
+    contextTokens: 128_000,
+    permissions: "ask",
+  };
   problem = null;
   reports = [];
   reportError = null;
@@ -3160,5 +3187,369 @@ describe("profiles", () => {
     await tasks.approve(id, { answer: "deny" });
     await reach(tasks, id, "succeeded");
     expect(minds.made.map((made) => made.model)).toEqual(["test/picked", "test/picked"]);
+  });
+});
+
+describe("permission levels", () => {
+  /** The level ORIGIN's chat has; every other chat asks. */
+  let level: PermissionLevel = "ask";
+  const leveled = async (): Promise<TaskManager> => {
+    const tasks = manager({
+      permissions: async (chat) => (chat.id === ORIGIN.id ? level : "ask"),
+      bash: { yieldMs: 300, pollMs: 50 },
+    });
+    await tasks.boot();
+    return tasks;
+  };
+  const bash = (id: string, command: string) => call(id, "bash", { command });
+  const allow = '{"verdict":"allow"}';
+  const ask = (risk: string) => `{"verdict":"ask","risk":"${risk}"}`;
+
+  beforeEach(() => {
+    level = "ask";
+  });
+
+  test("Full Access starts a task outside assistant.folders at once; another chat's still asks", async () => {
+    level = "full";
+    const tasks = await leveled();
+    const started = await tasks.start({ goal: "Full", folder: join(work, "full") }, ORIGIN);
+    expect(started.status).toBe("running");
+    expect(started).not.toHaveProperty("pending");
+    await reach(tasks, started.id, "succeeded");
+    const other = await tasks.start({ goal: "Other", folder: join(work, "other") }, ELSEWHERE);
+    expect(other).toMatchObject({ status: "awaiting-approval", pending: { kind: "start" } });
+    expect(minds.reviewed).toEqual([]);
+  });
+
+  test("Full Access grants a path outside the folders as Allow Once would, and the run goes on unpaused", async () => {
+    level = "full";
+    settings = { ...settings, folders: [join(work, "site")] };
+    mkdirSync(join(work, "notes"));
+    writeFileSync(join(work, "notes", "notes.txt"), "remember the milk\n");
+    const notes = realpathSync(join(work, "notes"));
+    const read = call("r1", "read", { path: join(work, "notes", "notes.txt") });
+    minds.script("Read", [calls([read]), calls([{ ...read, id: "r2" }]), says("Read.")]);
+    const tasks = await leveled();
+    const { id } = await tasks.start({ goal: "Read", folder: join(work, "site") }, ORIGIN);
+
+    const ended = await reach(tasks, id, "succeeded");
+    expect(ended.grants).toEqual([{ path: notes, access: "read" }]);
+    expect(types(id)).not.toContain("pause");
+    expect(userLines(minds.for("Read")[1]).at(-1)).toBe(
+      `Read access to ${notes} is allowed now. Try again.`,
+    );
+    expect(toolMessages(minds.for("Read")[2]).at(-1)?.[1]).toContain("remember the milk");
+    expect(added).toEqual([]);
+  });
+
+  test("Full Access, set while a task waits, runs its next commands unasked, but never one the owner denied", async () => {
+    settings = { ...settings, folders: [work] };
+    const folder = join(work, "cmds");
+    minds.script("Cmds", [
+      calls([bash("b1", "printf one > one.txt")]),
+      calls([bash("b2", "printf two > two.txt")]),
+      calls([bash("b3", "printf one > one.txt")]),
+      says("Done."),
+    ]);
+    const tasks = await leveled();
+    const { id } = await tasks.start({ goal: "Cmds", folder }, ORIGIN);
+    const paused = await reach(tasks, id, "paused");
+    expect(paused.pending).toMatchObject({ kind: "command", call: "b1" });
+
+    level = "full";
+    await tasks.approve(id, { answer: "deny" });
+    await reach(tasks, id, "succeeded");
+    expect(readFileSync(join(folder, "two.txt"), "utf8")).toBe("two");
+    expect(existsSync(join(folder, "one.txt"))).toBe(false);
+    expect(toolMessages(minds.for("Cmds")[3]).at(-1)).toEqual([
+      "b3",
+      "The owner refused to run this command in this task; don't run it again.",
+    ]);
+    expect(types(id).filter((type) => type === "pause")).toHaveLength(1);
+  });
+
+  test("Full Access lets a fetch from any site through, but never one the owner refused", async () => {
+    settings = { ...settings, folders: [work] };
+    minds.script("Sites", [
+      calls([call("f1", "web_fetch", { url: "https://203.0.113.9/" })]),
+      calls([call("f2", "web_fetch", { url: "https://203.0.113.9/again" })]),
+      calls([call("f3", "web_fetch", { url: "https://203.0.113.7/" })]),
+      says("Done."),
+    ]);
+    const tasks = await leveled();
+    const { id } = await tasks.start({ goal: "Sites", folder: join(work, "sites") }, ORIGIN);
+    await reach(tasks, id, "paused");
+    level = "full";
+    await tasks.approve(id, { answer: "deny" });
+
+    const ended = await reach(tasks, id, "succeeded");
+    expect(toolMessages(minds.for("Sites")[2]).at(-1)).toEqual([
+      "f2",
+      "The owner refused fetching from 203.0.113.9.",
+    ]);
+    // f3 ran, failing as this test's fetch fails every request.
+    const starts = transcript(id).filter((entry) => entry.type === "tool-start");
+    expect(starts.map((entry) => (entry as { callId: string }).callId)).toEqual(["f3"]);
+    expect(ended.web).toEqual({ mode: "ask", hosts: [], denied: ["203.0.113.9"] });
+  });
+
+  test("Approve for Me runs what its review allows, billed to the task, and asks with the reason otherwise", async () => {
+    level = "auto";
+    minds.cost = 0.01;
+    minds.review = (prompt) => (prompt.includes("../outside.txt") ? ask("outside") : allow);
+    const folder = join(work, "auto");
+    minds.script("Auto", [
+      calls([bash("b1", "printf ok > ok.txt")]),
+      calls([bash("b2", "printf nope > ../outside.txt")]),
+      says("Done."),
+    ]);
+    const tasks = await leveled();
+    const started = await tasks.start({ goal: "Auto", folder }, ORIGIN);
+    expect(started).toMatchObject({ status: "running", spentUsd: 0.01 });
+    expect(started).not.toHaveProperty("pending");
+
+    const paused = await reach(tasks, started.id, "paused");
+    expect(paused.pending).toEqual({
+      kind: "command",
+      call: "b2",
+      command: "printf nope > ../outside.txt",
+      timeout: 120,
+      review: "outside",
+    });
+    expect(readFileSync(join(folder, "ok.txt"), "utf8")).toBe("ok");
+    expect(existsSync(join(work, "outside.txt"))).toBe(false);
+    expect(minds.reviewed).toHaveLength(3);
+    const [first, second] = minds.reviewed;
+    expect(first).toContain(JSON.stringify({ kind: "start", folder }));
+    expect(second).toContain(
+      JSON.stringify({ kind: "command", command: "printf ok > ok.txt", folder }),
+    );
+    expect(second).toContain("The task has read outside content: no.");
+    // Three reviews and two worker requests so far, each the task's own.
+    expect(paused.spentUsd).toBeCloseTo(0.05);
+    expect(new Set(minds.records.map(({ source, session }) => `${source}:${session}`))).toEqual(
+      new Set([`task:${started.id}`]),
+    );
+
+    await tasks.approve(paused.id, { answer: "deny" });
+    await reach(tasks, started.id, "succeeded");
+    expect(existsSync(join(work, "outside.txt"))).toBe(false);
+  });
+
+  test("Approve for Me asks at a start its review won't allow, saying why", async () => {
+    level = "auto";
+    minds.review = () => ask("delete");
+    const tasks = await leveled();
+    const started = await tasks.start(
+      { goal: "Tidy my documents", folder: join(work, "docs") },
+      ORIGIN,
+    );
+    expect(started).toMatchObject({
+      status: "awaiting-approval",
+      pending: { kind: "start", review: "delete" },
+    });
+    expect(minds.for("Tidy my documents")).toEqual([]);
+  });
+
+  test("a review that fails, or answers no verdict, asks as failed", async () => {
+    level = "auto";
+    settings = { ...settings, folders: [work] };
+    minds.review = () => new Error("The reviewer is down");
+    minds.script("Broken", [calls([bash("b1", "printf x > x.txt")])]);
+    const tasks = await leveled();
+    const broken = await tasks.start({ goal: "Broken", folder: join(work, "broken") }, ORIGIN);
+    expect((await reach(tasks, broken.id, "paused")).pending).toMatchObject({
+      kind: "command",
+      review: "failed",
+    });
+    expect(logs.lines().join("\n")).toContain(
+      "Approve for Me couldn't review a command, so it asks: The reviewer is down",
+    );
+
+    minds.review = () => "Looks fine to me.";
+    minds.script("Vague", [calls([bash("b1", "printf y > y.txt")])]);
+    const vague = await tasks.start({ goal: "Vague", folder: join(work, "vague") }, ORIGIN);
+    expect((await reach(tasks, vague.id, "paused")).pending).toMatchObject({
+      kind: "command",
+      review: "failed",
+    });
+  });
+
+  test("Approve for Me grants the paths its review allows, and pauses on the first it won't", async () => {
+    level = "auto";
+    settings = { ...settings, folders: [join(work, "site")] };
+    mkdirSync(join(work, "notes"));
+    mkdirSync(join(work, "keys"));
+    writeFileSync(join(work, "notes", "a.txt"), "a\n");
+    writeFileSync(join(work, "keys", "b.txt"), "b\n");
+    minds.review = (prompt) => (prompt.includes("keys") ? ask("secrets") : allow);
+    const reads = [
+      call("r1", "read", { path: join(work, "notes", "a.txt") }),
+      call("r2", "read", { path: join(work, "keys", "b.txt") }),
+    ];
+    minds.script("Paths", [calls(reads), says("Read.")]);
+    const tasks = await leveled();
+    const { id } = await tasks.start({ goal: "Paths", folder: join(work, "site") }, ORIGIN);
+
+    const paused = await reach(tasks, id, "paused");
+    expect(paused.grants).toEqual([{ path: realpathSync(join(work, "notes")), access: "read" }]);
+    expect(paused.pending).toEqual({
+      kind: "path",
+      path: realpathSync(join(work, "keys", "b.txt")),
+      access: "read",
+      folder: realpathSync(join(work, "keys")),
+      review: "secrets",
+    });
+    expect(paused.inbox?.steer).toEqual([
+      `Read access to ${realpathSync(join(work, "notes"))} is allowed now. Try again.`,
+    ]);
+  });
+
+  test("Approve for Me adds a site its review allows, as Allow Once does, and asks about one it won't", async () => {
+    level = "auto";
+    settings = { ...settings, folders: [work] };
+    minds.review = (prompt) => (prompt.includes("203.0.113.9") ? ask("send") : allow);
+    minds.script("Review sites", [
+      calls([call("f1", "web_fetch", { url: "https://203.0.113.7/" })]),
+      calls([call("f2", "web_fetch", { url: "https://203.0.113.9/?q=secret" })]),
+    ]);
+    const tasks = await leveled();
+    const { id } = await tasks.start(
+      { goal: "Review sites", folder: join(work, "rsites") },
+      ORIGIN,
+    );
+    const paused = await reach(tasks, id, "paused");
+    expect(paused.web).toEqual({ mode: "ask", hosts: ["203.0.113.7"], denied: [] });
+    expect(paused.pending).toEqual({ kind: "fetch", host: "203.0.113.9", review: "send" });
+    expect(minds.reviewed.at(-1)).toContain(
+      JSON.stringify({ kind: "fetch", url: "https://203.0.113.9/?q=secret", host: "203.0.113.9" }),
+    );
+  });
+
+  test("Approve for Me tells its review once the task has read outside content", async () => {
+    level = "auto";
+    settings = { ...settings, folders: [work] };
+    const seeded = await seed({ external: true, pause: { reason: "stall", detail: "" } });
+    minds.script("Seeded", [calls([bash("b1", "printf z > z.txt")]), says("Done.")]);
+    const tasks = await leveled();
+    await tasks.continue(seeded.id);
+    await reach(tasks, seeded.id, "succeeded");
+    expect(minds.reviewed).toHaveLength(1);
+    expect(minds.reviewed[0]).toContain("The task has read outside content: yes.");
+  });
+
+  test("Full Access lets a fetch a restart cut short run again, which skips the gate", async () => {
+    level = "full";
+    const fetchIt = call("f1", "web_fetch", { url: "https://203.0.113.7/" });
+    const seeded = await seed({ pause: { reason: "stall", detail: "" } }, [
+      { type: "assistant", text: "", calls: [fetchIt], finishReason: "tool_calls" },
+      { type: "tool-start", callId: "f1", name: "web_fetch" },
+    ]);
+    minds.script("Seeded", [says("Done.")]);
+    const tasks = await leveled();
+    await tasks.continue(seeded.id);
+    await reach(tasks, seeded.id, "succeeded");
+    const result = transcript(seeded.id).find(
+      (entry) => entry.type === "tool-result" && entry.callId === "f1",
+    );
+    // It reached the fetch, which this test's fetch fails, rather than the sites it may use.
+    expect(result).toMatchObject({ type: "tool-result", isError: true });
+    expect(JSON.stringify(result)).not.toContain("isn't among the sites this task may fetch from");
+  });
+
+  test("the owner's Deny on a path holds at every level: a folder holding it asks again", async () => {
+    settings = { ...settings, folders: [join(work, "site")] };
+    mkdirSync(join(work, "notes"));
+    writeFileSync(join(work, "notes", "a.txt"), "a\n");
+    writeFileSync(join(work, "notes", "b.txt"), "b\n");
+    const a = realpathSync(join(work, "notes", "a.txt"));
+    minds.script("Denied", [
+      calls([call("r1", "read", { path: join(work, "notes", "a.txt") })]),
+      calls([call("r2", "read", { path: join(work, "notes", "b.txt") })]),
+      says("Done."),
+    ]);
+    const tasks = await leveled();
+    const { id } = await tasks.start({ goal: "Denied", folder: join(work, "site") }, ORIGIN);
+    expect((await reach(tasks, id, "paused")).pending).toMatchObject({ kind: "path", path: a });
+
+    level = "full";
+    expect((await tasks.approve(id, { answer: "deny" })).paths).toEqual({ denied: [a] });
+    // Full Access would grant b.txt's folder, which holds a.txt.
+    const again = await reach(tasks, id, "paused");
+    expect(again.pending).toEqual({
+      kind: "path",
+      path: realpathSync(join(work, "notes", "b.txt")),
+      access: "read",
+      folder: realpathSync(join(work, "notes")),
+    });
+    expect(again.grants).toEqual([]);
+    expect(minds.reviewed).toEqual([]);
+  });
+
+  test("a review that takes too long asks on the card", async () => {
+    level = "auto";
+    minds.review = () => held(new Promise<void>(() => {}));
+    const tasks = manager({ permissions: async () => level, reviewTimeoutMs: 50 });
+    await tasks.boot();
+    const started = await tasks.start({ goal: "Slow", folder: join(work, "slow") }, ORIGIN);
+    expect(started).toMatchObject({
+      status: "awaiting-approval",
+      pending: { kind: "start", review: "failed" },
+    });
+    expect(logs.lines().join("\n")).toContain("Approve for Me couldn't review the start in");
+  });
+
+  test("a start's review counts toward the first spend pause, which then comes before any request", async () => {
+    level = "auto";
+    minds.cost = 0.02;
+    settings = { ...settings, spendPauseUsd: 0.01 };
+    const tasks = await leveled();
+    const started = await tasks.start({ goal: "Pricey", folder: join(work, "pricey") }, ORIGIN);
+    expect(started.spentUsd).toBeCloseTo(0.02);
+    const paused = await reach(tasks, started.id, "paused");
+    expect(paused.pause).toEqual({
+      reason: "spend",
+      detail: "Spent $0.02; it pauses at every $0.01.",
+    });
+    expect(minds.for("Pricey")).toEqual([]);
+  });
+
+  test("a review whose reply reports no usage pauses the task before its first request", async () => {
+    level = "auto";
+    minds.reviewUsage = false;
+    const tasks = await leveled();
+    const started = await tasks.start({ goal: "Quiet", folder: join(work, "quiet") }, ORIGIN);
+    expect(started.status).toBe("running");
+    const paused = await reach(tasks, started.id, "paused");
+    expect(paused.pause).toMatchObject({ reason: "unpriced" });
+    expect(paused.pause?.detail).toStartWith("No usage was reported for test/model at openrouter");
+    expect(minds.for("Quiet")).toEqual([]);
+  });
+
+  test("a start waiting on its card keeps its review's uncounted spend: Allow pauses before the first request", async () => {
+    level = "auto";
+    minds.cost = null;
+    minds.review = () => ask("delete");
+    const tasks = await leveled();
+    const started = await tasks.start({ goal: "Unpriced", folder: join(work, "unpriced") }, ORIGIN);
+    expect(started.pending).toEqual({ kind: "start", review: "delete" });
+    await tasks.approve(started.id, { answer: "once" });
+    const paused = await reach(tasks, started.id, "paused");
+    expect(paused.pause).toMatchObject({ reason: "unpriced" });
+    expect(minds.for("Unpriced")).toEqual([]);
+  });
+
+  test("a level that can't be read asks, as Ask for Approval does", async () => {
+    const tasks = manager({
+      permissions: async () => {
+        throw new Error("The chat is gone");
+      },
+    });
+    await tasks.boot();
+    const started = await tasks.start({ goal: "Lost", folder: join(work, "lost") }, ORIGIN);
+    expect(started.pending).toEqual({ kind: "start" });
+    expect(logs.lines().join("\n")).toContain(
+      "Chat chat-1's permission level wasn't read, so its task asks: The chat is gone",
+    );
   });
 });

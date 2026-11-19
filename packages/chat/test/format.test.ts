@@ -12,7 +12,10 @@ import {
   displayOf,
   isChatDisplay,
   isChatId,
+  isPermissionLevel,
   isReplyMode,
+  PERMISSION_LEVELS,
+  permissionsOf,
   replyModeOf,
   stampEvents,
   summarize,
@@ -148,6 +151,36 @@ describe("displayOf", () => {
   test("isChatDisplay takes the three displays only", () => {
     expect(["focus", "normal", "verbose"].every(isChatDisplay)).toBe(true);
     expect([" focus", "Verbose", "quiet", "", null, 1].some(isChatDisplay)).toBe(false);
+  });
+});
+
+describe("permissionsOf", () => {
+  test("is the last settings event that sets one, else null: the app's level then applies", () => {
+    expect(permissionsOf([])).toBeNull();
+    const events: ChatEvent[] = [
+      { type: "settings", seq: 1, at: 1, display: "focus" },
+      { type: "settings", seq: 2, at: 2, permissions: "full" },
+      { type: "settings", seq: 3, at: 3, replyMode: "text" },
+    ];
+    expect(permissionsOf(events.slice(0, 1))).toBeNull();
+    expect(permissionsOf(events)).toBe("full");
+    expect(
+      permissionsOf([...events, { type: "settings", seq: 4, at: 4, permissions: "ask" }]),
+    ).toBe("ask");
+  });
+
+  test("a value that is no level reads as ask, never as the app's level", () => {
+    const events = [
+      { type: "settings", seq: 1, at: 1, permissions: "auto" },
+      { type: "settings", seq: 2, at: 2, permissions: "everything" },
+    ] as unknown as ChatEvent[];
+    expect(permissionsOf(events)).toBe("ask");
+    expect(permissionsOf(events.slice(0, 1))).toBe("auto");
+  });
+
+  test("isPermissionLevel takes the three levels only", () => {
+    expect(PERMISSION_LEVELS.every(isPermissionLevel)).toBe(true);
+    expect([" ask", "Full", "yolo", "", null, 1].some(isPermissionLevel)).toBe(false);
   });
 });
 

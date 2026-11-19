@@ -559,6 +559,10 @@ msgstr "A photo from {name}"
 msgid "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
 msgstr "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
 
+#: src/features/chats/labels.ts
+msgid "A review on the task's model lets routine actions through and asks you about the rest. Each review bills the task."
+msgstr "A review on the task's model lets routine actions through and asks you about the rest. Each review bills the task."
+
 #: src/features/call/transcript-view.tsx
 msgid "A selfie from {name}"
 msgstr "A selfie from {name}"
@@ -896,9 +900,57 @@ msgstr "API Key (If the Server Asks for One)"
 msgid "API Keys"
 msgstr "API Keys"
 
+#: src/features/chats/labels.ts
+msgid "Approve for Me"
+msgstr "Approve for Me"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: its review couldn't tell what this does."
+msgstr "Approve for Me asks you: its review couldn't tell what this does."
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: its review didn't answer, so it lets nothing through."
+msgstr "Approve for Me asks you: its review didn't answer, so it lets nothing through."
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this changes files outside the task's folder."
+msgstr "Approve for Me asks you: this changes files outside the task's folder."
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this changes system settings or other programs."
+msgstr "Approve for Me asks you: this changes system settings or other programs."
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this could delete or overwrite files outside the task's folder."
+msgstr "Approve for Me asks you: this could delete or overwrite files outside the task's folder."
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this could read keys, passwords or other private files."
+msgstr "Approve for Me asks you: this could read keys, passwords or other private files."
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this could send data off this computer."
+msgstr "Approve for Me asks you: this could send data off this computer."
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this could spend money."
+msgstr "Approve for Me asks you: this could spend money."
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this reaches beyond this computer, such as a push or a deploy."
+msgstr "Approve for Me asks you: this reaches beyond this computer, such as a push or a deploy."
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this runs code from the internet."
+msgstr "Approve for Me asks you: this runs code from the internet."
+
 #: src/features/usage/route.tsx
 msgid "As each provider reported it."
 msgstr "As each provider reported it."
+
+#: src/features/chats/labels.ts
+msgid "Ask for Approval"
+msgstr "Ask for Approval"
 
 #: src/features/tasks/labels.ts
 msgid "Ask for Each Site"
@@ -2086,6 +2138,10 @@ msgstr "From <0>{variable}</0> in the environment."
 msgid "From the environment"
 msgstr "From the environment"
 
+#: src/features/chats/labels.ts
+msgid "Full Access"
+msgstr "Full Access"
+
 #: src/features/settings/route.tsx
 msgid "General"
 msgstr "General"
@@ -2199,6 +2255,14 @@ msgstr "Her providers take no key."
 msgid "Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools."
 msgstr "Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools."
 
+#: src/features/chats/labels.ts
+msgid "Her tasks ask you before working outside your folders, visiting a site, running a command or using a tool."
+msgstr "Her tasks ask you before working outside your folders, visiting a site, running a command or using a tool."
+
+#: src/features/chats/labels.ts
+msgid "Her tasks work outside your folders, visit any site and run any command as you, without asking. Your Denies, spend pauses and No Web still hold."
+msgstr "Her tasks work outside your folders, visit any site and run any command as you, without asking. Your Denies, spend pauses and No Web still hold."
+
 #: src/features/setup/new-persona.tsx
 msgid "Her Voice"
 msgstr "Her Voice"
@@ -2265,8 +2329,16 @@ msgid "How many times personas may answer each other after each of your lines, o
 msgstr "How many times personas may answer each other after each of your lines, once two or more are in the chat. At 0 they only answer you."
 
 #: src/components/settings-form/labels.ts
+msgid "How much her tasks ask you, until a chat picks its own level beside its message box. Ask for Approval asks about every folder outside yours, site, command and MCP call you haven't allowed. Approve for Me has the task's own model review each of those first, billed to the task, and asks only about the risky ones. Full Access asks about none, so commands run as you unasked. At every level your Denies, spend pauses and No Web hold, and tasks never touch Eidolon's data, your keys or a .git folder with their file tools. Default Ask for Approval."
+msgstr "How much her tasks ask you, until a chat picks its own level beside its message box. Ask for Approval asks about every folder outside yours, site, command and MCP call you haven't allowed. Approve for Me has the task's own model review each of those first, billed to the task, and asks only about the risky ones. Full Access asks about none, so commands run as you unasked. At every level your Denies, spend pauses and No Web hold, and tasks never touch Eidolon's data, your keys or a .git folder with their file tools. Default Ask for Approval."
+
+#: src/components/settings-form/labels.ts
 msgid "How much of her tasks each chat shows, until the chat picks its own with /focus, /normal or /verbose. Focus hides task cards, and Verbose opens her newest running task's steps and, on a call, has her say how far a task's plan has got, which costs a reply each time. Default Normal."
 msgstr "How much of her tasks each chat shows, until the chat picks its own with /focus, /normal or /verbose. Focus hides task cards, and Verbose opens her newest running task's steps and, on a call, has her say how far a task's plan has got, which costs a reply each time. Default Normal."
+
+#: src/features/chats/permissions-picker.tsx
+msgid "How much should her tasks here ask you?"
+msgstr "How much should her tasks here ask you?"
 
 #: src/components/settings-form/labels.ts
 msgid "How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5."
@@ -4896,6 +4968,11 @@ msgstr "Task cards are hidden, but a task that waits for you still shows above t
 msgid "Task Display"
 msgstr "Task Display"
 
+#: src/components/settings-form/labels.ts
+#: src/features/chats/chat-settings.tsx
+msgid "Task Permissions"
+msgstr "Task Permissions"
+
 #: src/features/tasks/task-card.tsx
 msgid "Task:"
 msgstr "Task:"
@@ -5658,6 +5735,14 @@ msgstr "Until you choose, each persona answers as her own settings say."
 #: src/features/chats/chat-settings.tsx
 msgid "Until you choose, this chat follows Settings: {display}."
 msgstr "Until you choose, this chat follows Settings: {display}."
+
+#: src/features/chats/chat-settings.tsx
+msgid "Until you choose, this chat follows Settings: {level}."
+msgstr "Until you choose, this chat follows Settings: {level}."
+
+#: src/features/chats/permissions-picker.tsx
+msgid "Until you choose, this chat follows Settings."
+msgstr "Until you choose, this chat follows Settings."
 
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/references-section.tsx

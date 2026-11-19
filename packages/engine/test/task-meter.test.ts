@@ -177,6 +177,15 @@ describe("UsageMeter", () => {
     expect(counted.spentUsd()).toBe(0);
   });
 
+  test("a request outside its mind's that came back with no usage, a review's, can't be counted", () => {
+    const counted = meter();
+    counted.charge(record(0.01, { inputTokens: 900 }));
+    expect(counted.unpriced()).toBeNull();
+    counted.unreported();
+    expect(counted.unpriced()).toBe(UNREPORTED);
+    expect(counted.spentUsd()).toBeCloseTo(0.01, 10);
+  });
+
   test("a charge between requests doesn't stand for a request that reported no usage", () => {
     const counted = meter();
     counted.tap(record(0.01, { inputTokens: 900 }));

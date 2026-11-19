@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   mcpCallKey,
+  REVIEW_SYSTEM,
   readSnapshot,
   type TaskChat,
   type TaskPending,
@@ -26,6 +27,7 @@ import {
   type TaskStatus,
   tasksDir,
 } from "@eidolon/assistant";
+import type { PermissionLevel } from "@eidolon/chat";
 import { type AssistantSettings, dataHome } from "@eidolon/config";
 import type { createMind, MindChunk, MindRequest, MindToolCall, TaskEntry } from "@eidolon/engine";
 import { reportUsage } from "@eidolon/providers";
@@ -75,9 +77,16 @@ function held(open: Promise<void>, then: readonly MindChunk[] = says("Done.")): 
   };
 }
 
-/** Every task's mind: each request answered from its task's script, found by the goal. */
+/**
+ * Every task's mind: each request answered from its task's script, found by the goal, and each of
+ * Approve for Me's reviews by `review`.
+ */
 class Minds {
   readonly requests: { readonly goal: string; readonly request: MindRequest }[] = [];
+  /** Each review's prompt. */
+  readonly reviewed: string[] = [];
+  /** A review's reply to its prompt. Default: an allow. */
+  review: (prompt: string) => string = () => '{"verdict":"allow"}';
   readonly #scripts = new Map<string, readonly Turn[]>();
   readonly #served = new Map<string, number>();
 
@@ -93,6 +102,25 @@ class Minds {
     const minds = this;
     return {
       async *stream(request: MindRequest): AsyncGenerator<MindChunk> {
+        if (request.system === REVIEW_SYSTEM) {
+          const prompt = (request.messages as { content: string }[])
+            .map((m) => m.content)
+            .join("\n");
+          minds.reviewed.push(prompt);
+          // Priced, as the task's requests are: one with no usage would pause it unpriced.
+          reportUsage(
+            {
+              role: "assistant",
+              provider: "openrouter",
+              model: "test/model",
+              units: { inputTokens: 900, outputTokens: 10 },
+              costUsd: 0,
+            },
+            (record) => options.tap?.(record),
+          );
+          yield* says(minds.review(prompt));
+          return;
+        }
         const goal = /^Goal: (.*)$/m.exec(request.system)?.[1] ?? "";
         minds.requests.push({ goal, request });
         const at = minds.#served.get(goal) ?? 0;
@@ -151,6 +179,7 @@ beforeEach(() => {
     bash: true,
     spendPauseUsd: 1,
     contextTokens: 128_000,
+    permissions: "ask",
   };
   minds = new Minds();
   logs = captureLogs();
@@ -590,6 +619,59 @@ describe("when Always applies", () => {
     expect(paused.pending).toEqual(echoAsked("m2", "later"));
     expect(paused.external).toBe(true);
     expect(results(id)).toEqual([["m1", "it broke"]]);
+  });
+});
+
+describe("permission levels", () => {
+  test("Full Access runs a call unasked, but a task under No Web still asks", async () => {
+    writeMcp({ fake: fake([], { tools: ["echo"] }) });
+    let level: PermissionLevel = "ask";
+    minds.script("Full", [calls([echo("m1", "hi")]), says("Done.")]);
+    minds.script("Full offline", [calls([echo("m2", "there")]), says("Done.")]);
+    settings = { ...settings, folders: [] };
+    const tasks = manager({ permissions: async () => level });
+    await tasks.boot();
+    const offline = await tasks.start(
+      { goal: "Full offline", folder: join(work, "offline") },
+      ORIGIN,
+    );
+    await tasks.approve(offline.id, { answer: "once", pending: { kind: "start" }, web: "off" });
+    level = "full";
+    expect((await reach(tasks, offline.id, "paused")).pending).toEqual(echoAsked("m2", "there"));
+
+    const { id } = await tasks.start({ goal: "Full", folder: join(work, "full") }, ORIGIN);
+    await reach(tasks, id, "succeeded");
+    expect(results(id)).toEqual([["m1", "hi"]]);
+    expect(minds.reviewed).toEqual([]);
+  });
+
+  test("Approve for Me reviews a call with its arguments: an allow runs it, an ask says why", async () => {
+    writeMcp({ fake: fake([], { tools: ["echo"] }) });
+    minds.review = (prompt) =>
+      prompt.includes("secret") ? '{"verdict":"ask","risk":"send"}' : '{"verdict":"allow"}';
+    minds.script("Auto", [calls([echo("m1", "hi")]), calls([echo("m2", "secret")])]);
+    const tasks = manager({ permissions: async () => "auto" });
+    await tasks.boot();
+    const { id } = await tasks.start({ goal: "Auto", folder: join(work, "auto") }, ORIGIN);
+
+    const paused = await reach(tasks, id, "paused");
+    expect(paused.pending).toEqual({ ...echoAsked("m2", "secret"), review: "send" });
+    expect(results(id)).toEqual([["m1", "hi"]]);
+    expect(minds.reviewed[0]).toContain(
+      JSON.stringify({ kind: "mcp", server: "fake", tool: "echo", hint: "read-only" }),
+    );
+    expect(minds.reviewed[0]?.split("\n").at(-1)).toBe(JSON.stringify({ text: "hi" }));
+  });
+
+  test("Approve for Me asks about a call too long to review whole, with no review", async () => {
+    writeMcp({ fake: fake([], { tools: ["echo"] }) });
+    minds.script("Long", [calls([echo("m1", "z".repeat(9000))])]);
+    const tasks = manager({ permissions: async () => "auto" });
+    await tasks.boot();
+    const { id } = await tasks.start({ goal: "Long", folder: join(work, "long") }, ORIGIN);
+    const paused = await reach(tasks, id, "paused");
+    expect(paused.pending).toMatchObject({ kind: "mcp", tool: "echo", review: "unclear" });
+    expect(minds.reviewed).toEqual([]);
   });
 });
 

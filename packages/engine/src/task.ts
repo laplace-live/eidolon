@@ -25,6 +25,12 @@ export interface TaskFiles {
   readonly written?: readonly string[];
 }
 
+/** A path a tool was refused for lying outside the task's grants, which the owner may grant. */
+export interface TaskRefusal {
+  readonly path: string;
+  readonly access: "read" | "write";
+}
+
 export interface TaskToolResult {
   /** What the model sees. */
   readonly content: string;
@@ -33,7 +39,7 @@ export interface TaskToolResult {
   readonly details?: unknown;
   readonly files?: TaskFiles;
   /** The path this call was refused, so the caller can ask for it. */
-  readonly refused?: { readonly path: string; readonly access: "read" | "write" };
+  readonly refused?: TaskRefusal;
   /** The run may end after this batch, once every result in it says so (pi's terminate). */
   readonly terminate?: boolean;
 }
@@ -88,7 +94,7 @@ export type TaskEntryDraft =
       readonly isError: boolean;
       readonly details?: unknown;
       readonly files?: TaskFiles;
-      readonly refused?: { readonly path: string; readonly access: "read" | "write" };
+      readonly refused?: TaskRefusal;
     }
   | { readonly type: "steer"; readonly text: string }
   | { readonly type: "follow-up"; readonly text: string }
@@ -181,8 +187,11 @@ export interface TaskRequest {
   };
   /** The summary request compaction sends through `mind`. */
   readonly compaction: { readonly system: string; readonly instructions: string };
-  /** A refused path pauses the task (reason "approval") rather than only telling the model. */
-  readonly pauseOnRefused?: boolean;
+  /**
+   * Whether a batch's refused paths pause the task (reason "approval") rather than only telling the
+   * model: one that answers false has granted them, and queued the line that says so.
+   */
+  readonly pauseOnRefused?: (refused: readonly TaskRefusal[]) => Promise<boolean>;
   /** Its tools' work past their calls: a run doesn't end while it runs, and hears when it ends. */
   readonly background?: TaskBackground;
   /** Cancels the task: its manager's, never a chat turn's. */
@@ -215,3 +224,4 @@ export type TaskEvent =
 
 export { runTask } from "./task/loop.ts";
 export { UsageMeter, type UsageMeterOptions } from "./task/meter.ts";
+export { completeText } from "./task/once.ts";

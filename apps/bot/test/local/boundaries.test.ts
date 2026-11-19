@@ -247,6 +247,7 @@ describe("the route table", () => {
         bash: true,
         spendPauseUsd: 1,
         contextTokens: 1,
+        permissions: "ask",
       }),
       addFolder: () => {},
       problem: () => null,

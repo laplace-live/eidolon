@@ -7,9 +7,11 @@ export {
   parseAccounts,
 } from "./accounts.ts";
 export {
+  type AssistantPermissions,
   type AssistantSettings,
   assistantSettings,
   DEFAULT_ASSISTANT_CONTEXT_TOKENS,
+  DEFAULT_ASSISTANT_PERMISSIONS,
   DEFAULT_ASSISTANT_SPEND_PAUSE_USD,
   TASK_KINDS,
   type TaskKind,

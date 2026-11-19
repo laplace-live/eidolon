@@ -92,7 +92,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
 | anything under `apps/` or `packages/` | [typescript.md](docs/typescript.md) |
 | a provider, an account, a role's provider or model, model lists, prices, realtime models, the usage ledger or the Usage page | [providers.md](docs/providers.md) |
-| the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), a task's commands (`bash`), skills (Settings' Skills, `skills.json`, `EIDOLON_SHARED_SKILLS`), MCP servers (`mcp.json`), web search or kind, the task loop (`packages/engine/src/task.ts`), the app's tasks, her task tools (`start_task`, `steer_task`, `stop_task`, `check_task`), the status block, tasks on a call and the task routes (`apps/bot/src/local/tasks`, `routes/tasks.ts`), a chat's task display (`/focus`, `/normal`, `/verbose`), `/stop` and milestones on a call, or `laplace-task` | [assistant.md](docs/assistant.md) |
+| the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), a task's commands (`bash`), skills (Settings' Skills, `skills.json`, `EIDOLON_SHARED_SKILLS`), MCP servers (`mcp.json`), web search or kind, the task loop (`packages/engine/src/task.ts`), the app's tasks, permission levels and Approve for Me's review, her task tools (`start_task`, `steer_task`, `stop_task`, `check_task`), the status block, tasks on a call and the task routes (`apps/bot/src/local/tasks`, `routes/tasks.ts`), a chat's task display (`/focus`, `/normal`, `/verbose`), `/stop` and milestones on a call, or `laplace-task` | [assistant.md](docs/assistant.md) |
 
 ## Commands
 
@@ -102,7 +102,7 @@ The bot:
 bun install
 bun run dev                            # watch mode on :7860 (--port to move it); `start` without watch
 bun run typecheck && bun run lint && bun run test
-bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions / director-decisions
+bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions / director-decisions / review-decisions
 bun run laplace-task --folder <path> "<goal>"   # one assistant task in the foreground; billed (docs/assistant.md)
 ```
 
@@ -155,6 +155,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | `packages/imagegen` or the `take_selfie` tool | `bun run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | the gate's recall questions, state, or threshold (`packages/context/src/gate.ts`), or `RETRIEVAL_GATE_MODEL` | `bun run gate-decisions` — re-scores the labeled turns of `docs/benchmarks/2026-09-19-retrieval-gate/` into its `decisions.json`, and exits non-zero if any turn that needs recall would be skipped. About $0.002 of gate calls |
 | the director's questions, state, or thresholds (`packages/context/src/director.ts`) | `bun run director-decisions` — asks Jev about the labelled group-chat lines of `docs/benchmarks/2026-11-10-director/` into its `decisions.json`, and exits non-zero if any is decided wrong. About $0.003 of gate calls; after a threshold or label change alone, `bun docs/benchmarks/2026-11-10-director/score.ts --cached --check` replays the stored scores for free |
+| Approve for Me's review: its prompt, its notes or its verdict (`packages/assistant/src/review.ts`) | `bun run review-decisions` — asks the assistant role's model (or `--model <account>/<model>`) about the labelled actions of `docs/benchmarks/2026-11-19-approve-for-me/` into its `decisions.json`, and exits non-zero if any risky one is let through or a review fails. About $0.002 on `deepseek-flash`; run it on the models tasks use |
 | the gate's timeline questions or `TIMELINE_THRESHOLD` (`packages/context/src/gate.ts`) | `bun docs/benchmarks/2026-11-07-timeline-question/score.ts` — exits non-zero if any labeled turn lands on the wrong side of the threshold |
 | `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | no scripted check exists ([the 2026-10-17 benchmark](docs/benchmarks/2026-10-17-drama-3-markup/README.md) records what drama-3 does with each kind). Hold a real call, `bun apps/bot/scripts/e2e-call.ts --text "<a question her reply would mark up>" --headful`, and listen: a direction or a tag spoken aloud is a leak. Billed per character |
 | `packages/memory`, or `/api/memories` (`apps/bot/src/memory-admin.ts`) | `docker compose up qdrant`, then round-trip a real `add` → `search` → `deleteAll` through `openMemoryEngine(buildMemoryConfig())`. The tests fake Qdrant and both model calls, so only a live run proves the wire format; it needs an embedding key and an LLM key |
@@ -162,7 +163,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the voice loop, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
-| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat, voice messages and a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, and two that call a fake MCP server's tool, with a fake mind, director, voice, hearing and worker included |
+| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat, voice messages and a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
 | her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`; a task that needs a lookup and a run, which names its kind, asks on its card before the command and searches. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
@@ -352,10 +353,21 @@ the layout's one line.
   or persona facts.
 - **A command and an MCP server run as the owner, outside `FolderPolicy`.** Each command and MCP
   call waits on the task's card unless the owner allowed that exact command in that folder, or
-  always allows that tool, and such a grant stops applying once the task has read outside content
-  (`external`: `web_fetch`, `web_search`, any MCP call), an MCP one under No Web too. A server's
-  `readOnlyHint` or `destructiveHint` never skips the card
+  always allows that tool, or the chat's permission level lets it through, and such a grant stops
+  applying once the task has read outside content (`external`: `web_fetch`, `web_search`, any
+  MCP call), an MCP one under No Web too, where no level lets an MCP call through. A server's
+  `readOnlyHint` or `destructiveHint` never skips the card by itself
   ([assistant.md](docs/assistant.md#approvals)).
+- **Only the owner sets a permission level:** a chat's from its picker or Chat Settings (`PATCH
+  chats/:id`, under `/api/local`), the app's in Settings; never her tools, a task or a listed
+  origin. Full Access lets commands run as the owner unasked; at every level `FolderPolicy`'s
+  denies, the owner's Denies, spend pauses and No Web hold, and a level that can't be read asks
+  ([assistant.md](docs/assistant.md#permission-levels)).
+- **Approve for Me's review asks unless it answers allow.** It runs on the task's own model, billed
+  to the task through `UsageMeter.charge`, sees the brief and the action as JSON and never the
+  transcript, and a failure, a minute without an answer, arguments too long to show it whole, or
+  any other answer sends the action to the card. Its reason is a fixed risk the card names, never
+  model text, and never reaches her.
 - **A command, and an MCP server's process, run on `shellEnv()`, never `process.env`:** the
   allowed names, every `LC_*`, `TERM=dumb`, and a `PATH` with no folder the task may write (an MCP
   server's as the task's first run found it), so no `.env` key reaches one unless an `mcp.json`
@@ -368,7 +380,8 @@ the layout's one line.
 - **A tool's own spend reaches the task's meter through `UsageMeter.charge`, never `tap`:** `tap`
   stands for a worker request's usage and sets the context's size, which steers compaction.
 - **Her `start_task` description and hint come in two, commands on and off
-  (`offersCommands()`):** change both, and keep that her tasks can't open things for the owner.
+  (`offersCommands()`),** and with commands on, their approval sentence follows the chat's
+  permission level: change every variant, and keep that her tasks can't open things for the owner.
 - **Every task request is billed as source `task`, with the task's id as its session.**
 - **The task loop, `runTask`, lives in `@eidolon/engine`, which imports nothing from
   `@eidolon/assistant`:** the tools, store, inbox and meter come injected.

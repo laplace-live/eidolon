@@ -609,6 +609,37 @@ describe("what her turns are offered", () => {
     expect(described[1]).not.toContain("还能运行命令和程序");
   });
 
+  test("her texts follow the chat's permission level, else the app's, from her next turn and on a call", async () => {
+    const tasks = new FakeTasks();
+    serve({ turn: fakeTurn, answer: fakeAnswer, tasks });
+    const id = await greeted();
+    const hint = (permissions: "ask" | "auto" | "full") =>
+      assistantPromptHint({ commands: true, permissions });
+    await send(id, "你好");
+    const saved = process.env.ASSISTANT_PERMISSIONS;
+    try {
+      process.env.ASSISTANT_PERMISSIONS = "auto";
+      await send(id, "在吗");
+    } finally {
+      if (saved === undefined) delete process.env.ASSISTANT_PERMISSIONS;
+      else process.env.ASSISTANT_PERMISSIONS = saved;
+    }
+    await runner.changeSettings(id, { permissions: "full" });
+    await send(id, "帮我弄一下");
+    expect(answers.map((request) => request?.background?.hint)).toEqual([
+      hint("ask"),
+      hint("auto"),
+      hint("full"),
+    ]);
+    expect(answers[2]?.background?.tools[0]?.schema.description).toContain("完全权限");
+    expect(await runner.permissionsOf(id)).toBe("full");
+
+    const { call } = await onCall(id);
+    expect(call.extras?.(true)?.background?.hint).toBe(hint("full"));
+    await runner.changeSettings(id, { permissions: "ask" });
+    expect(call.extras?.(true)?.background?.hint).toBe(hint("ask"));
+  });
+
   test("her task tools besides, while a task of hers in the chat is live, typed or spoken", async () => {
     const tasks = new FakeTasks();
     serve({ turn: fakeTurn, answer: fakeAnswer, hear: voiceLine, tasks });
