@@ -13,7 +13,7 @@
     },
     "apps/bot": {
       "name": "laplace-eidolon",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "dependencies": {
         "@eidolon/access": "workspace:*",
         "@eidolon/chat": "workspace:*",
@@ -56,7 +56,7 @@
     },
     "apps/eidolon": {
       "name": "@laplace.live/eidolon",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "devDependencies": {
         "@eidolon/cli": "workspace:*",
         "@eidolon/config": "workspace:*",
@@ -208,7 +208,7 @@
     },
     "packages/sdk": {
       "name": "@laplace.live/eidolon-sdk",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "@pipecat-ai/client-js": "1.16.0",
         "@pipecat-ai/small-webrtc-transport": "1.11.2",
