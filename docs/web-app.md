@@ -320,9 +320,19 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   case, after `/` or `／` ([Tasks](#tasks)). A command is never sent to her: a display command
   stores the chat's display, with a toast, and starts no reply, and one for the display the chat
   has set already only says so. A known command with anything after it (`/stop 2`), or a slash and
-  ASCII letters alone that name none (`/foo`), is refused with a toast, and the draft stays.
-  Anything else that starts with a slash, a path or a slash before words, is a line like any
-  other (`features/chats/commands.ts`).
+  ASCII letters alone that name no command and no skill the list below offers (`/foo`), is refused
+  with a toast, and the draft stays. Anything else that starts with a slash, a path, a slash before
+  words or a skill's name, is a line like any other (`features/chats/commands.ts`).
+- **The `/` list:** a `/` or `／` that starts the draft opens a list above the box: the commands,
+  each with what it does, while nothing follows the slash word, since they run alone; then, in a
+  chat of hers alone while Assistant Mode is on and ready, the owner's skills her `start_task` can
+  name, each with its description (`nameableSkills`, from `GET skills`), less one named as a
+  command. Typing narrows it to the names that begin with what follows the slash, then those that
+  hold it. The arrow keys move through it, Enter runs a command or puts a skill in, Tab puts either
+  in, a click is Enter, and Escape closes it. A skill goes in as `/name ` before what the draft
+  says, so the line names it for her task ([assistant.md](assistant.md#skills)); a pick closes the
+  list, as a mention's does. A slash anywhere else, a path's or a sentence's, opens nothing
+  (`slashAt`, `features/chats/autocomplete.ts`).
 - **A group chat:**
   - The header's avatars open **In This Chat**, with **Add Persona** and **Remove Persona**.
   - Each run of a persona's lines starts with her avatar and short name, and the streaming text

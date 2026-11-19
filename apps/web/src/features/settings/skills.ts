@@ -1,5 +1,14 @@
-// Which of the owner's skills Settings' Skills card shows, and the names a new skill may take.
-import type { SkillView } from "@/lib/api";
+// The owner's skills: which of them Settings' Skills card shows, which she can be asked for by name,
+// and the names a new skill may take.
+import { queryOptions } from "@tanstack/react-query";
+import { call, type SkillsResponse, type SkillView } from "@/lib/api";
+
+export const skillsQuery = queryOptions({
+  queryKey: ["assistant", "skills"],
+  queryFn: ({ signal }) => call("GET /api/local/skills", { signal }),
+  // Skill folders change outside the app.
+  refetchOnWindowFocus: true,
+});
 
 export const SKILL_FILTERS = ["all", "eidolon", "shared", "off"] as const;
 export type SkillFilter = (typeof SKILL_FILTERS)[number];
@@ -21,6 +30,10 @@ export function visibleSkills(
     const text = `${skill.name}\n${skill.description}\n${skill.folder}`.toLowerCase();
     return words.every((word) => text.includes(word));
   });
+}
+
+export function nameableSkills({ skills }: SkillsResponse): SkillView[] {
+  return skills.filter((skill) => skill.nameable === true);
 }
 
 /** agentskills.io's names: runs of lowercase letters and digits, single hyphens, 64 at most. */

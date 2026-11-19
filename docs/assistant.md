@@ -389,6 +389,10 @@ and `description` the worker's prompt lists, and whose body and files the worker
   lists the owner's two folders' skills, each with where it is from, its folder and its switch,
   what hides it or keeps it out of the catalog, and the files left out; **Add Skill** writes a new
   `SKILL.md` into the data home's folder. A task folder's skills are never listed there.
+- **The composer's `/`** ([web-app.md](web-app.md#chats)) offers the skills she can name, by name
+  and description, in a chat of hers alone while Assistant Mode is ready, and puts the one picked
+  at the start of the owner's line as `/name`. That line, the owner's own words, is all that names
+  it to her: she passes it on in `start_task`'s `skills`, as for any skill the owner names.
 
 ### MCP servers
 
@@ -1201,7 +1205,7 @@ are JSON under 16 KB, but a new skill's, under 512 KB.
 | `DELETE assistant/commands/:id` | | Takes one back, answering with the rest; 400 `bad-request` for an id that isn't a UUIDv7, 404 `unknown-command` |
 | `GET mcp` | | `{ path, servers, errors }`: each server as `mcp.json` writes it (`command`, `args`, `enabled`, `description`, `alwaysAllow`), each `${NAME}` it needs and whether it is set, and its problem; never an `env` value or a resolved secret. A broken entry comes after the valid ones, with its name, switch and problem alone; `errors` says why a file that doesn't parse starts nothing |
 | `PUT mcp/servers/:name` | `{ enabled?, revoke? }`, one at least | Turns a server on (deleting `enabled` and Cline's `disabled`) or off (`enabled: false`), or takes one tool out of `alwaysAllow`, answering as GET does. Always is added only from a card: 400 `bad-request` for anything else; 404 `unknown-mcp-server`; 409 `invalid-mcp-config` while the file doesn't parse, and `linked-mcp-config` while it is a link, neither ever written over |
-| `GET skills` | | `{ sources, skills, skipped, errors }`: the data home's and the shared folder's skills, each with its source, its folder (`~` for home) and where a link leads, its switch, whether it opts out of model use, the folder of the skill that hides it, and whether the catalog leaves it out though it is on; the `SKILL.md` files left out and why; why `skills.json` can't be read |
+| `GET skills` | | `{ sources, skills, skipped, errors }`: the data home's and the shared folder's skills, each with its source, its folder (`~` for home) and where a link leads, its switch, whether it opts out of model use, the folder of the skill that hides it, whether the catalog leaves it out though it is on, and whether she can name it for a task; the `SKILL.md` files left out and why; why `skills.json` can't be read |
 | `PUT skills/:name` | `{ enabled }` | Switches the name on or off in `skills.json`, answering as GET does; 400 `bad-request` for any other body, 404 `unknown-skill` when neither folder has a skill by that name |
 | `POST skills` | `{ name, description, instructions }` | Writes `<data home>/skills/<name>/SKILL.md`, the description quoted, answering as GET does; 400 `bad-request` for a name that breaks the naming rules, a blank description or one over 1,024 characters, blank instructions or a file over 256 KB; 409 `skill-exists` when the folder is there |
 

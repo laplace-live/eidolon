@@ -1704,6 +1704,8 @@ export interface SkillView {
   readonly onlyWhenNamed?: true;
   /** On, but tasks' list of skills is full without it, so a task loads it only when she names it. */
   readonly unlisted?: true;
+  /** She can ask for it by name: start_task's `skills` takes it. */
+  readonly nameable?: true;
   /** On, but past the 150 names she can give a task: she can't ask for it by name. */
   readonly unnameable?: true;
   /** The folder of the skill by this name that is used instead. */
