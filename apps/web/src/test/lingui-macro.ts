@@ -41,3 +41,17 @@ export function linguiMacro() {
     },
   };
 }
+
+/**
+ * `@lingui/react/macro`'s stub, the same in every file that stubs it: test files share one process,
+ * and a module linked against a stub without `Trans` can't import it from a later one.
+ */
+export function linguiReactMacro() {
+  const { t } = linguiMacro();
+  const translate = (descriptor: unknown): string =>
+    typeof descriptor === "string" ? descriptor : t(descriptor as Descriptor);
+  return {
+    useLingui: () => ({ t, i18n: { _: translate, locale: "en" } }),
+    Trans: ({ children }: { readonly children?: unknown }) => children,
+  };
+}

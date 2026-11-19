@@ -2,7 +2,7 @@
 // groups, option labels, flags and why a value is refused.
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
-import { REPLY_MODE_LABELS } from "@/features/chats/labels";
+import { DISPLAY_LABELS, REPLY_MODE_LABELS } from "@/features/chats/labels";
 import type { RoleId } from "@/lib/providers";
 
 /** Each row's title. */
@@ -50,6 +50,22 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "sources.cookiesFromBrowser": msg`Browser to Read Cookies From`,
   "sources.cookiesFile": msg`Cookies File`,
   "usage.db": msg`Usage Ledger`,
+  "assistant.enabled": msg`Assistant Mode`,
+  "assistant.provider": msg`Assistant Provider`,
+  "assistant.model": msg`Assistant Model`,
+  "assistant.quick.provider": msg`Quick Task Provider`,
+  "assistant.quick.model": msg`Quick Task Model`,
+  "assistant.coding.provider": msg`Coding Task Provider`,
+  "assistant.coding.model": msg`Coding Task Model`,
+  "assistant.research.provider": msg`Research Task Provider`,
+  "assistant.research.model": msg`Research Task Model`,
+  "assistant.folders": msg`Assistant Folders`,
+  "assistant.bash": msg`Assistant Commands`,
+  "assistant.spendPauseUsd": msg`Assistant Spend Pause`,
+  "assistant.contextTokens": msg`Assistant Context`,
+  "assistant.search.provider": msg`Web Search Provider`,
+  "assistant.search.model": msg`Web Search Engine`,
+  "chats.display": msg`Task Display`,
   prompt: msg`System Prompt File`,
   "identity.timezone": msg`Time Zone`,
   "voice.provider": msg`Voice Provider`,
@@ -97,6 +113,7 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "chat.interests": msg`Interests`,
   "chat.talkativeness": msg`Talkativeness`,
   "chat.replyMode": msg`Reply Mode`,
+  "chat.maxRounds": msg`Rounds per Reply`,
 };
 
 /** The line under a row, for the rows that have one. */
@@ -115,6 +132,17 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "sources.cookiesFromBrowser": msg`The browser whose cookies yt-dlp uses for videos behind a login. Reading them may ask for your Keychain password.`,
   "sources.cookiesFile": msg`A cookies.txt for yt-dlp, which writes the merged cookies back into it.`,
   "usage.db": msg`Where calls and jobs record what they spend. Default usage.db in the data home.`,
+  "assistant.enabled": msg`Off, she can't start tasks, the running ones stop, and the Tasks list is hidden.`,
+  "assistant.quick.provider": msg`Jobs of a few minutes, such as a list or a few edits to a file. A cheaper model suits them, though a task still uses tools, and a weaker model is easier to mislead with what it reads.`,
+  "assistant.coding.provider": msg`Code, web pages and small programs.`,
+  "assistant.research.provider": msg`Looking things up on the web and writing up what it found.`,
+  "assistant.search.provider": msg`The account tasks search the web with. Off, they can still read the pages you allow, but can't search.`,
+  "assistant.search.model": msg`Which index the account searches. Each search costs under a cent.`,
+  "assistant.folders": msg`Folders every task may read and write besides its own, one per line.`,
+  "assistant.bash": msg`On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. macOS and Linux only.`,
+  "assistant.spendPauseUsd": msg`A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1.`,
+  "assistant.contextTokens": msg`The most context a task's requests carry, in tokens. Default 128000.`,
+  "chats.display": msg`How much of her tasks each chat shows, until the chat picks its own with /focus, /normal or /verbose. Focus hides task cards, and Verbose opens her newest running task's steps and, on a call, has her say how far a task's plan has got, which costs a reply each time. Default Normal.`,
   prompt: msg`Relative to her folder. Default prompt.md.`,
   "voice.model": msg`Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken.`,
   "hearing.language": msg`The language you speak in calls, as a two-letter code. Default zh.`,
@@ -130,6 +158,7 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "chat.interests": msg`Topics she cares about, separated by commas or 、. The director reads them with her summary to tell when a group's line is one she'd join in on. Empty means her summary alone.`,
   "chat.talkativeness": msg`How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5.`,
   "chat.replyMode": msg`Whether she answers in text or with a voice message. Auto lets the director choose voice when a line suits it, more often after a voice message of yours. A chat's own reply mode overrides hers, and without a key for her voice she answers in text.`,
+  "chat.maxRounds": msg`How many rounds of one reply may call her tools. Each round bills a request to her mind, or more when a malformed reply is asked for again. If the last still calls one, one more round asks her to answer, or to hand the work to a task. Default 8.`,
 };
 
 /** A choice's label by row and value; a value without one shows as it is. */
@@ -144,6 +173,7 @@ export const SETTING_OPTION_LABELS: Readonly<
     "s2.1-pro-free": msg`s2.1-pro-free (Free, under Fair Use)`,
   },
   "chat.replyMode": REPLY_MODE_LABELS,
+  "chats.display": DISPLAY_LABELS,
 };
 
 /** The headings a card's rows are grouped under. */
@@ -156,6 +186,7 @@ export const GROUP_LABELS: Readonly<Record<string, MessageDescriptor>> = {
   knowledge: msg`Knowledge`,
   videos: msg`Videos and Transcripts`,
   selfie: msg`Selfies`,
+  assistant: msg`Assistant Mode`,
   providers: msg`Providers`,
   sources: msg`Downloads`,
   usage: msg`Usage`,
@@ -173,6 +204,12 @@ export const FLAG_LABELS = {
 /** An optional role's default, where it has none: what being off means. */
 export const PROVIDER_OFF_LABELS: Readonly<Partial<Record<RoleId, MessageDescriptor>>> = {
   realtime: msg`Off: Three Models`,
+  assistant: msg`Off: No Tasks`,
+  // A kind follows the assistant's account, which is unset too.
+  "assistant-quick": msg`Same as Assistant Tasks`,
+  "assistant-coding": msg`Same as Assistant Tasks`,
+  "assistant-research": msg`Same as Assistant Tasks`,
+  search: msg`Off: No Web Search`,
 };
 
 /** Why controls.ts refused a value, by the code it gives; `{min}` and `{max}` are the row's limits. */
@@ -182,6 +219,8 @@ export const INVALID_MESSAGES: Readonly<Record<string, MessageDescriptor>> = {
   "settings.form.invalid.min": msg`The smallest allowed value is {min}.`,
   "settings.form.invalid.max": msg`The largest allowed value is {max}.`,
   "settings.form.invalid.comma": msg`A path can't contain a comma.`,
+  "settings.form.invalid.fullPath": msg`Use a full path, such as ~/Projects.`,
+  "settings.form.invalid.home": msg`A folder can't be the whole disk or your home folder.`,
   "settings.form.invalid.relative": msg`Use a path relative to the persona's folder that stays inside it.`,
   "settings.form.invalid.timezone": msg`Use a time zone name such as Asia/Shanghai.`,
   "settings.form.invalid.language": msg`Use a two-letter language code such as zh, or none.`,

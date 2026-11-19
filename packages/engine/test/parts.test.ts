@@ -234,6 +234,23 @@ describe("personaParts", () => {
     expect(calls.styles).toBe(2);
   });
 
+  test("a turn's assistant hint reaches that turn's instruction alone", async () => {
+    const { deps, calls, parts: made } = fake();
+    const parts = personaParts(deps);
+    const offered = await parts(PERSONA, VIEWER, CHAT, { assistantHint: "ASSISTANT HINT" });
+    await parts(PERSONA, VIEWER, CHAT);
+    expect(offered.tools).toEqual([made.selfie, made.recall]);
+    expect(calls.instructions).toEqual([
+      {
+        viewer: VIEWER,
+        voiceHint: "",
+        selfieHint: "SELFIE HINT",
+        assistantHint: "ASSISTANT HINT",
+      },
+      { viewer: VIEWER, voiceHint: "", selfieHint: "SELFIE HINT" },
+    ]);
+  });
+
   test("a realtime call's variant has the prefix's delivery line and no voice-style tool", async () => {
     const { deps, calls, parts: made } = fake();
     const built = await personaParts(deps)(PERSONA, VIEWER, CHAT, { realtime: true });

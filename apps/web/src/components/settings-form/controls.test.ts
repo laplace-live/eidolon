@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { CHAT_DISPLAYS } from "@eidolon/chat";
 import {
+  DEFAULT_CHAT_DISPLAY,
+  DEFAULT_CHAT_MAX_ROUNDS,
   DEFAULT_CHAT_REPLY_MODE,
   DEFAULT_CHAT_TALKATIVENESS,
   PY_SPACE_CLASS,
@@ -15,14 +18,17 @@ import {
   cardSections,
   changes,
   controlFor,
+  DEFAULT_DISPLAY,
   DEFAULT_REPLY_MODE,
   DEFAULT_TALKATIVENESS,
   draftOf,
+  effectiveModel,
   effectiveProvider,
   envDraft,
   fallbackModel,
   GROUPS,
   groupOf,
+  isFullPath,
   optionsOf,
   originOf,
   orphanedByProvider,
@@ -128,6 +134,37 @@ describe("the control for each kind", () => {
       fallback: DEFAULT_CHAT_REPLY_MODE,
     });
     expect(DEFAULT_REPLY_MODE).toBe(DEFAULT_CHAT_REPLY_MODE);
+  });
+
+  test("the task display is a select of the chat format's displays that names the bot's default while unset", () => {
+    expect(control("chats.display")).toEqual({
+      type: "select",
+      options: [...CHAT_DISPLAYS],
+      fallback: DEFAULT_CHAT_DISPLAY,
+    });
+    // @eidolon/config can't import the chat format, so its own copy is held to it here.
+    expect(CHAT_DISPLAYS).toContain(DEFAULT_CHAT_DISPLAY);
+    expect(DEFAULT_DISPLAY).toBe(DEFAULT_CHAT_DISPLAY);
+    expect(groupOf("chats.display", "app")).toBe("assistant");
+    for (const display of CHAT_DISPLAYS) {
+      expect(parseDraft(display, control("chats.display"))).toEqual({ ok: true, value: display });
+    }
+  });
+
+  test("her rounds per reply are a whole number of at least 1, as chatMaxRounds() takes", () => {
+    const rounds = control("chat.maxRounds");
+    expect(rounds).toEqual({ type: "integer", min: 1 });
+    expect(parseDraft("1", rounds)).toEqual({ ok: true, value: 1 });
+    expect(parseDraft(String(DEFAULT_CHAT_MAX_ROUNDS), rounds)).toEqual({
+      ok: true,
+      value: DEFAULT_CHAT_MAX_ROUNDS,
+    });
+    expect(parseDraft("0", rounds)).toEqual({ ok: false, error: "settings.form.invalid.min" });
+    expect(parseDraft("2.5", rounds)).toEqual({
+      ok: false,
+      error: "settings.form.invalid.integer",
+    });
+    expect(parseDraft("", rounds)).toEqual({ ok: true, value: null });
   });
 
   test("a select keeps a file's value that isn't one of its choices", () => {
@@ -309,6 +346,54 @@ describe("the other controls", () => {
   });
 });
 
+describe("Assistant Mode", () => {
+  test("is on while nothing sets it, as assistantSettings reads it, and its switch says so", () => {
+    expect(control("assistant.enabled")).toEqual({ type: "flag", fallback: "on" });
+  });
+
+  test("its folders are full paths, one per line", () => {
+    const folders = control("assistant.folders");
+    expect(folders).toEqual({ type: "paths", inPersona: false, folders: true });
+    expect(parseDraft("~/Projects\n\n /Users/me/work \nC:\\work", folders)).toEqual({
+      ok: true,
+      value: ["~/Projects", "/Users/me/work", "C:\\work"],
+    });
+    // The settings file resolves a relative one in the data home, where every task is refused;
+    // expandUser reads `~` and `~/` alone, so `~Projects` is one.
+    for (const relative of ["Projects", "./work", "../x", "~Projects", "~me/work", "~\\Projects"]) {
+      expect(parseDraft(relative, folders)).toEqual({
+        ok: false,
+        error: "settings.form.invalid.fullPath",
+      });
+    }
+  });
+
+  test("its folders are never the disk or home, which FolderPolicy refuses as a grant", () => {
+    const folders = control("assistant.folders");
+    for (const whole of ["/", "~", "~/", "//", "~//"]) {
+      expect(parseDraft(`~/ok\n${whole}`, folders)).toEqual({
+        ok: false,
+        error: "settings.form.invalid.home",
+      });
+    }
+    expect(parseDraft("~/a,b", folders)).toEqual({
+      ok: false,
+      error: "settings.form.invalid.comma",
+    });
+  });
+
+  test("isFullPath", () => {
+    for (const path of ["/a", "~", "~/a", "C:\\a", "c:/a"]) expect(isFullPath(path)).toBe(true);
+    for (const path of ["a", "./a", "", "C:", "C:a", "~a", "~me/a"]) {
+      expect(isFullPath(path)).toBe(false);
+    }
+  });
+
+  test("its commands are on while nothing sets them, as assistantSettings reads them", () => {
+    expect(control("assistant.bash")).toEqual({ type: "flag", fallback: "on" });
+  });
+});
+
 describe("providers and the models they fill", () => {
   const rows = (values: Record<string, string>, env: Record<string, string> = {}) =>
     SETTINGS.map((setting) =>
@@ -352,6 +437,50 @@ describe("providers and the models they fill", () => {
       fallbackModel(roleById("mind"), rows({ "mind.provider": "openai-compatible" }), {}, []),
     ).toBeNull();
   });
+
+  test("a task kind's provider follows the assistant's, and its model too while the providers match", () => {
+    const coding = roleById("assistant-coding");
+    expect(control("assistant.coding.provider")).toEqual({ type: "provider", role: coding });
+    expect(control("assistant.coding.model")).toEqual({ type: "model", role: coding });
+    // Nothing set anywhere: no task runs, the kind's included.
+    expect(effectiveProvider(coding, rows({}), {})).toBeNull();
+    const assistant = rows({
+      "assistant.provider": "openrouter",
+      "assistant.model": "anthropic/claude-sonnet-5.5",
+    });
+    expect(effectiveProvider(coding, assistant, {})).toBe("openrouter");
+    expect(effectiveModel(coding, assistant, {}, [])).toBe("anthropic/claude-sonnet-5.5");
+    // A model alone runs on the assistant's account.
+    const own = { "assistant.coding.model": "openai/gpt-6" };
+    expect(effectiveModel(coding, assistant, own, [])).toBe("openai/gpt-6");
+    // On another provider's account, the assistant's model isn't one it serves: it names its own.
+    const elsewhere = { "assistant.coding.provider": "anthropic" };
+    expect(effectiveProvider(coding, assistant, elsewhere)).toBe("anthropic");
+    expect(effectiveModel(coding, assistant, elsewhere, [])).toBeNull();
+  });
+
+  test("web search is off until an account is chosen, and takes the offer's engine while none is named", () => {
+    const search = roleById("search");
+    expect(control("assistant.search.provider")).toEqual({ type: "provider", role: search });
+    expect(control("assistant.search.model")).toEqual({ type: "model", role: search });
+    expect(effectiveProvider(search, rows({ "assistant.provider": "openrouter" }), {})).toBeNull();
+    const chosen = rows({ "assistant.search.provider": "openrouter" });
+    expect(effectiveModel(search, chosen, {}, [])).toBe(defaultModel(search, "openrouter"));
+    expect(defaultModel(search, "openrouter")).toBe("exa");
+  });
+
+  test("a role's model: its own as the drafts stand, else its fallback; the assistant has none", () => {
+    const assistant = roleById("assistant");
+    expect(effectiveModel(assistant, rows({ "assistant.provider": "openrouter" }), {}, [])).toBe(
+      null,
+    );
+    const chosen = rows({ "assistant.provider": "openrouter", "assistant.model": "x-ai/grok-5" });
+    expect(effectiveModel(assistant, chosen, {}, [])).toBe("x-ai/grok-5");
+    expect(effectiveModel(assistant, chosen, { "assistant.model": "" }, [])).toBeNull();
+    expect(effectiveModel(roleById("mind"), rows({}), {}, [])).toBe(
+      defaultModel(roleById("mind"), "openrouter"),
+    );
+  });
 });
 
 describe("a provider's models and voices go with it", () => {
@@ -372,6 +501,22 @@ describe("a provider's models and voices go with it", () => {
       "memory.model",
     ]);
     expect(orphanedByProvider(hers, { "mind.provider": "openrouter" }, {}, [])).toEqual([]);
+  });
+
+  test("a new assistant provider clears a kind's model while the kind follows it", () => {
+    const kinds = rows({
+      "assistant.provider": "openrouter",
+      "assistant.model": "anthropic/claude-sonnet-5.5",
+      "assistant.coding.model": "openai/gpt-6",
+      "assistant.research.provider": "openrouter",
+      "assistant.research.model": "x-ai/grok-5",
+    });
+    const drafts = { "assistant.provider": "anthropic" };
+    // research names its own account, which the change leaves where it was.
+    expect(orphanedByProvider(kinds, drafts, drafts, [])).toEqual([
+      "assistant.model",
+      "assistant.coding.model",
+    ]);
   });
 
   test("another account of the same provider keeps its models; one of another provider doesn't", () => {

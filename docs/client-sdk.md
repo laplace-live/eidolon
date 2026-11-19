@@ -34,7 +34,9 @@ zero `@pipecat-ai/*` packages directly.
   `docker.yml` ignores `packages/sdk/**`.
 - **Protocol parity is tested, not imported.** `packages/sdk/test/parity.test.ts` checks the SDK's
   constants (`CHAT_FORMAT`, window budgets, chain limits, voice limits, `AUDIO_QUALITIES`) against
-  `@eidolon/chat`, `@eidolon/access`, `@eidolon/runtime`, and `apps/bot/src/chat`.
+  `@eidolon/chat`, `@eidolon/access`, `@eidolon/runtime`, and `apps/bot/src/chat`. It also runs
+  generated logs through `buildWindow` and the server's `windowOf`, which must keep the same
+  events.
 - **The local web app is a consumer.** `apps/web` calls through `EidolonClient` and takes the cue
   markup, the turn `Watchdog` and server-message parsing from the SDK, with no `@pipecat-ai/*`
   package of its own. Its call transcript, call phases and chat items stay in `apps/web`: they
@@ -111,10 +113,10 @@ stores nothing on disk: the browser keeps the log and sends a bounded `ChatWindo
 in-chat call.
 
 The SDK owns the wire format, NDJSON stream parser, cross-tab Web Locks (`withChatLock`,
-`holdChatLock`), window builder (`buildWindow` within `CHAT_WINDOW_EVENTS`, `CHAT_WINDOW_BYTES`,
-`CHAT_WINDOW_MESSAGES`), session orchestrator (`createChat`, `sendChatTurn`, `startChatCall`,
-`closeDanglingCall`, `downloadMissingFiles`), and pure `chatViewReducer`, while leaving IndexedDB
-storage to the host app through `BrowserChatStore<TRecord>`:
+`holdChatLock`), window builder (`buildWindow`), session orchestrator (`createChat`,
+`sendChatTurn`, `startChatCall`, `closeDanglingCall`, `downloadMissingFiles`), and pure
+`chatViewReducer`, while leaving IndexedDB storage to the host app through
+`BrowserChatStore<TRecord>`:
 
 ```ts
 import {
@@ -124,6 +126,47 @@ import {
   startChatCall,
 } from "@laplace.live/eidolon-sdk";
 ```
+
+### The window
+
+`buildWindow` cuts a turn's window by the server's own rule ([chat.md](chat.md#the-window)):
+
+- **What it reads:** the log's newest `CHAT_WINDOW_EVENTS` (180) events that aren't `NEVER_SENT`,
+  newest first.
+- **Two shares,** each closing at its first event that doesn't fit, so a call never goes while its
+  result stays behind (a call cut off has none):
+  - tool calls and results: `CHAT_WINDOW_TOOL_EVENTS` (60) and `CHAT_WINDOW_TOOL_BYTES` (128 KB of
+    JSON);
+  - every other event: the other 120 and `CHAT_WINDOW_BYTES` (256 KB).
+
+  Once the second closes, full or at an event that doesn't fit, the window ends there: no older
+  tool event goes.
+- **State:** every `STATE_EVENT_TYPES` event goes too, however old.
+- **As stored:** each event goes whole, in log order, or not at all. A signed event changed in any
+  way fails its signature, and the server drops it: a tool result shortened to fit would read to
+  her as a call that never returned.
+
+**A store's `window()`** passes `buildWindow` the whole log, or no less of it than its newest
+`CHAT_WINDOW_EVENTS` events that aren't `NEVER_SENT` and every state event older than them, oldest
+first. Both give the same window. laplace's store reads exactly that bound, through the SDK's
+`CHAT_WINDOW_EVENTS`, so it reads what each SDK version needs with no change of its own.
+
+### Her words before a tool call
+
+When a round of a text turn of hers ends in tool calls, the words she wrote before them are stored
+on the round's first call as `said` ([chat.md](chat.md#the-format)), and her message holds only her
+last round:
+
+- **`eventItems`** shows a call's `said` as her `message` item at the call's seq, so her words read
+  in the order she said them.
+- **`chatViewReducer`** clears a live turn's streamed text once its call with `said` is stored, so
+  the words show once and her next round streams on below them. A call already in the view clears
+  nothing, so a reload can't take what streamed since.
+
+**Version skew:** production's calls carry `said` as soon as a bot that writes it is deployed, which
+a push to `master` does, while a new SDK reaches npm only with its version PR. Until a host takes
+an SDK that renders `said`, it shows those words while they stream and loses them once her message
+is stored. Its store keeps the events as received, so the words come back once it updates.
 
 ---
 

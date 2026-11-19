@@ -1,7 +1,9 @@
-// What a chat's log shows: the lines said, the turns that failed, and where each call began and
-// ended. Recall, tool events, the greeting prompt and the bookkeeping events stay hidden.
+// What a chat's log shows: the lines said, her words before a tool call, the turns that failed,
+// where each call began and ended, and a card for each task she started. Recall, other tool events,
+// the greeting prompt and the bookkeeping events stay hidden.
 import type {
   Attachment,
+  ChatDisplay,
   ChatEvent,
   ChatEventOf,
   CutOff,
@@ -9,6 +11,7 @@ import type {
   Speaker,
 } from "@eidolon/chat";
 import { parseMarkup, trimTrailingPartialCue } from "@laplace.live/eidolon-sdk";
+import { type TaskCall, taskCalls } from "@/features/tasks/calls";
 import { type ReplyReason, reasonOf } from "./group";
 
 export type AudioAttachment = Extract<Attachment, { readonly kind: "audio" }>;
@@ -26,10 +29,15 @@ type PersonaItem = {
   readonly sentAsText: boolean;
   readonly interrupted: boolean;
   readonly cutOff: CutOff | null;
-  /** The decision her turn answered; null for a greeting, or a late photo of unknown turn. */
+  /**
+   * The decision her turn answered; null for a greeting, a late photo of unknown turn, and her
+   * words before a tool call, whose turn's decision her message carries.
+   */
   readonly reason: ReplyReason | null;
   /** Said on a call, as its transcript. */
   readonly call: boolean;
+  /** Her words before a tool call, at the call's seq: a round of the reply her message ends. */
+  readonly said?: true;
 };
 
 /** Where a call began or ended, as a quiet line across the log. */
@@ -43,6 +51,15 @@ export type CallItem = {
   readonly group?: true;
   /** How long it lasted; null until it has ended, or when its other edge isn't in the log. */
   readonly durationMs: number | null;
+};
+
+/** A task she started with start_task, at her call. */
+export type TaskItem = {
+  readonly kind: "task";
+  readonly seq: number;
+  readonly persona: ParticipantId;
+  readonly task: string;
+  readonly call: TaskCall;
 };
 
 export type ChatItem =
@@ -62,7 +79,8 @@ export type ChatItem =
       readonly persona: ParticipantId;
       readonly error: string;
     }
-  | CallItem;
+  | CallItem
+  | TaskItem;
 
 /** A voice message's audio; null for any other message. */
 function voiceOf(event: ChatEventOf<"message">): AudioAttachment | null {
@@ -95,6 +113,7 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
   // The decision each turn began under, by turn.
   const turns = new Map<string, ReplyReason | null>();
   const calls = callEdges(events);
+  const tasks = new Map(taskCalls(events).map((call) => [call.seq, call]));
   // On a group call, the director chooses each line's speaker, but her follow-ups follow no decision.
   let groupCall = false;
   let previous: ChatEvent | undefined;
@@ -102,7 +121,34 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
     if ("turn" in event && !turns.has(event.turn)) {
       turns.set(event.turn, chosen.get(event.persona) ?? null);
     }
-    if (event.type === "decision") {
+    if (event.type === "tool-call") {
+      if (event.said !== undefined && event.said !== "") {
+        items.push({
+          kind: "persona",
+          seq: event.seq,
+          persona: event.persona,
+          text: event.said,
+          images: [],
+          voice: null,
+          sentAsText: false,
+          interrupted: false,
+          cutOff: null,
+          reason: null,
+          call: false,
+          said: true,
+        });
+      }
+      const started = tasks.get(event.seq);
+      if (started !== undefined && started.task !== null) {
+        items.push({
+          kind: "task",
+          seq: event.seq,
+          persona: started.persona,
+          task: started.task,
+          call: started,
+        });
+      }
+    } else if (event.type === "decision") {
       const reason = reasonOf(event, speakers);
       for (const reply of event.replies) chosen.set(reply.persona, reason);
     } else if (event.type === "call-started" || event.type === "call-ended") {
@@ -179,12 +225,27 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
   return items;
 }
 
+/** An item's key in the log: her words before a task's call share its seq with the card. */
+export function itemKey(item: ChatItem): string {
+  return `${item.kind}-${item.seq}`;
+}
+
+/** What a chat in `display` shows: focus leaves out task cards, but for those `revealed`. */
+export function displayedItems(
+  items: readonly ChatItem[],
+  display: ChatDisplay | null,
+  revealed: ReadonlySet<string>,
+): readonly ChatItem[] {
+  if (display !== "focus") return items;
+  return items.filter((item) => item.kind !== "task" || revealed.has(item.task));
+}
+
 /**
  * Whoever said `item`: null for the viewer, else her id, for her lines and failures. A call's edge
- * has no speaker, so whoever speaks after it starts a run.
+ * and a task's card have no speaker, so whoever speaks after one starts a run.
  */
 export function saidBy(item: ChatItem | undefined): ParticipantId | null | undefined {
-  if (item === undefined || item.kind === "call") return undefined;
+  if (item === undefined || item.kind === "call" || item.kind === "task") return undefined;
   return item.kind === "user" ? null : item.persona;
 }
 
@@ -197,7 +258,7 @@ export function startsRun(items: readonly ChatItem[], index: number): boolean {
 export function manyVoices(items: readonly ChatItem[]): boolean {
   let voice: ParticipantId | undefined;
   for (const item of items) {
-    if (item.kind === "user" || item.kind === "call") continue;
+    if (item.kind === "user" || item.kind === "call" || item.kind === "task") continue;
     if (voice !== undefined && item.persona !== voice) return true;
     voice = item.persona;
   }
@@ -206,19 +267,25 @@ export function manyVoices(items: readonly ChatItem[]): boolean {
 
 /**
  * What Retry sends again: the viewer's last line, if anything followed it only to fail, or her
- * reply to it was cut off. A voice message goes again as its transcript; one with none, not at all.
+ * reply to it was cut off, her words before its tool calls being part of that reply. A voice
+ * message goes again as its transcript; one with none, not at all. A task her turn started stops
+ * it: sending the line again would start another.
  */
 export function retryText(items: readonly ChatItem[]): string | null {
   const last = items.at(-1);
   if (last?.kind === "persona" && last.cutOff !== null) {
-    const asked = items.at(-2);
+    const before = (item: ChatItem | undefined) =>
+      item?.kind === "persona" && item.said === true && item.persona === last.persona;
+    let at = items.length - 2;
+    while (before(items[at])) at--;
+    const asked = items[at];
     return asked?.kind === "user" && asked.text !== "" ? asked.text : null;
   }
   if (last?.kind !== "failed") return null;
   for (let index = items.length - 1; index >= 0; index--) {
     const item = items[index]!;
     if (item.kind === "user") return item.text === "" ? null : item.text;
-    if (item.kind === "persona" || item.kind === "call") return null;
+    if (item.kind === "persona" || item.kind === "call" || item.kind === "task") return null;
   }
   return null;
 }

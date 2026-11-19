@@ -6,11 +6,23 @@ export {
   isAccountId,
   parseAccounts,
 } from "./accounts.ts";
+export {
+  type AssistantSettings,
+  assistantSettings,
+  DEFAULT_ASSISTANT_CONTEXT_TOKENS,
+  DEFAULT_ASSISTANT_SPEND_PAUSE_USD,
+  TASK_KINDS,
+  type TaskKind,
+} from "./assistant.ts";
 export { daysInMonth, isLeap, ordinalToYmd, ymdToOrdinal } from "./calendar.ts";
 export {
+  chatDisplay,
   chatInterests,
+  chatMaxRounds,
   chatReplyMode,
   chatTalkativeness,
+  DEFAULT_CHAT_DISPLAY,
+  DEFAULT_CHAT_MAX_ROUNDS,
   DEFAULT_CHAT_REPLY_MODE,
   DEFAULT_CHAT_TALKATIVENESS,
 } from "./chat.ts";
@@ -138,6 +150,7 @@ export {
   type LoadedSettings,
   layeredValue,
   loadSettings,
+  MCP_SECRETS_KEY,
   type PersonaIdentity,
   type PersonaSettings,
   personaFolders,

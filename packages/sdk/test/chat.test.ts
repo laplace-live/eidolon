@@ -8,6 +8,8 @@ import {
   type BrowserChatStore,
   buildWindow,
   CHAT_WINDOW_EVENTS,
+  CHAT_WINDOW_TOOL_BYTES,
+  CHAT_WINDOW_TOOL_EVENTS,
   ChatBusyError,
   type ChatHeader,
   ChatRequestError,
@@ -40,6 +42,7 @@ import {
   parseStreamLine,
   probeChatEndpoint,
   recorderMimeType,
+  STATE_EVENT_TYPES,
   sendChatTurn,
   separator,
   stampEvents,
@@ -49,6 +52,7 @@ import {
   summarize,
   uuidv7,
   type WireEvent,
+  windowBytesOf,
   withChatLock,
 } from "../src/index.ts";
 
@@ -276,8 +280,39 @@ describe("uuidv7 and chat parsing", () => {
   });
 });
 
+const viewerLine = (seq: number, text = "嗯"): WireEvent => ({
+  seq,
+  at: 1000 + seq,
+  type: "message",
+  id: `u${seq}`,
+  speaker: { kind: "user" },
+  text,
+});
+const toolCall = (seq: number, callId: string, extra: Record<string, unknown> = {}): WireEvent => ({
+  seq,
+  at: 1000 + seq,
+  type: "tool-call",
+  persona: "milky-green",
+  turn: "t1",
+  callId,
+  name: "recall_streams",
+  arguments: { query: "上次" },
+  sig: `sig-${seq}`,
+  ...extra,
+});
+const toolResult = (seq: number, callId: string, text = "好"): WireEvent => ({
+  seq,
+  at: 1000 + seq,
+  type: "tool-result",
+  persona: "milky-green",
+  turn: "t1",
+  callId,
+  result: { text },
+  sig: `sig-${seq}`,
+});
+
 describe("window builder, locks, availability, and session lifecycle", () => {
-  test("buildWindow keeps older state events ahead of newest 120 events and drops NEVER_SENT", () => {
+  test("buildWindow keeps the newest 120 lines after every older state event, and drops NEVER_SENT", () => {
     const header = newChatHeader(["milky-green"], 1000);
     const titleEvent: WireEvent = { seq: 1, at: 1001, type: "title", title: "Pinned title" };
     const contextEvent: WireEvent = {
@@ -290,19 +325,78 @@ describe("window builder, locks, availability, and session lifecycle", () => {
       role: "system",
       content: "recall",
     };
-    const filler: WireEvent[] = Array.from({ length: 130 }, (_, idx) => ({
-      seq: idx + 3,
-      at: 1003 + idx,
-      type: "message" as const,
-      id: `m-${idx}`,
-      speaker: { kind: "user" as const },
-      text: `msg-${idx}`,
-    }));
+    const filler = Array.from({ length: 130 }, (_, idx) => viewerLine(idx + 3, `msg-${idx}`));
     const win = buildWindow(header, [titleEvent, contextEvent, ...filler]);
-    expect(win.events).toHaveLength(1 + CHAT_WINDOW_EVENTS);
-    expect(win.events[0]).toEqual(titleEvent);
-    expect(win.events.some((e) => e.type === "context")).toBe(false);
+    expect(CHAT_WINDOW_EVENTS - CHAT_WINDOW_TOOL_EVENTS).toBe(120);
+    expect(win.events).toEqual([titleEvent, ...filler.slice(10)]);
     expect(isChatEvent(win.events[0]!)).toBe(true);
+  });
+
+  test("buildWindow gives tool calls and results 128 KB of their own, sending each event as stored", () => {
+    const header = newChatHeader(["milky-green"], 1000);
+    // 45 turns: the viewer's line, her call, its result of about 10 KB, her line.
+    const log = Array.from({ length: 45 }, (_, i) => [
+      viewerLine(4 * i + 1, "上次播了什么"),
+      toolCall(4 * i + 2, `c${i}`),
+      toolResult(4 * i + 3, `c${i}`, "好".repeat(3400)),
+      { ...viewerLine(4 * i + 4, "播了游戏"), speaker: { kind: "persona", id: "milky-green" } },
+    ]).flat();
+    const sent = buildWindow(header, log).events;
+    const isTool = (event: WireEvent) => event.type === "tool-call" || event.type === "tool-result";
+    expect(sent.filter((event) => !isTool(event))).toEqual(log.filter((event) => !isTool(event)));
+    const tools = log.filter(isTool);
+    const sentTools = sent.filter(isTool);
+    expect(sentTools.length).toBeLessThan(CHAT_WINDOW_TOOL_EVENTS);
+    expect(sentTools).toEqual(tools.slice(tools.length - sentTools.length));
+    const bytes = sentTools.reduce((sum, event) => sum + windowBytesOf(event), 0);
+    expect(bytes).toBeLessThanOrEqual(CHAT_WINDOW_TOOL_BYTES);
+    expect(bytes + windowBytesOf(tools.at(-sentTools.length - 1)!)).toBeGreaterThan(
+      CHAT_WINDOW_TOOL_BYTES,
+    );
+    expect(sent.every((event) => log.includes(event))).toBe(true);
+  });
+
+  test("buildWindow ends where the lines' share closes, full or at a line too big for it: no older tool event goes", () => {
+    const header = newChatHeader(["milky-green"], 1000);
+    const recall = [viewerLine(1, "还记得吗"), toolCall(2, "c0"), toolResult(3, "c0")];
+    const full = [...recall, ...Array.from({ length: 125 }, (_, i) => viewerLine(4 + i))];
+    expect(buildWindow(header, full).events).toEqual(
+      full.slice(-(CHAT_WINDOW_EVENTS - CHAT_WINDOW_TOOL_EVENTS)),
+    );
+    const misfit = [...recall, viewerLine(4, "长".repeat(90_000)), viewerLine(5, "讲讲")];
+    expect(buildWindow(header, misfit).events).toEqual([viewerLine(5, "讲讲")]);
+  });
+
+  test("buildWindow over the newest CHAT_WINDOW_EVENTS sendable events and every older state event equals buildWindow over the whole log", () => {
+    const header = newChatHeader(["milky-green"], 1000);
+    const context = (seq: number): WireEvent => ({
+      seq,
+      at: 1000 + seq,
+      type: "context",
+      persona: "milky-green",
+      turn: "t1",
+      position: 0,
+      role: "system",
+      content: "回忆",
+    });
+    const log: WireEvent[] = [];
+    for (let seq = 1; seq <= 400; seq++) {
+      if (seq % 50 === 7) log.push({ seq, at: 1000 + seq, type: "title", title: `第${seq}次` });
+      else if (seq % 9 === 0) log.push(context(seq));
+      else if (seq % 4 === 2) log.push(toolCall(seq, `c${seq}`));
+      else if (seq % 4 === 3) log.push(toolResult(seq, `c${seq - 1}`, "好".repeat(900)));
+      else log.push(viewerLine(seq));
+    }
+    const newest = log.filter((event) => !NEVER_SENT.has(event.type)).slice(-CHAT_WINDOW_EVENTS);
+    const oldest = newest[0]!.seq;
+    const read = [
+      ...log.filter(
+        (event) => event.seq < oldest && STATE_EVENT_TYPES.some((t) => t === event.type),
+      ),
+      ...newest,
+    ];
+    expect(read.length).toBeLessThan(log.length);
+    expect(buildWindow(header, read)).toEqual(buildWindow(header, log));
   });
 
   test("withChatLock and holdChatLock reject concurrent operations with ChatBusyError", async () => {
@@ -733,5 +827,79 @@ describe("window builder, locks, availability, and session lifecycle", () => {
       // no lines
     }
     expect(sentDurations).toEqual([String(MAX_VOICE_MS)]);
+  });
+});
+
+describe("her words before a tool call", () => {
+  const herLine = (seq: number, text: string): WireEvent => ({
+    seq,
+    at: 1000 + seq,
+    type: "message",
+    id: `m${seq}`,
+    speaker: { kind: "persona", id: "milky-green" },
+    text,
+    sig: `sig-${seq}`,
+  });
+
+  test("isChatEvent takes a string said and refuses any other", () => {
+    expect(isChatEvent(toolCall(2, "c"))).toBe(true);
+    expect(isChatEvent(toolCall(2, "c", { said: "我查一下" }))).toBe(true);
+    for (const said of [1, null, ["我查一下"], { text: "我查一下" }]) {
+      expect([said, isChatEvent(toolCall(2, "c", { said }))]).toEqual([said, false]);
+    }
+  });
+
+  test("eventItems shows a call's said as her message at the call's seq, before her line", () => {
+    const items = eventItems([
+      viewerLine(1, "上次播了什么"),
+      toolCall(2, "a", { said: "我查一下" }),
+      toolCall(3, "b"),
+      toolCall(4, "c", { said: "" }),
+      toolResult(5, "a"),
+      herLine(6, "播了游戏"),
+    ]);
+    expect(items.map((item) => item.key)).toEqual(["seq-1", "seq-2", "seq-6"]);
+    expect(items[1]).toEqual({
+      kind: "message",
+      key: "seq-2",
+      seq: 2,
+      at: 1002,
+      speaker: { kind: "persona", id: "milky-green" },
+      text: "我查一下",
+      modality: "text",
+      audio: null,
+      images: [],
+      interrupted: false,
+      cutOff: null,
+      sentAsText: false,
+    });
+  });
+
+  test("chatViewReducer clears the live text a said call repeats, and keeps it for a call with none", () => {
+    const line = (streamed: ChatStreamLine) => ({ type: "line", line: streamed }) as const;
+    const said = toolCall(2, "a", { said: "我查一下" });
+    let view = chatViewReducer(EMPTY_CHAT_VIEW, { type: "loaded", events: [viewerLine(1)] });
+    view = chatViewReducer(view, line({ type: "started", turn: "t1", persona: "milky-green" }));
+    view = chatViewReducer(view, line({ type: "delta", turn: "t1", text: "我查一下" }));
+    view = chatViewReducer(view, line({ type: "events", events: [said] }));
+    expect(liveItems(view.live)).toMatchObject([{ kind: "live", turn: "t1", text: "" }]);
+    view = chatViewReducer(view, line({ type: "delta", turn: "t1", text: "查到了" }));
+    view = chatViewReducer(view, line({ type: "events", events: [toolCall(3, "b")] }));
+    // A reload brings the said call back, and the words streamed since stay.
+    view = chatViewReducer(view, { type: "loaded", events: [viewerLine(1), said] });
+    // Another turn's said call isn't hers to clear.
+    view = chatViewReducer(view, {
+      type: "loaded",
+      events: [toolCall(4, "c", { turn: "t0", said: "别的" })],
+    });
+    expect(liveItems(view.live)).toMatchObject([{ kind: "live", turn: "t1", text: "查到了" }]);
+    view = chatViewReducer(view, line({ type: "events", events: [herLine(5, "查到了")] }));
+    expect(liveItems(view.live)).toEqual([]);
+    expect(eventItems(view.events).map((item) => item.kind === "message" && item.text)).toEqual([
+      "嗯",
+      "我查一下",
+      "别的",
+      "查到了",
+    ]);
   });
 });

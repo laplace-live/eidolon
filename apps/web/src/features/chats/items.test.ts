@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatEvent, ChatEventOf, Speaker } from "@eidolon/chat";
-import { chatItems, manyVoices, previewText, retryText, startsRun } from "./items";
+import type { StartTaskFinal } from "@/lib/api";
+import {
+  chatItems,
+  displayedItems,
+  itemKey,
+  manyVoices,
+  previewText,
+  retryText,
+  startsRun,
+} from "./items";
 
 const IMAGE = { kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" } as const;
 
@@ -551,6 +560,264 @@ describe("calls", () => {
     });
     // Her own follow-up, which no decision chose, and not the text turn's from before the call.
     expect(items[5]).toMatchObject({ kind: "persona", persona: "mio", call: true, reason: null });
+  });
+});
+
+describe("tasks", () => {
+  const TASK = "0196a3c0-0000-7000-8000-000000000001";
+  const MIO = { kind: "persona", id: "mio" } as const;
+  const startTask = (seq: number, callId: string): ChatEvent => ({
+    type: "tool-call",
+    seq,
+    at: seq,
+    persona: "mio",
+    turn: "t1",
+    callId,
+    name: "start_task",
+    arguments: { goal: "Write a TodoMVC", folder: "/Users/me/todo" },
+  });
+  const result = (
+    seq: number,
+    callId: string,
+    value: Record<string, unknown>,
+    stage?: "started" | "final",
+  ): ChatEvent => ({
+    type: "tool-result",
+    seq,
+    at: seq,
+    persona: "mio",
+    turn: "t1",
+    callId,
+    result: value,
+    ...(stage === undefined ? {} : { stage }),
+  });
+  const final: StartTaskFinal = { status: "succeeded", report: "Done.", files: [], spentUsd: 0.1 };
+  const events: ChatEvent[] = [
+    { type: "message", seq: 1, at: 1, id: "m1", speaker: { kind: "user" }, text: "Write one" },
+    startTask(2, "c1"),
+    result(3, "c1", { task: TASK, status: "running" }, "started"),
+    { type: "message", seq: 4, at: 4, id: "m4", speaker: MIO, text: "On it!" },
+    result(5, "c1", final, "final"),
+    { type: "message", seq: 6, at: 6, id: "m6", speaker: MIO, text: "Done!" },
+  ];
+
+  test("a card sits at her start_task call, naming the task its started result gives", () => {
+    const items = chatItems(events);
+    expect(items.map((item) => [item.kind, item.seq])).toEqual([
+      ["user", 1],
+      ["task", 2],
+      ["persona", 4],
+      ["persona", 6],
+    ]);
+    expect(items[1]).toEqual({
+      kind: "task",
+      seq: 2,
+      persona: "mio",
+      task: TASK,
+      call: {
+        seq: 2,
+        callId: "c1",
+        persona: "mio",
+        goal: "Write a TodoMVC",
+        folder: "/Users/me/todo",
+        task: TASK,
+        final: { seq: 5, result: final },
+      },
+    });
+  });
+
+  test("a call that started no task has no card", () => {
+    const items = chatItems([
+      startTask(1, "c1"),
+      result(2, "c1", { error: "A task is already working in /Users/me/todo: Write one." }),
+      startTask(3, "c2"),
+    ]);
+    expect(items).toEqual([]);
+  });
+
+  test("her line after a card starts a run, and Retry never reaches back past one", () => {
+    const items = chatItems([
+      ...events.slice(0, 3),
+      { type: "turn-failed", seq: 4, at: 4, persona: "mio", turn: "t1", error: "Timed out" },
+    ]);
+    expect(retryText(items)).toBeNull();
+    const told = chatItems(events.slice(0, 4));
+    expect(startsRun(told, 2)).toBe(true);
+    expect(manyVoices(told)).toBe(false);
+  });
+
+  const NONE: ReadonlySet<string> = new Set();
+
+  test("focus leaves out every card but those revealed; normal and verbose show them all", () => {
+    const second = "0196a3c0-0000-7000-8000-000000000002";
+    const items = chatItems([
+      ...events,
+      startTask(7, "c2"),
+      result(8, "c2", { task: second, status: "running" }, "started"),
+    ]);
+    const kinds = (shown: readonly { readonly kind: string; readonly seq: number }[]) =>
+      shown.map((item) => `${item.kind}-${item.seq}`);
+    expect(kinds(displayedItems(items, "focus", NONE))).toEqual([
+      "user-1",
+      "persona-4",
+      "persona-6",
+    ]);
+    expect(kinds(displayedItems(items, "focus", new Set([second])))).toEqual([
+      "user-1",
+      "persona-4",
+      "persona-6",
+      "task-7",
+    ]);
+    expect(displayedItems(items, "normal", NONE)).toEqual(items);
+    expect(displayedItems(items, "verbose", NONE)).toEqual(items);
+    expect(displayedItems(items, null, NONE)).toEqual(items);
+  });
+
+  test("focus hides the card Retry stops at, so Retry reads every item, not those shown", () => {
+    const items = chatItems([
+      ...events.slice(0, 3),
+      { type: "turn-failed", seq: 4, at: 4, persona: "mio", turn: "t1", error: "Timed out" },
+    ]);
+    expect(retryText(items)).toBeNull();
+    expect(retryText(displayedItems(items, "focus", NONE))).toBe("Write one");
+  });
+});
+
+describe("her words before a tool call", () => {
+  const TASK = "0196a3c0-0000-7000-8000-000000000001";
+  const MIO = { kind: "persona", id: "mio" } as const;
+  const call = (seq: number, name: string, said?: string): ChatEvent => ({
+    type: "tool-call",
+    seq,
+    at: seq,
+    persona: "mio",
+    turn: "t1",
+    callId: `c${seq}`,
+    name,
+    arguments: name === "start_task" ? { goal: "Write a TodoMVC" } : {},
+    ...(said === undefined ? {} : { said }),
+  });
+  const started: ChatEvent = {
+    type: "tool-result",
+    seq: 4,
+    at: 4,
+    persona: "mio",
+    turn: "t1",
+    callId: "c3",
+    result: { task: TASK, status: "running" },
+    stage: "started",
+  };
+  const events: ChatEvent[] = [
+    { type: "message", seq: 1, at: 1, id: "m1", speaker: { kind: "user" }, text: "Write one" },
+    {
+      type: "decision",
+      seq: 2,
+      at: 2,
+      after: 1,
+      replies: [{ persona: "mio", mode: "text" }],
+      source: "model",
+    },
+    call(3, "start_task", "好嘞我来弄"),
+    started,
+    { type: "message", seq: 5, at: 5, id: "m5", speaker: MIO, text: "弄好了告诉你" },
+  ];
+
+  test("show as her line before the call's card, with no Why She Answered", () => {
+    const items = chatItems(events);
+    expect(items.map((item) => [item.kind, item.seq])).toEqual([
+      ["user", 1],
+      ["persona", 3],
+      ["task", 3],
+      ["persona", 5],
+    ]);
+    expect(items[1]).toEqual({
+      kind: "persona",
+      seq: 3,
+      persona: "mio",
+      text: "好嘞我来弄",
+      images: [],
+      voice: null,
+      sentAsText: false,
+      interrupted: false,
+      cutOff: null,
+      reason: null,
+      call: false,
+      said: true,
+    });
+    // Her message keeps the decision her turn answered.
+    expect(items[3]).toMatchObject({ kind: "persona", reason: { source: "model" } });
+  });
+
+  test("show before any tool's call, and only where she wrote some", () => {
+    const items = chatItems([call(1, "recall_streams", "我查一下"), call(2, "take_selfie", "")]);
+    expect(items.map((item) => [item.kind, item.seq])).toEqual([["persona", 1]]);
+  });
+
+  test("a line and a card at one seq are told apart", () => {
+    const keys = chatItems(events).map(itemKey);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toEqual(["user-1", "persona-3", "task-3", "persona-5"]);
+  });
+
+  test("focus drops the card and keeps her line; normal shows both, in order", () => {
+    const items = chatItems(events);
+    const kinds = (shown: readonly { readonly kind: string }[]) => shown.map((item) => item.kind);
+    expect(kinds(displayedItems(items, "focus", new Set()))).toEqual([
+      "user",
+      "persona",
+      "persona",
+    ]);
+    expect(kinds(displayedItems(items, "normal", new Set()))).toEqual([
+      "user",
+      "persona",
+      "task",
+      "persona",
+    ]);
+  });
+
+  test("Retry after a reply cut off reaches past them, as past a call with none; never past a failure's, or a card", () => {
+    const cutOff: ChatEvent = {
+      type: "message",
+      seq: 6,
+      at: 6,
+      id: "m6",
+      speaker: MIO,
+      text: "那次",
+      cutOff: "length",
+    };
+    const cut = chatItems([
+      ...events.slice(0, 2),
+      call(3, "recall_streams", "我查一下"),
+      call(4, "recall_streams", "再查查"),
+      cutOff,
+    ]);
+    expect(cut.map((item) => item.kind)).toEqual(["user", "persona", "persona", "persona"]);
+    expect(retryText(cut)).toBe("Write one");
+    expect(retryText(chatItems([...events.slice(0, 2), call(3, "recall_streams"), cutOff]))).toBe(
+      "Write one",
+    );
+    // Her line stands between the owner's and a failure: the failure is her reply's.
+    const failed = chatItems([
+      ...events.slice(0, 2),
+      call(3, "recall_streams", "我查一下"),
+      { type: "turn-failed", seq: 4, at: 4, persona: "mio", turn: "t1", error: "Timed out" },
+    ]);
+    expect(failed.map((item) => item.kind)).toEqual(["user", "persona", "failed"]);
+    expect(retryText(failed)).toBeNull();
+    // Sending the line again would start another task.
+    expect(retryText(chatItems([...events.slice(0, 4), cutOff]))).toBeNull();
+    expect(
+      retryText(chatItems([...events.slice(0, 4), call(5, "recall_streams", "我查一下"), cutOff])),
+    ).toBeNull();
+    // Another persona's words before her calls are another's turn.
+    const bea = { ...call(5, "recall_streams", "我也查查"), persona: "bea" } as ChatEvent;
+    expect(retryText(chatItems([...events.slice(0, 2), bea, cutOff]))).toBeNull();
+  });
+
+  test("continue her run of lines", () => {
+    const items = chatItems([call(1, "recall_streams", "我查一下"), events[4]!]);
+    expect(startsRun(items, 0)).toBe(true);
+    expect(startsRun(items, 1)).toBe(false);
   });
 });
 

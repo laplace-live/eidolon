@@ -176,6 +176,8 @@ export {
   CHAT_WINDOW_BYTES,
   CHAT_WINDOW_EVENTS,
   CHAT_WINDOW_MESSAGES,
+  CHAT_WINDOW_TOOL_BYTES,
+  CHAT_WINDOW_TOOL_EVENTS,
   type ChatEvent,
   type ChatEventDraft,
   type ChatEventOf,

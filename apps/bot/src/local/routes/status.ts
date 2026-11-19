@@ -3,10 +3,12 @@ import { localError, localJson } from "../responses.ts";
 import { restartTracker } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
 import { buildStatus, defaultStatusDeps, type StatusDeps, trackSessionErrors } from "../status.ts";
+import type { TaskManager } from "../tasks/manager.ts";
 
 export function statusRoutes(
   app: LocalApp,
   deps: StatusDeps = defaultStatusDeps,
+  tasks?: Pick<TaskManager, "running">,
 ): LocalRouteSpec[] {
   // Built at boot, so this is what the server read then.
   restartTracker(app);
@@ -14,7 +16,7 @@ export function statusRoutes(
   return [
     {
       route: "GET /api/local/status",
-      handler: () => localJson(200, buildStatus(app, deps)),
+      handler: () => localJson(200, buildStatus(app, deps, tasks)),
     },
     {
       route: "POST /api/local/restart",

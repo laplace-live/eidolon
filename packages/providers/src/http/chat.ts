@@ -104,6 +104,13 @@ export function anthropicUnits(usage: Readonly<Record<string, unknown>>): Units 
   };
 }
 
+/** `url` without its trailing slashes, cut by hand: /\/+$/ is quadratic on a long run of them. */
+function withoutTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === "/") end--;
+  return url.slice(0, end);
+}
+
 function linked(signal: AbortSignal | null | undefined): AbortController {
   const controller = new AbortController();
   if (signal) {
@@ -145,7 +152,7 @@ export class OpenAIChatClient {
     const payload = { ...options.extraBody, ...body };
     const response = await send(
       options,
-      `${options.baseUrl.replace(/\/+$/, "")}/chat/completions`,
+      `${withoutTrailingSlashes(options.baseUrl)}/chat/completions`,
       {
         method: "POST",
         headers: {
@@ -189,7 +196,10 @@ export class OpenAIChatClient {
       for await (const event of sseEvents(body)) {
         if (event.data === "[DONE]") return;
         const chunk = parseData(this.#options.provider, event.data);
-        if (isPlainObject(chunk) && chunk.error !== undefined && chunk.choices === undefined) {
+        // A chunk with an error ends the reply, whatever else it carries: OpenRouter's mid-stream
+        // errors come with a choice whose finish_reason is "error"
+        // (https://openrouter.ai/docs/api-reference/errors).
+        if (isPlainObject(chunk) && chunk.error) {
           const error = chunk.error;
           const message =
             isPlainObject(error) && typeof error.message === "string"
@@ -239,7 +249,7 @@ export class AnthropicClient {
     const controller = linked(request.signal);
     const response = await send(
       options,
-      `${options.baseUrl.replace(/\/+$/, "")}/messages`,
+      `${withoutTrailingSlashes(options.baseUrl)}/messages`,
       {
         method: "POST",
         headers: {

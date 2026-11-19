@@ -11,6 +11,7 @@ test("each persona setting appears in exactly one section, and Advanced holds th
   expect(SHOWN_PATHS.filter((path) => !PERSONA_ROWS.includes(path))).toEqual([]);
   // A new persona setting lands in Advanced until a section shows it.
   expect(PERSONA_ROWS.filter((path) => !SHOWN_PATHS.includes(path)).sort()).toEqual([
+    "chat.maxRounds",
     "knowledge.index",
     "memory.agentId",
     "memory.runId",

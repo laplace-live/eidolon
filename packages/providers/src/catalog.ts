@@ -14,6 +14,7 @@ export const CATEGORIES = [
   "decision",
   "image",
   "transcription",
+  "search",
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
@@ -265,6 +266,20 @@ export const PROVIDERS: readonly Provider[] = [
         openModels: true,
         modelsUrl: "https://openrouter.ai/models?output_modalities=image",
         models: [{ id: "openai/gpt-image-2.5-flare" }, { id: "google/gemini-3.1-flash-image" }],
+      },
+      // openrouter:web_search's engines, which OpenRouter doesn't list. Closed to Exa: `auto` and
+      // `native` search at the price of the carrier model's own provider.
+      search: {
+        defaultModel: "exa",
+        openModels: false,
+        modelsUrl: "https://openrouter.ai/docs/guides/features/server-tools/web-search",
+        models: [
+          {
+            id: "exa",
+            note: "Exa's index, with an excerpt of each page",
+            price: { unit: "searches", usd: 7 },
+          },
+        ],
       },
     },
   },
@@ -893,6 +908,11 @@ export const ROLE_IDS = [
   "transcription",
   "refine",
   "embeddings",
+  "assistant",
+  "assistant-quick",
+  "assistant-coding",
+  "assistant-research",
+  "search",
 ] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 
@@ -908,8 +928,11 @@ export interface Role {
   readonly modelEnv: string;
   /** null: the role is off unless a provider is named, as realtime is. */
   readonly defaultProvider: ProviderId | null;
-  /** Where a role wants another model than its provider's default, by provider. */
-  readonly defaultModels?: Readonly<Partial<Record<ProviderId, string>>>;
+  /**
+   * Where a role wants another model than its provider's default, by provider. null: no default
+   * fills it, so the model must be named, as the assistant's is.
+   */
+  readonly defaultModels?: Readonly<Partial<Record<ProviderId, string>>> | null;
   /** Unset, the provider and model follow this role's. */
   readonly follows?: RoleId;
   /** A provider-named variable that also sets the model, read only while that provider fills it. */
@@ -1056,6 +1079,72 @@ export const ROLES: readonly Role[] = [
     baseUrlEnv: "EMBED_BASE_URL",
     phase: "index",
   },
+  {
+    id: "assistant",
+    label: "the assistant's tasks",
+    category: "llm",
+    scope: "app",
+    path: "assistant",
+    providerEnv: "ASSISTANT_PROVIDER",
+    modelEnv: "ASSISTANT_MODEL",
+    defaultProvider: null,
+    // Tasks run tools unattended, so they never fall back to a model nobody picked for them.
+    defaultModels: null,
+    phase: "call",
+  },
+  // A kind of task she starts. Unset, it takes the assistant's account and model; on another
+  // provider's account, it must name its model, since the assistant's belongs to its own provider.
+  {
+    id: "assistant-quick",
+    label: "quick tasks",
+    category: "llm",
+    scope: "app",
+    path: "assistant.quick",
+    providerEnv: "ASSISTANT_QUICK_PROVIDER",
+    modelEnv: "ASSISTANT_QUICK_MODEL",
+    defaultProvider: null,
+    defaultModels: null,
+    follows: "assistant",
+    phase: "call",
+  },
+  {
+    id: "assistant-coding",
+    label: "coding tasks",
+    category: "llm",
+    scope: "app",
+    path: "assistant.coding",
+    providerEnv: "ASSISTANT_CODING_PROVIDER",
+    modelEnv: "ASSISTANT_CODING_MODEL",
+    defaultProvider: null,
+    defaultModels: null,
+    follows: "assistant",
+    phase: "call",
+  },
+  {
+    id: "assistant-research",
+    label: "research tasks",
+    category: "llm",
+    scope: "app",
+    path: "assistant.research",
+    providerEnv: "ASSISTANT_RESEARCH_PROVIDER",
+    modelEnv: "ASSISTANT_RESEARCH_MODEL",
+    defaultProvider: null,
+    defaultModels: null,
+    follows: "assistant",
+    phase: "call",
+  },
+  {
+    id: "search",
+    label: "web search",
+    category: "search",
+    scope: "app",
+    path: "assistant.search",
+    providerEnv: "ASSISTANT_SEARCH_PROVIDER",
+    modelEnv: "ASSISTANT_SEARCH_MODEL",
+    // Each search bills while a task runs unattended: off until the owner picks an account.
+    defaultProvider: null,
+    phase: "call",
+  },
 ];
 
 const ROLE_BY_ID: ReadonlyMap<string, Role> = new Map(ROLES.map((role) => [role.id, role]));
@@ -1067,7 +1156,7 @@ export function roleById(id: RoleId): Role {
 /** The model `role` gets from a provider while none is named; null when it needs one named. */
 export function defaultModel(role: Role, providerId: string): string | null {
   const offer = BY_ID.get(providerId)?.offers[role.category];
-  if (offer === undefined) return null;
+  if (offer === undefined || role.defaultModels === null) return null;
   return role.defaultModels?.[providerId as ProviderId] ?? offer.defaultModel;
 }
 

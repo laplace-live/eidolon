@@ -1,5 +1,6 @@
 // The laplace-* commands: the query side (laplace-search, laplace-eval-retrieval,
-// laplace-generate-image, the retrieval-gate benchmark) and the offline chain that builds an index.
+// laplace-generate-image, the retrieval-gate benchmark), the offline chain that builds an index,
+// and laplace-task, an assistant task in the foreground.
 export {
   type ActionKind,
   type ArgAction,
@@ -95,4 +96,12 @@ export {
   searchMain,
   UNRESOLVED_PERIOD_NOTE,
 } from "./search.ts";
+export {
+  type Confirm,
+  type ModelChoice,
+  parseTaskArgs,
+  type TaskArgs,
+  type TaskDeps,
+  taskMain,
+} from "./task.ts";
 export { transcribeMain } from "./transcribe.ts";

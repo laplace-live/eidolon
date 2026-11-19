@@ -132,6 +132,15 @@ export function formatClock(ms: number, lang: Lang): string {
   return format.format(ms);
 }
 
+/** As formatClock, to the minute: for a time reckoned from now, which a second would make jitter. */
+export function formatClockMinute(ms: number, lang: Lang): string {
+  const format = cached(
+    `clock-minute:${lang}`,
+    () => new Intl.DateTimeFormat(lang, { hour: "numeric", minute: "2-digit", hourCycle: "h23" }),
+  );
+  return format.format(ms);
+}
+
 /** Seconds from `start` to `end`, or to `now` while it runs. */
 export function elapsedSeconds(start: string, end: string | null, now: number): number {
   const from = Date.parse(start);

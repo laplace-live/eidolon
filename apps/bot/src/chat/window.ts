@@ -19,30 +19,76 @@ import {
 import { isJsonObject, logger } from "@eidolon/config";
 import { type ChatSigner, fromViewer } from "./sig.ts";
 
-/** The most events a request's window holds, newest kept. */
-export const CHAT_WINDOW_EVENTS = 120;
-/** The most a request's window holds, as each event's JSON in UTF-8, newest kept. */
+/**
+ * The newest events a request's window is cut from, context aside: tool calls and results take at
+ * most CHAT_WINDOW_TOOL_EVENTS of them, and everything else the rest.
+ */
+export const CHAT_WINDOW_EVENTS = 180;
+/** The most the window's events weigh, tool calls and results aside, as JSON in UTF-8 bytes. */
 export const CHAT_WINDOW_BYTES = 256 * 1024;
+/** The most tool calls and results the window holds, of its CHAT_WINDOW_EVENTS. */
+export const CHAT_WINDOW_TOOL_EVENTS = 60;
+/** The most those tool calls and results weigh, apart from CHAT_WINDOW_BYTES. */
+export const CHAT_WINDOW_TOOL_BYTES = 128 * 1024;
 /** A browser's `settings` may ask for more hops; each costs mind turns, so the server caps them. */
 export const PUBLIC_CHAIN_LIMIT = 3;
 
-/** The newest of `events` that fit the window, oldest first. */
-export function newestThatFit(events: readonly unknown[]): unknown[] {
-  let bytes = 0;
-  let start = events.length;
-  while (start > 0 && events.length - start < CHAT_WINDOW_EVENTS) {
-    let size: number;
-    try {
-      size = Buffer.byteLength(JSON.stringify(events[start - 1]) ?? "");
-    } catch {
-      // JSON.stringify overflows the stack on nesting JSON.parse accepted.
-      break;
-    }
-    if (bytes + size > CHAT_WINDOW_BYTES) break;
-    bytes += size;
-    start--;
+/** An event's JSON in UTF-8 bytes, or Infinity when it nests too deep to measure. */
+function sizeOf(raw: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(raw) ?? "");
+  } catch {
+    // JSON.stringify overflows the stack on nesting JSON.parse accepted.
+    return Number.POSITIVE_INFINITY;
   }
-  return events.slice(start);
+}
+
+function isContextEvent(raw: unknown): boolean {
+  return isJsonObject(raw) && (raw.type === "context" || raw.type === "context-removed");
+}
+
+function isToolEvent(raw: unknown): boolean {
+  return isJsonObject(raw) && (raw.type === "tool-call" || raw.type === "tool-result");
+}
+
+/** What the chat is now: who is in it, its title and its settings. */
+function isStateEvent(raw: unknown): boolean {
+  return (
+    isJsonObject(raw) &&
+    (raw.type === "participants" || raw.type === "title" || raw.type === "settings")
+  );
+}
+
+/**
+ * The events the window keeps, unchanged and in their order. From the newest of the newest
+ * CHAT_WINDOW_EVENTS that aren't context back, tool calls and results fill a share of their own and
+ * every other event the rest. Each share closes at its first event that doesn't fit, so a call is
+ * never kept without its result, and the walk stops where the lines' share closes, full or at an
+ * event that doesn't fit: an older call of hers kept past her lines would open her view. Every
+ * participants, title and settings event is kept, however old. The SDK's buildWindow cuts by this
+ * rule, so what a browser on it sends is kept whole.
+ */
+export function windowOf(events: readonly unknown[]): unknown[] {
+  const lines = { events: CHAT_WINDOW_EVENTS - CHAT_WINDOW_TOOL_EVENTS, bytes: CHAT_WINDOW_BYTES };
+  const tools = { events: CHAT_WINDOW_TOOL_EVENTS, bytes: CHAT_WINDOW_TOOL_BYTES };
+  const kept = new Set<number>();
+  let read = 0;
+  for (let i = events.length - 1; i >= 0 && read < CHAT_WINDOW_EVENTS && lines.events > 0; i--) {
+    const raw = events[i];
+    if (isContextEvent(raw)) continue;
+    read++;
+    const share = isToolEvent(raw) ? tools : lines;
+    if (share.events === 0) continue;
+    const size = sizeOf(raw);
+    if (size > share.bytes) {
+      share.events = 0;
+      continue;
+    }
+    share.events--;
+    share.bytes -= size;
+    kept.add(i);
+  }
+  return events.filter((raw, i) => kept.has(i) || isStateEvent(raw));
 }
 
 function headerOf(raw: unknown): ChatHeader | null {
@@ -160,22 +206,14 @@ type OpenedChat =
   | { readonly ok: true; readonly store: RequestChatStore }
   | { readonly ok: false; readonly message: string };
 
-/** What the chat is now: who is in it, its title and its settings. */
-function isStateEvent(raw: unknown): boolean {
-  return (
-    isJsonObject(raw) &&
-    (raw.type === "participants" || raw.type === "title" || raw.type === "settings")
-  );
-}
-
 /**
- * The request's chat, `{ header, events }` as the browser sent it, cut to the newest events that
- * fit, plus every participants, title and settings event before them, so the chat is what its
- * whole log makes it. Each event the server signed is kept only while its `sig` verifies in this
- * chat, and the viewer's own only while well formed; context blocks never come back, and are
- * dropped too. What is dropped is counted in one log line, never answered: a tampered history just
- * loses those lines. Seqs carry on from the newest event sent, dropped or not, so the browser's log
- * stays contiguous.
+ * The request's chat, `{ header, events }` as the browser sent it, cut to its window (`windowOf`),
+ * which keeps every participants, title and settings event, so the chat is what its whole log makes
+ * it. Each event the server signed is kept only while its `sig` verifies in this chat, and the
+ * viewer's own only while well formed; context blocks never come back, and are dropped too. What
+ * is dropped is counted in one log line, never answered: a tampered history just loses those
+ * lines. Seqs carry on from the newest event sent, dropped or not, so the browser's log stays
+ * contiguous.
  */
 export async function openChatWindow(
   chat: unknown,
@@ -186,16 +224,17 @@ export async function openChatWindow(
   const header = headerOf(chat.header);
   if (header === null) return { ok: false, message: "chat.header is not a chat's header" };
   if (!Array.isArray(chat.events)) return { ok: false, message: "chat.events must be a list" };
-  const window = newestThatFit(chat.events);
-  const state = chat.events.slice(0, chat.events.length - window.length).filter(isStateEvent);
+  const window = windowOf(chat.events);
   const kept: ChatEvent[] = [];
   const dropped = new Map<Dropped, number>();
   const drop = (why: Dropped) => dropped.set(why, (dropped.get(why) ?? 0) + 1);
+  const context = chat.events.filter(isContextEvent).length;
+  if (context > 0) dropped.set("context", context);
   // The state events before the cut are bounded only by the body, and summarize, which every turn
   // runs, is quadratic in a growing list: a chat that ever holds more than six is refused here.
   const participants = new Set(header.participants);
   let lastSeq = 0;
-  for (const raw of [...state, ...window]) {
+  for (const raw of window) {
     const seq = isJsonObject(raw) ? seqOf(raw.seq) : null;
     if (seq !== null) lastSeq = Math.max(lastSeq, seq);
     if (!isJsonObject(raw) || seq === null || typeof raw.type !== "string") {
@@ -205,10 +244,6 @@ export async function openChatWindow(
     const at = raw.at;
     if (typeof at !== "number" || !Number.isFinite(at)) {
       drop("malformed");
-      continue;
-    }
-    if (raw.type === "context" || raw.type === "context-removed") {
-      drop("context");
       continue;
     }
     let event: ChatEvent;
@@ -238,7 +273,7 @@ export async function openChatWindow(
     }
     kept.push(event);
   }
-  const cut = chat.events.length - window.length - state.length;
+  const cut = chat.events.length - window.length - context;
   if (dropped.size > 0 || cut > 0) {
     const counts = [
       ...(cut > 0 ? [`${cut} past the window`] : []),

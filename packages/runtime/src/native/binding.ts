@@ -1,6 +1,7 @@
 // A call inside a chat, through a CallBinding: its log opens on the chat as her view had it, and
-// each line said on it, each photo she sends and its end reach the binding's hooks
-// (docs/voice-engine.md). A group call opens on the chat itself and reports its events.
+// each line said on it, each context block her replies record, each photo she sends and its end
+// reach the binding's hooks (docs/voice-engine.md). A group call opens on the chat itself and
+// reports its events.
 import {
   CHAT_WINDOW_MESSAGES,
   type ChatEvent,
@@ -19,6 +20,8 @@ import {
   type CallLog,
   type CallTransport,
   type CloseReason,
+  type OutsideResult,
+  type ReplyExtras,
   rtviMessage,
 } from "@eidolon/voice";
 
@@ -45,10 +48,23 @@ export interface CallBinding {
   readonly seedMessages: readonly unknown[];
   /** `client` is the call's browser; the call always passes it, a caller standing in may not. */
   readonly onTranscript: (line: TranscriptLine, client?: CallClient) => void;
+  /**
+   * Each context block the call's log records after its seed, in order with the lines: her
+   * replies' recall, the blocks `extras`' providers add, the nudge a reply answers.
+   */
+  readonly onContext?: (content: string) => void;
   /** Each server message a tool sends the client, in order with the lines: take_selfie's photos. */
   readonly onServerMessage?: (data: Readonly<Record<string, unknown>>, client?: CallClient) => void;
   /** Called once, after the call's last line, however it ended. */
   readonly onEnded: (end: CallEnd) => void;
+  /**
+   * What each reply of hers adds to her turn, asked synchronously as it starts: `background` and
+   * `tools` go only to a reply to the viewer's line, `providers` to every one. A realtime call never
+   * asks.
+   */
+  readonly extras?: ReplyExtras;
+  /** What reaches the call from outside it, read until it ends; a realtime call never reads it. */
+  readonly outside?: AsyncIterable<OutsideResult>;
 }
 
 /** A call with every persona in a chat at once, the director choosing who answers each line. */
@@ -240,8 +256,9 @@ function bound(
 
 /**
  * The call's `log`, `transport` and `deps` bound to `binding`: the log opens on the seed and hands
- * each finished line it stores to `onTranscript`, each server message the call sends its browser
- * reaches `onServerMessage` once sent, and Mem0 stores only what is said on the call.
+ * each finished line it stores to `onTranscript` and each context block to `onContext`, each
+ * server message the call sends its browser reaches `onServerMessage` once sent, and Mem0 stores
+ * only what is said on the call.
  */
 export function bindCall(
   binding: CallBinding,
@@ -249,10 +266,14 @@ export function bindCall(
   transport: CallTransport,
   deps: CallDeps,
 ): BoundCall {
-  const { persona, onTranscript, onServerMessage } = binding;
+  const { persona, onTranscript, onContext, onServerMessage } = binding;
   const seeded = log.append(seedEvents(binding.seedMessages, persona)).at(-1)?.seq ?? 0;
   const onStored = (events: readonly ChatEvent[], client: CallClient) => {
     for (const event of events) {
+      if (event.type === "context") {
+        if (onContext) report("a context block", () => onContext(event.content));
+        continue;
+      }
       const line = lineOf(event, persona);
       if (line !== null) report("a call line", () => onTranscript(line, client));
     }

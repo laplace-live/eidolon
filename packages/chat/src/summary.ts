@@ -1,4 +1,5 @@
 import {
+  type ChatDisplay,
   type ChatEvent,
   type ChatHeader,
   type ChatSummary,
@@ -46,6 +47,15 @@ export function replyModeOf(events: readonly ChatEvent[]): ReplyMode | null {
     (event) => event.type === "settings" && event.replyMode !== undefined,
   );
   return set?.type === "settings" ? (set.replyMode as ReplyMode) : null;
+}
+
+/**
+ * The chat's own display, which overrides the app's chats.display: the last `settings` event that
+ * sets one, else null.
+ */
+export function displayOf(events: readonly ChatEvent[]): ChatDisplay | null {
+  const set = events.findLast((event) => event.type === "settings" && event.display !== undefined);
+  return set?.type === "settings" ? (set.display as ChatDisplay) : null;
 }
 
 export function summarize(header: ChatHeader, events: readonly ChatEvent[]): ChatSummary {

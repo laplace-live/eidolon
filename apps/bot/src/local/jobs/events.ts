@@ -37,6 +37,64 @@ export function readLines(path: string, offset: number, limit = Number.POSITIVE_
   }
 }
 
+const STREAM_CHUNK_BYTES = 256 * 1024;
+
+/**
+ * The whole lines of `path` from byte `after` as they are written, until `running` says its writer
+ * stopped and the rest is read, or `close`. A wait for more ends at `wake`, and every `pollMs` when
+ * given; `onClose` runs at each close.
+ */
+export function followLines(
+  path: string,
+  after: number,
+  running: () => boolean,
+  options: { readonly pollMs?: number; readonly onClose?: () => void } = {},
+): {
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly wake: () => void;
+  readonly close: () => void;
+} {
+  let offset = after;
+  let open = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let resume: (() => void) | null = null;
+  const wake = (): void => resume?.();
+  const close = (): void => {
+    open = false;
+    clearTimeout(timer);
+    wake();
+    options.onClose?.();
+  };
+  const stream = new ReadableStream<Uint8Array>({
+    pull: async (controller) => {
+      while (open) {
+        // Checked before the read: a writer that stops in between still has its last lines read.
+        const live = running();
+        const chunk = readLines(path, offset, STREAM_CHUNK_BYTES);
+        if (chunk.length > 0) {
+          offset += chunk.length;
+          controller.enqueue(chunk);
+          return;
+        }
+        if (!live) break;
+        await new Promise<void>((resolve) => {
+          resume = resolve;
+          if (options.pollMs !== undefined) timer = setTimeout(resolve, options.pollMs);
+        });
+        resume = null;
+      }
+      close();
+      try {
+        controller.close();
+      } catch {
+        // The client cancelled it.
+      }
+    },
+    cancel: close,
+  });
+  return { stream, wake, close };
+}
+
 /**
  * The file at `path`, or its last `limit` bytes from the first whole line in them, with how many
  * bytes came before; null when there is no file.

@@ -16,11 +16,13 @@ import {
 import {
   activePersona,
   consoleSink,
+  DEFAULT_CHAT_MAX_ROUNDS,
   dataHome,
   errorText,
   type LogLevel,
   type LogRecord,
   logger,
+  resetSettings,
 } from "@eidolon/config";
 import {
   buildGreetingKickoff,
@@ -37,7 +39,7 @@ import type { ContextProvider, LlmTool, ToolResult, TurnGate } from "@eidolon/co
 import { usageRecord } from "@eidolon/providers";
 import { broadcast, FakeRetriever, MemoryCatalog, TODAY } from "../../context/test/helpers.ts";
 import { type PartsDeps, personaParts } from "../src/parts.ts";
-import { MAX_ROUNDS, runTurn } from "../src/turn.ts";
+import { runTurn } from "../src/turn.ts";
 import type {
   EngineDeps,
   LateTools,
@@ -247,6 +249,34 @@ describe("runTurn", () => {
         },
       ]);
     }
+  });
+
+  test("never runs a call its mind couldn't read, and keeps the reply as cut off", async () => {
+    let ran = 0;
+    const selfie = tool("take_selfie", async () => {
+      ran++;
+      return {};
+    });
+    const { mind, requests } = fakeMind([
+      { type: "text", text: "等我" },
+      {
+        type: "tool-calls",
+        calls: [{ id: "c1", name: "take_selfie", arguments: {}, unparsed: '{"scene":"海' }],
+      },
+      { type: "done", finishReason: "max_tokens" },
+    ]);
+    const outputs = await collect(runTurn(request(), deps(mind, parts({ tools: [selfie] }))));
+    expect(ran).toBe(0);
+    expect(requests).toHaveLength(1);
+    expect(eventsOf(outputs)).toEqual([
+      {
+        type: "message",
+        id: "id-2",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "等我",
+        cutOff: "length",
+      },
+    ]);
   });
 
   test("keeps a refusal with no words as an empty message, cut off", async () => {
@@ -485,7 +515,7 @@ describe("runTurn", () => {
     expect(messages("WARNING")).toEqual(["Could not load Mem0 memories for greeting: qdrant down"]);
   });
 
-  test("runs a tool, keeps its selfie and calls the mind again", async () => {
+  test("runs a tool, keeps its selfie and calls the mind again: the round's words go on its call, and her message is her last round", async () => {
     const fetched: string[] = [];
     const selfie = tool("take_selfie", async (_call, effects) => {
       await effects.sendServerMessage({ type: "selfie", urls: ["/api/selfie/a.png"] });
@@ -521,6 +551,7 @@ describe("runTurn", () => {
             callId: "call-1",
             name: "take_selfie",
             arguments: {},
+            said: "等我一下",
           },
         ],
       },
@@ -546,7 +577,7 @@ describe("runTurn", () => {
             type: "message",
             id: "id-2",
             speaker: { kind: "persona", id: PERSONA },
-            text: "等我一下拍好啦",
+            text: "拍好啦",
             attachments: [{ kind: "image", name: "a.png", mime: "image/png" }],
           },
         ],
@@ -554,52 +585,211 @@ describe("runTurn", () => {
       { type: "ended", turn: "id-1" },
     ]);
     expect(requests.map((r) => r.tools)).toEqual([[selfie.schema], [selfie.schema]]);
-    const toolCall = {
-      role: "assistant",
-      tool_calls: [
-        { id: "call-1", type: "function", function: { name: "take_selfie", arguments: "{}" } },
-      ],
-    };
-    expect(requests[1]?.messages).toEqual([
+    // Her second round reads the first as her next view will: the words on their call, so the
+    // request ends on the result.
+    const seen: ViewMessage[] = [
       { role: "user", content: "发张自拍" },
-      toolCall,
+      {
+        role: "assistant",
+        content: "等我一下",
+        tool_calls: [
+          { id: "call-1", type: "function", function: { name: "take_selfie", arguments: "{}" } },
+        ],
+      },
       { role: "tool", tool_call_id: "call-1", content: '{"ok": true, "count": 1}' },
-      { role: "assistant", content: "等我一下" },
-    ]);
+    ];
+    expect(requests[1]?.messages).toEqual(seen);
     expect(viewAfter(log.events, outputs)).toEqual([
-      { role: "user", content: "发张自拍" },
-      toolCall,
-      { role: "tool", tool_call_id: "call-1", content: '{"ok": true, "count": 1}' },
-      { role: "assistant", content: "等我一下拍好啦" },
-    ] as never);
+      ...seen,
+      { role: "assistant", content: "拍好啦" },
+    ]);
   });
 
-  test(`stops calling the mind after ${MAX_ROUNDS} rounds`, async () => {
-    let runs = 0;
-    const recall = tool("recall_streams", async () => {
-      runs++;
-      return {};
+  test("a parallel batch's words go on its first call alone, in her event and her next round", async () => {
+    const selfie = tool("take_selfie", async () => ({ ok: true }));
+    const { mind, requests } = fakeMind(
+      [
+        { type: "text", text: "两张哦" },
+        {
+          type: "tool-calls",
+          calls: [
+            { id: "c1", name: "take_selfie", arguments: {} },
+            { id: "c2", name: "take_selfie", arguments: {} },
+          ],
+        },
+        DONE,
+      ],
+      [{ type: "text", text: "好啦" }, DONE],
+    );
+    const outputs = await collect(runTurn(request(), deps(mind, parts({ tools: [selfie] }))));
+    const calls = eventsOf(outputs).filter((event) => event.type === "tool-call");
+    expect(calls.map((event) => [event.callId, event.said])).toEqual([
+      ["c1", "两张哦"],
+      ["c2", undefined],
+    ]);
+    expect(
+      requests[1]?.messages.map((message) => (message as { content?: unknown }).content),
+    ).toEqual(["你好", "两张哦", '{"ok": true}', undefined, '{"ok": true}']);
+    expect(eventsOf(outputs).at(-1)).toMatchObject({ type: "message", text: "好啦" });
+  });
+
+  test("a round that says nothing before its calls stores no said", async () => {
+    const recall = tool("recall_streams", async () => ({}));
+    const { mind } = fakeMind(
+      [call("c1", "recall_streams"), DONE],
+      [{ type: "text", text: "记得" }, DONE],
+    );
+    const events = eventsOf(
+      await collect(runTurn(request(), deps(mind, parts({ tools: [recall] })))),
+    );
+    expect(events[0]).toEqual({
+      type: "tool-call",
+      persona: PERSONA,
+      turn: "id-1",
+      callId: "c1",
+      name: "recall_streams",
+      arguments: {},
     });
-    const always = (): AsyncIterable<MindChunk> =>
-      (async function* () {
-        yield call(`call-${runs}`, "recall_streams");
-        yield DONE;
-      })();
-    const { mind, requests } = fakeMind(always, always, always, always, always);
-    const outputs = await collect(runTurn(request(), deps(mind, parts({ tools: [recall] }))));
-    expect(requests).toHaveLength(MAX_ROUNDS);
-    expect(runs).toBe(MAX_ROUNDS - 1);
-    expect(requests[1]?.messages.at(-1)).toEqual({
-      role: "tool",
-      tool_call_id: "call-0",
-      content: "COMPLETED",
+    expect(events.at(-1)).toMatchObject({ type: "message", text: "记得" });
+  });
+
+  test("a round that writes only whitespace before its calls stores no said, and her next round reads none", async () => {
+    const recall = tool("recall_streams", async () => ({}));
+    const { mind, requests } = fakeMind(
+      [{ type: "text", text: "\n\n" }, call("c1", "recall_streams"), DONE],
+      [{ type: "text", text: "记得" }, DONE],
+    );
+    const log = chat(user("还记得吗"));
+    const outputs = await collect(
+      runTurn(request({ chat: log }), deps(mind, parts({ tools: [recall] }))),
+    );
+    const events = eventsOf(outputs);
+    expect(events[0]).not.toHaveProperty("said");
+    expect(events.at(-1)).toMatchObject({ type: "message", text: "记得" });
+    expect(requests[1]?.messages[1]).not.toHaveProperty("content");
+    expect(viewAfter(log.events, outputs)).toEqual([
+      ...((requests[1]?.messages ?? []) as never[]),
+      { role: "assistant", content: "记得" },
+    ]);
+  });
+
+  test("each round's words go on its own first call, and a cut-off last round marks her message alone", async () => {
+    const recall = tool("recall_streams", async () => ({}));
+    const { mind, requests } = fakeMind(
+      [{ type: "text", text: "我想想。" }, call("c1", "recall_streams"), DONE],
+      [{ type: "text", text: "再查一下。" }, call("c2", "recall_streams"), DONE],
+      [
+        { type: "text", text: "是那次" },
+        { type: "done", finishReason: "length" },
+      ],
+    );
+    const log = chat(user("还记得吗"));
+    const outputs = await collect(
+      runTurn(request({ chat: log }), deps(mind, parts({ tools: [recall] }))),
+    );
+    const events = eventsOf(outputs);
+    expect(
+      events.flatMap((event) => (event.type === "tool-call" ? [[event.callId, event.said]] : [])),
+    ).toEqual([
+      ["c1", "我想想。"],
+      ["c2", "再查一下。"],
+    ]);
+    expect(events.at(-1)).toEqual({
+      type: "message",
+      id: "id-2",
+      speaker: { kind: "persona", id: PERSONA },
+      text: "是那次",
+      cutOff: "length",
     });
-    expect(messages("WARNING")).toEqual([
-      `[chat] ${PERSONA} called recall_streams after ${MAX_ROUNDS} rounds; not run`,
+    expect(viewAfter(log.events, outputs)).toEqual([
+      ...((requests[2]?.messages ?? []) as never[]),
+      { role: "assistant", content: "是那次" },
+    ]);
+  });
+
+  test("interrupted while a round streams: that round's words are her interrupted message, the rounds before stay on their calls", async () => {
+    const controller = new AbortController();
+    const recall = tool("recall_streams", async () => ({}));
+    const { mind } = fakeMind(
+      [{ type: "text", text: "我查查。" }, call("c1", "recall_streams"), DONE],
+      async function* () {
+        yield { type: "text", text: "找到" };
+        controller.abort();
+        yield { type: "text", text: "不该有" };
+      },
+    );
+    const events = eventsOf(
+      await collect(
+        runTurn(request({ signal: controller.signal }), deps(mind, parts({ tools: [recall] }))),
+      ),
+    );
+    expect(events.map((event) => event.type)).toEqual(["tool-call", "tool-result", "message"]);
+    expect(events[0]).toMatchObject({ said: "我查查。" });
+    expect(events[2]).toEqual({
+      type: "message",
+      id: "id-2",
+      speaker: { kind: "persona", id: PERSONA },
+      text: "找到",
+      interrupted: true,
+    });
+  });
+
+  test("interrupted while a tool runs: the round's words stay on its call, and no message is stored", async () => {
+    const controller = new AbortController();
+    const recall = tool(
+      "recall_streams",
+      ({ signal }) =>
+        new Promise<ToolResult>((_, reject) => {
+          controller.abort();
+          reject(signal.reason);
+        }),
+    );
+    const { mind } = fakeMind([
+      { type: "text", text: "我查查" },
+      call("c1", "recall_streams"),
+      DONE,
+    ]);
+    const outputs = await collect(
+      runTurn(request({ signal: controller.signal }), deps(mind, parts({ tools: [recall] }))),
+    );
+    expect(eventsOf(outputs)).toEqual([
+      {
+        type: "tool-call",
+        persona: PERSONA,
+        turn: "id-1",
+        callId: "c1",
+        name: "recall_streams",
+        arguments: {},
+        said: "我查查",
+      },
     ]);
     expect(outputs.at(-1)).toEqual({ type: "ended", turn: "id-1" });
   });
 
+  test("a failure keeps the failing round's words as interrupted, after the said of the round before", async () => {
+    const recall = tool("recall_streams", async () => ({}));
+    const { mind } = fakeMind(
+      [{ type: "text", text: "我查查。" }, call("c1", "recall_streams"), DONE],
+      async function* () {
+        yield { type: "text", text: "半句" };
+        throw new Error("upstream 500");
+      },
+    );
+    const events = eventsOf(
+      await collect(runTurn(request(), deps(mind, parts({ tools: [recall] })))),
+    );
+    expect(events[0]).toMatchObject({ type: "tool-call", said: "我查查。" });
+    expect(events.slice(2)).toEqual([
+      {
+        type: "message",
+        id: "id-2",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "半句",
+        interrupted: true,
+      },
+      { type: "turn-failed", persona: PERSONA, turn: "id-1", error: "upstream 500" },
+    ]);
+  });
   test("answers a missing, a failing and a timed-out tool as pipedog does", async () => {
     const thrower = tool("thrower", async () => {
       throw new Error("kaput");
@@ -763,6 +953,36 @@ describe("runTurn", () => {
     ]);
   });
 
+  test("records her nudge before her parts and mind are made: a turn that fails or is cut there still shows it", async () => {
+    const nudge = "说说那件事";
+    const recorded: ChatEventDraft = {
+      type: "context",
+      persona: PERSONA,
+      turn: "id-1",
+      position: 1,
+      role: "developer",
+      content: nudge,
+    };
+    const keyless = deps(fakeMind().mind, parts(), {
+      createMind: () => {
+        throw new Error("Set OPENROUTER_API_KEY");
+      },
+    });
+    expect(eventsOf(await collect(runTurn(request({ nudge }), keyless)))).toEqual([
+      recorded,
+      { type: "turn-failed", persona: PERSONA, turn: "id-1", error: "Set OPENROUTER_API_KEY" },
+    ]);
+    const controller = new AbortController();
+    const cut = deps(fakeMind().mind, parts(), {
+      parts: async () => {
+        controller.abort();
+        return parts();
+      },
+    });
+    const signal = controller.signal;
+    expect(eventsOf(await collect(runTurn(request({ nudge, signal }), cut)))).toEqual([recorded]);
+  });
+
   test("aborts the turn when its reader stops reading", async () => {
     const { promise: aborted, resolve } = Promise.withResolvers<void>();
     const { mind } = fakeMind(async function* (request) {
@@ -774,6 +994,109 @@ describe("runTurn", () => {
       if (output.type === "delta") break;
     }
     await aborted;
+  });
+});
+
+describe("her rounds", () => {
+  const saved = process.env.CHAT_MAX_ROUNDS;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.CHAT_MAX_ROUNDS;
+    else process.env.CHAT_MAX_ROUNDS = saved;
+  });
+
+  /** A recall tool counting its runs, and a mind that calls it on every request. */
+  function looping() {
+    const ran = { count: 0 };
+    const recall = tool("recall_streams", async () => {
+      ran.count++;
+      return {};
+    });
+    const always: Round = (asked) =>
+      (async function* () {
+        yield { type: "text", text: `第${requests.length}轮` } as MindChunk;
+        if (asked.toolChoice !== "none") yield call(`call-${requests.length}`, "recall_streams");
+        yield DONE;
+      })();
+    const { mind, requests } = fakeMind(...Array.from({ length: 20 }, () => always));
+    return { mind, requests, recall, ran };
+  }
+
+  test("with CHAT_MAX_ROUNDS=3, three rounds call her tools, then an answer round offers them with tool_choice none", async () => {
+    process.env.CHAT_MAX_ROUNDS = "3";
+    const { mind, requests, recall, ran } = looping();
+    const outputs = await collect(runTurn(request(), deps(mind, parts({ tools: [recall] }))));
+    expect(requests).toHaveLength(4);
+    expect(ran.count).toBe(3);
+    expect(requests.map((asked) => [asked.tools, asked.toolChoice])).toEqual([
+      [[recall.schema], undefined],
+      [[recall.schema], undefined],
+      [[recall.schema], undefined],
+      [[recall.schema], "none"],
+    ]);
+    expect(requests[3]?.messages.at(-1)).toEqual({
+      role: "tool",
+      tool_call_id: "call-3",
+      content: "COMPLETED",
+    });
+    expect(eventsOf(outputs).at(-1)).toEqual({
+      type: "message",
+      id: "id-2",
+      speaker: { kind: "persona", id: PERSONA },
+      text: "第4轮",
+    });
+    expect(messages("WARNING")).toEqual([]);
+  });
+
+  test("a call the answer round makes anyway is neither run nor stored, and her words there are her message", async () => {
+    process.env.CHAT_MAX_ROUNDS = "1";
+    let runs = 0;
+    const recall = tool("recall_streams", async () => {
+      runs++;
+      return {};
+    });
+    const { mind, requests } = fakeMind(
+      [call("c1", "recall_streams"), DONE],
+      [{ type: "text", text: "就是那次" }, call("c2", "recall_streams"), DONE],
+    );
+    const outputs = await collect(runTurn(request(), deps(mind, parts({ tools: [recall] }))));
+    expect([requests.length, runs, requests[1]?.toolChoice]).toEqual([2, 1, "none"]);
+    expect(
+      eventsOf(outputs).map((event) => [event.type, "callId" in event ? event.callId : ""]),
+    ).toEqual([
+      ["tool-call", "c1"],
+      ["tool-result", "c1"],
+      ["message", ""],
+    ]);
+    expect(eventsOf(outputs).at(-1)).toMatchObject({ text: "就是那次" });
+    expect(messages("WARNING")).toEqual([
+      `[chat] ${PERSONA} called recall_streams past her 1 tool rounds; not run`,
+    ]);
+  });
+
+  test(`with no CHAT_MAX_ROUNDS, ${DEFAULT_CHAT_MAX_ROUNDS} rounds call her tools before the answer round`, async () => {
+    delete process.env.CHAT_MAX_ROUNDS;
+    const { mind, requests, recall, ran } = looping();
+    await collect(runTurn(request(), deps(mind, parts({ tools: [recall] }))));
+    expect([requests.length, ran.count]).toEqual([
+      DEFAULT_CHAT_MAX_ROUNDS + 1,
+      DEFAULT_CHAT_MAX_ROUNDS,
+    ]);
+    expect(requests.at(-1)?.toolChoice).toBe("none");
+  });
+
+  test("her persona.yaml's chat.maxRounds bounds her rounds, over the environment's", async () => {
+    const yaml = join(dataHome(), "personas", PERSONA, "persona.yaml");
+    writeFileSync(yaml, "identity:\n  name: Alice\nchat:\n  maxRounds: 2\n");
+    resetSettings();
+    try {
+      process.env.CHAT_MAX_ROUNDS = "5";
+      const { mind, requests, recall, ran } = looping();
+      await collect(runTurn(request(), deps(mind, parts({ tools: [recall] }))));
+      expect([requests.length, ran.count]).toEqual([3, 2]);
+    } finally {
+      writeFileSync(yaml, "identity:\n  name: Alice\n");
+      resetSettings();
+    }
   });
 });
 
@@ -797,7 +1120,7 @@ describe("a tool that runs on past an interruption", () => {
       fetchImage: async () => ({ bytes: new TextEncoder().encode("a"), mime: "image/png" }),
     });
 
-  test("keeps running when its turn is interrupted, and its photos come later from her", async () => {
+  test("keeps running when its turn is interrupted, her words on its call, and its photos come later from her", async () => {
     const controller = new AbortController();
     const rendered = Promise.withResolvers<void>();
     let toolSignal: AbortSignal | undefined;
@@ -828,6 +1151,7 @@ describe("a tool that runs on past an interruption", () => {
       ),
     );
     const speaker = { kind: "persona", id: PERSONA } as const;
+    // Her words were finished: the tool was cut, not her sentence, so no message holds them again.
     expect(eventsOf(outputs)).toEqual([
       {
         type: "tool-call",
@@ -836,8 +1160,8 @@ describe("a tool that runs on past an interruption", () => {
         callId: "call-1",
         name: "take_selfie",
         arguments: {},
+        said: "等我一下",
       },
-      { type: "message", id: "id-2", speaker, text: "等我一下", interrupted: true },
     ]);
     expect(outputs.at(-1)).toEqual({ type: "ended", turn: "id-1" });
     expect(requests).toHaveLength(1);
@@ -856,7 +1180,7 @@ describe("a tool that runs on past an interruption", () => {
       },
       {
         type: "message",
-        id: "id-3",
+        id: "id-2",
         speaker,
         text: "",
         attachments: [{ kind: "image", name: "a.png", mime: "image/png" }],
@@ -873,12 +1197,12 @@ describe("a tool that runs on past an interruption", () => {
       { role: "user", content: "发张自拍" },
       {
         role: "assistant",
+        content: "等我一下",
         tool_calls: [
           { id: "call-1", type: "function", function: { name: "take_selfie", arguments: "{}" } },
         ],
       },
       { role: "tool", tool_call_id: "call-1", content: '{"ok": true, "count": 1}' },
-      { role: "assistant", content: "等我一下" },
       { role: "user", content: "好了吗" },
     ]);
   });

@@ -42,6 +42,38 @@ describe("the cards", () => {
     expect(listed).not.toContain("providers.openrouter.apiBase");
   });
 
+  test("Assistant Mode has a section of its own, with every assistant row and the task display last", () => {
+    const [card, kinds, ...others] = CARDS.assistant;
+    expect(others).toEqual([]);
+    expect(card?.paths).toEqual([
+      "assistant.enabled",
+      ["assistant.provider", "assistant.model"],
+      ["assistant.search.provider", "assistant.search.model"],
+      "assistant.folders",
+      "assistant.bash",
+      ["assistant.spendPauseUsd", "assistant.contextTokens"],
+      "chats.display",
+    ]);
+    const rows = SETTINGS.filter(
+      (setting) => setting.path.startsWith("assistant.") || setting.path === "chats.display",
+    );
+    expect(rows.map((setting) => setting.path).toSorted()).toEqual(
+      [...(card?.paths ?? []), ...(kinds?.paths ?? [])].flat().toSorted(),
+    );
+  });
+
+  test("Models by Kind follows the mode's card, each kind's account beside its model, and Advanced leaves them out", () => {
+    const kinds = CARDS.assistant.find((card) => card.id === "kinds");
+    expect(CARDS.assistant.map((card) => card.id)).toEqual(["assistant", "kinds"]);
+    expect(kinds?.paths).toEqual([
+      ["assistant.quick.provider", "assistant.quick.model"],
+      ["assistant.coding.provider", "assistant.coding.model"],
+      ["assistant.research.provider", "assistant.research.model"],
+    ]);
+    const advanced = pathsOf(cardSections(rows, "app", undefined, NAMED));
+    expect(advanced.filter((path) => path.startsWith("assistant."))).toEqual([]);
+  });
+
   test("Qdrant's host and port, and the embedding provider and model, sit side by side", () => {
     const lines = Object.values(CARDS).flatMap((section) =>
       section.flatMap((card) => card.paths.filter((line) => typeof line !== "string")),
@@ -58,6 +90,7 @@ describe("?tab=", () => {
     expect(resolve("")).toEqual({ section: "providers" });
     expect(resolve("tab=providers")).toEqual({ section: "providers" });
     expect(resolve("tab=memory")).toEqual({ section: "memory" });
+    expect(resolve("tab=assistant")).toEqual({ section: "assistant" });
     expect(resolve("tab=advanced")).toEqual({ section: "advanced" });
   });
 

@@ -1,10 +1,19 @@
-import { chainLimitOf, type ParticipantId, replyModeOf, summarize } from "@eidolon/chat";
+import {
+  type ChatDisplay,
+  type ChatEvent,
+  chainLimitOf,
+  displayOf,
+  type ParticipantId,
+  replyModeOf,
+  summarize,
+} from "@eidolon/chat";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRoundIcon, MessageSquareOffIcon, PanelLeftIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router";
+import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,7 +21,13 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { MicPill } from "@/features/call/call-controls";
 import { useCall } from "@/features/call/use-call";
-import { ApiError, type ErrorCode } from "@/lib/api";
+import { chatTasksQuery } from "@/features/tasks/queries";
+import { stopChoice } from "@/features/tasks/state";
+import { StopPicker } from "@/features/tasks/stop-picker";
+import { useChatTasks } from "@/features/tasks/use-chat-tasks";
+import { WaitingBar } from "@/features/tasks/waiting-bar";
+import { ApiError, type ErrorCode, type TaskSnapshot } from "@/lib/api";
+import { toastError } from "@/lib/feedback";
 import { listOf } from "@/lib/labels";
 import { statusQuery } from "@/lib/query";
 import { useLang } from "@/locales/i18n";
@@ -21,17 +36,22 @@ import { type LiveCall, ongoingCall } from "./call-live";
 import { ChatLog } from "./chat-log";
 import { ChatMenu } from "./chat-menu";
 import { ChatSettingsSheet } from "./chat-settings";
+import type { ChatCommand } from "./commands";
 import { Composer } from "./composer";
 import { chatName, shortDate } from "./format";
 import { nextUp } from "./group";
-import { chatItems, retryText } from "./items";
+import { chatItems, displayedItems, retryText } from "./items";
+import { DISPLAY_CHANGED, DISPLAY_HELP } from "./labels";
 import { ParticipantsMenu } from "./participants";
 import { chatWith, shortNameOf, usePersonaOf } from "./persona";
-import { chatQuery } from "./queries";
+import { chatQuery, useSetDisplay } from "./queries";
 import { callOn, type LiveError } from "./stream";
 import { useChat } from "./use-chat";
 import { canRecord } from "./use-recorder";
 import type { MicState } from "./voice-recorder";
+
+const NO_EVENTS: readonly ChatEvent[] = [];
+const NO_TASKS: ReadonlySet<string> = new Set();
 
 /** A reply that couldn't start: a key she needs, else the API's failure. */
 function LiveNotice({
@@ -132,6 +152,7 @@ export function ChatView({
 }) {
   const { t } = useLingui();
   const lang = useLang();
+  const queryClient = useQueryClient();
   const chat = useQuery(chatQuery(id));
   const { data: status, refetch: refetchStatus } = useQuery(statusQuery);
   const personaOf = usePersonaOf();
@@ -150,12 +171,56 @@ export function ChatView({
     () => (chat.data === undefined ? null : callOn(chat.data)),
     [chat.data],
   );
+  const events = chat.data?.events;
+  const tasks = useChatTasks(id, events ?? NO_EVENTS);
   // Another tab's call is followed too, so its lines show and its end frees the composer.
-  const turns = useChat(id, calling || serverCall !== null);
+  const turns = useChat(id, calling || serverCall !== null, tasks.awaitingReport);
   const [recordable] = useState(canRecord);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const events = chat.data?.events;
+  const ownDisplay = useMemo(() => displayOf(events ?? []), [events]);
+  const display: ChatDisplay | null =
+    chat.data === undefined ? null : (ownDisplay ?? chat.data.defaultDisplay);
+  const setDisplay = useSetDisplay();
+  const [stopping, setStopping] = useState<{
+    readonly open: boolean;
+    readonly tasks: readonly TaskSnapshot[];
+  }>({ open: false, tasks: [] });
+  // The task card to bring into view: the Tasks list links here with ?task=, and the waiting bar
+  // shows its own. Focus shows a card brought into view until the display changes.
+  const [params, setParams] = useSearchParams();
+  const linked = params.get("task");
+  const [focus, setFocus] = useState<string | null>(linked);
+  const [revealed, setRevealed] = useState({ display, tasks: NO_TASKS });
+  if (revealed.display !== display) setRevealed({ display, tasks: NO_TASKS });
+  useEffect(() => {
+    if (linked !== null) setFocus(linked);
+  }, [linked]);
+  const focused = useCallback(
+    (task: string) => {
+      setFocus(null);
+      setRevealed((current) => ({ ...current, tasks: new Set([...current.tasks, task]) }));
+      if (linked === null) return;
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete("task");
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [linked, setParams],
+  );
   const items = useMemo(() => chatItems(events ?? []), [events]);
+  // Focus would hide the card on its way into view, and the log could never scroll to it.
+  const visible = useMemo(
+    () => (focus === null ? revealed.tasks : new Set([...revealed.tasks, focus])),
+    [focus, revealed.tasks],
+  );
+  const shownItems = useMemo(
+    () => displayedItems(items, display, visible),
+    [items, display, visible],
+  );
   const header = chat.data?.header;
   const summary = useMemo(
     () => (header === undefined ? null : summarize(header, events ?? [])),
@@ -219,6 +284,7 @@ export function ChatView({
   const menuName = chatName(title, who, createdAt, lang, now);
   // This page knows of its own call before the server's answer says so.
   const inCall = calling || serverCall !== null;
+  // Every item, the cards focus hides included: a task her failed turn started holds Retry back.
   const retry = turns.busy || inCall ? null : retryText(items);
   const placeholder =
     solo === null ? t`Message everyone` : t`Message ${ph({ name: shortNameOf(solo) })}`;
@@ -248,6 +314,35 @@ export function ChatView({
           live: phase.name === "live",
         };
 
+  // Read afresh: the chat's list polls only every few seconds, and only once her log holds a task.
+  const askStop = async () => {
+    const read = await queryClient
+      .fetchQuery({ ...chatTasksQuery(id), staleTime: 0 })
+      .catch((error: unknown) => {
+        toastError(error);
+        return null;
+      });
+    if (read === null) return;
+    const live = stopChoice(read.tasks);
+    if (live.length === 0) {
+      toast.info(t`Nothing to stop`, {
+        description: t`No task in this chat is running or waiting for you.`,
+      });
+      return;
+    }
+    setStopping({ open: true, tasks: live });
+  };
+  const runCommand = (command: ChatCommand) => {
+    if (command === "stop") {
+      void askStop();
+      return;
+    }
+    const told = () =>
+      toast.success(t(DISPLAY_CHANGED[command]), { description: t(DISPLAY_HELP[command]) });
+    if (ownDisplay === command) told();
+    else setDisplay.mutate({ id, display: command }, { onSuccess: told });
+  };
+
   return (
     <>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
@@ -275,9 +370,10 @@ export function ChatView({
       <div className="relative min-h-0 flex-1">
         <ChatLog
           chatId={id}
+          display={display}
           personas={personas}
           personaOf={personaOf}
-          items={items}
+          items={shownItems}
           live={turns.live}
           next={next}
           lateTools={chat.data.lateTools}
@@ -288,10 +384,19 @@ export function ChatView({
           call={liveCall}
           onSend={turns.send}
           onSendVoice={turns.sendVoice}
+          focusTask={focus}
+          onFocused={focused}
         />
         <MicPill call={call} />
       </div>
       <footer className="flex shrink-0 flex-col gap-3 border-t bg-muted/50 px-4 py-3">
+        {tasks.bar !== null && (
+          <WaitingBar
+            task={tasks.bar.task}
+            others={tasks.bar.others}
+            onShow={() => setFocus(tasks.bar?.task.id ?? null)}
+          />
+        )}
         {docked && (
           <CallDock
             call={call}
@@ -318,14 +423,23 @@ export function ChatView({
           onSend={turns.send}
           onSendVoice={turns.sendVoice}
           onStop={turns.stop}
+          onCommand={runCommand}
         />
       </footer>
       <ChatSettingsSheet
         id={id}
         chainLimit={chainLimit}
         replyMode={replyMode}
+        display={ownDisplay}
+        defaultDisplay={chat.data.defaultDisplay}
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
+      />
+      <StopPicker
+        chatId={id}
+        open={stopping.open}
+        tasks={stopping.tasks}
+        onOpenChange={(open) => setStopping((current) => ({ ...current, open }))}
       />
       {/* biome-ignore lint/a11y/useMediaCaption: a live MediaStream takes no track; the chat's log is its caption. */}
       <audio ref={call.audioRef} autoPlay hidden />

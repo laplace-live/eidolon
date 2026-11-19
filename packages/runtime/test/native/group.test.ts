@@ -15,7 +15,7 @@ import {
   type ParticipantId,
   stampEvents,
 } from "@eidolon/chat";
-import { activePersona, dataHome, resetSettings } from "@eidolon/config";
+import { AsyncQueue, activePersona, dataHome, resetSettings } from "@eidolon/config";
 import type { DirectorInput } from "@eidolon/context";
 import type { ContextProvider } from "@eidolon/core";
 import { type ChatDeps, type MindChunk, type MindRequest, runChat, runTurn } from "@eidolon/engine";
@@ -25,8 +25,8 @@ import { type CallDeps, voiceModels } from "@eidolon/voice";
 import { Peer } from "@eidolon/webrtc";
 import { FakeSpeech, FakeStt, FakeTransport, settle } from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
-import { createSignallingServer } from "../../src/index.ts";
-import type { CallClient, GroupCallBinding } from "../../src/native/binding.ts";
+import { createSignallingServer, type OutsideResult } from "../../src/index.ts";
+import type { CallBinding, CallClient, GroupCallBinding } from "../../src/native/binding.ts";
 import { groupReason, runNativeSafely } from "../../src/native/engine.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
 import { captureLogs, type LogCapture, admission as offered, setEnv, until } from "../support.ts";
@@ -82,8 +82,14 @@ afterEach(() => {
   resetSettings();
 });
 
-/** A group call of `bob` and `cat`, `bob` hosting, its client ready. */
-async function groupCall(rounds: readonly (readonly ParticipantId[])[]) {
+/**
+ * A group call of `bob` and `cat`, `bob` hosting, its client ready; its binding also carries
+ * `adds`, which only a single call's may.
+ */
+async function groupCall(
+  rounds: readonly (readonly ParticipantId[])[],
+  adds: Pick<CallBinding, "extras" | "outside"> = {},
+) {
   const transport = new FakeTransport();
   const stt = new FakeStt();
   const clock = new FakeClock(0);
@@ -171,6 +177,7 @@ async function groupCall(rounds: readonly (readonly ParticipantId[])[]) {
       sent.push({ data, persona: activePersona().id });
     },
     onEnded: (end) => ends.push(end),
+    ...adds,
   };
   const done = runNativeSafely(transport, ADMISSION, deps, binding);
   await until(() => transport.connected, 10_000);
@@ -260,6 +267,34 @@ describe("a group call", () => {
     expect(new Set(c.sent.map((s) => s.persona))).toEqual(new Set([HOST]));
     expect(new Set(c.clients).size).toBe(1);
     expect(c.ends).toEqual(["hangup"]);
+    expect(logs.messages("ERROR")).toEqual([]);
+  }, 15_000);
+
+  test("takes nothing a single call's chat adds: no reply's extras are asked, and nothing from outside read", async () => {
+    const asked: boolean[] = [];
+    let read = false;
+    const outside: AsyncIterable<OutsideResult> = {
+      [Symbol.asyncIterator]: () => {
+        read = true;
+        return new AsyncQueue<OutsideResult>()[Symbol.asyncIterator]();
+      },
+    };
+    const c = await groupCall([[HOST]], {
+      extras: (answers) => {
+        asked.push(answers);
+        return null;
+      },
+      outside,
+    });
+    await c.says("今天做什么");
+    await until(() => c.minds.length === 1);
+    await c.speaks(HOST);
+    await until(() => c.decided.length === 2);
+    await settle();
+    await c.hangUp();
+    expect(c.minds.map((m) => m.persona)).toEqual([HOST]);
+    expect(asked).toEqual([]);
+    expect(read).toBe(false);
     expect(logs.messages("ERROR")).toEqual([]);
   }, 15_000);
 });

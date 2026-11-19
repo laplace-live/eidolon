@@ -172,10 +172,10 @@ export interface Booted {
 
 /** Boots the local server on 127.0.0.1 at a free port, over a fixture build. */
 export async function bootFixture(
-  options: { argv?: string[]; dist?: string; fakes?: Fakes } = {},
+  options: { argv?: string[]; dist?: string; fakes?: Fakes; io?: FakeIo } = {},
 ): Promise<Booted> {
   const fakes = options.fakes ?? fakeModules();
-  const io = fakeIo();
+  const io = options.io ?? fakeIo();
   const dist = options.dist ?? fixtureDist();
   const argv = options.argv ?? ["--host", "127.0.0.1", "--port", "0", "--no-open"];
   // What load-env.ts does in server.ts before the boot.

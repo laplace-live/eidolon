@@ -131,6 +131,41 @@ describe("usage records", () => {
       }),
     ).not.toThrow();
   });
+
+  test("a tap hears the record the ledger gets, cost and scope included, ledger or none", () => {
+    const at = Date.now();
+    const report = {
+      role: "assistant",
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+      units: { inputTokens: 1_000_000 },
+    } as const;
+    const tapped: UsageRecord[] = [];
+    const tap = (record: UsageRecord) => tapped.push(record);
+    reportUsage(report, tap);
+    const records: UsageRecord[] = [];
+    setUsageSink((record) => records.push(record));
+    withUsageScope({ source: "task", session: "task-1" }, () => reportUsage(report, tap));
+    expect(tapped[0]).toMatchObject({ category: "llm", source: null, costSource: "estimated" });
+    expect(tapped[0]?.costUsd).toBeCloseTo(1.32, 10);
+    expect(tapped[0]?.at).toBeGreaterThanOrEqual(at);
+    expect(records).toEqual([
+      expect.objectContaining({ role: "assistant", source: "task", session: "task-1" }),
+    ]);
+    expect(tapped[1]).toEqual(records[0] as UsageRecord);
+  });
+
+  test("a sink that throws keeps no record from the tap", () => {
+    setUsageSink(() => {
+      throw new Error("disk full");
+    });
+    const tapped: UsageRecord[] = [];
+    reportUsage(
+      { role: "assistant", provider: "openrouter", model: "m", units: {}, costUsd: 0.5 },
+      (record) => tapped.push(record),
+    );
+    expect(tapped).toEqual([expect.objectContaining({ costUsd: 0.5, costSource: "reported" })]);
+  });
 });
 
 test("spend is the provider's whose API the request went to, else the account's", () => {

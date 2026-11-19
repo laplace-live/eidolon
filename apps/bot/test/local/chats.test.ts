@@ -1575,6 +1575,48 @@ describe("a group chat", () => {
     }
     expect((await log(id)).events).toHaveLength(5);
   });
+
+  test("the display is kept as a settings event, and nothing else is", async () => {
+    const id = await greeted();
+    const patch = (body: unknown) => server.call("PATCH", `/chats/${id}`, body);
+    for (const display of ["verbose", "focus", "normal"]) {
+      expect(await json(await patch({ display }))).toEqual({ ok: true });
+    }
+    expect((await log(id)).events.slice(2)).toEqual([
+      expect.objectContaining({ seq: 3, type: "settings", display: "verbose" }),
+      expect.objectContaining({ seq: 4, type: "settings", display: "focus" }),
+      expect.objectContaining({ seq: 5, type: "settings", display: "normal" }),
+    ]);
+    expect(requests).toHaveLength(1);
+    for (const body of [
+      { display: "Focus" },
+      { display: "loud" },
+      { display: null },
+      { display: "focus", replyMode: "text" },
+    ]) {
+      expect([body, await errorCode(await patch(body))]).toEqual([body, [400, "bad-request"]]);
+    }
+    const refused = (await (await patch({ display: "loud" })).json()) as {
+      error: { message: string };
+    };
+    expect(refused.error.message).toEndWith("or a `display` of focus, normal or verbose");
+    expect((await log(id)).events).toHaveLength(5);
+  });
+
+  test("a read gives the app's display, which a chat follows until it sets its own", async () => {
+    const id = await greeted();
+    expect((await log(id)).defaultDisplay).toBe("normal");
+    const saved = process.env.CHAT_DISPLAY;
+    try {
+      process.env.CHAT_DISPLAY = "Verbose";
+      expect((await log(id)).defaultDisplay).toBe("verbose");
+      process.env.CHAT_DISPLAY = "loud";
+      expect((await log(id)).defaultDisplay).toBe("normal");
+    } finally {
+      if (saved === undefined) delete process.env.CHAT_DISPLAY;
+      else process.env.CHAT_DISPLAY = saved;
+    }
+  });
 });
 
 /**

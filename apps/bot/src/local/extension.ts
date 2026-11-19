@@ -1,8 +1,9 @@
 // The local web app's hold on the bot server: the guard in front of every route and the fallback,
-// the local viewer on the offer and memory routes, the /api/local router, and the built app for
-// every other GET. A listed origin gets the bot's own routes, as a deployment serves them.
+// the local viewer on the offer and memory routes, the /api/local router, the task manager, and the
+// built app for every other GET. A listed origin gets the bot's own routes, as a deployment serves
+// them.
 import { OFFER_PATH, PREFLIGHT_PATH, withCors } from "@eidolon/access";
-import { logger } from "@eidolon/config";
+import { assistantSettings, dataHome, logger } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import { logAccess, type MethodRoutes, type RouteHandler, type RouteMethod } from "../app.ts";
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "../memory-admin.ts";
@@ -21,21 +22,29 @@ import { accountsRoutes } from "./routes/accounts.ts";
 import { chatRunner, chatsRoutes } from "./routes/chats.ts";
 import { credentialsRoutes } from "./routes/credentials.ts";
 import { jobsRoutes } from "./routes/jobs.ts";
+import { mcpRoutes } from "./routes/mcp.ts";
 import { memoriesRoutes } from "./routes/memories.ts";
 import { personasRoutes } from "./routes/personas.ts";
 import { settingsRoutes } from "./routes/settings.ts";
 import { statusRoutes } from "./routes/status.ts";
+import { addAssistantFolder, tasksRoutes } from "./routes/tasks.ts";
 import { usageRoutes } from "./routes/usage.ts";
 import { voicesRoutes } from "./routes/voices.ts";
 import { authenticator, sessionRoutes } from "./session.ts";
 import type { StaticSite } from "./static.ts";
+import { assistantProblem, defaultStatusDeps } from "./status.ts";
+import { TaskManager } from "./tasks/manager.ts";
 import type { LocalToken } from "./token.ts";
 
 /** Every route module the local API serves, besides the session exchange. */
-export function localRouteModules(app: LocalApp, chats: () => ChatRunner): LocalRouteSpec[] {
+export function localRouteModules(
+  app: LocalApp,
+  chats: () => ChatRunner,
+  tasks: TaskManager,
+): LocalRouteSpec[] {
   return [
-    ...statusRoutes(app),
-    ...settingsRoutes(app),
+    ...statusRoutes(app, defaultStatusDeps, tasks),
+    ...settingsRoutes(app, (enabled) => tasks.modeChanged(enabled)),
     ...credentialsRoutes(app),
     ...accountsRoutes(app),
     ...personasRoutes(app),
@@ -44,6 +53,8 @@ export function localRouteModules(app: LocalApp, chats: () => ChatRunner): Local
     ...memoriesRoutes(app),
     ...usageRoutes(),
     ...chatsRoutes(chats),
+    ...tasksRoutes(tasks),
+    ...mcpRoutes(tasks),
   ];
 }
 
@@ -60,8 +71,17 @@ export interface LocalExtensionOptions {
   readonly origins?: ReadonlySet<string>;
 }
 
-export function createLocalExtension(options: LocalExtensionOptions): LocalExtension {
+export interface LocalAppExtension extends LocalExtension {
+  /**
+   * Loads the app's tasks and resumes the interrupted ones. Call it once the server listens: a
+   * start that can't bind its port exits, and would cut a resumed task off.
+   */
+  startTasks(): Promise<void>;
+}
+
+export function createLocalExtension(options: LocalExtensionOptions): LocalAppExtension {
   const stopHooks: (() => Promise<void>)[] = [];
+  let manager: TaskManager | null = null;
   const origins = options.origins ?? new Set<string>();
   let hosts: ReadonlySet<string> | null = null;
   const hostsOf = (context: LocalContext): ReadonlySet<string> => {
@@ -88,7 +108,21 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
       const onStop = (hook: () => Promise<void>): void => {
         stopHooks.push(hook);
       };
-      const chats = chatRunner({ onStop });
+      // Made once, at boot. Its hooks use `chats` and `app`, declared below: nothing calls them
+      // before startTasks(), once the server listens.
+      const tasks = new TaskManager({
+        dataHome: dataHome(),
+        settings: assistantSettings,
+        addFolder: (folder) => addAssistantFolder(app, folder),
+        problem: assistantProblem,
+        report: (snapshot) => chats().report(snapshot),
+        waiting: (snapshot) => chats().taskWaiting(snapshot),
+        progress: (snapshot) => chats().taskProgress(snapshot),
+      });
+      manager = tasks;
+      const chats = chatRunner({ onStop }, { tasks });
+      // Stop hooks run newest first: every run is left before the chats shut down.
+      onStop(() => tasks.stop());
       const identity = identityHandlers({
         signalling: context.signalling,
         memoryAdmin: options.memoryAdmin,
@@ -156,7 +190,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
 
       const specs = [
         ...sessionRoutes(app, options.token, options.nowSeconds),
-        ...localRouteModules(app, chats),
+        ...localRouteModules(app, chats, tasks),
       ];
       routes[`${LOCAL_PREFIX}/*`] = guarded(createLocalRouter(specs, authenticate), context);
       return routes;
@@ -180,6 +214,10 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalExten
         const origin = listedOrigin(request, origins);
         return origin === null ? response : withCors(request, response, { allowOrigins: [origin] });
       };
+    },
+
+    async startTasks() {
+      await manager?.boot();
     },
 
     async stop() {

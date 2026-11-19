@@ -124,6 +124,8 @@ async function runNative(
         : bindCall(binding, log, transport, deps);
   }
   const realtime = !group && select("realtime") !== null;
+  // A realtime session fixes its tools as it opens, and takes late results as system items.
+  const cascade = binding === undefined || isGroupCall(binding) || realtime ? null : binding;
   try {
     return await runVoiceCall(
       call.transport,
@@ -135,6 +137,8 @@ async function runNative(
         greet: !group,
         realtime,
         ...(group ? { group } : {}),
+        ...(cascade?.extras === undefined ? {} : { extras: cascade.extras }),
+        ...(cascade?.outside === undefined ? {} : { outside: cascade.outside }),
       },
       call.deps,
       NO_SHUTDOWN,

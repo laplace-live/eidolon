@@ -88,6 +88,7 @@ describe("UsageLedger", () => {
           outputTokens: 2,
           characters: 0,
           audioSeconds: 0,
+          searches: 0,
           images: 0,
         },
         expect.objectContaining({
@@ -105,6 +106,36 @@ describe("UsageLedger", () => {
       expect(bob.providers).toEqual(["cartesia", "openrouter"]);
       expect(ledger.summarize({ from: noon + 1, to: noon + 2000 }).rows[0]?.records).toBe(1);
       expect(ledger.summarize({ to: noon }).rows).toEqual([]);
+      ledger.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("sums a day's web searches in their row, as each record counts them", () => {
+    const dir = mkdtempSync(join(tmpdir(), "eidolon-ledger-"));
+    try {
+      const ledger = new UsageLedger(join(dir, "usage.db"));
+      const noon = at("2026-11-17T12:00:00");
+      for (const offset of [0, 1000]) {
+        ledger.record(
+          {
+            ...base,
+            source: "task",
+            role: "search",
+            category: "search",
+            model: "exa",
+            at: noon + offset,
+            units: { inputTokens: 1500, outputTokens: 150, searches: 1 },
+            costUsd: 0.0073,
+            costSource: "reported",
+          },
+          "milky-green",
+        );
+      }
+      expect(ledger.summarize().rows).toEqual([
+        expect.objectContaining({ role: "search", model: "exa", records: 2, searches: 2 }),
+      ]);
       ledger.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

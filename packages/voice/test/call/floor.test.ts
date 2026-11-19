@@ -1,10 +1,14 @@
-// The Floor's transition table, by docs/voice-engine.md's row numbers, with its barge-in, tools
-// and async results, the end of a call and the mailbox's rules: on the real kit, emitter, Speaker
-// and Mouth, with the caller, her turns, her voice and the clock scripted.
+// The Floor's transition table, by docs/voice-engine.md's row numbers, with its barge-in, tools,
+// async results and results from outside, what a bound call adds to her replies, the end of a call
+// and the mailbox's rules: on the real kit, emitter, Speaker and Mouth, with the caller, her turns,
+// her voice and the clock scripted.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { ChatEventDraft } from "@eidolon/chat";
 import { consoleSink, logger } from "@eidolon/config";
+import type { LlmTool, ToolSchema } from "@eidolon/core";
+import type { BackgroundTools, CallTurnRequest, PersonaParts, TurnExtras } from "@eidolon/engine";
 import { SPEECH_STALL_MS, SPEECH_STALLED } from "@eidolon/providers/speech-stream";
+import type { ReplyExtras } from "../../src/types.ts";
 import { HOST, NUDGE, settle, spokenReply, startCall, VIEWER } from "./harness.ts";
 
 let logs: string[];
@@ -31,6 +35,75 @@ const settled = (callId: string, stage: "final" | "cancelled"): ChatEventDraft =
   callId,
   result: stage === "final" ? { urls: ["https://x/1.png"] } : {},
   stage,
+});
+
+const schema = (name: string): ToolSchema => ({
+  name,
+  description: "",
+  properties: {},
+  required: [],
+});
+/** What a call bound to a chat adds to her replies: tools of the chat's, and a provider. */
+const BACKGROUND: BackgroundTools = {
+  tools: [
+    {
+      schema: schema("start_task"),
+      cancelOnInterruption: false,
+      timeoutSecs: null,
+      run: async () => ({}),
+    },
+  ],
+  hint: "（你能用电脑）",
+};
+const TOOLS: readonly LlmTool[] = [
+  {
+    schema: schema("stop_task"),
+    cancelOnInterruption: true,
+    timeoutSecs: null,
+    run: async () => ({}),
+  },
+];
+const PROVIDERS: PersonaParts["providers"] = [
+  { label: "TaskStatus", provider: { onContext: async () => {}, errorMessage: () => "" } },
+];
+const EVERYTHING: TurnExtras = { background: BACKGROUND, tools: TOOLS, providers: PROVIDERS };
+
+/** A plan that offers every reply EVERYTHING, recording whether each one it was asked for answers. */
+function giving(asked: boolean[]): ReplyExtras {
+  return (answers) => {
+    asked.push(answers);
+    return EVERYTHING;
+  };
+}
+
+/** What the Floor added to a reply's turn. */
+function added({ background, tools, providers }: CallTurnRequest): TurnExtras {
+  return {
+    ...(background === undefined ? {} : { background }),
+    ...(tools === undefined ? {} : { tools }),
+    ...(providers === undefined ? {} : { providers }),
+  };
+}
+
+/** A task's end, which the chat hands the call: the result of a call made before it. */
+const ended = (callId: string, stage: "final" | "cancelled" = "final"): ChatEventDraft => ({
+  type: "tool-result",
+  persona: HOST,
+  turn: "chat-turn",
+  callId,
+  result: { task: callId, status: stage === "final" ? "succeeded" : "cancelled" },
+  stage,
+});
+const ENDED = "（任务结束了）";
+
+/** A start her interrupted turn left running, answered after the turn was cut. */
+const lateStart = (callId: string): ChatEventDraft => ({
+  type: "tool-result",
+  persona: HOST,
+  turn: "turn-1",
+  callId,
+  result: { task: callId, status: "running" },
+  stage: "started",
 });
 
 describe("the client (rows 1, 30)", () => {
@@ -818,6 +891,383 @@ describe("tools and async results (rows 16, 17, 23)", () => {
     expect(call.news().at(-1)).toBe("llm-function-call-stopped s1 cancelled");
     await call.ear({ type: "user-stopped", text: null });
     expect(call.turns).toHaveLength(2);
+  });
+
+  test("row 23: a late started result goes after her cut message, and owes no reply", async () => {
+    const call = startCall({ stubborn: true });
+    await call.ready();
+    await call.says("帮我做个网页");
+    const cut = call.turn;
+    cut.round("好的。");
+    cut.tool("t1", "running", false, "start_task");
+    await settle();
+    call.utterance().pcm(1, 480);
+    call.utterance().segEnd(1);
+    await settle();
+    await call.play(480);
+    await call.ear({ type: "user-started" });
+    // The start her turn left running answers while that turn still stores what was heard.
+    cut.request.onAsyncResult([lateStart("t1")]);
+    cut.tool("t1", "cancelled", false, "start_task");
+    await settle();
+    await call.ear({ type: "final", text: "等等" }, { type: "user-stopped", text: "等等" });
+    await cut.end();
+    await settle();
+    expect(call.turns).toHaveLength(2);
+    const lines = call.events().map((e) => (e.type === "message" ? e.text : e.type));
+    expect(lines).toEqual(["帮我做个网页", "好的。", "tool-result", "等等"]);
+    await spokenReply(call, "好。");
+    call.news();
+    // One that answers once she is idle starts nothing; its RTVI call ended with the cut turn.
+    cut.request.onAsyncResult([lateStart("t2")]);
+    await settle();
+    expect(call.events().at(-1)).toMatchObject({ callId: "t2", stage: "started" });
+    expect(call.news()).toEqual([]);
+    expect(call.turns).toHaveLength(2);
+  });
+
+  test("row 23: a late result she waited for owes no reply either", async () => {
+    const call = startCall();
+    await call.ready();
+    await call.says("别做了");
+    const first = call.turn;
+    await spokenReply(call, "好。");
+    call.news();
+    first.request.onAsyncResult([
+      { type: "tool-result", persona: HOST, turn: "turn-1", callId: "s1", result: { ok: true } },
+    ]);
+    await settle();
+    expect(call.events().at(-1)).toMatchObject({ type: "tool-result", callId: "s1" });
+    expect(call.events().at(-1)).not.toHaveProperty("stage");
+    expect(call.news()).toEqual([]);
+    expect(call.turns).toHaveLength(1);
+  });
+});
+
+describe("what a bound call adds to her replies (rows 1, 4, 5, 7, 23)", () => {
+  test("rows 4 and 7: a reply to the caller's line, spoken or typed, gets all the plan adds", async () => {
+    const asked: boolean[] = [];
+    const call = startCall({ extras: giving(asked) });
+    await call.ready();
+    await call.says("帮我做个网页");
+    expect(asked).toEqual([true]);
+    expect(added(call.turn.request)).toEqual(EVERYTHING);
+    await spokenReply(call, "好。");
+    await call.rtvi("send-text", { content: "再做一个" });
+    expect(asked).toEqual([true, true]);
+    expect(added(call.turn.request)).toEqual(EVERYTHING);
+  });
+
+  test("her greeting, a recovery and a follow-up get the plan's providers alone", async () => {
+    const asked: boolean[] = [];
+    const call = startCall({ greet: true, extras: giving(asked) });
+    await call.ready();
+    expect(call.turn.request.kickoff).toBe(true);
+    expect(added(call.turn.request)).toEqual({ providers: PROVIDERS });
+    await spokenReply(call, "你好。");
+
+    await call.says("讲个故事");
+    call.turn.mind("started");
+    await settle();
+    await call.ear({ type: "user-started" }, { type: "user-stopped", text: null });
+    expect(call.turn.request.nudge).toBe(NUDGE);
+    expect(added(call.turn.request)).toEqual({ providers: PROVIDERS });
+    await spokenReply(call, "你说什么？");
+
+    call.turns[1]?.request.onAsyncResult([settled("s1", "final")]);
+    await settle();
+    expect(call.turns).toHaveLength(4);
+    expect(added(call.turn.request)).toEqual({ providers: PROVIDERS });
+    expect(asked).toEqual([false, true, false, false]);
+  });
+
+  test("it is asked as the reply starts: one that waits for her cut reply, once that has ended", async () => {
+    const asked: boolean[] = [];
+    const call = startCall({ stubborn: true, extras: giving(asked) });
+    await call.ready();
+    await call.says("讲个故事");
+    const cut = call.turn;
+    cut.round("从前有座山。");
+    await settle();
+    await call.says("等等");
+    expect(asked).toEqual([true]);
+    await cut.end();
+    await settle();
+    expect(call.turns).toHaveLength(2);
+    expect(asked).toEqual([true, true]);
+    expect(added(call.turn.request)).toEqual(EVERYTHING);
+  });
+
+  test("a plan that adds nothing adds nothing; one that throws is logged, and the reply goes on", async () => {
+    let failing = false;
+    const call = startCall({
+      extras: () => {
+        if (failing) throw new Error("the chat is gone");
+        return null;
+      },
+    });
+    await call.ready();
+    await call.says("你好");
+    expect(added(call.turn.request)).toEqual({});
+    await spokenReply(call, "你好呀。");
+    failing = true;
+    await call.says("在吗");
+    expect(call.turns).toHaveLength(2);
+    expect(added(call.turn.request)).toEqual({});
+    expect(logs).toContain("[voice] Reply id-4's extras failed: the chat is gone");
+  });
+});
+
+describe("results from outside the call (row 31)", () => {
+  test("stored at once; with a nudge, answered by a follow-up while she is idle", async () => {
+    const asked: boolean[] = [];
+    const call = startCall({ extras: giving(asked) });
+    await call.ready();
+    await call.says("帮我做个网页");
+    await spokenReply(call, "交给我吧。");
+    call.news();
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    // No call of this one's: the client hears nothing of it.
+    expect(call.news()).toEqual([]);
+    expect(call.turns).toHaveLength(2);
+    const { request } = call.turn;
+    expect(request.nudge).toBe(ENDED);
+    expect(request.chat.events.at(-1)).toMatchObject({ callId: "t1", stage: "final" });
+    expect(added(request)).toEqual({ providers: PROVIDERS });
+    expect(asked).toEqual([true, false]);
+    await spokenReply(call, "网页做好了。");
+    expect(call.turns).toHaveLength(2);
+  });
+
+  test("ones that land while she speaks wait for her reply's end, and go together", async () => {
+    const call = startCall({ extras: giving([]) });
+    await call.ready();
+    await call.says("讲个故事");
+    const first = call.turn;
+    first.round("从前有座山。");
+    await settle();
+    await call.outside({ drafts: [ended("t1")], nudge: "一" });
+    await call.outside({ drafts: [ended("t2")], nudge: "二" });
+    expect(call.turns).toHaveLength(1);
+    // Her open reply stores its line first: its turn placed its blocks by the log it read.
+    expect(call.events().map((e) => e.type)).toEqual(["message"]);
+    const ending = first.end();
+    await settle();
+    call.utterance().pcm(1, 240);
+    call.utterance().segEnd(1);
+    call.utterance().finish();
+    await settle();
+    await call.play(240);
+    await ending;
+    await settle();
+    const lines = call.events().map((e) => (e.type === "message" ? e.text : e.type));
+    expect(lines).toEqual(["讲个故事", "从前有座山。", "tool-result", "tool-result"]);
+    expect(call.events().slice(-2)).toMatchObject([{ callId: "t1" }, { callId: "t2" }]);
+    expect(call.turns).toHaveLength(2);
+    expect(call.turn.request.nudge).toBe("一\n\n二");
+  });
+
+  test("one that lands while the caller speaks skips her reply to them, which has the plan's tools, for a follow-up after it", async () => {
+    const asked: boolean[] = [];
+    const call = startCall({ extras: giving(asked) });
+    await call.ready();
+    await call.ear({ type: "user-started" });
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    expect(call.turns).toHaveLength(0);
+    await call.ear({ type: "final", text: "好了吗" }, { type: "user-stopped", text: "好了吗" });
+    expect(call.turns).toHaveLength(1);
+    const answer = call.turn.request;
+    expect(answer.nudge).toBeUndefined();
+    expect(added(answer)).toEqual(EVERYTHING);
+    // It still reads the result, stored before the line it answers.
+    const types = answer.chat.events.map((e) => e.type);
+    expect(types).toEqual(["tool-result", "message"]);
+    await spokenReply(call, "我看看。");
+    expect(call.turns).toHaveLength(2);
+    expect(call.turn.request.nudge).toBe(ENDED);
+    expect(added(call.turn.request)).toEqual({ providers: PROVIDERS });
+    expect(asked).toEqual([true, false]);
+    await spokenReply(call, "做好了。");
+    expect(call.turns).toHaveLength(2);
+  });
+
+  test("a reply to the caller's line that the plan offers no tools takes it", async () => {
+    const call = startCall({ extras: () => ({ providers: PROVIDERS }) });
+    await call.ready();
+    await call.ear({ type: "user-started" });
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    await call.ear({ type: "final", text: "好了吗" }, { type: "user-stopped", text: "好了吗" });
+    expect(call.turn.request.nudge).toBe(ENDED);
+    await spokenReply(call, "做好了。");
+    expect(call.turns).toHaveLength(1);
+  });
+
+  test("a recovery takes it after its own nudge", async () => {
+    const call = startCall({ extras: giving([]) });
+    await call.ready();
+    await call.says("讲个故事");
+    call.turn.mind("started");
+    await settle();
+    await call.ear({ type: "user-started" });
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    await call.ear({ type: "user-stopped", text: null });
+    expect(call.turns).toHaveLength(2);
+    expect(call.turn.request.nudge).toBe(`${NUDGE}\n\n${ENDED}`);
+    await spokenReply(call, "你说什么？");
+    expect(call.turns).toHaveLength(2);
+  });
+
+  test("one that comes before client-ready goes with her greeting", async () => {
+    const call = startCall({ greet: true, extras: giving([]) });
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    expect(call.turns).toHaveLength(0);
+    expect(call.events()).toMatchObject([{ callId: "t1", stage: "final" }]);
+    await call.ready();
+    expect(call.news()).toEqual(["bot-ready"]);
+    expect(call.turns).toHaveLength(1);
+    expect(call.turn.request).toMatchObject({ kickoff: true, nudge: ENDED });
+    await spokenReply(call, "欢迎回来，网页做好了。");
+    expect(call.turns).toHaveLength(1);
+  });
+
+  test("a greeting cut before its turn records the nudge it took leaves it for a follow-up after her answer", async () => {
+    const asked: boolean[] = [];
+    const call = startCall({ greet: true, extras: giving(asked) });
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    await call.ready();
+    expect(call.turn.request.nudge).toBe(ENDED);
+    await call.says("喂");
+    expect(call.turns).toHaveLength(2);
+    expect(call.turn.request.nudge).toBeUndefined();
+    await spokenReply(call, "在的。");
+    expect(call.turns).toHaveLength(3);
+    expect(call.turn.request.nudge).toBe(ENDED);
+    expect(asked).toEqual([false, true, false]);
+  });
+
+  test("a reply cut once its turn has recorded the nudge leaves nothing for another", async () => {
+    const call = startCall({ greet: true, extras: giving([]) });
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    await call.ready();
+    const greeting = call.turn;
+    // As the engine records it, before it asks her mind.
+    greeting.events({
+      type: "context",
+      persona: HOST,
+      turn: greeting.id,
+      position: 1,
+      role: "developer",
+      content: ENDED,
+    });
+    await settle();
+    await call.says("喂");
+    await spokenReply(call, "在的，网页也做好了。");
+    await call.advance(5_000);
+    expect(call.turns).toHaveLength(2);
+  });
+
+  test("one no longer due when her reply would take it is dropped: the end alone is told", async () => {
+    const call = startCall({ extras: giving([]) });
+    await call.ready();
+    await call.says("今天天气怎么样");
+    // Her answer, offered the plan's tools, is under way when a task pauses.
+    let paused = true;
+    await call.outside({ drafts: [], nudge: "（停下来了）", due: () => paused });
+    // The owner answers its card, and it ends, before her answer does.
+    paused = false;
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    await spokenReply(call, "今天是晴天哦。");
+    expect(call.turns).toHaveLength(2);
+    expect(call.turn.request.nudge).toBe(ENDED);
+  });
+
+  test("her greeting takes only the nudges still due as it starts", async () => {
+    const call = startCall({ greet: true, extras: giving([]) });
+    let paused = true;
+    await call.outside({ drafts: [], nudge: "（停下来了）", due: () => paused });
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    // The owner answers the card before the call is up.
+    paused = false;
+    await call.ready();
+    expect(call.turn.request).toMatchObject({ kickoff: true, nudge: ENDED });
+  });
+
+  test("a follow-up owed only to nudges no longer due never starts; one still due starts it", async () => {
+    const call = startCall({ extras: giving([]) });
+    await call.ready();
+    await call.says("今天天气怎么样");
+    let paused = true;
+    await call.outside({ drafts: [], nudge: "（停下来了）", due: () => paused });
+    paused = false;
+    await spokenReply(call, "今天是晴天哦。");
+    await call.advance(5_000);
+    expect(call.turns).toHaveLength(1);
+    await call.outside({ drafts: [], nudge: "（又停下来了）", due: () => true });
+    expect(call.turns).toHaveLength(2);
+    expect(call.turn.request.nudge).toBe("（又停下来了）");
+  });
+
+  test("one without a nudge is stored, and owes nothing", async () => {
+    const call = startCall();
+    await call.ready();
+    await call.outside({ drafts: [ended("t1", "cancelled")] });
+    expect(call.events()).toMatchObject([{ callId: "t1", stage: "cancelled" }]);
+    await call.advance(5_000);
+    expect(call.turns).toHaveLength(0);
+  });
+
+  test("its lines wait behind the message of her reply a barge-in cut", async () => {
+    const call = startCall({ stubborn: true });
+    await call.ready();
+    await call.says("讲个故事");
+    const cut = call.turn;
+    cut.round("从前有座山。山里有座庙。");
+    await settle();
+    call.utterance().pcm(1, 480);
+    call.utterance().segEnd(1);
+    call.utterance().pcm(2, 480);
+    await settle();
+    await call.play(720);
+    await call.ear({ type: "user-started" });
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    expect(call.events().map((e) => e.type)).toEqual(["message"]);
+    await cut.end();
+    await settle();
+    const lines = call.events().map((e) => (e.type === "message" ? e.text : e.type));
+    expect(lines).toEqual(["讲个故事", "从前有座山。", "tool-result"]);
+  });
+
+  test("once disconnect-bot has come, its lines are stored and no reply starts", async () => {
+    const call = startCall();
+    await call.ready();
+    await call.says("再见");
+    call.turn.round("拜拜。");
+    await settle();
+    call.utterance().pcm(1, 480);
+    await settle();
+    await call.play(240);
+    await call.rtvi("disconnect-bot");
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    await call.play(240);
+    await settle();
+    expect(call.endings).toEqual(["bot"]);
+    expect(call.events().at(-1)).toMatchObject({ callId: "t1" });
+    expect(call.turns).toHaveLength(1);
+  });
+
+  test("one after the call's end is neither stored nor answered", async () => {
+    const call = startCall({ stubborn: true });
+    await call.ready();
+    await call.says("讲个故事");
+    call.kit.post({ source: "shutdown" });
+    await settle();
+    // The call has ended, and still waits for her cut reply.
+    expect(call.floor.finished).toBeNull();
+    await call.outside({ drafts: [ended("t1")], nudge: ENDED });
+    await call.advance(2_000);
+    expect(await call.loop).toBe("shutdown");
+    expect(call.events().map((e) => e.type)).toEqual(["message"]);
+    expect(call.turns).toHaveLength(1);
   });
 });
 

@@ -1,7 +1,8 @@
 // Follows the chat on screen: its running turn from GET live when it opens, each reply a send
-// starts, and a call this page holds in it. A dropped stream leaves the turn running on the server,
-// so live picks it up again once. Her voice messages answering a send from this tab play on their
-// own, one after another, while the tab has the focus and no call is on.
+// starts, a call this page holds in it, and her report on a task that ended. A dropped stream
+// leaves the turn running on the server, so live picks it up again once. Her voice messages
+// answering a send from this tab play on their own, one after another, while the tab has the focus
+// and no call is on.
 import type { ChatEvent, ChatStreamLine } from "@eidolon/chat";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
@@ -11,6 +12,7 @@ import { toastError } from "@/lib/feedback";
 import { chatQuery, chatsQuery } from "./queries";
 import { reread } from "./reread";
 import {
+  awaitReport,
   IDLE,
   type LiveState,
   mayRunOn,
@@ -24,7 +26,10 @@ import { afterAutoPlay, pausePlayback, queueReplies, voiceReplies } from "./voic
 
 type Open = (signal: AbortSignal) => AsyncIterable<ChatStreamLine>;
 
-/** How long a call's feed waits to ask GET live again, after a 204 or a dropped stream. */
+/**
+ * How long a call's feed, or the wait for her report, waits to ask GET live again, after a 204 or a
+ * dropped stream.
+ */
 const CALL_FEED_RETRY_MS = 2000;
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,11 +50,17 @@ export interface ChatTurns {
   autoPlayEnded(next: boolean): void;
 }
 
-/** `calling`: a call is on in the chat, whose lines GET live carries as they are stored. */
-export function useChat(id: string, calling: boolean): ChatTurns {
+/**
+ * `calling`: a call is on in the chat, whose lines GET live carries as they are stored.
+ * `awaitingReport`: when the page saw a task of the chat end whose report, a turn with no line of
+ * the viewer's, isn't in the log yet, the latest; null for none.
+ */
+export function useChat(id: string, calling: boolean, awaitingReport: number | null): ChatTurns {
   const queryClient = useQueryClient();
   const [live, dispatch] = useReducer(reduceLive, IDLE);
   const streams = useRef(new Set<AbortController>());
+  /** When the last stream that carried a line ended. */
+  const carried = useRef(0);
   const sends = useRef(new Sends());
   const [toPlay, setToPlay] = useState<readonly number[]>([]);
   const callOn = useRef(calling);
@@ -124,6 +135,7 @@ export function useChat(id: string, calling: boolean): ChatTurns {
       } finally {
         streams.current.delete(controller);
         if (following) dispatch({ type: "unfollow" });
+        if (received) carried.current = Date.now();
       }
       if (controller.signal.aborted) return;
       dispatch({ type: "settled", key, turn: null });
@@ -167,6 +179,27 @@ export function useChat(id: string, calling: boolean): ChatTurns {
       on = false;
     };
   }, [calling, id, follow, queryClient]);
+
+  // Her report starts once its task's final is stored and no reply runs, so live is asked again
+  // until it comes; each answer, a 204 included, rereads the log.
+  useEffect(() => {
+    if (awaitingReport === null || calling) return;
+    let on = true;
+    void awaitReport(
+      {
+        open: () => streams.current.size,
+        carried: () => carried.current,
+        follow: () => follow((signal) => followLive(id, signal), null, false),
+        pause: () => pause(CALL_FEED_RETRY_MS),
+        now: Date.now,
+        on: () => on,
+      },
+      awaitingReport,
+    );
+    return () => {
+      on = false;
+    };
+  }, [awaitingReport, calling, id, follow]);
 
   const send = useCallback(
     (text: string) => {

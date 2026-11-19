@@ -28,8 +28,10 @@ import type {
   CloseReason,
   EarEvent,
   Heard,
+  OutsideResult,
   Pcm,
   PcmSource,
+  ReplyExtras,
 } from "../../src/types.ts";
 import { FakeClock } from "../input/clock.ts";
 
@@ -228,6 +230,8 @@ export interface CallOptions {
   readonly turn?: FloorOptions["turn"];
   /** Her voice's sample rate: 24 kHz unless set. */
   readonly speechRate?: number;
+  /** What each reply adds to her turn, as a call bound to a chat of hers alone has it. */
+  readonly extras?: ReplyExtras;
 }
 
 /** One message as a short line: its type, and what tells it apart from its kind. */
@@ -288,6 +292,7 @@ export function startCall(options: CallOptions = {}) {
       log,
       greet: options.greet ?? false,
       realtime: false,
+      ...(options.extras === undefined ? {} : { extras: options.extras }),
     },
     kit,
     emitter,
@@ -355,6 +360,11 @@ export function startCall(options: CallOptions = {}) {
     },
     async ear(...events: EarEvent[]): Promise<void> {
       for (const event of events) kit.post({ source: "ear", event });
+      await settle();
+    },
+    /** A result from outside the call, posted as runCall posts one. */
+    async outside(result: OutsideResult): Promise<void> {
+      kit.post({ source: "outside", result });
       await settle();
     },
     /** A whole turn of the caller's: started, its final, stopped. */

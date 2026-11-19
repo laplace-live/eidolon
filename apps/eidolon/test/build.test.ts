@@ -167,18 +167,25 @@ describe("the third-party notices", () => {
     expect(text.match(/^### /gm)?.length).toBe(dist.length);
   });
 
-  test("NOTICE, which the package ships, names every copyright a ported file's BSD-2 header does", () => {
+  test("NOTICE, which the package ships, names every copyright a ported file's header does", () => {
     const notice = readFileSync(join(ROOT, "NOTICE"), "utf8");
-    const holders = new Set<string>();
+    // pipedog's ports are BSD-2, pi-mono's MIT.
+    const holders = new Map<string, Set<string>>([
+      ["BSD-2-Clause", new Set()],
+      ["MIT", new Set()],
+    ]);
     for (const file of new Bun.Glob("packages/*/src/**/*.ts").scanSync(ROOT)) {
       const source = readFileSync(join(ROOT, file), "utf8");
-      if (!source.includes("SPDX-License-Identifier: BSD-2-Clause")) continue;
+      const license = /^\/\/ SPDX-License-Identifier: (BSD-2-Clause|MIT)$/m.exec(source)?.[1];
+      if (license === undefined) continue;
       for (const [, line] of source.matchAll(/^\/\/ (Copyright \(c\) .+)$/gm)) {
-        holders.add(line as string);
+        holders.get(license)?.add(line as string);
       }
     }
-    expect(holders.size).toBeGreaterThan(0);
-    expect([...holders].filter((line) => !notice.includes(line))).toEqual([]);
+    for (const [license, lines] of holders) {
+      expect([license, lines.size > 0]).toEqual([license, true]);
+      expect([license, [...lines].filter((line) => !notice.includes(line))]).toEqual([license, []]);
+    }
   });
 });
 

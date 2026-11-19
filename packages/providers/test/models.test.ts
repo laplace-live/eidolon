@@ -105,6 +105,9 @@ describe("listModels", () => {
   test("no listing, no key, or a refusal leaves the id to type", async () => {
     const fish = account("fish", { provider: "fish", apiKey: "f" });
     expect(await listModels(fish, "tts")).toEqual({ status: "unlisted" });
+    // OpenRouter lists no search engines, so the catalog's closed offer is the choice.
+    const openrouter = account("openrouter", { provider: "openrouter", apiKey: "o" });
+    expect(await listModels(openrouter, "search")).toEqual({ status: "unlisted" });
     const keyless = account("anthropic", { provider: "anthropic" });
     expect(await listModels(keyless, "llm")).toEqual({ status: "no-key" });
     const claude = account("anthropic", { provider: "anthropic", apiKey: "a" });

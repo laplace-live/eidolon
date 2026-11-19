@@ -56,6 +56,7 @@ const SUMMARY = `
     COALESCE(SUM(output_tokens), 0) AS outputTokens,
     COALESCE(SUM(characters), 0) AS characters,
     COALESCE(SUM(audio_seconds), 0) AS audioSeconds,
+    COALESCE(SUM(searches), 0) AS searches,
     COALESCE(SUM(images), 0) AS images
   FROM usage
   WHERE at >= $from AND at < $to AND ($persona IS NULL OR persona = $persona)

@@ -2,25 +2,46 @@
 // persona's voice are checked in the background and reported from the last answer; the tools on
 // PATH are looked up at most once a minute.
 import { existsSync, statfsSync, statSync } from "node:fs";
-import { activePersona, dataHome, envOptional, envOverride, logger } from "@eidolon/config";
+import { homedir } from "node:os";
+import { grantRefusal } from "@eidolon/assistant";
+import {
+  activePersona,
+  assistantSettings,
+  dataHome,
+  envOptional,
+  envOverride,
+  logger,
+} from "@eidolon/config";
 import { referenceCandidates } from "@eidolon/imagegen";
 import { download, which } from "@eidolon/ingest";
 import {
   accountsFor,
   callRoles,
+  hasKey,
+  missingKey,
   ProviderConfigError,
   type RoleId,
   type Selection,
   select,
+  selectRequired,
+  selectTask,
   trySelect,
   voiceOf,
 } from "@eidolon/providers";
 import manifest from "../../package.json" with { type: "json" };
-import type { CallRole, Status, VoiceStatus, YtDlpStatus } from "./api.ts";
+import type {
+  AssistantStatus,
+  CallRole,
+  Status,
+  TaskProfile,
+  VoiceStatus,
+  YtDlpStatus,
+} from "./api.ts";
 import { checkFishVoice, checkQdrant, configuredQdrant, voiceOk } from "./checks.ts";
 import { findAvatar, indexStatus } from "./personas.ts";
 import { restartTracker } from "./restart.ts";
 import type { LocalApp } from "./router.ts";
+import type { TaskManager } from "./tasks/manager.ts";
 
 export interface StatusDeps {
   readonly fetch: typeof fetch;
@@ -264,6 +285,55 @@ function callRole(role: RoleId): { role: CallRole; selection: Selection | null }
   }
 }
 
+/** Why one of `folders`, absolute, can't be granted, as every task's policy would refuse it. */
+export function foldersProblem(folders: readonly string[]): string | null {
+  const home = homedir();
+  for (const folder of folders) {
+    const refused = grantRefusal(folder, home);
+    if (refused !== null) return refused.message;
+  }
+  return null;
+}
+
+/**
+ * Why a task can't run, sending nothing: why createMind("assistant") would throw (no account or
+ * model chosen, an account that can't run tasks, or no key), or an assistant folder no task may be
+ * granted. null once a task can start.
+ */
+export function assistantProblem(): string | null {
+  try {
+    const selection = selectRequired("assistant");
+    if (!hasKey(selection)) return missingKey(selection).message;
+  } catch (error) {
+    if (error instanceof ProviderConfigError) return error.message;
+    throw error;
+  }
+  return foldersProblem(assistantSettings().folders);
+}
+
+/**
+ * Whether tasks may search the web: the search role has an account and its key. `problem` says why
+ * an account named can't; null when none is named, the owner's choice.
+ */
+export function searchStatus(): AssistantStatus["search"] {
+  let problem: string | null = null;
+  const selection = trySelect("search", undefined, (error) => {
+    problem = error.message;
+  });
+  if (selection === null) return { on: false, problem };
+  if (!hasKey(selection)) return { on: false, problem: missingKey(selection).message };
+  return { on: true, problem: null };
+}
+
+/**
+ * Why each kind of task runs on Assistant Mode's own account and model though its own are set; all
+ * null unless `ready`, as Assistant Mode's own problem is the one to tell.
+ */
+export function kindsStatus(ready: boolean): AssistantStatus["kinds"] {
+  const fallback = (kind: TaskProfile) => (ready ? selectTask(kind).fallback : null);
+  return { quick: fallback("quick"), coding: fallback("coding"), research: fallback("research") };
+}
+
 /** The roles her calls run on; a realtime setting Eidolon can't use is the problem to report. */
 function statusRoles(): readonly RoleId[] {
   try {
@@ -274,7 +344,12 @@ function statusRoles(): readonly RoleId[] {
   }
 }
 
-export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps): Status {
+/** `tasks`: the server's task manager, which counts the running tasks; none runs without one. */
+export function buildStatus(
+  app: LocalApp,
+  deps: StatusDeps = defaultStatusDeps,
+  tasks?: Pick<TaskManager, "running">,
+): Status {
   const state = stateOf(app);
   const persona = activePersona();
 
@@ -314,6 +389,7 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
 
   const changes = restartTracker(app).changes();
   const { ytDlp, ffmpeg } = tools(state, deps);
+  const notReady = assistantProblem();
   return {
     version: manifest.version,
     restartRequired: changes.calls.length > 0,
@@ -351,5 +427,13 @@ export function buildStatus(app: LocalApp, deps: StatusDeps = defaultStatusDeps)
     freeBytes: freeBytes(),
     lastSessionError: state.lastSessionError,
     activeCalls: app.activeCalls(),
+    assistant: {
+      enabled: assistantSettings().enabled,
+      ready: notReady === null,
+      problem: notReady,
+      running: tasks?.running() ?? 0,
+      search: searchStatus(),
+      kinds: kindsStatus(notReady === null),
+    },
   };
 }

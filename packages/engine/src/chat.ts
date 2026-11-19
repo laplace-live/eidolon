@@ -22,12 +22,15 @@ import {
   directorParticipant,
 } from "@eidolon/context";
 import { type UsageScope, withUsageScope } from "@eidolon/providers";
+import { linesOf } from "./group.ts";
 import { runTurn } from "./turn.ts";
 import type {
+  BackgroundTools,
   CallHooks,
   CallTurnOutput,
   EngineDeps,
   LateTools,
+  TurnExtras,
   TurnOutput,
   TurnRequest,
 } from "./types.ts";
@@ -66,10 +69,16 @@ export interface ChatRequest {
   readonly late?: LateTools;
   /** The director's and each turn's. Default: `{ source: "chat", session: <chat id> }`. */
   readonly usage?: UsageScope;
+  /** Offered in each turn after her own tools. */
+  readonly background?: BackgroundTools;
+  /** Offered in each turn after her own and her background tools, and settled within it. */
+  readonly tools?: TurnRequest["tools"];
+  /** Run in each turn after her own providers. */
+  readonly providers?: TurnRequest["providers"];
 }
 
 /** A call's answer: each persona's turn is a call's, and every reply is spoken. */
-export interface CallChatRequest extends Omit<ChatRequest, "late"> {
+export interface CallChatRequest extends Omit<ChatRequest, "late" | keyof TurnExtras> {
   /** Called just before each persona's turn, for that turn alone. */
   readonly hooks: (persona: ParticipantId) => CallHooks;
 }
@@ -95,17 +104,7 @@ function defaultDirector(): Director {
 
 /** The chat's lines through seq `last`, oldest first, as the director reads them. */
 function linesThrough(events: readonly ChatEvent[], last: number): DirectorLine[] {
-  return withUnheard(events).flatMap((event) =>
-    event.type === "message" && event.text !== "" && event.seq <= last
-      ? [
-          {
-            speaker: event.speaker,
-            text: event.text,
-            ...(event.modality ? { modality: event.modality } : {}),
-          },
-        ]
-      : [],
-  );
+  return linesOf(withUnheard(events).filter((event) => event.seq <= last));
 }
 
 /** The seq of the last persona line after seq `line`, or null when no persona spoke. */
@@ -140,6 +139,17 @@ function round(
     if (present.has(reply.persona) && !once.has(reply.persona)) once.set(reply.persona, reply);
   }
   return [...once.values()];
+}
+
+/** What a chat's answer hands each of its turns beyond her parts. */
+function handed(request: ChatRequest): Pick<TurnRequest, "late" | keyof TurnExtras> {
+  const { late, background, tools, providers } = request;
+  return {
+    ...(late ? { late } : {}),
+    ...(background ? { background } : {}),
+    ...(tools ? { tools } : {}),
+    ...(providers ? { providers } : {}),
+  };
 }
 
 /** Her reply, or its failure, or the turn's end: what her decision must be stored before. */
@@ -181,8 +191,8 @@ async function* answerWhileDeciding(
       viewer: request.viewer,
       signal,
       mode,
-      ...(request.late ? { late: request.late } : {}),
       ...(request.usage ? { usage: request.usage } : {}),
+      ...handed(request),
     },
     deps,
   )) {
@@ -223,9 +233,8 @@ export async function* runChat(
   const usage = request.usage ?? { source: "chat", session: header.id };
   const turn = (chat: ChatLog, persona: ParticipantId, mode: "text" | "voice") => {
     const base = { chat, persona, viewer: request.viewer, signal, usage };
-    if (hooks !== null) return runTurn({ ...base, ...hooks(persona) }, deps);
-    const late = "late" in request ? request.late : undefined;
-    return runTurn({ ...base, mode, ...(late ? { late } : {}) }, deps);
+    if ("hooks" in request) return runTurn({ ...base, ...request.hooks(persona) }, deps);
+    return runTurn({ ...base, mode, ...handed(request) }, deps);
   };
   const decide = (lines: DirectorLine[], hop: number): Promise<DirectorDecision> =>
     withUsageScope(usage, () =>

@@ -145,6 +145,39 @@ describe("OpenAIChatClient", () => {
     const failed = drain(stream);
     await expect(failed).rejects.toBeInstanceOf(ProviderHttpError);
   });
+
+  test("an error that ends a stream mid-reply throws, though its chunk carries a choice", async () => {
+    const client = new OpenAIChatClient({ provider: "OpenRouter", baseUrl: base(), apiKey: "k" });
+    // OpenRouter's mid-stream error (openrouter.ai/docs/api-reference/errors).
+    const dropped = {
+      id: "gen-1",
+      object: "chat.completion.chunk",
+      error: { code: 502, message: "Provider disconnected unexpectedly" },
+      choices: [{ index: 0, delta: { content: "" }, finish_reason: "error" }],
+    };
+    reply = () =>
+      sse([
+        'data: {"choices":[{"index":0,"delta":{"content":"I\'ll"}}]}\n\n',
+        `data: ${JSON.stringify(dropped)}\n\n`,
+        "data: [DONE]\n\n",
+      ]);
+    const items: unknown[] = [];
+    const read = async () => {
+      const stream = await client.chat.completions.create({ model: "m", stream: true });
+      for await (const item of stream as AsyncIterable<unknown>) items.push(item);
+    };
+    const error = await read().catch((thrown: unknown) => thrown);
+    expect(error).toBeInstanceOf(ProviderHttpError);
+    expect(error).toMatchObject({
+      status: 502,
+      message: "OpenRouter answered 502: Provider disconnected unexpectedly",
+    });
+    expect(items).toHaveLength(1);
+
+    reply = () => sse(['data: {"error":null,"choices":[{"delta":{"content":"ok"}}]}\n\n']);
+    const clean = await client.chat.completions.create({ model: "m", stream: true });
+    expect(await drain(clean)).toHaveLength(1);
+  });
 });
 
 describe("AnthropicClient", () => {
@@ -194,6 +227,17 @@ describe("AnthropicClient", () => {
       ],
     ]);
   });
+});
+
+test("a base URL keeps none of its trailing slashes, however many it has", async () => {
+  seen.length = 0;
+  reply = () => Response.json({ ok: true });
+  const slashed = `${base()}///`;
+  const openai = new OpenAIChatClient({ provider: "P", baseUrl: slashed, apiKey: "k" });
+  await openai.chat.completions.create({ model: "m" });
+  const anthropic = new AnthropicClient({ provider: "Anthropic", baseUrl: slashed, apiKey: "ak" });
+  await anthropic.beta.messages.create({ model: "claude-x" });
+  expect(seen.map((request) => request.path)).toEqual(["/v1/chat/completions", "/v1/messages"]);
 });
 
 test("OpenAI's own API gets a completion cap, and its reasoning models no sampling settings", () => {

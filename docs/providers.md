@@ -29,6 +29,9 @@ of their own (`stt/`, `speech/stream/`, `realtime/`).
 | transcription | `transcription.provider`, `.model` | `TRANSCRIBE_PROVIDER`, `TRANSCRIBE_MODEL` | Soniox `stt-async-v5` | jobs |
 | refine | `refine.provider`, `.model` | `REFINE_PROVIDER`, `REFINE_MODEL` | OpenRouter `~google/gemini-pro-latest` | jobs |
 | embeddings | `embeddings.provider`, `.model` (app-wide) | `EMBED_PROVIDER`, `EMBED_MODEL` | OpenRouter `google/gemini-embedding-2-preview` | jobs, calls, MCP |
+| assistant | `assistant.provider`, `.model` (app-wide) | `ASSISTANT_PROVIDER`, `ASSISTANT_MODEL` | off | tasks |
+| assistant-quick, -coding, -research | `assistant.quick.provider`, `.model`, and `.coding`'s and `.research`'s (app-wide) | `ASSISTANT_QUICK_PROVIDER`, `ASSISTANT_QUICK_MODEL`, and `_CODING_`'s and `_RESEARCH_`'s | the assistant's | tasks of that kind |
+| search | `assistant.search.provider`, `.model` (app-wide) | `ASSISTANT_SEARCH_PROVIDER`, `ASSISTANT_SEARCH_MODEL` | off; OpenRouter `exa` once its account is picked | a task's `web_search` |
 
 The decision models the retrieval gate asks are a category of their own, `decision`: OpenRouter
 lists them under `output_modalities=decisions` (Jev, Reflex, d1 and others), and the catalog
@@ -38,6 +41,33 @@ another one.
 Memory follows the mind: unset, it uses her chat account, and her chat model while the two
 accounts' providers match, as `modelFor` resolves it. Embeddings are app-wide, because every
 persona's index and the memory collection share one vector space.
+
+The assistant runs the tasks of Assistant Mode, app-wide. It has no default provider and no
+default model, whatever the provider: its tasks stay off until both are named, and her chat
+model is never the fallback.
+
+The task kinds follow the assistant as memory follows the mind (`follows: "assistant"`): a kind
+with nothing set runs on the assistant's account and model, a model alone on the assistant's
+account, another account of the assistant's provider its model too, and an account of another
+provider takes a model of its own. `selectTask(kind)` (`resolve.ts`) picks a task's at its start,
+and when a kind's own can't run (another provider's account without a model, an
+account with no key, one Eidolon doesn't know), it returns the assistant's with the reason as
+`fallback`; `other`, and no kind, are the assistant's own. It throws as `select` does when the
+assistant can't run either. Each kind's usage is recorded as role `assistant`
+([assistant.md](assistant.md#kinds)).
+
+Search is a category of its own, `search`, with one role: tasks' `web_search`. Its only offer is
+OpenRouter's `openrouter:web_search` server tool, closed to the engine `exa` at $7 per 1,000
+searches: `auto` and `native` would search at the carrier model's own provider's price.
+OpenRouter searches only inside a model's request, so `openRouterSearcher` (`search.ts`) sends
+one small carrier request a search, `openai/gpt-6-luna` with reasoning off, the tool forced once
+(`max_uses: 1`, `max_total_results`, `max_tool_calls: 1`), and reads the results from the
+reply's `url_citation` annotations, each page's title, URL and Exa's excerpt, so the query
+reaches OpenRouter, the carrier model's provider (OpenAI) and Exa. It goes through
+`OpenAIChatClient`, with OpenRouter's attribution headers and the client's retries, and reports
+one record: role `search`, model `exa`, the carrier's tokens, the searches billed and
+OpenRouter's `usage.cost`, about $0.007. A reply that counts several searches is recorded as one,
+as billed, and one in which none ran is reported, then fails.
 
 ## Accounts
 
@@ -102,7 +132,12 @@ with the reason under it. Any id typed is used as typed.
 Fish Audio has no listing either, but its models are a closed set: its API reference names them
 as the values of the `model` header, and a request naming any other runs on `s2.1-pro` without a
 word. Its offer is `openModels: false`, so its field is a choice among the catalog's models,
-which mirror that list; the key check in the app warns about an unknown one saved by hand. `GET /api/local/accounts/:id/models`
+which mirror that list; the key check in the app warns about an unknown one saved by hand.
+OpenRouter's web search is closed too, for another reason: it refuses an engine it doesn't know
+with a 400, but its `auto` and `native` engines search at the carrier model's own provider's
+price, so the search role offers `exa` alone. PUT settings doesn't check a closed offer's model,
+so one set by hand in `settings.yaml` or the environment runs as set, and is billed as reported.
+`GET /api/local/accounts/:id/models`
 keeps a list for ten minutes, a failure for thirty seconds, and forgets an account's when the
 account changes.
 
@@ -245,14 +280,16 @@ keys in Settings and the wizard, and home's readiness drops the voice item.
 ## Usage and cost
 
 Every request that spends money reports what it used (tokens in, cached and out, characters,
-bytes, seconds of audio, images, searches) through `reportUsage`. A call, a chat turn, a job and
-an MCP request each run inside `withUsageScope`, so the code that spends needn't know who asked.
+bytes, seconds of audio, images, searches) through `reportUsage`. A call, a chat turn, a job, a
+task and an MCP request each run inside `withUsageScope`, so the code that spends needn't know
+who asked.
 A record's cost is, in order: what the provider's response says it billed (OpenRouter's
 `usage.cost`, the decisions API's), else the catalog's list price for that model on that day,
 promotions included, else the caller's own estimate, else none, and it is kept as `unpriced` with
 its usage. A record names the provider whose API the request reached, so a role's own base at
 another provider's API (`RERANK_BASE_URL` at Cohere's) is that provider's spend, priced from its
-models.
+models. A task's mind also hands each of its records, cost and all, to the task's own meter
+(`createMind`'s `tap`), whose spend pauses read it.
 
 `@eidolon/usage` keeps the records in SQLite, at `EIDOLON_USAGE_DB` or `<data home>/usage.db`, in
 WAL mode with a busy timeout, because the bot, the local app and every job's CLI write to one file.
@@ -261,9 +298,10 @@ logs one warning and records nothing; a request never fails for it.
 
 The local app's **Usage** page reads it through `GET /api/local/usage?from=&to=&persona=`: spend
 per day or month stacked by provider, then tables by provider, by model and task, and by persona.
-Estimated spend is marked `≈`, and the totals say how much of it is estimated and how many records
-had no price. A provider keeps its color whatever the filter, from its place in the catalog among
-every provider the ledger knows.
+A provider's or a model's line says what it used in its own units, searches included; a persona's
+gives her requests and spend. Estimated spend is marked `≈`, and the totals say how much of it is
+estimated and how many records had no price. A provider keeps its color whatever the filter, from
+its place in the catalog among every provider the ledger knows.
 
 ## Production
 

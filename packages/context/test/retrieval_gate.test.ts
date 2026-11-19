@@ -259,6 +259,43 @@ describe("gateState", () => {
     ]);
     expect(state?.earlier_turns).toEqual([]);
   });
+
+  const recalled = (id: string, said?: string) => [
+    {
+      role: "assistant",
+      ...(said === undefined ? {} : { content: said }),
+      tool_calls: [{ id, type: "function", function: { name: "recall_streams", arguments: "{}" } }],
+    },
+    { role: "tool", tool_call_id: id, content: "那次直播" },
+  ];
+
+  test("her words before her calls and her line after them are one streamer turn, so the viewer line before them stays", () => {
+    const state = gateState([
+      { role: "user", content: "还记得那只猫吗" },
+      ...recalled("c1", "我想想。"),
+      { role: "system", content: "回忆" },
+      ...recalled("c2", "再查查。"),
+      ...recalled("c3"),
+      { role: "assistant", content: "是小花！" },
+      { role: "user", content: "它几岁了" },
+    ]);
+    expect(state?.earlier_turns).toEqual([
+      { speaker: "viewer", text: "还记得那只猫吗" },
+      { speaker: "streamer", text: "我想想。再查查。是小花！" },
+    ]);
+  });
+
+  test("her words before a call that no line of hers follows are a streamer turn of their own", () => {
+    const state = gateState([
+      { role: "user", content: "还记得那只猫吗" },
+      ...recalled("c1", "我查查"),
+      { role: "user", content: "它几岁了" },
+    ]);
+    expect(state?.earlier_turns).toEqual([
+      { speaker: "viewer", text: "还记得那只猫吗" },
+      { speaker: "streamer", text: "我查查" },
+    ]);
+  });
 });
 
 describe("RetrievalGate.decide", () => {

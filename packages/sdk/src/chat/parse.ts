@@ -162,7 +162,8 @@ export function isChatEvent(value: unknown): value is ChatEvent {
         isOwnedByPersona(value) &&
         isString(value.callId) &&
         isString(value.name) &&
-        isJsonObject(value.arguments)
+        isJsonObject(value.arguments) &&
+        (value.said === undefined || isString(value.said))
       );
     case "tool-result":
       return (

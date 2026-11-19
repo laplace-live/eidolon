@@ -20,7 +20,7 @@ import { type Lang, useLang } from "@/locales/i18n";
 import { seriesColor } from "./spend-chart";
 import { type Group, type ModelKey, OTHER, type Totals } from "./summary";
 
-/** What a line used, in the units its provider bills: tokens, characters, audio, images. */
+/** What a line used, in the units its provider bills, tokens to searches and images. */
 export function unitsText(lang: Lang, totals: Totals): string {
   const parts: string[] = [];
   const input = totals.inputTokens;
@@ -48,6 +48,11 @@ export function unitsText(lang: Lang, totals: Totals): string {
       () => new Intl.NumberFormat(lang, { maximumFractionDigits: digits }),
     ).format(minutes);
     parts.push(t`${amount} min of audio`);
+  }
+  if (totals.searches > 0) {
+    parts.push(
+      t`${plural(ph({ count: totals.searches }), { one: `# search`, other: `# searches` })}`,
+    );
   }
   if (totals.images > 0)
     parts.push(t`${plural(ph({ count: totals.images }), { one: `# image`, other: `# images` })}`);

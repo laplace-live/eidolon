@@ -17,6 +17,7 @@ import type {
   CursorEvent,
   EarEvent,
   Heard,
+  OutsideResult,
   Speaker,
 } from "../types.ts";
 import type { RealtimeInput } from "./realtime.ts";
@@ -70,6 +71,8 @@ export type LoopEvent =
       readonly persona: string;
       readonly drafts: readonly ChatEventDraft[];
     }
+  /** The plan's `outside`. */
+  | { readonly source: "outside"; readonly result: OutsideResult }
   /** `token` tells a timer from the one that replaced it. */
   | { readonly source: "timer"; readonly timer: TimerName; readonly token: number }
   | { readonly source: "transport" }
@@ -185,8 +188,8 @@ export interface CallSetup {
 
 /**
  * Runs a call on `transport` until it ends, around what `open` opens: the client's messages, its
- * hang-up and `signal` reach the mailbox, which the floor reads until it finishes. Rejects when
- * `open` or the connection does; what it opened is closed by then.
+ * hang-up, the plan's `outside` and `signal` reach the mailbox, which the floor reads until it
+ * finishes. Rejects when `open` or the connection does; what it opened is closed by then.
  */
 export async function runCall(
   transport: CallTransport,
@@ -215,6 +218,17 @@ export async function runCall(
     })().catch((error: unknown) => {
       logger.error(`[voice] The client's messages failed: ${errorText(error)}`, error);
     });
+    const { outside } = plan;
+    if (outside !== undefined) {
+      void (async () => {
+        for await (const result of outside) {
+          if (kit.stopped) return;
+          kit.post({ source: "outside", result });
+        }
+      })().catch((error: unknown) => {
+        logger.error(`[voice] Results from outside the call failed: ${errorText(error)}`, error);
+      });
+    }
     void transport.closed.then(() => kit.post({ source: "transport" }));
     signal.addEventListener("abort", onShutdown, { once: true });
     if (signal.aborted) onShutdown();

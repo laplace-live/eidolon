@@ -1,30 +1,22 @@
-// Where the offline chain reads and writes in the data home, and the locks that keep two runs from
-// writing the same files. Everything resolves at call time.
-import { Database } from "bun:sqlite";
-import { createHash } from "node:crypto";
-import {
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+// Where the offline chain reads and writes in the data home, and the keys of the locks that keep
+// two runs from writing the same files. Everything resolves at call time.
+import { mkdirSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import {
   activePersona,
   dataHome,
   envOptional,
-  isPlainObject,
   logger,
   personaHomeDir,
   resolveProjectPath,
   templatesDir,
 } from "@eidolon/config";
+import type { LockedError } from "@eidolon/config/lock";
 import { INDEX_DIR } from "@eidolon/retrieval";
 import type { ProgressSink, Stage } from "./progress.ts";
 
 export { type SourceFolder, sourceFolder, sourcesDir } from "@eidolon/config";
+export { acquireLock, LockedError, lockInfoPath } from "@eidolon/config/lock";
 
 /**
  * Where the writers build persona `id`'s index: where the bot reads it (`LANCEDB_PATH` or
@@ -123,15 +115,6 @@ export function sourcesLockKey(persona: string): string {
 /** Held by the download library while it installs or updates yt-dlp. */
 export const YT_DLP_LOCK_KEY = "yt-dlp";
 
-/** Another process holds the lock; the CLI exits 1, or emits code "locked" under --json. */
-export class LockedError extends Error {
-  override name = "LockedError";
-  readonly code = "locked";
-  constructor(holder: string, target: string, pid: number | null) {
-    super(`Another ${holder} is running for ${target}${pid === null ? "" : ` (pid ${pid})`}.`);
-  }
-}
-
 /** Another writer holds the index: why, as a failed stage, then the stage's summary. */
 export function lockedOut(
   emit: ProgressSink,
@@ -150,73 +133,4 @@ export function lockedOut(
     durationSec: 0,
     failures: [{ item, error: error.message }],
   });
-}
-
-// A lock's Database must stay reachable: collecting it would close the connection and release it.
-const held = new Set<Database>();
-
-function holderInfo(path: string): { pid: number | null; command: string | null } {
-  try {
-    const info: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (isPlainObject(info)) {
-      return {
-        pid: typeof info.pid === "number" ? info.pid : null,
-        command: typeof info.command === "string" ? info.command : null,
-      };
-    }
-  } catch {
-    // Not written yet, or gone: the holder is unknown.
-  }
-  return { pid: null, command: null };
-}
-
-/** Where lock `key`'s files sit in `<home>/locks/`, named by its SHA-256's first 12 hex digits. */
-function lockStem(key: string): string {
-  const name = createHash("sha256").update(key, "utf8").digest("hex").slice(0, 12);
-  return join(dataHome(), "locks", name);
-}
-
-/** The .info lock `key`'s holder writes: its pid, command, key and start. */
-export function lockInfoPath(key: string): string {
-  return `${lockStem(key)}.info`;
-}
-
-/**
- * Takes the lock named `key` for this process, or throws LockedError naming its holder. The lock
- * is SQLite's exclusive lock on a file in `<home>/locks/`, which the OS drops when the process
- * dies, so a crash never leaves a stale lock. Call the returned function to release it.
- */
-export function acquireLock(key: string, command: string): () => void {
-  privateDir("locks");
-  const infoPath = lockInfoPath(key);
-  const db = new Database(`${lockStem(key)}.lock`, { create: true });
-  try {
-    db.exec("PRAGMA busy_timeout = 0");
-    db.exec("BEGIN EXCLUSIVE");
-  } catch (error) {
-    db.close();
-    if ((error as { code?: unknown }).code !== "SQLITE_BUSY") throw error;
-    const holder = holderInfo(infoPath);
-    const colon = key.indexOf(":");
-    throw new LockedError(holder.command ?? command, key.slice(colon + 1), holder.pid);
-  }
-  held.add(db);
-  writeFileSync(
-    infoPath,
-    JSON.stringify({ pid: process.pid, command, key, start: new Date().toISOString() }),
-  );
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    // While the lock is still held, so it can't remove the next holder's file.
-    try {
-      unlinkSync(infoPath);
-    } catch {
-      // Already gone.
-    }
-    db.exec("ROLLBACK");
-    db.close();
-    held.delete(db);
-  };
 }

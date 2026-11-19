@@ -190,6 +190,70 @@ export const SETTINGS: readonly SettingField[] = [
   ),
   field("app", "sources.cookiesFile", "YT_DLP_COOKIES", "path", "Cookies file"),
   field("app", "usage.db", "EIDOLON_USAGE_DB", "path", "Usage ledger"),
+  field("app", "assistant.enabled", "ASSISTANT_ENABLED", "flag", "Assistant Mode"),
+  field("app", "assistant.provider", "ASSISTANT_PROVIDER", "string", "Assistant provider"),
+  field("app", "assistant.model", "ASSISTANT_MODEL", "string", "Assistant model", {
+    provider: "ASSISTANT_PROVIDER",
+  }),
+  field(
+    "app",
+    "assistant.quick.provider",
+    "ASSISTANT_QUICK_PROVIDER",
+    "string",
+    "Quick task provider",
+    { follows: "ASSISTANT_PROVIDER" },
+  ),
+  field("app", "assistant.quick.model", "ASSISTANT_QUICK_MODEL", "string", "Quick task model", {
+    provider: "ASSISTANT_QUICK_PROVIDER",
+  }),
+  field(
+    "app",
+    "assistant.coding.provider",
+    "ASSISTANT_CODING_PROVIDER",
+    "string",
+    "Coding task provider",
+    { follows: "ASSISTANT_PROVIDER" },
+  ),
+  field("app", "assistant.coding.model", "ASSISTANT_CODING_MODEL", "string", "Coding task model", {
+    provider: "ASSISTANT_CODING_PROVIDER",
+  }),
+  field(
+    "app",
+    "assistant.research.provider",
+    "ASSISTANT_RESEARCH_PROVIDER",
+    "string",
+    "Research task provider",
+    { follows: "ASSISTANT_PROVIDER" },
+  ),
+  field(
+    "app",
+    "assistant.research.model",
+    "ASSISTANT_RESEARCH_MODEL",
+    "string",
+    "Research task model",
+    { provider: "ASSISTANT_RESEARCH_PROVIDER" },
+  ),
+  field("app", "assistant.folders", "ASSISTANT_FOLDERS", "paths", "Assistant folders"),
+  field("app", "assistant.bash", "ASSISTANT_BASH", "flag", "Assistant commands"),
+  field(
+    "app",
+    "assistant.spendPauseUsd",
+    "ASSISTANT_SPEND_PAUSE_USD",
+    "float",
+    "Assistant spend pause",
+  ),
+  field("app", "assistant.contextTokens", "ASSISTANT_CONTEXT_TOKENS", "int", "Assistant context"),
+  field(
+    "app",
+    "assistant.search.provider",
+    "ASSISTANT_SEARCH_PROVIDER",
+    "string",
+    "Web search provider",
+  ),
+  field("app", "assistant.search.model", "ASSISTANT_SEARCH_MODEL", "string", "Web search engine", {
+    provider: "ASSISTANT_SEARCH_PROVIDER",
+  }),
+  field("app", "chats.display", "CHAT_DISPLAY", "string", "Task display"),
 
   field("persona", "prompt", "PERSONA_FILE", "path", "System prompt file"),
   field("persona", "identity.timezone", "PERSONA_TIMEZONE", "string", "Time zone"),
@@ -334,6 +398,7 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "chat.interests", "CHAT_INTERESTS", "string", "Chat interests"),
   field("persona", "chat.talkativeness", "CHAT_TALKATIVENESS", "float", "Chat talkativeness"),
   field("persona", "chat.replyMode", "CHAT_REPLY_MODE", "string", "Chat reply mode"),
+  field("persona", "chat.maxRounds", "CHAT_MAX_ROUNDS", "int", "Chat reply rounds"),
 ];
 
 /** `voice.styles.<name>`, a voice id or `{voiceId, hint}`, sets `TTS_VOICE_ID_<NAME>`. */
@@ -668,6 +733,8 @@ export interface SettingsLayers {
 }
 
 const UNSET: LayeredSetting = Object.freeze({ source: "default", value: null, raw: null });
+/** credentials.json's values for mcp.json's `${NAME}`s, which @eidolon/assistant reads. */
+export const MCP_SECRETS_KEY = "mcpSecrets";
 
 interface ReadLayers {
   readonly id: string;
@@ -786,7 +853,7 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
   }
 
   for (const [name, secret] of Object.entries(credentials)) {
-    if (name === ACCOUNTS_KEY) continue;
+    if (name === ACCOUNTS_KEY || name === MCP_SECRETS_KEY) continue;
     if (!CREDENTIALS.includes(name)) {
       warn(`Ignoring ${name} in ${credentialsPath}: not a credential`);
     } else if (typeof secret === "string" && secret) {

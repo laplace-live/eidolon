@@ -70,7 +70,7 @@ browser ══WebRTC══▶ CallTransport ─ @eidolon/webrtc (a werift peer)
                                                                                                     ▼
    replies: runTurn (call mode) ── lines ──▶ the call's mailbox ──▶ the Floor (never awaits)
    Mouth: segmenter ─▶ utterance (speech-stream) ─▶ resample ─▶ Speaker.enqueue
-   the Speaker's cursor, async tool results, timers ──▶ mailbox
+   the Speaker's cursor, async tool results, results from outside, timers ──▶ mailbox
                                        the Floor ─▶ RtviEmitter ─▶ transport.send
                                        the Floor ─▶ CallLog (in memory, dropped at the call's end)
 ```
@@ -86,7 +86,12 @@ to wait on runs as a task that posts back.
   Floor has yet to speak.
 - **Store first:** a reply's `events` line is appended to the call log before anything else is done
   with it. After a barge-in, the caller's next lines and any async results wait until the cut reply
-  has stored what was heard, so her interrupted message stays before them.
+  has stored what was heard, so her interrupted message stays before them; results from outside
+  wait for any open reply (row 31).
+- **From outside:** a bound call's `outside` ([below](#tools-and-async-results)) is one more
+  producer. `runCall` reads it after `open`, as it reads the transport's messages, and posts each
+  result; once the call has stopped it posts nothing. A stream that fails is logged as
+  `[voice] Results from outside the call failed: …`, and the call goes on.
 
 **A call's log** is a chat log (`@eidolon/chat`): the caller's lines are `message`s with
 `modality: "call"` (or `"text"` for `send-text`), and her turns store what the engine stores. Its
@@ -110,8 +115,9 @@ The Floor's state is three regions, plus counters:
 
 - **Counters:** `recoveries` (empty-turn recoveries in a row), `syncToolsRunning`, `followUps`
   (the personas owed a follow-up, each once, in the order their results came; a reply that isn't a
-  follow-up clears it), and whether the reply is spoken (its last audio has come and the mind is
-  done).
+  follow-up clears it), `nudges` (row 31's, waiting for her next reply offered none of the plan's
+  tools, which takes all those still due; while one is due, the host is owed a follow-up after
+  `followUps`), and whether the reply is spoken (its last audio has come and the mind is done).
 - **Idle** is USER quiet and BOT idle, pipedog's `waitingForUser`.
 
 `floor.ts` numbers its transitions by this table. "Emit" is an RTVI message ([RTVI](#rtvi)).
@@ -121,10 +127,10 @@ The Floor's state is three regions, plus counters:
 | 1 | CALL connecting | `client-ready` | — | an unparsable version or a major other than 2 gets `error-response`, and the call goes on; emit `bot-ready` with its id; CALL live; greet if the plan says so, which a group call never does | BOT thinking |
 | 2 | USER quiet | ear `user-started` | — | emit `user-started-speaking`, then `bot-interrupted`; `interruptedBot` is BOT ≠ idle or a sync tool running; barge in if BOT ≠ idle | USER speaking |
 | 3 | USER speaking | ear `interim` / `final` | — | emit `user-input`, then `user-transcription` | — |
-| 4 | USER speaking | ear `user-stopped(text)` | text | emit `user-llm-text`, then `user-stopped-speaking`, as pipedog does; store the line; recoveries := 0; start a reply | USER quiet, BOT thinking |
+| 4 | USER speaking | ear `user-stopped(text)` | text | emit `user-llm-text`, then `user-stopped-speaking`, as pipedog does; store the line; recoveries := 0; start a reply that answers the line, which the plan's extras give their tools | USER quiet, BOT thinking |
 | 5 | USER speaking | ear `user-stopped(null)` | interruptedBot, recoveries < 1, no sync tool | emit `user-stopped-speaking`; recoveries++; start a reply with `INTERRUPTED_EMPTY_TURN_PROMPT` | USER quiet, BOT thinking |
 | 6 | USER speaking | ear `user-stopped(null)` | otherwise | emit `user-stopped-speaking`; start a follow-up owed while the caller spoke | USER quiet |
-| 7 | live | `send-text{run_immediately:true}` | — | emit `bot-interrupted`; barge in if BOT ≠ idle; emit `user-input{chat}`, then `user-llm-text`; store the line; start a reply, spoken unless `audio_response` is false | BOT thinking |
+| 7 | live | `send-text{run_immediately:true}` | — | emit `bot-interrupted`; barge in if BOT ≠ idle; emit `user-input{chat}`, then `user-llm-text`; store the line; start a reply that answers the line, as row 4's does, spoken unless `audio_response` is false | BOT thinking |
 | 8 | live | `send-text{run_immediately:false}` | — | emit `user-input{chat}`; store the line for her next turn; start no reply, as pipedog runs none | — |
 | 9 | BOT ≠ idle | reply `mind started` | — | emit `bot-llm-started` | — |
 | 10 | BOT ≠ idle | reply `delta` | — | emit `bot-llm-text`; push it to her speech | — |
@@ -140,7 +146,7 @@ The Floor's state is three regions, plus counters:
 | 20 | BOT speaking | Speaker `drained` | spoken | emit `bot-stopped-speaking` | BOT thinking until `ended` |
 | 21 | BOT speaking | Speaker `drained` | not spoken | arm 3 s; if the Speaker is still drained then, emit `bot-stopped-speaking` | — |
 | 22 | BOT ≠ idle | reply `ended` | — | BOT idle; start an owed reply while the caller is quiet | BOT idle or thinking |
-| 23 | — | async result | — | store it; start a reply if idle, else owe one | — |
+| 23 | — | async result | — | store it; one that settles a call (`final` or `cancelled`) emits `llm-function-call-stopped` and starts a reply if idle, else owes one; a late `started` or plain result, from a tool her cut turn left running, emits and owes nothing | — |
 | 24 | live | ear `stt-error` | fatal | emit `error`; end the call (`error`) | ended |
 | 25 | live | Mouth `tts-error`, or 15 s without audio she owes: after a segment is said until some comes, and after her speech ends until its end does | — | emit `error`; drop her queued audio and cancel her speech; the reply goes on in text, storing what was heard | — |
 | 26 | live | idle timer (300 s) | — | end the call (`idle`) | ended |
@@ -148,6 +154,7 @@ The Floor's state is three regions, plus counters:
 | 28 | live | the transport closed | — | end the call (`client`) | ended |
 | 29 | any | shutdown | — | end the call (`shutdown`) | ended |
 | 30 | live | any other message | — | `client-message` is logged at debug; anything else gets `error-response` | — |
+| 31 | CALL ≠ ended | a result from outside (the plan's `outside`) | — | store its lines, at once while BOT is idle, else after the open reply's own; with a nudge, unless `disconnect-bot` came, keep it for her next reply offered none of the plan's tools: her greeting before `client-ready`, else a follow-up owed to the host, started at once if idle; a reply that has the plan's tools leaves it waiting, for a follow-up after it; one no longer due is dropped, and a reply cut before its turn records the nudges it took leaves them waiting again | — |
 
 **The idle timer** restarts on the caller's speech (every 0.2 s while the VAD hears it), each
 transcript, and her audio playing. `apps/web/src/features/call/phase.ts` counts on at least 285 s.
@@ -155,8 +162,8 @@ transcript, and her audio playing. `apps/web/src/features/call/phase.ts` counts 
 **A barge-in:**
 1. the Speaker empties at once;
 2. her speech freezes at what was heard;
-3. her turn is aborted: her mind, her context providers and her sync tools stop, and async tools
-   run on;
+3. her turn is aborted: her mind, her context providers and her sync tools stop, and her async
+   tools, and the tools her turn was handed that aren't cancelled on interruption, run on;
 4. after row 2's two messages, emit `bot-llm-stopped`, `bot-tts-stopped` and
    `bot-stopped-speaking` for whichever was open, so a new `user-started-speaking` comes before the
    old `bot-stopped-speaking`, as [frontend-loading-state.md](frontend-loading-state.md) documents;
@@ -167,9 +174,10 @@ with no key fails the call with `Bot session failed: …`. A turn that fails lat
 request (her key removed mid-call, her parts failing to build) reports its failure as `error`
 (row 18), and the call goes on, as it did after any pipedog error.
 
-**Ending a call** (`end(reason)`): cut the open reply silently, abort her async tools, close the
-recognizer and her speech (their meters flush), wait at most 2 s for the cut reply to store what
-was heard, flush the log, and, unless the client left, disconnect, which sends `peerLeft`.
+**Ending a call** (`end(reason)`): cut the open reply silently, abort her async tools and the
+tools a barge-in left running, close the recognizer and her speech (their meters flush), wait at
+most 2 s for the cut reply to store what was heard, flush the log, and, unless the client left,
+disconnect, which sends `peerLeft`.
 
 ## Hearing
 
@@ -273,11 +281,64 @@ In a call, the engine runs her turn in call mode (`CallHooks`, [chat.md](chat.md
 - `take_selfie` is async: its call is stored with a `started` result, the round goes on, and the
   selfie renders in the background. When it settles, its `final` or `cancelled` result is stored
   and starts a follow-up reply once the floor is free (rows 22–23). The call's end cancels it;
-- `ASYNC_TOOL_INSTRUCTIONS` joins her system instruction while an async tool is registered, as
-  pipedog's call prompt had it.
+- `ASYNC_TOOL_INSTRUCTIONS` joins her system instruction while one of her own tools is async, as
+  pipedog's call prompt had it, never for a tool a reply is handed;
+- her rounds are a chat's ([chat.md](chat.md#a-turn-runturn), step 5): `chat.maxRounds` of them
+  may call her tools, then an answer round offers `start_task` alone to a reply handed it, and to
+  any other reply her tools with `tool_choice: "none"`, so a reply that reaches the limit still
+  speaks;
+- within the turn, the words she wrote before a call sit on that call's message, as in a chat, but
+  a call's turns store no `said`: her line is what was heard, which her written words may not have
+  reached when the call is stored.
 
 Her tools act on the call through effects: a voice switch reaches her speech, and a selfie's
 `server-message` goes to the client.
+
+**What a reply is handed,** the plan's `extras` (a bound single cascade call's alone,
+[chat.md](chat.md#the-binding)), is asked synchronously as each reply actually starts, after any
+wait for a cut reply to store its message. `answers` is true only for a reply to the caller's line
+(rows 4 and 7), and only such a reply takes its `background` and `tools`; every reply, her
+greeting, a recovery and a follow-up included, takes its `providers`. One that throws is logged as
+`[voice] Reply <id>'s extras failed: …` and adds nothing. The local app hands her tasks this way
+([assistant.md](assistant.md#calls)):
+- **Background tools** (`start_task`) run as in a chat: the started result is stored with its
+  value, her next round reads it, and the turn's `tool` lines for it are a sync tool's
+  (`async: false`), counted in `syncToolsRunning`. Its `final` never comes through
+  `onAsyncResult`, but from outside (row 31).
+- **Request tools** (`steer_task`, `stop_task`, `check_task`) run as sync tools.
+- **Request providers** (the status block) run after hers.
+- **Only her own async tools** (`take_selfie`) take pipedog's async path.
+- **A barge-in** during a background tool's start, or during a request tool not cancelled on
+  interruption, leaves it running until the call ends (`asyncSignal`). Its `tool` line ends
+  `cancelled` with the turn, and what it brings reaches the Floor as an async result, a late
+  `started` or a result with no `stage`, stored after her cut message and settling nothing: no
+  `llm-function-call-stopped`, and no follow-up (row 23).
+
+**Results from outside,** the plan's `outside` (row 31), are lines the call's log stores and, with
+a nudge, a prompt for her next reply offered none of the plan's tools, which that reply records as
+her developer `context` block (`TurnRequest.nudge`), after a recovery's own prompt and joined with
+a blank line.
+- **The lines** are stored at once while BOT is idle. While a reply is open they wait until it has
+  stored its own: its turn places the blocks it records by the log it read, and a nudge it recorded
+  behind a call stored meanwhile would split that call from its result in every later view, a
+  message list OpenAI's and Anthropic's APIs refuse.
+- **The nudge:** before `client-ready` her greeting takes it; while the call is live it owes the
+  host a follow-up, started at once if the floor is free. A reply offered the plan's tools, such as
+  her answer to a line the caller said as a task ended, leaves the nudge waiting for a follow-up
+  after it, so the reply that tells of a task's end is offered none of the plan's tools. A later
+  answer to the caller's line still reads the result at tool level and may act, as a text chat's
+  does ([assistant.md](assistant.md#steer_task)).
+- **`due`,** when the result has one, is asked as a reply would take the nudge, and as the floor
+  decides whether a follow-up is owed for it: one no longer due is dropped. The local app's pointer
+  to a task's card lapses this way once the card is answered or the task ends, and its line on how
+  far a task's plan has got, in a verbose chat, once a newer one of the task is handed, the task
+  stops running, or the caller's next line is stored
+  ([assistant.md](assistant.md#milestones-on-a-call)).
+- **A reply cut before its turn records the nudges it took,** such as a greeting the caller speaks
+  over while it reads her memories, leaves them waiting for her next reply without the plan's tools.
+  One whose turn fails uncut drops them, so a turn that can't start isn't started again and again.
+- **After `disconnect-bot`** the lines are still stored and the nudge is dropped; after the call's
+  end nothing is stored, and a nudge still waiting is never spoken.
 
 ## Realtime
 
@@ -330,6 +391,10 @@ sends its conversation as the session opens.
   answered with its placeholder (the started envelope), and its result goes in later as a system
   item carrying the final or cancelled envelope, with a follow-up response once the floor is free.
 - **Her voice can't switch:** `switchVoice` throws, as it did on pipedog.
+- **Nothing is handed:** runNative copies neither a binding's `extras` nor its `outside` onto a
+  realtime call's plan, since the session fixes its tools as it opens and takes late results as
+  system items, and its floor ignores an outside result anyway. `prepareTurn`'s request carries no
+  background tools, request tools or providers, and a realtime model's turn ignores them.
 - **Metering** is the session's (`@eidolon/providers/realtime`): audio hours for a model priced by
   the hour, else each response's tokens.
 
@@ -340,19 +405,29 @@ A call bound to a chat runs through a `CallBinding` ([chat.md](chat.md#the-bindi
 - **She runs as herself:** the whole call runs inside `withPersona(binding.persona)`, so her
   roles, not the active persona's, make the call, and settings of hers that can't be read fail it.
 - **The seed opens the call's log:** the viewer's lines and hers as messages, a system or developer
-  message as her context block where it stands. Her view is the seed, then the call, in the text
-  chat's 60-line window, which counts the chat's lines too (D1). A realtime call packs that view
+  message as her context block where it stands. The words she wrote before a tool call in text
+  join her next line, or stand as her line before the viewer's next one (`callSeed`). Her view is
+  the seed, then the call, in the text chat's 60-line window, which counts the chat's lines too
+  (D1). A realtime call packs that view
   into its history item ([Realtime](#realtime)).
 - **The lines:** each message the call stores, the viewer's spoken or typed line or hers, goes to
   `onTranscript` as the log takes it. Hers is what was heard, `interrupted` when the viewer or a
   hang-up cut her off. The seed, the greeting's kickoff, the empty-turn prompt and an empty line
   aren't reported. A hook that throws is logged, and the call goes on.
+- **Her context blocks:** each `context` event the call stores after the seed, her recall, a block
+  of `extras`' providers, the nudge a reply answers (in one block after the empty-turn prompt, when
+  that goes first), goes to `onContext` as the log takes it, in order with the lines; a realtime
+  call's recall included.
 - **Her photos:** each `server-message` the call sends its browser, a selfie's, reaches
   `onServerMessage` once sent, in order with the lines.
 - **The browser:** every hook gets the call's one `CallClient`, whose `sendServerMessage` reaches
   the data channel until the browser hangs up or the call ends.
 - **The end:** `onEnded` once, after the last line: `error` when the call couldn't start or ended on
   a fatal error, else `hangup`.
+- **What her replies are handed, and what comes from outside:** `extras` and `outside`
+  ([Tools and async results](#tools-and-async-results)). runNative copies both onto the plan only
+  for a single bound call that isn't realtime. A `GroupCallBinding` has neither, and production's
+  `bindChatCall` sets neither.
 - **Mem0 stores only what is said on the call:** her Mem0 provider gets her view of the call's own
   events as the turn began (`MEM0_STORE_KEY`), since the chat's turns stored the seed already. So
   the greeting's turn stores nothing, where pipedog's stored the kickoff.
@@ -518,10 +593,11 @@ A realtime call's differences, each a fix of pipedog's realtime path:
 
 | Where | What |
 | --- | --- |
-| `packages/voice/test/` | each leaf on its own, with the upstream tests ported with it; the Floor row by row on a fake engine and clock; the real `runTurn` with a scripted mind; whole calls on a fake transport with the real hearing models; a realtime call on a scripted session, with the real `prepareTurn` and `runTool`; a group call's floor on the real `runChat` with a scripted director (`group.test.ts`); the ORT pin and its telemetry off (`input/onnx.test.ts`) |
-| `packages/runtime/test/native/` | the server's peers, a call's start, a call inside a chat reporting its lines, photos and end (once over `@eidolon/webrtc`), and a group call's binding (`group.test.ts`) |
+| `packages/voice/test/` | each leaf on its own, with the upstream tests ported with it; the Floor row by row on a fake engine and clock, row 31 and what a plan's `extras` add to each kind of reply included; the real `runTurn` with a scripted mind; whole calls on a fake transport with the real hearing models, results from outside included; a realtime call on a scripted session, with the real `prepareTurn` and `runTool`, ignoring an outside result; a group call's floor on the real `runChat` with a scripted director (`group.test.ts`); the ORT pin and its telemetry off (`input/onnx.test.ts`) |
+| `packages/runtime/test/native/` | the server's peers, a call's start, a call inside a chat reporting its lines, photos and end (once over `@eidolon/webrtc`), a bound call's `extras` and `outside` reaching its replies and its context blocks reaching `onContext`, a realtime or group call taking neither, and a group call's binding (`group.test.ts`) |
 | `packages/webrtc/test/` | pipedog's transport tests, ported (`rtc_media`, `test_smallwebrtc_request_handler`); the caller's audio and hers against libopus; a call's transport on a fake peer, and against a real werift client: both ways, liveness, a hang-up from either side, `restart_pc`; the signalling server with its peers' negotiation stood in for (`signalling`) and with a real werift client over this machine's interfaces (`loopback`), the werift patches loading once (`werift`), and the Opus bitrate (`opus`) |
-| `apps/bot/test/{chat,local}/native_call.test.ts` | production's `bindChatCall` and the local runner's binding on a call |
+| `apps/bot/test/{chat,local}/native_call.test.ts` | production's `bindChatCall` and the local runner's binding on a call, her tasks' starts on it and the ends she told there included |
+| `apps/bot/test/chat/call.test.ts` | production's binding, which hands her replies nothing and the call nothing from outside it |
 | `apps/bot/test/local/group_call.test.ts` | the local offer route's group checks, and the runner storing a group call's lines and decisions |
 | `apps/bot/test/e2e-invariants.test.ts` | I1–I10 (`apps/bot/scripts/e2e/invariants.ts`) on made-up sequences |
 

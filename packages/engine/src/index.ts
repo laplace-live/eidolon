@@ -1,8 +1,10 @@
 // The turn engine: one persona's turn in a chat, from her view of its log to the events the turn
 // adds, and a chat's answer to the viewer, turn by turn, in text, voice messages or a call. Chats
-// and calls run on it.
+// and calls run on it, and so do her tasks.
+export type { ContextProvider, LlmTool, ToolEffects } from "@eidolon/core";
 export { ASYNC_TOOL_INSTRUCTIONS, callInstruction, isAsyncTool } from "./async_tool.ts";
 export { callLine, callPhotos, callSeed } from "./call.ts";
+export { canonical } from "./canonical.ts";
 export {
   type CallChatOutput,
   type CallChatRequest,
@@ -15,8 +17,32 @@ export {
 export { defaultEngineDeps } from "./deps.ts";
 export { groupMemory } from "./group.ts";
 export { createMind } from "./mind/index.ts";
+export { estimateTokens } from "./task/context.ts";
+export {
+  runTask,
+  type TaskBackground,
+  type TaskBrief,
+  type TaskEntry,
+  type TaskEntryDraft,
+  type TaskEvent,
+  type TaskFiles,
+  type TaskGateDecision,
+  type TaskInbox,
+  type TaskMeter,
+  type TaskOutcome,
+  type TaskPauseReason,
+  type TaskRequest,
+  type TaskStore,
+  type TaskTool,
+  type TaskToolContext,
+  type TaskToolResult,
+  UsageMeter,
+  type UsageMeterOptions,
+} from "./task.ts";
 export { type PrepareRequest, prepareTurn, runTool, runTurn } from "./turn.ts";
 export type {
+  BackgroundTool,
+  BackgroundTools,
   CallHooks,
   CallTurnOutput,
   CallTurnRequest,
@@ -29,6 +55,7 @@ export type {
   PartsOptions,
   PersonaParts,
   SpeechDeps,
+  TurnExtras,
   TurnOutput,
   TurnRequest,
 } from "./types.ts";

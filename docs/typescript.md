@@ -15,7 +15,7 @@ nothing.
 | --- | --- |
 | `packages/core` | the extension contracts: `ContextProvider`, `LlmTool`, `ConversationContext`, `TurnGate` |
 | `packages/config` | `.env` loading (python-dotenv rules), env readers, settings and the data home, the logger, Python-compatible helpers, the OpenAI-compatible HTTP client, the persona clock |
-| `packages/providers` | the provider catalog and the roles a persona fills with it, resolving a role's provider, model and key, the fetch clients that stand in for vendor SDKs, prices and usage reports ([providers.md](providers.md)) |
+| `packages/providers` | the provider catalog and the roles a persona fills with it, resolving a role's provider, model and key, the fetch clients that stand in for vendor SDKs, prices and usage reports, and tasks' web search ([providers.md](providers.md)) |
 | `packages/usage` | the usage ledger: SQLite records of what each request cost, and their sums |
 | `packages/access` | `loginSyncToken` validation, quotas, client IP, CORS, the `/api/offer` guard, audio quality |
 | `packages/turn` | Cloudflare TURN credentials, ICE plans, relay-only candidate rules |
@@ -24,7 +24,8 @@ nothing.
 | `packages/context` | the retrieval gate, both RAG providers, the recall tool, the system instruction, the greeting, and group chats' director ([chat.md](chat.md#the-director)) |
 | `packages/tools`, `packages/imagegen` | `change_voice_style`, `take_selfie`, the selfie store |
 | `packages/chat` | the chat log's format, browser-safe: its events, `viewOf`, `parseMentions`, the `ChatStore` interface and its contract suite; `@eidolon/chat/jsonl` is the local store ([chat.md](chat.md)) |
-| `packages/engine` | the turn engine: one persona's turn, her mind per provider, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)); `runChat`, a chat's turns in the order the director chooses ([chat.md](chat.md#the-chain)) |
+| `packages/engine` | the turn engine: one persona's turn, her mind per provider, the tool loop and her context providers ([chat.md](chat.md#a-turn-runturn)); `runChat`, a chat's turns in the order the director chooses ([chat.md](chat.md#the-chain)); `runTask`, an assistant task's loop ([assistant.md](assistant.md#the-loop)) |
+| `packages/assistant` | an assistant task's tools, its commands and their registry, Agent Skills, the MCP client and a task's servers, `FolderPolicy`, the worker's prompt and the task's files, ported in part from pi-mono ([assistant.md](assistant.md)); only `apps/bot/src/local` and `apps/cli` import it (Biome) |
 | `packages/ingest` | the offline chain: download, transcribe, refine, both ingests, the stream catalog and the pipeline ([below](#the-offline-chain)) |
 | `packages/voice` | the voice engine: a call's loop around the turn engine, the Ear (Silero VAD, Smart Turn, the turn detector), the sentence segmenter, the Mouth and the Speaker, the vendored resampler, the RTVI codec and emitter, and the two ONNX models (`models/`) ([voice-engine.md](voice-engine.md)). Its live recognizers and speech clients are `@eidolon/providers/stt` and `/speech-stream`; only `packages/runtime` imports it (Biome) |
 | `packages/webrtc` | a call's WebRTC on werift and libopus-wasm: the signalling server, the peer, the data channel, the caller's audio in and hers out, and the werift patches ([voice-engine.md](voice-engine.md#the-transport)); only `packages/runtime` imports it (Biome) |
@@ -108,7 +109,10 @@ Things it relies on:
   lock on a file in `<home>/locks/`, which the OS releases when the process dies, so a crash
   leaves no stale lock. download, transcribe, refine and the pipeline hold `sources:<persona>`;
   the ingests, the catalog and the pipeline's ingest stage hold `index:<db path>`; the managed
-  yt-dlp's update holds `yt-dlp`. Dry runs take none.
+  yt-dlp's update holds `yt-dlp`. Dry runs take none. It lives in `@eidolon/config/lock`, a
+  subpath so config's index never loads `bun:sqlite`, and `@eidolon/ingest` re-exports it. An
+  assistant task holds `task:<id>` there too, while `laplace-task` or the local app's task manager
+  runs it.
 - **Cancellation.** `main.ts` runs every command through `runWithSignals`: the first SIGINT or
   SIGTERM aborts the run's signal, a second exits at once unless it comes within `REPEAT_MS`
   (500 ms), as the first delivered twice, and the exit code is 130 or 143. No new item starts,
@@ -193,12 +197,14 @@ original) or one code path against another (the pipeline's dry run against the p
 
 - **pipedog-derived code carries its BSD-2 header**, then `Ported from pipedog <path>@ce8f8bc`.
   pipedog is never followed past that commit; `NOTICE` names every copyright holder a ported
-  file's header does, and `apps/eidolon/test/build.test.ts` holds it to that.
+  file's header does, and `apps/eidolon/test/build.test.ts` holds it to that. Code ported from
+  pi-mono carries its MIT header the same way, at `ac78a60` ([assistant.md](assistant.md)).
 - **Only `packages/runtime` imports `@eidolon/voice` and `@eidolon/webrtc`.** Biome's
   `noRestrictedImports` enforces it, so every other package is testable without a call.
 - **`@eidolon/ingest` stays out of the bot image.** Biome forbids importing it under `apps/bot/**`
   and the other packages, because `docker.yml` skips the image build for changes to `apps/cli/**`
   and `packages/ingest/**`. Lift both together, or the image ships without a change it runs.
+  `@eidolon/assistant` is fenced the same way, and production never has the assistant at all.
 - **No vendor SDK sends a request.** `packages/providers` has fetch clients for OpenAI-compatible
   chat and Anthropic's Messages API, which the engine's minds call, and every provider a call
   hears or speaks through. A new provider gets one too, or bills behind the usage ledger's back.

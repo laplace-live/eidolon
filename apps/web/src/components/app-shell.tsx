@@ -1,3 +1,4 @@
+import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
@@ -5,9 +6,14 @@ import { Link, matchPath, Outlet, useLocation } from "react-router";
 import { AppMark } from "@/components/app-mark";
 import { PersonaSwitcher } from "@/components/persona-switcher";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
+import { tasksQuery } from "@/features/tasks/queries";
+import { tasksPoll, waitingCount } from "@/features/tasks/state";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
+
+/** How often the nav asks for the tasks while none is live: one may start in any chat. */
+const TASKS_IDLE_POLL_MS = 30_000;
 
 interface Tab {
   readonly to: string;
@@ -15,6 +21,8 @@ interface Tab {
   readonly end?: boolean;
   /** Lit for every path under this one, not only its own. */
   readonly section?: string;
+  /** Tasks waiting on the owner, beside Tasks. */
+  readonly waiting?: number;
 }
 
 function lit(tab: Tab, pathname: string): boolean {
@@ -43,6 +51,12 @@ export function AppShell() {
   const { t } = useLingui();
   const { pathname } = useLocation();
   const { data: status } = useQuery(statusQuery);
+  const assistant = status?.assistant.enabled === true;
+  const tasks = useQuery({
+    ...tasksQuery,
+    enabled: assistant,
+    refetchInterval: (read) => tasksPoll(read.state.data?.tasks, TASKS_IDLE_POLL_MS),
+  }).data?.tasks;
   const main = useRef<HTMLElement>(null);
   // The studio opens on the active persona; it stays lit on any persona's.
   const tabs: readonly Tab[] = [
@@ -52,6 +66,7 @@ export function AppShell() {
     ...(status
       ? [{ to: studioPath(status.persona.id), label: t`Studio`, section: "/personas/" }]
       : []),
+    ...(assistant ? [{ to: "/tasks", label: t`Tasks`, waiting: waitingCount(tasks ?? []) }] : []),
     { to: "/jobs", label: t`Jobs` },
     { to: "/usage", label: t`Usage` },
     { to: "/settings", label: t`Settings` },
@@ -98,8 +113,19 @@ export function AppShell() {
                         "text-foreground after:absolute after:inset-x-1 after:bottom-0 after:h-0.5 after:rounded-full after:bg-foreground",
                     )}
                   >
-                    <span className="rounded-md px-2 py-1.5 transition-colors group-hover:bg-muted group-focus-visible:ring-[3px] group-focus-visible:ring-ring/50">
+                    <span className="flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors group-hover:bg-muted group-focus-visible:ring-[3px] group-focus-visible:ring-ring/50">
                       {tab.label}
+                      {tab.waiting !== undefined && tab.waiting > 0 && (
+                        <span
+                          data-waiting-count
+                          className="min-w-5 rounded-full bg-warning/15 px-1.5 text-center font-medium text-warning text-xs tabular-nums"
+                        >
+                          <span aria-hidden>{tab.waiting}</span>
+                          <span className="sr-only">
+                            {t`, ${ph({ count: tab.waiting })} waiting for you`}
+                          </span>
+                        </span>
+                      )}
                     </span>
                   </Link>
                 </li>

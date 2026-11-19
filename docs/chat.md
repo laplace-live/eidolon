@@ -19,6 +19,7 @@ on a call that opens on the chat and is stored in it ([Calls](#calls)).
 @eidolon/providers/speech-batch   synthesize and transcribe: a whole voice message per request
 @eidolon/runtime      CallBinding: a call run as a chat's persona, opened on it, reporting its lines
 apps/bot/src/local/chats/, routes/chats.ts   the runner, a chat's calls and /api/local/chats
+apps/bot/src/local/tasks/                    her task tools, status block and tasks (assistant.md)
 apps/web/src/features/chats/                 the Chats page (web-app.md)
 apps/bot/src/chat/                           production's endpoint: /api/chat/*, signing, a call's binding
 packages/access/src/chat.ts                  production's chat quotas and served personas
@@ -50,16 +51,16 @@ isn't stored, she never saw.
 | Event | Written by | What it holds |
 | --- | --- | --- |
 | `message` | the runner for the viewer and for a call's lines, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `modality: "voice"` on a voice message, whose first attachment is its audio and whose `text` is its transcript; `modality: "call"` on a line said on a call, the viewer's or hers, its transcript in `text`; `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
-| `context` | the engine | A block a context provider put into her view: `role`, `content` and its `position` there; never shown |
-| `context-removed` | the engine | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move |
-| `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log |
+| `context` | the engine | A block a context provider put into her view: `role`, `content` and its `position` there; never shown. In the local app, the status block of her tasks (`后台的活：`) is one, replaced each turn ([assistant.md](assistant.md#the-status-block)) |
+| `context-removed` | the engine; the runner as a group call opens | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move, and the status block when it changes or moves. In the local app, a group call's opening takes each persona's stored status blocks and task nudges out, one under the call's id per persona (`staleTaskContext`, [Calls](#calls)) |
+| `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log. In a text turn, the first call a round records carries `said`, the words she wrote before it in that round (none for whitespace alone), which her `message` doesn't repeat; a call's turns never store it, and logs from before it have none. An async tool's results carry `stage`: `started` while it runs, then `final` or `cancelled`. pipedog's async tools (`take_selfie` on a call) store `{}` as `started`; a background tool stores what it started (`start_task`'s `{ task, status }`), never `{}`. Nothing else tells the two apart: only a `{}` start's `final` follows pipedog's rule ([Her view](#her-view-viewof)), so a future async tool that stores a value would settle as a background tool's does. `start_task`'s `final` is stored by the runner when the task ends ([The local API](#the-local-api)), and so are its `tool-call` and `started` result when she started it on a call ([assistant.md](assistant.md#calls)) |
 | `kickoff` | the engine | The greeting prompt she answered |
 | `turn-failed` | the engine, or the runner when a turn throws | The failure, through `errorText`; the chat stays usable. `code: "voice-failed"` when her reply, stored just before it, was meant as a voice message but stayed text |
 | `decision` | the engine (`runChat`) | Who answers the line at seq `after`, and how: `source: "single"` in a chat of one persona, else `mention`, `model` or `fallback`, with the director's `scores` when it asked, and each reply's `mode`, `text` or `voice`. Every reply follows one, and one may choose no one. In a chat of one in `auto`, it lands just before her reply, after her turn's other events |
 | `title` | `PATCH` | The chat's title; the last one wins. Until there is one, the page names the chat by who is in it now |
 | `participants` | `POST participants` | Personas added or removed |
-| `settings` | `PATCH` | The chat's `chainLimit` or `replyMode`; the last of each wins |
-| `call-started`, `call-ended` | the runner; in production, the browser | A call in the chat ([Calls](#calls)): `call-started` names the `call`, a UUIDv7, and the `persona` called, with `group: true` when every persona in the chat was on it; `call-ended` names the same `call` and its `reason`, `hangup`, `error` or `shutdown` |
+| `settings` | `PATCH` | The chat's `chainLimit`, `replyMode` or `display`; the last event that sets each wins. `display` is the local app's alone: how much of her tasks the chat shows ([assistant.md](assistant.md#display)), which production's window drops |
+| `call-started`, `call-ended` | the runner; in production, the browser | A call in the chat ([Calls](#calls)): `call-started` names the `call`, a UUIDv7, and the `persona` called, with `group: true` when every persona in the chat was on it; `call-ended` names the same `call` and its `reason`, `hangup`, `error` or `shutdown`, and in the local app `told`, the ids of her `start_task` calls whose ends she told on the call, when there are any ([assistant.md](assistant.md#calls)) |
 
 **`ChatSummary`** is what the chat list shows: the title, the participants, `createdAt`,
 `updatedAt`, the last message's text and the last seq. `summarize` derives it from a log, so a
@@ -77,10 +78,38 @@ call would hold for her, without the system message:
 - **In a chat of two or more personas,** the viewer's lines read `观众名：text`, with the
   viewer's name (`viewerName`, else 观众). A chat of one keeps them unlabelled.
 - **Another persona's messages** fold into one `user` message of `名字：text` lines, one per line,
-  for a run of them in a row.
+  for a run of them in a row. Another persona's `said` joins the run as a `名字：said` line, and
+  that persona's next line joins it into a single line when no other line comes between.
 - **Her tool calls** become an `assistant` message with `tool_calls`, each followed by its `tool`
   result. A call with no result reads `CANCELLED`, and an empty result reads `COMPLETED`, as
-  pipedog wrote them.
+  pipedog wrote them. A call's `said` is its message's `content`, so she reads her rounds in the
+  order she wrote them: her words, the call, its result, then her next words.
+- **Her older results are stubs.** A result she waited for (stored with no `stage`) whose call came
+  before her third-newest line, a message of hers with words, reads `[<name> result elided, <n>
+  characters]`, `n` being the length her view would hold, when that is shorter. Her last two turns
+  keep theirs whole, and the log keeps every result whole.
+  - **Never stubbed:** a result with a `stage` (`start_task`'s `started` and `final`, pipedog's
+    placeholder) and `CANCELLED`. `check_task`'s result is stubbed, since asking again gives a
+    fresh one.
+  - **The boundary moves by whole turns,** not in steps a provider's cache would like: each turn
+    makes its own mind, so no thinking crosses turns, and the clock to the minute at the top of
+    her system instruction already makes each turn's request a new prefix.
+- **pipedog's async call,** one whose `started` result is `{}` (`take_selfie` on a call), reads
+  pipedog's placeholder while it runs. Its `final` replaces the placeholder in place unless the
+  conversation moved on, and otherwise arrives as a `developer` message carrying pipedog's final
+  envelope, which tells her to convey it.
+- **Every other `final`,** a background tool's, from a chat or a call, settles at tool level. It
+  replaces its call's `tool` message, which read the started result until then, whatever came
+  after; when the call has left the window, it comes with its call, as an `assistant` message with
+  `tool_calls`, without its `said`, and its `tool` message, at the final's place; and it is left
+  out when the log holds no call for it. So what a task brings back (a page it quotes) reaches her
+  view only as a tool's output, in the chat and on a call, and a cancel's `final` doesn't ask her
+  to tell the owner of a cancel the owner made. A call's seed, which drops tool messages, never
+  holds it. On an Anthropic account a turn offered no tools at all sends its calls and results as
+  notes in the user's turn (`callsAsNotes`), this one included, her words before a call staying
+  her line ([assistant.md](assistant.md#the-report)).
+- **A `cancelled` result** always arrives as a `developer` message carrying pipedog's cancelled
+  envelope.
 - **Her `context` blocks** are spliced in at their `position` in seq order, so they accumulate as a
   call's do. A `context-removed` takes the named blocks out again.
 - **Her `kickoff`** is a `user` message.
@@ -172,8 +201,14 @@ aborts the turn. The engine never rejects for the turn's own failures.
      `buildSystemInstruction`, with `voicePromptHint` in a voice reply alone, and in a group the
      line naming the others ([below](#what-each-persona-sees)).
 3. **Her view** is `viewOf` the log as stored. A greeting turn adds `buildGreetingKickoff` over her
-   memories of the viewer, recorded as a `kickoff`.
-4. **Recall:** the gate attaches its decision, then Mem0, the archive and the facts run in turn.
+   memories of the viewer, recorded as a `kickoff`. A turn's `nudge` (a task's report turn has
+   one, and so may a reply on a call, [voice-engine.md](voice-engine.md#tools-and-async-results))
+   is a `developer` message at the view's end, recorded as her `context` block. Outside a call,
+   with no kickoff to go before it, it is recorded first, before step 2's parts and step 5's mind
+   are made, so a turn that fails or is cut there still shows what it was asked. A call's waits
+   for both: the Floor hands the nudge of a reply cut before its turn records it to her next one.
+4. **Recall:** the gate attaches its decision, then Mem0, the archive and the facts run in turn,
+   then the providers the request hands the turn (step 10), such as the local app's status block.
    The gate and the archive key their turn on the turn's id, since past the window a repeated line
    leaves the view's last lines as they were.
    Each block one of them inserts is recorded as a `context` at its position. Each block from the
@@ -186,25 +221,54 @@ aborts the turn. The engine never rejects for the turn's own failures.
      call-time fields, OpenRouter's usage body and headers, `developer` as `user` everywhere but
      OpenAI, Gemini's single system message, and Anthropic's prompt caching, fallbacks and message
      conversion.
+   - **A malformed empty reply is asked for again,** twice at most: Gemini through OpenRouter
+     sometimes ends a round with no text and no call, its `native_finish_reason`
+     `MALFORMED_RESPONSE` or `MALFORMED_FUNCTION_CALL`, mostly where it meant to call a tool. Each
+     attempt bills.
    - **One mind per turn,** so Anthropic's signed thinking goes back with the round after a tool
-     call.
+     call, while the system prompt, the tools and every earlier message are as they were
+     ([prefix checks](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/prefix-checks)):
+     a round that hides a spent tool (`recall_streams` after its second call) sends none, and
+     neither does one offered `start_task` alone (below). `tool_choice` isn't part of that prefix,
+     so her thinking goes back under `none`.
    - **In a group,** her request carries stop sequences, and her text is cut where she writes as
      someone else ([below](#what-each-persona-sees)).
-   - **Rounds:** at most 4 mind calls per turn. A round's tool calls run in parallel and are
-     recorded as a `tool-call` and a `tool-result` each. A tool she doesn't have, or one that
-     throws, gets pipedog's error text, and one that times out gets no result.
+   - **Rounds:** each of her first `chat.maxRounds` rounds (8 by default, a persona setting,
+     [personas.md](personas.md#personayaml)) may call her tools. A round's tool calls run in
+     parallel and are recorded as a `tool-call` and a `tool-result` each. A tool she doesn't have,
+     or one that throws, gets pipedog's error text, and one that times out gets no result.
+     - **Her words before a call:** in a text turn, what a round wrote before its calls is stored
+       as `said` on its first recorded call, and is that call message's `content` when the next
+       round reads the results, as her next view will. So each request after a call ends on its
+       results, with no filler turn on Anthropic, where `turnOf` sends the words and the call as
+       one assistant turn, exactly as Claude wrote them. Mem0 in a chat of one stores her view's
+       lines, so it keeps them as a line of hers before her message. A round that wrote only
+       whitespace has no words: no `said`, and no `content` on its call message.
+     - **The answer round:** when the last of those rounds still calls, one more follows. It
+       offers her background tools alone (`start_task`, step 10) when the turn has them and she
+       started none in her tool rounds, and otherwise her tools with `tool_choice: "none"`, which a
+       mind sends only beside tools, so a start isn't made twice. A call to anything it doesn't
+       offer is neither run nor recorded, only logged.
+     - **After a start there,** one more round offers the same tool with `none`, and its words are
+       her message, so she still says her line.
+     - **The bound:** `chat.maxRounds` + 1 requests a turn, or + 2 after a start in the answer
+       round, besides a malformed reply asked again: 9 by default, and 4 at `CHAT_MAX_ROUNDS=3`.
 6. **Tools' effects:** `switchVoice` sets the voice her voice reply is spoken in, and throws in a
    text reply, which isn't offered the tool. A `selfie` server message copies each image from the
    in-process selfie store into the chat's `files/` as soon as it is sent, while the URL still
    serves it (`SELFIE_TTL_SECONDS`), and the images become attachments on her message, or on a
    later one when the turn was interrupted first (step 8).
 7. **The end:**
-   - **Normally:** one `message` with her text and attachments. When the last round's finish
-     reason says her provider stopped her short (OpenAI's `length` or `content_filter`,
-     Anthropic's `max_tokens` or `refusal`), it is marked `cutOff`, and kept even with no text.
-   - **On abort:** the message is marked `interrupted`, keeping what she said, and none is stored
-     if she said nothing.
-   - **On a failure:** her partial text is stored as interrupted, followed by `turn-failed`.
+   - **Normally:** one `message` with her text and the turn's attachments: in a text turn, her last
+     round's, since an earlier round's words are its call's `said`; on a call, what was heard.
+     When the last round's finish reason says her provider stopped her short (OpenAI's `length` or
+     `content_filter`, Anthropic's `max_tokens` or `refusal`), it is marked `cutOff`, and kept
+     even with no text.
+   - **On abort:** the message is marked `interrupted`, keeping what the round under way had
+     said, and none is stored if it said nothing. A text turn cut while a tool runs gets no
+     message: that round's words, which she finished, are on its call already.
+   - **On a failure:** the failing round's partial text is stored as interrupted, followed by
+     `turn-failed`.
    - **A voice reply** is step 9's message.
 8. **A tool that runs on:** an interruption cancels a running tool, unless the tool's
    `cancelOnInterruption` is false, as `take_selfie`'s is, and the caller passes `late`
@@ -223,14 +287,43 @@ aborts the turn. The engine never rejects for the turn's own failures.
 9. **A voice reply** (`mode: "voice"`) is written as a text reply is, cues included, and its
    deltas stream the same. Then:
    - **Speaking it:** the stream gets `{ type: "tool", name: "voice", state: "running" }`, her
-     voice role speaks her whole text, in the voice `switchVoice` chose if she called it, and the
-     audio is saved with `saveAttachment` and its length.
+     voice role speaks her message's text, in the voice `switchVoice` chose if she called it, and
+     the audio is saved with `saveAttachment` and its length.
+   - **Only her last round is spoken,** since the clip's transcript is its message's text: the
+     words she wrote before a call stay text, on that call. 等我一下, a selfie, then 拍好啦 stores
+     等我一下 on the selfie's call, then a voice message of 拍好啦 that carries the photo.
    - **What is stored:** one `message` with `modality: "voice"`, the audio first and any photos
      after it, and the transcript in `text`, cues and all.
    - **When speaking or saving fails:** the tool line ends `failed`, her message is stored as
      text, and a `turn-failed` with `code: "voice-failed"` follows it.
    - **An interruption while she is spoken** stores her words as interrupted text, with no audio.
-   - **A reply with no words** isn't spoken.
+   - **A reply whose last round has no words** isn't spoken; its photos are a message with no
+     words, after the `said` before her call.
+10. **What a caller hands a turn** beyond her own parts (`TurnExtras`: `background`, `tools` and
+    `providers`), for that turn alone. `ChatRequest` hands all three to each turn it runs, and a
+    group call's `CallChatRequest` takes none. Assistant Mode's tasks are what the local app hands
+    ([assistant.md](assistant.md#her-side)).
+    - **Background tools** (`{ tools, hint }`), whose work goes on outside the turn, are offered
+      after her own tools, and `hint` joins her persona prefix after the selfie hint. A tool's
+      `run` also gets the mind's `callId`. A result is stored as her `tool-result` with
+      `stage: "started"`, unless it holds `error`, which is stored as it is; it is never `{}`,
+      which her view takes for pipedog's. Her turn then takes another round, which reads what the
+      tool started exactly as her next view will, so she says her line even when the call came with
+      no words. Interrupted, the tool runs on through `late`, and its started result is stored
+      after the interruption. Whoever does the work stores the call's `final` later.
+    - **Request tools** (`tools`) are offered after those, and settle within the turn as hers do,
+      their results stored with no `stage`; one not cancelled on interruption runs on through
+      `late`.
+    - **Request providers** (`providers`) run after hers (step 4), and the blocks they set or take
+      out are recorded as hers are.
+    - **In a call** (`CallTurnRequest` keeps all three, handed by the call's binding): only her own
+      async tools take pipedog's path. Background tools run as in a chat, with a sync tool's `tool`
+      line, and request tools as sync tools; `ASYNC_TOOL_INSTRUCTIONS` is decided on her own tools
+      alone. The turn builds its `late` from its hooks, so a background tool, or a request tool not
+      cancelled on interruption, that a barge-in cut runs on until `asyncSignal` aborts, and what it
+      brings reaches `onAsyncResult` (a `started` result, or one with no `stage`), stored after her
+      cut message ([voice-engine.md](voice-engine.md#tools-and-async-results)).
+    - **A realtime model's turn** takes none of them.
 
 ## Group chats
 
@@ -246,7 +339,8 @@ the gate's plumbing: the active persona's `gate` role and its key, `decisionsUrl
 - **What Jev reads:**
   - `participants`: each one's id, name, `identity.summary` and `chat.interests`;
   - `earlier_lines`: the 8 lines before the latest, each a speaker (her name, or `viewer`), its
-    text and its modality;
+    text and its modality. A persona's `said` joins her next line into one when no other line
+    comes between, and is a line of its own otherwise (`linesOf`, `packages/engine/src/group.ts`);
   - `latest`, the line to answer;
   - `recent_turns`: each persona's lines among the last 10, so no one dominates.
 - **What it asks:**
@@ -360,7 +454,8 @@ Production's endpoint and calls pass no owed lines.
 - **Mem0 stores only the viewer's lines and hers.** In her view, other personas' lines are `user`
   messages, so storing them would make what they said memories about the viewer: B says 我最喜欢猫,
   and A's Mem0 records that the viewer likes cats. So the engine hands Mem0 its own list, in
-  `turn.metadata[MEM0_STORE_KEY]`: the viewer's lines, unlabelled, and hers, the last 60.
+  `turn.metadata[MEM0_STORE_KEY]`: the viewer's lines, unlabelled, and hers, read as the
+  director reads them (`linesOf`), the last 60.
   `Mem0MemoryProvider` stores that list when it is there, and the context otherwise, so calls are
   unchanged.
 - **A persona removed from the chat still counts for both,** since her lines stay in the view: the
@@ -372,8 +467,9 @@ Production's endpoint and calls pass no owed lines.
 ### Costs
 
 For each viewer line, at the default chain limit, the most it can cost is:
-- 5 turns: 2 replies to the viewer, then 3 hops. Each turn is up to 4 mind calls, with its gate and
-  recall as in a chat of one;
+- 5 turns: 2 replies to the viewer, then 3 hops. Each turn is up to `chat.maxRounds` + 1 mind
+  calls, 9 by default ([step 5](#a-turn-runturn)), and more where a malformed reply is asked for
+  again, with its gate and recall as in a chat of one;
 - 4 director calls: one for the viewer's line, and one before each of the 3 hops. The
   benchmark's 101 calls cost $0.0033 in all, about $0.00003 each, and took 413 ms at the median on
   a warm connection;
@@ -512,9 +608,21 @@ interface CallBinding {
     line: { role: "user" | "assistant"; text: string; interrupted: boolean },
     client?: CallClient, // the call's browser; the call always passes it
   ): void;
+  // Each context block the call's log records after the seed, in order with the lines
+  onContext?(content: string): void;
   // A tool's, as take_selfie's, with the same browser
   onServerMessage?(data: Readonly<Record<string, unknown>>, client?: CallClient): void;
   onEnded(end: "hangup" | "error"): void; // once, after the last line
+  // What each reply of hers adds to her turn, asked as it starts: `answers` when it answers the
+  // viewer's line
+  extras?(answers: boolean): TurnExtras | null;
+  // Lines for the call's log and prompts for her, from outside the call; `due` says a nudge is
+  // still due
+  outside?: AsyncIterable<{
+    drafts: readonly ChatEventDraft[];
+    nudge?: string;
+    due?: () => boolean;
+  }>;
 }
 
 interface CallClient {
@@ -542,11 +650,29 @@ interface CallClient {
   viewer or a hang-up cut her off; a hang-up mid-reply reports that part before `onEnded`. An
   empty line isn't reported, and neither is the seed, the greeting's kickoff or the empty-turn
   recovery prompt. An `onTranscript` or `onEnded` that throws is logged, and the call goes on.
+- **Her context blocks:** each `context` event the call's log records after the seed, her recall,
+  a block `extras`' providers add, the nudge a reply answers (after an empty turn's recovery prompt,
+  in one block, when one goes first), reaches `onContext` as the log takes it, in order with the
+  lines; one that throws is logged. The local app tells from it which of her
+  tasks' ends a reply was asked to tell ([assistant.md](assistant.md#calls)). A group call reports
+  none.
 - **Her photos:** each server message the call sends its browser, `take_selfie`'s `{ type:
   "selfie", urls }`, reaches `onServerMessage` once it is sent, in order with the lines and with the
   same `CallClient`. One that throws is logged, and the tool still returns its result.
 - **The end:** `onEnded("error")` once when the call couldn't start or ended on a fatal error, and
   its peer was closed; else `onEnded("hangup")`.
+- **What a reply adds:** `extras` is asked synchronously as each reply of hers starts. Only a reply
+  to the viewer's spoken or typed line (`answers`) takes its `background` and `tools`; every reply,
+  her greeting, an empty turn's recovery and a follow-up included, takes its `providers`
+  ([step 10](#a-turn-runturn)). One that throws is logged and adds nothing.
+- **What comes from outside:** each `outside` item's `drafts` are stored in the call's log, at once
+  unless a reply of hers is open, then after its own lines, and its `nudge` goes to her next reply
+  that takes none of `extras`' tools, while its `due`, if it has one, says it is still due, as row
+  31 of [voice-engine.md](voice-engine.md#the-state-machine) says. The local app hands a call her
+  tasks' ends and pauses this way, and in a verbose chat how far their plans have got
+  ([assistant.md](assistant.md#calls)).
+- **Only a single cascade call** reads either: runNative passes neither to a realtime call, a
+  `GroupCallBinding` has neither, and production's binding sets neither.
 - **Mem0 stores only what is said on the call.** Her Mem0 provider gets her view of the call's own
   events as the turn began, through `MEM0_STORE_KEY`, as a group's turns do: the chat's lines were
   stored by its own turns already. Its search and the greeting's memories are unchanged.
@@ -568,14 +694,24 @@ that chat; without a `chatId`, it is the standalone call, unbound.
    2. stores `call-started { call, persona }`;
    3. seeds the call with her `viewOf` of the chat, the window her next text turn would read, a
       viewer's voice message heard as nothing reading `（听不清）`, less her tool calls and their
-      results: the call may offer none, and Anthropic refuses a `tool_use` block then;
-   4. stores each finished line as a `message` with `modality: "call"`, from the viewer or from
+      results (the call may offer none, and Anthropic refuses a `tool_use` block then), and less
+      the status block of her tasks and her task nudges, which are stale by the call
+      (`withoutTaskContext`). A call's `said` joins her next line into one when no other line
+      comes between, and is her line before the viewer's next one otherwise (`callSeed`);
+   4. with Assistant Mode's tasks, hands the binding `extras`, each reply's status block, and for a
+      reply to the viewer's line `start_task` and her task tools as a text answer gets them, and
+      `outside`, her tasks' ends and pauses, and in a verbose chat her plans' progress
+      ([assistant.md](assistant.md#calls)); only a single cascade call reads them;
+   5. stores each finished line as a `message` with `modality: "call"`, from the viewer or from
       her, `interrupted` where she was cut off, and each selfie she sends as her photos alone,
       `modality: "call"` and `text: ""`, copied from the in-process selfie store into the chat. A
-      photo takes its place among the lines as it arrives, while its files are saved;
-   5. stores `call-ended { call, reason }` once the session ends: `hangup`, `error`, or `shutdown`
-      when the server stops mid-call. A line or photo after it is dropped. Shutdown waits up to 2 s
-      for it, after the call's last lines, a call hung up just before included.
+      photo takes its place among the lines as it arrives, while its files are saved. A
+      `start_task` of hers on the call is stored too, as her `tool-call` and its `started` result,
+      once the manager answers;
+   6. stores `call-ended { call, reason }` once the session ends: `hangup`, `error`, or `shutdown`
+      when the server stops mid-call, with `told` naming the ends of her tasks she told on it. A
+      line or photo after it is dropped. Shutdown waits up to 2 s for it, after the call's last
+      lines, a call hung up just before included.
 3. **An offer the signalling server refuses** still stores both ends, the second with `error`: a
    call of no length.
 4. **A renegotiation,** an offer for the call's own `pc_id`, passes through unbound and stores
@@ -589,6 +725,8 @@ that chat; without a `chatId`, it is the standalone call, unbound.
   `call-ended`, so the page follows a reply and a call through one subscription. A line is stored
   only once it is finished, hers once all of it has played, so the page that placed the call shows
   the call's own transcript in their place until `call-ended` ([web-app.md](web-app.md#chats)).
+  It ends only once any `start_task` of hers the manager was still answering at the hang-up is
+  stored too, so the page's read after the call shows its card; shutdown waits 2 s at most.
 - `GET chats/:id`'s `call` is `{ id, persona }`, with `group: true` on a group call, and null once
   the call's end is asked for. A server killed mid-call leaves a `call-started` with no
   `call-ended`, and `call` is null after the restart, so the page goes by `call`, not by the events.
@@ -605,10 +743,12 @@ voice once the one before her has played out ([voice-engine.md](voice-engine.md#
   talks through a realtime model. `GET chats/:id`'s `groupCall` says whether a group call would be
   taken now, and the page offers **Everyone** in its Call menu only then, the chat's first persona
   hosting.
-- **What it stores:** `call-started { call, persona, group: true }`; each line as a `call` message
-  of whoever said it, each photo as hers, and each `decision`, against the line it answers as the
-  chat numbers it; then `call-ended`. The call opens on the chat itself, not a seed, so each
-  persona's view of it is her group view, and it doesn't greet.
+- **What it stores:** `call-started { call, persona, group: true }`; a `context-removed`, under the
+  call's id, for each persona's status block and task nudges the chat holds, which are stale by the
+  call and which nothing on it refreshes (`staleTaskContext`, [assistant.md](assistant.md#calls));
+  each line as a `call` message of whoever said it, each photo as hers, and each `decision`,
+  against the line it answers as the chat numbers it; then `call-ended`. The call opens on the chat
+  itself, not a seed, so each persona's view of it is her group view, and it doesn't greet.
 - **The page** names a group call's separator **Group call**, and a line said on it shows the
   decision that chose her; her follow-up after a selfie, which no decision chose, shows none.
   Since no one greets, it counts the call answered as it connects, and asks the viewer to speak
@@ -629,7 +769,8 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 - one live buffer of the running reply's lines, from its start: a greeting's turn, or a viewer
   line's decisions and turns;
 - the tools interrupted turns left running, by name;
-- the call on in it, with a live buffer of the events stored during it ([Calls](#calls)).
+- the call on in it, with a live buffer of the events stored during it ([Calls](#calls)), and the
+  ends of her tasks it was handed or holds for after it ([assistant.md](assistant.md#calls)).
 
 **What a send does:**
 - **New chat:** with one persona, her greeting starts right after the `201`, and `GET live`
@@ -648,6 +789,30 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   clip (`hearVoiceMessage`), and only then stores it with its transcript. One that can't be heard
   stores nothing, and leaves the owed lines to the next line.
 - **The owed lines** live in the runner's memory, per chat; a restart forgets them.
+- **Assistant Mode's tasks** (`ChatRunnerOptions.tasks`, [assistant.md](assistant.md#her-side)):
+  every turn of hers in a chat, a group's included, is handed the status block of her tasks there
+  (`providers`). Her answers to the viewer's lines in a chat of one, voice messages and lines on a
+  call included, also get `start_task` and its hint while Assistant Mode is ready (`background`),
+  and `steer_task`, `stop_task` and `check_task` while a task of hers there is live (`tools`). Her
+  greeting and her report turns, which no line of the viewer's asked for, and a group's turns get
+  none of these tools.
+- **A task's end** reaches the chat through `report(snapshot)`, which the task manager calls
+  ([assistant.md](assistant.md#the-report)). It waits until no reply runs in the chat, then, in
+  one turn of the queue, stores her call's `final` and starts her report turn the way a greeting
+  starts: no viewer line and no kickoff, streamed by `GET live`, in text unless the chat's reply
+  mode is voice. The turn carries the nudge `taskEndedNudge(call)`, stored as her developer
+  `context` block, which says the task ended and its result is in her call's return. A cancelled
+  task gets its `final` and no turn, and so does one that ends once the chat is no longer hers
+  alone. During a call, the call is handed the end for her to tell there, or holds it, and what
+  she didn't tell there she tells in text once `call-ended` is stored
+  ([assistant.md](assistant.md#calls)). Once shutdown begins it stores nothing.
+- **A pause** of a task of hers reaches the chat through `taskWaiting(snapshot)`, the manager's
+  `waiting` hook: during a call that takes her tasks, she points the owner to the card there,
+  whatever the chat's display; otherwise nothing happens, since the waiting bar shows it.
+- **A plan getting further** reaches the chat through `taskProgress(snapshot)`, the manager's
+  `progress` hook: during a call that takes her tasks, in a verbose chat alone, she tells the owner
+  how far the plan has got, at most once every 30 s ([assistant.md](assistant.md#display));
+  otherwise nothing happens, since the card shows the plan.
 - **A dropped connection** never stops a reply. It finishes and is stored, and `GET live` replays
   it. Only stop, a new message, a call, `DELETE` and the server's shutdown stop one
   ([The chain](#the-chain)). Shutdown waits up to 2 s for what was said to be stored.
@@ -662,21 +827,23 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   - **Reaching the page:** no stream carries it, since its turn's streams have closed by then and
     the page may have none open. `GET chats/:id` lists the tool in `lateTools` until what it
     brought is stored. While that list isn't empty, the page reads the chat again every 2 s and
-    shows the tool's quiet line, so the photo appears without a reload.
+    shows the tool's quiet line, so the photo appears without a reload. `start_task` may be listed
+    there too, for the moment its interrupted turn's start is still being made, and so may
+    `steer_task` and `stop_task`, which an interruption doesn't cancel either.
   - **What ends it:** stop and a new message leave it running. `DELETE` and shutdown cancel it.
 
 | Method and path (under `/api/local`) | Body | Answer |
 | --- | --- | --- |
 | `GET chats` | | `ChatSummary[]`, newest activity first |
 | `POST chats` | `{ participants: [id] }`, 1 to 6 personas, each once | `201 { id }`; one persona's greeting then runs |
-| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, call, groupCall }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; the call on in the chat, `{ id, persona, group? }`, or null; and whether its personas can be called together now |
+| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, call, groupCall, defaultDisplay }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; the call on in the chat, `{ id, persona, group? }`, or null; whether its personas can be called together now; and the app's `chats.display` as the read was made, which the chat follows until a `settings` event of its own sets a `display` |
 | `POST chats/:id/messages` | `{ text }`, 1 to 4000 characters | NDJSON `ChatStreamLine`s from the viewer's line on: each decision as an `events` line, and each turn from `started` to `ended`. `409 chat-in-call` during a call |
 | `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `409 chat-in-call` during a call, `502 upstream-failed` when hearing fails |
 | `GET chats/:id/live` | | NDJSON of the running reply from its start; during a call, each event the chat stores, from `call-started` until the stream ends after `call-ended`; or `204` while neither runs |
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
-| `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, or `{ replyMode }`, `auto`, `text` or `voice`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line |
+| `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, `{ replyMode }`, `auto`, `text` or `voice`, or `{ display }`, `focus`, `normal` or `verbose`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line; a `display` applies at once, during a call too, whose feed carries it, and starts no turn |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
-| `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`, then removes `chats/<id>/` and nothing else. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |
+| `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`; stops the chat's live tasks, after any `start_task` still being answered; then removes `chats/<id>/` and nothing else, leaving the tasks' records. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |
 | `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers `Range` requests with a `206` (Bun.serve's own, on a file) and sends `Accept-Ranges: bytes`, since Safari plays audio only from a server that takes ranges |
 
 - **Text** is trimmed. A message may hold tabs and line breaks, but no other control character.
@@ -697,9 +864,9 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 - `bun test --no-env-file packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
   `packages/runtime/test/native/binding.test.ts` runs a bound call on scripted hearing, mind and
   voice, and once over a real werift peer.
-- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks four chats against its fake
+- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks five chats against its fake
   OpenAI-compatible server, which also answers the director's Decisions route, OpenAI's speech and
-  transcriptions, and a call's realtime transcription session. It bills nothing.
+  transcriptions, a call's realtime transcription session, and a task's worker. It bills nothing.
   - **A chat of one:** New Chat and the greeting, a reply that streams in with its cue as a chip,
     after a decision that asked `voice_moment` alone, the history after a reload, Rename and
     Delete.
@@ -716,6 +883,19 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
     call line, the composer waiting and a send refused `chat-in-call`, then Hang Up, the
     `call-ended`, the separators with the call's length, and the composer back. A second tab, open
     before the call and told of it by a refused send, gets its composer back at the hang-up too.
+  - **Tasks,** with the assistant role on an OpenRouter account at the fake server: her greeting
+    offered neither `start_task` nor its hint, her `start_task` call for the viewer's line and her
+    line after it, reading the task's status; 弄好了吗 answered from the status block before and
+    after Allow Once on the card; at a path outside the task's folders, `check_task`'s detail and
+    a line passed on through `steer_task`, which the card lists until Allow Once lets the run read
+    it; the task done, her `final`, and her report turn, offered none of her task tools, reading
+    the final as her call's result after the nudge. Then, in the same chat, a second task she
+    stops with `stop_task`, with no turn telling of it; a third in each of the chat's displays,
+    its words before her call shown above its card, stopped with `/stop`; and a fourth she starts
+    on a call, which opens with no stale status block: her `start_task` for a line the fake
+    hearing hears, stored in the chat among the call's lines, her pointer to the card when the
+    task pauses, the end she speaks on the call, and no report in text after it
+    ([web-app.md](web-app.md#the-browser-smoke-test)).
 - `bun run director-decisions` after changing the director's questions, state or thresholds
   ([Calibrating](#calibrating)).
 - **By hand, billed:** a chat with milky-green on OpenRouter. Ask a recall question (it must call
@@ -731,6 +911,11 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   refer to something typed earlier, her lines and yours must land in the chat as call lines, and a
   reply you cut off must keep only what she said. Then call a persona who isn't the active one:
   her own voice must answer.
+- **By hand, billed:** with Assistant Mode on a model you pick, ask milky-green on OpenRouter for a
+  page in a new folder. She must call `start_task` with a brief the worker can follow alone, say
+  the card asks to start it, and, once you allow the start, retell the result in her own voice.
+  Her status answers, her task tools and a task on a call have checks of their own
+  ([assistant.md](assistant.md#checking-her-side)).
 
 ## Production: the browser keeps the chat
 
@@ -779,10 +964,12 @@ temporary data home and find it unchanged.
 - **Mem0** runs for logged-in viewers alone, keyed by mid and persona as calls key it. An
   anonymous viewer's turn skips it.
 - **What a line can cost:** the chain limit is at most 3 (`PUBLIC_CHAIN_LIMIT`), whatever a
-  `settings` event asks, so at most 5 turns, each up to 4 mind calls, plus the director's calls
-  ([Costs](#costs)). A reply is in voice only while her voice role can speak, whatever the reply
-  mode. Every request a chat makes is billed with `source: "chat"` and the chat's id as its
-  session.
+  `settings` event asks, so at most 5 turns, each up to `chat.maxRounds` + 1 mind calls and more
+  where a malformed reply is asked for again, plus the director's calls ([Costs](#costs)). The
+  template persona sets no `chat.maxRounds`, so the server's `CHAT_MAX_ROUNDS` decides, 8 by
+  default; 3 keeps a turn at 4. A reply is in voice only while her voice role can speak, whatever
+  the reply mode. Every request a chat makes is billed with `source: "chat"` and the chat's id as
+  its session.
 
 ### The routes
 
@@ -848,7 +1035,8 @@ temporary data home and find it unchanged.
   - `413` past 10 MB, or 2 minutes claimed or measured;
   - `502 upstream-failed` when hearing fails;
   - `503 unavailable` while the first persona's hearing role has no key.
-- **Multipart, not a header,** because a window of 256 KB is past what proxies take in a header.
+- **Multipart, not a header,** because a window of up to 384 KB is past what proxies take in a
+  header.
 
 **`GET /api/chat/files/:name`** serves her selfies, a call's included, and voice replies
 (`files.ts`):
@@ -868,17 +1056,41 @@ temporary data home and find it unchanged.
 
 `openChatWindow` (`window.ts`) reads the request's chat:
 
-- **The cut:** the newest 120 events that fit in 256 KB of JSON (`CHAT_WINDOW_EVENTS`,
-  `CHAT_WINDOW_BYTES`). Older ones are dropped and counted in the log. A browser can send its whole
-  log; the server keeps what fits.
+- **The cut** (`windowOf`) reads the newest 180 events that aren't context (`CHAT_WINDOW_EVENTS`),
+  newest first, and charges each to one of two shares:
+  - tool calls and results to their own: 60 events and 128 KB of JSON (`CHAT_WINDOW_TOOL_EVENTS`,
+    `CHAT_WINDOW_TOOL_BYTES`);
+  - every other event to the lines' share: the other 120 events and 256 KB (`CHAT_WINDOW_BYTES`).
+
+  A share closes once it is full or at its first event that doesn't fit. Once the tools' share
+  closes, the lines' share goes on; once the lines' share closes, the cut ends there, since an
+  older call of hers kept past her lines would open her view on that call, the lines around it
+  gone. What neither keeps is dropped and counted in the log. A browser can send its whole log;
+  the server keeps what fits.
+- **Why tool events have a share:** a `recall_streams` overview runs to 10,000 characters, about
+  30 KB of JSON, so two a turn would fill a shared 256 KB in about four turns and push her older
+  lines out. A chat with no tool calls keeps its newest 120 events.
+- **A call is never kept while its result is left out,** which would read to her as a call that
+  never returned: the result is newer, so the walk meets it first, and one that doesn't fit closes
+  the share before its call. A result can stay without its call when the share fills, or the cut
+  ends, between them; her view leaves such a result out.
+- **Her words before a call ride its share.** A call's `said` is part of the signed call, so once
+  the tool share leaves an older call out, the words she wrote before it leave her view with it,
+  while her line after them stays.
+- **No event is changed:** each is kept whole or left out. Every `sig` covers one event alone, so
+  leaving one out never fails another's check. The SDK's `buildWindow` cuts by the same rule
+  ([client-sdk.md](client-sdk.md#the-window)), so the server keeps whole what a browser on it
+  sends; one on an older SDK sends its newest 120 events, and loses only its tool events past the
+  share.
 - **The chat's state is kept whatever the cut:** every `participants`, `title` and `settings`
-  event, outside the 120 and the 256 KB, so who is in the chat, its title and its settings are what
-  its whole log makes them. **The browser must send all of them,** however old, before its newest
-  events and in `seq` order. One that sends only its newest events brings back a persona the viewer
-  removed, drops one they added, and reverts the chat's reply mode and chain limit.
+  event, outside both shares, so who is in the chat, its title and its settings are what its whole
+  log makes them. **The browser must send all of them,** however old, in `seq` order with its
+  newest events. One that sends only its newest events brings back a persona the viewer removed,
+  drops one they added, and reverts the chat's reply mode and chain limit.
 - **The viewer's own events** are rebuilt from the fields a turn reads, and dropped when malformed:
   - messages, without their attachments: no turn reads the viewer's, and the browser keeps them;
-  - `title`, `participants` and `settings`, a `chainLimit` past 3 read as 3;
+  - `title`, `participants`, and `settings` with its `replyMode` and `chainLimit` alone, a
+    `chainLimit` past 3 read as 3;
   - a call's `call-started` and `call-ended`.
 - **Every other event** stays only while its `sig` verifies in this chat.
 - **Context never comes back** ([below](#context-stays-on-the-server)); any that does is dropped.
@@ -925,7 +1137,7 @@ temporary data home and find it unchanged.
 
 What she recalled, `context` and `context-removed` events, never reaches the browser:
 - on real turns of the local app, those blocks came to about 15 KB a turn, which would fill the
-  256 KB window in about 15 turns;
+  lines' 256 KB in about 15 turns;
 - they are her retrieval, not the viewer's conversation.
 
 `RequestChatStore.add` drops them before it signs, so no answer carries them, and a later turn of
@@ -947,7 +1159,9 @@ inside that chat (`bindChatCall`, `call.ts`):
   `persona`, for a window that isn't a chat's, or for a persona who isn't in it; `403
   persona-not-served`.
 - **The seed** is her view of the window, as her next text turn would read it, less tool calls and
-  their results; a viewer's clip heard as nothing reads `（听不清）`.
+  their results, a call's `said` joined to her next line as the local seed joins it
+  ([A call in the local app](#a-call-in-the-local-app)); a viewer's clip heard as nothing reads
+  `（听不清）`.
 - **Each line,** the viewer's and hers, goes to the browser as an RTVI server message `{ type:
   "chat-line", event }`, through the `CallClient` the call hands `onTranscript`: a `message`
   with `modality: "call"`, numbered on from the window, signed unless it is the viewer's. A line

@@ -1,0 +1,36 @@
+// Copyright (c) 2025 Mario Zechner
+// SPDX-License-Identifier: MIT
+//
+// Ported from pi-mono packages/mcp/src/naming.ts@ac78a60
+import { createHash } from "node:crypto";
+
+/** Provider tool names are limited to 64 characters of `[A-Za-z0-9_-]`. */
+const MAX_TOOL_NAME_LENGTH = 64;
+
+/** How every MCP tool's name starts, whichever server's. */
+export const MCP_TOOL_PREFIX = "mcp__";
+
+/**
+ * `mcp__<server>__<tool>`, sanitized and shortened with a hash suffix when too long. Like Codex,
+ * everything but `[A-Za-z0-9_]` becomes `_`. `isTaken` reports names used by a different MCP tool:
+ * sanitizing can map two tools to one name (`a-b` and `a_b`), which then get the hash suffix.
+ */
+export function createMcpToolName(
+  server: string,
+  tool: string,
+  isTaken: (name: string) => boolean = () => false,
+): string {
+  const name = `${MCP_TOOL_PREFIX}${server}__${tool}`.replace(/[^A-Za-z0-9_]/g, "_");
+  if (name.length <= MAX_TOOL_NAME_LENGTH && !isTaken(name)) return name;
+  const hash = createHash("sha256").update(`${server}\0${tool}`).digest("hex").slice(0, 8);
+  return `${name.slice(0, MAX_TOOL_NAME_LENGTH - hash.length - 1)}_${hash}`;
+}
+
+/**
+ * Namespace of a server's tools: `mcp__<server>` with `-` replaced by `_`, like the tool names.
+ * Server names that differ only in `-` and `_` share a namespace, so a configuration must not have
+ * both.
+ */
+export function mcpNamespace(server: string): string {
+  return `${MCP_TOOL_PREFIX}${server.replace(/-/g, "_")}`;
+}

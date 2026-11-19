@@ -2,17 +2,26 @@
 // gate and context providers, then the mind and its tool loop, and for a voice message her voice
 // role speaking what she wrote. It all runs as her, inside withPersona, and its events come out as
 // drafts for the caller to number and store. In a call, her reply is spoken as it streams and she
-// keeps what was heard, and an async tool's result arrives after her turn.
+// keeps what was heard, and her async tool's result arrives after her turn; a background tool's
+// final arrives from whoever does its work, in a chat or a call.
 import {
   type Attachment,
   CHAT_WINDOW_MESSAGES,
   type ChatEventDraft,
   type CutOff,
   type ParticipantId,
+  startedResult,
   toolCallMessages,
   viewWithBlocks,
 } from "@eidolon/chat";
-import { errorText, logger, raceAbort, readPersonaIdentity, withPersona } from "@eidolon/config";
+import {
+  chatMaxRounds,
+  errorText,
+  logger,
+  raceAbort,
+  readPersonaIdentity,
+  withPersona,
+} from "@eidolon/config";
 import { buildGreetingKickoff } from "@eidolon/context";
 import type {
   ConversationContext,
@@ -28,6 +37,8 @@ import { saveSelfies } from "./attachments.ts";
 import { TurnConversation } from "./context.ts";
 import { type Group, groupOf, SpeakerCut } from "./group.ts";
 import type {
+  BackgroundTool,
+  BackgroundTools,
   CallHooks,
   CallTurnOutput,
   CallTurnRequest,
@@ -44,9 +55,6 @@ import { timed, withUnheard } from "./voice.ts";
 
 /** The `tool` stream line's name while her voice role speaks a voice message. */
 const SPEAKING = "voice";
-
-/** Mind calls per turn; tool calls the last one asks for are not run. */
-export const MAX_ROUNDS = 4;
 
 /** pipedog's tool results for a call with no handler, and for one whose handler threw. */
 const missingResult = (name: string): ToolResult => ({
@@ -88,6 +96,14 @@ interface ToolOutcome {
 
 /** A call's async tool, still running when its round ends. */
 const RUNS_ON: unique symbol = Symbol("runs on");
+
+/** What her next round reads for a call: its result, "started" (a placeholder), or null. */
+type RoundResult = Parameters<typeof toolCallMessages>[1];
+
+/** Whether a background tool's outcome started its work, rather than refusing or failing. */
+function started(outcome: ToolOutcome): outcome is ToolOutcome & { readonly result: ToolResult } {
+  return outcome.result !== null && !outcome.failed && outcome.result.error === undefined;
+}
 
 type ToolState = "running" | "done" | "failed" | "cancelled";
 
@@ -174,6 +190,22 @@ function inOrder(hooks: CallHooks, read: () => Promise<void>, aborted: AbortSign
     },
     onAsyncResult: (events) => {
       void read().then(() => hooks.onAsyncResult(events));
+    },
+  };
+}
+
+/**
+ * A call's `late`: a tool that runs on past a barge-in without taking pipedog's async path (a
+ * background tool, or a request tool not cancelled on interruption) runs until the call ends, and
+ * what it brings reaches the call as an async result, stored after her cut message.
+ */
+function callLate(hooks: CallHooks): LateTools {
+  return {
+    signal: hooks.asyncSignal ?? new AbortController().signal,
+    add: (_name, events) => {
+      void events.then((drafts) => {
+        if (drafts.length > 0) hooks.onAsyncResult(drafts);
+      });
     },
   };
 }
@@ -274,7 +306,7 @@ export async function runTool(
  * under; rejects with `cancel`'s reason.
  */
 async function invoke(
-  tool: LlmTool,
+  tool: LlmTool | BackgroundTool,
   call: MindToolCall,
   context: ConversationContext,
   effects: (signal: AbortSignal) => ToolEffects,
@@ -283,7 +315,10 @@ async function invoke(
   const timeout = tool.timeoutSecs ? AbortSignal.timeout(tool.timeoutSecs * 1000) : null;
   const signal = timeout === null ? cancel : AbortSignal.any([cancel, timeout]);
   try {
-    const run = tool.run({ arguments: call.arguments, context, signal }, effects(signal));
+    const run = tool.run(
+      { arguments: call.arguments, context, signal, callId: call.id },
+      effects(signal),
+    );
     return { result: await raceAbort(run, signal), failed: false };
   } catch (error) {
     if (cancel.aborted) throw cancel.reason;
@@ -316,6 +351,10 @@ class Turn {
   /** A call's: her reply is spoken as it streams. */
   readonly #call: CallHooks | null;
   readonly #late: LateTools | undefined;
+  /** What the caller hands this turn beyond her parts; a realtime model's turn takes none. */
+  readonly #background: BackgroundTools | null;
+  readonly #tools: readonly LlmTool[];
+  readonly #providers: PersonaParts["providers"];
   /** A call on a realtime model, which this turn only prepares. */
   readonly #realtime: boolean;
   #text = "";
@@ -347,8 +386,16 @@ class Turn {
     this.#emit = emit;
     this.#persona = request.persona;
     this.#id = deps.newId();
-    this.#call = request.mode === "call" ? inOrder(request, read, signal) : null;
-    this.#late = request.mode === "call" ? undefined : request.late;
+    if (request.mode === "call") {
+      this.#call = inOrder(request, read, signal);
+      this.#late = callLate(this.#call);
+    } else {
+      this.#call = null;
+      this.#late = request.late;
+    }
+    this.#background = request.background ?? null;
+    this.#tools = request.tools ?? [];
+    this.#providers = request.providers ?? [];
     this.#realtime = realtime;
     this.#mayBeVoice = request.mode !== undefined && request.mode !== "text";
   }
@@ -419,14 +466,26 @@ class Turn {
   async prepare(): Promise<{ parts: PersonaParts; conversation: TurnConversation }> {
     const group = this.#group();
     const parts = await this.#parts(group);
-    return { parts, conversation: await this.#enriched(parts, group) };
+    const conversation = this.#view();
+    await this.#kickoff(parts, conversation);
+    this.#nudge(conversation);
+    await this.#enrich(parts, conversation, group);
+    return { parts, conversation };
   }
 
   async #respond(): Promise<void> {
     const group = this.#group();
+    const conversation = this.#view();
+    // Outside a call, with no kickoff to go first, her nudge is recorded before her parts and mind
+    // are made, so a turn that fails or is cut there still shows what it was asked. A call's waits
+    // for them: the Floor gives a nudge her cut reply never recorded to her next one.
+    const early = this.#call === null && !this.#request.kickoff;
+    if (early) this.#nudge(conversation);
     const parts = await this.#parts(group);
     const mind = this.#deps.createMind();
-    const conversation = await this.#enriched(parts, group);
+    await this.#kickoff(parts, conversation);
+    if (!early) this.#nudge(conversation);
+    await this.#enrich(parts, conversation, group);
     await this.#converse(parts, mind, conversation, group);
   }
 
@@ -437,39 +496,49 @@ class Turn {
   async #parts(group: Group | null): Promise<PersonaParts> {
     const { chat, viewer } = this.#request;
     const others = group?.others ?? [];
+    const background = this.#background;
     const options: PartsOptions = this.#realtime
       ? { others, realtime: true }
-      : { others, voice: this.#mayBeVoice };
+      : {
+          others,
+          voice: this.#mayBeVoice,
+          ...(background === null ? {} : { assistantHint: background.hint }),
+        };
     const parts = await raceAbort(
       this.#deps.parts(this.#persona, viewer, chat, options),
       this.#signal,
     );
-    if (this.#call === null && !this.#realtime) return parts;
-    return { ...parts, systemInstruction: callInstruction(parts.systemInstruction, parts.tools) };
+    const tools = [...parts.tools, ...(background?.tools ?? []), ...this.#tools];
+    if (this.#call === null && !this.#realtime) return { ...parts, tools };
+    // pipedog's guidance is for her own async tools; tools a turn is handed never take that path.
+    return {
+      ...parts,
+      systemInstruction: callInstruction(parts.systemInstruction, parts.tools),
+      tools,
+    };
   }
 
-  async #enriched(parts: PersonaParts, group: Group | null): Promise<TurnConversation> {
-    const { chat, viewer, kickoff, nudge } = this.#request;
+  #view(): TurnConversation {
+    const { chat, viewer } = this.#request;
     const { messages, blocks } = turnView(chat, this.#persona, viewer.uname ?? "");
-    const conversation = new TurnConversation(messages, {
-      persona: this.#persona,
-      turn: this.#id,
-      blocks,
-    });
-    if (kickoff) {
-      const content = buildGreetingKickoff(await this.#greetingMemories(parts));
-      this.#record([{ type: "kickoff", persona: this.#persona, turn: this.#id, content }]);
-      conversation.append({ role: "user", content });
-    }
-    if (nudge !== undefined) {
-      conversation.setMessages([
-        ...conversation.getMessages(),
-        { role: "developer", content: nudge },
-      ]);
-      this.#record(conversation.takeRecorded());
-    }
-    await this.#enrich(parts, conversation, group);
-    return conversation;
+    return new TurnConversation(messages, { persona: this.#persona, turn: this.#id, blocks });
+  }
+
+  async #kickoff(parts: PersonaParts, conversation: TurnConversation): Promise<void> {
+    if (!this.#request.kickoff) return;
+    const content = buildGreetingKickoff(await this.#greetingMemories(parts));
+    this.#record([{ type: "kickoff", persona: this.#persona, turn: this.#id, content }]);
+    conversation.append({ role: "user", content });
+  }
+
+  #nudge(conversation: TurnConversation): void {
+    const { nudge } = this.#request;
+    if (nudge === undefined) return;
+    conversation.setMessages([
+      ...conversation.getMessages(),
+      { role: "developer", content: nudge },
+    ]);
+    this.#record(conversation.takeRecorded());
   }
 
   /**
@@ -522,7 +591,7 @@ class Turn {
     const metadata: FrameMetadata = {};
     if (group !== null) metadata[MEM0_STORE_KEY] = group.memory;
     parts.gate?.attach(conversation.getMessages(), metadata, conversation.turn);
-    for (const { label, provider } of parts.providers) {
+    for (const { label, provider } of [...parts.providers, ...this.#providers]) {
       try {
         await raceAbort(
           provider.onContext({
@@ -563,6 +632,11 @@ class Turn {
     };
   }
 
+  /**
+   * Her rounds. Each of her first chat.maxRounds may call her tools; when the last of them still
+   * calls, an answer round follows, offering her background tools alone, or her tools with none to
+   * call, and a background call it makes is followed by one more round that calls none.
+   */
   async #converse(
     parts: PersonaParts,
     mind: Mind,
@@ -571,8 +645,17 @@ class Turn {
   ): Promise<void> {
     const signal = this.#signal;
     const cut = group === null ? null : new SpeakerCut(group.names);
+    const rounds = chatMaxRounds();
+    // A background start in her tool rounds isn't offered again: the answer round then calls none.
+    let started = false;
     for (let round = 1; ; round++) {
       const hidden = conversation.hiddenTools;
+      const visible = parts.tools.filter((tool) => !hidden.includes(tool.schema.name));
+      const answering = round > rounds;
+      const background =
+        answering && !started ? visible.filter((tool) => this.#isBackground(tool)) : [];
+      const offered = background.length > 0 ? background : visible;
+      const none = answering && (background.length === 0 || round > rounds + 1);
       let text = "";
       let calls: MindToolCall[] = [];
       let finishReason: string | null = null;
@@ -587,9 +670,8 @@ class Turn {
         for await (const chunk of mind.stream({
           system: parts.systemInstruction,
           messages: conversation.getMessages(),
-          tools: parts.tools
-            .filter((tool) => !hidden.includes(tool.schema.name))
-            .map((tool) => tool.schema),
+          tools: offered.map((tool) => tool.schema),
+          ...(none ? { toolChoice: "none" } : {}),
           ...(group === null ? {} : { stop: group.stop }),
           signal,
         })) {
@@ -599,7 +681,7 @@ class Turn {
             // What follows a line written as someone else is theirs too, tool calls included.
             if (cut?.cut) break;
           } else if (chunk.type === "tool-calls") {
-            calls = [...calls, ...chunk.calls];
+            calls = [...calls, ...chunk.calls.filter((call) => call.unparsed === undefined)];
           } else if (chunk.type === "done") {
             finishReason = chunk.finishReason;
           }
@@ -609,37 +691,54 @@ class Turn {
         ended(signal.aborted ? undefined : completionError(error));
         throw error;
       }
-      let running: Promise<ToolResult | null | typeof RUNS_ON>[];
+      let running: Promise<RoundResult | typeof RUNS_ON>[];
+      let kept: MindToolCall[];
+      let words: string;
       try {
         if (cut?.cut) {
           logger.info(`[chat] ${this.#persona}'s reply was cut where she wrote as someone else`);
           return;
         }
         if (cut !== null) say(cut.flush());
-        if (calls.length === 0) {
+        // A provider may call what an answer round doesn't offer: unrecorded, it needs no result.
+        kept = !answering
+          ? calls
+          : calls.filter((call) => !none && offered.some((tool) => tool.schema.name === call.name));
+        if (kept.length < calls.length) {
+          const names = calls.filter((call) => !kept.includes(call)).map((call) => call.name);
+          logger.warning(
+            `[chat] ${this.#persona} called ${names.join(", ")} past her ${rounds} tool rounds; ` +
+              "not run",
+          );
+        }
+        if (kept.length === 0) {
           this.#cutOff = CUT_OFF.get(finishReason);
           return;
         }
-        if (round === MAX_ROUNDS) {
-          logger.warning(
-            `[chat] ${this.#persona} called ${calls.map((call) => call.name).join(", ")} ` +
-              `after ${MAX_ROUNDS} rounds; not run`,
-          );
-          return;
-        }
+        // Whitespace alone is no words: no line of hers to show, nor content for her to read.
+        words = text.trim() === "" ? "" : text;
+        // A call's message is what was heard, which the round's words may not have reached yet.
+        const said = this.#call === null ? words : "";
         this.#record(
-          calls.map((call) => ({
+          kept.map((call, i) => ({
             type: "tool-call",
             persona: this.#persona,
             turn: this.#id,
             callId: call.id,
             name: call.name,
             arguments: call.arguments,
+            ...(i === 0 && said !== "" ? { said } : {}),
           })),
         );
+        if (this.#call === null) this.#text = "";
+        started ||=
+          !answering &&
+          kept.some((call) =>
+            visible.some((tool) => tool.schema.name === call.name && this.#isBackground(tool)),
+          );
         // pipedog runs a round's calls in parallel too, and ends the mind's response once they
         // have started.
-        running = calls.map((call) => this.#runTool(parts, call, conversation));
+        running = kept.map((call) => this.#runTool(parts, call, conversation));
       } finally {
         ended();
       }
@@ -651,13 +750,22 @@ class Turn {
         this.#record(conversation.takeRecorded());
         return;
       }
-      calls.forEach((call, i) => {
-        conversation.append(...toolCallMessages({ callId: call.id, ...call }, results[i] ?? null));
+      // As her next view holds the round: its words on its first call, its results last.
+      kept.forEach((call, i) => {
+        conversation.append(
+          ...toolCallMessages(
+            { callId: call.id, ...call },
+            results[i] ?? null,
+            i === 0 ? words : "",
+          ),
+        );
       });
-      // A call's text lands after its tool messages, as pipedog's assistant aggregator orders it.
-      if (text !== "") conversation.append({ role: "assistant", content: text });
       this.#record(conversation.takeRecorded());
     }
+  }
+
+  #isBackground(tool: LlmTool): boolean {
+    return this.#background?.tools.includes(tool) ?? false;
   }
 
   /** A call names a tool that timed out cancelled; a chat, failed. */
@@ -672,18 +780,26 @@ class Turn {
   }
 
   /**
-   * The result the mind sees, null for a call that timed out, which a call's view cancels, or
-   * RUNS_ON for a call's async tool, whose result comes through `onAsyncResult`.
+   * What her next round reads: the result the mind sees, as her view will show it for a background
+   * tool whose work went on; null for a call that timed out, which a call's view cancels; RUNS_ON
+   * for a call's async tool, whose result comes through `onAsyncResult`.
    */
   async #runTool(
     parts: PersonaParts,
     call: MindToolCall,
     conversation: TurnConversation,
-  ): Promise<ToolResult | null | typeof RUNS_ON> {
+  ): Promise<RoundResult | typeof RUNS_ON> {
     const turnSignal = this.#signal;
     const hooks = this.#call;
     const tool = parts.tools.find((candidate) => candidate.schema.name === call.name);
-    const runsOn = hooks !== null && tool !== undefined && isAsyncTool(tool);
+    const background = tool !== undefined && this.#isBackground(tool);
+    // In a call, only her own async tools take pipedog's path; handed tools run as in a chat.
+    const runsOn =
+      hooks !== null &&
+      tool !== undefined &&
+      !background &&
+      !this.#tools.includes(tool) &&
+      isAsyncTool(tool);
     const state = (s: ToolState): void => this.#toolLine(call, runsOn, s);
     const settle = (result: ToolResult, s: "done" | "failed"): ToolResult => {
       this.#record([this.#toolResult(call, result)]);
@@ -725,7 +841,7 @@ class Turn {
         logger.info(
           `[chat] ${call.name} runs on after ${this.#persona}'s turn ${this.#id} stopped`,
         );
-        late.add(call.name, this.#lateEvents(call, running, later));
+        late.add(call.name, this.#lateEvents(call, running, later, background));
       }
       if (hooks !== null) state("cancelled");
       throw turnSignal.reason;
@@ -733,6 +849,11 @@ class Turn {
     if (outcome.result === null) {
       state("cancelled");
       return null;
+    }
+    if (background && started(outcome)) {
+      this.#record([{ ...this.#toolResult(call, outcome.result), stage: "started" }]);
+      state("done");
+      return startedResult(outcome.result);
     }
     return settle(outcome.result, outcome.failed ? "failed" : "done");
   }
@@ -762,15 +883,23 @@ class Turn {
       });
   }
 
-  /** What a tool her interrupted turn left running adds once it ends: its result, then `photos`. */
+  /**
+   * What a tool her interrupted turn left running adds once it ends: its result, `started` for a
+   * background tool whose work went on, then `photos`.
+   */
   async #lateEvents(
     call: MindToolCall,
     running: Promise<ToolOutcome>,
     photos: readonly Attachment[],
+    background: boolean,
   ): Promise<readonly ChatEventDraft[]> {
     const outcome = await running.catch(() => null);
     const events: ChatEventDraft[] = [];
-    if (outcome?.result) events.push(this.#toolResult(call, outcome.result));
+    if (outcome !== null && background && started(outcome)) {
+      events.push({ ...this.#toolResult(call, outcome.result), stage: "started" });
+    } else if (outcome?.result) {
+      events.push(this.#toolResult(call, outcome.result));
+    }
     if (photos.length > 0) {
       events.push({
         type: "message",

@@ -3,10 +3,17 @@
 import type { CardPath } from "@/components/settings-form/controls";
 import { studioPath } from "@/lib/paths";
 
-export const SECTIONS = ["providers", "general", "memory", "downloads", "advanced"] as const;
+export const SECTIONS = [
+  "providers",
+  "general",
+  "memory",
+  "downloads",
+  "assistant",
+  "advanced",
+] as const;
 export type SectionId = (typeof SECTIONS)[number];
 
-export type CardId = "you" | "storage" | "embeddings" | "ytDlp";
+export type CardId = "you" | "storage" | "embeddings" | "ytDlp" | "assistant" | "kinds";
 
 export interface CardSpec {
   /** Picks its title and description. */
@@ -41,6 +48,29 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
     {
       id: "ytDlp",
       paths: [["sources.cookiesFromBrowser", "sources.cookiesFile"], "sources.ytDlp"],
+    },
+  ],
+  assistant: [
+    {
+      id: "assistant",
+      paths: [
+        "assistant.enabled",
+        ["assistant.provider", "assistant.model"],
+        ["assistant.search.provider", "assistant.search.model"],
+        "assistant.folders",
+        "assistant.bash",
+        ["assistant.spendPauseUsd", "assistant.contextTokens"],
+        "chats.display",
+      ],
+    },
+    // The kinds' own accounts and models, which tasks she marks so run on.
+    {
+      id: "kinds",
+      paths: [
+        ["assistant.quick.provider", "assistant.quick.model"],
+        ["assistant.coding.provider", "assistant.coding.model"],
+        ["assistant.research.provider", "assistant.research.model"],
+      ],
     },
   ],
 };

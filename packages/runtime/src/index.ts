@@ -12,6 +12,7 @@ import type { AnyCallBinding } from "./native/binding.ts";
 import { productionCallDeps } from "./native/deps.ts";
 import { runNativeSafely } from "./native/engine.ts";
 
+export type { OutsideResult, ReplyExtras } from "@eidolon/voice";
 export type { SignallingResult } from "@eidolon/webrtc";
 export type {
   AnyCallBinding,

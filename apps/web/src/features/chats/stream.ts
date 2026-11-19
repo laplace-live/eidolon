@@ -95,6 +95,21 @@ function finishes(turn: LiveTurn, events: readonly ChatEvent[]): boolean {
 }
 
 /**
+ * `turn`, its streamed text dropped once `events` store a call of it that carries her words before
+ * it: the words streamed since her last such call, which the log now shows above the call.
+ */
+function afterSaid(turn: LiveTurn, events: readonly ChatEvent[]): LiveTurn {
+  const said = events.some(
+    (event) =>
+      event.type === "tool-call" &&
+      event.turn === turn.id &&
+      event.said !== undefined &&
+      event.said !== "",
+  );
+  return said ? { ...turn, text: "" } : turn;
+}
+
+/**
  * `pending` without the lines `events` store: each the first sent before it with its text, or for
  * a voice message, whose transcript can't be told before, the one sent by `key`, whose stream
  * carried it. Live replays any send's, so it clears none.
@@ -141,7 +156,10 @@ export function reduceLive(state: LiveState, action: LiveAction): LiveState {
       return {
         ...state,
         pending: unstored(state.pending, action.events, action.key),
-        turn: state.turn !== null && finishes(state.turn, action.events) ? null : state.turn,
+        turn:
+          state.turn === null || finishes(state.turn, action.events)
+            ? null
+            : afterSaid(state.turn, action.events),
         seen: Math.max(state.seen, ...action.events.map((event) => event.seq)),
       };
     case "ended":
@@ -317,4 +335,44 @@ export function mayRunOn({ turn, ended, broke, received }: StreamEnd): boolean {
  */
 export function reaches(line: ChatStreamLine, superseded: boolean): boolean {
   return !superseded || (line.type !== "started" && line.type !== "delta" && line.type !== "tool");
+}
+
+/**
+ * How long the page asks GET live for her report on a task it saw end, with no reply on the page:
+ * hers starts only once no reply runs in the chat.
+ */
+export const REPORT_WAIT_MS = 60_000;
+
+/** What the wait for her report reads and does. */
+export interface ReportWatch {
+  /** The page's streams open now. */
+  readonly open: () => number;
+  /** When a stream of the page's that carried a line last ended; 0 for none. */
+  readonly carried: () => number;
+  /** Asks GET live once, following what it carries to its end. */
+  readonly follow: () => Promise<void>;
+  /** Waits before asking again. */
+  readonly pause: () => Promise<unknown>;
+  readonly now: () => number;
+  /** The page still waits for it. */
+  readonly on: () => boolean;
+}
+
+/**
+ * Asks GET live for her report on a task the page saw end at `since`, until REPORT_WAIT_MS pass from
+ * then, or from the end of the last reply the page carried, with none open. A stream already open
+ * carries any reply, and a second would show its words twice.
+ */
+export async function awaitReport(watch: ReportWatch, since: number): Promise<void> {
+  let quiet = since;
+  while (watch.on()) {
+    if (watch.open() > 0) quiet = watch.now();
+    else {
+      quiet = Math.max(quiet, watch.carried());
+      if (watch.now() - quiet >= REPORT_WAIT_MS) return;
+      await watch.follow();
+      if (!watch.on()) return;
+    }
+    await watch.pause();
+  }
 }

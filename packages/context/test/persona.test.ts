@@ -13,6 +13,7 @@ import {
   humanizeDaysAgo,
   INTERRUPTED_EMPTY_TURN_PROMPT,
   loadPersona,
+  REALTIME_DELIVERY_LINE,
   STREAM_DATES_TTL_SEC,
   type Viewer,
   WEEKDAY_ZH,
@@ -123,6 +124,23 @@ describe("buildPersonaPrefix", () => {
         "UID。\n这是群聊，群里还有：露比、Ken；只用你自己的身份说话，不要替别人说话。\n",
       ),
     );
+  });
+
+  test("the assistant's hint follows the selfie's, ahead of the realtime line, and is left out when empty", () => {
+    const input = {
+      viewer: ANONYMOUS,
+      timeZone: "UTC",
+      now: new Date("2026-09-08T23:05:00Z"),
+      recentStreamDates: [],
+      voiceHint: "VOICE",
+      selfieHint: "SELFIE",
+    };
+    const clock =
+      "现在是 2026年9月8日 周二 23:05。如果用户问到时间或日期，根据这里的事实回答；不要主动念时间，除非话题相关。\n";
+    expect(buildPersonaPrefix({ ...input, assistantHint: "ASSISTANT", realtime: true })).toBe(
+      `${clock}VOICE\nSELFIE\nASSISTANT\n${REALTIME_DELIVERY_LINE}\n\n`,
+    );
+    expect(buildPersonaPrefix({ ...input, assistantHint: "" })).toBe(`${clock}VOICE\nSELFIE\n\n`);
   });
 
   test("anonymous with nothing else is the clock line alone", () => {
@@ -389,6 +407,22 @@ describe("buildSystemInstruction", () => {
       dbPath: join(dir, "no-lancedb"),
     });
     expect(instruction.startsWith("现在是 2026年9月8日 周二 23:05。")).toBe(true);
+  });
+
+  test("carries the assistant's hint into the prefix", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eidolon-instruction-"));
+    writeFileSync(join(dir, "persona.md"), "p");
+    setEnv("PERSONA_FILE", join(dir, "persona.md"));
+    const instruction = await buildSystemInstruction({
+      viewer: { isLoggedIn: false, uname: null, mid: null },
+      voiceHint: "",
+      selfieHint: "SELFIE",
+      assistantHint: "ASSISTANT",
+      timeZone: "UTC",
+      now: new Date("2026-09-08T23:05:00Z"),
+      dbPath: join(dir, "no-lancedb"),
+    });
+    expect(instruction.split("\n").slice(1)).toEqual(["SELFIE", "ASSISTANT", "", "p"]);
   });
 
   test("names a group chat's other personas", async () => {

@@ -5,7 +5,9 @@ import { existsSync } from "node:fs";
 import {
   attachmentKind,
   attachmentMime,
+  type ChatDisplay,
   ChatStoreError,
+  isChatDisplay,
   isChatId,
   isReplyMode,
   MAX_CHAIN_LIMIT,
@@ -86,6 +88,12 @@ function chainLimitOf(body: unknown): number | null {
 function replyModeIn(body: unknown): ReplyMode | null {
   if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "replyMode")) return null;
   return isReplyMode(body.replyMode) ? body.replyMode : null;
+}
+
+/** PATCH's `display`: focus, normal or verbose; else null. */
+function displayIn(body: unknown): ChatDisplay | null {
+  if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "display")) return null;
+  return isChatDisplay(body.display) ? body.display : null;
 }
 
 /** POST voice's `durationMs`, a whole number of ms from 1; else null. */
@@ -219,17 +227,19 @@ export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
         const title = field(body.value, "title", MAX_TITLE, CONTROL);
         const chainLimit = chainLimitOf(body.value);
         const replyMode = replyModeIn(body.value);
-        if (title === null && chainLimit === null && replyMode === null) {
+        const display = displayIn(body.value);
+        if (title === null && chainLimit === null && replyMode === null && display === null) {
           return localError(
             400,
             "bad-request",
-            "Send a `title` of 1 to 80 characters on one line, a `chainLimit` from 0 to 6, or a `replyMode` of auto, text or voice",
+            "Send a `title` of 1 to 80 characters on one line, a `chainLimit` from 0 to 6, a `replyMode` of auto, text or voice, or a `display` of focus, normal or verbose",
           );
         }
         return inChat(async () => {
           if (title !== null) await runner().rename(id, title);
           else if (chainLimit !== null) await runner().changeSettings(id, { chainLimit });
-          else await runner().changeSettings(id, { replyMode: replyMode as ReplyMode });
+          else if (replyMode !== null) await runner().changeSettings(id, { replyMode });
+          else await runner().changeSettings(id, { display: display as ChatDisplay });
           return localJson(200, { ok: true });
         });
       },

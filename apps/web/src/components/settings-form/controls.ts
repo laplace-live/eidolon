@@ -1,7 +1,7 @@
 // How the settings form shows a SETTINGS row and what it saves. A value is written so the bot reads
 // it back from the file exactly as from the variable: @eidolon/config's asEnvValue joins a list
 // with "," and resolves each path, and the readers split on "," and strip Python whitespace.
-import { REPLY_MODES } from "@eidolon/chat";
+import { CHAT_DISPLAYS, REPLY_MODES } from "@eidolon/chat";
 import type { SettingKind, SettingRow, SettingScope } from "@/lib/api";
 import {
   defaultModel,
@@ -19,10 +19,12 @@ export type Control =
   | { readonly type: "text"; readonly placeholder?: string }
   | { readonly type: "integer"; readonly min?: number; readonly max?: number }
   | { readonly type: "number"; readonly slider?: Slider }
-  | { readonly type: "flag" }
+  /** `fallback`: what applies while nothing sets it, where the reader has a default. */
+  | { readonly type: "flag"; readonly fallback?: "on" | "off" }
   | { readonly type: "list" }
   | { readonly type: "path"; readonly inPersona: boolean }
-  | { readonly type: "paths"; readonly inPersona: boolean }
+  /** `folders`: grants for a task, each a full path that isn't the disk or home. */
+  | { readonly type: "paths"; readonly inPersona: boolean; readonly folders?: boolean }
   /** `fallback`: what applies while nothing sets it, where that is one of its options. */
   | { readonly type: "select"; readonly options: readonly string[]; readonly fallback?: string }
   | { readonly type: "timezone" }
@@ -47,6 +49,9 @@ export const DEFAULT_TALKATIVENESS = 0.5;
 
 /** @eidolon/config's DEFAULT_CHAT_REPLY_MODE. */
 export const DEFAULT_REPLY_MODE = "auto";
+
+/** @eidolon/config's DEFAULT_CHAT_DISPLAY. */
+export const DEFAULT_DISPLAY = "normal";
 
 /** The browsers yt-dlp's --cookies-from-browser reads, and `none` for no cookies. */
 export const COOKIE_BROWSERS = [
@@ -78,6 +83,11 @@ const BY_PATH: Readonly<Record<string, Control>> = {
     slider: { min: 0, max: 1, step: 0.05, fallback: DEFAULT_TALKATIVENESS },
   },
   "chat.replyMode": { type: "select", options: REPLY_MODES, fallback: DEFAULT_REPLY_MODE },
+  "chat.maxRounds": { type: "integer", min: 1 },
+  "assistant.enabled": { type: "flag", fallback: "on" },
+  "assistant.folders": { type: "paths", inPersona: false, folders: true },
+  "assistant.bash": { type: "flag", fallback: "on" },
+  "chats.display": { type: "select", options: CHAT_DISPLAYS, fallback: DEFAULT_DISPLAY },
 };
 
 function byKind(kind: SettingKind, scope: SettingScope): Control {
@@ -186,6 +196,18 @@ export function fallbackModel(
   return defaultModel(role, provider);
 }
 
+/** The model `role` runs on as the drafts stand: its own, else its fallback; null when it has none. */
+export function effectiveModel(
+  role: Role,
+  rows: readonly Pick<SettingRow, "path" | "value" | "envValue" | "envOverride">[],
+  drafts: Readonly<Record<string, string>>,
+  accounts: AccountList | undefined,
+): string | null {
+  return (
+    chosenValue(`${role.path}.model`, rows, drafts) ?? fallbackModel(role, rows, drafts, accounts)
+  );
+}
+
 /** The paths whose values belong to `role`'s provider: they go when it changes. */
 function dependentsOf(role: Role): string[] {
   const dependents = [`${role.path}.model`];
@@ -291,6 +313,16 @@ export function browserTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+/** Absolute, or from the home folder by `~` or `~/`: never resolved in a folder of Eidolon's. */
+export function isFullPath(path: string): boolean {
+  return /^(?:[/\\]|~(?:\/|$))/.test(path) || /^[A-Za-z]:[/\\]/.test(path);
+}
+
+/** The whole disk, or the home folder itself. */
+function holdsHome(path: string): boolean {
+  return /^~?[/\\]*$/.test(path);
+}
+
 /** Relative, and never climbing above the folder it resolves in. */
 export function staysInside(path: string): boolean {
   if (/^[/\\~]/.test(path) || /^[A-Za-z]:/.test(path)) return false;
@@ -336,6 +368,8 @@ export function parseDraft(draft: string, control: Control): Parsed {
         if (control.inPersona && !URL_PREFIX.test(path) && !staysInside(path)) {
           return fail("settings.form.invalid.relative");
         }
+        if (control.folders && !isFullPath(path)) return fail("settings.form.invalid.fullPath");
+        if (control.folders && holdsHome(path)) return fail("settings.form.invalid.home");
       }
       return ok(paths.length > 0 ? paths : null);
     }
@@ -407,6 +441,7 @@ export const GROUPS = [
   "knowledge",
   "videos",
   "selfie",
+  "assistant",
   "providers",
   "sources",
   "usage",
@@ -429,6 +464,9 @@ const GROUP_OF: Readonly<Record<string, Group>> = {
   knowledge: "knowledge",
   transcription: "videos",
   selfie: "selfie",
+  assistant: "assistant",
+  // chats.display only changes how her tasks show.
+  chats: "assistant",
   providers: "providers",
   embeddings: "providers",
   rerank: "providers",

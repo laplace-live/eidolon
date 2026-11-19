@@ -17,7 +17,10 @@ under `GATE_FRAME_KEY`. A turn is its user-message count plus the latest
 user text, so tool continuations within a turn reuse the same decision.
 
 Jev sees the latest user line, the exchange just before it, and a one-line
-description of the persona. It answers three yes/no questions: is the
+description of the persona (`gateState`). What she said before a tool call,
+its message's content, joins her next line into one streamer turn when no
+user line comes between, so a recall follow-up keeps the viewer's line
+before it. Jev answers three yes/no questions: is the
 viewer asking about the streamer herself (preferences, habits, body, pets,
 friends, backstory, her flower shop), about something she said or did in
 the past, or who or what a specific named thing is. Any answer at or above

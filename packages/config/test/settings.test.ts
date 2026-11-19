@@ -1,11 +1,15 @@
 import "./isolated-guard.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   activePersona,
+  assistantSettings,
   CREDENTIALS,
+  chatDisplay,
   chatInterests,
+  chatMaxRounds,
   chatReplyMode,
   chatTalkativeness,
   dataHome,
@@ -277,6 +281,16 @@ describe("credentials", () => {
     expect(warnings).toEqual([]);
   });
 
+  test("mcpSecrets is no unknown credential, and none of its names becomes a setting", () => {
+    const file = '{"mcpSecrets": {"GITHUB_TOKEN": "ghp-file", "OPENROUTER_API_KEY": "sk-mcp"}}';
+    chmodSync(write("credentials.json", file), 0o600);
+    const loaded = loadSettings();
+    expect(loaded.values.get("mcpSecrets")).toBeUndefined();
+    expect(loaded.values.get("GITHUB_TOKEN")).toBeUndefined();
+    expect(loaded.values.get("OPENROUTER_API_KEY")).toBeUndefined();
+    expect(warnings).toEqual([]);
+  });
+
   test("a non-credential is refused, and a file others can read is flagged", () => {
     const path = write("credentials.json", '{"FISH_MODEL": "s2", "FISH_API_KEY": "k"}');
     chmodSync(path, 0o644);
@@ -473,6 +487,122 @@ describe("chat settings", () => {
     expect(chatReplyMode()).toBe("auto");
     expect(warnings).toEqual(["CHAT_REPLY_MODE='audio' is not auto, text or voice; using auto"]);
   });
+
+  test("the display is focus, normal or verbose in any case; anything else is normal, with a warning", () => {
+    expect(chatDisplay()).toBe("normal");
+    for (const [value, read] of [
+      ["focus", "focus"],
+      [" Verbose ", "verbose"],
+      ["NORMAL", "normal"],
+    ] as const) {
+      setEnv("CHAT_DISPLAY", value);
+      expect([value, chatDisplay()]).toEqual([value, read]);
+    }
+    expect(warnings).toEqual([]);
+    setEnv("CHAT_DISPLAY", "loud");
+    expect(chatDisplay()).toBe("normal");
+    expect(warnings).toEqual(["CHAT_DISPLAY='loud' is not focus, normal or verbose; using normal"]);
+  });
+
+  test("the display is the install's: settings.yaml's, under the environment's, for every persona", () => {
+    write("settings.yaml", "chats:\n  display: verbose\n");
+    const hers = write("personas/alice/persona.yaml", "chats:\n  display: focus\n");
+    installSettings();
+    expect(chatDisplay()).toBe("verbose");
+    expect(withPersona("alice", chatDisplay)).toBe("verbose");
+    expect(warnings).toEqual([`Unknown setting chats.display in ${hers}`]);
+    setEnv("CHAT_DISPLAY", "Focus");
+    expect(chatDisplay()).toBe("focus");
+  });
+
+  test("max rounds are 8 unset, and her persona.yaml's win over the environment's", () => {
+    write("personas/alice/persona.yaml", "chat:\n  maxRounds: 12\n");
+    installSettings();
+    expect(chatMaxRounds()).toBe(8);
+    setEnv("CHAT_MAX_ROUNDS", "3");
+    expect([chatMaxRounds(), withPersona("alice", chatMaxRounds)]).toEqual([3, 12]);
+    setEnv("CHAT_MAX_ROUNDS", "1");
+    expect(chatMaxRounds()).toBe(1);
+    expect(warnings).toEqual([]);
+  });
+
+  test("max rounds below 1, or not a whole number, are 8, with a warning", () => {
+    for (const value of ["0", "-2", "2.5"]) {
+      setEnv("CHAT_MAX_ROUNDS", value);
+      expect([value, chatMaxRounds()]).toEqual([value, 8]);
+    }
+    expect(warnings).toEqual([
+      "CHAT_MAX_ROUNDS='0' is below 1; using default 8",
+      "CHAT_MAX_ROUNDS='-2' is below 1; using default 8",
+      "CHAT_MAX_ROUNDS='2.5' is not a valid int; using default 8",
+    ]);
+  });
+});
+
+describe("assistant settings", () => {
+  test("unset: on, no folders of its own, commands on, a $1 spend pause and a 128,000-token context", () => {
+    expect(assistantSettings()).toEqual({
+      enabled: true,
+      folders: [],
+      bash: true,
+      spendPauseUsd: 1,
+      contextTokens: 128_000,
+    });
+  });
+
+  test("settings.yaml's, its folders in the data home or under ~; the environment's win", () => {
+    write(
+      "settings.yaml",
+      [
+        "assistant:",
+        "  enabled: false",
+        "  folders: [~/Projects, notes]",
+        "  bash: false",
+        "  spendPauseUsd: 2.5",
+        "  contextTokens: 64000",
+        "",
+      ].join("\n"),
+    );
+    installSettings();
+    expect(assistantSettings()).toEqual({
+      enabled: false,
+      folders: [join(homedir(), "Projects"), join(dataHome(), "notes")],
+      bash: false,
+      spendPauseUsd: 2.5,
+      contextTokens: 64_000,
+    });
+    setEnv("ASSISTANT_ENABLED", "on");
+    setEnv("ASSISTANT_FOLDERS", " ~/a, /b ,,");
+    setEnv("ASSISTANT_BASH", "yes");
+    expect(assistantSettings()).toMatchObject({
+      enabled: true,
+      folders: [join(homedir(), "a"), "/b"],
+      bash: true,
+    });
+    expect(warnings).toEqual([]);
+  });
+
+  test("only 0 turns the spend pauses off; a pause or context that is no amount is the default", () => {
+    for (const [value, read] of [
+      ["0", 0],
+      ["0.25", 0.25],
+      ["-1", 1],
+      ["inf", 1],
+      ["nan", 1],
+    ] as const) {
+      setEnv("ASSISTANT_SPEND_PAUSE_USD", value);
+      expect([value, assistantSettings().spendPauseUsd]).toEqual([value, read]);
+    }
+    for (const [value, read] of [
+      ["200000", 200_000],
+      ["0", 128_000],
+      ["-5", 128_000],
+    ] as const) {
+      setEnv("ASSISTANT_CONTEXT_TOKENS", value);
+      expect([value, assistantSettings().contextTokens]).toEqual([value, read]);
+    }
+    expect(warnings).toEqual([]);
+  });
 });
 
 test("fillPersonaText fills known placeholders and leaves the rest", () => {
@@ -490,4 +620,16 @@ test("docs/personas.md documents every setting, under its own scope", async () =
     expect(at, row).toBeGreaterThan(-1);
     expect(setting.scope === "persona" ? at > persona && at < app : at > app, row).toBe(true);
   }
+});
+
+test(".env.example declares every setting and key exactly once", async () => {
+  const example = await Bun.file(join(PROJECT_ROOT, ".env.example")).text();
+  const declared = example
+    .split("\n")
+    .flatMap((line) => /^([A-Z][A-Z\d_]*)=/.exec(line)?.[1] ?? []);
+  // dotenv keeps a variable's last line, so a blank one further down would undo the first.
+  const notOnce = [...SETTINGS.map((setting) => setting.env), ...CREDENTIALS].filter(
+    (name) => declared.filter((each) => each === name).length !== 1,
+  );
+  expect(notOnce).toEqual([]);
 });

@@ -46,10 +46,22 @@ export {
   select,
   selectedAccount,
   selectRequired,
+  selectTask,
+  type TaskSelection,
   takesKey,
+  taskRoleId,
   trySelect,
   voiceOf,
 } from "./resolve.ts";
+export {
+  openRouterSearcher,
+  roleSearcher,
+  type Searcher,
+  type SearcherOptions,
+  type SearchOutcome,
+  type SearchRequest,
+  type SearchResult,
+} from "./search.ts";
 export {
   billingProvider,
   type CostSource,

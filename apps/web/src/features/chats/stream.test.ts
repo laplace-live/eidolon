@@ -3,6 +3,7 @@ import type { ChatEvent, ChatHeader, ChatStreamLine } from "@eidolon/chat";
 import type { ChatContents } from "@/lib/chats";
 import { chatItems } from "./items";
 import {
+  awaitReport,
   callOn,
   IDLE,
   LATE_POLL_MS,
@@ -12,6 +13,8 @@ import {
   liveRows,
   mayRunOn,
   mergeEvents,
+  REPORT_WAIT_MS,
+  type ReportWatch,
   reaches,
   reduceLive,
   Sends,
@@ -117,6 +120,67 @@ describe("reduceLive", () => {
       second,
     );
     expect(tail.turn).toEqual({ id: "b", persona: "mio", after: 12, text: "好", tool: null });
+  });
+
+  test("a stored call carrying her words clears the words streamed, and the next round streams on", () => {
+    const call = (seq: number, turn: string, said?: string): ChatEvent => ({
+      type: "tool-call",
+      seq,
+      at: seq,
+      persona: "mio",
+      turn,
+      callId: `c${seq}`,
+      name: "recall_streams",
+      arguments: {},
+      ...(said === undefined ? {} : { said }),
+    });
+    const streaming = run([
+      { type: "started", turn: "t1", persona: "mio" },
+      { type: "delta", turn: "t1", text: "我查一下" },
+    ]);
+    const stored = run([{ type: "events", events: [call(3, "t1", "我查一下")] }], streaming);
+    expect(stored.turn?.text).toBe("");
+    // The log shows the stored words as her line, so they don't stream below it too.
+    expect(liveRows(stored, false)).toEqual([{ kind: "thinking" }]);
+    const result: ChatEvent = {
+      type: "tool-result",
+      seq: 4,
+      at: 4,
+      persona: "mio",
+      turn: "t1",
+      callId: "c3",
+      result: {},
+    };
+    const next = run(
+      [
+        { type: "events", events: [result] },
+        { type: "delta", turn: "t1", text: "那次是" },
+      ],
+      stored,
+    );
+    expect(liveRows(next, false)).toEqual([{ kind: "streamed", text: "那次是" }]);
+  });
+
+  test("a call with no words before it, or another turn's, leaves the words streamed", () => {
+    const streaming = run([
+      { type: "started", turn: "t1", persona: "mio" },
+      { type: "delta", turn: "t1", text: "嗯" },
+    ]);
+    const bare: ChatEvent = {
+      type: "tool-call",
+      seq: 3,
+      at: 3,
+      persona: "mio",
+      turn: "t1",
+      callId: "c1",
+      name: "take_selfie",
+      arguments: {},
+    };
+    expect(run([{ type: "events", events: [bare] }], streaming).turn?.text).toBe("嗯");
+    const empty = { ...bare, said: "" };
+    expect(run([{ type: "events", events: [empty] }], streaming).turn?.text).toBe("嗯");
+    const other = { ...bare, turn: "t0", said: "嗯" };
+    expect(run([{ type: "events", events: [other] }], streaming).turn?.text).toBe("嗯");
   });
 
   test("a turn-failed event ends its turn", () => {
@@ -341,6 +405,7 @@ describe("a line sent while a reply runs", () => {
       lateTools: [],
       hearingRefusal: null,
       groupCall: false,
+      defaultDisplay: "normal",
       call: null,
     };
     let live = IDLE;
@@ -531,6 +596,7 @@ describe("mergeEvents", () => {
     lateTools: [],
     hearingRefusal: null,
     groupCall: false,
+    defaultDisplay: "normal" as const,
     call: null,
   };
 
@@ -561,6 +627,7 @@ describe("latePoll", () => {
       hearingRefusal: null,
       call: null,
       groupCall: false,
+      defaultDisplay: "normal" as const,
     };
     expect(latePoll({ ...contents, lateTools: [] })).toBe(false);
     expect(latePoll({ ...contents, lateTools: ["take_selfie"] })).toBe(LATE_POLL_MS);
@@ -575,6 +642,7 @@ describe("callOn", () => {
     lateTools: [],
     hearingRefusal: null,
     groupCall: false,
+    defaultDisplay: "normal" as const,
     call: { id: "c1", persona: "mio" },
   };
 
@@ -610,5 +678,90 @@ describe("mayRunOn", () => {
     expect(mayRunOn({ ...broke, received: false })).toBe(false);
     expect(mayRunOn({ ...broke, broke: false })).toBe(false);
     expect(mayRunOn({ ...broke, turn: "t1", ended: true, broke: false })).toBe(false);
+  });
+});
+
+describe("the wait for her report", () => {
+  const TICK = 2000;
+
+  /** A page that saw a task end at 0 and asks every TICK, with a reply of its own from `from` to `to`. */
+  function page(reply: { readonly from: number; readonly to: number } | null = null) {
+    let now = 0;
+    const asked: number[] = [];
+    const watch: ReportWatch = {
+      open: () => (reply !== null && now >= reply.from && now < reply.to ? 1 : 0),
+      carried: () => (reply !== null && now >= reply.to ? reply.to : 0),
+      follow: async () => {
+        asked.push(now);
+      },
+      pause: async () => {
+        now += TICK;
+      },
+      now: () => now,
+      on: () => true,
+    };
+    return { watch, asked };
+  }
+
+  test("asks GET live at each tick while no reply runs, until REPORT_WAIT_MS after the end", async () => {
+    const { watch, asked } = page();
+    await awaitReport(watch, 0);
+    expect(asked).toHaveLength(REPORT_WAIT_MS / TICK);
+    expect([asked[0], asked.at(-1)]).toEqual([0, REPORT_WAIT_MS - TICK]);
+  });
+
+  test("a reply on the page that runs past it holds the wait, since hers starts after that one", async () => {
+    // Her selfie reply ran from before the task ended until 90 s after; a second stream would show
+    // its words twice.
+    const { watch, asked } = page({ from: 0, to: 90_000 });
+    await awaitReport(watch, 0);
+    expect([asked[0], asked.at(-1)]).toEqual([90_000, 90_000 + REPORT_WAIT_MS - TICK]);
+  });
+
+  test("so does a reply GET live carried", async () => {
+    let now = 0;
+    let carried = 0;
+    const asked: number[] = [];
+    await awaitReport(
+      {
+        open: () => 0,
+        carried: () => carried,
+        follow: async () => {
+          asked.push(now);
+          // The first answer is another tab's reply, 80 s long.
+          if (asked.length === 1) {
+            now += 80_000;
+            carried = now;
+          }
+        },
+        pause: async () => {
+          now += TICK;
+        },
+        now: () => now,
+        on: () => true,
+      },
+      0,
+    );
+    expect(asked.at(-1)).toBe(80_000 + REPORT_WAIT_MS - TICK);
+  });
+
+  test("stops once the page no longer waits for it", async () => {
+    let on = true;
+    let asked = 0;
+    await awaitReport(
+      {
+        open: () => 0,
+        carried: () => 0,
+        follow: async () => {
+          asked += 1;
+          on = false;
+        },
+        pause: async () => {},
+        now: () => 0,
+        on: () => on,
+      },
+      0,
+    );
+    expect(asked).toBe(1);
   });
 });

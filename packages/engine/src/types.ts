@@ -7,7 +7,15 @@ import type {
   ChatStreamLine,
   ParticipantId,
 } from "@eidolon/chat";
-import type { ContextProvider, LlmTool, ToolEffects, ToolSchema, TurnGate } from "@eidolon/core";
+import type {
+  ContextProvider,
+  LlmTool,
+  ToolCall,
+  ToolEffects,
+  ToolResult,
+  ToolSchema,
+  TurnGate,
+} from "@eidolon/core";
 import type { UsageScope } from "@eidolon/providers";
 import type { AudioClip, Speech, Transcript } from "@eidolon/providers/speech-batch";
 
@@ -16,6 +24,8 @@ export interface MindRequest {
   /** OpenAI-shaped, with no system message: `system` carries it. */
   readonly messages: readonly unknown[];
   readonly tools: readonly ToolSchema[];
+  /** "none": `tools` are still sent, but she may call none of them. Absent means "auto". */
+  readonly toolChoice?: "auto" | "none";
   /** Ends her reply where one appears, unwritten, where her provider takes it; at most 4. */
   readonly stop?: readonly string[];
   readonly signal: AbortSignal;
@@ -25,6 +35,11 @@ export interface MindToolCall {
   readonly id: string;
   readonly name: string;
   readonly arguments: Readonly<Record<string, unknown>>;
+  /**
+   * A call that must not run, its arguments' text as streamed: they aren't a JSON object, or the
+   * output limit cut its reply off. Its `arguments` are then `{}`.
+   */
+  readonly unparsed?: string;
 }
 
 /** Text as it streams, then a round's tool calls assembled whole, then the end. */
@@ -59,15 +74,46 @@ export interface TurnRequest {
   readonly usage?: UsageScope;
   /** A prompt she answers, stored as a developer `context` block at her view's end. */
   readonly nudge?: string;
+  /** Offered after her own tools, in this turn alone; a realtime model's turn takes none. */
+  readonly background?: BackgroundTools;
+  /**
+   * Offered after her own and her background tools, in this turn alone, and settled within it as
+   * hers are, as sync tools in a call; a realtime model's turn takes none.
+   */
+  readonly tools?: readonly LlmTool[];
+  /**
+   * Run after her own, in this turn alone; the blocks they set are recorded as hers are. A realtime
+   * model's turn takes none.
+   */
+  readonly providers?: PersonaParts["providers"];
+}
+
+/** What a caller adds to one turn of hers, beyond what her persona brings. */
+export type TurnExtras = Pick<TurnRequest, "background" | "tools" | "providers">;
+
+/** A turn's tools whose work goes on outside it, and the line her persona prefix gives them. */
+export interface BackgroundTools {
+  /**
+   * Each result is stored with stage `started`, her next round reads it, and whoever does the work
+   * stores the call's `final` later. A result holding `error` is stored as it is: nothing went on.
+   * A started result is never `{}`, which her view reads as pipedog's async call.
+   */
+  readonly tools: readonly BackgroundTool[];
+  readonly hint: string;
+}
+
+/** A tool whose call settles outside its turn: it is told the call's id, which its `final` answers. */
+export interface BackgroundTool extends Omit<LlmTool, "run"> {
+  run(call: ToolCall & { readonly callId: string }, effects: ToolEffects): Promise<ToolResult>;
 }
 
 /** What a call gives each of her turns: her reply is spoken live, and her tools act on the call. */
 export interface CallHooks {
   /**
    * Her parts' voice variant, spoken live rather than saved: tools act through `effects`,
-   * `ASYNC_TOOL_INSTRUCTIONS` joins her system instruction while an async tool is registered, and
-   * an async tool reports through `onAsyncResult`. The turn's outputs gain `mind` and `notice`
-   * lines, and its `tool` lines a `callId`.
+   * `ASYNC_TOOL_INSTRUCTIONS` joins her system instruction while one of her own tools is async, and
+   * such a tool reports through `onAsyncResult`. The turn's outputs gain `mind` and `notice` lines,
+   * and its `tool` lines a `callId`.
    */
   readonly mode: "call";
   readonly effects: ToolEffects;
@@ -79,15 +125,24 @@ export interface CallHooks {
   readonly heard: () => Promise<{ readonly text: string; readonly complete: boolean }>;
   /**
    * An async tool's settled result, during the turn or after it: one `tool-result` with stage
-   * `final` or `cancelled`. Its `running` line was the turn's; nothing else reports its end.
+   * `final` or `cancelled`. Its `running` line was the turn's; nothing else reports its end. Also,
+   * after a barge-in, the result of a tool the turn was handed that runs on past it, once that
+   * returns: stage `started` for a background tool, no stage for a request tool. Its tool line
+   * already ended `cancelled` with the turn.
    */
   readonly onAsyncResult: (events: readonly ChatEventDraft[]) => void;
-  /** Cancels the async tools her turns start, as the call ends; each also stops at its timeout. */
+  /**
+   * Cancels the async tools her turns start, and the tools that run on past a barge-in, as the
+   * call ends; each also stops at its timeout.
+   */
   readonly asyncSignal?: AbortSignal;
   readonly usage?: UsageScope;
 }
 
-/** A turn in a call, which has no `late`: an async tool runs on through `onAsyncResult`. */
+/**
+ * A turn in a call. Its `late` comes from its hooks: her async tool runs on through
+ * `onAsyncResult`, and so does a tool the turn is handed that isn't cancelled on interruption.
+ */
 export type CallTurnRequest = Omit<TurnRequest, "mode" | "late" | "usage"> & CallHooks;
 
 /** Takes a tool that runs on (`cancelOnInterruption: false`) when its turn is interrupted. */
@@ -153,6 +208,8 @@ export interface PartsOptions {
   readonly voice?: boolean;
   /** A realtime model voices her: the prefix's realtime delivery line. Its voice never switches. */
   readonly realtime?: boolean;
+  /** Her background tools' line, which her persona prefix carries after the selfie's. */
+  readonly assistantHint?: string;
   /** What the chat's parts are kept under, by default its id. */
   readonly chatKey?: string;
 }

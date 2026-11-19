@@ -13,7 +13,7 @@
     },
     "apps/bot": {
       "name": "laplace-eidolon",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "dependencies": {
         "@eidolon/access": "workspace:*",
         "@eidolon/chat": "workspace:*",
@@ -32,6 +32,7 @@
         "zod": "4.6.7",
       },
       "devDependencies": {
+        "@eidolon/assistant": "workspace:*",
         "@eidolon/cli": "workspace:*",
         "@eidolon/ingest": "workspace:*",
         "@pipecat-ai/client-js": "1.16.0",
@@ -42,8 +43,10 @@
     "apps/cli": {
       "name": "@eidolon/cli",
       "dependencies": {
+        "@eidolon/assistant": "workspace:*",
         "@eidolon/config": "workspace:*",
         "@eidolon/context": "workspace:*",
+        "@eidolon/engine": "workspace:*",
         "@eidolon/imagegen": "workspace:*",
         "@eidolon/ingest": "workspace:*",
         "@eidolon/providers": "workspace:*",
@@ -53,7 +56,7 @@
     },
     "apps/eidolon": {
       "name": "@laplace.live/eidolon",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "devDependencies": {
         "@eidolon/cli": "workspace:*",
         "@eidolon/config": "workspace:*",
@@ -101,6 +104,16 @@
       "name": "@eidolon/access",
       "dependencies": {
         "@eidolon/config": "workspace:*",
+      },
+    },
+    "packages/assistant": {
+      "name": "@eidolon/assistant",
+      "dependencies": {
+        "@eidolon/config": "workspace:*",
+        "@eidolon/core": "workspace:*",
+        "@eidolon/engine": "workspace:*",
+        "diff": "8.0.4",
+        "ignore": "7.0.8",
       },
     },
     "packages/chat": {
@@ -382,6 +395,8 @@
     "@dotenvx/primitives": ["@dotenvx/primitives@0.8.0", "", {}, "sha512-VYJy0uhFm9zTJ1TxBaW/pA8bjbOM/OttaNMwZ1RHG4JKyRG7DhSdiqD1ipQoAyoD22olUtxbP78W9xY3Wd11bg=="],
 
     "@eidolon/access": ["@eidolon/access@workspace:packages/access"],
+
+    "@eidolon/assistant": ["@eidolon/assistant@workspace:packages/assistant"],
 
     "@eidolon/chat": ["@eidolon/chat@workspace:packages/chat"],
 
@@ -1233,7 +1248,7 @@
 
     "ieee754": ["ieee754@1.2.1", "", {}, "sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA=="],
 
-    "ignore": ["ignore@5.3.2", "", {}, "sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g=="],
+    "ignore": ["ignore@7.0.8", "", {}, "sha512-YYNsSlXBjMk92SKnkwvB5LOVSa6OznlFUGcsvrFgNJbJCd0M1XKeFVRc8ZByeCqz32FivYNHJVooLmdqrmvp/Q=="],
 
     "import-meta-resolve": ["import-meta-resolve@4.2.0", "", {}, "sha512-Iqv2fzaTQN28s/FwZAoFq0ZSs/7hMAHJVX+w8PZl3cY19Pxk6jFFalxQoIfW2826i/fDLXv8IiEZRIT0lDuWcg=="],
 
@@ -1726,6 +1741,8 @@
     "@dotenvx/dotenvx/commander": ["commander@11.1.0", "", {}, "sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ=="],
 
     "@dotenvx/dotenvx/execa": ["execa@5.1.1", "", { "dependencies": { "cross-spawn": "^7.0.3", "get-stream": "^6.0.0", "human-signals": "^2.1.0", "is-stream": "^2.0.0", "merge-stream": "^2.0.0", "npm-run-path": "^4.0.1", "onetime": "^5.1.2", "signal-exit": "^3.0.3", "strip-final-newline": "^2.0.0" } }, "sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg=="],
+
+    "@dotenvx/dotenvx/ignore": ["ignore@5.3.2", "", {}, "sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g=="],
 
     "@dotenvx/dotenvx/open": ["open@8.4.2", "", { "dependencies": { "define-lazy-prop": "^2.0.0", "is-docker": "^2.1.1", "is-wsl": "^2.2.0" } }, "sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ=="],
 

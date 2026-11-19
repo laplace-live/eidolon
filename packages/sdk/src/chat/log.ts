@@ -4,6 +4,8 @@ import {
   CHAT_FORMAT,
   CHAT_WINDOW_BYTES,
   CHAT_WINDOW_EVENTS,
+  CHAT_WINDOW_TOOL_BYTES,
+  CHAT_WINDOW_TOOL_EVENTS,
   type ChatEvent,
   type ChatEventDraft,
   type ChatEventOf,
@@ -119,23 +121,39 @@ export const STATE_EVENT_TYPES = ["participants", "title", "settings"] as const;
 
 const STATE_EVENTS: ReadonlySet<string> = new Set(STATE_EVENT_TYPES);
 
+const TOOL_EVENTS: ReadonlySet<string> = new Set(["tool-call", "tool-result"]);
+
 /**
- * The window a turn sends, from the log oldest first: the newest 120 events that fit in 256 KB of
- * JSON, as the server cuts it, after every state event older than them. Events are sent as stored.
+ * The window a turn sends, from the log oldest first, cut as the server cuts it. From the newest of
+ * the log's newest `CHAT_WINDOW_EVENTS` that aren't `NEVER_SENT` back, tool calls and results fill
+ * a share of their own (`CHAT_WINDOW_TOOL_EVENTS`, `CHAT_WINDOW_TOOL_BYTES`) and every other event
+ * the rest (`CHAT_WINDOW_BYTES`). Each share closes at its first event that doesn't fit, so a call
+ * never goes without its result, and the walk stops where the other events' share closes, full or
+ * at an event that doesn't fit, so no older tool event goes. Every state event goes too, however
+ * old. Events are sent as stored, in log order: one changed to fit would fail its signature.
  */
 export function buildWindow(header: ChatHeader, events: readonly WireEvent[]): ChatWindow {
-  const newest: WireEvent[] = [];
-  let bytes = 0;
-  let cut = events.length;
-  for (let i = events.length - 1; i >= 0 && newest.length < CHAT_WINDOW_EVENTS; i--) {
+  const lines = { events: CHAT_WINDOW_EVENTS - CHAT_WINDOW_TOOL_EVENTS, bytes: CHAT_WINDOW_BYTES };
+  const tools = { events: CHAT_WINDOW_TOOL_EVENTS, bytes: CHAT_WINDOW_TOOL_BYTES };
+  const kept = new Set<number>();
+  let read = 0;
+  for (let i = events.length - 1; i >= 0 && read < CHAT_WINDOW_EVENTS && lines.events > 0; i--) {
     const event = events[i];
     if (event === undefined || NEVER_SENT.has(event.type)) continue;
+    read++;
+    const share = TOOL_EVENTS.has(event.type) ? tools : lines;
+    if (share.events === 0) continue;
     const size = windowBytesOf(event);
-    if (bytes + size > CHAT_WINDOW_BYTES) break;
-    bytes += size;
-    newest.push(event);
-    cut = i;
+    if (size > share.bytes) {
+      share.events = 0;
+      continue;
+    }
+    share.events--;
+    share.bytes -= size;
+    kept.add(i);
   }
-  const state = events.slice(0, cut).filter((event) => STATE_EVENTS.has(event.type));
-  return { header, events: [...state, ...newest.reverse()] };
+  return {
+    header,
+    events: events.filter((event, i) => kept.has(i) || STATE_EVENTS.has(event.type)),
+  };
 }

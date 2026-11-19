@@ -12,6 +12,7 @@ import {
   type Sources,
   select,
   selectRequired,
+  selectTask,
   voiceOf,
 } from "../src/index.ts";
 
@@ -110,6 +111,132 @@ describe("select", () => {
     const local = select("mind", reader({ LLM_PROVIDER: "ollama" }));
     expect(local?.keyName).toBeNull();
     expect(local?.baseUrl).toBe("http://localhost:11434/v1");
+  });
+
+  test("the assistant is off until it names a provider, and then a model: no default fills either", () => {
+    // Her chat model, either way it is set, is never the assistant's.
+    const chat = { OPENROUTER_API_KEY: "or", LLM_MODEL: "a/b", OPENROUTER_MODEL: "c/d" };
+    expect(select("assistant", reader(chat))).toBeNull();
+    expect(() => selectRequired("assistant", reader(chat))).toThrow(
+      "No provider fills ASSISTANT_PROVIDER",
+    );
+    for (const provider of ["openrouter", "anthropic", "deepseek", "openai"]) {
+      expect(() => select("assistant", reader({ ...chat, ASSISTANT_PROVIDER: provider }))).toThrow(
+        "needs a model: set ASSISTANT_MODEL",
+      );
+    }
+    const picked = select(
+      "assistant",
+      reader({ ...chat, ASSISTANT_PROVIDER: "openrouter", ASSISTANT_MODEL: "x/y" }),
+    );
+    expect([picked?.provider.id, picked?.model, picked?.apiKey]).toEqual([
+      "openrouter",
+      "x/y",
+      "or",
+    ]);
+  });
+});
+
+describe("selectTask", () => {
+  const assistant = {
+    OPENROUTER_API_KEY: "or",
+    ASSISTANT_PROVIDER: "openrouter",
+    ASSISTANT_MODEL: "x/assistant",
+  };
+  /** A task of `kind`'s account, model and key, and why it fell back. */
+  const task = (
+    kind: Parameters<typeof selectTask>[0],
+    values: Readonly<Record<string, string>>,
+    accounts: readonly AccountEntry[] = [],
+  ) => {
+    const sources: Sources = {
+      read: reader(values),
+      env: reader(values),
+      accounts: new Map(accounts.map((account) => [account.id, account])),
+    };
+    const { selection, fallback } = selectTask(kind, sources);
+    return [selection.role.id, selection.account.id, selection.model, selection.apiKey, fallback];
+  };
+
+  test("a task of no kind, or of other, runs on the assistant role", () => {
+    const expected = ["assistant", "openrouter", "x/assistant", "or", null];
+    expect(task(undefined, assistant)).toEqual(expected);
+    expect(task("other", assistant)).toEqual(expected);
+    // Whatever a kind's own settings say.
+    expect(task("other", { ...assistant, ASSISTANT_QUICK_MODEL: "x/quick" })).toEqual(expected);
+  });
+
+  test("a kind that names nothing runs on the assistant's account and model", () => {
+    for (const kind of ["quick", "coding", "research"] as const) {
+      expect(task(kind, assistant)).toEqual(["assistant", "openrouter", "x/assistant", "or", null]);
+    }
+  });
+
+  test("a kind's model alone runs on the assistant's account", () => {
+    expect(task("quick", { ...assistant, ASSISTANT_QUICK_MODEL: "x/quick" })).toEqual([
+      "assistant-quick",
+      "openrouter",
+      "x/quick",
+      "or",
+      null,
+    ]);
+  });
+
+  test("a kind's own account and model, whether or not the assistant's are set", () => {
+    const coding = {
+      ASSISTANT_CODING_PROVIDER: "anthropic",
+      ASSISTANT_CODING_MODEL: "claude-sonnet-5-5",
+      ANTHROPIC_API_KEY: "ak",
+    };
+    const expected = ["assistant-coding", "anthropic", "claude-sonnet-5-5", "ak", null];
+    expect(task("coding", { ...assistant, ...coding })).toEqual(expected);
+    expect(task("coding", coding)).toEqual(expected);
+    // Another account of the assistant's provider takes the assistant's model.
+    const work = {
+      id: "openrouter-work",
+      provider: "openrouter",
+      name: null,
+      apiKey: "or-work",
+      baseUrl: null,
+      options: {},
+    };
+    expect(
+      task("research", { ...assistant, ASSISTANT_RESEARCH_PROVIDER: "openrouter-work" }, [work]),
+    ).toEqual(["assistant-research", "openrouter-work", "x/assistant", "or-work", null]);
+  });
+
+  test("a kind whose own can't run falls back to the assistant's, saying why", () => {
+    const fallback = (values: Readonly<Record<string, string>>) => {
+      const [role, account, model, , why] = task("coding", { ...assistant, ...values });
+      expect([role, account, model]).toEqual(["assistant", "openrouter", "x/assistant"]);
+      return why;
+    };
+    // The assistant's model belongs to its own provider.
+    expect(fallback({ ASSISTANT_CODING_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "ak" })).toBe(
+      "Anthropic needs a model: set ASSISTANT_CODING_MODEL",
+    );
+    expect(
+      fallback({
+        ASSISTANT_CODING_PROVIDER: "anthropic",
+        ASSISTANT_CODING_MODEL: "claude-sonnet-5-5",
+      }),
+    ).toBe(
+      "Anthropic needs an API key: set ANTHROPIC_API_KEY in credentials.json or the environment",
+    );
+    expect(fallback({ ASSISTANT_CODING_PROVIDER: "ghost" })).toBe(
+      "ASSISTANT_CODING_PROVIDER=ghost is no provider or account Eidolon knows",
+    );
+    expect(fallback({ ASSISTANT_CODING_PROVIDER: "fish" })).toBe(
+      "Fish Audio offers no chat model (ASSISTANT_CODING_PROVIDER)",
+    );
+  });
+
+  test("with the assistant role unset, a kind that can't run on its own throws as selectRequired does", () => {
+    const keyOnly = { OPENROUTER_API_KEY: "or" };
+    for (const values of [keyOnly, { ...keyOnly, ASSISTANT_QUICK_MODEL: "x/quick" }]) {
+      expect(() => task("quick", values)).toThrow("No provider fills ASSISTANT_PROVIDER");
+    }
+    expect(() => task("other", keyOnly)).toThrow(ProviderConfigError);
   });
 });
 
