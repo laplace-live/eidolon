@@ -1,5 +1,29 @@
 # @laplace.live/eidolon
 
+## 0.10.0
+
+### Minor Changes
+
+- 99d38b4: Let her tasks use the MCP servers you add, asking you before each call
+- 99d38b4: Let you pick a model for each kind of task: quick, coding or research
+- 99d38b4: Let her tasks run commands on your computer once you allow them
+- 99d38b4: Let her tasks use Agent Skills from your data home and the task's folder
+- 99d38b4: Let her tasks search the web through an OpenRouter account you pick
+- aa03ebb: Ask her in a chat to work in your folders and read the web, with your approval
+- aba36d6: Pick /focus, /normal or /verbose for a chat's tasks, and stop one with /stop
+- aba36d6: Keep what she says before a tool call in its place; a voice reply speaks the rest
+- 2259c57: Run an assistant task in a folder from the command line with laplace-task
+- aba36d6: Let her use up to 8 tool rounds a reply (chat.maxRounds), then still answer
+- 4b1e84d: Ask her how a task is going, change or stop it, and give her tasks on a call
+
+### Patch Changes
+
+- b4b2484: Her reply on a thinking Claude model no longer fails after several tool rounds
+- c2f2402: Run on Bun 1.4.5, which fixes security issues in TLS, HTTP/3 and DNS
+- b4b2484: A reply OpenRouter ends with an error no longer counts as finished
+- aba36d6: Tool results no longer push her older lines out of production chats
+- 875e147: Answer instead of staying silent when Gemini sends back a malformed reply
+
 ## 0.9.1
 
 ### Patch Changes
