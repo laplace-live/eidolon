@@ -294,6 +294,9 @@ the layout's one line.
 - **`bun test` has no macro transform, and a macro throws when it runs.** Keep macros out of the
   modules tests import; a test that needs one stubs `@lingui/core/macro` with
   `apps/web/src/test/lingui-macro.ts` in its own file, never in a bunfig preload.
+- **Bun's version lives only in package.json's `packageManager`.** CI's setup-bun reads it
+  (`bun-version-file`), the npm package installs and builds with it, and the image follows
+  `oven/bun:1`: a bump edits that one line, never a workflow.
 - **Never find a shipped file through `import.meta`.** The npm package runs bundles, where every
   module's folder is `dist/`. A file the code ships with (a template, the web build, jieba's
   data, an entry to spawn) resolves through `shippedPath` in `@eidolon/config`, under the

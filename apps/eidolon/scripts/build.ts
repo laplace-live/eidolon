@@ -343,20 +343,25 @@ export function copyTracked(from: string, to: string): void {
   }
 }
 
-/** The Bun the production image runs: the package ships it, and builds with no other. */
-function productionBun(): string {
-  const dockerfile = readFileSync(join(ROOT, "apps/bot/Dockerfile"), "utf8");
-  const version = /^FROM oven\/bun:(\d+\.\d+\.\d+)\b/m.exec(dockerfile)?.[1];
-  if (version === undefined) throw new Error("apps/bot/Dockerfile names no oven/bun version");
+/** The Bun package.json's packageManager names, as CI's does: the package ships it, and builds with no other. */
+function pinnedBun(): string {
+  const { packageManager } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+    readonly packageManager?: unknown;
+  };
+  const version =
+    typeof packageManager === "string"
+      ? /^bun@(\d+\.\d+\.\d+)$/.exec(packageManager)?.[1]
+      : undefined;
+  if (version === undefined) throw new Error('package.json names no "packageManager": "bun@x.y.z"');
   if (Bun.version !== version) {
-    throw new Error(`Build the package with Bun ${version}, the image's, not ${Bun.version}`);
+    throw new Error(`Build the package with Bun ${version}, package.json's, not ${Bun.version}`);
   }
   return version;
 }
 
 /** Writes the package into PACK_DIR, replacing what was there. */
 async function stage(): Promise<Manifest> {
-  const manifest = packageManifest(productionBun());
+  const manifest = packageManifest(pinnedBun());
   rmSync(PACK_DIR, { recursive: true, force: true });
   mkdirSync(PACK_DIR);
   const inlined = await bundle(PACK_DIR);
