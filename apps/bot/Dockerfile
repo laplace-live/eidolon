@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # The TypeScript bot. Its build context is the repo root, not apps/bot.
-FROM oven/bun:1.4.4
+FROM oven/bun:1
 
 WORKDIR /app
 
