@@ -43,9 +43,9 @@ export function LockedScreen({ expired }: { readonly expired: boolean }) {
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6 px-4 py-10">
-      <div className="flex items-center gap-2.5 font-semibold tracking-tight">
+      <div className="flex items-center gap-1.5 font-logo font-semibold text-xl">
         <AppMark />
-        Eidolon
+        LAPLACE Eidolon
       </div>
       <form className="w-full max-w-md" onSubmit={submit}>
         <SectionCard

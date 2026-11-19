@@ -108,7 +108,7 @@ export function AccountKeyField({
       <FieldDescription>
         {`${t`Used for: ${roles}.`} `}
         {links && (
-          <span className="whitespace-nowrap [&_a:hover]:text-primary [&_a]:underline [&_a]:underline-offset-4">
+          <span className="whitespace-nowrap [&_a:hover]:text-link [&_a]:underline [&_a]:underline-offset-4">
             <KeyLinks pages={links} />
           </span>
         )}

@@ -99,7 +99,7 @@ export function ModelPicker({
                   href={browse}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="underline underline-offset-4 hover:text-primary"
+                  className="underline underline-offset-4 hover:text-link"
                 >
                   {t`Browse ${ph({ provider: providerName(provider) })}'s models`}
                 </a>

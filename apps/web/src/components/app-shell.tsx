@@ -84,12 +84,13 @@ export function AppShell() {
       {/* The bottom line is an inset shadow so the active tab's underline, inside the scroller, covers it. */}
       <header className="sticky top-0 z-40 bg-background/80 shadow-[inset_0_-1px_0_0_var(--border)] backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-1.5 px-4 sm:px-6">
+          {/* Outdented so the logo lines up, by eye, with the tabs' underline below. */}
           <Link
             to="/"
-            className="flex shrink-0 items-center gap-2.5 rounded-md py-1 pr-1 font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="-ml-1.5 flex shrink-0 items-center gap-1.5 rounded-md py-1 pr-1 font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             <AppMark />
-            <span className="sr-only tracking-tight sm:not-sr-only">Eidolon</span>
+            <span className="sr-only font-logo text-xl sm:not-sr-only">LAPLACE Eidolon</span>
           </Link>
           <Divider />
           <PersonaSwitcher />
