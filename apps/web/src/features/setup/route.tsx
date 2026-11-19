@@ -40,9 +40,9 @@ export function Component() {
     <div className="flex min-h-svh flex-col">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2.5 px-4 sm:px-6">
-          <span className="flex shrink-0 items-center gap-2.5 font-semibold">
+          <span className="flex shrink-0 items-center gap-1.5 font-semibold">
             <AppMark />
-            <span className="tracking-tight">Eidolon</span>
+            <span className="font-logo text-xl">LAPLACE Eidolon</span>
           </span>
           <span aria-hidden className="hidden text-lg text-muted-foreground/40 sm:inline">
             /
