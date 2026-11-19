@@ -934,12 +934,15 @@ export class TaskManager {
       throw error;
     }
     try {
-      // A crash between storing the run's end and task.json: resumed, it would run again.
+      // A crash between storing the run's end or pause and task.json: resumed, it would run on,
+      // past a spend pause too, which a new run counts from its next multiple.
       const last = (await openTaskStore(task.dir).entries()).at(-1);
-      const changes: Changes =
-        last?.type === "end" && last.outcome.status !== "paused"
-          ? endedChanges(last.outcome, last.at)
-          : { status: "interrupted" };
+      let changes: Changes = { status: "interrupted" };
+      if (last?.type === "end" && last.outcome.status !== "paused") {
+        changes = endedChanges(last.outcome, last.at);
+      } else if (last?.type === "pause") {
+        changes = { status: "paused", pause: { reason: last.reason, detail: last.detail } };
+      }
       await this.#change(task, changes, true);
     } finally {
       release();

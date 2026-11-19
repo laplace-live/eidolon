@@ -1239,6 +1239,24 @@ describe("a restart", () => {
     expect(minds.made).toEqual([]);
   });
 
+  test("a task a crash left running after its pause was stored stays paused, for the owner to continue", async () => {
+    // A spend pause reached the transcript; resumed, the run would count from its next multiple.
+    const detail = "Spent $1.02; it pauses at every $1.00.";
+    const seeded = await seed({ status: "running" }, [
+      { type: "assistant", text: "", calls: [{ id: "c1", name: "write", arguments: {} }] },
+      { type: "tool-start", callId: "c1", name: "write" },
+      { type: "tool-result", callId: "c1", name: "write", content: "Wrote a.txt", isError: false },
+      { type: "pause", reason: "spend", detail },
+    ]);
+    const tasks = await booted();
+    expect(await tasks.get(seeded.id)).toMatchObject({
+      status: "paused",
+      pause: { reason: "spend", detail },
+    });
+    expect((await onDisk(seeded.id))?.status).toBe("paused");
+    expect(minds.made).toEqual([]);
+  });
+
   test("a task another holder's lock holds is neither resumed nor continued", async () => {
     const seeded = await seed({ status: "interrupted" });
     const running = await seed({ status: "running" });
