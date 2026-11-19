@@ -1650,6 +1650,8 @@ export class TaskManager {
     const guard = new RunGuard(this.#policy(brief.folder, this.#grants(grants)));
     await mkdir(await guard.resolve(brief.folder, "write"), { recursive: true });
     const web = webOf(task.snapshot).mode !== "off";
+    // A fetch a restart cut short runs again without the gate, which otherwise sets this.
+    run.full = (await this.#levelOf(task.snapshot.chat)) === "full";
     // Asked at each call and redirect, so an approval reaches the tools without making them again.
     const site = {
       allows: (host: string) => {

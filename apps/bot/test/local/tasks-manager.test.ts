@@ -3428,6 +3428,25 @@ describe("permission levels", () => {
     expect(minds.reviewed[0]).toContain("The task has read outside content: yes.");
   });
 
+  test("Full Access lets a fetch a restart cut short run again, which skips the gate", async () => {
+    level = "full";
+    const fetchIt = call("f1", "web_fetch", { url: "https://203.0.113.7/" });
+    const seeded = await seed({ pause: { reason: "stall", detail: "" } }, [
+      { type: "assistant", text: "", calls: [fetchIt], finishReason: "tool_calls" },
+      { type: "tool-start", callId: "f1", name: "web_fetch" },
+    ]);
+    minds.script("Seeded", [says("Done.")]);
+    const tasks = await leveled();
+    await tasks.continue(seeded.id);
+    await reach(tasks, seeded.id, "succeeded");
+    const result = transcript(seeded.id).find(
+      (entry) => entry.type === "tool-result" && entry.callId === "f1",
+    );
+    // It reached the fetch, which this test's fetch fails, rather than the sites it may use.
+    expect(result).toMatchObject({ type: "tool-result", isError: true });
+    expect(JSON.stringify(result)).not.toContain("isn't among the sites this task may fetch from");
+  });
+
   test("a level that can't be read asks, as Ask for Approval does", async () => {
     const tasks = manager({
       permissions: async () => {
