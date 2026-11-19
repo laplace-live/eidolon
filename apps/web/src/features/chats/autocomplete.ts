@@ -110,14 +110,18 @@ export function closedAt(text: string, at: Trigger): Closed {
 export const EMPTY_DRAFT: Draft = { text: "", caret: 0, closed: null };
 
 /**
- * `draft` edited to `text`: a closed `@` or `/` stays closed while the caret is still in the name
- * after it and the name is still there. An `@` or `/` typed over it, in the same place, opens again.
+ * `draft` edited to `text`: a closed `@` or `/` stays closed while the name after it is still there
+ * and the caret isn't typing another, wherever else it is: a slash word ends at the space a pick
+ * adds, so words typed past it and taken back would open it again. An `@` or `/` typed over it, in
+ * the same place, opens again.
  */
 export function retyped(draft: Draft, text: string, caret: number): Draft {
   const { closed } = draft;
   const at = mentionAt(text, caret) ?? slashAt(text, caret);
   const still =
-    closed !== null && at?.start === closed.start && text.startsWith(closed.typed, closed.start);
+    closed !== null &&
+    text.startsWith(closed.typed, closed.start) &&
+    (at === null || at.start === closed.start);
   return { text, caret, closed: still ? closed : null };
 }
 

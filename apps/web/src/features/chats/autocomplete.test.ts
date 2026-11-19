@@ -204,6 +204,12 @@ describe("picking a slash word", () => {
     expect(slashSuggestions(done, ENTRIES).options).toEqual([]);
     // The space taken back, the name still begins "pdf-tools".
     expect(slashSuggestions(retyped(done, "/pdf", 4), ENTRIES).options).toEqual([]);
+    // So it stays after words typed past the slash word and taken back.
+    const typedOn = retyped(retyped(done, "/pdf 做", 6), "/pdf ", 5);
+    expect(slashSuggestions(retyped(typedOn, "/pdf", 4), ENTRIES).options).toEqual([]);
+    expect(slashSuggestions(retyped(done, "/pd", 3), ENTRIES).options).toEqual(
+      named("pdf", "pdf-tools"),
+    );
     expect(slashSuggestions(retyped(done, "/", 1), ENTRIES).options).toEqual(ENTRIES);
   });
 
