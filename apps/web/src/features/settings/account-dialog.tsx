@@ -255,7 +255,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
                     )}
                   </div>
                   {pages && (
-                    <FieldDescription className="[&_a:hover]:text-primary [&_a]:underline [&_a]:underline-offset-4">
+                    <FieldDescription className="[&_a:hover]:text-link [&_a]:underline [&_a]:underline-offset-4">
                       <KeyLinks pages={pages} />
                     </FieldDescription>
                   )}
