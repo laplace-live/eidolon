@@ -297,6 +297,26 @@ use it instead. The step checks an address (127.0.0.1:6333 unless you change it)
 edited address is checked and saved the same way. No address needs a restart: the next call opens
 memory at the saved one.
 
+## The layout
+
+The app is a sidebar and the page beside it, as a desktop chat app is (`components/app-shell.tsx`
+and `app-sidebar.tsx`, on shadcn's `Sidebar`):
+
+- **The sidebar**, top to bottom: the logo, which leads home, and the button that collapses it;
+  the persona calls reach, whose menu switches her and has **New Persona** and **Open the
+  Studio**; **New Chat**; Home, Call, Studio, Tasks ([Tasks](#tasks)), Jobs and Usage; the chats
+  ([Chats](#chats)), under a heading that leads to `/chats`; and at its foot Settings, the language
+  and the theme.
+- **Collapsed**, it keeps the icons and the chats' avatars, each named in a tooltip. The logo, its
+  edge, and ⌘B on a Mac or Ctrl+B elsewhere toggle it, and the browser remembers which it was
+  (`localStorage`'s `eidolon.sidebar.collapsed`).
+- **On a phone**, below 768 px, it is a sheet, opened from the bar above each page or the button in
+  a chat's or the call's header, and following a link in it closes it.
+- **The page:** a chat, `/chats` and the call page fill the window beside it under their own
+  headers; every other page scrolls in a column there, and the window itself never scrolls. A
+  layout that sits side by side when wide, such as the studio's and Settings' sections, goes by the
+  width it is given, through a container query, not the window's, which the sidebar shares.
+
 ## Chats
 
 `/chats` talks with the personas, one or several at once, in text and voice messages or on a call
@@ -304,20 +324,23 @@ inside the chat, and keeps every chat in the data home (`<data home>/chats/`). T
 turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
 
 - **The page:**
-  - The list of chats is on the left, newest first, and the open chat on the right. On a phone the
-    list is the page until a chat opens, and a sheet after.
-  - **New Chat** ticks one to six personas, the active one listed first, then **Start Chat** or
-    **Start Group Chat**. One persona's greeting then streams in, the way a call greets; a group
-    starts quiet, named by the short names of whoever is in it until it is renamed.
-  - A row and the chat's header each have a menu with **Rename** and **Delete**. Delete confirms in
-    the page. The header's menu also has **Chat Settings**, a sheet saved as soon as a value is
-    picked: **Reply Mode** (Auto, Text or Voice), which overrides every persona's own until it is
-    changed; **Task Display** (Focus, Normal or Verbose), how much of her tasks the chat shows
-    ([Tasks](#tasks)), which until it is chosen names the display Settings gives it; **Task
-    Permissions** (Ask for Approval, Approve for Me or Full Access), what her tasks there may do
-    without asking ([Tasks](#tasks)), which until it is chosen names the level Settings gives it;
-    and **Replies between Personas**, 0 to 6, the chain limit. Task Display shows in every chat, and
-    is the one way to change it during a call.
+  - The chats are in the sidebar ([The layout](#the-layout)), newest first, each with who it is
+    with, its name, its last line and when, and the open chat fills the rest of the window, its
+    lines in a centered column. With none open, `/chats` offers **New Chat**.
+  - **New Chat**, in the sidebar or on `/chats`, ticks one to six personas, the active one listed
+    first, then **Start Chat** or **Start Group Chat**. One persona's greeting then streams in, the
+    way a call greets; a group starts quiet, named by the short names of whoever is in it until it
+    is renamed.
+  - A row and the chat's header each have a menu with **Rename** and **Delete**; a row's shows in
+    place of its time while the pointer is over it or it has the keyboard's focus, and always on a
+    touch screen. Delete confirms in the page. The header's menu also has **Chat Settings**, a
+    sheet saved as soon as a value is picked: **Reply Mode** (Auto, Text or Voice), which overrides
+    every persona's own until it is changed; **Task Display** (Focus, Normal or Verbose), how much
+    of her tasks the chat shows ([Tasks](#tasks)), which until it is chosen names the display
+    Settings gives it; **Task Permissions** (Ask for Approval, Approve for Me or Full Access), what
+    her tasks there may do without asking ([Tasks](#tasks)), which until it is chosen names the
+    level Settings gives it; and **Replies between Personas**, 0 to 6, the chain limit. Task
+    Display shows in every chat, and is the one way to change it during a call.
 - **Commands:** the composer runs `/focus`, `/normal`, `/verbose` and `/stop` typed alone, in any
   case, after `/` or `／` ([Tasks](#tasks)). A command is never sent to her: a display command
   stores the chat's display, with a toast, and starts no reply, and one for the display the chat

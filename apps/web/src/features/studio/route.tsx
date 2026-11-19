@@ -141,13 +141,15 @@ function Loading() {
           <Skeleton className="h-4 w-28" />
         </div>
       </div>
-      <div className="md:grid md:grid-cols-[13rem_minmax(0,1fr)] md:gap-10">
-        <div className="hidden flex-col gap-2 md:flex">
-          {SECTIONS.map((id) => (
-            <Skeleton key={id} className="h-9" />
-          ))}
+      <div className="@container">
+        <div className="@3xl:grid @3xl:grid-cols-[13rem_minmax(0,1fr)] @3xl:gap-10">
+          <div className="hidden flex-col gap-2 @3xl:flex">
+            {SECTIONS.map((id) => (
+              <Skeleton key={id} className="h-9" />
+            ))}
+          </div>
+          <SectionCardSkeleton rows={3} />
         </div>
-        <SectionCardSkeleton rows={3} />
       </div>
     </div>
   );

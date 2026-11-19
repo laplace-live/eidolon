@@ -1,79 +1,76 @@
-import { ph } from "@lingui/core/macro";
+// The app's frame: the sidebar, and the page beside it, filling the window.
+
 import { useLingui } from "@lingui/react/macro";
-import { useQuery } from "@tanstack/react-query";
-import { useRef } from "react";
-import { Link, matchPath, Outlet, useLocation } from "react-router";
-import { AppMark } from "@/components/app-mark";
-import { PersonaSwitcher } from "@/components/persona-switcher";
-import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
-import { tasksQuery } from "@/features/tasks/queries";
-import { tasksPoll, waitingCount } from "@/features/tasks/state";
-import { studioPath } from "@/lib/paths";
-import { statusQuery } from "@/lib/query";
-import { cn } from "@/lib/utils";
+import { useEffect, useRef, useState } from "react";
+import { Outlet, useLocation } from "react-router";
+import { AppSidebar } from "@/components/app-sidebar";
+import { MobileBar } from "@/components/mobile-bar";
+import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 
-/** How often the nav asks for the tasks while none is live: one may start in any chat. */
-const TASKS_IDLE_POLL_MS = 30_000;
+/** Whether the sidebar was left collapsed, in this browser. */
+const COLLAPSED_KEY = "eidolon.sidebar.collapsed";
 
-interface Tab {
-  readonly to: string;
-  readonly label: string;
-  readonly end?: boolean;
-  /** Lit for every path under this one, not only its own. */
-  readonly section?: string;
-  /** Tasks waiting on the owner, beside Tasks. */
-  readonly waiting?: number;
+function storedOpen(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === null;
+  } catch {
+    return true;
+  }
 }
 
-function lit(tab: Tab, pathname: string): boolean {
-  if (tab.section !== undefined) return pathname.startsWith(tab.section);
-  return matchPath({ path: tab.to, end: tab.end ?? false }, pathname) !== null;
+function storeOpen(open: boolean): void {
+  try {
+    if (open) localStorage.removeItem(COLLAPSED_KEY);
+    else localStorage.setItem(COLLAPSED_KEY, "1");
+  } catch {
+    // Not kept; it still applies to this tab.
+  }
 }
 
-/** The slash between the app and the persona, as a breadcrumb draws it. */
-function Divider() {
+/** A phone's sheet closes once a link in it is followed. */
+function CloseOnNavigate() {
+  const { key } = useLocation();
+  const { setOpenMobile } = useSidebar();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a navigation only triggers it.
+  useEffect(() => setOpenMobile(false), [key, setOpenMobile]);
+  return null;
+}
+
+/** A page that scrolls in the frame, in a column. */
+export function PageLayout() {
   return (
-    <svg
-      aria-hidden
-      viewBox="0 0 24 24"
-      className="size-5 shrink-0 text-muted-foreground/35"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-    >
-      <path d="M16.88 3.55 7.12 20.45" />
-    </svg>
+    <>
+      <MobileBar />
+      <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
+        <Outlet />
+      </div>
+    </>
+  );
+}
+
+/** A page that fills the frame under its own header, as a chat and the call do. */
+export function FrameLayout() {
+  return (
+    <div className="flex min-h-80 flex-1 flex-col">
+      <Outlet />
+    </div>
   );
 }
 
 export function AppShell() {
   const { t } = useLingui();
-  const { pathname } = useLocation();
-  const { data: status } = useQuery(statusQuery);
-  const assistant = status?.assistant.enabled === true;
-  const tasks = useQuery({
-    ...tasksQuery,
-    enabled: assistant,
-    refetchInterval: (read) => tasksPoll(read.state.data?.tasks, TASKS_IDLE_POLL_MS),
-  }).data?.tasks;
+  const [open, setOpen] = useState(storedOpen);
   const main = useRef<HTMLElement>(null);
-  // The studio opens on the active persona; it stays lit on any persona's.
-  const tabs: readonly Tab[] = [
-    { to: "/", label: t`Home`, end: true },
-    { to: "/chats", label: t`Chats` },
-    { to: "/call", label: t`Call` },
-    ...(status
-      ? [{ to: studioPath(status.persona.id), label: t`Studio`, section: "/personas/" }]
-      : []),
-    ...(assistant ? [{ to: "/tasks", label: t`Tasks`, waiting: waitingCount(tasks ?? []) }] : []),
-    { to: "/jobs", label: t`Jobs` },
-    { to: "/usage", label: t`Usage` },
-    { to: "/settings", label: t`Settings` },
-  ];
 
   return (
-    <div className="flex min-h-svh flex-col">
+    <SidebarProvider
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        storeOpen(next);
+      }}
+      className="h-svh"
+    >
       <button
         type="button"
         onClick={() => main.current?.focus()}
@@ -81,68 +78,16 @@ export function AppShell() {
       >
         {t`Skip to content`}
       </button>
-      {/* The bottom line is an inset shadow so the active tab's underline, inside the scroller, covers it. */}
-      <header className="sticky top-0 z-40 bg-background/80 shadow-[inset_0_-1px_0_0_var(--border)] backdrop-blur-md">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-1.5 px-4 sm:px-6">
-          {/* Outdented so the logo lines up, by eye, with the tabs' underline below. */}
-          <Link
-            to="/"
-            className="-ml-1.5 flex shrink-0 items-center gap-1.5 rounded-md py-1 pr-1 font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          >
-            <AppMark />
-            <span className="sr-only font-logo text-xl sm:not-sr-only">LAPLACE Eidolon</span>
-          </Link>
-          <Divider />
-          <PersonaSwitcher />
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            <LanguageSwitch />
-            <ThemeMenu />
-          </div>
-        </div>
-        <nav aria-label={t`Main`} className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-          <ul className="no-scrollbar -mx-3 flex h-12 items-stretch overflow-x-auto">
-            {tabs.map((tab) => {
-              const current = lit(tab, pathname);
-              return (
-                <li key={tab.to} className="flex">
-                  <Link
-                    to={tab.to}
-                    aria-current={current ? "page" : undefined}
-                    className={cn(
-                      "group relative flex items-center px-1 text-muted-foreground text-sm outline-none transition-colors hover:text-foreground",
-                      current &&
-                        "text-foreground after:absolute after:inset-x-1 after:bottom-0 after:h-0.5 after:rounded-full after:bg-foreground",
-                    )}
-                  >
-                    <span className="flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors group-hover:bg-muted group-focus-visible:ring-[3px] group-focus-visible:ring-ring/50">
-                      {tab.label}
-                      {tab.waiting !== undefined && tab.waiting > 0 && (
-                        <span
-                          data-waiting-count
-                          className="min-w-5 rounded-full bg-warning/15 px-1.5 text-center font-medium text-warning text-xs tabular-nums"
-                        >
-                          <span aria-hidden>{tab.waiting}</span>
-                          <span className="sr-only">
-                            {t`, ${ph({ count: tab.waiting })} waiting for you`}
-                          </span>
-                        </span>
-                      )}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-      </header>
-      <main
+      <CloseOnNavigate />
+      <AppSidebar />
+      <SidebarInset
         id="main"
         ref={main}
         tabIndex={-1}
-        className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 outline-none sm:px-6"
+        className="min-w-0 overflow-y-auto outline-none"
       >
         <Outlet />
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

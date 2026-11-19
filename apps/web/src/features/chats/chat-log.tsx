@@ -491,7 +491,7 @@ function Intro({ personas }: { readonly personas: readonly ChatPersona[] }) {
       {solo ? (
         <PersonaAvatar persona={only} size="xl" />
       ) : (
-        <AvatarGroup className="-space-x-4 *:data-[slot=avatar]:ring-4 *:data-[slot=avatar]:ring-card">
+        <AvatarGroup className="-space-x-4 *:data-[slot=avatar]:ring-4">
           {personas.map((persona) => (
             <PersonaAvatar key={persona.id} persona={persona} size="lg" />
           ))}
@@ -734,7 +734,10 @@ export function ChatLog({
       onScroll={onScroll}
       className="absolute inset-0 overflow-y-auto px-4 pt-5 pb-6 sm:px-6"
     >
-      <div ref={contentRef} className="flex min-h-full flex-col justify-end gap-3">
+      <div
+        ref={contentRef}
+        className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end gap-3"
+      >
         {empty && <Intro personas={personas} />}
         {shown.map((item, index) => (
           <Item

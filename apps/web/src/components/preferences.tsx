@@ -9,6 +9,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { type Theme, useTheme } from "@/lib/theme";
 import { LANG_NAMES, setLang, useLang } from "@/locales/i18n";
 
@@ -18,15 +19,30 @@ const THEMES = [
   { value: "system", icon: MonitorIcon, label: msg`System` },
 ] as const satisfies readonly { value: Theme; icon: unknown; label: unknown }[];
 
-/** Switches between the two languages; it is labelled with the one it switches to. */
-export function LanguageSwitch() {
+/**
+ * Switches between the two languages; it is labelled with the one it switches to, in a tooltip
+ * when `compact`.
+ */
+export function LanguageSwitch({ compact = false }: { readonly compact?: boolean }) {
   const { t } = useLingui();
   const other = useLang() === "en" ? "zh-Hans" : "en";
-  return (
-    <Button variant="ghost" size="sm" aria-label={t`Language`} onClick={() => void setLang(other)}>
+  const button = (
+    <Button
+      variant="ghost"
+      size={compact ? "icon-sm" : "sm"}
+      aria-label={t`Language`}
+      onClick={() => void setLang(other)}
+    >
       <LanguagesIcon />
-      {LANG_NAMES[other]}
+      {!compact && LANG_NAMES[other]}
     </Button>
+  );
+  if (!compact) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent>{LANG_NAMES[other]}</TooltipContent>
+    </Tooltip>
   );
 }
 

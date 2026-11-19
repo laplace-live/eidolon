@@ -3,7 +3,7 @@
 // the route.
 import type { QueryClient } from "@tanstack/react-query";
 import { createBrowserRouter, data, type LoaderFunctionArgs, redirect } from "react-router";
-import { AppShell } from "@/components/app-shell";
+import { AppShell, FrameLayout, PageLayout } from "@/components/app-shell";
 import { RouteError } from "@/components/route-error";
 import { Spinner } from "@/components/ui/spinner";
 import { firstRunRedirect } from "@/features/setup/first-run";
@@ -55,14 +55,26 @@ export function createRouter({ queryClient, exchanged }: RouterDeps) {
           Component: AppShell,
           ErrorBoundary: RouteError,
           children: [
-            { index: true, lazy: () => import("@/features/home/route") },
-            { path: "chats/:id?", lazy: () => import("@/features/chats/route") },
-            { path: "call", lazy: () => import("@/features/call/route") },
-            { path: "personas/:id/:tab?", lazy: () => import("@/features/studio/route") },
-            { path: "settings", lazy: () => import("@/features/settings/route") },
-            { path: "tasks", lazy: () => import("@/features/tasks/route") },
-            { path: "jobs/:id?", lazy: () => import("@/features/jobs/route") },
-            { path: "usage", lazy: () => import("@/features/usage/route") },
+            {
+              Component: PageLayout,
+              ErrorBoundary: RouteError,
+              children: [
+                { index: true, lazy: () => import("@/features/home/route") },
+                { path: "personas/:id/:tab?", lazy: () => import("@/features/studio/route") },
+                { path: "settings", lazy: () => import("@/features/settings/route") },
+                { path: "tasks", lazy: () => import("@/features/tasks/route") },
+                { path: "jobs/:id?", lazy: () => import("@/features/jobs/route") },
+                { path: "usage", lazy: () => import("@/features/usage/route") },
+              ],
+            },
+            {
+              Component: FrameLayout,
+              ErrorBoundary: RouteError,
+              children: [
+                { path: "chats/:id?", lazy: () => import("@/features/chats/route") },
+                { path: "call", lazy: () => import("@/features/call/route") },
+              ],
+            },
           ],
         },
       ],

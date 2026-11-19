@@ -2,6 +2,7 @@ import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { EllipsisIcon, PencilIcon, Settings2Icon, Trash2Icon } from "lucide-react";
 import { type FormEvent, useId, useRef, useState } from "react";
+import { useMatch, useNavigate } from "react-router";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -118,18 +119,18 @@ function DeleteDialog({
   name,
   open,
   onOpenChange,
-  onDeleted,
 }: {
   readonly id: string;
   readonly name: string;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly onDeleted: (id: string) => void;
 }) {
   const { t } = useLingui();
+  const navigate = useNavigate();
+  const current = useMatch("/chats/:id")?.params.id;
   const remove = useDeleteChat((deleted) => {
     onOpenChange(false);
-    onDeleted(deleted);
+    if (deleted === current) navigate("/chats", { replace: true });
   });
   return (
     <AlertDialog open={open} onOpenChange={(next) => !remove.isPending && onOpenChange(next)}>
@@ -162,14 +163,12 @@ function DeleteDialog({
 export function ChatMenu({
   id,
   name,
-  onDeleted,
   onSettings,
   className,
 }: {
   readonly id: string;
   /** The chat's title, or what stands in for one. */
   readonly name: string;
-  readonly onDeleted: (id: string) => void;
   readonly onSettings?: () => void;
   readonly className?: string;
 }) {
@@ -223,7 +222,6 @@ export function ChatMenu({
         name={name}
         open={dialog === "delete"}
         onOpenChange={(open) => setDialog(open ? "delete" : null)}
-        onDeleted={onDeleted}
       />
     </>
   );
