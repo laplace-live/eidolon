@@ -29,9 +29,9 @@ describe("select", () => {
     expect(mind?.model).toBe("~google/gemini-flash-latest");
     expect(mind?.apiKey).toBe("or");
     expect(mind?.baseUrl).toBe("https://openrouter.ai/api/v1");
-    expect(select("hearing", read)?.model).toBe("stt-rt-v5");
+    expect(select("hearing", read)?.model).toBe("stt-rt-v6");
     expect(select("voice", read)?.model).toBe("drama-3");
-    expect(select("transcription", read)?.model).toBe("stt-async-v5");
+    expect(select("transcription", read)?.model).toBe("stt-async-v6");
     expect(select("gate", read)?.model).toBe("~typesafe/jev-latest");
     expect(select("rerank", read)?.model).toBe("cohere/rerank-4-fast");
     expect(select("embeddings", read)?.model).toBe("google/gemini-embedding-2-preview");
@@ -50,8 +50,8 @@ describe("select", () => {
     expect(
       select("voice", reader({ TTS_PROVIDER: "elevenlabs", FISH_MODEL: "s2.1-pro" }))?.model,
     ).toBe("eleven_flash_v2_5");
-    expect(select("transcription", reader({ SONIOX_ASYNC_MODEL: "stt-async-v6" }))?.model).toBe(
-      "stt-async-v6",
+    expect(select("transcription", reader({ SONIOX_ASYNC_MODEL: "stt-async-v5" }))?.model).toBe(
+      "stt-async-v5",
     );
   });
 

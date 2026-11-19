@@ -26,7 +26,7 @@ test("audio is reported once 300 s have piled up, as the selection's use", () =>
   expect(records[0]).toMatchObject({
     role: "hearing",
     provider: "soniox",
-    model: "stt-rt-v5",
+    model: "stt-rt-v6",
     units: { audioSeconds: 300.5 },
   });
   meter.flush();

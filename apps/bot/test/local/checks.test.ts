@@ -86,9 +86,9 @@ const verdict = (result: CheckResult): unknown[] => [
 const SONIOX = "GET https://api.soniox.com/v1/models";
 const MODELS = json(200, {
   models: [
-    { id: "stt-rt-v5", aliased_model_id: null },
-    { id: "stt-rt-preview", aliased_model_id: "stt-rt-v6" },
-    { id: "stt-async-v5", aliased_model_id: null },
+    { id: "stt-rt-v6", aliased_model_id: null },
+    { id: "stt-rt-preview", aliased_model_id: "stt-rt-v5" },
+    { id: "stt-async-v6", aliased_model_id: null },
   ],
 });
 
@@ -148,7 +148,7 @@ describe("soniox", () => {
       { [SONIOX]: MODELS },
       {
         SONIOX_API_KEY: "sk-soniox",
-        SONIOX_MODEL: "stt-rt-v6",
+        SONIOX_MODEL: "stt-rt-v5",
       },
     );
     expect(verdict(outcome.result)).toEqual([true, "ok", []]);

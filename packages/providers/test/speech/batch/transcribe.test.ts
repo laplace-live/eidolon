@@ -192,14 +192,14 @@ describe("transcribe", () => {
     expect(fake.seen.every((seen) => seen.headers.get("authorization") === "Bearer sk")).toBe(true);
     expect(await fileOf(fake.seen[0])).toEqual(["voice.webm", "audio/webm", [...clip.bytes]]);
     expect(fake.seen[1]?.json).toEqual({
-      model: "stt-async-v5",
+      model: "stt-async-v6",
       file_id: "f1",
       language_hints: ["zh"],
     });
     expect(fake.usage[0]).toMatchObject({
       role: "hearing",
       provider: "soniox",
-      model: "stt-async-v5",
+      model: "stt-async-v6",
       units: { audioSeconds: 3.6 },
       costUsd: (3.6 / 3600) * 0.1,
       costSource: "estimated",
@@ -225,7 +225,7 @@ describe("transcribe", () => {
       delete process.env.TRANSCRIBE_LANGUAGE;
     }
     await requests(5);
-    expect(fake.seen[1]?.json).toEqual({ model: "stt-async-v5", file_id: "f2" });
+    expect(fake.seen[1]?.json).toEqual({ model: "stt-async-v6", file_id: "f2" });
   });
 
   test("a Soniox job that fails is an error, and its file and job are still deleted", async () => {

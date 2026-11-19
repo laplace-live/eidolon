@@ -138,7 +138,7 @@ transcribe stage:
   --provider {soniox}   Transcription backend (default: soniox).
   --soniox-model SONIOX_MODEL
                         Override Soniox model (default: the
-                        transcription.model setting, else stt-async-v5).
+                        transcription.model setting, else stt-async-v6).
   --no-context          Skip the Soniox structured-context glossary even if
                         the file exists.
   --context-file CONTEXT_FILE

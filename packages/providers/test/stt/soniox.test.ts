@@ -14,7 +14,7 @@ import {
 } from "./fake.ts";
 
 const CONFIG =
-  '{"model": "stt-rt-v5", "audio_format": "pcm_s16le", "num_channels": 1, ' +
+  '{"model": "stt-rt-v6", "audio_format": "pcm_s16le", "num_channels": 1, ' +
   '"enable_endpoint_detection": false, "max_endpoint_delay_ms": null, ' +
   '"endpoint_sensitivity": null, "endpoint_latency_adjustment_level": null, ' +
   '"sample_rate": 16000, "language_hints": null, "language_hints_strict": null, ' +
@@ -293,7 +293,7 @@ test("meters every second it is sent, and reports it once closed", async () => {
   expect(records[0]).toMatchObject({
     role: "hearing",
     provider: "soniox",
-    model: "stt-rt-v5",
+    model: "stt-rt-v6",
     units: { audioSeconds: 1 },
   });
 });

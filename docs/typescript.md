@@ -358,7 +358,7 @@ Choices a reader might take for bugs, and why they stand.
 
 - Defaults come from the persona: `--out-dir` its `streams/`, `--context-file` its
   `glossary.toml`, `--soniox-model` `transcription.model` (`SONIOX_ASYNC_MODEL`, else
-  `stt-async-v5`), `--language` `transcription.language` (`TRANSCRIBE_LANGUAGE`; blank: `zh`,
+  `stt-async-v6`), `--language` `transcription.language` (`TRANSCRIBE_LANGUAGE`; blank: `zh`,
   `none`: no hint), and `--date` today, read when the command runs.
 - It takes `--persona`, `--force` and `--json`. There is no local transcription: `--provider`
   takes only `soniox`.
@@ -521,5 +521,3 @@ Still open:
   has to allow for ties.
 - The refine estimate's history basis (cost over chunks refined) runs low, because a sidecar's
   stats cover only its last run: 24% under for the pro model on the real sidecars.
-- `stt-async-v5`, the default transcription model, is deprecated: Soniox's model list says it is
-  removed on 2026-12-15 and its requests then go to `stt-async-v6`.

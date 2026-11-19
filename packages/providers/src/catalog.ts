@@ -665,17 +665,17 @@ export const PROVIDERS: readonly Provider[] = [
     baseUrlEnv: null,
     offers: {
       stt: {
-        defaultModel: "stt-rt-v5",
+        defaultModel: "stt-rt-v6",
         openModels: true,
         transport: "websocket",
         modelsUrl: "https://soniox.com/docs/stt/models",
         models: [
+          { id: "stt-rt-v6", price: { unit: "audio-hours", usd: 0.12 } },
           {
             id: "stt-rt-v5",
             note: "Soniox removes it on 2026-12-15 and sends its requests to stt-rt-v6",
             price: { unit: "audio-hours", usd: 0.12 },
           },
-          { id: "stt-rt-v6", price: { unit: "audio-hours", usd: 0.12 } },
         ],
       },
       tts: {
@@ -686,16 +686,16 @@ export const PROVIDERS: readonly Provider[] = [
         models: [{ id: "tts-rt-v2" }],
       },
       transcription: {
-        defaultModel: "stt-async-v5",
+        defaultModel: "stt-async-v6",
         openModels: true,
         modelsUrl: "https://soniox.com/docs/stt/models",
         models: [
+          { id: "stt-async-v6", price: { unit: "audio-hours", usd: 0.1 } },
           {
             id: "stt-async-v5",
             note: "Soniox removes it on 2026-12-15 and sends its requests to stt-async-v6",
             price: { unit: "audio-hours", usd: 0.1 },
           },
-          { id: "stt-async-v6", price: { unit: "audio-hours", usd: 0.1 } },
         ],
       },
     },
