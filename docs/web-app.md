@@ -840,6 +840,9 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
     while it runs, whose end's notice wakes the worker, who reads it with `bash_output`. **Show
     Steps** lists the skill, the commands and the notice; Settings' **Allowed Commands** lists the
     one allowed for good, whose **Remove** empties `allowed-commands.json`;
+  - the composer's `/` in that chat: the four commands, then the owner's skill with its
+    description, but not the shared one Settings switched off; `/smo` narrowed to the skill, and
+    Enter leaving `/smoke-style ` in the box, sent to no one;
   - an `mcp.json` naming `packages/assistant/test/fixtures/mcp-server.mjs`, run on this Bun with
     `echo` its one tool: a task whose worker calls it twice, its card naming the tool, the server,
     the server's read-only hint and the argument with its size, answered **Run Once**, then

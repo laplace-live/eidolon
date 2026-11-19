@@ -5,8 +5,8 @@
 // inside a chat, a task she starts, checks, steers and reports in a chat, a second she stops, a
 // third shown in each of the chat's displays and stopped with /stop, a fourth she starts by voice
 // on a call there, a coding task on the kind's own model that reads the owner's skill and runs
-// commands its card allows once, denies and allows for good, one moving to the background, and two
-// whose workers call a fake MCP server's tool. The keys are fake, so the providers refuse them for
+// commands its card allows once, denies and allows for good, one moving to the background, the
+// composer's `/` list of commands and skills, and two whose workers call a fake MCP server's tool. The keys are fake, so the providers refuse them for
 // free, and the embeddings, the chats' replies, the director's decisions, the voice messages'
 // speech, the calls' hearing, mind and voice and the tasks' workers come from a fake server, so
 // nothing is billed. Online, one task's worker fetches example.com.
@@ -4712,6 +4712,48 @@ async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
 }
 
 /**
+ * The composer's `/` in the task's chat, once Settings has switched the shared skill off: the
+ * commands, then the owner's skill with its description, and not the one switched off. Typing
+ * narrows it to the skill, and Enter puts the skill's name in the box, sending nothing.
+ */
+async function slashWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
+  const { page, checks, origin } = walk;
+  await page.goto(`${origin}/chats/${chat.id}`);
+  const { box } = chat;
+  const list = page.getByRole("listbox", { name: t("en", "Commands and Skills"), exact: true });
+  const options = async () =>
+    (await shows(list, 10_000))
+      ? (await list.getByRole("option").allInnerTexts()).map((text) =>
+          text.replace(/\s+/g, " ").trim(),
+        )
+      : [];
+  await box.click();
+  await box.pressSequentially("/");
+  // The commands show at once, and the skills once the page has read them.
+  await shows(list.getByRole("option").filter({ hasText: `/${SKILL_NAME}` }), 10_000);
+  const offered = await options();
+  const commands = ["focus", "normal", "verbose", "stop"].every((name) =>
+    offered.some((text) => text.startsWith(`/${name} `)),
+  );
+  const skill = `/${SKILL_NAME} ${SKILL_DESCRIPTION}`;
+  await box.pressSequentially(SKILL_NAME.slice(0, 3));
+  const narrowed = await options();
+  await box.press("Enter");
+  const picked = await box.inputValue();
+  await box.fill("");
+  checks.add(
+    "slash list",
+    commands &&
+      offered.includes(skill) &&
+      !offered.some((text) => text.startsWith(`/${SHARED_SKILL}`)) &&
+      JSON.stringify(narrowed) === JSON.stringify([skill]) &&
+      picked === `/${SKILL_NAME} `,
+    `/ offered ${JSON.stringify(offered)}; /${SKILL_NAME.slice(0, 3)} ${JSON.stringify(narrowed)}; ` +
+      `Enter left ${quote(picked)} in the box`,
+  );
+}
+
+/**
  * Two tasks whose workers call the fake MCP server's tool, mcp.json naming the test fixture run on
  * this Bun. The first's card asks for each call, every argument with its size and the server's
  * hint: Run Once, then Always Allow This Tool, which mcp.json then holds; its server is gone once
@@ -5059,8 +5101,12 @@ async function smoke(options: Options): Promise<Checks> {
         }
         // Last, in the task's chat: kinds, skills, commands and MCP servers' tools.
         if (chat !== undefined) {
-          if (await checks.step("task kinds", () => kindsWalk(walk))) {
-            await checks.step("task tools", () => toolsWalk(walk, chat));
+          if (
+            (await checks.step("task kinds", () => kindsWalk(walk))) &&
+            (await checks.step("task tools", () => toolsWalk(walk, chat)))
+          ) {
+            // The tools walk adds both skills, and switches the shared one off.
+            await checks.step("slash list", () => slashWalk(walk, chat));
           }
           await checks.step("task mcp", () => mcpWalk(walk, chat));
         }
