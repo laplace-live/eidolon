@@ -255,7 +255,7 @@ ingest leaves it out of what it embeds, together with a reporting verb after it 
 and the punctuation that follows.
 
 `knowledge.archive.skipTypes` defaults to `anime_audio,karaoke`; `none` keeps every scene.
-`transcription.model` defaults to `stt-async-v5`, `refine.model` to `~google/gemini-pro-latest` and
+`transcription.model` defaults to `stt-async-v6`, `refine.model` to `~google/gemini-pro-latest` and
 `refine.concurrency` to 8. `transcription.language` is the two-letter language hint Soniox gets for
 the persona's videos (default `zh`; `none` sends none), as `--language` sets it for one run.
 

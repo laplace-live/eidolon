@@ -76,7 +76,7 @@ npm 12 runs no dependency's install script unless you allow it; leave onnxruntim
 
 | Layer            | Service                                                                   |
 | ---------------- | ------------------------------------------------------------------------- |
-| STT              | [Soniox](https://console.soniox.com/) (`stt-rt-v5`)                       |
+| STT              | [Soniox](https://console.soniox.com/) (`stt-rt-v6`)                       |
 | LLM              | [OpenRouter](https://openrouter.ai/) (default `~google/gemini-flash-latest`) |
 | TTS              | [Fish Audio](https://fish.audio/app/) (`drama-3`, WebSocket)              |
 | Transport        | SmallWebRTC, relayed through [Cloudflare TURN](https://developers.cloudflare.com/realtime/turn/) when configured |

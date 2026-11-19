@@ -18,7 +18,7 @@ of their own (`stt/`, `speech/stream/`, `realtime/`).
 
 | Role | Settings | Variables | Default | Spends |
 | --- | --- | --- | --- | --- |
-| hearing | `hearing.provider`, `hearing.model`, `hearing.language` | `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | Soniox `stt-rt-v5` | in a call, a chat's voice message |
+| hearing | `hearing.provider`, `hearing.model`, `hearing.language` | `STT_PROVIDER`, `STT_MODEL`, `STT_LANGUAGE` | Soniox `stt-rt-v6` | in a call, a chat's voice message |
 | mind | `mind.provider`, `mind.model` | `LLM_PROVIDER`, `LLM_MODEL` | OpenRouter `~google/gemini-flash-latest` | in a call |
 | voice | `voice.provider`, `voice.model`, `voice.voiceId` | `TTS_PROVIDER`, `TTS_MODEL`, `TTS_VOICE_ID` | Fish Audio `drama-3` | in a call, a chat's voice reply |
 | realtime | `realtime.provider`, `realtime.model`, `realtime.voice` | `REALTIME_PROVIDER`, `REALTIME_MODEL`, `REALTIME_VOICE` | off | in a call |
@@ -26,7 +26,7 @@ of their own (`stt/`, `speech/stream/`, `realtime/`).
 | rerank | `knowledge.rerank.provider`, `.model` | `RERANK_PROVIDER`, `RERANK_MODEL` | OpenRouter `cohere/rerank-4-fast` | in a call, MCP |
 | memory | `memory.provider`, `memory.model` | `MEM0_LLM_PROVIDER`, `MEM0_LLM_MODEL` | her chat provider and model | after a turn |
 | selfie | `selfie.provider`, `selfie.model` | `SELFIE_PROVIDER`, `SELFIE_MODEL` | OpenRouter `openai/gpt-image-2.5-flare` | in a call |
-| transcription | `transcription.provider`, `.model` | `TRANSCRIBE_PROVIDER`, `TRANSCRIBE_MODEL` | Soniox `stt-async-v5` | jobs |
+| transcription | `transcription.provider`, `.model` | `TRANSCRIBE_PROVIDER`, `TRANSCRIBE_MODEL` | Soniox `stt-async-v6` | jobs |
 | refine | `refine.provider`, `.model` | `REFINE_PROVIDER`, `REFINE_MODEL` | OpenRouter `~google/gemini-pro-latest` | jobs |
 | embeddings | `embeddings.provider`, `.model` (app-wide) | `EMBED_PROVIDER`, `EMBED_MODEL` | OpenRouter `google/gemini-embedding-2-preview` | jobs, calls, MCP |
 | assistant | `assistant.provider`, `.model` (app-wide) | `ASSISTANT_PROVIDER`, `ASSISTANT_MODEL` | off | tasks |

@@ -133,7 +133,7 @@ describe("GET status", () => {
       call: {
         realtime: false,
         roles: [
-          { role: "hearing", provider: "soniox", model: "stt-rt-v5", problem: null },
+          { role: "hearing", provider: "soniox", model: "stt-rt-v6", problem: null },
           {
             role: "mind",
             provider: "openrouter",

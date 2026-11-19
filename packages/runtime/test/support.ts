@@ -34,7 +34,7 @@ export interface LogCapture {
   restore(): void;
 }
 
-/** Captures every log line at DEBUG; restore() puts the console back. */
+/** Captures every log line at DEBUG; restore() puts the console and the DEBUG level back. */
 export function captureLogs(): LogCapture {
   const records: LogRecord[] = [];
   setLogLevel("DEBUG");
@@ -43,7 +43,10 @@ export function captureLogs(): LogCapture {
     records,
     messages: (level) =>
       records.filter((r) => level === undefined || r.level === level).map((r) => r.message),
-    restore: () => logger.setSink(consoleSink),
+    restore: () => {
+      logger.setSink(consoleSink);
+      setLogLevel("DEBUG");
+    },
   };
 }
 

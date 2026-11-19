@@ -76,7 +76,7 @@ options:
 soniox provider:
   --soniox-model SONIOX_MODEL
                         Soniox async STT model (default: the
-                        transcription.model setting, else stt-async-v5)
+                        transcription.model setting, else stt-async-v6)
   --keep-soniox-files   Don't delete the uploaded file + transcription record
                         from Soniox after success. Default is to clean up so
                         the 10GB / 1000-file quota stays open.

@@ -151,7 +151,7 @@ describe("a run", () => {
 
   test("defaults: today's date, the persona's streams folder and glossary, the setting's model", async () => {
     const { audio } = setup();
-    const restore = setEnv({ SONIOX_ASYNC_MODEL: "stt-async-v6" });
+    const restore = setEnv({ SONIOX_ASYNC_MODEL: "stt-async-v5" });
     let result: Awaited<ReturnType<typeof run>>;
     try {
       result = await run([audio, "--language", ""]);
@@ -167,7 +167,7 @@ describe("a run", () => {
       `Soniox context: 6 general, 191 chars text, 122 terms (from ${glossary})`,
     ]);
     const body = JSON.parse(result.soniox.requests[1]?.json as string);
-    expect(body).toMatchObject({ model: "stt-async-v6", context: { terms: expect.any(Array) } });
+    expect(body).toMatchObject({ model: "stt-async-v5", context: { terms: expect.any(Array) } });
     expect(body.language_hints).toBeUndefined();
     rmSync(join(dataHome(), "sources"), { recursive: true, force: true });
   });

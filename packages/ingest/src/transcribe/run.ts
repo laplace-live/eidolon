@@ -70,7 +70,7 @@ import {
 } from "./render.ts";
 import { SonioxClient } from "./soniox.ts";
 
-export const DEFAULT_SONIOX_MODEL = "stt-async-v5";
+export const DEFAULT_SONIOX_MODEL = "stt-async-v6";
 export const DEFAULT_LANGUAGE = "zh";
 /** Soniox's per-file cap, checked before the upload so an oversized file fails first. */
 export const SONIOX_MAX_DURATION_MIN = 300;
