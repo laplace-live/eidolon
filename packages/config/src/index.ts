@@ -171,4 +171,5 @@ export {
   type VoiceStyleSetting,
   withPersona,
 } from "./settings.ts";
+export { withoutTrailingSlashes } from "./url.ts";
 export { type Clock, pyIsoformatUtc, utcDateParts, utcIsoDate, wallClockMicros } from "./utc.ts";
