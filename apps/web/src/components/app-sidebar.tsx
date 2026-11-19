@@ -200,7 +200,7 @@ export function AppSidebar() {
                 </Link>
               </SidebarMenuButton>
               <LanguageSwitch compact />
-              <ThemeMenu />
+              <ThemeMenu side={side} />
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>

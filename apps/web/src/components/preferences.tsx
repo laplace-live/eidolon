@@ -46,7 +46,7 @@ export function LanguageSwitch({ compact = false }: { readonly compact?: boolean
   );
 }
 
-export function ThemeMenu() {
+export function ThemeMenu({ side = "bottom" }: { readonly side?: "bottom" | "right" }) {
   const { t } = useLingui();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const Icon = resolvedTheme === "dark" ? MoonIcon : SunIcon;
@@ -57,7 +57,7 @@ export function ThemeMenu() {
           <Icon />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent side={side} align="end">
         <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as Theme)}>
           {THEMES.map(({ value, icon: ItemIcon, label }) => (
             <DropdownMenuRadioItem key={value} value={value}>
