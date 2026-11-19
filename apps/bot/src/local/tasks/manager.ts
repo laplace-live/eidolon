@@ -51,6 +51,7 @@ import {
   readMcpConfig,
   readMcpSecrets,
   readSnapshot,
+  reviewable,
   reviewPrompt,
   type SkillCatalog,
   scanSkills,
@@ -193,6 +194,8 @@ export interface TaskManagerOptions {
    * `ask`. Default: the app's.
    */
   readonly permissions?: (chat: TaskChat) => Promise<PermissionLevel>;
+  /** How long Approve for Me's review may take before the card asks instead: tests shorten it. */
+  readonly reviewTimeoutMs?: number;
 }
 
 type RefusalStatus = 400 | 404 | 409 | 416;
@@ -254,6 +257,11 @@ const MCP_CROWDED =
 const CARD_ARGUMENTS_BYTES = 12 * 1024;
 
 const ANSWERS: ReadonlySet<unknown> = new Set(["once", "always", "deny"]);
+/**
+ * Approve for Me's default deadline. The benchmark's reviews took 0.6 to 8 s; a stream that
+ * stalls would otherwise hold a start, and every start after it.
+ */
+const REVIEW_TIMEOUT_MS = 60_000;
 const ASK_EACH_SITE: TaskWebAccess = { mode: "ask", hosts: [], denied: [] };
 
 /** A snapshot's fields to change; one set to undefined is dropped. */
@@ -664,6 +672,7 @@ export class TaskManager {
   readonly #searcher: (charge: UsageSink) => WebSearcher | undefined;
   readonly #bash: Omit<BashJobsOptions, "onChange">;
   readonly #permissions: (chat: TaskChat) => Promise<PermissionLevel>;
+  readonly #reviewTimeoutMs: number;
   /** Aborted once the server stops, and a start's review with it. */
   readonly #stopping = new AbortController();
   /** The commands the owner allowed for good. */
@@ -692,6 +701,7 @@ export class TaskManager {
     this.#searcher = options.searcher ?? roleSearcher;
     this.#bash = options.bash ?? {};
     this.#permissions = options.permissions ?? (async () => this.#settings().permissions);
+    this.#reviewTimeoutMs = options.reviewTimeoutMs ?? REVIEW_TIMEOUT_MS;
     this.#allowed = new AllowedCommands(join(this.#root, ALLOWED_COMMANDS_FILE), this.#now);
     this.#mcpFile = new McpFile(options.dataHome);
     this.#skills = new OwnerSkills(options.dataHome);
@@ -1341,12 +1351,19 @@ export class TaskManager {
     signal: AbortSignal,
   ): Promise<ReviewVerdict> {
     const { id, brief, model } = task;
+    if (!reviewable(action)) {
+      logger.info(`Task ${id}: Approve for Me can't see ${actionHead(action)} whole, so it asks`);
+      return { allow: false, reason: "unclear" };
+    }
     let verdict: ReviewVerdict;
     try {
       // `charge`, never `tap`: a review is no worker request, and its size isn't the context's.
       const mind = this.#createMind("assistant", { ...model, tap: meter.charge });
       const prompt = reviewPrompt({ brief, external: task.external === true, action });
-      verdict = parseReview(await completeText(mind, { system: REVIEW_SYSTEM, prompt, signal }));
+      const deadline = AbortSignal.any([signal, AbortSignal.timeout(this.#reviewTimeoutMs)]);
+      verdict = parseReview(
+        await completeText(mind, { system: REVIEW_SYSTEM, prompt, signal: deadline }),
+      );
     } catch (error) {
       logger.warning(
         `Task ${id}: Approve for Me couldn't review ${actionHead(action)}, so it asks: ${errorText(error)}`,
@@ -1503,7 +1520,13 @@ export class TaskManager {
   ): Promise<Changes> {
     const { path, access, folder } = pending;
     const tell = (line: string): Changes => ({ inbox: steering(task.snapshot.inbox, line) });
-    if (answer === "deny") return tell(`The owner refused access to ${path}.`);
+    if (answer === "deny") {
+      const denied = task.snapshot.paths?.denied ?? [];
+      return {
+        ...tell(`The owner refused access to ${path}.`),
+        paths: { denied: denied.includes(path) ? denied : [...denied, path] },
+      };
+    }
     // Every task may read and write assistant.folders: only a write's folder joins them, never a file.
     if (answer === "always" && access === "write" && folder !== undefined) {
       await this.#addFolder(folder);
@@ -1906,11 +1929,18 @@ export class TaskManager {
     const level = await this.#levelOf(task.snapshot.chat);
     if (level === "ask") return true;
     const granted: FolderGrant[] = [];
+    const denied = task.snapshot.paths?.denied ?? [];
     for (const { path, access } of refused) {
       const grant = grantOf(path, access, this.#folderFor(path));
       if (holds(granted, grant)) continue;
+      // The owner's Deny holds at every level: a grant that holds or lies in it asks again.
+      const refusedBefore = denied.some(
+        (place) => isInside(place, grant.path) || isInside(grant.path, place),
+      );
       const action: ReviewedAction = { kind: "path", path, access, grants: grant.path };
-      const why = await levelAnswer(level, () => this.#reviewIn(task, run, action));
+      const why = refusedBefore
+        ? {}
+        : await levelAnswer(level, () => this.#reviewIn(task, run, action));
       if (why !== null) {
         run.refused = { path, access, ...why };
         if (granted.length > 0) await this.#grantMidRun(task, guard, granted);

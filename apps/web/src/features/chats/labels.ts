@@ -65,8 +65,8 @@ export const PERMISSION_LABELS: Readonly<Record<PermissionLevel, MessageDescript
 /** What each level lets her tasks do without you, under its name. */
 export const PERMISSION_HELP: Readonly<Record<PermissionLevel, MessageDescriptor>> = {
   ask: msg`Her tasks ask you before working outside your folders, visiting a site, running a command or using a tool.`,
-  auto: msg`A review on the task's model lets routine actions through and asks you only about risky ones. Each review bills the task.`,
-  full: msg`Her tasks work in any folder, visit any site and run any command as you, without asking.`,
+  auto: msg`A review on the task's model lets routine actions through and asks you about the rest. Each review bills the task.`,
+  full: msg`Her tasks work outside your folders, visit any site and run any command as you, without asking. Your Denies, spend pauses and No Web still hold.`,
 };
 
 /** What a toast says once a command has set the chat's display. */

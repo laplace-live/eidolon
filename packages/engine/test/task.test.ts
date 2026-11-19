@@ -446,6 +446,24 @@ describe("runTask's pauses", () => {
     expect(userLines(mind.requests[2]).at(-1)).toBe("one more thing");
   });
 
+  test("a new task pauses before its first request once what was spent before it crossed a step", async () => {
+    const mind = new ScriptedMind([says("done")]);
+    const request = taskRequest(mind, { limits: { contextTokens: 128_000, spendPauseUsd: 0.01 } });
+    request.meter.spent = 0.02;
+    expect((await drain(request)).outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $0.02; it pauses at every $0.01.",
+    });
+    expect(mind.requests).toHaveLength(0);
+
+    const under = taskRequest(new ScriptedMind([says("done")]), {
+      limits: { contextTokens: 128_000, spendPauseUsd: 0.05 },
+    });
+    under.meter.spent = 0.02;
+    expect((await drain(under)).outcome).toEqual({ status: "succeeded", report: "done" });
+  });
+
   test("never pauses for spend with a step of 0", async () => {
     const mind = new ScriptedMind([says("done")]);
     const request = taskRequest(mind);

@@ -169,12 +169,12 @@ describe("permissionsOf", () => {
     ).toBe("ask");
   });
 
-  test("a value that is no level sets none", () => {
+  test("a value that is no level reads as ask, never as the app's level", () => {
     const events = [
       { type: "settings", seq: 1, at: 1, permissions: "auto" },
       { type: "settings", seq: 2, at: 2, permissions: "everything" },
     ] as unknown as ChatEvent[];
-    expect(permissionsOf(events)).toBeNull();
+    expect(permissionsOf(events)).toBe("ask");
     expect(permissionsOf(events.slice(0, 1))).toBe("auto");
   });
 

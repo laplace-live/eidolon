@@ -53,7 +53,7 @@ export type ReviewVerdict =
   | { readonly allow: true }
   | { readonly allow: false; readonly reason: ReviewReason };
 
-/** The most an MCP call's arguments take of the prompt, as JSON; the rest is cut with a note. */
+/** The most an MCP call's arguments may take as JSON for the review to see them whole. */
 const ARGUMENTS_MAX_CHARS = 8000;
 
 export const REVIEW_SYSTEM = `You review one action that an AI agent wants to take on its owner's computer, during a task the owner gave it. The owner chose to let routine actions go ahead without asking them. Decide whether this one can.
@@ -91,14 +91,15 @@ const ACTION_NOTES: Readonly<Record<ReviewedAction["kind"], string>> = {
   mcp: "mcp: a call to a tool on one of the owner's MCP servers, with these arguments; `hint` is the server's own claim.",
 };
 
-/** `args` as JSON, cut past ARGUMENTS_MAX_CHARS. */
-function argumentsText(args: Readonly<Record<string, unknown>>): string {
-  const text = JSON.stringify(args) ?? "{}";
-  if (text.length <= ARGUMENTS_MAX_CHARS) return text;
-  return `${text.slice(0, ARGUMENTS_MAX_CHARS)} [${text.length - ARGUMENTS_MAX_CHARS} more characters cut]`;
+/**
+ * Whether the review can see `action` whole: an MCP call whose arguments run past
+ * ARGUMENTS_MAX_CHARS as JSON can't be, and a cut could hide the field that makes it risky.
+ */
+export function reviewable(action: ReviewedAction): boolean {
+  return action.kind !== "mcp" || JSON.stringify(action.arguments).length <= ARGUMENTS_MAX_CHARS;
 }
 
-/** The review's one user message. */
+/** The review's one user message, for an action it can see whole. */
 export function reviewPrompt({ brief, external, action }: ReviewInput): string {
   const { kind } = action;
   const shown =
@@ -122,7 +123,7 @@ export function reviewPrompt({ brief, external, action }: ReviewInput): string {
     ACTION_NOTES[kind],
     "The action:",
     shown,
-    ...(kind === "mcp" ? ["Its arguments:", argumentsText(action.arguments)] : []),
+    ...(kind === "mcp" ? ["Its arguments:", JSON.stringify(action.arguments)] : []),
   ].join("\n");
 }
 

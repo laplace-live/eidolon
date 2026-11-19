@@ -560,8 +560,8 @@ msgid "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her
 msgstr "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
 
 #: src/features/chats/labels.ts
-msgid "A review on the task's model lets routine actions through and asks you only about risky ones. Each review bills the task."
-msgstr "A review on the task's model lets routine actions through and asks you only about risky ones. Each review bills the task."
+msgid "A review on the task's model lets routine actions through and asks you about the rest. Each review bills the task."
+msgstr "A review on the task's model lets routine actions through and asks you about the rest. Each review bills the task."
 
 #: src/features/call/transcript-view.tsx
 msgid "A selfie from {name}"
@@ -2252,8 +2252,8 @@ msgid "Her tasks ask you before working outside your folders, visiting a site, r
 msgstr "Her tasks ask you before working outside your folders, visiting a site, running a command or using a tool."
 
 #: src/features/chats/labels.ts
-msgid "Her tasks work in any folder, visit any site and run any command as you, without asking."
-msgstr "Her tasks work in any folder, visit any site and run any command as you, without asking."
+msgid "Her tasks work outside your folders, visit any site and run any command as you, without asking. Your Denies, spend pauses and No Web still hold."
+msgstr "Her tasks work outside your folders, visit any site and run any command as you, without asking. Your Denies, spend pauses and No Web still hold."
 
 #: src/features/setup/new-persona.tsx
 msgid "Her Voice"

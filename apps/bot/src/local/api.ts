@@ -1514,6 +1514,11 @@ export interface TaskSnapshot {
   readonly skills?: readonly string[];
   /** The commands the owner refused it on its card: it may not run them again. */
   readonly bash?: { readonly denied: readonly string[] };
+  /**
+   * The paths the owner refused it on its card: no permission level grants a folder that holds one
+   * or lies in one without asking again.
+   */
+  readonly paths?: { readonly denied: readonly string[] };
   /** Its commands running in the background, oldest first; the card's Stop ends them too. */
   readonly background?: readonly BackgroundCommand[];
   /**

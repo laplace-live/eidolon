@@ -506,7 +506,9 @@ What it adds to pi:
   the task's, or makes the task unpriced when it has no cost, and never stands for a request's
   usage or the context's size.
 - **Pauses:**
-  - **Spend:** at each multiple of `assistant.spendPauseUsd` (0 never).
+  - **Spend:** at each multiple of `assistant.spendPauseUsd` (0 never). A resumed run goes on to
+    the next multiple past what was spent; a new one pauses at the first, before its first request
+    when a start's review has crossed it already.
   - **Unpriced:** while spend pauses are on, a request the meter couldn't count pauses the task
     before the next request, whatever that reply's calls did: they run, or fail before running,
     first. A request can't be counted when its model has no price (an `openai-compatible`
@@ -555,9 +557,10 @@ What it adds to pi:
     latest pause's reason and detail);
   - `profile`, the kind she named it, absent for `other` ([Kinds](#kinds));
   - `skills`, the owner's skills she named, which each run's prompt carries ([Skills](#skills));
-  - `bash: { denied }`, the commands the owner refused it; `background`, its commands running in
-    the background (`{ id, command, startedAt, endsAt }`); `external: true` once it has read
-    outside content; and `mcp: { denied, failed?, left? }`, the MCP calls refused it by their key,
+  - `bash: { denied }`, the commands the owner refused it, and `paths: { denied }`, the paths;
+    `background`, its commands running in the background (`{ id, command, startedAt, endsAt }`);
+    `external: true` once it has read outside content; and `mcp: { denied, failed?, left? }`, the
+    MCP calls refused it by their key,
     the servers it works without and why, and how many of a server's tools it wasn't given;
   - `todo`, the latest plan; `step`, the latest tool call it started (`{ tool, head }`: the tool,
     and the call's `path`, `url`, `pattern`, `glob` or `query`, else its arguments' JSON, cut at
@@ -915,7 +918,8 @@ until the owner answers it. A level that can't be read asks.
 
 - **What no level changes:** what `FolderPolicy` denies (the data home, the app root, the owner's
   keys, the `.env`, a git directory to write, home), commands off, a server turned off, the
-  owner's Denies in the task (`bash.denied`, `mcp.denied`, `web.denied`), No Web, which leaves out
+  owner's Denies in the task (`bash.denied`, `mcp.denied`, `web.denied`, and `paths.denied`, where
+  a grant that holds or lies in a refused path asks again, unreviewed), No Web, which leaves out
   `web_fetch` and `web_search` and whose MCP calls always ask, and the spend, stall and unpriced
   pauses. The owner's grants still let their calls through unreviewed: a command allowed for good,
   a tool always allowed, a site allowed, each as [Approvals](#approvals) says.
@@ -933,15 +937,18 @@ until the owner answers it. A level that can't be read asks.
 - **What it sees:** `REVIEW_SYSTEM` and one user message (`reviewPrompt`,
   `packages/assistant/src/review.ts`): the brief and the action, each one line of JSON so that
   neither can close the other, and whether the task has read outside content (`external`), which
-  makes it stricter about sending data out. An MCP call's arguments follow it, cut past 8,000
-  characters. Never the transcript, a page or a file.
+  makes it stricter about sending data out. An MCP call's arguments follow it whole: one whose
+  arguments run past 8,000 characters as JSON isn't reviewed (`reviewable`), since a cut could
+  hide the field that makes it risky, and asks as `unclear`. Never the transcript, a page or a
+  file.
 - **What it answers:** one line of JSON, `{"verdict":"allow"}` or `{"verdict":"ask","risk":…}`, the
   risk one of `delete`, `outside`, `secrets`, `send`, `publish`, `system`, `download`, `spend` or
   `unclear` (`parseReview`). An ask with no known risk reads as `unclear`; anything else, a failed
   request or a reply that never ends, as `failed`, which asks.
 - **Where it runs:** on the task's own account and model, `createMind("assistant", { account,
   model, tap: meter.charge })`, through the engine's `completeText`: one request, no tools, no
-  retry, under the run's Stop and the server's stop, a start's under the server's stop alone. It
+  retry, under the run's Stop and the server's stop, a start's under the server's stop alone, and
+  failing past a minute (`reviewTimeoutMs`), since a stalled start holds every start after it. It
   is billed as source `task`, the task's id its session, and counted in its spend through
   `UsageMeter.charge`: a start's review is the first spend the task's snapshot shows.
 - **What it costs:** a short request for each question it decides, on the task's own model; the
@@ -990,7 +997,8 @@ and so is one from a view that showed another folder for the same path.
     `assistant.folders`, and one she starts there runs without asking.
   - Either way the run goes on with a line it is told, after any lines she passed on: `The owner
     allowed read access to <folder>. Try again.` (or `read-write`; the path itself when it was
-    granted alone), or `The owner refused access to <path>.`
+    granted alone), or `The owner refused access to <path>.`, a Deny also adding the path to
+    `paths.denied`, which no permission level grants unasked ([Permission levels](#permission-levels)).
 - **A site** (`pending: fetch`): Allow Once adds the host, Allow Any Site sets the mode to `any`,
   and Deny adds the host to `denied`, whose calls the gate then blocks with `The owner refused
   fetching from <host>.`; a denial outlasts a later Any Site, and every level. The gate reads the

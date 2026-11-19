@@ -263,8 +263,11 @@ class TaskRun {
     this.#entries.push(...stored);
     this.#turns = stored.filter((entry) => entry.type === "assistant").length;
     const step = this.#request.limits.spendPauseUsd;
+    // A resumed run goes on past the spend the owner continued from; a new one owes the first
+    // multiple, which what was spent before it (a start's review) may have crossed already.
     if (step > 0) {
-      this.#spendLimit = (Math.floor(this.#request.meter.spentUsd() / step) + 1) * step;
+      this.#spendLimit =
+        stored.length === 1 ? step : (Math.floor(this.#request.meter.spentUsd() / step) + 1) * step;
     }
     if (stored.length === 1) return await this.#loop(null);
     await this.#append({ type: "resume" });

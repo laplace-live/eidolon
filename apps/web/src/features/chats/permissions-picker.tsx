@@ -1,6 +1,6 @@
 // The chat's permission level for her tasks, beside its message box: what they may do without your
 // answer on their cards, from their next question on. Until the chat picks one, it follows Settings.
-import { isPermissionLevel, PERMISSION_LEVELS, type PermissionLevel } from "@eidolon/chat";
+import { PERMISSION_LEVELS, type PermissionLevel } from "@eidolon/chat";
 import { useLingui } from "@lingui/react/macro";
 import {
   ChevronDownIcon,
@@ -61,12 +61,7 @@ export function PermissionsPicker({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="w-80 max-w-[calc(100vw-2rem)]">
         <DropdownMenuLabel>{t`How much should her tasks here ask you?`}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={shown}
-          onValueChange={(next) => {
-            if (isPermissionLevel(next) && next !== shown) save.mutate({ id, permissions: next });
-          }}
-        >
+        <DropdownMenuRadioGroup value={shown}>
           {PERMISSION_LEVELS.map((level) => {
             const ItemIcon = ICONS[level];
             const warn = level === "full";
@@ -75,6 +70,10 @@ export function PermissionsPicker({
                 key={level}
                 value={level}
                 disabled={save.isPending}
+                // Picking the level the chat follows from Settings makes it the chat's own.
+                onSelect={() => {
+                  if (level !== own) save.mutate({ id, permissions: level });
+                }}
                 className="items-start py-1.5"
               >
                 <ItemIcon className={cn("mt-0.5", warn && "text-warning")} />

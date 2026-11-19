@@ -188,6 +188,11 @@ export interface TaskSnapshot {
   readonly skills?: readonly string[];
   /** The commands the owner refused it, which it may not run again. */
   readonly bash?: { readonly denied: readonly string[] };
+  /**
+   * The paths the owner refused it: no permission level grants a folder that holds one or lies in
+   * one without asking again.
+   */
+  readonly paths?: { readonly denied: readonly string[] };
   /** Its commands running in the background. */
   readonly background?: readonly BackgroundCommand[];
   /**
@@ -354,6 +359,7 @@ function isSnapshot(value: unknown): value is TaskSnapshot {
     (value.profile === undefined || isOneOf(TASK_PROFILES, value.profile)) &&
     (value.skills === undefined || isStrings(value.skills)) &&
     (value.bash === undefined || (isPlainObject(value.bash) && isStrings(value.bash.denied))) &&
+    (value.paths === undefined || (isPlainObject(value.paths) && isStrings(value.paths.denied))) &&
     (value.background === undefined || isBackground(value.background)) &&
     (value.external === undefined || value.external === true) &&
     (value.mcp === undefined || isMcp(value.mcp)) &&

@@ -62,13 +62,15 @@ export function displayOf(events: readonly ChatEvent[]): ChatDisplay | null {
 
 /**
  * The chat's own permission level for her tasks, which overrides the app's assistant.permissions:
- * the last `settings` event that sets one, else null. A value that is no level sets none.
+ * the last `settings` event that sets one, else null. A value that is no level reads as `ask`,
+ * never as the app's, which may let more through.
  */
 export function permissionsOf(events: readonly ChatEvent[]): PermissionLevel | null {
   const set = events.findLast(
     (event) => event.type === "settings" && event.permissions !== undefined,
   );
-  return set?.type === "settings" && isPermissionLevel(set.permissions) ? set.permissions : null;
+  if (set?.type !== "settings") return null;
+  return isPermissionLevel(set.permissions) ? set.permissions : "ask";
 }
 
 export function summarize(header: ChatHeader, events: readonly ChatEvent[]): ChatSummary {

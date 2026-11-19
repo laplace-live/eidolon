@@ -560,8 +560,8 @@ msgid "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her
 msgstr "PNG、JPEG 或 WebP 图片，最大 {max}。不上传时，头像显示她的简称。"
 
 #: src/features/chats/labels.ts
-msgid "A review on the task's model lets routine actions through and asks you only about risky ones. Each review bills the task."
-msgstr "用任务自己的模型先审一遍：常规操作直接放行，只有有风险的才问你。每次审核都算在任务的花费里。"
+msgid "A review on the task's model lets routine actions through and asks you about the rest. Each review bills the task."
+msgstr "用任务自己的模型先审一遍：常规操作直接放行，其余的都会问你。每次审核都算在任务的花费里。"
 
 #: src/features/call/transcript-view.tsx
 msgid "A selfie from {name}"
@@ -2252,8 +2252,8 @@ msgid "Her tasks ask you before working outside your folders, visiting a site, r
 msgstr "她的任务在你的文件夹以外干活、访问网站、运行命令或使用工具之前，都会先问你。"
 
 #: src/features/chats/labels.ts
-msgid "Her tasks work in any folder, visit any site and run any command as you, without asking."
-msgstr "她的任务能在任何文件夹干活、访问任何网站，并以你的身份运行任何命令，都不会问你。"
+msgid "Her tasks work outside your folders, visit any site and run any command as you, without asking. Your Denies, spend pauses and No Web still hold."
+msgstr "她的任务能在你的文件夹以外干活、访问任何网站，并以你的身份运行任何命令，都不会问你。你的拒绝、花费暂停和不联网照样有效。"
 
 #: src/features/setup/new-persona.tsx
 msgid "Her Voice"

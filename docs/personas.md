@@ -379,7 +379,7 @@ asks about every folder outside yours, site, command and MCP call you haven't al
 the task's own model review each of those first, billed to the task, and asks only about the ones
 it finds risky; `full` asks about none, so its commands run as you unasked. Any other value reads
 as `ask`, with a warning. At every level a task's file tools stay out of the data home, your keys
-and `.git` folders, and your Denies, spend pauses and No Web hold.
+and `.git` folders; your Denies, spend pauses and No Web still hold.
 A task pauses to ask before going on each time its spend crosses a multiple of
 `assistant.spendPauseUsd` (default 1, in US dollars; 0 never pauses), or after its first request
 on a model with no known price, whose spend can't be counted, and keeps its requests within

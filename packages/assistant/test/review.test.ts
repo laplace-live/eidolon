@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { parseReview, REVIEW_RISKS, REVIEW_SYSTEM, reviewPrompt } from "../src/review.ts";
+import {
+  parseReview,
+  REVIEW_RISKS,
+  REVIEW_SYSTEM,
+  reviewable,
+  reviewPrompt,
+} from "../src/review.ts";
 
 const BRIEF = {
   goal: "Make a to-do page",
@@ -39,19 +45,16 @@ describe("reviewPrompt", () => {
     expect(JSON.parse(prompt.split("\n").at(-1) as string).command).toBe(command);
   });
 
-  test("an MCP call's arguments follow it, cut past 8,000 characters", () => {
-    const prompt = reviewPrompt({
-      brief: BRIEF,
-      external: false,
-      action: {
-        kind: "mcp",
-        server: "notes",
-        tool: "write_note",
-        arguments: { title: "x", body: "y".repeat(9000) },
-        hint: "destructive",
-      },
-    });
-    const lines = prompt.split("\n");
+  test("an MCP call's arguments follow it whole", () => {
+    const args = { title: "x", body: "y".repeat(7000), to: "/notes/x.md" };
+    const action = {
+      kind: "mcp",
+      server: "notes",
+      tool: "write_note",
+      arguments: args,
+      hint: "destructive",
+    } as const;
+    const lines = reviewPrompt({ brief: BRIEF, external: false, action }).split("\n");
     expect(JSON.parse(lines.at(-3) as string)).toEqual({
       kind: "mcp",
       server: "notes",
@@ -59,8 +62,20 @@ describe("reviewPrompt", () => {
       hint: "destructive",
     });
     expect(lines.at(-2)).toBe("Its arguments:");
-    expect(lines.at(-1)).toEndWith(" more characters cut]");
-    expect((lines.at(-1) as string).length).toBeLessThan(8100);
+    expect(JSON.parse(lines.at(-1) as string)).toEqual(args);
+  });
+
+  test("an MCP call whose arguments run past 8,000 characters can't be reviewed: a cut could hide a field", () => {
+    const call = (body: string) =>
+      ({
+        kind: "mcp",
+        server: "notes",
+        tool: "write_note",
+        arguments: { body, to: "/notes/x.md" },
+      }) as const;
+    expect(reviewable(call("y".repeat(7900)))).toBe(true);
+    expect(reviewable(call("y".repeat(8000)))).toBe(false);
+    expect(reviewable({ kind: "command", command: "y".repeat(9000), folder: "/x" })).toBe(true);
   });
 
   test("the system prompt names every risk a verdict may give", () => {

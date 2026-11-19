@@ -11,6 +11,7 @@ import {
   REVIEW_SYSTEM,
   type ReviewedAction,
   type ReviewReason,
+  type ReviewVerdict,
   reviewPrompt,
 } from "../../../packages/assistant/src/index.ts";
 import { setLogLevel } from "../../../packages/config/src/index.ts";
@@ -55,9 +56,11 @@ for (const [index, each] of cases.entries()) {
 }
 
 let override: { account: string; model: string } | undefined;
-if (named !== undefined) {
-  const slash = named.indexOf("/");
-  if (slash <= 0) throw new Error("--model is <account>/<model>");
+if (at !== -1) {
+  const slash = named?.indexOf("/") ?? -1;
+  if (named === undefined || slash <= 0 || slash === named.length - 1) {
+    throw new Error("--model is <account>/<model>");
+  }
   override = { account: named.slice(0, slash), model: named.slice(slash + 1) };
 }
 
@@ -75,12 +78,15 @@ async function decide(each: Case): Promise<Row> {
   const brief = briefs[each.brief] as TaskBrief;
   const prompt = reviewPrompt({ brief, external: each.external === true, action: each.action });
   const started = performance.now();
-  const text = await completeText(mind, {
+  // A failed request is a failed review, as a task's gate takes it, and the run goes on.
+  const verdict = await completeText(mind, {
     system: REVIEW_SYSTEM,
     prompt,
     signal: AbortSignal.timeout(120_000),
+  }).then(parseReview, (error: unknown): ReviewVerdict => {
+    console.error(`${each.id}: ${error instanceof Error ? error.message : String(error)}`);
+    return { allow: false, reason: "failed" };
   });
-  const verdict = parseReview(text);
   const decided = verdict.allow ? "allow" : "ask";
   return {
     id: each.id,

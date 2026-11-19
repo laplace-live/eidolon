@@ -651,6 +651,17 @@ describe("permission levels", () => {
     );
     expect(minds.reviewed[0]?.split("\n").at(-1)).toBe(JSON.stringify({ text: "hi" }));
   });
+
+  test("Approve for Me asks about a call too long to review whole, with no review", async () => {
+    writeMcp({ fake: fake([], { tools: ["echo"] }) });
+    minds.script("Long", [calls([echo("m1", "z".repeat(9000))])]);
+    const tasks = manager({ permissions: async () => "auto" });
+    await tasks.boot();
+    const { id } = await tasks.start({ goal: "Long", folder: join(work, "long") }, ORIGIN);
+    const paused = await reach(tasks, id, "paused");
+    expect(paused.pending).toMatchObject({ kind: "mcp", tool: "echo", review: "unclear" });
+    expect(minds.reviewed).toEqual([]);
+  });
 });
 
 describe("mcp.json's switches on a running task", () => {

@@ -56,6 +56,7 @@ export {
   type ReviewReason,
   type ReviewRisk,
   type ReviewVerdict,
+  reviewable,
   reviewPrompt,
 } from "./review.ts";
 export {

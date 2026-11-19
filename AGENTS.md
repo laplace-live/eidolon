@@ -365,8 +365,9 @@ the layout's one line.
   ([assistant.md](docs/assistant.md#permission-levels)).
 - **Approve for Me's review asks unless it answers allow.** It runs on the task's own model, billed
   to the task through `UsageMeter.charge`, sees the brief and the action as JSON and never the
-  transcript, and a failure or any other answer sends the action to the card. Its reason is a
-  fixed risk the card names, never model text, and never reaches her.
+  transcript, and a failure, a minute without an answer, arguments too long to show it whole, or
+  any other answer sends the action to the card. Its reason is a fixed risk the card names, never
+  model text, and never reaches her.
 - **A command, and an MCP server's process, run on `shellEnv()`, never `process.env`:** the
   allowed names, every `LC_*`, `TERM=dumb`, and a `PATH` with no folder the task may write (an MCP
   server's as the task's first run found it), so no `.env` key reaches one unless an `mcp.json`

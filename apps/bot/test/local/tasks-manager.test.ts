@@ -100,8 +100,8 @@ class Minds {
   readonly records: UsageRecord[] = [];
   /** Each review's prompt. */
   readonly reviewed: string[] = [];
-  /** A review's reply to its prompt, or the error its request fails with. Default: an allow. */
-  review: (prompt: string) => string | Error = () => '{"verdict":"allow"}';
+  /** A review's reply to its prompt, or the turn that answers it. Default: an allow. */
+  review: (prompt: string) => string | Turn = () => '{"verdict":"allow"}';
   readonly #scripts = new Map<string, readonly Turn[]>();
   readonly #served = new Map<string, number>();
   /** Each request's cost: null for a model with no price. */
@@ -133,7 +133,7 @@ class Minds {
           const prompt = userLines(request).join("\n");
           minds.reviewed.push(prompt);
           const answer = minds.review(prompt);
-          turn = answer instanceof Error ? answer : says(answer);
+          turn = typeof answer === "string" ? says(answer) : answer;
         } else {
           const goal = /^Goal: (.*)$/m.exec(request.system)?.[1] ?? "";
           minds.requests.push({ goal, request });
@@ -3445,6 +3445,63 @@ describe("permission levels", () => {
     // It reached the fetch, which this test's fetch fails, rather than the sites it may use.
     expect(result).toMatchObject({ type: "tool-result", isError: true });
     expect(JSON.stringify(result)).not.toContain("isn't among the sites this task may fetch from");
+  });
+
+  test("the owner's Deny on a path holds at every level: a folder holding it asks again", async () => {
+    settings = { ...settings, folders: [join(work, "site")] };
+    mkdirSync(join(work, "notes"));
+    writeFileSync(join(work, "notes", "a.txt"), "a\n");
+    writeFileSync(join(work, "notes", "b.txt"), "b\n");
+    const a = realpathSync(join(work, "notes", "a.txt"));
+    minds.script("Denied", [
+      calls([call("r1", "read", { path: join(work, "notes", "a.txt") })]),
+      calls([call("r2", "read", { path: join(work, "notes", "b.txt") })]),
+      says("Done."),
+    ]);
+    const tasks = await leveled();
+    const { id } = await tasks.start({ goal: "Denied", folder: join(work, "site") }, ORIGIN);
+    expect((await reach(tasks, id, "paused")).pending).toMatchObject({ kind: "path", path: a });
+
+    level = "full";
+    expect((await tasks.approve(id, { answer: "deny" })).paths).toEqual({ denied: [a] });
+    // Full Access would grant b.txt's folder, which holds a.txt.
+    const again = await reach(tasks, id, "paused");
+    expect(again.pending).toEqual({
+      kind: "path",
+      path: realpathSync(join(work, "notes", "b.txt")),
+      access: "read",
+      folder: realpathSync(join(work, "notes")),
+    });
+    expect(again.grants).toEqual([]);
+    expect(minds.reviewed).toEqual([]);
+  });
+
+  test("a review that takes too long asks on the card", async () => {
+    level = "auto";
+    minds.review = () => held(new Promise<void>(() => {}));
+    const tasks = manager({ permissions: async () => level, reviewTimeoutMs: 50 });
+    await tasks.boot();
+    const started = await tasks.start({ goal: "Slow", folder: join(work, "slow") }, ORIGIN);
+    expect(started).toMatchObject({
+      status: "awaiting-approval",
+      pending: { kind: "start", review: "failed" },
+    });
+    expect(logs.lines().join("\n")).toContain("Approve for Me couldn't review the start in");
+  });
+
+  test("a start's review counts toward the first spend pause, which then comes before any request", async () => {
+    level = "auto";
+    minds.cost = 0.02;
+    settings = { ...settings, spendPauseUsd: 0.01 };
+    const tasks = await leveled();
+    const started = await tasks.start({ goal: "Pricey", folder: join(work, "pricey") }, ORIGIN);
+    expect(started.spentUsd).toBeCloseTo(0.02);
+    const paused = await reach(tasks, started.id, "paused");
+    expect(paused.pause).toEqual({
+      reason: "spend",
+      detail: "Spent $0.02; it pauses at every $0.01.",
+    });
+    expect(minds.for("Pricey")).toEqual([]);
   });
 
   test("a level that can't be read asks, as Ask for Approval does", async () => {
