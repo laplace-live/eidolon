@@ -279,6 +279,8 @@ interface ChatsServer {
   /** Runs the stop hooks, as the server's shutdown does. */
   shutdown(): Promise<void>;
   close(): Promise<void>;
+  /** The runner the routes share. */
+  runner(): ChatRunner;
 }
 
 function serveChats(
@@ -329,6 +331,7 @@ function serveChats(
       }),
     raw: (method, path, init) => fetch(`${base}${path}`, { ...init, method }),
     shutdown,
+    runner: chats,
     async close() {
       await shutdown();
       await server.stop(true);
@@ -1599,8 +1602,57 @@ describe("a group chat", () => {
     const refused = (await (await patch({ display: "loud" })).json()) as {
       error: { message: string };
     };
-    expect(refused.error.message).toEndWith("or a `display` of focus, normal or verbose");
+    expect(refused.error.message).toContain(", a `display` of focus, normal or verbose,");
     expect((await log(id)).events).toHaveLength(5);
+  });
+
+  test("the permission level is kept as a settings event, and her tasks there act under it", async () => {
+    const id = await greeted();
+    const patch = (body: unknown) => server.call("PATCH", `/chats/${id}`, body);
+    expect(await server.runner().permissionsOf(id)).toBe("ask");
+    for (const permissions of ["full", "auto", "ask", "full"] as const) {
+      expect(await json(await patch({ permissions }))).toEqual({ ok: true });
+      expect(await server.runner().permissionsOf(id)).toBe(permissions);
+    }
+    expect((await log(id)).events.slice(2)).toEqual([
+      expect.objectContaining({ seq: 3, type: "settings", permissions: "full" }),
+      expect.objectContaining({ seq: 4, type: "settings", permissions: "auto" }),
+      expect.objectContaining({ seq: 5, type: "settings", permissions: "ask" }),
+      expect.objectContaining({ seq: 6, type: "settings", permissions: "full" }),
+    ]);
+    for (const body of [
+      { permissions: "Full" },
+      { permissions: "yolo" },
+      { permissions: null },
+      { permissions: "full", display: "focus" },
+    ]) {
+      expect([body, await errorCode(await patch(body))]).toEqual([body, [400, "bad-request"]]);
+    }
+    const refused = (await (await patch({ permissions: "all" })).json()) as {
+      error: { message: string };
+    };
+    expect(refused.error.message).toEndWith("or `permissions` of ask, auto or full");
+    expect((await log(id)).events).toHaveLength(6);
+    expect(requests).toHaveLength(1);
+  });
+
+  test("a chat that sets no level follows the app's, read at each question", async () => {
+    const id = await greeted();
+    const saved = process.env.ASSISTANT_PERMISSIONS;
+    try {
+      expect((await log(id)).defaultPermissions).toBe("ask");
+      process.env.ASSISTANT_PERMISSIONS = "Auto";
+      expect((await log(id)).defaultPermissions).toBe("auto");
+      expect(await server.runner().permissionsOf(id)).toBe("auto");
+      process.env.ASSISTANT_PERMISSIONS = "loud";
+      expect(await server.runner().permissionsOf(id)).toBe("ask");
+    } finally {
+      if (saved === undefined) delete process.env.ASSISTANT_PERMISSIONS;
+      else process.env.ASSISTANT_PERMISSIONS = saved;
+    }
+    await expect(
+      server.runner().permissionsOf("0190f5c8-0000-7000-8000-000000000000"),
+    ).rejects.toThrow();
   });
 
   test("a read gives the app's display, which a chat follows until it sets its own", async () => {

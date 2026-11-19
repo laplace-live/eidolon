@@ -22,11 +22,14 @@ export {
   DEFAULT_CHAIN_LIMIT,
   isChatDisplay,
   isChatId,
+  isPermissionLevel,
   isReplyMode,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
   MAX_VOICE_MS,
   type ParticipantId,
+  PERMISSION_LEVELS,
+  type PermissionLevel,
   REPLY_MODES,
   type ReplyMode,
   type Speaker,
@@ -36,7 +39,7 @@ export { joinSegments, separator } from "./join.ts";
 export { MemoryChatStore } from "./memory.ts";
 export { type MentionTarget, parseMentions } from "./mentions.ts";
 export { canonicalForSig } from "./sig.ts";
-export { chainLimitOf, displayOf, replyModeOf, summarize } from "./summary.ts";
+export { chainLimitOf, displayOf, permissionsOf, replyModeOf, summarize } from "./summary.ts";
 export {
   CHAT_WINDOW_MESSAGES,
   startedResult,

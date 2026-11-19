@@ -2,6 +2,7 @@
 // nudges her turns answer about a task. It hands her brief to the task manager and answers at once;
 // the task's end reaches the chat later, as her call's `final`.
 import { isEnded } from "@eidolon/assistant";
+import type { PermissionLevel } from "@eidolon/chat";
 import { logger, TASK_KINDS } from "@eidolon/config";
 import type { BackgroundTool } from "@eidolon/engine";
 import type {
@@ -46,13 +47,33 @@ export interface TaskAbilities {
   readonly commands: boolean;
   /** The names of the owner's skills she may give a task: the manager's skillNames. */
   readonly skills?: readonly string[];
+  /** How much the chat's tasks ask the owner, which her texts on commands follow. Default `ask`. */
+  readonly permissions?: PermissionLevel;
 }
 
-function startTaskSchema({ commands, skills = [] }: TaskAbilities): BackgroundTool["schema"] {
+/** What start_task's description says of a command's approval, at each level. */
+const COMMAND_APPROVAL: Readonly<Record<PermissionLevel, string>> = {
+  ask: "每条命令都要对方在聊天里的任务卡片上点允许才会运行（对方选过始终允许的除外）。",
+  auto: "命令会先自动审一遍：看着没风险的直接运行，有风险的要对方在聊天里的任务卡片上点允许才会运行。",
+  full: "这个聊天里对方给了完全权限，命令不用对方点允许，直接运行。",
+};
+
+/** What her hint says of a command's approval, at each level. */
+const HINT_APPROVAL: Readonly<Record<PermissionLevel, string>> = {
+  ask: "每条命令运行前都要对方在聊天里的任务卡片上点允许（对方选过始终允许的除外）。",
+  auto: "命令会先自动审一遍，看着没风险的直接运行，有风险的运行前要对方在聊天里的任务卡片上点允许。",
+  full: "这个聊天里对方给了完全权限，命令运行前不用对方点允许。",
+};
+
+function startTaskSchema({
+  commands,
+  skills = [],
+  permissions = "ask",
+}: TaskAbilities): BackgroundTool["schema"] {
   const what = commands
     ? "在这台电脑上动手做一件事：写代码、做网页、写或修改文件、在文件夹里找东西、上网看网页查资料，" +
       "还能运行命令和程序，比如跑测试、装依赖、用 git、删除或移动文件；" +
-      "每条命令都要对方在聊天里的任务卡片上点允许才会运行（对方选过始终允许的除外）。" +
+      COMMAND_APPROVAL[permissions] +
       "对方要你在电脑上做这些时调用。打开文件、网页或软件给对方看，看图片，" +
       "这些都做不到，别调用，直接跟对方说现在还做不到。"
     : "在这台电脑上动手做一件事：写代码、做网页、写或修改文件、在文件夹里找东西、上网看网页查资料。" +
@@ -197,12 +218,12 @@ export function startedOf(task: Pick<TaskSnapshot, "id" | "status">): StartTaskS
 }
 
 /** Her persona-prefix line for start_task, naming what her tasks can do. */
-export function assistantPromptHint({ commands }: TaskAbilities): string {
+export function assistantPromptHint({ commands, permissions = "ask" }: TaskAbilities): string {
   const what = commands
     ? "你能直接用这台电脑做事：写代码、做网页、写和改文件、上网查资料，" +
       "还能运行命令和程序（跑测试、装依赖、用 git、删除或移动文件），都是你自己动手。" +
       `要用电脑就调用 ${START_TASK} 工具，这是你碰电脑的唯一方式，不要说自己用不了电脑。` +
-      "每条命令运行前都要对方在聊天里的任务卡片上点允许（对方选过始终允许的除外）。" +
+      HINT_APPROVAL[permissions] +
       "不过现在你还不能打开文件、网页或软件给对方看，也看不了图片，对方要的话就直说，告诉对方文件在哪，"
     : "你能直接用这台电脑做事：写代码、做网页、写和改文件、上网查资料，都是你自己动手。" +
       `要用电脑就调用 ${START_TASK} 工具，这是你碰电脑的唯一方式，不要说自己用不了电脑。` +

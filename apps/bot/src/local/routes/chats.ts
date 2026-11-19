@@ -9,10 +9,12 @@ import {
   ChatStoreError,
   isChatDisplay,
   isChatId,
+  isPermissionLevel,
   isReplyMode,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
   MAX_VOICE_MS,
+  type PermissionLevel,
   type ReplyMode,
 } from "@eidolon/chat";
 import { isPlainObject, logger, withPersona } from "@eidolon/config";
@@ -94,6 +96,12 @@ function replyModeIn(body: unknown): ReplyMode | null {
 function displayIn(body: unknown): ChatDisplay | null {
   if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "display")) return null;
   return isChatDisplay(body.display) ? body.display : null;
+}
+
+/** PATCH's `permissions`: ask, auto or full; else null. */
+function permissionsIn(body: unknown): PermissionLevel | null {
+  if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "permissions")) return null;
+  return isPermissionLevel(body.permissions) ? body.permissions : null;
 }
 
 /** POST voice's `durationMs`, a whole number of ms from 1; else null. */
@@ -228,18 +236,26 @@ export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
         const chainLimit = chainLimitOf(body.value);
         const replyMode = replyModeIn(body.value);
         const display = displayIn(body.value);
-        if (title === null && chainLimit === null && replyMode === null && display === null) {
+        const permissions = permissionsIn(body.value);
+        if (
+          title === null &&
+          chainLimit === null &&
+          replyMode === null &&
+          display === null &&
+          permissions === null
+        ) {
           return localError(
             400,
             "bad-request",
-            "Send a `title` of 1 to 80 characters on one line, a `chainLimit` from 0 to 6, a `replyMode` of auto, text or voice, or a `display` of focus, normal or verbose",
+            "Send a `title` of 1 to 80 characters on one line, a `chainLimit` from 0 to 6, a `replyMode` of auto, text or voice, a `display` of focus, normal or verbose, or `permissions` of ask, auto or full",
           );
         }
         return inChat(async () => {
           if (title !== null) await runner().rename(id, title);
           else if (chainLimit !== null) await runner().changeSettings(id, { chainLimit });
           else if (replyMode !== null) await runner().changeSettings(id, { replyMode });
-          else await runner().changeSettings(id, { display: display as ChatDisplay });
+          else if (display !== null) await runner().changeSettings(id, { display });
+          else if (permissions !== null) await runner().changeSettings(id, { permissions });
           return localJson(200, { ok: true });
         });
       },

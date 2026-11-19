@@ -8,7 +8,6 @@ import { join } from "node:path";
 import { isLive } from "@eidolon/assistant";
 import {
   CHAT_FORMAT,
-  type ChatDisplay,
   type ChatEvent,
   type ChatEventDraft,
   type ChatHeader,
@@ -17,13 +16,21 @@ import {
   displayOf,
   MAX_PARTICIPANTS,
   type ParticipantId,
-  type ReplyMode,
+  type PermissionLevel,
+  permissionsOf,
   stampEvents,
   summarize,
   type ViewMessage,
 } from "@eidolon/chat";
 import { JsonlChatStore } from "@eidolon/chat/jsonl";
-import { AsyncQueue, chatDisplay, dataHome, errorText, logger } from "@eidolon/config";
+import {
+  AsyncQueue,
+  assistantSettings,
+  chatDisplay,
+  dataHome,
+  errorText,
+  logger,
+} from "@eidolon/config";
 import type { DirectorReply } from "@eidolon/context";
 import {
   type ChatOutput,
@@ -52,7 +59,14 @@ import type {
   OutsideResult,
   TranscriptLine,
 } from "@eidolon/runtime";
-import type { ChatCallInfo, ChatContents, StartTaskFinal, TaskChat, TaskSnapshot } from "../api.ts";
+import type {
+  ChatCallInfo,
+  ChatContents,
+  ChatUpdateRequest,
+  StartTaskFinal,
+  TaskChat,
+  TaskSnapshot,
+} from "../api.ts";
 import { localViewer } from "../identity.ts";
 import { herStart, staleTaskContext, untoldEnds, withoutTaskContext } from "../tasks/calls.ts";
 import { herTaskTools } from "../tasks/her-tools.ts";
@@ -334,6 +348,11 @@ export class ChatRunner {
   readonly #tasks: ChatRunnerOptions["tasks"];
   readonly #now: () => number;
   readonly #chats = new Map<string, Chat>();
+  /**
+   * Each chat's own permission level for her tasks, as its log last read or this runner last
+   * wrote it, null for none: only this runner writes a `settings` event.
+   */
+  readonly #levels = new Map<string, PermissionLevel | null>();
   /** Shutdown has begun: a task's end waits for the next start. */
   #closed = false;
   /** Each call whose end was asked for, until its call-ended, after its last lines, is stored. */
@@ -371,7 +390,38 @@ export class ChatRunner {
           };
     const groupCall = groupCallRefusal(participants) === null;
     const defaultDisplay = chatDisplay();
-    return { ...contents, lateTools, hearingRefusal: refusal, call, groupCall, defaultDisplay };
+    const defaultPermissions = assistantSettings().permissions;
+    return {
+      ...contents,
+      lateTools,
+      hearingRefusal: refusal,
+      call,
+      groupCall,
+      defaultDisplay,
+      defaultPermissions,
+    };
+  }
+
+  /**
+   * The permission level her tasks in chat `id` act under now: its own, else the app's
+   * assistant.permissions. Throws when the chat can't be read.
+   */
+  async permissionsOf(id: string): Promise<PermissionLevel> {
+    if (!this.#levels.has(id)) this.#noteLevel(id, (await this.store.read(id)).events);
+    return this.#levelOf(id);
+  }
+
+  /** Chat `id`'s level, as last noted; the app's while it has none of its own, or none noted. */
+  #levelOf(id: string): PermissionLevel {
+    return this.#levels.get(id) ?? assistantSettings().permissions;
+  }
+
+  /**
+   * Notes the level a whole log of chat `id` sets, unless one is noted already: a level written
+   * since that log was read is newer than it.
+   */
+  #noteLevel(id: string, events: readonly ChatEvent[]): void {
+    if (!this.#levels.has(id)) this.#levels.set(id, permissionsOf(events));
   }
 
   /** Why the personas of chat `id` can't be called together now; null when they can. */
@@ -642,6 +692,7 @@ export class ChatRunner {
   startCall(id: string, persona: ParticipantId): Promise<ChatCall> {
     return this.#openCall(id, persona, false, async (chat, call) => {
       const log = await this.store.read(id);
+      this.#noteLevel(id, log.events);
       // The status block and her task nudges the chat stored are stale on the call.
       const seedMessages: ViewMessage[] = withoutTaskContext(
         callSeed(log, persona, localViewer().uname ?? ""),
@@ -779,15 +830,16 @@ export class ChatRunner {
     await this.#append(id, this.#chat(id), [{ type: "title", title }]);
   }
 
-  /** The chat's chain limit, reply mode or display, as a `settings` event. */
+  /**
+   * The chat's chain limit, reply mode, display or permission level, as a `settings` event. A level
+   * reaches her tasks there at their next question, and her next turn's texts.
+   */
   async changeSettings(
     id: string,
-    change:
-      | { readonly chainLimit: number }
-      | { readonly replyMode: ReplyMode }
-      | { readonly display: ChatDisplay },
+    change: Exclude<ChatUpdateRequest, { readonly title: string }>,
   ): Promise<void> {
     await this.#append(id, this.#chat(id), [{ type: "settings", ...change }]);
+    if ("permissions" in change) this.#levels.set(id, change.permissions);
   }
 
   /**
@@ -814,6 +866,7 @@ export class ChatRunner {
         await this.store.remove(id);
       } finally {
         if (this.#chats.get(id) === chat) this.#chats.delete(id);
+        this.#levels.delete(id);
       }
     });
   }
@@ -1064,6 +1117,7 @@ export class ChatRunner {
     const { signal } = live.controller;
     void this.#run(id, chat, reply, null, async (late, save) => {
       const log = await this.store.read(id);
+      this.#noteLevel(id, log.events);
       const { participants } = summarize(log.header, log.events);
       reply.single = participants.length === 1;
       const [only] = participants;
@@ -1131,7 +1185,11 @@ export class ChatRunner {
     const live = herTasks(tasks.snapshotsOf(id), id, persona).some(({ snapshot }) =>
       isLive(snapshot.status),
     );
-    const abilities = { commands: tasks.offersCommands(), skills: tasks.skillNames() };
+    const abilities = {
+      commands: tasks.offersCommands(),
+      skills: tasks.skillNames(),
+      permissions: this.#levelOf(id),
+    };
     return {
       background: {
         tools: [startTaskTool(start, abilities)],

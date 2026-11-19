@@ -1,7 +1,8 @@
 // The local app's tasks, which she starts in a chat with start_task, and may steer or stop there.
 // Each runs in this process under its lock, its task.json kept in step with the run; the owner
-// answers its approvals from its card, and its end is reported back to the chat. laplace-task's
-// tasks have no chat and are never touched: that command may be running one.
+// answers its approvals from its card, or its chat's permission level lets them through, and its
+// end is reported back to the chat. laplace-task's tasks have no chat and are never touched: that
+// command may be running one.
 import { statSync } from "node:fs";
 import { mkdir, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -40,10 +41,17 @@ import {
   mcpStanding,
   newTaskId,
   openTaskStore,
+  type PathGuard,
   PathRefused,
+  parseReview,
+  REVIEW_SYSTEM,
+  type ReviewedAction,
+  type ReviewReason,
+  type ReviewVerdict,
   readMcpConfig,
   readMcpSecrets,
   readSnapshot,
+  reviewPrompt,
   type SkillCatalog,
   scanSkills,
   skillNames,
@@ -68,6 +76,7 @@ import {
   webFetchHost,
   writeSnapshot,
 } from "@eidolon/assistant";
+import type { PermissionLevel } from "@eidolon/chat";
 import {
   type AssistantSettings,
   errorText,
@@ -82,6 +91,7 @@ import {
 } from "@eidolon/config";
 import { acquireLock, LockedError } from "@eidolon/config/lock";
 import {
+  completeText,
   createMind,
   type Mind,
   type MindToolCall,
@@ -92,6 +102,7 @@ import {
   type TaskGateDecision,
   type TaskInbox,
   type TaskOutcome,
+  type TaskRefusal,
   type TaskRequest,
   type TaskStore,
   UsageMeter,
@@ -102,6 +113,7 @@ import {
   roleSearcher,
   selectTask,
   type UsageSink,
+  withUsageScope,
 } from "@eidolon/providers";
 import manifest from "../../../package.json" with { type: "json" };
 import {
@@ -175,6 +187,12 @@ export interface TaskManagerOptions {
   readonly searcher?: (charge: UsageSink) => WebSearcher | undefined;
   /** How each task's commands run: tests shorten the yield. Default: BashJobs' own. */
   readonly bash?: Omit<BashJobsOptions, "onChange">;
+  /**
+   * The permission level a task of `chat` acts under: the chat's own, else the app's. Read at each
+   * question it would ask, so a change reaches a running task at its next one; a throw reads as
+   * `ask`. Default: the app's.
+   */
+  readonly permissions?: (chat: TaskChat) => Promise<PermissionLevel>;
 }
 
 type RefusalStatus = 400 | 404 | 409 | 416;
@@ -263,8 +281,16 @@ interface Run extends Omit<Equipped, "mind"> {
   settled: Promise<void>;
   /** What the gate paused to ask: a site, a command, or an MCP call. */
   asked: Extract<TaskPending, { readonly kind: "fetch" | "command" | "mcp" }> | null;
-  /** The first path refused in the latest batch. */
-  refused: { readonly path: string; readonly access: "read" | "write" } | null;
+  /**
+   * The path the latest batch asks about: its first refused, or the one Approve for Me's review
+   * asked about, with why.
+   */
+  refused: (TaskRefusal & { readonly review?: ReviewReason }) | null;
+  /**
+   * Full Access, as the gate last read the level for a web_fetch: the call, and its redirects, may
+   * then reach any site the owner hasn't refused.
+   */
+  full: boolean;
   /** How the run ended or paused, once its transcript says so. */
   last: TaskOutcome | null;
   /** The calls of the latest reply: stored before the run, or made in it. */
@@ -300,6 +326,30 @@ interface Task {
   mcpOnce: { readonly call: string; readonly key: string }[];
   /** Wakes each events stream following the task. */
   readonly readers: Set<() => void>;
+}
+
+/**
+ * A run's policy, which a grant its chat's level makes while it runs replaces, so the call the
+ * worker makes again finds it.
+ */
+class RunGuard implements PathGuard {
+  #policy: FolderPolicy;
+
+  constructor(policy: FolderPolicy) {
+    this.#policy = policy;
+  }
+
+  get folder(): string {
+    return this.#policy.folder;
+  }
+
+  resolve(path: string, access: "read" | "write"): Promise<string> {
+    return this.#policy.resolve(path, access);
+  }
+
+  replace(policy: FolderPolicy): void {
+    this.#policy = policy;
+  }
 }
 
 function withChanges(snapshot: TaskSnapshot, changes: Changes): TaskSnapshot {
@@ -342,6 +392,51 @@ function adding(list: readonly string[], more: readonly string[] | undefined): r
 
 function steering(inbox: TaskInboxLines | undefined, line: string): TaskInboxLines {
   return { steer: [...(inbox?.steer ?? []), line], followUp: inbox?.followUp ?? [] };
+}
+
+/** What an Allow of `path` grants: its `folder` (#folderFor's), else the path alone. */
+function grantOf(path: string, access: "read" | "write", folder: string | undefined): FolderGrant {
+  return { path: folder ?? path, access: access === "write" ? "read-write" : "read" };
+}
+
+function holds(grants: readonly FolderGrant[], grant: FolderGrant): boolean {
+  return grants.some((each) => each.path === grant.path && each.access === grant.access);
+}
+
+/** What a run is told of a grant its chat's level made, where an answer says the owner allowed it. */
+function grantedLine({ path, access }: FolderGrant): string {
+  return `${access === "read" ? "Read" : "Read-write"} access to ${path} is allowed now. Try again.`;
+}
+
+/**
+ * What `level` makes of an action the owner would be asked about: null to let it through (Full
+ * Access, or an allow from Approve for Me's `review`), else what the card's question carries:
+ * nothing under Ask for Approval, the review's reason under Approve for Me.
+ */
+async function levelAnswer(
+  level: PermissionLevel,
+  review: () => Promise<ReviewVerdict>,
+): Promise<{ readonly review?: ReviewReason } | null> {
+  if (level === "full") return null;
+  if (level === "ask") return {};
+  const verdict = await review();
+  return verdict.allow ? null : { review: verdict.reason };
+}
+
+/** What the log says of an action Approve for Me's review decided. */
+function actionHead(action: ReviewedAction): string {
+  switch (action.kind) {
+    case "start":
+      return `the start in ${action.folder}`;
+    case "path":
+      return `${action.access} access to ${action.path}`;
+    case "fetch":
+      return `a fetch from ${action.host}`;
+    case "command":
+      return "a command";
+    case "mcp":
+      return `${action.tool} on the MCP server ${action.server}`;
+  }
 }
 
 /** A call's step as the snapshot names it: its path, url, pattern, glob or query, else its JSON. */
@@ -568,6 +663,9 @@ export class TaskManager {
   readonly #progress: ((snapshot: TaskSnapshot) => void) | undefined;
   readonly #searcher: (charge: UsageSink) => WebSearcher | undefined;
   readonly #bash: Omit<BashJobsOptions, "onChange">;
+  readonly #permissions: (chat: TaskChat) => Promise<PermissionLevel>;
+  /** Aborted once the server stops, and a start's review with it. */
+  readonly #stopping = new AbortController();
   /** The commands the owner allowed for good. */
   readonly #allowed: AllowedCommands;
   /** mcp.json, where Always Allow This Tool goes. */
@@ -579,7 +677,6 @@ export class TaskManager {
   #loaded: Promise<void> | null = null;
   #starts: Promise<unknown> = Promise.resolve();
   #guards: Omit<FolderPolicyOptions, "folder" | "grants"> | null = null;
-  #stopped = false;
 
   constructor(options: TaskManagerOptions) {
     this.#dataHome = options.dataHome;
@@ -594,6 +691,7 @@ export class TaskManager {
     this.#progress = options.progress;
     this.#searcher = options.searcher ?? roleSearcher;
     this.#bash = options.bash ?? {};
+    this.#permissions = options.permissions ?? (async () => this.#settings().permissions);
     this.#allowed = new AllowedCommands(join(this.#root, ALLOWED_COMMANDS_FILE), this.#now);
     this.#mcpFile = new McpFile(options.dataHome);
     this.#skills = new OwnerSkills(options.dataHome);
@@ -621,7 +719,8 @@ export class TaskManager {
       ({ snapshot }) => isEnded(snapshot.status) && snapshot.reported !== true,
     );
     void (async () => {
-      for (const task of unreported) if (!this.#stopped) await this.#reportEnd(task);
+      for (const task of unreported)
+        if (!this.#stopping.signal.aborted) await this.#reportEnd(task);
     })();
   }
 
@@ -630,7 +729,7 @@ export class TaskManager {
    * killed, which that run then hears of, and every MCP server closed.
    */
   async stop(): Promise<void> {
-    this.#stopped = true;
+    this.#stopping.abort();
     for (const close of [...this.#streams]) close();
     for (const task of this.#tasks.values()) task.run?.leave.abort();
     await this.#starts;
@@ -1147,7 +1246,7 @@ export class TaskManager {
       }
     }
     const skills = await this.#named(input.skills ?? []);
-    const runs = await insideAny(place, settings.folders);
+    const inside = await insideAny(place, settings.folders);
     const { profile } = input;
     let model: TaskModel;
     try {
@@ -1164,6 +1263,10 @@ export class TaskManager {
     }
     const id = newTaskId();
     const dir = join(this.#root, id);
+    // A start review's spend is the task's.
+    const meter = new UsageMeter(model);
+    const asked = inside ? null : await this.#startQuestion(id, origin, brief, model, meter);
+    const runs = asked === null;
     const snapshot: TaskSnapshot = {
       v: 1,
       id,
@@ -1174,14 +1277,14 @@ export class TaskManager {
       model,
       grants: [],
       spendPauseUsd: settings.spendPauseUsd,
-      spentUsd: 0,
+      spentUsd: meter.spentUsd(),
       files: { read: [], written: [] },
       web: ASK_EACH_SITE,
       ...(profile === undefined ? {} : { profile }),
       ...(skills.length === 0 ? {} : { skills }),
-      ...(runs ? {} : { pending: { kind: "start" } }),
+      ...(asked === null ? {} : { pending: asked }),
     };
-    const equipped = runs ? this.#equip(id, model, new UsageMeter(model)) : null;
+    const equipped = runs ? this.#equip(id, model, meter) : null;
     try {
       await openTaskStore(dir).append({ type: "brief", brief });
       await writeSnapshot(dir, snapshot);
@@ -1192,6 +1295,74 @@ export class TaskManager {
     const task = this.#track(dir, snapshot);
     if (equipped !== null) this.#launch(task, equipped);
     return task.snapshot;
+  }
+
+  /**
+   * What a start outside assistant.folders asks the owner, or null when its chat's level lets it
+   * run: Full Access, or Approve for Me's review.
+   */
+  async #startQuestion(
+    id: string,
+    origin: TaskChat,
+    brief: TaskBrief,
+    model: TaskModel,
+    meter: UsageMeter,
+  ): Promise<Extract<TaskPending, { readonly kind: "start" }> | null> {
+    const action: ReviewedAction = { kind: "start", folder: brief.folder };
+    const why = await levelAnswer(await this.#levelOf(origin), () =>
+      withUsageScope({ source: "task", session: id }, () =>
+        this.#review({ id, brief, model }, meter, action, this.#stopping.signal),
+      ),
+    );
+    return why === null ? null : { kind: "start", ...why };
+  }
+
+  /** The level `chat` has now; `ask` when it can't be read, which lets nothing more through. */
+  async #levelOf(chat: TaskChat | undefined): Promise<PermissionLevel> {
+    if (chat === undefined) return "ask";
+    try {
+      return await this.#permissions(chat);
+    } catch (error) {
+      logger.warning(
+        `Chat ${chat.id}'s permission level wasn't read, so its task asks: ${errorText(error)}`,
+      );
+      return "ask";
+    }
+  }
+
+  /**
+   * Approve for Me's review of `action`, on the task's own model and billed through `meter`: an
+   * allow, or why the card asks. One that fails asks, as `failed`.
+   */
+  async #review(
+    task: Pick<TaskSnapshot, "id" | "brief" | "model" | "external">,
+    meter: UsageMeter,
+    action: ReviewedAction,
+    signal: AbortSignal,
+  ): Promise<ReviewVerdict> {
+    const { id, brief, model } = task;
+    let verdict: ReviewVerdict;
+    try {
+      // `charge`, never `tap`: a review is no worker request, and its size isn't the context's.
+      const mind = this.#createMind("assistant", { ...model, tap: meter.charge });
+      const prompt = reviewPrompt({ brief, external: task.external === true, action });
+      verdict = parseReview(await completeText(mind, { system: REVIEW_SYSTEM, prompt, signal }));
+    } catch (error) {
+      logger.warning(
+        `Task ${id}: Approve for Me couldn't review ${actionHead(action)}, so it asks: ${errorText(error)}`,
+      );
+      return { allow: false, reason: "failed" };
+    }
+    logger.info(
+      `Task ${id}: Approve for Me ${verdict.allow ? "allowed" : `asks about (${verdict.reason})`} ${actionHead(action)}`,
+    );
+    return verdict;
+  }
+
+  /** #review for an action of `run`'s, which its Stop or the server's stop aborts. */
+  #reviewIn(task: Task, run: Run, action: ReviewedAction): Promise<ReviewVerdict> {
+    const signal = AbortSignal.any([run.cancel.signal, run.leave.signal]);
+    return this.#review(task.snapshot, run.meter, action, signal);
   }
 
   /**
@@ -1337,14 +1508,10 @@ export class TaskManager {
     if (answer === "always" && access === "write" && folder !== undefined) {
       await this.#addFolder(folder);
     }
-    const grant: FolderGrant = {
-      path: folder ?? path,
-      access: access === "write" ? "read-write" : "read",
-    };
+    const grant = grantOf(path, access, folder);
     const { grants } = task.snapshot;
-    const known = grants.some((each) => each.path === grant.path && each.access === grant.access);
     return {
-      grants: known ? grants : [...grants, grant],
+      grants: holds(grants, grant) ? grants : [...grants, grant],
       ...tell(`The owner allowed ${grant.access} access to ${grant.path}. Try again.`),
     };
   }
@@ -1451,13 +1618,14 @@ export class TaskManager {
       settled: Promise.resolve(),
       asked: null,
       refused: null,
+      full: false,
       last: null,
       calls: [],
       served: new Set(),
     };
     task.meter = meter;
     task.run = run;
-    if (this.#stopped) run.leave.abort();
+    if (this.#stopping.signal.aborted) run.leave.abort();
     run.settled = this.#follow(task, run, mind);
   }
 
@@ -1479,11 +1647,16 @@ export class TaskManager {
 
   async #request(task: Task, run: Run, mind: Mind): Promise<TaskRequest> {
     const { id, brief, grants, spendPauseUsd } = task.snapshot;
-    const policy = this.#policy(brief.folder, this.#grants(grants));
-    await mkdir(await policy.resolve(brief.folder, "write"), { recursive: true });
+    const guard = new RunGuard(this.#policy(brief.folder, this.#grants(grants)));
+    await mkdir(await guard.resolve(brief.folder, "write"), { recursive: true });
     const web = webOf(task.snapshot).mode !== "off";
     // Asked at each call and redirect, so an approval reaches the tools without making them again.
-    const site = { allows: (host: string) => allows(webOf(task.snapshot), host) };
+    const site = {
+      allows: (host: string) => {
+        const access = webOf(task.snapshot);
+        return allows(access, host) || (run.full && !access.denied.includes(host));
+      },
+    };
     const search = web ? this.#searcher(run.meter.charge) : undefined;
     const commands = this.offersCommands();
     if (commands) task.jobs ??= await this.#openCommands(task);
@@ -1494,11 +1667,11 @@ export class TaskManager {
       folder: brief.folder,
       requested: task.snapshot.skills ?? [],
     });
-    const named = await taskSkills(skills, policy, this.#settings().contextTokens);
+    const named = await taskSkills(skills, guard, this.#settings().contextTokens);
     logSkills(id, skills, named);
-    const mcp = await this.#mcpOf(task, run, policy);
+    const mcp = await this.#mcpOf(task, run, guard);
     const tools = [
-      ...createTaskTools(policy, {
+      ...createTaskTools(guard, {
         ...(web ? { web: site } : {}),
         ...(search === undefined ? {} : { search }),
         ...(commands && task.jobs !== null ? { bash: task.jobs } : {}),
@@ -1507,7 +1680,7 @@ export class TaskManager {
       // Last, so the built-ins keep their place in the provider's prompt cache.
       ...(mcp?.tools ?? []),
     ];
-    const contextFiles = await loadContextFiles(brief.folder, this.#home, policy);
+    const contextFiles = await loadContextFiles(brief.folder, this.#home, guard);
     const left = run.leave.signal;
     return {
       id,
@@ -1548,7 +1721,7 @@ export class TaskManager {
       gate: async (call) => this.#gate(task, run, call),
       limits: { contextTokens: this.#settings().contextTokens, spendPauseUsd },
       compaction: { system: COMPACTION_SYSTEM, instructions: COMPACTION_INSTRUCTIONS },
-      pauseOnRefused: true,
+      pauseOnRefused: (refused) => this.#refusedAsks(task, run, guard, refused),
       // A run that was left takes no ends: they wait in runs.json for the run that resumes it.
       ...(task.jobs === null ? {} : { background: task.jobs.forRun(left) }),
       signal: run.cancel.signal,
@@ -1559,7 +1732,7 @@ export class TaskManager {
    * The task's MCP servers, started by its first run; null when the run was stopped or left as
    * they started, or they couldn't be, and it goes on without them.
    */
-  async #mcpOf(task: Task, run: Run, guard: FolderPolicy): Promise<McpSession | null> {
+  async #mcpOf(task: Task, run: Run, guard: PathGuard): Promise<McpSession | null> {
     if (task.mcp !== null) return task.mcp;
     const { id } = task.snapshot;
     // A server stuck starting, or an npx download, must not hold up a Stop or the server's stop.
@@ -1598,7 +1771,7 @@ export class TaskManager {
 
   /**
    * Asks the owner, before a call starts, for each site, command and MCP call the task may not
-   * make yet.
+   * make yet, unless its chat's level lets the call through.
    */
   async #gate(task: Task, run: Run, call: MindToolCall): Promise<TaskGateDecision> {
     const mcp = task.mcp?.toolOf(call.name);
@@ -1610,9 +1783,9 @@ export class TaskManager {
 
   /**
    * Each call to an MCP server's tool waits on the task's card, unless the owner always allows that
-   * tool: not under No Web, nor in a task that has read outside content, which could have talked
-   * the worker into the call. mcp.json is read at each call, so a server turned off since the task
-   * started gets no more.
+   * tool, or the chat's level lets it through: neither under No Web, and the owner's Always not in
+   * a task that has read outside content, which could have talked the worker into the call.
+   * mcp.json is read at each call, so a server turned off since the task started gets no more.
    */
   async #gateMcp(
     task: Task,
@@ -1634,9 +1807,18 @@ export class TaskManager {
       };
     }
     if (task.mcpOnce.some((each) => each.call === call.id && each.key === key)) return null;
-    if (standing === "always" && webOf(snapshot).mode !== "off" && snapshot.external !== true) {
-      return null;
-    }
+    const noWeb = webOf(snapshot).mode === "off";
+    if (standing === "always" && !noWeb && snapshot.external !== true) return null;
+    const action: ReviewedAction = {
+      kind: "mcp",
+      server,
+      tool,
+      arguments: call.arguments,
+      ...(hint === undefined ? {} : { hint }),
+    };
+    const level = noWeb ? "ask" : await this.#levelOf(snapshot.chat);
+    const why = await levelAnswer(level, () => this.#reviewIn(task, run, action));
+    if (why === null) return null;
     const args = cardArguments(call.arguments);
     if (args === null) return { block: MCP_CROWDED };
     run.asked = {
@@ -1647,25 +1829,39 @@ export class TaskManager {
       key,
       args,
       ...(hint === undefined ? {} : { hint }),
+      ...why,
     };
     return { pause: `run ${tool} on the MCP server ${server}` };
   }
 
-  #gateSite(task: Task, run: Run, call: MindToolCall): TaskGateDecision {
+  async #gateSite(task: Task, run: Run, call: MindToolCall): Promise<TaskGateDecision> {
     // Null: the tool refuses the call whatever the owner says.
     const host = webFetchHost(call.arguments);
     if (host === null) return null;
-    const web = webOf(task.snapshot);
-    if (web.denied.includes(host)) return { block: `The owner refused fetching from ${host}.` };
-    if (allows(web, host)) return null;
-    run.asked = { kind: "fetch", host };
+    if (webOf(task.snapshot).denied.includes(host)) {
+      return { block: `The owner refused fetching from ${host}.` };
+    }
+    const level = await this.#levelOf(task.snapshot.chat);
+    // Its redirects too, which the tool asks `allows` about.
+    run.full = level === "full";
+    if (run.full || allows(webOf(task.snapshot), host)) return null;
+    const url = typeof call.arguments.url === "string" ? call.arguments.url : host;
+    const why = await levelAnswer(level, () =>
+      this.#reviewIn(task, run, { kind: "fetch", url, host }),
+    );
+    if (why === null) {
+      await this.#change(task, this.#answerSite(task, host, "once"), true);
+      return null;
+    }
+    run.asked = { kind: "fetch", host, ...why };
     return { pause: `fetch from ${host}` };
   }
 
   /**
-   * A command runs once the owner allows it on the task's card: this call alone, or for good in the
-   * task's folder. A command allowed for good asks again in a task that has read outside content,
-   * which could have talked the worker into changing what that command runs.
+   * A command runs once the owner allows it on the task's card, this call alone or for good in the
+   * task's folder, or the chat's level lets it through. A command allowed for good asks again in a
+   * task that has read outside content, which could have talked the worker into changing what
+   * that command runs.
    */
   async #gateCommand(task: Task, run: Run, call: MindToolCall): Promise<TaskGateDecision> {
     // Null: the tool refuses the call whatever the owner says.
@@ -1678,14 +1874,71 @@ export class TaskManager {
     if (task.once.some((each) => each.call === call.id && each.command === command)) return null;
     const granted = await this.#allowed.allows(await placeOf(snapshot.brief.folder), command);
     if (granted && snapshot.external !== true) return null;
+    const action: ReviewedAction = { kind: "command", command, folder: snapshot.brief.folder };
+    const why = await levelAnswer(await this.#levelOf(snapshot.chat), () =>
+      this.#reviewIn(task, run, action),
+    );
+    if (why === null) return null;
     run.asked = {
       kind: "command",
       call: call.id,
       command,
       timeout: bashTimeoutSeconds(call.arguments),
       ...(granted ? { granted: true } : {}),
+      ...why,
     };
     return { pause: "run a command" };
+  }
+
+  /**
+   * Whether a batch's refused paths wait on the owner. Under Full Access each is granted as Allow
+   * Once would grant it, and under Approve for Me each its review allows, and the run goes on, told
+   * so; the first one the review asks about pauses it, with those allowed before it granted.
+   */
+  async #refusedAsks(
+    task: Task,
+    run: Run,
+    guard: RunGuard,
+    refused: readonly TaskRefusal[],
+  ): Promise<boolean> {
+    const level = await this.#levelOf(task.snapshot.chat);
+    if (level === "ask") return true;
+    const granted: FolderGrant[] = [];
+    for (const { path, access } of refused) {
+      const grant = grantOf(path, access, this.#folderFor(path));
+      if (holds(granted, grant)) continue;
+      const action: ReviewedAction = { kind: "path", path, access, grants: grant.path };
+      const why = await levelAnswer(level, () => this.#reviewIn(task, run, action));
+      if (why !== null) {
+        run.refused = { path, access, ...why };
+        if (granted.length > 0) await this.#grantMidRun(task, guard, granted);
+        return true;
+      }
+      granted.push(grant);
+    }
+    return !(await this.#grantMidRun(task, guard, granted));
+  }
+
+  /**
+   * Grants `grants` to the task and its running guard, each with the line that tells the worker;
+   * false, granting nothing, when its policy can't take them.
+   */
+  async #grantMidRun(
+    task: Task,
+    guard: RunGuard,
+    grants: readonly FolderGrant[],
+  ): Promise<boolean> {
+    const { grants: before, brief, inbox } = task.snapshot;
+    const all = [...before, ...grants.filter((grant) => !holds(before, grant))];
+    try {
+      guard.replace(this.#policy(brief.folder, this.#grants(all)));
+    } catch (error) {
+      logger.warning(`Task ${task.snapshot.id} asks instead: ${errorText(error)}`);
+      return false;
+    }
+    const lines = grants.reduce((lines, grant) => steering(lines, grantedLine(grant)), inbox);
+    await this.#change(task, { grants: all, inbox: lines }, true);
+    return true;
   }
 
   /**
@@ -1830,7 +2083,7 @@ export class TaskManager {
       );
       return;
     }
-    if (!this.#stopped) await this.#change(task, { reported: true }, true);
+    if (!this.#stopping.signal.aborted) await this.#change(task, { reported: true }, true);
   }
 
   #stream(task: Task, after: number): ReadableStream<Uint8Array> {

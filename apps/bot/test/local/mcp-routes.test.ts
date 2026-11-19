@@ -69,6 +69,7 @@ beforeEach(() => {
     bash: true,
     spendPauseUsd: 1,
     contextTokens: 128_000,
+    permissions: "ask",
   };
   logs = captureLogs();
   setEnv("ASSISTANT_PROVIDER", "openrouter");

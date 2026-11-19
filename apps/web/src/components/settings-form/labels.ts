@@ -2,7 +2,7 @@
 // groups, option labels, flags and why a value is refused.
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
-import { DISPLAY_LABELS, REPLY_MODE_LABELS } from "@/features/chats/labels";
+import { DISPLAY_LABELS, PERMISSION_LABELS, REPLY_MODE_LABELS } from "@/features/chats/labels";
 import type { RoleId } from "@/lib/providers";
 
 /** Each row's title. */
@@ -61,6 +61,7 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "assistant.research.model": msg`Research Task Model`,
   "assistant.folders": msg`Assistant Folders`,
   "assistant.bash": msg`Assistant Commands`,
+  "assistant.permissions": msg`Task Permissions`,
   "assistant.spendPauseUsd": msg`Assistant Spend Pause`,
   "assistant.contextTokens": msg`Assistant Context`,
   "assistant.search.provider": msg`Web Search Provider`,
@@ -140,6 +141,7 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "assistant.search.model": msg`Which index the account searches. Each search costs under a cent.`,
   "assistant.folders": msg`Folders every task may read and write besides its own, one per line.`,
   "assistant.bash": msg`On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. macOS and Linux only.`,
+  "assistant.permissions": msg`How much her tasks ask you, until a chat picks its own level beside its message box. Ask for Approval asks about every folder outside yours, site, command and MCP call you haven't allowed. Approve for Me has the task's own model review each of those first, billed to the task, and asks only about the risky ones. Full Access asks about none, so commands run as you unasked. At every level your Denies, spend pauses and No Web hold, and tasks never touch Eidolon's data, your keys or a .git folder with their file tools. Default Ask for Approval.`,
   "assistant.spendPauseUsd": msg`A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1.`,
   "assistant.contextTokens": msg`The most context a task's requests carry, in tokens. Default 128000.`,
   "chats.display": msg`How much of her tasks each chat shows, until the chat picks its own with /focus, /normal or /verbose. Focus hides task cards, and Verbose opens her newest running task's steps and, on a call, has her say how far a task's plan has got, which costs a reply each time. Default Normal.`,
@@ -174,6 +176,7 @@ export const SETTING_OPTION_LABELS: Readonly<
   },
   "chat.replyMode": REPLY_MODE_LABELS,
   "chats.display": DISPLAY_LABELS,
+  "assistant.permissions": PERMISSION_LABELS,
 };
 
 /** The headings a card's rows are grouped under. */

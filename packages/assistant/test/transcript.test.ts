@@ -255,8 +255,14 @@ describe("task.json", () => {
           command: "npm test",
           timeout: 1800,
           granted: true,
+          review: "send",
         },
         external: true,
+      },
+      {
+        ...snapshot("t1"),
+        status: "awaiting-approval",
+        pending: { kind: "start", review: "failed" },
       },
     ];
     for (const value of snapshots) {
@@ -335,6 +341,8 @@ describe("task.json", () => {
       { ...snapshot("t1"), pending: { kind: "path", path: "/x", access: "read-write" } },
       { ...snapshot("t1"), pending: { kind: "path", path: "/x/y", access: "read", folder: 7 } },
       { ...snapshot("t1"), pending: { kind: "fetch" } },
+      { ...snapshot("t1"), pending: { kind: "fetch", host: "a.b", review: "risky" } },
+      { ...snapshot("t1"), pending: { kind: "start", review: null } },
       { ...snapshot("t1"), pause: { reason: "bored", detail: "" } },
       { ...snapshot("t1"), pause: { reason: "spend" } },
       { ...snapshot("t1"), todo: [{ text: "x", status: "doing" }] },

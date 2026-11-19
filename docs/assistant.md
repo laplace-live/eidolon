@@ -6,7 +6,8 @@ owner adds, while she reports the result as her own. A task is a worker on a mod
 with no persona, that works through tools until it can report. In the local app she starts one
 with `start_task` when the owner asks her in a chat, or on a call in a chat of hers alone, naming
 its kind, whose model it runs on ([Kinds](#kinds)); the task's card in that chat takes the owner's
-answers, a command's and an MCP call's included, and she reports there when it ends. While it
+answers, a command's and an MCP call's included, unless the chat's permission level lets the action
+through ([Permission levels](#permission-levels)), and she reports there when it ends. While it
 runs, she says how it is going from a status block of her tasks that each of her turns rebuilds,
 reads its detail with `check_task`, passes the owner's changes on with `steer_task`, and stops it
 with `stop_task`. The owner chooses how much of it each chat shows ([Display](#display)).
@@ -23,6 +24,8 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
 | `web_search`, and OpenRouter's searcher | `packages/assistant/src/tools/web-search.ts`; `packages/providers/src/search.ts` |
 | the `assistant` role and its kinds' roles, `createMind("assistant")`, `selectTask` | `packages/providers`, `packages/engine/src/mind` |
 | the app's tasks, `TaskManager` | `apps/bot/src/local/tasks/manager.ts` |
+| Approve for Me's review: its prompt and its verdict; a one-off request through a task's mind | `packages/assistant/src/review.ts`; `completeText` in `packages/engine/src/task/once.ts` |
+| a chat's permission level: its `settings` event, the runner's `permissionsOf`, and its picker | `packages/chat` (`permissionsOf`); `apps/bot/src/local/chats/runner.ts`; `apps/web/src/features/chats/permissions-picker.tsx` |
 | the commands allowed for good; mcp.json's one writer | `apps/bot/src/local/tasks/commands.ts`; `tasks/mcp.ts` |
 | `start_task`, her hint and her nudges | `apps/bot/src/local/tasks/tool.ts` |
 | `steer_task`, `stop_task` and `check_task` | `apps/bot/src/local/tasks/her-tools.ts` |
@@ -60,12 +63,18 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
   throws into the loop.
 - **A command and an MCP server run as the owner, outside `FolderPolicy`,** so each command and
   each MCP call waits on the task's card first, unless the owner allowed that exact command in
-  that folder, or always allows that tool, for good. Such a grant stops applying once the task has
+  that folder, or always allows that tool, for good, or the chat's permission level lets it
+  through ([Permission levels](#permission-levels)). Such a grant stops applying once the task has
   read outside content (a page `web_fetch` got, a redirect it stopped at included, `web_search`'s
   results, any MCP call's result), which could have talked the worker into the call; an MCP grant
-  doesn't apply under No Web either. A server's tool descriptions, which reach every request, and
-  what a command prints or downloads, don't count. A server's `readOnlyHint` or `destructiveHint`
-  is shown as its claim and never skips the card.
+  doesn't apply under No Web either, and no level lets an MCP call through there. A server's tool
+  descriptions, which reach every request, and what a command prints or downloads, don't count. A
+  server's `readOnlyHint` or `destructiveHint` is shown as its claim and never skips the card by
+  itself.
+- **Only the owner sets a permission level:** a chat's from its picker or its Chat Settings
+  (`PATCH chats/:id`, under `/api/local`, which a listed origin never reaches), the app's
+  `assistant.permissions` in Settings. Her tools, a task and production never set one, and a
+  level that can't be read asks.
 - **A command, and an MCP server's process, get a cut environment** (`shellEnv`, `shell.ts`):
   `HOME`, `USER`, `SHELL`, `LANG`, `TMPDIR`, every `LC_*`, `SSH_AUTH_SOCK` and the proxy variables
   in both cases, `TERM=dumb`, and a `PATH` without a folder the task may write (an MCP server's as
@@ -138,7 +147,10 @@ Kind card.
   tokens, thinking included, where her chat's stops at 4,096, so one long `write` fits; elsewhere
   no cap is sent and the provider's default applies.
 - **`assistant.folders`** are granted read-write to every task, besides its own folder. A task she
-  starts in one runs at once; anywhere else it asks the owner first.
+  starts in one runs at once; anywhere else it asks the owner first, unless its chat's level lets
+  it start ([Permission levels](#permission-levels)).
+- **`assistant.permissions`** (default `ask`) is the level of a chat that picks none of its own
+  ([Permission levels](#permission-levels)).
 - **`assistant.bash`** (default on) offers tasks `bash`, `bash_output` and `bash_kill`, on macOS
   and Linux only, since a kill takes a command's process group (`bashOffered`); the manager's
   `offersCommands()` is both. Off, a run made after leaves them out, and the gate refuses a command
@@ -539,7 +551,8 @@ What it adds to pi:
     the path alone is granted; a `fetch` with its host; a `command` with its `call`, the
     `command`, its `timeout` in seconds and `granted` when it is allowed for good but asks
     anyway; or an `mcp` call with its `server`, `tool`, `call`, `key`, `args` and the server's
-    `hint`) and `pause` (the latest pause's reason and detail);
+    `hint`; each with `review` when Approve for Me's review asked, naming why) and `pause` (the
+    latest pause's reason and detail);
   - `profile`, the kind she named it, absent for `other` ([Kinds](#kinds));
   - `skills`, the owner's skills she named, which each run's prompt carries ([Skills](#skills));
   - `bash: { denied }`, the commands the owner refused it; `background`, its commands running in
@@ -590,8 +603,8 @@ a group or realtime call, `/call` and production's chat endpoint never offer the
   the hint is. The tool's description also names what a task can't do yet, so that she says so and
   starts nothing: open a file, a page or an app to show the owner, or look at an image; and while
   commands are off (`offersCommands()`, read at each turn), run a program or a command, or delete,
-  move or rename a file. With them on, it says a task runs commands too, each after the owner's
-  Allow on the card, "（对方选过始终允许的除外）".
+  move or rename a file. With them on, it says a task runs commands too, and how they are allowed
+  at the chat's level, as the hint's middle does below.
 - **It answers at once:** `{ task, status }`, status `running` or `awaiting-approval`, stored as
   her `tool-result` with `stage: "started"`. Her next round reads it as it is, and so does each
   later view of hers until the `final` replaces it ([chat.md](chat.md#her-view-viewof)), so her
@@ -614,7 +627,12 @@ a group or realtime call, `/call` and production's chat endpoint never offer the
   middle reads "……上网查资料，还能运行命令和程序（跑测试、装依赖、用 git、删除或移动文件），都是你
   自己动手。……每条命令运行前都要对方在聊天里的任务卡片上点允许（对方选过始终允许的除外）。不过现在
   你还不能打开文件、网页或软件给对方看，也看不了图片，对方要的话就直说，告诉对方文件在哪，……"
-  (`assistantPromptHint` in `tool.ts`).
+  (`assistantPromptHint` in `tool.ts`). That approval sentence, and the description's, follow the
+  chat's level as the turn starts (`TaskAbilities.permissions`): under `auto`, "命令会先自动审一遍，
+  看着没风险的直接运行，有风险的运行前要对方在聊天里的任务卡片上点允许。"; under `full`,
+  "这个聊天里对方给了完全权限，命令运行前不用对方点允许。" (the description's: "……有风险的要对方在
+  聊天里的任务卡片上点允许才会运行。" and "……命令不用对方点允许，直接运行。"). Without commands
+  there is nothing of theirs to approve, and the texts are the same at every level.
 - **Deleting a chat** stops its live tasks, after any `start_task` call the manager is still
   answering.
 
@@ -797,7 +815,8 @@ never resumes a task. `app.onStop` stops it before the chat runner shuts down.
   (`A task is already working in <folder>: <goal>.`); starts are made one at a time. A file is
   refused 400 `invalid-path` (`<folder> can't be a task's folder: it is a file`), and a path under
   one with the stat's ENOTDIR, since Always at the start would add it to `assistant.folders`. Inside `assistant.folders` the task runs at
-  once; anywhere else it is `awaiting-approval`. It runs on the account and model `selectTask`
+  once; anywhere else it is `awaiting-approval`, unless its chat's level lets it start
+  ([Permission levels](#permission-levels)). It runs on the account and model `selectTask`
   picks for its kind ([Kinds](#kinds)); `deliverable` defaults to the goal and `check` to "Check
   the deliverable against the goal".
 - **A run,** one per task, holds the lock `task:<id>`:
@@ -812,7 +831,9 @@ never resumes a task. `app.onStop` stops it before the chat runner shuts down.
     skills;
   - `pauseOnRefused`, and a gate that pauses, before its `tool-start`, a `web_fetch` to a site not
     yet allowed, a command and an MCP call ([Approvals](#approvals)), so the call is asked about
-    again on resume;
+    again on resume, unless the chat's level lets them through: `pauseOnRefused` is then the
+    manager's, which grants a refused path and queues the line that says so, and the run goes on
+    without a pause;
   - `background`, the task's `BashJobs` (`forRun`), whenever it has one, commands off included,
     so a run still waits for the commands it started;
   - it makes the folder if it is missing, and grants `assistant.folders` as they stand plus the
@@ -866,11 +887,73 @@ never resumes a task. `app.onStop` stops it before the chat runner shuts down.
 | Event | Status |
 | --- | --- |
 | a start in `assistant.folders`, an Allow, a path or site answer, Continue | `running` |
-| a start anywhere else | `awaiting-approval`, `pending: start` |
+| a start anywhere else, unless its chat's level lets it start | `awaiting-approval`, `pending: start` |
 | a spend, stall or unpriced pause | `paused`, with `pause` |
-| a refused path; a site not yet allowed; a command or an MCP call | `paused`, with `pause` and `pending` (`path`, `fetch`, `command` or `mcp`) |
+| a refused path; a site not yet allowed; a command or an MCP call, its level letting none of them through | `paused`, with `pause` and `pending` (`path`, `fetch`, `command` or `mcp`) |
 | the run ends | `succeeded`, `failed` or `cancelled`, with `outcome` and `endedAt` |
 | the server stops mid-run | `interrupted` |
+
+### Permission levels
+
+How much a task asks the owner on its card: its chat's level, the last `settings` event that sets
+`permissions` (`permissionsOf`), else the app's `assistant.permissions` (`ASSISTANT_PERMISSIONS`,
+default `ask`, [personas.md](personas.md#settingsyaml)). The owner sets the chat's with the picker
+under its message box, shown in a chat of hers alone while Assistant Mode is on, or with Task
+Permissions in its Chat Settings; the app's is Task Permissions on Settings → Assistant Mode. The
+manager asks for it (`TaskManagerOptions.permissions`, the runner's `permissionsOf`, which keeps
+each chat's own as its log last said and as it last wrote it) at each question a task would ask,
+so a change reaches a running task at its next one; a question already on a card stays there
+until the owner answers it. A level that can't be read asks.
+
+| A task would ask about | `ask` | `auto`, Approve for Me | `full`, Full Access |
+| --- | --- | --- | --- |
+| its start, outside `assistant.folders` | asks | the review decides | starts |
+| a path outside its grants | asks | the review decides; an allow grants what Allow Once would | granted, as Allow Once would |
+| a site not yet allowed, under Ask for Each Site | asks | the review decides; an allow adds the site, as Allow Once does | any site, its redirects too |
+| a command not allowed for good, or one in a task that has read outside content | asks | the review decides | runs |
+| an MCP call not always allowed, or one in a task that has read outside content | asks | the review decides | runs |
+
+- **What no level changes:** what `FolderPolicy` denies (the data home, the app root, the owner's
+  keys, the `.env`, a git directory to write, home), commands off, a server turned off, the
+  owner's Denies in the task (`bash.denied`, `mcp.denied`, `web.denied`), No Web, which leaves out
+  `web_fetch` and `web_search` and whose MCP calls always ask, and the spend, stall and unpriced
+  pauses. The owner's grants still let their calls through unreviewed: a command allowed for good,
+  a tool always allowed, a site allowed, each as [Approvals](#approvals) says.
+- **A refused path the level allows never pauses the task.** The manager's `pauseOnRefused` grants
+  what Allow Once would (the path's folder, or the path alone), replaces the run's policy
+  (`RunGuard`), and queues a line the worker's next request carries: `Read-write access to <folder>
+  is allowed now. Try again.` Under `auto`, the first path the review asks about pauses the task,
+  those it allowed before it granted.
+- **Full Access runs commands as the owner, unasked:** they can read and change anything the owner
+  can, reach the network, and do what a page talked the worker into. A task's file tools still
+  keep out of what `FolderPolicy` denies.
+
+#### Approve for Me's review
+
+- **What it sees:** `REVIEW_SYSTEM` and one user message (`reviewPrompt`,
+  `packages/assistant/src/review.ts`): the brief and the action, each one line of JSON so that
+  neither can close the other, and whether the task has read outside content (`external`), which
+  makes it stricter about sending data out. An MCP call's arguments follow it, cut past 8,000
+  characters. Never the transcript, a page or a file.
+- **What it answers:** one line of JSON, `{"verdict":"allow"}` or `{"verdict":"ask","risk":…}`, the
+  risk one of `delete`, `outside`, `secrets`, `send`, `publish`, `system`, `download`, `spend` or
+  `unclear` (`parseReview`). An ask with no known risk reads as `unclear`; anything else, a failed
+  request or a reply that never ends, as `failed`, which asks.
+- **Where it runs:** on the task's own account and model, `createMind("assistant", { account,
+  model, tap: meter.charge })`, through the engine's `completeText`: one request, no tools, no
+  retry, under the run's Stop and the server's stop, a start's under the server's stop alone. It
+  is billed as source `task`, the task's id its session, and counted in its spend through
+  `UsageMeter.charge`: a start's review is the first spend the task's snapshot shows.
+- **What it costs:** a short request for each question it decides, on the task's own model; the
+  owner's grants skip it. On the 36 labelled actions of
+  [its benchmark](benchmarks/2026-11-19-approve-for-me/README.md), `deepseek-flash` took a median
+  0.6 s and $0.00006 a review, and Gemini Flash through OpenRouter 2.5 s and $0.0026; both asked
+  about every risky action and let every routine one through.
+- **What the card shows:** `pending.review`, as a line on the card ("Approve for Me asks you: this
+  could send data off this computer."). She never sees it: the status block and `check_task`
+  leave it out.
+- **The log** has a line for each verdict: `Task <id>: Approve for Me allowed a command`, or
+  `Task <id>: Approve for Me asks about (send) a fetch from <host>`.
 
 ### Approvals
 
@@ -884,14 +967,15 @@ the card and the bar always send it, so an answer from a view that shows an earl
 (another tab, a poll behind) is refused 409 `nothing-pending` instead of answering the next one,
 and so is one from a view that showed another folder for the same path.
 
-- **At the start** (`pending: start`):
+- **At the start** (`pending: start`), asked unless the chat's level lets it start
+  ([Permission levels](#permission-levels)):
   - Allow Once runs the task; Always Allow first adds its folder to `assistant.folders`.
   - Deny ends it `cancelled` with `denied: true`, even with Assistant Mode off.
   - The card may pick another account and model first, checked as `createMind` checks it: a
     refused one answers 400 and changes nothing. It may set web access: Ask for Each Site (`ask`),
     Any Site (`any`) or No Web (`off`).
-- **A path** (`pending: path`, from a tool result's `refused`; a denied place, home included, is
-  never asked about):
+- **A path** (`pending: path`, from a tool result's `refused`, when the chat's level doesn't grant
+  it; a denied place, home included, is never asked about):
   - What an Allow grants is decided when the task pauses, and the question names it as
     `pending.folder`: the path itself when it is a folder on disk, else its parent when that is
     one, unless it is home or holds it. Otherwise there is no `folder` and the path alone is
@@ -909,7 +993,10 @@ and so is one from a view that showed another folder for the same path.
     granted alone), or `The owner refused access to <path>.`
 - **A site** (`pending: fetch`): Allow Once adds the host, Allow Any Site sets the mode to `any`,
   and Deny adds the host to `denied`, whose calls the gate then blocks with `The owner refused
-  fetching from <host>.`; a denial outlasts a later Any Site.
+  fetching from <host>.`; a denial outlasts a later Any Site, and every level. The gate reads the
+  chat's level at each `web_fetch` the task hasn't been refused: under Full Access the call, and
+  each redirect it follows, may reach any site, and under Approve for Me a site not yet allowed
+  goes to the review, which sees the whole URL ([Permission levels](#permission-levels)).
 - **A command** (`pending: command`). The gate, in order:
   1. a command the tool refuses anyway (not a string, empty once trimmed, or over 12 KB as JSON)
      is never asked about;
@@ -919,7 +1006,9 @@ and so is one from a view that showed another folder for the same path.
   4. a Run Once for this call and command runs it;
   5. a command allowed for good in the task's folder runs, unless the task has read outside
      content (`external`); then the question carries `granted`, and the card says why it asks;
-  6. otherwise the task pauses, the question carrying the call, the command whole and its timeout,
+  6. under Full Access it runs, and under Approve for Me the review decides, its ask carried as
+     `review`;
+  7. otherwise the task pauses, the question carrying the call, the command whole and its timeout,
      for the card's "Stops at".
 
   Run Once runs that call alone: it is kept in memory, never in `task.json`, and dropped when the
@@ -943,7 +1032,9 @@ and so is one from a view that showed another folder for the same path.
   3. a Run Once for this call and key runs it;
   4. a tool in the server's `alwaysAllow` runs, unless the task is No Web or has read outside
      content;
-  5. otherwise the task pauses, the question carrying the server, the tool, the call, its key, the
+  5. unless the task is No Web, under Full Access it runs, and under Approve for Me the review
+     decides, its ask carried as `review`;
+  6. otherwise the task pauses, the question carrying the server, the tool, the call, its key, the
      server's hint and every top-level argument with its size, shortest first (`mcpArgumentList`).
      Their heads, 300 characters at most, are halved until the list fits 12 KB as JSON, since an
      answer sends it back to a route that takes 16 KB; a call whose argument names and sizes alone
@@ -1208,8 +1299,10 @@ are JSON under 16 KB, but a new skill's, under 512 KB.
 ### Checking her side
 
 The tests script every mind, and `local-smoke` walks tasks in a chat, in each display and on a
-call with a fake mind, then a coding task's skill and commands and two tasks' calls to a fake MCP
-server ([web-app.md](web-app.md#the-browser-smoke-test)). `packages/assistant`'s tests spawn real
+call with a fake mind, then a coding task's skill and commands, two tasks' calls to a fake MCP
+server, and two tasks under the chat's Approve for Me, with a fake review, and Full Access
+([web-app.md](web-app.md#the-browser-smoke-test)). `bun run review-decisions` scores the review
+itself on a real model ([its benchmark](benchmarks/2026-11-19-approve-for-me/README.md)). `packages/assistant`'s tests spawn real
 processes for `bash` and the MCP client, in temporary folders, and kill only what they started.
 Whether a real model follows her hint, her tools' descriptions, the status block and her nudges
 takes billed checks, after a change to any of them.

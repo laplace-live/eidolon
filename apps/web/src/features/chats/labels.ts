@@ -1,4 +1,4 @@
-import type { ChatDisplay, ChatEventOf, ReplyMode } from "@eidolon/chat";
+import type { ChatDisplay, ChatEventOf, PermissionLevel, ReplyMode } from "@eidolon/chat";
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import type { RecorderProblem } from "./use-recorder";
@@ -53,6 +53,20 @@ export const DISPLAY_HELP: Readonly<Record<ChatDisplay, MessageDescriptor>> = {
   focus: msg`Task cards are hidden, but a task that waits for you still shows above the message box. On a call, she still tells you when a task starts, waits for you and ends.`,
   normal: msg`Each task shows as one card that updates as it works. On a call, she tells you when a task starts, waits for you and ends.`,
   verbose: msg`Her newest running task's card also shows its steps as they happen. On a call, she also tells you how far a task's plan has got as it goes, which costs a reply each time.`,
+};
+
+/** Each permission level's name, as a chat's picker, its settings and Settings offer it. */
+export const PERMISSION_LABELS: Readonly<Record<PermissionLevel, MessageDescriptor>> = {
+  ask: msg`Ask for Approval`,
+  auto: msg`Approve for Me`,
+  full: msg`Full Access`,
+};
+
+/** What each level lets her tasks do without you, under its name. */
+export const PERMISSION_HELP: Readonly<Record<PermissionLevel, MessageDescriptor>> = {
+  ask: msg`Her tasks ask you before working outside your folders, visiting a site, running a command or using a tool.`,
+  auto: msg`A review on the task's model lets routine actions through and asks you only about risky ones. Each review bills the task.`,
+  full: msg`Her tasks work in any folder, visit any site and run any command as you, without asking.`,
 };
 
 /** What a toast says once a command has set the chat's display. */

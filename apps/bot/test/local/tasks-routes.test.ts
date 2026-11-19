@@ -159,7 +159,14 @@ beforeEach(() => {
   installSettings();
   work = mkdtempSync(join(tmpdir(), "eidolon-task-routes-"));
   clock = 1_700_000_000_000;
-  settings = { enabled: true, folders: [], bash: true, spendPauseUsd: 1, contextTokens: 128_000 };
+  settings = {
+    enabled: true,
+    folders: [],
+    bash: true,
+    spendPauseUsd: 1,
+    contextTokens: 128_000,
+    permissions: "ask",
+  };
   readSettings = () => settings;
   problem = null;
   minds = new Minds();

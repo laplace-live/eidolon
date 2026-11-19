@@ -19,6 +19,7 @@ export { groupMemory } from "./group.ts";
 export { createMind } from "./mind/index.ts";
 export { estimateTokens } from "./task/context.ts";
 export {
+  completeText,
   runTask,
   type TaskBackground,
   type TaskBrief,
@@ -31,6 +32,7 @@ export {
   type TaskMeter,
   type TaskOutcome,
   type TaskPauseReason,
+  type TaskRefusal,
   type TaskRequest,
   type TaskStore,
   type TaskTool,

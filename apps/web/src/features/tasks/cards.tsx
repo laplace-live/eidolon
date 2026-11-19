@@ -5,7 +5,7 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { CircleAlertIcon, CirclePauseIcon, TriangleAlertIcon } from "lucide-react";
+import { CircleAlertIcon, CirclePauseIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
 import { parseDraft } from "@/components/settings-form/controls";
@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { useLang } from "@/locales/i18n";
 import { approveBody, chosenModel, type ModelChoice } from "./choice";
 import { useDraft } from "./draft";
-import { MCP_HINT_TEXT, pathGrant } from "./labels";
+import { MCP_HINT_TEXT, pathGrant, REVIEW_TEXT } from "./labels";
 import {
   ASSISTANT_SETTINGS,
   CommandText,
@@ -158,6 +158,18 @@ function Frame({
       {note}
       <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
     </div>
+  );
+}
+
+/** Why Approve for Me's review sent this question to you, when it did. */
+function ReviewNote({ pending }: { readonly pending: TaskPending }) {
+  const { i18n } = useLingui();
+  if (pending.review === undefined) return null;
+  return (
+    <p className="flex items-start gap-2 text-xs" data-review={pending.review}>
+      <ShieldCheckIcon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+      <span>{i18n._(REVIEW_TEXT[pending.review])}</span>
+    </p>
   );
 }
 
@@ -333,6 +345,7 @@ function ApprovalPrompt({
           note={note}
           actions={actions}
         >
+          <ReviewNote pending={pending} />
           <p className="text-muted-foreground text-xs">{t`It works in this folder on its own once you allow it. Eidolon makes the folder if it doesn't exist yet.`}</p>
           <Asked>{task.brief.folder}</Asked>
           <ModelChoiceFields
@@ -371,6 +384,7 @@ function ApprovalPrompt({
           note={note}
           actions={actions}
         >
+          <ReviewNote pending={pending} />
           <p className="text-muted-foreground text-xs">{t`It asked for this path, which none of its folders hold.`}</p>
           <Asked>{pending.path}</Asked>
           <p className="wrap-anywhere text-xs">{i18n._(grant.allow)}</p>
@@ -390,6 +404,7 @@ function ApprovalPrompt({
           note={note}
           actions={actions}
         >
+          <ReviewNote pending={pending} />
           <p className="text-muted-foreground text-xs">{t`It asks before it fetches from a site for the first time. Allow Once lets this task use this site until it ends; Deny tells it it can't.`}</p>
           <Asked>{pending.host}</Asked>
           <p className="text-muted-foreground text-xs">{t`Allow Any Site lets this task fetch from any site without asking again.`}</p>
@@ -406,6 +421,7 @@ function ApprovalPrompt({
           note={note}
           actions={actions}
         >
+          <ReviewNote pending={pending} />
           <CommandText command={pending.command} sized />
           <p className="text-muted-foreground text-xs">{t`It runs in this folder:`}</p>
           <Asked>{task.brief.folder}</Asked>
@@ -435,6 +451,7 @@ function ApprovalPrompt({
           note={note}
           actions={actions}
         >
+          <ReviewNote pending={pending} />
           {pending.hint !== undefined && (
             <p className="text-xs">
               {i18n._(MCP_HINT_TEXT[pending.hint])}{" "}

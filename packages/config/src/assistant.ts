@@ -1,12 +1,17 @@
 // Assistant Mode's settings, beside its role's provider and model, which @eidolon/providers resolves
 // with the other roles'.
 import { resolve } from "node:path";
-import { envFlag, envFloat, envInt, envOptional } from "./env.ts";
+import { envChoice, envFlag, envFloat, envInt, envOptional } from "./env.ts";
 import { expandUser } from "./paths.ts";
 import { pyStrip } from "./py.ts";
 
 export const DEFAULT_ASSISTANT_SPEND_PAUSE_USD = 1;
 export const DEFAULT_ASSISTANT_CONTEXT_TOKENS = 128_000;
+
+/** @eidolon/chat's PERMISSION_LEVELS, which a chat's own level overrides. */
+const PERMISSION_LEVELS = ["ask", "auto", "full"] as const;
+export type AssistantPermissions = (typeof PERMISSION_LEVELS)[number];
+export const DEFAULT_ASSISTANT_PERMISSIONS: AssistantPermissions = "ask";
 
 /**
  * What she says a task is when she starts it. Each kind but `other` may have an account and model
@@ -26,6 +31,8 @@ export interface AssistantSettings {
   readonly spendPauseUsd: number;
   /** The context window a task's requests are kept within, in tokens. */
   readonly contextTokens: number;
+  /** How much a task asks the owner, in a chat that picks no level of its own. */
+  readonly permissions: AssistantPermissions;
 }
 
 export function assistantSettings(): AssistantSettings {
@@ -45,5 +52,10 @@ export function assistantSettings(): AssistantSettings {
         ? spendPauseUsd
         : DEFAULT_ASSISTANT_SPEND_PAUSE_USD,
     contextTokens: contextTokens > 0 ? contextTokens : DEFAULT_ASSISTANT_CONTEXT_TOKENS,
+    permissions: envChoice(
+      "ASSISTANT_PERMISSIONS",
+      PERMISSION_LEVELS,
+      DEFAULT_ASSISTANT_PERMISSIONS,
+    ),
   };
 }

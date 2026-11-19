@@ -94,6 +94,17 @@ export function envFlag(name: string, fallback: boolean): boolean {
   return fallback ? !FLAG_OFF.has(raw) : FLAG_ON.has(raw);
 }
 
+/** One of `choices`, in any case; `fallback` when unset or none of them, which warns. */
+export function envChoice<T extends string>(name: string, choices: readonly T[], fallback: T): T {
+  const raw = envOptional(name);
+  if (raw === undefined) return fallback;
+  const choice = choices.find((known) => known === raw.trim().toLowerCase());
+  if (choice !== undefined) return choice;
+  const named = `${choices.slice(0, -1).join(", ")} or ${choices.at(-1)}`;
+  logger.warning(`${name}=${pyRepr(raw)} is not ${named}; using ${fallback}`);
+  return fallback;
+}
+
 export function envStr(name: string, fallback: string): string {
   return envOptional(name) ?? fallback;
 }

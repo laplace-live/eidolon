@@ -8,6 +8,7 @@ import type { TaskBrief, TaskEntry, TaskEntryDraft, TaskOutcome, TaskStore } fro
 import type { McpFailure } from "./mcp/session.ts";
 import type { McpArgument, McpLeftOut } from "./mcp/tools.ts";
 import type { FolderGrant } from "./policy.ts";
+import { REVIEW_REASONS, type ReviewReason } from "./review.ts";
 import type { BackgroundCommand } from "./tools/jobs.ts";
 import { TODO_STATUSES, type TodoItem } from "./tools/todo.ts";
 
@@ -69,7 +70,7 @@ export type TaskProfile = (typeof TASK_PROFILES)[number];
  * What a task waits on the owner for: to start, a path outside its grants, a site, a command, or
  * a call to an MCP server's tool.
  */
-export type TaskPending =
+export type TaskPending = (
   | { readonly kind: "start" }
   | {
       readonly kind: "path";
@@ -107,7 +108,11 @@ export type TaskPending =
       readonly args: readonly McpArgument[];
       /** What the server claims of the tool, which never decides anything. */
       readonly hint?: "read-only" | "destructive";
-    };
+    }
+) & {
+  /** Approve for Me's review asked rather than let it through: the risk it named, or `failed`. */
+  readonly review?: ReviewReason;
+};
 
 /** A task's MCP servers, as its card tells of them. */
 export interface TaskMcp {
@@ -219,6 +224,7 @@ const PAUSE_REASONS: Readonly<Record<TaskPause["reason"], true>> = {
 
 function isPending(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
+  if (value.review !== undefined && !isOneOf(REVIEW_REASONS, value.review)) return false;
   switch (value.kind) {
     case "start":
       return true;

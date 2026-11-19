@@ -3,6 +3,7 @@
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import type {
+  ReviewReason,
   TaskPauseReason,
   TaskPending,
   TaskProfile,
@@ -138,6 +139,20 @@ type McpHint = NonNullable<Extract<TaskPending, { readonly kind: "mcp" }>["hint"
 export const MCP_HINT_TEXT: Readonly<Record<McpHint, MessageDescriptor>> = {
   "read-only": msg`The server says this tool only reads.`,
   destructive: msg`The server says this tool can change or delete things.`,
+};
+
+/** Why Approve for Me's review asks you rather than let an action through. */
+export const REVIEW_TEXT: Readonly<Record<ReviewReason, MessageDescriptor>> = {
+  delete: msg`Approve for Me asks you: this could delete or overwrite files outside the task's folder.`,
+  outside: msg`Approve for Me asks you: this changes files outside the task's folder.`,
+  secrets: msg`Approve for Me asks you: this could read keys, passwords or other private files.`,
+  send: msg`Approve for Me asks you: this could send data off this computer.`,
+  publish: msg`Approve for Me asks you: this reaches beyond this computer, such as a push or a deploy.`,
+  system: msg`Approve for Me asks you: this changes system settings or other programs.`,
+  download: msg`Approve for Me asks you: this runs code from the internet.`,
+  spend: msg`Approve for Me asks you: this could spend money.`,
+  unclear: msg`Approve for Me asks you: its review couldn't tell what this does.`,
+  failed: msg`Approve for Me asks you: its review didn't answer, so it lets nothing through.`,
 };
 
 /** A run of a command as its card shows it: as written, or one hidden character spelled out. */

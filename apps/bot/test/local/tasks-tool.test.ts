@@ -10,6 +10,7 @@ import {
   startedOf,
   startTaskTool,
   TASK_NUDGE_LEAD,
+  type TaskAbilities,
   taskEndedNudge,
   taskProgressNudge,
   taskWaitingNudge,
@@ -74,6 +75,38 @@ describe("her text for start_task", () => {
         "这些都做不到，别调用，直接跟对方说现在还做不到。" +
         STATUS_TAIL,
     );
+  });
+
+  test("with commands, what she is told of their approval follows the chat's level; ask is the default", () => {
+    const description = (abilities: TaskAbilities) =>
+      startTaskTool(async () => ({ id: "t", status: "running" }), abilities).schema.description;
+    expect(description({ ...COMMANDS, permissions: "ask" })).toBe(description(COMMANDS));
+    expect(assistantPromptHint({ ...COMMANDS, permissions: "ask" })).toBe(
+      assistantPromptHint(COMMANDS),
+    );
+    expect(description({ ...COMMANDS, permissions: "auto" })).toContain(
+      "还能运行命令和程序，比如跑测试、装依赖、用 git、删除或移动文件；" +
+        "命令会先自动审一遍：看着没风险的直接运行，有风险的要对方在聊天里的任务卡片上点允许才会运行。" +
+        "对方要你在电脑上做这些时调用。",
+    );
+    expect(assistantPromptHint({ ...COMMANDS, permissions: "auto" })).toContain(
+      "不要说自己用不了电脑。" +
+        "命令会先自动审一遍，看着没风险的直接运行，有风险的运行前要对方在聊天里的任务卡片上点允许。" +
+        "不过现在你还不能打开文件",
+    );
+    expect(description({ ...COMMANDS, permissions: "full" })).toContain(
+      "删除或移动文件；这个聊天里对方给了完全权限，命令不用对方点允许，直接运行。对方要你",
+    );
+    expect(assistantPromptHint({ ...COMMANDS, permissions: "full" })).toContain(
+      "不要说自己用不了电脑。这个聊天里对方给了完全权限，命令运行前不用对方点允许。不过现在",
+    );
+    // Without commands there is nothing of theirs to approve.
+    for (const permissions of ["auto", "full"] as const) {
+      expect(description({ ...NO_COMMANDS, permissions })).toBe(description(NO_COMMANDS));
+      expect(assistantPromptHint({ ...NO_COMMANDS, permissions })).toBe(
+        assistantPromptHint(NO_COMMANDS),
+      );
+    }
   });
 
   test("she names each task's kind, in words of the work alone: never a model or a cost", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { CHAT_DISPLAYS } from "@eidolon/chat";
+import { CHAT_DISPLAYS, PERMISSION_LEVELS } from "@eidolon/chat";
 import {
+  DEFAULT_ASSISTANT_PERMISSIONS,
   DEFAULT_CHAT_DISPLAY,
   DEFAULT_CHAT_MAX_ROUNDS,
   DEFAULT_CHAT_REPLY_MODE,
@@ -19,6 +20,7 @@ import {
   changes,
   controlFor,
   DEFAULT_DISPLAY,
+  DEFAULT_PERMISSIONS,
   DEFAULT_REPLY_MODE,
   DEFAULT_TALKATIVENESS,
   draftOf,
@@ -148,6 +150,24 @@ describe("the control for each kind", () => {
     expect(groupOf("chats.display", "app")).toBe("assistant");
     for (const display of CHAT_DISPLAYS) {
       expect(parseDraft(display, control("chats.display"))).toEqual({ ok: true, value: display });
+    }
+  });
+
+  test("task permissions are a select of the chat format's levels that names the bot's default while unset", () => {
+    expect(control("assistant.permissions")).toEqual({
+      type: "select",
+      options: [...PERMISSION_LEVELS],
+      fallback: DEFAULT_ASSISTANT_PERMISSIONS,
+    });
+    // @eidolon/config can't import the chat format, so its own copy is held to it here.
+    expect(PERMISSION_LEVELS).toContain(DEFAULT_ASSISTANT_PERMISSIONS);
+    expect(DEFAULT_PERMISSIONS).toBe(DEFAULT_ASSISTANT_PERMISSIONS);
+    expect(groupOf("assistant.permissions", "app")).toBe("assistant");
+    for (const level of PERMISSION_LEVELS) {
+      expect(parseDraft(level, control("assistant.permissions"))).toEqual({
+        ok: true,
+        value: level,
+      });
     }
   });
 

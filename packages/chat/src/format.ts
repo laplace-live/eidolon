@@ -56,6 +56,18 @@ export function isChatDisplay(value: unknown): value is ChatDisplay {
   return CHAT_DISPLAYS.some((display) => display === value);
 }
 
+/**
+ * What her tasks may do in a chat without the owner's answer on their cards: `ask` asks about every
+ * place, site, command and tool call outside what the owner allowed, `auto` has a review let the
+ * routine ones through, and `full` asks about none.
+ */
+export const PERMISSION_LEVELS = ["ask", "auto", "full"] as const;
+export type PermissionLevel = (typeof PERMISSION_LEVELS)[number];
+
+export function isPermissionLevel(value: unknown): value is PermissionLevel {
+  return PERMISSION_LEVELS.some((level) => level === value);
+}
+
 export type CutOff = "length" | "refusal";
 
 interface EventBase {
@@ -159,6 +171,8 @@ export type ChatEvent =
       readonly chainLimit?: number;
       /** Only the local app writes it. */
       readonly display?: ChatDisplay;
+      /** Only the local app writes it, from the owner's picker, and only it reads it. */
+      readonly permissions?: PermissionLevel;
     })
   | (EventBase & {
       readonly type: "call-started";

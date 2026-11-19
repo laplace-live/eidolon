@@ -341,6 +341,7 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `assistant.research.model` | `ASSISTANT_RESEARCH_MODEL` | string | Research task model |
 | `assistant.folders` | `ASSISTANT_FOLDERS` | paths | Assistant folders |
 | `assistant.bash` | `ASSISTANT_BASH` | flag | Assistant commands |
+| `assistant.permissions` | `ASSISTANT_PERMISSIONS` | string | Task permissions |
 | `assistant.spendPauseUsd` | `ASSISTANT_SPEND_PAUSE_USD` | float | Assistant spend pause |
 | `assistant.contextTokens` | `ASSISTANT_CONTEXT_TOKENS` | int | Assistant context |
 | `assistant.search.provider` | `ASSISTANT_SEARCH_PROVIDER` | string | Web search provider |
@@ -372,7 +373,14 @@ task may read and write besides its own, where a task she starts runs without as
 ([assistant.md](assistant.md)). `assistant.bash` (default on) lets a task ask to run commands on
 macOS and Linux, each waiting for your OK on its card unless you allowed that exact command in its
 folder for good; off, no task starts one, and one already running goes on to its end or its
-timeout. A task pauses to ask before going on each time its spend crosses a multiple of
+timeout. `assistant.permissions` is how much a task asks you, in a chat that picks no level of its
+own beside its message box ([assistant.md](assistant.md#permission-levels)): `ask`, the default,
+asks about every folder outside yours, site, command and MCP call you haven't allowed; `auto` has
+the task's own model review each of those first, billed to the task, and asks only about the ones
+it finds risky; `full` asks about none, so its commands run as you unasked. Any other value reads
+as `ask`, with a warning. At every level a task's file tools stay out of the data home, your keys
+and `.git` folders, and your Denies, spend pauses and No Web hold.
+A task pauses to ask before going on each time its spend crosses a multiple of
 `assistant.spendPauseUsd` (default 1, in US dollars; 0 never pauses), or after its first request
 on a model with no known price, whose spend can't be counted, and keeps its requests within
 `assistant.contextTokens` tokens (default 128000).

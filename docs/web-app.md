@@ -313,9 +313,11 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     the page. The header's menu also has **Chat Settings**, a sheet saved as soon as a value is
     picked: **Reply Mode** (Auto, Text or Voice), which overrides every persona's own until it is
     changed; **Task Display** (Focus, Normal or Verbose), how much of her tasks the chat shows
-    ([Tasks](#tasks)), which until it is chosen names the display Settings gives it; and
-    **Replies between Personas**, 0 to 6, the chain limit. Task Display shows in every chat, and is
-    the one way to change it during a call.
+    ([Tasks](#tasks)), which until it is chosen names the display Settings gives it; **Task
+    Permissions** (Ask for Approval, Approve for Me or Full Access), what her tasks there may do
+    without asking ([Tasks](#tasks)), which until it is chosen names the level Settings gives it;
+    and **Replies between Personas**, 0 to 6, the chain limit. Task Display shows in every chat, and
+    is the one way to change it during a call.
 - **Commands:** the composer runs `/focus`, `/normal`, `/verbose` and `/stop` typed alone, in any
   case, after `/` or `／` ([Tasks](#tasks)). A command is never sent to her: a display command
   stores the chat's display, with a toast, and starts no reply, and one for the display the chat
@@ -468,6 +470,9 @@ tools.
     transcript and shows each argument whole, escaped all the same; what each answer does, and,
     under No Web or once the task has read outside content, that tools always allowed ask again.
     **Deny**, **Always Allow This Tool** and **Run Once**;
+  - when Approve for Me's review sent the question to the owner (`review`), a line naming why,
+    such as "Approve for Me asks you: this could send data off this computer." (`REVIEW_TEXT`,
+    `features/tasks/labels.ts`), above the question's details;
   - for a spend, stall or unpriced pause, or an interrupted task, **Continue**, with the spend
     pause's amount at a spend pause;
   - while it waits on the owner (awaiting approval, paused or interrupted), the lines she passed
@@ -508,6 +513,14 @@ tools.
     A card read afresh keeps Show Steps, so a page never reads every ended task's transcript at
     once.
   - The owner's own Show Steps or Hide Steps holds until the display changes.
+- **The chat's permission level** ([assistant.md](assistant.md#permission-levels)) is the picker
+  under the composer, in a chat of hers alone while Assistant Mode is on
+  (`features/chats/permissions-picker.tsx`): the level's icon and name, Full Access in the warning
+  color, opening a menu of **Ask for Approval**, **Approve for Me** and **Full Access**, each with
+  what it lets her tasks do, and, while the chat has none of its own, that it follows Settings.
+  Chat Settings carries the same as **Task Permissions**, and Settings → Assistant Mode the app's.
+  A pick is a `PATCH chats/:id` with `{ permissions }`; it stays usable during a call, when the
+  composer takes nothing.
 - **`/stop`** reads the chat's tasks afresh and opens a dialog of the live ones, newest first:
   **Stop this task?**, or **Stop which task?** with several, each row with its goal, its status
   and the card's **Stop**, and **Cancel**. A Stop closes it; with no live task, a toast says so
@@ -836,6 +849,12 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
     **Always Allow This Tool**, which `mcp.json` keeps at 0600, the server's process gone once the
     task ends; a second task, called `other` and showing no kind, whose call runs unasked; then
     Settings' **MCP Servers** taking the Always back;
+  - the chat's permission picker under its message box: **Approve for Me**, stored as the chat's
+    `settings` event, under which a task outside `assistant.folders` starts with no card and
+    runs the command its fake review allows, then asks about the one writing outside its folder,
+    the card saying why, answered **Deny**; **Full Access**, in the warning color, her
+    `start_task` description saying commands run unasked, under which a task starts and runs its
+    command with no review and no pause; then **Ask for Approval** again;
 
 then stops the server and deletes the home. It refuses to start when either `load-env.ts` would
 apply a `.env` or use another data home, and exits 0 when every check passes, else 1, after the

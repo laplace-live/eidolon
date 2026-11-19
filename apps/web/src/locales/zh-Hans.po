@@ -559,6 +559,10 @@ msgstr "{name}发来的照片"
 msgid "A PNG, JPEG or WebP image, up to {max}. Without one, her avatar shows her initials."
 msgstr "PNG、JPEG 或 WebP 图片，最大 {max}。不上传时，头像显示她的简称。"
 
+#: src/features/chats/labels.ts
+msgid "A review on the task's model lets routine actions through and asks you only about risky ones. Each review bills the task."
+msgstr "用任务自己的模型先审一遍：常规操作直接放行，只有有风险的才问你。每次审核都算在任务的花费里。"
+
 #: src/features/call/transcript-view.tsx
 msgid "A selfie from {name}"
 msgstr "{name}发来的自拍"
@@ -892,9 +896,57 @@ msgstr "API 密钥（服务器需要时填写）"
 msgid "API Keys"
 msgstr "API 密钥"
 
+#: src/features/chats/labels.ts
+msgid "Approve for Me"
+msgstr "自动审批"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: its review couldn't tell what this does."
+msgstr "自动审批要你来定：审核看不出这会做什么。"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: its review didn't answer, so it lets nothing through."
+msgstr "自动审批要你来定：审核没有给出结果，所以不会自动放行。"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this changes files outside the task's folder."
+msgstr "自动审批要你来定：这会改动任务文件夹以外的文件。"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this changes system settings or other programs."
+msgstr "自动审批要你来定：这会改动系统设置或其他程序。"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this could delete or overwrite files outside the task's folder."
+msgstr "自动审批要你来定：这可能会删除或覆盖任务文件夹以外的文件。"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this could read keys, passwords or other private files."
+msgstr "自动审批要你来定：这可能会读取密钥、密码或其他私密文件。"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this could send data off this computer."
+msgstr "自动审批要你来定：这可能会把数据发到这台电脑以外。"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this could spend money."
+msgstr "自动审批要你来定：这可能会花钱。"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this reaches beyond this computer, such as a push or a deploy."
+msgstr "自动审批要你来定：这会影响这台电脑以外的东西，比如推送或部署。"
+
+#: src/features/tasks/labels.ts
+msgid "Approve for Me asks you: this runs code from the internet."
+msgstr "自动审批要你来定：这会运行从网上下载的代码。"
+
 #: src/features/usage/route.tsx
 msgid "As each provider reported it."
 msgstr "均为服务商报告的金额。"
+
+#: src/features/chats/labels.ts
+msgid "Ask for Approval"
+msgstr "需要批准"
 
 #: src/features/tasks/labels.ts
 msgid "Ask for Each Site"
@@ -2078,6 +2130,10 @@ msgstr "来自环境变量 <0>{variable}</0>。"
 msgid "From the environment"
 msgstr "来自环境变量"
 
+#: src/features/chats/labels.ts
+msgid "Full Access"
+msgstr "完全权限"
+
 #: src/features/settings/route.tsx
 msgid "General"
 msgstr "通用"
@@ -2191,6 +2247,14 @@ msgstr "她用的服务商都不需要密钥。"
 msgid "Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools."
 msgstr "其他部分没有显示的设置：她的提示词和索引存放在哪里、Mem0 归档她的记忆所用的 id，以及一次回复里最多几轮可以调用工具。"
 
+#: src/features/chats/labels.ts
+msgid "Her tasks ask you before working outside your folders, visiting a site, running a command or using a tool."
+msgstr "她的任务在你的文件夹以外干活、访问网站、运行命令或使用工具之前，都会先问你。"
+
+#: src/features/chats/labels.ts
+msgid "Her tasks work in any folder, visit any site and run any command as you, without asking."
+msgstr "她的任务能在任何文件夹干活、访问任何网站，并以你的身份运行任何命令，都不会问你。"
+
 #: src/features/setup/new-persona.tsx
 msgid "Her Voice"
 msgstr "她的声音"
@@ -2253,8 +2317,16 @@ msgid "How many times personas may answer each other after each of your lines, o
 msgstr "聊天里有两个或更多人设时，你每说一句，她们之间最多可以互相接话几次。设为 0 时，她们只回答你。"
 
 #: src/components/settings-form/labels.ts
+msgid "How much her tasks ask you, until a chat picks its own level beside its message box. Ask for Approval asks about every folder outside yours, site, command and MCP call you haven't allowed. Approve for Me has the task's own model review each of those first, billed to the task, and asks only about the risky ones. Full Access asks about none, so commands run as you unasked. At every level your Denies, spend pauses and No Web hold, and tasks never touch Eidolon's data, your keys or a .git folder with their file tools. Default Ask for Approval."
+msgstr "她的任务要问你多少，聊天可以在输入框旁边选自己的级别，没选的就照这里。需要批准：你的文件夹以外的地方、网站、命令和 MCP 调用，只要你没允许过都会问你。自动审批：先用任务自己的模型逐个审一遍，费用算在任务里，只有有风险的才问你。完全权限：什么都不问，命令会以你的身份直接运行。无论哪个级别，你的拒绝、花费暂停和不联网都照样有效，任务的文件工具也绝不会碰 Eidolon 的数据、你的密钥或 .git 文件夹。默认是需要批准。"
+
+#: src/components/settings-form/labels.ts
 msgid "How much of her tasks each chat shows, until the chat picks its own with /focus, /normal or /verbose. Focus hides task cards, and Verbose opens her newest running task's steps and, on a call, has her say how far a task's plan has got, which costs a reply each time. Default Normal."
 msgstr "每个聊天显示多少任务内容，直到这个聊天用 /focus、/normal 或 /verbose 选了自己的。专注会隐藏任务卡片；详细会展开她最新在做的任务的每一步，通话中还会让她说说任务的计划做到哪了，每次都多花一次回复的费用。默认普通。"
+
+#: src/features/chats/permissions-picker.tsx
+msgid "How much should her tasks here ask you?"
+msgstr "这个聊天里，她的任务什么时候要先问你？"
 
 #: src/components/settings-form/labels.ts
 msgid "How readily she joins in when no one addressed her, from 0 to 1. At 0 she answers only when she's addressed, or when no one else will answer you. Default 0.5."
@@ -4876,6 +4948,11 @@ msgstr "任务卡片会隐藏，但任务等你处理时，消息框上方仍会
 msgid "Task Display"
 msgstr "任务显示"
 
+#: src/components/settings-form/labels.ts
+#: src/features/chats/chat-settings.tsx
+msgid "Task Permissions"
+msgstr "任务权限"
+
 #: src/features/tasks/task-card.tsx
 msgid "Task:"
 msgstr "任务："
@@ -5638,6 +5715,14 @@ msgstr "在你选择之前，每个人设按她自己的设置回复。"
 #: src/features/chats/chat-settings.tsx
 msgid "Until you choose, this chat follows Settings: {display}."
 msgstr "在你选择之前，这个聊天跟随设置：{display}。"
+
+#: src/features/chats/chat-settings.tsx
+msgid "Until you choose, this chat follows Settings: {level}."
+msgstr "在你选择之前，这个聊天跟随设置：{level}。"
+
+#: src/features/chats/permissions-picker.tsx
+msgid "Until you choose, this chat follows Settings."
+msgstr "在你选择之前，这个聊天跟随设置。"
 
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/references-section.tsx

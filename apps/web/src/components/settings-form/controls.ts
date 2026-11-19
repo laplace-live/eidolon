@@ -1,7 +1,7 @@
 // How the settings form shows a SETTINGS row and what it saves. A value is written so the bot reads
 // it back from the file exactly as from the variable: @eidolon/config's asEnvValue joins a list
 // with "," and resolves each path, and the readers split on "," and strip Python whitespace.
-import { CHAT_DISPLAYS, REPLY_MODES } from "@eidolon/chat";
+import { CHAT_DISPLAYS, PERMISSION_LEVELS, REPLY_MODES } from "@eidolon/chat";
 import type { SettingKind, SettingRow, SettingScope } from "@/lib/api";
 import {
   defaultModel,
@@ -53,6 +53,9 @@ export const DEFAULT_REPLY_MODE = "auto";
 /** @eidolon/config's DEFAULT_CHAT_DISPLAY. */
 export const DEFAULT_DISPLAY = "normal";
 
+/** @eidolon/config's DEFAULT_ASSISTANT_PERMISSIONS. */
+export const DEFAULT_PERMISSIONS = "ask";
+
 /** The browsers yt-dlp's --cookies-from-browser reads, and `none` for no cookies. */
 export const COOKIE_BROWSERS = [
   "none",
@@ -87,6 +90,11 @@ const BY_PATH: Readonly<Record<string, Control>> = {
   "assistant.enabled": { type: "flag", fallback: "on" },
   "assistant.folders": { type: "paths", inPersona: false, folders: true },
   "assistant.bash": { type: "flag", fallback: "on" },
+  "assistant.permissions": {
+    type: "select",
+    options: PERMISSION_LEVELS,
+    fallback: DEFAULT_PERMISSIONS,
+  },
   "chats.display": { type: "select", options: CHAT_DISPLAYS, fallback: DEFAULT_DISPLAY },
 };
 

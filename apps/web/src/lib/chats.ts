@@ -4,6 +4,7 @@ import type {
   ChatStreamLine,
   ChatSummary,
   ParticipantId,
+  PermissionLevel,
   ReplyMode,
 } from "@eidolon/chat";
 import { ApiError, type ChatContents, call, send, stream, url } from "./api";
@@ -98,6 +99,11 @@ export async function setReplyMode(id: string, replyMode: ReplyMode): Promise<vo
 /** How much of her tasks the chat shows from now on, over the app's chats.display. */
 export async function setDisplay(id: string, display: ChatDisplay): Promise<void> {
   await call("PATCH /api/local/chats/:id", { params: { id }, body: { display } });
+}
+
+/** What her tasks in the chat may do unasked from their next question on, over the app's level. */
+export async function setPermissions(id: string, permissions: PermissionLevel): Promise<void> {
+  await call("PATCH /api/local/chats/:id", { params: { id }, body: { permissions } });
 }
 
 /** Adds personas to the chat and removes others, leaving it 1 to 6. */
