@@ -27,12 +27,13 @@ function text(value: unknown): string | null {
 }
 
 function finalOf(result: Readonly<Record<string, unknown>>): StartTaskFinal | null {
-  const { status, report, files, spentUsd } = result;
+  const { status, report, files, moreFiles, spentUsd } = result;
   if (typeof status !== "string" || !ENDINGS.has(status)) return null;
   return {
     status: status as StartTaskFinal["status"],
     report: typeof report === "string" ? report : "",
     files: Array.isArray(files) ? files.filter((file) => typeof file === "string") : [],
+    ...(typeof moreFiles === "number" && moreFiles > 0 ? { moreFiles } : {}),
     spentUsd: typeof spentUsd === "number" && Number.isFinite(spentUsd) ? spentUsd : 0,
   };
 }

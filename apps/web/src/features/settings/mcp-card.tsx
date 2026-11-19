@@ -41,9 +41,14 @@ export const mcpServersQuery = queryOptions({
   refetchOnWindowFocus: true,
 });
 
-/** The command a server starts with, as mcp.json writes it, its references unresolved. */
+/**
+ * The command a server starts with, as mcp.json writes it, its references unresolved: a part that's
+ * empty or holds a space or a quote is quoted, so each shows where it ends.
+ */
 export function commandLine(server: Pick<McpServerView, "command" | "args">): string {
-  return [server.command ?? "", ...(server.args ?? [])].filter((part) => part !== "").join(" ");
+  const shown = (part: string) =>
+    part === "" || /[\s"'\\]/.test(part) ? JSON.stringify(part) : part;
+  return [...(server.command ? [server.command] : []), ...(server.args ?? [])].map(shown).join(" ");
 }
 
 function ServerRow({

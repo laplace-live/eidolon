@@ -799,6 +799,7 @@ msgid "An MCP server is a program on this computer. Eidolon starts it with the c
 msgstr "MCP 服务器是这台电脑上的程序。每当有任务开始，Eidolon 就用 mcp.json 里的命令启动它，它以你的权限运行，不受任务文件夹的限制。每次调用都会先问你，除非你为那个工具选了「始终允许这个工具」。每个任务都会读到它对自己工具的描述；和网页不同，读过这些描述不会让你始终允许的命令和工具重新询问。"
 
 #: src/features/jobs/parts.tsx
+#: src/features/tasks/parts.tsx
 msgid "and {count} more"
 msgstr "还有 {count} 项"
 

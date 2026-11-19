@@ -312,14 +312,17 @@ export function CommandLine({ command }: { readonly command: string }) {
   );
 }
 
-/** The files it wrote, each from its folder when it lies there. */
+/** The files it wrote, each from its folder when it lies there, and how many more it left out. */
 export function FileList({
   folder,
   files,
+  more = 0,
 }: {
   readonly folder: string;
   readonly files: readonly string[];
+  readonly more?: number;
 }) {
+  const { t } = useLingui();
   return (
     <ul className="flex flex-col gap-1">
       {files.map((path) => (
@@ -327,6 +330,9 @@ export function FileList({
           {pathIn(folder, path)}
         </li>
       ))}
+      {more > 0 && (
+        <li className="text-muted-foreground text-xs">{t`and ${ph({ count: more })} more`}</li>
+      )}
     </ul>
   );
 }

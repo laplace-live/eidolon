@@ -48,8 +48,9 @@ model is never the fallback.
 
 The task kinds follow the assistant as memory follows the mind (`follows: "assistant"`): a kind
 with nothing set runs on the assistant's account and model, a model alone on the assistant's
-account, and another account takes a model of its own. `selectTask(kind)` (`resolve.ts`) picks a
-task's at its start, and when a kind's own can't run (another account without a model, an
+account, another account of the assistant's provider its model too, and an account of another
+provider takes a model of its own. `selectTask(kind)` (`resolve.ts`) picks a task's at its start,
+and when a kind's own can't run (another provider's account without a model, an
 account with no key, one Eidolon doesn't know), it returns the assistant's with the reason as
 `fallback`; `other`, and no kind, are the assistant's own. It throws as `select` does when the
 assistant can't run either. Each kind's usage is recorded as role `assistant`

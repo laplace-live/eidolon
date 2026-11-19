@@ -635,6 +635,28 @@ describe("laplace-task", () => {
     }
   });
 
+  test("--resume takes back from the transcript the files a crash kept out of task.json", async () => {
+    const restore = setEnv({ ASSISTANT_SPEND_PAUSE_USD: "0.5" });
+    try {
+      const first = scripted([calls([call("c1", "write", { path: "a.txt", content: "a" })])], 0.6);
+      const io = { ...captureIo().io, createMind: first.createMind, confirm: null };
+      expect(await taskMain(["--folder", folder, "Write a.txt"], io)).toBe(3);
+      const { id, dir } = onlyTask();
+      const paused = await readSnapshot(dir);
+      if (paused === null) throw new Error("no task.json");
+      expect(paused.files.written).toHaveLength(1);
+      // As a crash between the result's entry and task.json leaves it.
+      await writeSnapshot(dir, { ...paused, files: { read: [], written: [] } });
+
+      const second = scripted([says("All done.")], 0.1);
+      const again = { ...captureIo().io, createMind: second.createMind, confirm: null };
+      expect(await taskMain(["--resume", id], again)).toBe(0);
+      expect((await readSnapshot(dir))?.files.written).toEqual(paused.files.written);
+    } finally {
+      restore();
+    }
+  });
+
   test("going on without spend pauses keeps them off, so a --resume doesn't ask again", async () => {
     const restore = setEnv({ ASSISTANT_SPEND_PAUSE_USD: "0.01" });
     try {
@@ -862,6 +884,18 @@ describe("laplace-task", () => {
     } finally {
       rmSync(owner, { recursive: true, force: true });
     }
+  });
+
+  test("a skill's warning spells out the control characters in its path, which could drive the terminal", async () => {
+    const bad = join(folder, ".agents", "skills", "evil\u001b]52;c;eA==\u0007");
+    mkdirSync(bad, { recursive: true });
+    writeFileSync(join(bad, "SKILL.md"), "No frontmatter.\n");
+    const mind = scripted([says("Done.")]);
+    const io = { ...captureIo().io, createMind: mind.createMind, confirm: null };
+    expect(await taskMain(["--folder", folder, "Make a page"], io)).toBe(0);
+    const warnings = logs.records.filter(([level]) => level === "WARNING").map(([, text]) => text);
+    expect(warnings.some((text) => text.includes("evil\\u001b]52;c;eA==\\u0007"))).toBe(true);
+    expect(warnings.some((text) => text.includes("\u001b"))).toBe(false);
   });
 
   test("a task of the local app's, one with a chat, isn't resumed: its card there goes on with it", async () => {

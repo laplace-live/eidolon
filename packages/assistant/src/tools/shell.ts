@@ -130,7 +130,7 @@ export async function shellEnv(
 export function sanitizeBinaryOutput(str: string): string {
   // All removed characters are single UTF-16 code units, so surrogate pairs are never split.
   // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it removes.
-  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFF9-\uFFFB]/g, "");
+  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\uFFF9-\uFFFB]/g, "");
 }
 
 /** Kills process `pid` and its process group: a command spawned detached leads its own. */

@@ -23,6 +23,8 @@ export class JsonRpcLineReader {
   /** The bytes of the incomplete message received so far. */
   #stdoutChunks: Buffer[] = [];
   #stdoutPendingBytes = 0;
+  /** An oversized line was dropped: the rest of it, through its newline, is dropped too. */
+  #discarding = false;
   #stderrBuffer = Buffer.alloc(0);
 
   constructor(options: JsonRpcLineReaderOptions) {
@@ -46,6 +48,7 @@ export class JsonRpcLineReader {
     while (true) {
       const newline = data.indexOf(0x0a, start);
       if (newline < 0) {
+        if (this.#discarding) return;
         if (start < data.length) {
           // Copied, since the caller may reuse the chunk's memory.
           this.#stdoutChunks.push(Buffer.from(data.subarray(start)));
@@ -54,9 +57,15 @@ export class JsonRpcLineReader {
         if (this.#stdoutPendingBytes > maxMessageBytes) {
           this.#stdoutChunks = [];
           this.#stdoutPendingBytes = 0;
+          this.#discarding = true;
           this.#options.onError(new Error(`MCP stdio message exceeds ${maxMessageBytes} bytes`));
         }
         return;
+      }
+      if (this.#discarding) {
+        this.#discarding = false;
+        start = newline + 1;
+        continue;
       }
       let line = data.subarray(start, newline);
       if (this.#stdoutChunks.length > 0) {
@@ -98,5 +107,6 @@ export class JsonRpcLineReader {
     }
     this.#stdoutChunks = [];
     this.#stdoutPendingBytes = 0;
+    this.#discarding = false;
   }
 }

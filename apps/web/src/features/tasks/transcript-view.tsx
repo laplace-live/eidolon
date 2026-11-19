@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { useLang } from "@/locales/i18n";
 import { PAUSE_REASONS, TOOL_STATE_TEXT } from "./labels";
 import { type Block, type Inline, parseMarkdown } from "./markdown";
+import { Escaped } from "./parts";
 import { type ToolRow, type ToolState, type TranscriptRow, toolState } from "./transcript";
 
 function InlineText({ parts }: { readonly parts: readonly Inline[] }) {
@@ -38,6 +39,8 @@ function InlineText({ parts }: { readonly parts: readonly Inline[] }) {
   });
 }
 
+const HEADINGS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
+
 function BlockView({ block }: { readonly block: Block }) {
   switch (block.kind) {
     case "paragraph":
@@ -51,12 +54,14 @@ function BlockView({ block }: { readonly block: Block }) {
           ))}
         </p>
       );
-    case "heading":
+    case "heading": {
+      const Heading = HEADINGS[block.level - 1] ?? "h6";
       return (
-        <p className={cn("font-semibold", block.level <= 2 && "text-base")}>
+        <Heading className={cn("font-semibold", block.level <= 2 && "text-base")}>
           <InlineText parts={block.content} />
-        </p>
+        </Heading>
       );
+    }
     case "list": {
       const items = block.items.map((item) => (
         <li key={item.at}>
@@ -175,7 +180,7 @@ const ToolCall = memo(function ToolCall({
           {row.label}
         </span>
         <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
-          {row.head}
+          <Escaped text={row.head} />
         </span>
         {opens && (
           <ChevronRightIcon

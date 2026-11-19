@@ -367,7 +367,7 @@ async function equip(
   const search = web === "any" ? roleSearcher(meter.charge) : undefined;
   const skills = await loadSkills({ dataHome: dataHome(), folder: brief.folder });
   for (const { path, message, skipped } of skills.problems) {
-    logger.warning(`${skipped ? "Skipping " : ""}skill ${path}: ${message}`);
+    logger.warning(visible(`${skipped ? "Skipping " : ""}skill ${path}: ${message}`));
   }
   if (skills.unlisted > 0) {
     logger.warning(`${skills.unlisted} more skills aren't listed: the catalog is full`);
@@ -476,6 +476,8 @@ async function resumedTask(
     const equipped = await equip(id, found.brief, found.grants, model, meter, web, deps);
     const chosen = args.web && { web: { mode: args.web, hosts: [], denied: [] } };
     const snapshots = new Snapshots(dir, { ...found, model, ...chosen }, meter);
+    // A crash can come between a result's entry and task.json: the transcript has its files.
+    for (const entry of entries) snapshots.note(entry);
     await snapshots.save("running");
     const limits = {
       contextTokens: assistantSettings().contextTokens,

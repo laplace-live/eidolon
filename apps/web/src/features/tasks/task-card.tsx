@@ -173,6 +173,7 @@ export function TaskCard({
   const goal = task?.brief.goal ?? item.call.goal ?? "";
   const folder = task?.brief.folder ?? item.call.folder;
   const written = task?.files.written ?? item.call.final?.result.files ?? [];
+  const moreWritten = task === undefined ? (item.call.final?.result.moreFiles ?? 0) : 0;
   const failure = task?.outcome?.status === "failed" ? task.outcome.error : null;
   const offer = task === undefined ? null : offers(task);
 
@@ -256,7 +257,7 @@ export function TaskCard({
           {written.length > 0 && (
             <section className="flex flex-col gap-1.5">
               <h3 className="font-medium text-muted-foreground text-xs">{t`Files Written`}</h3>
-              <FileList folder={folder ?? ""} files={written} />
+              <FileList folder={folder ?? ""} files={written} more={moreWritten} />
             </section>
           )}
         </div>

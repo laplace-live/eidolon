@@ -3,9 +3,10 @@
 //
 // Ported from pi-mono packages/ai/src/utils/validation.ts@ac78a60
 //
-// A tool call's arguments checked against its schema before it runs, coerced first as pi-schema's
-// parse() coerces a model's loose JSON: "42" for a number, one value for an array, null for an
-// omitted optional property.
+// A tool call's arguments checked against its schema's type, enum, const, properties, required,
+// anyOf and oneOf before it runs, coerced first as pi-schema's parse() coerces a model's loose JSON:
+// "42" for a number, one value for an array, null for an omitted optional property. Other keywords,
+// such as minLength or pattern, are the tool's to check.
 import { isPlainObject } from "@eidolon/config";
 import type { ToolSchema } from "@eidolon/core";
 

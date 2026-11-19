@@ -71,6 +71,16 @@ describe("JsonRpcLineReader", () => {
     expect(messages).toEqual([{ jsonrpc: "2.0", id: 2, result: {} }]);
   });
 
+  it("drops an oversized line through its newline, never reading its rest as a message", () => {
+    const { reader, messages, errors } = startReader(40);
+    const rest = JSON.stringify({ jsonrpc: "2.0", method: "x" });
+    const next = JSON.stringify({ jsonrpc: "2.0", id: 2, result: {} });
+    reader.readStdout(Buffer.from("x".repeat(41)));
+    reader.readStdout(Buffer.from(`${rest}\n${next}\n`));
+    expect(errors).toEqual(["MCP stdio message exceeds 40 bytes"]);
+    expect(messages).toEqual([{ jsonrpc: "2.0", id: 2, result: {} }]);
+  });
+
   it("reports a message without its newline at the end", () => {
     const { reader, errors } = startReader();
     feed(reader, Buffer.from('{"jsonrpc":"2.0",'), 4);

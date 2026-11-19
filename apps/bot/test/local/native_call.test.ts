@@ -345,15 +345,17 @@ test("in a verbose chat, a step of her task's plan done is told in a follow-up o
   await until(() => turns.length === 2);
   const answer = turns[1] as FakeTurn;
   const start = answer.request.background?.tools[0];
+  if (start?.schema.name !== START_TASK)
+    throw new Error("her answer on the call has no start_task");
   const args = { goal: "写一个待办网页", folder: "~/site", profile: "coding" };
   const ids = { persona: PERSONA, turn: answer.id, callId: "call-1" };
   answer.events({ type: "tool-call", ...ids, name: START_TASK, arguments: args });
   const context = { getMessages: () => [], setMessages: () => {}, setHiddenTools: () => {} };
-  const result = await start?.run(
+  const result = await start.run(
     { arguments: args, context, signal: new AbortController().signal, callId: "call-1" },
     answer.request.effects,
   );
-  answer.events({ type: "tool-result", ...ids, result: result ?? {}, stage: "started" });
+  answer.events({ type: "tool-result", ...ids, result, stage: "started" });
   await speaks(answer, "交给我吧");
   // The first step of its plan is done.
   const furthered: TaskSnapshot = {
@@ -446,15 +448,17 @@ async function sayingGoodbye() {
   await until(() => turns.length === 2);
   const answer = turns[1] as FakeTurn;
   const start = answer.request.background?.tools[0];
+  if (start?.schema.name !== START_TASK)
+    throw new Error("her answer on the call has no start_task");
   const args = { goal: "写一个待办网页", folder: "~/site", profile: "coding" };
   const ids = { persona: PERSONA, turn: answer.id, callId: "call-1" };
   answer.events({ type: "tool-call", ...ids, name: START_TASK, arguments: args });
   const context = { getMessages: () => [], setMessages: () => {}, setHiddenTools: () => {} };
-  const result = await start?.run(
+  const result = await start.run(
     { arguments: args, context, signal: new AbortController().signal, callId: "call-1" },
     answer.request.effects,
   );
-  answer.events({ type: "tool-result", ...ids, result: result ?? {}, stage: "started" });
+  answer.events({ type: "tool-result", ...ids, result, stage: "started" });
   await speaks(answer, "交给我吧");
   transport.rtvi("send-text", { content: "好，那我先挂了", options: { run_immediately: true } });
   await until(() => turns.length === 3);

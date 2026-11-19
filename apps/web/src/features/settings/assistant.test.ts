@@ -258,5 +258,8 @@ describe("MCP Servers", () => {
   test("a server's command reads as mcp.json writes it, its references unresolved", () => {
     expect(commandLine({ command: "npx", args: ["-y", `\${PKG}`] })).toBe(`npx -y \${PKG}`);
     expect(commandLine({ command: undefined, args: undefined })).toBe("");
+    expect(commandLine({ command: "npx", args: ["my server", "", 'say "hi"'] })).toBe(
+      'npx "my server" "" "say \\"hi\\""',
+    );
   });
 });

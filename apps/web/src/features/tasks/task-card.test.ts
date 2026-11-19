@@ -41,7 +41,12 @@ function task(n: number, status: TaskStatus): TaskSnapshot {
 }
 
 /** The markup of `shown`'s card, with the chat's tasks `tasks`. */
-function card(display: ChatDisplay, tasks: readonly TaskSnapshot[], shown: TaskSnapshot): string {
+function card(
+  display: ChatDisplay,
+  tasks: readonly TaskSnapshot[],
+  shown: TaskSnapshot,
+  final: { readonly seq: number; readonly result: Record<string, unknown> } | null = null,
+): string {
   const client = new QueryClient();
   client.setQueryData(statusQuery.queryKey, {
     assistant: {
@@ -66,9 +71,9 @@ function card(display: ChatDisplay, tasks: readonly TaskSnapshot[], shown: TaskS
       goal: shown.brief.goal,
       folder: shown.brief.folder,
       task: shown.id,
-      final: null,
+      final,
     },
-  } as const;
+  } as never;
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
   return renderToStaticMarkup(
     createElement(
@@ -95,6 +100,14 @@ const newest = task(2, "running");
 const waiting = task(3, "paused");
 const done = task(4, "succeeded");
 const tasks = [older, newest, waiting, done];
+
+test("a card whose task is gone lists the files its end named, and how many more it wrote", () => {
+  const files = ["/Users/me/site/a.html", "/Users/me/site/b.css"];
+  const result = { status: "succeeded", report: "Done.", files, moreFiles: 48, spentUsd: 0.1 };
+  const markup = card("normal", [], done, { seq: 9, result });
+  expect(markup).toContain("a.html");
+  expect(markup).toContain("and 48 more");
+});
 
 test("in verbose, only the newest running task's card opens its steps", () => {
   expect(opens(card("verbose", tasks, newest))).toBe(true);

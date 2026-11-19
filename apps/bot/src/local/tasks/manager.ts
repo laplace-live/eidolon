@@ -856,7 +856,11 @@ export class TaskManager {
     let names: string[];
     try {
       names = await readdir(this.#root);
-    } catch {
+    } catch (error) {
+      // None yet is no tasks; anything else leaves them on disk for the next start.
+      if ((error as { code?: unknown }).code !== "ENOENT") {
+        logger.warning(`Tasks weren't read from ${this.#root}: ${errorText(error)}`);
+      }
       return;
     }
     for (const name of names.filter(isTaskId)) {

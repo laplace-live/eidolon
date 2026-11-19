@@ -799,6 +799,7 @@ msgid "An MCP server is a program on this computer. Eidolon starts it with the c
 msgstr "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again."
 
 #: src/features/jobs/parts.tsx
+#: src/features/tasks/parts.tsx
 msgid "and {count} more"
 msgstr "and {count} more"
 

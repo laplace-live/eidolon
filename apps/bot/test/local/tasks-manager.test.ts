@@ -1211,6 +1211,15 @@ describe("a restart", () => {
     await until(() => reports.length === 1);
   });
 
+  test("a tasks folder that can't be read is logged, not taken for an empty one in silence", async () => {
+    rmSync(tasksDir(), { recursive: true, force: true });
+    writeFileSync(tasksDir(), "");
+    const tasks = await booted();
+    expect(await tasks.list()).toEqual([]);
+    const warned = `WARNING Tasks weren't read from ${tasksDir()}: ENOTDIR`;
+    expect(logs.lines().some((line) => line.startsWith(warned))).toBe(true);
+  });
+
   test("a task a crash left running is interrupted, and waits for Continue while not ready", async () => {
     const seeded = await seed({ status: "running" });
     problem = "No key";
