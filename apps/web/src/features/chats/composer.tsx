@@ -68,8 +68,8 @@ function openAt(
 }
 
 /**
- * Suggestions above the text box. A click keeps the focus, and so the caret, in the box, and the
- * arrow keys scroll a long list to the option they reach.
+ * Suggestions above the text box. A click keeps the focus, and so the caret, in the box; only the
+ * main button picks. The arrow keys scroll a long list to the option they reach.
  */
 function SuggestionList<T>({
   id,
@@ -93,6 +93,9 @@ function SuggestionList<T>({
   readonly children: (option: T) => ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Not on every redraw: one each time her streaming reply grows would undo the owner's scrolling.
+  const shown = options.map(keyOf).join("\n");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: shown only triggers it.
   useLayoutEffect(() => {
     const list = ref.current;
     const option = list?.children[active];
@@ -102,7 +105,7 @@ function SuggestionList<T>({
     else if (bottom > list.scrollTop + list.clientHeight) {
       list.scrollTop = bottom - list.clientHeight;
     }
-  });
+  }, [active, shown]);
   return (
     <div
       ref={ref}
@@ -123,7 +126,7 @@ function SuggestionList<T>({
           aria-selected={index === active}
           onMouseDown={(event) => {
             event.preventDefault();
-            onChoose(index);
+            if (event.button === 0) onChoose(index);
           }}
           // Not mouseenter: Chrome fires that when a list opens or narrows under a pointer at rest,
           // which would move the highlight off the first match that Enter takes.
