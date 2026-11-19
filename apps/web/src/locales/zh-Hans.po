@@ -4381,6 +4381,10 @@ msgstr "她回应的是{name}的话。"
 msgid "She answered your line."
 msgstr "她回应的是你的话。"
 
+#: src/features/settings/skills-card.tsx
+msgid "She can name 150 skills at most, so she can't ask for this one by name."
+msgstr "她最多能点名 150 个技能，这个排在后面，没法点名要它。"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "She can't switch to it anymore, and its voice is removed from her settings."
 msgstr "她将不能再切换到这个风格，它的声音也会从她的设置中移除。"
@@ -4889,6 +4893,10 @@ msgstr "任务还不能开始"
 #: src/features/settings/skills-card.tsx
 msgid "Tasks' list of skills is full"
 msgstr "任务的技能列表已满"
+
+#: src/features/settings/skills-card.tsx
+msgid "Tasks' list of skills is full without it, and she can name 150 skills at most, so no task can use it. Switch off skills tasks don't need."
+msgstr "任务的技能列表已满，没列进它，她最多也只能点名 150 个技能，所以没有任务能用到它。把任务用不上的技能关掉吧。"
 
 #: src/features/settings/skills-card.tsx
 msgid "Tasks' list of skills is full without it, so only naming it to her reaches a task. Switch off skills tasks don't need."

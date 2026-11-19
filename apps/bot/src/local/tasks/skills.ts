@@ -1,7 +1,8 @@
 // The owner's skills, for Settings and for her start_task: what the data home's skills folder and
 // the folder the owner's agents share hold, and the owner's switches, which this process alone
 // writes, to the data home's skills.json.
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { lstat, mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import {
@@ -100,14 +101,24 @@ export class OwnerSkills {
         return { invalid: "A SKILL.md is 256 KB at most, and tasks skip a larger one" };
       }
       const root = skillsDir(this.#dataHome);
-      await mkdir(root, { recursive: true });
+      const folder = join(root, name);
+      // Written in a dot-folder no scan reads, then moved into place whole: a failed write leaves
+      // no empty folder that reads as taken, and no scan meets a SKILL.md half written.
+      const draft = join(root, `.${name}.${randomBytes(6).toString("hex")}.tmp`);
+      await mkdir(draft, { recursive: true });
       try {
-        await mkdir(join(root, name));
+        await writeFile(join(draft, SKILL_FILE), text, { flag: "wx" });
+        if (await taken(folder)) return "exists";
+        await rename(draft, folder);
       } catch (error) {
-        if ((error as { code?: unknown }).code === "EEXIST") return "exists";
+        // Another writer's folder by that name, made since the look.
+        if (["EEXIST", "ENOTEMPTY"].includes(String((error as { code?: unknown }).code))) {
+          return "exists";
+        }
         throw error;
+      } finally {
+        await rm(draft, { recursive: true, force: true });
       }
-      await writeFile(join(root, name, SKILL_FILE), text, { flag: "wx" });
       return this.#view(await this.#scan());
     });
   }
@@ -138,6 +149,7 @@ export class OwnerSkills {
       shared: await realpath(roots.shared).catch(() => roots.shared),
     };
     const unlisted = new Set(catalogOf(scan).unlisted);
+    const nameable = new Set(skillNames(scan));
     const found = new Set(scan.found.map((each) => each.path));
     const notes = new Map<string, string[]>();
     const skipped: { path: string; message: string }[] = [];
@@ -151,6 +163,12 @@ export class OwnerSkills {
       const source = skill.source === "shared" ? "shared" : "owner";
       const folder = dirname(each.path);
       const winner = scan.winners.get(skill.name);
+      const enabled = !scan.disabled.has(skill.name);
+      const unnameable =
+        winner === each &&
+        enabled &&
+        validateName(skill.name).length === 0 &&
+        !nameable.has(skill.name);
       return {
         name: skill.name,
         description: skill.description,
@@ -159,9 +177,10 @@ export class OwnerSkills {
         ...(join(real[source], relative(roots[source], folder)) === skill.dir
           ? {}
           : { linksTo: homed(skill.dir, home) }),
-        enabled: !scan.disabled.has(skill.name),
+        enabled,
         ...(each.explicit ? { onlyWhenNamed: true as const } : {}),
         ...(unlisted.has(skill) ? { unlisted: true as const } : {}),
+        ...(unnameable ? { unnameable: true as const } : {}),
         ...(winner === undefined || winner === each
           ? {}
           : { shadowedBy: homed(dirname(winner.path), home) }),
@@ -183,5 +202,16 @@ export class OwnerSkills {
               `skills.json ${scan.switchesProblem}, so every skill is on until it's fixed or a switch is changed, which writes it anew`,
             ],
     };
+  }
+}
+
+/** Whether anything, a link included, is at `path`. */
+async function taken(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === "ENOENT") return false;
+    throw error;
   }
 }

@@ -68,6 +68,16 @@ function SkillRow({
 }) {
   const { t } = useLingui();
   const { name, description, folder, linksTo, shadowedBy, problems } = skill;
+  const unlisted = skill.unlisted === true;
+  const unnameable = skill.unnameable === true;
+  const reach =
+    unlisted && unnameable
+      ? t`Tasks' list of skills is full without it, and she can name 150 skills at most, so no task can use it. Switch off skills tasks don't need.`
+      : unlisted
+        ? t`Tasks' list of skills is full without it, so only naming it to her reaches a task. Switch off skills tasks don't need.`
+        : unnameable
+          ? t`She can name 150 skills at most, so she can't ask for this one by name.`
+          : null;
   const notes = [
     ...(shadowedBy === undefined
       ? []
@@ -77,14 +87,7 @@ function SkillRow({
             tone: "muted",
           },
         ]),
-    ...(skill.unlisted === true
-      ? [
-          {
-            text: t`Tasks' list of skills is full without it, so only naming it to her reaches a task. Switch off skills tasks don't need.`,
-            tone: "warning",
-          },
-        ]
-      : []),
+    ...(reach === null ? [] : [{ text: reach, tone: "warning" }]),
     ...problems.map((text) => ({ text, tone: "warning" })),
   ];
   const off = !skill.enabled || shadowedBy !== undefined;
@@ -212,10 +215,15 @@ export function SkillsCard() {
   const [filter, setFilter] = useState<SkillFilter>("all");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
+  // A read still under way when a change lands would answer with the skills as they were.
+  const install = async (data: SkillsResponse) => {
+    await queryClient.cancelQueries({ queryKey: skillsQuery.queryKey });
+    queryClient.setQueryData(skillsQuery.queryKey, data);
+  };
   const change = useMutation({
     mutationFn: ({ name, enabled }: { readonly name: string; readonly enabled: boolean }) =>
       call("PUT /api/local/skills/:name", { params: { name }, body: { enabled } }),
-    onSuccess: (data) => queryClient.setQueryData(skillsQuery.queryKey, data),
+    onSuccess: install,
     onError: (error) => {
       toastError(error);
       void queryClient.invalidateQueries({ queryKey: skillsQuery.queryKey });
@@ -344,7 +352,7 @@ export function SkillsCard() {
         folder={eidolon}
         skills={data?.skills ?? []}
         onClose={() => setAdding(false)}
-        onAdded={(added) => queryClient.setQueryData(skillsQuery.queryKey, added)}
+        onAdded={(added) => void install(added)}
       />
     </SectionCard>
   );

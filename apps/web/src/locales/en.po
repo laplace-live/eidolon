@@ -4381,6 +4381,10 @@ msgstr "She answered {name}'s line."
 msgid "She answered your line."
 msgstr "She answered your line."
 
+#: src/features/settings/skills-card.tsx
+msgid "She can name 150 skills at most, so she can't ask for this one by name."
+msgstr "She can name 150 skills at most, so she can't ask for this one by name."
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "She can't switch to it anymore, and its voice is removed from her settings."
 msgstr "She can't switch to it anymore, and its voice is removed from her settings."
@@ -4889,6 +4893,10 @@ msgstr "Tasks can't start yet"
 #: src/features/settings/skills-card.tsx
 msgid "Tasks' list of skills is full"
 msgstr "Tasks' list of skills is full"
+
+#: src/features/settings/skills-card.tsx
+msgid "Tasks' list of skills is full without it, and she can name 150 skills at most, so no task can use it. Switch off skills tasks don't need."
+msgstr "Tasks' list of skills is full without it, and she can name 150 skills at most, so no task can use it. Switch off skills tasks don't need."
 
 #: src/features/settings/skills-card.tsx
 msgid "Tasks' list of skills is full without it, so only naming it to her reaches a task. Switch off skills tasks don't need."

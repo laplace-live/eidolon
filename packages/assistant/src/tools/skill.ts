@@ -4,7 +4,7 @@
 import type { Dirent } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import type { TaskToolContext, TaskToolResult } from "@eidolon/engine";
+import { estimateTokens, type TaskToolContext, type TaskToolResult } from "@eidolon/engine";
 import { fold, isMissing } from "../policy.ts";
 import {
   isInside,
@@ -154,28 +154,48 @@ async function load(
 export interface TaskSkills {
   /** What skill may load: the catalog's, then the named ones it doesn't list. */
   readonly loadable: readonly Skill[];
-  /** The named skills whose SKILL.md reads, for the prompt to carry whole. */
+  /**
+   * The named skills whose SKILL.md reads, each with it as skill answers for it, or, past the room
+   * a task's context leaves them, with a note to load it.
+   */
   readonly requested: readonly RequestedSkill[];
   /** The named skills whose SKILL.md doesn't read now, and why. */
   readonly unreadable: readonly SkillProblem[];
 }
 
+/** What the prompt carries for a named skill its SKILL.md didn't fit beside. */
+export const SKILL_LEFT_TO_LOAD =
+  "Its SKILL.md didn't fit here: load it with skill before you do anything else.";
+
 /**
- * A run's skills from `catalog`: what its skill tool loads, and what its prompt carries whole, each
- * named skill's SKILL.md as skill answers for it.
+ * A run's skills from `catalog`: what its skill tool loads, and what its prompt carries for each
+ * named skill, its SKILL.md as skill answers for it, cut as skill cuts a file. Together they fill
+ * at most a quarter of `contextTokens`, the task's context; a skill past that is named with
+ * SKILL_LEFT_TO_LOAD.
  */
-export async function taskSkills(catalog: SkillCatalog, guard: PathGuard): Promise<TaskSkills> {
+export async function taskSkills(
+  catalog: SkillCatalog,
+  guard: PathGuard,
+  contextTokens: number,
+): Promise<TaskSkills> {
   const listed = new Set(catalog.skills.map((skill) => skill.name));
   const context: TaskToolContext = { signal: new AbortController().signal, onUpdate: () => {} };
   const requested: RequestedSkill[] = [];
   const unreadable: SkillProblem[] = [];
+  let room = contextTokens / 4;
   for (const skill of catalog.requested) {
     const { content, isError } = await load(skill, guard, { path: SKILL_FILE }, context);
     if (isError) {
       unreadable.push({ path: join(skill.dir, SKILL_FILE), message: content, skipped: true });
-    } else {
-      requested.push({ skill, text: content });
+      continue;
     }
+    const cost = estimateTokens(content);
+    if (cost > room) {
+      requested.push({ skill, text: SKILL_LEFT_TO_LOAD });
+      continue;
+    }
+    room -= cost;
+    requested.push({ skill, text: content });
   }
   return {
     loadable: [

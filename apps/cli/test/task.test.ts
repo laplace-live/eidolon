@@ -107,11 +107,13 @@ function transcript(dir: string): TaskEntry[] {
     .map((line) => JSON.parse(line) as TaskEntry);
 }
 
-function writeSkill(dir: string, name: string, description: string): void {
+/** A SKILL.md in `dir`/`name`; `explicit` opts it out of model use. */
+function writeSkill(dir: string, name: string, description: string, explicit = false): void {
   mkdirSync(join(dir, name), { recursive: true });
+  const optOut = explicit ? "disable-model-invocation: true\n" : "";
   writeFileSync(
     join(dir, name, "SKILL.md"),
-    `---\nname: ${name}\ndescription: ${description}\n---\nThe ${name} steps.\n`,
+    `---\nname: ${name}\ndescription: ${description}\n${optOut}---\nThe ${name} steps.\n`,
   );
 }
 
@@ -894,7 +896,7 @@ describe("laplace-task", () => {
   });
 
   test("--skill carries an owner's skill whole in every run's prompt, kept for --resume; one switched off or unknown is a usage error", async () => {
-    writeSkill(sharedSkillsDir(), "ship", "Ship a change");
+    writeSkill(sharedSkillsDir(), "ship", "Ship a change", true);
     writeSkill(sharedSkillsDir(), "audit", "Audit the change");
     writeFileSync(skillSwitchesPath(dataHome()), JSON.stringify({ disabled: ["audit"] }));
     try {
@@ -911,21 +913,48 @@ describe("laplace-task", () => {
         2,
         "laplace-task: error: argument --skill: 'audit' is switched off in the app's Settings (choose from 'ship')",
       ]);
+      const run = (argv: readonly string[], mind: ReturnType<typeof scripted>) =>
+        taskMain(argv, { ...captureIo().io, createMind: mind.createMind, confirm: null });
+      const carried = (mind: ReturnType<typeof scripted>) => {
+        const system = mind.requests[0]?.system ?? "";
+        const block = system.slice(system.indexOf("<requested_skills>"));
+        return (
+          block.startsWith("<requested_skills>\nThe owner asked for these skills") &&
+          block.includes('<skill name="ship">') &&
+          block.includes("The ship steps.")
+        );
+      };
+      const first = scripted([
+        // biome-ignore lint/correctness/useYield: it fails before its first chunk.
+        async function* () {
+          throw new ProviderHttpError("OpenRouter", 400, "No such model");
+        },
+      ]);
+      expect(await run(["--folder", folder, "--skill", "ship", "Ship it"], first)).toBe(1);
+      expect(carried(first)).toBe(true);
+      const { id, dir } = onlyTask();
+      expect((await readSnapshot(dir))?.skills).toEqual(["ship"]);
+      const resumed = scripted([says("Done.")]);
+      expect(await run(["--resume", id], resumed)).toBe(0);
+      expect(carried(resumed)).toBe(true);
+    } finally {
+      rmSync(sharedSkillsDir(), { recursive: true, force: true });
+      rmSync(skillSwitchesPath(dataHome()), { force: true });
+    }
+  });
+
+  test("a skills.json that doesn't read switches nothing off, and says so", async () => {
+    writeSkill(sharedSkillsDir(), "ship", "Ship a change");
+    writeFileSync(skillSwitchesPath(dataHome()), "{");
+    try {
       const mind = scripted([says("Done.")]);
-      const io = captureIo();
-      expect(
-        await taskMain(["--folder", folder, "--skill", "ship", "Ship it"], {
-          ...io.io,
-          createMind: mind.createMind,
-          confirm: null,
-        }),
-      ).toBe(0);
-      const system = mind.requests[0]?.system ?? "";
-      expect(system).toContain(
-        `<requested_skills>\nThe owner asked for these skills for this task: follow each one.`,
-      );
-      expect(system).toContain("The ship steps.");
-      expect((await readSnapshot(onlyTask().dir))?.skills).toEqual(["ship"]);
+      const io = { ...captureIo().io, createMind: mind.createMind, confirm: null };
+      expect(await taskMain(["--folder", folder, "Ship it"], io)).toBe(0);
+      const warnings = logs.records
+        .filter(([level]) => level === "WARNING")
+        .map(([, text]) => text);
+      expect(warnings).toContain("skills.json isn't JSON, so no skill is switched off");
+      expect(mind.requests[0]?.system).toContain('<skill name="ship" from="owner">');
     } finally {
       rmSync(sharedSkillsDir(), { recursive: true, force: true });
       rmSync(skillSwitchesPath(dataHome()), { force: true });

@@ -45,14 +45,6 @@ export function NewSkillDialog({ open, folder, skills, onClose, onAdded }: NewSk
   const [instructions, setInstructions] = useState("");
   const [tried, setTried] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    setName("");
-    setDescription("");
-    setInstructions("");
-    setTried(false);
-  }, [open]);
-
   const trimmed = name.trim();
   const save = useMutation({
     mutationFn: () =>
@@ -63,6 +55,17 @@ export function NewSkillDialog({ open, folder, skills, onClose, onAdded }: NewSk
       onClose();
     },
   });
+  const { reset } = save;
+
+  // Every opening starts from an empty form, a failed save's error gone with it.
+  useEffect(() => {
+    if (!open) return;
+    setName("");
+    setDescription("");
+    setInstructions("");
+    setTried(false);
+    reset();
+  }, [open, reset]);
 
   const same = skills.filter((skill) => skill.name === trimmed);
   const nameProblem =

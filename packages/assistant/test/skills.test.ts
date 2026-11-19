@@ -11,6 +11,7 @@ import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { estimateTokens } from "@eidolon/engine";
 import {
+  catalogOf,
   loadSkills,
   type SkillProblem,
   scanSkills,
@@ -76,6 +77,7 @@ describe("loadSkills", () => {
       missing: [],
       off: [],
       unlisted: [],
+      switchesProblem: null,
       problems: [],
     });
   });
@@ -151,6 +153,7 @@ describe("loadSkills", () => {
       missing: [],
       off: [],
       unlisted: [],
+      switchesProblem: null,
       problems: [
         { path: missing, message: "description is required", skipped: true },
         { path: bare, message: "description is required", skipped: true },
@@ -170,6 +173,7 @@ describe("loadSkills", () => {
       missing: [],
       off: [],
       unlisted: [],
+      switchesProblem: null,
       problems: [
         {
           path,
@@ -279,6 +283,7 @@ describe("loadSkills", () => {
       missing: [],
       off: [],
       unlisted: [],
+      switchesProblem: null,
       problems: [],
     });
   });
@@ -319,7 +324,15 @@ describe("loadSkills", () => {
 
   test("no folders, no skills and no problems", async () => {
     const { home, folder } = await places();
-    const empty = { skills: [], requested: [], missing: [], off: [], unlisted: [], problems: [] };
+    const empty = {
+      skills: [],
+      requested: [],
+      missing: [],
+      off: [],
+      unlisted: [],
+      problems: [],
+      switchesProblem: null,
+    };
     expect(await loadSkills({ dataHome: home })).toEqual(empty);
     expect(await loadSkills({ dataHome: home, folder })).toEqual(empty);
     mkdirSync(folder, { recursive: true });
@@ -354,6 +367,7 @@ describe("loadSkills", () => {
       missing: [],
       off: [],
       unlisted: [],
+      switchesProblem: null,
       problems: [
         { path: join(owner, "inside", "SKILL.md"), message: "isn't a file", skipped: true },
         {
@@ -384,6 +398,7 @@ describe("loadSkills", () => {
       missing: [],
       off: [],
       unlisted: [],
+      switchesProblem: null,
       problems: [{ path: owner, message: "stopped scanning after 2000 folders", skipped: true }],
     });
   });
@@ -443,6 +458,7 @@ describe("loadSkills", () => {
       missing: [],
       off: [],
       unlisted: [],
+      switchesProblem: null,
       problems: [],
     });
   });
@@ -472,6 +488,7 @@ describe("loadSkills", () => {
       missing: [],
       off: [],
       unlisted: [],
+      switchesProblem: null,
       problems: [
         {
           path: join(folder, ".agents", "skills", "keys"),
@@ -508,6 +525,7 @@ describe("loadSkills", () => {
       missing: [],
       off: [],
       unlisted: [],
+      switchesProblem: null,
       problems: [
         {
           path: join(owner, "linked", "SKILL.md"),
@@ -665,11 +683,13 @@ describe("the shared folder, the owner's switches and the skills she names", () 
       ["{disabled: [notes]", "isn't JSON"],
       ['{"disabled": "notes"}', "isn't {disabled: [the names of skills switched off]}"],
       ['["notes"]', "isn't {disabled: [the names of skills switched off]}"],
+      ['{"disabled": null}', "isn't {disabled: [the names of skills switched off]}"],
     ] as const) {
       write(skillSwitchesPath(home), text);
       const scan = await scanSkills({ dataHome: home });
       expect([scan.switchesProblem, [...scan.disabled]]).toEqual([problem, []]);
       expect(skillNames(scan)).toEqual(["notes"]);
+      expect(catalogOf(scan).switchesProblem).toBe(problem);
     }
     write(skillSwitchesPath(home), "{}");
     expect((await scanSkills({ dataHome: home })).switchesProblem).toBeNull();

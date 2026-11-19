@@ -511,9 +511,12 @@ function filesHeld(
 /** What a run's skills left out, and why: Settings shows the owner's, the log the rest. */
 function logSkills(
   id: string,
-  { problems, unlisted, missing }: SkillCatalog,
+  { problems, unlisted, missing, switchesProblem }: SkillCatalog,
   { unreadable }: TaskSkills,
 ): void {
+  if (switchesProblem !== null) {
+    logger.warning(`Task ${id}: skills.json ${switchesProblem}, so no skill is switched off`);
+  }
   for (const { path, message, skipped } of [...problems, ...unreadable]) {
     logger.warning(`Task ${id}: ${skipped ? "skipping " : ""}skill ${path}: ${message}`);
   }
@@ -1491,7 +1494,7 @@ export class TaskManager {
       folder: brief.folder,
       requested: task.snapshot.skills ?? [],
     });
-    const named = await taskSkills(skills, policy);
+    const named = await taskSkills(skills, policy, this.#settings().contextTokens);
     logSkills(id, skills, named);
     const mcp = await this.#mcpOf(task, run, policy);
     const tools = [

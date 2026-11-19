@@ -92,6 +92,8 @@ export interface SkillCatalog {
   /** Found and on, but past 150 skills or 4,500 tokens. */
   readonly unlisted: readonly Skill[];
   readonly problems: readonly SkillProblem[];
+  /** Why skills.json can't be read, which then switches nothing off; null when it reads. */
+  readonly switchesProblem: string | null;
 }
 
 export function skillsDir(dataHome: string): string {
@@ -361,7 +363,12 @@ async function readSwitches(
   } catch {
     return none("isn't JSON");
   }
-  const disabled = isPlainObject(value) ? (value.disabled ?? []) : null;
+  // `{}` switches nothing off; a `disabled` that isn't a list of names, null too, is a problem.
+  const disabled = !isPlainObject(value)
+    ? null
+    : value.disabled === undefined
+      ? []
+      : value.disabled;
   if (!Array.isArray(disabled) || !disabled.every((name) => typeof name === "string")) {
     return none("isn't {disabled: [the names of skills switched off]}");
   }
@@ -470,6 +477,7 @@ export function catalogOf(scan: SkillScan, requested: readonly string[] = []): S
     off,
     unlisted: ordered.slice(skills.length),
     problems: scan.problems,
+    switchesProblem: scan.switchesProblem,
   };
 }
 

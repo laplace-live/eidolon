@@ -578,11 +578,13 @@ tools.
   folder and filtered by source or by those switched off. A row has the name, its source as a
   badge (**Eidolon** or **Shared**), **Only When Named** for one that opts out of model use, its
   folder, the start of its description and its switch, and below, where a link leads, the skill of
-  the same name that hides it (which has no switch), the catalog leaving it out, and its problems;
-  the card warns once tasks' catalog is full, lists the `SKILL.md` files left out and why, and
-  shows both folders in its footer. **Refresh** reads the folders again, as a focused tab does, and
-  **Add Skill** writes a new one into the data home's folder from its name, description and
-  instructions, checked as the server checks them (`new-skill-dialog.tsx`).
+  the same name that hides it (which has no switch), the catalog or her 150 names leaving it out,
+  and its problems; the card warns once tasks' catalog is full, lists the `SKILL.md` files left
+  out and why, and shows both folders in its footer. **Refresh** reads the folders again, as a
+  focused tab does, and **Add Skill** writes a new one into the data home's folder from its name,
+  description and instructions, checked as the server checks them (`new-skill-dialog.tsx`). A
+  switch's or a new skill's answer replaces the list only after any read still under way is
+  cancelled, so an older read can't put the old switches back.
 - **Spend:** a task's requests are recorded with `source: "task"` and the task's id.
 
 ## Jobs

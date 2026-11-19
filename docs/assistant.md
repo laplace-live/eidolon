@@ -367,17 +367,20 @@ and `description` the worker's prompt lists, and whose body and files the worker
   why, and the next switch writes it anew.
 - **The catalog,** `<skills>` after `<project_context>` in the worker's prompt, lists each as
   `<skill name="…" from="owner">…</skill>`, escaped, the data home's first, then the shared
-  folder's (`from="owner"` too), then the task folder's, at most 150 and about 4,500 tokens; those
-  left out can't be loaded unless she named them. The folder's are called untrusted there, and the
-  file text the prompt quotes can't open or close `<skills>`, `<skill>` or `<requested_skills>`.
+  folder's (`from="owner"` too), then the task folder's, at most 150 and about 4,500 tokens; an
+  owner's or a shared skill left out loads only when she names it, and a task folder's can't be
+  named. The folder's are called untrusted there, and the file text the prompt quotes can't open
+  or close `<skills>`, `<skill>` or `<requested_skills>`.
   `disable-model-invocation: true` leaves a skill out of it, and `allowed-tools` grants nothing.
-- **The skills she names** ([`start_task`](#start_task)'s `skills`), only the owner's: the task
-  keeps their names (`task.json`'s `skills`), and each run's prompt carries each one's `SKILL.md`,
-  as `skill` answers for it, in `<requested_skills>` after `<skills>`, whether or not the catalog
-  lists it, `disable-model-invocation: true` included; `skill` loads the rest of its folder. A
-  start naming a skill switched off, or one the owner hasn't, is refused (400 `unknown-skill`),
-  saying which, so she can tell the owner; one switched off or gone since the start is left out of
-  the next run, with a warning.
+- **The skills she names** ([`start_task`](#start_task)'s `skills`), only the owner's, 150 at most
+  by name, which Settings marks past them: the task keeps their names (`task.json`'s `skills`), and
+  each run's prompt carries each one's `SKILL.md` as `skill` answers for it, cut at 2,000 lines or
+  50 KB with where to read on, in `<requested_skills>` after `<skills>`, whether or not the catalog
+  lists it, `disable-model-invocation: true` included (`taskSkills`). Together they take at most a
+  quarter of the task's context (`assistant.contextTokens`); one past that is named with a note to
+  load it first. `skill` loads the rest of a skill's folder. A start naming a skill switched off,
+  or one the owner hasn't, is refused (400 `unknown-skill`), saying which, so she can tell the
+  owner; one switched off or gone since the start is left out of the next run, with a warning.
 - **`skill`** reads only inside the folder of a skill the prompt lists or carries, as it lies on
   disk, and never a dot-file or dot-folder there; a folder skill's files must pass the task's
   policy too. It never pauses the task. Skills get no environment, key or command of their own: a

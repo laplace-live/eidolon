@@ -49,7 +49,8 @@ set `EIDOLON_HOME=/data`.
   tasks/<id>/           assistant tasks' records; tasks/allowed-commands.json, the commands
                         allowed for good from their cards (assistant.md)
   skills/<name>/        the owner's Agent Skills, each a SKILL.md, which tasks may load, besides
-                        those in the folder their agents share, ~/.agents/skills (assistant.md)
+                        those in the folder their agents share: EIDOLON_SHARED_SKILLS, else
+                        ~/.agents/skills (assistant.md)
   skills.json           the names of the skills switched off in Settings, which only the app writes
   mcp.json              the MCP servers tasks may call; mcp/ (0700) is where one with no cwd runs
   mem0/history.db       Mem0's change log (the TypeScript bot's default)

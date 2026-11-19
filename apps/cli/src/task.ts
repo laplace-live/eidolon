@@ -404,7 +404,14 @@ async function equip(
     folder: brief.folder,
     requested: named,
   });
-  const { loadable, requested, unreadable } = await taskSkills(skills, policy);
+  const { loadable, requested, unreadable } = await taskSkills(
+    skills,
+    policy,
+    assistantSettings().contextTokens,
+  );
+  if (skills.switchesProblem !== null) {
+    logger.warning(`skills.json ${skills.switchesProblem}, so no skill is switched off`);
+  }
   for (const { path, message, skipped } of [...skills.problems, ...unreadable]) {
     logger.warning(visible(`${skipped ? "Skipping " : ""}skill ${path}: ${message}`));
   }

@@ -2893,22 +2893,41 @@ describe("skills", () => {
     test("a named skill switched off or gone since its start is left out of the next run, with a warning", async () => {
       settings = { ...settings, folders: [work] };
       skill(shared("ship"), "ship", "Ship a change.");
-      minds.script("Gone", [calls([call("f1", "web_fetch", { url: "https://203.0.113.7/" })])]);
+      skill(shared("audit"), "audit", "Audit a change.");
+      const fetches = [calls([call("f1", "web_fetch", { url: "https://203.0.113.7/" })])];
+      minds.script("Off", fetches);
+      minds.script("Gone", fetches);
       const tasks = await booted();
-      const { id } = await tasks.start(
-        { goal: "Gone", folder: join(work, "gone"), skills: ["ship"] },
-        ORIGIN,
+      const started = await Promise.all(
+        [
+          ["Off", "ship"],
+          ["Gone", "audit"],
+        ].map(async ([goal, name]) => {
+          const { id } = await tasks.start(
+            { goal: goal as string, folder: join(work, goal as string), skills: [name as string] },
+            ORIGIN,
+          );
+          await reach(tasks, id, "paused");
+          expect(minds.for(goal as string)[0]?.system).toContain(`<skill name="${name}">`);
+          return id;
+        }),
       );
-      await reach(tasks, id, "paused");
-      expect(minds.for("Gone")[0]?.system).toContain('<skill name="ship">');
       await tasks.changeSkill("ship", false);
-      await tasks.approve(id, { answer: "deny" });
-      await reach(tasks, id, "succeeded");
-      const resumed = minds.for("Gone")[1];
-      expect(resumed?.system).not.toContain("<requested_skills>");
-      expect(resumed?.tools.map((tool) => tool.name)).not.toContain("skill");
+      rmSync(shared("audit"), { recursive: true });
+      for (const [index, goal] of ["Off", "Gone"].entries()) {
+        const id = started[index] as string;
+        await tasks.approve(id, { answer: "deny" });
+        await reach(tasks, id, "succeeded");
+        const resumed = minds.for(goal)[1];
+        expect(resumed?.system).not.toContain("<requested_skills>");
+        expect(resumed?.tools.map((tool) => tool.name)).not.toContain("skill");
+      }
+      const [off, gone] = started;
       expect(logs.lines()).toContain(
-        `WARNING Task ${id}: no longer has the skills it was given: ship`,
+        `WARNING Task ${off}: no longer has the skills it was given: ship`,
+      );
+      expect(logs.lines()).toContain(
+        `WARNING Task ${gone}: no longer has the skills it was given: audit`,
       );
     });
 
@@ -3021,6 +3040,39 @@ describe("skills", () => {
         expect([bad.status, bad.code, bad.message]).toEqual([400, "bad-request", message]);
       }
       expect(existsSync(owner("notes"))).toBe(false);
+    });
+
+    test("a write that fails leaves no folder behind, so the next try writes the skill", async () => {
+      const tasks = manager();
+      const input = { name: "notes", description: "Notes.", instructions: "Keep notes." };
+      mkdirSync(owner(""), { recursive: true });
+      // Folders made now can't be written in: the SKILL.md write fails after its folder is made.
+      const umask = process.umask(0o277);
+      try {
+        await expect(tasks.createSkill(input)).rejects.toMatchObject({ code: "EACCES" });
+      } finally {
+        process.umask(umask);
+      }
+      expect(readdirSync(owner(""))).toEqual([]);
+      const view = await tasks.createSkill(input);
+      expect(view.skills.map((each) => each.name)).toEqual(["notes"]);
+      expect(readdirSync(owner(""))).toEqual(["notes"]);
+    });
+
+    test("past the 150 names she can give, Settings marks the skills she can't name", async () => {
+      for (let i = 0; i < 152; i++) {
+        const name = `s${String(i).padStart(3, "0")}`;
+        skill(shared(name), name, `Skill ${name}.`);
+      }
+      const tasks = manager();
+      const view = await tasks.skills();
+      expect(tasks.skillNames()).toHaveLength(150);
+      expect(view.skills.filter((each) => each.unnameable).map((each) => each.name)).toEqual([
+        "s150",
+        "s151",
+      ]);
+      // Most are left out of the catalog too: it holds about 4,500 tokens of them.
+      expect(view.skills.find((each) => each.name === "s151")?.unlisted).toBe(true);
     });
   });
 });

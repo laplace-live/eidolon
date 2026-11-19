@@ -348,7 +348,8 @@ the layout's one line.
 - **Interruptions never stop a task; only a cancel does:** the card's Stop, a Deny at its start,
   Assistant Mode off, a deleted chat, or her `stop_task` on the owner's word.
 - **The worker has no persona:** the brief, the folder's `AGENTS.md` and `CLAUDE.md`, its tools'
-  rules, the skills catalog, the date and the folder; no `prompt.md`, Mem0 or persona facts.
+  rules, the skills catalog and the skills she named, the date and the folder; no `prompt.md`, Mem0
+  or persona facts.
 - **A command and an MCP server run as the owner, outside `FolderPolicy`.** Each command and MCP
   call waits on the task's card unless the owner allowed that exact command in that folder, or
   always allows that tool, and such a grant stops applying once the task has read outside content

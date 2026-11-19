@@ -1702,8 +1702,10 @@ export interface SkillView {
   readonly enabled: boolean;
   /** It opts out of model use: a task follows it only when she names it. */
   readonly onlyWhenNamed?: true;
-  /** On, but tasks' list of skills is full without it: only her naming it reaches a task. */
+  /** On, but tasks' list of skills is full without it, so a task loads it only when she names it. */
   readonly unlisted?: true;
+  /** On, but past the 150 names she can give a task: she can't ask for it by name. */
+  readonly unnameable?: true;
   /** The folder of the skill by this name that is used instead. */
   readonly shadowedBy?: string;
   /** What is off about it, in English, such as a name that breaks the naming rules. */
