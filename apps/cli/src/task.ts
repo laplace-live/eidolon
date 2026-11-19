@@ -410,7 +410,7 @@ async function equip(
     assistantSettings().contextTokens,
   );
   if (skills.switchesProblem !== null) {
-    logger.warning(`skills.json ${skills.switchesProblem}, so no skill is switched off`);
+    logger.warning(visible(`skills.json ${skills.switchesProblem}, so no skill is switched off`));
   }
   for (const { path, message, skipped } of [...skills.problems, ...unreadable]) {
     logger.warning(visible(`${skipped ? "Skipping " : ""}skill ${path}: ${message}`));

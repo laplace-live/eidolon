@@ -738,6 +738,8 @@ describe("approvals", () => {
       access: "read",
       folder: realpathSync(join(work, "notes")),
     });
+    // The file follows the snapshot in memory, which `reach` reads.
+    await until(async () => (await onDisk(id))?.status === "paused");
     expect((await onDisk(id))?.pending).toEqual(paused.pending);
 
     const approved = await tasks.approve(id, { answer: "once" });
