@@ -7,6 +7,7 @@ import {
   openrouterHeaders,
   pyRepr,
   pyStrip,
+  withoutTrailingSlashes,
 } from "@eidolon/config";
 import { billingProvider, hasKey, reportUsage, select, type Units } from "@eidolon/providers";
 
@@ -114,7 +115,7 @@ export class OpenRouterReranker implements Reranker {
     this.modelName = options.modelName ?? DEFAULT_RERANK_MODEL;
     this.column = options.column ?? "text";
     this.topN = options.topN ?? null;
-    this.baseUrl = (options.baseUrl ?? DEFAULT_RERANK_BASE_URL).replace(/\/+$/, "");
+    this.baseUrl = withoutTrailingSlashes(options.baseUrl ?? DEFAULT_RERANK_BASE_URL);
     this.#apiKey = options.apiKey;
     this.#openrouter = options.openrouter ?? true;
     this.#onUsage = options.onUsage;

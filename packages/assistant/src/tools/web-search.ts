@@ -1,6 +1,6 @@
 // web_search: the web's top results for a query, each a title, a URL and an excerpt of the page,
 // from the search role's provider. The worker reads the pages it relies on with web_fetch.
-import { errorText } from "@eidolon/config";
+import { errorText, withoutTrailingSlashes } from "@eidolon/config";
 import type { AssistantTool } from "../types.ts";
 import {
   ABORTED,
@@ -60,11 +60,7 @@ export interface WebSearchOptions {
  * when it isn't one. A URL's scheme is dropped, as models often send one.
  */
 function siteOf(text: string): string | null {
-  const unschemed = text.trim().replace(/^https?:\/\//i, "");
-  // Trailing slashes cut by hand: /\/+$/ is quadratic on a long run of them that doesn't end it.
-  let end = unschemed.length;
-  while (end > 0 && unschemed[end - 1] === "/") end--;
-  const bare = unschemed.slice(0, end);
+  const bare = withoutTrailingSlashes(text.trim().replace(/^https?:\/\//i, ""));
   const parts = /^(\*\.)?([^/\s*@:?#]+)(\/\S*)?$/.exec(bare);
   if (parts === null) return null;
   let host: string;

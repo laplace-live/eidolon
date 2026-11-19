@@ -253,6 +253,17 @@ describe("pyParseInt and pyParseFloat", () => {
     expect(Object.is(pyParseInt("-0"), 0)).toBe(true);
   });
 
+  test("only ASCII whitespace at either end is skipped, however long a run inside is", () => {
+    expect(pyParseInt(" \t\n\v\f\r42 \t\n\v\f\r")).toBe(42);
+    expect(pyParseFloat("\r\n-2.5\t ")).toBe(-2.5);
+    expect(pyParseInt("\x1c42")).toBeNull();
+    const inside = `4${" ".repeat(200_000)}2`;
+    const started = performance.now();
+    expect(pyParseInt(inside)).toBeNull();
+    expect(pyParseFloat(inside)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   test("float() the same way, with inf and nan", () => {
     const cases: [string, number | null][] = [
       ["\uff10.\uff15", 0.5],

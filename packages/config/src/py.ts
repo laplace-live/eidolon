@@ -50,7 +50,16 @@ function pyNumericAscii(text: string): string | null {
   return ascii;
 }
 
-const ASCII_WS_EDGES = /^[ \t\n\v\f\r]+|[ \t\n\v\f\r]+$/g;
+const ASCII_WS = " \t\n\v\f\r";
+
+/** `text` without ASCII whitespace at its ends, cut by hand: a regex for it is quadratic. */
+function stripAsciiWhitespace(text: string): string {
+  let start = 0;
+  let end = text.length;
+  while (start < end && ASCII_WS.includes(text[start] as string)) start++;
+  while (end > start && ASCII_WS.includes(text[end - 1] as string)) end--;
+  return text.slice(start, end);
+}
 const INT_LITERAL = /^([+-]?)(\d+(?:_\d+)*)$/;
 const FLOAT_LITERAL =
   /^[+-]?(?:\d+(?:_\d+)*(?:\.(?:\d+(?:_\d+)*)?)?|\.\d+(?:_\d+)*)(?:[eE][+-]?\d+(?:_\d+)*)?$/;
@@ -58,7 +67,8 @@ const SPECIAL_FLOAT = /^([+-]?)(inf|infinity|nan)$/i;
 
 /** Python `int(text)`, or null where it raises ValueError. */
 export function pyParseInt(text: string): number | null {
-  const match = INT_LITERAL.exec(pyNumericAscii(text)?.replace(ASCII_WS_EDGES, "") ?? "");
+  const ascii = pyNumericAscii(text);
+  const match = INT_LITERAL.exec(ascii === null ? "" : stripAsciiWhitespace(ascii));
   if (!match) return null;
   const n = Number((match[2] as string).replaceAll("_", ""));
   return match[1] === "-" && n !== 0 ? -n : n;
@@ -66,8 +76,9 @@ export function pyParseInt(text: string): number | null {
 
 /** Python `float(text)`, `inf` and `nan` included, or null where it raises ValueError. */
 export function pyParseFloat(text: string): number | null {
-  const ascii = pyNumericAscii(text)?.replace(ASCII_WS_EDGES, "");
-  if (ascii === undefined) return null;
+  const numeric = pyNumericAscii(text);
+  if (numeric === null) return null;
+  const ascii = stripAsciiWhitespace(numeric);
   if (FLOAT_LITERAL.test(ascii)) return Number(ascii.replaceAll("_", ""));
   const special = SPECIAL_FLOAT.exec(ascii);
   if (!special) return null;

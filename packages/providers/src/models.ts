@@ -1,6 +1,6 @@
 // The models an account can use, as its provider's API lists them: nothing here is a list of its
 // own. A provider without a listing, or one that refuses, leaves the caller to take any id typed.
-import { isPlainObject } from "@eidolon/config";
+import { isPlainObject, withoutTrailingSlashes } from "@eidolon/config";
 import type { Account } from "./accounts.ts";
 import { ANTHROPIC_VERSION, type Category } from "./catalog.ts";
 import { errorMessageOf } from "./http/errors.ts";
@@ -26,8 +26,6 @@ interface Request {
   readonly headers: Readonly<Record<string, string>>;
   readonly parse: (body: unknown) => ListedModel[];
 }
-
-const trim = (url: string) => url.replace(/\/+$/, "");
 
 function bearer(key: string | undefined): Record<string, string> {
   return key ? { Authorization: `Bearer ${key}` } : {};
@@ -91,7 +89,7 @@ function byKind(models: ListedModel[], category: Category, provider: string): Li
 
 /** How `account`'s provider lists `category`'s models; null where it has no listing. */
 function requestFor(account: Account, category: Category): Request | null {
-  const base = account.baseUrl === undefined ? undefined : trim(account.baseUrl);
+  const base = account.baseUrl === undefined ? undefined : withoutTrailingSlashes(account.baseUrl);
   const key = account.apiKey;
   switch (account.provider.id) {
     case "openrouter": {

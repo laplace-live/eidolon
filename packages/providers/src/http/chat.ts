@@ -7,6 +7,7 @@ import {
   isPlainObject,
   retryDelaySeconds,
   shouldRetry,
+  withoutTrailingSlashes,
 } from "@eidolon/config";
 import { ANTHROPIC_VERSION } from "../catalog.ts";
 import type { Units } from "../pricing.ts";
@@ -102,13 +103,6 @@ export function anthropicUnits(usage: Readonly<Record<string, unknown>>): Units 
     cacheWriteTokens: count(usage.cache_creation_input_tokens),
     outputTokens: count(usage.output_tokens),
   };
-}
-
-/** `url` without its trailing slashes, cut by hand: /\/+$/ is quadratic on a long run of them. */
-function withoutTrailingSlashes(url: string): string {
-  let end = url.length;
-  while (end > 0 && url[end - 1] === "/") end--;
-  return url.slice(0, end);
 }
 
 function linked(signal: AbortSignal | null | undefined): AbortController {

@@ -190,10 +190,12 @@ export function fakeRefine(status?: number): { fetch: typeof fetch; calls: () =>
 
 /** One fetch for a run: Soniox's API to `soniox`, everything else to `other`. */
 export function routeFetch(soniox: typeof fetch, other: typeof fetch): typeof fetch {
-  const route = (input: unknown, init?: RequestInit) =>
-    new URL(String(input)).hostname.endsWith("soniox.com")
+  const route = (input: unknown, init?: RequestInit) => {
+    const host = new URL(String(input)).hostname;
+    return host === "soniox.com" || host.endsWith(".soniox.com")
       ? soniox(input as Request, init)
       : other(input as Request, init);
+  };
   return route as unknown as typeof fetch;
 }
 
