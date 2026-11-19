@@ -935,12 +935,13 @@ export class TaskManager {
     }
     try {
       // A crash between storing the run's end or pause and task.json: resumed, it would run on,
-      // past a spend pause too, which a new run counts from its next multiple.
+      // past a spend pause too, which a new run counts from its next multiple. An approval's
+      // question lives only in its run, so the resume asks it again.
       const last = (await openTaskStore(task.dir).entries()).at(-1);
       let changes: Changes = { status: "interrupted" };
       if (last?.type === "end" && last.outcome.status !== "paused") {
         changes = endedChanges(last.outcome, last.at);
-      } else if (last?.type === "pause") {
+      } else if (last?.type === "pause" && last.reason !== "approval") {
         changes = { status: "paused", pause: { reason: last.reason, detail: last.detail } };
       }
       await this.#change(task, changes, true);

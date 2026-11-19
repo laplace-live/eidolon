@@ -1257,6 +1257,22 @@ describe("a restart", () => {
     expect(minds.made).toEqual([]);
   });
 
+  test("a task a crash left running after its approval pause was stored is resumed, to ask again", async () => {
+    // Only the run that asked holds the question: the resume asks it again before any request.
+    settings = { ...settings, folders: [work] };
+    const command = "printf done > made.txt";
+    const seeded = await seed({ status: "running" }, [
+      { type: "assistant", text: "", calls: [call("b1", "bash", { command })] },
+      { type: "pause", reason: "approval", detail: "run a command" },
+    ]);
+    const tasks = await booted();
+    const paused = await reach(tasks, seeded.id, "paused");
+    expect(paused.pending).toEqual({ kind: "command", call: "b1", command, timeout: 120 });
+    expect(paused.pause).toEqual({ reason: "approval", detail: "run a command" });
+    expect(minds.requests).toEqual([]);
+    expect(existsSync(join(work, "seeded", "made.txt"))).toBe(false);
+  });
+
   test("a task another holder's lock holds is neither resumed nor continued", async () => {
     const seeded = await seed({ status: "interrupted" });
     const running = await seed({ status: "running" });
