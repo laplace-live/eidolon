@@ -24,6 +24,7 @@ entry offers a kind implements it there, and no other does.
 
 | Kind | Interface | Table |
 | --- | --- | --- |
+| Chat | `Mind` (`createMind`, in `@eidolon/engine`), `chatPoster` | `CHAT_DIALECTS` (`chat/index.ts`) |
 | Live speech recognition | `SttStream` | `STT_STREAMS` (`stt/index.ts`) |
 | Batch speech recognition | `transcribe` | `TRANSCRIBERS` (`speech/batch/transcribe.ts`) |
 | Streaming speech | `SpeechStream` | `SPEECH_STREAMS` (`speech/stream/index.ts`) |
@@ -34,8 +35,9 @@ entry offers a kind implements it there, and no other does.
 | Model lists | `listModels` | `LISTINGS` (`models.ts`) |
 
 A new provider is its catalog entry (its offers, prices and free key check), a file for each kind
-it offers, beside that kind's others, and a line in each kind's table. The local app checks a key
-with the catalog's `check` unless `KEY_CHECKS` (`apps/bot/src/local/checks.ts`) needs more.
+it offers, beside that kind's others, and a line in each kind's table; chat needs only its line
+([Requests](#requests)). The local app checks a key with the catalog's `check` unless `KEY_CHECKS`
+(`apps/bot/src/local/checks.ts`) needs more.
 
 ## Roles
 
@@ -192,6 +194,12 @@ One model can be reached two ways. Claude runs on an OpenRouter account as
 the response carries what the request cost; on a maker's API the catalog's price estimates it.
 
 ## Requests
+
+A chat provider's line in `CHAT_DIALECTS` names the wire it speaks, Anthropic's Messages API or
+OpenAI-compatible chat, and where its API parts from OpenAI's own: whether it takes `developer`
+messages, `stop` or a second system message, the fields a mind sends over every other (DeepSeek's
+thinking off, Anthropic's fallbacks), OpenRouter's attribution, cost and own fields, and what a
+JSON caller's body becomes there. The minds and the JSON posters read it and name no provider.
 
 - **Anthropic** goes through `AnthropicClient`: `x-api-key`, `anthropic-version`, prompt caching,
   and the server-side fallback beta with `fallbacks: "default"` on the models that offer one. It

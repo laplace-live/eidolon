@@ -2,6 +2,7 @@
 // every provider the catalog offers a kind from must implement it there, as no other may.
 import { describe, expect, test } from "vitest";
 import { type Category, PROVIDER_IDS, PROVIDERS } from "../src/catalog.ts";
+import { CHAT_DIALECTS } from "../src/chat/index.ts";
 import { DECISION_MODELS } from "../src/decision/index.ts";
 import { LISTINGS } from "../src/models.ts";
 import { REALTIME_DIALECTS } from "../src/realtime/session.ts";
@@ -17,6 +18,7 @@ const offering = (category: Category) =>
     .sort();
 
 const KINDS: readonly (readonly [string, Category, object])[] = [
+  ["chat", "llm", CHAT_DIALECTS],
   ["live speech recognition", "stt", STT_STREAMS],
   ["batch speech recognition", "stt", TRANSCRIBERS],
   ["streaming speech", "tts", SPEECH_STREAMS],

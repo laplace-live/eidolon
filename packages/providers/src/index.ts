@@ -10,6 +10,14 @@ export {
 } from "./accounts.ts";
 export * from "./catalog.ts";
 export {
+  CHAT_DIALECTS,
+  type ChatDialect,
+  type CompletionsDialect,
+  chatDialect,
+  forOpenAI,
+  type MessagesDialect,
+} from "./chat/index.ts";
+export {
   DECISION_MODELS,
   type DecisionAnswers,
   type DecisionModel,
@@ -28,7 +36,6 @@ export {
   reportDecision,
 } from "./decision/openrouter.ts";
 export {
-  ANTHROPIC_FALLBACK_MODELS,
   AnthropicClient,
   anthropicUnits,
   type ChatClientOptions,
@@ -40,7 +47,6 @@ export {
 export { errorMessageOf, httpError, ProviderHttpError } from "./http/errors.ts";
 export {
   chatPoster,
-  forOpenAI,
   fromAnthropicResponse,
   jsonPoster,
   type PostTarget,
