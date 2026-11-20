@@ -404,7 +404,8 @@ async function main(): Promise<number> {
     if (!(error instanceof CheckFailed)) console.log(`FAIL: ${(error as Error).stack}`);
     return 1;
   } finally {
-    rmSync(temp, { recursive: true, force: true });
+    // Windows refuses, for a moment, to delete a folder a process it is ending still holds.
+    rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }
 
