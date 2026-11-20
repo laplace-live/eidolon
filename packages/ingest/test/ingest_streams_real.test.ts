@@ -148,7 +148,8 @@ test.skipIf((!haveStreams || !existsSync(CATALOG)) && !REQUIRED)(
     expect([report.ok, report.error]).toEqual([true, null]);
     const mine = readFileSync(join(db, "stream_catalog.json"), "utf8");
     const expected = readFileSync(CATALOG, "utf8");
-    expect(mine.length).toBe(expected.length);
+    // Masked first: a stamp on a whole second has no fraction, 7 characters shorter.
+    expect(maskBuiltAt(mine).length).toBe(maskBuiltAt(expected).length);
     expect(maskBuiltAt(mine) === maskBuiltAt(expected)).toBe(true);
   },
   600_000,

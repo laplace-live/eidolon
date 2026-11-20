@@ -1,4 +1,5 @@
 // Expected values were printed by CPython 3.13 and pydantic 2.13.
+import { type AddressInfo, createServer } from "node:net";
 import { describe, expect, test } from "vitest";
 import {
   AsyncQueue,
@@ -34,6 +35,23 @@ describe("Python object helpers", () => {
     expect(errorText(new TypeError("boom"))).toBe("boom");
     expect(errorText("plain")).toBe("plain");
     expect(errorText(42)).toBe("42");
+  });
+
+  test("errorText says why Node's fetch failed", async () => {
+    const closed = createServer();
+    await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
+    const { port } = closed.address() as AddressInfo;
+    await new Promise((resolve) => closed.close(resolve));
+    const refused = await fetch(`http://127.0.0.1:${port}/`).catch((error: unknown) => error);
+    expect(errorText(refused)).toBe(`fetch failed: connect ECONNREFUSED 127.0.0.1:${port}`);
+    const everyAddress = new AggregateError([
+      new Error("connect ECONNREFUSED ::1:9"),
+      new Error("connect ECONNREFUSED 127.0.0.1:9"),
+    ]);
+    expect(errorText(new TypeError("fetch failed", { cause: everyAddress }))).toBe(
+      "fetch failed: connect ECONNREFUSED ::1:9; connect ECONNREFUSED 127.0.0.1:9",
+    );
+    expect(errorText(new TypeError("fetch failed"))).toBe("fetch failed");
   });
 
   test("pyError carries the exception name", () => {
