@@ -696,6 +696,11 @@ export const PROVIDERS: readonly Provider[] = [
             note: "Soniox removes it on 2026-12-15 and sends its requests to stt-async-v6",
             price: { unit: "audio-hours", usd: 0.1 },
           },
+          {
+            id: "stt-async-v4",
+            note: "Soniox removed it on 2026-06-30 and sends its requests to stt-async-v5",
+            price: { unit: "audio-hours", usd: 0.1 },
+          },
         ],
       },
     },

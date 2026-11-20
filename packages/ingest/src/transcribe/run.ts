@@ -33,7 +33,7 @@ import {
   resolvePersonaPath,
   sortedPy,
 } from "@eidolon/config";
-import { reportUsage, selectRequired } from "@eidolon/providers";
+import { costOf, priceOf, reportUsage, selectRequired } from "@eidolon/providers";
 import { failureOf } from "../failure.ts";
 import { writeTextAtomic } from "../paths.ts";
 import { noProgress, type RunOptions } from "../progress.ts";
@@ -79,12 +79,6 @@ export const SONIOX_MAX_DURATION_MIN = 300;
 export const SLICE_MAX_MIN_DEFAULT = 280;
 const POLL_INTERVAL_MS = 5_000;
 const STATUS_LOG_EVERY_MS = 10_000;
-// Soniox bills async transcription by the hour of audio.
-const USD_PER_AUDIO_HOUR: Readonly<Record<string, number>> = {
-  "stt-async-v4": 0.1,
-  "stt-async-v5": 0.1,
-  "stt-async-v6": 0.1,
-};
 // What deleting Soniox's copies may take once a run is cancelled; the CLI quits at 10 s.
 const CANCEL_CLEANUP_MS = 8_000;
 // The SDK's limit on `client_reference_id`, in code points.
@@ -145,7 +139,7 @@ export interface TranscribeResult {
   readonly tokens: number;
   /** The audio Soniox processed, in seconds. */
   readonly durationSec: number;
-  /** What the run cost by Soniox's price list; null for a model the list lacks. */
+  /** What the run cost at the catalog's price; null for a model it doesn't price. */
   readonly costUsd: number | null;
 }
 
@@ -250,10 +244,10 @@ export function glossaryPath(persona: string): string {
   return resolvePersonaPath(persona, "glossary.toml");
 }
 
-/** What `durationSec` of audio costs with `model`, or null for a model without a known price. */
+/** What `durationSec` of audio costs with `model` at the catalog's price; null when it has none. */
 export function estimateTranscribeUsd(durationSec: number, model: string): number | null {
-  const rate = USD_PER_AUDIO_HOUR[model];
-  return rate === undefined ? null : (durationSec / 3600) * rate;
+  const price = priceOf("soniox", "transcription", model);
+  return price === undefined ? null : costOf(price, { audioSeconds: durationSec });
 }
 
 /**
@@ -397,7 +391,6 @@ async function transcribe(options: TranscribeOptions): Promise<TranscribeResult>
       provider: "soniox",
       model,
       units: { audioSeconds: outcome.durationSec },
-      estimatedUsd: estimateTranscribeUsd(outcome.durationSec, model),
     });
     // The payload first: it holds everything the transcript renders from, and the transcript
     // stays the mark of a finished stream.

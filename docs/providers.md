@@ -285,7 +285,7 @@ Its length is the provider's figure (MiniMax's) or counted from the MP3's frame 
 | OpenAI | `POST {base}/audio/transcriptions`, multipart, the file named `voice.<ext>` | `gpt-realtime-whisper`, which serves Realtime sessions alone, becomes `gpt-4o-transcribe` | Its length when `usage` is in seconds; token usage is reported as tokens |
 | Deepgram | `POST {base}/v1/listen?model=…&punctuate=true`, the raw clip | as set | `detect_language` without a hint; the length from `metadata.duration` |
 | ElevenLabs | `POST {base}/v1/speech-to-text`, multipart | `_realtime` dropped | `tag_audio_events: false`, so the transcript holds only words, as a call's does |
-| Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run after the transcript is returned, without holding it up, and even when the request fails or is abandoned, each with 10 s of its own; a 404 is quiet. It is its own client: `@eidolon/ingest`'s never reaches the bot image |
+| Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run after the transcript is returned, without holding it up, and even when the request fails or is abandoned, each with 10 s of its own; a 404 is quiet. It shares only the endpoints with `laplace-transcribe`'s client, whose retries, uploads streamed from disk, reference ids and error texts a voice message doesn't want |
 
 Each request reports the clip's seconds, the provider's figure else the recorder's, under the
 hearing role, priced as the transcription role prices that model: Soniox's async models by the
@@ -331,7 +331,9 @@ promotions included, else the caller's own estimate, else none, and it is kept a
 its usage. A record names the provider whose API the request reached, so a role's own base at
 another provider's API (`RERANK_BASE_URL` at Cohere's) is that provider's spend, priced from its
 models. A task's mind also hands each of its records, cost and all, to the task's own meter
-(`createMind`'s `tap`), whose spend pauses read it.
+(`createMind`'s `tap`), whose spend pauses read it. The offline chain's own reports,
+`laplace-transcribe`'s, `laplace-refine`'s and the pipeline's plan, price from the catalog the same
+way ([typescript.md](typescript.md#refine)).
 
 `@eidolon/usage` keeps the records in SQLite, at `EIDOLON_USAGE_DB` or `<data home>/usage.db`, in
 WAL mode with a busy timeout, because the bot, the local app and every job's CLI write to one file.

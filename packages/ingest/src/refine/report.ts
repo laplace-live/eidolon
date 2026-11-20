@@ -11,9 +11,10 @@ import {
   rjust,
   thousands,
 } from "@eidolon/config";
+import { costOf, type Price } from "@eidolon/providers";
 import { loadSidecar, nextTranscript, type ParsedStream, type StreamChunk } from "../streams.ts";
 import type { StreamResult } from "./run.ts";
-import { fmtCost, PRICING_USD_PER_1M, Usage } from "./usage.ts";
+import { fmtCost, refinePrice, Usage } from "./usage.ts";
 import { isV2Refinement } from "./validate.ts";
 
 const lines = (rows: readonly string[]): string => rows.map((row) => `${row}\n`).join("");
@@ -124,11 +125,10 @@ function guessTokens(chunks: number, chars: number): { tokensIn: number; tokensO
   };
 }
 
-function priceOf(model: string, tokensIn: number, tokensOut: number): number | null {
-  const pricing = PRICING_USD_PER_1M.get(model);
-  return pricing === undefined
+function guessUsd(price: Price | undefined, tokensIn: number, tokensOut: number): number | null {
+  return price === undefined
     ? null
-    : (tokensIn * pricing[0] + tokensOut * pricing[1]) / 1_000_000;
+    : costOf(price, { inputTokens: tokensIn, outputTokens: tokensOut });
 }
 
 export interface DryRunReport {
@@ -140,7 +140,7 @@ export interface DryRunReport {
   readonly skipped: number;
   readonly tokensIn: number;
   readonly tokensOut: number;
-  /** Null when the price table doesn't list the model; the text then says $0. */
+  /** Null when the catalog doesn't price the model (`refinePrice`); the text then says $0. */
   readonly costUsd: number | null;
 }
 
@@ -160,6 +160,7 @@ export async function dryRun(
     "(estimates based on char count; actual cost is usually a bit lower)",
     "",
   ];
+  const price = refinePrice(model);
   let chunks = 0;
   let skipped = 0;
   let tokensIn = 0;
@@ -174,7 +175,7 @@ export async function dryRun(
       continue;
     }
     const guess = guessTokens(pending.length, charsOf(pending));
-    const cost = priceOf(model, guess.tokensIn, guess.tokensOut) ?? 0;
+    const cost = guessUsd(price, guess.tokensIn, guess.tokensOut) ?? 0;
     rows.push(
       `  ${name}: ${pending.length} chunks × 2 passes, ~${thousands(guess.tokensIn)} in / ` +
         `~${thousands(guess.tokensOut)} out → ~$${pyFixed(cost, 4)}`,
@@ -183,7 +184,7 @@ export async function dryRun(
     tokensIn += guess.tokensIn;
     tokensOut += guess.tokensOut;
   }
-  const costUsd = priceOf(model, tokensIn, tokensOut);
+  const costUsd = guessUsd(price, tokensIn, tokensOut);
   rows.push(
     "",
     `Estimated total: ${chunks} chunks (2 passes each), ~${thousands(tokensIn)} in / ` +
@@ -247,7 +248,7 @@ export interface RefineCost {
 
 /**
  * The dry run's arithmetic for `chunks` chunks of `chars` characters (text and heading), priced
- * by `history` when it holds the same model, else by the price table. For a video not yet
+ * by `history` when it holds the same model, else by the catalog. For a video not yet
  * transcribed, guess both from its duration.
  */
 export function refineCost(
@@ -260,10 +261,10 @@ export function refineCost(
   if (history !== null && history.model === model) {
     return { ...guess, costUsd: chunks * history.usdPerChunk, basis: "history" };
   }
-  const price = priceOf(model, guess.tokensIn, guess.tokensOut);
-  return price === null
+  const usd = guessUsd(refinePrice(model), guess.tokensIn, guess.tokensOut);
+  return usd === null
     ? { ...guess, basis: "unpriced" }
-    : { ...guess, costUsd: price, basis: "price-table" };
+    : { ...guess, costUsd: usd, basis: "price-table" };
 }
 
 /** What a run would refine of one stream. */

@@ -51,6 +51,7 @@ beforeEach(() => {
   for (const name of [
     "SONIOX_API_KEY",
     "TRANSCRIBE_LANGUAGE",
+    "REFINE_PROVIDER",
     "REFINE_API_KEY",
     "OPENROUTER_API_KEY",
     "EMBED_DIM",
@@ -916,13 +917,15 @@ describe("planPipeline", () => {
       JSON.stringify({ provider: "soniox", transcript: { id: "t", text: "", tokens: [] } }),
     );
     const events: ProgressEvent[] = [];
+    // A provider whose models the catalog prices: OpenRouter's report their cost instead.
+    process.env.REFINE_PROVIDER = "deepseek";
     const plan = await pipeline.planPipeline("milky-green", {
       vodsDir: join(work, "vods"),
       streamsDir: join(work, "streams"),
       listsDir: lists(),
       dbPath: null,
       transcribeModel: "stt-async-v5",
-      refineModel: "~google/gemini-flash-latest",
+      refineModel: "deepseek-flash",
       onProgress: (event) => events.push(event),
     });
     expect(plan.videos.map((video) => video.id)).toEqual([
@@ -990,7 +993,7 @@ describe("planPipeline", () => {
     expect(unlisted).toMatchObject({ uploadDate: "2026-08-06", transcribe: "pending" });
     expect(unlisted.url).toBeUndefined();
     expect(unlisted.estimate.transcribeUsd).toBeCloseTo((900 / 3600) * 0.1, 12);
-    // 900 s is three scenes at most, priced by the flash model's table.
+    // 900 s is three scenes at most, priced by the catalog.
     expect(unlisted.estimate.basis).toBe("price-table");
     expect(byId.get("BV1gggggggg1")).toMatchObject({
       download: "pending",

@@ -465,8 +465,9 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   in the API's order.
 - The missing-key message names `credentials.json`, and the closing hint is
   `bun run laplace-ingest-streams --persona <id>`.
-- Cost is estimated at Soniox's $0.10 per audio hour for `stt-async-v4`, `-v5` and `-v6`, and
-  reported `unpriced` for any other model.
+- Cost is estimated at the catalog's price for the model, $0.10 per audio hour for `stt-async-v6`,
+  `-v5` and `-v4` (an alias Soniox serves as v5), and reported `unpriced` for a model the catalog
+  doesn't list.
 - `laplace-extract-users` labels message types 1 and 3 as gift and SC, which is what they hold in
   real exports. Its `--persona` is only checked.
 
@@ -491,6 +492,12 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   message and exits 1 (`missing-credential`).
 - Under `--json`, the human summary and the dry run's text go to stderr, and a dry run or a run
   with no streams also ends in a summary event, with `costUsd: 0` when no chunk was sent.
+- **Prices come from the catalog**, at the provider the refine role's requests reach
+  (`billingProvider`, as the usage ledger prices them): a call whose response reports no cost,
+  its cache reads at their own price, the dry run and the pipeline's plan. The catalog prices none
+  of OpenRouter's chat models, since OpenRouter reports what each call costs, so there a call
+  without a cost logs `No cost data and no pricing entry` and counts only its tokens, and a dry
+  run prints `$0` and `not in local price table`.
 - Where the `  ✓` lines fall among the next chunk's lines depends on the scheduler.
 - Requests carry no SDK-only headers (`User-Agent`, `X-Stainless-*`), and have one 600 s timeout
   per attempt. `OPENROUTER_APP_NAME` and `OPENROUTER_APP_URL` are read when used, so `.env` values
