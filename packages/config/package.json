@@ -7,7 +7,7 @@
     "./lock": "./src/lock.ts"
   },
   "dependencies": {
-    "undici": "7.29.0",
+    "undici": "7.30.1",
     "uuid": "14.0.3",
     "yaml": "2.9.1"
   },
