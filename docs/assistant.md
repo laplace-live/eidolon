@@ -112,10 +112,10 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
 - **Every task request is billed as source `task`, with the task's id as its session.** `runTask`
   runs in that usage scope; `createMind`'s `tap` hands each record to the task's meter too, and a
   search's record reaches it through `UsageMeter.charge`.
-- **Ported pi-mono files keep pi's MIT header,** then `Ported from pi-mono <path>@ac78a60`; the
-  package keeps `LICENSE-pi` and `THIRD_PARTY.md`, and `NOTICE` names the holder
-  (`apps/eidolon/test/build.test.ts` checks it). The MCP client is pi's, stdio alone: its OAuth
-  isn't ported.
+- **Ported pi-mono files keep pi's MIT header,** then `Ported from pi-mono <path>@ac78a60`, with
+  `, its Windows parts @cb1205e` where those came later; the package keeps `LICENSE-pi` and
+  `THIRD_PARTY.md`, and `NOTICE` names the holder (`apps/eidolon/test/build.test.ts` checks it).
+  The MCP client is pi's, stdio alone: its OAuth isn't ported.
 
 ## Assistant Mode and the role
 

@@ -421,9 +421,9 @@ the layout's one line.
 - **Every task request is billed as source `task`, with the task's id as its session.**
 - **The task loop, `runTask`, lives in `@eidolon/engine`, which imports nothing from
   `@eidolon/assistant`:** the tools, store, inbox and meter come injected.
-- **pi-mono-derived code carries its MIT header,** then `Ported from pi-mono <path>@ac78a60`;
-  `packages/assistant` keeps `LICENSE-pi` and `THIRD_PARTY.md`, and `NOTICE` names the holder
-  (`build.test.ts` checks it).
+- **pi-mono-derived code carries its MIT header,** then `Ported from pi-mono <path>@ac78a60`
+  (`, its Windows parts @cb1205e` where those came later); `packages/assistant` keeps `LICENSE-pi`
+  and `THIRD_PARTY.md`, and `NOTICE` names the holder (`build.test.ts` checks it).
 
 ### Identity and quotas
 

@@ -147,6 +147,6 @@ jobs:
       - run: >-
           bun run test packages/assistant/test/shell.test.ts packages/assistant/test/mcp-stdio.test.ts
           packages/assistant/test/eidolon-command.test.ts packages/assistant/test/path.test.ts
-          -t Windows
+          packages/assistant/test/bash-windows.test.ts packages/ingest/test/limit.test.ts -t Windows
 
       - run: bun run test apps/cli/test/cli.test.ts -t relayStopMessages

@@ -1,6 +1,6 @@
 // Concurrency and cancellation for the offline chain: a FIFO limiter (asyncio.Semaphore's order),
 // the CLI's signal handling, and stopping child processes.
-import type { Subprocess } from "@eidolon/config";
+import { killTree, type Subprocess } from "@eidolon/config";
 
 /** Runs `task` once a slot frees, in the order tasks were queued. */
 export type Limiter = <T>(task: () => Promise<T>) => Promise<T>;
@@ -151,14 +151,22 @@ export async function runWithSignals(
 export const KILL_GRACE_MS = 5_000;
 
 /** The parts of a Subprocess that terminate uses. */
-export type ChildProcess = Pick<Subprocess, "exitCode" | "signalCode" | "exited" | "kill">;
+export type ChildProcess = Pick<Subprocess, "pid" | "exitCode" | "signalCode" | "exited" | "kill">;
 
-/** SIGTERM, then SIGKILL if `child` hasn't exited within `graceMs`; resolves once it has exited. */
+/**
+ * SIGTERM, then SIGKILL if `child` hasn't exited within `graceMs`; resolves once it has exited. On
+ * Windows, where kill() ends only the child itself, its tree at once.
+ */
 export async function terminate(
   child: ChildProcess,
   graceMs: number = KILL_GRACE_MS,
 ): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform === "win32") {
+    killTree(child.pid);
+    await child.exited;
+    return;
+  }
   child.kill("SIGTERM");
   const timer = setTimeout(() => child.kill("SIGKILL"), graceMs);
   try {

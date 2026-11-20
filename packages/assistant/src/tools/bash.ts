@@ -78,7 +78,16 @@ export function createLocalBashOperations(): BashOperations {
         // setsid(): its own session and process group, which killProcessTree reaches whole.
         detached: process.platform !== "win32",
       });
-      const kill = () => killProcessTree(child.pid);
+      // On Windows only while the shell runs: a gone shell leaves no tree to find, and its pid may
+      // be another process's by the time an abort lands while the pipes drain.
+      const kill = () => {
+        if (
+          process.platform !== "win32" ||
+          (child.exitCode === null && child.signalCode === null)
+        ) {
+          killProcessTree(child.pid);
+        }
+      };
       signal?.addEventListener("abort", kill, { once: true });
       // An abort that landed while the folder was checked fires no listener added after it.
       if (signal?.aborted) kill();
@@ -97,9 +106,8 @@ export function createLocalBashOperations(): BashOperations {
         exitCode = await child.exited;
         // What the command left running holds its pipes open after the shell exits, and reading
         // them to their end would hang (pi #5303, #11613): its group dies with the shell. A process
-        // that left the group gets PIPE_DRAIN_MS before the pipes are let go. Windows finds no tree
-        // under a shell that is gone, and may have given its pid to another process.
-        if (process.platform !== "win32") kill();
+        // that left the group gets PIPE_DRAIN_MS before the pipes are let go.
+        kill();
         let timer: ReturnType<typeof setTimeout> | undefined;
         const drained = await Promise.race([
           pumped.then(() => true),
