@@ -1,9 +1,10 @@
-// A realtime server played by Bun.serve, in OpenAI's dialect or xAI's: it greets each connection
+// A realtime server played by ws's server, in OpenAI's dialect or xAI's: it greets each connection
 // as its provider does and answers `session.update`; the test scripts the rest. Nothing here waits
 // on a timer.
-import type { Server, ServerWebSocket } from "bun";
+import type { WebSocket } from "ws";
 import type { RealtimeEvent, RealtimeSession } from "../../src/realtime/index.ts";
 import { type Selection, select } from "../../src/resolve.ts";
+import { type Handshake, type Listening, messageOf, serveWs } from "../ws-server.ts";
 
 export const KEY = "secret-key-0123456789";
 
@@ -30,10 +31,6 @@ class Waiting<T> {
   }
 }
 
-interface PeerData {
-  readonly peer: RealtimePeer;
-}
-
 export class RealtimePeer {
   readonly url: URL;
   readonly headers: Headers;
@@ -42,11 +39,12 @@ export class RealtimePeer {
   readonly #messages = new Waiting<ClientMessage>();
   readonly #closed = Promise.withResolvers<void>();
   readonly #server: FakeRealtime;
-  socket: ServerWebSocket<PeerData> | null = null;
+  readonly socket: WebSocket;
 
-  constructor(request: Request, server: FakeRealtime) {
-    this.url = new URL(request.url);
-    this.headers = request.headers;
+  constructor(socket: WebSocket, handshake: Handshake, server: FakeRealtime) {
+    this.socket = socket;
+    this.url = handshake.url;
+    this.headers = handshake.headers;
     this.#server = server;
   }
 
@@ -69,16 +67,16 @@ export class RealtimePeer {
 
   send(...events: readonly unknown[]): void {
     for (const event of events) {
-      this.socket?.send(typeof event === "string" ? event : JSON.stringify(event));
+      this.socket.send(typeof event === "string" ? event : JSON.stringify(event));
     }
   }
 
   close(code = 1000, reason = ""): void {
-    this.socket?.close(code, reason);
+    this.socket.close(code, reason);
   }
 
-  received(data: string | Buffer): void {
-    const text = typeof data === "string" ? data : data.toString();
+  received(data: string | Uint8Array): void {
+    const text = typeof data === "string" ? data : new TextDecoder().decode(data);
     this.raw.push(text);
     const { event_id, ...message } = JSON.parse(text) as ClientMessage;
     if (typeof event_id !== "string" || !UUID.test(event_id)) {
@@ -98,7 +96,7 @@ export class RealtimePeer {
 
 export class FakeRealtime {
   readonly dialect: DialectId;
-  readonly #server: Server<PeerData>;
+  #server: Listening | null = null;
   readonly #arrivals = new Waiting<RealtimePeer>();
   /** Answer upgrades with this HTTP status instead of accepting them. */
   refuse: number | null = null;
@@ -108,40 +106,40 @@ export class FakeRealtime {
   constructor(dialect: DialectId, options: { readonly answers?: boolean } = {}) {
     this.dialect = dialect;
     this.answers = options.answers ?? true;
-    this.#server = Bun.serve<PeerData>({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: (request, server) => {
-        if (this.refuse !== null) return new Response("refused", { status: this.refuse });
-        const peer = new RealtimePeer(request, this);
-        if (server.upgrade(request, { data: { peer } })) return undefined;
-        return new Response("no upgrade", { status: 400 });
-      },
-      websocket: {
-        open: (ws) => {
-          ws.data.peer.socket = ws;
-          const says = serverEvents(dialect);
-          ws.data.peer.send(says.sessionCreated());
-          if (dialect === "xai") ws.data.peer.send(says.conversationCreated());
-          this.#arrivals.push(ws.data.peer);
-        },
-        message: (ws, data) => ws.data.peer.received(data),
-        close: (ws) => ws.data.peer.ended(),
+  }
+
+  static async start(
+    dialect: DialectId,
+    options: { readonly answers?: boolean } = {},
+  ): Promise<FakeRealtime> {
+    const fake = new FakeRealtime(dialect, options);
+    fake.#server = await serveWs({
+      handshake: () =>
+        fake.refuse === null ? undefined : new Response("refused", { status: fake.refuse }),
+      open: (socket, handshake) => {
+        const peer = new RealtimePeer(socket, handshake, fake);
+        socket.on("message", (data, isBinary) => peer.received(messageOf(data, isBinary)));
+        socket.on("close", () => peer.ended());
+        const says = serverEvents(dialect);
+        peer.send(says.sessionCreated());
+        if (dialect === "xai") peer.send(says.conversationCreated());
+        fake.#arrivals.push(peer);
       },
     });
+    return fake;
   }
 
   /** The account's API base. */
   get base(): string {
-    return `http://127.0.0.1:${this.#server.port}/v1`;
+    return `http://127.0.0.1:${this.#server?.port}/v1`;
   }
 
   connection(): Promise<RealtimePeer> {
     return this.#arrivals.next();
   }
 
-  stop(): void {
-    this.#server.stop(true);
+  stop(): Promise<void> {
+    return this.#server?.stop() ?? Promise.resolve();
   }
 }
 

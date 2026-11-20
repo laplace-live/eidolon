@@ -1,16 +1,17 @@
 // The local router's 500: what a handler threw goes to the log under a short id, and the answer
 // carries only its code, a fixed message and that id, never the exception's text or stack.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import type { ErrorBody } from "../../src/local/api.ts";
 import { createLocalRouter } from "../../src/local/router.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
+import { type ServedRoutes, serveRoutes } from "../serve.ts";
 
 let logs: CapturedLogs;
-let server: ReturnType<typeof Bun.serve>;
+let server: ServedRoutes;
 const thrown = new Error("could not open /Users/someone/.laplace/eidolon/credentials.json");
 
-beforeAll(() => {
+beforeAll(async () => {
   logs = captureLogs();
   const router = createLocalRouter(
     [
@@ -23,21 +24,16 @@ beforeAll(() => {
     ],
     () => "bearer",
   );
-  server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    routes: { "/api/local/*": router },
-    fetch: () => new Response(null, { status: 404 }),
-  });
+  server = await serveRoutes({ "/api/local/*": router });
 });
 
 afterAll(async () => {
-  await server.stop(true);
+  await server.stop();
   logs.restore();
 });
 
 test("a handler that throws is a 500 with a fixed message, and an id that names its log line", async () => {
-  const response = await fetch(`http://127.0.0.1:${server.port}/api/local/status`);
+  const response = await fetch(`${server.url}/api/local/status`);
   const text = await response.text();
   const { error } = JSON.parse(text) as ErrorBody;
   expect(response.status).toBe(500);

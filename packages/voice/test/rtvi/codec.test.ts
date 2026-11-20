@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { readRtvi, rtviMessage } from "../../src/rtvi/codec.ts";
 
 const msg = (type: string, data?: unknown, id: unknown = "m1") => ({

@@ -83,7 +83,7 @@ export function buildMemoryConfig(): MemoryConfig {
   if (!host) throw new Error("MEM0_QDRANT_HOST is unset, so there is no vector store");
   const embeddings = selectRequired("embeddings");
   if (!hasKey(embeddings)) throw missingKey(embeddings);
-  // bun:sqlite, like sqlite3, raises rather than create missing parents, and the history DB
+  // node:sqlite, like sqlite3, raises rather than create missing parents, and the history DB
   // lands under a mounted volume that starts empty.
   const historyDbPath = envOptional("MEM0_HISTORY_DB_PATH") ?? historyDbDefault();
   mkdirSync(dirname(historyDbPath), { recursive: true });

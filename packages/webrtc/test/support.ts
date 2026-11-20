@@ -1,4 +1,5 @@
 import { networkInterfaces } from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
 import type { AllowedOffer } from "@eidolon/access";
 import { consoleSink, type LogLevel, type LogRecord, logger, setLogLevel } from "@eidolon/config";
 import type { PcmSource } from "../src/audio_out.ts";
@@ -44,7 +45,7 @@ export async function until(check: () => boolean, timeoutMs = 2000): Promise<voi
   const deadline = performance.now() + timeoutMs;
   while (!check()) {
     if (performance.now() > deadline) throw new Error("condition not met in time");
-    await Bun.sleep(2);
+    await delay(2);
   }
 }
 

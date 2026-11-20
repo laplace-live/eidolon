@@ -5,6 +5,7 @@
       "apps/**",
       "packages/**",
       "*.json",
+      "*.ts",
       "!**/node_modules",
       "!packages/retrieval/data",
       "!apps/web/dist",
@@ -394,6 +395,29 @@
           "suspicious": {
             "noArrayIndexKey": "off",
             "noDoubleEquals": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/bot/src/**",
+        "apps/cli/src/**",
+        "apps/eidolon/src/**",
+        "packages/*/src/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Bun": "Runtime code runs on Node: use node:* modules or a dependency, not Bun's APIs.",
+                  "HTMLRewriter": "Bun's HTMLRewriter isn't on Node: parse HTML with htmlparser2."
+                }
+              }
+            }
           }
         }
       }

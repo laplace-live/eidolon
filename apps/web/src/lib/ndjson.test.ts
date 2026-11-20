@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { LineSplitter, readNdjson } from "./ndjson";
 
 const encoder = new TextEncoder();

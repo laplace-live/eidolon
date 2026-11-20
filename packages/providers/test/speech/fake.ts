@@ -1,9 +1,11 @@
-// A speech provider stand-in on Bun.serve, and selections that reach it through an account of its
+// A speech provider stand-in on ws's server, and selections that reach it through an account of its
 // own, as a non-default account reaches a proxy.
-import type { Server, ServerWebSocket } from "bun";
+import { setTimeout as delay } from "node:timers/promises";
+import type { WebSocket } from "ws";
 import { type Selection, select } from "../../src/index.ts";
 import type { UtteranceAudio } from "../../src/speech/stream/index.ts";
 import type { KeyedSelection } from "../../src/speech/stream/shared.ts";
+import { messageOf, serveWs } from "../ws-server.ts";
 
 export const KEY = "sk-test-secret-0123456789";
 
@@ -12,7 +14,7 @@ export interface Peer {
   readonly path: string;
   readonly headers: Headers;
   readonly received: (string | Uint8Array)[];
-  readonly socket: ServerWebSocket<{ peer: Peer }>;
+  readonly socket: WebSocket;
   closed: { code: number; reason: string } | null;
 }
 
@@ -26,7 +28,7 @@ export interface Fake {
   readonly base: string;
   readonly peers: Peer[];
   readonly requests: HttpRequest[];
-  stop(): void;
+  stop(): Promise<void>;
 }
 
 export interface FakeOptions {
@@ -37,52 +39,48 @@ export interface FakeOptions {
   readonly onMessage?: (peer: Peer, data: string | Uint8Array) => void;
 }
 
-export function fakeServer(options: FakeOptions = {}): Fake {
+export async function fakeServer(options: FakeOptions = {}): Promise<Fake> {
   const peers: Peer[] = [];
   const requests: HttpRequest[] = [];
-  const server: Server<{ peer: Peer }> = Bun.serve<{ peer: Peer }>({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request, srv) {
+  const server = await serveWs({
+    handshake: () =>
+      options.refuse === undefined
+        ? undefined
+        : new Response(`refused ${KEY}`, { status: options.refuse }),
+    open(socket, { url, headers }) {
+      const peer: Peer = {
+        path: `${url.pathname}${url.search}`,
+        headers,
+        received: [],
+        socket,
+        closed: null,
+      };
+      socket.on("message", (message, isBinary) => {
+        const data = messageOf(message, isBinary);
+        peer.received.push(data);
+        options.onMessage?.(peer, data);
+      });
+      socket.on("close", (code, reason) => {
+        peer.closed = { code, reason: reason.toString() };
+      });
+      peers.push(peer);
+    },
+    async fetch(request) {
       const url = new URL(request.url);
-      const path = `${url.pathname}${url.search}`;
-      if (request.headers.get("upgrade") === "websocket") {
-        if (options.refuse !== undefined) {
-          return new Response(`refused ${KEY}`, { status: options.refuse });
-        }
-        const peer = {
-          path,
-          headers: request.headers,
-          received: [],
-          closed: null,
-        } as unknown as Peer;
-        if (srv.upgrade(request, { data: { peer } })) return undefined;
-        return new Response("no upgrade", { status: 400 });
-      }
-      const entry = { path, headers: request.headers, body: await request.text() };
+      const entry = {
+        path: `${url.pathname}${url.search}`,
+        headers: request.headers,
+        body: await request.text(),
+      };
       requests.push(entry);
       return options.http?.(entry) ?? new Response("no handler", { status: 500 });
-    },
-    websocket: {
-      open(ws) {
-        (ws.data.peer as { socket: unknown }).socket = ws;
-        peers.push(ws.data.peer);
-      },
-      message(ws, message) {
-        const data = typeof message === "string" ? message : new Uint8Array(message);
-        ws.data.peer.received.push(data);
-        options.onMessage?.(ws.data.peer, data);
-      },
-      close(ws, code, reason) {
-        ws.data.peer.closed = { code, reason };
-      },
     },
   });
   return {
     base: `http://127.0.0.1:${server.port}`,
     peers,
     requests,
-    stop: () => server.stop(true),
+    stop: () => server.stop(),
   };
 }
 
@@ -110,7 +108,7 @@ export async function until<T>(check: () => T | undefined | null | false, ms = 4
     const value = check();
     if (value !== undefined && value !== null && value !== false) return value;
     if (Date.now() > deadline) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 

@@ -6,7 +6,7 @@
 //
 // Upstream compares against transformers' WhisperFeatureExtractor, which has no JS counterpart, so
 // those comparisons stay skipped as they are upstream; the shape checks they made run here.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   computeWhisperLogMelFeatures,
   WHISPER_NUM_FRAMES,

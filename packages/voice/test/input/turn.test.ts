@@ -1,7 +1,7 @@
 // The turn rules pipedog 0.10.0 runs a call with (a VAD or transcript start, the Smart Turn stop,
 // the 5 s watchdog), and the end on the recognizer's acknowledgement, on scripted timelines and a
 // fake clock.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { FINALIZE_ACK_CAP_MS, TurnDetector } from "../../src/input/turn.ts";
 import type { EarEvent } from "../../src/types.ts";
 import { FakeClock } from "./clock.ts";

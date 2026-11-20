@@ -5,12 +5,15 @@
 //
 // The edit and write tools' cases. pi slows its tools through their operations; these spy on
 // node:fs/promises, which the tools call.
-import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as fsp from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditTool } from "../src/tools/edit.ts";
 import { createWriteTool } from "../src/tools/write.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
+
+// A copy of the module, so a test can spy on what the tools call: its own exports can't be.
+vi.mock("node:fs/promises", async (importOriginal) => ({ ...(await importOriginal<object>()) }));
 
 const { readFile, writeFile } = fsp;
 
@@ -35,17 +38,17 @@ function slowFiles(options: {
   readonly afterRead?: () => Promise<void>;
   readonly write: (path: string, content: string) => Promise<void>;
 }): void {
-  spyOn(fsp, "readFile").mockImplementation((async (path: string) => {
+  vi.spyOn(fsp, "readFile").mockImplementation((async (path: string) => {
     const buffer = await readFile(path);
     await options.afterRead?.();
     return buffer;
   }) as typeof fsp.readFile);
-  spyOn(fsp, "writeFile").mockImplementation((async (path: string, content: string) =>
+  vi.spyOn(fsp, "writeFile").mockImplementation((async (path: string, content: string) =>
     options.write(path, content)) as typeof fsp.writeFile);
 }
 
 afterEach(async () => {
-  mock.restore();
+  vi.restoreAllMocks();
   await removeTempFolders();
 });
 

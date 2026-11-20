@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { ndjsonSink, noProgress, type ProgressEvent, SUMMARY_COUNTS } from "../src/index.ts";
 
 test("ndjsonSink writes one JSON line per event, stamped with v and t", () => {

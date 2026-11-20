@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   cliEntry,
   consoleSink,
@@ -199,7 +199,7 @@ describe("dotenv", () => {
     const root = mkdtempSync(join(tmpdir(), "eidolon-find-"));
     writeFileSync(join(root, ".env"), "X=1\n");
     const nested = join(root, "a", "b");
-    Bun.spawnSync(["mkdir", "-p", nested]);
+    mkdirSync(nested, { recursive: true });
     expect(findDotenv(nested)).toBe(join(root, ".env"));
   });
 
@@ -368,10 +368,10 @@ describe("logger", () => {
   test("logToStderr sends every level to stderr", () => {
     const err: string[] = [];
     const out: string[] = [];
-    const error = spyOn(console, "error").mockImplementation((line: unknown) => {
+    const error = vi.spyOn(console, "error").mockImplementation((line: unknown) => {
       err.push(String(line));
     });
-    const log = spyOn(console, "log").mockImplementation((line: unknown) => {
+    const log = vi.spyOn(console, "log").mockImplementation((line: unknown) => {
       out.push(String(line));
     });
     try {

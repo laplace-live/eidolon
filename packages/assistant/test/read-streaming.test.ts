@@ -4,15 +4,20 @@
 // Ported from pi-mono packages/coding-agent/test/read-streaming.test.ts@ac78a60
 //
 // The reference is pi's whole-file read from before it streamed, with this tool's head and note for
-// a line over the byte limit. Bun takes no heap cap, so the 200 MB line is checked for its output only.
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+// a line over the byte limit. The 200 MB line is checked for its output only: no heap cap here would
+// fail a read that stored it.
 import { appendFileSync, writeFileSync } from "node:fs";
 import * as fsp from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { TaskToolResult } from "@eidolon/engine";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createReadTool, type ReadText, readLines } from "../src/tools/read.ts";
 import { DEFAULT_MAX_BYTES, formatSize, truncateHead } from "../src/tools/truncate.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
+
+// A copy of the module, so a test can spy on what the tool calls: its own exports can't be.
+vi.mock("node:fs/promises", async (importOriginal) => ({ ...(await importOriginal<object>()) }));
 
 // The read tool's text path before it streamed (#9654), kept as the reference the new path must
 // match.
@@ -145,7 +150,7 @@ describe("read tool streaming", () => {
   });
 
   afterEach(async () => {
-    mock.restore();
+    vi.restoreAllMocks();
     await removeTempFolders();
   });
 
@@ -216,7 +221,7 @@ describe("read tool streaming", () => {
     writeFileSync(path, `head\n${"x".repeat(200_000)}`);
     const decode = TextDecoder.prototype.decode;
     let appended = false;
-    spyOn(TextDecoder.prototype, "decode").mockImplementation(function (
+    vi.spyOn(TextDecoder.prototype, "decode").mockImplementation(function (
       this: TextDecoder,
       ...args: Parameters<TextDecoder["decode"]>
     ) {
@@ -239,7 +244,7 @@ describe("read tool streaming", () => {
     writeFileSync(path, "line\n");
     const controller = new AbortController();
     const open = fsp.open;
-    spyOn(fsp, "open").mockImplementation((...args: Parameters<typeof fsp.open>) => {
+    vi.spyOn(fsp, "open").mockImplementation((...args: Parameters<typeof fsp.open>) => {
       controller.abort();
       return open(...args);
     });
@@ -253,7 +258,7 @@ describe("read tool streaming", () => {
         isError: true,
       });
       // An error the stream emitted would surface on a later tick.
-      await Bun.sleep(20);
+      await delay(20);
     } finally {
       process.off("uncaughtException", onUncaught);
       process.off("unhandledRejection", onUncaught);
@@ -268,7 +273,7 @@ describe("read tool streaming", () => {
     const controller = new AbortController();
     const decode = TextDecoder.prototype.decode;
     let decodedChunks = 0;
-    spyOn(TextDecoder.prototype, "decode").mockImplementation(function (
+    vi.spyOn(TextDecoder.prototype, "decode").mockImplementation(function (
       this: TextDecoder,
       ...args: Parameters<TextDecoder["decode"]>
     ) {
@@ -281,7 +286,7 @@ describe("read tool streaming", () => {
       content: "Operation aborted",
       isError: true,
     });
-    await Bun.sleep(20);
+    await delay(20);
     expect(decodedChunks).toBe(1);
   });
 
@@ -306,7 +311,7 @@ describe("read tool streaming", () => {
         while (true) {
           chunksRead++;
           if (chunksRead === 3) controller.abort();
-          await Bun.sleep(1);
+          await delay(1);
           yield Buffer.from("line\n");
         }
       } finally {
@@ -316,7 +321,7 @@ describe("read tool streaming", () => {
     await expect(
       readLines(createReadStream(), undefined, undefined, controller.signal),
     ).rejects.toThrow("Operation aborted");
-    await Bun.sleep(20);
+    await delay(20);
     expect(closed).toBe(true);
     expect(chunksRead).toBe(3);
   });

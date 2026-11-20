@@ -1,12 +1,13 @@
 // fixtures/transcribe/run.golden.json holds transcription runs against a fake Soniox serving the
 // jobs it lists: the requests each run made and the files it wrote. The run here is served the
 // same jobs.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { type ProgressEvent, transcribe } from "../src/index.ts";
 import {
   type FakeJob,
@@ -19,7 +20,7 @@ import {
 const { transcribeAudio, transcriptState, audioStatus, listAudioFiles, TranscribeError } =
   transcribe;
 
-const FIXTURES = join(import.meta.dir, "fixtures/transcribe");
+const FIXTURES = join(import.meta.dirname, "fixtures/transcribe");
 
 interface Scenario {
   name: string;
@@ -34,7 +35,7 @@ interface Scenario {
   payload: string | null;
 }
 
-const golden = (await Bun.file(join(FIXTURES, "run.golden.json")).json()) as {
+const golden = JSON.parse(await readFile(join(FIXTURES, "run.golden.json"), "utf8")) as {
   scenarios: Scenario[];
 };
 const scenario = (name: string): Scenario =>
@@ -128,9 +129,12 @@ describe("against Python's run", () => {
       expect(new Set(deletes(strip(soniox.requests)).map((r) => r.path))).toEqual(
         new Set(deletes(strip(expected)).map((r) => r.path)),
       );
+      // One dispatcher, the client's patient one, for every request.
+      const dispatcher = soniox.requests[0]?.dispatcher;
+      expect(dispatcher).toEqual(expect.objectContaining({ dispatch: expect.any(Function) }));
       for (const request of soniox.requests) {
         expect(request.authorization).toBe("Bearer test-key");
-        expect(request.timeout).toBe(600_000);
+        expect(request.dispatcher).toBe(dispatcher);
       }
       expect(result).toMatchObject({ status: "done", streamId: stem, tokens: expect.any(Number) });
       expect(events.map((e) => (e.type === "item" ? e.status : e.type))).toEqual(["start", "done"]);

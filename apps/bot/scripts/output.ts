@@ -1,4 +1,5 @@
 // The local app's output, for the scripts that boot it and wait for the link it prints.
+import { setTimeout as delay } from "node:timers/promises";
 
 /** What boot.ts prints once the app listens; its group is the link that signs a browser in. */
 export const READY_LINE = /^Eidolon is ready: (\S+)$/m;
@@ -6,9 +7,11 @@ export const READY_LINE = /^Eidolon is ready: (\S+)$/m;
 /** A child's output as it arrives. */
 export class Output {
   text = "";
+  /** Settles once the stream has ended and `text` holds all of it, which can be after its exit. */
+  readonly done: Promise<void>;
 
   constructor(stream: ReadableStream<Uint8Array>) {
-    void (async () => {
+    this.done = (async () => {
       const decoder = new TextDecoder();
       for await (const chunk of stream) this.text += decoder.decode(chunk, { stream: true });
     })();
@@ -25,7 +28,7 @@ export class Output {
       const match = pattern.exec(this.text);
       if (match) return match[1] ?? match[0];
       if (over || Date.now() > deadline) throw new Error(`no ${pattern} in the output`);
-      await Bun.sleep(100);
+      await delay(100);
     }
   }
 

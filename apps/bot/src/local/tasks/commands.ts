@@ -4,7 +4,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { replaceJsonFile } from "@eidolon/assistant";
-import { errorText, isPlainObject, logger } from "@eidolon/config";
+import { errorText, isPlainObject, logger, newId } from "@eidolon/config";
 import type { AllowedCommand } from "../api.ts";
 
 export const ALLOWED_COMMANDS_FILE = "allowed-commands.json";
@@ -50,7 +50,7 @@ export class AllowedCommands {
     return this.#serial(async () => {
       const commands = await this.#read();
       if (commands.some(matching(folder, command))) return;
-      const id = Bun.randomUUIDv7();
+      const id = newId();
       await this.#write([...commands, { id, folder, command, addedAt: this.#now(), task }]);
     });
   }

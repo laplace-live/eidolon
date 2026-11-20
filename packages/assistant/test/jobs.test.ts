@@ -1,9 +1,10 @@
 // A task's commands past their calls: the move to the background, the notices of how each ended,
 // bash_output and bash_kill, the background limit, and what a stop or a crash leaves for the next
 // run. Real processes, on POSIX.
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterAll, describe, expect, test } from "vitest";
 import {
   createBashKillTool,
   createBashOutputTool,
@@ -32,7 +33,7 @@ function alive(pid: number): boolean {
 }
 
 async function until(done: () => boolean, ms = 5000): Promise<void> {
-  for (const end = Date.now() + ms; !done(); await Bun.sleep(20)) {
+  for (const end = Date.now() + ms; !done(); await delay(20)) {
     if (Date.now() > end) throw new Error("Timed out waiting");
   }
 }
@@ -253,7 +254,7 @@ describe.skipIf(!bashOffered())("BashJobs", () => {
       },
     });
     const result = start(setup_, "sleep 30");
-    await Bun.sleep(100);
+    await delay(100);
     const stopping = setup_.jobs.killAll("shutdown");
     expect(await result).toMatchObject({
       content: "Command stopped: Eidolon is stopping",
@@ -277,10 +278,11 @@ describe.skipIf(!bashOffered())("BashJobs", () => {
 
   test("a stop ends every command, and the next start hears of those in the background only", async () => {
     const setup_ = await setup();
-    const { jobs, dir, records } = setup_;
+    const { jobs, records, guard } = setup_;
     await start(setup_, "sleep 30");
-    const foreground = start(setup_, "sleep 30", { wait: true });
-    await until(() => readFileSync(join(dir, "runs.json"), "utf8").includes('"id": 2'));
+    // Running, not just recorded: a stop between the two answers that commands can't start.
+    const foreground = start(setup_, "touch started && sleep 30", { wait: true });
+    await until(() => existsSync(join(guard.folder, "started")));
     await jobs.killAll("shutdown");
     expect((await foreground).content).toBe("Command stopped: Eidolon is stopping");
     expect(await start(setup_, "echo late")).toEqual({

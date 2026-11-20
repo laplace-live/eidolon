@@ -5,6 +5,7 @@ import {
   extractCostUsd,
   isJsonObject,
   openrouterHeaders,
+  patientDispatcher,
   pyStr,
   pyStrip,
   pyTruthy,
@@ -30,8 +31,9 @@ export const QUALITIES = ["auto", "low", "medium", "high", "xhigh", "max"] as co
 export const MAX_REFERENCES = 16;
 export const MAX_IMAGES = 10;
 
-// A max-quality render runs for minutes, and Bun's fetch drops a connection idle for 5 minutes by
-// default. The bot bounds itself far lower, through the tool timeout.
+// A max-quality render runs for minutes, and fetch gives up on headers or a body idle for 5 minutes
+// by default; Bun's fetch ignores the dispatcher that lifts it. The bot bounds itself far lower,
+// through the tool timeout.
 export const IMAGE_REQUEST_IDLE_TIMEOUT_MS = 600_000;
 
 /** One decoded image off the API, with the media type it reported. */
@@ -72,6 +74,23 @@ function errorMessage(text: string): string {
   const error = isJsonObject(body) ? body.error : undefined;
   if (isJsonObject(error)) return pyStr(pyTruthy(error.message) ? error.message : error);
   return pyStr(pyTruthy(error) ? error : body);
+}
+
+/**
+ * `text` decoded as `Uint8Array.fromBase64` decodes it, which Node lacks: ASCII whitespace
+ * skipped, padding optional but whole, and any other character outside the standard alphabet a
+ * SyntaxError, where Buffer would skip it and decode the rest.
+ */
+function fromBase64(text: unknown): Uint8Array {
+  if (typeof text !== "string") throw new TypeError("b64_json is not a string");
+  const compact = text.replace(/[\t\n\f\r ]/g, "");
+  const padding = compact.endsWith("==") ? 2 : compact.endsWith("=") ? 1 : 0;
+  const body = compact.slice(0, compact.length - padding);
+  const tail = body.length % 4;
+  if (/[^A-Za-z0-9+/]/.test(body) || tail === 1 || (padding > 0 && tail + padding !== 4)) {
+    throw new SyntaxError("b64_json is not base64");
+  }
+  return new Uint8Array(Buffer.from(body, "base64"));
 }
 
 // A truthy `data` that isn't a list: a string or an object yields no image rows, and a number or a
@@ -115,13 +134,14 @@ export async function generate(options: GenerateOptions): Promise<Generation> {
   let status: number;
   let text: string;
   try {
-    const response = await (options.fetch ?? fetch)(options.url ?? OPENROUTER_IMAGES_URL, {
+    const init: RequestInit & { readonly dispatcher: unknown } = {
       method: "POST",
       headers,
       body,
       signal,
-      timeout: IMAGE_REQUEST_IDLE_TIMEOUT_MS,
-    });
+      dispatcher: patientDispatcher(IMAGE_REQUEST_IDLE_TIMEOUT_MS),
+    };
+    const response = await (options.fetch ?? fetch)(options.url ?? OPENROUTER_IMAGES_URL, init);
     status = response.status;
     text = await response.text();
   } catch (e) {
@@ -140,7 +160,7 @@ export async function generate(options: GenerateOptions): Promise<Generation> {
     const mediaType = row.media_type;
     images.push({
       // A non-string b64_json throws TypeError here, as b64decode does.
-      data: Uint8Array.fromBase64(row.b64_json as string),
+      data: fromBase64(row.b64_json),
       mediaType: typeof mediaType === "string" && mediaType !== "" ? mediaType : "image/png",
     });
   }

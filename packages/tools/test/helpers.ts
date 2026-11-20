@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { consoleSink, type LogRecord, logger, pyJsonDumps } from "@eidolon/config";
 import type {
   ConversationContext,
@@ -93,7 +94,7 @@ export function bytesOf(label: string): Uint8Array {
 }
 
 export function dataUrl(mediaType: string, bytes: Uint8Array): string {
-  return `data:${mediaType};base64,${bytes.toBase64()}`;
+  return `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
 /** The OpenAI tool list as sent on the wire, serialized as `json.dumps(ensure_ascii=False)`. */
@@ -115,7 +116,7 @@ export function wire(schema: ToolSchema): string {
 
 export interface FetchCall {
   readonly url: string;
-  readonly init: BunFetchRequestInit;
+  readonly init: RequestInit;
   readonly payload: Record<string, unknown>;
 }
 
@@ -125,7 +126,7 @@ export function fakeFetch(respond: (call: FetchCall) => Response | Promise<Respo
   calls: FetchCall[];
 } {
   const calls: FetchCall[] = [];
-  const impl = async (input: string | URL | Request, init: BunFetchRequestInit = {}) => {
+  const impl = async (input: string | URL | Request, init: RequestInit = {}) => {
     const call = { url: String(input), init, payload: JSON.parse(String(init.body)) };
     calls.push(call);
     return respond(call);
@@ -162,11 +163,11 @@ export async function invoke(
   const events: unknown[][] = [];
   const effects: ToolEffects = {
     async switchVoice(referenceId) {
-      await Bun.sleep(1);
+      await delay(1);
       events.push(["push", "TTSUpdateSettingsFrame", referenceId]);
     },
     async sendServerMessage(data) {
-      await Bun.sleep(1);
+      await delay(1);
       events.push(["push", "RTVIServerMessageFrame", data]);
     },
   };

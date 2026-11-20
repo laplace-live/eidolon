@@ -1,10 +1,11 @@
-// A provider's WebSocket played by Bun.serve, and the helpers the recognizer tests share. Nothing
+// A provider's WebSocket played by ws's server, and the helpers the recognizer tests share. Nothing
 // here waits on a timer, so a test may fake the clock.
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
-import type { Server, ServerWebSocket } from "bun";
+import type { WebSocket } from "ws";
 import { type Selection, select } from "../../src/index.ts";
 import type { SttEvent, SttStream } from "../../src/stt/index.ts";
 import type { WsData } from "../../src/ws.ts";
+import { type Handshake, type Listening, messageOf, serveWs } from "../ws-server.ts";
 
 export const KEY = "secret-key-0123456789";
 
@@ -13,10 +14,6 @@ export function captureLogs(): { readonly lines: string[]; restore(): void } {
   const lines: string[] = [];
   logger.setSink((record: LogRecord) => lines.push(`${record.level} ${record.message}`));
   return { lines, restore: () => logger.setSink(consoleSink) };
-}
-
-interface PeerData {
-  readonly peer: Peer;
 }
 
 class Waiting<T> {
@@ -41,11 +38,12 @@ export class Peer {
   readonly headers: Headers;
   readonly #messages = new Waiting<WsData>();
   readonly #closed = Promise.withResolvers<void>();
-  socket: ServerWebSocket<PeerData> | null = null;
+  readonly socket: WebSocket;
 
-  constructor(request: Request) {
-    this.url = new URL(request.url);
-    this.headers = request.headers;
+  constructor(socket: WebSocket, handshake: Handshake) {
+    this.socket = socket;
+    this.url = handshake.url;
+    this.headers = handshake.headers;
   }
 
   /** The next message the client sent. */
@@ -58,15 +56,15 @@ export class Peer {
   }
 
   send(message: unknown): void {
-    this.socket?.send(typeof message === "string" ? message : JSON.stringify(message));
+    this.socket.send(typeof message === "string" ? message : JSON.stringify(message));
   }
 
   close(code = 1000, reason = ""): void {
-    this.socket?.close(code, reason);
+    this.socket.close(code, reason);
   }
 
-  received(data: string | Buffer): void {
-    this.#messages.push(typeof data === "string" ? data : new Uint8Array(data));
+  received(data: WsData): void {
+    this.#messages.push(data);
   }
 
   ended(): void {
@@ -75,7 +73,7 @@ export class Peer {
 }
 
 export class FakeServer {
-  readonly #server: Server<PeerData>;
+  #server: Listening | null = null;
   readonly #peers: Peer[] = [];
   readonly #arrivals = new Waiting<Peer>();
   /** Answer upgrades with this HTTP status instead of accepting them. */
@@ -83,34 +81,26 @@ export class FakeServer {
   /** Called once each connection is open. */
   onOpen: ((peer: Peer) => void) | null = null;
 
-  constructor() {
-    this.#server = Bun.serve<PeerData>({
-      // Bound to every address, the port can be shared with another process's 127.0.0.1 listener,
-      // which then answers a client dialling 127.0.0.1 in its place.
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: (request, server) => {
-        if (this.refuse !== null) return new Response("refused", { status: this.refuse });
-        const peer = new Peer(request);
-        if (server.upgrade(request, { data: { peer } })) return undefined;
-        return new Response("no upgrade", { status: 400 });
-      },
-      websocket: {
-        open: (ws) => {
-          ws.data.peer.socket = ws;
-          this.#peers.push(ws.data.peer);
-          this.#arrivals.push(ws.data.peer);
-          this.onOpen?.(ws.data.peer);
-        },
-        message: (ws, data) => ws.data.peer.received(data),
-        close: (ws) => ws.data.peer.ended(),
+  static async start(): Promise<FakeServer> {
+    const fake = new FakeServer();
+    fake.#server = await serveWs({
+      handshake: () =>
+        fake.refuse === null ? undefined : new Response("refused", { status: fake.refuse }),
+      open: (socket, handshake) => {
+        const peer = new Peer(socket, handshake);
+        socket.on("message", (data, isBinary) => peer.received(messageOf(data, isBinary)));
+        socket.on("close", () => peer.ended());
+        fake.#peers.push(peer);
+        fake.#arrivals.push(peer);
+        fake.onOpen?.(peer);
       },
     });
+    return fake;
   }
 
   /** The HTTP origin, as an account's API base names it. */
   get base(): string {
-    return `http://127.0.0.1:${this.#server.port}`;
+    return `http://127.0.0.1:${this.#server?.port}`;
   }
 
   get connections(): number {
@@ -122,8 +112,8 @@ export class FakeServer {
     return this.#arrivals.next();
   }
 
-  stop(): void {
-    this.#server.stop(true);
+  stop(): Promise<void> {
+    return this.#server?.stop() ?? Promise.resolve();
   }
 }
 

@@ -1,8 +1,8 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test, vi } from "vitest";
 import { linguiMacro } from "@/test/lingui-macro";
 import { WEB_MODES } from "./choice";
 
-mock.module("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
 const {
   MCP_HINT_TEXT,
   PAUSE_REASONS,

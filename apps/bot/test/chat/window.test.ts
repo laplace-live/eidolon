@@ -1,7 +1,6 @@
 // A request's window: the cap, what verifies and what is dropped, and the stateless store a turn
 // runs on, end to end through runChat with fake minds.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ANONYMOUS } from "@eidolon/access";
@@ -26,6 +25,7 @@ import {
   type PersonaParts,
   runChat,
 } from "@eidolon/engine";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { ChatSigner, MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
 import {
   CHAT_WINDOW_BYTES,

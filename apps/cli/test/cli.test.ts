@@ -1,10 +1,12 @@
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cliEntry, dataHome, personaIds, resetSettings, sourceFolder } from "@eidolon/config";
 import { CLEANUP_LIMIT_MS } from "@eidolon/ingest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   buildStreamCatalogMain,
   CLI_USAGE,
@@ -67,11 +69,13 @@ test("one command per Python CLI, laplace-discover and laplace-task, each run by
 });
 
 test("every command has its root script", async () => {
-  const { scripts } = (await Bun.file(join(import.meta.dir, "../../../package.json")).json()) as {
+  const { scripts } = JSON.parse(
+    await readFile(join(import.meta.dirname, "../../../package.json"), "utf8"),
+  ) as {
     scripts: Record<string, string>;
   };
   for (const name of Object.keys(NEW_COMMANDS)) {
-    expect(scripts[`laplace-${name}`]).toBe(`bun apps/cli/src/main.ts ${name}`);
+    expect(scripts[`laplace-${name}`]).toBe(`node apps/cli/src/main.ts ${name}`);
   }
 });
 
@@ -179,10 +183,13 @@ test("eval-retrieval's queries default to the persona's eval sources", async () 
 });
 
 test("main.ts loads .env before any other module is evaluated", async () => {
-  const source = await Bun.file(join(import.meta.dir, "../src/main.ts")).text();
+  const source = await readFile(join(import.meta.dirname, "../src/main.ts"), "utf8");
   const imports = source.split("\n").filter((line) => line.startsWith("import "));
   expect(imports[0]).toBe('import "./load-env.ts";');
-  expect(source).toContain("const argv = Bun.argv.slice(2);");
+  // The proxy variables it reads come from the .env, so it runs in the body, before any request.
+  expect(source).toContain("\ninstallHttpDefaults();\n");
+  expect(source.indexOf("installHttpDefaults();")).toBeLessThan(source.indexOf("runWithSignals("));
+  expect(source).toContain("const argv = process.argv.slice(2);");
   expect(source).toContain(
     "runWithSignals((signal) => runCli(argv, { signal }), process, cleanupLimitMs(argv))",
   );
@@ -190,8 +197,8 @@ test("main.ts loads .env before any other module is evaluated", async () => {
 });
 
 test("load-env.ts logs to stderr, then installs the settings for the persona --persona names", async () => {
-  const source = await Bun.file(join(import.meta.dir, "../src/load-env.ts")).text();
-  expect(source.indexOf("personaArg(Bun.argv.slice(2))")).toBeGreaterThan(-1);
+  const source = await readFile(join(import.meta.dirname, "../src/load-env.ts"), "utf8");
+  expect(source.indexOf("personaArg(process.argv.slice(2))")).toBeGreaterThan(-1);
   expect(source.indexOf("personaArg(")).toBeLessThan(source.indexOf("installSettings();"));
   expect(source.indexOf("logToStderr();")).toBeGreaterThan(-1);
   expect(source.indexOf("logToStderr();")).toBeLessThan(source.indexOf("installSettings();"));
@@ -279,25 +286,29 @@ function importStatements(source: string): string[] {
   );
 }
 
+/** Every `import(…)` and `require(…)` call in `source`. */
+function dynamicImports(source: string): string[] {
+  return source.match(/\b(?:import|require)\s*\(\s*["'`][^"'`]*["'`]/g) ?? [];
+}
+
 test("@eidolon/cli/job and @eidolon/ingest/progress are import-free leaves the web app can import", async () => {
-  const manifest = await Bun.file(join(import.meta.dir, "../package.json")).json();
+  const manifest = JSON.parse(await readFile(join(import.meta.dirname, "../package.json"), "utf8"));
   expect(manifest.exports["./job"]).toBe("./src/job.ts");
-  const progress = Bun.resolveSync("@eidolon/ingest/progress", import.meta.dir);
+  const progress = createRequire(import.meta.filename).resolve("@eidolon/ingest/progress");
   expect(progress).toEndWith(join("packages", "ingest", "src", "progress.ts"));
-  const transpiler = new Bun.Transpiler({ loader: "ts" });
-  for (const path of [join(import.meta.dir, "../src/job.ts"), progress]) {
-    const source = await Bun.file(path).text();
-    expect(transpiler.scanImports(source), path).toEqual([]);
+  for (const path of [join(import.meta.dirname, "../src/job.ts"), progress]) {
+    const source = await readFile(path, "utf8");
+    expect(dynamicImports(source), path).toEqual([]);
     expect(importStatements(source), path).toEqual([]);
   }
-  // The check itself: a type-only import counts too.
+  // The checks themselves: a type-only import counts too.
   expect(importStatements('import type { A } from "a";\nexport { b } from "b";')).toHaveLength(2);
+  expect(dynamicImports('await import("a");\nrequire("b");')).toHaveLength(2);
 });
 
-test("a job runs the CLI without a .env from its folder and reports NDJSON", () => {
+test("a job runs the CLI on this runtime and reports NDJSON", () => {
   expect(jobArgv(cliEntry(), "refine", ["--persona", "milky-green"])).toEqual([
     process.execPath,
-    "--no-env-file",
     cliEntry(),
     "refine",
     "--json",

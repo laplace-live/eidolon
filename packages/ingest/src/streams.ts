@@ -18,6 +18,7 @@ import {
   sortedPy,
 } from "@eidolon/config";
 import { PyPattern } from "@eidolon/retrieval";
+import { parse as parseYaml } from "yaml";
 import { writeTextAtomic } from "./paths.ts";
 
 /** The audio files a download leaves for transcription, by suffix. */
@@ -83,7 +84,7 @@ export interface ParsedStream {
   readonly mdPath: string;
   readonly streamId: string;
   /**
-   * The frontmatter through YAML 1.2 (Bun), not PyYAML's YAML 1.1. What YAML 1.1 types
+   * The frontmatter through YAML 1.2, not PyYAML's YAML 1.1. What YAML 1.1 types
    * implicitly comes out differently: booleans like yes/no/on/off, timestamps, sexagesimal and
    * octal numbers, `1_000`, `1e3` and `1.0`. A non-string key such as `2021` parses as a string.
    */
@@ -123,8 +124,9 @@ function parseFrontmatter(raw: string): { metadata: Record<string, unknown>; con
   // `_, fm, content = BOUNDARY.split(text, 2)` raises ValueError, which means no frontmatter.
   if (open === undefined || close === undefined) return { metadata: {}, content: text };
   const fm = text.slice(open.index + open[0].length, close.index);
+  // A repeated YAML key keeps its last value rather than failing the transcript.
   const loaded: unknown = yaml
-    ? Bun.YAML.parse(fm)
+    ? parseYaml(fm, { uniqueKeys: false })
     : pyJsonLoads(`{${fm}}`, { strict: true, floats: true });
   return {
     metadata: isPlainObject(loaded) ? { ...loaded } : {},

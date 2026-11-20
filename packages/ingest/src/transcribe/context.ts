@@ -12,6 +12,7 @@ import {
   pyTruthy,
   sortedPy,
 } from "@eidolon/config";
+import { parse as parseToml } from "smol-toml";
 import { TranscribeError } from "./errors.ts";
 
 /** The glossary as written, in TOML order: what is persisted, so old transcripts stay explainable. */
@@ -74,7 +75,7 @@ export function loadContext(path: string | null): SonioxContext | null {
   }
   let raw: Record<string, unknown>;
   try {
-    raw = { ...(Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, unknown>) };
+    raw = { ...parseToml(readFileSync(path, "utf8")) };
   } catch (error) {
     throw new TranscribeError(`${path}: invalid TOML: ${errorText(error)}`);
   }

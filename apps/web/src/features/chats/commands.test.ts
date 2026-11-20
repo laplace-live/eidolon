@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { CHAT_DISPLAYS } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import { CHAT_COMMANDS, parseCommand, slashEntries } from "./commands";
 
 const PDF = { name: "pdf", description: "Read and make PDFs" };

@@ -1,8 +1,9 @@
 // runTask around its tools' background work: a run that would end waits while the work runs, and
 // goes on with each end as a notice; steering, follow-ups, a cancel and a reader leaving all end
 // the wait. Then the context's side: a notice is a user line, and a tool may say what masks it.
-import { describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { abortableSleep } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import { contextMessages, taskContext } from "../src/task/context.ts";
 import { runTask, type TaskBackground, type TaskEntry } from "../src/task.ts";
 import {
@@ -187,7 +188,7 @@ describe("a run with background work", () => {
     expect(returned.done).toBe(true);
     await pending;
     const takes = background.takes;
-    await Bun.sleep(60);
+    await delay(60);
     expect(background.takes).toBe(takes);
     expect(request.store.types()).toEqual(["brief", "assistant"]);
   });

@@ -8,7 +8,7 @@ import { join } from "node:path";
  * (no sizes, no Duration), the rest by ffmpeg, `fragmented.m4a` fragmented as a recorder writes MP4.
  */
 export function fixture(name: string): Uint8Array<ArrayBuffer> {
-  return new Uint8Array(readFileSync(join(import.meta.dir, "fixtures", name)));
+  return new Uint8Array(readFileSync(join(import.meta.dirname, "fixtures", name)));
 }
 
 /** What ffmpeg decodes each fixture to, in ms, and its type. */

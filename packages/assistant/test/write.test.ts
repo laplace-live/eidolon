@@ -4,10 +4,10 @@
 // Ported from pi-mono packages/coding-agent/test/tools.test.ts@ac78a60
 //
 // pi's write cases in a task's folder; then the task's own: refusals, files, aborts and arguments.
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { TaskToolResult } from "@eidolon/engine";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createWriteTool } from "../src/tools/write.ts";
 import type { AssistantTool } from "../src/types.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";

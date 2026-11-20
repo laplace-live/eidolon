@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { lookup } from "node:dns/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import type { IceService } from "@eidolon/turn";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { BotArgs } from "../src/args.ts";
+import { listen } from "../src/routing.ts";
 import { type BotDeps, type BotServer, shutdownHandler, startBotServer } from "../src/server.ts";
 import { type CapturedLogs, captureLogs, deferred, fakeAccess } from "./fakes.ts";
 
@@ -186,16 +188,16 @@ describe("startBotServer", () => {
     async () => {
       const [first, last] = [LOCALHOST[0] as string, LOCALHOST.at(-1) as string];
       // Another program on the last address, without SO_REUSEPORT, so the bot's bind there fails.
-      const other = Bun.serve({
+      const other = await listen({
         hostname: last,
         port: 0,
-        reusePort: false,
-        fetch: () => new Response("other"),
+        handle: async () => new Response("other"),
+        onError: () => new Response(null, { status: 500 }),
       });
       try {
         const { deps } = fakeDeps();
         await expect(
-          startBotServer({ ...ARGS, host: "localhost", port: other.port as number }, deps),
+          startBotServer({ ...ARGS, host: "localhost", port: other.port }, deps),
         ).rejects.toThrow();
         const host = first.includes(":") ? `[${first}]` : first;
         const refused = await fetch(`http://${host}:${other.port}/api/ice-servers`).then(
@@ -204,7 +206,7 @@ describe("startBotServer", () => {
         );
         expect(refused).toBe(true);
       } finally {
-        await other.stop(true);
+        await other.stop();
       }
     },
   );
@@ -219,7 +221,7 @@ describe("startBotServer", () => {
     const warm = deferred();
     const { deps, recorded } = fakeDeps({ warmAudioModels: () => warm.promise });
     const booting = startBotServer(ARGS, deps);
-    await Bun.sleep(10);
+    await delay(10);
     expect(recorded.calls).not.toContain("iceServiceFromEnv");
     expect(recorded.calls).not.toContain("createMcpHandler");
     expect(logs.records).toEqual([]);
@@ -280,10 +282,10 @@ describe("shutdownHandler", () => {
       (code) => exits.push(code),
     );
     onSignal();
-    await Bun.sleep(0);
+    await delay(0);
     expect(exits).toEqual([]);
     stopped.resolve();
-    await Bun.sleep(0);
+    await delay(0);
     expect(stops).toBe(1);
     expect(exits).toEqual([0]);
   });
@@ -313,7 +315,7 @@ describe("shutdownHandler", () => {
       (code) => exits.push(code),
     );
     onSignal();
-    await Bun.sleep(0);
+    await delay(0);
     expect(exits).toEqual([0]);
     expect(logs.lines()).toEqual(["ERROR Shutdown failed"]);
   });

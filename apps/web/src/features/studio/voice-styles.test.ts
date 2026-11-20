@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { VoiceStyle } from "@/lib/api";
 import { builtInHint, nameProblem, withoutStyle, withStyle } from "./voice-styles";
 

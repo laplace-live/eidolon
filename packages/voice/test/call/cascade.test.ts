@@ -1,11 +1,12 @@
 // A whole call on a fake transport, fake hearing and voice roles and scripted turns: what it opens
 // and closes, how it ends, the logs runtime's status reads, and the call's usage scope reaching
 // what the transport's audio bills. runVoiceCall runs the real Ear on the real models.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import type { ChatEventDraft } from "@eidolon/chat";
 import { AsyncQueue, consoleSink, logger } from "@eidolon/config";
 import type { EngineDeps } from "@eidolon/engine";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { type Ear, runCascadeCall } from "../../src/call/cascade.ts";
 import { memoryCallLog } from "../../src/call/log.ts";
 import { runVoiceCall, warmVoiceModels } from "../../src/index.ts";
@@ -274,10 +275,10 @@ describe("runVoiceCall", () => {
     const s = setup();
     const shutdown = new AbortController();
     const running = runVoiceCall(s.transport, s.plan, s.deps, shutdown.signal);
-    for (let i = 0; i < 50 && !s.transport.connected; i++) await Bun.sleep(5);
+    for (let i = 0; i < 50 && !s.transport.connected; i++) await delay(5);
     // A transport's callback runs outside the call's scope.
     setTimeout(() => s.transport.audioIn.push(new Int16Array(320)), 0);
-    for (let i = 0; i < 50 && s.stt.samples === 0; i++) await Bun.sleep(5);
+    for (let i = 0; i < 50 && s.stt.samples === 0; i++) await delay(5);
     expect(s.stt.samples).toBe(320);
     expect(records).toMatchObject([{ role: "hearing", source: "call", session: "call-7" }]);
     shutdown.abort();

@@ -58,7 +58,9 @@ export {
   sourcesDir,
   templatesDir,
 } from "./home.ts";
+export { installHttpDefaults, patientDispatcher } from "./http.ts";
 export { type HttpStatusReply, type HttpxStatusOptions, httpxStatusMessage } from "./httpx.ts";
+export { newId } from "./ids.ts";
 export {
   consoleSink,
   formatLogRecord,
@@ -92,6 +94,7 @@ export {
   voiceModelsDir,
   webDist,
 } from "./paths.ts";
+export { type SpawnOptions, type StdioTarget, type Subprocess, spawnProcess } from "./process.ts";
 export {
   cpLen,
   cpSlice,
@@ -143,6 +146,7 @@ export {
   pyPathWithSuffix,
 } from "./pypath.ts";
 export { AsyncQueue } from "./queue.ts";
+export { jsRuntime } from "./runtime.ts";
 export {
   accountEntries,
   activePersona,
@@ -178,3 +182,4 @@ export {
 } from "./settings.ts";
 export { withoutTrailingSlashes } from "./url.ts";
 export { type Clock, pyIsoformatUtc, utcDateParts, utcIsoDate, wallClockMicros } from "./utc.ts";
+export { which } from "./which.ts";

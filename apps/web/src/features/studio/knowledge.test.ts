@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { FactFile } from "../../lib/api";
 import { factsHint, factsState, wasIndexed } from "./knowledge";
 

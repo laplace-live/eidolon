@@ -1,8 +1,8 @@
 // The search role's client against a local server standing in for OpenRouter's chat completions,
 // answering as the billed probe of 2026-11-17 saw it answer.
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { openrouterHeaders } from "@eidolon/config";
-import type { Server } from "bun";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { type ServedFetch, serveFetch } from "../../config/test/http.ts";
 import {
   openRouterSearcher,
   ProviderHttpError,
@@ -19,26 +19,23 @@ interface Seen {
 /** What the server answers next: a status and a JSON body, or never. */
 let answer: { status: number; body: unknown } | "hang" = { status: 200, body: {} };
 let seen: Seen[] = [];
-let server: Server<undefined>;
+let server: ServedFetch;
 
-beforeAll(() => {
-  server = Bun.serve({
-    port: 0,
-    async fetch(request) {
-      if (new URL(request.url).pathname !== "/api/v1/chat/completions") {
-        return new Response("not found", { status: 404 });
-      }
-      seen.push({
-        body: (await request.json()) as Record<string, unknown>,
-        headers: request.headers,
-      });
-      if (answer === "hang") return new Promise<Response>(() => {});
-      return Response.json(answer.body, { status: answer.status });
-    },
+beforeAll(async () => {
+  server = await serveFetch(async (request) => {
+    if (new URL(request.url).pathname !== "/api/v1/chat/completions") {
+      return new Response("not found", { status: 404 });
+    }
+    seen.push({
+      body: (await request.json()) as Record<string, unknown>,
+      headers: request.headers,
+    });
+    if (answer === "hang") return new Promise<Response>(() => {});
+    return Response.json(answer.body, { status: answer.status });
   });
 });
 
-afterAll(() => server.stop(true));
+afterAll(() => server.stop());
 
 beforeEach(() => {
   seen = [];
@@ -48,7 +45,7 @@ function selection(): Selection {
   const values: Record<string, string> = {
     ASSISTANT_SEARCH_PROVIDER: "openrouter",
     OPENROUTER_API_KEY: "or-test",
-    OPENROUTER_API_BASE: `${server.url.href}api/v1`,
+    OPENROUTER_API_BASE: `${server.url}/api/v1`,
   };
   const chosen = select("search", (name) => values[name]);
   if (chosen === null) throw new Error("no search role");

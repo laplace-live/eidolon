@@ -1,12 +1,13 @@
 // A test file that deletes a path in the data home imports isolated-guard.ts first: run from a
-// subfolder, bunfig.toml's preload is skipped and the data home is the developer's own.
-import { describe, expect, test } from "bun:test";
+// subfolder, vitest.config.ts's setup file is skipped and the data home is the developer's own.
 import { readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import { describe, expect, test } from "vitest";
+import { spawnProcess } from "../src/index.ts";
 
-const ROOT = join(import.meta.dir, "../../..");
-const GUARD = join(import.meta.dir, "isolated-guard.ts");
+const ROOT = join(import.meta.dirname, "../../..");
+const GUARD = join(import.meta.dirname, "isolated-guard.ts");
 
 /** What names the data home or a folder in it. */
 const HOME =
@@ -14,7 +15,7 @@ const HOME =
 /** The real-data tests' read-only corpus, which no guard covers. */
 const REAL_HOME = /\bEIDOLON_REAL_HOME\b/;
 const DELETE =
-  /\b(?:rmSync|rmdirSync|unlinkSync|rm|rmdir|unlink)\s*\(|\bspawn(?:Sync)?\s*\(\s*\[\s*["'`]rm["'`]|\$`rm\b/g;
+  /\b(?:rmSync|rmdirSync|unlinkSync|rm|rmdir|unlink)\s*\(|\b(?:spawn(?:Sync|Process)?|execFile(?:Sync)?)\s*\(\s*\[?\s*["'`]rm["'`]|\$`rm\b/g;
 const ASSIGN =
   /(?:\b(?:const|let|var)\s+|^[ \t]*|[;{][ \t]*)([A-Za-z_$][\w$]*)[ \t]*(?::[^=;\n]*)?=(?![=>])([^;]*)/gm;
 const IDENTIFIER = /(?<![.\w$])[A-Za-z_$][\w$]*/g;
@@ -33,7 +34,11 @@ function testFiles(): string[] {
       }
       for (const entry of entries) {
         const path = join(dir, entry);
-        if (entry.endsWith(".ts") && !entry.includes("node_modules") && path !== import.meta.path) {
+        if (
+          entry.endsWith(".ts") &&
+          !entry.includes("node_modules") &&
+          path !== import.meta.filename
+        ) {
           files.push(path);
         }
       }
@@ -106,19 +111,19 @@ describe("isolated-guard.ts", () => {
       false,
     );
     expect(flagged("Bun.spawn(['rm', '-rf', binDir()]);")).toBe(true);
+    expect(flagged("spawnProcess(['rm', '-rf', binDir()]);")).toBe(true);
+    expect(flagged("spawnSync('rm', ['-rf', binDir()]);")).toBe(true);
     expect(flagged("// rmSync(dataHome());\nrmSync(work);")).toBe(false);
   });
 
   test("it refuses an unset or foreign EIDOLON_HOME, and loads under its run's own", async () => {
-    const { EIDOLON_HOME: _, ...env } = process.env;
+    const env: Record<string, string> = {};
+    for (const [name, value] of Object.entries(process.env)) {
+      if (name !== "EIDOLON_HOME" && value !== undefined) env[name] = value;
+    }
     const load = async (home: string | undefined, setup = "") => {
-      const child = Bun.spawn(
-        [
-          process.execPath,
-          "--no-env-file",
-          "-e",
-          `${setup}await import(${JSON.stringify(GUARD)});`,
-        ],
+      const child = spawnProcess(
+        [process.execPath, "-e", `${setup}await import(${JSON.stringify(GUARD)});`],
         {
           env: home === undefined ? env : { ...env, EIDOLON_HOME: home },
           stdout: "ignore",
@@ -140,7 +145,7 @@ describe("isolated-guard.ts", () => {
     }
     const own = await load(
       undefined,
-      `process.env.EIDOLON_HOME = require("node:path").join(require("node:os").tmpdir(), "eidolon-test-home-" + process.pid);`,
+      `process.env.EIDOLON_HOME = (await import("node:path")).join((await import("node:os")).tmpdir(), "eidolon-test-home-" + process.pid);`,
     );
     expect(own).toEqual({ code: 0, stderr: "" });
   }, 20_000);

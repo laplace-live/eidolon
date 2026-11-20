@@ -1,6 +1,5 @@
 // The commands the owner allowed for good from tasks' cards: what each allows, the file they live
 // in, and that answers given at once never lose one another's.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -13,6 +12,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { newId } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AllowedCommands } from "../../src/local/tasks/commands.ts";
 import { placeOf } from "../../src/local/tasks/places.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
@@ -94,7 +95,7 @@ describe("allowed commands", () => {
     await allowed.add("/a", "make", "task-1");
     await allowed.add("/a", "make test", "task-1");
     const [newest, oldest] = await allowed.list();
-    expect(await allowed.remove(Bun.randomUUIDv7())).toBe(false);
+    expect(await allowed.remove(newId())).toBe(false);
     expect(await allowed.remove(newest?.id as string)).toBe(true);
     expect(await allowed.remove(newest?.id as string)).toBe(false);
     expect(await allowed.list()).toEqual([oldest]);

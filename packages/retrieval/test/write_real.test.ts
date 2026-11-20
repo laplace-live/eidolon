@@ -1,10 +1,10 @@
 // The write side against 奶绿's real index and embedding cache in EIDOLON_REAL_HOME, read only:
 // tables are rewritten into a temporary folder and the cache is cloned there. Each test skips
 // without the data, unless EIDOLON_REQUIRE_PARITY=1.
-import { afterAll, beforeAll, expect, test } from "bun:test";
 import { constants, copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import {
   DEFAULT_EMBED_MODEL,
   EmbedCache,

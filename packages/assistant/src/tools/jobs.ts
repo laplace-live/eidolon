@@ -1,6 +1,7 @@
 // A task's commands, kept across its runs in <task>/bash/: each one's output in <n>.log, and
 // runs.json saying how each ended and whether the worker was told. One still running at the yield
 // goes on in the background, and the task's runs wait for it and hear how it ended.
+import { createReadStream } from "node:fs";
 import { type FileHandle, mkdir, open, readdir, readFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { errorText, isPlainObject } from "@eidolon/config";
@@ -567,7 +568,7 @@ export class BashJobs implements TaskBackground {
       // Nothing was written before it was lost.
     } else if (offset !== undefined) {
       try {
-        body = sanitize((await readLines(Bun.file(log).stream(), offset, limit)).text);
+        body = sanitize((await readLines(createReadStream(log), offset, limit)).text);
       } catch (error) {
         return { content: `${state}\n\n${errorText(error)}`, isError: true, details: details(run) };
       }

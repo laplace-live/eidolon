@@ -1,9 +1,9 @@
 // The local viewer: granted by the session alone, free of the anonymous quota, and with memories
 // kept per persona. A fake Mem0 engine filters by user and agent the way mem0 does.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   activePersona,
   dataHome,
@@ -15,6 +15,7 @@ import {
 import { LOCAL_VIEWER_MID } from "@eidolon/context";
 import type { MemoryAdmin, MemorySummary } from "@eidolon/memory";
 import type { CallBinding } from "@eidolon/runtime";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { ChatContents } from "../../src/local/api.ts";
 import {
   activeMemoryScope,
@@ -309,7 +310,7 @@ describe("a call in a chat", () => {
     for (;;) {
       contents = (await (await local("GET", `/chats/${id}`)).json()) as ChatContents;
       if (contents.call === null || Date.now() > deadline) break;
-      await Bun.sleep(5);
+      await delay(5);
     }
     expect(contents.call).toBeNull();
     expect(contents.events.map((event) => event.type)).toEqual([

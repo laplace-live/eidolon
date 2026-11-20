@@ -1,9 +1,12 @@
-import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { type AddressInfo, createServer } from "node:http";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ServerWebSocket } from "bun";
+import { DatabaseSync } from "node:sqlite";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { costOf, priceOf } from "../../../packages/providers/src/index.ts";
 import { packMsg, unpackMsg } from "../../../packages/providers/src/speech/stream/msgpack.ts";
 import {
@@ -185,8 +188,8 @@ describe("the arithmetic", () => {
   });
 });
 
-const SCRIPT = join(import.meta.dir, "measure.ts");
-const ROOT = join(import.meta.dir, "../../..");
+const SCRIPT = join(import.meta.dirname, "measure.ts");
+const ROOT = join(import.meta.dirname, "../../..");
 const KEY = "sk-fake-fish-0123456789";
 const SETTLE_MS = 300;
 // The fake answers its nth flush on a session after FIRST_MS, in 2 + n % 3 messages a tenth of a
@@ -205,61 +208,72 @@ interface Peer {
   chain: Promise<void>;
 }
 
+// The socket server comes from the package the script's Fish client uses: nothing here installs it.
+const { WebSocketServer } = createRequire(join(ROOT, "packages/providers/package.json"))(
+  "ws",
+) as typeof import("ws");
+
 /** Fish's live socket as the script drives it: a flush's audio comes in order after the last's. */
-function fakeFish() {
+async function fakeFish() {
   const peers: Peer[] = [];
-  const server = Bun.serve<{ peer: Peer }>({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch(request, srv) {
-      const url = new URL(request.url);
-      const peer: Peer = {
-        path: url.pathname,
-        headers: request.headers,
-        received: [],
-        lastAudio: [],
-        flushes: 0,
-        chain: Promise.resolve(),
-      };
-      if (srv.upgrade(request, { data: { peer } })) return undefined;
-      return new Response("no upgrade", { status: 400 });
-    },
-    websocket: {
-      open(ws) {
-        peers.push(ws.data.peer);
-      },
-      message(ws: ServerWebSocket<{ peer: Peer }>, data) {
-        const { peer } = ws.data;
-        const message = unpackMsg(data as Uint8Array) as Record<string, unknown>;
-        peer.received.push({ t: performance.now(), message });
-        if (message.event === "flush") {
-          const n = peer.flushes++;
-          peer.chain = peer.chain.then(async () => {
-            await Bun.sleep(FIRST_MS);
-            for (let i = 0; i < chunksOf(n); i++) {
-              if (i > 0) await Bun.sleep(GAP_MS[i % 2] as number);
-              ws.send(packMsg({ event: "audio", audio: new Uint8Array(TENTH) }));
-            }
-            peer.lastAudio[n] = performance.now();
-          });
-        } else if (message.event === "stop") {
-          peer.chain = peer.chain.then(() => {
-            ws.send(packMsg({ event: "finish", reason: "stop" }));
-          });
-        }
-      },
-    },
+  const server = createServer((_request, response) => {
+    response.writeHead(400).end("no upgrade");
   });
-  return { base: `http://127.0.0.1:${server.port}`, peers, stop: () => server.stop(true) };
+  const sockets = new WebSocketServer({ server });
+  sockets.on("connection", (ws, request) => {
+    const headers = new Headers();
+    for (let i = 0; i < request.rawHeaders.length; i += 2) {
+      headers.append(request.rawHeaders[i] as string, request.rawHeaders[i + 1] as string);
+    }
+    const peer: Peer = {
+      path: new URL(request.url ?? "/", "http://127.0.0.1").pathname,
+      headers,
+      received: [],
+      lastAudio: [],
+      flushes: 0,
+      chain: Promise.resolve(),
+    };
+    peers.push(peer);
+    ws.on("message", (data: Buffer) => {
+      const message = unpackMsg(data) as Record<string, unknown>;
+      peer.received.push({ t: performance.now(), message });
+      if (message.event === "flush") {
+        const n = peer.flushes++;
+        peer.chain = peer.chain.then(async () => {
+          await delay(FIRST_MS);
+          for (let i = 0; i < chunksOf(n); i++) {
+            if (i > 0) await delay(GAP_MS[i % 2] as number);
+            ws.send(packMsg({ event: "audio", audio: new Uint8Array(TENTH) }));
+          }
+          peer.lastAudio[n] = performance.now();
+        });
+      } else if (message.event === "stop") {
+        peer.chain = peer.chain.then(() => {
+          ws.send(packMsg({ event: "finish", reason: "stop" }));
+        });
+      }
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    base: `http://127.0.0.1:${port}`,
+    peers,
+    stop() {
+      for (const ws of sockets.clients) ws.terminate();
+      sockets.close();
+      server.close();
+    },
+  };
 }
 
 describe("the script against a fake Fish", () => {
   let home: string;
-  let fake: ReturnType<typeof fakeFish>;
+  let fake: Awaited<ReturnType<typeof fakeFish>>;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     home = mkdtempSync(join(tmpdir(), "fish-flush-"));
-    fake = fakeFish();
+    fake = await fakeFish();
     writeFileSync(
       join(home, "credentials.json"),
       JSON.stringify({
@@ -276,7 +290,7 @@ describe("the script against a fake Fish", () => {
 
   /** The script on a data home whose voice role is the fake's account, and no .env. */
   async function run(...args: string[]) {
-    const child = Bun.spawn([process.execPath, SCRIPT, ...args], {
+    const child = spawn(process.execPath, [SCRIPT, ...args], {
       cwd: ROOT,
       env: {
         PATH: process.env.PATH ?? "",
@@ -288,14 +302,17 @@ describe("the script against a fake Fish", () => {
         TTS_PROVIDER: "fake-fish",
         TTS_VOICE_ID: "voice-fake",
       },
-      stdout: "pipe",
-      stderr: "pipe",
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    const code = await new Promise<number | null>((resolve) => child.on("close", resolve));
     return { stdout, stderr, code };
   }
 
@@ -383,9 +400,9 @@ describe("the script against a fake Fish", () => {
     );
 
     const said = [...texts, ...pipelinedTexts];
-    const db = new Database(join(home, "usage.db"), { readonly: true });
+    const db = new DatabaseSync(join(home, "usage.db"), { readOnly: true });
     const rows = db
-      .query("SELECT role, provider, model, characters, bytes, source, cost_source FROM usage")
+      .prepare("SELECT role, provider, model, characters, bytes, source, cost_source FROM usage")
       .all();
     db.close();
     expect(rows).toEqual([

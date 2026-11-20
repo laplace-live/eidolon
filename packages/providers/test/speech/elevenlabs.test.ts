@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { ELEVENLABS_URL, ElevenLabsSpeech } from "../../src/speech/stream/elevenlabs.ts";
 import {
   bytesOf,
@@ -26,7 +26,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await Promise.all(streams.map((stream) => stream.close()));
-  fake?.stop();
+  await fake?.stop();
   restore();
 });
 
@@ -37,7 +37,7 @@ function open(): ElevenLabsSpeech {
 }
 
 /** ElevenLabs' own answer to `close_socket`, around a test's handler. */
-function serve(onMessage?: (peer: Peer, data: string | Uint8Array) => void): Fake {
+function serve(onMessage?: (peer: Peer, data: string | Uint8Array) => void): Promise<Fake> {
   return fakeServer({
     onMessage: (peer, data) => {
       if (JSON.parse(data as string).close_socket === true) peer.socket.close(1000, "bye");
@@ -84,7 +84,7 @@ test("pipedog's URL for ElevenLabs' own account", () => {
 });
 
 test("a context per utterance: today's messages out, audio split at each segment's last word", async () => {
-  fake = serve(answer);
+  fake = await serve(answer);
   const stream = open();
   expect(stream.sampleRate).toBe(24000);
   const peer = await until(() => fake.peers[0]);
@@ -128,7 +128,7 @@ test("a context per utterance: today's messages out, audio split at each segment
 });
 
 test("cues are stripped for a model that can't read them; a cue-only segment still ends in order", async () => {
-  fake = serve(answer);
+  fake = await serve(answer);
   const stream = open();
   const utterance = stream.utterance(null);
   utterance.say({ id: 1, text: "[温柔] 你好。" });
@@ -152,7 +152,7 @@ test("cues are stripped for a model that can't read them; a cue-only segment sti
 });
 
 test("cancel closes the context; an utterance with nothing said opens none", async () => {
-  fake = serve();
+  fake = await serve();
   const stream = open();
   const peer = await until(() => fake.peers[0]);
   const empty = stream.utterance(null);
@@ -172,7 +172,7 @@ test("cancel closes the context; an utterance with nothing said opens none", asy
 });
 
 test("another voice is another socket, since the voice is in the URL", async () => {
-  fake = serve();
+  fake = await serve();
   const stream = open();
   await until(() => fake.peers[0]);
   stream.utterance("voice-2").say({ id: 1, text: "嗯。" });
@@ -188,7 +188,7 @@ let intervals: Intervals;
 test("a keepalive every 10 s names a context only once its first message is out", async () => {
   intervals = captureIntervals();
   try {
-    fake = serve();
+    fake = await serve();
     const stream = open();
     const peer = await until(() => fake.peers[0]);
     const keepalive = await until(() => intervals.findLast((interval) => interval.ms === 10_000));
@@ -213,7 +213,7 @@ test("a keepalive every 10 s names a context only once its first message is out"
 });
 
 test("closing asks ElevenLabs to close the socket, and a dropped socket fails its utterances", async () => {
-  fake = fakeServer({
+  fake = await fakeServer({
     onMessage: (peer, data) => {
       if (JSON.parse(data as string).close_socket === true) peer.socket.close(1000, "bye");
       if (JSON.parse(data as string).text === "坏。") peer.socket.close(1011, "boom");
@@ -230,12 +230,13 @@ test("closing asks ElevenLabs to close the socket, and a dropped socket fails it
   const peer = await until(() => fake.peers[1]?.received.length === 2 && fake.peers[1]);
   await stream.close();
   expect(JSON.parse(peer.received.at(-1) as string)).toEqual({ close_socket: true });
-  expect(peer.closed).toEqual({ code: 1000, reason: "bye" });
+  // The server hears its socket close once the connection has, which may follow the client.
+  expect(await until(() => peer.closed)).toEqual({ code: 1000, reason: "bye" });
   expect(await collect(again.audio)).toEqual([]);
 });
 
 test("a refused key is an error that never carries it", async () => {
-  fake = fakeServer({ refuse: 401 });
+  fake = await fakeServer({ refuse: 401 });
   const utterance = open().utterance(null);
   utterance.say({ id: 1, text: "嗨。" });
   const [event] = await collect(utterance.audio);

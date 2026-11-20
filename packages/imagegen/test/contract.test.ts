@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import * as imagegen from "../src/index.ts";
 
 // The signatures apps/bot and runtime compile against; this file stops type-checking if one drifts.

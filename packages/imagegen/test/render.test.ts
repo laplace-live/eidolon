@@ -1,5 +1,5 @@
-import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   type ReferenceImage,
   type RenderSelfieOptions,

@@ -1,6 +1,6 @@
 // What makes a milestone of her task's plan for a verbose chat's call, and how far apart a call's
 // milestones are, with explicit times.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { TaskSnapshot, TaskStatus, TaskTodoStatus } from "../../src/local/api.ts";
 import {
   doneOf,

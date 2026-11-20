@@ -1,11 +1,11 @@
 // /api/local/skills over a manager, as the local router serves it: what Settings is shown of the
 // owner's skill folders, the switch a PUT flips, a skill a POST writes, and what each refuses.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { skillSwitchesPath } from "@eidolon/assistant";
 import { dataHome, sharedSkillsDir } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ErrorBody, SkillsResponse } from "../../src/local/api.ts";
 import { createLocalRouter } from "../../src/local/router.ts";
@@ -13,12 +13,13 @@ import { skillsRoutes } from "../../src/local/routes/skills.ts";
 import { TaskManager } from "../../src/local/tasks/manager.ts";
 import { ensureDataHome } from "../../src/local/write.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
+import { type ServedRoutes, serveRoutes } from "../serve.ts";
 
 const AUTH = "Bearer test-secret";
 
 let logs: CapturedLogs;
 const managers: TaskManager[] = [];
-const servers: ReturnType<typeof Bun.serve>[] = [];
+const servers: Promise<ServedRoutes>[] = [];
 
 beforeEach(() => {
   ensureDataHome();
@@ -26,7 +27,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  for (const server of servers.splice(0)) server.stop(true);
+  for (const server of servers.splice(0)) await (await server).stop();
   for (const tasks of managers.splice(0)) await tasks.stop();
   logs.restore();
   rmSync(join(dataHome(), "skills"), { recursive: true, force: true });
@@ -63,15 +64,10 @@ function serve(): (method: string, path: string, body?: unknown) => Promise<Resp
   const router: RouteHandler = createLocalRouter(skillsRoutes(tasks), (request) =>
     request.headers.get("authorization") === AUTH ? "bearer" : null,
   );
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    routes: { "/api/local/*": router },
-    fetch: () => new Response(null, { status: 404 }),
-  });
-  servers.push(server);
-  return (method, path, body) =>
-    fetch(`http://127.0.0.1:${server.port}${path}`, {
+  const listening = serveRoutes({ "/api/local/*": router });
+  servers.push(listening);
+  return async (method, path, body) =>
+    fetch(`${(await listening).url}${path}`, {
       method,
       headers: {
         authorization: AUTH,

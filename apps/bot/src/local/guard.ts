@@ -5,9 +5,8 @@
 // one way in for another page is an origin EIDOLON_LOCAL_ALLOWED_ORIGINS lists, and only to the
 // bot's API, never to /api/local.
 import { corsPreflightResponse } from "@eidolon/access";
-import { logger } from "@eidolon/config";
 import { SELFIE_PATH } from "@eidolon/imagegen";
-import { logAccess, type RouteServer } from "../app.ts";
+import type { RouteServer } from "../app.ts";
 import { localError } from "./responses.ts";
 import { LOCAL_PREFIX } from "./router.ts";
 
@@ -96,11 +95,7 @@ export function listedOrigin(request: Request, listed: ReadonlySet<string>): str
   return isApiPath(pathname) && !isLocalApiPath(pathname) ? origin : null;
 }
 
-/**
- * The guard's own answer: a refusal, or a listed origin's preflight; null lets the routes answer.
- * The order matters: the URL is parsed only once Host has passed, because without one Bun's
- * request.url is not absolute.
- */
+/** The guard's own answer: a refusal, or a listed origin's preflight; null lets the routes answer. */
 export function guardRequest(
   request: Request,
   server: RouteServer | undefined,
@@ -117,8 +112,8 @@ export function guardRequest(
     return localError(421, "misdirected", "Open Eidolon through localhost or 127.0.0.1");
   }
   const crossOrigin = listedOrigin(request, listed);
-  // Bun hands a preflight to a function route or the fallback, both guarded, so it is answered
-  // here or nowhere: the bot's own answer would allow every origin.
+  // The routing hands a preflight to a function route or the fallback, both guarded, so it is
+  // answered here or nowhere: the bot's own answer would allow every origin.
   if (request.method === "OPTIONS") {
     const preflight =
       crossOrigin === null ? null : corsPreflightResponse(request, { allowOrigins: [crossOrigin] });
@@ -150,17 +145,4 @@ export function guardRequest(
     return localError(403, "forbidden", "Only Eidolon's own pages may call its API");
   }
   return null;
-}
-
-/** The access line for a refused request, which may lack the Host its URL needs. */
-export function logRefused(
-  request: Request,
-  server: RouteServer | undefined,
-  response: Response,
-): void {
-  try {
-    logAccess(request, server, response);
-  } catch {
-    logger.info(`- - "${request.method} - HTTP/1.1" ${response.status}`);
-  }
 }

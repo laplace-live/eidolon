@@ -1,8 +1,7 @@
 // The public read-only MCP server: search_persona_facts and search_streams over the two LanceDB
 // indexes, as stateless Streamable HTTP with JSON responses. The app mounts `handle` at both /mcp
-// and /mcp/, after CORS and the per-request idle-timeout opt-out. The bare path must answer
-// directly: a redirect built behind a TLS-terminating proxy points at http://, a downgrade MCP SDK
-// clients refuse to follow.
+// and /mcp/, after CORS. The bare path must answer directly: a redirect built behind a
+// TLS-terminating proxy points at http://, a downgrade MCP SDK clients refuse to follow.
 import {
   quotaFromEnv,
   resolveBearerCaller,
@@ -55,8 +54,8 @@ import {
 export interface McpHandler {
   /**
    * One stateless Streamable HTTP exchange; `clientIp` comes from access's resolveClientIp.
-   * Never receives a CORS preflight: the app's route wrapper answers it first, because Bun hands
-   * OPTIONS to function-valued routes instead of falling through to `fetch`.
+   * Never receives a CORS preflight: the app's route wrapper answers it first, because the routing
+   * hands OPTIONS to function-valued routes instead of the fallback.
    */
   handle(request: Request, clientIp: string): Promise<Response>;
 }

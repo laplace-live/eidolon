@@ -2,7 +2,6 @@
 // runs, pauses, asks and ends, and is reported to its chat; what a restart, a cancel, the lock and
 // Assistant Mode's switch do to it; and that laplace-task's tasks are never touched.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -17,6 +16,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   newTaskId,
   openTaskStore,
@@ -48,6 +48,7 @@ import {
   reportUsage,
   type UsageRecord,
 } from "@eidolon/providers";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { STEER_PREFIX } from "../../src/local/api.ts";
 import {
   TaskManager,
@@ -266,7 +267,7 @@ async function until(check: () => boolean | Promise<boolean>, ms = 5000): Promis
   const deadline = Date.now() + ms;
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 
@@ -1233,7 +1234,7 @@ describe("a restart", () => {
     const before = types(id);
     expect(before).toEqual(["brief", "assistant", "tool-start", "tool-result"]);
     open.resolve();
-    await Bun.sleep(20);
+    await delay(20);
     expect(types(id)).toEqual(before);
 
     const second = await booted();
@@ -1380,7 +1381,11 @@ describe("a restart", () => {
     await reach(tasks, seeded.id, "succeeded");
     expect(userLines(minds.for("Seeded")[0]).at(-1)).toBe("Use tabs.");
     expect(types(seeded.id)).toEqual(["brief", "steer", "assistant", "end"]);
-    expect(await onDisk(seeded.id)).not.toHaveProperty("inbox");
+    // The run drops the line from task.json without waiting for the write.
+    await until(async () => {
+      const disk = await onDisk(seeded.id);
+      return disk !== null && !Object.hasOwn(disk, "inbox");
+    });
   });
 });
 
@@ -1404,7 +1409,7 @@ describe("cancelling", () => {
     // A cancelled task never runs again.
     expect((await refused(tasks.continue(id))).code).toBe("not-paused");
     expect((await refused(tasks.approve(id, { answer: "once" }))).code).toBe("nothing-pending");
-    await Bun.sleep(20);
+    await delay(20);
     expect(reports.map(({ status }) => status)).toEqual(["cancelled"]);
   });
 
@@ -1502,7 +1507,7 @@ describe("cancelling", () => {
     const tasks = await booted();
     const starting = tasks.start({ goal: "Late", folder: join(work, "late") }, ORIGIN);
     // Past its check of the mode, making its folder's grants and files.
-    await Bun.sleep(0);
+    await delay(0);
     settings = { ...settings, enabled: false };
     await tasks.modeChanged(false);
     const started = await starting;
@@ -1530,7 +1535,7 @@ describe("reports", () => {
     await second.stop();
 
     await booted();
-    await Bun.sleep(30);
+    await delay(30);
     expect(reports).toHaveLength(2);
   });
 
@@ -1544,7 +1549,7 @@ describe("reports", () => {
     const running = await seed({ status: "running", chat: undefined });
     const interrupted = await seed({ status: "interrupted", chat: undefined });
     const tasks = await booted();
-    await Bun.sleep(30);
+    await delay(30);
 
     expect(await tasks.list()).toEqual([]);
     for (const { id } of [ended, running, interrupted]) {
@@ -1817,7 +1822,7 @@ describe("her steering", () => {
     const { id } = await tasks.start({ goal: "Spends", folder: join(work, "spend") }, ORIGIN);
     await reach(tasks, id, "paused");
     expect((await tasks.steer(id, "Stop at two pages.")).status).toBe("paused");
-    await Bun.sleep(20);
+    await delay(20);
     expect(minds.for("Spends")).toHaveLength(2);
 
     await tasks.continue(id);
@@ -1940,7 +1945,7 @@ describe("waiting", () => {
       Stall: "stall",
       Unpriced: "unpriced",
     });
-    await Bun.sleep(20);
+    await delay(20);
     expect(waits).toHaveLength(5);
   });
 
@@ -1964,7 +1969,7 @@ describe("waiting", () => {
     await tasks.approve(id, { answer: "once" });
     await reach(tasks, id, "succeeded");
     await until(() => reports.length === 2);
-    await Bun.sleep(20);
+    await delay(20);
     expect(waits.map((each) => each.status)).toEqual(["paused"]);
   });
 

@@ -1,5 +1,6 @@
 // The embedding client for any OpenAI-compatible `/embeddings` endpoint. Query-time vectors must
 // come from the same model and dimension as the offline ingest's, or they aren't comparable.
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   cpSlice,
   embedDim,
@@ -167,7 +168,7 @@ export class EmbeddingClient {
     this.#headers = { ...(options.headers ?? {}) };
     this.#openrouter = options.openrouter ?? true;
     this.#fetch = options.fetch ?? null;
-    this.#sleep = options.sleep ?? ((seconds) => Bun.sleep(seconds * 1000));
+    this.#sleep = options.sleep ?? ((seconds) => sleep(seconds * 1000));
     this.#random = options.random ?? Math.random;
     this.#maxRetries = options.maxRetries ?? EMBED_HTTP_MAX_RETRIES;
     this.#timeoutSec = options.timeoutSec ?? EMBED_HTTP_TIMEOUT_SEC;

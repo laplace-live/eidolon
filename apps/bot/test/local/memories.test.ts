@@ -1,11 +1,11 @@
 // GET and DELETE /api/local/memories: each persona's memories of the local viewer, in the scope her
 // calls store under, so forgetting with one persona leaves another's.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, installSettings } from "@eidolon/config";
 import type { MemoryAdmin, MemorySummary } from "@eidolon/memory";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { memoryScopeOf } from "../../src/local/identity.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot } from "./harness.ts";

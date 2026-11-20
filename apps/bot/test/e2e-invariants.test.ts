@@ -1,5 +1,5 @@
 // I1–I10 (scripts/e2e/invariants.ts) on made-up sequences, as e2e-call.ts checks a real call's.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { checkInvariants, type WireMessage } from "../scripts/e2e/invariants.ts";
 
 const m = (type: string, data?: Record<string, unknown>): WireMessage =>

@@ -6,6 +6,7 @@
 //
 // Her audio: RawAudioTrack's drift-free 10 ms clock pulling a PcmSource, and RTCRtpSender's 20 ms
 // Opus packets on a peer's first transceiver.
+import { setTimeout as sleep } from "node:timers/promises";
 import { errorText, logger } from "@eidolon/config";
 import { MediaStreamTrack, type RTCRtpSender, RtpHeader, RtpPacket } from "werift";
 import { OPUS_RTP_CLOCK_RATE, type OpusCodec } from "./opus.ts";
@@ -85,7 +86,7 @@ export class AudioOut {
         if (pulled > 0) {
           // From the clock's start, so a stalled event loop catches up instead of drifting.
           const wait = start + (pulled / rate) * 1000 - performance.now();
-          if (wait > 0) await Bun.sleep(wait);
+          if (wait > 0) await sleep(wait);
           if (this.#run !== run) break;
         }
         if (live()) packet.set(source.pull(per10ms), filled);

@@ -2,9 +2,9 @@
 // fresh one, which is how settings read once at boot take effect. Otherwise this process exits with
 // the child's code. The child gets its own process group, so a terminal's Ctrl-C reaches it once,
 // through here, and an IPC channel ends it if this process is killed outright.
-import { serverEntry } from "@eidolon/config";
-import type { Subprocess } from "bun";
+import { jsRuntime, type Subprocess, serverEntry, spawnProcess } from "@eidolon/config";
 import { localArgv, parseLocalArgs } from "./args.ts";
+import { STARTED_ENV } from "./environ.ts";
 
 /** EX_TEMPFAIL: the server stopped so that a new one can start. */
 export const RESTART_EXIT_CODE = 75;
@@ -63,18 +63,18 @@ export async function supervise(
   try {
     for (;;) {
       boundPort = null;
-      // No env: the server applies the .env itself. Passing what this process applied from it
-      // would keep a key deleted from the .env since alive across every restart.
-      child = Bun.spawn(
-        [process.execPath, "--no-env-file", options.entry ?? serverEntry(), ...localArgv(args)],
-        {
-          stdio: ["ignore", "inherit", "inherit"],
-          detached: process.platform !== "win32",
-          ipc(message) {
-            if (isListening(message)) boundPort = message.port;
-          },
+      const runtime = jsRuntime();
+      // The environment this process started with: the server applies the .env itself.
+      child = spawnProcess([runtime.command, options.entry ?? serverEntry(), ...localArgv(args)], {
+        env: { ...STARTED_ENV, ...runtime.env },
+        stdin: "ignore",
+        stdout: "inherit",
+        stderr: "inherit",
+        detached: process.platform !== "win32",
+        ipc(message) {
+          if (isListening(message)) boundPort = message.port;
         },
-      );
+      });
       const code = await child.exited;
       child = null;
       if (code !== RESTART_EXIT_CODE || stopping) return code;

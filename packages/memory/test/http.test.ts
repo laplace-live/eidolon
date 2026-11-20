@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { OpenAIClient } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import {
   extractionRequestBody,
   isReasoningModel,

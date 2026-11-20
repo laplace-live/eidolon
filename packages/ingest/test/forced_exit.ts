@@ -24,7 +24,7 @@ export async function cancelMidRebuild(
   logger.setSink((record) => {
     if (!/^Wrote \d+ rows to /.test(record.message)) return;
     listeners.get("SIGINT")?.();
-    Bun.sleepSync(5);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
   });
   const code = await runWithSignals(async (signal) => ((await ingest(signal)).ok ? 0 : 1), host, 1);
   return { code, exits };

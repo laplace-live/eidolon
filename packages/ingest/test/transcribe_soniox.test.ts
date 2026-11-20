@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { consoleSink, type LogRecord, logger, PyFloat } from "@eidolon/config";
+import { consoleSink, type LogRecord, logger, PyFloat, spawnProcess } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { serveFetch } from "../../config/test/http.ts";
 import { transcribe } from "../src/index.ts";
 import { fakeSoniox, type Override, type Recorded, sonioxError } from "./fake_soniox.ts";
 
@@ -57,10 +58,37 @@ describe("the calls", () => {
         method: "POST",
         path: "/files",
         authorization: "Bearer key",
-        timeout: 600_000,
+        dispatcher: expect.objectContaining({ dispatch: expect.any(Function) }),
         form: { client_reference_id: "laplace-eidolon:BV1x.m4a", filename: "BV1x.m4a" },
       },
     ]);
+  });
+
+  test("an upload over Node's fetch streams the file through the client's dispatcher", async () => {
+    const audio = join(work, "BV1x.m4a");
+    writeFileSync(audio, "abc");
+    const received: unknown[] = [];
+    const server = await serveFetch(async (request) => {
+      const form = await request.formData();
+      const file = form.get("file") as File;
+      received.push([
+        new URL(request.url).pathname,
+        request.headers.get("authorization"),
+        form.get("client_reference_id"),
+        file.name,
+        await file.text(),
+      ]);
+      return Response.json({ id: "f1" }, { status: 201 });
+    });
+    try {
+      const c = new SonioxClient({ apiKey: "key", baseUrl: `${server.url}/v1` });
+      expect(await c.upload(audio, "BV1x.m4a", "laplace-eidolon:BV1x.m4a")).toEqual({ id: "f1" });
+      expect(received).toEqual([
+        ["/v1/files", "Bearer key", "laplace-eidolon:BV1x.m4a", "BV1x.m4a", "abc"],
+      ]);
+    } finally {
+      await server.stop();
+    }
   });
 
   test("create posts JSON; get and the transcript parse what Soniox sent", async () => {
@@ -223,11 +251,10 @@ describe("cancelling", () => {
   });
 
   test("a cancel during the default wait clears its timer, so the process exits at once", async () => {
-    const module = join(import.meta.dir, "../src/transcribe/soniox.ts");
-    const child = Bun.spawn(
+    const module = join(import.meta.dirname, "../src/transcribe/soniox.ts");
+    const child = spawnProcess(
       [
         process.execPath,
-        "--no-env-file",
         "-e",
         `const { SonioxClient } = await import(${JSON.stringify(module)});
          const controller = new AbortController();

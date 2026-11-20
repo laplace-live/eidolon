@@ -1,5 +1,5 @@
 // Expected values are Python datetime.date's.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   addDays,
   DateRangeError,

@@ -1,6 +1,6 @@
 // Behavior that needs @eidolon/retrieval's real retriever factories and search parameters.
-import { expect, test } from "bun:test";
 import { SlidingWindowQuota } from "@eidolon/access";
+import { expect, test } from "vitest";
 import { createMcpHandler } from "../../src/mcp/index.ts";
 import {
   CHUNK_HIT,

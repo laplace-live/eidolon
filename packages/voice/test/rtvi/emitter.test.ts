@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { RtviMessage } from "../../src/rtvi/codec.ts";
 import { RtviEmitter } from "../../src/rtvi/emitter.ts";
 import type { Tag } from "../../src/types.ts";
@@ -10,9 +10,9 @@ let rtvi: RtviEmitter;
 beforeEach(() => {
   sent = [];
   rtvi = new RtviEmitter((message) => sent.push(message), ABOUT);
-  setSystemTime(new Date("2026-11-09T00:41:18.588Z"));
+  vi.setSystemTime(new Date("2026-11-09T00:41:18.588Z"));
 });
-afterEach(() => setSystemTime());
+afterEach(() => vi.useRealTimers());
 
 const types = () => sent.map((m) => m.type);
 const wire = () => sent.map((m) => JSON.stringify(m));

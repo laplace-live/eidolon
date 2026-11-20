@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 import { resolveClientIp, UNKNOWN_CLIENT_IP } from "../src/index.ts";
 import { EnvPatch } from "./helpers.ts";
 

@@ -1,19 +1,20 @@
 // The Python in this repository is for human readers only (AGENTS.md, "The Python"): no TypeScript
 // under apps/ or packages/ runs it, and no agent-facing doc names it or says how to run it outside
 // that rule.
-import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { describe, expect, test } from "vitest";
+import { withoutComments } from "./code.ts";
 
-const ROOT = resolve(import.meta.dir, "../../..");
-const SELF = relative(ROOT, import.meta.path);
+const ROOT = resolve(import.meta.dirname, "../../..");
+const SELF = relative(ROOT, import.meta.filename);
 /** uv, uvx, pytest, or python, versioned or not: `python3`, `python3.13`. */
 const COMMANDS = String.raw`(?:uvx?|pytest|python(?:\d+(?:\.\d+)*)?)(?![\w.-])`;
-/** A string that is one of the commands: `Bun.which("uv")`, `[UV, "run", "python", script]`. */
+/** A string that is one of the commands: `which("uv")`, `[UV, "run", "python", script]`. */
 const COMMAND_STRING = new RegExp(`(["'\`])${COMMANDS}\\1`);
 /** A Bun shell template that runs one. */
 const SHELL = new RegExp(`\\$\`\\s*${COMMANDS}`);
-const SPAWN = /\b(?:exec|execFile|execFileSync|execSync|fork|spawn|spawnSync)\s*\(/g;
+const SPAWN = /\b(?:exec|execFile|execFileSync|execSync|fork|spawn|spawnProcess|spawnSync)\s*\(/g;
 /** In a spawn's arguments: a `.py` path, or a command line that starts with one of the commands. */
 const PYTHON_ARGUMENT = new RegExp(`["'\`][^"'\`\\n]*[\\w-]\\.py\\b|["'\`]${COMMANDS}\\s`);
 /** The Python's package, any `.py` file, or a command line that runs it. */
@@ -28,10 +29,6 @@ const NAMES_PYTHON = new RegExp(
   ].join("|"),
 );
 const SKIPPED_DIRS = new Set(["node_modules", "dist", "pack"]);
-const TRANSPILERS = {
-  ts: new Bun.Transpiler({ loader: "ts" }),
-  tsx: new Bun.Transpiler({ loader: "tsx" }),
-};
 
 function typescriptFiles(dir: string): string[] {
   const found: string[] = [];
@@ -55,9 +52,9 @@ function callArguments(code: string, open: number): string {
 }
 
 /** What in `source` runs the Python: a command string, a shell template, a spawn's argument. */
-function pythonRuns(source: string, loader: keyof typeof TRANSPILERS = "ts"): string[] {
-  // Transpiled, so comments and types are gone and only code is checked.
-  const code = TRANSPILERS[loader].transformSync(source);
+function pythonRuns(source: string): string[] {
+  // Comments are gone, so only code is checked.
+  const code = withoutComments(source);
   const found: string[] = [];
   const command = COMMAND_STRING.exec(code) ?? SHELL.exec(code);
   if (command) found.push(command[0]);
@@ -83,16 +80,18 @@ function allowedAgentsLines(lines: readonly string[]): Set<number> {
 }
 
 describe("no TypeScript runs the Python", () => {
-  test("an exec, a versioned python and a uvx shell are flagged, a message that names it isn't", () => {
+  test("an exec, a spawn of a .py and a uvx shell are flagged; a message or comment naming it isn't", () => {
     for (const source of [
       `exec("uv run python x.py");`,
       `spawn(["python3.13", "-c", "print(1)"]);`,
+      `spawnProcess([process.execPath, "tools/x.py"]);`,
       "await Bun.$`uvx ruff check .`;",
     ]) {
       expect([source, pythonRuns(source).length > 0]).toEqual([source, true]);
     }
     const message = `logger.warning("The Python is for human readers: uv run python bot.py");`;
     expect(pythonRuns(message)).toEqual([]);
+    expect(pythonRuns(`/* spawn(["python3", "x.py"]); */ const tool = "uv";`)).toEqual(['"uv"']);
   });
 
   test("nothing under apps/ or packages/ spawns uv, python or pytest, or hands a spawn a .py", () => {
@@ -102,7 +101,7 @@ describe("no TypeScript runs the Python", () => {
       const path = relative(ROOT, file);
       if (path === SELF) continue;
       const source = readFileSync(file, "utf8");
-      const runs = pythonRuns(source, path.endsWith(".tsx") ? "tsx" : "ts");
+      const runs = pythonRuns(source);
       offenders.push(...runs.map((run) => `${path}: ${run}`));
     }
     expect(files.length).toBeGreaterThan(500);

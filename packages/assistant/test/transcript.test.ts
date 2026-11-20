@@ -1,9 +1,18 @@
 import "../../config/test/isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
-import { appendFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { dataHome } from "@eidolon/config";
 import type { TaskEntryDraft } from "@eidolon/engine";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   newTaskId,
   openTaskStore,
@@ -62,7 +71,7 @@ describe("tasks' folders", () => {
   test("tasks live in the data home, under time-ordered UUIDv7 ids", async () => {
     expect(tasksDir()).toBe(join(dataHome(), "tasks"));
     const first = newTaskId();
-    await Bun.sleep(2);
+    await delay(2);
     const second = newTaskId();
     for (const id of [first, second]) {
       expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
@@ -413,10 +422,10 @@ describe("task.json", () => {
       { ...snapshot("t1"), mcp: { denied: [], left: [{ server: "fs", count: 1.5 }] } },
     ];
     for (const value of wrong) {
-      await Bun.write(path, JSON.stringify(value));
+      writeFileSync(path, JSON.stringify(value));
       await expect(readSnapshot(dir)).rejects.toThrow(`${path} is not a version 1 task snapshot`);
     }
-    await Bun.write(path, "{");
+    writeFileSync(path, "{");
     await expect(readSnapshot(dir)).rejects.toThrow(`${path} is not JSON`);
   });
 });

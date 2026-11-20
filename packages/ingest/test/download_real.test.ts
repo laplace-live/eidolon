@@ -1,11 +1,11 @@
 // fixtures/download/download-real.golden.json holds what readUrlList and readIds make of each real
 // URL list: counts and hashes, no URLs. Lists changed since are left out. These skip when the real
 // data is absent, unless EIDOLON_REQUIRE_PARITY=1. They only read the data home.
-import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { sortedPy } from "@eidolon/config";
+import { expect, test } from "vitest";
 import { download } from "../src/index.ts";
 import { DOWNLOAD_FIXTURES } from "./download_helpers.ts";
 

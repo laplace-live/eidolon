@@ -1,13 +1,13 @@
 // Chat Settings' Task Display field: rendered to markup, with the macros stubbed.
-import { expect, mock, test } from "bun:test";
 import type { ChatDisplay } from "@eidolon/chat";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { expect, test, vi } from "vitest";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
-mock.module("@lingui/core/macro", linguiMacro);
-mock.module("@lingui/react/macro", linguiReactMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/react/macro", linguiReactMacro);
 const { DisplayField } = await import("./chat-settings");
 const { DISPLAY_HELP } = await import("./labels");
 

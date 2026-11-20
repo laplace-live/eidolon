@@ -1,8 +1,8 @@
 // The Ear's plumbing on scripted VAD, Smart Turn and recognizer fakes and a fake clock, and once on
 // the real models.
-import { describe, expect, test } from "bun:test";
 import { AsyncQueue } from "@eidolon/config";
 import type { SttEvent, SttStream } from "@eidolon/providers/stt";
+import { describe, expect, test } from "vitest";
 import { resampler } from "../../src/dsp/resampler/index.ts";
 import { type EarDeps, runEar } from "../../src/input/ear.ts";
 import { type EndOfTurn, SmartTurn } from "../../src/input/smart_turn.ts";

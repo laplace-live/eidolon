@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { type GenerateOptions, generate, ImageGenError } from "../src/index.ts";
 import {
   CancelledError,
@@ -9,9 +9,15 @@ import {
   restoreEnv,
 } from "./helpers.ts";
 
+// The dispatcher as the timeout it was made for, which a test can read.
+vi.mock("@eidolon/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@eidolon/config")>()),
+  patientDispatcher: (timeoutMs: number) => ({ timeoutMs }),
+}));
+
 // base64 of b"\x89PNG fake".
 const B64 = "iVBORyBmYWtl";
-const BYTES = Uint8Array.fromBase64(B64);
+const BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x20, 0x66, 0x61, 0x6b, 0x65]);
 
 beforeEach(clearSelfieEnv);
 afterEach(restoreEnv);
@@ -56,7 +62,7 @@ describe("generate request", () => {
       Authorization: "Bearer sk-or-test",
       "Content-Type": "application/json",
     });
-    expect(call?.init.timeout).toBe(600_000);
+    expect(call?.init.dispatcher).toEqual({ timeoutMs: 600_000 });
     expect(result).toEqual({ images: [{ data: BYTES, mediaType: "image/png" }], costUsd: 0.04 });
   });
 
@@ -233,6 +239,13 @@ describe("generate errors", () => {
       expect(await failure(run())).toBeInstanceOf(TypeError);
     }
   });
+
+  test("a b64_json that isn't base64 text raises SyntaxError", async () => {
+    for (const b64 of ["iVBO!yBm", "iVBORy-_", "A", "iVBORw=", "iVBO==Ry", "QUJD\vRA=="]) {
+      const { run } = answering(() => jsonResponse(200, { data: [{ b64_json: b64 }] }));
+      expect([b64, await failure(run())]).toEqual([b64, expect.any(SyntaxError)]);
+    }
+  });
 });
 
 describe("generate results", () => {
@@ -257,6 +270,17 @@ describe("generate results", () => {
       "image/gif",
     ]);
     expect(result.images.every((image) => image.data.toString() === BYTES.toString())).toBe(true);
+  });
+
+  test("decodes base64 across whitespace, with or without its padding", async () => {
+    const decoded = async (b64: string) => {
+      const { run } = answering(() => jsonResponse(200, { data: [{ b64_json: b64 }] }));
+      return [...(await run()).images[0]!.data];
+    };
+    expect(await decoded("iVBO\nRyBm\r\nYWtl")).toEqual([...BYTES]);
+    expect(await decoded(" iVBORw== ")).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect(await decoded("iVBORw")).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect(await decoded("iVBORyA=")).toEqual([0x89, 0x50, 0x4e, 0x47, 0x20]);
   });
 
   test("reads the cost as extract_cost_usd does", async () => {

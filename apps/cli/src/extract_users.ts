@@ -1,6 +1,7 @@
 // laplace-extract-users: mines danmaku JSON for the viewer names a glossary should know. Stdout is
 // one name per line, so it pipes straight into a file; the summary goes to stderr.
 import { existsSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { pyFixed, pyJsonLoadsFast, thousands, utcIsoDate } from "@eidolon/config";
 import { extractUsers } from "@eidolon/ingest";
 import {
@@ -109,7 +110,7 @@ export async function extractUsersMain(
     return 1;
   }
   err(`Reading ${input} (${pyFixed(statSync(input).size / 1024 / 1024, 1)} MB)…`);
-  const bytes = await Bun.file(input).bytes();
+  const bytes = await readFile(input);
   // The rest runs without a pause, so a signal is honoured here or not at all.
   if (deps.signal?.aborted) return 1;
   const payload = loadJson(bytes);

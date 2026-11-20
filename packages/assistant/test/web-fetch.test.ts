@@ -1,10 +1,14 @@
 // web_fetch against local servers: a resolver stands in for DNS and a dialer reaches the servers
 // in place of the public addresses they stand for, so nothing here touches the network.
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { generateKeyPairSync, sign } from "node:crypto";
+import { createServer } from "node:https";
+import type { AddressInfo, LookupFunction } from "node:net";
 import { isIP } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
 import type { TaskToolResult } from "@eidolon/engine";
-import type { Server } from "bun";
+import { Agent, buildConnector } from "undici";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { type ServedFetch, serveFetch } from "../../config/test/http.ts";
 import {
   createTaskTools,
   createWebFetchTool,
@@ -17,7 +21,9 @@ import {
 } from "../src/index.ts";
 import {
   htmlToText,
+  PinnedAgent,
   type WebFetcher,
+  type WebFetchInit,
   type WebInterfaces,
   type WebLookup,
 } from "../src/tools/web-fetch.ts";
@@ -53,7 +59,7 @@ const INTERFACES: WebInterfaces = () => ({
 
 const encoder = new TextEncoder();
 
-/** A self-signed certificate for `host`, as Bun.serve and fetch's `ca` take it. */
+/** A self-signed certificate for `host`, as an https server and undici's `ca` take it. */
 function selfSigned(host: string): { cert: string; key: string } {
   const der = (tag: number, ...parts: Uint8Array[]): Uint8Array => {
     const body = Buffer.concat(parts);
@@ -114,131 +120,203 @@ const PAGE = `<!doctype html><html><head><title>Tea &amp; Milk</title></head>
 /** GBK's bytes for 中文. */
 const GBK_ZHONGWEN = [0xd6, 0xd0, 0xce, 0xc4];
 
-/** A body Bun.serve sends with no Content-Type, as it does a stream's. */
-function untyped(bytes: Uint8Array): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes);
-      controller.close();
-    },
-  });
+interface Listening {
+  readonly port: number;
+  stop(): Promise<void>;
 }
 
-let http!: Server<undefined>;
+/** An https server on loopback, answering with the Host it was sent; `named` holds SNI's others. */
+async function secureServer(
+  tls: { cert: string; key: string },
+  named: Readonly<Record<string, { cert: string; key: string }>> = {},
+): Promise<Listening> {
+  const server = createServer(tls, (request, response) => {
+    response.end(`secure, for ${request.headers.host}`);
+  });
+  for (const [name, context] of Object.entries(named)) server.addContext(name, context);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    port: (server.address() as AddressInfo).port,
+    stop: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+  };
+}
+
+const toLoopback: LookupFunction = (_hostname, options, callback) => {
+  if (options.all) callback(null, [{ address: "127.0.0.1", family: 4 }]);
+  else callback(null, "127.0.0.1", 4);
+};
+
+/** How SITE_IP's https is reached: as named, by its address alone, or as another name. */
+type Checked = "named" | "by address" | "as elsewhere.test";
+
+const routes = new Map<string, Agent>();
+
+/**
+ * SITE_IP's route to `port` on loopback, whatever the URL's port. Host, SNI and the certificate
+ * check take the URL's name, as on a PinnedAgent, unless `checked` says otherwise; site.test's
+ * certificate is the only one trusted.
+ */
+function route(port: number, checked: Checked = "named"): Agent {
+  const key = `${port} ${checked}`;
+  const known = routes.get(key);
+  if (known !== undefined) return known;
+  const connector = buildConnector({
+    ca: [site.cert],
+    lookup: toLoopback,
+    ...(checked === "as elsewhere.test" && { servername: "elsewhere.test" }),
+  });
+  const agent = new Agent({
+    connect: (options, callback) =>
+      connector(
+        {
+          ...options,
+          port: String(port),
+          ...(checked === "by address" && { hostname: "127.0.0.1", host: `127.0.0.1:${port}` }),
+        },
+        callback,
+      ),
+  });
+  routes.set(key, agent);
+  return agent;
+}
+
+let http!: ServedFetch;
 /** Shows site.test's certificate only to a client that names site.test (SNI), else other.test's. */
-let sniHttps!: Server<undefined>;
+let sniHttps!: Listening;
 /** Shows site.test's certificate to every client. */
-let siteHttps!: Server<undefined>;
+let siteHttps!: Listening;
 const seen: { host: string | null; path: string }[] = [];
 let endlessCancelled = false;
 
-beforeAll(() => {
+beforeAll(async () => {
   globalThis.fetch = (async (input: unknown) => {
     throw new Error(`unexpected network call in a test: ${String(input)}`);
   }) as unknown as typeof fetch;
-  http = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      const url = new URL(request.url);
-      seen.push({ host: request.headers.get("host"), path: url.pathname + url.search });
-      const type = (contentType: string) => ({ headers: { "content-type": contentType } });
-      switch (url.pathname) {
-        case "/hello":
-          return new Response("hello", type("text/plain; charset=utf-8"));
-        case "/redirect":
-          return new Response(null, {
-            status: Number(url.searchParams.get("status") ?? 302),
-            headers: { location: url.searchParams.get("to") ?? "/" },
-          });
-        case "/page":
-          return new Response(PAGE, type("text/html; charset=utf-8"));
-        case "/json":
-          return new Response('{"tea":"milk",\n "cups":2}', type("application/json"));
-        case "/rss":
-          return new Response(
-            "<rss><channel><title>Tea</title></channel></rss>",
-            type("application/rss+xml"),
-          );
-        case "/png":
-          return new Response(new Uint8Array(1536).fill(0x89), type("image/png"));
-        case "/untyped-text":
-          return new Response(untyped(encoder.encode("plain words")));
-        case "/untyped-binary":
-          return new Response(untyped(new Uint8Array([0, 1, 2, 0xff, 0xfe])));
-        // Bun.serve sends a byte array as application/octet-stream.
-        case "/octet-text":
-          return new Response(encoder.encode("# Notes\n\nkept as text"));
-        case "/octet-binary":
-          return new Response(new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0]));
-        case "/gbk":
-          return new Response(
-            new Uint8Array([...encoder.encode("<p>"), ...GBK_ZHONGWEN, ...encoder.encode("</p>")]),
-            type("text/html; charset=gbk"),
-          );
-        case "/meta-gbk":
-          return new Response(
-            new Uint8Array([
-              ...encoder.encode('<html><head><meta charset="gbk"></head><body><p>'),
-              ...GBK_ZHONGWEN,
-              ...encoder.encode("</p></body></html>"),
-            ]),
-            type("text/html"),
-          );
-        case "/missing":
-          return new Response(
-            `<html><body><h1>Not here</h1><p>${"Nothing at this address. ".repeat(200)}</p></body></html>`,
-            { status: 404, headers: { "content-type": "text/html" } },
-          );
-        case "/endless": {
-          const line = encoder.encode(`${"x".repeat(99)}\n`);
-          const chunk = new Uint8Array(line.length * 640);
-          for (let at = 0; at < chunk.length; at += line.length) chunk.set(line, at);
-          const body = new ReadableStream({
-            pull(controller) {
-              controller.enqueue(chunk);
-            },
-            cancel() {
-              endlessCancelled = true;
-            },
-          });
-          return new Response(body, type("text/plain"));
-        }
-        case "/stall":
-          return new Promise<Response>(() => {});
-        case "/stall-body": {
-          const body = new ReadableStream({
-            start(controller) {
-              controller.enqueue(encoder.encode("first words"));
-            },
-          });
-          return new Response(body, type("text/plain"));
-        }
-        default:
-          return new Response(`${request.headers.get("host")} ${url.pathname}`, type("text/plain"));
+  http = await serveFetch(async (request) => {
+    const url = new URL(request.url);
+    seen.push({ host: request.headers.get("host"), path: url.pathname + url.search });
+    const type = (contentType: string) => ({ headers: { "content-type": contentType } });
+    switch (url.pathname) {
+      case "/hello":
+        return new Response("hello", type("text/plain; charset=utf-8"));
+      case "/redirect":
+        return new Response(null, {
+          status: Number(url.searchParams.get("status") ?? 302),
+          headers: { location: url.searchParams.get("to") ?? "/" },
+        });
+      case "/page":
+        return new Response(PAGE, type("text/html; charset=utf-8"));
+      case "/json":
+        return new Response('{"tea":"milk",\n "cups":2}', type("application/json"));
+      case "/rss":
+        return new Response(
+          "<rss><channel><title>Tea</title></channel></rss>",
+          type("application/rss+xml"),
+        );
+      case "/png":
+        return new Response(new Uint8Array(1536).fill(0x89), type("image/png"));
+      // A byte array goes with no Content-Type.
+      case "/untyped-text":
+        return new Response(encoder.encode("plain words"));
+      case "/untyped-binary":
+        return new Response(new Uint8Array([0, 1, 2, 0xff, 0xfe]));
+      // What a server sends for a file it has no type for.
+      case "/octet-text":
+        return new Response(
+          encoder.encode("# Notes\n\nkept as text"),
+          type("application/octet-stream"),
+        );
+      case "/octet-binary":
+        return new Response(
+          new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0]),
+          type("application/octet-stream"),
+        );
+      case "/gbk":
+        return new Response(
+          new Uint8Array([...encoder.encode("<p>"), ...GBK_ZHONGWEN, ...encoder.encode("</p>")]),
+          type("text/html; charset=gbk"),
+        );
+      case "/meta-gbk":
+        return new Response(
+          new Uint8Array([
+            ...encoder.encode('<html><head><meta charset="gbk"></head><body><p>'),
+            ...GBK_ZHONGWEN,
+            ...encoder.encode("</p></body></html>"),
+          ]),
+          type("text/html"),
+        );
+      case "/missing":
+        return new Response(
+          `<html><body><h1>Not here</h1><p>${"Nothing at this address. ".repeat(200)}</p></body></html>`,
+          { status: 404, statusText: "Not Found", headers: { "content-type": "text/html" } },
+        );
+      case "/endless": {
+        const line = encoder.encode(`${"x".repeat(99)}\n`);
+        const chunk = new Uint8Array(line.length * 640);
+        for (let at = 0; at < chunk.length; at += line.length) chunk.set(line, at);
+        const body = new ReadableStream({
+          pull(controller) {
+            controller.enqueue(chunk);
+          },
+          cancel() {
+            endlessCancelled = true;
+          },
+        });
+        return new Response(body, type("text/plain"));
       }
-    },
+      case "/stall":
+        return new Promise<Response>(() => {});
+      case "/stall-body": {
+        const body = new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode("first words"));
+          },
+        });
+        return new Response(body, type("text/plain"));
+      }
+      default:
+        return new Response(`${request.headers.get("host")} ${url.pathname}`, type("text/plain"));
+    }
   });
-  const secure = (request: Request) => new Response(`secure, for ${request.headers.get("host")}`);
-  sniHttps = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    tls: [other, { ...site, serverName: "site.test" }],
-    fetch: secure,
-  });
-  siteHttps = Bun.serve({ hostname: "127.0.0.1", port: 0, tls: site, fetch: secure });
+  sniHttps = await secureServer(other, { "site.test": site });
+  siteHttps = await secureServer(site);
 });
 
-afterAll(() => {
+afterAll(async () => {
   globalThis.fetch = realFetch;
-  http.stop(true);
-  sniHttps.stop(true);
-  siteHttps.stop(true);
+  await Promise.all([
+    http.stop(),
+    sniHttps.stop(),
+    siteHttps.stop(),
+    ...[...routes.values()].map((agent) => agent.close()),
+  ]);
 });
 
-interface Dialed {
+/** A DNS over HTTPS request, as its stand-in got it. */
+interface Asked {
   readonly url: string;
-  readonly init: BunFetchRequestInit;
+  readonly init: WebFetchInit;
+}
+
+/** A connection web_fetch made: its URL, the name kept, and the address its dispatcher dials. */
+interface Dialed extends Asked {
+  readonly address: string;
+}
+
+/** A dial's URL with the address it reached in place of the name: where it went, and for what. */
+function reached({ url, address }: Dialed): string {
+  const at = new URL(url);
+  at.hostname = isIP(address) === 6 ? `[${address}]` : address;
+  return at.href;
+}
+
+/** A fetch error as Node's fetch throws one: its cause says why. */
+function fetchFailed(message: string, code: string): TypeError {
+  return new TypeError("fetch failed", { cause: Object.assign(new Error(message), { code }) });
 }
 
 /**
@@ -246,21 +324,24 @@ interface Dialed {
  * site.test's certificate alone; that can't connect to DOWN_IP; and that answers any other address
  * itself, so nothing leaves this computer.
  */
-function dialer(secure: () => Server<undefined> = () => sniHttps) {
+function dialer(secure: () => Listening = () => sniHttps, checked?: Checked) {
   const dialed: Dialed[] = [];
-  const fetch: WebFetcher = async (url, init) => {
-    dialed.push({ url, init });
-    const target = new URL(url);
-    const address = target.hostname.replace(/^\[|\]$/g, "");
-    if (address === DOWN_IP) throw new TypeError(`ECONNREFUSED: can't connect to ${address}`);
+  /** `url`'s response from `address`. */
+  const reach = async (url: string, address: string, init: WebFetchInit): Promise<Response> => {
+    if (address === DOWN_IP) {
+      throw fetchFailed(`connect ECONNREFUSED ${address}:80`, "ECONNREFUSED");
+    }
     if (address !== SITE_IP) return new Response(`reached ${address}`);
-    const server = target.protocol === "https:" ? secure() : http;
-    target.hostname = "127.0.0.1";
-    target.port = String(server.port);
-    const tls = target.protocol === "https:" ? { tls: { ...init.tls, ca: [site.cert] } } : {};
-    return realFetch(target.href, { ...init, ...tls });
+    const server = new URL(url).protocol === "https:" ? secure() : http;
+    const routed: WebFetchInit = { ...init, dispatcher: route(server.port, checked) };
+    return realFetch(url, routed);
   };
-  return { fetch, dialed };
+  const fetch: WebFetcher = (url, init) => {
+    const { address } = init.dispatcher as PinnedAgent;
+    dialed.push({ url, address, init });
+    return reach(url, address, init);
+  };
+  return { fetch, reach, dialed };
 }
 
 /** A lookup answering from `table`, each name's answer a function of how often it was asked. */
@@ -323,14 +404,13 @@ function fakeIpTun(real: Readonly<Record<string, string>>) {
   const elsewhere = dialer();
   const dialed: Dialed[] = [];
   const fetch: WebFetcher = async (url, init) => {
-    dialed.push({ url, init });
-    const target = new URL(url);
-    const name = names.find((candidate) => fakeOf(candidate) === target.hostname);
-    if (name === undefined) return elsewhere.fetch(url, init);
-    const address = real[name] ?? "";
-    target.hostname = isIP(address) === 6 ? `[${address}]` : address;
-    if (address === "127.0.0.1") return realFetch(target.href, init);
-    return elsewhere.fetch(target.href, init);
+    const { address } = init.dispatcher as PinnedAgent;
+    dialed.push({ url, address, init });
+    const name = names.find((candidate) => fakeOf(candidate) === address);
+    const carried = name === undefined ? address : (real[name] ?? "");
+    if (carried !== "127.0.0.1") return elsewhere.reach(url, carried, init);
+    const routed: WebFetchInit = { ...init, dispatcher: route(http.port) };
+    return realFetch(url, routed);
   };
   return { lookup, fetch, asked, dialed };
 }
@@ -340,7 +420,7 @@ function fakeIpTun(real: Readonly<Record<string, string>>) {
  * after the CNAME that led there; a name not in `table` is NXDOMAIN.
  */
 function cloudflare(table: Readonly<Record<string, readonly string[]>>) {
-  const asked: Dialed[] = [];
+  const asked: Asked[] = [];
   const doh: WebFetcher = async (url, init) => {
     asked.push({ url, init });
     const query = new URL(url).searchParams;
@@ -380,24 +460,22 @@ describe("web_fetch", () => {
     });
     expect(names.asked).toEqual(["rebind.test"]);
     expect(dial.dialed).toHaveLength(1);
-    const [{ url, init }] = dial.dialed as [Dialed];
-    expect(url).toBe(`http://${SITE_IP}/hello?cup=1`);
-    expect(init).toMatchObject({ method: "GET", redirect: "manual", proxy: false });
-    expect(new Headers(init.headers).get("host")).toBe("rebind.test");
-    expect(init.tls).toBeUndefined();
-    // Bun sent the Host it was given to the address it dialed.
+    const [{ url, address, init }] = dial.dialed as [Dialed];
+    // The URL keeps the name, for Host; its dispatcher dials the address checked, and no proxy.
+    expect([url, address]).toEqual(["http://rebind.test/hello?cup=1", SITE_IP]);
+    expect(init).toMatchObject({ method: "GET", redirect: "manual" });
+    expect(init.dispatcher).toBeInstanceOf(PinnedAgent);
     expect(seen.at(-1)).toEqual({ host: "rebind.test", path: "/hello?cup=1" });
   });
 
-  test("over https, Bun sends the site's name for SNI and checks the certificate against it", async () => {
+  test("over https, the site's name goes out for SNI and the certificate is checked against it", async () => {
     // sniHttps shows site.test's certificate only to a client that names site.test, and the dialer
     // trusts that certificate alone: the fetch succeeds only if the name went out as SNI.
     const { run, dialed } = webFetch();
     const result = await run({ url: "https://site.test/tea" });
     expect(result.isError).toBeUndefined();
     expect(result.content).toBe("secure, for site.test");
-    expect(dialed[0]?.url).toBe(`https://${SITE_IP}/tea`);
-    expect(dialed[0]?.init.tls).toEqual({ serverName: "site.test" });
+    expect(dialed.map(reached)).toEqual([`https://${SITE_IP}/tea`]);
     // A port of its own goes to Host too.
     expect((await run({ url: "https://site.test:8443/" })).content).toBe(
       "secure, for site.test:8443",
@@ -405,21 +483,19 @@ describe("web_fetch", () => {
 
     // siteHttps shows site.test's certificate to anyone. Checked against the server name, it
     // passes; the same request checked against its address, or against another name, fails.
-    const pinnedTo = (tls?: BunFetchRequestInit["tls"]) => {
-      const dial = dialer(() => siteHttps);
-      return createWebFetchTool({
+    const reaching = (checked?: Checked) =>
+      createWebFetchTool({
         web: ANY,
         lookup: resolver(NAMES).lookup,
-        fetch: (url, init) => dial.fetch(url, tls === undefined ? init : { ...init, tls }),
+        fetch: dialer(() => siteHttps, checked).fetch,
       });
-    };
-    const pinned = await pinnedTo().execute({ url: "https://site.test/" }, toolContext());
-    expect(pinned.content).toBe("secure, for site.test");
-    for (const tls of [{}, { serverName: "elsewhere.test" }]) {
-      const refused = await pinnedTo(tls).execute({ url: "https://site.test/" }, toolContext());
-      expect([tls, refused.isError]).toEqual([tls, true]);
+    const named = await reaching().execute({ url: "https://site.test/" }, toolContext());
+    expect(named.content).toBe("secure, for site.test");
+    for (const checked of ["by address", "as elsewhere.test"] as const) {
+      const refused = await reaching(checked).execute({ url: "https://site.test/" }, toolContext());
+      expect([checked, refused.isError]).toEqual([checked, true]);
       expect(refused.content).toStartWith(
-        "Couldn't connect to site.test: ERR_TLS_CERT_ALTNAME_INVALID",
+        "Couldn't connect to site.test: Hostname/IP does not match certificate's altnames",
       );
     }
   });
@@ -428,7 +504,9 @@ describe("web_fetch", () => {
     const { run, dialed, asked } = webFetch();
     expect((await run({ url: "http://203.0.113.50/x" })).content).toBe("reached 203.0.113.50");
     expect(asked).toEqual([]);
-    expect(new Headers(dialed[0]?.init.headers).get("host")).toBeNull();
+    expect(dialed.map(({ url, address }) => [url, address])).toEqual([
+      ["http://203.0.113.50/x", "203.0.113.50"],
+    ]);
   });
 
   test("refuses the names and addresses of this computer and its network, before connecting", async () => {
@@ -588,7 +666,7 @@ describe("web_fetch", () => {
       finalUrl: "http://site.test/hello",
       status: 200,
     });
-    expect(dialed.map(({ url }) => url)).toEqual([
+    expect(dialed.map(reached)).toEqual([
       `http://${SITE_IP}/redirect?to=/hello`,
       `http://${SITE_IP}/hello`,
     ]);
@@ -649,11 +727,7 @@ describe("web_fetch", () => {
     expect(local.content).toEndWith(
       "redirected to http://localhost/: localhost names this computer or its network, which web_fetch never reaches.",
     );
-    expect(dial.dialed.map(({ url }) => new URL(url).hostname)).toEqual([
-      SITE_IP,
-      SITE_IP,
-      SITE_IP,
-    ]);
+    expect(dial.dialed.map(({ address }) => address)).toEqual([SITE_IP, SITE_IP, SITE_IP]);
   });
 
   test("a redirect to a site not allowed ends the call, naming the target to fetch directly", async () => {
@@ -718,7 +792,7 @@ describe("web_fetch", () => {
     const tool = createWebFetchTool({ web: ANY, lookup: names.lookup, fetch: dial.fetch });
     const result = await tool.execute({ url: "http://multi.test/hello" }, toolContext());
     expect(result.content).toBe("hello");
-    expect(dial.dialed.map(({ url }) => new URL(url).hostname)).toEqual([DOWN_IP, SITE_IP]);
+    expect(dial.dialed.map(({ address }) => address)).toEqual([DOWN_IP, SITE_IP]);
 
     const down = resolver({ "down.test": [DOWN_IP] });
     const failed = await createWebFetchTool({
@@ -727,7 +801,7 @@ describe("web_fetch", () => {
       fetch: dial.fetch,
     }).execute({ url: "http://down.test/" }, toolContext());
     expect(failed).toEqual({
-      content: `Couldn't connect to down.test: ECONNREFUSED: can't connect to ${DOWN_IP}`,
+      content: `Couldn't connect to down.test: connect ECONNREFUSED ${DOWN_IP}:80`,
       isError: true,
     });
 
@@ -751,7 +825,7 @@ describe("web_fetch", () => {
       "[The response was cut at 2.0MB. 50.0KB limit reached: showing 50.0KB of 2.0MB]",
     ]);
     // Reading stopped there: the server saw its stream cancelled.
-    for (let wait = 0; wait < 100 && !endlessCancelled; wait++) await Bun.sleep(10);
+    for (let wait = 0; wait < 100 && !endlessCancelled; wait++) await delay(10);
     expect(endlessCancelled).toBe(true);
   });
 
@@ -910,6 +984,44 @@ describe("web_fetch", () => {
     expect(dialed).toEqual([]);
     expect(asked).toEqual([]);
   });
+
+  test("refuses to run on Bun, whose fetch can't be held to the address it checked", async () => {
+    const versions = process.versions as Record<string, string | undefined>;
+    versions.bun = "1.4.5";
+    try {
+      const { run, dialed, asked } = webFetch();
+      expect(await run({ url: "http://site.test/hello" })).toEqual({
+        content:
+          "web_fetch can't run here: it needs Node, and Eidolon is running on Bun, whose fetch " +
+          "can't be held to the address web_fetch checked.",
+        isError: true,
+      });
+      expect(dialed).toEqual([]);
+      expect(asked).toEqual([]);
+    } finally {
+      delete versions.bun;
+    }
+  });
+});
+
+describe("PinnedAgent", () => {
+  test("connects to its address whatever the name resolves to, and sends the name as Host", async () => {
+    const server = await serveFetch((request) => {
+      const url = new URL(request.url);
+      return new Response(`${request.headers.get("host")} ${url.pathname}${url.search}`);
+    });
+    const dispatcher = new PinnedAgent("127.0.0.1");
+    try {
+      // .invalid never resolves (RFC 2606).
+      const init: WebFetchInit = { dispatcher };
+      const response = await realFetch(`http://pinned.invalid:${server.port}/tea?cup=1`, init);
+      expect(await response.text()).toBe(`pinned.invalid:${server.port} /tea?cup=1`);
+      expect(dispatcher.address).toBe("127.0.0.1");
+    } finally {
+      await dispatcher.close();
+      await server.stop();
+    }
+  });
 });
 
 describe("web_fetch behind a fake-IP proxy", () => {
@@ -974,11 +1086,13 @@ describe("web_fetch behind a fake-IP proxy", () => {
       interfaces: INTERFACES,
     });
     const result = await tool.execute({ url: "http://site.test/hello" }, toolContext());
-    expect(tun.dialed.map(({ url }) => url)).toEqual([`http://${SITE_IP}/hello`]);
+    expect(tun.dialed.map(reached)).toEqual([`http://${SITE_IP}/hello`]);
     expect(result.content).toBe("hello");
+    // The URL keeps the name, for Host.
+    expect(tun.dialed.map(({ url }) => url)).toEqual(["http://site.test/hello"]);
     const [{ init }] = tun.dialed as [Dialed];
-    expect(init).toMatchObject({ method: "GET", redirect: "manual", proxy: false });
-    expect(new Headers(init.headers).get("host")).toBe("site.test");
+    expect(init).toMatchObject({ method: "GET", redirect: "manual" });
+    expect(init.dispatcher).toBeInstanceOf(PinnedAgent);
     expect(tun.asked).toEqual(["site.test"]);
     // Cloudflare, reached by its address, by GET, with no proxy, in the call's time.
     expect(dns.asked.map(({ url }) => url)).toEqual([
@@ -986,7 +1100,9 @@ describe("web_fetch behind a fake-IP proxy", () => {
       "https://1.1.1.1/dns-query?name=site.test&type=AAAA",
     ]);
     for (const asked of dns.asked) {
-      expect(asked.init).toMatchObject({ proxy: false });
+      // An Agent of undici's own, which no proxy agent is.
+      expect(asked.init.dispatcher).toBeInstanceOf(Agent);
+      expect(asked.init.dispatcher).not.toBeInstanceOf(PinnedAgent);
       expect(asked.init.method ?? "GET").toBe("GET");
       expect(new Headers(asked.init.headers).get("accept")).toBe("application/dns-json");
       expect(asked.init.signal).toBeInstanceOf(AbortSignal);
@@ -995,8 +1111,7 @@ describe("web_fetch behind a fake-IP proxy", () => {
     // Over https, its name goes out for SNI and the certificate check, as anywhere.
     const secure = await tool.execute({ url: "https://site.test/tea" }, toolContext());
     expect(secure.content).toBe("secure, for site.test");
-    expect(tun.dialed.at(-1)?.url).toBe(`https://${SITE_IP}/tea`);
-    expect(tun.dialed.at(-1)?.init.tls).toEqual({ serverName: "site.test" });
+    expect(tun.dialed.slice(-1).map(reached)).toEqual([`https://${SITE_IP}/tea`]);
   });
 
   test("one stand-in among the system's addresses sets its whole answer aside", async () => {
@@ -1018,18 +1133,17 @@ describe("web_fetch behind a fake-IP proxy", () => {
       "A",
       "AAAA",
     ]);
-    expect(dial.dialed.map(({ url }) => url)).toEqual([`http://${SITE_IP}/hello`]);
+    expect(dial.dialed.map(reached)).toEqual([`http://${SITE_IP}/hello`]);
   });
 
   test("when none of the real addresses can be reached, says they were dialed in the proxy's place", async () => {
     const tun = fakeIpTun({ "v6only.test": "2001:db8:6::1" });
     const dns = cloudflare({ "v6only.test": ["2001:db8:6::1"] });
-    // As Bun fails where the proxy carries IPv4 alone, leaving IPv6 no route.
+    // As a connection fails where the proxy carries IPv4 alone, leaving IPv6 no route.
     const unroutable: WebFetcher = async (url, init) => {
-      tun.dialed.push({ url, init });
-      throw Object.assign(new TypeError("EHOSTUNREACH: Was there a typo in the url or port?"), {
-        code: "EHOSTUNREACH",
-      });
+      const { address } = init.dispatcher as PinnedAgent;
+      tun.dialed.push({ url, address, init });
+      throw fetchFailed(`connect EHOSTUNREACH ${address}:443`, "EHOSTUNREACH");
     };
     const tool = createWebFetchTool({
       web: ANY,
@@ -1042,10 +1156,10 @@ describe("web_fetch behind a fake-IP proxy", () => {
       content:
         "Couldn't connect to v6only.test at the addresses Cloudflare's DNS over HTTPS (1.1.1.1) " +
         "gave, which web_fetch dials in place of the ones this computer's fake-IP proxy hands " +
-        "out: EHOSTUNREACH: Was there a typo in the url or port?",
+        "out: connect EHOSTUNREACH 2001:db8:6::1:443",
       isError: true,
     });
-    expect(tun.dialed.map(({ url }) => url)).toEqual(["https://[2001:db8:6::1]/"]);
+    expect(tun.dialed.map(reached)).toEqual(["https://[2001:db8:6::1]/"]);
   });
 
   test("each redirect's target is looked up the same way", async () => {
@@ -1070,7 +1184,7 @@ describe("web_fetch behind a fake-IP proxy", () => {
       details: redirectedAt(`http://site.test/redirect?to=${target}`),
     });
     expect(seen.slice(served).map(({ path }) => path)).toEqual([`/redirect?to=${target}`]);
-    expect(tun.dialed.map(({ url }) => url)).toEqual([`http://${SITE_IP}/redirect?to=${target}`]);
+    expect(tun.dialed.map(reached)).toEqual([`http://${SITE_IP}/redirect?to=${target}`]);
   });
 
   test("refuses the proxy's own addresses, in a URL or in the real answer", async () => {
@@ -1120,9 +1234,9 @@ describe("web_fetch behind a fake-IP proxy", () => {
     const failures: [WebFetcher, string][] = [
       [
         async () => {
-          throw new TypeError("Unable to connect. Is the computer able to access the url?");
+          throw fetchFailed("connect ECONNREFUSED 1.1.1.1:443", "ECONNREFUSED");
         },
-        "failed: Unable to connect. Is the computer able to access the url?",
+        "failed: connect ECONNREFUSED 1.1.1.1:443",
       ],
       [async () => new Response("busy", { status: 503 }), "answered HTTP 503."],
       [async () => Response.json({ Status: 2 }), "answered with DNS status 2."],

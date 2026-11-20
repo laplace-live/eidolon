@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { ProviderConfigError, ProviderHttpError, selectRequired } from "../../../src/index.ts";
 import { speechSupport, synthesize } from "../../../src/speech/batch/index.ts";
 import { synthesizeTimeoutMs } from "../../../src/speech/batch/synthesize.ts";
@@ -195,6 +195,29 @@ describe("synthesize", () => {
     await expect(failed).rejects.toThrow("MiniMax answered 200: bad key (1004)");
     await expect(failed).rejects.toBeInstanceOf(ProviderHttpError);
     expect(fake.usage).toEqual([]);
+  });
+
+  test("MiniMax audio that isn't hex is an error, and nothing is reported as used", async () => {
+    const selection = voice({
+      TTS_PROVIDER: "minimax",
+      MINIMAX_API_KEY: "mk",
+      MINIMAX_GROUP_ID: "g",
+    });
+    for (const audio of ["fffb9", "fffbzz"]) {
+      fake.answer(() =>
+        Response.json({
+          data: { audio, status: 2 },
+          extra_info: { audio_length: 1234 },
+          base_resp: { status_code: 0, status_msg: "success" },
+        }),
+      );
+      const broken = await synthesize(selection, "你好", { fetch: fake.fetch }).catch(
+        (e: unknown) => e,
+      );
+      expect(broken).toBeInstanceOf(SyntaxError);
+      expect((broken as Error).message).toBe("MiniMax sent audio that isn't hex");
+      expect(fake.usage).toEqual([]);
+    }
   });
 
   test("a success with no audio is an error, and nothing is reported as used", async () => {

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { packMsg, unpackMsg } from "../../src/speech/stream/msgpack.ts";
 
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");

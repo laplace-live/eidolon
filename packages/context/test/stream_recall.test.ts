@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { LogRecord } from "@eidolon/config";
 import type { LlmTool, ToolEffects, ToolResult } from "@eidolon/core";
 import type { Broadcast } from "@eidolon/retrieval";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   OVERVIEW_FRAME_KEY,
   PersonaFacts,

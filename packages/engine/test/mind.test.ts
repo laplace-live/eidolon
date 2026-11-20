@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { consoleSink, type LogRecord, logger, openrouterHeaders } from "@eidolon/config";
 import type { ToolSchema } from "@eidolon/core";
 import {
@@ -8,7 +8,8 @@ import {
   type UsageRecord,
   withUsageScope,
 } from "@eidolon/providers";
-import type { Server } from "bun";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { type ServedFetch, serveFetch } from "../../config/test/http.ts";
 import { createMind } from "../src/mind/index.ts";
 import type { Mind, MindChunk, MindRequest } from "../src/types.ts";
 
@@ -18,28 +19,24 @@ interface Seen {
   readonly body: Record<string, unknown>;
 }
 
-let server: Server<undefined>;
+let server: ServedFetch;
 let seen: Seen[] = [];
 let reply: () => Response = () => new Response("{}");
 
-beforeAll(() => {
-  server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      seen.push({
-        path: new URL(request.url).pathname,
-        headers: request.headers,
-        body: (await request.json()) as Record<string, unknown>,
-      });
-      return reply();
-    },
+beforeAll(async () => {
+  server = await serveFetch(async (request) => {
+    seen.push({
+      path: new URL(request.url).pathname,
+      headers: request.headers,
+      body: (await request.json()) as Record<string, unknown>,
+    });
+    return reply();
   });
 });
 
-afterAll(() => server.stop(true));
+afterAll(() => server.stop());
 
-const base = () => `http://127.0.0.1:${server.port}/v1`;
+const base = () => `${server.url}/v1`;
 
 const ENV = [
   "LLM_PROVIDER",
@@ -1218,7 +1215,7 @@ describe("aborting", () => {
       expect(await run().catch((e: unknown) => e)).toBe(reason);
       expect(received).toEqual([{ type: "text", text: "嗨" }]);
       const deadline = performance.now() + 2000;
-      while (!cancelled && performance.now() < deadline) await Bun.sleep(5);
+      while (!cancelled && performance.now() < deadline) await delay(5);
       expect(cancelled).toBe(true);
     });
   }

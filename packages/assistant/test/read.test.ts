@@ -5,10 +5,10 @@
 //
 // pi's read cases in a task's folder, where an image is a note rather than an attachment and a
 // failure a result rather than a rejection; then the task's own: refusals, files and arguments.
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { TaskToolResult } from "@eidolon/engine";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createReadTool } from "../src/tools/read.ts";
 import type { AssistantTool } from "../src/types.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";

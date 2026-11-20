@@ -1,8 +1,8 @@
 // What a call takes of her tasks from its chat: a seed without the stored status block or her task
 // nudges, a group call's views without them, her start_task calls as drafts for the call's log, and
 // the ends she never told.
-import { describe, expect, test } from "bun:test";
 import type { ChatEvent, ChatEventDraft, ViewMessage } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import {
   herStart,
   staleTaskContext,

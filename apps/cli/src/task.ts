@@ -392,7 +392,7 @@ async function equip(
       // EIDOLON_APP_ROOT's package, or this checkout.
       appRoot: shippedPath(".", "."),
       // The one load-env.ts reads: from a worktree, its main checkout's.
-      dotenv: findDotenv(import.meta.dir),
+      dotenv: findDotenv(import.meta.dirname),
     });
     folder = await policy.resolve(brief.folder, "write");
   } catch (error) {

@@ -1,4 +1,3 @@
-import { afterEach, describe, expect, test } from "bun:test";
 import {
   CHAT_FORMAT,
   type ChatEventDraft,
@@ -8,6 +7,7 @@ import {
   viewWithBlocks,
 } from "@eidolon/chat";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
+import { afterEach, describe, expect, test } from "vitest";
 import { TurnConversation } from "../src/context.ts";
 
 const HEADER: ChatHeader = {

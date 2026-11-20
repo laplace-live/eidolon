@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { type Broadcast, type BroadcastScene, OccurrenceIndex } from "../src/index.ts";
 
 function scene(heading: string, topics: string[], summary = ""): BroadcastScene {

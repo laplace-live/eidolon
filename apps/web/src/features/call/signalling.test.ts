@@ -1,10 +1,10 @@
-import { afterEach, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, expect, test, vi } from "vitest";
 import { PROOF_HEADER } from "../../../../bot/src/local/api.ts";
 import { keepProof } from "../../lib/proof";
 import { fetchIceServers, offerOptions } from "./signalling";
 
 afterEach(() => {
-  mock.restore();
+  vi.restoreAllMocks();
 });
 
 test("the offer goes with the session's proof, which the server needs beside the cookie", () => {
@@ -29,7 +29,7 @@ test("a call inside a chat names the chat and whom it calls there", () => {
 
 test("the ICE servers are asked for with the proof too, and an empty list is an answer", async () => {
   keepProof("proof-for-ice");
-  const fetch = spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ iceServers: [] }));
+  const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ iceServers: [] }));
   expect(await fetchIceServers()).toEqual([]);
   const [to, init] = fetch.mock.calls[0] ?? [];
   expect([to, init?.credentials, new Headers(init?.headers).get(PROOF_HEADER)]).toEqual([

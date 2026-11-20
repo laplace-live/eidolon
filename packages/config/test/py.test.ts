@@ -1,5 +1,5 @@
 // Expected values were printed by CPython 3.13.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   cpLen,
   cpSlice,

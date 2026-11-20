@@ -1,6 +1,5 @@
 // batches.ts against the download golden's prepare cases (download_helpers.ts). The golden's data/
 // is the persona's lists/ here and data/auto-embed/ its lists/batches/.
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -13,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { download } from "../src/index.ts";
 import { downloadGolden as golden, type PrepareGolden } from "./download_helpers.ts";
 

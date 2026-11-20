@@ -1,5 +1,5 @@
 // Expected values were printed by CPython 3.13's re.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { PyPattern, pyRegexSource } from "../src/index.ts";
 
 function outcome(run: () => unknown): unknown {

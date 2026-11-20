@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
 import type { LlmTool } from "@eidolon/core";
+import { expect, test } from "vitest";
 import * as tools from "../src/index.ts";
 
 // The signatures runtime compiles against; this file stops type-checking if one drifts.

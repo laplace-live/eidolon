@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //
 // Ported from pi-mono packages/mcp/test/naming.test.ts@ac78a60
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { createMcpToolName, mcpNamespace } from "../src/mcp/naming.ts";
 
 describe("createMcpToolName", () => {

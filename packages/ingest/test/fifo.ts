@@ -1,12 +1,14 @@
 // A file a child process blocks on: a FIFO it reads synchronously until the test writes it, so a
 // test can send a real signal while the child is in the middle of a synchronous read.
+import { spawnSync } from "node:child_process";
 import { closeSync, constants, openSync, writeSync } from "node:fs";
-import type { Subprocess } from "bun";
+import { setTimeout as delay } from "node:timers/promises";
+import type { Subprocess } from "@eidolon/config";
 
 /** Makes `path` a FIFO. */
 export function makeFifo(path: string): void {
-  const made = Bun.spawnSync(["mkfifo", path]);
-  if (made.exitCode !== 0) throw new Error(`mkfifo ${path}: ${made.stderr.toString()}`);
+  const made = spawnSync("mkfifo", [path], { encoding: "utf8" });
+  if (made.status !== 0) throw new Error(`mkfifo ${path}: ${made.stderr}`);
 }
 
 /**
@@ -17,7 +19,7 @@ export function makeFifo(path: string): void {
  */
 export async function whenReading(
   path: string,
-  child: Subprocess<"ignore" | "inherit" | "pipe", "pipe", "pipe">,
+  child: Pick<Subprocess, "exitCode" | "signalCode" | "stderr">,
 ): Promise<(text: string) => void> {
   for (;;) {
     let fd: number | null = null;
@@ -29,7 +31,7 @@ export async function whenReading(
     }
     if (fd !== null) {
       const writer = fd;
-      await Bun.sleep(100);
+      await delay(100);
       return (text) => {
         try {
           writeSync(writer, text);
@@ -45,6 +47,6 @@ export async function whenReading(
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`exited before reading ${path}: ${await new Response(child.stderr).text()}`);
     }
-    await Bun.sleep(10);
+    await delay(10);
   }
 }

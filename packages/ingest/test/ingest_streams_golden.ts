@@ -3,6 +3,7 @@
 // with the embedding call stubbed by the fake below. Logs and argv write "<STREAMS>" and "<TMP>"
 // for the run's folders.
 import { mkdirSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   DEFAULT_EMBED_MODEL,
@@ -12,7 +13,7 @@ import {
   openTable,
 } from "@eidolon/retrieval";
 
-const FIXTURES = join(import.meta.dir, "fixtures");
+const FIXTURES = join(import.meta.dirname, "fixtures");
 
 export interface GoldenTable {
   readonly rows: Record<string, unknown>[];
@@ -42,14 +43,13 @@ export interface IngestStreamsGolden {
   readonly help: Record<"ingest_streams" | "build_stream_catalog", [string, string]>;
 }
 
-export const GOLDEN = (await Bun.file(
-  join(FIXTURES, "ingest_streams.golden.json"),
-).json()) as IngestStreamsGolden;
+export const GOLDEN = JSON.parse(
+  await readFile(join(FIXTURES, "ingest_streams.golden.json"), "utf8"),
+) as IngestStreamsGolden;
 
-const INPUTS = (await Bun.file(join(FIXTURES, "ingest_streams", "inputs.json")).json()) as Record<
-  "streams" | "bad_date",
-  Record<string, string>
->;
+const INPUTS = JSON.parse(
+  await readFile(join(FIXTURES, "ingest_streams", "inputs.json"), "utf8"),
+) as Record<"streams" | "bad_date", Record<string, string>>;
 
 /** The golden's dimension: it was printed with EMBED_DIM=4. */
 export const GOLDEN_DIM = 4;

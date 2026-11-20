@@ -1,12 +1,13 @@
 // startBotServer without the local extension, as main.ts and the Docker image run it, answers every
 // path the local app adds exactly as it did before the app existed.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ANONYMOUS } from "@eidolon/access";
 import { CHAT_FORMAT } from "@eidolon/chat";
 import { activePersona, dataHome, resetSettings } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { serveFetch } from "../../../../packages/config/test/http.ts";
 import { MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
 import { TASKS_BLOCK_NAME } from "../../src/local/tasks/status.ts";
 import {
@@ -141,25 +142,21 @@ describe("the production surface", () => {
 
   test("its chat endpoint never offers her task tools, their hint or the 后台的活 block, whatever Assistant Mode's settings say", async () => {
     const sent: { tools?: { function: { name: string } }[]; messages: unknown[] }[] = [];
-    const provider = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      async fetch(request) {
-        sent.push(await request.json());
-        const chunks = [
-          { choices: [{ delta: { role: "assistant", content: "好呀" } }] },
-          { choices: [{ delta: {}, finish_reason: "stop" }] },
-        ];
-        const body = [...chunks.map((chunk) => JSON.stringify(chunk)), "[DONE]"]
-          .map((data) => `data: ${data}\n\n`)
-          .join("");
-        return new Response(body, { headers: { "content-type": "text/event-stream" } });
-      },
+    const provider = await serveFetch(async (request) => {
+      sent.push(await request.json());
+      const chunks = [
+        { choices: [{ delta: { role: "assistant", content: "好呀" } }] },
+        { choices: [{ delta: {}, finish_reason: "stop" }] },
+      ];
+      const body = [...chunks.map((chunk) => JSON.stringify(chunk)), "[DONE]"]
+        .map((data) => `data: ${data}\n\n`)
+        .join("");
+      return new Response(body, { headers: { "content-type": "text/event-stream" } });
     });
     const env: Record<string, string> = {
       EIDOLON_CHAT_SECRET: "e".repeat(MIN_CHAT_SECRET_LENGTH),
       OPENROUTER_API_KEY: "fake-key",
-      OPENROUTER_API_BASE: `http://127.0.0.1:${provider.port}/v1`,
+      OPENROUTER_API_BASE: `${provider.url}/v1`,
       ASSISTANT_ENABLED: "true",
       ASSISTANT_PROVIDER: "openrouter",
       ASSISTANT_MODEL: "test/model",
@@ -194,7 +191,7 @@ describe("the production surface", () => {
         expect(said).not.toContain(TASKS_BLOCK_NAME);
       }
     } finally {
-      await provider.stop(true);
+      await provider.stop();
       for (const [name, value] of saved) {
         if (value === undefined) delete process.env[name];
         else process.env[name] = value;

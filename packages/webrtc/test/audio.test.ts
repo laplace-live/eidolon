@@ -1,6 +1,7 @@
 // The caller's audio decoded to 16 kHz mono with concealment, and hers sent as 20 ms Opus packets
 // on a 10 ms clock that never drifts, against libopus itself and a sender that keeps what it gets.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { MediaStreamTrack, RTCRtpSender, RtpPacket } from "werift";
 import { AUDIO_IN_RATE, AudioIn, type AudioPacket } from "../src/audio_in.ts";
 import { AudioOut } from "../src/audio_out.ts";
@@ -182,9 +183,10 @@ describe("AudioOut", () => {
       expect(header.sequenceNumber).toBe((previous.sequenceNumber + 1) & 0xffff);
       expect(header.timestamp).toBe((previous.timestamp + 960) >>> 0);
     }
-    // Paced at 20 ms a packet from the clock's start, which it never drifts from.
+    // Paced at 20 ms a packet from the clock's start, which it never drifts from: a first packet
+    // its timer sent late (13 ms, with every core busy) leaves the rest on time, 80 ms less that.
     const first = sender.sent[0]!.at;
-    expect(sender.sent[4]!.at - first).toBeGreaterThanOrEqual(75);
+    expect(sender.sent[4]!.at - first).toBeGreaterThanOrEqual(60);
     expect(sender.replaced).toBe(1);
   });
 
@@ -230,7 +232,7 @@ describe("AudioOut", () => {
     stop();
     const before = sender.sent.length;
     const last = sender.sent[before - 1]!;
-    await Bun.sleep(300);
+    await delay(300);
     out.play(new ToneSource(24_000), () => true);
     await until(() => sender.sent.length > before, 4000);
     out.stop();

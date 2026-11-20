@@ -1,7 +1,7 @@
 // A task's context in its requests: old results masked, the rest compacted into a summary past
 // the context's threshold, and a provider's overflow compacted and retried.
-import { describe, expect, test } from "bun:test";
 import { ProviderHttpError } from "@eidolon/providers";
+import { describe, expect, test } from "vitest";
 import type { TaskEntryDraft, TaskEvent, TaskTool } from "../src/task.ts";
 import type { MindChunk, MindRequest } from "../src/types.ts";
 import {

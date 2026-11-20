@@ -1,12 +1,13 @@
 // The production chat's files: named by their content, typed as the local store types them, and
 // gone after their lifetime.
-import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { withPersona } from "@eidolon/config";
+import { afterEach, describe, expect, test } from "vitest";
 import { attachmentOf, ChatFiles, chatFileResponse } from "../../src/chat/files.ts";
 import { MILKY } from "./harness.ts";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-const PNG_NAME = `${new Bun.CryptoHasher("sha256").update(PNG).digest("hex")}.png`;
+const PNG_NAME = `${createHash("sha256").update(PNG).digest("hex")}.png`;
 
 afterEach(() => {
   delete process.env.SELFIE_TTL_SECONDS;

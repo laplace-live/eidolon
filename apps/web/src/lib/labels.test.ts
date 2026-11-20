@@ -1,9 +1,9 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test, vi } from "vitest";
 import { linguiMacro } from "@/test/lingui-macro";
 import { ERROR_CODES } from "../../../bot/src/local/api.ts";
 import { ApiError, CLIENT_ERROR_CODES } from "./api";
 
-mock.module("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
 const { errorMessage, listOf } = await import("./labels");
 
 test("an error says its code's sentence, and anything else a general one", () => {

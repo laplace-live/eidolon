@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { joinSegments, separator } from "../src/index.ts";
 
 describe("separator", () => {

@@ -1,7 +1,8 @@
-// The only test file that touches the process-wide defaults: bun test shares modules across files,
-// so every other file injects its quota, resolver and settings.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+// The only test file that touches the process-wide defaults: every other file injects its quota,
+// resolver and settings.
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   ANONYMOUS,
   admitChatTurn,
@@ -31,7 +32,7 @@ afterEach(() => {
 
 describe("env is read after import", () => {
   test("nothing reads the env at module top level", () => {
-    const index = join(import.meta.dir, "../src/index.ts");
+    const index = join(import.meta.dirname, "../src/index.ts");
     const script = `
       const access = await import(${JSON.stringify(index)});
       Object.assign(process.env, {
@@ -62,14 +63,12 @@ describe("env is read after import", () => {
         access.chatQuotas() === chat;
       console.log("@@" + JSON.stringify({ first, memoized }));
     `;
-    const run = Bun.spawnSync({
-      cmd: [process.execPath, "--no-env-file", "-e", script],
+    const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
       env: {},
-      stdout: "pipe",
-      stderr: "pipe",
+      encoding: "utf8",
     });
-    const stdout = run.stdout.toString();
-    expect(run.exitCode, run.stderr.toString()).toBe(0);
+    const stdout = run.stdout;
+    expect(run.status, run.stderr).toBe(0);
     const line = stdout.split("\n").find((l) => l.startsWith("@@"));
     expect(JSON.parse(line?.slice(2) ?? "null")).toEqual({
       first: {

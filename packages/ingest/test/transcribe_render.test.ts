@@ -1,8 +1,9 @@
 // fixtures/transcribe/render.golden.json holds the rendering's outputs (timestamps, segments,
 // scenes, markdown, token dumps) for the synthetic inputs it lists.
-import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadsPy, PyFloat, pyJsonDumps } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import { transcribe } from "../src/index.ts";
 
 const {
@@ -51,9 +52,9 @@ interface Golden {
   token_dumps: [string, string][];
 }
 
-const golden = (await Bun.file(
-  join(import.meta.dir, "fixtures/transcribe/render.golden.json"),
-).json()) as Golden;
+const golden = JSON.parse(
+  await readFile(join(import.meta.dirname, "fixtures/transcribe/render.golden.json"), "utf8"),
+) as Golden;
 
 const toTokens = (rows: [string, number | null, number | null][]) =>
   rows.map(([text, start_ms, end_ms]) => ({ text, start_ms, end_ms }));

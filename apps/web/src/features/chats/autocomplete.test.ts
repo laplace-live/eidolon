@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { type MentionTarget, parseMentions } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import {
   closedAt,
   EMPTY_DRAFT,

@@ -1184,7 +1184,7 @@ export class TaskManager {
       // EIDOLON_APP_ROOT's package, or this checkout.
       appRoot: shippedPath(".", "."),
       // The one load-env.ts reads: from a worktree, its main checkout's.
-      dotenv: findDotenv(import.meta.dir),
+      dotenv: findDotenv(import.meta.dirname),
     };
     return new FolderPolicy({ folder, grants, ...this.#guards });
   }

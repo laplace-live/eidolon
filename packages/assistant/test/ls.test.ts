@@ -5,10 +5,10 @@
 //
 // pi's ls cases in a task's folder, where a limit is a whole number; then the task's own:
 // refusals, errors, aborts and arguments.
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TaskToolResult } from "@eidolon/engine";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createLsTool, type LsDetails } from "../src/tools/ls.ts";
 import type { AssistantTool } from "../src/types.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";

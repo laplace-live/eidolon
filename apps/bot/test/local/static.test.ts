@@ -1,11 +1,11 @@
 // The built app is served from a map made at boot: no request path reaches the filesystem, so no
 // spelling of `..` and no symlink leads out of the build. The fixture build is the test's own.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataHome } from "@eidolon/config";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { loadStaticSite, MissingDist, STATIC_HEADERS } from "../../src/local/static.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import {
@@ -115,6 +115,33 @@ describe("files", () => {
       "x-content-type-options": "nosniff",
       "referrer-policy": "same-origin",
     });
+  });
+
+  test("a file's type is its extension's, text in UTF-8, and anything else a download", () => {
+    const build = mkdtempSync(join(tmpdir(), "eidolon-dist-"));
+    try {
+      const names = ["index.html", "a.js", "b.css", "c.svg", "d.png", "e.woff2", "F.JS", "g.txt"];
+      for (const name of names) writeFileSync(join(build, name), "x");
+      const site = loadStaticSite(build);
+      const types = Object.fromEntries(
+        names.map((name) => {
+          const response = site.respond(`/${name}`, new Request(`http://local/${name}`));
+          return [name, response.headers.get("content-type")];
+        }),
+      );
+      expect(types).toEqual({
+        "index.html": "text/html;charset=utf-8",
+        "a.js": "text/javascript;charset=utf-8",
+        "b.css": "text/css;charset=utf-8",
+        "c.svg": "image/svg+xml",
+        "d.png": "image/png",
+        "e.woff2": "font/woff2",
+        "F.JS": "text/javascript;charset=utf-8",
+        "g.txt": "application/octet-stream",
+      });
+    } finally {
+      rmSync(build, { recursive: true, force: true });
+    }
   });
 
   test("a matching If-None-Match is a 304 with the same headers", async () => {

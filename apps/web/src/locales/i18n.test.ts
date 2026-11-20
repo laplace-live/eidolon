@@ -1,5 +1,5 @@
-import { describe, expect, mock, test } from "bun:test";
 import { i18n } from "@lingui/core";
+import { describe, expect, test, vi } from "vitest";
 import { detectLang, dynamicActivate } from "./i18n";
 
 describe("detectLang", () => {
@@ -23,10 +23,10 @@ describe("detectLang", () => {
 });
 
 test("a catalog that can't load falls back to English's", async () => {
-  mock.module("./zh-Hans.po", () => {
+  vi.doMock("./zh-Hans.po", () => {
     throw new Error("chunk failed to load");
   });
-  mock.module("./en.po", () => ({ messages: { hello: "Hello" } }));
+  vi.doMock("./en.po", () => ({ messages: { hello: "Hello" } }));
   const root = { lang: "" };
   Object.assign(globalThis, { document: { documentElement: root } });
   try {

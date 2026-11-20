@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { BOT_ABOUT } from "../src/index.ts";
 
 describe("BOT_ABOUT", () => {

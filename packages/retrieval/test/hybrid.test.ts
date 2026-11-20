@@ -1,8 +1,9 @@
-import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pyJsonDumps } from "@eidolon/config";
 import type { Table } from "@lancedb/lancedb";
+import { describe, expect, test } from "vitest";
 import {
   hybridSearch,
   OpenRouterReranker,
@@ -219,7 +220,9 @@ describe("hybridSearch on an in-memory table", () => {
 
 // fixtures/hybrid_parity.json pins hybrid search over stored row vectors (no embedding calls) on
 // one snapshot of the real tables; a re-ingest changes their fingerprints and skips these.
-const parity = await Bun.file(join(import.meta.dir, "fixtures", "hybrid_parity.json")).json();
+const parity = JSON.parse(
+  readFileSync(join(import.meta.dirname, "fixtures", "hybrid_parity.json"), "utf8"),
+);
 const real: Record<string, Table | null> = {
   persona_facts: await realTable("persona_facts"),
   stream_chunks: await realTable("stream_chunks"),

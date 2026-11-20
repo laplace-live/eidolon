@@ -5,8 +5,7 @@
 //
 // The task's commands: bash runs one in the task's folder, and bash_output and bash_kill follow one
 // that moved to the background. A task's BashJobs runs them all, past the calls that start them.
-import { constants as osConstants } from "node:os";
-import { isPlainObject } from "@eidolon/config";
+import { isPlainObject, spawnProcess } from "@eidolon/config";
 import type { AssistantTool, PathGuard } from "../types.ts";
 import type { BashJobs } from "./jobs.ts";
 import { pathExists } from "./path.ts";
@@ -66,10 +65,9 @@ export function createLocalBashOperations(): BashOperations {
       }
       const environment = env ?? (await shellEnv());
       const { shell, args } = getShellConfig(environment.PATH ?? "");
-      const child = Bun.spawn({
-        cmd: [shell, ...args, command],
+      const child = spawnProcess([shell, ...args, command], {
         cwd,
-        env: { ...environment },
+        env: environment,
         // Input ends at once, and with no terminal a password prompt fails rather than waiting.
         stdin: "ignore",
         stdout: "pipe",
@@ -81,7 +79,7 @@ export function createLocalBashOperations(): BashOperations {
       signal?.addEventListener("abort", kill, { once: true });
       // An abort that landed while the folder was checked fires no listener added after it.
       if (signal?.aborted) kill();
-      const readers = [child.stdout.getReader(), child.stderr.getReader()];
+      const readers = [child.stdout!.getReader(), child.stderr!.getReader()];
       const pumped = Promise.all(
         readers.map(async (reader) => {
           for (;;) {
@@ -91,8 +89,9 @@ export function createLocalBashOperations(): BashOperations {
           }
         }),
       ).catch(() => {});
+      let exitCode: number;
       try {
-        await child.exited;
+        exitCode = await child.exited;
         // What the command left running holds its pipes open after the shell exits, and reading
         // them to their end would hang (pi #5303, #11613): its group dies with the shell. A process
         // that left the group gets PIPE_DRAIN_MS before the pipes are let go.
@@ -111,14 +110,9 @@ export function createLocalBashOperations(): BashOperations {
         signal?.removeEventListener("abort", kill);
       }
       if (signal?.aborted) throw new Error("aborted");
-      // A signal-killed shell has no exit code. Use the standard shell convention so
-      // callers do not mistake the termination for a successful command.
-      const { exitCode, signalCode } = child;
-      if (exitCode !== null) return { exitCode };
-      if (signalCode === null) return { exitCode: 1 };
-      const number =
-        typeof signalCode === "number" ? signalCode : (osConstants.signals[signalCode] ?? 0);
-      return { exitCode: 128 + number };
+      // A signal-killed shell has no exit code: `exited` gives the standard shell convention,
+      // 128 + the signal's number, so callers do not mistake the termination for a success.
+      return { exitCode };
     },
   };
 }

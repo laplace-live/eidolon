@@ -21,7 +21,7 @@ import {
   type ParticipantId,
   summarize,
 } from "@eidolon/chat";
-import { isJsonObject, logger } from "@eidolon/config";
+import { isJsonObject, logger, newId } from "@eidolon/config";
 import {
   type ChatDeps,
   type ChatOutput,
@@ -249,7 +249,7 @@ async function relay(
     if (persona === null) {
       send({ type: "error", code: "internal", message: REPLY_FAILED });
     } else {
-      const turn = running?.turn ?? Bun.randomUUIDv7();
+      const turn = running?.turn ?? newId();
       const events = await store.add([{ type: "turn-failed", persona, turn, error: REPLY_FAILED }]);
       send({ type: "events", events });
     }
@@ -372,7 +372,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
       );
     }
     const first = await store.add([
-      { type: "message", id: Bun.randomUUIDv7(), speaker: { kind: "user" }, text },
+      { type: "message", id: newId(), speaker: { kind: "user" }, text },
     ]);
     const after = (first[0] as ChatEvent).seq;
     return ndjson(request.signal, (send, signal) =>

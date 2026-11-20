@@ -1,6 +1,8 @@
-import { afterEach, beforeEach, expect, jest, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
 import { openSonioxStt, sonioxConfig, sonioxUrl } from "../../src/stt/soniox.ts";
+import { useFakeClock } from "../clock.ts";
 import {
   captureLogs,
   defaultSelection,
@@ -23,14 +25,14 @@ const CONFIG =
 
 let server: FakeServer;
 let logs: ReturnType<typeof captureLogs>;
-beforeEach(() => {
-  server = new FakeServer();
+beforeEach(async () => {
+  server = await FakeServer.start();
   logs = captureLogs();
 });
-afterEach(() => {
-  jest.useRealTimers();
+afterEach(async () => {
+  vi.useRealTimers();
   setUsageSink(null);
-  server.stop();
+  await server.stop();
   logs.restore();
 });
 
@@ -128,7 +130,7 @@ test("an error ends the segment; a rejected key is fatal, and never retried", as
   peer.send({ tokens: [], error_code: 401, error_message: "Invalid API key" });
   peer.close();
   await events.until((event) => event.type === "error" && event.fatal);
-  await Bun.sleep(50);
+  await delay(50);
   expect(events.seen).toEqual([
     { type: "interim", text: "嗯" },
     { type: "final", text: "嗯", finalized: true },
@@ -193,7 +195,7 @@ test("three drops in a row right after connecting are fatal", async () => {
 });
 
 test("a server that stops answering is tried three times, 4 s apart, then given up on", async () => {
-  jest.useFakeTimers();
+  useFakeClock();
   const stt = await open();
   const events = watch(stt);
   const peer = await server.connection();
@@ -203,7 +205,7 @@ test("a server that stops answering is tried three times, 4 s apart, then given 
     await events.until(
       (event) => event.type === "error" && event.message.includes(`attempt ${attempt} failed`),
     );
-    jest.advanceTimersByTime(4_000);
+    vi.advanceTimersByTime(4_000);
   }
   await events.until((event) => event.type === "error" && event.fatal);
   const seen = errors(events.seen);
@@ -233,23 +235,23 @@ test("a refused key fails at once, and no error names it", async () => {
     /^Unable to connect to Soniox: websocket connection to ws:\/\/127\.0\.0\.1:\d+\/transcribe-websocket failed.*401$/,
   );
   expect(JSON.stringify(events.seen)).not.toContain(KEY);
-  await Bun.sleep(50);
+  await delay(50);
   expect(errors(events.seen)).toHaveLength(1);
   await stt.close();
 });
 
 test("keeps an idle socket alive every 5 s, and only once it has been idle 1 s", async () => {
-  jest.useFakeTimers();
+  useFakeClock();
   const stt = await open();
   const peer = await server.connection();
   await peer.next();
-  jest.advanceTimersByTime(5_000);
+  vi.advanceTimersByTime(5_000);
   expect(await peer.next()).toBe('{"type": "keepalive"}');
-  jest.advanceTimersByTime(4_500);
+  vi.advanceTimersByTime(4_500);
   stt.send(new Int16Array([1]));
-  jest.advanceTimersByTime(500);
+  vi.advanceTimersByTime(500);
   expect(samples(await peer.next())).toEqual([1]);
-  jest.advanceTimersByTime(5_000);
+  vi.advanceTimersByTime(5_000);
   expect(await peer.next()).toBe('{"type": "keepalive"}');
   await stt.close();
 });

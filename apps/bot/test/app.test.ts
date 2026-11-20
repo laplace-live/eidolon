@@ -1,13 +1,7 @@
-import { afterEach, describe, expect, test } from "bun:test";
 import type { OfferAdmission, OfferInput } from "@eidolon/access";
-import type { BunRequest } from "bun";
-import {
-  type BotAppParts,
-  createBotApp,
-  isDemoPath,
-  type RouteHandler,
-  type RouteServer,
-} from "../src/app.ts";
+import { afterEach, describe, expect, test } from "vitest";
+import { type BotAppParts, createBotApp, isDemoPath, type RouteServer } from "../src/app.ts";
+import type { RouteRequest } from "../src/routing.ts";
 import {
   ANSWER,
   captureLogs,
@@ -25,8 +19,8 @@ afterEach(async () => {
   served = null;
 });
 
-function start(overrides: Partial<BotAppParts> = {}): Served {
-  served = serve(createBotApp(fakeParts(overrides)));
+async function start(overrides: Partial<BotAppParts> = {}): Promise<Served> {
+  served = await serve(createBotApp(fakeParts(overrides)));
   return served;
 }
 
@@ -46,7 +40,7 @@ describe("routes", () => {
       iceServers: [{ urls: ["stun:stun.cloudflare.com:3478"] }],
       extra: { kept: "中文" },
     };
-    const { url } = start({ ice: { browserPayload: async () => payload } });
+    const { url } = await start({ ice: { browserPayload: async () => payload } });
     const { response, body } = await call(`${url}/api/ice-servers`);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/json");
@@ -60,7 +54,7 @@ describe("routes", () => {
     const inputs: OfferInput[] = [];
     const admissions: OfferAdmission[] = [];
     const peers: (string | null | undefined)[] = [];
-    const { url } = start({
+    const { url } = await start({
       access: fakeAccess({
         resolveClientIp: (_headers, peer) => {
           peers.push(peer);
@@ -108,7 +102,7 @@ describe("routes", () => {
 
   test("POST /api/offer decodes invalid UTF-8 as U+FFFD before the guard parses it", async () => {
     const inputs: OfferInput[] = [];
-    const { url } = start({
+    const { url } = await start({
       access: fakeAccess({
         admitOffer: async (input) => {
           inputs.push(input);
@@ -125,7 +119,7 @@ describe("routes", () => {
 
   test("a refused offer is the guard's 429, with CORS, and never reaches signalling", async () => {
     let offers = 0;
-    const { url } = start({
+    const { url } = await start({
       access: fakeAccess({ admitOffer: async (input) => refusedOffer(input) }),
       signalling: {
         offer: async () => {
@@ -151,7 +145,7 @@ describe("routes", () => {
   });
 
   test("POST /api/offer answers signalling's status and body", async () => {
-    const { url } = start({
+    const { url } = await start({
       signalling: {
         offer: async () => ({
           status: 400,
@@ -168,7 +162,7 @@ describe("routes", () => {
   test("PATCH /api/offer passes the raw body text to signalling and skips the guard", async () => {
     const bodies: string[] = [];
     let guarded = 0;
-    const { url } = start({
+    const { url } = await start({
       access: fakeAccess({
         admitOffer: async (input) => {
           guarded++;
@@ -194,7 +188,7 @@ describe("routes", () => {
 
   test("POST /api/offer/preflight answers with the guard's response", async () => {
     const inputs: OfferInput[] = [];
-    const { url } = start({
+    const { url } = await start({
       access: fakeAccess({
         resolveClientIp: () => "203.0.113.1",
         preflightOffer: async (input) => {
@@ -217,7 +211,7 @@ describe("routes", () => {
 
   test("GET /api/selfie/:id serves the percent-decoded segment", async () => {
     const segments: string[] = [];
-    const { url } = start({
+    const { url } = await start({
       selfieResponse: (segment) => {
         segments.push(segment);
         return new Response(new Uint8Array([1, 2, 3]), {
@@ -235,7 +229,7 @@ describe("routes", () => {
 
   test("/mcp and /mcp/ reach the MCP handler for every method, with no redirect", async () => {
     const seen: string[] = [];
-    const { url } = start({
+    const { url } = await start({
       access: fakeAccess({ resolveClientIp: () => "192.0.2.4" }),
       mcp: {
         handle: async (request, clientIp) => {
@@ -272,7 +266,7 @@ describe("fallback", () => {
   });
 
   test("demo paths answer an empty 404 for every method, with CORS", async () => {
-    const { url } = start();
+    const { url } = await start();
     for (const [method, path] of [
       ["GET", "/"],
       ["GET", "/client"],
@@ -288,14 +282,15 @@ describe("fallback", () => {
       });
       expect(response.status).toBe(404);
       expect(body).toBe("");
-      expect(response.headers.get("content-length")).toBe("0");
+      // Bun.serve sends Content-Length: 0; srvx on Node sends no length, the empty body chunked.
+      expect(response.headers.get("content-length") ?? "0").toBe("0");
       expect(response.headers.get("content-type")).toBeNull();
       expect(response.headers.get("x-fake-cors")).toBe(ORIGIN);
     }
   });
 
   test("unknown paths answer FastAPI's JSON 404, the runner's own routes included", async () => {
-    const { url } = start();
+    const { url } = await start();
     for (const [method, path] of [
       ["GET", "/nope"],
       ["POST", "/nope"],
@@ -325,7 +320,7 @@ describe("fallback", () => {
   });
 
   test("paths under /mcp/ answer the mount's plain-text 404", async () => {
-    const { url } = start();
+    const { url } = await start();
     const { response, body } = await call(`${url}/mcp/extra`, { method: "POST" });
     expect(response.status).toBe(404);
     expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
@@ -334,7 +329,7 @@ describe("fallback", () => {
   });
 
   test("a known path with the wrong method answers 405 with the first route's Allow", async () => {
-    const { url } = start();
+    const { url } = await start();
     for (const [method, path, allow] of [
       ["GET", "/api/offer", "POST"],
       ["PUT", "/api/offer", "POST"],
@@ -364,7 +359,7 @@ describe("fallback", () => {
 
   test("CORS preflights are answered before routing, on every path", async () => {
     let mcpCalls = 0;
-    const { url } = start({
+    const { url } = await start({
       mcp: {
         handle: async () => {
           mcpCalls++;
@@ -393,7 +388,7 @@ describe("route wrapper", () => {
       handlerRuns++;
       throw new Error("the GET handler ran for HEAD");
     };
-    const { url } = start({
+    const { url } = await start({
       ice: { browserPayload: counted },
       access: fakeAccess({ resolveBearerCaller: counted }),
       selfieResponse: () => {
@@ -408,7 +403,8 @@ describe("route wrapper", () => {
       });
       expect(response.status).toBe(405);
       expect(response.headers.get("allow")).toBe("GET");
-      expect(response.headers.get("content-length")).toBe("31");
+      // Bun.serve sends the GET body's length; srvx on Node sends a HEAD no length.
+      expect(response.headers.get("content-length") ?? "31").toBe("31");
       expect(body).toBe("");
       expect(response.headers.get("x-fake-cors")).toBe(ORIGIN);
     }
@@ -418,7 +414,7 @@ describe("route wrapper", () => {
   test("a throwing handler becomes a logged plain 500 that still carries CORS", async () => {
     const logs = captureLogs();
     try {
-      const { url } = start({
+      const { url } = await start({
         ice: {
           browserPayload: async () => {
             throw new Error("secret detail");
@@ -444,7 +440,7 @@ describe("route wrapper", () => {
   test("a rejected signalling call is a 500 too", async () => {
     const logs = captureLogs();
     try {
-      const { url } = start({
+      const { url } = await start({
         signalling: {
           offer: async () => {
             throw new Error("werift exploded");
@@ -464,7 +460,7 @@ describe("route wrapper", () => {
   test("every request leaves uvicorn's access line, whatever path answered it", async () => {
     const logs = captureLogs();
     try {
-      const { url } = start({
+      const { url } = await start({
         signalling: {
           offer: async () => ({ status: 200, body: ANSWER }),
           patch: async () => {
@@ -505,124 +501,24 @@ describe("route wrapper", () => {
     }
   });
 
-  describe("idle timeout", () => {
-    function fakeServer(order: string[]): RouteServer {
-      return {
-        timeout: (_request, seconds) => {
-          order.push(`timeout ${seconds}`);
-        },
-        requestIP: () => ({ address: "203.0.113.9", family: "IPv4", port: 50000 }),
-      };
-    }
-
-    function routeOf(
-      parts: BotAppParts,
-      path: string,
-      method?: "GET" | "POST" | "PATCH",
-    ): RouteHandler {
-      const entry = createBotApp(parts).routes[path];
-      const handler = typeof entry === "function" ? entry : method ? entry?.[method] : undefined;
-      if (!handler) throw new Error(`no ${method} route for ${path}`);
-      return handler;
-    }
-
-    function request(path: string, init: RequestInit = {}): BunRequest {
-      return Object.assign(new Request(`http://bot.test${path}`, init), {
-        params: { id: "abc.png" },
-      }) as unknown as BunRequest;
-    }
-
-    test("every route turns the idle timeout off before awaiting its handler", async () => {
-      const order: string[] = [];
-      const mark = (name: string) => {
-        order.push(name);
-      };
-      const parts = fakeParts({
-        access: fakeAccess({
-          admitOffer: async (input) => {
-            mark("offer");
-            return refusedOffer(input);
-          },
-          preflightOffer: async () => {
-            mark("preflight");
-            return new Response("{}");
-          },
-          resolveBearerCaller: async () => {
-            mark("memories");
-            return null;
-          },
-        }),
-        ice: {
-          browserPayload: async () => {
-            mark("ice");
-            return { iceServers: [] };
-          },
-        },
-        signalling: {
-          offer: async () => ({ status: 200, body: ANSWER }),
-          patch: async () => {
-            mark("patch");
-            return { status: 200, body: {} };
-          },
-        },
-        selfieResponse: () => {
-          mark("selfie");
-          return new Response(null, { status: 404 });
-        },
-        mcp: {
-          handle: async () => {
-            mark("mcp");
-            return new Response("mcp");
-          },
-        },
-      });
-      const cases: [string, "GET" | "POST" | "PATCH" | undefined, string][] = [
-        ["/api/ice-servers", "GET", "ice"],
-        ["/api/offer", "POST", "offer"],
-        ["/api/offer", "PATCH", "patch"],
-        ["/api/offer/preflight", "POST", "preflight"],
-        ["/api/memories", "GET", "memories"],
-        ["/api/memories/forget", "POST", "memories"],
-        ["/api/selfie/:id", "GET", "selfie"],
-        ["/mcp", undefined, "mcp"],
-        ["/mcp/", undefined, "mcp"],
-      ];
-      for (const [path, method, name] of cases) {
-        order.length = 0;
-        const init = method === "GET" ? {} : { method: method ?? "POST", body: "{}" };
-        await routeOf(parts, path, method)(request(path, init), fakeServer(order));
-        expect(`${path} ${order.join(", ")}`).toBe(`${path} timeout 0, ${name}`);
-      }
-    });
-
-    test("preflights and HEAD's 405 answer before the timeout is touched", async () => {
-      const order: string[] = [];
-      const parts = fakeParts();
-      await routeOf(parts, "/mcp")(
-        request("/mcp", { method: "OPTIONS", headers: PREFLIGHT }),
-        fakeServer(order),
-      );
-      const head = await routeOf(
-        parts,
-        "/api/ice-servers",
-        "GET",
-      )(request("/api/ice-servers", { method: "HEAD" }), fakeServer(order));
-      expect(head.status).toBe(405);
-      expect(order).toEqual([]);
-    });
-
-    test("the MCP route resolves the client IP from the socket peer", async () => {
-      const seen: string[] = [];
-      const parts = fakeParts({
+  test("the MCP route resolves the client IP from the socket peer", async () => {
+    const seen: string[] = [];
+    const entry = createBotApp(
+      fakeParts({
         mcp: {
           handle: async (_request, clientIp) => {
             seen.push(clientIp);
             return new Response("mcp");
           },
         },
-      });
-      await routeOf(parts, "/mcp/")(request("/mcp/", { method: "POST" }), fakeServer([]));
-      expect(seen).toEqual(["ip:203.0.113.9"]);
-    });
+      }),
+    ).routes["/mcp/"];
+    if (typeof entry !== "function") throw new Error("/mcp/ is no function route");
+    const request = Object.assign(new Request("http://bot.test/mcp/", { method: "POST" }), {
+      params: {},
+    }) as RouteRequest;
+    const server: RouteServer = { requestIP: () => ({ address: "203.0.113.9", port: 50000 }) };
+    await entry(request, server);
+    expect(seen).toEqual(["ip:203.0.113.9"]);
   });
 });

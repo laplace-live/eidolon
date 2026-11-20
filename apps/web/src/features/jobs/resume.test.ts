@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { canResume } from "./resume";
 
 const job = { ephemeral: false, resumedBy: null };

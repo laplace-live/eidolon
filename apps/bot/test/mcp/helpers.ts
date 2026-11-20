@@ -1,7 +1,7 @@
 // Shared fixtures for the MCP tests: canned hits, fake retrievers and the handler built over them.
-import { afterAll, beforeAll } from "bun:test";
 import { SlidingWindowQuota, type UserContext } from "@eidolon/access";
 import type { Retriever, SearchOptions, SearchRow } from "@eidolon/retrieval";
+import { afterAll, beforeAll } from "vitest";
 import { createMcpHandler, type McpHandler, type McpHandlerOptions } from "../../src/mcp/index.ts";
 
 export const FACT_HIT: SearchRow = {

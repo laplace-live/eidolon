@@ -16,7 +16,7 @@ export interface Recorded {
   readonly form?: { readonly client_reference_id: string; readonly filename: string };
   readonly json?: string;
   readonly authorization?: string;
-  readonly timeout?: unknown;
+  readonly dispatcher?: unknown;
 }
 
 /** What a test answers instead of the canned job: a response, or an error to throw (a network failure). */
@@ -39,7 +39,7 @@ export function fakeSoniox(
   let creates = 0;
   const byId = new Map(jobs.map((job) => [job.created.id, job]));
   const polls = new Map(jobs.map((job) => [job.created.id, [...job.polls]]));
-  const fetchFake = async (input: unknown, init: RequestInit & { timeout?: unknown } = {}) => {
+  const fetchFake = async (input: unknown, init: RequestInit & { dispatcher?: unknown } = {}) => {
     const signal = init.signal;
     signal?.throwIfAborted();
     const path = new URL(String(input)).pathname.replace(/^\/v1/, "");
@@ -49,10 +49,10 @@ export function fakeSoniox(
       method,
       path,
       authorization: headers.Authorization,
-      timeout: init.timeout,
+      dispatcher: init.dispatcher,
     };
     if (init.body instanceof FormData) {
-      // As Soniox receives it: FormData.get() names a Bun.file entry by its path instead.
+      // As Soniox receives it: the multipart body on the wire.
       const wire = await new Response(init.body).text();
       recorded = {
         ...recorded,

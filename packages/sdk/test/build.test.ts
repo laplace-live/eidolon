@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+// The SDK's build script runs on Bun, so these tests drive it through `bun`.
+import { spawn, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -11,18 +12,27 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { checkDistImports, type SdkManifest, stage } from "../scripts/build.ts";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-const ROOT = resolve(import.meta.dir, "../../..");
-const SDK_NODE_MODULES = resolve(import.meta.dir, "../node_modules");
+const ROOT = resolve(import.meta.dirname, "../../..");
+const SDK_NODE_MODULES = resolve(import.meta.dirname, "../node_modules");
+const SCRIPT = resolve(import.meta.dirname, "../scripts/build.ts");
+
+/** Runs `code` on Bun, with the build script's exports as `build`. */
+function onBun(code: string) {
+  const source = `const build = await import(${JSON.stringify(SCRIPT)});\n${code}`;
+  return spawnSync("bun", ["--no-env-file", "-e", source], { cwd: ROOT, encoding: "utf8" });
+}
 
 let stagedDir: string;
-let manifest: SdkManifest;
+let manifest: Record<string, unknown>;
 
-beforeAll(async () => {
+beforeAll(() => {
   stagedDir = mkdtempSync(join(tmpdir(), "eidolon-sdk-pack-"));
-  manifest = await stage(stagedDir);
-});
+  const staged = onBun(`await build.stage(${JSON.stringify(stagedDir)});`);
+  if (staged.status !== 0) throw new Error(`stage exited ${staged.status}:\n${staged.stderr}`);
+  manifest = JSON.parse(readFileSync(join(stagedDir, "package.json"), "utf8"));
+}, 60_000);
 
 afterAll(() => {
   rmSync(stagedDir, { recursive: true, force: true });
@@ -45,7 +55,7 @@ describe("@laplace.live/eidolon-sdk package build", () => {
     }
 
     const workspacePkg = JSON.parse(
-      readFileSync(resolve(import.meta.dir, "../package.json"), "utf8"),
+      readFileSync(resolve(import.meta.dirname, "../package.json"), "utf8"),
     ) as { version: string; private?: boolean; publishConfig?: Record<string, unknown> };
     expect(workspacePkg.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(workspacePkg.private).toBeUndefined();
@@ -104,12 +114,12 @@ describe("@laplace.live/eidolon-sdk package build", () => {
         join(broken, "dist", "react", "index.js"),
         'import { jsxDEV } from "react/jsx-dev-runtime";\nexport const el = jsxDEV("div", {});\n',
       );
-      expect(() => checkDistImports(broken, manifest)).toThrow(
-        /unrewritten TypeScript[\s\S]*undeclared import left-pad/,
+      const check = onBun(
+        `try { build.checkDistImports(${JSON.stringify(broken)}, ${JSON.stringify(manifest)}); }\n` +
+          "catch (error) { console.log(error.message); }",
       );
-      expect(() => checkDistImports(broken, manifest)).toThrow(
-        /development JSX runtime react\/jsx-dev-runtime/,
-      );
+      expect(check.stdout).toMatch(/unrewritten TypeScript[\s\S]*undeclared import left-pad/);
+      expect(check.stdout).toMatch(/development JSX runtime react\/jsx-dev-runtime/);
     } finally {
       rmSync(broken, { recursive: true, force: true });
     }
@@ -165,26 +175,22 @@ describe("@laplace.live/eidolon-sdk package build", () => {
       );
 
       const tsc = join(ROOT, "node_modules", ".bin", "tsc");
-      const res = Bun.spawnSync([tsc, "-p", join(consumer, "tsconfig.json")], {
+      const res = spawnSync(tsc, ["-p", join(consumer, "tsconfig.json")], {
         cwd: consumer,
-        stderr: "pipe",
-        stdout: "pipe",
+        encoding: "utf8",
       });
-      expect([res.exitCode, res.stdout.toString() + res.stderr.toString()]).toEqual([0, ""]);
+      expect([res.status, res.stdout + res.stderr]).toEqual([0, ""]);
 
-      const nodeRes = Bun.spawnSync(
+      const nodeRes = spawnSync(
+        process.execPath,
         [
-          "node",
           "--input-type=module",
           "-e",
           'const core = await import("@laplace.live/eidolon-sdk"); const react = await import("@laplace.live/eidolon-sdk/react"); if (typeof core.EidolonClient !== "function" || typeof react.useEidolonClient !== "function") process.exit(1);',
         ],
-        { cwd: consumer, stderr: "pipe", stdout: "pipe" },
+        { cwd: consumer, encoding: "utf8" },
       );
-      expect([nodeRes.exitCode, nodeRes.stdout.toString() + nodeRes.stderr.toString()]).toEqual([
-        0,
-        "",
-      ]);
+      expect([nodeRes.status, nodeRes.stdout + nodeRes.stderr]).toEqual([0, ""]);
     } finally {
       rmSync(join(stagedDir, "node_modules"), { recursive: true, force: true });
       rmSync(consumer, { recursive: true, force: true });
@@ -213,12 +219,10 @@ describe("@laplace.live/eidolon-sdk package build", () => {
           mkdirSync(dirname(join(sandbox, rel)), { recursive: true });
           copyFileSync(join(ROOT, "biome.json"), join(sandbox, "biome.json"));
           writeFileSync(join(sandbox, rel), code);
-          const proc = Bun.spawn([biome, "lint", rel], {
-            cwd: sandbox,
-            stdout: "ignore",
-            stderr: "ignore",
+          const exitCode = await new Promise<number | null>((done) => {
+            spawn(biome, ["lint", rel], { cwd: sandbox, stdio: "ignore" }).on("exit", done);
           });
-          return [`${rel} (${code.trim()})`, (await proc.exited) !== 0, shouldFail] as const;
+          return [`${rel} (${code.trim()})`, exitCode !== 0, shouldFail] as const;
         }),
       );
       for (const [label, failed, expected] of results) {

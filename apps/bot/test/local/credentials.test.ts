@@ -1,13 +1,19 @@
 // /api/local/credentials: keys are written 0600 from the first byte, and no key, name or malformed
 // body ever comes back in a response or a log line.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, envOptional } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot } from "./harness.ts";
+
+// An ES module's exports can't be spied on in place: every importer gets this openSync instead.
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, openSync: vi.fn(actual.openSync) };
+});
 
 let booted: Booted;
 let logs: CapturedLogs;
@@ -70,18 +76,14 @@ describe("GET credentials", () => {
 
 describe("PUT credentials", () => {
   test("creates credentials.json 0600 from its first byte, merges, and null removes", async () => {
-    const opened = spyOn(fs, "openSync");
-    let first: Awaited<ReturnType<typeof answer>>;
-    try {
-      first = await answer(
-        await api("PUT", "/credentials", { SONIOX_API_KEY: " sk-one ", FISH_API_KEY: "sk-two" }),
-        ["sk-one", "sk-two"],
-      );
-      const secret = opened.mock.calls.filter((call) => String(call[0]).includes("credentials"));
-      expect(secret.map((call) => [call[1], call[2]])).toEqual([["wx", 0o600]]);
-    } finally {
-      opened.mockRestore();
-    }
+    const opened = vi.mocked(fs.openSync);
+    opened.mockClear();
+    const first = await answer(
+      await api("PUT", "/credentials", { SONIOX_API_KEY: " sk-one ", FISH_API_KEY: "sk-two" }),
+      ["sk-one", "sk-two"],
+    );
+    const secret = opened.mock.calls.filter((call) => String(call[0]).includes("credentials"));
+    expect(secret.map((call) => [call[1], call[2]])).toEqual([["wx", 0o600]]);
     expect(first.status).toBe(200);
     expect(first.body.SONIOX_API_KEY).toEqual({ set: true, source: "credentials" });
     expect(statSync(file()).mode & 0o777).toBe(0o600);

@@ -7,6 +7,7 @@
 // with everything it started. Commands run on macOS and Linux only.
 import { accessSync, constants } from "node:fs";
 import { basename, delimiter, isAbsolute, sep } from "node:path";
+import { which } from "@eidolon/config";
 import { fold } from "../policy.ts";
 import type { PathGuard } from "../types.ts";
 
@@ -35,9 +36,9 @@ function shellPathExists(path: string): boolean {
 /** pi's order: /bin/bash, then bash on `path`, the PATH a command gets, then sh. */
 export function getShellConfig(path: string): ShellConfig {
   if (shellPathExists("/bin/bash")) return { shell: "/bin/bash", args: ["-c"] };
-  const bash = Bun.which("bash", { PATH: path });
+  const bash = which("bash", path);
   if (bash !== null) return { shell: bash, args: ["-c"] };
-  return { shell: Bun.which("sh", { PATH: path }) ?? "/bin/sh", args: ["-c"] };
+  return { shell: which("sh", path) ?? "/bin/sh", args: ["-c"] };
 }
 
 /**

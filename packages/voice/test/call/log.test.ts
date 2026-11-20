@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import type { ChatEvent, ChatEventDraft } from "@eidolon/chat";
 import { consoleSink, logger } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { callLog, memoryCallLog } from "../../src/call/log.ts";
 import { HEADER } from "./harness.ts";
 
@@ -8,11 +9,11 @@ let logs: string[];
 beforeEach(() => {
   logs = [];
   logger.setSink((record) => logs.push(record.message));
-  setSystemTime(new Date(5_000));
+  vi.setSystemTime(new Date(5_000));
 });
 afterEach(() => {
   logger.setSink(consoleSink);
-  setSystemTime();
+  vi.useRealTimers();
 });
 
 const line = (text: string): ChatEventDraft => ({
@@ -50,7 +51,7 @@ describe("callLog", () => {
   test("writes each batch once the one before it is written, in order", async () => {
     const written: number[][] = [];
     const log = callLog({ header: HEADER, events: [] }, async (events) => {
-      await Bun.sleep(events[0]?.seq === 1 ? 5 : 0);
+      await delay(events[0]?.seq === 1 ? 5 : 0);
       written.push(events.map((e) => e.seq));
     });
     log.append([line("一")]);

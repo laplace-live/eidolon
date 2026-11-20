@@ -11,9 +11,11 @@ import {
   envOptional,
   envOverride,
   logger,
+  spawnProcess,
+  which,
 } from "@eidolon/config";
 import { referenceCandidates } from "@eidolon/imagegen";
-import { download, which } from "@eidolon/ingest";
+import { download } from "@eidolon/ingest";
 import {
   accountsFor,
   callRoles,
@@ -170,19 +172,14 @@ function voiceTtl(answer: Answer): number {
 /** The first line `<path> --version` prints, or null. */
 async function versionOf(path: string): Promise<string | null> {
   try {
-    const child = Bun.spawn([path, "--version"], {
-      stdin: "ignore",
+    const child = spawnProcess([path, "--version"], {
       stdout: "pipe",
       stderr: "ignore",
+      timeout: VERSION_TIMEOUT_MS,
     });
-    const timer = setTimeout(() => child.kill(), VERSION_TIMEOUT_MS);
-    try {
-      const [text, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
-      const line = text.trim().split("\n")[0]?.trim() ?? "";
-      return code === 0 && line !== "" ? line.slice(0, 64) : null;
-    } finally {
-      clearTimeout(timer);
-    }
+    const [text, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+    const line = text.trim().split("\n")[0]?.trim() ?? "";
+    return code === 0 && line !== "" ? line.slice(0, 64) : null;
   } catch {
     return null;
   }

@@ -5,8 +5,9 @@
 //
 // pi's loop cases on runTask: the task's inbox stands in for pi's queues, its gate for
 // beforeToolCall, and a resumed store for continue().
-import { describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { ProviderHttpError } from "@eidolon/providers";
+import { describe, expect, test } from "vitest";
 import { briefText } from "../src/task/context.ts";
 import { runTask, type TaskEvent, type TaskToolContext } from "../src/task.ts";
 import {
@@ -480,7 +481,7 @@ describe("runTask, as pi's Agent", () => {
     const { events } = await drain(taskRequest(mind, { tools: [tracked] }));
     const counted = events.length;
     update?.("late");
-    await Bun.sleep(0);
+    await delay(0);
     expect(toolEvents(events, "update")).toEqual(["call-1"]);
     expect(events).toHaveLength(counted);
   });
@@ -506,11 +507,11 @@ describe("runTask, as pi's Agent", () => {
     })();
     await slowStarted.promise;
     while (!events.some((event) => event.type === "tool" && event.state === "end")) {
-      await Bun.sleep(1);
+      await delay(1);
     }
     const counted = events.length;
     settledUpdate?.("late");
-    await Bun.sleep(0);
+    await delay(0);
     expect(events).toHaveLength(counted);
     releaseSlow.resolve();
     await reading;

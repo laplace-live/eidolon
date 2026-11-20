@@ -1,9 +1,9 @@
 // EIDOLON_LOCAL_ALLOWED_ORIGINS: a listed site's pages call the bot's API as a deployment serves
 // it, with CORS headers, while /api/local and the local viewer stay the app's own pages'.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { LOCAL_VIEWER_MID } from "@eidolon/context";
 import type { MemoryAdmin } from "@eidolon/memory";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { PROOF_HEADER as PROOF } from "../../src/local/api.ts";
 import { listedOrigin, parseListedOrigins } from "../../src/local/guard.ts";
 import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";

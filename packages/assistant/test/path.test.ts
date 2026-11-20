@@ -4,10 +4,10 @@
 // Ported from pi-mono packages/coding-agent/test/path-utils.test.ts@ac78a60
 //
 // resolveReadPath is pi's resolveReadPathAsync here, so its cases await it.
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, readdirSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { expandPath, resolveReadPath, resolveToCwd } from "../src/tools/path.ts";
 
 describe("path-utils", () => {

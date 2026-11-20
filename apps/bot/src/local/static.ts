@@ -1,8 +1,9 @@
 // The built web app (apps/web/dist), read into memory once at boot as a map of URL path → file.
 // A request is answered from that map or with index.html; its path is never decoded or joined to
 // a filesystem path, so no spelling of `..` reaches outside the build.
+import { hash } from "node:crypto";
 import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { webDist } from "@eidolon/config";
 import { isInside } from "./write.ts";
 
@@ -24,6 +25,16 @@ export const STATIC_HEADERS: Readonly<Record<string, string>> = Object.freeze({
 
 /** Vite fingerprints everything under /assets/, so a name never changes content. */
 const IMMUTABLE = "public, max-age=31536000, immutable";
+
+/** The types of what the build holds, by extension. */
+const TYPES: Readonly<Record<string, string>> = {
+  ".js": "text/javascript;charset=utf-8",
+  ".css": "text/css;charset=utf-8",
+  ".html": "text/html;charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".woff2": "font/woff2",
+};
 
 export class MissingDist extends Error {
   override readonly name = "MissingDist";
@@ -50,8 +61,8 @@ function load(path: string, urlPath: string): StaticFile {
   const bytes = new Uint8Array(readFileSync(path));
   return {
     bytes,
-    type: Bun.file(path).type,
-    etag: `"${Bun.hash(bytes).toString(36)}"`,
+    type: TYPES[extname(path).toLowerCase()] ?? "application/octet-stream",
+    etag: `"${hash("sha1", bytes, "base64url")}"`,
     cache: urlPath.startsWith("/assets/") ? IMMUTABLE : "no-cache",
   };
 }
@@ -60,7 +71,7 @@ function load(path: string, urlPath: string): StaticFile {
 export function loadStaticSite(dist = webDist()): StaticSite {
   let root: string;
   try {
-    root = realpathSync(dist);
+    root = realpathSync.native(dist);
     statSync(join(root, "index.html"));
   } catch {
     throw new MissingDist(`The web app is not built: ${dist} has no index.html`);
@@ -72,7 +83,7 @@ export function loadStaticSite(dist = webDist()): StaticSite {
       if (name.startsWith(".") || !PLAIN_SEGMENT.test(name)) continue;
       let real: string;
       try {
-        real = realpathSync(join(dir, name));
+        real = realpathSync.native(join(dir, name));
       } catch {
         continue;
       }

@@ -2,12 +2,12 @@
 // synthetic fact files, with the embedding call stubbed. Each replays here through
 // ingestFactsMain, in order, over the same files, stub and EMBED_DIM.
 
-import { Database } from "bun:sqlite";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import {
   dataHome,
   installSettings,
@@ -24,6 +24,7 @@ import {
   openTable,
   resetEmbeddingClient,
 } from "@eidolon/retrieval";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { ingestFactsMain, parseIngestFactsArgs } from "../src/ingest_facts.ts";
 import { blockNetwork, captureIo, captureLogs, placehold, substitute } from "./helpers.ts";
 
@@ -46,9 +47,12 @@ interface Scenario {
   cache_count: number | null;
 }
 
-const golden = (await Bun.file(
-  join(PROJECT_ROOT, "packages/ingest/test/fixtures/ingest_facts/golden.json"),
-).json()) as { fact_files: Record<string, string>; scenarios: Scenario[] };
+const golden = JSON.parse(
+  await readFile(
+    join(PROJECT_ROOT, "packages/ingest/test/fixtures/ingest_facts/golden.json"),
+    "utf8",
+  ),
+) as { fact_files: Record<string, string>; scenarios: Scenario[] };
 
 const ISOLATED = [
   "FACTS_FILES",
@@ -165,9 +169,9 @@ async function tableState(dbPath: string, name: string): Promise<Scenario["state
 
 function cacheCount(path: string): number | null {
   if (!existsSync(path)) return null;
-  const db = new Database(path, { readonly: true });
+  const db = new DatabaseSync(path, { readOnly: true });
   try {
-    return Number(db.query("SELECT COUNT(*) FROM embed_cache").values()[0]?.[0]);
+    return Number(db.prepare("SELECT COUNT(*) AS n FROM embed_cache").get()?.n);
   } finally {
     db.close();
   }

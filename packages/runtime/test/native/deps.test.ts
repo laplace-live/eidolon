@@ -1,11 +1,12 @@
 // What a call runs on outside the tests, and the models it warms.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { defaultEngineDeps, runTurn } from "@eidolon/engine";
 import { openRealtime } from "@eidolon/providers/realtime";
 import { openSpeech } from "@eidolon/providers/speech-stream";
 import { openStt } from "@eidolon/providers/stt";
 import { voiceModels } from "@eidolon/voice";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { warmAudioModels } from "../../src/index.ts";
 import { productionCallDeps } from "../../src/native/deps.ts";
 import { BOT_ABOUT } from "../../src/rtvi.ts";
@@ -56,7 +57,7 @@ describe("productionCallDeps", () => {
     clock.setTimer(5, () => fired.push("kept"));
     const cancel = clock.setTimer(5, () => fired.push("cancelled"));
     cancel();
-    await Bun.sleep(30);
+    await delay(30);
     expect(fired).toEqual(["kept"]);
     expect(clock.now() - start).toBeGreaterThanOrEqual(5);
   });

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { runChatStoreContract } from "../src/contract.ts";
 import { MemoryChatStore } from "../src/index.ts";
 

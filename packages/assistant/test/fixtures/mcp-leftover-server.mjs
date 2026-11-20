@@ -5,11 +5,7 @@ import { spawn } from "node:child_process";
 
 const helper = spawn(
   process.execPath,
-  [
-    "--no-env-file",
-    "-e",
-    "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000)",
-  ],
+  ["-e", "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000)"],
   { stdio: ["ignore", "pipe", "ignore"] },
 );
 helper.stdout.once("data", () => {

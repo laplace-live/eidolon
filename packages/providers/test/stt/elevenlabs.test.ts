@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, expect, jest, test } from "bun:test";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
 import { elevenLabsUrl, openElevenLabsStt } from "../../src/stt/elevenlabs.ts";
+import { useFakeClock } from "../clock.ts";
 import {
   captureLogs,
   defaultSelection,
@@ -14,14 +15,14 @@ import {
 
 let server: FakeServer;
 let logs: ReturnType<typeof captureLogs>;
-beforeEach(() => {
-  server = new FakeServer();
+beforeEach(async () => {
+  server = await FakeServer.start();
   logs = captureLogs();
 });
-afterEach(() => {
-  jest.useRealTimers();
+afterEach(async () => {
+  vi.useRealTimers();
   setUsageSink(null);
-  server.stop();
+  await server.stop();
   logs.restore();
 });
 
@@ -80,13 +81,13 @@ test("partials are interim, commits are finalized segments, and errors are repor
 });
 
 test("sends 100 ms of silence once 10 s pass without audio", async () => {
-  jest.useFakeTimers();
+  useFakeClock();
   const stt = await open();
   const peer = await server.connection();
-  jest.advanceTimersByTime(5_000);
+  vi.advanceTimersByTime(5_000);
   stt.send(new Int16Array([3]));
   expect(await peer.next()).toBe(chunk("AwA=", false));
-  jest.advanceTimersByTime(10_000);
+  vi.advanceTimersByTime(10_000);
   const silence = Buffer.alloc(3200).toString("base64");
   expect(await peer.next()).toBe(chunk(silence, false));
   await stt.close();

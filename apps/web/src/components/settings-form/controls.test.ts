@@ -1,4 +1,3 @@
-import { describe, expect, test } from "bun:test";
 import { CHAT_DISPLAYS, PERMISSION_LEVELS } from "@eidolon/chat";
 import {
   DEFAULT_ASSISTANT_PERMISSIONS,
@@ -13,6 +12,7 @@ import {
   SETTINGS,
   type SettingField,
 } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import type { SettingRow } from "../../lib/api";
 import { defaultModel, roleById } from "../../lib/providers";
 import {

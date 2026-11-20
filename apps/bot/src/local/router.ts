@@ -1,10 +1,10 @@
-// The local API under /api/local. A single Bun wildcard route hands every request here, so no
-// exact route can fall through to the bot's fallback and its allow-every-origin preflight answer;
-// the 404 and 405 are this router's own. Each route runs one pipeline: the session check, the
-// idle-timeout opt-out, a logged 500, no-store, and the access line.
+// The local API under /api/local. A single wildcard route hands every request here, so no exact
+// route can fall through to the bot's fallback and its allow-every-origin preflight answer; the 404
+// and 405 are this router's own. Each route runs one pipeline: the session check, a logged 500,
+// no-store, and the access line.
 import type { MemoryAdmin } from "@eidolon/memory";
-import type { BunRequest } from "bun";
 import { logAccess, type RouteHandler, type RouteServer } from "../app.ts";
+import { matchSegments } from "../routing.ts";
 import type { LocalRoute } from "./api.ts";
 import { internalError, localError, NO_STORE } from "./responses.ts";
 
@@ -138,12 +138,11 @@ export function localRoute(
   handler: LocalHandler,
   authenticate: Authenticate,
 ): RouteHandler {
-  return async (request: BunRequest, server: RouteServer) => {
+  return async (request, server) => {
     if (request.method !== method) {
       const refused = localError(405, "method-not-allowed", `Use ${method}`, { allow: method });
       return finish(request, server, refused);
     }
-    server.timeout(request, 0);
     return finish(request, server, await respond(request, server, { handler }, {}, authenticate));
   };
 }
@@ -160,24 +159,6 @@ function compile(spec: LocalRouteSpec): CompiledRoute {
   return { ...spec, method, pattern, literals: pattern.filter((s) => !s.startsWith(":")).length };
 }
 
-function match(
-  pattern: readonly string[],
-  segments: readonly string[],
-): Record<string, string> | null {
-  if (pattern.length !== segments.length) return null;
-  const params: Record<string, string> = {};
-  for (const [i, want] of pattern.entries()) {
-    const got = segments[i] as string;
-    if (want.startsWith(":")) {
-      if (got === "") return null;
-      params[want.slice(1)] = got;
-    } else if (want !== got) {
-      return null;
-    }
-  }
-  return params;
-}
-
 function decodeParams(raw: Record<string, string>): Record<string, string> | null {
   const params: Record<string, string> = {};
   try {
@@ -188,7 +169,7 @@ function decodeParams(raw: Record<string, string>): Record<string, string> | nul
   return params;
 }
 
-/** The handler for Bun's `/api/local/*` route. Routes with literal segments beat parameters. */
+/** The handler for the `/api/local/*` route. Routes with literal segments beat parameters. */
 export function createLocalRouter(
   specs: readonly LocalRouteSpec[],
   authenticate: Authenticate,
@@ -199,13 +180,10 @@ export function createLocalRouter(
     if (seen.has(route.route)) throw new Error(`${route.route} is registered twice`);
     seen.add(route.route);
   }
-  return async (request: BunRequest, server: RouteServer) => {
-    // Job events stream for as long as a job runs; Bun would cut them after 10 s of quiet.
-    server.timeout(request, 0);
-    // Bun matches the wildcard on the raw path, which `..` segments can lead out of /api/local.
+  return async (request, server) => {
     const segments = new URL(request.url).pathname.split("/");
     const candidates = table
-      .map((route) => ({ route, raw: match(route.pattern, segments) }))
+      .map((route) => ({ route, raw: matchSegments(route.pattern, segments) }))
       .filter((found): found is { route: CompiledRoute; raw: Record<string, string> } => {
         return found.raw !== null;
       });

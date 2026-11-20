@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { PlanVideo } from "@eidolon/ingest/progress";
+import { describe, expect, test } from "vitest";
 import {
   downloadBatches,
   estimateAudioBytes,

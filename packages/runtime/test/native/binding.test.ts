@@ -2,11 +2,11 @@
 // fake recognizer and voice, the real hearing models and the real engine on a scripted mind. It
 // opens on the chat and reports her lines, context blocks, photos and end, in order.
 import "../../../config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { AllowedOffer, UserContext } from "@eidolon/access";
-import { AsyncQueue, activePersona, dataHome, resetSettings } from "@eidolon/config";
+import { AsyncQueue, activePersona, dataHome, newId, resetSettings } from "@eidolon/config";
 import { buildGreetingKickoff } from "@eidolon/context";
 import type { ContextProvider, LlmTool } from "@eidolon/core";
 import {
@@ -24,6 +24,7 @@ import { MEM0_STORE_KEY } from "@eidolon/memory";
 import type { RealtimeEvent, RealtimeSession } from "@eidolon/providers/realtime";
 import { type CallDeps, voiceModels } from "@eidolon/voice";
 import { createSignallingServerWith, peerCallTransport } from "@eidolon/webrtc";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { RTCPeerConnection } from "werift";
 import { packHistory } from "../../../voice/src/call/realtime.ts";
 import {
@@ -129,7 +130,7 @@ function engine(
     }),
     saveAttachment: () => Promise.reject(new Error("a call keeps no files")),
     fetchImage: () => Promise.reject(new Error("a call fetches no images")),
-    newId: () => Bun.randomUUIDv7(),
+    newId,
     speech: {
       canSpeak: () => false,
       synthesize: () => Promise.reject(new Error("a call speaks no voice messages")),
@@ -347,7 +348,7 @@ describe("a call bound to a chat", () => {
     await c.play(720);
     await c.hangUp();
     const atEnd = [...c.lines];
-    await Bun.sleep(50);
+    await delay(50);
     const expected: Line[] = [
       { role: "assistant", text: "你好呀，又见面了。", interrupted: false, persona: "bob" },
       { role: "user", text: "今天吃什么", interrupted: false, persona: "bob" },

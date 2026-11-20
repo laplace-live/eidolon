@@ -2,7 +2,7 @@
 // voice role: the Ear, the Floor, her Mouth and the Speaker around one mailbox, from the client's
 // connection to the call's end.
 import { joinSegments } from "@eidolon/chat";
-import { errorText, logger, withPersona } from "@eidolon/config";
+import { errorText, logger, newId, withPersona } from "@eidolon/config";
 import { INTERRUPTED_EMPTY_TURN_PROMPT } from "@eidolon/context";
 import type { SttStream } from "@eidolon/providers/stt";
 import { runEar } from "../input/ear.ts";
@@ -80,7 +80,7 @@ export function runCascadeCall(
         mouth,
         turn: (request) => deps.runTurn(request, deps.engine),
         nudge: INTERRUPTED_EMPTY_TURN_PROMPT,
-        newId: () => Bun.randomUUIDv7(),
+        newId,
         onEnding: () => void close(),
         ...(group === null ? {} : { group }),
       });

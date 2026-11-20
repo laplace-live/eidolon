@@ -1,7 +1,7 @@
 // fixtures/transcribe/render.golden.json holds what each fixtures/transcribe/glossary/*.toml loads
 // to, and the create bodies the soniox SDK built.
-import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   consoleSink,
@@ -11,11 +11,12 @@ import {
   PROJECT_ROOT,
   pyJsonDumps,
 } from "@eidolon/config";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { transcribe } from "../src/index.ts";
 
 const { apiContext, loadContext, summarizeContext, TranscribeError } = transcribe;
 
-const GLOSSARIES = join(import.meta.dir, "fixtures/transcribe/glossary");
+const GLOSSARIES = join(import.meta.dirname, "fixtures/transcribe/glossary");
 
 interface ContextCase {
   name: string;
@@ -27,9 +28,9 @@ interface ContextCase {
   sdk_accepts?: boolean;
 }
 
-const golden = (await Bun.file(
-  join(import.meta.dir, "fixtures/transcribe/render.golden.json"),
-).json()) as {
+const golden = JSON.parse(
+  await readFile(join(import.meta.dirname, "fixtures/transcribe/render.golden.json"), "utf8"),
+) as {
   contexts: ContextCase[];
   create_bodies: Record<string, string>;
   real_glossary: { chars: number; sha256: string; summary: string; create_body_sha256: string };

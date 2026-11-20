@@ -1,7 +1,7 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test, vi } from "vitest";
 import { linguiMacro } from "@/test/lingui-macro";
 
-mock.module("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
 const { callLine } = await import("./call-line");
 
 const started = { kind: "call", seq: 4, edge: "started", persona: "mio" } as const;

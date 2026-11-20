@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { OpenAIClient, type OpenAIClientOptions } from "../src/index.ts";
+import { describe, expect, test } from "vitest";
+import { OpenAIClient, type OpenAIClientOptions, spawnProcess } from "../src/index.ts";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -130,11 +130,10 @@ describe("OpenAIClient", () => {
   });
 
   test("a cancel during the default retry wait clears its timer, so the process exits at once", async () => {
-    const module = join(import.meta.dir, "../src/openai-http.ts");
-    const child = Bun.spawn(
+    const module = join(import.meta.dirname, "../src/openai-http.ts");
+    const child = spawnProcess(
       [
         process.execPath,
-        "--no-env-file",
         "-e",
         `const { OpenAIClient } = await import(${JSON.stringify(module)});
          const controller = new AbortController();

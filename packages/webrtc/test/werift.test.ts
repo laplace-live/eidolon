@@ -1,12 +1,13 @@
 // @eidolon/webrtc's werift corrections: each patches werift once, however often it loads.
-import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { describe, expect, test } from "vitest";
 import { Connection, UdpTransport } from "werift";
 import { closeWhenDtlsCloses } from "../src/patches.ts";
 // Patches werift as it loads, as patches.ts does.
 import "../src/peer.ts";
+import { setTimeout as delay } from "node:timers/promises";
 
-const SRC = join(import.meta.dir, "..", "src");
+const SRC = join(import.meta.dirname, "..", "src");
 
 test("loading a patch again changes nothing", async () => {
   const gatherCandidates = Connection.prototype.gatherCandidates;
@@ -67,17 +68,17 @@ describe("the werift patches", () => {
     test("the remote closing the only DTLS transport disconnects the peer", async () => {
       const fake = fakePeer(["connected"]);
       fake.close(0);
-      await Bun.sleep(0);
+      await delay(0);
       expect(fake.disconnects()).toBe(1);
     });
 
     test("waits until every DTLS transport has closed", async () => {
       const fake = fakePeer(["connected", "connected"]);
       fake.close(0);
-      await Bun.sleep(0);
+      await delay(0);
       expect(fake.disconnects()).toBe(0);
       fake.close(1);
-      await Bun.sleep(0);
+      await delay(0);
       expect(fake.disconnects()).toBe(1);
     });
 
@@ -85,7 +86,7 @@ describe("the werift patches", () => {
       const fake = fakePeer(["connected"]);
       fake.peer.connectionState = "closed";
       fake.close(0);
-      await Bun.sleep(0);
+      await delay(0);
       expect(fake.disconnects()).toBe(0);
     });
   });

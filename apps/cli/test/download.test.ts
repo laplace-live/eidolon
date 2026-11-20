@@ -1,12 +1,12 @@
 // laplace-download, replayed from the goldens in packages/ingest/test/fixtures/download with
 // fake-yt-dlp.sh as yt-dlp.
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sourceFolder } from "@eidolon/config";
 import { acquireLock, sourcesLockKey } from "@eidolon/ingest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   downloadGolden as golden,
   installFakeYtDlp,

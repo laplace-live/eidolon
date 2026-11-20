@@ -1,8 +1,8 @@
 // POST and PATCH /api/offer, its peers' negotiation stood in for: the answers, status codes and
 // bodies, per-offer plans and relay-only rules.
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { type AllowedOffer, ANONYMOUS } from "@eidolon/access";
 import type { ServerIcePlan } from "@eidolon/turn";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { OpusCodec, OpusEncoder, OpusEncoderOptions } from "../src/opus.ts";
 import type { CandidateRules, DtlsClosable } from "../src/patches.ts";
 import { type IceCandidate, Peer } from "../src/peer.ts";
@@ -33,19 +33,19 @@ function standIn(hooks: {
   const proto = Peer.prototype;
   const answers = new WeakMap<Peer, { sdp: string; type: string }>();
   const spies = [
-    spyOn(proto, "initialize").mockImplementation(async function (this: Peer, sdp: string) {
+    vi.spyOn(proto, "initialize").mockImplementation(async function (this: Peer, sdp: string) {
       answers.set(this, await hooks.initialize(this, sdp));
     }),
-    spyOn(proto, "getAnswer").mockImplementation(function (this: Peer) {
+    vi.spyOn(proto, "getAnswer").mockImplementation(function (this: Peer) {
       const answer = answers.get(this);
       return answer === undefined ? null : { ...answer, pc_id: this.pcId };
     }),
-    spyOn(proto, "renegotiate").mockImplementation(function (this: Peer, options) {
+    vi.spyOn(proto, "renegotiate").mockImplementation(function (this: Peer, options) {
       return hooks.renegotiate(this, options);
     }),
-    spyOn(proto, "addIceCandidate").mockImplementation((candidate) =>
-      hooks.addIceCandidate(candidate),
-    ),
+    vi
+      .spyOn(proto, "addIceCandidate")
+      .mockImplementation((candidate) => hooks.addIceCandidate(candidate)),
   ];
   return () => {
     for (const spy of spies) spy.mockRestore();
@@ -381,7 +381,7 @@ describe("the signalling server", () => {
       const first = await signalling.offer(admission({ sdp: "A", type: "offer" }));
       const pcId = (first.body as { pc_id: string }).pc_id;
       const connection = built[0]!.connection;
-      const disconnect = spyOn(connection, "disconnect").mockImplementation(async () => {});
+      const disconnect = vi.spyOn(connection, "disconnect").mockImplementation(async () => {});
       const handlers: ((state: string) => void)[] = [];
       const dtls = {
         state: "connected",
@@ -551,7 +551,7 @@ describe("the signalling server", () => {
     });
 
     test("close() disconnects every peer and forgets them", async () => {
-      const disconnect = spyOn(Peer.prototype, "disconnect");
+      const disconnect = vi.spyOn(Peer.prototype, "disconnect");
       try {
         const { signalling } = server([STUN_PLAN]);
         const a = await signalling.offer(admission({ sdp: "A", type: "offer" }));

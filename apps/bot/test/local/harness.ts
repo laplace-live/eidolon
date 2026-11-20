@@ -218,6 +218,19 @@ export interface RawResponse {
   readonly body: string;
 }
 
+/** A chunked body's bytes, without the chunk sizes and trailers between them. */
+function dechunk(body: Buffer): Buffer {
+  const parts: Buffer[] = [];
+  let at = 0;
+  for (;;) {
+    const end = body.indexOf("\r\n", at);
+    const size = end === -1 ? 0 : Number.parseInt(body.subarray(at, end).toString("latin1"), 16);
+    if (!(size > 0)) return Buffer.concat(parts);
+    parts.push(body.subarray(end + 2, end + 2 + size));
+    at = end + 2 + size + 2;
+  }
+}
+
 /** One HTTP/1.1 exchange over a socket, sent byte for byte: `..`, odd Hosts, no Host at all. */
 export function raw(port: number, head: string, body = ""): Promise<RawResponse> {
   return new Promise((resolve, reject) => {
@@ -226,18 +239,24 @@ export function raw(port: number, head: string, body = ""): Promise<RawResponse>
     socket.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     socket.on("error", reject);
     socket.on("end", () => {
-      const text = Buffer.concat(chunks).toString("utf8");
-      const split = text.indexOf("\r\n\r\n");
-      const [statusLine, ...lines] = text.slice(0, split).split("\r\n");
+      const bytes = Buffer.concat(chunks);
+      const split = bytes.indexOf("\r\n\r\n");
+      const [statusLine, ...lines] = bytes
+        .subarray(0, split === -1 ? bytes.length : split)
+        .toString("utf8")
+        .split("\r\n");
       const headers = new Map<string, string>();
       for (const line of lines) {
         const colon = line.indexOf(":");
         headers.set(line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim());
       }
+      const rest = split === -1 ? Buffer.alloc(0) : bytes.subarray(split + 4);
       resolve({
         status: Number((statusLine ?? "").split(" ")[1]),
         headers,
-        body: text.slice(split + 4),
+        body: (headers.get("transfer-encoding") === "chunked" ? dechunk(rest) : rest).toString(
+          "utf8",
+        ),
       });
     });
     socket.write(`${head.replace(/\n/g, "\r\n")}\r\nConnection: close\r\n\r\n${body}`);

@@ -1,5 +1,4 @@
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   copyFileSync,
   existsSync,
@@ -9,10 +8,12 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataHome, installSettings, PyFloat, resetSettings } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   ask,
   type GateRow,
@@ -45,7 +46,9 @@ interface Stats {
   q4: number[];
 }
 
-const ANSWERS: Record<string, string> = await Bun.file(join(FIX, "gate/answers.json")).json();
+const ANSWERS: Record<string, string> = JSON.parse(
+  await readFile(join(FIX, "gate/answers.json"), "utf8"),
+);
 // The fake clock's steps in milliseconds, which the goldens' latencies follow.
 const STEPS = [460.9375, 250, 125, 527.34375, 0.9765625, 1500];
 const goldens = await golden<{ runs: Run[]; stats: Stats[] }>("gate_decisions.json");

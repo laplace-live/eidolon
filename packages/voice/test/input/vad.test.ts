@@ -7,7 +7,7 @@
 // The port runs 16 kHz only, so the 8 kHz cases run at 16 kHz, and its typed input has no
 // dimensions to get wrong. The repository keeps no audio: syntheticSpeech stands in for the Kokoro
 // clip, at its level.
-import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { type SileroModel, Vad, type VadState } from "../../src/input/vad.ts";
 import {
   concat,

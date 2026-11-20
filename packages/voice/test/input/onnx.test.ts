@@ -1,9 +1,54 @@
-import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { PROJECT_ROOT } from "@eidolon/config";
+import { PROJECT_ROOT, spawnProcess } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import { sharedSession } from "../../src/input/onnx.ts";
 import { voiceModels } from "../../src/models.ts";
 import { SILERO_MODEL, SMART_TURN_MODEL } from "./speech.ts";
+
+/**
+ * The exit code, and ORT_DISABLE_TELEMETRY as getenv reads it when ORT loads, in a process whose
+ * environment sets it to `value`: a stand-in ORT records it as sharedSession imports it.
+ */
+async function telemetryAtLoad(value: string | undefined): Promise<[number, string]> {
+  const env: Record<string, string> = {};
+  for (const [name, set] of Object.entries(process.env)) {
+    if (set !== undefined && name !== "ORT_DISABLE_TELEMETRY") env[name] = set;
+  }
+  if (value !== undefined) env.ORT_DISABLE_TELEMETRY = value;
+  const onnx = join(import.meta.dirname, "../../src/input/onnx.ts");
+  const getenv = join(import.meta.dirname, "getenv.ts");
+  const child = spawnProcess(
+    [
+      process.execPath,
+      "-e",
+      `const { cEnv } = await import(${JSON.stringify(getenv)});
+let seen = "never loaded";
+globalThis.ortLoads = () => {
+  seen = String(cEnv("ORT_DISABLE_TELEMETRY"));
+};
+(await import("node:module")).registerHooks({
+  resolve: (specifier, context, next) =>
+    specifier === "onnxruntime-node"
+      ? { url: "stub:onnxruntime-node", shortCircuit: true }
+      : next(specifier, context),
+  load: (url, context, next) =>
+    url === "stub:onnxruntime-node"
+      ? {
+          format: "module",
+          shortCircuit: true,
+          source: "globalThis.ortLoads(); export const InferenceSession = { create: async () => ({ outputNames: [] }) };",
+        }
+      : next(url, context),
+});
+const { sharedSession } = await import(${JSON.stringify(onnx)});
+await sharedSession("model.onnx");
+process.stdout.write(seen);`,
+    ],
+    { env },
+  );
+  const [code, text] = await Promise.all([child.exited, new Response(child.stdout).text()]);
+  return [code, text];
+}
 
 describe("onnx sessions", () => {
   test("the ORT build is the pinned 1.30.0: another shifts Smart Turn's probabilities", async () => {
@@ -15,51 +60,11 @@ describe("onnx sessions", () => {
   });
 
   test("ORT's telemetry is off by the time it loads, where its getenv reads it", async () => {
-    const onnx = join(import.meta.dir, "../../src/input/onnx.ts");
-    const getenv = join(import.meta.dir, "getenv.ts");
-    const env: Record<string, string | undefined> = { ...process.env };
-    delete env.ORT_DISABLE_TELEMETRY;
-    // A stand-in ORT records what its getenv would read as it loads.
-    const child = Bun.spawn(
-      [
-        process.execPath,
-        "--no-env-file",
-        "-e",
-        `const { cEnv } = await import(${JSON.stringify(getenv)});
-let seen = "never loaded";
-Bun.plugin({
-  setup(build) {
-    build.module("onnxruntime-node", () => {
-      seen = String(cEnv("ORT_DISABLE_TELEMETRY"));
-      return { exports: { InferenceSession: { create: async () => ({ outputNames: [] }) } }, loader: "object" };
-    });
-  },
-});
-const { sharedSession } = await import(${JSON.stringify(onnx)});
-await sharedSession("model.onnx");
-process.stdout.write(seen);`,
-      ],
-      { env, stdout: "pipe", stderr: "inherit" },
-    );
-    expect([await child.exited, await new Response(child.stdout).text()]).toEqual([0, "1"]);
+    expect(await telemetryAtLoad(undefined)).toEqual([0, "1"]);
   });
 
   test("an ORT_DISABLE_TELEMETRY the environment sets is kept", async () => {
-    const onnx = join(import.meta.dir, "../../src/input/onnx.ts");
-    const getenv = join(import.meta.dir, "getenv.ts");
-    const child = Bun.spawn(
-      [
-        process.execPath,
-        "--no-env-file",
-        "-e",
-        `const { cEnv } = await import(${JSON.stringify(getenv)});
-const { sharedSession } = await import(${JSON.stringify(onnx)});
-await sharedSession(${JSON.stringify(SILERO_MODEL)});
-process.stdout.write(String(cEnv("ORT_DISABLE_TELEMETRY")));`,
-      ],
-      { env: { ...process.env, ORT_DISABLE_TELEMETRY: "0" }, stdout: "pipe", stderr: "inherit" },
-    );
-    expect([await child.exited, await new Response(child.stdout).text()]).toEqual([0, "0"]);
+    expect(await telemetryAtLoad("0")).toEqual([0, "0"]);
   });
 
   test("the models are the committed ones in packages/voice/models", () => {

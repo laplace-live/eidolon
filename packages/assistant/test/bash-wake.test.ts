@@ -1,7 +1,7 @@
 // A task's run around its commands, on the real loop and real processes: a worker that ends its
 // reply while a command runs is woken by how it ended, and a server stopping during that wait
 // leaves the end for the run that resumes.
-import { afterAll, describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { abortableSleep } from "@eidolon/config";
 import {
   type Mind,
@@ -15,6 +15,7 @@ import {
   type TaskRequest,
   type TaskStore,
 } from "@eidolon/engine";
+import { afterAll, describe, expect, test } from "vitest";
 import { createBashTools } from "../src/tools/bash.ts";
 import { BashJobs } from "../src/tools/jobs.ts";
 import { bashOffered } from "../src/tools/shell.ts";
@@ -190,7 +191,7 @@ describe.skipIf(!bashOffered())("a task's run around its commands", () => {
     leave.abort();
     const returned = reader.return({ status: "cancelled" }).catch(() => {});
     await jobs.killAll("shutdown");
-    await Promise.race([Promise.all([pending, returned]), Bun.sleep(2000)]);
+    await Promise.race([Promise.all([pending, returned]), delay(2000)]);
     const before = (await store.entries()).map((entry) => entry.type);
     expect(before).toEqual(["brief", "assistant", "tool-start", "tool-result", "assistant"]);
 

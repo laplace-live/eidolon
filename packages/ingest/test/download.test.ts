@@ -2,7 +2,7 @@
 // fake-yt-dlp.sh as yt-dlp. Where the library differs from a golden on purpose, the test says so
 // and applies the difference to the golden's output.
 import "../../config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   consoleSink,
   type LogRecord,
@@ -22,6 +23,7 @@ import {
   setLogLevel,
   sortedPy,
 } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { binDir, download, type ProgressEvent } from "../src/index.ts";
 import {
   DOWNLOAD_FIXTURES,
@@ -119,10 +121,10 @@ describe("ytDlpArgs", () => {
     }
   });
 
-  test("only the managed yt-dlp gets Bun as its JavaScript runtime: another may predate the flag", () => {
+  test("only the managed yt-dlp gets Node as its JavaScript runtime: another may predate the flag", () => {
     expect(download.jsRuntimeArgs({ source: "managed" })).toEqual([
       "--js-runtimes",
-      `bun:${process.execPath}`,
+      `node:${process.execPath}`,
     ]);
     expect(download.jsRuntimeArgs({ source: "setting" })).toEqual([]);
     expect(download.jsRuntimeArgs({ source: "path" })).toEqual([]);
@@ -315,7 +317,7 @@ describe("downloadUrls against download_urls", () => {
       vodsDir: vods,
       ytDlp: { path: join(work, "missing-yt-dlp"), source: "setting" },
     });
-    const message = `ENOENT: no such file or directory, posix_spawn '${join(work, "missing-yt-dlp")}'`;
+    const message = `spawn ${join(work, "missing-yt-dlp")} ENOENT`;
     expect(report.failedUrls).toEqual([
       { url: "https://example.invalid/ok/BV1aaaaaaaa1", error: message },
     ]);
@@ -475,7 +477,8 @@ describe("events", () => {
         onProgress: (e) => events.push(e),
       },
     );
-    while (!existsSync(log)) await Bun.sleep(10);
+    // The shell creates the log before printf writes to it.
+    while (readArgvLog(log)[0]?.at(-1) !== "https://example.invalid/hang") await delay(10);
     controller.abort();
     const started = performance.now();
     const report = await running;
@@ -522,7 +525,7 @@ describe("after an HTTP 412", () => {
         });
       }
       if (url.endsWith("/SHA2-256SUMS")) {
-        const hash = new Bun.CryptoHasher("sha256").update(ASSET).digest("hex");
+        const hash = createHash("sha256").update(ASSET).digest("hex");
         return new Response(`${hash}  yt-dlp_linux\n${"0".repeat(64)}  yt-dlp_macos\n`);
       }
       return new Response(ASSET);
@@ -548,9 +551,9 @@ describe("after an HTTP 412", () => {
       "https://github.com/yt-dlp/yt-dlp/releases/download/2026.11.01/SHA2-256SUMS",
       "https://github.com/yt-dlp/yt-dlp/releases/download/2026.11.01/yt-dlp_linux",
     ]);
-    // Both copies are managed ones, so each gets this Bun for YouTube's challenges.
+    // Both copies are managed ones, so each gets this Node for YouTube's challenges.
     expect(readArgvLog(join(work, "argv.log")).map((call) => call.slice(0, 3))).toEqual(
-      Array(2).fill(["--ignore-config", "--js-runtimes", `bun:${process.execPath}`]),
+      Array(2).fill(["--ignore-config", "--js-runtimes", `node:${process.execPath}`]),
     );
     expect(events.filter((e) => e.type === "stage" && e.stage === "setup")).toEqual([
       { type: "stage", stage: "setup", status: "start", message: "yt-dlp 2026.11.01" },
@@ -611,7 +614,7 @@ describe("expandPlaylist", () => {
     ]);
   });
 
-  test("the managed yt-dlp also gets this Bun for YouTube's JavaScript challenges", async () => {
+  test("the managed yt-dlp also gets this Node for YouTube's JavaScript challenges", async () => {
     await download.expandPlaylist("https://example.invalid/playlist/1", {
       ytDlp: { path: fake, source: "managed", tag: "2026.10.26" },
       cookiesFromBrowser: null,
@@ -621,7 +624,7 @@ describe("expandPlaylist", () => {
       [
         "--ignore-config",
         "--js-runtimes",
-        `bun:${process.execPath}`,
+        `node:${process.execPath}`,
         "--flat-playlist",
         "--print",
         "%(.{webpage_url,id,title,duration,live_status})j",

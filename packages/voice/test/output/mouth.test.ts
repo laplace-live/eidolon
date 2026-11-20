@@ -1,9 +1,10 @@
 // The Mouth on a scripted speech stream and the real Speaker, with the test pulling audio and
 // handing the cursor's events back as the Floor does.
-import { describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { AsyncQueue } from "@eidolon/config";
 import { type Markup, select } from "@eidolon/providers";
 import type { SpeechStream, Utterance, UtteranceAudio } from "@eidolon/providers/speech-stream";
+import { describe, expect, test } from "vitest";
 import { resampler } from "../../src/dsp/resampler/index.ts";
 import {
   Mouth,
@@ -20,7 +21,7 @@ import { FakeClock } from "../input/clock.ts";
 const join = (parts: readonly string[]) => parts.join("|");
 
 /** Lets the Mouth read the audio the test scripted. */
-const settle = () => Bun.sleep(0);
+const settle = () => delay(0);
 
 /** An utterance that records what it was given; the test scripts its audio. */
 class FakeUtterance implements Utterance {

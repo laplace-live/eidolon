@@ -5,7 +5,7 @@
 // keep its fallback even when .env sets a value.
 import "./load-env.ts";
 import * as access from "@eidolon/access";
-import { logger } from "@eidolon/config";
+import { installHttpDefaults, logger } from "@eidolon/config";
 import * as imagegen from "@eidolon/imagegen";
 import * as memory from "@eidolon/memory";
 import * as retrieval from "@eidolon/retrieval";
@@ -16,10 +16,11 @@ import { parseBotArgs } from "./args.ts";
 import * as mcp from "./mcp/index.ts";
 import { shutdownHandler, startBotServer } from "./server.ts";
 
-// Bun exits on an unhandled rejection, so one stray promise would drop every live call.
+// An unhandled rejection exits the process, so one stray promise would drop every live call.
 process.on("unhandledRejection", (reason) => logger.error("Unhandled rejection", reason));
 
-const args = parseBotArgs(Bun.argv.slice(2));
+installHttpDefaults();
+const args = parseBotArgs(process.argv.slice(2));
 installUsageLedger();
 const bot = await startBotServer(args, {
   access,

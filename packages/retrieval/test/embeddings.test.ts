@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { describe, expect, test } from "vitest";
 import {
   DEFAULT_EMBED_MODEL,
   defaultEmbeddingClient,

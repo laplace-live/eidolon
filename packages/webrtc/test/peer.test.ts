@@ -1,6 +1,7 @@
 // A native call's transport: first over a peer whose events the test fires, then over a real werift
 // peer offering to the signalling server as small-webrtc's client does.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   type RTCDataChannel,
   RTCPeerConnection,
@@ -180,7 +181,7 @@ describe("a native call's transport on a peer", () => {
     await transport.disconnect();
     await transport.disconnect();
     transport.send({ type: "bot-llm-text" });
-    await Bun.sleep(10);
+    await delay(10);
     expect(peer.disconnects).toBe(1);
     expect(peer.sent).toEqual([{ type: "signalling", message: { type: "peerLeft" } }]);
     expect(closed).toBe(false);
@@ -278,7 +279,7 @@ describe.skipIf(!CAN_DIAL)("against a real peer", () => {
   afterEach(async () => {
     for (const client of clients) await client.close();
     await server.close();
-    await Bun.sleep(20);
+    await delay(20);
   });
 
   /** A client's call, connected, with the transport its offer built, playing a tone. */
@@ -339,9 +340,9 @@ describe.skipIf(!CAN_DIAL)("against a real peer", () => {
   test("a client that stops pinging for 3 s has her audio wait, unread", async () => {
     const { client } = await call();
     client.channel.send("ping: 1");
-    await Bun.sleep(100);
+    await delay(100);
     expect(peers[0]?.isConnected()).toBe(true);
-    await Bun.sleep(3_000);
+    await delay(3_000);
     expect(peers[0]?.isConnected()).toBe(false);
     const heard = client.heard.length;
     await until(() => client.heard.length >= heard + 10, 4000);

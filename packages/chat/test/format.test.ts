@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { newId } from "../../config/src/ids.ts";
 import {
   attachmentExtension,
   attachmentKind,
@@ -243,9 +244,9 @@ describe("canonicalForSig", () => {
 
 describe("ids and attachment names", () => {
   test("a chat id is a lowercase UUID", () => {
-    expect(isChatId(Bun.randomUUIDv7())).toBe(true);
+    expect(isChatId(newId())).toBe(true);
     expect(isChatId(crypto.randomUUID())).toBe(true);
-    expect(isChatId(Bun.randomUUIDv7().toUpperCase())).toBe(false);
+    expect(isChatId(newId().toUpperCase())).toBe(false);
     expect(isChatId("../0190f5c8-0000-7000-8000-000000000000")).toBe(false);
     expect(isChatId("0190f5c8-0000-7000-8000-000000000000\n")).toBe(false);
   });

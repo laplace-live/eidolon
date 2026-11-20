@@ -6,10 +6,13 @@
 // pi's grep cases without context lines, which this grep doesn't have, or those that test rg itself,
 // and with whole-number limits; then the search's own: regexes and case, binary files, the ignore
 // rules, globs, refusals, aborts and arguments.
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { spawnProcess } from "@eidolon/config";
 import type { TaskToolResult } from "@eidolon/engine";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createGrepTool, type GrepDetails } from "../src/tools/grep.ts";
 import { GREP_MAX_LINE_LENGTH } from "../src/tools/truncate.ts";
 import type { AssistantTool, PathGuard } from "../src/types.ts";
@@ -536,17 +539,18 @@ describe("grep's search", () => {
     }
   });
 
-  it("names a line the pattern may have given up on, and searches on past it", async () => {
-    // JavaScriptCore stops backtracking at a limit and reports no match.
-    write("log.txt", `${"a".repeat(30)}!ab\nshort ab\n`);
+  it("names a line the pattern fails on slowly, and searches on past it", async () => {
+    // (a+)+b tries every split of the a's before it fails: about 250 ms for 25 of them once V8 has
+    // compiled it, which its test of the first line does, and five times that before.
+    write("log.txt", `# build\n${"a".repeat(25)}!\nshort ab\n`);
 
     const result = await grep({ pattern: "(a+)+b" });
 
     expect(result.isError).toBeUndefined();
     expect(result.content).toStartWith(
-      "log.txt:2: short ab\n\n[Not searched, the pattern was too slow there: log.txt:1. JavaScript regexes backtrack: avoid nested quantifiers such as (a+)+, and \\w+x or .* after a common word, which rescan a long line from every start",
+      "log.txt:3: short ab\n\n[Not searched, the pattern was too slow there: log.txt:2. JavaScript regexes backtrack: avoid nested quantifiers such as (a+)+, and \\w+x or .* after a common word, which rescan a long line from every start",
     );
-    expect(result.details).toEqual({ unsearched: ["log.txt:1"] });
+    expect(result.details).toEqual({ unsearched: ["log.txt:2"] });
   });
 
   it("returns what it found past a long minified line the pattern is merely slow on", async () => {
@@ -577,8 +581,9 @@ describe("grep's search", () => {
   }, 10_000);
 
   it("stops once lines it can't search have taken five seconds, with what it found", async () => {
+    // a.txt's test compiles the pattern, and each line of log.txt then fails in about 250 ms.
     write("a.txt", "ab\n");
-    write("log.txt", `${"a".repeat(30)}!ab\n`.repeat(60));
+    write("log.txt", `${"a".repeat(25)}!\n`.repeat(60));
     write("z.txt", "ab\n");
 
     const started = performance.now();
@@ -598,35 +603,31 @@ describe("grep's search", () => {
 
   it("ends its matcher with the process that started it, even one killed outright", async () => {
     write("long.txt", `${"x".repeat(1024 * 1024)}\n`);
-    const module = (name: string) => JSON.stringify(join(import.meta.dir, name));
-    const task = Bun.spawn({
-      cmd: [
+    const module = (name: string) => JSON.stringify(join(import.meta.dirname, name));
+    const task = spawnProcess(
+      [
         process.execPath,
-        "--no-env-file",
         "-e",
         `const { createGrepTool } = await import(${module("../src/tools/grep.ts")});
          const { folderGuard, toolContext } = await import(${module("tool-folder.ts")});
          await createGrepTool(folderGuard(${JSON.stringify(testDir)}))
            .execute({ pattern: "\\\\w+bar" }, toolContext());`,
       ],
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "inherit",
-    });
+      { stdin: "ignore", stdout: "ignore", stderr: "inherit" },
+    );
     const children = () =>
-      Bun.spawnSync(["pgrep", "-P", String(task.pid)])
-        .stdout.toString()
-        .split("\n")
+      spawnSync("pgrep", ["-P", String(task.pid)], { encoding: "utf8" })
+        .stdout.split("\n")
         .filter(Boolean)
         .map(Number);
     let matcher: number | undefined;
     for (let wait = 0; wait < 500 && matcher === undefined; wait++) {
-      await Bun.sleep(10);
+      await delay(10);
       matcher = children()[0];
     }
     if (matcher === undefined) throw new Error("grep started no matcher");
     // Busy in its test of the line, so it can't hear its channel close.
-    await Bun.sleep(300);
+    await delay(300);
     task.kill("SIGKILL");
     await task.exited;
     const alive = (pid: number) => {
@@ -639,7 +640,7 @@ describe("grep's search", () => {
     };
     let gone = false;
     for (let wait = 0; wait < 100 && !gone; wait++) {
-      await Bun.sleep(20);
+      await delay(20);
       gone = !alive(matcher);
     }
     if (!gone) process.kill(matcher, "SIGKILL");
@@ -661,9 +662,9 @@ describe("grep's search", () => {
 
   it("fails when its matcher can't start, rather than finding nothing", async () => {
     write("a.txt", "hello needle\n");
-    const bun = process.execPath;
-    // As when the Bun running the task is reinstalled under it.
-    process.execPath = join(testDir, "bun");
+    const node = process.execPath;
+    // As when the Node running the task is reinstalled under it.
+    process.execPath = join(testDir, "node");
     try {
       for (const path of [".", "a.txt"]) {
         const result = await grep({ pattern: "needle", path });
@@ -674,7 +675,7 @@ describe("grep's search", () => {
         ]);
       }
     } finally {
-      process.execPath = bun;
+      process.execPath = node;
     }
   });
 

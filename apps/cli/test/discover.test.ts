@@ -1,10 +1,10 @@
 // laplace-discover: its flags, its JSON, and the batch it writes into the persona's lists.
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sourceFolder } from "@eidolon/config";
 import { download } from "@eidolon/ingest";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { fakeBilibili } from "../../../packages/ingest/test/discover_helpers.ts";
 import { discoverMain } from "../src/index.ts";
 import { blockNetwork, captureIo, captureLogs } from "./helpers.ts";

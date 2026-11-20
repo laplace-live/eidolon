@@ -8,8 +8,8 @@
 // a real RTCIceCandidate whose `.candidate` string is empty. That can't be parsed as a candidate,
 // and addIceCandidate takes `null`, not an empty-string candidate, as the end of candidates: the
 // server forwards `null` for an empty marker instead of failing or dropping it.
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { AllowedOffer } from "@eidolon/access";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { type IceCandidate, Peer } from "../src/peer.ts";
 import { createSignallingServerWith, type SignallingServer } from "../src/signalling.ts";
 
@@ -35,11 +35,11 @@ describe("TestHandlePatchRequest", () => {
   beforeEach(async () => {
     added = [];
     const spies = [
-      spyOn(Peer.prototype, "initialize").mockImplementation(async () => {}),
-      spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
+      vi.spyOn(Peer.prototype, "initialize").mockImplementation(async () => {}),
+      vi.spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
         return { sdp: "v=0\r\n", type: "answer", pc_id: this.pcId };
       }),
-      spyOn(Peer.prototype, "addIceCandidate").mockImplementation(async (candidate) => {
+      vi.spyOn(Peer.prototype, "addIceCandidate").mockImplementation(async (candidate) => {
         added.push(candidate);
       }),
     ];

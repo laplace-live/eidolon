@@ -2,9 +2,9 @@
 // tools and its status block: request tools, offered after hers and her background tools and
 // settled within the turn, and request providers, run after hers, in a chat and in a call alike.
 import "../../config/test/isolated-guard.ts";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { UserContext } from "@eidolon/access";
 import {
   CHAT_FORMAT,
@@ -17,6 +17,7 @@ import {
 } from "@eidolon/chat";
 import { dataHome, resetSettings } from "@eidolon/config";
 import type { ContextProvider, LlmTool, ToolResult } from "@eidolon/core";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { ASYNC_TOOL_INSTRUCTIONS } from "../src/async_tool.ts";
 import { type ChatDeps, type ChatOutput, runChat } from "../src/chat.ts";
 import { runTurn } from "../src/turn.ts";
@@ -232,7 +233,7 @@ async function until(fn: () => boolean): Promise<void> {
   const start = Date.now();
   while (!fn()) {
     if (Date.now() - start > 1000) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 
@@ -528,7 +529,7 @@ describe("a call's request tools and providers", () => {
     expect(checking?.aborted).toBe(true);
     stopping.resolve({ task: 1, status: "cancelled", written: 2 });
     await until(() => results.length > 0);
-    await Bun.sleep(10);
+    await delay(10);
     expect(results).toEqual([
       [
         {

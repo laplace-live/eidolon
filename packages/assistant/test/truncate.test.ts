@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //
 // Ported from pi-mono packages/coding-agent/test/truncate-surrogates.test.ts@ac78a60
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { sliceHead, sliceTail, truncateLine } from "../src/tools/truncate.ts";
 
 const EMOJI = "\u{1F600}"; // two UTF-16 code units: \uD83D\uDE00

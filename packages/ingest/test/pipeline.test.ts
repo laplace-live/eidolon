@@ -1,7 +1,6 @@
 // The pipeline library against fixtures/pipeline/golden.json (see pipeline_helpers.ts): the
 // summary text, the transcribe stage's planning and runs, the plan, and batches. Soniox, the refine
 // provider and the embedding API are fakes.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -20,6 +19,7 @@ import {
   streamChunksSchema,
   writeTable,
 } from "@eidolon/retrieval";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   download,
   LockedError,

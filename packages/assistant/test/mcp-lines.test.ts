@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //
 // Ported from pi-mono packages/mcp/test/lines.test.ts@ac78a60
-import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JsonRpcMessage } from "../src/mcp/protocol/jsonrpc.ts";
 import { JsonRpcLineReader } from "../src/mcp/transports/lines.ts";
 
@@ -24,14 +24,14 @@ function feed(reader: JsonRpcLineReader, bytes: Buffer, chunkSize: number): void
 
 describe("JsonRpcLineReader", () => {
   afterEach(() => {
-    mock.restore();
+    vi.restoreAllMocks();
   });
 
   it("joins a message split across many chunks once, when its newline arrives", () => {
     const { reader, messages, errors } = startReader();
     const text = "x".repeat(1024 * 1024);
     const bytes = Buffer.from(`${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { text } })}\n`);
-    const concat = spyOn(Buffer, "concat");
+    const concat = vi.spyOn(Buffer, "concat");
     feed(reader, bytes, 4096);
     expect(concat).toHaveBeenCalledTimes(1);
     expect(errors).toEqual([]);

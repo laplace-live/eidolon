@@ -8,6 +8,7 @@
 import "../../../apps/cli/src/load-env.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { activePersona, errorText } from "../../../packages/config/src/index.ts";
 import {
@@ -138,8 +139,8 @@ function options(argv: readonly string[]): Options {
     return parsed;
   };
   return {
-    wav: values.wav ?? join(import.meta.dir, "serial.wav"),
-    out: values.out ?? join(import.meta.dir, "results.json"),
+    wav: values.wav ?? join(import.meta.dirname, "serial.wav"),
+    out: values.out ?? join(import.meta.dirname, "results.json"),
     settleMs: wholeMs("settle-ms", values["settle-ms"], 2500),
     warmMs: wholeMs("warm-ms", values["warm-ms"], 2000),
     dryRun: values["dry-run"] ?? false,
@@ -427,10 +428,10 @@ async function measure(opts: Options, selection: Selection): Promise<number> {
   try {
     // The bot opens a session at call setup, long before a reply: so the first flush's time to
     // audio leaves out the handshake.
-    await Bun.sleep(opts.warmMs);
+    await delay(opts.warmMs);
     serial = await serialRun(stream, opts.settleMs);
     if (serial.record.error === null) {
-      await Bun.sleep(opts.warmMs);
+      await delay(opts.warmMs);
       pipelined = await pipelinedRun(stream);
     }
   } finally {
@@ -472,7 +473,7 @@ async function measure(opts: Options, selection: Selection): Promise<number> {
 async function main(): Promise<number> {
   let opts: Options;
   try {
-    opts = options(Bun.argv.slice(2));
+    opts = options(process.argv.slice(2));
   } catch (error) {
     if (!(error instanceof UsageError)) throw error;
     console.error(error.message === "" ? USAGE : `${error.message}\n\n${USAGE}`);

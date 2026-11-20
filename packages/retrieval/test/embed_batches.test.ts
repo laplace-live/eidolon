@@ -1,9 +1,9 @@
 // The golden's scenarios (write_golden.ts) pin each run's log lines, requests, vectors, usage,
 // cache and totals, with the embedding call stubbed.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   DEFAULT_EMBED_MODEL,
   EmbedCache,

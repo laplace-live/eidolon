@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createMemoryAdmin } from "../src/admin.ts";
 import { MemoryEngine, SharedEngine } from "../src/engine.ts";
 import { HistoryStore } from "../src/history.ts";

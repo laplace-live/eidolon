@@ -3,9 +3,10 @@
 //
 // Ported from pi-mono packages/coding-agent/test/edit-diff-window.test.ts@ac78a60
 //
-// Bun takes no heap cap, so the 20 MB file is checked for its output only.
-import { describe, expect, it } from "bun:test";
+// The 20 MB file is checked for its output only: no heap cap here would fail a diff that held it
+// whole.
 import { applyPatch } from "diff";
+import { describe, expect, it } from "vitest";
 import {
   generateDiffString,
   generateEditDiff,

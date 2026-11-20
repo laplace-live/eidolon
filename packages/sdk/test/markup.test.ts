@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { type MarkupToken, parseMarkup, trimTrailingPartialCue } from "../src/index.ts";
 
 /** The tokens without offsets, which only the spoken split reads. */

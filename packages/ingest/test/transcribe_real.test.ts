@@ -2,10 +2,10 @@
 // byte for byte, the sliced ones included, from the payload alone; the real transcripts are the
 // golden. The skip rule must find each from its audio. Each test skips when its data is absent,
 // unless EIDOLON_REQUIRE_PARITY=1.
-import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isPlainObject, sortedPy } from "@eidolon/config";
+import { expect, test } from "vitest";
 import { transcribe } from "../src/index.ts";
 
 const SOURCES = join(process.env.EIDOLON_REAL_HOME ?? "", "sources/milky-green");

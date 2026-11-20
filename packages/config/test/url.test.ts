@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { withoutTrailingSlashes } from "../src/url.ts";
 
 test("a URL loses every trailing slash, and nothing else", () => {

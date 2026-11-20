@@ -1,5 +1,5 @@
 // The Opus seam: the offer's bitrate on every encoder a peer makes.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   libopusWasmCodec,
   type OpusCodec,

@@ -6,6 +6,7 @@
 // readers consult this layer, so a value parses and warns exactly as it would from the environment.
 import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { parse as parseYaml } from "yaml";
 import { ACCOUNTS_KEY, type AccountEntry, accountProvider, parseAccounts } from "./accounts.ts";
 import { envVariable, setFileLayer } from "./env.ts";
 import { DEFAULT_PERSONA, dataHome, personaDirs, personaIds, resolvePersonaPath } from "./home.ts";
@@ -498,14 +499,21 @@ function readTree(path: string, label: string, warn: Warn): Tree {
     return {};
   }
   try {
-    const parsed: unknown = path.endsWith(".json") ? JSON.parse(text) : Bun.YAML.parse(text);
+    // A repeated key keeps its last value rather than costing the whole file.
+    const parsed: unknown = path.endsWith(".json")
+      ? JSON.parse(text)
+      : parseYaml(text, { uniqueKeys: false });
     if (parsed === null || parsed === undefined) return {};
     if (isPlainObject(parsed)) return parsed;
     warn(`Ignoring ${label}: expected a mapping at the top level`);
   } catch (error) {
     // JSON.parse's message quotes the text it stopped at, which in credentials.json is a key.
     if (path.endsWith(".json")) warn(`Ignoring ${label}: not valid JSON`);
-    else warn(`Ignoring ${label}: ${error instanceof Error ? error.message : String(error)}`);
+    else {
+      // yaml's message ends in an excerpt of the file under "… at line 3, column 7:".
+      const message = error instanceof Error ? error.message : String(error);
+      warn(`Ignoring ${label}: ${(message.split("\n", 1)[0] as string).replace(/:$/, "")}`);
+    }
   }
   return {};
 }

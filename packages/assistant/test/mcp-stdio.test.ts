@@ -3,20 +3,21 @@
 //
 // Ported from pi-mono packages/mcp/test/stdio.test.ts@ac78a60
 //
-// The fixtures run on this Bun, as pi's run on its Node; every process a case starts is killed
-// before it ends.
-import { describe, expect, it } from "bun:test";
+// The fixtures run on this Node, as pi's do; every process a case starts is killed before it ends.
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { describe, expect, it } from "vitest";
 import { McpClient } from "../src/mcp/client.ts";
 import { StdioTransport } from "../src/mcp/transports/stdio.ts";
 
-const FIXTURES = join(import.meta.dir, "fixtures");
+const FIXTURES = join(import.meta.dirname, "fixtures");
 const fixture = join(FIXTURES, "mcp-stdio-server.mjs");
 const stubborn = join(FIXTURES, "mcp-stubborn-server.mjs");
 const exitingParent = join(FIXTURES, "mcp-exiting-parent-server.mjs");
 const daemon = join(FIXTURES, "mcp-daemon-server.mjs");
 const leftover = join(FIXTURES, "mcp-leftover-server.mjs");
-const STDIO = join(import.meta.dir, "../src/mcp/transports/stdio.ts");
+const STDIO = join(import.meta.dirname, "../src/mcp/transports/stdio.ts");
 
 function isAlive(pid: number): boolean {
   try {
@@ -37,19 +38,21 @@ async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<boo
 }
 
 /**
- * The pids `body` returns, run in a Bun process of its own with StdioTransport imported, once that
+ * The pids `body` returns, run in a process of its own with StdioTransport imported, once that
  * process has ended by process.exit, as the app's shutdown ends it.
  */
 function pidsAfterExit(body: string): number[] {
-  const host = Bun.spawnSync([
+  const host = spawnSync(
     process.execPath,
-    "--no-env-file",
-    "-e",
-    `const { StdioTransport } = await import(${JSON.stringify(STDIO)});
-    const pids = await (async () => { ${body} })();
-    process.stdout.write(JSON.stringify(pids), () => process.exit(0));`,
-  ]);
-  return JSON.parse(host.stdout.toString()) as number[];
+    [
+      "-e",
+      `const { StdioTransport } = await import(${JSON.stringify(STDIO)});
+      const pids = await (async () => { ${body} })();
+      process.stdout.write(JSON.stringify(pids), () => process.exit(0));`,
+    ],
+    { stdio: ["ignore", "pipe", "inherit"], encoding: "utf8" },
+  );
+  return JSON.parse(host.stdout) as number[];
 }
 
 function killAll(pids: readonly number[]): void {
@@ -64,7 +67,7 @@ describe("StdioTransport", () => {
   it("connects to a newline-delimited MCP server and captures stderr", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
-      args: ["--no-env-file", fixture],
+      args: [fixture],
     });
     const client = new McpClient({ name: "stdio-test", version: "1.0.0" });
     await client.connect(transport);
@@ -81,7 +84,7 @@ describe("StdioTransport", () => {
   it("kills a server that ignores shutdown, including its children", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
-      args: ["--no-env-file", stubborn],
+      args: [stubborn],
       closeTimeoutMs: 100,
     });
     const client = new McpClient({ name: "stdio-test", version: "1.0.0" });
@@ -103,7 +106,7 @@ describe("StdioTransport", () => {
   it("kills children still holding the pipes after the server process exited", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
-      args: ["--no-env-file", exitingParent],
+      args: [exitingParent],
       closeTimeoutMs: 100,
     });
     let closeEvents = 0;
@@ -134,7 +137,7 @@ describe("StdioTransport", () => {
   it("lets go of the pipes a process outside the server's group holds, so close() still ends", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
-      args: ["--no-env-file", daemon],
+      args: [daemon],
       closeTimeoutMs: 100,
     });
     const client = new McpClient({ name: "stdio-test", version: "1.0.0" });
@@ -147,7 +150,7 @@ describe("StdioTransport", () => {
     });
     try {
       const closed = client.close().then(() => "closed");
-      expect(await Promise.race([closed, Bun.sleep(4_000).then(() => "pending")])).toBe("closed");
+      expect(await Promise.race([closed, delay(4_000).then(() => "pending")])).toBe("closed");
       // It left the group, so no close reaches it.
       expect(isAlive(helper as number)).toBe(true);
     } finally {
@@ -160,7 +163,7 @@ describe("StdioTransport", () => {
   it("kills what a server that exits on its stdin closing leaves in its group, SIGTERM or not", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
-      args: ["--no-env-file", leftover],
+      args: [leftover],
       closeTimeoutMs: 100,
     });
     await transport.start();
@@ -183,10 +186,12 @@ describe("StdioTransport", () => {
     const pids = pidsAfterExit(`
       const transport = new StdioTransport({
         command: process.execPath,
-        args: ["--no-env-file", ${JSON.stringify(stubborn)}],
+        args: [${JSON.stringify(stubborn)}],
       });
       await transport.start();
-      while (!/grandchild \\d+/.test(transport.stderr)) await Bun.sleep(10);
+      while (!/grandchild \\d+/.test(transport.stderr)) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
       return [transport.pid, Number(/grandchild (\\d+)/.exec(transport.stderr)[1])];
     `);
     try {
@@ -201,7 +206,7 @@ describe("StdioTransport", () => {
     const pids = pidsAfterExit(`
       const transport = new StdioTransport({
         command: process.execPath,
-        args: ["--no-env-file", ${JSON.stringify(leftover)}, "--exit"],
+        args: [${JSON.stringify(leftover)}, "--exit"],
         closeTimeoutMs: 60_000,
       });
       const closed = new Promise((resolve) => transport.onClose(resolve));
@@ -222,7 +227,6 @@ describe("StdioTransport", () => {
     const transport = new StdioTransport({
       command: process.execPath,
       args: [
-        "--no-env-file",
         "-e",
         "console.error(JSON.stringify(Object.keys(process.env).filter((key) => key.startsWith('EIDOLON_MCP'))))",
       ],

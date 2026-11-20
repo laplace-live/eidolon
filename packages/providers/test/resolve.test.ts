@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { AccountEntry } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import {
   accountOf,
   accountsFor,

@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
+import { expect, test } from "vitest";
 import { accountsQuery, modelsQuery } from "@/lib/accounts";
 import type { SettingsResponse } from "@/lib/api";
 import { statusQuery } from "@/lib/query";

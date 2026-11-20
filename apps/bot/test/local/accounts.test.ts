@@ -2,12 +2,12 @@
 // with keys that never come back, guarded while a persona names one, checked and listed against
 // the provider through a fake fetch.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import { providerById } from "@eidolon/providers";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { AccountsResponse, CheckResult, ModelsResponse } from "../../src/local/api.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { accountsRoutes } from "../../src/local/routes/accounts.ts";

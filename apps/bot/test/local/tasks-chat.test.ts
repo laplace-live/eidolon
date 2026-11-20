@@ -5,9 +5,9 @@
 // the chat takes of her tasks, in a verbose chat their plans' progress too; a deleted chat's tasks
 // stopped. A fake manager and a scripted mind: nothing reaches a network.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { scanSkills, skillNames } from "@eidolon/assistant";
 import {
   CHAT_WINDOW_MESSAGES,
@@ -31,6 +31,7 @@ import {
   type TurnRequest,
 } from "@eidolon/engine";
 import type { OutsideResult } from "@eidolon/runtime";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { RouteServer } from "../../src/app.ts";
 import {
   STEER_PREFIX,
@@ -346,7 +347,7 @@ async function until(check: () => boolean | Promise<boolean>, ms = 3000): Promis
   const deadline = Date.now() + ms;
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 
@@ -863,7 +864,7 @@ describe("her task tools", () => {
     await send(id, "算了别做了");
     await until(async () => finals(await events(id)).length === 1);
     await idle(id);
-    await Bun.sleep(30);
+    await delay(30);
     expect(tasks.order).toEqual([`started ${TASK}`, `stopping ${TASK}`, `stopped ${TASK}`]);
     expect(mind.requests[4]?.messages.at(-1)).toEqual({
       role: "tool",
@@ -1020,7 +1021,7 @@ describe("a task's end", () => {
     await runner.report(success);
     await until(() => mind.requests.length === 4);
     await idle(id);
-    await Bun.sleep(30);
+    await delay(30);
     expect(mind.requests).toHaveLength(4);
     const log = await events(id);
     const final: StartTaskFinal = {
@@ -1135,7 +1136,7 @@ describe("a task's end", () => {
         status === "failed" ? ({ status, error: "The model refused" } as const) : { status };
       await runner.report(ended(id, { status, outcome }));
       if (told) await until(() => mind.requests.length === 4);
-      else await Bun.sleep(50);
+      else await delay(50);
       await idle(id);
       const log = await events(id);
       expect([status, finals(log).map((event) => event.result.status)]).toEqual([status, [status]]);
@@ -1221,7 +1222,7 @@ describe("a task's end", () => {
     const reply = await runner.send(id, "还有别的吗");
     await until(() => mind.requests.length === 4);
     const reported = runner.report(ended(id, SUCCESS));
-    expect(await Promise.race([reported.then(() => true), Bun.sleep(50).then(() => false)])).toBe(
+    expect(await Promise.race([reported.then(() => true), delay(50).then(() => false)])).toBe(
       false,
     );
     expect(finals(await events(id))).toEqual([]);
@@ -1258,7 +1259,7 @@ describe("a task's end", () => {
     const sending = runner.send(id, "在吗");
     const reported = runner.report(ended(id, SUCCESS));
     await until(() => mind.requests.length === 4);
-    await Bun.sleep(30);
+    await delay(30);
     expect(finals(await events(id))).toEqual([]);
     answering.resolve();
     await (await sending).ended;
@@ -1384,7 +1385,7 @@ describe("a call in a chat of hers alone", () => {
       { role: "assistant", content: "弄好啦" },
     ]);
     // She told it: nothing goes to the call.
-    await Bun.sleep(30);
+    await delay(30);
     expect(handed).toEqual([]);
   });
 
@@ -1427,7 +1428,7 @@ describe("a call in a chat of hers alone", () => {
     expect(await startsOnCall(call, "call-b")).toEqual({
       error: "A task is already working in /site.",
     });
-    await Bun.sleep(30);
+    await delay(30);
     expect(ofCall(await events(id), "call-b")).toEqual([]);
   });
 
@@ -1449,7 +1450,7 @@ describe("a call in a chat of hers alone", () => {
     const starting = startsOnCall(call, "call-a");
     await until(() => tasks.started.length === 1);
     const ending = call.onEnded("hangup");
-    await Bun.sleep(30);
+    await delay(30);
     expect(fed).toBe(false);
     answered.resolve();
     expect(await starting).toEqual({ task: TASK, status: "running" });
@@ -1484,7 +1485,7 @@ describe("a call in a chat of hers alone", () => {
     call.onContext?.(taskEndedNudge("c1"));
     call.onTranscript({ role: "assistant", text: "网页做好啦", interrupted: false });
     await call.onEnded("hangup");
-    await Bun.sleep(50);
+    await delay(50);
     await idle(id);
     expect(mind.requests).toHaveLength(3);
     expect((await events(id)).at(-1)).toMatchObject({ type: "call-ended", told: ["c1"] });
@@ -1509,7 +1510,7 @@ describe("a call in a chat of hers alone", () => {
       endedAt: 5000,
     });
     const reported = runner.report(end);
-    await Bun.sleep(30);
+    await delay(30);
     answered.resolve();
     await starting;
     await reported;
@@ -1588,7 +1589,7 @@ describe("a call in a chat of hers alone", () => {
     await until(() => handed.length === 1);
     expect(handed).toEqual([{ drafts: ofCall(await events(id), "c1") }]);
     await call.onEnded("hangup");
-    await Bun.sleep(50);
+    await delay(50);
     await idle(id);
     expect(mind.requests).toHaveLength(3);
   });
@@ -1631,7 +1632,7 @@ describe("a call in a chat of hers alone", () => {
     tasks.snapshots = [paused];
     const before = await events(id);
     runner.taskWaiting(paused);
-    await Bun.sleep(30);
+    await delay(30);
     expect(await events(id)).toEqual(before);
     expect(mind.requests).toHaveLength(3);
     const { call, handed } = await onCall(id);
@@ -1646,7 +1647,7 @@ describe("a call in a chat of hers alone", () => {
     expect(handed[1]).toEqual({ drafts: [], nudge: taskWaitingNudge("c1"), due });
     await call.onEnded("hangup");
     runner.taskWaiting(paused);
-    await Bun.sleep(30);
+    await delay(30);
     expect(handed).toHaveLength(2);
     expect(mind.requests).toHaveLength(3);
   });
@@ -1691,7 +1692,7 @@ describe("a call in a chat of hers alone", () => {
     await runner.report(ended(id, SUCCESS));
     expect(finals(await events(id))).toHaveLength(1);
     await call.onEnded("hangup");
-    await Bun.sleep(50);
+    await delay(50);
     await idle(id);
     expect(handed).toEqual([]);
     expect(mind.requests).toHaveLength(3);
@@ -1717,7 +1718,7 @@ describe("a call in a chat of hers alone", () => {
       });
       await runner.report(ended(id, SUCCESS));
       call.onTranscript({ role: "assistant", text: "我们聊点别的吧", interrupted: false });
-      await Bun.sleep(30);
+      await delay(30);
       expect(handed).toEqual([]);
       expect(mind.requests).toHaveLength(3);
       await call.onEnded("hangup");
@@ -1743,7 +1744,7 @@ describe("a call in a chat of hers alone", () => {
     await runner.report(ended(id, SUCCESS));
     expect(finals(await events(id))).toHaveLength(1);
     await call.onEnded("hangup");
-    await Bun.sleep(50);
+    await delay(50);
     await idle(id);
     expect(mind.requests).toHaveLength(3);
   });
@@ -1979,12 +1980,12 @@ describe("an end she tells on a call", () => {
     call.onContext?.(taskEndedNudge("c1"));
     call.onTranscript({ role: "assistant", text: "网页做好啦", interrupted: false });
     await call.onEnded("hangup");
-    await Bun.sleep(50);
+    await delay(50);
     await idle(id);
     expect(mind.requests).toHaveLength(4);
     expect(await callEnded(id)).toMatchObject({ call: call.id, told: ["c1"] });
     const next = await onCall(id);
-    await Bun.sleep(30);
+    await delay(30);
     expect(next.handed).toEqual([]);
     await next.call.onEnded("hangup");
   });
@@ -2014,14 +2015,14 @@ describe("an end she tells on a call", () => {
     await entered.promise;
     // The owner calls while her report turn's tool runs: a turn cut there stores no message.
     const { call, handed } = await onCall(id);
-    await Bun.sleep(30);
+    await delay(30);
     const log = await events(id);
     expect(log.findLast((event) => event.type === "tool-call")).toMatchObject({ said: words });
     expect(lines(log).at(-1)).toBe("her: 好，我去弄啦");
     expect(call.seedMessages.at(-1)).toEqual({ role: "assistant", content: words });
     expect(handed).toEqual([]);
     await call.onEnded("hangup");
-    await Bun.sleep(30);
+    await delay(30);
     await idle(id);
     expect(mind.requests).toHaveLength(4);
   });
@@ -2033,7 +2034,7 @@ describe("an end she tells on a call", () => {
       const { call, handed } = await onCall(id);
       await runner.report(ended(id, SUCCESS));
       call.onTranscript({ role: "assistant", text: "我们聊点别的吧", interrupted: false });
-      await Bun.sleep(30);
+      await delay(30);
       expect(handed).toEqual([]);
     });
     // The owner quits the app with the call on: no tell after it.
@@ -2088,11 +2089,11 @@ describe("an end she tells on a call", () => {
     });
     // Her tell of the first has written part of a line when the owner calls again.
     await until(() => mind.requests.length === 4);
-    await Bun.sleep(30);
+    await delay(30);
     const { call, handed } = await onCall(id);
     expect(lines(await events(id)).at(-1)).toBe("her: 第一个做好了，");
     await until(() => handed.length === 1);
-    await Bun.sleep(30);
+    await delay(30);
     expect(handed).toEqual([
       { drafts: ofCall(await events(id), "c2"), nudge: taskEndedNudge("c2") },
     ]);
@@ -2126,7 +2127,7 @@ describe("an end she tells on a call", () => {
     call.onContext?.(`${taskEndedNudge("c1")}\n\n${taskEndedNudge("c2")}`);
     call.onTranscript({ role: "assistant", text: "两个都做好啦", interrupted: false });
     await call.onEnded("hangup");
-    await Bun.sleep(50);
+    await delay(50);
     await idle(id);
     expect(mind.requests).toHaveLength(4);
     expect(await callEnded(id)).toMatchObject({ told: ["c1", "c2"] });
@@ -2251,7 +2252,7 @@ describe("her task's plan on a call", () => {
     const id = await startedIn(mind, tasks);
     const { handed } = await onCall(id);
     furthered(tasks, planned(id, 1));
-    await Bun.sleep(30);
+    await delay(30);
     expect(handed).toEqual([]);
     const saved = process.env.CHAT_DISPLAY;
     process.env.CHAT_DISPLAY = "verbose";
@@ -2263,7 +2264,7 @@ describe("her task's plan on a call", () => {
       await runner.changeSettings(id, { display: "focus" });
       clock += MILESTONE_GAP_MS;
       furthered(tasks, planned(id, 2));
-      await Bun.sleep(30);
+      await delay(30);
       expect(handed).toHaveLength(1);
     } finally {
       if (saved === undefined) delete process.env.CHAT_DISPLAY;
@@ -2282,22 +2283,22 @@ describe("her task's plan on a call", () => {
     await runner.changeSettings(id, { display: "verbose" });
     const before = await events(id);
     furthered(tasks, planned(id, 1));
-    await Bun.sleep(30);
+    await delay(30);
     expect(await events(id)).toEqual(before);
     const { call, handed } = await onCall(id);
     // The plan's last step, which her end tells.
     furthered(tasks, planned(id, 4));
-    await Bun.sleep(30);
+    await delay(30);
     expect(handed).toEqual([]);
     furthered(tasks, planned(id, 2));
     await until(() => handed.length === 1);
     clock += MILESTONE_GAP_MS;
     furthered(tasks, planned(id, 2));
-    await Bun.sleep(30);
+    await delay(30);
     expect(handed).toHaveLength(1);
     expect(await runner.changeParticipants(id, ["beta"], [])).toBe(true);
     furthered(tasks, planned(id, 3));
-    await Bun.sleep(30);
+    await delay(30);
     expect(handed).toHaveLength(1);
     await call.onEnded("hangup");
   });
@@ -2312,11 +2313,11 @@ describe("her task's plan on a call", () => {
     furthered(tasks, planned(id, 2));
     clock += 10_000;
     furthered(tasks, second(id, 1));
-    await Bun.sleep(30);
+    await delay(30);
     expect(handed).toHaveLength(1);
     clock += 9_999;
     furthered(tasks, second(id, 2));
-    await Bun.sleep(30);
+    await delay(30);
     expect(handed).toHaveLength(1);
     clock += 1;
     furthered(tasks, planned(id, 3));
@@ -2423,7 +2424,7 @@ describe("a deleted chat", () => {
     void runner.send(id, ASK);
     await until(() => tasks.started.length === 1);
     const removed = runner.remove(id);
-    await Bun.sleep(30);
+    await delay(30);
     expect(tasks.order).toEqual([]);
     answered.resolve();
     await removed;

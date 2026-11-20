@@ -3,7 +3,6 @@
 // transcribe; here the stages run in this process, so each scenario gives them inputs that end
 // the same way: the fake Soniox, refine provider and embedding API, or a transcript the catalog
 // rejects.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
@@ -15,6 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { personaIds, resetSettings, sourceFolder } from "@eidolon/config";
 import {
   acquireLock,
@@ -23,6 +23,7 @@ import {
   SUMMARY_COUNTS,
   sourcesLockKey,
 } from "@eidolon/ingest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { installFakeYtDlp } from "../../../packages/ingest/test/download_helpers.ts";
 import { fakeSoniox, sonioxError } from "../../../packages/ingest/test/fake_soniox.ts";
 import { makeFifo, whenReading } from "../../../packages/ingest/test/fifo.ts";
@@ -705,7 +706,7 @@ describe("--json and locks", () => {
     try {
       const release = await whenReading(fifo, child);
       child.kill("SIGTERM");
-      await Bun.sleep(50);
+      await delay(50);
       release(transcriptText(blocked, "2026-08-02", 1));
       const [code, stdout, stderr] = await Promise.all([
         child.exited,

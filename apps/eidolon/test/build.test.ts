@@ -1,12 +1,22 @@
 // The package build: each bundle where the resolvers look for it, importing only builtins and what
 // the package installs, and the published manifest the workspaces' pins make.
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  globSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cliEntry, serverEntry, voiceModelsDir } from "@eidolon/config";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
-  bareImports,
+  type Bundles,
   bundle,
   checkImports,
   copyTracked,
@@ -17,24 +27,25 @@ import {
   notices,
   packageManifest,
 } from "../scripts/build.ts";
-import { ENTRIES, PLATFORMS } from "../src/launcher.ts";
+import { ENTRIES, NODE_MAJOR, PLATFORMS } from "../src/launcher.ts";
 
-const ROOT = join(import.meta.dir, "../../..");
+const ROOT = join(import.meta.dirname, "../../..");
+const LAUNCHER = "bin/eidolon.mjs";
 
 function manifestOf<T>(path: string): T {
   return JSON.parse(readFileSync(join(ROOT, path, "package.json"), "utf8")) as T;
 }
 
 let root: string;
-let inlined: Map<string, string>;
+let bundles: Bundles;
 let manifest: Manifest;
 
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "eidolon-package-"));
-  inlined = await bundle(root);
-  manifest = packageManifest(Bun.version);
+  bundles = await bundle(root);
+  manifest = packageManifest();
   writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
-});
+}, 60_000);
 
 afterAll(() => {
   rmSync(root, { recursive: true, force: true });
@@ -44,77 +55,72 @@ describe("the bundles", () => {
   test("sit where the launcher and the resolvers look for them", () => {
     expect(inPackage(root, serverEntry)).toBe(join(root, "dist", "server.js"));
     expect(inPackage(root, cliEntry)).toBe(join(root, ENTRIES.cli));
-    for (const file of [ENTRIES.app, ENTRIES.cli, "dist/server.js"]) {
-      expect([file, readFileSync(join(root, file), "utf8").startsWith("// @bun")]).toEqual([
-        file,
-        true,
-      ]);
-    }
-    const launcher = join(root, "bin", "eidolon.mjs");
+    const files = [ENTRIES.app, ENTRIES.cli, "dist/server.js", LAUNCHER];
+    expect([...bundles.imports.keys()].sort()).toEqual([...files].sort());
+    for (const file of files) expect([file, existsSync(join(root, file))]).toEqual([file, true]);
+    const launcher = join(root, LAUNCHER);
     expect(readFileSync(launcher, "utf8")).toStartWith("#!/usr/bin/env node\n");
     expect(statSync(launcher).mode & 0o111).toBe(0o111);
   });
 
   test("import only builtins and what the package installs", () => {
-    expect(() => checkImports(root, manifest)).not.toThrow();
-    const stray = mkdtempSync(join(tmpdir(), "eidolon-package-"));
-    try {
-      mkdirSync(join(stray, "dist"));
-      writeFileSync(join(stray, "dist", "x.js"), 'import "left-pad";\nimport "node:fs";\n');
-      expect(() => checkImports(stray, manifest)).toThrow("x.js: left-pad");
-    } finally {
-      rmSync(stray, { recursive: true, force: true });
-    }
+    expect(() => checkImports(bundles.imports, manifest)).not.toThrow();
+    const stray = new Map([["dist/x.js", new Set(["left-pad", "node:fs", "bufferutil"])]]);
+    expect(() => checkImports(stray, manifest)).toThrow(
+      /^The bundles import what the package doesn't install:\ndist\/x\.js: left-pad$/,
+    );
   });
 
   test("leave werift and apache-arrow to node_modules, one copy for the packages that share them", () => {
-    const server = bareImports(join(root, "dist", "server.js"));
+    const server = bundles.imports.get("dist/server.js");
     for (const name of ["werift", "libopus-wasm", "apache-arrow", "onnxruntime-node"]) {
-      expect([name, server.has(name)]).toEqual([name, true]);
+      expect([name, server?.has(name)]).toEqual([name, true]);
     }
-    expect([...inlined.keys()]).toContain("@lancedb/lancedb");
+    expect([...bundles.inlined.keys()]).toContain("@lancedb/lancedb");
     for (const name of ["werift", "libopus-wasm", "apache-arrow", "onnxruntime-node"]) {
-      expect([name, inlined.has(name)]).toEqual([name, false]);
+      expect([name, bundles.inlined.has(name)]).toEqual([name, false]);
     }
-    expect([...inlined.keys()].filter((name) => name.startsWith("@eidolon/"))).toEqual([]);
+    expect([...bundles.inlined.keys()].filter((name) => name.startsWith("@eidolon/"))).toEqual([]);
+    // ws requires its native speedups by name, and runs without them.
+    for (const name of ["bufferutil", "utf-8-validate"]) {
+      expect([name, server?.has(name)]).toEqual([name, true]);
+    }
   });
 
   test("keep LanceDB's loader requiring each supported platform's binary by name", () => {
-    for (const file of ["server.js", "cli.js"]) {
-      const imports = bareImports(join(root, "dist", file));
-      for (const { lancedb } of Object.values(PLATFORMS)) {
-        expect([file, lancedb, imports.has(lancedb)]).toEqual([file, lancedb, true]);
+    for (const file of ["dist/server.js", "dist/cli.js"]) {
+      const imports = bundles.imports.get(file);
+      for (const lancedb of Object.values(PLATFORMS)) {
+        expect([file, lancedb, imports?.has(lancedb)]).toEqual([file, lancedb, true]);
       }
     }
   });
 
   test("the launcher answers --help and --version, and refuses what isn't a command", () => {
-    const launcher = join(root, "bin", "eidolon.mjs");
-    const help = Bun.spawnSync([process.execPath, launcher, "--help"]);
-    expect([help.exitCode, help.stdout.toString()]).toEqual([
-      0,
-      expect.stringContaining("ingest-facts"),
-    ]);
-    const version = Bun.spawnSync([process.execPath, launcher, "--version"]);
-    expect(version.stdout.toString()).toBe(`${manifest.version}\n`);
-    const unknown = Bun.spawnSync([process.execPath, launcher, "serve"]);
-    expect(unknown.exitCode).toBe(2);
-    expect(unknown.stderr.toString()).toStartWith('eidolon: unknown command "serve"');
+    const launcher = join(root, LAUNCHER);
+    const run = (...args: string[]) =>
+      spawnSync(process.execPath, [launcher, ...args], { encoding: "utf8" });
+    const help = run("--help");
+    expect([help.status, help.stdout]).toEqual([0, expect.stringContaining("ingest-facts")]);
+    expect(run("--version").stdout).toBe(`${manifest.version}\n`);
+    const unknown = run("serve");
+    expect(unknown.status).toBe(2);
+    expect(unknown.stderr).toStartWith('eidolon: unknown command "serve"');
   });
 });
 
 describe("the voice models", () => {
-  test("ship byte for byte in data/models, with their licenses", async () => {
+  test("ship byte for byte in data/models, with their licenses", () => {
     const dir = inPackage(root, voiceModelsDir);
     expect(dir).toBe(join(root, "data", "models"));
     copyTracked(voiceModelsDir(), dir);
-    const sha256 = async (file: string) =>
-      new Bun.CryptoHasher("sha256")
-        .update(await Bun.file(join(dir, file)).arrayBuffer())
+    const sha256 = (file: string) =>
+      createHash("sha256")
+        .update(readFileSync(join(dir, file)))
         .digest("hex");
     expect({
-      silero: await sha256("silero_vad.onnx"),
-      smartTurn: await sha256("smart-turn-v3.2-cpu.onnx"),
+      silero: sha256("silero_vad.onnx"),
+      smartTurn: sha256("smart-turn-v3.2-cpu.onnx"),
     }).toEqual({
       silero: "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
       smartTurn: "2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f",
@@ -156,7 +162,7 @@ describe("the third-party notices", () => {
   });
 
   test("give each package the bundles inline its text, LanceDB's from SPDX", () => {
-    const dist = inlinedPackages(inlined);
+    const dist = inlinedPackages(bundles.inlined);
     const lancedb = dist.find((pkg) => pkg.name === "@lancedb/lancedb");
     expect(lancedb).toMatchObject({ identifier: "Apache-2.0", text: undefined });
     const text = notices(dist, []);
@@ -174,7 +180,7 @@ describe("the third-party notices", () => {
       ["BSD-2-Clause", new Set()],
       ["MIT", new Set()],
     ]);
-    for (const file of new Bun.Glob("packages/*/src/**/*.ts").scanSync(ROOT)) {
+    for (const file of globSync("packages/*/src/**/*.ts", { cwd: ROOT })) {
       const source = readFileSync(join(ROOT, file), "utf8");
       const license = /^\/\/ SPDX-License-Identifier: (BSD-2-Clause|MIT)$/m.exec(source)?.[1];
       if (license === undefined) continue;
@@ -208,9 +214,10 @@ describe("the published manifest", () => {
       name: "@laplace.live/eidolon",
       version: bot.version,
       license: "AGPL-3.0-only",
-      bin: { eidolon: "bin/eidolon.mjs" },
+      bin: { eidolon: LAUNCHER },
       os: ["darwin", "linux"],
       cpu: ["arm64", "x64"],
+      engines: { node: `>=${NODE_MAJOR}` },
       publishConfig: { access: "public", provenance: true },
     });
     for (const field of ["private", "scripts", "devDependencies", "workspaces"]) {
@@ -218,7 +225,7 @@ describe("the published manifest", () => {
     }
   });
 
-  test("depends on the externals at the workspaces' pins, and each platform's Bun and LanceDB", () => {
+  test("depends on the externals at the workspaces' pins, and each platform's LanceDB", () => {
     const runtime = manifestOf<{ dependencies: Record<string, string> }>("packages/runtime");
     const retrieval = manifestOf<{ dependencies: Record<string, string> }>("packages/retrieval");
     const voice = manifestOf<{ dependencies: Record<string, string> }>("packages/voice");
@@ -234,9 +241,6 @@ describe("the published manifest", () => {
       "@lancedb/lancedb-darwin-arm64": retrieval.dependencies["@lancedb/lancedb"],
       "@lancedb/lancedb-linux-arm64-gnu": retrieval.dependencies["@lancedb/lancedb"],
       "@lancedb/lancedb-linux-x64-gnu": retrieval.dependencies["@lancedb/lancedb"],
-      "@oven/bun-darwin-aarch64": Bun.version,
-      "@oven/bun-linux-aarch64": Bun.version,
-      "@oven/bun-linux-x64": Bun.version,
     });
   });
 });

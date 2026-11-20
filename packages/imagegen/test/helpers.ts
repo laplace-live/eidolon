@@ -84,12 +84,15 @@ export function bytesOf(label: string): Uint8Array {
 }
 
 export function dataUrl(mediaType: string, bytes: Uint8Array): string {
-  return `data:${mediaType};base64,${bytes.toBase64()}`;
+  return `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}`;
 }
+
+/** fetch's init, with the dispatcher Node's fetch reads. */
+type FetchInit = RequestInit & { readonly dispatcher?: unknown };
 
 export interface FetchCall {
   readonly url: string;
-  readonly init: BunFetchRequestInit;
+  readonly init: FetchInit;
   readonly payload: Record<string, unknown>;
 }
 
@@ -99,7 +102,7 @@ export function fakeFetch(respond: (call: FetchCall) => Response | Promise<Respo
   calls: FetchCall[];
 } {
   const calls: FetchCall[] = [];
-  const impl = async (input: string | URL | Request, init: BunFetchRequestInit = {}) => {
+  const impl = async (input: string | URL | Request, init: FetchInit = {}) => {
     const call = { url: String(input), init, payload: JSON.parse(String(init.body)) };
     calls.push(call);
     return respond(call);
@@ -107,13 +110,13 @@ export function fakeFetch(respond: (call: FetchCall) => Response | Promise<Respo
   return { fetch: impl as typeof fetch, calls };
 }
 
-/** A fetch that never answers and rejects with the signal's reason once aborted, as Bun's does. */
+/** A fetch that never answers and rejects with the signal's reason once aborted, as fetch does. */
 export function hangingFetch(): { fetch: typeof fetch; started: Promise<void> } {
   let markStarted = () => {};
   const started = new Promise<void>((resolve) => {
     markStarted = resolve;
   });
-  const impl = (_input: string | URL | Request, init: BunFetchRequestInit = {}) =>
+  const impl = (_input: string | URL | Request, init: FetchInit = {}) =>
     new Promise<Response>((_resolve, reject) => {
       markStarted();
       const signal = init.signal;

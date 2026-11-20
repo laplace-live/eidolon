@@ -5,10 +5,10 @@
 //
 // pi's find cases that hinge on neither fd nor Windows, where a limit is a whole number; then the
 // walk's own: its ignore rules, refusals, aborts and arguments.
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TaskToolResult } from "@eidolon/engine";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FolderPolicy } from "../src/policy.ts";
 import { createFindTool, type FindDetails } from "../src/tools/find.ts";
 import { createGrepTool } from "../src/tools/grep.ts";
@@ -381,6 +381,16 @@ describe("find's walk", () => {
     expect((await find(folderGuard(folder), { pattern: "*" })).content).toBe(
       "a.txt\nb/\nb/inner.txt\nC.txt",
     );
+  });
+
+  it("matches a name that starts with a parenthesis, as a Next.js route group's does", async () => {
+    write("app/(auth)/login/page.tsx");
+    write("app/(shop)/page.tsx");
+    write("(draft).md");
+    write("notes.md");
+
+    expect(await findIn(folder, "(draft).md")).toEqual(["(draft).md"]);
+    expect(await findIn(folder, "app/(auth)/**/page.tsx")).toEqual(["app/(auth)/login/page.tsx"]);
   });
 
   it("never lists .git or node_modules, whatever .gitignore says", async () => {

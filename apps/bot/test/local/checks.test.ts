@@ -1,11 +1,11 @@
 // POST credentials/check through a fake fetch: each provider's status table, the fields a check
 // reads, where the key is sent and where it never is. Nothing here reaches a network.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
+import { afterEach, describe, expect, test } from "vitest";
 import memoryManifest from "../../../../packages/memory/package.json" with { type: "json" };
 import type { CheckProvider, CheckResult } from "../../src/local/api.ts";
 import {

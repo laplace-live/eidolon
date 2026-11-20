@@ -1,7 +1,7 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test, vi } from "vitest";
 import { linguiMacro } from "@/test/lingui-macro";
 
-mock.module("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
 const { verdictMessage, warningMessage } = await import("./check-labels");
 
 test("a verdict says the provider's own sentence, then the code's, then passed or failed", () => {

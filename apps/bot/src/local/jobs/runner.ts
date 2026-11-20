@@ -3,9 +3,17 @@
 import { closeSync } from "node:fs";
 import { uptime } from "node:os";
 import { jobArgv } from "@eidolon/cli/job";
-import { cliEntry, dataHome, errorText, logger } from "@eidolon/config";
-import type { Subprocess } from "bun";
+import {
+  cliEntry,
+  dataHome,
+  errorText,
+  jsRuntime,
+  logger,
+  type Subprocess,
+  spawnProcess,
+} from "@eidolon/config";
 import type { JobSnapshot } from "../api.ts";
+import { STARTED_ENV } from "../environ.ts";
 import { EPHEMERAL_COMMANDS, type JobSpec } from "./argv.ts";
 import { endedStatus, followLines, JobEvents, tailOf } from "./events.ts";
 import {
@@ -21,7 +29,7 @@ import {
 } from "./store.ts";
 
 /** The argv that runs a CLI command; tests run a fake CLI. */
-export type ArgvBuilder = (command: string, args: readonly string[]) => string[];
+export type ArgvBuilder = (command: string, args: readonly string[]) => [string, ...string[]];
 
 export interface JobRunnerOptions {
   readonly argv?: ArgvBuilder;
@@ -147,10 +155,10 @@ export class JobRunner {
     try {
       // Before the spawn: a server that dies right after it still finds the job at its next start.
       writeRecord(record);
-      // No env: the CLI applies the .env itself. Passing what this process applied from it would
-      // keep a key deleted from the .env since.
-      child = Bun.spawn(this.argv(spec.cli, spec.args), {
+      // The environment this server started with: the CLI applies the .env itself.
+      child = spawnProcess(this.argv(spec.cli, spec.args), {
         cwd: dataHome(),
+        env: { ...STARTED_ENV, ...jsRuntime().env },
         stdin: "ignore",
         stdout: outputs.events,
         stderr: outputs.log,

@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { AccountEntry } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import { accountOf, listModels, type Sources } from "../src/index.ts";
 
 function account(id: string, fields: Partial<AccountEntry> & { provider: string }) {

@@ -1,6 +1,5 @@
-// The HTTP surface of the bot for one Bun.serve: every route runs the same wrapper (CORS preflight,
-// HEAD rule, idle-timeout opt-out, logged 500, CORS), and everything else gets FastAPI's 404 and
-// 405 bodies.
+// The HTTP surface of the bot for routing.ts: every route runs the same wrapper (CORS preflight,
+// HEAD rule, logged 500, CORS), and everything else gets FastAPI's 404 and 405 bodies.
 import { STATUS_CODES } from "node:http";
 import {
   type CorsPolicy,
@@ -15,7 +14,6 @@ import { SELFIE_PATH } from "@eidolon/imagegen";
 import type { MemoryAdmin } from "@eidolon/memory";
 import type { SignallingResult, SignallingServer } from "@eidolon/runtime";
 import type { IceService } from "@eidolon/turn";
-import type { BunRequest, Server } from "bun";
 import type { ChatEndpoint } from "./chat/routes.ts";
 import type { McpHandler } from "./mcp/index.ts";
 import {
@@ -32,11 +30,16 @@ import {
   notFound,
   plainText,
 } from "./responses.ts";
+import {
+  type MethodRoutes,
+  matchSegments,
+  type RouteHandler,
+  type RouteMethod,
+  type RouteRequest,
+  type RouteServer,
+} from "./routing.ts";
 
-export type RouteServer = Pick<Server<undefined>, "requestIP" | "timeout">;
-export type RouteHandler = (request: BunRequest, server: RouteServer) => Promise<Response>;
-export type RouteMethod = "GET" | "POST" | "PATCH";
-export type MethodRoutes = Partial<Record<RouteMethod, RouteHandler>>;
+export type { MethodRoutes, RouteHandler, RouteMethod, RouteServer } from "./routing.ts";
 
 /** The `@eidolon/access` functions the routes call; the module itself in production. */
 export interface BotAccess {
@@ -63,26 +66,17 @@ export interface BotAppParts {
 }
 
 export interface BotApp {
-  /** For `Bun.serve({ routes })`; every handler is wrapped. */
+  /** routeRequest's routes; every handler is wrapped. */
   readonly routes: Record<string, RouteHandler | MethodRoutes>;
-  /** For `Bun.serve({ fetch })`: CORS preflights, demo-path 404s, then 405 or 404. */
+  /** routeRequest's fallback: CORS preflights, demo-path 404s, then 405 or 404. */
   readonly fallback: (request: Request, server?: RouteServer) => Response;
-  /** For `Bun.serve({ error })`, a last resort only: Bun passes no request, so no CORS. */
-  readonly onError: (error: Error) => Response;
+  /** listen's onError, a last resort only: it gets no request, so no CORS. */
+  readonly onError: (error: unknown) => Response;
 }
 
 /** Pipecat's prebuilt demo UI paths, which the bot never serves. */
 export function isDemoPath(pathname: string): boolean {
   return pathname === "/" || pathname === "/client" || pathname.startsWith("/client/");
-}
-
-function routeMatches(pattern: string, pathname: string): boolean {
-  const want = pattern.split("/");
-  const got = pathname.split("/");
-  return (
-    want.length === got.length &&
-    want.every((segment, i) => (segment.startsWith(":") ? got[i] !== "" : segment === got[i]))
-  );
 }
 
 function signallingResponse(result: SignallingResult): Response {
@@ -114,21 +108,17 @@ export function createBotApp(parts: BotAppParts): BotApp {
   const respond = async (
     handler: RouteHandler,
     getOnly: boolean,
-    request: BunRequest,
+    request: RouteRequest,
     server: RouteServer,
   ): Promise<Response> => {
-    // Bun hands OPTIONS to function-valued routes (/mcp) instead of falling through to fetch.
+    // The routing hands OPTIONS to function-valued routes (/mcp) instead of the fallback.
     const preflight = access.corsPreflightResponse(request, cors);
     if (preflight) return preflight;
-    // Bun runs a GET handler for HEAD, which would mint TURN credentials or scroll Qdrant;
+    // The routing runs a GET handler for HEAD, which would mint TURN credentials or scroll Qdrant;
     // FastAPI's GET routes answer HEAD with a 405.
     if (getOnly && request.method === "HEAD") {
       return access.withCors(request, methodNotAllowed("GET"), cors);
     }
-    // Bun.serve cuts a request whose handler has written nothing for idleTimeout (default 10 s;
-    // a 40 s handler got an empty reply at about 12 s). An offer can wait on a 10 s TURN mint
-    // plus a 10 s Workers validation.
-    server.timeout(request, 0);
     let response: Response;
     try {
       response = await handler(request, server);
@@ -197,7 +187,7 @@ export function createBotApp(parts: BotAppParts): BotApp {
   routes["/mcp/"] = mcp;
 
   const allowed = Object.entries(methodRoutes).map(([path, methods]) => ({
-    path,
+    pattern: path.split("/"),
     allow: Object.keys(methods)[0] as string,
   }));
 
@@ -205,7 +195,8 @@ export function createBotApp(parts: BotAppParts): BotApp {
     if (isDemoPath(pathname)) return new Response(null, { status: 404 });
     // Every path under /mcp/ gets the plain-text 404 a mounted Starlette router sends.
     if (pathname.startsWith("/mcp/")) return plainText(404, "Not Found");
-    const route = allowed.find(({ path }) => routeMatches(path, pathname));
+    const segments = pathname.split("/");
+    const route = allowed.find(({ pattern }) => matchSegments(pattern, segments) !== null);
     return route ? methodNotAllowed(route.allow) : notFound();
   };
 

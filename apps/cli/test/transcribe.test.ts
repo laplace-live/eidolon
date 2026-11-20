@@ -1,12 +1,13 @@
 // fixtures/transcribe/parser.golden.json holds argparse's results for this command's parser; the
 // runs are served packages/ingest's run.golden.json jobs.
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataHome, PROJECT_ROOT, sourceFolder } from "@eidolon/config";
 import { acquireLock, sourcesLockKey, transcribe } from "@eidolon/ingest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   type FakeJob,
   fakeBinaries,
@@ -19,7 +20,7 @@ import { blockNetwork, captureIo, captureLogs, setEnv } from "./helpers.ts";
 
 blockNetwork();
 
-const FIX = join(import.meta.dir, "fixtures/transcribe");
+const FIX = join(import.meta.dirname, "fixtures/transcribe");
 const INGEST_FIX = join(PROJECT_ROOT, "packages/ingest/test/fixtures/transcribe");
 
 interface ParseCase {
@@ -30,11 +31,11 @@ interface ParseCase {
   ns?: Record<string, unknown>;
 }
 
-const parserGolden = (await Bun.file(join(FIX, "parser.golden.json")).json()) as {
+const parserGolden = JSON.parse(await readFile(join(FIX, "parser.golden.json"), "utf8")) as {
   transcribe: ParseCase[];
   close_matches: [string, string[], string[]][];
 };
-const runGolden = (await Bun.file(join(INGEST_FIX, "run.golden.json")).json()) as {
+const runGolden = JSON.parse(await readFile(join(INGEST_FIX, "run.golden.json"), "utf8")) as {
   scenarios: {
     name: string;
     audio: string;

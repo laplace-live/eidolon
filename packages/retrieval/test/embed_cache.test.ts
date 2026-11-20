@@ -1,10 +1,11 @@
 // Keys, blobs and the file's schema are compared with the golden (write_golden.ts). The real cache
 // is read in write_real.test.ts.
-import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { spawnProcess } from "@eidolon/config";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { EmbedCache, embedCacheKey } from "../src/index.ts";
 import { WRITE_GOLDEN } from "./write_golden.ts";
 
@@ -16,10 +17,17 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+/** Every row of `sql` as an array of its values. */
+function values(db: DatabaseSync, sql: string, ...params: string[]): unknown[][] {
+  const statement = db.prepare(sql);
+  statement.setReturnArrays(true);
+  return statement.all(...params) as unknown as unknown[][];
+}
+
 function rawBlob(path: string, key: string): string {
-  const db = new Database(path);
+  const db = new DatabaseSync(path);
   try {
-    const [row] = db.query("SELECT vector FROM embed_cache WHERE key = ?").values(key);
+    const [row] = values(db, "SELECT vector FROM embed_cache WHERE key = ?", key);
     return Buffer.from(row?.[0] as Uint8Array).toString("hex");
   } finally {
     db.close();
@@ -47,13 +55,11 @@ test("vectors are stored as the float32 bytes numpy wrote, rounded the same way"
 test("a new file gets Python's table and WAL mode, in a folder created for it", () => {
   const path = join(dir, "nested", "cache", "embed_cache.db");
   new EmbedCache(path).close();
-  const db = new Database(path);
+  const db = new DatabaseSync(path);
   try {
-    const sql = db.query("SELECT sql FROM sqlite_master WHERE name = 'embed_cache'").values();
+    const sql = values(db, "SELECT sql FROM sqlite_master WHERE name = 'embed_cache'");
     expect(sql).toEqual([[WRITE_GOLDEN.cache_file.sql]]);
-    expect(db.query("PRAGMA journal_mode").values()).toEqual([
-      [WRITE_GOLDEN.cache_file.journal_mode],
-    ]);
+    expect(values(db, "PRAGMA journal_mode")).toEqual([[WRITE_GOLDEN.cache_file.journal_mode]]);
   } finally {
     db.close();
   }
@@ -103,22 +109,18 @@ test("a batch that fails part way stores none of it", () => {
 test("a write waits for another process's lock, as Python's 5 s timeout did", async () => {
   const path = join(dir, "embed_cache.db");
   const cache = new EmbedCache(path);
-  const holder = Bun.spawn(
-    [
-      process.execPath,
-      "--no-env-file",
-      "-e",
-      `import { Database } from "bun:sqlite";
-       const db = new Database(${JSON.stringify(path)});
-       db.exec("BEGIN IMMEDIATE");
-       db.run("INSERT INTO embed_cache VALUES ('held', x'00000000')");
-       console.log("locked");
-       Bun.sleepSync(300);
-       db.exec("COMMIT");`,
-    ],
-    { stdout: "pipe" },
-  );
-  const reader = holder.stdout.getReader();
+  const holder = spawnProcess([
+    process.execPath,
+    "-e",
+    `const { DatabaseSync } = require("node:sqlite");
+     const db = new DatabaseSync(${JSON.stringify(path)});
+     db.exec("BEGIN IMMEDIATE");
+     db.exec("INSERT INTO embed_cache VALUES ('held', x'00000000')");
+     console.log("locked");
+     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+     db.exec("COMMIT");`,
+  ]);
+  const reader = (holder.stdout as ReadableStream<Uint8Array>).getReader();
   expect(new TextDecoder().decode((await reader.read()).value)).toContain("locked");
   const start = performance.now();
   cache.putMany("m", 1, [["a", [1]]]);

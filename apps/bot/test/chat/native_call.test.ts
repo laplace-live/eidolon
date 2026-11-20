@@ -1,12 +1,12 @@
 // A production call inside a chat: bindChatCall's binding run on the voice loop over a fake
 // transport, recognizer and voice, with her turns scripted. She opens on the window, and each line
 // and photo reaches the browser through the call, numbered on from the window and signed.
-import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { ANONYMOUS, chatPersonas, type JsonObject } from "@eidolon/access";
 import { CHAT_FORMAT, type ChatEvent, type ChatEventOf, type ChatHeader } from "@eidolon/chat";
 import type { CallTurnRequest } from "@eidolon/engine";
 import { selfieStore } from "@eidolon/imagegen";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { runNativeSafely } from "../../../../packages/runtime/src/native/engine.ts";
 import { BOT_ABOUT } from "../../../../packages/runtime/src/rtvi.ts";
 import {

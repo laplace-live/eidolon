@@ -2,7 +2,6 @@
 // fact loading make of the inputs it lists. The CLI's tests replay its command runs; these cover
 // the library alone, and what the golden doesn't.
 import "../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -14,6 +13,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
@@ -32,6 +32,7 @@ import {
   resetEmbeddingClient,
   tokenizeZh,
 } from "@eidolon/retrieval";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { indexMetaPath, ingestFacts, type ProgressEvent } from "../src/index.ts";
 import { cancelMidRebuild } from "./forced_exit.ts";
 
@@ -57,9 +58,9 @@ interface ParseCase {
   tokens: string;
 }
 
-const golden = (await Bun.file(
-  join(import.meta.dir, "fixtures/ingest_facts/golden.json"),
-).json()) as {
+const golden = JSON.parse(
+  await readFile(join(import.meta.dirname, "fixtures/ingest_facts/golden.json"), "utf8"),
+) as {
   printed_by: string;
   fact_files: Record<string, string>;
   parse: ParseCase[];

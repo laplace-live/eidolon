@@ -1,6 +1,7 @@
 // A rendered selfie runs to ~1 MB, ~1.4 MB once base64'd, past what one SCTP data-channel message
 // carries, so the bytes wait here and only a root-relative URL rides the RTVI message. The store is
 // process-local: a second worker would 404 on the first one's ids.
+import { randomBytes } from "node:crypto";
 import { pyPathStem } from "@eidolon/config";
 import type { GeneratedImage } from "./generate.ts";
 import { imageSuffix } from "./mime.ts";
@@ -15,9 +16,7 @@ interface Entry {
 
 /** `secrets.token_urlsafe(16)`: 22 characters of `[A-Za-z0-9_-]`. */
 function newSelfieId(): string {
-  return crypto
-    .getRandomValues(new Uint8Array(SELFIE_ID_BYTES))
-    .toBase64({ alphabet: "base64url", omitPadding: true });
+  return randomBytes(SELFIE_ID_BYTES).toString("base64url");
 }
 
 /** Short-lived in-memory selfies served at `/api/selfie/<id><suffix>`. */

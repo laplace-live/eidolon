@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { ChatEvent, ChatHeader, ChatStreamLine } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import type { ChatContents } from "@/lib/chats";
 import { chatItems } from "./items";
 import {

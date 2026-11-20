@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { ChatEvent } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import {
   afterAutoPlay,
   cancelsTake,

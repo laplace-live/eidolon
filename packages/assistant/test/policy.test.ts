@@ -1,7 +1,16 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterAll, describe, expect, test } from "vitest";
 import { FolderPolicy, type FolderPolicyOptions, GrantRefused } from "../src/policy.ts";
 
 const root = mkdtempSync(join(tmpdir(), "grants-"));
@@ -180,7 +189,7 @@ describe("FolderPolicy", () => {
     symlinkSync("y/../proj", loop);
     const policy = new FolderPolicy(options);
     const settled = (work: Promise<unknown>) =>
-      Promise.race([work.then(String, String), Bun.sleep(2000).then(() => "still resolving")]);
+      Promise.race([work.then(String, String), delay(2000).then(() => "still resolving")]);
     for (const access of ["read", "write"] as const) {
       expect(await settled(policy.resolve("README.md", access))).toStartWith("Error: ENOENT");
     }
@@ -315,7 +324,7 @@ describe("FolderPolicy", () => {
     }
   });
 
-  test.if(process.platform === "darwin")(
+  test.runIf(process.platform === "darwin")(
     "on macOS a .git folder is .git in any letter case",
     async () => {
       const { options } = layout();
@@ -408,6 +417,8 @@ describe("FolderPolicy", () => {
       base,
       join(home, "projects", ".."),
       join(base, "home-link"),
+      // Only where the file system folds case (APFS, by default): elsewhere it's another folder.
+      ...[home.toUpperCase(), base.toUpperCase()].filter((path) => existsSync(path)),
     ]) {
       expect(() => new FolderPolicy({ ...options, grants: [{ path, access: "read" }] })).toThrow(
         GrantRefused,
@@ -492,7 +503,7 @@ describe("FolderPolicy", () => {
     expect(await policy.resolve(typed, "write")).toBe(onDisk(join(folder, typed)));
   });
 
-  test.if(process.platform === "darwin")(
+  test.runIf(process.platform === "darwin")(
     "on macOS a denied folder not made yet is denied in any letter case",
     async () => {
       const { home, options } = layout();

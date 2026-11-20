@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { ProviderConfigError, ProviderHttpError, selectRequired } from "../../../src/index.ts";
 import { speechSupport, transcribe } from "../../../src/speech/batch/index.ts";
 import { transcribeTimeoutMs } from "../../../src/speech/batch/transcribe.ts";
@@ -19,11 +20,11 @@ const noWait = async () => {};
 
 /** Soniox deletes after it answers: what reached the fake once `count` requests have. */
 async function requests(count: number): Promise<string[]> {
-  for (let waited = 0; fake.seen.length < count && waited < 2000; waited += 5) await Bun.sleep(5);
+  for (let waited = 0; fake.seen.length < count && waited < 2000; waited += 5) await delay(5);
   return fake.seen.map(({ method, url }) => `${method} ${new URL(url).pathname}`);
 }
 
-/** The upload's name, its type as sent (Bun's parse guesses one from the name), and its bytes. */
+/** The upload's name, its type as sent (from the raw body, not the parse), and its bytes. */
 async function fileOf(seen: Seen | undefined): Promise<[string, string, number[]]> {
   const file = seen?.form?.get("file");
   if (!(file instanceof File)) throw new Error("no file in the upload");
@@ -348,13 +349,14 @@ describe("transcribe", () => {
       if (method === "GET") return new Promise<Response>(() => {});
       return new Response(null, { status: 204 });
     });
+    // Long enough for the upload and the job to be answered on a busy machine; the poll never is.
     const pending = transcribe(hearing({ SONIOX_API_KEY: "sk" }), clip, {
       fetch: fake.fetch,
       sleep: noWait,
-      timeoutMs: 50,
+      timeoutMs: 500,
     });
     const error = await pending.catch((e: unknown) => e);
-    expect((error as Error).message).toBe("Soniox didn't answer within 0.05 s");
+    expect((error as Error).message).toBe("Soniox didn't answer within 0.5 s");
     expect(await requests(5)).toEqual([
       "POST /v1/files",
       "POST /v1/transcriptions",

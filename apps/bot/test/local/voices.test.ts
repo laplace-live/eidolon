@@ -1,8 +1,8 @@
 // GET voices/search through a fake fetch: Fish's public search, sent without the key, and its
 // results mapped to absolute https URLs with anything a call couldn't use left out.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { describe, expect, test } from "bun:test";
 import type { MemoryAdmin } from "@eidolon/memory";
+import { describe, expect, test } from "vitest";
 import type { VoiceSearchResponse } from "../../src/local/api.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { PAGE_SIZE, voiceOf, voicesRoutes } from "../../src/local/routes/voices.ts";

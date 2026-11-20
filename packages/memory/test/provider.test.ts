@@ -1,9 +1,10 @@
 import "../../config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { activePersona, dataHome, resetSettings, withPersona } from "@eidolon/config";
 import type { ContextTurn, ConversationContext } from "@eidolon/core";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { LlmSettings, MemoryConfig } from "../src/config.ts";
 import { MemoryEngine, SharedEngine } from "../src/engine.ts";
 import { HistoryStore } from "../src/history.ts";
@@ -207,7 +208,7 @@ describe("onContext", () => {
     controller.abort(reason);
     await expect(pending).rejects.toBe(reason);
     release([memory("late")]);
-    await Bun.sleep(0);
+    await delay(0);
     expect(context.messages).toHaveLength(1);
     expect(spawned).toEqual([]);
   });

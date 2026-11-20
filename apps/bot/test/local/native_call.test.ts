@@ -4,14 +4,15 @@
 // the call too, and a task's end reaches her there, told there only by a line after a reply of hers
 // recorded its nudge, else in text after the call; in a verbose chat, so does its plan's progress.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { type ChatEvent, viewOf } from "@eidolon/chat";
 import { dataHome } from "@eidolon/config";
 import type { CallTurnRequest } from "@eidolon/engine";
 import { selfieStore } from "@eidolon/imagegen";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { runNativeSafely } from "../../../../packages/runtime/src/native/engine.ts";
 import { BOT_ABOUT } from "../../../../packages/runtime/src/rtvi.ts";
 import {
@@ -276,7 +277,7 @@ test("her answer on the call may start a task, which the chat stores, and she te
   transport.leave();
   await done;
   await until(() => runner.callIn(id) === null);
-  await Bun.sleep(50);
+  await delay(50);
   await runner.shutdown();
 
   // She told it on the call: no turn of hers after it, and the call's end says so.
@@ -381,7 +382,7 @@ test("in a verbose chat, a step of her task's plan done is told in a follow-up o
   transport.leave();
   await done;
   await until(() => runner.callIn(id) === null);
-  await Bun.sleep(50);
+  await delay(50);
   await runner.shutdown();
 
   expect(told).toBe(1);

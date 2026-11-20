@@ -5,5 +5,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./lock": "./src/lock.ts"
+  },
+  "dependencies": {
+    "undici": "7.29.0",
+    "uuid": "14.0.3",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "srvx": "1.0.8"
   }
 }

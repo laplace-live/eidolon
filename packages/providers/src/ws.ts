@@ -5,16 +5,12 @@
 // Ported from pipedog packages/core/src/services/websocket_service.ts@ce8f8bc and packages/core/src/utils/network.ts@ce8f8bc
 //
 // The socket the streaming clients share, with the open and close timeouts and the reconnect
-// pacing pipedog's services used.
+// pacing pipedog's services used. It is the `ws` package's client, which Bun swaps for its own
+// implementation: Node's global WebSocket reports a refused handshake without its status, and
+// can't terminate.
+import type { IncomingMessage } from "node:http";
 import { AsyncQueue, logger } from "@eidolon/config";
-import type { WebSocket as BunWebSocket, WebSocketOptions } from "bun";
-
-// The DOM lib in tsconfig types the global WebSocket as the browser's, which takes no handshake
-// headers and can't terminate; at runtime it is Bun's, which can.
-const BunSocket = WebSocket as unknown as new (
-  url: string,
-  options: WebSocketOptions,
-) => BunWebSocket;
+import WebSocket from "ws";
 
 const OPEN_TIMEOUT_MS = 10_000;
 const CLOSE_TIMEOUT_MS = 2_000;
@@ -34,7 +30,7 @@ export interface WsConnection {
   close(): Promise<void>;
 }
 
-/** The server refused the opening handshake; `status` is its HTTP status when Bun reports one. */
+/** The opening handshake failed; `status` is the HTTP status of a server that refused it. */
 export class WsHandshakeError extends Error {
   override name = "WsHandshakeError";
   readonly status: number | null;
@@ -51,33 +47,33 @@ function describe(url: string): string {
   return parsed === null ? "the websocket server" : `${parsed.origin}${parsed.pathname}`;
 }
 
-// Bun reports a refused upgrade only in the error event's text:
-// "WebSocket connection to '<url>' failed: Expected 101 status code: 401".
-function refused(where: string, event: ErrorEvent): WsHandshakeError {
-  const text = event.message ?? "";
-  const at = text.indexOf("failed: ");
-  const detail = at < 0 ? "" : text.slice(at + "failed: ".length);
-  const status = /Expected 101 status code: (\d{3})/.exec(text)?.[1];
+function failed(where: string, detail: string, status: number | null): WsHandshakeError {
   return new WsHandshakeError(
     `websocket connection to ${where} failed${detail === "" ? "" : `: ${detail}`}`,
-    status === undefined ? null : Number(status),
+    status,
   );
 }
 
 class Socket implements WsConnection {
-  readonly #ws: BunWebSocket;
+  readonly #ws: WebSocket;
   readonly #queue = new AsyncQueue<WsData>();
   #closeCode: number | null = null;
   #closeReason = "";
   readonly #ended = Promise.withResolvers<void>();
 
-  constructor(ws: BunWebSocket) {
+  constructor(ws: WebSocket) {
     this.#ws = ws;
     ws.binaryType = "arraybuffer";
-    ws.addEventListener("message", ({ data }) => {
-      this.#queue.push(typeof data === "string" ? data : new Uint8Array(data as ArrayBuffer));
+    // Text arrives as a Buffer whatever the binaryType.
+    ws.on("message", (data, isBinary) => {
+      this.#queue.push(
+        isBinary ? new Uint8Array(data as ArrayBuffer) : (data as Buffer).toString(),
+      );
     });
-    ws.addEventListener("close", ({ code, reason }) => this.ended(code, reason));
+    ws.on("close", (code, reason) => this.ended(code, reason.toString()));
+    // An EventEmitter throws an error nobody listens for; ws follows each with a close, which ends
+    // the socket.
+    ws.on("error", () => {});
   }
 
   get open(): boolean {
@@ -146,7 +142,7 @@ export async function connectWs(
 ): Promise<WsConnection> {
   signal.throwIfAborted();
   const where = describe(url);
-  const ws = new BunSocket(url, { headers: { ...headers } });
+  const ws = new WebSocket(url, { headers: { ...headers } });
   const socket = new Socket(ws);
   try {
     await new Promise<void>((resolve, reject) => {
@@ -155,11 +151,19 @@ export async function connectWs(
         reject(error);
       };
       const onOpen = () => {
+        // ws would read frames that came with the handshake before the caller resumes, handing it a
+        // closing socket from a server that closes at once; they wait for resume() below.
+        ws.pause();
         settle();
         resolve();
       };
-      const onError = (event: ErrorEvent) => fail(refused(where, event));
-      const onClose = ({ code, reason }: CloseEvent) => {
+      const onError = (error: Error) => fail(failed(where, error.message, null));
+      // With this listener, ws leaves a refused handshake pending until the catch below drops it.
+      const onRefused = (_request: unknown, response: IncomingMessage) => {
+        const status = response.statusCode ?? null;
+        fail(failed(where, `Expected 101 status code: ${status}`, status));
+      };
+      const onClose = (code: number, reason: Buffer) => {
         fail(
           new WsHandshakeError(
             `websocket connection to ${where} closed during handshake (${code} ${reason})`,
@@ -174,14 +178,16 @@ export async function connectWs(
       );
       function settle() {
         clearTimeout(timer);
-        ws.removeEventListener("open", onOpen);
-        ws.removeEventListener("error", onError);
-        ws.removeEventListener("close", onClose);
+        ws.off("open", onOpen);
+        ws.off("error", onError);
+        ws.off("unexpected-response", onRefused);
+        ws.off("close", onClose);
         signal.removeEventListener("abort", onAbort);
       }
-      ws.addEventListener("open", onOpen);
-      ws.addEventListener("error", onError);
-      ws.addEventListener("close", onClose);
+      ws.on("open", onOpen);
+      ws.on("error", onError);
+      ws.on("unexpected-response", onRefused);
+      ws.on("close", onClose);
       signal.addEventListener("abort", onAbort);
     });
   } catch (error) {
@@ -191,6 +197,8 @@ export async function connectWs(
   const onAbort = () => void socket.close();
   signal.addEventListener("abort", onAbort, { once: true });
   void socket.whenEnded.then(() => signal.removeEventListener("abort", onAbort));
+  // Reading resumes on a later tick, once the caller has taken the socket as open.
+  ws.resume();
   return socket;
 }
 

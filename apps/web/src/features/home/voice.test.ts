@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { changeVoiceDialog } from "./voice";
 
 test("a save in flight holds the dialog open and keeps its state", () => {

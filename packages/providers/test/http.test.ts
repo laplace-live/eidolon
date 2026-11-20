@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { Server } from "bun";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { type ServedFetch, serveFetch } from "../../config/test/http.ts";
 import {
   AnthropicClient,
   chatPoster,
@@ -19,29 +19,25 @@ interface Seen {
   readonly body: Record<string, unknown>;
 }
 
-let server: Server<undefined>;
+let server: ServedFetch;
 const seen: Seen[] = [];
 let reply: (request: Seen) => Response = () => new Response("{}");
 
-beforeAll(() => {
-  server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      const entry = {
-        path: new URL(request.url).pathname,
-        headers: request.headers,
-        body: (await request.json()) as Record<string, unknown>,
-      };
-      seen.push(entry);
-      return reply(entry);
-    },
+beforeAll(async () => {
+  server = await serveFetch(async (request) => {
+    const entry = {
+      path: new URL(request.url).pathname,
+      headers: request.headers,
+      body: (await request.json()) as Record<string, unknown>,
+    };
+    seen.push(entry);
+    return reply(entry);
   });
 });
 
-afterAll(() => server.stop(true));
+afterAll(() => server.stop());
 
-const base = () => `http://127.0.0.1:${server.port}/v1`;
+const base = () => `${server.url}/v1`;
 
 function sse(lines: readonly string[]): Response {
   return new Response(lines.join(""), { headers: { "Content-Type": "text/event-stream" } });

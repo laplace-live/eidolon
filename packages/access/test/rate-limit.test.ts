@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { monotonicSeconds, quotaFromEnv, SlidingWindowQuota } from "../src/index.ts";
 import { EnvPatch, FakeClock, LogCapture } from "./helpers.ts";
 
@@ -42,7 +42,7 @@ describe("SlidingWindowQuota", () => {
 
   test("a peek never adds a key; only a recorded attempt does", () => {
     const quota = new SlidingWindowQuota(3, 60, new FakeClock(1000).now);
-    const set = spyOn(Map.prototype, "set");
+    const set = vi.spyOn(Map.prototype, "set");
     try {
       for (let i = 0; i < 5; i++) quota.peek(`203.0.113.${i}`);
       expect(set).not.toHaveBeenCalled();

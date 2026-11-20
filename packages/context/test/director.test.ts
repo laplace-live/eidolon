@@ -1,9 +1,10 @@
 import "../../config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, type LogRecord, resetSettings } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { serveFetch } from "../../config/test/http.ts";
 import { VOICE_THRESHOLD, VOICE_THRESHOLD_AFTER_VOICE, voiceThreshold } from "../src/director.ts";
 import {
   ADDRESSED_THRESHOLD,
@@ -460,7 +461,7 @@ describe("falling back to rules", () => {
     const decision = await directorWith(hang, { timeoutSec: 0.05 }).decide(input([viewer("hi")]));
     expect(decision.source).toBe("fallback");
     expect(messages("WARNING")).toEqual([
-      "Director fell back to rules: TimeoutError('The operation timed out.')",
+      "Director fell back to rules: TimeoutError('The operation was aborted due to timeout')",
     ]);
   });
 
@@ -592,22 +593,18 @@ describe("from the settings", () => {
 
   test("the gate role's account and model, whether or not the gate retrieves", async () => {
     const seen: { path: string; auth: string | null; body: Body }[] = [];
-    const server = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      async fetch(request) {
-        const body = (await request.json()) as Body;
-        seen.push({
-          path: new URL(request.url).pathname,
-          auth: request.headers.get("authorization"),
-          body,
-        });
-        return answering()(request.url, { body: JSON.stringify(body) });
-      },
+    const server = await serveFetch(async (request) => {
+      const body = (await request.json()) as Body;
+      seen.push({
+        path: new URL(request.url).pathname,
+        auth: request.headers.get("authorization"),
+        body,
+      });
+      return answering()(request.url, { body: JSON.stringify(body) });
     });
     try {
       setEnv("OPENROUTER_API_KEY", "or-key");
-      setEnv("OPENROUTER_API_BASE", `http://127.0.0.1:${server.port}/api/v1`);
+      setEnv("OPENROUTER_API_BASE", `${server.url}/api/v1`);
       setEnv("RETRIEVAL_GATE_MODEL", "typesafe/jev-1.14");
       setEnv("RETRIEVAL_GATE_ENABLED", "false");
       const decision = await directorFromEnv().decide(input([viewer("hi")]));
@@ -617,7 +614,7 @@ describe("from the settings", () => {
       expect(seen[0]?.auth).toBe("Bearer or-key");
       expect(seen[0]?.body.model).toBe("typesafe/jev-1.14");
     } finally {
-      server.stop(true);
+      await server.stop();
     }
   });
 

@@ -1,21 +1,21 @@
 // The waiting bar answers a task as its card does, so it lists the lines she passed on that an
 // Allow or a Continue lets the task read, as text: rendered to markup, with the macros stubbed.
-import { expect, mock, test } from "bun:test";
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
+import { expect, test, vi } from "vitest";
 import type { TaskSnapshot } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 import { STEER_PREFIX } from "../../../../bot/src/local/api.ts";
 
-mock.module("@lingui/core/macro", linguiMacro);
-mock.module("@lingui/react/macro", linguiReactMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/react/macro", linguiReactMacro);
 // The drafts' store has no server snapshot, and they aren't what this checks.
-mock.module("./draft", () => ({
+vi.doMock("./draft", () => ({
   useDraft: <T>(_key: string, initial: T) => [initial, () => {}] as const,
 }));
 const { WaitingBar } = await import("./waiting-bar");

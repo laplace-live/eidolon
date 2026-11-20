@@ -1,11 +1,11 @@
 // The local viewer's line in the persona prefix: identity.localViewerLine, which names no UID,
 // while a Bilibili viewer's line stays byte for byte what production sends.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import { buildPersonaPrefix, type Viewer } from "@eidolon/context";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { localViewer } from "../../src/local/identity.ts";
 
 const NOW = new Date("2026-09-08T23:05:00Z");

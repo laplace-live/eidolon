@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { describe, expect, test } from "vitest";
 import { botVersion, syncVersion, VERSION_SITES } from "../scripts/sync-version.ts";
 
-const ROOT = join(import.meta.dir, "../../..");
+const ROOT = join(import.meta.dirname, "../../..");
 
 function copyOfSites(): string {
   const dir = mkdtempSync(join(tmpdir(), "eidolon-version-"));

@@ -1,9 +1,10 @@
 // fixtures/streams.golden.json holds each synthetic transcript in fixtures/streams as parsed.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { PyFloat, pyStr } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   AUDIO_EXTENSIONS,
   infoJsonPath,
@@ -18,7 +19,7 @@ import {
   transcriptPaths,
 } from "../src/index.ts";
 
-const FIXTURES = join(import.meta.dir, "fixtures");
+const FIXTURES = join(import.meta.dirname, "fixtures");
 
 interface GoldenStream {
   md_path: string;
@@ -38,7 +39,7 @@ afterEach(() => {
 
 describe("iterStreams", () => {
   test("parses every *.md as _streams.py does", async () => {
-    const golden = (await Bun.file(join(FIXTURES, "streams.golden.json")).json()) as {
+    const golden = JSON.parse(await readFile(join(FIXTURES, "streams.golden.json"), "utf8")) as {
       streams: GoldenStream[];
     };
     const got = iterStreams(join(FIXTURES, "streams")).map((s) => ({
@@ -116,6 +117,16 @@ describe("iterStreams", () => {
     writeFileSync(join(work, "key.md"), "---\n2021: x\n---\n## h\nt\n");
     // TypeError: keywords must be strings
     expect(parseStream(join(work, "key.md")).metadata).toEqual({ "2021": "x" });
+  });
+
+  test("a key the frontmatter repeats keeps its last value", () => {
+    writeFileSync(
+      join(work, "twice.md"),
+      "---\nstream_id: a\ntitle: t\nstream_id: b\n---\n## h\nt\n",
+    );
+    const stream = parseStream(join(work, "twice.md"));
+    expect(stream.metadata).toEqual({ stream_id: "b", title: "t" });
+    expect(stream.chunks.map((c) => c.id)).toEqual(["b::000"]);
   });
 });
 

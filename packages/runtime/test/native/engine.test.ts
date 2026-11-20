@@ -1,11 +1,11 @@
 // The signalling server's peers, and a call's start, on a fake transport with fake providers and the
 // real hearing models.
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { AllowedOffer } from "@eidolon/access";
 import { activePersona, pyRepr } from "@eidolon/config";
 import type { CallTurnRequest, EngineDeps, Mind } from "@eidolon/engine";
 import { type CallDeps, voiceModels } from "@eidolon/voice";
 import { Peer } from "@eidolon/webrtc";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   FakeSpeech,
   FakeStt,
@@ -37,10 +37,10 @@ afterEach(() => {
 describe("createSignallingServer", () => {
   test("every offer is a call on @eidolon/webrtc's peers", async () => {
     const answer = { sdp: "v=0\r\n", type: "answer" };
-    const initialize = spyOn(Peer.prototype, "initialize").mockImplementation(async () => {});
+    const initialize = vi.spyOn(Peer.prototype, "initialize").mockImplementation(async () => {});
     const spies = [
       initialize,
-      spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
+      vi.spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
         return { ...answer, pc_id: this.pcId };
       }),
     ];

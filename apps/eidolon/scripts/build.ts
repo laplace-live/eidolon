@@ -1,5 +1,6 @@
 // Builds the npm package @laplace.live/eidolon in apps/eidolon/pack/ (`bun run build:npm`), and
 // with --pack, packs it beside that folder (`bun run pack:npm`).
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   cpSync,
@@ -21,13 +22,15 @@ import {
   voiceModelsDir,
   webDist,
 } from "@eidolon/config";
-import { ENTRIES, PLATFORMS } from "../src/launcher.ts";
+import { type Plugin, build as viteBuild } from "vite";
+import { ENTRIES, NODE_MAJOR, PLATFORMS } from "../src/launcher.ts";
 
-const ROOT = resolve(import.meta.dir, "../../..");
-const HERE = resolve(import.meta.dir, "..");
+const ROOT = resolve(import.meta.dirname, "../../..");
+const HERE = resolve(import.meta.dirname, "..");
 const PACK_DIR = join(HERE, "pack");
 /** SPDX's license texts (github.com/spdx/license-list-data, text/), named by identifier. */
 const SPDX_DIR = join(HERE, "spdx");
+const LAUNCHER = "bin/eidolon.mjs";
 
 /**
  * What the bundles leave in node_modules, each a dependency of the package: files read beside the
@@ -45,13 +48,12 @@ const EXTERNAL = [
   "@lancedb/lancedb-*",
 ];
 
-/** LanceDB requires it inside its OpenAI embedding function only, which nothing calls. */
-const NEVER_LOADED = ["openai"];
-
-const BUNFIG = `# The launcher passes this file to every Bun it starts (BUN_OPTIONS), in place of a bunfig.toml
-# in the working directory, which is the user's.
-env = false
-`;
+/**
+ * What the inlined code requires but the package never installs: LanceDB requires openai inside
+ * its OpenAI embedding function only, which nothing calls, and ws tries bufferutil and
+ * utf-8-validate, its native speedups, and runs without them.
+ */
+const NOT_INSTALLED = ["openai", "bufferutil", "utf-8-validate"];
 
 export interface Manifest {
   readonly name: string;
@@ -119,7 +121,7 @@ function workspacePins(): Map<string, string> {
 }
 
 /** The published package.json: the externals at the workspaces' pins, and the per-platform builds. */
-export function packageManifest(bunVersion: string): Manifest {
+export function packageManifest(): Manifest {
   const own = readJson<{ name: string; version: string; license: string }>(
     join(HERE, "package.json"),
   );
@@ -138,10 +140,7 @@ export function packageManifest(bunVersion: string): Manifest {
   }
   const optionalDependencies = Object.fromEntries(
     Object.values(PLATFORMS)
-      .flatMap(({ bun, lancedb: binary }) => [
-        [bun, bunVersion],
-        [binary, lancedb],
-      ])
+      .map((binary) => [binary, lancedb])
       .sort(([a], [b]) => (a as string).localeCompare(b as string)),
   );
   const platforms = Object.keys(PLATFORMS).map((key) => key.split("-") as [string, string]);
@@ -156,84 +155,127 @@ export function packageManifest(bunVersion: string): Manifest {
       directory: "apps/eidolon",
     },
     type: "module",
-    bin: { eidolon: "bin/eidolon.mjs" },
+    bin: { eidolon: LAUNCHER },
     os: [...new Set(platforms.map(([os]) => os))],
     cpu: [...new Set(platforms.map(([, cpu]) => cpu))],
-    engines: { node: ">=20" },
+    engines: { node: `>=${NODE_MAJOR}` },
     dependencies,
     optionalDependencies,
     publishConfig: { access: "public", provenance: true },
   };
 }
 
+/** What the bundles hold. */
+export interface Bundles {
+  /** Each bundle's imports and requires, as written, by its path in the package. */
+  readonly imports: ReadonlyMap<string, ReadonlySet<string>>;
+  /** The node_modules packages they inline, by name, with their folders. */
+  readonly inlined: ReadonlyMap<string, string>;
+}
+
+function isExternal(id: string): boolean {
+  const name = packageName(id);
+  return [...EXTERNAL, ...NOT_INSTALLED].some((pattern) => matches(pattern, name));
+}
+
+/** Records what the bundle written to `file` imports, and the packages it inlines. */
+function recorder(file: string, imports: Map<string, Set<string>>, inlined: Map<string, string>) {
+  return {
+    name: "eidolon-package-contents",
+    generateBundle(_options, output) {
+      const specifiers = new Set<string>();
+      imports.set(file, specifiers);
+      for (const chunk of Object.values(output)) {
+        if (chunk.type !== "chunk") continue;
+        for (const specifier of [...chunk.imports, ...chunk.dynamicImports]) {
+          specifiers.add(specifier);
+        }
+        // A CommonJS module inlined into the bundle keeps its requires as __require calls.
+        for (const [, specifier] of chunk.code.matchAll(/\b__require\("([^"]+)"\)/g)) {
+          specifiers.add(specifier as string);
+        }
+        for (const id of chunk.moduleIds) {
+          const owner = owningPackage(id);
+          if (owner !== null) inlined.set(owner.name, owner.dir);
+        }
+      }
+    },
+  } satisfies Plugin;
+}
+
 /**
- * Bundles the supervisor, the server and the CLI for Bun into the package at `root`, and the
- * launcher for Node. Returns the node_modules packages the Bun bundles inline, by name.
+ * Bundles the supervisor, the server and the CLI into the package at `root`, and the launcher, one
+ * file each: entries built together would share chunks.
  */
-export async function bundle(root: string): Promise<Map<string, string>> {
-  const builds: [string, string][] = [
-    [join(ROOT, "apps/bot/src/local/main.ts"), join(root, ENTRIES.app)],
-    [serverEntry(), inPackage(root, serverEntry)],
-    [cliEntry(), inPackage(root, cliEntry)],
+export async function bundle(root: string): Promise<Bundles> {
+  const builds: [entry: string, file: string][] = [
+    [join(ROOT, "apps/bot/src/local/main.ts"), ENTRIES.app],
+    [serverEntry(), relative(root, inPackage(root, serverEntry))],
+    [cliEntry(), relative(root, inPackage(root, cliEntry))],
+    [join(HERE, "src/bin.ts"), LAUNCHER],
   ];
+  const imports = new Map<string, Set<string>>();
   const inlined = new Map<string, string>();
-  // One build per entry: entries built together are named after their folders, and the chunks
-  // they share land elsewhere, each with its own import.meta.dir.
-  for (const [entry, output] of builds) {
-    const result = await Bun.build({
-      entrypoints: [entry],
-      target: "bun",
-      outdir: dirname(output),
-      naming: `${basename(output, ".js")}.[ext]`,
-      external: [...EXTERNAL, ...NEVER_LOADED],
-      metafile: true,
+  for (const [entry, file] of builds) {
+    const launcher = file === LAUNCHER;
+    await viteBuild({
+      configFile: false,
+      envDir: false,
+      publicDir: false,
+      root: ROOT,
+      logLevel: "warn",
+      plugins: [recorder(file, imports, inlined)],
+      ssr: { noExternal: true },
+      build: {
+        ssr: entry,
+        outDir: join(root, dirname(file)),
+        emptyOutDir: false,
+        target: `node${NODE_MAJOR}`,
+        minify: false,
+        reportCompressedSize: false,
+        rolldownOptions: {
+          // Module comments name files from the checkout's root, wherever this runs.
+          cwd: ROOT,
+          external: isExternal,
+          onLog(level, log, handler) {
+            // LanceDB's Transformers.js embedding function, which nothing calls, imports that
+            // package through eval.
+            if (log.code === "EVAL" && log.id?.includes("/@lancedb/lancedb/")) return;
+            handler(level, log);
+          },
+          output: {
+            format: "es",
+            entryFileNames: basename(file),
+            codeSplitting: false,
+            comments: { jsdoc: false },
+            ...(launcher ? { banner: "#!/usr/bin/env node" } : {}),
+          },
+        },
+      },
     });
-    if (!result.success) throw new AggregateError(result.logs, `bun build ${entry} failed`);
-    for (const input of Object.keys(result.metafile?.inputs ?? {})) {
-      const owner = owningPackage(resolve(input));
-      if (owner !== null) inlined.set(owner.name, owner.dir);
-    }
   }
-  const launcher = await Bun.build({
-    entrypoints: [join(HERE, "src/bin.ts")],
-    target: "node",
-    outdir: join(root, "bin"),
-    naming: "eidolon.mjs",
-    banner: "#!/usr/bin/env node",
-  });
-  if (!launcher.success) throw new AggregateError(launcher.logs, "bun build src/bin.ts failed");
-  chmodSync(join(root, "bin", "eidolon.mjs"), 0o755);
-  return inlined;
-}
-
-/** The bare specifiers `file` imports or requires. */
-export function bareImports(file: string): Set<string> {
-  const source = readFileSync(file, "utf8");
-  const specifiers = new Bun.Transpiler({ loader: "js" })
-    .scanImports(source)
-    .map(({ path }) => path);
-  // A CommonJS module inlined into the bundle keeps its requires as __require calls.
-  for (const [, specifier] of source.matchAll(/\b__require\("([^"]+)"\)/g)) {
-    specifiers.push(specifier as string);
-  }
-  return new Set(specifiers.filter((s) => !s.startsWith(".") && !s.startsWith("/")));
+  chmodSync(join(root, LAUNCHER), 0o755);
+  return { imports, inlined };
 }
 
 /**
- * Throws when a bundle in `root/dist` imports something the package doesn't install. LanceDB's
- * loader names a binary for every platform it supports, and requires only the running one's.
+ * Throws when a bundle imports something the package doesn't install. LanceDB's loader names a
+ * binary for every platform it supports, and requires only the running one's.
  */
-export function checkImports(root: string, manifest: Manifest): void {
+export function checkImports(
+  imports: ReadonlyMap<string, ReadonlySet<string>>,
+  manifest: Manifest,
+): void {
   const installed = new Set([
     ...Object.keys(manifest.dependencies),
     ...Object.keys(manifest.optionalDependencies),
   ]);
   const stray: string[] = [];
-  const dist = join(root, "dist");
-  for (const file of readdirSync(dist).filter((name) => name.endsWith(".js"))) {
-    for (const specifier of bareImports(join(dist, file))) {
+  for (const [file, specifiers] of imports) {
+    for (const specifier of specifiers) {
+      if (specifier.startsWith(".") || specifier.startsWith("/")) continue;
       const name = packageName(specifier);
-      if (isBuiltin(specifier) || installed.has(name) || NEVER_LOADED.includes(name)) continue;
+      if (isBuiltin(specifier) || installed.has(name) || NOT_INSTALLED.includes(name)) continue;
       if (name.startsWith("@lancedb/lancedb-")) continue;
       stray.push(`${file}: ${specifier}`);
     }
@@ -256,10 +298,7 @@ export interface Bundled {
 /** The web app, built into `out`; returns the packages it bundles. */
 async function buildWeb(out: string): Promise<Bundled[]> {
   const web = join(ROOT, "apps/web");
-  const vite = (await import(Bun.resolveSync("vite", web))) as {
-    build(config: Record<string, unknown>): Promise<unknown>;
-  };
-  await vite.build({
+  await viteBuild({
     root: web,
     configFile: join(web, "vite.config.ts"),
     logLevel: "warn",
@@ -272,7 +311,7 @@ async function buildWeb(out: string): Promise<Bundled[]> {
 
 const LICENSE_FILE = /^(licen[cs]e|copying)([.-].*)?$/i;
 
-/** The packages the Bun bundles inline, with what their folders hold, as Vite reads the web app's. */
+/** The packages the bundles inline, with what their folders hold, as Vite reads the web app's. */
 export function inlinedPackages(inlined: ReadonlyMap<string, string>): Bundled[] {
   return [...inlined].map(([name, dir]) => {
     const { version, license } = readJson<{ version: string; license?: string }>(
@@ -335,46 +374,36 @@ export function notices(dist: readonly Bundled[], web: readonly Bundled[]): stri
 /** Copies the repository's files under `from`, so an untracked index or picture never ships. */
 export function copyTracked(from: string, to: string): void {
   const dir = relative(ROOT, from);
-  const listed = Bun.spawnSync(["git", "ls-files", "-z", "--", dir], { cwd: ROOT });
-  if (listed.exitCode !== 0) throw new Error(`git ls-files ${dir} failed`);
-  for (const file of listed.stdout.toString().split("\0").filter(Boolean)) {
+  const listed = spawnSync("git", ["ls-files", "-z", "--", dir], {
+    cwd: ROOT,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  if (listed.status !== 0) throw new Error(`git ls-files ${dir} failed`);
+  for (const file of listed.stdout.split("\0").filter(Boolean)) {
     const target = join(to, relative(dir, file));
     mkdirSync(dirname(target), { recursive: true });
     cpSync(join(ROOT, file), target);
   }
 }
 
-/** The Bun package.json's packageManager names, as CI's does: the package ships it, and builds with no other. */
-function pinnedBun(): string {
-  const { packageManager } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
-    readonly packageManager?: unknown;
-  };
-  const version =
-    typeof packageManager === "string"
-      ? /^bun@(\d+\.\d+\.\d+)$/.exec(packageManager)?.[1]
-      : undefined;
-  if (version === undefined) throw new Error('package.json names no "packageManager": "bun@x.y.z"');
-  if (Bun.version !== version) {
-    throw new Error(`Build the package with Bun ${version}, package.json's, not ${Bun.version}`);
-  }
-  return version;
-}
-
 /** Writes the package into PACK_DIR, replacing what was there. */
 async function stage(): Promise<Manifest> {
-  const manifest = packageManifest(pinnedBun());
+  const manifest = packageManifest();
   rmSync(PACK_DIR, { recursive: true, force: true });
   mkdirSync(PACK_DIR);
-  const inlined = await bundle(PACK_DIR);
-  checkImports(PACK_DIR, manifest);
+  const bundles = await bundle(PACK_DIR);
+  checkImports(bundles.imports, manifest);
   const web = await buildWeb(inPackage(PACK_DIR, webDist));
   copyTracked(templatesDir(), inPackage(PACK_DIR, templatesDir));
   copyTracked(builtinSkillsDir(), inPackage(PACK_DIR, builtinSkillsDir));
   copyTracked(jiebaDir(), inPackage(PACK_DIR, jiebaDir));
   copyTracked(resamplerDir(), inPackage(PACK_DIR, resamplerDir));
   copyTracked(voiceModelsDir(), inPackage(PACK_DIR, voiceModelsDir));
-  writeFileSync(join(PACK_DIR, "bunfig.toml"), BUNFIG);
-  writeFileSync(join(PACK_DIR, "THIRD_PARTY_NOTICES.md"), notices(inlinedPackages(inlined), web));
+  writeFileSync(
+    join(PACK_DIR, "THIRD_PARTY_NOTICES.md"),
+    notices(inlinedPackages(bundles.inlined), web),
+  );
   cpSync(join(HERE, "README.md"), join(PACK_DIR, "README.md"));
   for (const file of ["LICENSE", "NOTICE"]) cpSync(join(ROOT, file), join(PACK_DIR, file));
   writeFileSync(join(PACK_DIR, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -383,12 +412,13 @@ async function stage(): Promise<Manifest> {
 
 /** `npm pack` of PACK_DIR into apps/eidolon/; returns the tarball's path. */
 function pack(): string {
-  const packed = Bun.spawnSync(["npm", "pack", "--json", "--pack-destination", HERE], {
+  const packed = spawnSync("npm", ["pack", "--json", "--pack-destination", HERE], {
     cwd: PACK_DIR,
-    stderr: "inherit",
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
   });
-  if (packed.exitCode !== 0) throw new Error(`npm pack exited ${packed.exitCode}`);
-  const [result] = JSON.parse(packed.stdout.toString()) as { filename: string }[];
+  if (packed.status !== 0) throw new Error(`npm pack exited ${packed.status}`);
+  const [result] = JSON.parse(packed.stdout) as { filename: string }[];
   if (result === undefined) throw new Error("npm pack reported no tarball");
   return join(HERE, result.filename);
 }
@@ -398,5 +428,5 @@ if (import.meta.main) {
   delete process.env.EIDOLON_APP_ROOT;
   const manifest = await stage();
   console.log(`${manifest.name}@${manifest.version} staged in ${relative(ROOT, PACK_DIR)}`);
-  if (Bun.argv.includes("--pack")) console.log(pack());
+  if (process.argv.includes("--pack")) console.log(pack());
 }

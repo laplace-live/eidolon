@@ -1,14 +1,4 @@
 import "../../config/test/isolated-guard.ts";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  setSystemTime,
-  test,
-} from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { UserContext } from "@eidolon/access";
@@ -24,6 +14,7 @@ import {
 } from "@eidolon/config";
 import { RECALL_HINT, RECALL_PREFIX, RECALL_TOOL_NAME } from "@eidolon/context";
 import type { ContextProvider, LlmTool, TurnGate } from "@eidolon/core";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   type ArchiveProvider,
   lastSelection,
@@ -406,22 +397,22 @@ describe("personaParts", () => {
       expect(built.providers.map((p) => p.label)).not.toContain("LaplaceMem0MemoryService");
     };
     try {
-      setSystemTime(new Date(0));
+      vi.setSystemTime(new Date(0));
       await withoutMemory();
       down = false;
-      setSystemTime(new Date(59_999));
+      vi.setSystemTime(new Date(59_999));
       await withoutMemory();
       expect(calls.memory).toEqual(["0"]);
 
       down = true;
-      setSystemTime(new Date(60_000));
+      vi.setSystemTime(new Date(60_000));
       await withoutMemory();
       expect(messages("WARNING")).toEqual([
         "Mem0 unavailable, continuing without memory: ECONNREFUSED",
       ]);
 
       down = false;
-      setSystemTime(new Date(120_000));
+      vi.setSystemTime(new Date(120_000));
       const back = await parts(PERSONA, VIEWER, CHAT);
       expect(back.providers[0]).toEqual({
         label: "LaplaceMem0MemoryService",
@@ -430,7 +421,7 @@ describe("personaParts", () => {
       await parts(PERSONA, VIEWER, CHAT);
       expect(calls.memory).toEqual(["0", "0", "0"]);
     } finally {
-      setSystemTime();
+      vi.useRealTimers();
     }
   });
 });

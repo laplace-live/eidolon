@@ -1,9 +1,12 @@
-import { afterEach, beforeEach, expect, jest, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
 import { FISH_SEGMENT_IDLE_MS, FISH_URL, FishSpeech } from "../../src/speech/stream/fish.ts";
 import type { UtteranceAudio } from "../../src/speech/stream/index.ts";
 import { packMsg, unpackMsg } from "../../src/speech/stream/msgpack.ts";
 import { SPEECH_STALL_MS, SPEECH_STALLED } from "../../src/speech/stream/shared.ts";
+import { useFakeClock } from "../clock.ts";
+import { serveTcp } from "../ws-server.ts";
 import {
   bytesOf,
   CLEAN_ENV,
@@ -56,7 +59,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await Promise.all(streams.map((stream) => stream.close()));
-  fake?.stop();
+  await fake?.stop();
   setUsageSink(null);
   restore();
 });
@@ -78,21 +81,21 @@ const events = (peer: Peer) =>
  * sample the flush's number, and `stop` with `finish` once that audio is out. Returns when it got
  * each text, and when it sent each flush's last audio.
  */
-function pacedFish(): { readonly texts: number[]; readonly lastAudio: number[] } {
+async function pacedFish(): Promise<{ readonly texts: number[]; readonly lastAudio: number[] }> {
   const texts: number[] = [];
   const lastAudio: number[] = [];
   let chain = Promise.resolve();
   let flushes = 0;
-  fake = fakeServer({
+  fake = await fakeServer({
     onMessage: (peer, data) => {
       const { event } = unpackMsg(data as Uint8Array) as { event: string };
       if (event === "text") texts.push(performance.now());
       if (event === "flush") {
         const n = ++flushes;
         chain = chain.then(async () => {
-          await Bun.sleep(20);
+          await delay(20);
           peer.socket.send(packMsg({ event: "audio", audio: bytesOf([n, n]) }));
-          await Bun.sleep(10);
+          await delay(10);
           peer.socket.send(packMsg({ event: "audio", audio: bytesOf([n]) }));
           lastAudio.push(performance.now());
         });
@@ -111,7 +114,7 @@ test("pipedog's URL for Fish's own account", () => {
 });
 
 test("a session opens at once with today's start message, and an utterance says, flushes and stops", async () => {
-  fake = fakeServer({ onMessage: answer });
+  fake = await fakeServer({ onMessage: answer });
   const stream = open();
   expect(stream.sampleRate).toBe(44100);
   const first = await until(() => heardFrom(fake, 0));
@@ -142,7 +145,7 @@ test("a session opens at once with today's start message, and an utterance says,
 });
 
 test("segments go one at a time, each once the last one's audio has gone quiet, its audio tagged with it", async () => {
-  const { texts, lastAudio } = pacedFish();
+  const { texts, lastAudio } = await pacedFish();
   const utterance = open().utterance(null);
   utterance.say({ id: 1, text: "一。" });
   utterance.say({ id: 2, text: "二。" });
@@ -174,7 +177,7 @@ test("segments go one at a time, each once the last one's audio has gone quiet, 
 });
 
 test("a segment left with nothing to say ends in its place and goes to no one", async () => {
-  pacedFish();
+  await pacedFish();
   const utterance = open().utterance(null);
   utterance.say({ id: 1, text: "一。" });
   utterance.say({ id: 2, text: "  " });
@@ -198,7 +201,7 @@ test("a segment left with nothing to say ends in its place and goes to no one", 
 });
 
 test("a cancel drops the segments waiting and sends nothing more on the session", async () => {
-  pacedFish();
+  await pacedFish();
   const utterance = open().utterance(null);
   const audio = utterance.audio[Symbol.asyncIterator]();
   utterance.say({ id: 1, text: "一。" });
@@ -207,14 +210,14 @@ test("a cancel drops the segments waiting and sends nothing more on the session"
   expect(plain([(await audio.next()).value])).toEqual([{ kind: "pcm", seg: 1, pcm: [1, 1] }]);
   utterance.cancel();
   const peer = await until(() => fake.peers[0]?.closed && fake.peers[0]);
-  await Bun.sleep(FISH_SEGMENT_IDLE_MS + 50);
+  await delay(FISH_SEGMENT_IDLE_MS + 50);
   expect(events(peer)).toEqual(["start", "一。", "flush"]);
   expect((await audio.next()).done).toBe(true);
 });
 
 test("a flush that never answers fails the utterance 15 s on, so no segment waits behind it for ever", async () => {
   const silent = Promise.withResolvers<Peer>();
-  fake = fakeServer({
+  fake = await fakeServer({
     onMessage: (peer, data) => {
       if ((unpackMsg(data as Uint8Array) as { event: string }).event !== "flush") return;
       if (peer.received.length === 3) {
@@ -225,8 +228,8 @@ test("a flush that never answers fails the utterance 15 s on, so no segment wait
     },
   });
   const stream = open();
-  // No `until` from here: the fake clock holds Bun.sleep too.
-  jest.useFakeTimers();
+  // No `until` from here: its deadline is on the fake clock.
+  useFakeClock();
   try {
     const seen: UtteranceAudio[] = [];
     const first = Promise.withResolvers<void>();
@@ -244,25 +247,25 @@ test("a flush that never answers fails the utterance 15 s on, so no segment wait
     utterance.say({ id: 2, text: "二。" });
     utterance.end();
     await first.promise;
-    jest.advanceTimersByTime(FISH_SEGMENT_IDLE_MS);
+    vi.advanceTimersByTime(FISH_SEGMENT_IDLE_MS);
     const peer = await silent.promise;
-    jest.advanceTimersByTime(SPEECH_STALL_MS - 1);
+    vi.advanceTimersByTime(SPEECH_STALL_MS - 1);
     await settle();
     expect(plain(seen)).toEqual([
       { kind: "pcm", seg: 1, pcm: [1] },
       { kind: "seg-end", seg: 1 },
     ]);
-    jest.advanceTimersByTime(1);
+    vi.advanceTimersByTime(1);
     await reading;
     expect(seen.at(-1)).toEqual({ kind: "error", message: SPEECH_STALLED });
     expect(events(peer).slice(0, 5)).toEqual(["start", "一。", "flush", "二。", "flush"]);
   } finally {
-    jest.useRealTimers();
+    vi.useRealTimers();
   }
 });
 
 test("drama-3 hears her cues; another Fish model gets them stripped, and the meter counts what went", async () => {
-  fake = fakeServer();
+  fake = await fakeServer();
   const drama = open();
   const cue = "[温柔] 好<emphasis>呀</emphasis>";
   const said = drama.utterance(null);
@@ -301,7 +304,7 @@ test("drama-3 hears her cues; another Fish model gets them stripped, and the met
 });
 
 test("another voice opens its own session, and the next one opens in the voice last used", async () => {
-  fake = fakeServer();
+  fake = await fakeServer();
   const stream = open();
   await until(() => fake.peers[0]?.received[0]);
   const styled = stream.utterance("voice-2");
@@ -324,7 +327,7 @@ test("another voice opens its own session, and the next one opens in the voice l
 });
 
 test("a voice switch while segments wait leaves the new voice's session to the next utterance", async () => {
-  pacedFish();
+  await pacedFish();
   const stream = open();
   const before = stream.utterance(null);
   before.say({ id: 1, text: "一。" });
@@ -345,7 +348,7 @@ test("a voice switch while segments wait leaves the new voice's session to the n
 });
 
 test("an utterance with nothing said hands its session to the next", async () => {
-  fake = fakeServer();
+  fake = await fakeServer();
   const stream = open();
   const empty = stream.utterance(null);
   empty.say({ id: 1, text: "  " });
@@ -354,12 +357,12 @@ test("an utterance with nothing said hands its session to the next", async () =>
   const next = stream.utterance(null);
   next.say({ id: 2, text: "在。" });
   await until(() => fake.peers[0]?.received.length === 3);
-  await Bun.sleep(50);
+  await delay(50);
   expect(fake.peers).toHaveLength(1);
 });
 
 test("cancel closes the session at once and opens the next", async () => {
-  fake = fakeServer();
+  fake = await fakeServer();
   const stream = open();
   const utterance = stream.utterance(null);
   utterance.say({ id: 1, text: "一二三。" });
@@ -377,19 +380,14 @@ test("barge-ins while sessions are still connecting abandon their handshakes", a
   // A server that takes connections and never answers the upgrade.
   let connected = 0;
   let open = 0;
-  const listener = Bun.listen({
-    hostname: "127.0.0.1",
-    port: 0,
-    socket: {
-      open: () => {
-        connected++;
-        open++;
-      },
-      close: () => {
-        open--;
-      },
-      data: () => {},
-    },
+  const listener = await serveTcp((socket) => {
+    connected++;
+    open++;
+    // Read and dropped: a socket nobody reads never hears the client hang up.
+    socket.resume();
+    socket.once("close", () => {
+      open--;
+    });
   });
   try {
     const stream = new FishSpeech(selectionAt("fish", `http://127.0.0.1:${listener.port}`));
@@ -403,12 +401,12 @@ test("barge-ins while sessions are still connecting abandon their handshakes", a
     }
     await until(() => open === 1);
   } finally {
-    listener.stop(true);
+    await listener.stop();
   }
 });
 
 test("Fish's error finish and a refused key are errors that never carry the key", async () => {
-  fake = fakeServer({
+  fake = await fakeServer({
     onMessage: (peer, data) => {
       const message = unpackMsg(data as Uint8Array) as { event: string };
       if (message.event === "flush")
@@ -420,9 +418,9 @@ test("Fish's error finish and a refused key are errors that never carry the key"
   expect(await collect(failing.audio)).toEqual([
     { kind: "error", message: "Fish Audio server error during synthesis" },
   ]);
-  fake.stop();
+  await fake.stop();
 
-  fake = fakeServer({ refuse: 401 });
+  fake = await fakeServer({ refuse: 401 });
   const refused = open().utterance(null);
   refused.say({ id: 1, text: "嗨。" });
   const [event] = await collect(refused.audio);
@@ -434,7 +432,7 @@ test("Fish's error finish and a refused key are errors that never carry the key"
 });
 
 test("closing the stream ends an open utterance and flushes the meter", async () => {
-  fake = fakeServer();
+  fake = await fakeServer();
   const stream = open();
   const utterance = stream.utterance(null);
   utterance.say({ id: 1, text: "再见。" });

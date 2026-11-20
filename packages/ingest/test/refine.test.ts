@@ -1,11 +1,11 @@
 // fixtures/refine/vectors.golden.json holds what the validators, lenient JSON, the stream context
 // and the usage accounting make of the inputs it lists. The hashes below pin milky-green's prompts
 // and response schemas.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   activePersona,
   consoleSink,
@@ -21,9 +21,10 @@ import {
   pyJsonLoads,
 } from "@eidolon/config";
 import type { CostSource } from "@eidolon/retrieval";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { type ProgressEvent, parseStream, refine } from "../src/index.ts";
 
-const FIXTURES = join(import.meta.dir, "fixtures/refine");
+const FIXTURES = join(import.meta.dirname, "fixtures/refine");
 const MILKY_GREEN = { name: "明前奶绿", shortName: "奶绿" };
 
 function sha256(text: string): string {
@@ -286,7 +287,7 @@ function fakeClient(
       client.inFlight++;
       client.peak = Math.max(client.peak, client.inFlight);
       try {
-        await Bun.sleep(1);
+        await delay(1);
         return await answer(call);
       } finally {
         client.inFlight--;

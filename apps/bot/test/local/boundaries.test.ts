@@ -1,10 +1,11 @@
 // What keeps the local app out of production: main.ts reaches none of it, nor the store it keeps
 // chats in, nor the assistant, nothing outside apps/bot/src/local names it, apps/bot gains no
-// dependency, and the SPA's leaves import nothing but @eidolon/chat's types.
+// dependency unlisted here, and the SPA's leaves import nothing but @eidolon/chat's types.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { describe, expect, test } from "vitest";
+import { parseAst } from "vitest/node";
 import {
   ERROR_CODES,
   JOB_COMMANDS,
@@ -19,10 +20,11 @@ import { sessionRoutes } from "../../src/local/session.ts";
 import { TaskManager } from "../../src/local/tasks/manager.ts";
 import { LocalToken } from "../../src/local/token.ts";
 
-const ROOT = resolve(import.meta.dir, "../../../..");
+const ROOT = resolve(import.meta.dirname, "../../../..");
 const BOT_SRC = join(ROOT, "apps", "bot", "src");
 const LOCAL_SRC = join(BOT_SRC, "local");
-const transpiler = new Bun.Transpiler({ loader: "ts" });
+/** The one local module that copies the environment: for the children that apply the .env. */
+const ENVIRON = join(LOCAL_SRC, "environ.ts");
 
 interface Workspace {
   readonly dir: string;
@@ -45,11 +47,76 @@ function workspaces(): Map<string, Workspace> {
   return found;
 }
 
+interface AstNode {
+  readonly type: string;
+  readonly [field: string]: unknown;
+}
+
+interface Specifier {
+  readonly importKind?: string;
+  readonly exportKind?: string;
+}
+
+/** Erased by TypeScript: `import type`, or only `type` names between the braces. */
+function typeOnly(kind: unknown, specifiers: readonly Specifier[]): boolean {
+  return (
+    kind === "type" ||
+    (specifiers.length > 0 && specifiers.every((s) => (s.importKind ?? s.exportKind) === "type"))
+  );
+}
+
+function literal(node: unknown): string | null {
+  const value = (node as AstNode | null)?.value;
+  return (node as AstNode | null)?.type === "Literal" && typeof value === "string" ? value : null;
+}
+
+/**
+ * Every specifier `file` loads once its types are erased, in source order: imports, re-exports,
+ * `import()` and `require()`, never a type's `import("…")`.
+ */
 function scan(file: string): string[] {
-  return transpiler
-    .scanImports(readFileSync(file, "utf8"))
-    .filter(({ kind }) => kind !== "import-rule" && kind !== "url-token")
-    .map(({ path }) => path);
+  const found: string[] = [];
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (node === null || typeof node !== "object") return;
+    const ast = node as AstNode;
+    switch (ast.type) {
+      case "ImportDeclaration":
+        if (!typeOnly(ast.importKind, ast.specifiers as Specifier[])) {
+          found.push(literal(ast.source) as string);
+        }
+        return;
+      case "ExportNamedDeclaration":
+        if (ast.source !== null && !typeOnly(ast.exportKind, ast.specifiers as Specifier[])) {
+          found.push(literal(ast.source) as string);
+        }
+        break;
+      case "ExportAllDeclaration":
+        if (ast.exportKind !== "type") found.push(literal(ast.source) as string);
+        return;
+      case "ImportExpression": {
+        const source = literal(ast.source);
+        if (source !== null) found.push(source);
+        break;
+      }
+      case "CallExpression": {
+        const callee = ast.callee as AstNode;
+        const source = literal((ast.arguments as unknown[])[0]);
+        if (callee.type === "Identifier" && callee.name === "require" && source !== null) {
+          found.push(source);
+        }
+        break;
+      }
+      case "TSImportType":
+        return;
+    }
+    for (const [field, value] of Object.entries(ast)) if (field !== "type") visit(value);
+  };
+  visit(parseAst(readFileSync(file, "utf8"), { lang: "ts", sourceType: "module" }).body);
+  return found;
 }
 
 /** Every workspace file main.ts loads, and every specifier it meets on the way. */
@@ -153,7 +220,7 @@ describe("production never loads the local app", () => {
     }
   });
 
-  test("apps/bot's external dependencies are unchanged", () => {
+  test("apps/bot's external dependencies are exactly these", () => {
     const manifest = JSON.parse(
       readFileSync(join(ROOT, "apps", "bot", "package.json"), "utf8"),
     ) as {
@@ -164,20 +231,27 @@ describe("production never loads the local app", () => {
     );
     expect(Object.fromEntries(external)).toEqual({
       "@modelcontextprotocol/sdk": "1.32.1",
+      "smol-toml": "1.9.1",
+      srvx: "1.0.8",
+      yaml: "2.9.1",
       zod: "4.6.7",
     });
   });
 });
 
 describe("the local entries", () => {
-  test("load .env first, as main.ts does", () => {
+  test("note the environment they started with, then load .env, before anything else", () => {
     for (const entry of ["main.ts", "server.ts"]) {
-      expect([entry, scan(join(LOCAL_SRC, entry))[0]]).toEqual([entry, "../load-env.ts"]);
+      expect([entry, scan(join(LOCAL_SRC, entry)).slice(0, 2)]).toEqual([
+        entry,
+        ["./environ.ts", "../load-env.ts"],
+      ]);
     }
+    expect(scan(ENVIRON)).toEqual([]);
   });
 
   test("read no env themselves: settings go through @eidolon/config", () => {
-    for (const file of sources(LOCAL_SRC)) {
+    for (const file of sources(LOCAL_SRC).filter((f) => f !== ENVIRON)) {
       const text = readFileSync(file, "utf8");
       expect([relative(ROOT, file), text.includes("process.env")]).toEqual([
         relative(ROOT, file),

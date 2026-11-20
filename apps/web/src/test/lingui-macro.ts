@@ -1,6 +1,6 @@
-// Lingui's macros compile at build time, and `bun test` has no transform, so they throw if run. A
-// test of a module that uses them stubs `@lingui/core/macro` with this before importing it; the
-// stubs give the English source text, placeholders filled.
+// Lingui's macros compile at build time, and the tests run without that transform, so they throw if
+// run. A test of a module that uses them stubs `@lingui/core/macro` with this before importing it;
+// the stubs give the English source text, placeholders filled.
 type Values = Readonly<Record<string, unknown>>;
 interface Descriptor {
   readonly id?: string;

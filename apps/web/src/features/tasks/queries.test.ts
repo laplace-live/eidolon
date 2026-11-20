@@ -1,13 +1,13 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { TaskSnapshot, TaskStatus } from "@/lib/api";
 import { linguiMacro } from "@/test/lingui-macro";
 
-mock.module("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
 const { stoppedByTurningOff, tasksQuery } = await import("./queries");
 
 afterEach(() => {
-  mock.restore();
+  vi.restoreAllMocks();
 });
 
 const STATUSES: readonly TaskStatus[] = [
@@ -52,7 +52,7 @@ function serve(tasks: readonly TaskSnapshot[]) {
         );
     }
   };
-  return spyOn(globalThis, "fetch").mockImplementation(answer as typeof fetch);
+  return vi.spyOn(globalThis, "fetch").mockImplementation(answer as typeof fetch);
 }
 
 describe("what turning Assistant Mode off stops", () => {
@@ -74,7 +74,7 @@ describe("what turning Assistant Mode off stops", () => {
   });
 
   test("is unknown while the tasks can't be read", async () => {
-    spyOn(globalThis, "fetch").mockResolvedValue(
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json(
         { error: { code: "internal", message: "Eidolon hit an error" } },
         { status: 500 },

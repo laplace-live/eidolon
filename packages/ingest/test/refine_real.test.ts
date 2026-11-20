@@ -1,10 +1,11 @@
 // The real transcripts and sidecars under <EIDOLON_REAL_HOME>/sources/milky-green/streams, read
 // only. Each test skips when they are absent, unless EIDOLON_REQUIRE_PARITY=1.
-import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { activePersona, consoleSink, logger, OpenAIClient } from "@eidolon/config";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import { iterStreams, loadSidecar, type ParsedStream, refine, saveSidecar } from "../src/index.ts";
 
 const STREAMS = join(process.env.EIDOLON_REAL_HOME ?? "", "sources/milky-green/streams");
@@ -106,7 +107,7 @@ test.skipIf(!HAVE_DATA && !REQUIRED)(
         if (!once.equals(original)) {
           rewritten.push(name);
           const [after, before] = [once, original].map((bytes) => JSON.parse(bytes.toString()));
-          if (!Bun.deepEquals(after, before)) changed.push(name);
+          if (!isDeepStrictEqual(after, before)) changed.push(name);
         }
         if (!twice.equals(once)) unstable.push(name);
       }

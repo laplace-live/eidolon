@@ -87,7 +87,9 @@ export function canonicalPath(path: string): string {
   let head = resolve(path);
   for (;;) {
     try {
-      return join(realpathSync(head), ...missing);
+      // realpath(3) also gives the letter case on disk; the JavaScript realpathSync keeps the case
+      // it was given.
+      return join(realpathSync.native(head), ...missing);
     } catch {
       const parent = dirname(head);
       if (parent === head) return resolve(path);

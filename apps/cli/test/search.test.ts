@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import { logger } from "@eidolon/config";
 import type { Retriever, SearchOptions, SearchRow } from "@eidolon/retrieval";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { searchMain } from "../src/index.ts";
 import {
   blockNetwork,
@@ -26,7 +27,7 @@ interface Case {
   calls: Record<string, unknown>[];
 }
 
-const HITS: SearchRow[] = (await Bun.file(`${FIX}/search_hits.json`).json()).hits;
+const HITS: SearchRow[] = JSON.parse(await readFile(`${FIX}/search_hits.json`, "utf8")).hits;
 const PATHS = { "<FIX>": FIX };
 const goldens = await golden<Case[]>("search.json");
 
