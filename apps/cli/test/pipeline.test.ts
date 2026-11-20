@@ -157,7 +157,7 @@ async function scenario(
     retryDelaysMs: [],
     ffprobe: null,
     ffmpeg: null,
-    embeddingClient: fakeEmbeddings(),
+    embeddingModel: fakeEmbeddings(),
     ...options.deps,
   });
   return {
@@ -398,7 +398,7 @@ describe("main() scenarios", () => {
   test("ingest-fails: no catalog after a failed ingest", async () => {
     const run = await scenario("ingest-fails", {
       setup: unrefined,
-      deps: { embeddingClient: fakeEmbeddings(true) },
+      deps: { embeddingModel: fakeEmbeddings(true) },
       extra: indexOf(join(work, "main-ingest-fails")),
     });
     expect(run.code).toBe(1);

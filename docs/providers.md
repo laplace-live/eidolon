@@ -30,6 +30,7 @@ entry offers a kind implements it there, and no other does.
 | Streaming speech | `SpeechStream` | `SPEECH_STREAMS` (`speech/stream/index.ts`) |
 | Batch speech | `synthesize` | `SYNTHESIZERS` (`speech/batch/synthesize.ts`) |
 | Realtime voice | `RealtimeSession` | `REALTIME_DIALECTS` (`realtime/session.ts`) |
+| Embedding models | `EmbeddingModel` | `EMBEDDING_MODELS` (`embedding/index.ts`) |
 | Decision models | `DecisionModel` | `DECISION_MODELS` (`decision/index.ts`) |
 | Reranking | `RerankModel` | `RERANK_MODELS` (`rerank/index.ts`) |
 | Image generation | `ImageModel` | `IMAGE_MODELS` (`image/index.ts`) |
@@ -222,8 +223,13 @@ JSON caller's body becomes there. The minds and the JSON posters read it and nam
   reply has started streaming.
 - **OpenAI's own API** gets `max_completion_tokens` for `max_tokens`, and no `temperature` or
   `top_p` for its reasoning models, which refuse them; OpenRouter makes that translation itself.
-- **The rest** (embeddings, reranking, the decision API, image generation, memory extraction and
-  refinement) post plain JSON with `fetch` and report what they used the same way.
+- **Embeddings**, retrieval's and Mem0's alike, are one `EmbeddingModel` request: on OpenRouter it
+  asks for its cost (`usage.include`) and carries the attribution headers. Retrieval's retries a
+  failed request five times, and a 200 without vectors, OpenRouter's way of passing an upstream
+  error on, five times more, a quota error's ten times a minute apart; Mem0's, made during a
+  turn, retries twice, as the OpenAI SDK did, and fails on such a 200 at once.
+- **The rest** (reranking, the decision API, image generation, memory extraction and refinement)
+  post plain JSON with `fetch` and report what they used the same way.
 
 ## Speech without a WebSocket
 

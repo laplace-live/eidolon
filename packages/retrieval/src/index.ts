@@ -30,24 +30,12 @@ export {
 } from "./embed_batches.ts";
 export { EmbedCache, embedCacheKey } from "./embed_cache.ts";
 export {
-  type CostSource,
-  defaultEmbeddingClient,
-  EMBED_HTTP_MAX_RETRIES,
-  EMBED_HTTP_TIMEOUT_SEC,
-  EMBED_PRICING_USD_PER_1M,
-  EMBED_QUOTA_BACKOFF,
-  EMBED_RETRY_BASE_DELAY,
-  EmbeddingClient,
-  type EmbeddingClientOptions,
-  EmbeddingUsage,
+  defaultEmbeddingModel,
   type EmbedOptions,
   embeddingSelection,
   embedTexts,
   embedTextsWithUsage,
-  isQuotaError,
-  MAX_EMBED_DATA_RETRIES,
-  MAX_EMBED_QUOTA_RETRIES,
-  resetEmbeddingClient,
+  resetEmbeddingModel,
 } from "./embeddings.ts";
 export {
   type HybridSearchOptions,

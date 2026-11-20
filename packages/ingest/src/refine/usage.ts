@@ -12,13 +12,13 @@ import {
 } from "@eidolon/config";
 import {
   billingProvider,
+  type EmbeddingCostSource as CostSource,
   costOf,
   openaiUnits,
   type Price,
   priceOf,
   trySelect,
 } from "@eidolon/providers";
-import type { CostSource } from "@eidolon/retrieval";
 
 /** Tokens and USD, summed per call, then per chunk, then per stream, in that order. */
 export class Usage {

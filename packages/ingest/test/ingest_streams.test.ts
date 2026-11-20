@@ -15,12 +15,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, installSettings, logger, pyRepr, resetSettings } from "@eidolon/config";
-import { type EmbeddingClient, resetEmbeddingClient } from "@eidolon/retrieval";
+import type { EmbeddingModel } from "@eidolon/providers";
+import { resetEmbeddingModel } from "@eidolon/retrieval";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ingestStreams, type ProgressEvent } from "../src/index.ts";
 import { cancelMidRebuild } from "./forced_exit.ts";
 import {
-  fakeClient,
+  fakeModel,
   GOLDEN,
   GOLDEN_DIM,
   GOLDEN_MODEL,
@@ -75,7 +76,6 @@ function optionsFor(argv: readonly string[]): ingestStreams.IngestStreamsOptions
       ? null
       : (values.get("--cache-path") ?? join(work, "unused.db")),
     clearCache: switches.has("--clear-cache"),
-    model: GOLDEN_MODEL,
     dim: GOLDEN_DIM,
     now: NOW,
   };
@@ -89,9 +89,8 @@ function options(
     dbPath: join(work, "db"),
     skipTypes: DEFAULT_SKIP,
     cachePath: join(work, "cache", "embed_cache.db"),
-    model: GOLDEN_MODEL,
     dim: GOLDEN_DIM,
-    client: fakeClient([]),
+    embedding: fakeModel([]),
     now: NOW,
     ...extra,
   };
@@ -117,7 +116,7 @@ describe("ingestStreams", () => {
       const calls: number[] = [];
       const report = await ingestStreams.ingestStreams({
         ...optionsFor(run.argv),
-        client: fakeClient(calls),
+        embedding: fakeModel(calls),
       });
       expect({ run: run.name, ok: report.ok, logs: logs(), calls }).toEqual({
         run: run.name,
@@ -247,24 +246,28 @@ describe("ingestStreams", () => {
     const meta = readFileSync(join(db, "stream_chunks.meta.json"), "utf8");
 
     const controller = new AbortController();
-    const aborting: Pick<EmbeddingClient, "embedWithUsage"> = {
-      async embedWithUsage() {
+    const aborting: EmbeddingModel = {
+      provider: "openrouter",
+      model: GOLDEN_MODEL,
+      async embed() {
         controller.abort(new DOMException("Interrupted by SIGINT", "AbortError"));
         throw controller.signal.reason;
       },
     };
     const cancelled = await ingestStreams.ingestStreams(
-      options({ cachePath: null, client: aborting, signal: controller.signal }),
+      options({ cachePath: null, embedding: aborting, signal: controller.signal }),
     );
     expect([cancelled.ok, cancelled.cancelled, cancelled.written]).toEqual([false, true, false]);
 
     const events: ProgressEvent[] = [];
     records.length = 0;
-    const failing: Pick<EmbeddingClient, "embedWithUsage"> = {
-      embedWithUsage: () => Promise.reject(new Error("provider down")),
+    const failing: EmbeddingModel = {
+      provider: "openrouter",
+      model: GOLDEN_MODEL,
+      embed: () => Promise.reject(new Error("provider down")),
     };
     const failed = await ingestStreams.ingestStreams(
-      options({ cachePath: null, client: failing, onProgress: (e) => events.push(e) }),
+      options({ cachePath: null, embedding: failing, onProgress: (e) => events.push(e) }),
     );
     expect([failed.ok, failed.cancelled, failed.error]).toEqual([false, false, "provider down"]);
     expect(records.at(-1)).toEqual(["ERROR", "Stream ingest failed: provider down"]);
@@ -304,14 +307,14 @@ describe("ingestStreams", () => {
     delete process.env.EMBED_API_KEY;
     delete process.env.OPENROUTER_API_KEY;
     resetSettings();
-    resetEmbeddingClient();
+    resetEmbeddingModel();
     const network = vi.spyOn(globalThis, "fetch").mockImplementation((async () => {
       throw new Error("network disabled in tests");
     }) as unknown as typeof fetch);
     try {
       const events: ProgressEvent[] = [];
       const report = await ingestStreams.ingestStreams(
-        options({ client: undefined, onProgress: (e) => events.push(e) }),
+        options({ embedding: undefined, onProgress: (e) => events.push(e) }),
       );
       expect([report.ok, report.written]).toEqual([false, false]);
       expect(events.at(-2)).toMatchObject({ status: "failed", code: "missing-credential" });
@@ -319,7 +322,7 @@ describe("ingestStreams", () => {
       expect(network).not.toHaveBeenCalled();
     } finally {
       network.mockRestore();
-      resetEmbeddingClient();
+      resetEmbeddingModel();
       if (saved[0] !== undefined) process.env.EMBED_API_KEY = saved[0];
       if (saved[1] !== undefined) process.env.OPENROUTER_API_KEY = saved[1];
     }
@@ -329,7 +332,11 @@ describe("ingestStreams", () => {
     expect((await ingestStreams.ingestStreams(options())).ok).toBe(true);
     const report = await ingestStreams.ingestStreams(
       options({
-        client: { embedWithUsage: () => Promise.reject(new Error("no request expected")) },
+        embedding: {
+          provider: "openrouter",
+          model: GOLDEN_MODEL,
+          embed: () => Promise.reject(new Error("no request expected")),
+        },
       }),
     );
     expect([report.ok, report.cacheHits, report.embedded]).toEqual([true, 13, 0]);

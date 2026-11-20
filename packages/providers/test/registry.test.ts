@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { type Category, PROVIDER_IDS, PROVIDERS } from "../src/catalog.ts";
 import { CHAT_DIALECTS } from "../src/chat/index.ts";
 import { DECISION_MODELS } from "../src/decision/index.ts";
+import { EMBEDDING_MODELS } from "../src/embedding/index.ts";
 import { IMAGE_MODELS } from "../src/image/index.ts";
 import { LISTINGS } from "../src/models.ts";
 import { REALTIME_DIALECTS } from "../src/realtime/session.ts";
@@ -26,6 +27,7 @@ const KINDS: readonly (readonly [string, Category, object])[] = [
   ["streaming speech", "tts", SPEECH_STREAMS],
   ["batch speech", "tts", SYNTHESIZERS],
   ["realtime voice", "realtime", REALTIME_DIALECTS],
+  ["embedding models", "embedding", EMBEDDING_MODELS],
   ["decision models", "decision", DECISION_MODELS],
   ["reranking", "rerank", RERANK_MODELS],
   ["image generation", "image", IMAGE_MODELS],

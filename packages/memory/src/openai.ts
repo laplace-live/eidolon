@@ -1,5 +1,7 @@
-// mem0's OpenAI embedder and extraction LLM over an OpenAI-compatible endpoint.
+// mem0's OpenAI embedder, on the embeddings role's model, and its extraction LLM over an
+// OpenAI-compatible endpoint.
 import { isPlainObject, type JsonPoster, pyError, pyTypeName } from "@eidolon/config";
+import { type EmbeddingModel, reportEmbedding } from "@eidolon/providers";
 
 const EMBED_BATCH_SIZE = 100;
 
@@ -31,50 +33,38 @@ function flatten(text: unknown): string {
   return text.replaceAll("\n", " ");
 }
 
-export class OpenAICompatibleEmbedder implements Embedder {
-  readonly #model: string;
+/** mem0's OpenAI embedder: what it asks `model` for, and the errors it raises. */
+export class Mem0Embedder implements Embedder {
+  readonly #model: EmbeddingModel;
   readonly #dims: number;
-  readonly #client: JsonPoster;
 
-  constructor(settings: { readonly model: string; readonly dims: number }, client: JsonPoster) {
-    this.#model = settings.model;
-    this.#dims = settings.dims;
-    this.#client = client;
+  constructor(model: EmbeddingModel, dims: number) {
+    this.#model = model;
+    this.#dims = dims;
   }
 
-  #body(input: string[]): Record<string, unknown> {
+  async #request(inputs: readonly string[]): Promise<number[][]> {
     // `dimensions` goes out because the dimension is configured; mem0 sends it only then.
-    return { input, model: this.#model, encoding_format: "float", dimensions: this.#dims };
+    const [vectors, usage] = await this.#model.embed(inputs, this.#dims);
+    reportEmbedding(this.#model, usage);
+    return vectors;
   }
 
   async embed(text: unknown): Promise<number[]> {
-    const response = await this.#client.post("embeddings", this.#body([flatten(text)]));
-    const data = field(response, "data", "CreateEmbeddingResponse");
-    return field(first(data), "embedding", "Embedding") as number[];
+    return first(await this.#request([flatten(text)])) as number[];
   }
 
   async embedBatch(texts: readonly unknown[]): Promise<number[][]> {
     const inputs = texts.map(flatten);
     const embeddings: number[][] = [];
     for (let i = 0; i < inputs.length; i += EMBED_BATCH_SIZE) {
-      const response = await this.#client.post(
-        "embeddings",
-        this.#body(inputs.slice(i, i + EMBED_BATCH_SIZE)),
-      );
-      const data = field(response, "data", "CreateEmbeddingResponse");
-      if (!Array.isArray(data))
-        throw pyError("TypeError", `'${pyTypeName(data)}' object is not iterable`);
-      const ordered = [...data].sort(
-        (a, b) => Number(field(a, "index", "Embedding")) - Number(field(b, "index", "Embedding")),
-      );
-      for (const item of ordered)
-        embeddings.push(field(item, "embedding", "Embedding") as number[]);
+      embeddings.push(...(await this.#request(inputs.slice(i, i + EMBED_BATCH_SIZE))));
     }
     if (embeddings.length !== inputs.length) {
       throw pyError(
         "ValueError",
         `OpenAI embed_batch() returned ${embeddings.length} embeddings for ${inputs.length} texts` +
-          ` using model '${this.#model}'`,
+          ` using model '${this.#model.model}'`,
       );
     }
     return embeddings;

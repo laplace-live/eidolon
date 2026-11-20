@@ -146,10 +146,11 @@ test.skipIf((chunks === null || !existsSync(REAL_CACHE)) && !REQUIRED)(
       batchSize: 64,
       noun: "chunks",
       cache,
-      model: DEFAULT_EMBED_MODEL,
       dim: DIM,
-      client: {
-        embedWithUsage: () => Promise.reject(new Error("every input should have hit the cache")),
+      embedding: {
+        provider: "openrouter",
+        model: DEFAULT_EMBED_MODEL,
+        embed: () => Promise.reject(new Error("every input should have hit the cache")),
       },
     });
     cache.close();

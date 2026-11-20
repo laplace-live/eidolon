@@ -17,7 +17,12 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { installSettings, resetSettings } from "@eidolon/config";
 import { canonicalPath } from "@eidolon/ingest";
-import { type LanceTable, openTable, resetEmbeddingClient } from "@eidolon/retrieval";
+import {
+  embeddingSelection,
+  type LanceTable,
+  openTable,
+  resetEmbeddingModel,
+} from "@eidolon/retrieval";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import {
   f32Bytes as bytes,
@@ -112,7 +117,7 @@ test.skipIf(!present && !REQUIRED)(
     delete process.env.EMBED_MODEL;
     delete process.env.EMBED_DIM;
     installSettings();
-    resetEmbeddingClient();
+    resetEmbeddingModel();
     const logs = captureLogs();
     const io = captureIo();
     let code: number;
@@ -130,8 +135,10 @@ test.skipIf(!present && !REQUIRED)(
         ],
         {
           ...io.io,
-          client: {
-            embedWithUsage: () => Promise.reject(new Error("every fact should have hit the cache")),
+          embedding: {
+            provider: "openrouter",
+            model: embeddingSelection().model,
+            embed: () => Promise.reject(new Error("every fact should have hit the cache")),
           },
         },
       );
@@ -169,7 +176,7 @@ test.skipIf(!present && !REQUIRED)(
       `Wrote ${expected.rows} rows to ${canonicalPath(db)}/persona_facts.lance`,
       "Built FTS index on 'tokens' for persona_facts",
       `Embedding totals: ${expected.rows} facts, 0 tokens (provider did not report cost and no ` +
-        "local price entry — add the model to embeddings.EMBED_PRICING_USD_PER_1M to fix)",
+        "local price entry — add the model's price to the provider catalog to fix)",
     ]);
 
     const table = (await openTable(db, "persona_facts")) as LanceTable;

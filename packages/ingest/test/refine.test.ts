@@ -20,7 +20,7 @@ import {
   pyJsonDumps,
   pyJsonLoads,
 } from "@eidolon/config";
-import type { CostSource } from "@eidolon/retrieval";
+import type { EmbeddingCostSource as CostSource } from "@eidolon/providers";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { type ProgressEvent, parseStream, refine } from "../src/index.ts";
 

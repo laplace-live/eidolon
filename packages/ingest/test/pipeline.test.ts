@@ -13,8 +13,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { openAIEmbeddings } from "@eidolon/providers";
 import {
-  EmbeddingClient,
+  DEFAULT_EMBED_MODEL,
   STREAM_CHUNKS_TABLE,
   streamChunksSchema,
   writeTable,
@@ -642,7 +643,7 @@ describe("refine and ingest", () => {
       base({
         stages: ["ingest"],
         skipTypes: "",
-        embeddingClient: fakeEmbeddings(),
+        embeddingModel: fakeEmbeddings(),
         holdIndex: () => {
           held.push("taken");
           return () => held.push("released");
@@ -667,7 +668,9 @@ describe("refine and ingest", () => {
       "2026-08-01-BV1aaaaaaaa1.md": transcriptText("2026-08-01-BV1aaaaaaaa1", "2026-08-01", 1),
     });
     process.env.EMBED_DIM = "8";
-    const rejected = new EmbeddingClient({
+    const rejected = openAIEmbeddings({
+      provider: "openrouter",
+      model: DEFAULT_EMBED_MODEL,
       baseUrl: "https://x.invalid/v1",
       apiKey: "k",
       fetch: (async () =>
@@ -675,13 +678,13 @@ describe("refine and ingest", () => {
           { error: { message: "User not found.", code: 401 } },
           { status: 401 },
         )) as unknown as typeof fetch,
-      maxRetries: 0,
+      retries: { http: 0 },
     });
     const events: ProgressEvent[] = [];
     const report = await pipeline.runPipeline(
       base({
         stages: ["ingest"],
-        embeddingClient: rejected,
+        embeddingModel: rejected,
         onProgress: (event) => events.push(event),
       }),
     );
@@ -704,7 +707,7 @@ describe("refine and ingest", () => {
     });
     process.env.EMBED_DIM = "8";
     const report = await pipeline.runPipeline(
-      base({ stages: ["ingest"], skipTypes: "", embeddingClient: fakeEmbeddings() }),
+      base({ stages: ["ingest"], skipTypes: "", embeddingModel: fakeEmbeddings() }),
     );
     expect(report.ingest?.rc).toBe(0);
     const meta = JSON.parse(readFileSync(join(work, "index", "stream_chunks.meta.json"), "utf8"));
@@ -805,7 +808,7 @@ describe("a run over a batch", () => {
         urls: download.readUrlList(batch),
         listsDir: lists,
         ytDlp: { path: yt, source: "setting" },
-        embeddingClient: fakeEmbeddings(),
+        embeddingModel: fakeEmbeddings(),
         now: () => new Date("2026-01-02T03:04:05Z"),
         ...overrides,
       }),

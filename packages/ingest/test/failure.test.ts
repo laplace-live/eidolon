@@ -1,7 +1,7 @@
 // failureOf against what each client really throws: Soniox's, refine's OpenAIClient and the
-// embedding client, each over a fake fetch.
-import { OpenAIClient } from "@eidolon/config";
-import { EmbeddingClient } from "@eidolon/retrieval";
+// embedding model, each over a fake fetch.
+import { DEFAULT_EMBED_MODEL, OpenAIClient } from "@eidolon/config";
+import { type OpenAIEmbeddingsOptions, openAIEmbeddings } from "@eidolon/providers";
 import { expect, test } from "vitest";
 import { download, failureOf, LockedError, sharedFailure, transcribe } from "../src/index.ts";
 import { captureLogs } from "./pipeline_helpers.ts";
@@ -86,40 +86,37 @@ test("refine's OpenAIClient: 401, 402 and 429, with a JSON body or not, and no c
   });
 });
 
-test("the embedding client: 401, 402 and 429, no connection, and a quota error every time", async () => {
-  const options = { model: "m", dimensions: 2 };
-  for (const [status, code] of STATUSES) {
-    const client = new EmbeddingClient({
+test("the embedding model: 401, 402 and 429, no connection, and a quota error every time", async () => {
+  const model = (options: Pick<OpenAIEmbeddingsOptions, "fetch" | "sleep">) =>
+    openAIEmbeddings({
+      provider: "openrouter",
+      model: DEFAULT_EMBED_MODEL,
       baseUrl: "https://x.invalid/v1",
       apiKey: "k",
-      fetch: answering(status, { error: { message: "no" } }),
-      maxRetries: 0,
+      retries: { http: 0 },
+      ...options,
     });
-    const error = await thrown(() => client.embedWithUsage(["a"], options));
+  for (const [status, code] of STATUSES) {
+    const failing = model({ fetch: answering(status, { error: { message: "no" } }) });
+    const error = await thrown(() => failing.embed(["a"], 2));
     expect(failureOf(error, "embeddings")).toEqual({ code, provider: "embeddings" } as never);
   }
-  const offline = new EmbeddingClient({
-    baseUrl: "https://x.invalid/v1",
-    apiKey: "k",
-    fetch: unreachable,
-    maxRetries: 0,
+  const offline = model({ fetch: unreachable });
+  expect(failureOf(await thrown(() => offline.embed(["a"], 2)), "embeddings")).toEqual({
+    code: "network",
+    provider: "embeddings",
   });
-  expect(
-    failureOf(await thrown(() => offline.embedWithUsage(["a"], options)), "embeddings"),
-  ).toEqual({ code: "network", provider: "embeddings" });
   // OpenRouter wraps an upstream 429 in a 200 body.
-  const quota = new EmbeddingClient({
-    baseUrl: "https://x.invalid/v1",
-    apiKey: "k",
+  const quota = model({
     fetch: answering(200, { error: { message: "RESOURCE_EXHAUSTED: quota exceeded", code: 429 } }),
     sleep: async () => {},
-    maxRetries: 0,
   });
   const logs = captureLogs();
   try {
-    expect(
-      failureOf(await thrown(() => quota.embedWithUsage(["a"], options)), "embeddings"),
-    ).toEqual({ code: "rate-limited", provider: "embeddings" });
+    expect(failureOf(await thrown(() => quota.embed(["a"], 2)), "embeddings")).toEqual({
+      code: "rate-limited",
+      provider: "embeddings",
+    });
   } finally {
     logs.stop();
   }

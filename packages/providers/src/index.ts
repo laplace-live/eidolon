@@ -36,6 +36,20 @@ export {
   reportDecision,
 } from "./decision/openrouter.ts";
 export {
+  EMBEDDING_MODELS,
+  type EmbeddingModel,
+  type EmbeddingModelOptions,
+  type EmbeddingRetries,
+  embeddingModel,
+  reportEmbedding,
+} from "./embedding/index.ts";
+export {
+  type EmbeddingCostSource,
+  EmbeddingUsage,
+  type OpenAIEmbeddingsOptions,
+  openAIEmbeddings,
+} from "./embedding/openai.ts";
+export {
   AnthropicClient,
   anthropicUnits,
   type ChatClientOptions,

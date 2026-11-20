@@ -229,6 +229,7 @@ export const PROVIDERS: readonly Provider[] = [
         modelsUrl: "https://openrouter.ai/models?output_modalities=embeddings",
         models: [
           { id: "google/gemini-embedding-2-preview", maxDim: 3072, price: tokens(0.15, 0) },
+          { id: "~google/gemini-embedding-2-preview", maxDim: 3072, price: tokens(0.15, 0) },
           { id: "openai/text-embedding-3-large", maxDim: 3072, price: tokens(0.13, 0) },
           { id: "openai/text-embedding-3-small", maxDim: 1536, price: tokens(0.02, 0) },
           { id: "qwen/qwen3-embedding-8b", maxDim: 4096 },

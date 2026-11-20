@@ -3,9 +3,10 @@ import { describe, expect, test } from "vitest";
 import {
   extractionRequestBody,
   isReasoningModel,
+  Mem0Embedder,
   OpenAICompatibleChat,
-  OpenAICompatibleEmbedder,
 } from "../src/openai.ts";
+import { FakeEmbeddings } from "./support.ts";
 
 interface Seen {
   url: string;
@@ -39,11 +40,6 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
   });
 }
 
-function embeddings(seen: Seen): Response {
-  const input = seen.body.input as string[];
-  return json({ data: input.map((text, index) => ({ index, embedding: [text.length] })) });
-}
-
 function client(replies: Reply[], options: { random?: () => number } = {}) {
   const { fetch, seen } = fakeFetch(replies);
   const sleeps: number[] = [];
@@ -69,80 +65,48 @@ async function failure(promise: Promise<unknown>): Promise<[string, string]> {
   throw new Error("expected a rejection");
 }
 
-describe("embedder over the OpenAI SDK's wire format", () => {
-  test("one text: newlines (only \\n) become spaces, float encoding, dimensions, bearer key", async () => {
-    const { http, seen } = client([embeddings]);
-    const embedder = new OpenAICompatibleEmbedder(
-      { model: "google/gemini-embedding-2-preview", dims: 3072 },
-      http,
-    );
-    expect(await embedder.embed("a\nb\rc")).toEqual([5]);
-    expect(seen[0]?.url).toBe("https://openrouter.ai/api/v1/embeddings");
-    expect(JSON.stringify(seen[0]?.body)).toBe(
-      '{"input":["a b\\rc"],"model":"google/gemini-embedding-2-preview","encoding_format":"float","dimensions":3072}',
-    );
-    expect(seen[0]?.headers.get("authorization")).toBe("Bearer sk-test");
-    expect(seen[0]?.headers.get("content-type")).toBe("application/json");
-    expect(seen[0]?.headers.has("http-referer")).toBe(false);
+describe("mem0's embedder", () => {
+  test("one text: newlines (only \\n) become spaces, at the configured dimensions", async () => {
+    const model = new FakeEmbeddings();
+    expect(await new Mem0Embedder(model, 3072).embed("a\nb\rc")).toEqual([5, 1, 0, 0]);
+    expect(model.calls).toEqual([
+      { input: ["a b\rc"], model: "google/gemini-embedding-2-preview", dimensions: 3072 },
+    ]);
   });
 
-  test("a base URL ending in / is not doubled", async () => {
-    const { fetch, seen } = fakeFetch([embeddings]);
-    const http = new OpenAIClient({ baseUrl: "https://example.test/v1/", apiKey: "k" }, { fetch });
-    await new OpenAICompatibleEmbedder({ model: "m", dims: 1 }, http).embed("x");
-    expect(seen[0]?.url).toBe("https://example.test/v1/embeddings");
-  });
-
-  test("batches go out 100 at a time and come back in index order", async () => {
-    const reversed = (seen: Seen) => {
-      const input = seen.body.input as string[];
-      return json({
-        data: input.map((text, index) => ({ index, embedding: [Number(text)] })).reverse(),
-      });
-    };
-    const { http, seen } = client([reversed, reversed, reversed]);
-    const embedder = new OpenAICompatibleEmbedder({ model: "m", dims: 1 }, http);
-    const texts = Array.from({ length: 250 }, (_, i) => String(i));
-    const vectors = await embedder.embedBatch(texts);
-    expect(seen.map((s) => (s.body.input as string[]).length)).toEqual([100, 100, 50]);
-    expect(vectors).toEqual(texts.map((t) => [Number(t)]));
+  test("batches go out 100 at a time, their vectors kept in order", async () => {
+    const model = new FakeEmbeddings();
+    const texts = Array.from({ length: 250 }, (_, i) => "x".repeat(i));
+    const vectors = await new Mem0Embedder(model, 1).embedBatch(texts);
+    expect(model.calls.map((call) => (call.input as string[]).length)).toEqual([100, 100, 50]);
+    expect(vectors).toEqual(texts.map((text) => [text.length, 1, 0, 0]));
   });
 
   test("a short batch raises mem0's count error", async () => {
-    const { http } = client([json({ data: [{ index: 0, embedding: [1] }] })]);
-    const embedder = new OpenAICompatibleEmbedder({ model: "m", dims: 1 }, http);
-    expect(await failure(embedder.embedBatch(["a", "b"]))).toEqual([
+    const model = new FakeEmbeddings("m");
+    model.plan = ["short"];
+    expect(await failure(new Mem0Embedder(model, 1).embedBatch(["a", "b"]))).toEqual([
       "ValueError",
       "OpenAI embed_batch() returned 1 embeddings for 2 texts using model 'm'",
     ]);
   });
 
   test("a non-string text raises before any request", async () => {
-    const { http, seen } = client([]);
-    const embedder = new OpenAICompatibleEmbedder({ model: "m", dims: 1 }, http);
-    expect(await failure(embedder.embedBatch(["a", 5]))).toEqual([
+    const model = new FakeEmbeddings();
+    expect(await failure(new Mem0Embedder(model, 1).embedBatch(["a", 5]))).toEqual([
       "AttributeError",
       "'int' object has no attribute 'replace'",
     ]);
-    expect(seen).toHaveLength(0);
-  });
-
-  test("a response without data reads as the SDK's attribute error", async () => {
-    const { http } = client([json({ object: "list" })]);
-    const embedder = new OpenAICompatibleEmbedder({ model: "m", dims: 1 }, http);
-    expect(await failure(embedder.embed("x"))).toEqual([
-      "AttributeError",
-      "'CreateEmbeddingResponse' object has no attribute 'data'",
-    ]);
+    expect(model.calls).toHaveLength(0);
   });
 });
 
 describe("the SDK's retry policy", () => {
   test("429 then 200 retries once after the jittered backoff", async () => {
-    const { http, seen, sleeps } = client([json({ error: "slow down" }, 429), embeddings], {
+    const { http, seen, sleeps } = client([json({ error: "slow down" }, 429), json({ ok: 1 })], {
       random: () => 1,
     });
-    await new OpenAICompatibleEmbedder({ model: "m", dims: 1 }, http).embed("x");
+    expect(await http.post("chat/completions", {})).toEqual({ ok: 1 });
     expect(seen).toHaveLength(2);
     expect(sleeps).toEqual([375]);
   });

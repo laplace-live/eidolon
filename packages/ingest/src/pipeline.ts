@@ -16,9 +16,9 @@ import {
   sortedPy,
   sourceFolder,
 } from "@eidolon/config";
+import type { EmbeddingModel } from "@eidolon/providers";
 import {
   CATALOG_FILENAME,
-  type EmbeddingClient,
   ingestHint,
   listTableNames,
   STREAM_CHUNKS_TABLE,
@@ -173,7 +173,7 @@ export interface PipelineOptions extends RunOptions {
 
   /** `--skip-types` as given; null leaves defaultSkipTypes() in charge. */
   readonly skipTypes?: string | null;
-  readonly embeddingClient?: Pick<EmbeddingClient, "embedWithUsage">;
+  readonly embeddingModel?: EmbeddingModel;
 
   /** Soniox's and the refine provider's fetch. */
   readonly fetch?: typeof fetch;
@@ -742,7 +742,7 @@ async function ingestStage(options: PipelineOptions): Promise<StageResult> {
       skipTypes: parseSkipTypes(flagSkipTypes ?? defaultSkipTypes()),
       dryRun,
       cachePath: options.cachePath === undefined ? embedCachePath() : options.cachePath,
-      client: options.embeddingClient,
+      embedding: options.embeddingModel,
       now: options.now,
       onProgress: emit,
       signal,

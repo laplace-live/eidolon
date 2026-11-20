@@ -18,11 +18,12 @@ import {
   sourceFolder,
 } from "@eidolon/config";
 import { acquireLock, canonicalPath, embedCachePath, indexLockKey } from "@eidolon/ingest";
+import { type EmbeddingModel, EmbeddingUsage } from "@eidolon/providers";
 import {
-  EmbeddingUsage,
+  DEFAULT_EMBED_MODEL,
   type LanceTable,
   openTable,
-  resetEmbeddingClient,
+  resetEmbeddingModel,
 } from "@eidolon/retrieval";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { ingestFactsMain, parseIngestFactsArgs } from "../src/ingest_facts.ts";
@@ -74,7 +75,7 @@ beforeEach(() => {
   process.env.EMBED_DIM = "4";
   // milky-green's persona.yaml, from the repository's template: her fact patterns and subject.
   installSettings();
-  resetEmbeddingClient();
+  resetEmbeddingModel();
   logs = captureLogs();
 });
 afterEach(() => {
@@ -84,17 +85,16 @@ afterEach(() => {
     else process.env[key] = value;
   }
   resetSettings();
-  resetEmbeddingClient();
+  resetEmbeddingModel();
 });
 
 /** The golden's embedding stub: a deterministic vector per text, tokens by code point. */
-function fakeClient(calls: Call[]) {
+function fakeModel(calls: Call[]): EmbeddingModel {
   return {
-    async embedWithUsage(
-      texts: readonly string[],
-      options: { model: string; dimensions: number; signal?: AbortSignal },
-    ): Promise<[number[][], EmbeddingUsage]> {
-      calls.push({ texts: [...texts], model: options.model, dimensions: options.dimensions });
+    provider: "openrouter",
+    model: DEFAULT_EMBED_MODEL,
+    async embed(texts, dimensions) {
+      calls.push({ texts: [...texts], model: DEFAULT_EMBED_MODEL, dimensions });
       const tokens = texts.reduce((n, t) => n + [...t].length, 0);
       const vectors = texts.map((text) => {
         let sum = 0;
@@ -197,7 +197,7 @@ describe("replays ingest_facts.py's main() over the synthetic fact files", () =>
       const calls: Call[] = [];
       const io = captureIo();
       const argv = scenario.argv.map((arg) => substitute(arg, { "<TMP>": work }));
-      const code = await ingestFactsMain(argv, { ...io.io, client: fakeClient(calls) });
+      const code = await ingestFactsMain(argv, { ...io.io, embedding: fakeModel(calls) });
       const paths = { "<TMP>": canonicalPath(work) };
       const records = logs.records.map(([level, message]) => [level, placehold(message, paths)]);
       expect(records.filter(([, message]) => !INDEX_LINE.test(message as string))).toEqual(
@@ -378,7 +378,7 @@ describe("the index it writes", () => {
     const db = join(work, "index");
     const code = await ingestFactsMain(
       ["--json", "--data-dir", join(work, "facts"), "--db-path", db],
-      { ...io.io, signal: controller.signal, client: fakeClient([]) },
+      { ...io.io, signal: controller.signal, embedding: fakeModel([]) },
     );
     expect(code).toBe(1);
     const events = io
@@ -397,7 +397,7 @@ describe("the index it writes", () => {
     const db = join(work, "index");
     const code = await ingestFactsMain(
       ["--json", "--data-dir", join(work, "facts"), "--db-path", db, "--no-cache"],
-      { ...io.io, client: fakeClient(calls), now: () => new Date("2026-11-05T00:00:00Z") },
+      { ...io.io, embedding: fakeModel(calls), now: () => new Date("2026-11-05T00:00:00Z") },
     );
     expect(code).toBe(0);
     const events = io

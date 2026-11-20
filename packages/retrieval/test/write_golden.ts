@@ -2,8 +2,9 @@
 // the batch-embedding scenarios and totals, and each table's schema, rows, FTS index and versions.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { EmbeddingCostSource as CostSource } from "@eidolon/providers";
 import type { DataType, Field } from "apache-arrow";
-import type { ArrowSchema, CostSource } from "../src/index.ts";
+import type { ArrowSchema } from "../src/index.ts";
 
 export interface GoldenScenario {
   name: string;

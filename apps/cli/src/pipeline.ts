@@ -24,7 +24,7 @@ import {
   transcribe,
   zeroCounts,
 } from "@eidolon/ingest";
-import type { EmbeddingClient } from "@eidolon/retrieval";
+import type { EmbeddingModel } from "@eidolon/providers";
 import {
   ArgparseExit,
   type ArgType,
@@ -284,7 +284,7 @@ export interface PipelineDeps extends CommandDeps {
   /** ffprobe and ffmpeg: looked up on PATH when undefined, missing when null. */
   readonly ffprobe?: string | null;
   readonly ffmpeg?: string | null;
-  readonly embeddingClient?: Pick<EmbeddingClient, "embedWithUsage">;
+  readonly embeddingModel?: EmbeddingModel;
   readonly now?: () => Date;
 }
 
@@ -456,7 +456,7 @@ export async function pipelineMain(
       refineConcurrency: ns.refine_concurrency as number | null,
       refineForce: ns.refine_force === true,
       skipTypes: ns.skip_types as string | null,
-      embeddingClient: deps.embeddingClient,
+      embeddingModel: deps.embeddingModel,
       fetch: deps.fetch,
       now: deps.now,
       onProgress: emit,

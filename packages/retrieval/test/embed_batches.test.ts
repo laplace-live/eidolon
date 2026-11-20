@@ -3,12 +3,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { type EmbeddingModel, EmbeddingUsage, openAIEmbeddings } from "@eidolon/providers";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   DEFAULT_EMBED_MODEL,
   EmbedCache,
-  EmbeddingClient,
-  EmbeddingUsage,
   embeddingTotalsMessage,
   embedInBatches,
 } from "../src/index.ts";
@@ -28,21 +27,24 @@ afterEach(() => {
 
 type Call = { texts: string[]; model: string; dimensions: number; signal?: AbortSignal };
 
-/** A client answering each request with the golden's stub vectors and the next usage. */
-function stubClient(usages: EmbeddingUsage[], vector: (text: string) => number[] = fakeVector) {
-  const calls: Call[] = [];
-  const client = {
-    async embedWithUsage(
-      texts: readonly string[],
-      options: { model: string; dimensions: number; signal?: AbortSignal },
-    ): Promise<[number[][], EmbeddingUsage]> {
-      calls.push({ texts: [...texts], ...options });
+/** A model answering each request with the golden's stub vectors and the next usage. */
+function stubModel(
+  usages: EmbeddingUsage[],
+  vector: (text: string) => number[] = fakeVector,
+  model = DEFAULT_EMBED_MODEL,
+  calls: Call[] = [],
+) {
+  const embedding: EmbeddingModel = {
+    provider: "openrouter",
+    model,
+    async embed(texts, dimensions, signal) {
+      calls.push({ texts: [...texts], model, dimensions, ...(signal ? { signal } : {}) });
       const usage = usages.shift();
-      if (usage === undefined) throw new Error("stubClient: no usage left");
+      if (usage === undefined) throw new Error("stubModel: no usage left");
       return [texts.map(vector), usage];
     },
   };
-  return { client, calls };
+  return { embedding, calls };
 }
 
 const usage = (tokens = 1) => new EmbeddingUsage({ promptTokens: tokens, totalTokens: tokens });
@@ -68,13 +70,13 @@ describe("Python's embed_in_batches", () => {
         ([promptTokens, totalTokens, costUsd, costSource]) =>
           new EmbeddingUsage({ promptTokens, totalTokens, costUsd, costSource }),
       );
-      const { client, calls } = stubClient(usages);
+      const { embedding, calls } = stubModel(usages);
       const report = await embedInBatches(s.texts, {
         batchSize: s.batch_size,
         noun: s.noun,
         cache,
         dim: GOLDEN_DIM,
-        client,
+        embedding,
       });
       expect(messages(records, "INFO")).toEqual(s.messages);
       expect(calls.map(({ texts, model, dimensions }) => ({ texts, model, dimensions }))).toEqual(
@@ -109,13 +111,18 @@ test("each batch is one float request with the run's model and dimension", async
     ]),
     body([[5, 6]]),
   ]);
-  const client = new EmbeddingClient({ baseUrl: "https://example.test/v1", apiKey: "k", fetch });
+  const embedding = openAIEmbeddings({
+    provider: "openrouter",
+    model: "openai/text-embedding-3-small",
+    baseUrl: "https://example.test/v1",
+    apiKey: "k",
+    fetch,
+  });
   const report = await embedInBatches(["a", "b", "c"], {
     batchSize: 2,
     noun: "facts",
-    model: "openai/text-embedding-3-small",
     dim: 2,
-    client,
+    embedding,
   });
   expect(calls.map((c) => JSON.parse(String(c.init.body)))).toEqual([
     {
@@ -140,13 +147,20 @@ test("each batch is one float request with the run's model and dimension", async
   ]);
 });
 
-test("EMBED_MODEL and EMBED_DIM fill in for omitted options, blank as unset", async () => {
+test("EMBED_MODEL names the model an opener opens, EMBED_DIM its size, blank as unset", async () => {
   process.env.EMBED_MODEL = "";
   process.env.EMBED_DIM = "2";
   const cache = new EmbedCache(join(dir, "embed_cache.db"));
   cache.putMany(DEFAULT_EMBED_MODEL, 2, [["a", [1, 2]]]);
-  const { client, calls } = stubClient([usage()], () => [3, 4]);
-  const report = await embedInBatches(["a", "b"], { batchSize: 64, noun: "chunks", cache, client });
+  const calls: Call[] = [];
+  const open = (vector: number[]) => (model: string) =>
+    stubModel([usage()], () => vector, model, calls).embedding;
+  const report = await embedInBatches(["a", "b"], {
+    batchSize: 64,
+    noun: "chunks",
+    cache,
+    embedding: open([3, 4]),
+  });
   expect([report.model, report.dim]).toEqual([DEFAULT_EMBED_MODEL, 2]);
   expect(calls.map((c) => [c.model, c.dimensions])).toEqual([[DEFAULT_EMBED_MODEL, 2]]);
   expect(Array.from(report.vectors)).toEqual([1, 2, 3, 4]);
@@ -155,9 +169,10 @@ test("EMBED_MODEL and EMBED_DIM fill in for omitted options, blank as unset", as
     batchSize: 64,
     noun: "chunks",
     cache,
-    client: stubClient([usage()], () => [5, 6]).client,
+    embedding: open([5, 6]),
   });
   expect([other.model, other.cacheHits]).toEqual(["openai/text-embedding-3-large", 0]);
+  expect(calls.at(-1)?.model).toBe("openai/text-embedding-3-large");
   cache.close();
 });
 
@@ -181,7 +196,7 @@ test("reports progress after each batch", async () => {
     batchSize: 2,
     noun: "chunks",
     dim: 4,
-    client: stubClient([usage(), usage(), usage()]).client,
+    embedding: stubModel([usage(), usage(), usage()]).embedding,
     onProgress: (p) => progress.push(p),
   });
   expect(progress).toEqual([
@@ -195,13 +210,13 @@ describe("cancellation", () => {
   test("no batch starts once the signal aborts, and the finished ones stay cached", async () => {
     const cache = new EmbedCache(join(dir, "embed_cache.db"));
     const controller = new AbortController();
-    const { client, calls } = stubClient([usage(), usage()]);
+    const { embedding, calls } = stubModel([usage(), usage()]);
     const run = embedInBatches(["a", "b", "c"], {
       batchSize: 2,
       noun: "chunks",
       cache,
       dim: 4,
-      client,
+      embedding,
       signal: controller.signal,
       onProgress: () => controller.abort(new DOMException("stop", "AbortError")),
     });
@@ -221,13 +236,19 @@ describe("cancellation", () => {
           controller.abort(new DOMException("stop", "AbortError"));
         }),
     ]);
-    const client = new EmbeddingClient({ baseUrl: "https://example.test/v1", apiKey: "k", fetch });
+    const embedding = openAIEmbeddings({
+      provider: "openrouter",
+      model: DEFAULT_EMBED_MODEL,
+      baseUrl: "https://example.test/v1",
+      apiKey: "k",
+      fetch,
+    });
     const run = embedInBatches(["a"], {
       batchSize: 64,
       noun: "chunks",
       cache,
       dim: 2,
-      client,
+      embedding,
       signal: controller.signal,
     });
     await expect(run).rejects.toThrow("stop");
@@ -242,7 +263,7 @@ describe("cancellation", () => {
       batchSize: 64,
       noun: "chunks",
       dim: 2,
-      client: stubClient([]).client,
+      embedding: stubModel([]).embedding,
       signal: controller.signal,
     });
     await expect(run).rejects.toThrow("stop");
@@ -252,15 +273,17 @@ describe("cancellation", () => {
 describe("vectors the table can't take", () => {
   test("a short response throws before any of its batch is cached", async () => {
     const cache = new EmbedCache(join(dir, "embed_cache.db"));
-    const client = {
-      embedWithUsage: async (): Promise<[number[][], EmbeddingUsage]> => [[[1, 2]], usage()],
+    const embedding: EmbeddingModel = {
+      provider: "openrouter",
+      model: DEFAULT_EMBED_MODEL,
+      embed: async () => [[[1, 2]], usage()],
     };
     const run = embedInBatches(["a", "b"], {
       batchSize: 64,
       noun: "chunks",
       cache,
       dim: 2,
-      client,
+      embedding,
     });
     await expect(run).rejects.toThrow("Embedding provider returned 1 vectors for 2 texts");
     expect(cache.count()).toBe(0);
@@ -269,8 +292,8 @@ describe("vectors the table can't take", () => {
 
   test("a vector of another size throws and is never cached", async () => {
     const cache = new EmbedCache(join(dir, "embed_cache.db"));
-    const { client } = stubClient([usage()], () => [1, 2, 3]);
-    const run = embedInBatches(["a"], { batchSize: 64, noun: "chunks", cache, dim: 2, client });
+    const { embedding } = stubModel([usage()], () => [1, 2, 3]);
+    const run = embedInBatches(["a"], { batchSize: 64, noun: "chunks", cache, dim: 2, embedding });
     await expect(run).rejects.toThrow(
       `Embedding model ${DEFAULT_EMBED_MODEL} returned 3 dimensions, not the 2 requested`,
     );
@@ -281,13 +304,13 @@ describe("vectors the table can't take", () => {
   test("a cached vector of another size is embedded again and replaced", async () => {
     const cache = new EmbedCache(join(dir, "embed_cache.db"));
     cache.putMany(DEFAULT_EMBED_MODEL, 2, [["a", [1, 2, 3]]]);
-    const { client, calls } = stubClient([usage()], () => [4, 5]);
+    const { embedding, calls } = stubModel([usage()], () => [4, 5]);
     const report = await embedInBatches(["a"], {
       batchSize: 64,
       noun: "chunks",
       cache,
       dim: 2,
-      client,
+      embedding,
     });
     expect([report.cacheHits, report.embedded, calls.length]).toEqual([0, 1, 1]);
     expect(cache.getMany(DEFAULT_EMBED_MODEL, 2, ["a"]).get(0)).toEqual(new Float32Array([4, 5]));
