@@ -5,6 +5,10 @@
  * The argv of a job running `command` through the CLI at `entry` (@eidolon/config's cliEntry), with
  * progress events on stdout.
  */
-export function jobArgv(entry: string, command: string, args: readonly string[]): string[] {
+export function jobArgv(
+  entry: string,
+  command: string,
+  args: readonly string[],
+): [string, ...string[]] {
   return [process.execPath, entry, command, "--json", ...args];
 }

@@ -164,7 +164,6 @@ describe("listen", () => {
       ),
       onError: () => new Response("error", { status: 500 }),
     });
-    expect(listener.hostname).toBe("127.0.0.1");
     expect(listener.port).toBeGreaterThan(0);
     expect(listener.url).toBe(`http://127.0.0.1:${listener.port}/`);
     const response = await fetch(`http://127.0.0.1:${listener.port}/echo/%E4%B8%AD`, {

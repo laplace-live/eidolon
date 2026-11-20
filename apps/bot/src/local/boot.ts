@@ -286,7 +286,7 @@ export async function bootLocal(
   const stop = shutdown;
   // Before the tasks load: the supervisor's disconnect comes once, so a later handler misses it.
   io.onShutdown(() => stop(0));
-  const port = bot.server.port as number;
+  const port = bot.server.port;
   try {
     recordServerPort(port);
   } catch (error) {

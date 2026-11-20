@@ -5,8 +5,6 @@
 // the .env over it, for the reason apps/bot/src/main.ts gives.
 import "./environ.ts";
 import "../load-env.ts";
-import { installHttpDefaults } from "@eidolon/config";
 import { supervise } from "./supervisor.ts";
 
-installHttpDefaults();
 process.exit(await supervise(process.argv.slice(2)));

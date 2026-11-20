@@ -29,7 +29,7 @@ import {
 } from "./store.ts";
 
 /** The argv that runs a CLI command; tests run a fake CLI. */
-export type ArgvBuilder = (command: string, args: readonly string[]) => string[];
+export type ArgvBuilder = (command: string, args: readonly string[]) => [string, ...string[]];
 
 export interface JobRunnerOptions {
   readonly argv?: ArgvBuilder;
@@ -156,7 +156,7 @@ export class JobRunner {
       // Before the spawn: a server that dies right after it still finds the job at its next start.
       writeRecord(record);
       // The environment this server started with: the CLI applies the .env itself.
-      child = spawnProcess(this.argv(spec.cli, spec.args) as [string, ...string[]], {
+      child = spawnProcess(this.argv(spec.cli, spec.args), {
         cwd: dataHome(),
         env: { ...STARTED_ENV, ...jsRuntime().env },
         stdin: "ignore",

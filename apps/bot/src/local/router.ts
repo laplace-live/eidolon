@@ -4,6 +4,7 @@
 // no-store, and the access line.
 import type { MemoryAdmin } from "@eidolon/memory";
 import { logAccess, type RouteHandler, type RouteServer } from "../app.ts";
+import { matchSegments } from "../routing.ts";
 import type { LocalRoute } from "./api.ts";
 import { internalError, localError, NO_STORE } from "./responses.ts";
 
@@ -158,24 +159,6 @@ function compile(spec: LocalRouteSpec): CompiledRoute {
   return { ...spec, method, pattern, literals: pattern.filter((s) => !s.startsWith(":")).length };
 }
 
-function match(
-  pattern: readonly string[],
-  segments: readonly string[],
-): Record<string, string> | null {
-  if (pattern.length !== segments.length) return null;
-  const params: Record<string, string> = {};
-  for (const [i, want] of pattern.entries()) {
-    const got = segments[i] as string;
-    if (want.startsWith(":")) {
-      if (got === "") return null;
-      params[want.slice(1)] = got;
-    } else if (want !== got) {
-      return null;
-    }
-  }
-  return params;
-}
-
 function decodeParams(raw: Record<string, string>): Record<string, string> | null {
   const params: Record<string, string> = {};
   try {
@@ -200,7 +183,7 @@ export function createLocalRouter(
   return async (request, server) => {
     const segments = new URL(request.url).pathname.split("/");
     const candidates = table
-      .map((route) => ({ route, raw: match(route.pattern, segments) }))
+      .map((route) => ({ route, raw: matchSegments(route.pattern, segments) }))
       .filter((found): found is { route: CompiledRoute; raw: Record<string, string> } => {
         return found.raw !== null;
       });

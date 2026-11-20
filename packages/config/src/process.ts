@@ -1,6 +1,6 @@
 // The part of Bun.spawn's Subprocess the code was written against, over node:child_process.
 import { type Serializable, type StdioOptions, spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { constants } from "node:os";
 import { resolve } from "node:path";
 import { Readable, type Writable } from "node:stream";
@@ -25,7 +25,6 @@ export interface SpawnOptions {
 
 export interface Subprocess {
   readonly pid: number;
-  /** Web streams when piped, as Bun.spawn gave. */
   readonly stdout: ReadableStream<Uint8Array> | null;
   readonly stderr: ReadableStream<Uint8Array> | null;
   readonly stdin: Writable | null;
@@ -38,14 +37,6 @@ export interface Subprocess {
   unref(): void;
 }
 
-function isDirectory(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
 /**
  * The error Node emits a tick after a failed start, named by what most likely failed: ENOENT for a
  * missing program or working folder, EACCES for a path that is no executable file.
@@ -54,7 +45,8 @@ function startError(command: string, args: readonly string[], options: SpawnOpti
   const cwd = options.cwd ?? process.cwd();
   const path = command.includes("/") ? resolve(cwd, command) : null;
   let code = "UNKNOWN";
-  if (!isDirectory(cwd)) code = "ENOENT";
+  // A cwd that is no folder throws ENOTDIR from spawn itself, so only a missing one gets here.
+  if (!existsSync(cwd)) code = "ENOENT";
   else if (path !== null) {
     if (which(path) === null) code = existsSync(path) ? "EACCES" : "ENOENT";
   } else if (which(command, options.env?.PATH ?? process.env.PATH ?? "") === null) {
@@ -94,7 +86,7 @@ export function spawnProcess(
     stdio,
     detached: options.detached ?? false,
     serialization: "json",
-    ...(options.timeout === undefined ? {} : { timeout: options.timeout, killSignal: "SIGTERM" }),
+    timeout: options.timeout,
   });
   // A failed start and a failed kill emit "error", which with no listener would end this process:
   // Bun.spawn threw for the first, and nothing reported the second.

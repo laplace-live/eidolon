@@ -11,8 +11,8 @@ function isExecutableFile(path: string): boolean {
 }
 
 /**
- * The executable file `name` names, as Bun.which found it: a name with a slash as given, else the
- * first match in `path`'s folders (empty entries skipped). Null when there is none.
+ * The executable file `name` names: a name with a slash as given, else the first match in `path`'s
+ * folders (empty entries skipped). Null when there is none.
  */
 export function which(name: string, path: string = process.env.PATH ?? ""): string | null {
   if (name === "") return null;

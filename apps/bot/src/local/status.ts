@@ -173,18 +173,13 @@ function voiceTtl(answer: Answer): number {
 async function versionOf(path: string): Promise<string | null> {
   try {
     const child = spawnProcess([path, "--version"], {
-      stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",
+      timeout: VERSION_TIMEOUT_MS,
     });
-    const timer = setTimeout(() => child.kill(), VERSION_TIMEOUT_MS);
-    try {
-      const [text, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
-      const line = text.trim().split("\n")[0]?.trim() ?? "";
-      return code === 0 && line !== "" ? line.slice(0, 64) : null;
-    } finally {
-      clearTimeout(timer);
-    }
+    const [text, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+    const line = text.trim().split("\n")[0]?.trim() ?? "";
+    return code === 0 && line !== "" ? line.slice(0, 64) : null;
   } catch {
     return null;
   }

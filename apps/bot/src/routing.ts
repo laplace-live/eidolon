@@ -53,7 +53,11 @@ function decodeSegment(segment: string): string {
   }
 }
 
-function matchParams(
+/**
+ * The `:param` segments of a path split on "/" under `pattern`, as sent; null unless every literal
+ * segment matches and every param is non-empty.
+ */
+export function matchSegments(
   pattern: readonly string[],
   segments: readonly string[],
 ): Record<string, string> | null {
@@ -63,7 +67,7 @@ function matchParams(
     const got = segments[i] as string;
     if (want.startsWith(":")) {
       if (got === "") return null;
-      params[want.slice(1)] = decodeSegment(got);
+      params[want.slice(1)] = got;
     } else if (want !== got) {
       return null;
     }
@@ -72,7 +76,7 @@ function matchParams(
 }
 
 /**
- * Dispatch as Bun.serve({routes, fetch}) did: an exact path first, then `:param` paths (most
+ * Dispatch as Bun.serve({routes, fetch}) does: an exact path first, then `:param` paths (most
  * literal segments wins), then `/*` wildcards (longest prefix). A function route takes every
  * method. A method map answers its methods and runs GET for HEAD; any other method goes to
  * `fallback`, as does a path no route matches. Matching uses `new URL(request.url).pathname`.
@@ -99,8 +103,10 @@ export function routeRequest(
     if (route !== undefined) return { route, params: {} };
     const segments = pathname.split("/");
     for (const candidate of paramRoutes) {
-      const params = matchParams(candidate.pattern, segments);
-      if (params !== null) return { route: candidate.route, params };
+      const params = matchSegments(candidate.pattern, segments);
+      if (params === null) continue;
+      for (const [name, value] of Object.entries(params)) params[name] = decodeSegment(value);
+      return { route: candidate.route, params };
     }
     const wildcard = wildcards.find(({ prefix }) => pathname.startsWith(prefix));
     return wildcard === undefined ? null : { route: wildcard.route, params: {} };
@@ -138,16 +144,14 @@ function peerOf(request: Request): PeerAddress | null {
 }
 
 export interface Listener {
-  readonly hostname: string;
   readonly port: number;
   readonly url: string;
   stop(): Promise<void>;
 }
 
 /**
- * srvx's serve: reusePort false, silent, gracefulShutdown false, bun: {idleTimeout: 0,
- * development: false}; port 0 picks a free one. stop() closes open connections too (Bun's
- * stop(true)). requestIP reads the socket through srvx's request.runtime (node or bun).
+ * Serves `handle`, at a free port for port 0. stop() closes open connections too, as Bun's
+ * stop(true) does.
  */
 export async function listen(options: {
   readonly hostname: string;
@@ -161,6 +165,8 @@ export async function listen(options: {
   const srvx = serve({
     hostname: options.hostname,
     port: options.port,
+    // Bun sets SO_REUSEPORT unless told not to, with development off: another server could bind
+    // the same port and take its requests, cookies included.
     reusePort: false,
     silent: true,
     gracefulShutdown: false,
@@ -181,5 +187,5 @@ export async function listen(options: {
   if (port === undefined || url === undefined) {
     throw new Error(`Not listening on ${options.hostname}:${options.port}`);
   }
-  return { hostname: options.hostname, port, url, stop: () => srvx.close(true) };
+  return { port, url, stop: () => srvx.close(true) };
 }

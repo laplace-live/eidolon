@@ -30,12 +30,13 @@ import {
   notFound,
   plainText,
 } from "./responses.ts";
-import type {
-  MethodRoutes,
-  RouteHandler,
-  RouteMethod,
-  RouteRequest,
-  RouteServer,
+import {
+  type MethodRoutes,
+  matchSegments,
+  type RouteHandler,
+  type RouteMethod,
+  type RouteRequest,
+  type RouteServer,
 } from "./routing.ts";
 
 export type { MethodRoutes, RouteHandler, RouteMethod, RouteServer } from "./routing.ts";
@@ -76,15 +77,6 @@ export interface BotApp {
 /** Pipecat's prebuilt demo UI paths, which the bot never serves. */
 export function isDemoPath(pathname: string): boolean {
   return pathname === "/" || pathname === "/client" || pathname.startsWith("/client/");
-}
-
-function routeMatches(pattern: string, pathname: string): boolean {
-  const want = pattern.split("/");
-  const got = pathname.split("/");
-  return (
-    want.length === got.length &&
-    want.every((segment, i) => (segment.startsWith(":") ? got[i] !== "" : segment === got[i]))
-  );
 }
 
 function signallingResponse(result: SignallingResult): Response {
@@ -195,7 +187,7 @@ export function createBotApp(parts: BotAppParts): BotApp {
   routes["/mcp/"] = mcp;
 
   const allowed = Object.entries(methodRoutes).map(([path, methods]) => ({
-    path,
+    pattern: path.split("/"),
     allow: Object.keys(methods)[0] as string,
   }));
 
@@ -203,7 +195,8 @@ export function createBotApp(parts: BotAppParts): BotApp {
     if (isDemoPath(pathname)) return new Response(null, { status: 404 });
     // Every path under /mcp/ gets the plain-text 404 a mounted Starlette router sends.
     if (pathname.startsWith("/mcp/")) return plainText(404, "Not Found");
-    const route = allowed.find(({ path }) => routeMatches(path, pathname));
+    const segments = pathname.split("/");
+    const route = allowed.find(({ pattern }) => matchSegments(pattern, segments) !== null);
     return route ? methodNotAllowed(route.allow) : notFound();
   };
 
