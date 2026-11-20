@@ -1,5 +1,6 @@
-// /api/local/skills: the owner's skills, for Settings. The owner switches them, and writes new ones
-// into the data home's skills folder; a task's own folder's skills are never listed.
+// /api/local/skills: the owner's skills and the built-in ones, for Settings. The owner switches
+// them, and writes new ones into the data home's skills folder; a task's own folder's skills are
+// never listed.
 import { MAX_SKILL_BYTES } from "@eidolon/assistant";
 import { isPlainObject } from "@eidolon/config";
 import type { SkillCreate } from "../api.ts";

@@ -18,7 +18,9 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
 | the loop, `runTask`, and its meter, `UsageMeter` | `packages/engine/src/task.ts` and `task/` |
 | the tools, `FolderPolicy`, the worker's prompt, the task's files | `packages/assistant` (`@eidolon/assistant`) |
 | commands: `bash`, `bash_output`, `bash_kill`, their registry `BashJobs`, and the environment they get | `packages/assistant/src/tools/{bash,jobs,shell,output}.ts` |
+| the `eidolon` command a task's commands run | `packages/assistant/src/eidolon-command.ts` |
 | Agent Skills: finding them, the `skill` tool and the skills she names | `packages/assistant/src/skills.ts`, `tools/skill.ts` |
+| the built-in skills, `persona-update` among them | `packages/assistant/skills/<name>/` |
 | the owner's skills for Settings and her names for them, and `skills.json`'s one writer | `apps/bot/src/local/tasks/skills.ts`; `routes/skills.ts` |
 | the MCP client and a task's servers, `McpSession` | `packages/assistant/src/mcp/` |
 | `web_search`, and OpenRouter's searcher | `packages/assistant/src/tools/web-search.ts`; `packages/providers/src/search.ts` |
@@ -81,11 +83,14 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
   the task's first run found it), a `node_modules/.bin` or Bun's node shim (`/usr/bin:/bin` when
   nothing is left, since bash runs a program from the folder it starts in on an empty one). No key
   the `.env` put in the server's environment reaches either, unless an mcp.json entry names it.
-- **Of the file tools, only `skill` reads in the data home,** and only a listed or named skill's
-  own files, never a dot-file or a dot-folder; `bash_output` reads only its task's own logs there,
-  and commands and MCP servers run outside `FolderPolicy`. Of a skill, only its name reaches her,
-  and only an owner's: `start_task`'s `skills` enum, never a description, a body or a task
-  folder's skill. No skill reaches production.
+  A command's `PATH` starts with `<data home>/bin`, Eidolon's `eidolon` command and the managed
+  yt-dlp, and it gets `EIDOLON_TASK_PERSONA`, the id of the persona whose chat started the task
+  ([Commands](#commands)).
+- **Of the file tools, only `skill` reads in the data home or the app's own folder,** and only a
+  listed or named skill's own files, never a dot-file or a dot-folder; `bash_output` reads only
+  its task's own logs there, and commands and MCP servers run outside `FolderPolicy`. Of a skill,
+  only its name reaches her, and only an owner's or a built-in one: `start_task`'s `skills` enum,
+  never a description, a body or a task folder's skill. No skill reaches production.
 - **Every entry is stored before it is shown,** and the outcome comes from the runtime, never from
   the worker's text.
 - **Nothing the worker wrote reaches her above a tool's output.** Its report, plan, steps, file
@@ -302,6 +307,19 @@ call that started it. Each command waits for the owner's OK first ([Approvals](#
   process group of its own, with input closed and the cut environment ([Rules](#rules)) rebuilt
   at each spawn, so the PATH filter asks the task's policy as it stands. A command that asks a
   question fails rather than waits.
+- **Eidolon's own commands:** `<data home>/bin` leads the `PATH` (`BashJobs`' `bin`), past the same
+  filter. It holds the managed yt-dlp, once Eidolon has installed it, and `eidolon`,
+  which `TaskManager.boot()` writes again at each start (`writeEidolonCommand`, 0700): a `sh`
+  script that runs this install's CLI (`cliEntry()`) on the app's own Bun with `--no-env-file`,
+  setting `EIDOLON_HOME` to the app's data home, `BUN_OPTIONS` to the app's, else
+  `--config=<app>/bunfig.toml` (so the task folder's `bunfig.toml` can't preload code into it), and
+  the npm launcher's `EIDOLON_APP_ROOT` and `EIDOLON_NO_DOTENV` when the app has them. `eidolon
+  discover` is the [persona-update](#the-built-in-skills) skill's step; `eidolon pipeline` and
+  the rest run too, each behind the card like any other command, but a task's command dies at 30
+  minutes, so the paid stages stay Studio's. An app task's commands also get
+  `EIDOLON_TASK_PERSONA` (`BashJobs`' `variables`), its chat's persona; a skill names it as
+  `--persona "$EIDOLON_TASK_PERSONA"`, since a checkout's `.env` overrides `EIDOLON_PERSONA` in the
+  CLI.
 - **Its output** goes to `<task>/bash/<n>.log` (0600, in a 0700 `bash/`) from its first byte; the
   call shows the tail, ANSI codes and redrawn lines cleaned, binary output named and not shown,
   and `bash_output` pages the log. At 16 MB the command is killed, and its result says to send big
@@ -362,6 +380,9 @@ and `description` the worker's prompt lists, and whose body and files the worker
   - the shared folder's, the [Agent Skills](https://agentskills.io) folder the owner's other
     agents read too, pi among them: `EIDOLON_SHARED_SKILLS`, or `~/.agents/skills`, read from the
     environment only; a folder that doesn't exist shares none;
+  - the built-in ones, which ship with Eidolon ([The built-in skills](#the-built-in-skills)):
+    `builtinSkillsDir()`, `packages/assistant/skills/` in a checkout and `skills/` in the npm
+    package;
   - the task folder's, in `.agents/skills/<name>/`, which are untrusted, as its `AGENTS.md` is.
 
   The first two are the owner's, whatever wrote them. A `SKILL.md` counts up to 4 folders below
@@ -370,22 +391,25 @@ and `description` the worker's prompt lists, and whose body and files the worker
   skill's folder.
 - **Read at every run** (`loadSkills`), so a resume sees a skill added since and none switched off
   since. It never throws: what it can't read is left out, and each skipped skill is logged as a
-  warning with why, which Settings shows for the owner's two folders.
-- **A name clash:** the data home's skill wins, then the shared folder's, and the one it hides is
-  logged as shadowed.
+  warning with why, which Settings shows for every source but the task folder.
+- **A name clash:** the data home's skill wins, then the shared folder's, then the built-in one,
+  and the one it hides is logged as shadowed. So the owner customizes a built-in skill by writing
+  one of its name; a task folder's never replaces one.
 - **The owner's switches,** `<data home>/skills.json` (`{ "disabled": [names] }`), which only the
   local app writes, from Settings: a name switched off is off wherever a skill by that name is
   found, the task folder's included. One that doesn't read switches nothing off, Settings says
   why, and the next switch writes it anew.
 - **The catalog,** `<skills>` after `<project_context>` in the worker's prompt, lists each as
-  `<skill name="…" from="owner">…</skill>`, escaped, the data home's first, then the shared
-  folder's (`from="owner"` too), then the task folder's, at most 150 and about 4,500 tokens; an
-  owner's or a shared skill left out loads only when she names it, and a task folder's can't be
-  named. The folder's are called untrusted there, and the file text the prompt quotes can't open
-  or close `<skills>`, `<skill>` or `<requested_skills>`.
+  `<skill name="…" from="owner">…</skill>`, escaped, the built-in ones first (`from="builtin"`), so
+  however many skills the owner has none of them is left out, then the data home's, then the
+  shared folder's (`from="owner"` too), then the task folder's, at most 150 and about 4,500
+  tokens; an owner's or a shared skill left out loads only when she names it, and a task folder's
+  can't be named. The folder's are called untrusted there, and the file text the prompt quotes
+  can't open or close `<skills>`, `<skill>` or `<requested_skills>`.
   `disable-model-invocation: true` leaves a skill out of it, and `allowed-tools` grants nothing.
-- **The skills she names** ([`start_task`](#start_task)'s `skills`), only the owner's, 150 at most
-  by name, which Settings marks past them: the task keeps their names (`task.json`'s `skills`), and
+- **The skills she names** ([`start_task`](#start_task)'s `skills`), only the owner's and the
+  built-in ones, 150 at most by name, the built-in ones kept, which Settings marks past them: the
+  task keeps their names (`task.json`'s `skills`), and
   each run's prompt carries each one's `SKILL.md` as `skill` answers for it, cut at 2,000 lines or
   50 KB with where to read on, in `<requested_skills>` after `<skills>`, whether or not the catalog
   lists it, `disable-model-invocation: true` included (`taskSkills`). Together they take at most a
@@ -395,16 +419,39 @@ and `description` the worker's prompt lists, and whose body and files the worker
   owner; one switched off or gone since the start is left out of the next run, with a warning.
 - **`skill`** reads only inside the folder of a skill the prompt lists or carries, as it lies on
   disk, and never a dot-file or dot-folder there; a folder skill's files must pass the task's
-  policy too. It never pauses the task. Skills get no environment, key or command of their own: a
+  policy too, and a built-in one's lie in the app's folder, which the file tools never read. Its
+  `SKILL.md` is headed `Skill <name> (the owner's)`, `(built into Eidolon)` or `(from the task's
+  folder)`. It never pauses the task. Skills get no environment, key or command of their own: a
   script a skill names runs only as any other command does, through `bash` and its card.
 - **Settings' Skills** (`apps/web/src/features/settings/skills-card.tsx`, the routes' `skills`)
-  lists the owner's two folders' skills, each with where it is from, its folder and its switch,
-  what hides it or keeps it out of the catalog, and the files left out; **Add Skill** writes a new
-  `SKILL.md` into the data home's folder. A task folder's skills are never listed there.
+  lists the owner's two folders' skills and the built-in ones (**Built In**), each with where it
+  is from, its folder and its switch, what hides it or keeps it out of the catalog, and the files
+  left out; **Add Skill** writes a new `SKILL.md` into the data home's folder, saying when it will
+  be used instead of a shared or built-in skill of its name. A task folder's skills are never
+  listed there. `TaskManagerOptions.builtinSkills` names the built-in folder, which tests give
+  their own.
 - **The composer's `/`** ([web-app.md](web-app.md#chats)) offers the skills she can name, by name
   and description, in a chat of hers alone while Assistant Mode is ready, and puts the one picked
   at the start of the owner's line as `/name`. That line, the owner's own words, is all that names
   it to her: she passes it on in `start_task`'s `skills`, as for any skill the owner names.
+
+### The built-in skills
+
+Skills Eidolon ships, in `packages/assistant/skills/<name>/`, which the npm build copies to the
+package's `skills/` (`copyTracked`, so only tracked files ship). Until the owner switches one off
+or replaces it with a skill of its name, each is in every task's catalog and her `start_task`
+enum, so every task offers `skill`. Production never loads them: it has no assistant.
+
+- **`persona-update`** finds a persona's new streams and saves them as a batch in her sources,
+  which Studio's Videos tab then downloads, prices and transcribes. It runs `eidolon discover
+  --persona "$EIDOLON_TASK_PERSONA"` ([typescript.md](typescript.md#discover)), reads the tiers
+  (her official replays, then others' full recordings for dates she has no replay or transcript
+  of, then clips only when the brief asks), and when no channel is known finds her Bilibili
+  livestream recordings: her space's 直播回放 list, by its URL
+  (`https://space.bilibili.com/<mid>/lists/<id>?type=series`), from `candidates`' `replayLists`
+  or the web, running it again with that list as `--channel`. It leaves out look-alikes with
+  `--skip` and saves with `--save`. It never runs the paid stages, and without `bash` it stops,
+  pointing the owner to the Videos tab.
 
 ### MCP servers
 
@@ -603,8 +650,9 @@ a group or realtime call, `/call` and production's chat endpoint never offer the
 - **Arguments:** `{ goal, deliverable?, folder, check?, profile, skills? }`, OpenClaw's objective,
   output, write scope and verification, the kind of task ([Kinds](#kinds)), and the owner's skills
   the owner asked for by name ([Skills](#skills)); `goal`, `folder` and `profile` are needed, the
-  folder absolute or under `~`. `skills` is offered only while the owner has a skill switched on
-  in the data home's or the shared folder's, as an enum of their names (the manager's
+  folder absolute or under `~`. `skills` is offered only while a skill is switched on in the data
+  home's or the shared folder's, or built in, which is so until the owner switches every built-in
+  one off, as an enum of their names (the manager's
   `skillNames()`, from the latest scan, which each of her turns starts again), never a
   description; the manager checks the names at the start, since her tools aren't checked against
   their schema. Their descriptions are in Chinese, in her register, and are live API surface, as
@@ -1308,8 +1356,8 @@ are JSON under 16 KB, but a new skill's, under 512 KB.
 | `DELETE assistant/commands/:id` | | Takes one back, answering with the rest; 400 `bad-request` for an id that isn't a UUIDv7, 404 `unknown-command` |
 | `GET mcp` | | `{ path, servers, errors }`: each server as `mcp.json` writes it (`command`, `args`, `enabled`, `description`, `alwaysAllow`), each `${NAME}` it needs and whether it is set, and its problem; never an `env` value or a resolved secret. A broken entry comes after the valid ones, with its name, switch and problem alone; `errors` says why a file that doesn't parse starts nothing |
 | `PUT mcp/servers/:name` | `{ enabled?, revoke? }`, one at least | Turns a server on (deleting `enabled` and Cline's `disabled`) or off (`enabled: false`), or takes one tool out of `alwaysAllow`, answering as GET does. Always is added only from a card: 400 `bad-request` for anything else; 404 `unknown-mcp-server`; 409 `invalid-mcp-config` while the file doesn't parse, and `linked-mcp-config` while it is a link, neither ever written over |
-| `GET skills` | | `{ sources, skills, skipped, errors }`: the data home's and the shared folder's skills, each with its source, its folder (`~` for home) and where a link leads, its switch, whether it opts out of model use, the folder of the skill that hides it, whether the catalog leaves it out though it is on, and whether she can name it for a task; the `SKILL.md` files left out and why; why `skills.json` can't be read |
-| `PUT skills/:name` | `{ enabled }` | Switches the name on or off in `skills.json`, answering as GET does; 400 `bad-request` for any other body, 404 `unknown-skill` when neither folder has a skill by that name |
+| `GET skills` | | `{ sources, skills, skipped, errors }`: the data home's, the shared folder's and the built-in skills, each with its source (`eidolon`, `shared`, `builtin`), its folder (`~` for home) and where a link leads, its switch, whether it opts out of model use, the folder of the skill that hides it, whether the catalog leaves it out though it is on, and whether she can name it for a task; the `SKILL.md` files left out and why; why `skills.json` can't be read |
+| `PUT skills/:name` | `{ enabled }` | Switches the name on or off in `skills.json`, answering as GET does; 400 `bad-request` for any other body, 404 `unknown-skill` when no source has a skill by that name |
 | `POST skills` | `{ name, description, instructions }` | Writes `<data home>/skills/<name>/SKILL.md`, the description quoted, answering as GET does; 400 `bad-request` for a name that breaks the naming rules, a blank description or one over 1,024 characters, blank instructions or a file over 256 KB; 409 `skill-exists` when the folder is there |
 
 ### Checking her side
@@ -1382,9 +1430,10 @@ bun run laplace-task --resume <id> [--model <account>/<model>] [--web any|off] [
   the task's; `off`, the default, leaves both out. No site is asked about, as this is an explicit
   command. `task.json` keeps the choice, so `--resume` keeps a task's `any` until `--web off` is
   given.
-- **Skills:** each run lists the data home's, the shared folder's and the folder's, as the app's
-  tasks do, leaves out the names switched off in `skills.json`, and logs what it skipped. `--skill
-  NAME`, repeated for more, gives the task an owner's skill as if she had named it, kept for
+- **Skills:** each run lists the data home's, the shared folder's, the built-in ones and the
+  folder's, as the app's tasks do, leaves out the names switched off in `skills.json`, and logs
+  what it skipped. `--skill NAME`, repeated for more, gives the task an owner's or a built-in
+  skill as if she had named it, kept for
   `--resume`; one the owner hasn't, or has switched off, is a usage error naming the skills there
   are. It has no commands and no MCP servers, which ask the owner on a card, and no kind:
   `--model` picks the model.

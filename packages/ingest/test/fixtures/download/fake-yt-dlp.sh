@@ -81,8 +81,8 @@ EOF
     make "$id"
     ;;
   playlist/*)
-    # As --print '%(.{webpage_url,id,title,duration})j' prints entries; the second has no title or
-    # duration.
+    # As --print '%(.{webpage_url,id,title,duration,live_status})j' prints entries; the second has
+    # no title or duration.
     i=1
     while [ "$i" -le "${name#playlist/}" ]; do
       if [ "$i" -eq 2 ]; then

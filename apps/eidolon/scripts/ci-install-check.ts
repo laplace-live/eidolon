@@ -1,6 +1,7 @@
 // Installs a packed @laplace.live/eidolon with npm, install scripts and all, as npx would, then runs
 // it on a new HOME and data home: its link, a sign-in with the link's code, the status with the
-// cookie and the proof, a CLI command's help, and a clean exit on SIGTERM. CI runs it on linux-x64.
+// cookie and the proof, a CLI command's help, the eidolon command tasks run, the built-in skills,
+// and a clean exit on SIGTERM. CI runs it on linux-x64.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -10,6 +11,7 @@ import {
   type ErrorBody,
   PROOF_HEADER,
   type SessionGrant,
+  type SkillsResponse,
   type Status,
 } from "../../bot/src/local/api.ts";
 
@@ -205,6 +207,29 @@ async function checkPackage(tarball: string, temp: string): Promise<void> {
       "search --help",
       help.code === 0 && help.stdout.startsWith("usage: "),
       `exit ${help.code}${help.code === 0 ? "" : `: ${help.stderr.trim()}`}`,
+    );
+    // As a task's command runs it: a shell finding it first on a PATH of the system's folders
+    // otherwise, with no EIDOLON_HOME.
+    const commands = join(env.EIDOLON_HOME, "bin");
+    const tasks = await run(
+      ["/bin/sh", "-c", "eidolon discover --help"],
+      { PATH: `${commands}:/usr/bin:/bin`, HOME: home },
+      temp,
+    );
+    check(
+      "tasks' eidolon",
+      tasks.code === 0 && tasks.stdout.startsWith("usage: "),
+      `eidolon discover --help with ${commands} first on PATH: exit ${tasks.code}` +
+        `${tasks.code === 0 ? "" : `: ${tasks.stderr.trim()}`}`,
+    );
+    const skills = await fetch(`${app.origin}/api/local/skills`, { headers: session });
+    const listing = (await skills.json().catch(() => ({}))) as Partial<SkillsResponse>;
+    const builtin = (listing.skills ?? []).filter((skill) => skill.source === "builtin");
+    check(
+      "built-in skills",
+      skills.status === 200 && builtin.some((skill) => skill.name === "persona-update"),
+      `GET /api/local/skills: ${skills.status}, built in: ` +
+        `${builtin.map((skill) => skill.name).join(", ") || "none"}`,
     );
     app.process.kill("SIGTERM");
     const code = await exitWithin(app.process, STOP_TIMEOUT_MS);

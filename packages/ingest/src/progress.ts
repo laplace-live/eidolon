@@ -50,6 +50,8 @@ export interface PlaylistEntry {
   readonly id: string;
   readonly title?: string;
   readonly durationSec?: number;
+  /** yt-dlp's `live_status`, where the site gives one: `was_live` for a past live stream. */
+  readonly liveStatus?: string;
 }
 
 /** One video as the plan sees it: where each stage stands, and what the rest would cost. */

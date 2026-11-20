@@ -125,6 +125,7 @@ function scripted(calls: Record<string, unknown>): typeof createMind {
 function manager(mind?: typeof createMind): TaskManager {
   const made = new TaskManager({
     dataHome: dataHome(),
+    builtinSkills: join(dataHome(), "builtin-skills"),
     settings: () => settings,
     addFolder: () => {},
     problem: () => null,

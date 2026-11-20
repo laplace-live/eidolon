@@ -11,6 +11,7 @@ import {
   COMMANDS,
   cleanupLimitMs,
   commandPersona,
+  discoverMain,
   downloadMain,
   EVAL_PARSER,
   extractUsersMain,
@@ -50,10 +51,11 @@ const NEW_COMMANDS = {
   pipeline: pipelineMain,
   "extract-users": extractUsersMain,
   "prepare-batch": prepareBatchMain,
+  discover: discoverMain,
   task: taskMain,
 };
 
-test("one command per Python CLI, and laplace-task, each run by its own module", () => {
+test("one command per Python CLI, laplace-discover and laplace-task, each run by its own module", () => {
   expect(Object.keys(COMMANDS)).toEqual([
     "search",
     "eval-retrieval",

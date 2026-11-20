@@ -1095,6 +1095,10 @@ msgstr "由“{job}”建立"
 msgid "Built in"
 msgstr "内置"
 
+#: src/features/settings/skills-card.tsx
+msgid "Built In"
+msgstr "内置"
+
 #: src/features/home/readiness-labels.ts
 msgid "Built with other embedding settings: build it again."
 msgstr "是用其他嵌入设置构建的，需要重新构建。"
@@ -2504,8 +2508,8 @@ msgid "Instructions"
 msgstr "说明"
 
 #: src/features/settings/skills-card.tsx
-msgid "Instructions a task follows for one kind of work, such as your house style or how you ship a change. A task loads a skill when its work calls for it, or from its start when you name the skill to her. A task also finds the skills in its own folder's .agents/skills."
-msgstr "任务做某一类活时照着做的说明，比如你的排版风格，或者你提交改动的流程。任务在活需要时加载技能；你跟她点名要用某个技能时，任务一开始就会加载。任务也会用到它自己文件夹里 .agents/skills 中的技能。"
+msgid "Instructions a task follows for one kind of work, such as your house style or how you ship a change. A task loads a skill when its work calls for it, or from its start when you name the skill to her. Eidolon comes with a few skills built in, and one of yours by the same name is used instead. A task also finds the skills in its own folder's .agents/skills."
+msgstr "任务做某一类活时照着做的说明，比如你的排版风格，或者你提交改动的流程。任务在活需要时加载技能；你跟她点名要用某个技能时，任务一开始就会加载。Eidolon 自带几个内置技能，你有同名的技能时会用你的。任务也会用到它自己文件夹里 .agents/skills 中的技能。"
 
 #: src/features/chats/why-answered.tsx
 msgid "Interested"
@@ -2629,6 +2633,10 @@ msgstr "写完手头的内容后，它就会停止。"
 #: src/features/tasks/labels.ts
 msgid "It waited for your answer."
 msgstr "它在等你答复。"
+
+#: src/features/settings/new-skill-dialog.tsx
+msgid "It will be used instead of the built-in skill of the same name."
+msgstr "它会代替同名的内置技能。"
 
 #: src/features/settings/new-skill-dialog.tsx
 msgid "It will be used instead of the shared skill of the same name."

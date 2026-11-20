@@ -1,7 +1,8 @@
 // Plans, cached per persona: a plan reads every list, audio file, transcript and index meta of
 // hers, and the videos tab asks for one whenever it opens. What it reports changes only when a
 // job that changes her sources ends, a batch is written, or a setting it reads changes.
-import { layeredValue, readSettingsLayers, SETTINGS } from "@eidolon/config";
+import { layeredValue, readSettingsLayers, SETTINGS, sourceFolder } from "@eidolon/config";
+import { download } from "@eidolon/ingest";
 import { PLAN_SETTINGS } from "../api.ts";
 import { SOURCE_COMMANDS } from "./argv.ts";
 import type { Job, JobRunner } from "./runner.ts";
@@ -11,10 +12,16 @@ export const PLAN_VARIABLES: readonly string[] = SETTINGS.filter((field) =>
   (PLAN_SETTINGS as readonly string[]).includes(field.path),
 ).map((field) => field.env);
 
-/** What a plan of `persona` reads of the settings, as its CLI reads them. */
+/**
+ * What a plan of `persona` reads that no job of this server changes: the settings, as its CLI
+ * reads them, and her batches, which a task's `eidolon discover --save` writes too.
+ */
 export function planInputs(persona: string): string {
   const layers = readSettingsLayers(persona);
-  return JSON.stringify(PLAN_VARIABLES.map((name) => layeredValue(layers, name) ?? null));
+  return JSON.stringify([
+    PLAN_VARIABLES.map((name) => layeredValue(layers, name) ?? null),
+    download.batchLists(sourceFolder(persona, "lists")),
+  ]);
 }
 
 interface Cached {

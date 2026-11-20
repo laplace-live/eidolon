@@ -78,6 +78,7 @@ bun run laplace-ingest-streams           # → index/stream_chunks.lance
 bun run laplace-ingest-facts             # sources/<id>/facts/ → index/persona_facts.lance
 bun run laplace-build-stream-catalog     # → index/stream_catalog.json
 bun run laplace-prepare-batch <capture> --expected-count <n>   # new videos → lists/batches/
+bun run laplace-discover                 # her new videos on Bilibili and YouTube; --save → lists/batches/
 bun run laplace-extract-users <export>   # the names a danmaku export reads aloud, for glossary.toml
 ```
 
@@ -96,6 +97,7 @@ stderr. Stdout carries only the command's report, or with `--json` one
 | `failure.ts` | an error's event code and provider |
 | `streams.ts` | transcript parsing, sidecars, audio naming |
 | `download/` | managed yt-dlp, URL lists and batches, the argv, the part check, playlists |
+| `discover/` | a persona's official channels, Bilibili's web API, and sorting her new videos into tiers |
 | `transcribe/` | the Soniox REST client, glossary context, rendering, slicing, the skip rules |
 | `refine/` | prompts, schemas, lenient JSON, validators, scheduling, cost estimates |
 | `ingest_streams.ts`, `catalog.ts` | `stream_chunks`' rows and rebuild; `stream_catalog.json` |
@@ -142,7 +144,8 @@ ms, and the human summary moves to stderr. The types are in `packages/ingest/src
   audio's stem: `BV1FbgM6QEw3_p1`), a 1-based `index` within the stage, `costUsd`, and for a
   download the ids it created (`outputs`).
 - `progress`: `done` of `total`, in bytes, chunks, rows, files or percent.
-- `entry`: one video `download --expand` found: `{url, id, title?, durationSec?}`.
+- `entry`: one video `download --expand` found: `{url, id, title?, durationSec?, liveStatus?}`,
+  `liveStatus` being yt-dlp's `live_status` (`was_live` for a past live stream).
 - `plan`: one video of `pipeline --dry-run --json`: where each stage stands, and what the rest
   would cost. A video Soniox heard no speech in has nothing to index: its `indexed` is false, and
   the plan summary's `unindexed` leaves it out.
@@ -353,6 +356,72 @@ Choices a reader might take for bugs, and why they stand.
   check --persona`. `--source` writes the `# Source:` line. Another site's http(s) URLs are keyed
   by their exact text, while Bilibili's `m.`, `space.` and `b23.tv` links are refused. It has
   `--persona`, and no `--json`, since its stdout is already JSON.
+
+### Discover
+
+`laplace-discover` finds a persona's videos that no list or batch of hers has
+([personas.md](personas.md#a-personas-sources)), in three tiers, and prints them as JSON:
+`persona`, `channels`, `candidates`, `official`, `recordings` and `clips` (each `{count, hours,
+videos}`, a video `{url, title, date, minutes, uploader}`, newest first), `known`, `batch` and
+`warnings`, each channel, candidate and video on a line of its own, since a first fill lists
+hundreds and a task's command shows 2,000 lines. It has no `--json`: its stdout is already JSON.
+It takes no lock: it reads, and `--save` writes one new batch, never over another. The
+[persona-update](assistant.md#the-built-in-skills) skill runs it from a task.
+
+- **Official** is what her official channels list, whatever its length: the `--channel` URLs,
+  then every channel URL on her batches' `# Source:` lines. A channel is a Bilibili list, a
+  Bilibili space, or a YouTube channel (its `/streams` tab through yt-dlp's `--flat-playlist`, the
+  past live streams). Her livestream recordings on Bilibili are her space's 直播回放 list, which
+  Bilibili fills from her live room, and a list goes by the URL the space links it with
+  (`listUrl`): `https://space.bilibili.com/2132180406/lists/2484684?type=series`. A space stands
+  for its lists named 直播回放, 录播 or 回放, each read, printed and saved by that URL, and with
+  none it is a warning that leaves her streams to the search. Each Bilibili channel shows its
+  account's `name` and its list's name (`list`, from the space's lists, asked for once a space,
+  20 a page, every page their total takes, 10 at most), and a list given whose name is none of
+  those is listed with a warning. A Bilibili search result over `--min-minutes` (60) that an
+  official space uploaded is official too. A YouTube replay's day comes from its title alone: a
+  flat listing carries no upload date, so an undated one covers no day.
+- **Recordings** are others' uploads over `--min-minutes` from Bilibili's search for her name, one
+  a day, for the days no official video, no transcribed video of hers running that long
+  (`duration_min`, a video's parts added up, never two clips') and no recording she already has
+  covers. A day comes from the
+  title (`2026年11月19日`, `2026-11-19` and the like), else from the upload in her time zone; one
+  dated by its upload may be the day before's stream, which ends after midnight at times, so it
+  covers both days, whether picked now or hers already, and of two such a day apart only one is
+  picked. Of a day's recordings, one titled as the official replay is (`…日19点场`) wins, else the
+  longest: fans upload the same stream twice in one video (弹幕版). A recording she has covers
+  its days by its batch's `# Covers:` line, or, without one, while the search still returns it.
+- **A transcript's day.** A transcript is named `<upload date>-<id>.md` by yt-dlp's
+  `upload_date`, in UTC, which can fall a day after the stream. So one of an official video (by
+  its BV id, a part's `_p<n>` cut) covers no day of its own, the video's day standing for it, and
+  another's day is its `vods/<id>.info.json` title's, else that upload date; only those others'
+  info.json files are read.
+- **Clips** are the shorter results naming her (`identity.name` or `shortName` in the title),
+  counted always, listed and saved only with `--clips`.
+- **Bilibili's web API, as its own pages call it.** One `buvid3` cookie from the homepage per run,
+  a space's Referer for its lists and the search page's for the search: without them the lists
+  answer -352 and the search HTTP 412. At least 300 ms between requests. The search runs twice,
+  `--pages` pages of 20 each (5): first its long videos alone (`duration=4`, over an hour), since a
+  few days of clips fill the newest pages, then everything, for clips and the shorter streams a
+  `--min-minutes` under 60 lets in. No login, and no yt-dlp, whose Bilibili search and space
+  listing answer 412 without one.
+- **A failure is a warning.** A channel that can't be listed gets `error`, a failed search ends
+  that search, a list given whose space's lists can't be read is listed with no `list` name, and
+  an uploader that can't be looked up leaves the search to name the account; the run goes on.
+- **Candidates:** with no channel known, the five Bilibili users the search names like her, each
+  with its space's replay lists (`replayLists`, `{url, name, videos}` by `listUrl`), those that
+  have one first: only a streamer's own space has a 直播回放 list, and the search may rank a
+  namesake above her. Whoever runs it chooses one and passes its list's URL as `--channel`.
+- **`--skip VIDEO`**, repeated for more, leaves a video out of every tier and the batch, by its BV
+  id or its Bilibili or YouTube URL (`videoKey`): one found that isn't her stream. A skipped video
+  covers no day by any of its ways (the listing, a `# Covers:` line, the search, its transcript),
+  so another recording of its day can take its place.
+- **`--save`** writes official, then recordings, then clips (with `--clips`) into
+  `lists/batches/videos-<time>.txt`, under a `# Source:` line for each channel it listed, a
+  Bilibili list by its URL, so the next run finds them without `--channel`, and a
+  `# Covers: <day>[ <day>] <url>` line for each recording with a day, the days it covers (both,
+  for one dated by its upload), which every later run reads. Readers of a list's videos skip `#`
+  lines.
 
 ### Transcribe and extract-users
 

@@ -44,6 +44,8 @@ set `EIDOLON_HOME=/data`.
   sources/<id>/         what builds a persona's index (below); never deployed
   cache/embed_cache.db  the embedding cache every persona shares; its key holds the model
   bin/yt-dlp            the yt-dlp the offline tools install and keep current, with its stamp
+  bin/eidolon           the CLI as assistant tasks' commands run it, which the local app writes
+                        at each start; bin/ leads those commands' PATH (assistant.md)
   locks/                the offline tools' locks, released when their process exits
   chats/<id>/           the local web app's text chats, 0700: chat.jsonl, meta.json, files/ (chat.md)
   tasks/<id>/           assistant tasks' records; tasks/allowed-commands.json, the commands
@@ -83,6 +85,20 @@ next ingest. `laplace-ingest-facts` rebuilds `persona_facts` from `facts/`.
 batch writes `<batch>.done.json` beside it once every video the batch lists is downloaded and
 transcribed; a batch without one is still pending. A `.soniox.json` without its `.md` is audio
 Soniox heard no speech in: it counts as transcribed, so the audio isn't billed again.
+
+`laplace-discover` finds her new videos on Bilibili and YouTube: her official channels' streams,
+then others' full recordings of the days those miss, then clips
+([typescript.md](typescript.md#discover)). On Bilibili her streams are her space's 直播回放 list,
+named by its URL, `https://space.bilibili.com/<mid>/lists/<id>?type=series`, as
+`https://space.bilibili.com/2132180406/lists/2484684?type=series` is 明前奶绿's. Her official
+channels are the ones `--channel` names and the ones on her batches' `# Source:` lines,
+prepare-batch's series URL among them, so a persona whose batches name hers needs no
+`--channel`. `--save` writes the new videos into a new batch headed by a `# Source:` line for each
+channel it listed, a space given whole by its 直播回放 list's URL, which is how the next run finds
+them again; to forget a channel, delete its `# Source:` line from every batch that has one. Each
+recording it saves gets a `# Covers: <day>[ <day>] <url>` line there too, the days that recording
+covers, so no later run lists another upload of those days, unless a run's `--skip` names that
+recording as not hers.
 
 ## Layers
 

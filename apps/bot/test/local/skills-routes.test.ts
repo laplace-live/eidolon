@@ -46,6 +46,7 @@ function skill(dir: string, name: string, description: string): void {
 function serve(): (method: string, path: string, body?: unknown) => Promise<Response> {
   const tasks = new TaskManager({
     dataHome: dataHome(),
+    builtinSkills: join(dataHome(), "builtin-skills"),
     settings: () => ({
       enabled: true,
       folders: [],

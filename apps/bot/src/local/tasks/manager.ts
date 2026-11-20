@@ -75,11 +75,14 @@ import {
   WEB_SEARCH,
   type WebSearcher,
   webFetchHost,
+  writeEidolonCommand,
   writeSnapshot,
 } from "@eidolon/assistant";
 import type { PermissionLevel } from "@eidolon/chat";
 import {
   type AssistantSettings,
+  binDir,
+  builtinSkillsDir,
   errorText,
   expandUser,
   findDotenv,
@@ -87,7 +90,6 @@ import {
   logger,
   pyStrip,
   raceAbort,
-  sharedSkillsDir,
   shippedPath,
 } from "@eidolon/config";
 import { acquireLock, LockedError } from "@eidolon/config/lock";
@@ -197,6 +199,8 @@ export interface TaskManagerOptions {
   readonly permissions?: (chat: TaskChat) => Promise<PermissionLevel>;
   /** How long Approve for Me's review may take before the card asks instead: tests shorten it. */
   readonly reviewTimeoutMs?: number;
+  /** The folder of the skills Eidolon ships. Default: builtinSkillsDir(); tests give their own. */
+  readonly builtinSkills?: string;
 }
 
 type RefusalStatus = 400 | 404 | 409 | 416;
@@ -680,7 +684,7 @@ export class TaskManager {
   readonly #allowed: AllowedCommands;
   /** mcp.json, where Always Allow This Tool goes. */
   readonly #mcpFile: McpFile;
-  /** The owner's skills and their switches. */
+  /** The owner's skills and the built-in ones, and their switches. */
   readonly #skills: OwnerSkills;
   readonly #tasks = new Map<string, Task>();
   readonly #streams = new Set<() => void>();
@@ -705,16 +709,24 @@ export class TaskManager {
     this.#reviewTimeoutMs = options.reviewTimeoutMs ?? REVIEW_TIMEOUT_MS;
     this.#allowed = new AllowedCommands(join(this.#root, ALLOWED_COMMANDS_FILE), this.#now);
     this.#mcpFile = new McpFile(options.dataHome);
-    this.#skills = new OwnerSkills(options.dataHome);
+    this.#skills = new OwnerSkills(options.dataHome, options.builtinSkills ?? builtinSkillsDir());
     // Scanned now, so her first turn's start_task can name them.
     this.#skills.names();
   }
 
   /**
-   * The server's start: loads the app's tasks, resumes each interrupted one while Assistant Mode is
-   * on and ready, and, in the background, reports each ended one its chat doesn't have yet.
+   * The server's start: writes the `eidolon` command tasks run, loads the app's tasks, resumes each
+   * interrupted one while Assistant Mode is on and ready, and, in the background, reports each
+   * ended one its chat doesn't have yet.
    */
   async boot(): Promise<void> {
+    if (bashOffered()) {
+      try {
+        await writeEidolonCommand(this.#dataHome);
+      } catch (error) {
+        logger.warning(`Tasks' eidolon command wasn't written: ${errorText(error)}`);
+      }
+    }
     await this.#load();
     if (this.ready()) {
       for (const task of this.#oldestFirst()) {
@@ -1088,9 +1100,16 @@ export class TaskManager {
     }
   }
 
-  /** The task's registry of commands, which keeps task.json's list of those in the background. */
+  /**
+   * The task's registry of commands, which keeps task.json's list of those in the background. Its
+   * commands find the `eidolon` command first on their PATH, and the persona whose chat it is in
+   * EIDOLON_TASK_PERSONA.
+   */
   #openCommands(task: Task): Promise<BashJobs> {
+    const persona = task.snapshot.chat?.persona;
     return BashJobs.open(task.dir, {
+      bin: binDir(this.#dataHome),
+      ...(persona === undefined ? {} : { variables: { EIDOLON_TASK_PERSONA: persona } }),
       ...this.#bash,
       onChange: (background) => {
         void this.#change(task, { background: background.length === 0 ? undefined : background });
@@ -1393,12 +1412,12 @@ export class TaskManager {
   }
 
   /**
-   * The owner's skills `names` gives, as a task keeps them. Refused, so she can tell the owner, when
-   * one is switched off or the owner has none by that name.
+   * The owner's and the built-in skills `names` gives, as a task keeps them. Refused, so she can
+   * tell the owner, when one is switched off or there is none by that name.
    */
   async #named(names: readonly string[]): Promise<readonly string[]> {
     if (names.length === 0) return [];
-    const scan = await scanSkills({ dataHome: this.#dataHome, shared: sharedSkillsDir() });
+    const scan = await scanSkills(this.#skills.folders());
     const { requested, missing, off } = catalogOf(scan, names);
     if (missing.length === 0) return requested.map((skill) => skill.name);
     const unknown = missing.filter((name) => !off.includes(name));
@@ -1697,8 +1716,7 @@ export class TaskManager {
     if (commands) task.jobs ??= await this.#openCommands(task);
     // Read at each run, so a resumed task finds a skill added since, and none switched off since.
     const skills = await loadSkills({
-      dataHome: this.#dataHome,
-      shared: sharedSkillsDir(),
+      ...this.#skills.folders(),
       folder: brief.folder,
       requested: task.snapshot.skills ?? [],
     });

@@ -8,7 +8,7 @@ import { resolveYtDlp, type YtDlp, type YtDlpOptions } from "./ytdlp.ts";
 
 // One JSON object per entry, of the fields yt-dlp has. webpage_url, not url: for a single video,
 // url is the media stream's address.
-const ENTRY_TEMPLATE = "%(.{webpage_url,id,title,duration})j";
+const ENTRY_TEMPLATE = "%(.{webpage_url,id,title,duration,live_status})j";
 
 export interface ExpandOptions extends RunOptions {
   /** null: no browser's cookies; omitted: defaultCookiesFromBrowser(). */
@@ -27,13 +27,14 @@ function entryOf(line: string): PlaylistEntry | null {
     return null;
   }
   if (!isPlainObject(fields)) return null;
-  const { webpage_url: url, id, title, duration } = fields;
+  const { webpage_url: url, id, title, duration, live_status: liveStatus } = fields;
   if (typeof url !== "string" || typeof id !== "string") return null;
   return {
     url,
     id,
     ...(typeof title === "string" ? { title } : {}),
     ...(typeof duration === "number" ? { durationSec: duration } : {}),
+    ...(typeof liveStatus === "string" ? { liveStatus } : {}),
   };
 }
 

@@ -34,6 +34,11 @@ export function cliEntry(): string {
   return shippedPath("dist/cli.js", "apps/cli/src/main.ts");
 }
 
+/** The Agent Skills that ship with Eidolon, which every task may load. */
+export function builtinSkillsDir(): string {
+  return shippedPath("skills", "packages/assistant/skills");
+}
+
 /** jieba's dictionary and HMM tables. */
 export function jiebaDir(): string {
   return shippedPath("data/jieba", "packages/retrieval/data/jieba");

@@ -57,9 +57,12 @@ options:
   ],
 };
 
-// OSError and ValueError with their subclasses, by the names pyError gives them: the expected
-// failures, reported as their message alone; anything else keeps its stack.
-const REPORTED = new Set([
+/**
+ * OSError and ValueError with their subclasses, by the names pyError gives them: the expected
+ * failures of reading lists and writing a batch, reported as their message alone; anything else
+ * keeps its stack.
+ */
+export const REPORTED: ReadonlySet<string> = new Set([
   "OSError",
   "FileNotFoundError",
   "FileExistsError",

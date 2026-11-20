@@ -1,6 +1,6 @@
 // Settings' Skills: the owner's skills, from Eidolon's skills folder and the folder their agents
-// share, each with where it is from and its switch, and a new one written into Eidolon's. A task's
-// own folder's skills are that task's, and never listed here.
+// share, and the built-in ones, each with where it is from and its switch, and a new one written
+// into Eidolon's. A task's own folder's skills are that task's, and never listed here.
 
 import type { MessageDescriptor } from "@lingui/core";
 import { msg, ph, plural } from "@lingui/core/macro";
@@ -41,12 +41,14 @@ import { SKILL_FILTERS, type SkillFilter, skillsQuery, visibleSkills } from "./s
 const SOURCE_LABELS: Readonly<Record<SkillOrigin, MessageDescriptor>> = {
   eidolon: msg`Eidolon`,
   shared: msg`Shared`,
+  builtin: msg`Built In`,
 };
 
 const FILTER_LABELS: Readonly<Record<SkillFilter, MessageDescriptor>> = {
   all: msg`All Skills`,
   eidolon: msg`Eidolon's Folder`,
   shared: msg`Shared Folder`,
+  builtin: msg`Built In`,
   off: msg`Switched Off`,
 };
 
@@ -231,7 +233,7 @@ export function SkillsCard() {
   return (
     <SectionCard
       title={t`Skills`}
-      description={t`Instructions a task follows for one kind of work, such as your house style or how you ship a change. A task loads a skill when its work calls for it, or from its start when you name the skill to her. A task also finds the skills in its own folder's .agents/skills.`}
+      description={t`Instructions a task follows for one kind of work, such as your house style or how you ship a change. A task loads a skill when its work calls for it, or from its start when you name the skill to her. Eidolon comes with a few skills built in, and one of yours by the same name is used instead. A task also finds the skills in its own folder's .agents/skills.`}
       action={
         <>
           <Button

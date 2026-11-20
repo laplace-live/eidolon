@@ -44,6 +44,7 @@ export {
   envVariablesStartingWith,
 } from "./env.ts";
 export {
+  binDir,
   DEFAULT_PERSONA,
   dataHome,
   personaDirs,
@@ -79,6 +80,7 @@ export {
   openrouterHeaders,
 } from "./openrouter.ts";
 export {
+  builtinSkillsDir,
   cliEntry,
   expandUser,
   jiebaDir,
