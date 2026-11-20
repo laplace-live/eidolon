@@ -168,7 +168,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
 | local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun run test apps/bot/test/local`, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat, voice messages and a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
 | her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`; a task that needs a lookup and a run, which names its kind, asks on its card before the command and searches. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
-| `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, and stops it |
+| `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64 and Windows x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, loads its native modules, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
 
 ## Rules
@@ -329,6 +329,12 @@ the layout's one line.
   module's folder is `dist/`. A file the code ships with (a template, the web build, jieba's
   data, an entry to spawn) resolves through `shippedPath` in `@eidolon/config`, under the
   launcher's `EIDOLON_APP_ROOT` or else the checkout, and `apps/eidolon`'s build copies it in.
+- **Windows has no process groups and no SIGTERM: every kill there is TerminateProcess.** Spawn
+  through `spawnProcess` (or cross-spawn, for a `.cmd` such as `npx`), which hides the child's
+  console window; end a process with what it started through `killTree` (`@eidolon/config`, taskkill
+  there), and only while it runs, since Windows reuses a dead process's pid; ask a job to stop with
+  `STOP_MESSAGE` over its IPC channel; and pass no signal on with `kill()` there
+  ([web-app.md](docs/web-app.md#from-the-npm-package)).
 
 ### The offline chain
 
@@ -396,7 +402,8 @@ the layout's one line.
   any other answer sends the action to the card. Its reason is a fixed risk the card names, never
   model text, and never reaches her.
 - **A command, and an MCP server's process, run on `shellEnv()`, never `process.env`:** the
-  allowed names, every `LC_*`, `TERM=dumb`, and a `PATH` with no folder the task may write (an MCP
+  allowed names (on Windows also what its programs need, `PASSED_ON_WINDOWS`), every `LC_*`,
+  `TERM=dumb`, and a `PATH` with no folder the task may write (an MCP
   server's as the task's first run found it), so no `.env` key reaches one unless an `mcp.json`
   entry names it. A command's `PATH` starts with `<data home>/bin`, where the app writes the
   `eidolon` command at each start beside the managed yt-dlp, and it gets `EIDOLON_TASK_PERSONA`,

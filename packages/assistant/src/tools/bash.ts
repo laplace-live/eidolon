@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Mario Zechner
 // SPDX-License-Identifier: MIT
 //
-// Ported from pi-mono packages/coding-agent/src/core/tools/bash.ts@ac78a60
+// Ported from pi-mono packages/coding-agent/src/core/tools/bash.ts@ac78a60, its Windows parts @cb1205e
 //
 // The task's commands: bash runs one in the task's folder, and bash_output and bash_kill follow one
 // that moved to the background. A task's BashJobs runs them all, past the calls that start them.
@@ -55,7 +55,10 @@ export interface BashOperations {
   ): Promise<{ readonly exitCode: number | null }>;
 }
 
-/** Commands on this computer: bash, detached, so a kill takes everything a command started. */
+/**
+ * Commands on this computer: bash, detached, so a kill takes everything a command started; on
+ * Windows, which has no groups, in this process's job, and killed by its tree.
+ */
 export function createLocalBashOperations(): BashOperations {
   return {
     async exec(command, cwd, { onData, signal, env }) {
@@ -73,7 +76,7 @@ export function createLocalBashOperations(): BashOperations {
         stdout: "pipe",
         stderr: "pipe",
         // setsid(): its own session and process group, which killProcessTree reaches whole.
-        detached: true,
+        detached: process.platform !== "win32",
       });
       const kill = () => killProcessTree(child.pid);
       signal?.addEventListener("abort", kill, { once: true });
@@ -94,8 +97,9 @@ export function createLocalBashOperations(): BashOperations {
         exitCode = await child.exited;
         // What the command left running holds its pipes open after the shell exits, and reading
         // them to their end would hang (pi #5303, #11613): its group dies with the shell. A process
-        // that left the group gets PIPE_DRAIN_MS before the pipes are let go.
-        kill();
+        // that left the group gets PIPE_DRAIN_MS before the pipes are let go. Windows finds no tree
+        // under a shell that is gone, and may have given its pid to another process.
+        if (process.platform !== "win32") kill();
         let timer: ReturnType<typeof setTimeout> | undefined;
         const drained = await Promise.race([
           pumped.then(() => true),

@@ -36,11 +36,12 @@ export interface BootIo {
 }
 
 function openBrowser(url: string): void {
+  // On Windows, as pi does: no cmd.exe, which would read the link's & and ^ as its own.
   const command: [string, ...string[]] =
     process.platform === "darwin"
       ? ["open", url]
       : process.platform === "win32"
-        ? ["cmd", "/c", "start", "", url]
+        ? ["rundll32", "url.dll,FileProtocolHandler", url]
         : ["xdg-open", url];
   try {
     spawnProcess(command, { stdin: "ignore", stdout: "ignore", stderr: "ignore" }).unref();

@@ -18,11 +18,17 @@ It needs Node.js 24 or later. Everything it keeps, settings and keys included, i
 ## Platforms
 
 LanceDB and ONNX Runtime, its native parts, decide where it runs: macOS on Apple silicon (with an
-arm64 Node), and Linux with glibc on x64 or arm64. Intel Macs, musl Linux such as Alpine, and
-Windows are not supported.
+arm64 Node), Linux with glibc on x64 or arm64, and Windows on x64. Intel Macs and musl Linux, such
+as Alpine, are not supported.
+
+On Windows, LanceDB and ONNX Runtime need the Microsoft Visual C++ Redistributable: install it from
+https://aka.ms/vs/17/release/vc_redist.x64.exe if `eidolon` says it is missing. Windows on Arm runs
+it on the x64 build of Node. Tasks run their commands in Git Bash, as pi's do: install Git for
+Windows (https://git-scm.com/download/win) for them; without it, tasks read, write and search, but
+run no commands.
 
 The first run downloads about 230 MB, mostly LanceDB and ONNX Runtime for your platform, and the
-install takes about 610 MB on disk on a Mac and more on Linux.
+install takes about 610 MB on disk on a Mac and more on Linux and Windows.
 
 On Linux x64, npm 11 also runs onnxruntime-node's install script, which downloads CUDA libraries
 Eidolon never uses from NuGet, and fails the install when NuGet is out of reach. Skip it:

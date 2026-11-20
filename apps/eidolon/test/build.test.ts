@@ -215,7 +215,7 @@ describe("the published manifest", () => {
       version: bot.version,
       license: "AGPL-3.0-only",
       bin: { eidolon: LAUNCHER },
-      os: ["darwin", "linux"],
+      os: ["darwin", "linux", "win32"],
       cpu: ["arm64", "x64"],
       engines: { node: `>=${NODE_MAJOR}` },
       publishConfig: { access: "public", provenance: true },
@@ -243,6 +243,7 @@ describe("the published manifest", () => {
       "@lancedb/lancedb-darwin-arm64": retrieval.dependencies["@lancedb/lancedb"],
       "@lancedb/lancedb-linux-arm64-gnu": retrieval.dependencies["@lancedb/lancedb"],
       "@lancedb/lancedb-linux-x64-gnu": retrieval.dependencies["@lancedb/lancedb"],
+      "@lancedb/lancedb-win32-x64-msvc": retrieval.dependencies["@lancedb/lancedb"],
     });
   });
 });

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { describe, expect, test } from "vitest";
-import { jsRuntime, spawnProcess } from "../src/index.ts";
+import { jsRuntime, killTree, spawnProcess } from "../src/index.ts";
 
 /** Node running `script` as CommonJS (no top-level await), so `require` is there. */
 function node(script: string): [string, ...string[]] {
@@ -52,37 +52,41 @@ describe("spawnProcess", () => {
     expect(await terminated.exited).toBe(128 + 15);
   });
 
-  test("a program that can't start throws at once, and its late error event goes nowhere", async () => {
-    const work = mkdtempSync(join(tmpdir(), "eidolon-spawn-"));
-    const missing = join(work, "missing");
-    const thrown = (argv: [string, ...string[]], options = {}): unknown => {
-      try {
-        spawnProcess(argv, options);
-      } catch (error) {
-        return error;
-      }
-      return null;
-    };
-    expect(thrown([missing, "--version"])).toMatchObject({
-      message: `spawn ${missing} ENOENT`,
-      code: "ENOENT",
-      errno: -2,
-      syscall: `spawn ${missing}`,
-      path: missing,
-      spawnargs: ["--version"],
-    });
-    expect(thrown(["eidolon-no-such-program"], { env: { PATH: work } })).toMatchObject({
-      code: "ENOENT",
-    });
-    expect(thrown(["true"], { cwd: missing })).toMatchObject({ code: "ENOENT" });
-    const plain = join(work, "plain");
-    writeFileSync(plain, "#!/bin/sh\n");
-    chmodSync(plain, 0o644);
-    expect(thrown([plain])).toMatchObject({ message: `spawn ${plain} EACCES`, code: "EACCES" });
-    expect(thrown([work])).toMatchObject({ code: "EACCES" });
-    // Node emits the failure a tick later: unheard, it would fail this file as an uncaught error.
-    await delay(50);
-  });
+  // POSIX's errno and file modes.
+  test.skipIf(process.platform === "win32")(
+    "a program that can't start throws at once, and its late error event goes nowhere",
+    async () => {
+      const work = mkdtempSync(join(tmpdir(), "eidolon-spawn-"));
+      const missing = join(work, "missing");
+      const thrown = (argv: [string, ...string[]], options = {}): unknown => {
+        try {
+          spawnProcess(argv, options);
+        } catch (error) {
+          return error;
+        }
+        return null;
+      };
+      expect(thrown([missing, "--version"])).toMatchObject({
+        message: `spawn ${missing} ENOENT`,
+        code: "ENOENT",
+        errno: -2,
+        syscall: `spawn ${missing}`,
+        path: missing,
+        spawnargs: ["--version"],
+      });
+      expect(thrown(["eidolon-no-such-program"], { env: { PATH: work } })).toMatchObject({
+        code: "ENOENT",
+      });
+      expect(thrown(["true"], { cwd: missing })).toMatchObject({ code: "ENOENT" });
+      const plain = join(work, "plain");
+      writeFileSync(plain, "#!/bin/sh\n");
+      chmodSync(plain, 0o644);
+      expect(thrown([plain])).toMatchObject({ message: `spawn ${plain} EACCES`, code: "EACCES" });
+      expect(thrown([work])).toMatchObject({ code: "EACCES" });
+      // Node emits the failure a tick later: unheard, it would fail this file as an uncaught error.
+      await delay(50);
+    },
+  );
 
   test("ipc carries JSON both ways", async () => {
     const received: unknown[] = [];
@@ -116,7 +120,7 @@ describe("spawnProcess", () => {
     expect(() => child.send({})).toThrow("send() needs a process spawned with ipc");
   });
 
-  test("detached gives it a process group of its own, which kill(-pid) reaches whole", async () => {
+  test("killTree ends a detached child and what it started, as a job's force stop does", async () => {
     const child = spawnProcess(
       node(
         `const grandchild = require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
@@ -128,22 +132,26 @@ describe("spawnProcess", () => {
     const { value } = await (child.stdout as ReadableStream<Uint8Array>).getReader().read();
     const grandchild = Number(new TextDecoder().decode(value).trim());
     expect(alive(grandchild)).toBe(true);
-    // The group's id is the child's pid: setsid() made it the leader.
-    expect(() => process.kill(-child.pid, 0)).not.toThrow();
-    process.kill(-child.pid, "SIGKILL");
-    expect(await child.exited).toBe(128 + 9);
+    // The group's id is the child's pid: setsid() made it the leader. Windows has no groups.
+    if (process.platform !== "win32") expect(() => process.kill(-child.pid, 0)).not.toThrow();
+    killTree(child.pid);
+    // taskkill's exit code, on Windows.
+    expect(await child.exited).toBe(process.platform === "win32" ? 1 : 128 + 9);
     await until(() => !alive(grandchild));
   });
 
-  test("an undetached child stays in this process's group", async () => {
-    const child = spawnProcess(node("setInterval(() => {}, 1000);"), { stdout: "ignore" });
-    try {
-      expect(() => process.kill(-child.pid, 0)).toThrow();
-    } finally {
-      child.kill("SIGKILL");
-      await child.exited;
-    }
-  });
+  test.skipIf(process.platform === "win32")(
+    "an undetached child stays in this process's group",
+    async () => {
+      const child = spawnProcess(node("setInterval(() => {}, 1000);"), { stdout: "ignore" });
+      try {
+        expect(() => process.kill(-child.pid, 0)).toThrow();
+      } finally {
+        child.kill("SIGKILL");
+        await child.exited;
+      }
+    },
+  );
 
   test("timeout sends SIGTERM once it has passed", async () => {
     const started = performance.now();

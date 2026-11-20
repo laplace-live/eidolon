@@ -156,12 +156,14 @@ Kind card.
   it start ([Permission levels](#permission-levels)).
 - **`assistant.permissions`** (default `ask`) is the level of a chat that picks none of its own
   ([Permission levels](#permission-levels)).
-- **`assistant.bash`** (default on) offers tasks `bash`, `bash_output` and `bash_kill`, on macOS
-  and Linux only, since a kill takes a command's process group (`bashOffered`); the manager's
-  `offersCommands()` is both. Off, a run made after leaves them out, and the gate refuses a command
-  from a run made before (`The owner turned commands off, so bash can't run anything now.`).
-  Turning it off kills nothing: a command already running goes on to its end or its timeout. Her
-  texts follow it at each turn ([`start_task`](#start_task)).
+- **`assistant.bash`** (default on) offers tasks `bash`, `bash_output` and `bash_kill` on macOS and
+  Linux, and on Windows where pi's lookup finds a bash (`windowsBash`): Git Bash where its installer
+  puts it, then a `bash.exe` on PATH (Cygwin, MSYS2), never WSL's launcher in System32, which runs a
+  command in Linux. Without one, Windows offers none (`bashOffered`, looked up once a start); the
+  manager's `offersCommands()` is both. Off, a run made after leaves them out, and the gate refuses
+  a command from a run made before (`The owner turned commands off, so bash can't run anything
+  now.`). Turning it off kills nothing: a command already running goes on to its end or its
+  timeout. Her texts follow it at each turn ([`start_task`](#start_task)).
 - **`assistant.search.provider` and `.model`** are the `search` role ([providers.md](providers.md)):
   no default provider, so tasks can't search until the owner picks an OpenRouter account; its one
   engine is `exa`. `GET status`'s `assistant.search` is `{ on, problem }`: `on` once the role has
@@ -309,16 +311,20 @@ call that started it. Each command waits for the owner's OK first ([Approvals](#
 - **How it runs:** `/bin/bash -c` (pi's shell order) in the task's folder, spawned detached into a
   process group of its own, with input closed and the cut environment ([Rules](#rules)) rebuilt
   at each spawn, so the PATH filter asks the task's policy as it stands. A command that asks a
-  question fails rather than waits.
+  question fails rather than waits. On Windows it is Git Bash's `bash.exe -c`, as pi runs it: in
+  the server's job instead of a group, its console window hidden, the cut environment carrying
+  what Windows programs need (`PASSED_ON_WINDOWS`); the file tools read its `/c/x` paths as
+  `C:\x` (`normalizeWindowsShellPath`).
 - **Eidolon's own commands:** `<data home>/bin` leads the `PATH` (`BashJobs`' `bin`), past the same
   filter. It holds the managed yt-dlp, once Eidolon has installed it, and `eidolon`,
   which `TaskManager.boot()` writes again at each start (`writeEidolonCommand`, 0700): a `sh`
-  script that runs this install's CLI (`cliEntry()`) on the app's own runtime (`jsRuntime()`),
-  setting `EIDOLON_HOME` to the app's data home, `ELECTRON_RUN_AS_NODE` inside Electron, and
-  the npm launcher's `EIDOLON_APP_ROOT` and `EIDOLON_NO_DOTENV` when the app has them. `eidolon
-  discover` is the [persona-update](#the-built-in-skills) skill's step; `eidolon pipeline` and
-  the rest run too, each behind the card like any other command, but a task's command dies at 30
-  minutes, so the paid stages stay Studio's. An app task's commands also get
+  script (its paths with forward slashes on Windows, for Git Bash) that runs this install's CLI
+  (`cliEntry()`) on the app's own runtime (`jsRuntime()`), setting `EIDOLON_HOME` to the app's
+  data home, `ELECTRON_RUN_AS_NODE` inside Electron, and the npm launcher's `EIDOLON_APP_ROOT` and
+  `EIDOLON_NO_DOTENV` when the app has them. `eidolon discover` is the
+  [persona-update](#the-built-in-skills) skill's step; `eidolon pipeline` and the rest run too,
+  each behind the card like any other command, but a task's command dies at 30 minutes, so the
+  paid stages stay Studio's. An app task's commands also get
   `EIDOLON_TASK_PERSONA` (`BashJobs`' `variables`), its chat's persona; a skill names it as
   `--persona "$EIDOLON_TASK_PERSONA"`, since a checkout's `.env` overrides `EIDOLON_PERSONA` in the
   CLI.
@@ -342,7 +348,9 @@ call that started it. Each command waits for the owner's OK first ([Approvals](#
   there, `seen` false, for its next run.
 - **Kills take the whole process group:** a Stop, the timeout, `bash_kill`, the task's end, the
   server's stop, and the shell's own exit, so what a command left running dies with it (a process
-  that left the group gets 1 s before its pipes are let go). One that lands while the shell is
+  that left the group gets 1 s before its pipes are let go). On Windows `taskkill /F /T` takes the
+  shell's tree while the shell runs; once it has exited, Windows finds no tree under it, so what
+  it left running runs on, as in pi. One that lands while the shell is
   still starting kills it as it spawns. A paused task keeps its commands. At the server's next
   start, a crash's unended runs end `lost`, and the background one's notice says it may still be
   running and holding its ports.
@@ -483,7 +491,10 @@ the task's card unless the owner always allows that tool ([Approvals](#approvals
   each call and a server's progress renews). The run's Stop and the server's stop abort an open,
   so a server that hangs starting never holds either up. A session is kept through pauses and
   closed, every process group with it, whenever the task ends, by Stop, a deleted chat, Assistant
-  Mode off or the app's stop; a close lets go of a server's pipes a second after its SIGKILL. A
+  Mode off or the app's stop; a close lets go of a server's pipes a second after its SIGKILL. On
+  Windows, as in pi, cross-spawn starts a `.cmd` command such as `npx` through cmd.exe, a close
+  kills the server's tree through `taskkill /F /T` while it runs and lets go of its pipes at once
+  once it has exited, and a server the app leaves by dying is left to end when its stdin does. A
   task resumed after a restart opens a new one. A server that fails to start leaves the task
   without it, which the card notes (`mcp.failed`), and a listing the session can't take ends the
   open with every server it started closed; one that exits later fails the calls after it with

@@ -381,10 +381,11 @@ function folderOf(text: string): string {
   if (given === "") throw new TaskRefused(400, "invalid-path", "A task needs a folder");
   const path = expandUser(given);
   if (!isAbsolute(path)) {
+    const start = process.platform === "win32" ? "a drive, such as C:\\," : "/";
     throw new TaskRefused(
       400,
       "invalid-path",
-      `${given} isn't a folder's full path: start it with / or ~`,
+      `${given} isn't a folder's full path: start it with ${start} or ~`,
     );
   }
   return resolve(path);

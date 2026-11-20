@@ -3,6 +3,7 @@
 import { installSettings, logToStderr } from "@eidolon/config";
 import { runWithSignals } from "@eidolon/ingest";
 import { cleanupLimitMs, runCli } from "../src/cli.ts";
+import { relayStopMessages } from "../src/job.ts";
 import { personaArg } from "../src/persona-arg.ts";
 
 const argv = process.argv.slice(2);
@@ -10,6 +11,7 @@ const persona = personaArg(argv);
 if (persona) process.env.EIDOLON_PERSONA = persona;
 installSettings();
 logToStderr();
+relayStopMessages(process);
 process.exitCode = await runWithSignals(
   (signal) => runCli(argv, { signal }),
   process,

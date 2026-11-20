@@ -691,6 +691,8 @@ function readVoiceStyles(persona: Tree, label: string, warn: Warn): Map<string, 
 }
 
 function warnIfShared(path: string, warn: Warn): void {
+  // Windows reports 0o666 for every file it lets this user write: its access lists aren't modes.
+  if (process.platform === "win32") return;
   try {
     if (statSync(path).mode & 0o077) {
       warn(`${path} is readable by other users; run \`chmod 600 ${path}\``);

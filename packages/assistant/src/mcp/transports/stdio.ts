@@ -1,12 +1,15 @@
 // Copyright (c) 2025 Mario Zechner
 // SPDX-License-Identifier: MIT
 //
-// Ported from pi-mono packages/mcp/src/transports/stdio.ts@ac78a60
+// Ported from pi-mono packages/mcp/src/transports/stdio.ts@ac78a60, its Windows parts @cb1205e
 //
 // A server as a program on this computer, in a process group of its own, so that closing it ends
 // what it started too, such as the server npx starts under it. It gets the environment it is given
-// and nothing of this process's.
-import { type ChildProcess, spawn } from "node:child_process";
+// and nothing of this process's. Windows has no process groups: there closing a server kills its
+// tree through taskkill, and one this process leaves behind by dying reads its stdin's end.
+import type { ChildProcess } from "node:child_process";
+import { killTree } from "@eidolon/config";
+import crossSpawn from "cross-spawn";
 import { type JsonRpcMessage, McpConnectionClosedError } from "../protocol/jsonrpc.ts";
 import { JsonRpcLineReader } from "./lines.ts";
 import { type McpTransport, TransportEvents } from "./transport.ts";
@@ -16,6 +19,8 @@ const DEFAULT_CLOSE_TIMEOUT_MS = 2_000;
 const STDIN_CLOSE_GRACE_MS = 500;
 /** After the SIGKILL, how long the server's pipes get to close before they are let go. */
 const PIPE_DRAIN_MS = 1_000;
+
+const WINDOWS = process.platform === "win32";
 
 /** Process groups that may still hold a server or what it started, killed if the host exits. */
 const liveProcessGroups = new Set<number>();
@@ -33,6 +38,12 @@ function signalGroup(pid: number, signal: NodeJS.Signals): boolean {
 
 function killProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
   const pid = child.pid;
+  // Every kill there is TerminateProcess, which would leave what the server started; and a pid
+  // whose process is gone may be another's.
+  if (WINDOWS) {
+    if (pid !== undefined && child.exitCode === null && child.signalCode === null) killTree(pid);
+    return;
+  }
   if (pid !== undefined) {
     try {
       // Negative pid: the whole group, so wrappers like `npx` do not leave the server behind.
@@ -101,16 +112,18 @@ export class StdioTransport extends TransportEvents implements McpTransport {
     if (this.#started) throw new Error("MCP stdio transport already started");
     if (this.#closed) throw new McpConnectionClosedError();
     this.#started = true;
-    const child = spawn(this.options.command, this.options.args ?? [], {
+    // Node starts no .cmd, as npx is on Windows, but through cmd.exe, which cross-spawn quotes for.
+    const child = crossSpawn(this.options.command, this.options.args ?? [], {
       cwd: this.options.cwd,
       env: { ...this.options.env },
       stdio: ["pipe", "pipe", "pipe"],
       // Own process group, so closing the transport can terminate the server's children too.
-      detached: true,
+      detached: !WINDOWS,
+      windowsHide: true,
     });
     this.#child = child;
     const pid = child.pid;
-    if (pid !== undefined) {
+    if (pid !== undefined && !WINDOWS) {
       installExitHook();
       liveProcessGroups.add(pid);
     }
@@ -162,6 +175,13 @@ export class StdioTransport extends TransportEvents implements McpTransport {
     const child = this.#child;
     if (!child) {
       this.emitClose();
+      return;
+    }
+    // On Windows, as in pi, a server that already exited leaves no tree to find: its pipes are let
+    // go at once, whoever still holds them.
+    if (WINDOWS && (child.exitCode !== null || child.signalCode !== null)) {
+      child.stdin?.end();
+      for (const stream of [child.stdout, child.stderr]) stream?.destroy();
       return;
     }
     // A server that already exited can leave children holding its pipes; the group cleanup below

@@ -387,11 +387,12 @@ in one of the local app's chats, or `laplace-task` runs; production never has th
 for either, and her chat model is never the fallback. `assistant.folders` lists folders every
 task may read and write besides its own, where a task she starts runs without asking first
 ([assistant.md](assistant.md)). `assistant.bash` (default on) lets a task ask to run commands on
-macOS and Linux, each waiting for your OK on its card unless you allowed that exact command in its
-folder for good; off, no task starts one, and one already running goes on to its end or its
-timeout. `assistant.permissions` is how much a task asks you, in a chat that picks no level of its
-own in its message box ([assistant.md](assistant.md#permission-levels)): `ask`, the default,
-asks about every folder outside yours, site, command and MCP call you haven't allowed; `auto` has
+macOS and Linux, and on Windows in Git Bash once Git for Windows is installed, each waiting for
+your OK on its card unless you allowed that exact command in its folder for good; off, no task
+starts one, and one already running goes on to its end or its timeout. `assistant.permissions` is
+how much a task asks you, in a chat that picks no level of its own in its message box
+([assistant.md](assistant.md#permission-levels)): `ask`, the default, asks about every folder
+outside yours, site, command and MCP call you haven't allowed; `auto` has
 the task's own model review each of those first, billed to the task, and asks only about the ones
 it finds risky; `full` asks about none, so its commands run as you unasked. Any other value reads
 as `ask`, with a warning. At every level a task's file tools stay out of the data home, your keys

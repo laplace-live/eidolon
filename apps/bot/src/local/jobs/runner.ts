@@ -2,12 +2,13 @@
 // files the server tails, so a job outlives a reloaded page and the server's own restart.
 import { closeSync } from "node:fs";
 import { uptime } from "node:os";
-import { jobArgv } from "@eidolon/cli/job";
+import { jobArgv, STOP_MESSAGE } from "@eidolon/cli/job";
 import {
   cliEntry,
   dataHome,
   errorText,
   jsRuntime,
+  killTree,
   logger,
   type Subprocess,
   spawnProcess,
@@ -165,6 +166,7 @@ export class JobRunner {
         // Its own process group: Ctrl-C in the terminal reaches only the server, which stops its
         // jobs itself, and a kill of the group reaches the CLI's own children too.
         detached: true,
+        ipc: () => {},
       });
     } catch (error) {
       removeJob(id);
@@ -220,24 +222,17 @@ export class JobRunner {
   }
 
   /**
-   * Asks this server's running job to stop with SIGTERM, which the CLI answers by cancelling its
-   * run once any index rebuild it is in has finished. Asked again with `force`, it kills the
-   * job's whole process group, which can leave an index half rebuilt.
+   * Asks this server's running job to stop, which the CLI answers as SIGTERM, by cancelling its
+   * run once any index rebuild it is in has finished. Asked again with `force`, it kills the job
+   * and what it started, which can leave an index half rebuilt.
    */
   cancel(job: Job, force = false): CancelOutcome {
     if (job.record.status !== "running") return "ended";
     const child = job.child;
     if (child === null) return "not-ours";
-    if (job.record.stopReason === null) {
-      this.signalStop(job, "cancel");
-    } else if (force) {
-      try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {
-        // The group is gone.
-      }
-    }
-    // Otherwise nothing: a second SIGTERM makes the CLI quit at once, even mid-rebuild.
+    if (job.record.stopReason === null) this.signalStop(job, "cancel");
+    else if (force) killTree(child.pid);
+    // Otherwise nothing: a second stop makes the CLI quit at once, even mid-rebuild.
     return "stopping";
   }
 
@@ -257,7 +252,7 @@ export class JobRunner {
   }
 
   /**
-   * The stop hook: ends the streams and sends SIGTERM to every job this server runs, then waits
+   * The stop hook: ends the streams and asks every job this server runs to stop, then waits
    * briefly so the quick ones record how they ended. Nothing is killed: a job still finishing an
    * index rebuild runs on in its own process group, and the next server watches it to its end.
    */
@@ -280,7 +275,7 @@ export class JobRunner {
     clearTimeout(timer);
   }
 
-  /** Saves why `job` stops, then sends it SIGTERM: a server that dies in between still knows. */
+  /** Saves why `job` stops, then asks it to: a server that dies in between still knows. */
   private signalStop(job: Job, reason: StopReason): void {
     job.record = { ...job.record, stopReason: reason };
     try {
@@ -288,7 +283,7 @@ export class JobRunner {
     } catch (error) {
       logger.error(`Job ${job.record.id}'s stop wasn't saved`, error);
     }
-    job.child?.kill("SIGTERM");
+    job.child?.send(STOP_MESSAGE);
   }
 
   private track(record: StoredJob): Job {

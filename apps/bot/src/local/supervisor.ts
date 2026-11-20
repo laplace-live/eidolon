@@ -1,7 +1,8 @@
 // `bun run local` keeps the server in a child process: when the server exits 75, it asks for a
 // fresh one, which is how settings read once at boot take effect. Otherwise this process exits with
 // the child's code. The child gets its own process group, so a terminal's Ctrl-C reaches it once,
-// through here, and an IPC channel ends it if this process is killed outright.
+// through here, and an IPC channel ends it if this process is killed outright. On Windows it shares
+// this console instead, which gives it Ctrl-C and the window's closing itself.
 import { jsRuntime, type Subprocess, serverEntry, spawnProcess } from "@eidolon/config";
 import { localArgv, parseLocalArgs } from "./args.ts";
 import { STARTED_ENV } from "./environ.ts";
@@ -41,6 +42,8 @@ const processSignals: SignalSource = (forward) => {
 export interface SuperviseOptions {
   readonly entry?: string;
   readonly signals?: SignalSource;
+  /** This process's when omitted. */
+  readonly platform?: NodeJS.Platform;
 }
 
 /**
@@ -56,9 +59,11 @@ export async function supervise(
   let child: Subprocess | null = null;
   let stopping = false;
   let boundPort: number | null = null;
+  // Windows' kill() is TerminateProcess, which would end the server in the middle of its own stop.
+  const forwards = (options.platform ?? process.platform) !== "win32";
   const unsubscribe = (options.signals ?? processSignals)((signal) => {
     stopping = true;
-    child?.kill(signal);
+    if (forwards) child?.kill(signal);
   });
   try {
     for (;;) {

@@ -5,6 +5,8 @@
 //
 // The fixtures run on this Node, as pi's do; every process a case starts is killed before it ends.
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
@@ -221,6 +223,41 @@ describe("StdioTransport", () => {
       killAll(pids);
     }
   }, 10_000);
+
+  it.runIf(process.platform === "win32")(
+    "on Windows starts a .cmd server by its bare name, as npx is, and closing kills its tree",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "eidolon-mcp-cmd-"));
+      const script = join(dir, "server.mjs");
+      writeFileSync(
+        script,
+        `import { spawn } from "node:child_process";
+        const grandchild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+        console.error(JSON.stringify({ argv: process.argv.slice(2), grandchild: grandchild.pid }));
+        setInterval(() => {}, 1000);`,
+      );
+      writeFileSync(join(dir, "fixture-server.cmd"), `@"${process.execPath}" "${script}" %*\r\n`);
+      const args = ["a b", "x&y", "(1)", "100%", "^caret", "C:\\Program Files (x86)\\x"];
+      const transport = new StdioTransport({
+        command: "fixture-server",
+        args,
+        env: { PATH: `${dir};${process.env.PATH ?? ""}`, PATHEXT: ".COM;.EXE;.BAT;.CMD" },
+        closeTimeoutMs: 100,
+      });
+      try {
+        await transport.start();
+        expect(await waitFor(() => transport.stderr.includes("}"), 10_000)).toBe(true);
+        const said = JSON.parse(transport.stderr) as { argv: string[]; grandchild: number };
+        expect(said.argv).toEqual(args);
+        await transport.close();
+        expect(await waitFor(() => !isAlive(said.grandchild), 5_000)).toBe(true);
+      } finally {
+        await transport.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    20_000,
+  );
 
   it("gives the server the environment it is given and nothing of this process's", async () => {
     process.env.EIDOLON_MCP_STDIO_PROBE = "leaked";

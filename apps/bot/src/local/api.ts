@@ -935,13 +935,13 @@ export interface JobEventsQuery {
 }
 
 /**
- * DELETE jobs/:id sends the job SIGTERM, which it answers by cancelling its run once any index
- * rebuild it is in has finished; a repeat sends nothing more.
+ * DELETE jobs/:id asks the job to stop, which it answers as SIGTERM, by cancelling its run once any
+ * index rebuild it is in has finished; a repeat sends nothing more.
  */
 export interface JobCancelQuery {
   /**
-   * 1, on a job already stopping: SIGKILL for its whole process group, at once, which can leave an
-   * index without its table or its full-text index until the next ingest.
+   * 1, on a job already stopping: kills it and what it started, at once, which can leave an index
+   * without its table or its full-text index until the next ingest.
    */
   readonly force?: 1;
 }

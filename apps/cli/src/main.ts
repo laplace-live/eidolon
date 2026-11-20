@@ -8,10 +8,12 @@ import { runWithSignals } from "@eidolon/ingest";
 import { withUsageScope } from "@eidolon/providers";
 import { installUsageLedger } from "@eidolon/usage";
 import { cleanupLimitMs, runCli } from "./cli.ts";
+import { relayStopMessages } from "./job.ts";
 
 installHttpDefaults();
 const argv = process.argv.slice(2);
 installUsageLedger();
+relayStopMessages(process);
 // A job the local app started carries its id, which its usage records name.
 const job = process.env.EIDOLON_JOB_ID;
 // Not process.exit(): it drops whatever stdout still has queued for a pipe, cutting `| jq` short.

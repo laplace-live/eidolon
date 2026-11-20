@@ -1,17 +1,30 @@
 // The npm package's `eidolon` command, which npx runs on Node: it runs the web app's supervisor or
 // the CLI on that same Node.
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { constants } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** The platforms LanceDB's and onnxruntime-node's binaries cover, with LanceDB's build for each. */
+/** The platforms Eidolon runs on, each with LanceDB's build for it. */
 export const PLATFORMS = {
   "darwin-arm64": "@lancedb/lancedb-darwin-arm64",
   "linux-x64": "@lancedb/lancedb-linux-x64-gnu",
   "linux-arm64": "@lancedb/lancedb-linux-arm64-gnu",
+  "win32-x64": "@lancedb/lancedb-win32-x64-msvc",
 } as const;
+
+/**
+ * The Visual C++ runtime's DLLs that onnxruntime-node's and LanceDB's Windows builds import, and
+ * Windows doesn't ship. Missing, either fails to load with "The specified module could not be found".
+ */
+export const VC_RUNTIME_DLLS: readonly string[] = [
+  "vcruntime140.dll",
+  "vcruntime140_1.dll",
+  "msvcp140.dll",
+  "msvcp140_1.dll",
+  "msvcp140_atomic_wait.dll",
+];
 
 /** The oldest Node major that runs the bundles, which the package's `engines` names too. */
 export const NODE_MAJOR = 24;
@@ -87,10 +100,13 @@ export interface Host {
   readonly glibc: boolean;
   /** On macOS, whether this is an x64 process Rosetta translates. */
   readonly rosetta: boolean;
+  /** On Windows, whether the Visual C++ runtime the native modules load is installed. */
+  readonly vcRuntime: boolean;
 }
 
 const SUPPORTED =
-  "Eidolon runs on macOS on Apple silicon, and on Linux with glibc on x64 or arm64.";
+  "Eidolon runs on macOS on Apple silicon, on Linux with glibc on x64 or arm64, and on Windows " +
+  "on x64.";
 
 /** Why the native modules can't run on `host`, or null when they can. */
 export function unsupportedReason(host: Host): string | null {
@@ -101,8 +117,21 @@ export function unsupportedReason(host: Host): string | null {
           "arm64. Install the arm64 build of Node, then run eidolon again."
       : `Intel Macs are not supported: LanceDB and onnxruntime-node ship no build for them. ${SUPPORTED}`;
   }
+  if (host.platform === "win32" && host.arch === "arm64") {
+    return (
+      "this Node is an arm64 build, and Eidolon's native modules for Windows are x64. Install " +
+      "the x64 build of Node, which Windows on Arm runs too, then run eidolon again."
+    );
+  }
   if (!Object.hasOwn(PLATFORMS, key)) {
     return `${key} is not supported: LanceDB and onnxruntime-node ship no build for it. ${SUPPORTED}`;
+  }
+  if (host.platform === "win32" && !host.vcRuntime) {
+    return (
+      "the Microsoft Visual C++ Redistributable, which LanceDB and onnxruntime-node need, is " +
+      "missing or out of date. Install it from https://aka.ms/vs/17/release/vc_redist.x64.exe, " +
+      "then run eidolon again."
+    );
   }
   if (host.platform === "linux" && !host.glibc) {
     return (
@@ -140,7 +169,18 @@ function currentHost(): Host {
     arch === "x64" &&
     spawnSync("sysctl", ["-n", "sysctl.proc_translated"], { encoding: "utf8" }).stdout?.trim() ===
       "1";
-  return { platform, arch, glibc, rosetta };
+  return { platform, arch, glibc, rosetta, vcRuntime: platform !== "win32" || hasVcRuntime() };
+}
+
+/** Whether every VC_RUNTIME_DLLS is where Windows looks for a DLL: System32, else a PATH folder. */
+export function hasVcRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
+  const folders = [
+    join(env.SystemRoot ?? "C:\\Windows", "System32"),
+    ...(env.PATH ?? "").split(";"),
+  ];
+  return VC_RUNTIME_DLLS.every((dll) =>
+    folders.some((folder) => folder !== "" && existsSync(join(folder, dll))),
+  );
 }
 
 function fail(message: string, code = 1): void {
@@ -154,9 +194,14 @@ function run(bundle: string, args: readonly string[], env: NodeJS.ProcessEnv): v
   // A terminal's Ctrl-C reaches the child itself, in this process group: passing it on would
   // deliver it twice.
   process.on("SIGINT", () => {});
-  process.on("SIGTERM", () => child.kill("SIGTERM"));
-  // As SIGTERM: the CLI has no SIGHUP handler, so a SIGHUP would end it at once.
-  process.on("SIGHUP", () => child.kill("SIGTERM"));
+  if (process.platform === "win32") {
+    // Closing the console window reaches the child too, and kill() there is TerminateProcess.
+    process.on("SIGHUP", () => {});
+  } else {
+    process.on("SIGTERM", () => child.kill("SIGTERM"));
+    // As SIGTERM: the CLI has no SIGHUP handler, so a SIGHUP would end it at once.
+    process.on("SIGHUP", () => child.kill("SIGTERM"));
+  }
   child.on("error", (error) => {
     fail(`could not start ${process.execPath}: ${error.message}`);
     process.exit();

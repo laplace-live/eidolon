@@ -1,8 +1,12 @@
 // A stand-in for the CLI in the jobs tests, never the real one, whose load-env.ts would read the
 // repository's .env: `node jobs-fake-cli.ts <scenario> <command> --json [args]`. It writes progress
-// events to stdout and log lines to stderr, as the CLI does.
+// events to stdout and log lines to stderr, as the CLI does, and takes the server's stop message as
+// SIGTERM, as the CLI does.
 import { spawn } from "node:child_process";
+import { relayStopMessages } from "@eidolon/cli/job";
 
+process.on("message", (message) => process.stderr.write(`message ${JSON.stringify(message)}\n`));
+relayStopMessages(process);
 const [scenario = "ok", command = "", ...args] = process.argv.slice(2);
 
 /** The summary the real CLI ends this command line's run with. */

@@ -1,15 +1,16 @@
 // Copyright (c) 2025 Mario Zechner
 // SPDX-License-Identifier: MIT
 //
-// Ported from pi-mono packages/coding-agent/src/core/tools/path-utils.ts@ac78a60 and packages/coding-agent/src/utils/paths.ts@ac78a60
+// Ported from pi-mono packages/coding-agent/src/core/tools/path-utils.ts@ac78a60 and packages/coding-agent/src/utils/paths.ts@ac78a60, its Windows parts @cb1205e
 //
-// A path as a model writes it, made a path on disk: odd spaces, a leading @ and ~ dealt with, and
-// relative to the task's folder. A read also tries the spellings macOS gives screenshots.
+// A path as a model writes it, made a path on disk: odd spaces, a leading @ and ~ dealt with, a
+// Git Bash drive path made a Windows one, and relative to the task's folder. A read also tries the
+// spellings macOS gives screenshots.
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
-import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { expandUser } from "@eidolon/config";
 
 const UNICODE_SPACES = /[\u{a0}\u{2000}-\u{200a}\u{202f}\u{205f}\u{3000}]/gu;
 const NARROW_NO_BREAK_SPACE = "\u{202f}";
@@ -24,17 +25,24 @@ export async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+/** Git Bash's, MSYS's, Cygwin's and WSL's drive paths (`/c/x`, `/mnt/c/x`) in the form Windows takes. */
+export function normalizeWindowsShellPath(path: string): string {
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) return path;
+  const match = /^\/(?:mnt\/|cygdrive\/)?([a-z])(?:\/(.*))?$/i.exec(path);
+  if (!match) return path;
+  return `${(match[1] as string).toUpperCase()}:\\${match[2]?.replaceAll("/", "\\") ?? ""}`;
+}
+
 /**
- * `path` with Unicode spaces made plain, a leading @ dropped, a leading ~ expanded and a file: URL
- * made a path. `~draft.md` stays a file name.
+ * `path` with Unicode spaces made plain, a leading @ dropped, on Windows a shell's drive path made
+ * Windows', a leading ~ expanded and a file: URL made a path. `~draft.md` stays a file name.
  */
 export function expandPath(path: string): string {
   let normalized = path.replace(UNICODE_SPACES, " ");
   if (normalized.startsWith("@")) normalized = normalized.slice(1);
-  if (normalized === "~") return homedir();
-  if (normalized.startsWith("~/")) return join(homedir(), normalized.slice(2));
+  if (process.platform === "win32") normalized = normalizeWindowsShellPath(normalized);
   if (/^file:\/\//.test(normalized)) return fileURLToPath(normalized);
-  return normalized;
+  return expandUser(normalized);
 }
 
 /** `path` expanded, and absolute: as it is, or against `cwd`. */

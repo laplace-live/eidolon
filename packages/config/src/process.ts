@@ -2,7 +2,7 @@
 import { type Serializable, type StdioOptions, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { constants } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { Readable, type Writable } from "node:stream";
 import { which } from "./which.ts";
 
@@ -15,7 +15,10 @@ export interface SpawnOptions {
   readonly stdin?: "ignore" | "pipe" | "inherit"; // default "ignore"
   readonly stdout?: StdioTarget; // default "pipe"
   readonly stderr?: StdioTarget; // default "inherit"
-  /** setsid(): its own session and process group, so killing -pid reaches what it started. */
+  /**
+   * setsid(): its own session and process group, so killing -pid reaches what it started. On
+   * Windows: no console, and it outlives this process, which otherwise takes it along.
+   */
   readonly detached?: boolean;
   /** SIGTERM once this many ms have passed. */
   readonly timeout?: number;
@@ -85,6 +88,9 @@ export function spawnProcess(
     env: options.env ?? process.env,
     stdio,
     detached: options.detached ?? false,
+    // A console program started by a process with no console, as a job's yt-dlp is on Windows,
+    // opens a window of its own.
+    windowsHide: true,
     serialization: "json",
     timeout: options.timeout,
   });
@@ -121,4 +127,31 @@ export function spawnProcess(
       child.unref();
     },
   };
+}
+
+/**
+ * Kills process `pid` and what it started: its process group, which a child spawned detached
+ * leads, else the process alone; on Windows, which has no groups, its tree, through taskkill, as pi
+ * does. Call it only while `pid` runs: Windows reuses a pid once its process is gone.
+ */
+export function killTree(pid: number): void {
+  if (process.platform === "win32") {
+    const taskkill = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
+    spawn(taskkill, ["/F", "/T", "/PID", String(pid)], {
+      stdio: "ignore",
+      // Outside this process's job, which would end taskkill with this process.
+      detached: true,
+      windowsHide: true,
+    }).on("error", () => {});
+    return;
+  }
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Already gone.
+    }
+  }
 }

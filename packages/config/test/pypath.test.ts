@@ -98,3 +98,33 @@ test("parent and relative_to read paths as PurePosixPath does", () => {
   expect(pyPathRelativeTo("../x.md", ".")).toBe("../x.md");
   expect(() => pyPathRelativeTo("/a/x.md", "/b")).toThrow("is not in the subpath");
 });
+
+describe("on Windows", () => {
+  /** Runs `check` while process.platform reads `value`, as the helpers read it on each call. */
+  function on(value: NodeJS.Platform, check: () => void): void {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform") as PropertyDescriptor;
+    Object.defineProperty(process, "platform", { ...platform, value });
+    try {
+      check();
+    } finally {
+      Object.defineProperty(process, "platform", platform);
+    }
+  }
+
+  test("a backslash separates too, a drive's root stays a root, and paths print with slashes", () => {
+    on("win32", () => {
+      expect(pyPath("C:\\Users\\t\\.laplace\\x.md")).toBe("C:/Users/t/.laplace/x.md");
+      expect(pyPathName("C:\\Users\\t\\lists\\batches\\videos-1.txt")).toBe("videos-1.txt");
+      expect(pyPathStem(".\\vods\\BV1x.m4a")).toBe("BV1x");
+      expect(pyPathSuffix("C:\\a\\b.refined.json")).toBe(".json");
+      expect(pyPathParent("C:\\Users\\t")).toBe("C:/Users");
+      expect(pyPathParent("C:\\x")).toBe("C:/");
+      expect(pyPathParent("C:\\")).toBe("C:/");
+      expect(pyPathRelativeTo("C:\\data\\streams\\a.md", "C:/data")).toBe("streams/a.md");
+      expect(pyPathWithSuffix("C:\\a\\b.md", ".json")).toBe("C:/a/b.json");
+      expect(pyPath("\\\\server\\share\\x")).toBe("//server/share/x");
+    });
+    // Elsewhere a backslash is part of a name, as in PurePosixPath.
+    on("linux", () => expect(pyPathName("a\\b.png")).toBe("a\\b.png"));
+  });
+});

@@ -1,12 +1,15 @@
 // Installs a packed @laplace.live/eidolon with npm, install scripts and all, as npx would, then runs
 // it on a new HOME and data home: its link, a sign-in with the link's code, the status with the
 // cookie and the proof, a CLI command's help, the eidolon command tasks run, the built-in skills,
-// sharp where the bundles import it, and a clean exit on SIGTERM. CI runs it on linux-x64.
-import { spawnSync } from "node:child_process";
+// sharp, LanceDB and onnxruntime-node as the bundles load them, and a clean exit on SIGTERM. CI runs
+// it on linux-x64 and win32-x64, where tasks' commands run in Git Bash and nothing sends SIGTERM:
+// there it also checks npm's .cmd for the command, and that the app ends with its launcher.
+import { type SpawnSyncOptions, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { type Subprocess, spawnProcess } from "@eidolon/config";
+import { setTimeout as delay } from "node:timers/promises";
+import { killTree, type Subprocess, spawnProcess } from "@eidolon/config";
 import { Output, READY_LINE } from "../../bot/scripts/output.ts";
 import {
   type ErrorBody,
@@ -15,6 +18,9 @@ import {
   type SkillsResponse,
   type Status,
 } from "../../bot/src/local/api.ts";
+import { PLATFORMS } from "../src/launcher.ts";
+
+const WINDOWS = process.platform === "win32";
 
 const USAGE = `usage: node apps/eidolon/scripts/ci-install-check.ts <tarball>
 
@@ -31,6 +37,24 @@ const made = await sharp({ create: { width: 2, height: 1, channels: 3, backgroun
 const { format, width, height } = await sharp(made).metadata();
 console.log(\`\${format} \${width}×\${height}\`);
 `;
+/**
+ * LanceDB's binary for this platform, which the bundles require by name, opening a database, and
+ * onnxruntime-node running Silero VAD from the package's models: on Windows each needs the Visual
+ * C++ runtime.
+ */
+const NATIVE_CHECK = `
+const { createRequire } = await import("node:module");
+const { mkdtempSync, rmSync } = await import("node:fs");
+const { tmpdir } = await import("node:os");
+const { join } = await import("node:path");
+const { Connection } = createRequire(join(process.cwd(), "package.json"))(process.argv[1]);
+const dir = mkdtempSync(join(tmpdir(), "eidolon-lancedb-"));
+const tables = await (await Connection.new(dir, {})).tableNames();
+rmSync(dir, { recursive: true, force: true });
+const ort = await import("onnxruntime-node");
+const vad = await ort.InferenceSession.create(join(process.cwd(), "data", "models", "silero_vad.onnx"));
+console.log(\`lancedb \${JSON.stringify(tables)}, silero inputs \${vad.inputNames.join(",")}\`);
+`;
 const STOP_TIMEOUT_MS = 15_000;
 const TAIL_LINES = 40;
 
@@ -42,14 +66,27 @@ function check(name: string, pass: boolean, detail: string): asserts pass {
   if (!pass) throw new CheckFailed(name);
 }
 
+/**
+ * Runs `command` to its end. On Windows npm, and the .cmd npm links for a package's command, start
+ * only through cmd.exe: there the line is the command's own, each argument quoted.
+ */
+function runSync(command: string, args: readonly string[], options: SpawnSyncOptions) {
+  return WINDOWS
+    ? spawnSync([`"${command}"`, ...args.map((arg) => `"${arg}"`)].join(" "), {
+        ...options,
+        shell: true,
+      })
+    : spawnSync(command, args, options);
+}
+
 function versionOf(tool: string): string {
-  return spawnSync(tool, ["--version"], { encoding: "utf8" }).stdout.trim();
+  return String(runSync(tool, ["--version"], { encoding: "utf8" }).stdout).trim();
 }
 
 /** `npm install --prefix`, which runs the dependencies' install scripts; returns the bin it links. */
 function install(tarball: string, prefix: string): string {
   mkdirSync(prefix, { recursive: true });
-  const npm = spawnSync(
+  const npm = runSync(
     "npm",
     ["install", "--prefix", prefix, "--no-audit", "--no-fund", resolve(tarball)],
     { cwd: prefix, stdio: ["ignore", "inherit", "inherit"] },
@@ -60,7 +97,7 @@ function install(tarball: string, prefix: string): string {
     `npm ${versionOf("npm")} on Node ${versionOf("node")}, ${process.platform}-${process.arch}: ` +
       `exit ${npm.status}`,
   );
-  return join(prefix, "node_modules", ".bin", "eidolon");
+  return join(prefix, "node_modules", ".bin", WINDOWS ? "eidolon.cmd" : "eidolon");
 }
 
 interface App {
@@ -102,27 +139,35 @@ async function run(
   return { code, stdout, stderr };
 }
 
-/** Stops what still runs: SIGTERM to the launcher's process group, then SIGKILL. */
+/** Stops what still runs: SIGTERM to the launcher's process group, then SIGKILL; its tree on Windows. */
 async function stopAll(child: Subprocess): Promise<void> {
   for (const signal of ["SIGTERM", "SIGKILL"] as const) {
     if (child.exitCode !== null || child.signalCode !== null) return;
-    try {
-      process.kill(-child.pid, signal);
-    } catch {
-      // The group is gone.
+    if (WINDOWS) killTree(child.pid);
+    else {
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        // The group is gone.
+      }
     }
     await exitWithin(child, STOP_TIMEOUT_MS);
   }
 }
 
 /** Starts `eidolon --no-open --port 0` and waits for the link it prints. */
-async function boot(bin: string, env: Record<string, string>, cwd: string): Promise<App> {
-  const child = spawnProcess([bin, "--no-open", "--port", "0"], {
+async function boot(
+  eidolon: readonly [string, ...string[]],
+  env: Record<string, string>,
+  cwd: string,
+): Promise<App> {
+  const child = spawnProcess([...eidolon, "--no-open", "--port", "0"], {
     cwd,
     env,
     stdout: "pipe",
     stderr: "pipe",
-    detached: true,
+    // On Windows it stays in this process's job instead, which ends it with this process.
+    detached: !WINDOWS,
   });
   const stdout = new Output(child.stdout as ReadableStream<Uint8Array>);
   const stderr = new Output(child.stderr as ReadableStream<Uint8Array>);
@@ -163,17 +208,69 @@ async function signIn(origin: string, code: string): Promise<Record<string, stri
   return { Cookie: cookie, [PROOF_HEADER]: proof, Origin: origin };
 }
 
+/** What Windows programs need of this environment, with the user's own folders under `home`. */
+function windowsEnv(home: string): Record<string, string> {
+  const kept = ["SystemRoot", "windir", "SystemDrive", "ComSpec", "PATHEXT", "TEMP", "TMP"].flatMap(
+    (name) => {
+      const value = process.env[name];
+      return value === undefined ? [] : [[name, value] as const];
+    },
+  );
+  return {
+    ...Object.fromEntries(kept),
+    USERPROFILE: home,
+    APPDATA: join(home, "AppData", "Roaming"),
+    LOCALAPPDATA: join(home, "AppData", "Local"),
+  };
+}
+
+/** Whether the app at `origin` stops answering within `ms`. */
+async function closes(origin: string, ms: number): Promise<boolean> {
+  const deadline = performance.now() + ms;
+  for (;;) {
+    const answers = await fetch(`${origin}/`).then(
+      () => true,
+      () => false,
+    );
+    if (!answers) return true;
+    if (performance.now() > deadline) return false;
+    await delay(250);
+  }
+}
+
 /** Every check on the package at `tarball`, installed and run inside `temp`. */
 async function checkPackage(tarball: string, temp: string): Promise<void> {
   const prefix = join(temp, "prefix");
   const bin = install(tarball, prefix);
-  const manifest = join(prefix, "node_modules", "@laplace.live", "eidolon", "package.json");
-  const { version } = JSON.parse(readFileSync(manifest, "utf8")) as { version: string };
+  const pkg = join(prefix, "node_modules", "@laplace.live", "eidolon");
+  const manifest = JSON.parse(readFileSync(join(pkg, "package.json"), "utf8")) as {
+    version: string;
+    bin: { eidolon: string };
+  };
+  const { version } = manifest;
+  // npm's .cmd for it starts only through cmd.exe, which would hide the launcher's process: the
+  // launcher itself, as the .cmd runs it.
+  const eidolon: [string, ...string[]] = WINDOWS
+    ? [process.execPath, join(pkg, manifest.bin.eidolon)]
+    : [bin];
   const home = join(temp, "home");
   mkdirSync(home, { recursive: true });
   // A first run's environment: this PATH, and nothing of this computer's Eidolon.
-  const env = { PATH: process.env.PATH ?? "", HOME: home, EIDOLON_HOME: join(temp, "data") };
-  const app = await boot(bin, env, temp);
+  const env = {
+    PATH: process.env.PATH ?? "",
+    HOME: home,
+    EIDOLON_HOME: join(temp, "data"),
+    ...(WINDOWS ? windowsEnv(home) : {}),
+  };
+  if (WINDOWS) {
+    const shim = runSync(bin, ["--version"], { cwd: temp, env, encoding: "utf8" });
+    check(
+      "eidolon.cmd",
+      shim.status === 0 && String(shim.stdout).trim() === version,
+      `npm's eidolon.cmd --version: exit ${shim.status}, ${String(shim.stdout).trim() || String(shim.stderr).trim()}`,
+    );
+  }
+  const app = await boot(eidolon, env, temp);
   try {
     const session = await signIn(app.origin, app.code);
     const status = await fetch(`${app.origin}/api/local/status`, { headers: session });
@@ -212,20 +309,23 @@ async function checkPackage(tarball: string, temp: string): Promise<void> {
       `GET /api/local/chats: ${chats.status}, ${JSON.stringify(listed)}; a new chat without ` +
         `keys: ${create.status} ${refused ?? ""}`,
     );
-    const help = await run([bin, "search", "--help"], env, temp);
+    const help = await run([...eidolon, "search", "--help"], env, temp);
     check(
       "search --help",
       help.code === 0 && help.stdout.startsWith("usage: "),
       `exit ${help.code}${help.code === 0 ? "" : `: ${help.stderr.trim()}`}`,
     );
-    // As a task's command runs it: a shell finding it first on a PATH of the system's folders
-    // otherwise, with no EIDOLON_HOME.
+    // As a task's command runs it: a shell, on Windows Git Bash, finding it first on a PATH of the
+    // system's folders otherwise, with no EIDOLON_HOME.
     const commands = join(env.EIDOLON_HOME, "bin");
-    const tasks = await run(
-      ["/bin/sh", "-c", "eidolon discover --help"],
-      { PATH: `${commands}:/usr/bin:/bin`, HOME: home },
-      temp,
-    );
+    const system = process.env.SystemRoot ?? "C:\\Windows";
+    const [shell, taskEnv]: [string, Record<string, string>] = WINDOWS
+      ? [
+          join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe"),
+          { ...windowsEnv(home), PATH: [commands, join(system, "System32"), system].join(";") },
+        ]
+      : ["/bin/sh", { PATH: `${commands}:/usr/bin:/bin`, HOME: home }];
+    const tasks = await run([shell, "-c", "eidolon discover --help"], taskEnv, temp);
     check(
       "tasks' eidolon",
       tasks.code === 0 && tasks.stdout.startsWith("usage: "),
@@ -235,12 +335,23 @@ async function checkPackage(tarball: string, temp: string): Promise<void> {
     const images = await run(
       [process.execPath, "--input-type=module", "--eval", SHARP_CHECK],
       env,
-      join(prefix, "node_modules", "@laplace.live", "eidolon"),
+      pkg,
     );
     check(
       "sharp",
       images.code === 0 && images.stdout.trim() === "jpeg 2×1",
       images.code === 0 ? images.stdout.trim() : `exit ${images.code}: ${images.stderr.trim()}`,
+    );
+    const lancedb = PLATFORMS[`${process.platform}-${process.arch}` as keyof typeof PLATFORMS];
+    const native = await run(
+      [process.execPath, "--input-type=module", "--eval", NATIVE_CHECK, lancedb],
+      env,
+      pkg,
+    );
+    check(
+      "native modules",
+      native.code === 0 && native.stdout.startsWith("lancedb [], silero inputs "),
+      native.code === 0 ? native.stdout.trim() : `exit ${native.code}: ${native.stderr.trim()}`,
     );
     const skills = await fetch(`${app.origin}/api/local/skills`, { headers: session });
     const listing = (await skills.json().catch(() => ({}))) as Partial<SkillsResponse>;
@@ -251,17 +362,16 @@ async function checkPackage(tarball: string, temp: string): Promise<void> {
       `GET /api/local/skills: ${skills.status}, built in: ` +
         `${builtin.map((skill) => skill.name).join(", ") || "none"}`,
     );
+    // On Windows a kill ends the launcher at once, as closing the console window does at last; its
+    // job takes the supervisor along, and the supervisor's the server.
     app.process.kill("SIGTERM");
     const code = await exitWithin(app.process, STOP_TIMEOUT_MS);
-    const answers = await fetch(`${app.origin}/`).then(
-      () => true,
-      () => false,
-    );
+    const closed = await closes(app.origin, WINDOWS ? STOP_TIMEOUT_MS : 0);
     check(
-      "SIGTERM",
-      code === 0 && !answers,
+      WINDOWS ? "ends with its launcher" : "SIGTERM",
+      (WINDOWS ? code !== null : code === 0) && closed,
       `the launcher exited ${code ?? `not within ${STOP_TIMEOUT_MS / 1000} s`}; the port ` +
-        `${answers ? "still answers" : "is closed"}`,
+        `${closed ? "is closed" : "still answers"}`,
     );
   } catch (error) {
     console.log(
