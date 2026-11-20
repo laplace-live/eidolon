@@ -96,6 +96,8 @@ async function checkBot(home: string): Promise<void> {
     bot.kill("SIGTERM");
     const code = await Promise.race([bot.exited, Bun.sleep(10_000).then(() => null)]);
     check("SIGTERM", code === 0, `exit ${code}`);
+    // What it logged on its way out can still be in the pipe.
+    if (code !== null) await stderr.done;
     const errors = stderr.text.split("\n").filter((line) => /\| (ERROR|CRITICAL) /.test(line));
     check("errors", errors.length === 0, errors.join("\n") || "none logged");
   } finally {

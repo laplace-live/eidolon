@@ -7,9 +7,11 @@ export const READY_LINE = /^Eidolon is ready: (\S+)$/m;
 /** A child's output as it arrives. */
 export class Output {
   text = "";
+  /** Settles once the stream has ended and `text` holds all of it, which can be after its exit. */
+  readonly done: Promise<void>;
 
   constructor(stream: ReadableStream<Uint8Array>) {
-    void (async () => {
+    this.done = (async () => {
       const decoder = new TextDecoder();
       for await (const chunk of stream) this.text += decoder.decode(chunk, { stream: true });
     })();
