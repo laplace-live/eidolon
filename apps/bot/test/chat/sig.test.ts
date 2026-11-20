@@ -1,11 +1,11 @@
 // The production chat's HMAC: its wire format, what it binds, and where its secret may come from.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ChatEvent, canonicalForSig } from "@eidolon/chat";
 import { dataHome, envOptional, installSettings, resetSettings } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   ChatSigner,
   chatSecretFromEnv,

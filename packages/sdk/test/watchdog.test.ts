@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "vitest";
 import { STUCK_DELAY_MS, THINKING_DELAY_MS, type WaitState, Watchdog } from "../src/index.ts";
 
 /** A clock the test moves by hand. */

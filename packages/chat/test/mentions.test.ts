@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { type MentionTarget, parseMentions } from "../src/index.ts";
 
 const MILKY: MentionTarget = { id: "milky-green", name: "明前奶绿", shortName: "奶绿" };

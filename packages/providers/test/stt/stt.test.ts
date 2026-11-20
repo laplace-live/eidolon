@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, test } from "vitest";
 import { openStt, spokenLanguage, sttLanguage } from "../../src/stt/index.ts";
 import { defaultSelection, live } from "./fake.ts";
 

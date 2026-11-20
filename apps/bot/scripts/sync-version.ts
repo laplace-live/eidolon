@@ -36,6 +36,6 @@ export function syncVersion(root: string, version = botVersion(root)): string[] 
 }
 
 if (import.meta.main) {
-  const root = join(import.meta.dir, "../../..");
+  const root = join(import.meta.dirname, "../../..");
   for (const file of syncVersion(root)) console.log(`${file} → ${botVersion(root)}`);
 }

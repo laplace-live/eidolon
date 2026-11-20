@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { PROVIDERS } from "../../lib/providers";
 import { checkTone, keyPages } from "./credentials";
 

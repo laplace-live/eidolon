@@ -1,8 +1,8 @@
 // The skill tool, on skills loadSkills finds in temporary folders and under the policy a task runs
 // with: what it reads and lists, and what it refuses without ever asking the owner.
-import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
 import { FolderPolicy } from "../src/policy.ts";
 import { loadSkills, type Skill, skillsDir } from "../src/skills.ts";
 import { createReadTool } from "../src/tools/read.ts";

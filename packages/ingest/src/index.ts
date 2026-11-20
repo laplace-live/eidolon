@@ -20,7 +20,6 @@ export {
   type SignalHost,
   terminate,
   terminateOnAbort,
-  which,
 } from "./limit.ts";
 export {
   acquireLock,

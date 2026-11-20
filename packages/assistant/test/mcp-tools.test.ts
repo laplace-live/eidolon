@@ -1,10 +1,11 @@
-// A task's MCP servers against a fake server on stdio (fixtures/mcp-server.mjs), run on this Bun.
+// A task's MCP servers against a fake server on stdio (fixtures/mcp-server.mjs), run on this Node.
 // Every server a case starts is closed after it, and every pid a case checks is one it started.
-import { afterEach, describe, expect, test } from "bun:test";
 import { readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import type { TaskToolResult } from "@eidolon/engine";
+import { afterEach, describe, expect, test } from "vitest";
 import { buildTaskPrompt } from "../src/index.ts";
 import type { CallToolResult } from "../src/mcp/protocol/content.ts";
 import type { Tool } from "../src/mcp/protocol/types.ts";
@@ -21,8 +22,8 @@ import {
 } from "../src/mcp/tools.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
 
-const FIXTURE = join(import.meta.dir, "fixtures/mcp-server.mjs");
-const DAEMON = join(import.meta.dir, "fixtures/mcp-daemon-server.mjs");
+const FIXTURE = join(import.meta.dirname, "fixtures/mcp-server.mjs");
+const DAEMON = join(import.meta.dirname, "fixtures/mcp-daemon-server.mjs");
 const TOKEN = "EIDOLON_MCP_TEST_TOKEN";
 const SECRET = "EIDOLON_MCP_TEST_SECRET";
 
@@ -31,7 +32,7 @@ const ref = (name: string) => `\${${name}}`;
 
 /** An mcp.json entry that runs the fake server with `flags`. */
 function fake(flags: string[] = [], entry: Record<string, unknown> = {}): Record<string, unknown> {
-  return { command: process.execPath, args: ["--no-env-file", FIXTURE, ...flags], ...entry };
+  return { command: process.execPath, args: [FIXTURE, ...flags], ...entry };
 }
 
 const sessions: McpSession[] = [];
@@ -467,12 +468,13 @@ describe("the servers' processes", () => {
   test("a listing the session can't take ends the open with every server it started closed", async () => {
     const folder = await tempFolder();
     const pidfiles = [join(folder, "good"), join(folder, "deep")];
-    // A schema nested past the call stack, which JSON still parses.
+    // A schema nested past the call stack, which JSON still parses. V8 reports the overflow as a
+    // RangeError, though with every core busy it came as a TypeError from the call it cut short.
     const opening = open({
       good: fake(["--pidfile", pidfiles[0] as string]),
       deep: fake(["--pidfile", pidfiles[1] as string, "--deep", "20000"]),
     });
-    await expect(opening).rejects.toThrow(RangeError);
+    await expect(opening).rejects.toThrow();
     const pids = (await Promise.all(pidfiles.map(pidsIn))).flat();
     try {
       expect(pids).toHaveLength(2);
@@ -550,7 +552,7 @@ describe("the servers' processes", () => {
       {
         held: {
           command: process.execPath,
-          args: ["--no-env-file", DAEMON, "--hang", "--pidfile", pidfile],
+          args: [DAEMON, "--hang", "--pidfile", pidfile],
         },
       },
       { signal: controller.signal },
@@ -563,7 +565,7 @@ describe("the servers' processes", () => {
         () => "stopped",
       );
       // Within its close's SIGTERM, SIGKILL and the second its pipes then get.
-      expect(await Promise.race([ended, Bun.sleep(6_000).then(() => "pending")])).toBe("stopped");
+      expect(await Promise.race([ended, delay(6_000).then(() => "pending")])).toBe("stopped");
       expect(isAlive(server)).toBe(false);
     } finally {
       for (const pid of [server, helper]) if (isAlive(pid)) process.kill(pid, "SIGKILL");
@@ -613,7 +615,7 @@ describe("the servers' processes", () => {
       missing: { command: "/nonexistent/eidolon-mcp-server" },
       dies: {
         command: process.execPath,
-        args: ["--no-env-file", "-e", "console.error('no config found'); process.exit(2)"],
+        args: ["-e", "console.error('no config found'); process.exit(2)"],
       },
       fake: fake(),
     });

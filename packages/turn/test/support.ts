@@ -1,5 +1,5 @@
-import { afterEach, beforeEach } from "bun:test";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
+import { afterEach, beforeEach } from "vitest";
 
 /** Records the current test's log lines instead of printing them. */
 export function captureLogs(): LogRecord[] {

@@ -1,12 +1,12 @@
 // steer_task, stop_task and check_task over a fake manager: their schemas word for word, how she
 // names a task, what each answers and refuses, and that check_task's detail stays under its cap.
-import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { webFetchHost } from "@eidolon/assistant";
 import { toolCallMessages } from "@eidolon/chat";
 import type { PersonaParts } from "@eidolon/engine";
+import { afterEach, describe, expect, test } from "vitest";
 import { STEER_PREFIX, type TaskSnapshot } from "../../src/local/api.ts";
 import { herTaskTools } from "../../src/local/tasks/her-tools.ts";
 import { TaskRefused } from "../../src/local/tasks/manager.ts";

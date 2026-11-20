@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 // Ported from pipedog packages/core/test/test_async_tool_messages.test.ts@ce8f8bc
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   asyncToolCallId,
   cancelledEnvelope,

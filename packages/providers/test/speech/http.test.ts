@@ -1,8 +1,10 @@
-import { afterEach, beforeEach, expect, jest, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
 import { openSpeech, type SpeechStream } from "../../src/speech/stream/index.ts";
 import { MiniMaxSpeech } from "../../src/speech/stream/minimax.ts";
 import { OpenAISpeech } from "../../src/speech/stream/openai.ts";
+import { useFakeClock } from "../clock.ts";
 import {
   bytesOf,
   CLEAN_ENV,
@@ -31,7 +33,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await Promise.all(streams.map((stream) => stream.close()));
-  fake?.stop();
+  await fake?.stop();
   setUsageSink(null);
   restore();
 });
@@ -50,7 +52,7 @@ function streamed(pieces: (string | Uint8Array)[], pauseMs = 5): Response {
     new ReadableStream({
       async start(controller) {
         for (const piece of pieces) {
-          await Bun.sleep(pauseMs);
+          await delay(pauseMs);
           controller.enqueue(typeof piece === "string" ? encoder.encode(piece) : piece);
         }
         controller.close();
@@ -80,7 +82,7 @@ function pieces(text: string, cuts: number[]): string[] {
 }
 
 test("MiniMax: today's request per segment, blocks read across pieces, the summary block skipped", async () => {
-  fake = fakeServer({ http: () => streamed(pieces(minimaxBody([1, 2, 3]), [7, 33, 61])) });
+  fake = await fakeServer({ http: () => streamed(pieces(minimaxBody([1, 2, 3]), [7, 33, 61])) });
   const stream = keep(
     new MiniMaxSpeech(selectionAt("minimax", `${fake.base}/v1/`, {}, { groupId: "g1" })),
   );
@@ -108,7 +110,7 @@ test("MiniMax: today's request per segment, blocks read across pieces, the summa
 
 test("two requests at a time, each segment's audio played in the order said", async () => {
   const held: ((response: Response) => void)[] = [];
-  fake = fakeServer({
+  fake = await fakeServer({
     http: () => new Promise<Response>((resolve) => held.push(resolve)),
   });
   const stream = keep(new OpenAISpeech(selectionAt("openai", `${fake.base}/v1`)));
@@ -119,15 +121,21 @@ test("two requests at a time, each segment's audio played in the order said", as
   utterance.say({ id: 4, text: "三。" });
   utterance.end();
   await until(() => held.length === 2);
-  await Bun.sleep(30);
+  await delay(30);
   expect(fake.requests.map((request) => JSON.parse(request.body).input)).toEqual(["一。", "二。"]);
   held[1]?.(new Response(bytesOf([30, 31])));
-  await Bun.sleep(30);
-  expect(held).toHaveLength(3);
+  await until(() => held.length === 3);
   held[2]?.(new Response(bytesOf([40])));
-  held[0]?.(streamed([bytesOf([10]), bytesOf([11])]));
+  // A piece goes once the last one's audio is out: fetch hands over pieces that waited as one.
+  const body = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
+  held[0]?.(new Response(new ReadableStream({ start: (controller) => body.resolve(controller) })));
+  const audio = utterance.audio[Symbol.asyncIterator]();
+  const sending = await body.promise;
+  sending.enqueue(bytesOf([10]));
+  expect(plain([(await audio.next()).value])).toEqual([{ kind: "pcm", seg: 1, pcm: [10] }]);
+  sending.enqueue(bytesOf([11]));
+  sending.close();
   expect(plain(await collect(utterance.audio))).toEqual([
-    { kind: "pcm", seg: 1, pcm: [10] },
     { kind: "pcm", seg: 1, pcm: [11] },
     { kind: "seg-end", seg: 1 },
     { kind: "seg-end", seg: 2 },
@@ -143,16 +151,26 @@ test("OpenAI: today's request, a sample split between pieces kept whole", async 
   restore();
   restore = setEnv({ ...CLEAN_ENV, TTS_VOICE_ID: "coral" });
   const pcm = bytesOf([1000, -1000, 7]);
-  fake = fakeServer({
-    http: () => streamed([pcm.subarray(0, 3), pcm.subarray(3, 5), pcm.subarray(5)]),
+  const body = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
+  fake = await fakeServer({
+    http: () =>
+      new Response(new ReadableStream({ start: (controller) => body.resolve(controller) })),
   });
   const stream = keep(new OpenAISpeech(selectionAt("openai", `${fake.base}/v1`)));
   const utterance = stream.utterance(null);
   utterance.say({ id: 1, text: "你好。" });
   utterance.end();
+  // A piece goes once the last one's samples are out: fetch hands over pieces that waited as one.
+  const audio = utterance.audio[Symbol.asyncIterator]();
+  const next = async () => plain([(await audio.next()).value])[0];
+  const sending = await body.promise;
+  sending.enqueue(pcm.subarray(0, 3));
+  expect(await next()).toEqual({ kind: "pcm", seg: 1, pcm: [1000] });
+  sending.enqueue(pcm.subarray(3, 5));
+  expect(await next()).toEqual({ kind: "pcm", seg: 1, pcm: [-1000] });
+  sending.enqueue(pcm.subarray(5));
+  sending.close();
   expect(plain(await collect(utterance.audio))).toEqual([
-    { kind: "pcm", seg: 1, pcm: [1000] },
-    { kind: "pcm", seg: 1, pcm: [-1000] },
     { kind: "pcm", seg: 1, pcm: [7] },
     { kind: "seg-end", seg: 1 },
     { kind: "end" },
@@ -166,7 +184,7 @@ test("OpenAI: today's request, a sample split between pieces kept whole", async 
 });
 
 test("a failed request is an error without the key, and stops the rest", async () => {
-  fake = fakeServer({
+  fake = await fakeServer({
     http: (request) =>
       JSON.parse(request.body).input === "坏。"
         ? new Response(`{"error":{"message":"Incorrect API key provided: ${KEY}"}}`, {
@@ -187,11 +205,11 @@ test("a failed request is an error without the key, and stops the rest", async (
     },
   ]);
   utterance.say({ id: 2, text: "好。" });
-  await Bun.sleep(20);
+  await delay(20);
   expect(fake.requests).toHaveLength(1);
 
-  fake.stop();
-  fake = fakeServer({ http: () => new Response("", { status: 500 }) });
+  await fake.stop();
+  fake = await fakeServer({ http: () => new Response("", { status: 500 }) });
   const minimax = keep(new MiniMaxSpeech(selectionAt("minimax", fake.base, {}, { groupId: "g" })));
   const failing = minimax.utterance(null);
   failing.say({ id: 1, text: "嗨。" });
@@ -201,7 +219,7 @@ test("a failed request is an error without the key, and stops the rest", async (
 });
 
 test("MiniMax: a refusal answered 200, whole or mid-stream, is an error", async () => {
-  fake = fakeServer({
+  fake = await fakeServer({
     http: (request) =>
       JSON.parse(request.body).text === "一。"
         ? new Response('{"base_resp":{"status_code":1008,"status_msg":"insufficient balance"}}')
@@ -227,12 +245,12 @@ test("MiniMax: a refusal answered 200, whole or mid-stream, is an error", async 
 });
 
 test("a request that sends no audio for 15 s has stalled; each piece puts that off", async () => {
-  // No `until` here: the fake clock holds Bun.sleep too.
-  jest.useFakeTimers();
+  // No `until` here: its deadline is on the fake clock.
+  useFakeClock();
   try {
     const body = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
     const unanswered = Promise.withResolvers<void>();
-    fake = fakeServer({
+    fake = await fakeServer({
       http: (request) => {
         if (JSON.parse(request.body).input === "二。") {
           unanswered.resolve();
@@ -247,7 +265,7 @@ test("a request that sends no audio for 15 s has stalled; each piece puts that o
     const silent = stream.utterance(null);
     silent.say({ id: 1, text: "二。" });
     await unanswered.promise;
-    jest.advanceTimersByTime(15_000);
+    vi.advanceTimersByTime(15_000);
     expect(await collect(silent.audio)).toEqual([
       { kind: "error", message: "No speech audio arrived within 15 seconds" },
     ]);
@@ -260,24 +278,24 @@ test("a request that sends no audio for 15 s has stalled; each piece puts that o
     const sending = await body.promise;
     sending.enqueue(bytesOf([1]));
     expect(await next()).toEqual({ kind: "pcm", seg: 1, pcm: [1] });
-    jest.advanceTimersByTime(10_000);
+    vi.advanceTimersByTime(10_000);
     sending.enqueue(bytesOf([2]));
     expect(await next()).toEqual({ kind: "pcm", seg: 1, pcm: [2] });
-    jest.advanceTimersByTime(10_000);
+    vi.advanceTimersByTime(10_000);
     sending.enqueue(bytesOf([3]));
     expect(await next()).toEqual({ kind: "pcm", seg: 1, pcm: [3] });
-    jest.advanceTimersByTime(15_000);
+    vi.advanceTimersByTime(15_000);
     expect(await next()).toEqual({
       kind: "error",
       message: "No speech audio arrived within 15 seconds",
     });
   } finally {
-    jest.useRealTimers();
+    vi.useRealTimers();
   }
 });
 
 test("an unknown OpenAI voice fails before any request", async () => {
-  fake = fakeServer({ http: () => new Response(bytesOf([1])) });
+  fake = await fakeServer({ http: () => new Response(bytesOf([1])) });
   const utterance = keep(new OpenAISpeech(selectionAt("openai", fake.base))).utterance("bogus");
   utterance.say({ id: 1, text: "嗨。" });
   const [event] = await collect(utterance.audio);
@@ -291,7 +309,7 @@ test("an unknown OpenAI voice fails before any request", async () => {
 });
 
 test("cancel aborts what is in flight; closing the stream ends what is open and meters what went", async () => {
-  fake = fakeServer({ http: () => new Promise<Response>(() => {}) });
+  fake = await fakeServer({ http: () => new Promise<Response>(() => {}) });
   const stream = keep(new OpenAISpeech(selectionAt("openai", fake.base)));
   const cut = stream.utterance(null);
   cut.say({ id: 1, text: "一。" });
@@ -314,7 +332,7 @@ test("cancel aborts what is in flight; closing the stream ends what is open and 
 });
 
 test("openSpeech speaks for the voice role in scope, and refuses before connecting", async () => {
-  fake = fakeServer({ http: () => new Response(bytesOf([5])) });
+  fake = await fakeServer({ http: () => new Response(bytesOf([5])) });
   restore();
   restore = setEnv({ ...CLEAN_ENV, TTS_PROVIDER: "openai" });
   expect(() => openSpeech()).toThrow("OpenAI needs an API key: set OPENAI_API_KEY");

@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { SETTINGS } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import { cardSections, visibleRows } from "@/components/settings-form/controls";
 import type { SettingRow } from "@/lib/api";
 import { CARDS, NAMED, resolveSection } from "./sections";

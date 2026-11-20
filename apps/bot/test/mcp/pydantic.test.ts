@@ -1,6 +1,6 @@
 // Goldens of pydantic-core's text: to_json and str(ValidationError).
-import { expect, test } from "bun:test";
 import { validationErrorText } from "@eidolon/config";
+import { expect, test } from "vitest";
 import { envelopeText, pydanticFloat } from "../../src/mcp/pydantic.ts";
 
 test("floats print as pydantic_core.to_json does", () => {

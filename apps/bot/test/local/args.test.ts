@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   type LocalArgs,
   localArgv,
@@ -22,14 +22,14 @@ beforeEach(() => {
   stderr = [];
   stdout = [];
   spies.push(
-    spyOn(process, "exit").mockImplementation(((code?: number) => {
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
       throw new Exit(code);
     }) as typeof process.exit),
-    spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+    vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
       stderr.push(String(chunk));
       return true;
     }),
-    spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
       stdout.push(String(chunk));
       return true;
     }),

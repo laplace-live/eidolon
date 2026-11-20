@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { sanitize } from "../src/tools/output.ts";
 
 test("a command's output loses its control characters, DEL with them, but keeps its lines", () => {

@@ -1,8 +1,8 @@
 // The 后台的活 block: what it says of each of her tasks in a chat, word for word, that nothing the
 // worker wrote ever reaches it, and how its provider places and replaces it in her view.
-import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import { activePersona, withPersona } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import { TurnConversation } from "../../../../packages/engine/src/context.ts";
 import { STEER_PREFIX, type TaskSnapshot } from "../../src/local/api.ts";
 import {

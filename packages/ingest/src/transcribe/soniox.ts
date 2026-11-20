@@ -1,19 +1,21 @@
 // The Soniox REST calls a transcription makes, over fetch: upload the audio, create a
 // transcription, poll it, fetch the transcript, delete both. Every call retries network errors and
 // the statuses Soniox calls retryable, with backoff.
+import { openAsBlob } from "node:fs";
 import {
   abortableSleep,
   errorText,
   isPlainObject,
   loadsPy,
   logger,
+  patientDispatcher,
   raceAbort,
 } from "@eidolon/config";
 import type { SonioxToken } from "./render.ts";
 
 export const SONIOX_API_BASE = "https://api.soniox.com/v1";
-// An idle timeout, so a slow upload of a few hundred MB passes: Bun's `timeout` is an idle timer,
-// where AbortSignal.timeout would cap the whole upload instead.
+// An idle timeout, so a slow upload of a few hundred MB passes: undici restarts its header timer as
+// the body goes out, where AbortSignal.timeout would cap the whole upload instead.
 export const SONIOX_IDLE_TIMEOUT_MS = 600_000;
 /** The waits before each retry: about a minute of flakiness ridden out. */
 export const RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
@@ -107,7 +109,7 @@ function describe(error: unknown): string {
 interface Send {
   readonly method: string;
   readonly path: string;
-  readonly body?: () => BodyInit;
+  readonly body?: () => Promise<BodyInit>;
   readonly json?: unknown;
   /** A 404 means it is already gone, which is what a delete wanted. */
   readonly gone?: boolean;
@@ -120,6 +122,7 @@ export class SonioxClient {
   readonly #fetch: typeof fetch;
   readonly #retryDelaysMs: readonly number[];
   readonly #sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
+  readonly #dispatcher = patientDispatcher(SONIOX_IDLE_TIMEOUT_MS);
 
   constructor(options: SonioxClientOptions) {
     this.#apiKey = options.apiKey;
@@ -139,11 +142,11 @@ export class SonioxClient {
     const body = await this.#send({
       method: "POST",
       path: "/files",
-      // A fresh form per attempt: Bun.file is read lazily, so a retry streams the file again.
-      body: () => {
+      // A fresh form per attempt: the file's Blob is read lazily, so a retry streams it again.
+      body: async () => {
         const form = new FormData();
         form.append("client_reference_id", clientReferenceId);
-        form.append("file", Bun.file(path), filename);
+        form.append("file", await openAsBlob(path), filename);
         return form;
       },
       signal,
@@ -201,9 +204,9 @@ export class SonioxClient {
         const response = await this.#fetch(`${this.#baseUrl}${path}`, {
           method,
           headers,
-          body: request.json !== undefined ? JSON.stringify(request.json) : request.body?.(),
+          body: request.json !== undefined ? JSON.stringify(request.json) : await request.body?.(),
           signal: signal ?? null,
-          timeout: SONIOX_IDLE_TIMEOUT_MS,
+          dispatcher: this.#dispatcher,
         } as RequestInit);
         status = response.status;
         body = await response.text();

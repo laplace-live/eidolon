@@ -15,9 +15,7 @@ interface Entry {
 
 /** `secrets.token_urlsafe(16)`: 22 characters of `[A-Za-z0-9_-]`. */
 function newSelfieId(): string {
-  return crypto
-    .getRandomValues(new Uint8Array(SELFIE_ID_BYTES))
-    .toBase64({ alphabet: "base64url", omitPadding: true });
+  return Buffer.from(crypto.getRandomValues(new Uint8Array(SELFIE_ID_BYTES))).toString("base64url");
 }
 
 /** Short-lived in-memory selfies served at `/api/selfie/<id><suffix>`. */

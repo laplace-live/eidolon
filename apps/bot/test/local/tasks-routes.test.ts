@@ -2,10 +2,10 @@
 // refusals, the events stream, PUT settings turning Assistant Mode off, and status' count. The
 // booted server's guard, boot and stop are in tasks-server.test.ts.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   newTaskId,
   openTaskStore,
@@ -21,11 +21,13 @@ import {
   assistantSettings,
   dataHome,
   installSettings,
+  newId,
   resetSettings,
 } from "@eidolon/config";
 import { acquireLock } from "@eidolon/config/lock";
 import type { createMind, MindChunk, MindRequest, MindToolCall } from "@eidolon/engine";
 import { ProviderConfigError, reportUsage } from "@eidolon/providers";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { RouteHandler } from "../../src/app.ts";
 import type { AllowedCommandsResponse, ErrorBody, TasksResponse } from "../../src/local/api.ts";
 import { createLocalRouter, type LocalApp } from "../../src/local/router.ts";
@@ -35,6 +37,7 @@ import { buildStatus, type StatusDeps } from "../../src/local/status.ts";
 import { TaskManager, type TaskManagerOptions } from "../../src/local/tasks/manager.ts";
 import { ensureDataHome } from "../../src/local/write.ts";
 import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
+import { type ServedRoutes, serveRoutes } from "../serve.ts";
 
 type Turn = readonly MindChunk[] | ((request: MindRequest) => AsyncIterable<MindChunk>);
 
@@ -110,8 +113,8 @@ class Minds {
 }
 
 const AUTH = "Bearer test-secret";
-const CHAT = Bun.randomUUIDv7();
-const OTHER_CHAT = Bun.randomUUIDv7();
+const CHAT = newId();
+const OTHER_CHAT = newId();
 const ORIGIN: TaskChat = { id: CHAT, persona: "milky-green", call: "call-1" };
 const ELSEWHERE: TaskChat = { id: OTHER_CHAT, persona: "milky-green", call: "call-2" };
 
@@ -132,7 +135,7 @@ let problem: string | null = null;
 let minds: Minds;
 let logs: CapturedLogs;
 const managers: TaskManager[] = [];
-const servers: ReturnType<typeof Bun.serve>[] = [];
+const servers: Promise<ServedRoutes>[] = [];
 const savedEnv = new Map<string, string | undefined>();
 const realFetch = globalThis.fetch;
 
@@ -177,7 +180,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  for (const server of servers.splice(0)) server.stop(true);
+  for (const server of servers.splice(0)) await (await server).stop();
   for (const tasks of managers.splice(0)) await tasks.stop();
   logs.restore();
   for (const [name, value] of savedEnv) {
@@ -229,23 +232,19 @@ function serve(
     [...settingsRoutes(app, onAssistantMode), ...tasksRoutes(tasks)],
     (request) => (request.headers.get("authorization") === AUTH ? "bearer" : null),
   );
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    routes: { "/api/local/*": router },
-    fetch: () => new Response(null, { status: 404 }),
-  });
-  servers.push(server);
+  const listening = serveRoutes({ "/api/local/*": router });
+  servers.push(listening);
   return {
     tasks,
-    call(method, path, init = {}) {
+    async call(method, path, init = {}) {
+      const server = await listening;
       const headers: Record<string, string> = init.auth === false ? {} : { authorization: AUTH };
       let body: string | undefined;
       if (init.raw !== undefined || init.body !== undefined) {
         headers["content-type"] = "application/json";
         body = init.raw ?? JSON.stringify(init.body);
       }
-      return realFetch(`http://127.0.0.1:${server.port}${path}`, { method, headers, body });
+      return realFetch(`${server.url}${path}`, { method, headers, body });
     },
   };
 }
@@ -269,7 +268,7 @@ async function until(check: () => boolean | Promise<boolean>, ms = 5000): Promis
   const deadline = Date.now() + ms;
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 
@@ -330,7 +329,7 @@ describe("GET tasks", () => {
       third.id,
       first.id,
     ]);
-    expect(await ids(await call("GET", `/api/local/tasks?chat=${Bun.randomUUIDv7()}`))).toEqual([]);
+    expect(await ids(await call("GET", `/api/local/tasks?chat=${newId()}`))).toEqual([]);
     for (const chat of ["", "chat-1", CHAT.toUpperCase()]) {
       expect([chat, await refusal(await call("GET", `/api/local/tasks?chat=${chat}`))]).toEqual([
         chat,
@@ -688,15 +687,15 @@ describe("assistant/commands", () => {
 
   test("DELETE answers 400 for an id that is none, 404 for one no command has; both need the session", async () => {
     const { call } = serve(manager());
-    for (const id of ["x", "commands", `${Bun.randomUUIDv7()}`.toUpperCase()]) {
+    for (const id of ["x", "commands", `${newId()}`.toUpperCase()]) {
       const malformed = await call("DELETE", `/api/local/assistant/commands/${id}`);
       expect([id, await refusal(malformed)]).toEqual([id, [400, "bad-request"]]);
     }
-    const unknown = await call("DELETE", `/api/local/assistant/commands/${Bun.randomUUIDv7()}`);
+    const unknown = await call("DELETE", `/api/local/assistant/commands/${newId()}`);
     expect(await refusal(unknown)).toEqual([404, "unknown-command"]);
     for (const [method, path] of [
       ["GET", "/api/local/assistant/commands"],
-      ["DELETE", `/api/local/assistant/commands/${Bun.randomUUIDv7()}`],
+      ["DELETE", `/api/local/assistant/commands/${newId()}`],
     ] as const) {
       const response = await call(method, path, { auth: false });
       expect([method, await refusal(response)]).toEqual([method, [401, "unauthorized"]]);

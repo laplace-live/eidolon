@@ -47,9 +47,10 @@ and that the host is one of them; a call that fails the check fails as `Bot sess
 **Warm-up:** `warmAudioModels()` loads both models and the resampler before the server listens:
 `models/silero_vad.onnx` and `models/smart-turn-v3.2-cpu.onnx` (`voiceModels()`, through
 `@eidolon/config`'s `voiceModelsDir()`; the npm package ships them in `data/models/`), on the
-pinned onnxruntime-node 1.30.0. `src/input/onnx.ts` turns ORT's telemetry off before ORT first
-loads (`ORT_DISABLE_TELEMETRY`, set with libc's `setenv`, since ORT's `getenv` never sees Bun's
-`process.env`): an upload in flight at exit crashed Bun (exit 134).
+pinned onnxruntime-node 1.30.0. ORT's telemetry is off (`ORT_DISABLE_TELEMETRY=1`): an upload in
+flight at exit crashed Bun (exit 134). On Node, `src/input/onnx.ts` sets it before ORT first loads,
+unless the environment set it. ORT reads it with `getenv`, which Bun's `process.env` writes never
+reach, so under Bun only the environment sets it: the image's `ENV` and `bun run dev`/`start` do.
 
 **Logs:** a call logs what the local app and the e2e notes read:
 - the `[bot] Session start …` line and `Starting bot` (`logSessionStart`), a chat window in the

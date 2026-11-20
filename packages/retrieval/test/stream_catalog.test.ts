@@ -1,19 +1,21 @@
 // StreamCatalog over the fixture catalogs in fixtures/catalog; expected.json pins the formatted
 // text for them and for one snapshot of the real catalog.
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   unlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cpLen } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   CATALOG_FILENAME,
   clearCatalogCache,
@@ -25,8 +27,15 @@ import {
 } from "../src/index.ts";
 import { captureLogs, REAL_INDEX } from "./helpers.ts";
 
-const FIXTURES = join(import.meta.dir, "fixtures", "catalog");
-const expected = await Bun.file(join(FIXTURES, "expected.json")).json();
+// The catalog's reads, counted: every file read StreamCatalog makes goes through readFile.
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, readFile: vi.fn(actual.readFile) };
+});
+const reads = vi.mocked(readFile);
+
+const FIXTURES = join(import.meta.dirname, "fixtures", "catalog");
+const expected = JSON.parse(readFileSync(join(FIXTURES, "expected.json"), "utf8"));
 
 const records = captureLogs();
 let dir: string;
@@ -140,21 +149,17 @@ describe("tests/test_stream_catalog.py", () => {
 
   test("concurrent cold reads share one parse", async () => {
     install("one");
-    const reads = spyOn(Bun, "file");
-    try {
-      const catalog = new StreamCatalog(dir);
-      const [first, second, other] = await Promise.all([
-        catalog.broadcasts(),
-        catalog.broadcasts(),
-        new StreamCatalog(dir).broadcasts(),
-      ]);
-      expect(reads).toHaveBeenCalledTimes(1);
-      expect(first.length).toBe(1);
-      expect(second).toEqual(first);
-      expect(other[0]).toBe(first[0] as (typeof first)[0]);
-    } finally {
-      reads.mockRestore();
-    }
+    reads.mockClear();
+    const catalog = new StreamCatalog(dir);
+    const [first, second, other] = await Promise.all([
+      catalog.broadcasts(),
+      catalog.broadcasts(),
+      new StreamCatalog(dir).broadcasts(),
+    ]);
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(first.length).toBe(1);
+    expect(second).toEqual(first);
+    expect(other[0]).toBe(first[0] as (typeof first)[0]);
   });
 });
 
@@ -231,18 +236,14 @@ describe("loader edges", () => {
   test("warmStreamCatalog fills the shared cache", async () => {
     install("select");
     await warmStreamCatalog(dir);
-    const reads = spyOn(Bun, "file");
-    try {
-      expect((await new StreamCatalog(dir).broadcasts()).length).toBe(3);
-      expect(reads).not.toHaveBeenCalled();
-    } finally {
-      reads.mockRestore();
-    }
+    reads.mockClear();
+    expect((await new StreamCatalog(dir).broadcasts()).length).toBe(3);
+    expect(reads).not.toHaveBeenCalled();
   });
 
   test("every instance's timeline reads the one index warmStreamCatalog builds", async () => {
     install("select");
-    const builds = spyOn(OccurrenceIndex, "build");
+    const builds = vi.spyOn(OccurrenceIndex, "build");
     try {
       await warmStreamCatalog(dir);
       expect(builds).toHaveBeenCalledTimes(1);
@@ -297,7 +298,7 @@ describe("loader edges", () => {
 });
 
 const realPath = join(REAL_INDEX, CATALOG_FILENAME);
-const realBytes = existsSync(realPath) ? await Bun.file(realPath).bytes() : null;
+const realBytes = existsSync(realPath) ? readFileSync(realPath) : null;
 // expected.json's real_* values are for one snapshot of the catalog; a re-ingest changes it.
 const sameAsGoldens =
   realBytes !== null &&
@@ -307,7 +308,7 @@ describe("the committed catalog", () => {
   test.skipIf(realBytes === null)(
     "parses in slices; every stored overview recomputes",
     async () => {
-      const yields = spyOn(globalThis, "setImmediate");
+      const yields = vi.spyOn(globalThis, "setImmediate");
       let broadcasts: Awaited<ReturnType<StreamCatalog["broadcasts"]>>;
       try {
         broadcasts = await new StreamCatalog(REAL_INDEX).broadcasts();
@@ -324,7 +325,7 @@ describe("the committed catalog", () => {
   test.skipIf(realBytes === null)("indexes for timelines in slices", async () => {
     const catalog = new StreamCatalog(REAL_INDEX);
     await catalog.broadcasts();
-    const yields = spyOn(globalThis, "setImmediate");
+    const yields = vi.spyOn(globalThis, "setImmediate");
     try {
       await catalog.occurrences();
       expect(yields).toHaveBeenCalled();

@@ -4,8 +4,8 @@
 // Ported from pi-mono packages/ai/test/overflow.test.ts@ac78a60 and packages/ai/test/retry.test.ts@ac78a60
 //
 // pi's provider messages, as @eidolon/providers surfaces them: a ProviderHttpError with a status.
-import { describe, expect, test } from "bun:test";
 import { ProviderHttpError } from "@eidolon/providers";
+import { describe, expect, test } from "vitest";
 import { isContextOverflow, isTransient } from "../src/task/errors.ts";
 
 const http = (status: number, message: string) =>

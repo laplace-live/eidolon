@@ -1,6 +1,7 @@
 // Broadcast overviews from `stream_catalog.json`, which the offline chain writes. One parsed
 // copy per (path, mtime, size) is shared process-wide, so per-session instances never reparse.
 import { existsSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cpLen, errorText, logger, pyCompare, pyRepr, pyStr } from "@eidolon/config";
 import type { IsoDate } from "./civil_date.ts";
@@ -230,7 +231,7 @@ async function scanLayout(bytes: Uint8Array, slicer: Slicer): Promise<Layout | n
  * every call's audio.
  */
 async function parseCatalog(path: string): Promise<readonly Broadcast[]> {
-  const bytes = new Uint8Array(await Bun.file(path).arrayBuffer());
+  const bytes = await readFile(path);
   const slicer = new Slicer();
   const layout = await scanLayout(bytes, slicer);
   if (layout === null) {

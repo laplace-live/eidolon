@@ -1,6 +1,6 @@
 // What a run reports while it works: the CLI prints these, or with --json writes one per line for
 // the web app, which spawns the CLI and reads its stdout. Keep this module import-free: the web app
-// imports its types (`@eidolon/ingest/progress`) without Bun or Node.
+// imports its types (`@eidolon/ingest/progress`) without Node.
 
 export type Stage =
   | "setup"

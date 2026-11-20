@@ -4,8 +4,8 @@
 // Ported from pi-mono packages/ai/test/validation.test.ts@ac78a60
 //
 // pi's cases on plain JSON schemas; a tool's schema here is its properties and required list.
-import { describe, expect, test } from "bun:test";
 import type { ToolSchema } from "@eidolon/core";
+import { describe, expect, test } from "vitest";
 import { validateToolArguments } from "../src/task/validate.ts";
 
 function echo(value: Readonly<Record<string, unknown>>): ToolSchema {

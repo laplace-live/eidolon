@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { deviceProblemOf, micProblemOf, probeMic } from "./media";
 
 const named = (name: string) => Object.assign(new Error(name), { name });

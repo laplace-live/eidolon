@@ -2,6 +2,7 @@
 // kind and file name a path carries is checked before it touches the disk, and every write goes to
 // the user's copy in the data home; a template is only ever read.
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   activePersona,
@@ -18,6 +19,7 @@ import {
 } from "@eidolon/config";
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { transcribe } from "@eidolon/ingest";
+import { parse as parseToml, TomlError } from "smol-toml";
 import { readBytes } from "../../responses.ts";
 import {
   type IdentityUpdate,
@@ -84,7 +86,7 @@ const CONTROL = /\p{Cc}/u;
 
 /** Typed by the bytes, never by the name. */
 async function serveImage(path: string): Promise<Response> {
-  const bytes = await Bun.file(path).bytes();
+  const bytes = await readFile(path);
   const image = sniffImage(bytes);
   if (image === null) {
     return localError(415, "unsupported-media-type", "Only PNG, JPEG and WebP images are shown");
@@ -110,9 +112,12 @@ async function readUpload(
 /** A folder the app may delete in: really under the data home, and outside every template. */
 function userFolder(folder: string): boolean {
   try {
-    const real = realpathSync(folder);
+    // realpath(3) gives the letter case on disk; the JavaScript realpathSync keeps the case it was
+    // given, so a template spelled otherwise would pass for a user folder.
+    const real = realpathSync.native(folder);
     return (
-      isInside(real, realpathSync(dataHome())) && !isInside(real, realpathSync(templatesDir()))
+      isInside(real, realpathSync.native(dataHome())) &&
+      !isInside(real, realpathSync.native(templatesDir()))
     );
   } catch {
     return false;
@@ -224,31 +229,22 @@ function glossaryOf(id: string) {
   return { ...textOf(id, "glossary.toml"), errors: glossaryErrors(id) };
 }
 
-/** Where the glossary sits for the bundler, which reads it from memory, never from the disk. */
-const GLOSSARY_ENTRY = "/glossary.toml";
-
 /**
  * Where the TOML stops parsing, as `line L, column C: reason` with both counted from 1; the
- * parser's quote of the text there is left out. Null when it parses.
+ * parser's excerpt of the text there is left out. Null when it parses.
  */
-async function tomlError(text: string): Promise<string | null> {
+function tomlError(text: string): string | null {
   try {
-    Bun.TOML.parse(text);
+    parseToml(text);
     return null;
   } catch (error) {
-    // Bun.TOML.parse's error has `line` and `column`, but they are JavaScriptCore's: where this
-    // file called it. Bun.build parses TOML with the same parser and logs the text's own place.
-    const built = await Bun.build({
-      entrypoints: [GLOSSARY_ENTRY],
-      files: { [GLOSSARY_ENTRY]: text },
-      throw: false,
-    });
-    const log = built.logs.find((entry) => entry.position !== null);
-    const reason = (log?.message ?? String((error as { message?: unknown }).message ?? ""))
-      .replace(/^TOML Parse error:\s*/, "")
-      .replace(/:?\s*"[^"]*"/g, "");
-    const at = log?.position;
-    return at ? `line ${at.line}, column ${at.column}: ${reason}` : reason;
+    if (!(error instanceof TomlError)) throw error;
+    // The message is "Invalid TOML document: <reason>", then a blank line and the excerpt.
+    const reason = (error.message.split("\n", 1)[0] as string).replace(
+      /^Invalid TOML document:\s*/,
+      "",
+    );
+    return `line ${error.line}, column ${error.column}: ${reason}`;
   }
 }
 
@@ -404,7 +400,7 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
       handler: forPersona(async (request, id) => {
         const text = await textBody(request);
         if (text instanceof Response) return text;
-        const error = await tomlError(text);
+        const error = tomlError(text);
         if (error !== null) return localError(400, "invalid-toml", error);
         try {
           writeDataFile(personaWriteTarget(id, "glossary.toml"), text);

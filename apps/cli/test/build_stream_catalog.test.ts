@@ -1,12 +1,12 @@
 // The command around the library: the golden catalog runs (see
 // packages/ingest/test/ingest_streams_golden.ts) replayed from their argv, the help, the defaults
 // and the lock. Every run happens in a temporary data home.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resetSettings, sourceFolder } from "@eidolon/config";
 import { acquireLock, indexLockKey } from "@eidolon/ingest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   GOLDEN,
   maskBuiltAt,

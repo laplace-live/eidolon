@@ -1,7 +1,6 @@
 // The jobs routes over HTTP, with a fake CLI: starting, listing, the plan cache, the events stream
 // and its offsets, the log, cancelling, resuming, batches, and paths that try to leave the folder.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   appendFileSync,
   existsSync,
@@ -12,7 +11,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { dataHome, sourceFolder } from "@eidolon/config";
+import { setTimeout as delay } from "node:timers/promises";
+import { dataHome, sourceFolder, spawnProcess } from "@eidolon/config";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { BatchResponse, ErrorBody, JobSnapshot } from "../../src/local/api.ts";
 import { PLAN_VARIABLES } from "../../src/local/jobs/plan.ts";
 import { MAX_BATCH_URLS } from "../../src/local/routes/batches.ts";
@@ -24,10 +25,10 @@ let logs: CapturedLogs;
 let server: JobsServer;
 let batch: string;
 
-beforeEach(() => {
+beforeEach(async () => {
   logs = captureLogs();
   ({ batch } = seedSources());
-  server = serveJobs();
+  server = await serveJobs();
 });
 
 afterEach(async () => {
@@ -363,7 +364,7 @@ test("GET jobs/:id/log answers a long log's last MiB, from a whole line, saying 
 test("the route table is built without the data home; the first request loads the jobs", async () => {
   await server.close();
   rmSync(dataHome(), { recursive: true, force: true });
-  server = serveJobs();
+  server = await serveJobs();
   expect(existsSync(dataHome())).toBe(false);
   await server.close();
 
@@ -387,7 +388,7 @@ test("the route table is built without the data home; the first request loads th
       pid: null,
     }),
   );
-  server = serveJobs();
+  server = await serveJobs();
   expect(existsSync(record)).toBe(true);
   // A runner drops an earlier start's plans as it loads.
   expect(await (await server.call("GET", "/api/local/jobs")).json()).toEqual([]);
@@ -438,7 +439,7 @@ describe("DELETE jobs/:id", () => {
       "bad-request",
     ]);
     expect((await server.call("DELETE", `/api/local/jobs/${started.id}`)).status).toBe(202);
-    await Bun.sleep(200);
+    await delay(200);
     const ignored = (await (
       await server.call("GET", `/api/local/jobs/${started.id}`)
     ).json()) as JobSnapshot;
@@ -463,7 +464,7 @@ describe("DELETE jobs/:id", () => {
 
   test("an earlier server's job, left stopping, isn't signalable: a cancel, forced or not, is 409", async () => {
     await server.close();
-    const stranger = Bun.spawn(["sleep", "30"]);
+    const stranger = spawnProcess(["sleep", "30"]);
     try {
       const id = "20261105T120000-ABCDEF";
       mkdirSync(join(dataHome(), "jobs"), { recursive: true });
@@ -487,7 +488,7 @@ describe("DELETE jobs/:id", () => {
           stopReason: "shutdown",
         }),
       );
-      server = serveJobs();
+      server = await serveJobs();
       expect(await (await server.call("GET", `/api/local/jobs/${id}`)).json()).toMatchObject({
         status: "running",
         stopping: true,
@@ -500,7 +501,7 @@ describe("DELETE jobs/:id", () => {
           "conflict",
         ]);
       }
-      await Bun.sleep(100);
+      await delay(100);
       expect(isAlive(stranger.pid)).toBe(true);
       expect(stranger.exitCode).toBeNull();
     } finally {
@@ -541,7 +542,7 @@ describe("POST jobs/:id/resume", () => {
 
   test("a job an earlier server left running comes back interrupted, and resumes", async () => {
     await server.close();
-    const gone = Bun.spawn(["true"]);
+    const gone = spawnProcess(["true"]);
     await gone.exited;
     const id = "20261105T120000-ABCDEF";
     mkdirSync(join(dataHome(), "jobs"), { recursive: true });
@@ -562,7 +563,7 @@ describe("POST jobs/:id/resume", () => {
         pid: gone.pid,
       }),
     );
-    server = serveJobs();
+    server = await serveJobs();
     const before = (await (
       await server.call("GET", `/api/local/jobs/${id}`)
     ).json()) as JobSnapshot;

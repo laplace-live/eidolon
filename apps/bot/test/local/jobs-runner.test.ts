@@ -1,7 +1,6 @@
 // The job runner over a fake CLI: events and stderr in files, snapshots reduced from them, a crash
 // told by its missing summary, cancelling, the stop hook, what a restart finds, and retention.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -16,7 +15,9 @@ import {
 } from "node:fs";
 import { tmpdir, uptime } from "node:os";
 import { join } from "node:path";
-import { dataHome } from "@eidolon/config";
+import { setTimeout as delay } from "node:timers/promises";
+import { dataHome, spawnProcess } from "@eidolon/config";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { JobCommand, JobStatus } from "../../src/local/api.ts";
 import type { JobSpec } from "../../src/local/jobs/argv.ts";
 import { type Job, JobRunner, type JobRunnerOptions } from "../../src/local/jobs/runner.ts";
@@ -215,7 +216,7 @@ describe("a job's run", () => {
     mkdirSync(join(root, "dist"));
     writeFileSync(
       join(root, "dist", "cli.js"),
-      `const [command, ...args] = Bun.argv.slice(2);
+      `const [command, ...args] = process.argv.slice(2);
 const summary = { v: 1, t: Date.now(), type: "summary", stage: command, ok: true, counts: {}, durationSec: 0 };
 process.stdout.write(JSON.stringify(summary) + "\\n");
 process.stderr.write(JSON.stringify(args));`,
@@ -245,18 +246,19 @@ process.stderr.write(JSON.stringify(args));`,
 
   test("a job inherits the environment the server started with, and nothing it applied since", async () => {
     mkdirSync(dataHome(), { recursive: true });
-    const child = Bun.spawn(
-      [process.execPath, "--no-env-file", join(import.meta.dir, "jobs-env-child.ts")],
-      {
-        env: { PATH: process.env.PATH ?? "", EIDOLON_HOME: dataHome(), EIDOLON_NO_DOTENV: "1" },
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    const [out, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+    const child = spawnProcess([process.execPath, join(import.meta.dirname, "jobs-env-child.ts")], {
+      env: { PATH: process.env.PATH ?? "", EIDOLON_HOME: dataHome(), EIDOLON_NO_DOTENV: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [out, err, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
     // The job's CLI applies the .env itself: what the server applied would outlive a key deleted
     // from the .env since.
-    expect([code, JSON.parse(/^job saw (.*)$/m.exec(out)?.[1] ?? "null")]).toEqual([
+    expect([code, JSON.parse(/^job saw (.*)$/m.exec(out)?.[1] ?? "null")], err).toEqual([
       0,
       { EIDOLON_NO_DOTENV: "1", EIDOLON_ENV_PROBE: null },
     ]);
@@ -298,7 +300,7 @@ describe("cancelling", () => {
     await until(() => jobs.snapshot(job).stages.length > 0);
     const grandchild = Number(firstMessage(job));
     expect(jobs.cancel(job)).toBe("stopping");
-    await Bun.sleep(300);
+    await delay(300);
     expect(jobs.snapshot(job)).toMatchObject({ status: "running", stopping: true });
     expect(isAlive(grandchild)).toBe(true);
     expect(jobs.cancel(job, true)).toBe("stopping");
@@ -366,7 +368,7 @@ describe("cancelling", () => {
         signalable: false,
       });
       expect(next.cancel(watched, true)).toBe("not-ours");
-      await Bun.sleep(60);
+      await delay(60);
       expect(isAlive(pid)).toBe(true);
       process.kill(-pid, "SIGKILL");
       await until(() => next.snapshot(watched).status !== "running");
@@ -412,7 +414,7 @@ describe("what a restart finds", () => {
   }
 
   async function deadPid(): Promise<number> {
-    const child = Bun.spawn(["true"]);
+    const child = spawnProcess(["true"]);
     await child.exited;
     return child.pid;
   }
@@ -465,7 +467,7 @@ describe("what a restart finds", () => {
   });
 
   test("a stale record naming a live, unrelated process: watched, never signalled", async () => {
-    const stranger = Bun.spawn(["sleep", "30"]);
+    const stranger = spawnProcess(["sleep", "30"]);
     try {
       const record = leave({ pid: stranger.pid });
       const jobs = runner();
@@ -477,7 +479,7 @@ describe("what a restart finds", () => {
       });
       expect(jobs.cancel(job)).toBe("not-ours");
       expect(jobs.cancel(job, true)).toBe("not-ours");
-      await Bun.sleep(60);
+      await delay(60);
       expect(isAlive(stranger.pid)).toBe(true);
       stranger.kill();
       await stranger.exited;
@@ -489,7 +491,7 @@ describe("what a restart finds", () => {
   });
 
   test("a running record from before this machine booted is gone, whatever its pid names now", async () => {
-    const stranger = Bun.spawn(["sleep", "30"]);
+    const stranger = spawnProcess(["sleep", "30"]);
     try {
       const beforeBoot = new Date(Date.now() - uptime() * 1000 - 3_600_000).toISOString();
       const record = leave({ pid: stranger.pid, startedAt: beforeBoot });
@@ -504,7 +506,7 @@ describe("what a restart finds", () => {
   });
 
   test("a job still running whose summary arrives ends by it", async () => {
-    const stranger = Bun.spawn(["sleep", "30"]);
+    const stranger = spawnProcess(["sleep", "30"]);
     try {
       const record = leave({ pid: stranger.pid });
       const jobs = runner();

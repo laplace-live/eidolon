@@ -5,10 +5,11 @@
 //
 // pi's cases for the tool list, the rules and a context file name that is a folder; the walk down
 // from home, the caps, the untrusted wrapping and the skills catalog are this package's own.
-import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { afterAll, describe, expect, test } from "vitest";
 import { FolderPolicy } from "../src/policy.ts";
 import { buildTaskPrompt, loadContextFiles, type TaskPromptInput } from "../src/prompt.ts";
 import type { Skill } from "../src/skills.ts";
@@ -407,7 +408,7 @@ describe("loadContextFiles", () => {
   test("an AGENTS.md that is a FIFO is skipped without waiting for a writer", async () => {
     const home = join(root, "fifo");
     mkdirSync(join(home, "proj"), { recursive: true });
-    expect(Bun.spawnSync(["mkfifo", join(home, "proj", "AGENTS.md")]).exitCode).toBe(0);
+    expect(spawnSync("mkfifo", [join(home, "proj", "AGENTS.md")]).status).toBe(0);
     write(join(home, "proj", "CLAUDE.md"), "Fallback instructions");
     expect(await contextFiles(join(home, "proj"), home)).toEqual([
       { path: join(home, "proj", "CLAUDE.md"), content: "Fallback instructions" },

@@ -1,8 +1,8 @@
 import "./isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   activePersona,
   assistantSettings,
@@ -402,6 +402,21 @@ describe("mistakes", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toStartWith(`Ignoring ${path}: `);
   });
+
+  test("malformed YAML is named on one line, with where it broke", () => {
+    write("settings.yaml", "access: [unclosed\n");
+    loadSettings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/: \S.* at line \d+, column \d+$/);
+    expect(warnings[0]).not.toContain("\n");
+  });
+
+  test("a key given twice keeps its last value rather than costing the whole file", () => {
+    write("personas/other/persona.yaml", "identity:\n  name: Other\n");
+    write("settings.yaml", "persona: milky-green\npersona: other\n");
+    expect(loadSettings().persona.id).toBe("other");
+    expect(warnings).toEqual([]);
+  });
 });
 
 describe("choosing the persona", () => {
@@ -631,8 +646,8 @@ test("fillPersonaText fills known placeholders and leaves the rest", () => {
   );
 });
 
-test("docs/personas.md documents every setting, under its own scope", async () => {
-  const doc = await Bun.file(join(PROJECT_ROOT, "docs", "personas.md")).text();
+test("docs/personas.md documents every setting, under its own scope", () => {
+  const doc = readFileSync(join(PROJECT_ROOT, "docs", "personas.md"), "utf8");
   const [persona, app] = [doc.indexOf("## persona.yaml"), doc.indexOf("## settings.yaml")];
   for (const setting of SETTINGS) {
     const row = `| \`${setting.path}\` | \`${setting.env}\` | ${setting.kind} | ${setting.title} |`;
@@ -642,8 +657,8 @@ test("docs/personas.md documents every setting, under its own scope", async () =
   }
 });
 
-test(".env.example declares every setting and key exactly once", async () => {
-  const example = await Bun.file(join(PROJECT_ROOT, ".env.example")).text();
+test(".env.example declares every setting and key exactly once", () => {
+  const example = readFileSync(join(PROJECT_ROOT, ".env.example"), "utf8");
   const declared = example
     .split("\n")
     .flatMap((line) => /^([A-Z][A-Z\d_]*)=/.exec(line)?.[1] ?? []);

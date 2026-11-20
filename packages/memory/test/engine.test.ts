@@ -1,9 +1,9 @@
 // Parity with mem0: every case in fixtures/engine.json was produced by running mem0's own
 // Memory.add/search/get_all/delete_all and Qdrant.create_col against the fakes in support.ts, with
 // the clock and uuid4 pinned. Each replays here and must match call for call, row for row.
-import { Database } from "bun:sqlite";
-import { describe, expect, test } from "bun:test";
+import { DatabaseSync } from "node:sqlite";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { describe, expect, test } from "vitest";
 import { MemoryEngine, openMemoryEngine, sortNewestFirst } from "../src/engine.ts";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "../src/extraction-prompt.ts";
 import { HistoryStore } from "../src/history.ts";
@@ -15,7 +15,6 @@ import {
 import { QdrantVectorStore } from "../src/qdrant.ts";
 import type { MemoryItem } from "../src/types.ts";
 import fixtures from "./fixtures/engine.json";
-import timeFixtures from "./fixtures/time.json";
 import {
   type ChatResponse,
   captureLogs,
@@ -24,6 +23,7 @@ import {
   type Payload,
   pinned,
   tempPath,
+  timeFixtures,
 } from "./support.ts";
 
 type Ids = { user_id?: string | null; agent_id?: string | null; run_id?: string | null };
@@ -63,19 +63,20 @@ function build(options: {
 }
 
 function rows(dbPath: string) {
-  const db = new Database(dbPath, { readonly: true });
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const values = (sql: string): unknown[][] => {
+    const statement = db.prepare(sql);
+    statement.setReturnArrays(true);
+    return statement.all() as unknown as unknown[][];
+  };
   try {
     return {
-      history: db
-        .query(
-          "SELECT id, memory_id, old_memory, new_memory, event, created_at, updated_at, is_deleted, actor_id, role FROM history ORDER BY rowid",
-        )
-        .values(),
-      messages: db
-        .query(
-          "SELECT id, session_scope, role, content, name, created_at FROM messages ORDER BY rowid",
-        )
-        .values(),
+      history: values(
+        "SELECT id, memory_id, old_memory, new_memory, event, created_at, updated_at, is_deleted, actor_id, role FROM history ORDER BY rowid",
+      ),
+      messages: values(
+        "SELECT id, session_scope, role, content, name, created_at FROM messages ORDER BY rowid",
+      ),
     };
   } finally {
     db.close();

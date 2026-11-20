@@ -1,7 +1,8 @@
 // The MCP server's tools and tiers, then the wire behavior clients see, pinned byte for byte.
-import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { SlidingWindowQuota, type UserContext } from "@eidolon/access";
 import { type LogRecord, logger } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import { createMcpHandler } from "../../src/mcp/index.ts";
 import {
   projectChunk,
@@ -9,6 +10,7 @@ import {
   searchPersonaFactsDescription,
   searchStreamsDescription,
 } from "../../src/mcp/tools.ts";
+import { serveRoutes } from "../serve.ts";
 import {
   ACCEPT,
   buildHandler,
@@ -57,15 +59,13 @@ test("test_tools_list_exposes_both_search_tools", async () => {
 test("test_bare_path_answers_without_redirect", async () => {
   const handler = await buildHandler();
   const route = (request: Request) => handler.handle(request, "testclient");
-  // Bun's routes match exactly, so the app registers both paths.
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    routes: { "/mcp": route, "/mcp/": route },
-    fetch: () => new Response("Not Found", { status: 404 }),
-  });
+  // The routes match exactly, so the app registers both paths.
+  const server = await serveRoutes(
+    { "/mcp": route, "/mcp/": route },
+    () => new Response("Not Found", { status: 404 }),
+  );
   try {
-    const response = await fetch(`http://127.0.0.1:${server.port}/mcp`, {
+    const response = await fetch(`${server.url}/mcp`, {
       method: "POST",
       redirect: "manual",
       headers: { "content-type": "application/json", accept: ACCEPT },
@@ -79,7 +79,7 @@ test("test_bare_path_answers_without_redirect", async () => {
     expect(response.status).toBe(200);
     expect((await resultOf(response)).structuredContent.count).toBe(1);
   } finally {
-    server.stop(true);
+    await server.stop();
   }
 });
 
@@ -139,7 +139,7 @@ test("test_valid_token_uses_higher_authenticated_tier", async () => {
   }
 });
 
-const sha256 = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
+const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
 describe("golden surface", () => {
   test("tools/list is the Python server's result, byte for byte", async () => {

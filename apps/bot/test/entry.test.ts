@@ -1,13 +1,16 @@
 // main.ts is never imported by tests (it boots the bot), so its import order is checked from source.
-import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { describe, expect, test } from "vitest";
 
-const SRC = join(import.meta.dir, "..", "src");
-const transpiler = new Bun.Transpiler({ loader: "ts" });
+const SRC = join(import.meta.dirname, "..", "src");
+/** A static import's or re-export's specifier, in source order; `import type` evaluates nothing. */
+const STATIC_IMPORT = /^(?:import|export)\s+(?!type\s)(?:[^"';]*?\sfrom\s*)?["']([^"']+)["']/gm;
 
 async function importsOf(file: string): Promise<string[]> {
-  return transpiler.scanImports(await Bun.file(join(SRC, file)).text()).map(({ path }) => path);
+  const source = await readFile(join(SRC, file), "utf8");
+  return [...source.matchAll(STATIC_IMPORT)].map((match) => match[1] as string);
 }
 
 describe("entry point", () => {
@@ -23,7 +26,7 @@ describe("entry point", () => {
     const files = readdirSync(SRC).filter((name) => name.endsWith(".ts"));
     expect(files).toContain("main.ts");
     for (const file of files) {
-      expect(`${file}: ${(await Bun.file(join(SRC, file)).text()).includes("process.env")}`).toBe(
+      expect(`${file}: ${(await readFile(join(SRC, file), "utf8")).includes("process.env")}`).toBe(
         `${file}: false`,
       );
     }

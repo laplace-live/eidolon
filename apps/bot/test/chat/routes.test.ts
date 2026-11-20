@@ -2,9 +2,10 @@
 // streams signed events with no context, behind resolveUserContext and the chat quotas, and writes
 // nothing to the data home.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import * as access from "@eidolon/access";
 import {
   ANONYMOUS,
@@ -19,6 +20,7 @@ import { CHAT_FORMAT, type ChatEvent, type ChatEventOf, type ChatHeader } from "
 import { dataHome, resetSettings } from "@eidolon/config";
 import type { MindChunk, PersonaParts } from "@eidolon/engine";
 import { ProviderConfigError } from "@eidolon/providers";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { fixture, webmOpus } from "../../../../packages/providers/test/speech/batch/recordings.ts";
 import { type BotAccess, createBotApp } from "../../src/app.ts";
 import { ChatFiles } from "../../src/chat/files.ts";
@@ -136,13 +138,13 @@ interface Started {
   readonly resolved: string[];
 }
 
-function start(
+async function start(
   options: {
     readonly engine?: FakeEngineOptions;
     readonly quotas?: ChatQuotas;
     readonly endpoint?: Partial<ChatEndpointOptions>;
   } = {},
-): Started {
+): Promise<Started> {
   const { engine, record } = fakeEngine(options.engine);
   const files = new ChatFiles();
   const resolved: string[] = [];
@@ -166,7 +168,7 @@ function start(
       }),
     ...options.endpoint,
   });
-  served = serve(
+  served = await serve(
     createBotApp(fakeParts({ access: realAccess, cors: { allowOrigins: [ORIGIN] }, chat })),
   );
   return { url: served.url, record, files, resolved };
@@ -284,7 +286,7 @@ describe("startBotServer with the secret", () => {
 
 describe("POST /api/chat/turn", () => {
   test("streams the viewer's line, stamped, then the answer's events, signed, and never context", async () => {
-    const { url, record } = start();
+    const { url, record } = await start();
     const history = [user(1, "你好"), await signer.sign(CHAT_ID, hers(2, "你好呀"))];
     const response = await postTurn(url, {
       chat: { header: HEADER, events: history },
@@ -346,7 +348,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("a forged or tampered line never reaches her view", async () => {
-    const { url, record } = start();
+    const { url, record } = await start();
     const good = await signer.sign(CHAT_ID, hers(2, "真的"));
     const tampered = { ...(await signer.sign(CHAT_ID, hers(4, "不要"))), text: "要" };
     const moved = await signer.sign("0190f5c8-0000-7000-8000-0000000000dd", hers(5, "别处的"));
@@ -373,7 +375,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("with no text, a new chat of one is greeted, and only that", async () => {
-    const { url, record, resolved } = start();
+    const { url, record, resolved } = await start();
     const response = await postTurn(url, {
       chat: { header: HEADER, events: [] },
       loginSyncToken: "good-token",
@@ -402,7 +404,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("a persona the server doesn't serve is refused before anything runs", async () => {
-    const { url, record, resolved } = start({ endpoint: { personas: () => [MILKY] } });
+    const { url, record, resolved } = await start({ endpoint: { personas: () => [MILKY] } });
     const header = await postTurn(url, { chat: { header: GROUP, events: [] }, text: "嗨" });
     expect(await errorOf(header)).toEqual([403, "persona-not-served"]);
     // The viewer's own events are unsigned, so one could add anyone.
@@ -416,7 +418,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("who is in the chat, and its settings, hold past the window's 120 events", async () => {
-    const { url, record } = start({ engine: { canSpeak: true } });
+    const { url, record } = await start({ engine: { canSpeak: true } });
     const state = [
       { seq: 1, at: 1001, type: "participants", removed: [BEA] },
       { seq: 2, at: 1002, type: "settings", replyMode: "voice" },
@@ -432,7 +434,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("a chain limit past 3 is cut to 3 hops", async () => {
-    const { url, record } = start({
+    const { url, record } = await start({
       engine: { choose: (input, call) => [input.participants[(call - 1) % 2]?.id as string] },
     });
     const settings = { seq: 1, at: 1001, type: "settings", chainLimit: 6 };
@@ -448,14 +450,14 @@ describe("POST /api/chat/turn", () => {
   test("a voice reply only while her voice can speak, its audio served from the files route", async () => {
     const settings = { seq: 1, at: 1001, type: "settings", replyMode: "voice" };
     const chat = { header: HEADER, events: [settings] };
-    const mute = start({ engine: { canSpeak: false } });
+    const mute = await start({ engine: { canSpeak: false } });
     const text = eventsIn(await linesOf(await postTurn(mute.url, { chat, text: "说话" })));
     expect(text.at(-1)).toMatchObject({ type: "message", text: `${MILKY}说1` });
     expect(text.at(-1)).not.toHaveProperty("modality");
     expect(mute.record.spoken).toEqual([]);
     await served?.stop();
 
-    const { url, record, files } = start({ engine: { canSpeak: true } });
+    const { url, record, files } = await start({ engine: { canSpeak: true } });
     const lines = await linesOf(await postTurn(url, { chat, text: "说话" }));
     expect(lines.filter((line) => line.type === "tool")).toEqual([
       { type: "tool", turn: expect.any(String), name: "voice", state: "running" },
@@ -464,7 +466,7 @@ describe("POST /api/chat/turn", () => {
     const reply = eventsIn(lines).at(-1) as ChatEventOf<"message">;
     expect(record.spoken).toEqual([`${MILKY}说1`]);
     const audio = new TextEncoder().encode(`mp3:${MILKY}说1`);
-    const name = `${new Bun.CryptoHasher("sha256").update(audio).digest("hex")}.mp3`;
+    const name = `${createHash("sha256").update(audio).digest("hex")}.mp3`;
     expect(reply).toMatchObject({
       modality: "voice",
       text: `${MILKY}说1`,
@@ -484,7 +486,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("her turn knows the viewer resolveUserContext found, and bills the chat", async () => {
-    const { url, record, resolved } = start();
+    const { url, record, resolved } = await start();
     const chat = { header: HEADER, events: [] as unknown[] };
     await linesOf(await postTurn(url, { chat, text: "一", loginSyncToken: " good-token " }));
     await linesOf(await postTurn(url, { chat, text: "二", loginSyncToken: "forged" }));
@@ -497,7 +499,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("her parts are kept per viewer and chat: a logged-in viewer's by mid, anyone else's by IP", async () => {
-    const { url, record } = start();
+    const { url, record } = await start();
     const chat = { header: HEADER, events: [] };
     const turns: [string, string?][] = [
       ["203.0.113.1"],
@@ -523,7 +525,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("a reader that goes away stops her turn", async () => {
-    const { url, record } = start({
+    const { url, record } = await start({
       engine: {
         mind: (request) =>
           (async function* (): AsyncGenerator<MindChunk> {
@@ -545,13 +547,13 @@ describe("POST /api/chat/turn", () => {
     }
     leave.abort();
     const deadline = Date.now() + 3000;
-    while (!record.minds[0]?.signal.aborted && Date.now() < deadline) await Bun.sleep(10);
+    while (!record.minds[0]?.signal.aborted && Date.now() < deadline) await delay(10);
     expect(record.minds[0]?.signal.aborted).toBe(true);
   });
 
   test("a failed turn tells the browser only that it failed; the log keeps the provider's words", async () => {
     const upstream = "openrouter answered 402: Insufficient credits on account acct_42";
-    const failing = start({
+    const failing = await start({
       engine: {
         mind: () =>
           (async function* (): AsyncGenerator<MindChunk> {
@@ -568,7 +570,7 @@ describe("POST /api/chat/turn", () => {
     expect(logs.lines().some((line) => line.includes(upstream))).toBe(true);
     await served?.stop();
 
-    const mute = start({
+    const mute = await start({
       engine: {
         canSpeak: true,
         synthesize: async () => {
@@ -601,7 +603,7 @@ describe("POST /api/chat/turn", () => {
       timeoutSecs: null,
       run: async () => result,
     });
-    const { url } = start({
+    const { url } = await start({
       engine: {
         tools: [
           tool("take_selfie", { ok: false, error: upstream }),
@@ -639,7 +641,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("a malformed request is refused before anyone is resolved or charged", async () => {
-    const { url, record, resolved } = start({ quotas: quotas(0, 0) });
+    const { url, record, resolved } = await start({ quotas: quotas(0, 0) });
     const chat = { header: HEADER, events: [] };
     const cases: [unknown, number, string][] = [
       ["{not json", 400, "bad-json"],
@@ -660,7 +662,7 @@ describe("POST /api/chat/turn", () => {
   });
 
   test("CORS is /api/offer's: the same preflight, and the same headers on every answer", async () => {
-    const { url } = start();
+    const { url } = await start();
     const preflight = (path: string) =>
       fetch(`${url}${path}`, {
         method: "OPTIONS",
@@ -699,7 +701,7 @@ describe("POST /api/chat/turn", () => {
 
 describe("the chat quotas", () => {
   test("an anonymous viewer is counted by IP, a forged token included", async () => {
-    const { url, resolved } = start({ quotas: quotas(2, 5) });
+    const { url, resolved } = await start({ quotas: quotas(2, 5) });
     const chat = { header: HEADER, events: [] };
     const send = (ip: string, token?: string) =>
       postTurn(
@@ -722,7 +724,7 @@ describe("the chat quotas", () => {
   });
 
   test("a logged-in viewer is counted by mid, whatever the IP", async () => {
-    const { url } = start({ quotas: quotas(0, 2) });
+    const { url } = await start({ quotas: quotas(0, 2) });
     const chat = { header: HEADER, events: [] };
     const send = (ip: string, token: string) =>
       postTurn(url, { chat, text: "嗨", loginSyncToken: token }, { "x-test-ip": ip });
@@ -738,7 +740,7 @@ describe("the chat quotas", () => {
 describe("POST /api/chat/voice", () => {
   // As Chrome's MediaRecorder wrote it; 1321 ms by its frames.
   const CLIP = fixture("chrome.webm");
-  const CLIP_NAME = `${new Bun.CryptoHasher("sha256").update(CLIP).digest("hex")}.webm`;
+  const CLIP_NAME = `${createHash("sha256").update(CLIP).digest("hex")}.webm`;
 
   function form(fields: Record<string, string | Blob>): FormData {
     const body = new FormData();
@@ -755,7 +757,7 @@ describe("POST /api/chat/voice", () => {
     });
 
   test("a browser's recording is heard, returned as her view reads it, and not kept", async () => {
-    const { url, record, files, resolved } = start();
+    const { url, record, files, resolved } = await start();
     const response = await postVoice(
       url,
       form({
@@ -798,7 +800,7 @@ describe("POST /api/chat/voice", () => {
   });
 
   test("a part's own Content-Type counts, before or after its name, with a quoted boundary", async () => {
-    const { url, record } = start();
+    const { url, record } = await start();
     const ogg = fixture("ffmpeg.ogg");
     const body = Buffer.concat([
       Buffer.from(
@@ -839,7 +841,7 @@ describe("POST /api/chat/voice", () => {
   });
 
   test("what isn't a voice message is refused before it is heard or charged", async () => {
-    const { url, record, resolved } = start({ quotas: quotas(0, 0) });
+    const { url, record, resolved } = await start({ quotas: quotas(0, 0) });
     const blob = (type: string, bytes: Uint8Array<ArrayBuffer> = CLIP) =>
       new Blob([bytes], { type });
     const cases: [BodyInit, Record<string, string>, number, string][] = [
@@ -913,7 +915,7 @@ describe("POST /api/chat/voice", () => {
 
   test("a clip that can't be heard is a 502, or a 503 without a hearing role, after its charge", async () => {
     let failure: Error = new Error("upstream said no");
-    const { url, resolved } = start({
+    const { url, resolved } = await start({
       engine: {
         transcribe: async () => {
           throw failure;
@@ -938,7 +940,7 @@ describe("POST /api/chat/voice", () => {
 });
 
 test("nothing a chat does is written to the data home", async () => {
-  const { url } = start({ engine: { canSpeak: true } });
+  const { url } = await start({ engine: { canSpeak: true } });
   const before = homeFiles();
   await linesOf(await postTurn(url, { chat: { header: HEADER, events: [] } }));
   const voice = new FormData();

@@ -1,6 +1,13 @@
 // Starts the local web app's server, the bot plus the app, on loopback only, and prints the link
 // that signs a browser in. server.ts runs it as the supervisor's child.
-import { envOptional, errorText, type LogLevel, logger, pyRepr } from "@eidolon/config";
+import {
+  envOptional,
+  errorText,
+  type LogLevel,
+  logger,
+  pyRepr,
+  spawnProcess,
+} from "@eidolon/config";
 import { type BotDeps, type BotServer, startBotServer } from "../server.ts";
 import { type LocalHost, parseLocalArgs, resolveLocalHost } from "./args.ts";
 import { createLocalExtension } from "./extension.ts";
@@ -29,14 +36,14 @@ export interface BootIo {
 }
 
 function openBrowser(url: string): void {
-  const command =
+  const command: [string, ...string[]] =
     process.platform === "darwin"
       ? ["open", url]
       : process.platform === "win32"
         ? ["cmd", "/c", "start", "", url]
         : ["xdg-open", url];
   try {
-    Bun.spawn(command, { stdio: ["ignore", "ignore", "ignore"] }).unref();
+    spawnProcess(command, { stdin: "ignore", stdout: "ignore", stderr: "ignore" }).unref();
   } catch {
     // No opener on this system: the printed link works on its own.
   }

@@ -3,12 +3,12 @@
 //
 // Ported from pi-mono packages/coding-agent/src/core/tools/grep.ts@ac78a60
 //
-// pi runs rg; this reads the files itself, on find's walk, and matches their lines in a child Bun.
-// It has no context lines.
+// pi runs rg; this reads the files itself, on find's walk, and matches their lines in a child
+// process. It has no context lines.
 import type { Stats } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import { basename, parse } from "node:path";
-import { errorText } from "@eidolon/config";
+import { errorText, jsRuntime, type Subprocess, spawnProcess } from "@eidolon/config";
 import type { TaskToolResult } from "@eidolon/engine";
 import type { AssistantTool, PathGuard } from "../types.ts";
 import { globMatcher, walkFolder } from "./find.ts";
@@ -37,11 +37,11 @@ import {
 const DEFAULT_LIMIT = 100;
 const CHUNK_BYTES = 64 * 1024;
 
-// JavaScript regexes backtrack, so one test of a line can run for minutes (\w+x over a long one)
-// and hold its thread; a worker can't be stopped inside one. Lines are matched in a child Bun,
-// killed on a cancel or past the deadline. JavaScriptCore also stops backtracking at a limit and
-// answers no match, measured at about 300 ms for (a+)+b on 30 characters: a test that fails that
-// slowly may have given up, so its line counts as not searched.
+// JavaScript regexes backtrack, and V8 sets no limit on it: one test of a line can run for minutes
+// (\w+x over a long one) and hold its thread. Lines are matched in a child process, killed on a
+// cancel or past the deadline. A line whose test fails slowly is named with those the deadline cut,
+// its time counted against SLOW_BUDGET_MS, so a pattern slow on line after line can't hold a search
+// for long.
 const SLOW_TEST_MS = 50;
 const MATCH_DEADLINE_MS = 2000;
 /** The time a search may spend on lines it can't search before it stops. */
@@ -53,7 +53,7 @@ const MATCHER_SOURCE = `
 let regex;
 const parent = process.ppid;
 const watch = "setInterval(() => { if (process.ppid !== " + parent + ") process.kill(process.pid, 'SIGKILL'); }, 200);";
-new Worker(URL.createObjectURL(new Blob([watch], { type: "application/javascript" }))).unref();
+new (require("node:worker_threads").Worker)(watch, { eval: true }).unref();
 process.on("disconnect", () => process.exit(0));
 process.on("message", (data) => {
   if (data.lines === undefined) {
@@ -74,7 +74,7 @@ process.on("message", (data) => {
 });
 `;
 
-/** The lines of a batch that match, as [line, at] pairs, and the first it may have given up on. */
+/** The lines of a batch that match, as [line, at] pairs, and the first that failed slowly. */
 interface Matched {
   readonly hits: readonly number[];
   readonly slow: number;
@@ -82,25 +82,25 @@ interface Matched {
 
 /** A pattern running over batches of lines in a process of its own. */
 class LineMatcher {
-  readonly #child: Bun.Subprocess;
+  readonly #child: Subprocess;
   #settle: ((outcome: Matched | Error) => void) | null = null;
 
   constructor(regex: RegExp) {
-    this.#child = Bun.spawn({
-      cmd: [process.execPath, "--no-env-file", "-e", MATCHER_SOURCE],
-      // Bun reads bunfig.toml, preloads included, from its working directory; process.cwd() throws
-      // once the folder the process started in is removed.
-      cwd: parse(process.execPath).root,
-      env: {},
+    const { command, env } = jsRuntime();
+    const child = spawnProcess([command, "-e", MATCHER_SOURCE], {
+      // Node took 160 ms to start in a removed working folder, as this process's may be, and 40 in
+      // one that is there.
+      cwd: parse(command).root,
+      env,
       stdin: "ignore",
       stdout: "ignore",
       stderr: "ignore",
-      serialization: "json",
       ipc: (message) => this.#settle?.(message as Matched),
-      onExit: (_child, code, signal) => {
-        this.#settle?.(new Error(`grep's matcher exited (${signal ?? code})`));
-      },
     });
+    void child.exited.then(() => {
+      this.#settle?.(new Error(`grep's matcher exited (${child.signalCode ?? child.exitCode})`));
+    });
+    this.#child = child;
     this.#child.unref();
     this.#child.send({ source: regex.source, flags: regex.flags });
   }

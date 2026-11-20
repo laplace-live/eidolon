@@ -6,10 +6,11 @@
 // pi's bash cases that hold without its temp files, structured content or streaming updates, on
 // real processes and on fake operations; then this tool's own: the cut environment, no input or
 // terminal, cleaned output, the output cap, its arguments, real process-group kills, and `wait`.
-import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { TaskToolResult } from "@eidolon/engine";
+import { afterAll, describe, expect, test } from "vitest";
 import {
   BASH_OUTPUT,
   type BashOperations,
@@ -79,7 +80,7 @@ function alive(pid: number): boolean {
 }
 
 async function deadWithin(pid: number, ms: number): Promise<boolean> {
-  for (const end = Date.now() + ms; Date.now() < end; await Bun.sleep(20)) {
+  for (const end = Date.now() + ms; Date.now() < end; await delay(20)) {
     if (!alive(pid)) return true;
   }
   return !alive(pid);
@@ -87,7 +88,7 @@ async function deadWithin(pid: number, ms: number): Promise<boolean> {
 
 /** The pids a command printed into its log, once there are `count`. */
 async function pidsIn(log: string, count: number): Promise<number[]> {
-  for (const end = Date.now() + 5000; Date.now() < end; await Bun.sleep(20)) {
+  for (const end = Date.now() + 5000; Date.now() < end; await delay(20)) {
     let text = "";
     try {
       text = readFileSync(log, "utf8");

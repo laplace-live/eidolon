@@ -1,11 +1,19 @@
 // The goldens under fixtures/goldens hold each command's expected output for the fixtures and fakes
 // these tests use; "<FIX>" stands for this fixtures directory.
-import { afterAll, beforeAll } from "bun:test";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { consoleSink, type LogLevel, type LogRecord, logger, setLogLevel } from "@eidolon/config";
-import type { Subprocess } from "bun";
+import {
+  consoleSink,
+  type LogLevel,
+  type LogRecord,
+  logger,
+  type Subprocess,
+  setLogLevel,
+  spawnProcess,
+} from "@eidolon/config";
+import { afterAll, beforeAll } from "vitest";
 
-export const FIX = join(import.meta.dir, "fixtures");
+export const FIX = join(import.meta.dirname, "fixtures");
 
 /** Call at a test file's top level: a fetch nobody injected fails instead of going out. */
 export function blockNetwork(): void {
@@ -20,8 +28,8 @@ export function blockNetwork(): void {
   });
 }
 
-export function golden<T>(name: string): Promise<T> {
-  return Bun.file(join(FIX, "goldens", name)).json() as Promise<T>;
+export async function golden<T>(name: string): Promise<T> {
+  return JSON.parse(await readFile(join(FIX, "goldens", name), "utf8")) as T;
 }
 
 /** Replaces each placeholder in `text` with its path. */
@@ -77,16 +85,11 @@ export function captureLogs(): { readonly records: [LogLevel, string][]; stop():
 }
 
 /** The CLI in a process of its own, as main.ts runs it minus the .env load, in this environment. */
-export function spawnCli(argv: readonly string[]): Subprocess<"ignore", "pipe", "pipe"> {
-  return Bun.spawn(
-    [process.execPath, "--no-env-file", join(import.meta.dir, "cli_child.ts"), ...argv],
-    {
-      env: process.env,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
+export function spawnCli(argv: readonly string[]): Subprocess {
+  return spawnProcess([process.execPath, join(import.meta.dirname, "cli_child.ts"), ...argv], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
 }
 
 /** Sets (or, for undefined, deletes) env vars; the returned function restores them. */

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { FORCE_STOP_AFTER_MS, forceStopIn, showsStop, stopOffer, stoppingSince } from "./stopping";
 
 test("force stop waits 20 s from when the page first saw the job stopping", () => {

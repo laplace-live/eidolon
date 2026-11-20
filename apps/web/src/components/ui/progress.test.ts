@@ -1,6 +1,6 @@
-import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { expect, test } from "vitest";
 import { Progress } from "./progress";
 
 test("a screen reader hears how far along it is", () => {

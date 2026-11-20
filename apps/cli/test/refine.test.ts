@@ -1,13 +1,15 @@
 // fixtures/goldens/refine.json holds laplace-refine's runs over fixtures/refine/streams, answered
 // by fixtures/refine/responses.json. Each scenario replays here through refineMain with the same
 // responses, clock and date.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { activePersona, personaIds, resetSettings, sortedPy, sourceFolder } from "@eidolon/config";
 import { acquireLock, refine, sourcesLockKey } from "@eidolon/ingest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { makeFifo, whenReading } from "../../../packages/ingest/test/fifo.ts";
 import { parseRefineArgs, refineMain } from "../src/refine.ts";
 import {
@@ -53,7 +55,7 @@ interface Scenario {
 }
 
 const STREAMS = join(FIX, "refine/streams");
-const RESPONSES = (await Bun.file(join(FIX, "refine/responses.json")).json()) as Record<
+const RESPONSES = JSON.parse(await readFile(join(FIX, "refine/responses.json"), "utf8")) as Record<
   string,
   Canned[]
 >;
@@ -486,7 +488,7 @@ describe("--json", () => {
     try {
       const release = await whenReading(fifo, child);
       child.kill("SIGINT");
-      await Bun.sleep(50);
+      await delay(50);
       release("## 00:00 — 你好\n\n大家好。\n");
       const [code, stdout, stderr] = await Promise.all([
         child.exited,

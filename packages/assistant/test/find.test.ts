@@ -5,10 +5,10 @@
 //
 // pi's find cases that hinge on neither fd nor Windows, where a limit is a whole number; then the
 // walk's own: its ignore rules, refusals, aborts and arguments.
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TaskToolResult } from "@eidolon/engine";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FolderPolicy } from "../src/policy.ts";
 import { createFindTool, type FindDetails } from "../src/tools/find.ts";
 import { createGrepTool } from "../src/tools/grep.ts";

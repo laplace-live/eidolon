@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
 import { openaiSessionUpdate, openaiSttUrl, openOpenAIStt } from "../../src/stt/openai.ts";
 import {
@@ -13,13 +13,13 @@ import {
 
 let server: FakeServer;
 let logs: ReturnType<typeof captureLogs>;
-beforeEach(() => {
-  server = new FakeServer();
+beforeEach(async () => {
+  server = await FakeServer.start();
   logs = captureLogs();
 });
-afterEach(() => {
+afterEach(async () => {
   setUsageSink(null);
-  server.stop();
+  await server.stop();
   logs.restore();
 });
 

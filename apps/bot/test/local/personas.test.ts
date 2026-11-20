@@ -1,10 +1,10 @@
 // /api/local/personas: creating and switching personas, and each one's files. Every write lands in
 // the user's copy in the data home, and the templates' bytes are pinned across this whole file.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   activePersona,
   dataHome,
@@ -15,6 +15,8 @@ import {
   templatesDir,
 } from "@eidolon/config";
 import { referenceCandidates, referenceSources } from "@eidolon/imagegen";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { parse as parseYaml } from "yaml";
 import { MAX_UPLOAD_BYTES } from "../../src/local/routes/personas.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, fakeModules, raw } from "./harness.ts";
@@ -105,11 +107,14 @@ function api(
     body === undefined || body instanceof Uint8Array || body instanceof ReadableStream
       ? (body as BodyInit | undefined)
       : JSON.stringify(body);
-  return fetch(`${booted.base}/api/local${path}`, {
+  // Node's fetch sends a stream only as a half-duplex request.
+  const init: RequestInit & { duplex?: "half" } = {
     method,
     headers: { ...booted.session, "Content-Type": type },
     body: encoded,
-  });
+    ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
+  };
+  return fetch(`${booted.base}/api/local${path}`, init);
 }
 
 async function call(method: string, path: string, body?: unknown, type?: string) {
@@ -179,7 +184,7 @@ describe("listing and creating", () => {
       201,
       { id: "aria", name: "阿莉亚", shortName: "莉亚", template: false, own: true, avatar: false },
     ]);
-    const yaml = Bun.YAML.parse(readFileSync(join(personaHomeDir("aria"), "persona.yaml"), "utf8"));
+    const yaml = parseYaml(readFileSync(join(personaHomeDir("aria"), "persona.yaml"), "utf8"));
     expect(yaml).toEqual({
       identity: {
         name: "阿莉亚",
@@ -208,7 +213,7 @@ describe("listing and creating", () => {
       summary: "",
     });
     expect(created.status).toBe(201);
-    const yaml = Bun.YAML.parse(readFileSync(join(personaHomeDir("aria"), "persona.yaml"), "utf8"));
+    const yaml = parseYaml(readFileSync(join(personaHomeDir("aria"), "persona.yaml"), "utf8"));
     expect(Object.keys((yaml as { identity: object }).identity)).toEqual(["name", "timezone"]);
     expect(readPersonaIdentity("aria")).toMatchObject({ shortName: "阿莉亚", fans: "观众" });
     expect(readFileSync(join(personaHomeDir("aria"), "prompt.md"), "utf8")).toContain("观众");
@@ -247,7 +252,7 @@ describe("switching", () => {
     expect([switched.status, switched.body.active]).toEqual([200, "aria"]);
     expect(activePersona().id).toBe("aria");
     expect(activePersona().identity.name).toBe("阿莉亚");
-    expect(Bun.YAML.parse(readFileSync(join(dataHome(), "settings.yaml"), "utf8"))).toEqual({
+    expect(parseYaml(readFileSync(join(dataHome(), "settings.yaml"), "utf8"))).toEqual({
       persona: "aria",
     });
   });
@@ -283,7 +288,7 @@ describe("switching", () => {
       headers: { ...booted.session, "Content-Type": "application/json" },
       body: JSON.stringify({ sdp: "v=0\r\n", type: "offer" }),
     });
-    for (let i = 0; i < 500 && offering === 0; i++) await Bun.sleep(2);
+    for (let i = 0; i < 500 && offering === 0; i++) await delay(2);
     expect(offering).toBe(1);
     return {
       answer,
@@ -355,11 +360,12 @@ describe("prompt, glossary and identity", () => {
     expect([read.body.source, read.body.errors]).toEqual(["template", []]);
     const broken = await call("PUT", `/personas/${MILKY}/glossary`, { text: "terms = [1,\n" });
     expect([broken.status, broken.body.error.code]).toEqual([400, "invalid-toml"]);
-    expect(broken.body.error.message).toBe("line 1, column 12: Unterminated array; expected ']'");
+    expect(broken.body.error.message).toBe("line 2, column 1: invalid value");
     // The place in the TOML, counted in characters, never this server's own source position.
     for (const [text, message] of [
-      ["a = 1\n\n  b = = 2\n", "line 3, column 7: Expected a value but found '='"],
-      ['"名字" = "奶绿"\n"别名" = = "x"\n', "line 2, column 8: Expected a value but found '='"],
+      ["a = 1\n\n  b = = 2\n", "line 3, column 7: invalid value"],
+      ['"名字" = "奶绿"\n"别名" = = "x"\n', "line 2, column 8: invalid value"],
+      ['terms = ["a", "b"\n', "line 2, column 1: expected comma or end of structure"],
     ] as const) {
       const refused = await call("PUT", `/personas/${MILKY}/glossary`, { text });
       expect([refused.status, refused.body.error.message]).toEqual([400, message]);
@@ -387,7 +393,7 @@ describe("prompt, glossary and identity", () => {
       fans: "",
     });
     expect(saved.body).toEqual({ ...read.body, shortName: "绿", fans: "" });
-    const own = Bun.YAML.parse(
+    const own = parseYaml(
       readFileSync(join(personaHomeDir(MILKY), "persona.yaml"), "utf8"),
     ) as Record<string, any>;
     expect(own.identity.viewerLine).toBe("今天来花店的{fans}叫「{viewer}」（B站UID:{uid}）。");

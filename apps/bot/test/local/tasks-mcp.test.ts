@@ -2,7 +2,6 @@
 // network: each call's card and its answers, when Always applies, what mcp.json's switches do to a
 // running task, and that every way a task ends kills its servers.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   lstatSync,
@@ -17,6 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   mcpCallKey,
   REVIEW_SYSTEM,
@@ -31,6 +31,7 @@ import type { PermissionLevel } from "@eidolon/chat";
 import { type AssistantSettings, dataHome } from "@eidolon/config";
 import type { createMind, MindChunk, MindRequest, MindToolCall, TaskEntry } from "@eidolon/engine";
 import { reportUsage } from "@eidolon/providers";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import {
   TaskManager,
   type TaskManagerOptions,
@@ -40,7 +41,7 @@ import { ensureDataHome } from "../../src/local/write.ts";
 import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
 
 const FIXTURE = join(
-  import.meta.dir,
+  import.meta.dirname,
   "../../../../packages/assistant/test/fixtures/mcp-server.mjs",
 );
 
@@ -236,7 +237,7 @@ async function booted(): Promise<TaskManager> {
 
 /** The fake server's entry: its flags, then mcp.json's own fields. */
 function fake(flags: readonly string[] = [], fields: Record<string, unknown> = {}) {
-  return { command: process.execPath, args: ["--no-env-file", FIXTURE, ...flags], ...fields };
+  return { command: process.execPath, args: [FIXTURE, ...flags], ...fields };
 }
 
 const MCP_JSON = () => join(dataHome(), "mcp.json");
@@ -273,7 +274,7 @@ async function until(check: () => boolean | Promise<boolean>, ms = 5000): Promis
   const deadline = Date.now() + ms;
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 

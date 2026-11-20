@@ -13,6 +13,7 @@ import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { errorText, isPlainObject } from "@eidolon/config";
 import { estimateTokens } from "@eidolon/engine";
+import { parse as parseYaml } from "yaml";
 import { fold, isMissing } from "./policy.ts";
 import { formatSize, sliceHead } from "./tools/truncate.ts";
 
@@ -160,7 +161,9 @@ function parseFrontmatter(content: string): Frontmatter {
   if (end === -1) return { fields: {}, yamlError: null };
   const yaml = normalized.slice(4, end);
   try {
-    const parsed: unknown = Bun.YAML.parse(yaml);
+    // A repeated key keeps its last value. An error's line would count from the frontmatter, not
+    // from the file, so its message goes without one.
+    const parsed: unknown = parseYaml(yaml, { uniqueKeys: false, prettyErrors: false });
     return { fields: isPlainObject(parsed) ? parsed : {}, yamlError: null };
   } catch (error) {
     return { fields: lineFields(yaml), yamlError: errorText(error) };

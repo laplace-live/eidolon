@@ -1,6 +1,5 @@
 // A task's card: the steps it opens as the chat's display says, what a command or a tool call
 // asks, and its details. Rendered to markup, with the macros stubbed.
-import { describe, expect, mock, test } from "bun:test";
 import type { ChatDisplay } from "@eidolon/chat";
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
@@ -8,15 +7,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
+import { describe, expect, test, vi } from "vitest";
 import type { TaskSnapshot, TaskStatus } from "@/lib/api";
 import { formatClock } from "@/lib/format";
 import { statusQuery } from "@/lib/query";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
-mock.module("@lingui/core/macro", linguiMacro);
-mock.module("@lingui/react/macro", linguiReactMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/react/macro", linguiReactMacro);
 // The drafts' store has no server snapshot, and they aren't what this checks.
-mock.module("./draft", () => ({
+vi.doMock("./draft", () => ({
   useDraft: <T>(_key: string, initial: T) => [initial, () => {}] as const,
 }));
 const { TaskCard } = await import("./task-card");

@@ -4,14 +4,16 @@
 import "../../../../packages/config/test/isolated-guard.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { sourceFolder } from "@eidolon/config";
 import type { RouteHandler } from "../../src/app.ts";
 import type { JobSnapshot } from "../../src/local/api.ts";
 import type { ArgvBuilder, JobRunnerOptions } from "../../src/local/jobs/runner.ts";
 import { createLocalRouter, type LocalApp } from "../../src/local/router.ts";
 import { jobsRoutes } from "../../src/local/routes/jobs.ts";
+import { serveRoutes } from "../serve.ts";
 
-export const FAKE_CLI = join(import.meta.dir, "jobs-fake-cli.ts");
+export const FAKE_CLI = join(import.meta.dirname, "jobs-fake-cli.ts");
 
 export interface FakeCli {
   /** What the next job's fake CLI does: a case of jobs-fake-cli.ts. */
@@ -27,15 +29,7 @@ export function fakeCli(): FakeCli {
     calls: [],
     argv: (command, args) => {
       cli.calls.push([command, ...args]);
-      return [
-        process.execPath,
-        "--no-env-file",
-        FAKE_CLI,
-        cli.scenario,
-        command,
-        "--json",
-        ...args,
-      ];
+      return [process.execPath, FAKE_CLI, cli.scenario, command, "--json", ...args];
     },
   };
   return cli;
@@ -66,7 +60,7 @@ export async function until(check: () => boolean | Promise<boolean>, ms = 5000):
   const deadline = Date.now() + ms;
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
-    await Bun.sleep(10);
+    await delay(10);
   }
 }
 
@@ -90,7 +84,7 @@ export interface JobsServer {
 }
 
 /** The jobs routes behind the local router, every caller signed in. */
-export function serveJobs(options: Omit<JobRunnerOptions, "argv"> = {}): JobsServer {
+export async function serveJobs(options: Omit<JobRunnerOptions, "argv"> = {}): Promise<JobsServer> {
   const cli = fakeCli();
   const stops: (() => Promise<void>)[] = [];
   let port = 0;
@@ -107,14 +101,9 @@ export function serveJobs(options: Omit<JobRunnerOptions, "argv"> = {}): JobsSer
     jobsRoutes(app, { argv: cli.argv, pollMs: 20, ...options }),
     () => "bearer",
   );
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    routes: { "/api/local/*": router },
-    fetch: () => new Response(null, { status: 404 }),
-  });
-  port = server.port as number;
-  const base = `http://127.0.0.1:${port}`;
+  const server = await serveRoutes({ "/api/local/*": router });
+  port = server.port;
+  const base = server.url;
   const call = (method: string, path: string, body?: unknown): Promise<Response> =>
     fetch(`${base}${path}`, {
       method,
@@ -139,7 +128,7 @@ export function serveJobs(options: Omit<JobRunnerOptions, "argv"> = {}): JobsSer
     },
     async close() {
       for (const stop of stops) await stop();
-      await server.stop(true);
+      await server.stop();
     },
   };
 }

@@ -6,7 +6,7 @@
 //
 // test_volume_is_measured_once_per_update isn't ported: it mocks the measurement's module, and
 // here the measurement and the tracker share one.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { AudioVolumeTracker, VOLUME_WINDOW_SECS } from "../../src/input/loudness.ts";
 import { mulberry32 } from "./speech.ts";
 

@@ -1,9 +1,9 @@
 // The catalogs `bun run i18n` extracts: every message translated with the same placeholders, and
 // every SETTINGS row titled. Records keyed by a union type cover the other codes at compile time.
-import { expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SETTINGS } from "@eidolon/config";
+import { expect, test, vi } from "vitest";
 import { linguiMacro } from "@/test/lingui-macro";
 import { LANGS } from "./i18n";
 
@@ -27,7 +27,7 @@ function catalog(lang: string): Entry[] {
     if (current !== null && current.id !== "") entries.push(current);
     current = null;
   };
-  for (const raw of readFileSync(join(import.meta.dir, `${lang}.po`), "utf8").split("\n")) {
+  for (const raw of readFileSync(join(import.meta.dirname, `${lang}.po`), "utf8").split("\n")) {
     const obsolete = raw.startsWith("#~ ");
     const line = obsolete ? raw.slice(3) : raw;
     if (line.startsWith("msgctxt ")) {
@@ -76,7 +76,7 @@ test("every message has a Chinese translation with the same placeholders and tag
 });
 
 test("every SETTINGS row has a title, and help only for rows there are", async () => {
-  mock.module("@lingui/core/macro", linguiMacro);
+  vi.doMock("@lingui/core/macro", linguiMacro);
   const { SETTING_HELP, SETTING_TITLES } = await import("@/components/settings-form/labels");
   const paths = SETTINGS.map((row) => row.path);
   expect(paths.filter((path) => !(path in SETTING_TITLES))).toEqual([]);

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { AudioQueue } from "../../src/speech/stream/shared.ts";
 import { alnumCount, WordTimeline } from "../../src/speech/stream/timeline.ts";
 import { collect, plain } from "./fake.ts";

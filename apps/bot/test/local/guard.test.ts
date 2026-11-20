@@ -1,8 +1,9 @@
 // The guard matrix: Host, Origin, Sec-Fetch-Site, the session and the socket peer, for every kind
 // of route the local server answers. Raw sockets, so Host says exactly what a test means.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { MemoryAdmin } from "@eidolon/memory";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { serveFetch } from "../../../../packages/config/test/http.ts";
 import type { RouteServer } from "../../src/app.ts";
 import { type ErrorBody, PROOF_HEADER as PROOF } from "../../src/local/api.ts";
 import { allowedHosts, guardRequest, isApiPath, isLoopbackAddress } from "../../src/local/guard.ts";
@@ -266,20 +267,16 @@ describe("the session", () => {
   test("a cookie another localhost port received, replayed with a forged Origin, opens nothing", async () => {
     // Cookies ignore ports: a page's request to any localhost port carries Eidolon's cookie.
     const seen: { cookie: string | null } = { cookie: null };
-    const elsewhere = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch(request) {
-        seen.cookie = request.headers.get("cookie");
-        return new Response("ok");
-      },
+    const elsewhere = await serveFetch((request) => {
+      seen.cookie = request.headers.get("cookie");
+      return new Response("ok");
     });
     try {
-      await fetch(`http://127.0.0.1:${elsewhere.port}/`, {
+      await fetch(`${elsewhere.url}/`, {
         headers: { Cookie: `theirs=1; ${booted.cookie}` },
       });
     } finally {
-      await elsewhere.stop(true);
+      await elsewhere.stop();
     }
     expect(seen.cookie).toContain(booted.cookie);
     const before = [memoryCalls, booted.fakes.offers.length];
@@ -378,17 +375,20 @@ test("no response the matrix saw carried a CORS header", async () => {
   for (const route of ROUTES) expectNoCors(await send(route, signedIn()), route.path);
 });
 
-test("/api/local/* answers no-store; a path that `..` leads out of it is the router's 404", async () => {
+test("/api/local/* answers no-store; a path that `..` leads out of it is the path it leads to", async () => {
   const status = await send(ROUTES[12] as Route, signedIn());
   expect(status.headers.get("cache-control")).toBe("no-store");
-  const escaped = await send(
-    { method: "GET", path: "/api/local/../memories", session: true, api: true },
-    signedIn(),
-  );
-  expect([escaped.status, escaped.body]).toEqual([
-    404,
-    '{"error":{"code":"not-found","message":"No such API route"}}',
-  ]);
+  for (const headers of [signedIn(), {}]) {
+    const escaped = await send(
+      { method: "GET", path: "/api/local/../memories", session: true, api: true },
+      headers,
+    );
+    const direct = await send(
+      { method: "GET", path: "/api/memories", session: true, api: true },
+      headers,
+    );
+    expect([escaped.status, escaped.body]).toEqual([direct.status, direct.body]);
+  }
 });
 
 describe("guardRequest", () => {

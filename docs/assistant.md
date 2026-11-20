@@ -231,7 +231,7 @@ task's MCP tools come after them all.
 | `write` | `path`, `content` | makes parent folders; writes to one file queue, keyed by realpath |
 | `edit` | `path`, `edits[{ oldText, newText }]` | an exact match, then a fuzzy one, which replaces only the text it covers; each edit unique and apart; keeps CRLF and the BOM; refuses a file that isn't UTF-8 |
 | `ls` | `path`, `limit` | 500 entries or 50 KB; `/` after folders, dotfiles listed |
-| `find` | `pattern`, `path`, `limit` | 1,000 results or 50 KB; `Bun.Glob` with `.gitignore` rules (the `ignore` package), not pi's `fd` |
+| `find` | `pattern`, `path`, `limit` | 1,000 results or 50 KB; minimatch, where a dot file matches, a leading `#` is part of a name and each leading `!` negates but one that opens `!(`, with `.gitignore` rules (the `ignore` package), not pi's `fd` |
 | `grep` | `pattern`, `path`, `glob`, `ignoreCase`, `literal`, `limit` | 100 matches, 500 characters of a line around its match, 50 KB; JavaScript regexes in Unicode mode, not pi's `rg`, though a `]` or `}` that closes nothing matches itself, as in `rg`; skips binary files |
 | `skill` | `name` (an enum of the listed skills and those she named), `path` (default `SKILL.md`), `offset`, `limit` | a file in such a skill's folder, read as `read` reads, or a folder's entries (50, 3 deep); never a dot-file or dot-folder ([Skills](#skills)) |
 | `bash` | `command`, `timeout` (seconds, default 120, at most 1,800), `wait` | `bash -c` in the task's folder, with no input and no terminal; the last 2,000 lines or 50 KB of what it printed, all of it in its log; to the background after 10 s unless `wait`; killed at its timeout, its time in the background included, or once its output passes 16 MB; a command over 12 KB as JSON is refused unasked ([Commands](#commands)) |
@@ -251,11 +251,11 @@ isn't UTF-8 (Latin-1, UTF-8 with a stray byte) reads as UTF-8, with replacement 
 a restart cut them short; `edit`, `bash` and an MCP tool don't (`replay: "never"`), since a
 command or a server may have done its work.
 
-`grep` matches in a child Bun, since a backtracking regex can hold its thread for minutes (`\w+x`
-over a long line); a cancel kills it, and it ends itself once the process that started it is
-gone. A line whose test fails after 50 ms (past its backtracking limit JavaScriptCore answers no
-match, with no error), or a batch of lines still running after 2 s, is left unsearched and named
-in a notice that says how to simplify the pattern. The search goes on past it, and stops with
+`grep` matches in a child Node, since a backtracking regex can hold its thread for minutes (`\w+x`
+over a long line) and V8 sets no limit on one: the 2 s deadline is what stops it. A cancel kills
+the child, and it ends itself once the process that started it is gone. A line whose test fails
+after 50 ms, or a batch of lines still running after 2 s, is left unsearched and named in a notice
+that says how to simplify the pattern. The search goes on past it, and stops with
 what it found once such lines have taken 5 s.
 
 **`web_fetch` never reaches the owner's computer or network.** It is offered only when the task
@@ -271,20 +271,23 @@ asked at the call and again at every redirect.
   same way, and `webFetchHost` returns null for a refused one, so the owner is never asked about
   it. Every redirect target is checked again.
 - The connection goes to the address that was checked, with the name sent as `Host` and as the TLS
-  server name (Bun's documented "Connecting to a specific address"), so DNS rebinding can't lead
-  it elsewhere. For the same reason it never goes through `HTTP_PROXY` or `HTTPS_PROXY`.
+  server name and checked against the certificate (`PinnedAgent`, an undici dispatcher whose
+  lookup answers that address), so DNS rebinding can't lead it elsewhere. For the same reason it
+  never goes through `HTTP_PROXY` or `HTTPS_PROXY`. Bun's fetch ignores a dispatcher, so under Bun
+  the tool refuses to run.
 - **Behind a fake-IP proxy,** a TUN that answers every name from 198.18.0.0/15 and resolves the
   name itself when a connection reaches one of those, the address checked isn't the one reached.
   So a system answer with any address in that range is set aside, and the name is asked of
   Cloudflare's DNS over HTTPS by address (`GET https://1.1.1.1/dns-query?name=<host>&type=A` and
-  `&type=AAAA`, `accept: application/dns-json`, `proxy: false`, under the call's cancel and 30 s).
-  Its A and AAAA answers (CNAMEs skipped) are checked like any others and one is dialed, pinned;
-  each redirect hop goes the same way. 198.18.0.0/15 in a URL or a DoH answer is refused, checked
-  before the interfaces, since the TUN has its own address in it. A DoH request that fails, or
-  answers anything but 200 with NOERROR or NXDOMAIN, and an answer with no address, fail the call
-  with a message naming the proxy and the resolver; it never falls back to the stand-in. NXDOMAIN
-  reads as `Can't find <host> (ENOTFOUND).`, and when none of the real addresses answers, the
-  error says they came from DoH in the proxy's place before Bun's own text.
+  `&type=AAAA`, `accept: application/dns-json`, on a direct undici `Agent`, under the call's cancel
+  and 30 s). Its A and AAAA answers (CNAMEs skipped) are checked like any others and one is
+  dialed, pinned; each redirect hop goes the same way. 198.18.0.0/15 in a URL or a DoH answer is
+  refused, checked before the interfaces, since the TUN has its own address in it. A DoH request
+  that fails, or answers anything but 200 with NOERROR or NXDOMAIN, and an answer with no address,
+  fail the call with a message naming the proxy and the resolver; it never falls back to the
+  stand-in. NXDOMAIN reads as `Can't find <host> (ENOTFOUND).`, and when none of the real
+  addresses answers, the error says they came from DoH in the proxy's place before the reason
+  Node's fetch gives (the `cause` of its `fetch failed`).
 - **Not covered:** a TUN whose sniffer reads the Host or SNI of the pinned connection and resolves
   the name again (mihomo's sniffer, or sing-box's sniff, with override-destination) can still be
   led to loopback or the LAN by a rebinding name; this Mac's Surge carries a pinned connection to
@@ -310,9 +313,8 @@ call that started it. Each command waits for the owner's OK first ([Approvals](#
 - **Eidolon's own commands:** `<data home>/bin` leads the `PATH` (`BashJobs`' `bin`), past the same
   filter. It holds the managed yt-dlp, once Eidolon has installed it, and `eidolon`,
   which `TaskManager.boot()` writes again at each start (`writeEidolonCommand`, 0700): a `sh`
-  script that runs this install's CLI (`cliEntry()`) on the app's own Bun with `--no-env-file`,
-  setting `EIDOLON_HOME` to the app's data home, `BUN_OPTIONS` to the app's, else
-  `--config=<app>/bunfig.toml` (so the task folder's `bunfig.toml` can't preload code into it), and
+  script that runs this install's CLI (`cliEntry()`) on the app's own runtime (`jsRuntime()`),
+  setting `EIDOLON_HOME` to the app's data home, `ELECTRON_RUN_AS_NODE` inside Electron, and
   the npm launcher's `EIDOLON_APP_ROOT` and `EIDOLON_NO_DOTENV` when the app has them. `eidolon
   discover` is the [persona-update](#the-built-in-skills) skill's step; `eidolon pipeline` and
   the rest run too, each behind the card like any other command, but a task's command dies at 30

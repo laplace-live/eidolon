@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { cloudflareTurnKeyFromEnv, mintCloudflareIce } from "../src/index.ts";
 import { blockNetwork, captureLogs, fakeFetch, lines, useEnv } from "./support.ts";
 
@@ -137,7 +137,9 @@ describe("mintCloudflareIce", () => {
     const started = performance.now();
     expect(await mintCloudflareIce(KEY, 3600, { fetch: hanging, timeoutMs: 20 })).toBeNull();
     expect(performance.now() - started).toBeGreaterThanOrEqual(15);
-    expect(lines(logs)).toEqual([`${PREFIX}TimeoutError: The operation timed out.`]);
+    expect(lines(logs)).toEqual([
+      `${PREFIX}TimeoutError: The operation was aborted due to timeout`,
+    ]);
   });
 
   test("a body that stalls past the timeout fails too", async () => {
@@ -151,7 +153,9 @@ describe("mintCloudflareIce", () => {
       return new Response(body, { status: 201 });
     });
     expect(await mintCloudflareIce(KEY, 3600, { fetch, timeoutMs: 20 })).toBeNull();
-    expect(lines(logs)).toEqual([`${PREFIX}TimeoutError: The operation timed out.`]);
+    expect(lines(logs)).toEqual([
+      `${PREFIX}TimeoutError: The operation was aborted due to timeout`,
+    ]);
   });
 
   test("never logs the token or the credential", async () => {

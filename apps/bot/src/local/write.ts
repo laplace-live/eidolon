@@ -43,7 +43,8 @@ function realish(path: string): string {
     at = dirname(at);
   }
   try {
-    at = realpathSync(at);
+    // realpath(3) gives the letter case on disk, which the JavaScript realpathSync keeps as given.
+    at = realpathSync.native(at);
   } catch {
     // A dangling link or a race: compare it as written.
   }
@@ -81,7 +82,7 @@ export function writeDataFile(
   ensureDataHome();
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   refuse(path);
-  const folder = realpathSync(dirname(path));
+  const folder = realpathSync.native(dirname(path));
 
   const bytes = typeof data === "string" ? Buffer.from(data, "utf8") : data;
   const temp = join(folder, `.${basename(path)}.${randomBytes(6).toString("hex")}.tmp`);

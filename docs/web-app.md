@@ -19,7 +19,7 @@ bun run app        # builds apps/web/dist when it has no index.html, then `local
 | --- | --- |
 | `bun run app` | `bun run build:web` when the app isn't built, then `bun run local --open` |
 | `bun run local` | `apps/bot/src/local/main.ts`: the supervisor and the server under it. Without a build it exits 2 and names `bun run build:web` |
-| `bun run dev:local` | `apps/bot/src/local/server.ts` alone, under `bun --watch` |
+| `bun run dev:local` | `apps/bot/src/local/server.ts` alone, under `node --watch` |
 | `bun run dev:web` | Vite on `http://127.0.0.1:5173`, proxying `/api` and `/mcp` to the server on `localhost:7860` |
 | `bun run build:web` | `apps/web/dist` |
 
@@ -50,17 +50,18 @@ refuses every other page.
 ### From the npm package
 
 `npx @laplace.live/eidolon` runs the same app with no checkout. The package's launcher,
-`bin/eidolon.mjs`, starts its bundles on the Bun it installs, with `EIDOLON_NO_DOTENV=1` and
-`EIDOLON_APP_ROOT` set to the package. `dist/app.js` and `dist/server.js` are the supervisor and
-the server, which serves `web/` in place of `apps/web/dist`, and jobs run `dist/cli.js` in place of
-`apps/cli/src/main.ts`. `eidolon <command>` runs an offline command the same way.
+`bin/eidolon.mjs`, starts its bundles on the Node running it, with `EIDOLON_NO_DOTENV=1` and
+`EIDOLON_APP_ROOT` set to the package; on a Node older than 24 it says so and exits.
+`dist/app.js` and `dist/server.js` are the supervisor and the server, which serves `web/` in place
+of `apps/web/dist`, and jobs run `dist/cli.js` in place of `apps/cli/src/main.ts`.
+`eidolon <command>` runs an offline command the same way.
 
-The launcher exits as Bun does. A terminal's Ctrl-C reaches Bun directly, and SIGTERM or SIGHUP
-sent to the launcher reach it as SIGTERM. A SIGINT sent to the launcher's pid alone is ignored,
-so that Ctrl-C reaches a running command once. A SIGTERM sent to the whole process group, as
-`timeout` sends one, reaches Bun twice, directly and through the launcher; a command counts a
-second signal within half a second as the first, and only a later one makes it quit without
-finishing an index. A tool that stops the app should send SIGTERM.
+The launcher exits as its child does. A terminal's Ctrl-C reaches the child directly, and SIGTERM
+or SIGHUP sent to the launcher reach it as SIGTERM. A SIGINT sent to the launcher's pid alone is
+ignored, so that Ctrl-C reaches a running command once. A SIGTERM sent to the whole process group,
+as `timeout` sends one, reaches the child twice, directly and through the launcher; a command
+counts a second signal within half a second as the first, and only a later one makes it quit
+without finishing an index. A tool that stops the app should send SIGTERM.
 
 ## What stays out of production
 
@@ -651,14 +652,15 @@ with `-`, is refused. No request reaches `--yt-dlp-args`, a path flag, `--cookie
 | `refine`, `ingest-streams`, `ingest-facts`, `build-stream-catalog` | none | the command, for her |
 | `plan` | `refresh` | `laplace-pipeline --dry-run` over every video she has |
 
-A job is `bun --no-env-file apps/cli/src/main.ts <command> --json …` (`jobArgv` in
-`@eidolon/cli/job`), started in the data home, detached in its own process group, so Ctrl-C in the
-terminal reaches only the server. Its files are in `<data home>/jobs/` (0700): the record
-`<id>.json`, its stdout `<id>.ndjson` (the [progress events](typescript.md#progress-events)) and
-its stderr `<id>.log`, both 0600. The server tails the files, so a job outlives a reloaded page and
-the server itself. `GET jobs/:id` is a snapshot reduced from the events (status, each stage's
-done and total, cost so far, failures, the end of stderr, and whether the run's summary arrived);
-`events?after=<byte offset>` streams the events from there; `log` is stderr, or its last MiB.
+A job is `node apps/cli/src/main.ts <command> --json …`, on the Node running the server
+(`jobArgv` in `@eidolon/cli/job`), started in the data home, detached in its own process group,
+so Ctrl-C in the terminal reaches only the server. Its files are in `<data home>/jobs/` (0700): the
+record `<id>.json`, its stdout `<id>.ndjson` (the [progress events](typescript.md#progress-events))
+and its stderr `<id>.log`, both 0600. The server tails the files, so a job outlives a reloaded
+page and the server itself. `GET jobs/:id` is a snapshot reduced from the events (status, each
+stage's done and total, cost so far, failures, the end of stderr, and whether the run's summary
+arrived); `events?after=<byte offset>` streams the events from there; `log` is stderr, or its last
+MiB.
 
 A job ends `succeeded` by its run's summary; `cancelled` when you stopped it; `interrupted` when
 the server's own stop or restart stopped it, another signal did, or it ended while no server
@@ -877,9 +879,9 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
     while it runs, whose end's notice wakes the worker, who reads it with `bash_output`. **Show
     Steps** lists the skill, the commands and the notice; Settings' **Allowed Commands** lists the
     one allowed for good, whose **Remove** empties `allowed-commands.json`;
-  - an `mcp.json` naming `packages/assistant/test/fixtures/mcp-server.mjs`, run on this Bun with
-    `echo` its one tool: a task whose worker calls it twice, its card naming the tool, the server,
-    the server's read-only hint and the argument with its size, answered **Run Once**, then
+  - an `mcp.json` naming `packages/assistant/test/fixtures/mcp-server.mjs`, run on the smoke's
+    Bun with `echo` its one tool: a task whose worker calls it twice, its card naming the tool, the
+    server, the server's read-only hint and the argument with its size, answered **Run Once**, then
     **Always Allow This Tool**, which `mcp.json` keeps at 0600, the server's process gone once the
     task ends; a second task, called `other` and showing no kind, whose call runs unasked; then
     Settings' **MCP Servers** taking the Always back;

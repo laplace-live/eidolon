@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { proofHeaders } from "./proof";
 import { exchangeLinkCode, linkCodeIn, takeLinkCode } from "./session";
 
 afterEach(() => {
-  mock.restore();
+  vi.restoreAllMocks();
 });
 
 const CODE = "1762300000.Qm9vdHN0cmFwLWxpbmstY29kZS1ITUFDLXNoYTI1Ng_-";
@@ -52,15 +52,15 @@ describe("takeLinkCode", () => {
 
 describe("exchangeLinkCode", () => {
   test("keeps the proof the server answers with, for every later request", async () => {
-    spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ok: true, proof: "p-1" }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ok: true, proof: "p-1" }));
     expect(await exchangeLinkCode(CODE)).toBeNull();
     expect(proofHeaders()).toEqual({ "X-Eidolon-Proof": "p-1" });
   });
 
   test("a refused code keeps no proof", async () => {
-    spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ok: true, proof: "p-2" }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ok: true, proof: "p-2" }));
     await exchangeLinkCode(CODE);
-    spyOn(globalThis, "fetch").mockResolvedValue(
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({ error: { code: "link-expired", message: "old" } }, { status: 401 }),
     );
     expect((await exchangeLinkCode(CODE))?.code).toBe("link-expired");

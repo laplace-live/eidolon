@@ -1,16 +1,16 @@
 // laplace-chat's capitalization, held for every label written where the scanner can tell it is one:
 // buttons, menu items, field and column labels, headings, setting names and aria-labels are Title
 // Case; a sentence, a question or a status in progress keeps sentence case.
-import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { parse } from "@babel/parser";
+import { describe, expect, test } from "vitest";
 import { keepsSentenceCase, labelsIn, titleCase } from "../../scripts/title-case.ts";
 
 /** Headings phrased as a sentence, which nothing in their text marks as one. */
 const SENTENCE_HEADINGS = new Set(["You're all set"]);
 
-const SRC = join(import.meta.dir, "..");
+const SRC = join(import.meta.dirname, "..");
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

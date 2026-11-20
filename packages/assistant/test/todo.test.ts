@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
 import type { TaskToolResult } from "@eidolon/engine";
+import { describe, expect, it } from "vitest";
 import { createTodoTool, TODO_STATUSES } from "../src/tools/todo.ts";
 import { toolContext } from "./tool-folder.ts";
 

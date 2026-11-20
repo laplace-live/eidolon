@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { ChatDisplay } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import type { TaskPending, TaskSnapshot, TaskStatus } from "@/lib/api";
 import { STEER_PREFIX } from "../../../../bot/src/local/api.ts";
 import {

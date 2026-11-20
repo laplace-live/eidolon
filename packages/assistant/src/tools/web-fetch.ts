@@ -1,12 +1,15 @@
 // web_fetch: a page on the web, as text the worker can read. The names and addresses of the
 // owner's computer and network are refused before any connection, and each connection goes to the
 // address that was checked, so a name that answers differently a moment later (DNS rebinding)
-// can't lead there.
+// can't lead there. That takes Node: Bun's fetch ignores the dispatcher that holds a connection to
+// the checked address.
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { networkInterfaces } from "node:os";
 import { errorText, raceAbort } from "@eidolon/config";
 import type { TaskToolResult } from "@eidolon/engine";
+import { Parser } from "htmlparser2";
+import { Agent, type Dispatcher } from "undici";
 import type { AssistantTool } from "../types.ts";
 import { ABORTED, errorResult, invalidArguments, stringArgument } from "./results.ts";
 import { DEFAULT_MAX_BYTES, formatSize, truncateHead, truncateLine } from "./truncate.ts";
@@ -20,6 +23,8 @@ const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const ERROR_BODY_CHARS = 2000;
 const REDIRECTS: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
 const NEVER_REACHED = "this computer or its network, which web_fetch never reaches";
+const ON_BUN =
+  "web_fetch can't run here: it needs Node, and Eidolon is running on Bun, whose fetch can't be held to the address web_fetch checked.";
 
 /** Which sites a task's web_fetch may reach. */
 export interface WebAccess {
@@ -46,7 +51,10 @@ export type WebLookup = (
   host: string,
 ) => Promise<readonly { readonly address: string; readonly family: number }[]>;
 
-export type WebFetcher = (url: string, init: BunFetchRequestInit) => Promise<Response>;
+/** fetch's init, with the undici dispatcher Node's fetch takes. */
+export type WebFetchInit = RequestInit & { dispatcher?: Dispatcher };
+
+export type WebFetcher = (url: string, init: WebFetchInit) => Promise<Response>;
 
 /** This computer's network interfaces, as os.networkInterfaces gives them. */
 export type WebInterfaces = () => Readonly<
@@ -69,6 +77,37 @@ export interface WebFetchOptions {
 
 /** Ends a call, its message the result. */
 class Stopped extends Error {}
+
+/** Why a fetch failed: Node's says "fetch failed", and why in its cause. */
+function failureText(error: unknown): string {
+  const cause = error instanceof TypeError ? error.cause : undefined;
+  return errorText(cause instanceof Error ? cause : error);
+}
+
+/**
+ * A dispatcher that connects to `address` whatever its URL's name resolves to: Host, SNI and the
+ * certificate check keep the name. It goes direct: a proxy would resolve the name again.
+ */
+export class PinnedAgent extends Agent {
+  /** Where it connects. */
+  readonly address: string;
+
+  constructor(address: string) {
+    const family = isIP(address);
+    super({
+      connect: {
+        lookup: (_hostname, options, callback) => {
+          if (options.all) callback(null, [{ address, family }]);
+          else callback(null, address, family);
+        },
+      },
+    });
+    this.address = address;
+  }
+}
+
+/** No proxy for DNS over HTTPS either, whatever HTTP_PROXY and HTTPS_PROXY say. */
+const DIRECT = new Agent();
 
 function ipv4Value(address: string): number {
   return address.split(".").reduce((value, octet) => value * 256 + Number(octet), 0);
@@ -238,7 +277,7 @@ async function realAddresses(
     try {
       const response = await doh(url.href, {
         headers: { accept: "application/dns-json" },
-        proxy: false,
+        dispatcher: DIRECT,
         signal,
       });
       if (response.status !== 200) return `answered HTTP ${response.status}.`;
@@ -252,7 +291,7 @@ async function realAddresses(
           `${BEHIND_FAKE_IP}, and ${RESOLVER}, asked for ${host}'s real address, hadn't answered.`,
         );
       }
-      return `failed: ${errorText(error)}`;
+      return `failed: ${failureText(error)}`;
     }
   };
   const addresses: string[] = [];
@@ -317,33 +356,29 @@ async function connect(
   fetchImpl: WebFetcher,
   signal: AbortSignal,
 ): Promise<Response> {
-  const named = addressLiteral(url) === null;
+  // fetch refuses a URL that carries credentials.
+  const target = new URL(url.href);
+  target.username = "";
+  target.password = "";
   let failure: unknown;
   for (const address of addresses) {
-    const dial = new URL(url.href);
-    dial.hostname = isIP(address) === 6 ? `[${address}]` : address;
-    dial.username = "";
-    dial.password = "";
-    dial.hash = "";
+    const dispatcher = new PinnedAgent(address);
     try {
-      // Bun dials the URL's address, sends this Host, and uses serverName for SNI and for the
-      // certificate check. A proxy would resolve the name again, and Bun weighs NO_PROXY against
-      // the address, not the name: hence proxy false. Bun's fetch docs, "Connecting to a specific
-      // address": https://bun.com/docs/runtime/networking/fetch#connecting-to-a-specific-address
-      return await fetchImpl(dial.href, {
+      return await fetchImpl(target.href, {
         method: "GET",
-        ...(named && { headers: { host: url.host } }),
-        ...(named && url.protocol === "https:" && { tls: { serverName: siteOf(url) } }),
         redirect: "manual",
-        proxy: false,
+        dispatcher,
         signal,
       });
     } catch (error) {
       if (signal.aborted) throw error;
       failure ??= error;
+    } finally {
+      // It lets its connection go once the response has been read.
+      void dispatcher.close();
     }
   }
-  const why = errorText(failure);
+  const why = failureText(failure);
   const at = real
     ? ` at the addresses ${RESOLVER} gave, which web_fetch dials in place of the ones this computer's fake-IP proxy hands out`
     : "";
@@ -590,6 +625,7 @@ export function createWebFetchTool(options: WebFetchOptions): AssistantTool {
     ],
     replay: "safe",
     async execute(args, { signal }) {
+      if (process.versions.bun !== undefined) return errorResult(ON_BUN);
       const problems: string[] = [];
       const text = stringArgument(args, "url", problems);
       const url = problems.length > 0 ? null : httpUrl(text);
@@ -617,7 +653,7 @@ export function createWebFetchTool(options: WebFetchOptions): AssistantTool {
           return failed(`Timed out after ${timeoutMs / 1000} s fetching ${url.href}${waiting}`);
         }
         if (error instanceof Stopped) return failed(error.message);
-        return failed(`Couldn't fetch ${url.href}: ${errorText(error)}`);
+        return failed(`Couldn't fetch ${url.href}: ${failureText(error)}`);
       }
     },
   };
@@ -688,7 +724,7 @@ const ENTITIES: ReadonlyMap<string, string> = new Map([
   ).map(([name, code]): [string, string] => [name, String.fromCodePoint(code)]),
 ]);
 
-/** `text` with its character references decoded: HTMLRewriter hands text over as written. */
+/** `text` with its character references decoded: walkHtml hands text over as written. */
 function decodeEntities(text: string): string {
   if (!text.includes("&")) return text;
   return text.replace(
@@ -747,6 +783,98 @@ const ITEMS: ReadonlySet<string> = new Set(["li", "tr", "dt", "dd"]);
 /** Blocks whose items start a group of their own. */
 const LISTS: ReadonlySet<string> = new Set(["ul", "ol", "dl", "table"]);
 
+/** Elements with no content and no end tag. */
+const VOID: ReadonlySet<string> = new Set([
+  "area",
+  "base",
+  "basefont",
+  "bgsound",
+  "br",
+  "col",
+  "command",
+  "embed",
+  "frame",
+  "hr",
+  "img",
+  "input",
+  "keygen",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
+]);
+
+/** A start tag, as walkHtml hands it over. */
+interface HtmlElement {
+  /** Lowercase. */
+  readonly tagName: string;
+  /** False for a void element, which has no end tag. */
+  readonly canHaveContent: boolean;
+  /** As written: character references stay. */
+  getAttribute(name: string): string | null;
+  /** Runs `handler` where the element ends: at its end tag, or where the parser closes it. */
+  onEndTag(handler: () => void): void;
+}
+
+/**
+ * Walks `html`, calling `element` at each start tag and `text` with each run of text between tags
+ * and comments, as written: character references stay. An element whose end tag the page left out
+ * ends where the parser closes it, as when an enclosing one closes.
+ */
+function walkHtml(
+  html: string,
+  element: (element: HtmlElement) => void,
+  text: (text: string) => void,
+): void {
+  const open: { readonly name: string; readonly ends: (() => void)[] }[] = [];
+  // The parser can hand one run of text over in pieces, a character reference split between them.
+  let run = "";
+  const endRun = () => {
+    if (run === "") return;
+    const whole = run;
+    run = "";
+    text(whole);
+  };
+  const parser = new Parser(
+    {
+      onopentag(name, attributes) {
+        endRun();
+        const ends: (() => void)[] = [];
+        const canHaveContent = !VOID.has(name);
+        element({
+          tagName: name,
+          canHaveContent,
+          getAttribute: (attribute) => attributes[attribute] ?? null,
+          onEndTag: (handler) => ends.push(handler),
+        });
+        if (canHaveContent) open.push({ name, ends });
+      },
+      onclosetag(name) {
+        endRun();
+        const at = open.findLastIndex((entry) => entry.name === name);
+        if (at === -1) return;
+        const [entry] = open.splice(at, 1);
+        for (const end of entry.ends) end();
+      },
+      ontext(chunk) {
+        run += chunk;
+      },
+      oncomment: endRun,
+      onprocessinginstruction: endRun,
+    },
+    {
+      decodeEntities: false,
+      lowerCaseTags: true,
+      lowerCaseAttributeNames: true,
+      recognizeSelfClosing: false,
+    },
+  );
+  parser.end(html);
+  endRun();
+}
+
 function linkUrl(href: string | null, base: URL | string): string | null {
   const target = href === null ? "" : decodeEntities(href).trim();
   if (target === "" || target.startsWith("#")) return null;
@@ -776,7 +904,6 @@ export function htmlToText(html: string, base: URL | string): string {
   let lastItem = false;
   let pre: string | null = null;
   let skip = 0;
-  let node = "";
   const links: { url: string; text: string }[] = [];
 
   const push = (text: string, isItem: boolean) => {
@@ -857,72 +984,61 @@ export function htmlToText(html: string, base: URL | string): string {
     }
   };
 
-  new HTMLRewriter()
-    .on("*", {
-      element(element) {
-        const tag = element.tagName;
-        if (DROPPED.has(tag) || skip > 0) {
-          // Their end tags are never left out, so the count comes back down.
-          if (DROPPED.has(tag) && element.canHaveContent) {
-            skip++;
-            element.onEndTag(() => {
-              skip--;
-            });
-          }
-          return;
+  walkHtml(
+    html,
+    (element) => {
+      const tag = element.tagName;
+      if (DROPPED.has(tag) || skip > 0) {
+        // Their end tags are never left out, so the count comes back down.
+        if (DROPPED.has(tag) && element.canHaveContent) {
+          skip++;
+          element.onEndTag(() => {
+            skip--;
+          });
         }
-        if (pre !== null) {
-          if (tag === "br") pre += "\n";
-          return;
+        return;
+      }
+      if (pre !== null) {
+        if (tag === "br") pre += "\n";
+        return;
+      }
+      if (tag === "br") {
+        append("\n");
+      } else if (tag === "pre") {
+        flush();
+        pre = "";
+        if (element.canHaveContent) element.onEndTag(endPre);
+      } else if (BLOCKS.has(tag) || LISTS.has(tag)) {
+        flush();
+        if (LISTS.has(tag)) lastItem = false;
+        const level = /^h([1-6])$/.exec(tag)?.[1];
+        if (level !== undefined) prefix = `${"#".repeat(Number(level))} `;
+        if (tag === "li") prefix = "- ";
+        if (ITEMS.has(tag)) item = true;
+        if (element.canHaveContent) element.onEndTag(() => endBlock(tag));
+      } else if (tag === "td" || tag === "th") {
+        if (hasText) {
+          trimEndSpaces();
+          append(" | ");
         }
-        if (tag === "br") {
-          append("\n");
-        } else if (tag === "pre") {
-          flush();
-          pre = "";
-          if (element.canHaveContent) element.onEndTag(endPre);
-        } else if (BLOCKS.has(tag) || LISTS.has(tag)) {
-          flush();
-          if (LISTS.has(tag)) lastItem = false;
-          const level = /^h([1-6])$/.exec(tag)?.[1];
-          if (level !== undefined) prefix = `${"#".repeat(Number(level))} `;
-          if (tag === "li") prefix = "- ";
-          if (ITEMS.has(tag)) item = true;
-          // lol-html calls this for an end tag the page left out once an enclosing one closes.
-          if (element.canHaveContent) element.onEndTag(() => endBlock(tag));
-        } else if (tag === "td" || tag === "th") {
-          if (hasText) {
-            trimEndSpaces();
-            append(" | ");
-          }
-        } else if (tag === "code") {
-          append("`");
-          if (element.canHaveContent) {
-            element.onEndTag(() => {
-              append("`");
-            });
-          }
-        } else if (tag === "a" && element.canHaveContent) {
-          const url = linkUrl(element.getAttribute("href"), base);
-          if (url !== null) {
-            const link = { url, text: "" };
-            links.push(link);
-            element.onEndTag(() => endLink(link));
-          }
+      } else if (tag === "code") {
+        append("`");
+        if (element.canHaveContent) {
+          element.onEndTag(() => {
+            append("`");
+          });
         }
-      },
-    })
-    .onDocument({
-      text(chunk) {
-        // A reference can straddle two chunks of one text node.
-        node += chunk.text;
-        if (!chunk.lastInTextNode) return;
-        addText(decodeEntities(node));
-        node = "";
-      },
-    })
-    .transform(html);
-  if (pre !== null) endPre();
+      } else if (tag === "a" && element.canHaveContent) {
+        const url = linkUrl(element.getAttribute("href"), base);
+        if (url !== null) {
+          const link = { url, text: "" };
+          links.push(link);
+          element.onEndTag(() => endLink(link));
+        }
+      }
+    },
+    (text) => addText(decodeEntities(text)),
+  );
   flush();
   return out;
 }

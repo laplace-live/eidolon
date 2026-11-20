@@ -1,9 +1,9 @@
 // A dry run over the real sources under <EIDOLON_REAL_HOME>/sources/milky-green, read only: the
 // human dry run and the plan `--dry-run --json` emits must agree on every audio file and every
 // chunk left to refine. Skips when the data is absent, unless EIDOLON_REQUIRE_PARITY=1.
-import { expect, test } from "bun:test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
+import { expect, test } from "vitest";
 import { iterStreams, type ParsedStream, pipeline, refine } from "../src/index.ts";
 import { captureLogs } from "./pipeline_helpers.ts";
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "vitest";
 import { createIceService, type IcePayload, iceServiceFromEnv } from "../src/index.ts";
 import { blockNetwork, captureLogs, fakeFetch, lines, NETWORK_BLOCKED, useEnv } from "./support.ts";
 

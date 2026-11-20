@@ -1,8 +1,8 @@
 import "../../config/test/isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   alternativeStyleNames,
   createVoiceTool,

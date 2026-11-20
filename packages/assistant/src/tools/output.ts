@@ -6,6 +6,7 @@
 // A command's output: its log keeps every byte, stdout and stderr in the order they came, and a
 // result shows the end of it, cleaned of what a terminal would have drawn.
 import { open } from "node:fs/promises";
+import { stripVTControlCharacters } from "node:util";
 import { sanitizeBinaryOutput } from "./shell.ts";
 import {
   DEFAULT_MAX_BYTES,
@@ -110,12 +111,12 @@ function lastRedraw(line: string): string {
 }
 
 /**
- * `text` as a model should read it: no colours, cursor moves or links (Bun.stripANSI), CRLF and a
- * redrawn line's carriage returns resolved, and no other control characters. Its lines stay the
- * log's, so line numbers hold.
+ * `text` as a model should read it: no colours, cursor moves or links, CRLF and a redrawn line's
+ * carriage returns resolved, and no other control characters. Its lines stay the log's, so line
+ * numbers hold.
  */
 export function sanitize(text: string): string {
-  return Bun.stripANSI(text)
+  return stripVTControlCharacters(text)
     .split("\n")
     .map((line) => sanitizeBinaryOutput(lastRedraw(line)))
     .join("\n");

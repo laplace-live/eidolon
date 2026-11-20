@@ -9,6 +9,8 @@
   "dependencies": {
     "@eidolon/config": "workspace:*",
     "@eidolon/providers": "workspace:*",
-    "@eidolon/retrieval": "workspace:*"
+    "@eidolon/retrieval": "workspace:*",
+    "smol-toml": "1.9.1",
+    "yaml": "2.9.1"
   }
 }

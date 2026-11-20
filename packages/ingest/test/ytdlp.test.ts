@@ -1,6 +1,6 @@
 // The managed yt-dlp against a fake GitHub: never a real download.
 import "../../config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, type LogRecord, logger, setLogLevel } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   acquireLock,
   binDir,
@@ -86,7 +87,7 @@ function fakeGitHub(
     if (!url.startsWith(base)) return new Response("not found", { status: 404 });
     const name = url.slice(base.length);
     if (name === "SHA2-256SUMS") {
-      const sum = current.sum ?? new Bun.CryptoHasher("sha256").update(current.body).digest("hex");
+      const sum = current.sum ?? createHash("sha256").update(current.body).digest("hex");
       return new Response(
         `${"1".repeat(64)}  yt-dlp\n${sum}  ${asset}\n${"2".repeat(64)}  yt-dlp_zzz\n`,
       );
@@ -202,7 +203,7 @@ describe("resolveYtDlp", () => {
     expect(JSON.parse(readFileSync(join(binDir(), "yt-dlp.stamp.json"), "utf8"))).toEqual({
       tag: "2026.10.26",
       asset: "yt-dlp_linux",
-      sha256: new Bun.CryptoHasher("sha256").update(body).digest("hex"),
+      sha256: createHash("sha256").update(body).digest("hex"),
       checkedAt: new Date(T0).toISOString(),
     });
     expect(readdirSync(binDir()).sort()).toEqual(["yt-dlp", "yt-dlp.stamp.json"]);

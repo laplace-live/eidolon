@@ -1,20 +1,20 @@
-// The npm package's `eidolon` command, which npx runs on Node: it finds the Bun the package ships
-// for this platform and runs the web app's supervisor or the CLI on it.
+// The npm package's `eidolon` command, which npx runs on Node: it runs the web app's supervisor or
+// the CLI on that same Node.
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
-import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import { constants } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** The platforms LanceDB's and onnxruntime-node's binaries cover, with Bun's and LanceDB's builds. */
+/** The platforms LanceDB's and onnxruntime-node's binaries cover, with LanceDB's build for each. */
 export const PLATFORMS = {
-  "darwin-arm64": { bun: "@oven/bun-darwin-aarch64", lancedb: "@lancedb/lancedb-darwin-arm64" },
-  "linux-x64": { bun: "@oven/bun-linux-x64", lancedb: "@lancedb/lancedb-linux-x64-gnu" },
-  "linux-arm64": { bun: "@oven/bun-linux-aarch64", lancedb: "@lancedb/lancedb-linux-arm64-gnu" },
+  "darwin-arm64": "@lancedb/lancedb-darwin-arm64",
+  "linux-x64": "@lancedb/lancedb-linux-x64-gnu",
+  "linux-arm64": "@lancedb/lancedb-linux-arm64-gnu",
 } as const;
 
-export type Platform = keyof typeof PLATFORMS;
+/** The oldest Node major that runs the bundles, which the package's `engines` names too. */
+export const NODE_MAJOR = 24;
 
 /** The CLI's commands, but gate-decisions, which reads and writes the repository's benchmarks. */
 export const CLI_COMMANDS: readonly string[] = [
@@ -113,55 +113,23 @@ export function unsupportedReason(host: Host): string | null {
   return null;
 }
 
-export interface BunLookup {
-  /** `require.resolve` from the launcher; null when nothing resolves. */
-  resolve(specifier: string): string | null;
-  /** A file's size in bytes; null when it is missing. */
-  size(path: string): number | null;
-  /** The `version` of the package.json at `path`. */
-  version(path: string): string | null;
-}
-
-// bun's own bin/bun.exe is a shell script of a few hundred bytes until its postinstall replaces it.
-const PLACEHOLDER_MAX_BYTES = 64 * 1024;
-
-/** The Bun to run on `platform`: `version`, the one this package depends on. */
-export function findBun(platform: Platform, version: string, lookup: BunLookup): string | null {
-  const own = lookup.resolve(`${PLATFORMS[platform].bun}/bin/bun`);
-  if (own !== null) return own;
-  // In a project that also depends on bun at this version, bun's postinstall moved the binary
-  // above into its own bin/bun.exe.
-  const bun = lookup.resolve("bun/package.json");
-  if (bun === null || lookup.version(bun) !== version) return null;
-  const exe = join(dirname(bun), "bin", "bun.exe");
-  return (lookup.size(exe) ?? 0) > PLACEHOLDER_MAX_BYTES ? exe : null;
-}
-
-function bunMissing(platform: Platform, version: string): string {
+/** Why Node `version` (process.versions.node) can't run the bundles, or null when it can. */
+export function unsupportedNode(version: string): string | null {
+  if (Number.parseInt(version, 10) >= NODE_MAJOR) return null;
   return (
-    `the Bun runtime for ${platform} (${PLATFORMS[platform].bun}@${version}) is not installed. ` +
-    "It is an optional dependency: install again without --omit=optional or --no-optional, or " +
-    `set EIDOLON_BUN to a Bun ${version} binary.`
+    `this is Node.js ${version}, and Eidolon needs Node.js ${NODE_MAJOR} or later. Install a ` +
+    "newer Node, then run eidolon again."
   );
 }
 
-/** The environment of the Bun this runs: the package's files, and no .env or cwd bunfig.toml. */
+/** The app's environment: the package's files, and no .env. */
 export function childEnv(env: NodeJS.ProcessEnv, root: string): NodeJS.ProcessEnv {
-  // Bun reads bunfig.toml from the working directory, which is the user's; BUN_OPTIONS replaces it
-  // in every Bun the app starts, jobs included. Bun honors quotes only around the first option, so
-  // the package's leads: a path with a space survives.
-  const config = `"--config=${join(root, "bunfig.toml")}"`;
-  return {
-    ...env,
-    EIDOLON_APP_ROOT: root,
-    EIDOLON_NO_DOTENV: "1",
-    BUN_OPTIONS: env.BUN_OPTIONS ? `${config} ${env.BUN_OPTIONS}` : config,
-  };
+  return { ...env, EIDOLON_APP_ROOT: root, EIDOLON_NO_DOTENV: "1" };
 }
 
 function currentHost(): Host {
   const { platform, arch } = process;
-  // On musl, Node's and Bun's reports leave glibcVersionRuntime out.
+  // On musl, Node's report leaves glibcVersionRuntime out.
   const report =
     platform === "linux"
       ? (process.report.getReport() as { header: { glibcVersionRuntime?: string } })
@@ -175,42 +143,14 @@ function currentHost(): Host {
   return { platform, arch, glibc, rosetta };
 }
 
-function systemLookup(): BunLookup {
-  const require = createRequire(import.meta.url);
-  return {
-    resolve(specifier) {
-      try {
-        return require.resolve(specifier);
-      } catch {
-        return null;
-      }
-    },
-    size(path) {
-      try {
-        return statSync(path).size;
-      } catch {
-        return null;
-      }
-    },
-    version(path) {
-      try {
-        const { version } = JSON.parse(readFileSync(path, "utf8")) as { version?: unknown };
-        return typeof version === "string" ? version : null;
-      } catch {
-        return null;
-      }
-    },
-  };
-}
-
 function fail(message: string, code = 1): void {
   process.stderr.write(`eidolon: ${message}\n`);
   process.exitCode = code;
 }
 
-/** Runs Bun until it exits, then exits as it did. */
-function run(bun: string, argv: readonly string[], env: NodeJS.ProcessEnv): void {
-  const child = spawn(bun, argv, { stdio: "inherit", env });
+/** Runs `bundle` on this Node until it exits, then exits as it did. */
+function run(bundle: string, args: readonly string[], env: NodeJS.ProcessEnv): void {
+  const child = spawn(process.execPath, [bundle, ...args], { stdio: "inherit", env });
   // A terminal's Ctrl-C reaches the child itself, in this process group: passing it on would
   // deliver it twice.
   process.on("SIGINT", () => {});
@@ -218,7 +158,7 @@ function run(bun: string, argv: readonly string[], env: NodeJS.ProcessEnv): void
   // As SIGTERM: the CLI has no SIGHUP handler, so a SIGHUP would end it at once.
   process.on("SIGHUP", () => child.kill("SIGTERM"));
   child.on("error", (error) => {
-    fail(`could not start ${bun}: ${error.message}`);
+    fail(`could not start ${process.execPath}: ${error.message}`);
     process.exit();
   });
   child.on("exit", (code, signal) => {
@@ -232,38 +172,25 @@ function run(bun: string, argv: readonly string[], env: NodeJS.ProcessEnv): void
 
 export function main(argv: readonly string[]): void {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+  const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
     version: string;
-    optionalDependencies: Record<string, string>;
   };
   const command = parseCommand(argv);
   switch (command.kind) {
     case "help":
-      process.stdout.write(usage(manifest.version));
+      process.stdout.write(usage(version));
       return;
     case "version":
-      process.stdout.write(`${manifest.version}\n`);
+      process.stdout.write(`${version}\n`);
       return;
     case "unknown":
-      fail(`unknown command ${JSON.stringify(command.name)}\n\n${usage(manifest.version)}`, 2);
+      fail(`unknown command ${JSON.stringify(command.name)}\n\n${usage(version)}`, 2);
       return;
   }
-  const host = currentHost();
-  const reason = unsupportedReason(host);
+  const reason = unsupportedReason(currentHost()) ?? unsupportedNode(process.versions.node);
   if (reason !== null) {
     fail(reason);
     return;
   }
-  const platform = `${host.platform}-${host.arch}` as Platform;
-  const version = manifest.optionalDependencies[PLATFORMS[platform].bun] ?? "";
-  const bun = process.env.EIDOLON_BUN || findBun(platform, version, systemLookup());
-  if (bun === null) {
-    fail(bunMissing(platform, version));
-    return;
-  }
-  run(
-    bun,
-    ["--no-env-file", join(root, ENTRIES[command.kind]), ...command.args],
-    childEnv(process.env, root),
-  );
+  run(join(root, ENTRIES[command.kind]), command.args, childEnv(process.env, root));
 }

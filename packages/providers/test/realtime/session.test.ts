@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import type { ToolSchema } from "@eidolon/core";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
 import { openRealtime, type RealtimeOptions } from "../../src/realtime/index.ts";
 import { OPENAI } from "../../src/realtime/openai.ts";
@@ -44,15 +45,15 @@ let logs: ReturnType<typeof captureLogs>;
 beforeEach(() => {
   logs = captureLogs();
 });
-afterEach(() => {
+afterEach(async () => {
   setUsageSink(null);
-  for (const server of servers) server.stop();
+  await Promise.all(servers.map((server) => server.stop()));
   servers = [];
   logs.restore();
 });
 
-function serve(dialect: DialectId, answers = true): FakeRealtime {
-  const server = new FakeRealtime(dialect, { answers });
+async function serve(dialect: DialectId, answers = true): Promise<FakeRealtime> {
+  const server = await FakeRealtime.start(dialect, { answers });
   servers.push(server);
   return server;
 }
@@ -93,7 +94,7 @@ test("dials pipedog's URL for each provider's own account, and the account's bas
     "wss://proxy.test/x/v1/realtime?model=grok%20voice%2F2",
   );
   for (const dialect of ["openai", "xai"] as const) {
-    const { session, peer } = await open(serve(dialect));
+    const { session, peer } = await open(await serve(dialect));
     expect(peer.url.pathname).toBe("/v1/realtime");
     expect(peer.url.searchParams.get("model")).toBe(
       dialect === "openai" ? "gpt-realtime-2.1" : "grok-voice-latest",
@@ -108,7 +109,7 @@ test("dials pipedog's URL for each provider's own account, and the account's bas
 });
 
 test("OpenAI is configured once its session exists, as pipedog configured it", async () => {
-  const { session, peer } = await open(serve("openai"));
+  const { session, peer } = await open(await serve("openai"));
   await peer.nextOf("session.update");
   expect(withoutId(peer.raw[0] as string)).toBe(
     '{"event_id": "E", "type": "session.update", "session": {"type": "realtime", ' +
@@ -117,7 +118,7 @@ test("OpenAI is configured once its session exists, as pipedog configured it", a
       `"output": {"voice": "marin"}}, ${TOOLS_JSON}}}`,
   );
   await session.close();
-  const detect = await open(serve("openai"), {
+  const detect = await open(await serve("openai"), {
     transcription: { model: "gpt-realtime-whisper", language: null },
   });
   expect(await detect.peer.nextOf("session.update")).toMatchObject({
@@ -127,7 +128,7 @@ test("OpenAI is configured once its session exists, as pipedog configured it", a
 });
 
 test("xAI is configured once its conversation exists, with its audio formats", async () => {
-  const { session, peer } = await open(serve("xai"));
+  const { session, peer } = await open(await serve("xai"));
   await peer.nextOf("session.update");
   expect(peer.raw).toHaveLength(1);
   expect(withoutId(peer.raw[0] as string)).toBe(
@@ -142,7 +143,7 @@ test("xAI is configured once its conversation exists, with its audio formats", a
 for (const dialect of ["openai", "xai"] as const) {
   describe(dialect, () => {
     test("holds items and the response until the session is ready, then sends them in order", async () => {
-      const { session, peer, says } = await open(serve(dialect, false));
+      const { session, peer, says } = await open(await serve(dialect, false));
       await peer.nextOf("session.update");
       let sent: string | null = null;
       void session.addItem({ role: "system", text: "背景" }).then((id) => {
@@ -151,7 +152,7 @@ for (const dialect of ["openai", "xai"] as const) {
       session.createResponse();
       const kickoff = session.addItem({ role: "user", text: "Say hi." });
       session.deleteItem("old");
-      await Bun.sleep(0);
+      await delay(0);
       expect(sent).toBeNull();
       peer.send(says.sessionUpdated());
       const system = await peer.next();
@@ -165,7 +166,10 @@ for (const dialect of ["openai", "xai"] as const) {
         },
       });
       expect(sent).toMatch(/^[0-9a-f]{32}$/);
-      expect(peer.raw.at(-1)).toContain('"text": "\\u80cc\\u666f"');
+      // The messages after it may have arrived in the same read.
+      expect(peer.raw.find((raw) => raw.includes(sent as unknown as string))).toContain(
+        '"text": "\\u80cc\\u666f"',
+      );
       expect(await peer.next()).toMatchObject({ item: { id: await kickoff, role: "user" } });
       expect(await peer.next()).toEqual({ type: "conversation.item.delete", item_id: "old" });
       expect(await peer.next()).toEqual({
@@ -179,7 +183,7 @@ for (const dialect of ["openai", "xai"] as const) {
     });
 
     test("one response at a time: a second is owed, and sent only for what came after the first", async () => {
-      const { session, peer, events, says } = await open(serve(dialect));
+      const { session, peer, events, says } = await open(await serve(dialect));
       session.createResponse();
       await peer.nextOf("response.create");
       session.createResponse();
@@ -220,7 +224,7 @@ for (const dialect of ["openai", "xai"] as const) {
     });
 
     test("a response the server started takes in what was delivered before it", async () => {
-      const { session, peer, events, says } = await open(serve(dialect));
+      const { session, peer, events, says } = await open(await serve(dialect));
       await mark(session, peer, "ready");
       void session.addItem({ role: "system", text: "Recall: she sang yesterday." });
       peer.send(says.responseCreated("auto"));
@@ -234,7 +238,7 @@ for (const dialect of ["openai", "xai"] as const) {
     });
 
     test("speaks a response through several items, with its words and the user's", async () => {
-      const { session, peer, events, says } = await open(serve(dialect));
+      const { session, peer, events, says } = await open(await serve(dialect));
       peer.send(
         says.speechStarted("u1"),
         ...says.heard("u1", ["你", "好"]),
@@ -266,7 +270,7 @@ for (const dialect of ["openai", "xai"] as const) {
     });
 
     test("runs a call the model announced, and answers it once", async () => {
-      const { session, peer, events, says } = await open(serve(dialect));
+      const { session, peer, events, says } = await open(await serve(dialect));
       await mark(session, peer, "ready");
       peer.send(
         says.responseCreated("r1"),
@@ -301,7 +305,7 @@ for (const dialect of ["openai", "xai"] as const) {
     });
 
     test("truncates, cancels and deletes as the API spells it", async () => {
-      const { session, peer } = await open(serve(dialect));
+      const { session, peer } = await open(await serve(dialect));
       await mark(session, peer, "ready");
       session.truncate("a1", 0, 1234.7);
       session.cancelResponse();
@@ -316,7 +320,7 @@ for (const dialect of ["openai", "xai"] as const) {
     });
 
     test("skips what it can't read, and the server's harmless refusals", async () => {
-      const { session, peer, events, says } = await open(serve(dialect));
+      const { session, peer, events, says } = await open(await serve(dialect));
       peer.send(
         "not json",
         { no: "type" },
@@ -340,7 +344,7 @@ for (const dialect of ["openai", "xai"] as const) {
     });
 
     test("a fatal error ends the session with pipedog's text", async () => {
-      const { session, peer, events, says } = await open(serve(dialect));
+      const { session, peer, events, says } = await open(await serve(dialect));
       peer.send(says.error("server_error", "boom"), says.speechStarted("u1"));
       await events.ended;
       expect(events.seen).toEqual([
@@ -359,7 +363,7 @@ for (const dialect of ["openai", "xai"] as const) {
     });
 
     test("the socket closing under it is fatal", async () => {
-      const { session, peer, events } = await open(serve(dialect));
+      const { session, peer, events } = await open(await serve(dialect));
       peer.close(1011, "overloaded");
       await events.ended;
       const name = dialect === "openai" ? "OpenAI Realtime" : "Grok Realtime";
@@ -370,7 +374,7 @@ for (const dialect of ["openai", "xai"] as const) {
           fatal: true,
         },
       ]);
-      const quiet = await open(serve(dialect));
+      const quiet = await open(await serve(dialect));
       quiet.peer.close();
       await quiet.events.ended;
       expect(quiet.events.seen).toEqual([
@@ -380,7 +384,7 @@ for (const dialect of ["openai", "xai"] as const) {
     });
 
     test("closing ends its events and settles what it held; aborting closes it", async () => {
-      const { session, peer, events } = await open(serve(dialect, false));
+      const { session, peer, events } = await open(await serve(dialect, false));
       await peer.nextOf("session.update");
       const held = session.addItem({ role: "user", text: "never sent" });
       await session.close();
@@ -392,14 +396,14 @@ for (const dialect of ["openai", "xai"] as const) {
       await peer.closed;
 
       const abort = new AbortController();
-      const aborted = await open(serve(dialect), { signal: abort.signal });
+      const aborted = await open(await serve(dialect), { signal: abort.signal });
       abort.abort();
       await aborted.events.ended;
       expect(aborted.events.seen).toEqual([]);
     });
 
     test("a refused handshake fails the open, and no error names the key", async () => {
-      const server = serve(dialect);
+      const server = await serve(dialect);
       server.refuse = 401;
       const failed = await openRealtimeSession(
         realtimeAt(dialect, server.base),
@@ -418,7 +422,7 @@ for (const dialect of ["openai", "xai"] as const) {
 }
 
 test("OpenAI hears before it is ready; xAI drops audio until then", async () => {
-  const openai = await open(serve("openai", false));
+  const openai = await open(await serve("openai", false));
   await openai.peer.nextOf("session.update");
   openai.session.appendAudio(new Int16Array(0));
   openai.session.appendAudio(new Int16Array([1, -2]));
@@ -428,7 +432,7 @@ test("OpenAI hears before it is ready; xAI drops audio until then", async () => 
   });
   await openai.session.close();
 
-  const xai = await open(serve("xai", false));
+  const xai = await open(await serve("xai", false));
   await xai.peer.nextOf("session.update");
   xai.session.appendAudio(new Int16Array([1, -2]));
   xai.peer.send(serverEvents("xai").sessionUpdated());
@@ -440,7 +444,7 @@ test("OpenAI hears before it is ready; xAI drops audio until then", async () => 
 });
 
 test("OpenAI's interims are what the item has heard so far, each item its own", async () => {
-  const { session, peer, events, says } = await open(serve("openai"));
+  const { session, peer, events, says } = await open(await serve("openai"));
   peer.send(
     ...says.heard("u1", ["我想", "问"]),
     ...says.heard("u2", ["再见"]),
@@ -459,7 +463,7 @@ test("OpenAI's interims are what the item has heard so far, each item its own", 
 });
 
 test("xAI's transcripts come trimmed, and an empty one is dropped", async () => {
-  const { session, peer, events, says } = await open(serve("xai"));
+  const { session, peer, events, says } = await open(await serve("xai"));
   peer.send(
     ...says.heard("u1", ["你", "好"]),
     says.heardAll("u1", "  "),
@@ -477,7 +481,7 @@ test("xAI's transcripts come trimmed, and an empty one is dropped", async () => 
 test("OpenAI reports each response's tokens, and nothing for a response without usage", async () => {
   const records: UsageRecord[] = [];
   setUsageSink((record) => records.push(record));
-  const { session, peer, events, says } = await open(serve("openai"));
+  const { session, peer, events, says } = await open(await serve("openai"));
   peer.send(
     says.done("r1", { usage: { input: 100, cached: 40, output: 30 } }),
     { type: "response.done", event_id: "e", response: { id: "r2", status: "completed" } },
@@ -507,7 +511,7 @@ test("OpenAI reports each response's tokens, and nothing for a response without 
 test("xAI's voice is metered by the hour it hears, else by its reported tokens", async () => {
   const records: UsageRecord[] = [];
   setUsageSink((record) => records.push(record));
-  const hourly = await open(serve("xai"));
+  const hourly = await open(await serve("xai"));
   hourly.session.appendAudio(new Int16Array(8000));
   hourly.session.appendAudio(new Int16Array(8000));
   hourly.peer.send(serverEvents("xai").done("r1", { usage: { input: 5, output: 5 } }));
@@ -519,7 +523,7 @@ test("xAI's voice is metered by the hour it hears, else by its reported tokens",
   ]);
 
   records.length = 0;
-  const { session, peer, events, says } = await open(serve("xai"), {}, "grok-voice-next");
+  const { session, peer, events, says } = await open(await serve("xai"), {}, "grok-voice-next");
   session.appendAudio(new Int16Array(16000));
   peer.send(
     says.done("r1", { usage: { input: 12, output: 8 } }),

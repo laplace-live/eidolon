@@ -28,14 +28,14 @@ Everything else — Mem0, the reranker, the retrieval gate, both RAG indexes —
 degrades quietly when its key, table, or vector store is missing, so a fresh
 checkout runs.
 
-The bot is TypeScript on Bun, on eidolon's own voice engine (`packages/voice`),
-in `apps/` and `packages/`; production has run it (`ghcr.io/laplace-live/eidolon`)
+The bot is TypeScript, on eidolon's own voice engine (`packages/voice`), in
+`apps/` and `packages/`; production has run it on Bun (`ghcr.io/laplace-live/eidolon`)
 since 2026-11-04. The offline chain is TypeScript too: `packages/ingest`, run
 through the `laplace-*` commands in `apps/cli`. The local web app and the
-offline commands also ship as the npm package `@laplace.live/eidolon`
-(`apps/eidolon`), which runs them, bundled, on the Bun it installs. The original
-Python runtime is in the repo too, for human readers only; agents never touch it
-([The Python](#the-python)).
+offline commands run on Node 24, and also ship as the npm package
+`@laplace.live/eidolon` (`apps/eidolon`), which runs them, bundled, on the
+user's Node. The original Python runtime is in the repo too, for human readers
+only; agents never touch it ([The Python](#the-python)).
 
 ## Repository layout
 
@@ -101,8 +101,9 @@ The bot:
 
 ```bash
 bun install
-bun run dev                            # watch mode on :7860 (--port to move it); `start` without watch
+bun run dev                            # watch mode on :7860 (--port to move it), on Bun; `start` without watch
 bun run typecheck && bun run lint && bun run test
+bun run test <paths>                   # Vitest on Node, those files or folders only
 bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions / director-decisions / review-decisions
 bun run laplace-task --folder <path> "<goal>"   # one assistant task in the foreground; billed (docs/assistant.md)
 ```
@@ -152,8 +153,8 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | --- | --- |
 | retrieval, tokenization, chunking, `top_k`, or `candidates` | `bun run laplace-eval-retrieval --compare ~/.laplace/eidolon/sources/<id>/eval/baseline.json`. A quality claim without a number is not a claim |
 | an ingest, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests (`bun run laplace-ingest-streams`, `laplace-ingest-facts`) into the persona's `index/`, then copy it to each server's mounted data home with the rsync in [personas.md](docs/personas.md#deploying-a-persona) |
-| anything under `packages/ingest`, an offline command in `apps/cli`, or the write side of `packages/retrieval` | the gates below, then the stage's real-data test with `EIDOLON_REQUIRE_PARITY=1 bun test --no-env-file <file>`: `packages/ingest/test/*_real.test.ts` (streams, download, transcribe, refine, ingest_streams, pipeline), `apps/cli/test/ingest_facts_real.test.ts`, `packages/retrieval/test/write_real.test.ts`. They are free and only read `~/.laplace/eidolon` (`EIDOLON_REAL_HOME`). Without the variable a missing corpus skips silently |
-| the voice loop (`packages/voice`), the transport (`packages/webrtc`), `packages/runtime`, or the werift patches | `bun test --no-env-file packages/voice packages/webrtc packages/runtime`, then boot the bot and hold real calls with `e2e-call.ts` (`--text`, `--audio`, `--barge-in`), compared with a baseline's by `e2e-compare.ts` ([voice-engine.md](docs/voice-engine.md#real-calls)) — a call's timing isn't unit-testable. Billed |
+| anything under `packages/ingest`, an offline command in `apps/cli`, or the write side of `packages/retrieval` | the gates below, then the stage's real-data test with `EIDOLON_REQUIRE_PARITY=1 bun run test <file>`: `packages/ingest/test/*_real.test.ts` (streams, download, transcribe, refine, ingest_streams, pipeline), `apps/cli/test/ingest_facts_real.test.ts`, `packages/retrieval/test/write_real.test.ts`. They are free and only read `~/.laplace/eidolon` (`EIDOLON_REAL_HOME`). Without the variable a missing corpus skips silently |
+| the voice loop (`packages/voice`), the transport (`packages/webrtc`), `packages/runtime`, or the werift patches | `bun run test packages/voice packages/webrtc packages/runtime`, then boot the bot and hold real calls with `e2e-call.ts` (`--text`, `--audio`, `--barge-in`), compared with a baseline's by `e2e-compare.ts` ([voice-engine.md](docs/voice-engine.md#real-calls)) — a call's timing isn't unit-testable. Billed |
 | `packages/imagegen` or the `take_selfie` tool | `bun run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
 | the gate's recall questions, state, or threshold (`packages/context/src/gate.ts`), or `RETRIEVAL_GATE_MODEL` | `bun run gate-decisions` — re-scores the labeled turns of `docs/benchmarks/2026-09-19-retrieval-gate/` into its `decisions.json`, and exits non-zero if any turn that needs recall would be skipped. About $0.002 of gate calls |
 | the director's questions, state, or thresholds (`packages/context/src/director.ts`) | `bun run director-decisions` — asks Jev about the labelled group-chat lines of `docs/benchmarks/2026-11-10-director/` into its `decisions.json`, and exits non-zero if any is decided wrong. About $0.003 of gate calls; after a threshold or label change alone, `bun docs/benchmarks/2026-11-10-director/score.ts --cached --check` replays the stored scores for free |
@@ -161,13 +162,13 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | the gate's timeline questions or `TIMELINE_THRESHOLD` (`packages/context/src/gate.ts`) | `bun docs/benchmarks/2026-11-07-timeline-question/score.ts` — exits non-zero if any labeled turn lands on the wrong side of the threshold |
 | `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | no scripted check exists ([the 2026-10-17 benchmark](docs/benchmarks/2026-10-17-drama-3-markup/README.md) records what drama-3 does with each kind). Hold a real call, `bun apps/bot/scripts/e2e-call.ts --text "<a question her reply would mark up>" --headful`, and listen: a direction or a tag spoken aloud is a leak. Billed per character |
 | `packages/memory`, or `/api/memories` (`apps/bot/src/memory-admin.ts`) | `docker compose up qdrant`, then round-trip a real `add` → `search` → `deleteAll` through `openMemoryEngine(buildMemoryConfig())`. The tests fake Qdrant and both model calls, so only a live run proves the wire format; it needs an embedding key and an LLM key |
-| `packages/assistant`, the task loop (`packages/engine/src/task*`), or `laplace-task` | `bun test --no-env-file packages/assistant packages/engine apps/cli/test/task.test.ts`, which script every mind, and spawn real processes for `bash` and the MCP client in temporary folders, killing only their own; a change to how a task behaves also needs one billed task on a model you pick: `bun run laplace-task --folder <tmp>/mg-react-todomvc "写一个 React TodoMVC，单文件 index.html"`, then try the page ([assistant.md](docs/assistant.md#laplace-task)) |
+| `packages/assistant`, the task loop (`packages/engine/src/task*`), or `laplace-task` | `bun run test packages/assistant packages/engine apps/cli/test/task.test.ts`, which script every mind, and spawn real processes for `bash` and the MCP client in temporary folders, killing only their own; a change to how a task behaves also needs one billed task on a model you pick: `bun run laplace-task --folder <tmp>/mg-react-todomvc "写一个 React TodoMVC，单文件 index.html"`, then try the page ([assistant.md](docs/assistant.md#laplace-task)) |
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`; for retrieval, the gate or the voice loop, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
-| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun test --no-env-file apps/bot/test/local` from the repository root, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat, voice messages and a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
+| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun run test apps/bot/test/local`, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat, voice messages and a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
 | her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`; a task that needs a lookup and a run, which names its kind, asks on its card before the command and searches. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
-| `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on a temporary home, signs in, and stops it |
+| `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
 
 ## Rules
@@ -228,10 +229,13 @@ the layout's one line.
   pipedog's copyright lines and `SPDX-License-Identifier: BSD-2-Clause`, then
   `Ported from pipedog <path>@ce8f8bc`; its package keeps `LICENSE-pipedog` and
   `THIRD_PARTY.md`, and `NOTICE` names every holder (`build.test.ts` checks it).
-- **`load-env.ts` is the only `.env` reader.** `bunfig.toml` sets `env = false`
-  and tests pass `--no-env-file`; no module reads env at import. It walks up to
-  the first `.env`, and a git worktree without one, wherever it lives, reads
-  its main checkout's, real keys included; `EIDOLON_NO_DOTENV=1` skips it.
+- **`load-env.ts` is the only `.env` reader.** Node reads none unasked,
+  `bunfig.toml` sets `env = false` for what runs on Bun, and `vitest.config.ts`
+  loads none into a test. No module reads env at import but
+  `apps/bot/src/local/environ.ts`, which the local entries import before
+  `load-env.ts` so the server and jobs they spawn start without its keys. It walks
+  up to the first `.env`, and a git worktree without one, wherever it lives,
+  reads its main checkout's, real keys included; `EIDOLON_NO_DOTENV=1` skips it.
 - **Production never runs local mode.** `main.ts` and the code it loads never
   import `apps/bot/src/local/` (Biome and `boundaries.test.ts` hold it), and
   nothing but that separate entry turns it on: no flag, setting or env var,
@@ -273,9 +277,11 @@ the layout's one line.
 - **The werift patches in `packages/webrtc/src/patches.ts` are load-bearing** — no
   default STUN server, disconnect on DTLS close, relay-only, the `raddr` scrub. Each
   one's failure mode is in [typescript.md](docs/typescript.md).
-- **Run `bun test` from the repository root only.** Elsewhere `bunfig.toml`'s preload is
-  skipped and the data home is the real one, so a test file that deletes in it imports
+- **Run the tests from the repository root only, as `bun run test [paths]`.** Vitest runs them
+  on Node; elsewhere it finds no `vitest.config.ts`, its setup files are skipped and the data
+  home is the real one, so a test file that deletes in it imports
   `packages/config/test/isolated-guard.ts` first, and `isolated-guard.test.ts` enforces that.
+  `bun test` is not the test runner.
 - **The web app's strings are English source text in Lingui macros** (`apps/web`). A component
   writes `` t`Save` `` with `t` from `useLingui()` (`@lingui/react/macro`); other code uses `t`
   from `@lingui/core/macro`; a label looked up by code is a `msg` descriptor in a `*labels.ts`
@@ -294,12 +300,25 @@ the layout's one line.
   one uncompiled, and it renders nothing
   ([lingui/swc-plugin#284](https://github.com/lingui/swc-plugin/issues/284)): hoist it into a
   variable.
-- **`bun test` has no macro transform, and a macro throws when it runs.** Keep macros out of the
-  modules tests import; a test that needs one stubs `@lingui/core/macro` with
-  `apps/web/src/test/lingui-macro.ts` in its own file, never in a bunfig preload.
+- **The tests have no macro transform, and a macro throws when it runs.** Vitest's web project
+  leaves Lingui's plugin out. Keep macros out of the modules tests import; a test that needs one
+  stubs `@lingui/core/macro` with `apps/web/src/test/lingui-macro.ts` through `vi.doMock` in its
+  own file, never in a setup file.
 - **Bun's version lives only in package.json's `packageManager`.** CI's setup-bun reads it
-  (`bun-version-file`), the npm package installs and builds with it, and the image follows
-  `oven/bun:1`: a bump edits that one line, never a workflow.
+  (`bun-version-file`) and the image follows `oven/bun:1`: a bump edits that one line, never a
+  workflow. Bun installs, runs the scripts and serves production; the npm package ships none.
+- **Runtime code uses no Bun API.** `apps/*/src` and `packages/*/src` import no `bun` or `bun:*`
+  module and use no `Bun` global, `HTMLRewriter`, `import.meta.dir` or `import.meta.path`, no
+  Bun-only fetch option (`tls`, `proxy`, `timeout`, `unix`, `verbose`) and no
+  `Uint8Array.fromBase64`, `toBase64` or `fromHex`, which Node 24 lacks. Biome bans the globals,
+  `apps/cli/test/no_bun.test.ts` the modules and `import.meta` fields, and the typecheck, on
+  Node's types with `bun` resolving to nothing, the rest.
+- **Whatever production loads also runs on Bun, until production moves to Node.** Everything
+  `apps/bot/src/main.ts` reaches uses only `node:*` modules and packages proven on both
+  runtimes; a merge deploys it on Bun.
+- **An undici dispatcher does nothing under Bun**, whose fetch ignores it: a keep-alive, proxy,
+  timeout or pinned address set through one holds on Node alone. So `web_fetch`, whose DNS pin is
+  a dispatcher, runs only on Node and refuses under Bun.
 - **Never find a shipped file through `import.meta`.** The npm package runs bundles, where every
   module's folder is `dist/`. A file the code ships with (a template, the web build, jieba's
   data, an entry to spawn) resolves through `shippedPath` in `@eidolon/config`, under the
@@ -375,8 +394,7 @@ the layout's one line.
   server's as the task's first run found it), so no `.env` key reaches one unless an `mcp.json`
   entry names it. A command's `PATH` starts with `<data home>/bin`, where the app writes the
   `eidolon` command at each start beside the managed yt-dlp, and it gets `EIDOLON_TASK_PERSONA`,
-  its chat's persona; `eidolon` sets its own data home and never reads the task folder's
-  `bunfig.toml`.
+  its chat's persona; `eidolon` sets its own data home and runs on the app's own Node.
 - **Of the file tools, only `skill` reads in the data home or the app's folder,** and only a listed
   or named skill's own files, never a dot-file; `bash_output` reads only its task's logs there, and
   commands and MCP servers run outside `FolderPolicy`. Of a skill only its name reaches her, and

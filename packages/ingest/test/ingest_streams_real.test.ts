@@ -2,7 +2,6 @@
 // what the index there holds. Everything real is read only: both are rebuilt into a temporary
 // folder, through a clone of the real embedding cache, and any embedding request fails the run.
 // Each test skips without the data, unless EIDOLON_REQUIRE_PARITY=1.
-import { afterAll, beforeAll, expect, test } from "bun:test";
 import {
   constants,
   copyFileSync,
@@ -16,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, logger } from "@eidolon/config";
 import { DEFAULT_EMBED_MODEL, type LanceTable, openTable } from "@eidolon/retrieval";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import { f32Bytes as bytes, tableIndices as indices } from "../../retrieval/test/helpers.ts";
 import { catalog, ingestStreams } from "../src/index.ts";
 import { maskBuiltAt } from "./ingest_streams_golden.ts";

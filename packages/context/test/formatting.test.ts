@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { SearchRow, StreamScope } from "@eidolon/retrieval";
+import { describe, expect, test } from "vitest";
 import {
   formatChunks,
   formatFacts,

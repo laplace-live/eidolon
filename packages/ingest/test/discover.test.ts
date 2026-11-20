@@ -1,11 +1,11 @@
 // laplace-discover's library against a fake Bilibili and a fake yt-dlp: channels from arguments
 // and batches, the three tiers, what her lists and transcripts already cover, and the batch.
 import "../../config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, logger, setLogLevel } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { discover, download } from "../src/index.ts";
 import { fakeBilibili, type Route } from "./discover_helpers.ts";
 

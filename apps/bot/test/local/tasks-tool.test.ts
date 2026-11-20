@@ -1,7 +1,7 @@
 // start_task's prompt text, the nudges her turns answer, and what start_task hands the manager. The
 // Chinese is live prompt text: these hold it word for word.
-import { describe, expect, test } from "bun:test";
 import type { BackgroundTool } from "@eidolon/engine";
+import { describe, expect, test } from "vitest";
 import { TASKS_BLOCK_NAME } from "../../src/local/tasks/status.ts";
 import {
   assistantPromptHint,

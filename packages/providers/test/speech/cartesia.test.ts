@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { CARTESIA_URL, CartesiaSpeech } from "../../src/speech/stream/cartesia.ts";
 import {
   bytesOf,
@@ -24,7 +24,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await Promise.all(streams.map((stream) => stream.close()));
-  fake?.stop();
+  await fake?.stop();
   restore();
 });
 
@@ -56,7 +56,7 @@ test("pipedog's URL for Cartesia's own account", () => {
 });
 
 test("today's message per segment and its flush; word timestamps split the audio", async () => {
-  fake = fakeServer({
+  fake = await fakeServer({
     onMessage: (peer, data) => {
       const message = JSON.parse(data as string);
       if (message.continue !== false) return;
@@ -113,7 +113,7 @@ test("today's message per segment and its flush; word timestamps split the audio
 });
 
 test("cancel cancels the context; an error message fails the utterance", async () => {
-  fake = fakeServer({
+  fake = await fakeServer({
     onMessage: (peer, data) => {
       const message = JSON.parse(data as string);
       if (message.transcript === "坏。") {
@@ -141,7 +141,7 @@ test("cancel cancels the context; an error message fails the utterance", async (
 });
 
 test("a socket Cartesia dropped fails what was on it, and the next utterance reconnects", async () => {
-  fake = fakeServer({ onMessage: (peer) => peer.socket.close(1000, "idle") });
+  fake = await fakeServer({ onMessage: (peer) => peer.socket.close(1000, "idle") });
   const stream = open();
   const first = stream.utterance(null);
   first.say({ id: 1, text: "一。" });
@@ -155,7 +155,7 @@ test("a socket Cartesia dropped fails what was on it, and the next utterance rec
 test("a refused key is an error that never carries it; no language for `none`", async () => {
   restore();
   restore = setEnv({ ...CLEAN_ENV, TTS_VOICE_ID: "v1", STT_LANGUAGE: "none" });
-  fake = fakeServer({ refuse: 403 });
+  fake = await fakeServer({ refuse: 403 });
   const utterance = open().utterance(null);
   utterance.say({ id: 1, text: "嗨。" });
   const [event] = await collect(utterance.audio);

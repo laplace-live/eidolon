@@ -1,10 +1,10 @@
 // Every provider the catalog offers for a call's hearing, voice or realtime role opens a client
 // through the dispatcher a call uses; one without would fail only once a call starts.
 import "../../config/test/isolated-guard.ts";
-import { afterAll, beforeAll, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
+import { afterAll, beforeAll, test } from "vitest";
 import { defaultModel, providerById, providersFor, type RoleId, roleById } from "../src/catalog.ts";
 import { openRealtime } from "../src/realtime/index.ts";
 import { openSpeech } from "../src/speech/stream/index.ts";
@@ -33,9 +33,9 @@ const credentials = join(dataHome(), "credentials.json");
 let server: FakeServer;
 let logs: ReturnType<typeof captureLogs>;
 
-beforeAll(() => {
+beforeAll(async () => {
   logs = captureLogs();
-  server = new FakeServer();
+  server = await FakeServer.start();
   // Every account's API base is this server, so no client reaches its provider's own host.
   const accounts = Object.fromEntries(
     [...new Set(CASES.map(([, id]) => id))].map((id) => [
@@ -55,10 +55,10 @@ beforeAll(() => {
   installSettings();
 });
 
-afterAll(() => {
+afterAll(async () => {
   rmSync(credentials, { force: true });
   resetSettings();
-  server.stop();
+  await server.stop();
   logs.restore();
 });
 

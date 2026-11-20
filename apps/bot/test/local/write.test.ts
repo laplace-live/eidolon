@@ -1,13 +1,23 @@
 // The one write helper: under the data home only, never into a persona template, atomic, and a
 // secret private from its first byte. The templates' bytes are pinned across this whole file.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataHome, personaHomeDir, personaTemplateDir, templatesDir } from "@eidolon/config";
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import {
   checkFileName,
   fileIn,
@@ -18,6 +28,12 @@ import {
   WriteRefused,
   writeDataFile,
 } from "../../src/local/write.ts";
+
+// An ES module's exports can't be spied on in place: every importer gets this openSync instead.
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, openSync: vi.fn(actual.openSync) };
+});
 
 function hashTree(root: string): Map<string, string> {
   const hashes = new Map<string, string>();
@@ -57,17 +73,14 @@ describe("writeDataFile", () => {
   });
 
   test("creates a secret mode 0600 from its first byte", () => {
-    const opened = spyOn(fs, "openSync");
-    try {
-      writeDataFile(join(dataHome(), "credentials.json"), "{}", { secret: true });
-      writeDataFile(join(dataHome(), "settings.yaml"), "{}");
-      expect(opened.mock.calls.map((call) => [call[1], call[2]])).toEqual([
-        ["wx", 0o600],
-        ["wx", 0o644],
-      ]);
-    } finally {
-      opened.mockRestore();
-    }
+    const opened = vi.mocked(fs.openSync);
+    opened.mockClear();
+    writeDataFile(join(dataHome(), "credentials.json"), "{}", { secret: true });
+    writeDataFile(join(dataHome(), "settings.yaml"), "{}");
+    expect(opened.mock.calls.map((call) => [call[1], call[2]])).toEqual([
+      ["wx", 0o600],
+      ["wx", 0o644],
+    ]);
     expect(statSync(join(dataHome(), "credentials.json")).mode & 0o777).toBe(0o600);
   });
 
@@ -101,6 +114,27 @@ describe("writeDataFile", () => {
       rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  // Only where the file system folds case (APFS, by default): elsewhere it's another folder.
+  test.runIf(existsSync(tmpdir().toUpperCase()))(
+    "refuses a template whose path is spelled in other letter case",
+    () => {
+      const app = join(dataHome(), "app");
+      mkdirSync(join(app, "personas", "x"), { recursive: true });
+      writeFileSync(join(app, "personas", "x", "prompt.md"), "template");
+      const before = process.env.EIDOLON_APP_ROOT;
+      process.env.EIDOLON_APP_ROOT = app;
+      try {
+        expect(() =>
+          writeDataFile(join(dataHome(), "APP", "personas", "x", "prompt.md"), "x"),
+        ).toThrow(WriteRefused);
+        expect(readFileSync(join(app, "personas", "x", "prompt.md"), "utf8")).toBe("template");
+      } finally {
+        if (before === undefined) delete process.env.EIDOLON_APP_ROOT;
+        else process.env.EIDOLON_APP_ROOT = before;
+      }
+    },
+  );
 });
 
 describe("persona files", () => {

@@ -1,8 +1,8 @@
 // mem0's SQLiteManager: the `history` audit table and the `messages` window the extraction prompt
 // quotes as "Last k Messages". The SQL is mem0's verbatim. Rows written in one call share a
 // timestamp, so SQLite's tie order decides which 10 messages survive eviction: the earliest
-// inserted, measured identical on Python's sqlite3 and bun:sqlite.
-import { Database, type SQLQueryBindings } from "bun:sqlite";
+// inserted, measured identical on Python's sqlite3 and node:sqlite.
+import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
 import { type Clock, errorText, logger, pyIsoformatUtc, wallClockMicros } from "@eidolon/config";
 import type { StoredMessage } from "./prompts.ts";
 
@@ -94,26 +94,34 @@ export interface MessageRow {
   readonly name?: unknown;
 }
 
-function bind(value: unknown): SQLQueryBindings {
-  return (value === undefined ? null : value) as SQLQueryBindings;
+function bind(value: unknown): SQLInputValue {
+  return (value === undefined ? null : value) as SQLInputValue;
 }
 
 export class HistoryStore {
-  readonly #db: Database;
+  readonly #db: DatabaseSync;
   readonly #newId: () => string;
   readonly #clock: Clock;
+  readonly #insertHistory: StatementSync;
+  readonly #insertMessage: StatementSync;
+  readonly #evictMessages: StatementSync;
+  readonly #lastMessages: StatementSync;
 
   /** Opens (creating) the file; like sqlite3, it raises rather than create missing parents. */
   constructor(path: string, options: { newId?: () => string; clock?: Clock } = {}) {
     this.#newId = options.newId ?? (() => crypto.randomUUID());
     this.#clock = options.clock ?? wallClockMicros;
-    this.#db = new Database(path);
+    this.#db = new DatabaseSync(path);
     try {
-      // Python's sqlite3 waits 5 s on a locked database by default; bun:sqlite does not wait.
+      // Python's sqlite3 waits 5 s on a locked database by default; node:sqlite does not wait.
       this.#db.exec("PRAGMA busy_timeout = 5000");
       this.#transaction("History table migration failed", () => this.#migrate());
-      this.#transaction("Failed to create history table", () => this.#db.run(CREATE_HISTORY));
-      this.#transaction("Failed to create messages table", () => this.#db.run(CREATE_MESSAGES));
+      this.#transaction("Failed to create history table", () => this.#db.exec(CREATE_HISTORY));
+      this.#transaction("Failed to create messages table", () => this.#db.exec(CREATE_MESSAGES));
+      this.#insertHistory = this.#db.prepare(INSERT_HISTORY);
+      this.#insertMessage = this.#db.prepare(INSERT_MESSAGE);
+      this.#evictMessages = this.#db.prepare(EVICT_MESSAGES);
+      this.#lastMessages = this.#db.prepare(LAST_MESSAGES);
     } catch (error) {
       // SharedEngine retries a failed open per session, so each failure would leak a handle.
       this.#db.close();
@@ -124,36 +132,39 @@ export class HistoryStore {
   /** mem0's `_migrate_history_table`: rebuild a `history` table whose columns predate its schema. */
   #migrate(): void {
     const exists = this.#db
-      .query("SELECT name FROM sqlite_master WHERE type='table' AND name='history'")
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='history'")
       .get();
     if (!exists) return;
     const columns = new Set(
-      (this.#db.query("PRAGMA table_info(history)").all() as { name: string }[]).map((c) => c.name),
+      this.#db
+        .prepare("PRAGMA table_info(history)")
+        .all()
+        .map((c) => c.name as string),
     );
     if (columns.size === HISTORY_COLUMNS.length && HISTORY_COLUMNS.every((c) => columns.has(c))) {
       return;
     }
-    this.#db.run("DROP TABLE IF EXISTS history_old");
-    this.#db.run("ALTER TABLE history RENAME TO history_old");
-    this.#db.run(CREATE_HISTORY.replace(" IF NOT EXISTS", ""));
+    this.#db.exec("DROP TABLE IF EXISTS history_old");
+    this.#db.exec("ALTER TABLE history RENAME TO history_old");
+    this.#db.exec(CREATE_HISTORY.replace(" IF NOT EXISTS", ""));
     const shared = HISTORY_COLUMNS.filter((c) => columns.has(c)).join(", ");
-    if (shared) this.#db.run(`INSERT INTO history (${shared}) SELECT ${shared} FROM history_old`);
-    this.#db.run("DROP TABLE history_old");
+    if (shared) this.#db.exec(`INSERT INTO history (${shared}) SELECT ${shared} FROM history_old`);
+    this.#db.exec("DROP TABLE history_old");
   }
 
   #transaction(failure: string, body: () => void): void {
-    this.#db.run("BEGIN");
+    this.#db.exec("BEGIN");
     try {
       body();
-      this.#db.run("COMMIT");
+      this.#db.exec("COMMIT");
     } catch (error) {
-      this.#db.run("ROLLBACK");
+      this.#db.exec("ROLLBACK");
       logger.error(`${failure}: ${errorText(error)}`);
       throw error;
     }
   }
 
-  #historyRow(entry: HistoryEntry): SQLQueryBindings[] {
+  #historyRow(entry: HistoryEntry): SQLInputValue[] {
     return [
       this.#newId(),
       entry.memoryId,
@@ -170,15 +181,14 @@ export class HistoryStore {
 
   addHistory(entry: HistoryEntry): void {
     this.#transaction("Failed to add history record", () => {
-      this.#db.query(INSERT_HISTORY).run(...this.#historyRow(entry));
+      this.#insertHistory.run(...this.#historyRow(entry));
     });
   }
 
   batchAddHistory(entries: readonly HistoryEntry[]): void {
     this.#transaction("Failed to batch add history records", () => {
       const rows = entries.map((entry) => this.#historyRow(entry));
-      const insert = this.#db.query(INSERT_HISTORY);
-      for (const row of rows) insert.run(...row);
+      for (const row of rows) this.#insertHistory.run(...row);
     });
   }
 
@@ -186,9 +196,8 @@ export class HistoryStore {
     if (messages.length === 0) return;
     this.#transaction("Failed to save messages", () => {
       const now = pyIsoformatUtc(this.#clock());
-      const insert = this.#db.query(INSERT_MESSAGE);
       for (const message of messages) {
-        insert.run(
+        this.#insertMessage.run(
           this.#newId(),
           sessionScope,
           bind(message.role),
@@ -197,12 +206,12 @@ export class HistoryStore {
           now,
         );
       }
-      this.#db.query(EVICT_MESSAGES).run(sessionScope, sessionScope);
+      this.#evictMessages.run(sessionScope, sessionScope);
     });
   }
 
   getLastMessages(sessionScope: string, limit = 10): StoredMessage[] {
-    return this.#db.query(LAST_MESSAGES).all(sessionScope, limit) as StoredMessage[];
+    return this.#lastMessages.all(sessionScope, limit) as unknown as StoredMessage[];
   }
 
   close(): void {

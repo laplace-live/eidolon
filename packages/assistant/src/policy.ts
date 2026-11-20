@@ -64,10 +64,13 @@ function withHome(path: string, home: string): string {
   return bare === "~" || bare.startsWith("~/") ? join(home, bare.slice(1)) : path;
 }
 
-/** `path`'s realpath; a folder not made yet holds nothing, home least of all. */
+/**
+ * `path`'s realpath, in the letter case on disk (the JavaScript realpathSync keeps the case it was
+ * given); a folder not made yet holds nothing, home least of all.
+ */
 function real(path: string): string {
   try {
-    return realpathSync(path);
+    return realpathSync.native(path);
   } catch {
     return path;
   }

@@ -1,14 +1,10 @@
-import { CString, dlopen, FFIType } from "bun:ffi";
-
-/** `name` as getenv reads it, which process.env doesn't change under Bun; null when unset. */
+/**
+ * `name` as getenv reads it, or null when unset. Node's diagnostic report lists the C environment
+ * (libuv's uv_os_environ), not the process.env object.
+ */
 export function cEnv(name: string): string | null {
-  const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", {
-    getenv: { args: [FFIType.cstring], returns: FFIType.ptr },
-  });
-  try {
-    const value = libc.symbols.getenv(Buffer.from(`${name}\0`));
-    return value === null ? null : new CString(value).toString();
-  } finally {
-    libc.close();
-  }
+  const report = process.report.getReport() as {
+    readonly environmentVariables?: Readonly<Record<string, string>>;
+  };
+  return report.environmentVariables?.[name] ?? null;
 }

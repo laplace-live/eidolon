@@ -1,9 +1,9 @@
 import "../../config/test/isolated-guard.ts";
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings, withPersona } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   DEFAULT_RERANK_BASE_URL,
   DEFAULT_RERANK_MODEL,
@@ -136,7 +136,7 @@ describe("OpenRouterReranker", () => {
 
   test("the 10 s timeout covers each attempt and reads as httpx's", async () => {
     const timer = new AbortController();
-    const timeout = spyOn(AbortSignal, "timeout").mockImplementation(() => timer.signal);
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => timer.signal);
     try {
       const { fetch } = fakeFetch([
         (init) =>

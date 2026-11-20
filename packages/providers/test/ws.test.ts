@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, expect, jest, test } from "bun:test";
 import { createHash } from "node:crypto";
-import type { Server, TCPSocketListener } from "bun";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import {
   backoffMs,
   connectWs,
@@ -9,47 +9,33 @@ import {
   type WsData,
   WsHandshakeError,
 } from "../src/index.ts";
+import { useFakeClock } from "./clock.ts";
+import { type Listening, serveTcp, serveWs } from "./ws-server.ts";
 
-interface Peer {
-  readonly path: string;
-  readonly auth: string | null;
-}
-
-let server: Server<Peer>;
+let server: Listening;
 const serverSaw: { code: number; reason: string }[] = [];
 
-beforeAll(() => {
-  server = Bun.serve<Peer>({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request, srv) {
-      const { pathname } = new URL(request.url);
-      if (pathname === "/deny") return new Response("bad key", { status: 401 });
-      if (pathname === "/slow") await Bun.sleep(500);
-      const data = { path: pathname, auth: request.headers.get("authorization") };
-      if (srv.upgrade(request, { data })) return undefined;
-      return new Response("no upgrade", { status: 400 });
+beforeAll(async () => {
+  server = await serveWs({
+    async handshake({ url }) {
+      if (url.pathname === "/deny") return new Response("bad key", { status: 401 });
+      if (url.pathname === "/slow") await delay(500);
+      return undefined;
     },
-    websocket: {
-      open(ws) {
-        if (ws.data.path === "/close") {
-          ws.send("bye");
-          ws.close(1011, "boom");
-          return;
-        }
-        if (ws.data.path === "/echo") ws.send(JSON.stringify({ auth: ws.data.auth }));
-      },
-      message(ws, message) {
-        ws.send(message);
-      },
-      close(_ws, code, reason) {
-        serverSaw.push({ code, reason });
-      },
+    open(ws, { url, headers }) {
+      ws.on("message", (message, isBinary) => ws.send(message, { binary: isBinary }));
+      ws.on("close", (code, reason) => serverSaw.push({ code, reason: reason.toString() }));
+      if (url.pathname === "/close") {
+        ws.send("bye");
+        ws.close(1011, "boom");
+        return;
+      }
+      if (url.pathname === "/echo") ws.send(JSON.stringify({ auth: headers.get("authorization") }));
     },
   });
 });
 
-afterAll(() => server.stop(true));
+afterAll(() => server.stop());
 
 const url = (path: string) => `ws://127.0.0.1:${server.port}${path}`;
 const live = () => new AbortController().signal;
@@ -120,41 +106,37 @@ test("an abort fails a handshake with its reason, and closes an open socket", as
   call.abort(reason);
   expect(await rest(connection)).toEqual([]);
   expect(connection.closeCode).toBe(1000);
-  await Bun.sleep(20);
+  await delay(20);
   expect(serverSaw).toEqual([{ code: 1000, reason: "" }]);
 });
 
 test("close drops a peer that never acknowledges it after 2 s", async () => {
   const accept = (key: string) =>
     createHash("sha1").update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
-  const listener: TCPSocketListener = Bun.listen({
-    hostname: "127.0.0.1",
-    port: 0,
-    socket: {
-      data(socket, data) {
-        const key = /Sec-WebSocket-Key: (.+)\r\n/i.exec(data.toString())?.[1];
-        if (key === undefined) return;
-        socket.write(
-          "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
-            `Sec-WebSocket-Accept: ${accept(key.trim())}\r\n\r\n`,
-        );
-      },
-    },
+  const listener = await serveTcp((socket) => {
+    socket.on("data", (data) => {
+      const key = /Sec-WebSocket-Key: (.+)\r\n/i.exec(data.toString())?.[1];
+      if (key === undefined) return;
+      socket.write(
+        "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+          `Sec-WebSocket-Accept: ${accept(key.trim())}\r\n\r\n`,
+      );
+    });
   });
   try {
     const connection = await connectWs(`ws://127.0.0.1:${listener.port}/`, {}, live());
-    jest.useFakeTimers();
+    useFakeClock();
     const closing = connection.close();
-    jest.advanceTimersByTime(1_999);
+    vi.advanceTimersByTime(1_999);
     await new Promise((resolve) => setImmediate(resolve));
     expect(connection.closeCode).toBeNull();
-    jest.advanceTimersByTime(1);
+    vi.advanceTimersByTime(1);
     await closing;
     expect(connection.closeCode).toBe(1006);
     expect(await rest(connection)).toEqual([]);
   } finally {
-    jest.useRealTimers();
-    listener.stop(true);
+    vi.useRealTimers();
+    await listener.stop();
   }
 });
 

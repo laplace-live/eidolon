@@ -2,7 +2,6 @@
 // her words where she wrote it, her speech ends only once all of them reached it, her stored line
 // is what was heard, an async selfie's result brings the follow-up reply, and what reaches the call
 // from outside lands where her view keeps a call with its result, its nudge spoken.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { ChatEventDraft } from "@eidolon/chat";
 import { consoleSink, logger } from "@eidolon/config";
 import type { LlmTool } from "@eidolon/core";
@@ -14,6 +13,7 @@ import {
   type MindRequest,
   runTurn,
 } from "@eidolon/engine";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { HOST, settle, startCall } from "./harness.ts";
 
 let logs: string[];

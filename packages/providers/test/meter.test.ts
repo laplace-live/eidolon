@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { Meter, type Selection, select, setUsageSink, type UsageRecord } from "../src/index.ts";
 
 const ENV: Readonly<Record<string, string>> = { SONIOX_API_KEY: "k", FISH_API_KEY: "k" };

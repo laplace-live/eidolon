@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { consoleSink, logger } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { CallKit, IDLE_TIMEOUT_MS, type LoopEvent } from "../../src/call/kit.ts";
 import { FakeClock } from "../input/clock.ts";
 

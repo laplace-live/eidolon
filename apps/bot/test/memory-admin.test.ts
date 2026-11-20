@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { LoggedInUser } from "@eidolon/access";
 import type { AdminOutcome, MemoryAdmin, MemorySummary } from "@eidolon/memory";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createBotApp } from "../src/app.ts";
 import {
   type CapturedLogs,
@@ -48,10 +48,10 @@ interface Seen {
   userIds: string[];
 }
 
-function start(
+async function start(
   caller: LoggedInUser | null,
   admin: MemoryAdmin | null,
-): { url: string; seen: Seen } {
+): Promise<{ url: string; seen: Seen }> {
   const seen: Seen = { authorizations: [], userIds: [] };
   const record = (outcome: () => Promise<AdminOutcome<any>>) => async (userId: string) => {
     seen.userIds.push(userId);
@@ -61,7 +61,7 @@ function start(
     list: record(() => admin.list("")),
     forget: record(() => admin.forget("")),
   };
-  served = serve(
+  served = await serve(
     createBotApp(
       fakeParts({
         access: fakeAccess({
@@ -104,7 +104,7 @@ describe("auth comes first", () => {
   for (const { method, path, unauthorized } of ENDPOINTS) {
     for (const configured of [true, false]) {
       test(`${method} ${path} answers its own 401 for every anonymous caller (Mem0 ${configured ? "configured" : "unconfigured"})`, async () => {
-        const { url, seen } = start(null, configured ? admin({ ok: true, value: [] }) : null);
+        const { url, seen } = await start(null, configured ? admin({ ok: true, value: [] }) : null);
         for (const authorization of [undefined, "Basic abc", "Bearer ", "Bearer revoked"]) {
           const { response, body } = await call(`${url}${path}`, method, authorization);
           expect(response.status).toBe(401);
@@ -122,7 +122,7 @@ describe("auth comes first", () => {
 
 describe("GET /api/memories", () => {
   test("lists the caller's memories with null fields kept and count equal to the list", async () => {
-    const { url, seen } = start(VIEWER, admin({ ok: true, value: MEMORIES }));
+    const { url, seen } = await start(VIEWER, admin({ ok: true, value: MEMORIES }));
     const { response, body } = await call(`${url}/api/memories`, "GET", "Bearer tok");
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/json");
@@ -140,7 +140,7 @@ describe("GET /api/memories", () => {
   });
 
   test("an empty list is a plain 200, and a missing uname is null and None", async () => {
-    const { url } = start({ ...VIEWER, uname: null }, admin({ ok: true, value: [] }));
+    const { url } = await start({ ...VIEWER, uname: null }, admin({ ok: true, value: [] }));
     const { response, body } = await call(`${url}/api/memories`, "GET", "Bearer tok");
     expect(response.status).toBe(200);
     expect(body).toBe('{"user_id":"12345678","uname":null,"count":0,"memories":[]}');
@@ -148,7 +148,7 @@ describe("GET /api/memories", () => {
   });
 
   test("unconfigured memory is a 503 after auth, with no log", async () => {
-    const { url } = start(VIEWER, null);
+    const { url } = await start(VIEWER, null);
     const { response, body } = await call(`${url}/api/memories`, "GET", "Bearer tok");
     expect(response.status).toBe(503);
     expect(body).toBe('{"error":"Mem0 service unavailable"}');
@@ -156,7 +156,7 @@ describe("GET /api/memories", () => {
   });
 
   test("an unreachable vector store is a 503 with the Could not reach line", async () => {
-    const { url } = start(
+    const { url } = await start(
       VIEWER,
       admin({ ok: false, reason: "unavailable", error: new Error("connect ECONNREFUSED") }),
     );
@@ -169,7 +169,7 @@ describe("GET /api/memories", () => {
   });
 
   test("a failed get_all is a 502 logged with the exception type", async () => {
-    const { url } = start(
+    const { url } = await start(
       VIEWER,
       admin({ ok: false, reason: "failed", error: new QdrantError("Bad Request") }),
     );
@@ -184,7 +184,7 @@ describe("GET /api/memories", () => {
 
 describe("POST /api/memories/forget", () => {
   test("wipes the caller's memories, idempotently", async () => {
-    const { url, seen } = start(VIEWER, admin({ ok: true, value: [] }));
+    const { url, seen } = await start(VIEWER, admin({ ok: true, value: [] }));
     for (let i = 0; i < 2; i++) {
       const { response, body } = await call(`${url}/api/memories/forget`, "POST", "Bearer tok");
       expect(response.status).toBe(200);
@@ -199,14 +199,14 @@ describe("POST /api/memories/forget", () => {
   });
 
   test("unconfigured memory is a 503", async () => {
-    const { url } = start(VIEWER, null);
+    const { url } = await start(VIEWER, null);
     const { response, body } = await call(`${url}/api/memories/forget`, "POST", "Bearer tok");
     expect(response.status).toBe(503);
     expect(body).toBe('{"error":"Mem0 service unavailable"}');
   });
 
   test("an unreachable vector store is a 503 with the Could not reach line", async () => {
-    const { url } = start(
+    const { url } = await start(
       VIEWER,
       admin(
         { ok: true, value: [] },
@@ -225,7 +225,7 @@ describe("POST /api/memories/forget", () => {
     const valueError = Object.assign(new Error("Memory with id p1 not found."), {
       name: "ValueError",
     });
-    const { url } = start(
+    const { url } = await start(
       VIEWER,
       admin({ ok: true, value: [] }, { ok: false, reason: "failed", error: valueError }),
     );
@@ -237,7 +237,7 @@ describe("POST /api/memories/forget", () => {
   });
 
   test("a failed delete_all is a 502 logged with the exception type", async () => {
-    const { url } = start(
+    const { url } = await start(
       VIEWER,
       admin(
         { ok: true, value: [] },

@@ -8,8 +8,8 @@ import type {
   UserContext,
 } from "@eidolon/access";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
-import type { Server } from "bun";
 import type { BotAccess, BotApp, BotAppParts } from "../src/app.ts";
+import { listen, routeRequest } from "../src/routing.ts";
 
 export const ANON: UserContext = { mid: null, uname: null, face: null, isLoggedIn: false };
 export const VIEWER: LoggedInUser = {
@@ -97,21 +97,19 @@ export function fakeParts(overrides: Partial<BotAppParts> = {}): BotAppParts {
 }
 
 export interface Served {
-  readonly server: Server<undefined>;
   readonly url: string;
   stop(): Promise<void>;
 }
 
-export function serve(app: BotApp): Served {
-  const server = Bun.serve({
+/** The app on 127.0.0.1 at a free port, as startBotServer serves it. */
+export async function serve(app: BotApp): Promise<Served> {
+  const listener = await listen({
     hostname: "127.0.0.1",
     port: 0,
-    development: false,
-    routes: app.routes,
-    fetch: app.fallback,
-    error: app.onError,
+    handle: routeRequest(app.routes, app.fallback),
+    onError: app.onError,
   });
-  return { server, url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
+  return { url: `http://127.0.0.1:${listener.port}`, stop: () => listener.stop() };
 }
 
 export interface CapturedLogs {

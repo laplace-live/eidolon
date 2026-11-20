@@ -1,8 +1,9 @@
 // A real werift peer offers to the signalling server over this machine's own interfaces. A local
 // STUN responder stands in for werift's default (stun.l.google.com), so nothing leaves the host.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createSocket } from "node:dgram";
 import { createServer } from "node:net";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { RTCPeerConnection } from "werift";
 import type { Peer } from "../src/peer.ts";
 import { createSignallingServerWith, type SignallingServer } from "../src/signalling.ts";
@@ -17,26 +18,23 @@ import {
 
 /** Answers every STUN Binding Request with the sender's address (RFC 5389 §7.3.1). */
 async function stunResponder(): Promise<{ url: string; close(): void }> {
-  const socket = await Bun.udpSocket({
-    hostname: "127.0.0.1",
-    socket: {
-      data(sock, request, port, address) {
-        if (request.length < 20 || request.readUInt16BE(0) !== 0x0001) return;
-        const response = Buffer.alloc(32);
-        response.writeUInt16BE(0x0101, 0);
-        response.writeUInt16BE(12, 2);
-        request.copy(response, 4, 4, 20);
-        response.writeUInt16BE(0x0020, 20);
-        response.writeUInt16BE(8, 22);
-        response.writeUInt8(0x01, 25);
-        response.writeUInt16BE(port ^ 0x2112, 26);
-        const ip = address.split(".").reduce((n, octet) => n * 256 + Number(octet), 0);
-        response.writeUInt32BE((ip ^ 0x2112a442) >>> 0, 28);
-        sock.send(response, port, address);
-      },
-    },
+  const socket = createSocket("udp4");
+  socket.on("message", (request, { address, port }) => {
+    if (request.length < 20 || request.readUInt16BE(0) !== 0x0001) return;
+    const response = Buffer.alloc(32);
+    response.writeUInt16BE(0x0101, 0);
+    response.writeUInt16BE(12, 2);
+    request.copy(response, 4, 4, 20);
+    response.writeUInt16BE(0x0020, 20);
+    response.writeUInt16BE(8, 22);
+    response.writeUInt8(0x01, 25);
+    response.writeUInt16BE(port ^ 0x2112, 26);
+    const ip = address.split(".").reduce((n, octet) => n * 256 + Number(octet), 0);
+    response.writeUInt32BE((ip ^ 0x2112a442) >>> 0, 28);
+    socket.send(response, port, address);
   });
-  return { url: `stun:127.0.0.1:${socket.port}`, close: () => socket.close() };
+  await new Promise<void>((resolve) => socket.bind(0, "127.0.0.1", resolve));
+  return { url: `stun:127.0.0.1:${socket.address().port}`, close: () => socket.close() };
 }
 
 /** A localhost TCP port nothing listens on, so a TURN allocation there is refused at once. */

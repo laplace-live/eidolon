@@ -3,7 +3,7 @@
 // contract), barge-ins truncated where the cursor stood, typed text answered (E2), her recall
 // mirrored (E1), bot-output held for the caller's transcript (E4), her tools, and a fatal error
 // ending the call (E8). The real prepareTurn and runTool run on fake parts.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { type ChatEvent, finalEnvelope, stampEvents, startedEnvelope } from "@eidolon/chat";
 import { AsyncQueue, consoleSink, logger, resetSettings } from "@eidolon/config";
 import { buildGreetingKickoff } from "@eidolon/context";
@@ -11,6 +11,7 @@ import type { ContextProvider, LlmTool } from "@eidolon/core";
 import { ASYNC_TOOL_INSTRUCTIONS, type EngineDeps } from "@eidolon/engine";
 import { reportUsage, setUsageSink, type UsageRecord } from "@eidolon/providers";
 import type { RealtimeEvent, RealtimeOptions, RealtimeSession } from "@eidolon/providers/realtime";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { callLog, memoryCallLog } from "../../src/call/log.ts";
 import { packHistory, runRealtimeCall } from "../../src/call/realtime.ts";
 import { runVoiceCall } from "../../src/index.ts";
@@ -236,7 +237,7 @@ async function startRealtime(o: Options = {}) {
   const running = o.scoped
     ? runVoiceCall(transport, plan, deps, shutdown.signal)
     : runRealtimeCall(transport, plan, deps, shutdown.signal, { newId: () => `id-${++ids}` });
-  for (let i = 0; i < 50 && !transport.connected; i++) await Bun.sleep(1);
+  for (let i = 0; i < 50 && !transport.connected; i++) await delay(1);
   await settle();
   let mark = 0;
   let asked = 0;
@@ -428,7 +429,7 @@ describe("runRealtimeCall", () => {
       const call = await startRealtime({ dialect: "xai", scoped: true });
       // A transport's callback runs outside the call's scope.
       setTimeout(() => call.transport.audioIn.push(new Int16Array(320)), 0);
-      for (let i = 0; i < 50 && call.session.samples === 0; i++) await Bun.sleep(2);
+      for (let i = 0; i < 50 && call.session.samples === 0; i++) await delay(2);
       expect(records).toMatchObject([
         { role: "realtime", source: "call", session: call.plan.id, units: { audioSeconds: 0.02 } },
       ]);

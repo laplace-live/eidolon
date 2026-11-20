@@ -1,9 +1,9 @@
 // The locks that keep two processes from writing the same files. A subpath of its own
-// (@eidolon/config/lock), so what imports config's index never loads bun:sqlite.
-import { Database } from "bun:sqlite";
+// (@eidolon/config/lock), so what imports config's index never loads node:sqlite.
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { dataHome } from "./home.ts";
 import { isPlainObject } from "./py.ts";
 
@@ -16,8 +16,11 @@ export class LockedError extends Error {
   }
 }
 
-// A lock's Database must stay reachable: collecting it would close the connection and release it.
-const held = new Set<Database>();
+/** SQLite's result code for a lock another connection holds. */
+const SQLITE_BUSY = 5;
+
+// A lock's database must stay reachable: collecting it would close the connection and release it.
+const held = new Set<DatabaseSync>();
 
 function holderInfo(path: string): { pid: number | null; command: string | null } {
   try {
@@ -54,13 +57,13 @@ export function acquireLock(key: string, command: string): () => void {
   // Made with the data home when either is missing, readable by this user only.
   mkdirSync(join(dataHome(), "locks"), { recursive: true, mode: 0o700 });
   const infoPath = lockInfoPath(key);
-  const db = new Database(`${lockStem(key)}.lock`, { create: true });
+  const db = new DatabaseSync(`${lockStem(key)}.lock`);
   try {
     db.exec("PRAGMA busy_timeout = 0");
     db.exec("BEGIN EXCLUSIVE");
   } catch (error) {
     db.close();
-    if ((error as { code?: unknown }).code !== "SQLITE_BUSY") throw error;
+    if ((error as { errcode?: unknown }).errcode !== SQLITE_BUSY) throw error;
     const holder = holderInfo(infoPath);
     const colon = key.indexOf(":");
     throw new LockedError(holder.command ?? command, key.slice(colon + 1), holder.pid);

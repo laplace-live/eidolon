@@ -11,9 +11,11 @@ import {
   envOptional,
   envOverride,
   logger,
+  spawnProcess,
+  which,
 } from "@eidolon/config";
 import { referenceCandidates } from "@eidolon/imagegen";
-import { download, which } from "@eidolon/ingest";
+import { download } from "@eidolon/ingest";
 import {
   accountsFor,
   callRoles,
@@ -170,7 +172,7 @@ function voiceTtl(answer: Answer): number {
 /** The first line `<path> --version` prints, or null. */
 async function versionOf(path: string): Promise<string | null> {
   try {
-    const child = Bun.spawn([path, "--version"], {
+    const child = spawnProcess([path, "--version"], {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",

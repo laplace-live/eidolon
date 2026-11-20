@@ -9,8 +9,11 @@ import {
   pyParseFloat,
   pyPathName,
   pyStrip,
+  type Subprocess,
+  spawnProcess,
+  which,
 } from "@eidolon/config";
-import { terminateOnAbort, which } from "../limit.ts";
+import { terminateOnAbort } from "../limit.ts";
 import { infoJsonPath } from "../streams.ts";
 import { TranscribeError } from "./errors.ts";
 
@@ -33,20 +36,14 @@ export async function probeDurationSec(
   if (!ffprobe) return null;
   const { signal } = options;
   signal?.throwIfAborted();
-  const argv = [
+  const argv: [string, ...string[]] = [
     ffprobe,
     ...["-v", "error", "-show_entries", "format=duration"],
     ...["-of", "default=noprint_wrappers=1:nokey=1", path],
   ];
-  let child: Bun.Subprocess<"ignore", "pipe", "ignore">;
+  let child: Subprocess;
   try {
-    child = Bun.spawn(argv, {
-      env: process.env,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
-      timeout: PROBE_TIMEOUT_MS,
-    });
+    child = spawnProcess(argv, { stdout: "pipe", stderr: "ignore", timeout: PROBE_TIMEOUT_MS });
   } catch {
     return null;
   }
@@ -96,14 +93,14 @@ export async function ffmpegSlice(
   if (!ffmpeg) throw ffmpegMissing();
   const { signal } = options;
   signal?.throwIfAborted();
-  const child = Bun.spawn(
+  const child = spawnProcess(
     [
       ffmpeg,
       ...["-nostdin", "-loglevel", "error", "-y"],
       ...["-ss", pyFixed(slice.startSec, 3), "-t", pyFixed(slice.durationSec, 3)],
       ...["-i", audio, "-c", "copy", "-vn", "-map_metadata", "-1", slice.outPath],
     ],
-    { env: process.env, stdin: "ignore", stdout: "ignore", stderr: "pipe" },
+    { stdout: "ignore", stderr: "pipe" },
   );
   const release = terminateOnAbort(child, signal);
   let stderr: string;

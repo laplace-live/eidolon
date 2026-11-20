@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { SpokenTracker } from "../../src/output/spoken.ts";
 import type { CursorEvent, Tag } from "../../src/types.ts";
 

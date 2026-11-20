@@ -23,7 +23,7 @@ export class PcmBytes {
     const whole = (bytes.length - from) & ~1;
     new Uint8Array(samples.buffer, at, whole).set(bytes.subarray(from, from + whole));
     if (from + whole < bytes.length) this.#carry = bytes[from + whole] as number;
-    // Typed arrays use the host's byte order; every host Bun ships for is little-endian.
+    // Typed arrays use the host's byte order; every platform Eidolon runs on is little-endian.
     return samples;
   }
 }

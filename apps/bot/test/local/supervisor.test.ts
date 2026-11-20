@@ -1,35 +1,37 @@
-// The supervisor against a fake server child, a plain Bun script that follows a plan file and
-// records each run's flags: restart on 75, signals passed on, and the child's exit code returned.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+// The supervisor against a fake server child, a plain script that follows a plan file and records
+// each run's flags: restart on 75, signals passed on, and the child's exit code returned.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { type ForwardedSignal, supervise } from "../../src/local/supervisor.ts";
 
 const FAKE_SERVER = `
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-const runs = join(import.meta.dir, "runs.ndjson");
+import { setTimeout as delay } from "node:timers/promises";
+const runs = join(import.meta.dirname, "runs.ndjson");
 let index = 0;
 try { index = readFileSync(runs, "utf8").trim().split("\\n").filter(Boolean).length; } catch {}
-const step = JSON.parse(readFileSync(join(import.meta.dir, "plan.json"), "utf8"))[index];
+const step = JSON.parse(readFileSync(join(import.meta.dirname, "plan.json"), "utf8"))[index];
 if (step.port !== undefined) {
   process.send?.({ kind: "listening", port: step.port });
-  await Bun.sleep(50);
+  await delay(50);
 }
 if (step.onSignal !== undefined) {
   for (const signal of ["SIGINT", "SIGTERM"]) {
     process.on(signal, () => {
-      appendFileSync(join(import.meta.dir, "signals.txt"), signal + "\\n");
+      appendFileSync(join(import.meta.dirname, "signals.txt"), signal + "\\n");
       process.exit(step.onSignal);
     });
   }
 }
 appendFileSync(
-  join(import.meta.dir, "probes.ndjson"),
+  join(import.meta.dirname, "probes.ndjson"),
   JSON.stringify(process.env.EIDOLON_ENV_PROBE ?? null) + "\\n",
 );
-appendFileSync(runs, JSON.stringify(Bun.argv.slice(2)) + "\\n");
+appendFileSync(runs, JSON.stringify(process.argv.slice(2)) + "\\n");
 if (step.exit !== undefined) process.exit(step.exit);
 setInterval(() => {}, 1000);
 `;
@@ -64,7 +66,7 @@ function runs(): string[][] {
 async function started(count: number): Promise<void> {
   for (let waited = 0; runs().length < count; waited += 20) {
     if (waited > 10_000) throw new Error("the fake server never started");
-    await Bun.sleep(20);
+    await delay(20);
   }
 }
 
@@ -137,7 +139,7 @@ describe("supervise", () => {
     mkdirSync(join(dir, "dist"));
     writeFileSync(
       join(dir, "dist", "server.js"),
-      'process.exit(Bun.argv.includes("--port=41234") ? 7 : 1);',
+      'process.exit(process.argv.includes("--port=41234") ? 7 : 1);',
     );
     process.env.EIDOLON_APP_ROOT = dir;
     try {

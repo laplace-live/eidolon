@@ -15,8 +15,14 @@ import {
   writeSync,
 } from "node:fs";
 import { join } from "node:path";
-import { envOptional, errorText, isPlainObject, logger, raceAbort } from "@eidolon/config";
-import { which } from "../limit.ts";
+import {
+  abortableSleep,
+  envOptional,
+  errorText,
+  isPlainObject,
+  logger,
+  which,
+} from "@eidolon/config";
 import { acquireLock, binDir, LockedError, writeTextAtomic, YT_DLP_LOCK_KEY } from "../paths.ts";
 import { noProgress, type RunOptions } from "../progress.ts";
 
@@ -188,7 +194,7 @@ async function ensureManaged(asset: string, platform: string, opts: YtDlpOptions
     }
     logger.info("Waiting for another process to install yt-dlp");
     while (release === null) {
-      await raceAbort(Bun.sleep(opts.lockPollMs ?? 500), opts.signal);
+      await abortableSleep(opts.lockPollMs ?? 500, opts.signal);
       release = tryLock(command);
     }
   }

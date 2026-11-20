@@ -1,10 +1,10 @@
 // The golden catalog runs (see ingest_streams_golden.ts) replayed through writeStreamCatalog, plus
 // its events, built_at, and what a failed or cancelled build leaves behind.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, logger } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { catalog, type ProgressEvent } from "../src/index.ts";
 import {
   GOLDEN,

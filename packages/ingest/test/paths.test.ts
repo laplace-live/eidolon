@@ -1,5 +1,4 @@
 import "../../config/test/isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -14,7 +13,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dataHome, PROJECT_ROOT, resetSettings, templatesDir } from "@eidolon/config";
+import { dataHome, PROJECT_ROOT, resetSettings, spawnProcess, templatesDir } from "@eidolon/config";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   acquireLock,
   binDir,
@@ -166,21 +166,20 @@ describe("acquireLock", () => {
 
   test("another process's lock names it, and dies with it", async () => {
     mkdirSync(dataHome(), { recursive: true });
-    const paths = join(import.meta.dir, "../src/paths.ts");
-    const child = Bun.spawn(
+    const paths = join(import.meta.dirname, "../src/paths.ts");
+    const child = spawnProcess(
       [
         process.execPath,
-        "--no-env-file",
         "-e",
         `const { acquireLock } = await import(${JSON.stringify(paths)});
          acquireLock("sources:milky-green", "laplace-pipeline");
          console.log("locked");
-         await Bun.sleep(30_000);`,
+         await new Promise((wake) => setTimeout(wake, 30_000));`,
       ],
-      { cwd: dataHome(), env: { ...process.env }, stdout: "pipe", stderr: "inherit" },
+      { cwd: dataHome(), stdout: "pipe", stderr: "inherit" },
     );
     try {
-      const reader = child.stdout.getReader();
+      const reader = (child.stdout as ReadableStream<Uint8Array>).getReader();
       const { value } = await reader.read();
       expect(new TextDecoder().decode(value)).toBe("locked\n");
       let error: unknown;

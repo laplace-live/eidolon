@@ -844,7 +844,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, `{ replyMode }`, `auto`, `text` or `voice`, `{ display }`, `focus`, `normal` or `verbose`, or `{ permissions }`, `ask`, `auto` or `full`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line; a `display` applies at once, during a call too, whose feed carries it, and starts no turn; `permissions` reaches her tasks there at their next question, and her texts at her next turn, a call's included, and starts no turn |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
 | `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`; stops the chat's live tasks, after any `start_task` still being answered; then removes `chats/<id>/` and nothing else, leaving the tasks' records. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |
-| `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers `Range` requests with a `206` (Bun.serve's own, on a file) and sends `Accept-Ranges: bytes`, since Safari plays audio only from a server that takes ranges |
+| `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers a single `Range` with a `206` and an unsatisfiable one with a `416` (`ranges.ts`), and always sends `Accept-Ranges: bytes` and the length, since Safari plays audio only from a server that takes ranges |
 
 - **Text** is trimmed. A message may hold tabs and line breaks, but no other control character.
 - **`missing-key`:** when a persona's mind role's provider takes a key and has none, `POST chats`,
@@ -861,7 +861,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   stored, or when the answer threw outside any turn, as when reading the log fails.
 
 **Checks:**
-- `bun test --no-env-file packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
+- `bun run test packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
   `packages/runtime/test/native/binding.test.ts` runs a bound call on scripted hearing, mind and
   voice, and once over a real werift peer.
 - `bun apps/bot/scripts/local-smoke.ts --headful`. It walks five chats against its fake
@@ -1194,7 +1194,7 @@ The browser's side is in
 
 ### Checks
 
-- `bun test --no-env-file apps/bot/test/chat packages/access/test/chat.test.ts
+- `bun run test apps/bot/test/chat packages/access/test/chat.test.ts
   packages/providers/test/speech/batch/recording.test.ts apps/bot/test/local/boundaries.test.ts
   apps/bot/test/local/production.test.ts`. The recordings measured are tones in
   `packages/providers/test/speech/batch/fixtures/`, one as Chrome's MediaRecorder wrote it.

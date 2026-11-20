@@ -1,6 +1,7 @@
 // A call's Floor on its real kit, emitter, Speaker and Mouth, with fakes for the rest: the test
 // posts what the Ear hears and what the client sends, scripts each turn's lines and her voice's
 // audio, pulls the Speaker as the transport's clock would, and moves the clock.
+import { setTimeout as delay } from "node:timers/promises";
 import type { UserContext } from "@eidolon/access";
 import {
   CHAT_FORMAT,
@@ -48,7 +49,7 @@ export const HEADER: ChatHeader = {
 
 /** Lets every task the test started run until each waits on something the test controls. */
 export async function settle(): Promise<void> {
-  for (let i = 0; i < 8; i++) await Bun.sleep(0);
+  for (let i = 0; i < 8; i++) await delay(0);
 }
 
 /** An utterance that records what it was given; the test scripts its audio. */

@@ -3,9 +3,8 @@
 //
 // Ported from pi-mono packages/mcp/test/client.test.ts@ac78a60
 //
-// pi's client cases over two in-memory transports; the progress case runs on real timers, since
-// bun's fake ones don't flush the transport's microtasks between timers.
-import { describe, expect, it, mock } from "bun:test";
+// pi's client cases over two in-memory transports; the progress case runs on real timers.
+import { describe, expect, it, vi } from "vitest";
 import { McpClient } from "../src/mcp/client.ts";
 import {
   type JsonRpcMessage,
@@ -216,7 +215,7 @@ describe("McpClient", () => {
       await sleep(300);
       return { content: [{ type: "text", text: "done" }] };
     });
-    const progress = mock();
+    const progress = vi.fn();
     const result = await client.callTool("slow", {}, { timeoutMs: 150, onProgress: progress });
     expect(result).toEqual({ content: [{ type: "text", text: "done" }] });
     expect(progress).toHaveBeenCalledWith({ progressToken: 2, progress: 1, total: 2 });
@@ -328,7 +327,7 @@ describe("McpClient", () => {
 
   it("notifies close listeners once when the transport drops", async () => {
     const { client, server } = await connect();
-    const closed = mock();
+    const closed = vi.fn();
     client.onClose(closed);
     server.setHandler("tools/call", () => new Promise(() => {}));
     const pending = client.callTool("wait");
@@ -348,7 +347,7 @@ describe("McpClient", () => {
       roots: [{ uri: "file:///workspace", name: "workspace" }],
     });
     await client.connect(clientTransport);
-    const changed = mock();
+    const changed = vi.fn();
     client.onNotification("notifications/tools/list_changed", changed);
     await server.transport.send({ jsonrpc: "2.0", id: "roots", method: "roots/list" });
     await server.transport.send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });

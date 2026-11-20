@@ -1,5 +1,6 @@
 // fixtures/write_side.golden.json pins the write side: the embedding cache's keys, blobs and file,
 // the batch-embedding scenarios and totals, and each table's schema, rows, FTS index and versions.
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DataType, Field } from "apache-arrow";
 import type { ArrowSchema, CostSource } from "../src/index.ts";
@@ -40,9 +41,9 @@ export interface WriteGolden {
   schemas: Record<string, { metadata: Record<string, string>; fields: unknown[][] }>;
 }
 
-export const WRITE_GOLDEN = (await Bun.file(
-  join(import.meta.dir, "fixtures", "write_side.golden.json"),
-).json()) as WriteGolden;
+export const WRITE_GOLDEN = JSON.parse(
+  readFileSync(join(import.meta.dirname, "fixtures", "write_side.golden.json"), "utf8"),
+) as WriteGolden;
 
 /** The golden's dimension: it was printed with EMBED_DIM=4. */
 export const GOLDEN_DIM = 4;

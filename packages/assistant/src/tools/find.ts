@@ -3,12 +3,13 @@
 //
 // Ported from pi-mono packages/coding-agent/src/core/tools/find.ts@ac78a60
 //
-// pi runs fd; this walks the folder itself and matches with Bun.Glob, keeping fd's rules: hidden
+// pi runs fd; this walks the folder itself and matches with minimatch, keeping fd's rules: hidden
 // files listed, .gitignore files obeyed, a "/" after each directory. grep shares the walk.
 import type { Dirent } from "node:fs";
 import { lstat, readdir, readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import ignore, { type Ignore } from "ignore";
+import { Minimatch } from "minimatch";
 import type { AssistantTool, PathGuard } from "../types.ts";
 import { pathExists, resolveToCwd } from "./path.ts";
 import {
@@ -167,15 +168,34 @@ export function globMatcher(
 ): (path: string) => boolean {
   // fd and rg never match a leading "./" (pi #12020).
   const cleaned = pattern.replace(/^(?:\.\/)+/, "");
-  const glob = new Bun.Glob(ignoreCase ? cleaned.toLowerCase() : cleaned);
+  const glob = compileGlob(ignoreCase ? cleaned.toLowerCase() : cleaned);
   const fold = ignoreCase ? (text: string) => text.toLowerCase() : (text: string) => text;
   if (!cleaned.includes("/")) {
-    return (path) => glob.match(fold(path.slice(path.lastIndexOf("/") + 1)));
+    return (path) => glob(fold(path.slice(path.lastIndexOf("/") + 1)));
   }
   if (isAbsolute(cleaned)) {
-    return (path) => glob.match(fold(join(root, path))) || glob.match(fold(join(named, path)));
+    return (path) => glob(fold(join(root, path))) || glob(fold(join(named, path)));
   }
-  return (path) => glob.match(fold(path));
+  return (path) => glob(fold(path));
+}
+
+/**
+ * Whether a path matches `glob`, dot files included. A leading # is part of a name, not a comment,
+ * and each leading ! negates but one that opens an extglob, as in !(*.test).ts.
+ */
+function compileGlob(glob: string): (path: string) => boolean {
+  let negations = 0;
+  while (glob[negations] === "!") negations++;
+  if (glob[negations] === "(") negations--;
+  const matcher = new Minimatch(glob.slice(negations), {
+    dot: true,
+    nocomment: true,
+    nonegate: true,
+    // . and .. stay as written: a walked path holds neither.
+    optimizationLevel: 0,
+  });
+  const negated = negations % 2 === 1;
+  return (path) => matcher.match(path) !== negated;
 }
 
 /**

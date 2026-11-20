@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { SONIOX_URL, SonioxSpeech } from "../../src/speech/stream/soniox.ts";
 import { sonioxUrl } from "../../src/stt/soniox.ts";
 import { selectionAt as hearingAt } from "../stt/fake.ts";
@@ -27,7 +27,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await Promise.all(streams.map((stream) => stream.close()));
-  fake?.stop();
+  await fake?.stop();
   restore();
 });
 
@@ -46,7 +46,7 @@ test("pipedog's URL for Soniox's own account", () => {
 });
 
 test("an account's API base moves her voice's socket to its origin, as it moves her hearing's", async () => {
-  fake = fakeServer();
+  fake = await fakeServer();
   const base = `${fake.base}/soniox`;
   streams.push(new SonioxSpeech(selectionAt("soniox", base)));
   const peer = await until(() => fake.peers[0]);
@@ -57,7 +57,7 @@ test("an account's API base moves her voice's socket to its origin, as it moves 
 });
 
 test("a stream per utterance, configured as today before its text; timestamps split the audio", async () => {
-  fake = fakeServer({
+  fake = await fakeServer({
     onMessage: (peer, data) => {
       const message = JSON.parse(data as string);
       if (message.text_end !== true) return;
@@ -108,7 +108,7 @@ test("a stream per utterance, configured as today before its text; timestamps sp
 test("a voice of her own, a regional language as its base, and no stream left open when nothing was said", async () => {
   restore();
   restore = setEnv({ ...CLEAN_ENV, TTS_VOICE_ID: "Maya", STT_LANGUAGE: "zh-CN" });
-  fake = fakeServer();
+  fake = await fakeServer();
   const stream = open();
   const empty = stream.utterance(null);
   empty.end();
@@ -125,7 +125,7 @@ test("a voice of her own, a regional language as its base, and no stream left op
 });
 
 test("an error code fails the utterance with today's text", async () => {
-  fake = fakeServer({
+  fake = await fakeServer({
     onMessage: (peer, data) => {
       const message = JSON.parse(data as string);
       if (message.text === undefined) return;
@@ -150,7 +150,7 @@ test("an error code fails the utterance with today's text", async () => {
 test("a keepalive every 20 s", async () => {
   const intervals = captureIntervals();
   try {
-    fake = fakeServer();
+    fake = await fakeServer();
     open();
     const peer = await until(() => fake.peers[0]);
     const keepalive = await until(() => intervals.findLast((interval) => interval.ms === 20_000));
@@ -163,7 +163,7 @@ test("a keepalive every 20 s", async () => {
 });
 
 test("a refused key is an error that never carries it", async () => {
-  fake = fakeServer({ refuse: 401 });
+  fake = await fakeServer({ refuse: 401 });
   const utterance = open().utterance(null);
   utterance.say({ id: 1, text: "嗨。" });
   const [event] = await collect(utterance.audio);

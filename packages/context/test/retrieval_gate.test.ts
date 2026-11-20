@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GATE_QUESTION_KEYS, type LogRecord } from "@eidolon/config";
 import type { SearchRow } from "@eidolon/retrieval";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   DEFAULT_GATE_MODEL,
   GATE_FRAME_KEY,
@@ -436,7 +436,7 @@ describe("RetrievalGate.decide", () => {
     );
     expect((await gate.decide(state)).retrieve).toBe(true);
     expect(warnings()[0]).toBe(
-      "Retrieval gate failed open: TimeoutError('The operation timed out.')",
+      "Retrieval gate failed open: TimeoutError('The operation was aborted due to timeout')",
     );
   });
 

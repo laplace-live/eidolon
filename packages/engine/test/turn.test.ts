@@ -1,5 +1,4 @@
 import "../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { UserContext } from "@eidolon/access";
@@ -37,6 +36,7 @@ import {
 } from "@eidolon/context";
 import type { ContextProvider, LlmTool, ToolResult, TurnGate } from "@eidolon/core";
 import { usageRecord } from "@eidolon/providers";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { broadcast, FakeRetriever, MemoryCatalog, TODAY } from "../../context/test/helpers.ts";
 import { type PartsDeps, personaParts } from "../src/parts.ts";
 import { runTurn } from "../src/turn.ts";

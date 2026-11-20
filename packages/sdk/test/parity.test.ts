@@ -1,4 +1,3 @@
-import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
@@ -11,6 +10,7 @@ import {
   REPLY_MODES as SERVER_REPLY_MODES,
   type ChatEvent as ServerChatEvent,
 } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import { ChatSigner, fromViewer, MIN_CHAT_SECRET_LENGTH } from "../../../apps/bot/src/chat/sig.ts";
 import {
   openChatWindow,
@@ -48,7 +48,7 @@ import {
   type WireEvent,
 } from "../src/index.ts";
 
-const ROOT = resolve(import.meta.dir, "../../..");
+const ROOT = resolve(import.meta.dirname, "../../..");
 
 describe("server and client SDK protocol parity", () => {
   test("chat log format and window budgets match server constants", () => {

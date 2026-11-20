@@ -1,4 +1,4 @@
-// On demand: `bun packages/retrieval/test/jieba-parity.ts [dbPath]` re-tokenizes every row of both
+// On demand: `node packages/retrieval/test/jieba-parity.ts [dbPath]` re-tokenizes every row of both
 // tables and compares with the stored `tokens` column. Exits 1 on any mismatch.
 import { openTable, resolveDbPath, tokenizeZh, warmTokenizer } from "../src/index.ts";
 import { chunkFtsText, FTS_COLUMNS, factFtsText } from "./fts_text.ts";

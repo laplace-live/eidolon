@@ -1369,12 +1369,20 @@ class Run {
     this.#cleanups.push(cleanup);
   }
 
-  /** Starts the server with `env`, adding the boot check; null when it printed no link. */
+  /** Starts the server on Node with `env`, adding the boot check; null when it printed no link. */
   async boot(env: Record<string, string>, checks: Checks): Promise<Server | null> {
-    const child = Bun.spawn(
-      [process.execPath, "--no-env-file", SERVER_ENTRY, "--port", "0", "--no-open"],
-      { cwd: ROOT, env, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
-    );
+    const node = Bun.which("node", { PATH: env.PATH ?? "" });
+    if (node === null) {
+      checks.add("boot", false, "no node on PATH to run the server with");
+      return null;
+    }
+    const child = Bun.spawn([node, SERVER_ENTRY, "--port", "0", "--no-open"], {
+      cwd: ROOT,
+      env,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     this.#server = child;
     const stdout = new Output(child.stdout);
     const stderr = new Output(child.stderr);

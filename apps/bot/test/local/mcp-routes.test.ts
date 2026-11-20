@@ -2,7 +2,6 @@
 // what a PUT may change there and what it refuses, and an MCP card's answer as the page sends it.
 // The booted server's guard is in tasks-server.test.ts.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
   linkSync,
   lstatSync,
@@ -15,9 +14,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { type TaskSnapshot, tasksDir } from "@eidolon/assistant";
-import { type AssistantSettings, dataHome } from "@eidolon/config";
+import { type AssistantSettings, dataHome, newId } from "@eidolon/config";
 import type { createMind, MindChunk } from "@eidolon/engine";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ErrorBody, McpServersResponse } from "../../src/local/api.ts";
 import { createLocalRouter } from "../../src/local/router.ts";
@@ -26,9 +27,10 @@ import { tasksRoutes } from "../../src/local/routes/tasks.ts";
 import { TaskManager } from "../../src/local/tasks/manager.ts";
 import { ensureDataHome } from "../../src/local/write.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
+import { type ServedRoutes, serveRoutes } from "../serve.ts";
 
 const FIXTURE = join(
-  import.meta.dir,
+  import.meta.dirname,
   "../../../../packages/assistant/test/fixtures/mcp-server.mjs",
 );
 const AUTH = "Bearer test-secret";
@@ -38,7 +40,7 @@ let umask = 0;
 let settings: AssistantSettings;
 let logs: CapturedLogs;
 const managers: TaskManager[] = [];
-const servers: ReturnType<typeof Bun.serve>[] = [];
+const servers: Promise<ServedRoutes>[] = [];
 const savedEnv = new Map<string, string | undefined>();
 const realFetch = globalThis.fetch;
 
@@ -77,7 +79,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  for (const server of servers.splice(0)) server.stop(true);
+  for (const server of servers.splice(0)) await (await server).stop();
   for (const tasks of managers.splice(0)) await tasks.stop();
   process.umask(umask);
   logs.restore();
@@ -149,21 +151,16 @@ function serve(
     [...tasksRoutes(tasks), ...mcpRoutes(tasks)],
     (request) => (request.headers.get("authorization") === AUTH ? "bearer" : null),
   );
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    routes: { "/api/local/*": router },
-    fetch: () => new Response(null, { status: 404 }),
-  });
-  servers.push(server);
-  return (method, path, init = {}) => {
+  const listening = serveRoutes({ "/api/local/*": router });
+  servers.push(listening);
+  return async (method, path, init = {}) => {
     const headers: Record<string, string> = init.auth === false ? {} : { authorization: AUTH };
     let body: string | undefined;
     if (init.body !== undefined) {
       headers["content-type"] = "application/json";
       body = typeof init.body === "string" ? init.body : JSON.stringify(init.body);
     }
-    return realFetch(`http://127.0.0.1:${server.port}${path}`, { method, headers, body });
+    return realFetch(`${(await listening).url}${path}`, { method, headers, body });
   };
 }
 
@@ -446,7 +443,7 @@ describe("an MCP card's answer", () => {
       MCP_JSON(),
       JSON.stringify({
         mcpServers: {
-          fake: { command: process.execPath, args: ["--no-env-file", FIXTURE], tools: ["echo"] },
+          fake: { command: process.execPath, args: [FIXTURE], tools: ["echo"] },
         },
       }),
     );
@@ -457,12 +454,12 @@ describe("an MCP card's answer", () => {
     const call = serve(tasks);
     const { id } = await tasks.start(
       { goal: "Many", folder: join(work, "many") },
-      { id: Bun.randomUUIDv7(), persona: "milky-green", call: "call-1" },
+      { id: newId(), persona: "milky-green", call: "call-1" },
     );
     let paused: TaskSnapshot = await tasks.get(id);
     for (const deadline = Date.now() + 5000; paused.status !== "paused"; ) {
       if (Date.now() > deadline) throw new Error("timed out waiting");
-      await Bun.sleep(5);
+      await delay(5);
       paused = await tasks.get(id);
     }
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { mp3DurationMs, recordingDurationMs } from "../../../src/speech/batch/index.ts";
 import { mp3Frames } from "./fake.ts";
 import { FIXTURES, fixture, webmOpus } from "./recordings.ts";

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { CloudflareIceCache, type IcePayload } from "../src/index.ts";
 import { blockNetwork, captureLogs, deferred, fakeFetch, lines } from "./support.ts";
 

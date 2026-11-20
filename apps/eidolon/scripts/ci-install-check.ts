@@ -2,10 +2,11 @@
 // it on a new HOME and data home: its link, a sign-in with the link's code, the status with the
 // cookie and the proof, a CLI command's help, the eidolon command tasks run, the built-in skills,
 // and a clean exit on SIGTERM. CI runs it on linux-x64.
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { Subprocess } from "bun";
+import { type Subprocess, spawnProcess } from "@eidolon/config";
 import { Output, READY_LINE } from "../../bot/scripts/output.ts";
 import {
   type ErrorBody,
@@ -15,7 +16,7 @@ import {
   type Status,
 } from "../../bot/src/local/api.ts";
 
-const USAGE = `usage: bun apps/eidolon/scripts/ci-install-check.ts <tarball>
+const USAGE = `usage: node apps/eidolon/scripts/ci-install-check.ts <tarball>
 
 Installs the tarball with npm into a temporary folder, runs its eidolon on a temporary HOME and
 data home, and deletes them. Exits 0 when every check passes, else 1.`;
@@ -33,28 +34,29 @@ function check(name: string, pass: boolean, detail: string): asserts pass {
 }
 
 function versionOf(tool: string): string {
-  return Bun.spawnSync([tool, "--version"]).stdout.toString().trim();
+  return spawnSync(tool, ["--version"], { encoding: "utf8" }).stdout.trim();
 }
 
 /** `npm install --prefix`, which runs the dependencies' install scripts; returns the bin it links. */
 function install(tarball: string, prefix: string): string {
   mkdirSync(prefix, { recursive: true });
-  const npm = Bun.spawnSync(
-    ["npm", "install", "--prefix", prefix, "--no-audit", "--no-fund", resolve(tarball)],
-    { cwd: prefix, stdin: "ignore", stdout: "inherit", stderr: "inherit" },
+  const npm = spawnSync(
+    "npm",
+    ["install", "--prefix", prefix, "--no-audit", "--no-fund", resolve(tarball)],
+    { cwd: prefix, stdio: ["ignore", "inherit", "inherit"] },
   );
   check(
     "install",
-    npm.exitCode === 0,
+    npm.status === 0,
     `npm ${versionOf("npm")} on Node ${versionOf("node")}, ${process.platform}-${process.arch}: ` +
-      `exit ${npm.exitCode}`,
+      `exit ${npm.status}`,
   );
   return join(prefix, "node_modules", ".bin", "eidolon");
 }
 
 interface App {
   /** The launcher, which leads its own process group. */
-  readonly process: Subprocess<"ignore", "pipe", "pipe">;
+  readonly process: Subprocess;
   readonly stdout: Output;
   readonly stderr: Output;
   readonly origin: string;
@@ -64,7 +66,7 @@ interface App {
 
 /** The launcher's exit code, or null when it hasn't exited within `ms`. */
 export async function exitWithin(child: Subprocess, ms: number): Promise<number | null> {
-  // Cleared on exit: a pending Bun.sleep would hold this script open for the rest of `ms`.
+  // Cleared on exit: a pending timer would hold this script open for the rest of `ms`.
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {
     timer = setTimeout(() => resolve(null), ms);
@@ -78,11 +80,11 @@ export async function exitWithin(child: Subprocess, ms: number): Promise<number 
 
 /** Runs a command to its end, keeping this process's event loop, and so the app's pipes, going. */
 async function run(
-  argv: readonly string[],
+  argv: readonly [string, ...string[]],
   env: Record<string, string>,
   cwd: string,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const child = Bun.spawn([...argv], { cwd, env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+  const child = spawnProcess(argv, { cwd, env, stdout: "pipe", stderr: "pipe" });
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -106,16 +108,15 @@ async function stopAll(child: Subprocess): Promise<void> {
 
 /** Starts `eidolon --no-open --port 0` and waits for the link it prints. */
 async function boot(bin: string, env: Record<string, string>, cwd: string): Promise<App> {
-  const child = Bun.spawn([bin, "--no-open", "--port", "0"], {
+  const child = spawnProcess([bin, "--no-open", "--port", "0"], {
     cwd,
     env,
-    stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
     detached: true,
   });
-  const stdout = new Output(child.stdout);
-  const stderr = new Output(child.stderr);
+  const stdout = new Output(child.stdout as ReadableStream<Uint8Array>);
+  const stderr = new Output(child.stderr as ReadableStream<Uint8Array>);
   let link: string;
   try {
     link = await stdout.waitFor(READY_LINE, child.exited, BOOT_TIMEOUT_MS);
@@ -262,7 +263,7 @@ function tarballArg(argv: readonly string[]): string {
 }
 
 async function main(): Promise<number> {
-  const tarball = tarballArg(Bun.argv.slice(2));
+  const tarball = tarballArg(process.argv.slice(2));
   const temp = mkdtempSync(join(tmpdir(), "eidolon-install-check-"));
   try {
     await checkPackage(resolve(tarball), temp);

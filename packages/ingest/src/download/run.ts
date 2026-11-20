@@ -10,10 +10,11 @@ import {
   pyPathStem,
   pyPathSuffix,
   pyStrip,
+  type Subprocess,
   sortedPy,
+  spawnProcess,
   splitlines,
 } from "@eidolon/config";
-import type { Subprocess } from "bun";
 import { type Failure, sharedFailure } from "../failure.ts";
 import { terminateOnAbort } from "../limit.ts";
 import {
@@ -189,10 +190,7 @@ async function runYtDlp(
   onProgress: ProgressSink,
 ): Promise<Outcome> {
   const events = opts.output === "events";
-  const child = Bun.spawn([ytDlp.path, ...args], {
-    // Bun spawns with the environment the process started with unless told otherwise; yt-dlp must
-    // see what the .env set, such as a proxy.
-    env: process.env,
+  const child = spawnProcess([ytDlp.path, ...args], {
     stdin: "inherit",
     stdout: events ? "pipe" : "inherit",
     stderr: "pipe",
@@ -201,7 +199,7 @@ async function runYtDlp(
   try {
     const onOutput = opts.onOutput ?? (() => {});
     const [stderr] = await Promise.all([
-      readText(child.stderr),
+      readText(child.stderr as ReadableStream<Uint8Array>),
       events
         ? forEachLine(child.stdout as ReadableStream<Uint8Array>, (line) => {
             const progress = parseProgressLine(line);

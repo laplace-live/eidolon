@@ -1,12 +1,12 @@
 // POST jobs' typed requests: the exact argv each command and option set spawns, what the real
 // CLI parsers read from it, and the requests refused before anything runs.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "@eidolon/cli";
 import { jobArgv } from "@eidolon/cli/job";
 import { cliEntry, dataHome } from "@eidolon/config";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { BUILD_STREAM_CATALOG_PARSER } from "../../../cli/src/build_stream_catalog.ts";
 import { DOWNLOAD_PARSER } from "../../../cli/src/download.ts";
 import { INGEST_FACTS_PARSER } from "../../../cli/src/ingest_facts.ts";
@@ -164,14 +164,7 @@ describe("each command spawns a fixed argv", () => {
         arg === "<batch>" ? batch : arg === "<audio>" ? audio : arg,
       );
       const [cli, ...args] = expected as [string, ...string[]];
-      expect(argv(spec)).toEqual([
-        process.execPath,
-        "--no-env-file",
-        cliEntry(),
-        cli,
-        "--json",
-        ...args,
-      ]);
+      expect(argv(spec)).toEqual([process.execPath, cliEntry(), cli, "--json", ...args]);
       expect(spec.options).toEqual(options);
       expect(spec.persona).toBe((body as { persona: string }).persona);
     });

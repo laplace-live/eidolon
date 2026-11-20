@@ -1,7 +1,9 @@
 // A stand-in for the CLI in the jobs tests, never the real one, whose load-env.ts would read the
-// repository's .env: `bun jobs-fake-cli.ts <scenario> <command> --json [args]`. It writes progress
+// repository's .env: `node jobs-fake-cli.ts <scenario> <command> --json [args]`. It writes progress
 // events to stdout and log lines to stderr, as the CLI does.
-const [scenario = "ok", command = "", ...args] = Bun.argv.slice(2);
+import { spawn } from "node:child_process";
+
+const [scenario = "ok", command = "", ...args] = process.argv.slice(2);
 
 /** The summary the real CLI ends this command line's run with. */
 const runStage =
@@ -136,7 +138,7 @@ switch (scenario) {
 
   case "stubborn": {
     // Ignores SIGTERM, and has a child of its own that only a kill of the group reaches.
-    const child = Bun.spawn(["sleep", "30"], { stdio: ["ignore", "ignore", "ignore"] });
+    const child = spawn("sleep", ["30"], { stdio: "ignore" });
     emit({ type: "stage", stage, status: "start", message: String(child.pid) });
     process.on("SIGTERM", () => process.stderr.write("ignoring SIGTERM\n"));
     setInterval(() => {}, 1000);

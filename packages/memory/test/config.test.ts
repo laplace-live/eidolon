@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { dataHome } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   buildMemoryConfig,
   memorySearchSettingsFromEnv,

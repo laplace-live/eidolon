@@ -2,9 +2,9 @@
 // at a fake OpenRouter. A browser keeps the chat and sends it back whole with each line, as laplace's
 // client will; the server keeps nothing. With EIDOLON_CHAT_SECRET unset, none of it exists.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   CHAT_FORMAT,
   type ChatEvent,
@@ -15,7 +15,8 @@ import {
 import { activePersona, dataHome, resetSettings } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import type { CallBinding } from "@eidolon/runtime";
-import type { Server } from "bun";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { type ServedFetch, serveFetch } from "../../../../packages/config/test/http.ts";
 import { ChatSigner, fromViewer, MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
 import { type BotServer, startBotServer } from "../../src/server.ts";
 import { type CapturedLogs, captureLogs, ORIGIN } from "../fakes.ts";
@@ -41,43 +42,39 @@ const LOOK_CALL = "call_look_up";
 
 /** What her mind was sent, one request per mind call. */
 const asked: { readonly messages: readonly Sent[] }[] = [];
-let provider: Server<undefined>;
+let provider: ServedFetch;
 
-beforeAll(() => {
-  provider = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      if (new URL(request.url).pathname !== "/v1/chat/completions") {
-        return new Response("not here", { status: 404 });
-      }
-      const sent = (await request.json()) as { messages: Sent[] };
-      asked.push(sent);
-      const last = sent.messages.at(-1);
-      const call = {
-        index: 0,
-        id: LOOK_CALL,
-        type: "function",
-        function: { name: "look_up", arguments: "{}" },
-      };
-      const delta =
-        last?.content === LOOK_UP
-          ? { role: "assistant", content: LOOKING, tool_calls: [call] }
-          : { role: "assistant", content: last?.role === "tool" ? FOUND : `第${asked.length}句` };
-      const chunks = [
-        { choices: [{ delta }] },
-        { choices: [{ delta: {}, finish_reason: "tool_calls" in delta ? "tool_calls" : "stop" }] },
-        { choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, cost: 0.0001 } },
-      ];
-      const body = [...chunks.map((chunk) => JSON.stringify(chunk)), "[DONE]"]
-        .map((data) => `data: ${data}\n\n`)
-        .join("");
-      return new Response(body, { headers: { "content-type": "text/event-stream" } });
-    },
+beforeAll(async () => {
+  provider = await serveFetch(async (request) => {
+    if (new URL(request.url).pathname !== "/v1/chat/completions") {
+      return new Response("not here", { status: 404 });
+    }
+    const sent = (await request.json()) as { messages: Sent[] };
+    asked.push(sent);
+    const last = sent.messages.at(-1);
+    const call = {
+      index: 0,
+      id: LOOK_CALL,
+      type: "function",
+      function: { name: "look_up", arguments: "{}" },
+    };
+    const delta =
+      last?.content === LOOK_UP
+        ? { role: "assistant", content: LOOKING, tool_calls: [call] }
+        : { role: "assistant", content: last?.role === "tool" ? FOUND : `第${asked.length}句` };
+    const chunks = [
+      { choices: [{ delta }] },
+      { choices: [{ delta: {}, finish_reason: "tool_calls" in delta ? "tool_calls" : "stop" }] },
+      { choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, cost: 0.0001 } },
+    ];
+    const body = [...chunks.map((chunk) => JSON.stringify(chunk)), "[DONE]"]
+      .map((data) => `data: ${data}\n\n`)
+      .join("");
+    return new Response(body, { headers: { "content-type": "text/event-stream" } });
   });
 });
 afterAll(async () => {
-  await provider.stop(true);
+  await provider.stop();
   resetSettings();
 });
 
@@ -105,7 +102,7 @@ beforeEach(() => {
     delete process.env[name];
   }
   process.env.OPENROUTER_API_KEY = "fake-key";
-  process.env.OPENROUTER_API_BASE = `http://127.0.0.1:${provider.port}/v1`;
+  process.env.OPENROUTER_API_BASE = `${provider.url}/v1`;
   process.env.EIDOLON_REAL_IP_HEADER = IP_HEADER;
   resetSettings();
   asked.length = 0;
@@ -242,7 +239,7 @@ describe("with EIDOLON_CHAT_SECRET set", () => {
     binding.onTranscript({ role: "user", text: "是我", interrupted: false }, client);
     binding.onEnded("hangup");
     const deadline = Date.now() + 2000;
-    while (lines.length < 2 && Date.now() < deadline) await Bun.sleep(5);
+    while (lines.length < 2 && Date.now() < deadline) await delay(5);
     browser.events.push(...JSON.parse(JSON.stringify(lines)));
     browser.events.push({ seq: 9, at: 2009, type: "call-ended", call: "call-1", reason: "hangup" });
     expect(

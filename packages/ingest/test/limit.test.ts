@@ -1,7 +1,9 @@
-import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { spawnProcess } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import {
   CLEANUP_LIMIT_MS,
   createLimiter,
@@ -100,6 +102,18 @@ describe("createLimiter", () => {
   });
 });
 
+/**
+ * A child's run: 30 s of work that its signal cuts short. The timer keeps the child alive, as a real
+ * run's I/O does: Node exits once nothing but a signal listener is left to wait on.
+ */
+const WORK_THE_SIGNAL_STOPS = `new Promise((stop) => {
+  const work = setTimeout(stop, 30_000);
+  signal.addEventListener("abort", () => {
+    clearTimeout(work);
+    stop();
+  });
+})`;
+
 class FakeHost implements SignalHost {
   readonly listeners = new Map<string, () => void>();
   readonly exits: number[] = [];
@@ -155,7 +169,7 @@ describe("runWithSignals", () => {
       const host = new FakeHost();
       // As a real signal sent during the run's last synchronous stretch: a later turn delivers it.
       const result = runWithSignals(async () => {
-        setTimeout(() => host.send(name), 0);
+        setImmediate(() => host.send(name));
         return 0;
       }, host);
       expect(await result).toBe(code);
@@ -274,19 +288,14 @@ describe("runWithSignals", () => {
   });
 
   test("a real Ctrl-C: a run that ignores its signal quits at once with no cleanup time; one that honors it stops at once and says how to quit now", async () => {
-    const limit = join(import.meta.dir, "../src/limit.ts");
+    const limit = join(import.meta.dirname, "../src/limit.ts");
     for (const [run, cleanupMs, stderr] of [
-      ["Bun.sleep(30_000)", 0, ""],
-      [
-        "new Promise((stop) => signal.addEventListener('abort', stop))",
-        CLEANUP_LIMIT_MS,
-        "Stopping; press Ctrl-C again to quit now.\n",
-      ],
+      ["new Promise((wake) => setTimeout(wake, 30_000))", 0, ""],
+      [WORK_THE_SIGNAL_STOPS, CLEANUP_LIMIT_MS, "Stopping; press Ctrl-C again to quit now.\n"],
     ] as const) {
-      const child = Bun.spawn(
+      const child = spawnProcess(
         [
           process.execPath,
-          "--no-env-file",
           "-e",
           `const { runWithSignals } = await import(${JSON.stringify(limit)});
            process.exitCode = await runWithSignals(async (signal) => {
@@ -298,7 +307,7 @@ describe("runWithSignals", () => {
         { stdout: "pipe", stderr: "pipe" },
       );
       try {
-        const { value } = await child.stdout.getReader().read();
+        const { value } = await (child.stdout as ReadableStream<Uint8Array>).getReader().read();
         expect(new TextDecoder().decode(value)).toBe("ready\n");
         const sent = performance.now();
         child.kill("SIGINT");
@@ -312,17 +321,16 @@ describe("runWithSignals", () => {
   }, 10_000);
 
   test("a real SIGTERM that arrives twice, as the npm launcher's process group gets one, stops gracefully once", async () => {
-    const limit = join(import.meta.dir, "../src/limit.ts");
-    const child = Bun.spawn(
+    const limit = join(import.meta.dirname, "../src/limit.ts");
+    const child = spawnProcess(
       [
         process.execPath,
-        "--no-env-file",
         "-e",
         `const { runWithSignals } = await import(${JSON.stringify(limit)});
          process.exitCode = await runWithSignals(async (signal) => {
            console.log("ready");
-           await new Promise((stop) => signal.addEventListener("abort", stop));
-           await Bun.sleep(200);
+           await ${WORK_THE_SIGNAL_STOPS};
+           await new Promise((wake) => setTimeout(wake, 200));
            console.log("stopped");
            return 0;
          });`,
@@ -331,8 +339,8 @@ describe("runWithSignals", () => {
     );
     const decoder = new TextDecoder();
     try {
-      const stdout = child.stdout.getReader();
-      const stderr = child.stderr.getReader();
+      const stdout = (child.stdout as ReadableStream<Uint8Array>).getReader();
+      const stderr = (child.stderr as ReadableStream<Uint8Array>).getReader();
       expect(decoder.decode((await stdout.read()).value)).toBe("ready\n");
       child.kill("SIGTERM");
       // The second once the first reached its listener, as the launcher's copy comes: two pending
@@ -353,7 +361,7 @@ describe("runWithSignals", () => {
   }, 10_000);
 
   test("a real signal sent while the run is stuck in a synchronous read still exits 130 or 143", async () => {
-    const limit = join(import.meta.dir, "../src/limit.ts");
+    const limit = join(import.meta.dirname, "../src/limit.ts");
     const work = mkdtempSync(join(tmpdir(), "limit-signal-"));
     try {
       for (const [name, code] of [
@@ -362,10 +370,9 @@ describe("runWithSignals", () => {
       ] as const) {
         const fifo = join(work, `${name}.fifo`);
         makeFifo(fifo);
-        const child = Bun.spawn(
+        const child = spawnProcess(
           [
             process.execPath,
-            "--no-env-file",
             "-e",
             `const { readFileSync } = await import("node:fs");
              const { runWithSignals } = await import(${JSON.stringify(limit)});
@@ -374,12 +381,12 @@ describe("runWithSignals", () => {
                return 0;
              });`,
           ],
-          { stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+          { stdout: "pipe", stderr: "pipe" },
         );
         try {
           const release = await whenReading(fifo, child);
           child.kill(name);
-          await Bun.sleep(50);
+          await delay(50);
           release("x");
           expect(await child.exited).toBe(code);
         } finally {
@@ -394,26 +401,26 @@ describe("runWithSignals", () => {
 
 describe("terminate", () => {
   test("SIGTERM stops a child that listens", async () => {
-    const child = Bun.spawn(["sleep", "30"]);
+    const child = spawnProcess(["sleep", "30"]);
     await terminate(child);
     expect(child.signalCode).toBe("SIGTERM");
   });
 
   test("a child that ignores SIGTERM gets SIGKILL after the grace period", async () => {
-    const child = Bun.spawn(["sh", "-c", "trap '' TERM; exec sleep 30"]);
-    await Bun.sleep(100);
+    const child = spawnProcess(["sh", "-c", "trap '' TERM; exec sleep 30"]);
+    await delay(100);
     await terminate(child, 100);
     expect(child.signalCode).toBe("SIGKILL");
   });
 
   test("an exited child is left alone; an abort terminates a running one", async () => {
-    const done = Bun.spawn(["true"]);
+    const done = spawnProcess(["true"]);
     await done.exited;
     await terminate(done);
     expect(done.exitCode).toBe(0);
 
     const controller = new AbortController();
-    const child = Bun.spawn(["sleep", "30"]);
+    const child = spawnProcess(["sleep", "30"]);
     const detach = terminateOnAbort(child, controller.signal);
     controller.abort();
     await child.exited;

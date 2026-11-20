@@ -1,5 +1,5 @@
 // The videos a playlist, channel or series URL lists, for building a batch without a browser.
-import { isPlainObject, pyStrip } from "@eidolon/config";
+import { isPlainObject, pyStrip, spawnProcess } from "@eidolon/config";
 import { terminateOnAbort } from "../limit.ts";
 import { noProgress, type PlaylistEntry, type RunOptions } from "../progress.ts";
 import { defaultCookiesFile, defaultCookiesFromBrowser, jsRuntimeArgs } from "./argv.ts";
@@ -69,8 +69,7 @@ export async function expandPlaylist(
   if (browser) args.push("--cookies-from-browser", browser);
   if (cookies) args.push("--cookies", cookies);
   args.push(...(opts.extraArgs ?? []), "--", url);
-  const child = Bun.spawn([ytDlp.path, ...args], {
-    env: process.env,
+  const child = spawnProcess([ytDlp.path, ...args], {
     stdin: "inherit",
     stdout: "pipe",
     stderr: "pipe",
@@ -81,7 +80,7 @@ export async function expandPlaylist(
   try {
     [stderr] = await Promise.all([
       new Response(child.stderr).text(),
-      forEachLine(child.stdout, (line) => {
+      forEachLine(child.stdout as ReadableStream<Uint8Array>, (line) => {
         const entry = entryOf(pyStrip(line));
         if (entry === null) return;
         entries.push(entry);

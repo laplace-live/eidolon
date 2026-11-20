@@ -5,7 +5,7 @@
 //
 // pi's cases for stdio entries and fields every entry has; an HTTP entry is refused here, with the
 // way to reach it as a stdio one.
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import {
   HTTP_SERVERS_LATER,
   type McpServerConfigResult,

@@ -1,6 +1,7 @@
 // A call inside a chat, as the local app and production both keep it: what the call opens on, and
 // the `call` messages its lines and her photos become.
 import type { ChatEventDraft, ParticipantId, ViewMessage } from "@eidolon/chat";
+import { newId } from "@eidolon/config";
 import { fetchStoredSelfie, saveSelfies } from "./attachments.ts";
 import { turnView } from "./turn.ts";
 import type { EngineDeps, TurnRequest } from "./types.ts";
@@ -48,7 +49,7 @@ export function callLine(
 ): ChatEventDraft {
   return {
     type: "message",
-    id: Bun.randomUUIDv7(),
+    id: newId(),
     speaker: line.role === "user" ? { kind: "user" } : { kind: "persona", id: persona },
     text: line.text,
     modality: "call",
@@ -73,7 +74,7 @@ export async function callPhotos(
   if (attachments.length === 0) return null;
   return {
     type: "message",
-    id: Bun.randomUUIDv7(),
+    id: newId(),
     speaker: { kind: "persona", id: persona },
     text: "",
     attachments,

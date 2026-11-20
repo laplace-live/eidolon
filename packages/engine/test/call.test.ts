@@ -2,9 +2,9 @@
 // kept as her line, notices, the nudge, the call's usage scope, the async-tool guidance, sync and
 // async tools, a realtime turn's preparation, runTool, and a group call's runChat.
 import "../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { UserContext } from "@eidolon/access";
 import {
   CHAT_FORMAT,
@@ -21,6 +21,7 @@ import { activePersona, consoleSink, dataHome, logger, resetSettings } from "@ei
 import type { DirectorDecision, DirectorInput } from "@eidolon/context";
 import type { ContextProvider, LlmTool, ToolEffects } from "@eidolon/core";
 import { usageRecord } from "@eidolon/providers";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { ASYNC_TOOL_INSTRUCTIONS } from "../src/async_tool.ts";
 import { callSeed } from "../src/call.ts";
 import { type CallChatOutput, runChat } from "../src/chat.ts";
@@ -256,7 +257,7 @@ async function until(fn: () => boolean): Promise<void> {
   const start = Date.now();
   while (!fn()) {
     if (Date.now() - start > 1000) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 
@@ -372,7 +373,7 @@ describe("a call's turn", () => {
       },
     };
     for await (const output of runTurn(request(call), deps(mind, parts({ tools: [voice] })))) {
-      await Bun.sleep(1);
+      await delay(1);
       read.push(lines([output])[0] as string);
     }
     expect(order).toEqual(["switch after mind:ended", "heard after 2 rounds"]);

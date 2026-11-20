@@ -1,7 +1,6 @@
 // A turn in a chat with other personas: the others named in her instruction, the viewer labelled,
 // stop sequences and the cut at a line she writes as someone else, and what Mem0 may store.
 import "../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { UserContext } from "@eidolon/access";
@@ -15,6 +14,7 @@ import {
 import { consoleSink, dataHome, type LogRecord, logger, resetSettings } from "@eidolon/config";
 import type { ContextProvider, FrameMetadata, LlmTool } from "@eidolon/core";
 import { MEM0_STORE_KEY } from "@eidolon/memory";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { SpeakerCut } from "../src/group.ts";
 import { runTurn } from "../src/turn.ts";
 import type {

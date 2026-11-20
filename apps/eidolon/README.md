@@ -12,8 +12,8 @@ The terminal prints the link that signs your browser in, and opens it. `npx @lap
 --help` lists the offline commands, which build a persona's knowledge from her facts and videos;
 the web app runs them too. `task` runs an assistant task in a folder, on a model you choose.
 
-It needs Node.js 20 or later, and brings its own Bun. Everything it keeps, settings and keys
-included, is in `~/.laplace/eidolon` (or the folder `EIDOLON_HOME` names); it reads no `.env`.
+It needs Node.js 24 or later. Everything it keeps, settings and keys included, is in
+`~/.laplace/eidolon` (or the folder `EIDOLON_HOME` names); it reads no `.env`.
 
 ## Platforms
 
@@ -21,8 +21,8 @@ LanceDB and ONNX Runtime, its native parts, decide where it runs: macOS on Apple
 arm64 Node), and Linux with glibc on x64 or arm64. Intel Macs, musl Linux such as Alpine, and
 Windows are not supported.
 
-The first run downloads about 280 MB, mostly Bun, LanceDB and ONNX Runtime for your platform, and
-the install takes about 750 MB on disk on a Mac and 900 MB on Linux.
+The first run downloads about 230 MB, mostly LanceDB and ONNX Runtime for your platform, and the
+install takes about 610 MB on disk on a Mac and more on Linux.
 
 On Linux x64, npm 11 also runs onnxruntime-node's install script, which downloads CUDA libraries
 Eidolon never uses from NuGet, and fails the install when NuGet is out of reach. Skip it:

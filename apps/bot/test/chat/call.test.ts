@@ -2,7 +2,6 @@
 // session opens on her view of it and each line goes back signed; with the secret unset, or with no
 // chat in the offer, the call is today's.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -11,6 +10,7 @@ import { CHAT_FORMAT, type ChatEvent, type ChatEventOf, type ChatHeader } from "
 import { dataHome, readPersonaIdentity } from "@eidolon/config";
 import { selfieStore } from "@eidolon/imagegen";
 import type { CallBinding, CallClient } from "@eidolon/runtime";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   type BoundOffer,
   bindChatCall,

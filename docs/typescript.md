@@ -1,10 +1,10 @@
 # The TypeScript bot
 
-The bot, and the offline chain that builds its indexes, in Bun/TypeScript, on eidolon's own voice
-engine ([voice-engine.md](voice-engine.md)), parts of it ported from
+The bot, and the offline chain that builds its indexes, in TypeScript, on eidolon's own voice engine
+([voice-engine.md](voice-engine.md)), parts of it ported from
 [pipedog](https://github.com/polvallverdu/pipedog) (a TypeScript port of Pipecat). The bot has run
-production since 2026-11-04. The code and its own tests are the only source of truth for how
-it behaves.
+production on Bun since 2026-11-04; the local app, the CLI and the npm package run on Node 24. The
+code and its own tests are the only source of truth for how it behaves.
 
 ## Layout
 
@@ -30,7 +30,7 @@ nothing.
 | `packages/voice` | the voice engine: a call's loop around the turn engine, the Ear (Silero VAD, Smart Turn, the turn detector), the sentence segmenter, the Mouth and the Speaker, the vendored resampler, the RTVI codec and emitter, and the two ONNX models (`models/`) ([voice-engine.md](voice-engine.md)). Its live recognizers and speech clients are `@eidolon/providers/stt` and `/speech-stream`; only `packages/runtime` imports it (Biome) |
 | `packages/webrtc` | a call's WebRTC on werift and libopus-wasm: the signalling server, the peer, the data channel, the caller's audio in and hers out, and the werift patches ([voice-engine.md](voice-engine.md#the-transport)); only `packages/runtime` imports it (Biome) |
 | `packages/runtime` | the bridge from `apps/bot` to the voice engine: the signalling server, a call's production deps and start, and the `CallBinding` that runs a call inside a chat ([chat.md](chat.md#the-binding)) |
-| `apps/bot` | `Bun.serve`, the routes, MCP, the entry point, and the production chat endpoint, `src/chat` ([chat.md](chat.md#production-the-browser-keeps-the-chat)) |
+| `apps/bot` | the routes, on `routing.ts` (Bun.serve's routing, served by srvx: `node:http` under Node, `Bun.serve` under Bun), MCP, the entry point, and the production chat endpoint, `src/chat` ([chat.md](chat.md#production-the-browser-keeps-the-chat)) |
 | `apps/cli` | every `laplace-*` command and the gate benchmark: argparse specs, the persona, locks, printing, exit codes |
 
 A new context tier implements `ContextProvider`; a new LLM tool implements `LlmTool`; the turn
@@ -112,7 +112,7 @@ Things it relies on:
   leaves no stale lock. download, transcribe, refine and the pipeline hold `sources:<persona>`;
   the ingests, the catalog and the pipeline's ingest stage hold `index:<db path>`; the managed
   yt-dlp's update holds `yt-dlp`. Dry runs take none. It lives in `@eidolon/config/lock`, a
-  subpath so config's index never loads `bun:sqlite`, and `@eidolon/ingest` re-exports it. An
+  subpath so config's index never loads `node:sqlite`, and `@eidolon/ingest` re-exports it. An
   assistant task holds `task:<id>` there too, while `laplace-task` or the local app's task manager
   runs it.
 - **Cancellation.** `main.ts` runs every command through `runWithSignals`: the first SIGINT or
@@ -180,10 +180,10 @@ that provider's key, credit or reach:
 
 yt-dlp's codes are read off its stderr, so they are a best guess. A job runs
 `jobArgv(entry, command, args)` from `@eidolon/cli/job`, also import-free, with
-`@eidolon/config`'s `cliEntry()` as the entry: `bun --no-env-file <entry> <command> --json …`,
-started in the data home. A cancel sends it SIGTERM. Nothing kills it on a timer: only a forced
-second cancel (`DELETE jobs/:id?force=1`) of a job this server spawned sends SIGKILL, to its whole
-process group ([web-app.md](web-app.md#jobs)).
+`@eidolon/config`'s `cliEntry()` as the entry: `<entry> <command> --json …` on the server's own
+`process.execPath`, started in the data home. A cancel sends it SIGTERM. Nothing kills it on a
+timer: only a forced second cancel (`DELETE jobs/:id?force=1`) of a job this server spawned sends
+SIGKILL, to its whole process group ([web-app.md](web-app.md#jobs)).
 
 ### Real-data tests
 
@@ -213,18 +213,20 @@ original) or one code path against another (the pipeline's dry run against the p
   hears or speaks through. A new provider gets one too, or bills behind the usage ledger's back.
 - **`@eidolon/providers/catalog` imports nothing.** The web app bundles it for its provider and
   model pickers; a test keeps it import-free, and Biome lets the web app import it alone.
-- **`bunfig.toml` turns Bun's own `.env` loader off.** `load-env.ts`, the first import of each
-  entry point, is the only reader, with python-dotenv's rules. Bun's loader would expand bare
-  `$VAR` and read `.env.local`, which those rules don't. Tests run with `--no-env-file`.
+- **`load-env.ts`, the first import of each entry point, is the only `.env` reader**, with
+  python-dotenv's rules. Node reads no `.env` unless told to; `bunfig.toml` turns Bun's own
+  loader off for what still runs on Bun, which would expand bare `$VAR` and read `.env.local`;
+  `vitest.config.ts` loads none into a test.
 - **No module reads env at import.** Everything reads at call time, so the order of imports
-  against the `.env` load cannot pin a fallback.
-- **A child that needs what `.env` set gets `env: process.env`, and lookups
-  `Bun.which(name, {PATH: process.env.PATH})`.** `Bun.spawn` without `env`, and `Bun.which`
-  without `PATH`, use the environment the process started with, missing everything `load-env.ts`
-  applied from `.env`: yt-dlp would miss a proxy the `.env` sets. A child that runs a
-  `load-env.ts` of its own, a job's CLI or the server `bun run local` restarts, gets no `env` and
-  reads `.env` as it is now. Handed `process.env`, it would keep every key deleted from `.env`
-  since, because `override` sets keys and never unsets them.
+  against the `.env` load cannot pin a fallback. The one exception is
+  `apps/bot/src/local/environ.ts`, below.
+- **A child inherits what `.env` set, unless it reads `.env` itself.** `spawnProcess` without
+  `env` passes `process.env` as it is now, and `which` reads its `PATH` at call time, so yt-dlp
+  gets a proxy the `.env` sets. A child that runs a `load-env.ts` of its own, a job's CLI or the
+  server `bun run local` restarts, starts from `STARTED_ENV` instead: the environment the local
+  entry started with, which `environ.ts` keeps by being imported before `load-env.ts`. Handed
+  `process.env`, it would keep every key deleted from `.env` since, because `override` sets keys
+  and never unsets them.
 - **werift needs four corrections, all in `packages/webrtc/src/patches.ts`.** Its prototype patch
   is guarded with `Symbol.for("eidolon.werift.patched")`, so a second evaluation of the module
   patches nothing (`packages/webrtc/test/werift.test.ts`).
@@ -304,15 +306,15 @@ Choices a reader might take for bugs, and why they stand.
 - **Failures are reported, not raised.** A missing key fails with code `missing-credential`
   before any request. Provider errors, unreadable files and LanceDB errors log their message and
   stack, fail their stage with a summary listing them, and exit 1.
-- **Transcript frontmatter is YAML 1.2** (Bun's parser), not 1.1: `yes`, `1:30`, `017`, `1_000`
-  and unquoted timestamps read as 1.2 reads them. The tools write plain strings there, so no real
-  transcript is affected.
+- **Transcript frontmatter is YAML 1.2** (the `yaml` package's default), not 1.1: `yes`, `1:30`,
+  `017`, `1_000` and unquoted timestamps read as 1.2 reads them. The tools write plain strings
+  there, so no real transcript is affected.
 
 ### Download and batches
 
 - yt-dlp's argv starts with `--ignore-config`, so a user's yt-dlp config can't redirect the
   files, and puts `--` before the URL, so a URL can't pass as an option. The managed yt-dlp's
-  argv, download and `--expand` alike, also carries `--js-runtimes bun:<the running bun>` for
+  argv, download and `--expand` alike, also carries `--js-runtimes node:<the running node>` for
   YouTube's JavaScript challenges; a user's `--no-js-runtimes` in `--yt-dlp-args` still wins. A
   `YT_DLP_PATH` or PATH yt-dlp gets no such flag, since one older than the option would fail every
   URL.
@@ -433,7 +435,8 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   takes only `soniox`.
 - **Soniox over fetch.** Every call (upload, create, poll, transcript, delete) retries network
   errors and HTTP 408, 429, 500, 502, 503 and 504 after 1, 2, 4, 8, 16 and 30 s, since one 429 or
-  5xx left unretried loses a job already paid for. Requests run under Bun's 600 s idle timeout.
+  5xx left unretried loses a job already paid for. A request's headers and body may each take
+  600 s (`patientDispatcher`), past undici's default 300 s.
 - An upload is deleted when creating its transcription fails, even with `--keep-soniox-files`, so
   it never sits in Soniox's 10 GB quota.
 - Soniox's copies are deleted after the payload and transcript are written, so a failed write
@@ -581,10 +584,6 @@ Still open:
   once, but werift's own ICE reported connected about 4 s later. It never reproduced with
   tracing on, so the cause is unknown. Watch offer→connected on the Cloudflare TURN call, where
   relay-only leaves far fewer candidate pairs than a multi-interface dev machine.
-- yt-dlp has deprecated Bun as a JavaScript runtime and supports it only up to 1.3.14. On
-  2026-11-05 the managed yt-dlp 2026.10.26 still solved a live YouTube video's challenge with Bun
-  1.4.4 and no deno installed, after printing `bun version 1.4.4 is not supported! 1.3.14 is the
-  last supported bun version`; with deno on PATH, yt-dlp uses deno. Bilibili needs no runtime.
 - Each FTS index build orders tied-score hits its own way: two builds of the same rows disagreed
   in 7 of 10 queries. Scores and result sets are identical, so comparing two builds' hybrid ranks
   has to allow for ties.

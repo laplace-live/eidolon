@@ -1,6 +1,7 @@
-// Preloaded before every test file (bunfig.toml). Personas resolve from the repo's templates and an
-// empty data home, never the developer's own, and tasks find none of the developer's shared skills;
-// the parity tests that need the real index read it from EIDOLON_REAL_HOME.
+// A setup file of every test file (vitest.config.ts), each in a process of its own. Personas resolve
+// from the repo's templates and an empty data home, never the developer's own, and tasks find none
+// of the developer's shared skills; the parity tests that need the real index read it from
+// EIDOLON_REAL_HOME.
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 

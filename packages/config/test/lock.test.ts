@@ -1,5 +1,4 @@
 import "./isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -10,8 +9,10 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
-import { dataHome } from "../src/index.ts";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
+import { dataHome, spawnProcess } from "../src/index.ts";
 import { acquireLock, LockedError, lockInfoPath } from "../src/lock.ts";
 
 afterEach(() => {
@@ -73,21 +74,20 @@ describe("acquireLock", () => {
 
   test("another process's lock names it, and dies with it", async () => {
     mkdirSync(dataHome(), { recursive: true });
-    const lock = join(import.meta.dir, "../src/lock.ts");
-    const child = Bun.spawn(
+    const lock = join(import.meta.dirname, "../src/lock.ts");
+    const child = spawnProcess(
       [
         process.execPath,
-        "--no-env-file",
         "-e",
         `const { acquireLock } = await import(${JSON.stringify(lock)});
          acquireLock("task:0199e0a4", "laplace-task");
          console.log("locked");
-         await Bun.sleep(30_000);`,
+         await new Promise((resolve) => setTimeout(resolve, 30_000));`,
       ],
-      { cwd: dataHome(), env: { ...process.env }, stdout: "pipe", stderr: "inherit" },
+      { cwd: dataHome(), stdout: "pipe", stderr: "inherit" },
     );
     try {
-      const reader = child.stdout.getReader();
+      const reader = (child.stdout as ReadableStream<Uint8Array>).getReader();
       const { value } = await reader.read();
       expect(new TextDecoder().decode(value)).toBe("locked\n");
       let error: unknown;
@@ -108,26 +108,33 @@ describe("acquireLock", () => {
   }, 30_000);
 });
 
-test("the lock is @eidolon/config/lock, so nothing config's index loads imports bun:sqlite", async () => {
-  const manifest = await Bun.file(join(import.meta.dir, "../package.json")).json();
+test("the lock is @eidolon/config/lock, so importing config's index never loads node:sqlite", async () => {
+  const manifest = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf8"));
   expect(manifest.exports["./lock"]).toBe("./src/lock.ts");
-  expect(Bun.resolveSync("@eidolon/config/lock", import.meta.dir)).toBe(
-    join(import.meta.dir, "../src/lock.ts"),
+  expect(createRequire(import.meta.filename).resolve("@eidolon/config/lock")).toBe(
+    join(import.meta.dirname, "../src/lock.ts"),
   );
-  const transpiler = new Bun.Transpiler({ loader: "ts" });
-  const reached = new Set<string>();
-  const specifiers = new Set<string>();
-  const queue = [join(import.meta.dir, "../src/index.ts")];
-  while (queue.length > 0) {
-    const file = queue.pop() as string;
-    if (reached.has(file)) continue;
-    reached.add(file);
-    for (const { path } of transpiler.scanImports(await Bun.file(file).text())) {
-      specifiers.add(path);
-      if (path.startsWith(".")) queue.push(join(dirname(file), path));
-    }
-  }
-  expect(reached.size).toBeGreaterThan(10);
-  expect(reached).not.toContain(join(import.meta.dir, "../src/lock.ts"));
-  expect(specifiers).not.toContain("bun:sqlite");
+  // What the import loads, as a resolve hook in a process of its own records it.
+  const index = join(import.meta.dirname, "../src/index.ts");
+  const child = spawnProcess([
+    process.execPath,
+    "-e",
+    `const loaded = [];
+     (await import("node:module")).registerHooks({
+       resolve(specifier, context, next) {
+         const resolved = next(specifier, context);
+         loaded.push(resolved.url);
+         return resolved;
+       },
+     });
+     await import(${JSON.stringify(index)});
+     console.log(JSON.stringify(loaded));`,
+  ]);
+  const [text, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+  expect(code).toBe(0);
+  const loaded: string[] = JSON.parse(text);
+  expect(loaded.filter((url) => url.endsWith("/packages/config/src/index.ts"))).toHaveLength(1);
+  expect(loaded.length).toBeGreaterThan(10);
+  expect(loaded.filter((url) => url.endsWith("/src/lock.ts"))).toEqual([]);
+  expect(loaded).not.toContain("node:sqlite");
 });

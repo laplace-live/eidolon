@@ -1,9 +1,9 @@
-import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Table } from "@lancedb/lancedb";
 import * as lancedb from "@lancedb/lancedb";
+import { describe, expect, test } from "vitest";
 import {
   type HybridSearchOptions,
   ingestHint,

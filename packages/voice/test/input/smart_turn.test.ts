@@ -7,7 +7,7 @@
 // The port's parameters are fixed at pipedog's defaults, and a clock it is given stamps the
 // chunks, so the trim and stop tests use those defaults on a fake clock instead of sleeping. The
 // cleanup tests aren't ported: there is no model thread to release.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   MAX_DURATION_SECONDS,
   PRE_SPEECH_MS,

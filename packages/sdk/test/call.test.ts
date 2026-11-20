@@ -1,6 +1,6 @@
-import { beforeAll, describe, expect, test } from "bun:test";
 import React, { act, Suspense, startTransition, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { beforeAll, describe, expect, test } from "vitest";
 import {
   BotAlreadyStartedError,
   callErrorStatus,

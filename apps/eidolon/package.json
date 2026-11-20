@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@eidolon/cli": "workspace:*",
-    "@eidolon/config": "workspace:*"
+    "@eidolon/config": "workspace:*",
+    "vite": "8.3.5"
   }
 }

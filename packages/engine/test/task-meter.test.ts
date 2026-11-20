@@ -1,8 +1,8 @@
 // A task's meter, which its runner and the loop share: the spend its mind's usage records add up
 // to, and the pause before the next request once a request couldn't be counted.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
 import { ProviderHttpError, type UsageRecord } from "@eidolon/providers";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { type TaskEntryDraft, UsageMeter } from "../src/task.ts";
 import type { MindChunk } from "../src/types.ts";
 import {

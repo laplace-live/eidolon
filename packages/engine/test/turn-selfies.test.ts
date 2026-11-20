@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { SelfieStore } from "@eidolon/imagegen";
+import { describe, expect, test } from "vitest";
 import { fetchStoredSelfie, saveSelfies } from "../src/attachments.ts";
 
 describe("fetchStoredSelfie", () => {

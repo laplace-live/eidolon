@@ -8,6 +8,7 @@ import {
   errorText,
   isJsonObject,
   logger,
+  newId,
   pyRepr,
   withPersona,
 } from "@eidolon/config";
@@ -98,7 +99,7 @@ async function runNative(
   binding?: AnyCallBinding,
 ): Promise<CloseReason> {
   logSessionStart(admission);
-  const id = Bun.randomUUIDv7();
+  const id = newId();
   const host = binding?.persona ?? activePersona().id;
   let call: BoundCall;
   let group = false;

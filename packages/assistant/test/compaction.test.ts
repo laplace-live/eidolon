@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { COMPACTION_INSTRUCTIONS, COMPACTION_SYSTEM } from "../src/compaction.ts";
 
 describe("compaction", () => {

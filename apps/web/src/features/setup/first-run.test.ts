@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { firstRunRedirect } from "./first-run";
 
 const key = (account: string, set: boolean) => ({

@@ -2,7 +2,6 @@
 // compared with the table in her real index. EIDOLON_REAL_HOME is only read: the index is written
 // into a temporary folder, and the embedding cache is cloned there, so a run that missed it would
 // fail rather than pay. Skips without the data, unless EIDOLON_REQUIRE_PARITY=1.
-import { afterAll, beforeAll, expect, test } from "bun:test";
 import {
   constants,
   copyFileSync,
@@ -15,9 +14,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { installSettings, resetSettings } from "@eidolon/config";
 import { canonicalPath } from "@eidolon/ingest";
 import { type LanceTable, openTable, resetEmbeddingClient } from "@eidolon/retrieval";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import {
   f32Bytes as bytes,
   tableIndices as indices,
@@ -177,7 +178,7 @@ test.skipIf(!present && !REQUIRED)(
     expect(mine.metadata).toEqual(expected.metadata);
     expect(mine.rows).toBe(expected.rows);
     for (const [name, values] of Object.entries(expected.columns)) {
-      expect({ name, equal: Bun.deepEquals(mine.columns[name], values) }).toEqual({
+      expect({ name, equal: isDeepStrictEqual(mine.columns[name], values) }).toEqual({
         name,
         equal: true,
       });

@@ -3,11 +3,11 @@
 //
 // Ported from pipedog packages/resampler-wasm/test/resampler.test.ts@ce8f8bc
 
-import { beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PROJECT_ROOT } from "@eidolon/config";
+import { beforeAll, describe, expect, test } from "vitest";
 import { engineFromModule } from "../../src/dsp/resampler/engine.ts";
 import {
   QUALITIES,

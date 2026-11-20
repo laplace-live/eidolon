@@ -1,12 +1,12 @@
 // GET /api/local/usage: the ledger's spend by day, persona, provider and model, filtered by range
 // and persona, and an honest "not recording" when the ledger can't open.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import { reportUsage, withUsageScope } from "@eidolon/providers";
 import { installUsageLedger, uninstallUsageLedger } from "@eidolon/usage";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { UsageSummary } from "../../src/local/api.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot } from "./harness.ts";

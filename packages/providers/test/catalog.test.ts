@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { CREDENTIALS, SETTINGS, TASK_KINDS } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import {
   CATEGORIES,
   PROVIDER_IDS,

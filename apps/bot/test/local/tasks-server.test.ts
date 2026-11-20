@@ -2,10 +2,10 @@
 // and started with the server, PUT settings turning Assistant Mode off, and the server's stop. A
 // task's model requests go to a local server that holds each one until its client gives up.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   newTaskId,
   openTaskStore,
@@ -14,39 +14,38 @@ import {
   tasksDir,
   writeSnapshot,
 } from "@eidolon/assistant";
+import { newId } from "@eidolon/config";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { serveFetch } from "../../../../packages/config/test/http.ts";
 import { PROOF_HEADER, type Status, type TasksResponse } from "../../src/local/api.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, fakeIo } from "./harness.ts";
 
 const SITE = "http://localhost:3000";
-const ORIGIN = { id: Bun.randomUUIDv7(), persona: "milky-green", call: "call-1" };
+const ORIGIN = { id: newId(), persona: "milky-green", call: "call-1" };
 
 /** A model server that answers nothing: each request waits until its client gives up on it. */
 interface HeldModel {
   readonly requests: Request[];
   /** OPENROUTER_API_BASE for it. */
   readonly base: string;
-  stop(): void;
+  stop(): Promise<void>;
 }
 
-function heldModel(): HeldModel {
+async function heldModel(): Promise<HeldModel> {
   const requests: Request[] = [];
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch(request) {
-      requests.push(request);
-      return new Promise<Response>((resolve) => {
-        request.signal.addEventListener("abort", () => resolve(new Response(null)), {
-          once: true,
-        });
+  const server = await serveFetch((request) => {
+    requests.push(request);
+    return new Promise<Response>((resolve) => {
+      request.signal.addEventListener("abort", () => resolve(new Response(null)), {
+        once: true,
       });
-    },
+    });
   });
   return {
     requests,
-    base: `http://127.0.0.1:${server.port}/api/v1`,
-    stop: () => server.stop(true),
+    base: `${server.url}/api/v1`,
+    stop: () => server.stop(),
   };
 }
 
@@ -83,7 +82,7 @@ beforeEach(() => {
 afterEach(async () => {
   await booted?.stop();
   booted = null;
-  model?.stop();
+  await model?.stop();
   model = null;
   logs.restore();
   for (const [name, value] of savedEnv) {
@@ -96,8 +95,8 @@ afterEach(async () => {
 });
 
 /** Assistant Mode ready, on an OpenRouter account whose API is the held model server. */
-function readyAssistant(): HeldModel {
-  model = heldModel();
+async function readyAssistant(): Promise<HeldModel> {
+  model = await heldModel();
   setEnv("ASSISTANT_PROVIDER", "openrouter");
   setEnv("ASSISTANT_MODEL", "test/model");
   setEnv("OPENROUTER_API_KEY", "test-key");
@@ -167,7 +166,7 @@ async function until(check: () => boolean | Promise<boolean>, ms = 5000): Promis
   const deadline = Date.now() + ms;
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 
@@ -188,7 +187,7 @@ describe("the task routes", () => {
       ["POST", `/api/local/tasks/${id}/continue`, "{}"],
       ["DELETE", `/api/local/tasks/${id}`, undefined],
       ["GET", "/api/local/assistant/commands", undefined],
-      ["DELETE", `/api/local/assistant/commands/${Bun.randomUUIDv7()}`, undefined],
+      ["DELETE", `/api/local/assistant/commands/${newId()}`, undefined],
       ["GET", "/api/local/mcp", undefined],
       ["PUT", "/api/local/mcp/servers/fake", '{"enabled":false}'],
     ] as const) {
@@ -255,7 +254,7 @@ describe("the manager", () => {
   });
 
   test("resumes an interrupted task once the server is up; turning Assistant Mode off stops it before the answer", async () => {
-    const held = readyAssistant();
+    const held = await readyAssistant();
     const task = await seed({ status: "interrupted" });
     booted = await bootFixture();
     await until(() => held.requests.length === 1);
@@ -293,7 +292,7 @@ describe("the manager", () => {
   });
 
   test("stops with the server, leaving a running task interrupted, and the next start resumes it", async () => {
-    const held = readyAssistant();
+    const held = await readyAssistant();
     const task = await seed({ status: "interrupted" });
     booted = await bootFixture();
     await until(() => held.requests.length === 1);
@@ -313,7 +312,7 @@ describe("the manager", () => {
 
 describe("Assistant folders", () => {
   test("PUT settings refuses one that is or holds the home folder, which no task may be granted", async () => {
-    readyAssistant();
+    await readyAssistant();
     booted = await bootFixture();
     const home = homedir();
     const put = (folders: readonly string[]) =>

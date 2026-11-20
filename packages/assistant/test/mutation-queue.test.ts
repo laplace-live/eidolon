@@ -4,10 +4,10 @@
 // Ported from pi-mono packages/coding-agent/test/file-mutation-queue.test.ts@ac78a60
 //
 // The queue's own cases; the edit and write tools' cases go with those tools.
-import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { withFileMutationQueue } from "../src/tools/mutation-queue.ts";
 
 function delay(ms: number): Promise<void> {

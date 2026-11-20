@@ -1,7 +1,6 @@
 // load-env.ts run in a process of its own, as a copy in a temporary app with a .env of the test's:
 // the walk up from the copy finds that .env first, so a developer's own never reaches a test.
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterAll, beforeAll, expect, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
@@ -13,7 +12,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dataHome, findDotenv } from "@eidolon/config";
+import { dataHome, findDotenv, spawnProcess } from "@eidolon/config";
+import { afterAll, beforeAll, expect, test } from "vitest";
 
 let app = "";
 
@@ -21,7 +21,10 @@ beforeAll(() => {
   app = mkdtempSync(join(tmpdir(), "eidolon-cli-load-env-"));
   mkdirSync(join(app, "src"));
   for (const file of ["load-env.ts", "persona-arg.ts"]) {
-    writeFileSync(join(app, "src", file), readFileSync(join(import.meta.dir, "..", "src", file)));
+    writeFileSync(
+      join(app, "src", file),
+      readFileSync(join(import.meta.dirname, "..", "src", file)),
+    );
   }
   writeFileSync(
     join(app, "src", "probe.ts"),
@@ -46,7 +49,7 @@ beforeAll(() => {
     join(app, ".env"),
     "EIDOLON_DOTENV_PROBE=from-dotenv\nFISH_VOICE_ID=dotenv-voice\nFISH_VOICE_ID_GENTLE=dotenv-gentle\n",
   );
-  symlinkSync(join(import.meta.dir, "..", "node_modules"), join(app, "node_modules"));
+  symlinkSync(join(import.meta.dirname, "..", "node_modules"), join(app, "node_modules"));
 });
 
 afterAll(() => {
@@ -61,7 +64,7 @@ async function run(
   env: Record<string, string>,
 ): Promise<{ out: string; err: string }> {
   expect(findDotenv(join(app, "src"))).toBe(join(app, ".env"));
-  const child = Bun.spawn([process.execPath, "--no-env-file", join(app, "src", script), ...args], {
+  const child = spawnProcess([process.execPath, join(app, "src", script), ...args], {
     cwd: app,
     env: { PATH: process.env.PATH ?? "", EIDOLON_HOME: dataHome(), ...env },
     stdout: "pipe",

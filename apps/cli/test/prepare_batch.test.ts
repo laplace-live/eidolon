@@ -1,10 +1,10 @@
 // laplace-prepare-batch, replayed from the goldens in packages/ingest/test/fixtures/download.
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pyJsonDumps, sourceFolder } from "@eidolon/config";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import {
   downloadGolden as golden,
   type PrepareGolden,

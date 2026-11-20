@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { pyJsonDumps } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import {
   parseRecallRequest,
   RECALL_PERIODS,

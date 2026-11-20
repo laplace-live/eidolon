@@ -1,15 +1,16 @@
 // fixtures/extract_users/golden.json holds laplace-extract-users' runs over the exports beside it,
 // types 1 and 3 labelled gift and SC; fixtures/transcribe's parser.golden.json holds argparse's
 // results for this command's parser.
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { extractUsers } from "@eidolon/ingest";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { ArgparseExit, parseArgs } from "../src/argparse.ts";
 import { runCli } from "../src/cli.ts";
 import { EXTRACT_USERS_PARSER, extractUsersMain } from "../src/extract_users.ts";
 import { captureIo } from "./helpers.ts";
 
-const FIX = join(import.meta.dir, "fixtures/extract_users");
+const FIX = join(import.meta.dirname, "fixtures/extract_users");
 
 interface RunCase {
   argv: string[];
@@ -27,10 +28,10 @@ interface ParseCase {
   ns?: Record<string, unknown>;
 }
 
-const golden = (await Bun.file(join(FIX, "golden.json")).json()) as { cases: RunCase[] };
-const parser = (await Bun.file(
-  join(import.meta.dir, "fixtures/transcribe/parser.golden.json"),
-).json()) as {
+const golden = JSON.parse(await readFile(join(FIX, "golden.json"), "utf8")) as { cases: RunCase[] };
+const parser = JSON.parse(
+  await readFile(join(import.meta.dirname, "fixtures/transcribe/parser.golden.json"), "utf8"),
+) as {
   extract_users: ParseCase[];
 };
 

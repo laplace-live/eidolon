@@ -11,12 +11,12 @@ import { SELFIE_PATH } from "@eidolon/imagegen";
 import type { MemoryAdmin } from "@eidolon/memory";
 import type { SignallingServer } from "@eidolon/runtime";
 import type { IceService } from "@eidolon/turn";
-import type { Server } from "bun";
 import { type BotAccess, type BotApp, createBotApp } from "./app.ts";
 import type { BotArgs } from "./args.ts";
 import { chatEndpointFromEnv } from "./chat/routes.ts";
 import type { McpHandler } from "./mcp/index.ts";
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "./memory-admin.ts";
+import { type Listener, listen, routeRequest } from "./routing.ts";
 
 export interface BotDeps {
   readonly access: BotAccess & {
@@ -61,7 +61,8 @@ export interface LocalExtension {
 }
 
 export interface BotServer {
-  readonly server: Server<undefined>;
+  /** The first address's listener; the others share its port. */
+  readonly server: Listener;
   /** Stops listening and drops in-flight requests, then disconnects every peer. No drain. */
   stop(): Promise<void>;
 }
@@ -100,32 +101,21 @@ export async function startBotServer(args: BotArgs, deps: BotDeps): Promise<BotS
   });
 
   const local = deps.local;
-  const context: LocalContext = { signalling, port: () => server.port as number };
+  const context: LocalContext = { signalling, port: () => server.port };
   const routes = local ? local.routes(app.routes, context) : app.routes;
   const fallback = local ? local.fallback(app.fallback, context) : app.fallback;
 
-  const listen = (hostname: string, port: number) =>
-    Bun.serve({
-      hostname,
-      port,
-      // The default is NODE_ENV !== "production", which answers an uncaught error with an HTML
-      // debug page.
-      development: false,
-      // With development off, Bun sets SO_REUSEPORT unless told not to, so another server could
-      // bind the same port and take its requests, cookies included. The local app's port is its own.
-      ...(local ? { reusePort: false } : {}),
-      routes,
-      fetch: fallback,
-      error: app.onError,
-    });
+  const handle = routeRequest(routes, fallback);
+  const bind = (hostname: string, port: number) =>
+    listen({ hostname, port, handle, onError: app.onError });
   const [first, ...rest] = await bindAddresses(args.host);
-  const server = listen(first as string, args.port);
+  const server = await bind(first as string, args.port);
   const servers = [server];
   try {
-    for (const hostname of rest) servers.push(listen(hostname, server.port as number));
+    for (const hostname of rest) servers.push(await bind(hostname, server.port));
   } catch (error) {
     // Else the addresses already bound keep serving, and answer the local entry's probe.
-    await Promise.all(servers.map((s) => s.stop(true)));
+    await Promise.all(servers.map((s) => s.stop()));
     throw error;
   }
   const url = args.host === "localhost" ? `http://localhost:${server.port}/` : server.url;
@@ -133,7 +123,7 @@ export async function startBotServer(args: BotArgs, deps: BotDeps): Promise<BotS
   return {
     server,
     async stop() {
-      await Promise.all(servers.map((s) => s.stop(true)));
+      await Promise.all(servers.map((s) => s.stop()));
       try {
         await local?.stop();
       } finally {
@@ -143,8 +133,8 @@ export async function startBotServer(args: BotArgs, deps: BotDeps): Promise<BotS
   };
 }
 
-// Every address `localhost` resolves to: Bun.serve binds only the first (::1 on macOS), which
-// would refuse a client that dials 127.0.0.1.
+// Every address `localhost` resolves to: listening on the name binds only the first (::1 on macOS),
+// which would refuse a client that dials 127.0.0.1.
 async function bindAddresses(host: string): Promise<string[]> {
   if (host !== "localhost") return [host];
   const found = await lookup(host, { all: true });

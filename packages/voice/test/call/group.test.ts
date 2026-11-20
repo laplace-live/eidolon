@@ -3,7 +3,6 @@
 // each persona speaks in her own voice once the one before her has played out, her label rides her
 // first sample, and a barge-in keeps what was heard and drops the turns still to come.
 import "../../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -17,6 +16,7 @@ import { activePersona, consoleSink, dataHome, logger, resetSettings } from "@ei
 import type { DirectorDecision, DirectorInput } from "@eidolon/context";
 import type { LlmTool } from "@eidolon/core";
 import { type ChatDeps, type MindChunk, type MindRequest, runChat, runTurn } from "@eidolon/engine";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { runCascadeCall } from "../../src/call/cascade.ts";
 import { Floor } from "../../src/call/floor.ts";
 import type { GroupFloor } from "../../src/call/group.ts";

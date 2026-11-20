@@ -12,6 +12,10 @@
   },
   "dependencies": {
     "@eidolon/config": "workspace:*",
-    "@eidolon/core": "workspace:*"
+    "@eidolon/core": "workspace:*",
+    "ws": "8.22.1"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2"
   }
 }

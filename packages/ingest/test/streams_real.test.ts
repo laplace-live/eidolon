@@ -1,16 +1,17 @@
 // fixtures/streams-real.golden.json holds what parsing the real transcripts gives: counts and
 // hashes, no text. Transcripts added since are left out. It skips when the transcripts it lists
 // are absent or changed, unless EIDOLON_REQUIRE_PARITY=1.
-import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { pyJsonDumps, pyStr } from "@eidolon/config";
+import { expect, test } from "vitest";
 import { iterStreams } from "../src/index.ts";
 
-const golden = (await Bun.file(
-  join(import.meta.dir, "fixtures/streams-real.golden.json"),
-).json()) as {
+const golden = JSON.parse(
+  await readFile(join(import.meta.dirname, "fixtures/streams-real.golden.json"), "utf8"),
+) as {
   streams: number;
   chunks: number;
   ids_headings_sha256: string;

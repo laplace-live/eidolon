@@ -38,6 +38,7 @@ import {
   resolveDbPath,
   STREAM_CHUNKS_TABLE,
 } from "@eidolon/retrieval";
+import { parse, stringify } from "yaml";
 import type {
   FactFile,
   FactsResponse,
@@ -71,7 +72,8 @@ export function parseYamlTree(text: string | null, label: string): Tree {
   if (text === null) return {};
   let parsed: unknown;
   try {
-    parsed = Bun.YAML.parse(text);
+    // A repeated key keeps its last value, as settings.ts reads the file.
+    parsed = parse(text, { uniqueKeys: false });
   } catch {
     throw new UnreadableYaml(`${label} isn't valid YAML; fix it by hand first`);
   }
@@ -81,7 +83,8 @@ export function parseYamlTree(text: string | null, label: string): Tree {
 }
 
 export function stringifyYaml(tree: Tree): string {
-  return `${Bun.YAML.stringify(tree, null, 2)}\n`;
+  // Unfolded: yaml folds a long value at 80 columns by default.
+  return stringify(tree, { indent: 2, lineWidth: 0 });
 }
 
 /** Sets a dotted path in `tree`, or with null removes it and the mappings it leaves empty. */

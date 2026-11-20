@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, test } from "vitest";
 import { keepProof, proofHeaders } from "./proof";
 
 /** A localStorage of one slot, whatever the key, that refuses every write unless `writable`. */

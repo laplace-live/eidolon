@@ -1,7 +1,7 @@
 // api.ts can't import @eidolon/assistant or @eidolon/engine, so it mirrors the task snapshot and
 // the transcript entries the routes send: the typecheck fails here once a mirror drifts.
-import { expect, test } from "bun:test";
 import type { TaskEntry } from "@eidolon/engine";
+import { expect, test } from "vitest";
 import type { TaskSnapshot } from "../../../../packages/assistant/src/index.ts";
 import type {
   TaskEntry as WireTaskEntry,

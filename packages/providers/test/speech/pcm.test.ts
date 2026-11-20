@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { bytesOfBase64, PcmBytes } from "../../src/speech/pcm.ts";
 import { bytesOf } from "./fake.ts";
 

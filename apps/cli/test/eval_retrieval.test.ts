@@ -1,11 +1,12 @@
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import type { HybridSearchOptions, Reranker, SearchRow } from "@eidolon/retrieval";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   aggregate,
   benchmarkMeanMs,
@@ -49,7 +50,9 @@ interface Case {
   saved: string | null;
 }
 
-const ROWS: Record<string, SearchRow[]> = (await Bun.file(`${FIX}/eval/rows.json`).json()).rows;
+const ROWS: Record<string, SearchRow[]> = JSON.parse(
+  await readFile(`${FIX}/eval/rows.json`, "utf8"),
+).rows;
 // The fake clock's steps in milliseconds, which the goldens' timings follow.
 const STEPS = [125, 250, 500, 62.5, 1000];
 const goldens = await golden<Case[]>("eval_retrieval.json");

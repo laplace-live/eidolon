@@ -1,17 +1,14 @@
-// The launcher's pure parts: what each command line runs, which hosts it refuses, where it finds
-// Bun, and the environment Bun gets, checked against a real Bun for the bunfig.toml it reads.
-import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+// The launcher's pure parts: what each command line runs, which hosts and Nodes it refuses, and the
+// environment the app gets.
 import { COMMANDS } from "@eidolon/cli";
+import { describe, expect, test } from "vitest";
 import {
-  type BunLookup,
   CLI_COMMANDS,
   childEnv,
-  findBun,
   type Host,
+  NODE_MAJOR,
   parseCommand,
+  unsupportedNode,
   unsupportedReason,
   usage,
 } from "../src/launcher.ts";
@@ -87,82 +84,31 @@ describe("unsupportedReason", () => {
   });
 });
 
-describe("findBun", () => {
-  const OWN = "/pkg/node_modules/@oven/bun-darwin-aarch64/bin/bun";
-  const BUN = "/project/node_modules/bun";
-
-  function lookup(files: Record<string, number>, versions: Record<string, string> = {}): BunLookup {
-    return {
-      resolve: (specifier) =>
-        specifier === "@oven/bun-darwin-aarch64/bin/bun" && OWN in files
-          ? OWN
-          : specifier === "bun/package.json" && `${BUN}/package.json` in versions
-            ? `${BUN}/package.json`
-            : null,
-      size: (path) => files[path] ?? null,
-      version: (path) => versions[path] ?? null,
-    };
-  }
-
-  test("takes the platform package's binary", () => {
-    expect(findBun("darwin-arm64", "1.4.4", lookup({ [OWN]: 88_000_000 }))).toBe(OWN);
+describe("unsupportedNode", () => {
+  test(`Node ${NODE_MAJOR} and later run the bundles`, () => {
+    for (const version of [`${NODE_MAJOR}.0.0`, "24.22.1", "26.1.0"]) {
+      expect(unsupportedNode(version)).toBeNull();
+    }
   });
 
-  test("finds the binary bun's postinstall moved, at this version only", () => {
-    const moved = { [`${BUN}/bin/bun.exe`]: 88_000_000 };
-    expect(
-      findBun("darwin-arm64", "1.4.4", lookup(moved, { [`${BUN}/package.json`]: "1.4.4" })),
-    ).toBe(`${BUN}/bin/bun.exe`);
-    expect(
-      findBun("darwin-arm64", "1.4.4", lookup(moved, { [`${BUN}/package.json`]: "1.3.0" })),
-    ).toBeNull();
-  });
-
-  test("never bun's placeholder script, and null when nothing is installed", () => {
-    const placeholder = { [`${BUN}/bin/bun.exe`]: 450 };
-    expect(
-      findBun("darwin-arm64", "1.4.4", lookup(placeholder, { [`${BUN}/package.json`]: "1.4.4" })),
-    ).toBeNull();
-    expect(findBun("darwin-arm64", "1.4.4", lookup({}))).toBeNull();
+  test("an older Node is told which one to install", () => {
+    expect(unsupportedNode("22.12.0")).toBe(
+      "this is Node.js 22.12.0, and Eidolon needs Node.js 24 or later. Install a newer Node, " +
+        "then run eidolon again.",
+    );
+    expect(unsupportedNode("20.19.5")).toContain("needs Node.js 24 or later");
   });
 });
 
 describe("childEnv", () => {
-  test("names the package, skips every .env, and leads BUN_OPTIONS with the package's bunfig", () => {
-    const env = { PATH: "/bin", BUN_OPTIONS: "--smol" };
+  test("names the package and skips every .env, leaving the rest as it was", () => {
+    const env = { PATH: "/bin", NODE_OPTIONS: "--max-old-space-size=4096" };
     expect(childEnv(env, "/opt/my pkg")).toEqual({
       PATH: "/bin",
+      NODE_OPTIONS: "--max-old-space-size=4096",
       EIDOLON_APP_ROOT: "/opt/my pkg",
       EIDOLON_NO_DOTENV: "1",
-      BUN_OPTIONS: '"--config=/opt/my pkg/bunfig.toml" --smol',
     });
-    expect(env).toEqual({ PATH: "/bin", BUN_OPTIONS: "--smol" });
-    expect(childEnv({}, "/opt/pkg").BUN_OPTIONS).toBe('"--config=/opt/pkg/bunfig.toml"');
-  });
-
-  test("keeps the working directory's bunfig.toml and .env out of Bun, and of every Bun it starts", () => {
-    const dir = mkdtempSync(join(tmpdir(), "eidolon-launcher-"));
-    try {
-      const cwd = join(dir, "cwd");
-      const root = join(dir, "the package");
-      mkdirSync(cwd);
-      mkdirSync(root);
-      writeFileSync(join(cwd, "bunfig.toml"), 'preload = ["./hijack.ts"]\n');
-      writeFileSync(join(cwd, "hijack.ts"), 'console.log("hijacked");\n');
-      writeFileSync(join(cwd, ".env"), "EIDOLON_DOTENV_PROBE=read\n");
-      writeFileSync(join(root, "bunfig.toml"), "env = false\n");
-      const probe = 'process.env.EIDOLON_DOTENV_PROBE ?? "clean"';
-      writeFileSync(join(root, "child.ts"), `console.log("child", ${probe});\n`);
-      writeFileSync(
-        join(root, "main.ts"),
-        `console.log("main", ${probe});\n` +
-          'Bun.spawnSync([process.execPath, import.meta.dir + "/child.ts"], { stdout: "inherit" });\n',
-      );
-      const env = childEnv({ PATH: process.env.PATH }, root);
-      const run = Bun.spawnSync([process.execPath, join(root, "main.ts")], { cwd, env });
-      expect(run.stdout.toString()).toBe("main clean\nchild clean\n");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    expect(env).toEqual({ PATH: "/bin", NODE_OPTIONS: "--max-old-space-size=4096" });
   });
 });

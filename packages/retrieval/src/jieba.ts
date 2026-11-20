@@ -59,6 +59,38 @@ function loadHmm(): HmmTables {
   return { start, trans, emit };
 }
 
+// The DAG ranks routes by sums of ln(count), and an ulp in one flips its ties on runs of one
+// character (呀呀呀呀呀). Python's math.log is the C library's, which on macOS rounds every count in
+// the dictionary correctly; V8's Math.log is an ulp off on 76 of them (3, 14, 48). So these are
+// exact: fixed point with 128 fraction bits, rounded to a double once.
+const LN_BITS = 128n;
+const LN_SCALE = 2 ** -128;
+// Counts below this, 99.98% of the dictionary's words, keep their ln in an array, not a Map: the
+// DAG looks one up for every candidate word.
+const SMALL_COUNTS = 65536;
+
+/** 2·atanh(num / den), which is ln((den + num) / (den − num)), in fixed point; num / den ≤ 1/3. */
+function atanh2(num: bigint, den: bigint): bigint {
+  let term = (num << LN_BITS) / den;
+  const square = ((num * num) << LN_BITS) / (den * den);
+  let sum = 0n;
+  for (let k = 1n; term !== 0n; k += 2n) {
+    sum += term / k;
+    term = (term * square) >> LN_BITS;
+  }
+  return 2n * sum;
+}
+
+const LN2 = atanh2(1n, 3n);
+
+/** ln(n) of a positive integer, correctly rounded. */
+export function lnExact(n: number): number {
+  const big = BigInt(n);
+  const exponent = big.toString(2).length - 1;
+  const power = 1n << BigInt(exponent);
+  return Number(BigInt(exponent) * LN2 + atanh2(big - power, big + power)) * LN_SCALE;
+}
+
 /** bytes.strip(): the dictionary is read as bytes, so only ASCII whitespace is stripped. */
 function stripAscii(line: string): string {
   let start = 0;
@@ -109,6 +141,9 @@ export class JiebaTokenizer {
 
   #freq: Map<string, number> | null = null;
   #logTotal = 0;
+  /** lnExact of each count the DAG has met: NaN until then. */
+  readonly #smallLogs = new Float64Array(SMALL_COUNTS).fill(Number.NaN);
+  readonly #logs = new Map<number, number>();
   #hmm: HmmTables | null = null;
 
   get initialized(): boolean {
@@ -121,7 +156,7 @@ export class JiebaTokenizer {
     const dict = join(jiebaDir(), "dict.txt");
     const { freq, total } = genPfdict(readFileSync(dict, "utf8"), dict);
     this.#hmm = loadHmm();
-    this.#logTotal = Math.log(total);
+    this.#logTotal = lnExact(total);
     this.#freq = freq;
   }
 
@@ -183,6 +218,23 @@ export class JiebaTokenizer {
     return this.#freq as Map<string, number>;
   }
 
+  #ln(count: number): number {
+    if (count < SMALL_COUNTS) {
+      let small = this.#smallLogs[count] as number;
+      if (Number.isNaN(small)) {
+        small = lnExact(count);
+        this.#smallLogs[count] = small;
+      }
+      return small;
+    }
+    let ln = this.#logs.get(count);
+    if (ln === undefined) {
+      ln = lnExact(count);
+      this.#logs.set(count, ln);
+    }
+    return ln;
+  }
+
   /** `__cut_DAG`: the max-probability dictionary route, with HMM over runs of single characters. */
   #cutDag(chars: readonly string[], out: string[]): void {
     const freq = this.#dict();
@@ -238,7 +290,7 @@ export class JiebaTokenizer {
       for (const x of dag[idx] as number[]) {
         while (pos <= x) frag += chars[pos++] as string;
         // Left to right, as Python evaluates it: float addition is not associative.
-        const p = Math.log(freq.get(frag) || 1) - this.#logTotal + (prob[x + 1] as number);
+        const p = this.#ln(freq.get(frag) || 1) - this.#logTotal + (prob[x + 1] as number);
         if (bestX === -1 || p > best || (p === best && x > bestX)) {
           best = p;
           bestX = x;

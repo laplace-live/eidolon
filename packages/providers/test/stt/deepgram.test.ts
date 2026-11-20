@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, expect, jest, test } from "bun:test";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setUsageSink, type UsageRecord } from "../../src/index.ts";
 import { deepgramUrl, openDeepgramStt } from "../../src/stt/deepgram.ts";
+import { useFakeClock } from "../clock.ts";
 import {
   captureLogs,
   defaultSelection,
@@ -17,14 +18,14 @@ import {
 
 let server: FakeServer;
 let logs: ReturnType<typeof captureLogs>;
-beforeEach(() => {
-  server = new FakeServer();
+beforeEach(async () => {
+  server = await FakeServer.start();
   logs = captureLogs();
 });
-afterEach(() => {
-  jest.useRealTimers();
+afterEach(async () => {
+  vi.useRealTimers();
   setUsageSink(null);
-  server.stop();
+  await server.stop();
   logs.restore();
 });
 
@@ -154,15 +155,15 @@ test("two finalizes sent before either is answered get an acknowledgement each",
 });
 
 test("sends KeepAlive every 5 s, audio or not", async () => {
-  jest.useFakeTimers();
+  useFakeClock();
   const stt = await open();
   const peer = await server.connection();
   stt.send(new Int16Array([1]));
   expect(samples(await peer.next())).toEqual([1]);
-  jest.advanceTimersByTime(5_000);
+  vi.advanceTimersByTime(5_000);
   expect(await peer.next()).toBe('{"type": "KeepAlive"}');
   stt.send(new Int16Array([2]));
-  jest.advanceTimersByTime(5_000);
+  vi.advanceTimersByTime(5_000);
   expect(samples(await peer.next())).toEqual([2]);
   expect(await peer.next()).toBe('{"type": "KeepAlive"}');
   await stt.close();
@@ -183,7 +184,7 @@ test("a rejected handshake gives up at once, and no error names the key", async 
 });
 
 test("a dropped socket is reported and reconnected 4 s later", async () => {
-  jest.useFakeTimers();
+  useFakeClock();
   const stt = await open();
   const events = watch(stt);
   const first = await server.connection();
@@ -192,9 +193,9 @@ test("a dropped socket is reported and reconnected 4 s later", async () => {
   expect(events.seen).toEqual([{ type: "error", message: "1011 boom", fatal: false }]);
   // The backoff starts waiting once the closed socket is let go.
   await turn();
-  jest.advanceTimersByTime(3_999);
+  vi.advanceTimersByTime(3_999);
   const next = server.connection();
-  jest.advanceTimersByTime(1);
+  vi.advanceTimersByTime(1);
   const second = await next;
   // Words on the new socket: the client has it too.
   second.send(results("在"));
@@ -205,7 +206,7 @@ test("a dropped socket is reported and reconnected 4 s later", async () => {
 });
 
 test("three connections in a row that don't stay up are fatal", async () => {
-  jest.useFakeTimers();
+  useFakeClock();
   server.onOpen = (peer) => peer.close(1011, "nope");
   // Opening may wait for a connection that stays, so its failures are counted in the log.
   const opening = open();
@@ -213,7 +214,7 @@ test("three connections in a row that don't stay up are fatal", async () => {
   for (const attempt of [1, 2]) {
     await waitFor(() => failures() === attempt);
     await turn();
-    jest.advanceTimersByTime(4_000);
+    vi.advanceTimersByTime(4_000);
   }
   const stt = await opening;
   const events = watch(stt);
@@ -227,7 +228,7 @@ test("three connections in a row that don't stay up are fatal", async () => {
 });
 
 test("a handshake refused by the server's trouble is retried 4 s later, and opening waits", async () => {
-  jest.useFakeTimers();
+  useFakeClock();
   server.refuse = 503;
   let opened = false;
   const opening = open().then((stt) => {
@@ -237,7 +238,7 @@ test("a handshake refused by the server's trouble is retried 4 s later, and open
   await waitFor(() => logs.lines.some((line) => line.includes("connection error:")));
   expect(opened).toBe(false);
   server.refuse = null;
-  jest.advanceTimersByTime(4_000);
+  vi.advanceTimersByTime(4_000);
   const stt = await opening;
   const events = watch(stt);
   await server.connection();

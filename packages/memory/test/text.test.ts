@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { pyJsonDumps, pyJsonLoads } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "../src/extraction-prompt.ts";
 import { generateAdditiveExtractionPrompt, type StoredMessage } from "../src/prompts.ts";
 import { buildSessionScope, scopeFilters } from "../src/scope.ts";

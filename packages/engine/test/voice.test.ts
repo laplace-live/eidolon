@@ -2,9 +2,9 @@
 // audio, the voice-style tool, synthesis that fails or is interrupted, the viewer's clip heard as a
 // line, how each persona's reply mode is settled, and a chat whose director chooses voice.
 import "../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { UserContext } from "@eidolon/access";
 import {
   type Attachment,
@@ -26,6 +26,7 @@ import {
 import { Director } from "@eidolon/context";
 import type { LlmTool } from "@eidolon/core";
 import { usageRecord } from "@eidolon/providers";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { type ChatDeps, type ChatOutput, runChat } from "../src/chat.ts";
 import { runTurn } from "../src/turn.ts";
 import type {
@@ -753,7 +754,7 @@ describe("a chat that answers in voice", () => {
       const director = new Director({
         apiKey: "k",
         fetch: (async (_url: string, init: RequestInit) => {
-          await Promise.race([textSeen, Bun.sleep(500)]);
+          await Promise.race([textSeen, delay(500)]);
           order.push("director answered");
           const { questions } = JSON.parse(String(init.body)) as Body;
           return Response.json({

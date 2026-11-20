@@ -30,6 +30,7 @@ import {
   dataHome,
   errorText,
   logger,
+  newId,
 } from "@eidolon/config";
 import type { DirectorReply } from "@eidolon/context";
 import {
@@ -437,7 +438,7 @@ export class ChatRunner {
   async create(participants: readonly ParticipantId[]): Promise<string> {
     const header: ChatHeader = {
       format: CHAT_FORMAT,
-      id: Bun.randomUUIDv7(),
+      id: newId(),
       createdAt: Date.now(),
       participants,
     };
@@ -634,7 +635,7 @@ export class ChatRunner {
       await this.#yield(chat);
       return this.#answerLine(id, chat, {
         type: "message",
-        id: Bun.randomUUIDv7(),
+        id: newId(),
         speaker: { kind: "user" },
         text,
       });
@@ -770,7 +771,7 @@ export class ChatRunner {
       // and removes the chat next.
       if (chat.cancel.signal.aborted) throw new ChatStoreError("not-found", `No chat ${id}`);
       const call: ActiveCall = {
-        id: Bun.randomUUIDv7(),
+        id: newId(),
         persona,
         group,
         live: new LiveTurn(),
@@ -1008,7 +1009,7 @@ export class ChatRunner {
         const stored = this.#append(id, chat, [
           {
             type: "message",
-            id: Bun.randomUUIDv7(),
+            id: newId(),
             speaker: event.speaker,
             text: event.text,
             modality: "call",
@@ -1496,7 +1497,7 @@ export class ChatRunner {
           {
             type: "turn-failed",
             persona,
-            turn: turn ?? Bun.randomUUIDv7(),
+            turn: turn ?? newId(),
             error: errorText(error),
           },
         ]);

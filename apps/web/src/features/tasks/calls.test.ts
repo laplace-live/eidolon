@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { ChatEvent } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import type { StartTaskFinal } from "@/lib/api";
 import { taskEndedNudge } from "../../../../bot/src/local/tasks/tool.ts";
 import { reportStored, type TaskCall, taskCalls } from "./calls";

@@ -1,11 +1,14 @@
 // Booting the local server: what it prints and when, the browser, the log level, the exits for
 // a missing build, a bad token and a taken port, and stopping or restarting it.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { activePersona, consoleSink, envOptional, logger } from "@eidolon/config";
+import { afterEach, describe, expect, test } from "vitest";
+import { serveFetch } from "../../../../packages/config/test/http.ts";
 import { bootLocal, shutdownOnce } from "../../src/local/boot.ts";
 import { serverLockInfoPath, takeServerLock } from "../../src/local/server-lock.ts";
 import { tokenPath } from "../../src/local/token.ts";
@@ -142,25 +145,27 @@ describe("a port in use", () => {
   test("no server can share the local port and take its requests", async () => {
     booted = await bootFixture();
     const port = booted.port;
-    const share = () =>
-      Bun.serve({
-        hostname: "127.0.0.1",
-        port,
-        development: false,
-        fetch: () => new Response("x"),
+    // With SO_REUSEPORT where Node can set it (Linux; macOS refuses it with ENOTSUP).
+    const refused = await new Promise<string | undefined>((resolve) => {
+      const other = createServer();
+      other.once("error", (error: NodeJS.ErrnoException) => resolve(error.code));
+      other.listen({ host: "127.0.0.1", port, reusePort: process.platform === "linux" }, () => {
+        other.close();
+        resolve(undefined);
       });
-    expect(share).toThrow(expect.objectContaining({ code: "EADDRINUSE" }));
+    });
+    expect(refused).toBe("EADDRINUSE");
   });
 
   test("by another program: exits 1", async () => {
-    const other = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("hi") });
+    const other = await serveFetch(() => new Response("hi"));
     const io = fakeIo();
     const dist = fixtureDist();
     try {
       const argv = ["--host", "127.0.0.1", "--port", String(other.port), "--no-open"];
       expect(await bootLocal(argv, fakeModules().modules, { dist, io })).toBeNull();
     } finally {
-      other.stop(true);
+      await other.stop();
       rmSync(dist, { recursive: true, force: true });
     }
     expect(io.exits).toEqual([1]);
@@ -211,7 +216,7 @@ describe("stopping", () => {
     booted = await bootFixture();
     booted.io.shutdown?.();
     for (let waited = 0; booted.io.exits.length === 0 && waited < 2000; waited += 10) {
-      await Bun.sleep(10);
+      await delay(10);
     }
     expect(booted.io.exits).toEqual([0]);
     const refused = await fetch(`${booted.base}/`).then(
@@ -226,7 +231,7 @@ describe("stopping", () => {
     booted.server.restart();
     expect(booted.io.exits).toEqual([]);
     for (let waited = 0; booted.io.exits.length === 0 && waited < 3000; waited += 20) {
-      await Bun.sleep(20);
+      await delay(20);
     }
     expect(booted.io.exits).toEqual([75]);
   });
@@ -260,8 +265,8 @@ describe("stopping", () => {
       exits.push(code),
     )(75);
     logger.setSink(() => {});
-    await Bun.sleep(0);
-    await Bun.sleep(0);
+    await delay(0);
+    await delay(0);
     expect(exits).toEqual([75]);
   });
 });

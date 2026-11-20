@@ -1,7 +1,6 @@
 // The command around the library: the golden runs (packages/ingest/test/ingest_streams_golden.ts)
 // replayed from their argv, the help as argparse lays it out, the defaults, the lock, --json, and
 // the index path checks. Every run happens in a temporary data home.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -16,6 +15,7 @@ import { join } from "node:path";
 import { installSettings, PROJECT_ROOT, resetSettings, sourceFolder } from "@eidolon/config";
 import { acquireLock, embedCachePath, indexLockKey } from "@eidolon/ingest";
 import { resetEmbeddingClient } from "@eidolon/retrieval";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   fakeClient,
   GOLDEN,

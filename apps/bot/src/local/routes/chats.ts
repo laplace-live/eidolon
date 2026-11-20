@@ -23,8 +23,9 @@ import { readBytes } from "../../responses.ts";
 import { HearingFailed, hearingRefusal } from "../chats/hearing.ts";
 import { ChatInCall, ChatRunner, type ChatRunnerOptions } from "../chats/runner.ts";
 import { personaRefusal } from "../personas.ts";
+import { fileResponse } from "../ranges.ts";
 import {
-  imageResponse,
+  imageHeaders,
   localError,
   localFailure,
   localJson,
@@ -408,13 +409,7 @@ export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
         }
         const path = runner().store.filePath(id, name);
         if (!existsSync(path)) return localError(404, "not-found", "No such file");
-        // Bun.serve answers a Range request on a Bun.file body itself, with a 206 or 416 and its
-        // own Accept-Ranges; a second one would read `bytes, bytes`. Safari plays audio only from
-        // a server that takes ranges.
-        const ranges: Record<string, string> = request.headers.has("range")
-          ? {}
-          : { "accept-ranges": "bytes" };
-        return imageResponse(Bun.file(path), mime, ranges);
+        return fileResponse(request, path, imageHeaders(mime));
       },
     },
   ];

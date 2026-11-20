@@ -1,10 +1,10 @@
 import "../../config/test/isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataHome, resetSettings, withPersona } from "@eidolon/config";
 import { reportUsage, withUsageScope } from "@eidolon/providers";
+import { afterEach, describe, expect, test } from "vitest";
 import { installUsageLedger, ledgerPath, UsageLedger, uninstallUsageLedger } from "../src/index.ts";
 
 const touched: string[] = [];

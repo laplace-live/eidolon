@@ -4,7 +4,7 @@
 import { chmodSync, copyFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const DOWNLOAD_FIXTURES = join(import.meta.dir, "fixtures", "download");
+export const DOWNLOAD_FIXTURES = join(import.meta.dirname, "fixtures", "download");
 
 export interface RunGolden {
   name: string;
@@ -101,12 +101,12 @@ export function readArgvLog(path: string): string[][] {
 
 /**
  * A golden argv plus what the download adds to it: --ignore-config first, then, for the managed
- * yt-dlp only, this Bun as YouTube's JavaScript runtime, and -- before the URL.
+ * yt-dlp only, this Node as YouTube's JavaScript runtime, and -- before the URL.
  */
 export function withPortArgs(python: readonly string[], managed = false): string[] {
   return [
     "--ignore-config",
-    ...(managed ? ["--js-runtimes", `bun:${process.execPath}`] : []),
+    ...(managed ? ["--js-runtimes", `node:${process.execPath}`] : []),
     ...python.slice(0, -1),
     "--",
     python.at(-1) as string,

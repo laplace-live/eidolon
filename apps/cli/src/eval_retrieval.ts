@@ -43,6 +43,7 @@ import {
   type SearchRow,
   vectorSearch,
 } from "@eidolon/retrieval";
+import { parse as parseToml } from "smol-toml";
 import { ArgparseExit, INT, type ParserSpec, parseArgs } from "./argparse.ts";
 import { type CliIo, printer, reportExit, resolveIo } from "./io.ts";
 import { mean, median } from "./py.ts";
@@ -234,7 +235,7 @@ export function benchmarkMeanMs(bench: RerankerBenchmark): number {
 export function loadQueries(path: string): EvalQuery[] {
   const shown = pyPath(path);
   if (!existsSync(path)) throw pyError("FileNotFoundError", `Queries file not found: ${shown}`);
-  const data = Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+  const data: Record<string, unknown> = parseToml(readFileSync(path, "utf8"));
   const rawQueries = "query" in data ? data.query : [];
   if (!pyTruthy(rawQueries)) throw pyError("ValueError", `No [[query]] entries in ${shown}`);
   return pyIter(rawQueries).map((q, i) => {

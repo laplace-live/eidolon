@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
 /** The repository root. The Docker image keeps this layout. */
-export const PROJECT_ROOT = resolve(import.meta.dir, "../../..");
+export const PROJECT_ROOT = resolve(import.meta.dirname, "../../..");
 
 /** `PROJECT_ROOT / value`, as pathlib joins: an absolute `value` stands alone. */
 export function resolveProjectPath(value: string): string {
@@ -12,7 +12,7 @@ export function resolveProjectPath(value: string): string {
 /**
  * A file the code ships with: `packaged` under `EIDOLON_APP_ROOT`, which the npm package's launcher
  * sets to the package, else `inCheckout` under this checkout. Every module of a bundle has dist/
- * as its `import.meta.dir`, so a lookup relative to the code would break there.
+ * as its `import.meta.dirname`, so a lookup relative to the code would break there.
  */
 export function shippedPath(packaged: string, inCheckout: string): string {
   const root = process.env.EIDOLON_APP_ROOT;

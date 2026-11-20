@@ -1,7 +1,8 @@
 import "./isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   accountEntries,
   activePersona,
@@ -118,14 +119,14 @@ describe("withPersona", () => {
       const before = reads();
       bobTurn.resolve();
       await aliceTurn.promise;
-      await Bun.sleep(1);
+      await delay(1);
       return [before, reads()];
     });
     const bob = withPersona("bob", async () => {
       await bobTurn.promise;
       const before = reads();
       aliceTurn.resolve();
-      await Bun.sleep(1);
+      await delay(1);
       return [before, reads()];
     });
     const between = reads();
@@ -150,7 +151,7 @@ describe("withPersona", () => {
     const before = snapshot();
     withPersona("alice", reads);
     await withPersona("bob", async () => {
-      await Bun.sleep(1);
+      await delay(1);
       return reads();
     });
     const after = snapshot();

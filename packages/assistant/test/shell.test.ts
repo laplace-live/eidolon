@@ -5,9 +5,9 @@
 //
 // pi's tree kill, on a stubbed process.kill; then the environment a command gets: the names it keeps
 // and the PATH it runs with, which no folder a task may write can lead.
-import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
+import { afterAll, afterEach, beforeEach, describe, expect, type Mock, test, vi } from "vitest";
 import { createLocalBashOperations } from "../src/tools/bash.ts";
 import { bashOffered, getShellConfig, killProcessTree, shellEnv } from "../src/tools/shell.ts";
 import { folderGuard, removeTempFolders, tempFolder } from "./tool-folder.ts";
@@ -22,11 +22,11 @@ afterAll(removeTempFolders);
 
 // Regression coverage for #11252: stop-before-kill is macOS-only and best-effort.
 describe("killProcessTree", () => {
-  let kill: ReturnType<typeof spyOn<typeof process, "kill">>;
+  let kill: Mock<typeof process.kill>;
 
   beforeEach(() => {
     setPlatform("darwin");
-    kill = spyOn(process, "kill").mockReturnValue(true);
+    kill = vi.spyOn(process, "kill").mockReturnValue(true);
   });
 
   afterEach(() => {

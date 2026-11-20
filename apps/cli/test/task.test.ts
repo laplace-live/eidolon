@@ -1,5 +1,4 @@
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -13,6 +12,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   readSnapshot,
   skillSwitchesPath,
@@ -29,6 +29,7 @@ import {
   reportUsage,
   type UsageRecord,
 } from "@eidolon/providers";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ArgparseExit } from "../src/argparse.ts";
 import { parseTaskArgs, taskMain } from "../src/task.ts";
 import { blockNetwork, captureIo, captureLogs, setEnv } from "./helpers.ts";
@@ -155,7 +156,7 @@ describe("laplace-task", () => {
           const path = join(tasksDir(), `${readdirSync(tasksDir())[0]}`, "task.json");
           for (let wait = 0; wait < 400 && !midRun?.files.written.length; wait++) {
             midRun = JSON.parse(readFileSync(path, "utf8"));
-            await Bun.sleep(5);
+            await delay(5);
           }
           yield* says("Wrote hello.txt.");
         },
@@ -338,7 +339,7 @@ describe("laplace-task", () => {
       says("Wrote hello.txt."),
     ]);
     const io = captureIo();
-    const writes = spyOn(process.stdout, "write");
+    const writes = vi.spyOn(process.stdout, "write");
     let code: number;
     try {
       code = await taskMain(["--json", "--folder", folder, "Write hello.txt"], {

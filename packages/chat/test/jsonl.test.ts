@@ -1,4 +1,3 @@
-import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   appendFile,
@@ -12,6 +11,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterAll, describe, expect, test } from "vitest";
+import { newId } from "../../config/src/ids.ts";
 import { runChatStoreContract } from "../src/contract.ts";
 import { CHAT_FORMAT, type ChatEvent, type ChatHeader } from "../src/index.ts";
 import { JsonlChatStore } from "../src/jsonl.ts";
@@ -38,7 +39,7 @@ runChatStoreContract({ describe, test, expect }, async () => quietStore(await fr
 function header(createdAt = 1000): ChatHeader {
   return {
     format: CHAT_FORMAT,
-    id: Bun.randomUUIDv7(),
+    id: newId(),
     createdAt,
     participants: ["milky-green"],
   };
@@ -166,7 +167,7 @@ describe("JsonlChatStore's files", () => {
     const { root, chat } = await chatWith([]);
     await mkdir(join(root, "notes"));
     await writeFile(join(root, "README"), "hi");
-    await mkdir(join(root, Bun.randomUUIDv7()));
+    await mkdir(join(root, newId()));
     const reports: string[] = [];
     expect((await quietStore(root, reports).list()).map((summary) => summary.id)).toEqual([
       chat.id,
@@ -211,8 +212,8 @@ describe("JsonlChatStore's validation", () => {
   test("ids must be lowercase UUIDs before they reach the disk", async () => {
     const root = await freshRoot();
     const store = quietStore(root);
-    const upper = Bun.randomUUIDv7().toUpperCase();
-    for (const id of ["../escape", "", "chat", upper, `${Bun.randomUUIDv7()}/x`]) {
+    const upper = newId().toUpperCase();
+    for (const id of ["../escape", "", "chat", upper, `${newId()}/x`]) {
       expect(await code(store.read(id))).toBe("invalid");
       expect(await code(store.append(id, []))).toBe("invalid");
       expect(await code(store.remove(id))).toBe("invalid");
@@ -272,13 +273,13 @@ describe("JsonlChatStore's attachments", () => {
     for (const mime of ["image/svg+xml", "text/html", "application/octet-stream"]) {
       expect(await code(store.saveFile(chat.id, png, mime))).toBe("invalid");
     }
-    expect(await code(store.saveFile(Bun.randomUUIDv7(), png, "image/png"))).toBe("not-found");
+    expect(await code(store.saveFile(newId(), png, "image/png"))).toBe("not-found");
     expect((await readdir(root)).sort()).toEqual([chat.id]);
   });
 
   test("filePath takes only attachment names", async () => {
     const store = quietStore(await freshRoot());
-    const id = Bun.randomUUIDv7();
+    const id = newId();
     for (const name of ["../meta.json", "chat.jsonl", `${sha}.svg`, `${sha}.PNG`, `x${sha}.png`]) {
       expect(await code(Promise.resolve().then(() => store.filePath(id, name)))).toBe("invalid");
     }

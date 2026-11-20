@@ -1,7 +1,7 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test, vi } from "vitest";
 import { linguiMacro } from "@/test/lingui-macro";
 
-mock.module("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
 const { describeEvent, reasonText, stageName } = await import("./describe");
 
 test("a code becomes its sentence, naming the provider it is about", () => {

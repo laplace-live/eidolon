@@ -1,14 +1,14 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { PROOF_HEADER } from "../../../bot/src/local/api.ts";
 import { ApiError, call, errorDetail, errorFrom, stream, url } from "./api";
 import { keepProof } from "./proof";
 
 afterEach(() => {
-  mock.restore();
+  vi.restoreAllMocks();
 });
 
 function answer(response: Response) {
-  return spyOn(globalThis, "fetch").mockResolvedValue(response);
+  return vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
 }
 
 describe("errorFrom", () => {
@@ -102,7 +102,7 @@ describe("call", () => {
   });
 
   test("no answer at all is unreachable", async () => {
-    spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
     expect(await call("GET /api/local/status").catch((error: unknown) => error)).toMatchObject({
       status: 0,
       code: "unreachable",
@@ -112,7 +112,7 @@ describe("call", () => {
   test("an abort stays an abort", async () => {
     const controller = new AbortController();
     controller.abort();
-    spyOn(globalThis, "fetch").mockRejectedValue(controller.signal.reason);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(controller.signal.reason);
     const failure = await call("GET /api/local/status", { signal: controller.signal }).catch(
       (error: unknown) => error,
     );
@@ -124,7 +124,8 @@ describe("call", () => {
 describe("the session's proof", () => {
   test("goes with every call and stream, as the header the server reads", async () => {
     keepProof("proof-from-the-session");
-    const fetch = spyOn(globalThis, "fetch")
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({}))
       .mockResolvedValueOnce(Response.json({}))
       .mockResolvedValueOnce(new Response("log"));

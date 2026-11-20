@@ -1,11 +1,11 @@
 // Production never has the assistant, and docker.yml skips the bot image build for
 // packages/assistant changes: both hold only while nothing the image loads imports
 // @eidolon/assistant. Biome's noRestrictedImports is what enforces that.
-import { expect, test } from "bun:test";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { PROJECT_ROOT } from "@eidolon/config";
+import { PROJECT_ROOT, spawnProcess } from "@eidolon/config";
+import { expect, test } from "vitest";
 
 test("Biome refuses @eidolon/assistant everywhere the bot image loads code, and only there", async () => {
   const refused: Record<string, boolean> = {
@@ -26,7 +26,7 @@ test("Biome refuses @eidolon/assistant everywhere the bot image loads code, and 
       Object.keys(refused).map(async (file) => {
         mkdirSync(dirname(join(dir, file)), { recursive: true });
         writeFileSync(join(dir, file), 'import "@eidolon/assistant";\n');
-        const lint = Bun.spawn([join(PROJECT_ROOT, "node_modules/.bin/biome"), "lint", file], {
+        const lint = spawnProcess([join(PROJECT_ROOT, "node_modules/.bin/biome"), "lint", file], {
           cwd: dir,
           stdout: "ignore",
           stderr: "ignore",

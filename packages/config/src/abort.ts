@@ -1,9 +1,11 @@
+import { setTimeout as sleep } from "node:timers/promises";
+
 /**
- * Bun.sleep(ms), but once `signal` aborts it rejects with the signal's reason and clears its timer,
+ * Waits `ms`, but once `signal` aborts it rejects with the signal's reason and clears its timer,
  * which would otherwise keep a cancelled process alive until it fired.
  */
 export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal === undefined) return Bun.sleep(ms);
+  if (signal === undefined) return sleep(ms);
   return new Promise<void>((resolve, reject) => {
     if (signal.aborted) {
       reject(signal.reason);

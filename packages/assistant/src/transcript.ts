@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { dataHome, isPlainObject, type TaskKind } from "@eidolon/config";
+import { dataHome, isPlainObject, newId, type TaskKind } from "@eidolon/config";
 import type { TaskBrief, TaskEntry, TaskEntryDraft, TaskOutcome, TaskStore } from "@eidolon/engine";
 import type { McpFailure } from "./mcp/session.ts";
 import type { McpArgument, McpLeftOut } from "./mcp/tools.ts";
@@ -22,7 +22,7 @@ export function tasksDir(home: string = dataHome()): string {
 
 /** Time-ordered, so a listing sorted by id is sorted by creation. */
 export function newTaskId(): string {
-  return Bun.randomUUIDv7();
+  return newId();
 }
 
 /** An id newTaskId makes, so naming a task never names a folder outside the tasks folder. */

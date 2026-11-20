@@ -2,7 +2,6 @@
 // copy of persona.yaml (never the template), and the rules that keep a page from reading files or
 // running binaries through a setting.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,6 +13,8 @@ import {
   SETTINGS,
   templatesDir,
 } from "@eidolon/config";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { SettingRow, SettingsResponse } from "../../src/local/api.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, fakeModules } from "./harness.ts";
@@ -215,7 +216,7 @@ describe("PUT settings", () => {
       "https://a.example",
       "https://b.example",
     ]);
-    expect(Bun.YAML.parse(readFileSync(join(dataHome(), "settings.yaml"), "utf8"))).toEqual({
+    expect(parseYaml(readFileSync(join(dataHome(), "settings.yaml"), "utf8"))).toEqual({
       local: { viewerName: "小明" },
       embeddings: { dim: 1024 },
       access: { allowedOrigins: ["https://a.example", "https://b.example"] },
@@ -225,7 +226,7 @@ describe("PUT settings", () => {
 
     const removed = await put({ scope: "app", values: { "local.viewerName": null } });
     expect(row(removed.body, "local.viewerName")).toMatchObject({ value: null, source: "default" });
-    expect(Bun.YAML.parse(readFileSync(join(dataHome(), "settings.yaml"), "utf8"))).toEqual({
+    expect(parseYaml(readFileSync(join(dataHome(), "settings.yaml"), "utf8"))).toEqual({
       embeddings: { dim: 1024 },
       access: { allowedOrigins: ["https://a.example", "https://b.example"] },
     });
@@ -240,7 +241,7 @@ describe("PUT settings", () => {
     });
     expect(saved.status).toBe(200);
     expect(row(saved.body, "voice.model")).toMatchObject({ value: "s2-pro", source: "persona" });
-    const own = Bun.YAML.parse(
+    const own = parseYaml(
       readFileSync(join(personaHomeDir("milky-green"), "persona.yaml"), "utf8"),
     ) as Record<string, any>;
     expect(own.identity.name).toBe("明前奶绿");
@@ -391,12 +392,12 @@ describe("PUT settings", () => {
     /** Her voice on `provider`, with a style of its voices. */
     const speaking = async (provider: string) => {
       expect((await save({ "voice.provider": provider })).status).toBe(200);
-      const own = Bun.YAML.parse(readFileSync(yaml, "utf8")) as Record<string, any>;
+      const own = parseYaml(readFileSync(yaml, "utf8")) as Record<string, any>;
       own.voice = { ...own.voice, styles: { gentle: `${provider}-gentle` } };
-      writeFileSync(yaml, Bun.YAML.stringify(own));
+      writeFileSync(yaml, stringifyYaml(own));
     };
     const styles = () =>
-      (Bun.YAML.parse(readFileSync(yaml, "utf8")) as Record<string, any>).voice?.styles;
+      (parseYaml(readFileSync(yaml, "utf8")) as Record<string, any>).voice?.styles;
     for (const apiKey of ["fk-1", "fk-2"]) {
       expect((await api("POST", "/accounts", { provider: "fish", apiKey })).status).toBe(201);
     }
@@ -475,7 +476,7 @@ describe("PUT settings", () => {
 
 describe("voice styles", () => {
   const yaml = () => join(personaHomeDir("milky-green"), "persona.yaml");
-  const ownFile = () => Bun.YAML.parse(readFileSync(yaml(), "utf8")) as Record<string, any>;
+  const ownFile = () => parseYaml(readFileSync(yaml(), "utf8")) as Record<string, any>;
   const setEnv = (name: string, value: string) => {
     process.env[name] = value;
     touched.push(name);

@@ -1,8 +1,8 @@
 // failureOf against what each client really throws: Soniox's, refine's OpenAIClient and the
 // embedding client, each over a fake fetch.
-import { expect, test } from "bun:test";
 import { OpenAIClient } from "@eidolon/config";
 import { EmbeddingClient } from "@eidolon/retrieval";
+import { expect, test } from "vitest";
 import { download, failureOf, LockedError, sharedFailure, transcribe } from "../src/index.ts";
 import { captureLogs } from "./pipeline_helpers.ts";
 

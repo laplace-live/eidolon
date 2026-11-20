@@ -96,13 +96,13 @@ const TOOLS = [
         {
           name: "deep",
           description: "Takes a schema nested past any stack.",
-          inputSchema: object({
-            x: Array.from({ length: deep }).reduce((inner) => ({ a: inner }), {}),
-          }),
+          inputSchema: object({ x: "DEEP" }),
         },
       ]
     : []),
 ];
+// V8's JSON.stringify overflows its stack on a value nested that deep, so its text goes in whole.
+const DEEP = `${'{"a":'.repeat(deep)}{}${"}".repeat(deep)}`;
 
 const cancelled = [];
 const waiting = new Map();
@@ -110,7 +110,9 @@ const asked = new Map();
 let nextAsk = 1;
 
 const send = (message) =>
-  process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ jsonrpc: "2.0", ...message }).replace('"x":"DEEP"', `"x":${DEEP}`)}\n`,
+  );
 const text = (value) => ({ content: [{ type: "text", text: value }] });
 const PIXEL = Buffer.from("not really a png").toString("base64");
 

@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, type Mock, spyOn } from "bun:test";
 import { join } from "node:path";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
 import * as lancedb from "@lancedb/lancedb";
+import { afterEach, beforeEach, type Mock, vi } from "vitest";
 import { openTable, resetEmbeddingClient, resetRerankerCache } from "../src/index.ts";
 
 /** Routes the logger into the returned array for each test, and back to the console after. */
@@ -58,7 +58,7 @@ export function isolateEnv(): { network: () => Mock<typeof fetch> } {
     }
     resetRerankerCache();
     resetEmbeddingClient();
-    network = spyOn(globalThis, "fetch").mockImplementation((async (input: unknown) => {
+    network = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: unknown) => {
       throw new Error(`network disabled in tests: ${String(input)}`);
     }) as unknown as typeof fetch);
   });

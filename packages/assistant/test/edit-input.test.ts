@@ -5,9 +5,9 @@
 //
 // The task loop runs prepareArguments before validating, as pi does, and execute runs it again, so
 // a call made without the loop is prepared too.
-import { afterEach, describe, expect, it } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { createEditTool, prepareEditArguments } from "../src/tools/edit.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
 

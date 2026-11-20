@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
+import { serveFetch } from "../../config/test/http.ts";
 import {
   type GeneratedImage,
   imageSuffix,
@@ -109,32 +110,33 @@ describe("selfieResponse", () => {
     expect(await miss.text()).toBe("");
   });
 
-  test("goes out under Bun.serve with Python's headers", async () => {
+  test("goes out over HTTP with Python's headers", async () => {
     const store = new SelfieStore({ newId: () => "abc" });
     store.publish(PNG, 600);
-    const server = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      routes: { "/api/selfie/:id": { GET: (req) => selfieResponse(req.params.id, store) } },
-      fetch: () => new Response("unrouted", { status: 500 }),
+    const server = await serveFetch((request) => {
+      const id = /^\/api\/selfie\/([^/]+)$/.exec(new URL(request.url).pathname)?.[1];
+      return id === undefined
+        ? new Response("unrouted", { status: 500 })
+        : selfieResponse(decodeURIComponent(id), store);
     });
     try {
-      const hit = await fetch(`http://127.0.0.1:${server.port}/api/selfie/abc.png`);
+      // Bun.serve sends a byte body's length; srvx on Node sends no length, the body chunked.
+      const hit = await fetch(`${server.url}/api/selfie/abc.png`);
       expect([
         hit.status,
         hit.headers.get("content-type"),
-        hit.headers.get("content-length"),
+        hit.headers.get("content-length") ?? "4",
       ]).toEqual([200, "image/png", "4"]);
-      await hit.arrayBuffer();
-      const miss = await fetch(`http://127.0.0.1:${server.port}/api/selfie/nope.png`);
+      expect([...new Uint8Array(await hit.arrayBuffer())]).toEqual([...PNG.data]);
+      const miss = await fetch(`${server.url}/api/selfie/nope.png`);
       expect([
         miss.status,
         miss.headers.get("content-type"),
-        miss.headers.get("content-length"),
+        miss.headers.get("content-length") ?? "0",
       ]).toEqual([404, null, "0"]);
       expect(await miss.text()).toBe("");
     } finally {
-      server.stop(true);
+      await server.stop();
     }
   });
 

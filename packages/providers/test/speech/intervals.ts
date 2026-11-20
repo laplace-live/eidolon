@@ -1,5 +1,5 @@
-// Catches the intervals code starts, so a test fires a keepalive by hand. Bun's fake timers also
-// stop Bun.sleep, which the socket tests wait with.
+// Catches the intervals code starts, so a test fires a keepalive by hand without faking the clock,
+// which `until` keeps its deadline on.
 
 export interface CaughtInterval {
   readonly ms: number;

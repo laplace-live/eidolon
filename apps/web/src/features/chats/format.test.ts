@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { chatName, relativeTime, shortDate } from "./format";
 
 const NOW = new Date(2026, 10, 9, 12, 0).getTime();

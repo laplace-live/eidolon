@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type LogRecord, PROJECT_ROOT } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   buildGreetingKickoff,
   buildPersonaPrefix,

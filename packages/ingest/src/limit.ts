@@ -1,6 +1,6 @@
 // Concurrency and cancellation for the offline chain: a FIFO limiter (asyncio.Semaphore's order),
-// the CLI's signal handling, and finding and stopping child processes.
-import type { Subprocess } from "bun";
+// the CLI's signal handling, and stopping child processes.
+import type { Subprocess } from "@eidolon/config";
 
 /** Runs `task` once a slot frees, in the order tasks were queued. */
 export type Limiter = <T>(task: () => Promise<T>) => Promise<T>;
@@ -52,8 +52,8 @@ export const CLEANUP_LIMIT_MS = 10_000;
 
 /**
  * A signal this soon after the first is that one delivered twice, a few ms apart: `bun run` passes
- * Ctrl-C on to its script, and a SIGTERM to the npm launcher's process group reaches Bun directly
- * and through the launcher.
+ * Ctrl-C on to its script, and a SIGTERM to the npm launcher's process group reaches the CLI
+ * directly and through the launcher.
  */
 export const REPEAT_MS = 500;
 
@@ -133,9 +133,10 @@ export async function runWithSignals(
   });
   try {
     const code = await run(controller.signal);
-    // A signal sent during the run's last synchronous stretch reaches its listener only on a later
-    // turn of the event loop; without this one, the run exits with its own code.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // A signal sent during the run's last synchronous stretch reaches its listener when the event
+    // loop next polls; an immediate runs just after that poll, where a due timer could run before
+    // it. Without this wait, the run exits with its own code.
+    await new Promise((resolve) => setImmediate(resolve));
     return received === null ? code : SIGNALS[received];
   } finally {
     clearTimeout(deadline);
@@ -144,18 +145,10 @@ export async function runWithSignals(
   }
 }
 
-/**
- * `shutil.which`: `name` on PATH as it is now, or null. Bun.which alone searches the PATH the
- * process started with, before the .env applied.
- */
-export function which(name: string): string | null {
-  return Bun.which(name, { PATH: process.env.PATH ?? "" });
-}
-
 /** How long a child gets to exit after SIGTERM before it gets SIGKILL. */
 export const KILL_GRACE_MS = 5_000;
 
-/** The parts of a Bun Subprocess that terminate uses. */
+/** The parts of a Subprocess that terminate uses. */
 export type ChildProcess = Pick<Subprocess, "exitCode" | "signalCode" | "exited" | "kill">;
 
 /** SIGTERM, then SIGKILL if `child` hasn't exited within `graceMs`; resolves once it has exited. */

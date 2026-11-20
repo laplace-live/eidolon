@@ -12,6 +12,9 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "tsconfig.json"
+      - "tsconfig.scripts.json"
+      - "tsconfig.no-bun.d.ts"
+      - "vitest.config.ts"
       - "biome.json"
       - "AGENTS.md"
       - "docs/**"
@@ -28,6 +31,9 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "tsconfig.json"
+      - "tsconfig.scripts.json"
+      - "tsconfig.no-bun.d.ts"
+      - "vitest.config.ts"
       - "biome.json"
       - "AGENTS.md"
       - "docs/**"
@@ -54,6 +60,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+
+      # The tests run on Node, as the local app, the CLI and the npm package do.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
 
       - run: bun install --frozen-lockfile
 
@@ -86,6 +97,6 @@ jobs:
 
       - run: bun run pack:npm
 
-      - run: bun apps/eidolon/scripts/ci-install-check.ts apps/eidolon/*.tgz
+      - run: node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/*.tgz
 
       - run: bun run pack:sdk

@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { ChatEvent, ChatEventOf, Speaker } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import type { StartTaskFinal } from "@/lib/api";
 import {
   chatItems,

@@ -2,9 +2,9 @@
 // hint, their result stored as `started` while the work goes on outside the turn, and her next
 // round reading what they started, in a chat and in a call alike.
 import "../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { UserContext } from "@eidolon/access";
 import {
   CHAT_FORMAT,
@@ -17,6 +17,7 @@ import {
 } from "@eidolon/chat";
 import { consoleSink, dataHome, logger, resetSettings } from "@eidolon/config";
 import type { LlmTool, ToolResult } from "@eidolon/core";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { ASYNC_TOOL_INSTRUCTIONS } from "../src/async_tool.ts";
 import { type ChatDeps, type ChatOutput, runChat } from "../src/chat.ts";
 import { runTurn } from "../src/turn.ts";
@@ -181,7 +182,7 @@ async function until(fn: () => boolean): Promise<void> {
   const start = Date.now();
   while (!fn()) {
     if (Date.now() - start > 1000) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 
@@ -742,7 +743,7 @@ describe("a call's background tools", () => {
       }
       starting.resolve({ task: "t1", status: "running" });
       if (ending) {
-        await Bun.sleep(20);
+        await delay(20);
         expect(results).toEqual([]);
         continue;
       }

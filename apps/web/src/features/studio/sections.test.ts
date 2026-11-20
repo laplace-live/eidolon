@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
 import { SETTINGS } from "@eidolon/config";
+import { expect, test } from "vitest";
 import { isSection, SHOWN_PATHS } from "./sections";
 
 const PERSONA_ROWS = SETTINGS.filter((row) => row.scope === "persona").map((row) => row.path);

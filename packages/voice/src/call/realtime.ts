@@ -15,7 +15,7 @@ import {
   finalEnvelope,
   startedEnvelope,
 } from "@eidolon/chat";
-import { errorText, logger, pyJsonDumps, pyTruthy, withPersona } from "@eidolon/config";
+import { errorText, logger, newId, pyJsonDumps, pyTruthy, withPersona } from "@eidolon/config";
 import type { ConversationContext, LlmTool, ToolEffects, ToolResult } from "@eidolon/core";
 import {
   callInstruction,
@@ -1099,7 +1099,7 @@ export function runRealtimeCall(
         dialect,
         parts,
         engine: deps.engine,
-        newId: options.newId ?? (() => Bun.randomUUIDv7()),
+        newId: options.newId ?? newId,
         onEnding: () => void close(),
       });
       void (async () => {

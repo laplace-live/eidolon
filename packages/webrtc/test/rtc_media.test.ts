@@ -5,7 +5,7 @@
 //
 // The audio reorder buffer, candidate parsing and Opus packet sizes; the port carries no video,
 // resampler or ESP32 munging, so their cases aren't ported.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { AudioJitterBuffer, type JitterPacket } from "../src/jitter.ts";
 import { libopusWasmCodec, opusPacketSamples } from "../src/opus.ts";
 import { candidateFromSdp, candidateToSdp } from "../src/peer.ts";

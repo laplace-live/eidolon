@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { ChatEvent, ParticipantId } from "@eidolon/chat";
+import { describe, expect, test } from "vitest";
 import { nextUp, reasonOf, scoreTable } from "./group";
 
 function said(seq: number, persona: ParticipantId | null, text = "…"): ChatEvent {

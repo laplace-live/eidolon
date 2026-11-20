@@ -1,8 +1,8 @@
 // Expected jieba cuts were printed by Python jieba 0.42.1.
-import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect, test } from "vitest";
 import {
   JiebaTokenizer,
   tokenizeZh,
@@ -10,6 +10,7 @@ import {
   warmTokenizer,
   ZH_QUERY_STOPWORDS,
 } from "../src/index.ts";
+import { lnExact } from "../src/jieba.ts";
 import { chunkFtsText, FTS_COLUMNS, factFtsText } from "./fts_text.ts";
 import { realTable } from "./helpers.ts";
 
@@ -137,6 +138,24 @@ describe("jieba port", () => {
     expect(tokenizeZhQuery(input)).toBe(expected);
   });
 
+  test("ln of a count is the C library's, correctly rounded, where V8's Math.log is an ulp off", () => {
+    expect([lnExact(1), lnExact(2)]).toEqual([0, Math.LN2]);
+    // macOS's log, which Python's math.log calls, on four of the dictionary's counts.
+    expect([3, 14, 48, 74].map(lnExact)).toEqual([
+      1.0986122886681098, 2.6390573296152584, 3.871201010907891, 4.30406509320417,
+    ]);
+    for (let n = 1; n <= 5000; n++) {
+      const v8 = Math.log(n);
+      expect(Math.abs(lnExact(n) - v8)).toBeLessThanOrEqual(v8 * Number.EPSILON);
+    }
+  });
+
+  test("a run of one character ties as Python cuts it, as the index's tokens column holds it", () => {
+    expect(tokenizeZh("呀呀呀呀呀这是个啥玩意")).toBe("呀呀 呀呀 呀 这 是 个 啥 玩意");
+    expect(tokenizeZh("我咚咚咚的磕大头呀")).toBe("我 咚咚 咚 的 磕 大头 呀");
+    expect(tokenizeZhQuery("我咚咚咚的磕大头呀")).toBe("咚咚 咚 磕 大头");
+  });
+
   test("80 stopwords, the two whitespace entries included", () => {
     expect(ZH_QUERY_STOPWORDS.size).toBe(80);
     expect(ZH_QUERY_STOPWORDS.has(" ") && ZH_QUERY_STOPWORDS.has("\t")).toBe(true);
@@ -147,7 +166,7 @@ describe("jieba port", () => {
 const facts = await realTable("persona_facts");
 const chunks = await realTable("stream_chunks");
 
-// `bun packages/retrieval/test/jieba-parity.ts` checks every row; this samples it.
+// `node packages/retrieval/test/jieba-parity.ts` checks every row; this samples it.
 describe("parity with the stored tokens column", () => {
   test.skipIf(facts === null)("every persona_facts row", async () => {
     const rows = await facts

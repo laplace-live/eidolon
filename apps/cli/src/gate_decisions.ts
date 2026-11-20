@@ -27,6 +27,7 @@ import {
   reportDecision,
 } from "@eidolon/context";
 import { accountOf } from "@eidolon/providers";
+import { parse as parseToml } from "smol-toml";
 import { type CliIo, printer, resolveIo } from "./io.ts";
 import { median, numOf, type PyNumber, quantilesExclusive } from "./py.ts";
 
@@ -205,7 +206,7 @@ export async function runGateDecisions(options: GateDecisionsOptions = {}): Prom
   const print = printer(io.stdout);
   const turnsPath = options.turnsPath ?? join(BENCHMARK_DIR, "turns.toml");
   const outPath = options.outPath ?? join(BENCHMARK_DIR, "decisions.json");
-  const parsed = Bun.TOML.parse(readFileSync(turnsPath, "utf8")) as Record<string, unknown>;
+  const parsed: Record<string, unknown> = parseToml(readFileSync(turnsPath, "utf8"));
   const turns = subscript(parsed, "turn") as GateTurnSpec[];
   const model = envOptional("RETRIEVAL_GATE_MODEL") ?? DEFAULT_GATE_MODEL;
   // OpenRouter's own account: its variable, or the key the local app saved in it.

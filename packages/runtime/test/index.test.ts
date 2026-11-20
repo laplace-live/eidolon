@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { logger } from "@eidolon/config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import * as runtime from "../src/index.ts";
 import { captureLogs, type LogCapture } from "./support.ts";
 

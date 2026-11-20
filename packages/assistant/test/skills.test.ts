@@ -6,10 +6,11 @@
 // pi's loader cases, on skills written to temporary folders rather than pi's fixtures; the two
 // sources, the line fallback, the limits, links, clashes and the catalog's budget are this
 // package's own.
-import { afterEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { estimateTokens } from "@eidolon/engine";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   catalogOf,
   loadSkills,
@@ -178,7 +179,8 @@ describe("loadSkills", () => {
       problems: [
         {
           path,
-          message: "its frontmatter doesn't parse (YAML Parse error: Unexpected token)",
+          message:
+            "its frontmatter doesn't parse (Flow sequence in block collection must be sufficiently indented and end with a ])",
           skipped: true,
         },
       ],
@@ -206,11 +208,12 @@ describe("loadSkills", () => {
       ["pdf-tools", "Use when: the user asks about 'PDFs'"],
       ["quoted", "Use when: quoted"],
     ]);
+    const nested = "Nested mappings are not allowed in compact mappings";
+    const unclosed = "Flow map in block collection must be sufficiently indented and end with a }";
     expect(problems).toEqual(
-      paths.map((path) => ({
-        path,
-        message:
-          "its frontmatter doesn't parse (YAML Parse error: Unexpected token): its name and description were read line by line",
+      [nested, nested, unclosed].map((why, at) => ({
+        path: paths[at],
+        message: `its frontmatter doesn't parse (${why}): its name and description were read line by line`,
         skipped: false,
       })),
     );
@@ -224,6 +227,19 @@ describe("loadSkills", () => {
     );
     const { skills, problems } = await loadSkills({ dataHome: home });
     expect(skills.map((skill) => skill.name)).toEqual(["unknown-field"]);
+    expect(problems).toEqual([]);
+  });
+
+  test("a field given twice keeps its last value, and the frontmatter still parses", async () => {
+    const { home, owner } = await places();
+    writeSkill(
+      join(owner, "twice"),
+      "name: twice\ndescription: The first draft.\ndescription: The one that counts.",
+    );
+    const { skills, problems } = await loadSkills({ dataHome: home });
+    expect(skills.map(({ name, description }) => [name, description])).toEqual([
+      ["twice", "The one that counts."],
+    ]);
     expect(problems).toEqual([]);
   });
 
@@ -357,10 +373,10 @@ describe("loadSkills", () => {
     const { home, owner } = await places();
     mkdirSync(join(owner, "pipe"), { recursive: true });
     mkdirSync(join(owner, "linked"), { recursive: true });
-    expect(Bun.spawnSync(["mkfifo", join(owner, "pipe", "SKILL.md")]).exitCode).toBe(0);
+    expect(spawnSync("mkfifo", [join(owner, "pipe", "SKILL.md")]).status).toBe(0);
     symlinkSync("../pipe/SKILL.md", join(owner, "linked", "SKILL.md"));
     mkdirSync(join(owner, "inside"), { recursive: true });
-    expect(Bun.spawnSync(["mkfifo", join(owner, "inside", "fifo")]).exitCode).toBe(0);
+    expect(spawnSync("mkfifo", [join(owner, "inside", "fifo")]).status).toBe(0);
     symlinkSync("fifo", join(owner, "inside", "SKILL.md"));
     expect(await loadSkills({ dataHome: home })).toEqual({
       skills: [],

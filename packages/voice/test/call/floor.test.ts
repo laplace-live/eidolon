@@ -2,12 +2,12 @@
 // async results and results from outside, what a bound call adds to her replies, the end of a call
 // and the mailbox's rules: on the real kit, emitter, Speaker and Mouth, with the caller, her turns,
 // her voice and the clock scripted.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { ChatEventDraft } from "@eidolon/chat";
 import { consoleSink, logger } from "@eidolon/config";
 import type { LlmTool, ToolSchema } from "@eidolon/core";
 import type { BackgroundTools, CallTurnRequest, PersonaParts, TurnExtras } from "@eidolon/engine";
 import { SPEECH_STALL_MS, SPEECH_STALLED } from "@eidolon/providers/speech-stream";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { ReplyExtras } from "../../src/types.ts";
 import { HOST, NUDGE, settle, spokenReply, startCall, VIEWER } from "./harness.ts";
 

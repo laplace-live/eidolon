@@ -8,7 +8,7 @@ import { consoleSink, type LogLevel, type LogRecord, logger } from "@eidolon/con
 import { type EmbeddingClient, EmbeddingUsage } from "@eidolon/retrieval";
 import type { FakeJob } from "./fake_soniox.ts";
 
-export const PIPELINE_FIXTURES = join(import.meta.dir, "fixtures", "pipeline");
+export const PIPELINE_FIXTURES = join(import.meta.dirname, "fixtures", "pipeline");
 
 export interface SummaryGolden {
   readonly stages: string[];
@@ -117,7 +117,7 @@ export function sidecarText(streamId: string, refined: number): string {
 }
 
 const TRANSCRIBE_GOLDEN = JSON.parse(
-  readFileSync(join(import.meta.dir, "fixtures", "transcribe", "run.golden.json"), "utf8"),
+  readFileSync(join(import.meta.dirname, "fixtures", "transcribe", "run.golden.json"), "utf8"),
 ) as { scenarios: { name: string; jobs: FakeJob[] }[] };
 
 /**

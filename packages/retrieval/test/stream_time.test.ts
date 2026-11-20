@@ -1,5 +1,5 @@
 // Scope resolution and query intent, then goldens that pin Unicode and calendar edge cases.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   hasStreamTimeReference,
   isStreamElaboration,

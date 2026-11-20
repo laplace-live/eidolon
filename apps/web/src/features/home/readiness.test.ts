@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { studioPath } from "@/lib/paths";
 import type { Status } from "../../lib/api";
 import { type Formats, formatsFor, type Item, readiness, verdict } from "./readiness";

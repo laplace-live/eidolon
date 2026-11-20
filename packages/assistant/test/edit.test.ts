@@ -5,12 +5,12 @@
 //
 // pi's edit, fuzzy-matching and line-ending cases in a task's folder, a failure a result rather
 // than a rejection; then the task's own: refusals, files, aborts, arguments and non-UTF-8 files.
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import * as fsp from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { TaskToolResult } from "@eidolon/engine";
 import { applyPatch } from "diff";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEditTool } from "../src/tools/edit.ts";
 import * as editDiff from "../src/tools/edit-diff.ts";
 import {
@@ -21,6 +21,9 @@ import {
 } from "../src/tools/edit-diff.ts";
 import type { AssistantTool } from "../src/types.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
+
+// A copy of the module, so a test can spy on what the tool calls: its own exports can't be.
+vi.mock("node:fs/promises", async (importOriginal) => ({ ...(await importOriginal<object>()) }));
 
 let testDir: string;
 let editTool: AssistantTool;
@@ -39,7 +42,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  mock.restore();
+  vi.restoreAllMocks();
   await removeTempFolders();
 });
 
@@ -214,7 +217,7 @@ describe("edit tool", () => {
 
   it("should include the original error message for unknown edit access errors", async () => {
     writeFileSync(join(testDir, "broken.txt"), "hello\n");
-    spyOn(fsp, "access").mockImplementation(async () => {
+    vi.spyOn(fsp, "access").mockImplementation(async () => {
       throw new Error("disk offline");
     });
 
@@ -228,10 +231,10 @@ describe("edit tool", () => {
 
   it("should compute the diff before writing, so a diff failure leaves the file unchanged", async () => {
     writeFileSync(join(testDir, "f.txt"), "a\nb\n");
-    spyOn(editDiff, "generateEditDiff").mockImplementation(() => {
+    vi.spyOn(editDiff, "generateEditDiff").mockImplementation(() => {
       throw new Error("diff failed");
     });
-    const writeFile = spyOn(fsp, "writeFile");
+    const writeFile = vi.spyOn(fsp, "writeFile");
 
     const result = await edit({ path: "f.txt", edits: [{ oldText: "b", newText: "B" }] });
 
@@ -505,26 +508,34 @@ describe("edit tool fuzzy matching", () => {
     const line =
       "今天直播唱了三首歌，分别是《晴天》、《稻香》和《七里香》！观众说：“太好听了（真的）。”\n";
     const body = line.repeat(Math.floor((10 * 1024 * 1024) / Buffer.byteLength(line)));
-    const quickest = (work: () => void) => {
-      let best = Number.POSITIVE_INFINITY;
-      for (let run = 0; run < 3; run++) {
-        const started = performance.now();
-        work();
-        best = Math.min(best, performance.now() - started);
-      }
-      return best;
+    const took = (work: () => void) => {
+      const started = performance.now();
+      work();
+      return performance.now() - started;
     };
-    const nfkc = quickest(() => body.split("\n").map((each) => each.normalize("NFKC")));
-    for (const oldText of ["最后一行：结束", "最后一行:结束"]) {
-      const elapsed = quickest(() => {
-        const { newContent } = applyEditsToNormalizedContent(
-          `${body}最后一行：结束\n`,
-          [{ oldText, newText: "最后一行：完" }],
-          "notes.md",
-        );
-        expect(newContent).toBe(`${body}最后一行：完\n`);
-      });
-      expect([oldText, elapsed < nfkc * 8]).toEqual([oldText, true]);
+    const oldTexts = ["最后一行：结束", "最后一行:结束"];
+    let nfkc = Number.POSITIVE_INFINITY;
+    const elapsed = oldTexts.map(() => Number.POSITIVE_INFINITY);
+    // Taken in turns, so the other test files' load weighs on both sides alike.
+    for (let run = 0; run < 3; run++) {
+      nfkc = Math.min(
+        nfkc,
+        took(() => body.split("\n").map((each) => each.normalize("NFKC"))),
+      );
+      for (const [i, oldText] of oldTexts.entries()) {
+        const time = took(() => {
+          const { newContent } = applyEditsToNormalizedContent(
+            `${body}最后一行：结束\n`,
+            [{ oldText, newText: "最后一行：完" }],
+            "notes.md",
+          );
+          expect(newContent).toBe(`${body}最后一行：完\n`);
+        });
+        elapsed[i] = Math.min(elapsed[i] as number, time);
+      }
+    }
+    for (const [i, oldText] of oldTexts.entries()) {
+      expect([oldText, (elapsed[i] as number) < nfkc * 8]).toEqual([oldText, true]);
     }
   });
 

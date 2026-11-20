@@ -1,7 +1,8 @@
 // runTask beyond pi's loop: a transcript it resumes from, steering that skips a sequential batch,
 // spend, stall and approval pauses, retries, and an outcome the runtime decides.
-import { describe, expect, test } from "bun:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { httpError, ProviderHttpError, type UsageRecord, usageRecord } from "@eidolon/providers";
+import { describe, expect, test } from "vitest";
 import { completeText, runTask, type TaskEntry, type TaskEvent } from "../src/task.ts";
 import {
   anthropicMind,
@@ -959,7 +960,7 @@ describe("runTask's cancel", () => {
     controller.abort();
     expect((await done).outcome).toEqual({ status: "cancelled" });
     finish.resolve("too late");
-    await Bun.sleep(1);
+    await delay(1);
     expect(request.store.types()).toEqual(["brief", "assistant", "tool-start", "end"]);
   });
 
@@ -998,7 +999,7 @@ describe("runTask's cancel", () => {
       if (event.type === "entry" && event.entry.type === "tool-start") break;
     }
     await aborted.promise;
-    await Bun.sleep(1);
+    await delay(1);
     expect(request.store.types()).toEqual(["brief", "assistant", "tool-start"]);
   });
 });

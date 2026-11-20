@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { selfiePaths, selfiePersona, speakerOf } from "../src/index.ts";
 
 const ID = "Qm9vdHN0cmFwLWlkLTE2Yg";

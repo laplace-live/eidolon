@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_PERSONA, IDENTITY_DEFAULTS, PROJECT_ROOT } from "@eidolon/config";
+import { describe, expect, test } from "vitest";
 import { LOCAL_ROUTES } from "../../../../bot/src/local/api.ts";
 import type { SettingRow } from "../../lib/api";
 import {

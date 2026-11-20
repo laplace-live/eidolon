@@ -10,8 +10,8 @@ import { personaArg } from "./persona-arg.ts";
 // installing the settings logs too.
 logToStderr();
 if (!envFlag("EIDOLON_NO_DOTENV", false)) {
-  loadDotenv(findDotenv(import.meta.dir), { override: true });
+  loadDotenv(findDotenv(import.meta.dirname), { override: true });
 }
-const persona = personaArg(Bun.argv.slice(2));
+const persona = personaArg(process.argv.slice(2));
 if (persona) process.env.EIDOLON_PERSONA = persona;
 installSettings();

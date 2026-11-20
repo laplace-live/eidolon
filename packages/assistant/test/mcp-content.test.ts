@@ -6,7 +6,7 @@
 // pi's cases for content blocks, input schemas and the output limit. The limit here takes the
 // result's text alone, since the worker can't view images, and saves nothing: the cut text says to
 // ask again for less.
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { normalizeMcpInputSchema } from "../src/mcp/input-schema.ts";
 import { limitMcpText, MCP_OUTPUT_MAX_BYTES } from "../src/mcp/output-limit.ts";
 import { type ContentBlock, toLlmContent } from "../src/mcp/protocol/content.ts";

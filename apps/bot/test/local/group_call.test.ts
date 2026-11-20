@@ -2,16 +2,16 @@
 // reports against the chat's own seqs, and a whole group call run through that binding over a
 // fake transport, recognizer and voices, the real engine on scripted minds and a scripted director.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AllowedOffer } from "@eidolon/access";
 import { type ChatEvent, type ParticipantId, stampEvents } from "@eidolon/chat";
-import { activePersona, dataHome, resetSettings } from "@eidolon/config";
+import { activePersona, dataHome, newId, resetSettings } from "@eidolon/config";
 import { type ChatDeps, type MindChunk, runChat, runTurn } from "@eidolon/engine";
 import { selfieStore } from "@eidolon/imagegen";
 import type { AnyCallBinding, SignallingServer } from "@eidolon/runtime";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { runNativeSafely } from "../../../../packages/runtime/src/native/engine.ts";
 import { BOT_ABOUT } from "../../../../packages/runtime/src/rtvi.ts";
 import {
@@ -109,7 +109,7 @@ describe("the offer route", () => {
   ];
 
   test("reads `group` from the offer's requestData", () => {
-    const chatId = Bun.randomUUIDv7();
+    const chatId = newId();
     expect(chatCallTarget({ chatId, persona: ANN, group: true })).toEqual({
       chatId,
       persona: ANN,
@@ -249,7 +249,7 @@ describe("a group call's binding", () => {
       }),
       saveAttachment: () => Promise.reject(new Error("a call keeps no files")),
       fetchImage: () => Promise.reject(new Error("a call fetches no images")),
-      newId: () => Bun.randomUUIDv7(),
+      newId: () => newId(),
       speech: {
         canSpeak: () => false,
         synthesize: () => Promise.reject(new Error("no voice messages")),

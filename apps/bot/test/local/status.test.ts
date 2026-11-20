@@ -1,10 +1,10 @@
 // GET status: its shape on a fresh home, the background probes it reports from their last answer,
 // the index read from build records alone, the yt-dlp states, the last failed call and restarts.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   dataHome,
   installSettings,
@@ -14,6 +14,7 @@ import {
   resetSettings,
 } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import manifest from "../../package.json" with { type: "json" };
 import { reinstallSettings } from "../../src/local/restart.ts";
 import type { LocalApp } from "../../src/local/router.ts";
@@ -70,7 +71,7 @@ function fakeDeps(replies: Record<string, () => Response>) {
 async function until(done: () => boolean): Promise<void> {
   // A deadline, not a count of sleeps: spawning --version took over 0.5 s on a loaded Mac.
   const deadline = Date.now() + 2_000;
-  while (!done() && Date.now() < deadline) await Bun.sleep(2);
+  while (!done() && Date.now() < deadline) await delay(2);
   expect(done()).toBe(true);
 }
 
@@ -407,7 +408,7 @@ describe("GET status", () => {
     });
     app.calls = 1;
     buildStatus(app, deps);
-    await Bun.sleep(5);
+    await delay(5);
     expect(asked).toEqual([]);
     app.calls = 0;
     expect(buildStatus(app, deps).persona.voice.ok).toBeNull();
@@ -474,7 +475,7 @@ describe("GET status", () => {
     buildStatus(app, deps);
     await until(() => pending.length === 2);
     pending[0]?.(json(200, {}));
-    await Bun.sleep(5);
+    await delay(5);
     setEnv("FISH_API_KEY", "fk-old");
     expect(buildStatus(app, deps).persona.voice.ok).toBeNull();
     await until(() => pending.length === 3);

@@ -4,7 +4,6 @@
 // it, and each persona's Mem0 stores only the viewer's call lines and hers. A realtime persona can't
 // join one.
 import "../../../config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AllowedOffer, UserContext } from "@eidolon/access";
@@ -15,7 +14,7 @@ import {
   type ParticipantId,
   stampEvents,
 } from "@eidolon/chat";
-import { AsyncQueue, activePersona, dataHome, resetSettings } from "@eidolon/config";
+import { AsyncQueue, activePersona, dataHome, newId, resetSettings } from "@eidolon/config";
 import type { DirectorInput } from "@eidolon/context";
 import type { ContextProvider } from "@eidolon/core";
 import { type ChatDeps, type MindChunk, type MindRequest, runChat, runTurn } from "@eidolon/engine";
@@ -23,6 +22,7 @@ import { MEM0_STORE_KEY } from "@eidolon/memory";
 import { realtimeIn } from "@eidolon/providers";
 import { type CallDeps, voiceModels } from "@eidolon/voice";
 import { Peer } from "@eidolon/webrtc";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { FakeSpeech, FakeStt, FakeTransport, settle } from "../../../voice/test/call/harness.ts";
 import { FakeClock } from "../../../voice/test/input/clock.ts";
 import { createSignallingServer, type OutsideResult } from "../../src/index.ts";
@@ -122,7 +122,7 @@ async function groupCall(
     }),
     saveAttachment: () => Promise.reject(new Error("a call keeps no files")),
     fetchImage: () => Promise.reject(new Error("a call fetches no images")),
-    newId: () => Bun.randomUUIDv7(),
+    newId,
     speech: {
       canSpeak: () => false,
       synthesize: () => Promise.reject(new Error("a call speaks no voice messages")),
@@ -330,8 +330,8 @@ describe("who can join a group call", () => {
       `${PERSONAS[OTHER]}realtime:\n  provider: openai\n`,
     );
     const spies = [
-      spyOn(Peer.prototype, "initialize").mockImplementation(async () => {}),
-      spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
+      vi.spyOn(Peer.prototype, "initialize").mockImplementation(async () => {}),
+      vi.spyOn(Peer.prototype, "getAnswer").mockImplementation(function (this: Peer) {
         return { sdp: "v=0\r\n", type: "answer", pc_id: this.pcId };
       }),
     ];

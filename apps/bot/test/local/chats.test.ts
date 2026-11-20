@@ -1,9 +1,10 @@
 // /api/local/chats over a fake turn, a fake director and a fake hearing: what the runner stores, in
 // which order, and what each stream carries. The engine itself is never run here.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { AllowedOffer } from "@eidolon/access";
 import {
   type ChatEvent,
@@ -15,7 +16,7 @@ import {
   summarize,
   viewOf,
 } from "@eidolon/chat";
-import { activePersona, dataHome, readPersonaIdentity } from "@eidolon/config";
+import { activePersona, dataHome, newId, readPersonaIdentity } from "@eidolon/config";
 import { Director } from "@eidolon/context";
 import {
   type ChatRequest,
@@ -37,6 +38,8 @@ import type {
   SignallingResult,
   SignallingServer,
 } from "@eidolon/runtime";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { serveFetch } from "../../../../packages/config/test/http.ts";
 import type { RouteHandler } from "../../src/app.ts";
 import type { ChatContents } from "../../src/local/api.ts";
 import type { LiveTurn } from "../../src/local/chats/live.ts";
@@ -53,6 +56,7 @@ import { ndjsonResponse } from "../../src/local/responses.ts";
 import { createLocalRouter, type LocalApp, localRoute } from "../../src/local/router.ts";
 import { chatRunner, chatsRoutes } from "../../src/local/routes/chats.ts";
 import { ANSWER, type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
+import { serveRoutes } from "../serve.ts";
 
 const PERSONA = "milky-green";
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
@@ -283,9 +287,9 @@ interface ChatsServer {
   runner(): ChatRunner;
 }
 
-function serveChats(
+async function serveChats(
   options: ChatRunnerOptions = { turn: fakeTurn, answer: fakeAnswer, hear: fakeHear },
-): ChatsServer {
+): Promise<ChatsServer> {
   const stops: (() => Promise<void>)[] = [];
   const app: LocalApp = {
     port: () => 0,
@@ -299,22 +303,17 @@ function serveChats(
   const chats = chatRunner(app, options);
   const router: RouteHandler = createLocalRouter(chatsRoutes(chats), () => "bearer");
   const identity = identityHandlers({ signalling, memoryAdmin: () => null, chats });
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    routes: {
-      "/api/local/*": router,
-      "/api/offer": localRoute("POST", identity.offer, () => "bearer"),
-    },
-    fetch: () => new Response(null, { status: 404 }),
+  const server = await serveRoutes({
+    "/api/local/*": router,
+    "/api/offer": localRoute("POST", identity.offer, () => "bearer"),
   });
-  const base = `http://127.0.0.1:${server.port}/api/local`;
+  const base = `${server.url}/api/local`;
   const shutdown = async () => {
     for (const stop of stops.splice(0)) await stop();
   };
   return {
     offer: (body) =>
-      fetch(`http://127.0.0.1:${server.port}/api/offer`, {
+      fetch(`${server.url}/api/offer`, {
         method: "POST",
         body: JSON.stringify(body),
         headers: { "content-type": "application/json" },
@@ -334,7 +333,7 @@ function serveChats(
     runner: chats,
     async close() {
       await shutdown();
-      await server.stop(true);
+      await server.stop();
     },
   };
 }
@@ -400,7 +399,7 @@ async function until(check: () => boolean | Promise<boolean>, ms = 3000): Promis
   const deadline = Date.now() + ms;
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error("timed out waiting");
-    await Bun.sleep(5);
+    await delay(5);
   }
 }
 
@@ -411,7 +410,7 @@ function settles(promise: Promise<unknown>, ms = 50): Promise<boolean> {
       () => true,
       () => true,
     ),
-    Bun.sleep(ms).then(() => false),
+    delay(ms).then(() => false),
   ]);
 }
 
@@ -441,7 +440,7 @@ async function ownRunner(test: (runner: ChatRunner) => Promise<void>): Promise<v
 let server: ChatsServer;
 let logs: CapturedLogs;
 
-beforeEach(() => {
+beforeEach(async () => {
   scripts = new Map([
     ["", reply("你好呀")],
     ["*", reply("收到啦")],
@@ -455,7 +454,7 @@ beforeEach(() => {
   answer = { status: 200, body: ANSWER };
   logs = captureLogs();
   process.env.OPENROUTER_API_KEY = "sk-or-test";
-  server = serveChats();
+  server = await serveChats();
 });
 
 afterEach(async () => {
@@ -902,7 +901,7 @@ describe("a message", () => {
 });
 
 const WEBM = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4, 5, 6]);
-const WEBM_NAME = `${new Bun.CryptoHasher("sha256").update(WEBM).digest("hex")}.webm`;
+const WEBM_NAME = `${createHash("sha256").update(WEBM).digest("hex")}.webm`;
 
 interface VoiceOptions {
   readonly bytes?: Uint8Array<ArrayBuffer>;
@@ -1020,7 +1019,7 @@ describe("a voice message", () => {
     await until(() => heard.length === 1);
     const deleted = await Promise.race([
       server.call("DELETE", `/chats/${id}`),
-      Bun.sleep(1000).then(() => null),
+      delay(1000).then(() => null),
     ]);
     expect(deleted).not.toBeNull();
     expect(await json(deleted as Response)).toEqual({ ok: true });
@@ -1118,27 +1117,23 @@ describe("a voice message", () => {
 
   test("is heard by default through the engine, on her hearing role's provider, as the chat's usage", async () => {
     const uploads: { auth: string | null; file: Uint8Array }[] = [];
-    const openai = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      async fetch(request) {
-        if (new URL(request.url).pathname !== "/v1/audio/transcriptions") {
-          return new Response(null, { status: 404 });
-        }
-        const file = (await request.formData()).get("file") as File;
-        uploads.push({
-          auth: request.headers.get("authorization"),
-          file: new Uint8Array(await file.arrayBuffer()),
-        });
-        return Response.json({ text: " 听得见吗 ", usage: { type: "duration", seconds: 2.4 } });
-      },
+    const openai = await serveFetch(async (request) => {
+      if (new URL(request.url).pathname !== "/v1/audio/transcriptions") {
+        return new Response(null, { status: 404 });
+      }
+      const file = (await request.formData()).get("file") as File;
+      uploads.push({
+        auth: request.headers.get("authorization"),
+        file: new Uint8Array(await file.arrayBuffer()),
+      });
+      return Response.json({ text: " 听得见吗 ", usage: { type: "duration", seconds: 2.4 } });
     });
     process.env.STT_PROVIDER = "openai";
     process.env.OPENAI_API_KEY = "sk-openai-test";
-    process.env.OPENAI_BASE_URL = `http://127.0.0.1:${openai.port}/v1`;
+    process.env.OPENAI_BASE_URL = `${openai.url}/v1`;
     const usage: UsageRecord[] = [];
     setUsageSink((record) => usage.push(record));
-    const engine = serveChats({ turn: fakeTurn, answer: fakeAnswer });
+    const engine = await serveChats({ turn: fakeTurn, answer: fakeAnswer });
     try {
       const { id } = await json<{ id: string }>(
         await engine.call("POST", "/chats", { participants: [PERSONA] }),
@@ -1163,7 +1158,7 @@ describe("a voice message", () => {
       ]);
     } finally {
       await engine.close();
-      await openai.stop(true);
+      await openai.stop();
       setUsageSink(null);
       delete process.env.STT_PROVIDER;
       delete process.env.OPENAI_API_KEY;
@@ -1279,7 +1274,7 @@ describe("a chat", () => {
     const attachment = message?.attachments?.[0];
     expect(attachment).toMatchObject({ kind: "image", mime: "image/png" });
     const name = attachment?.name as string;
-    expect(name).toBe(`${new Bun.CryptoHasher("sha256").update(PNG).digest("hex")}.png`);
+    expect(name).toBe(`${createHash("sha256").update(PNG).digest("hex")}.png`);
 
     const file = await server.call("GET", `/chats/${id}/files/${name}`);
     expect(file.status).toBe(200);
@@ -1712,7 +1707,7 @@ async function engineChat(
   deps: Omit<EngineDeps, "saveAttachment">,
   test: (engine: ChatsServer, id: string) => Promise<void>,
 ): Promise<void> {
-  const engine = serveChats({
+  const engine = await serveChats({
     answer: (request, saveAttachment) =>
       runChat(request, { ...deps, saveAttachment, director: new Director(null) }),
   });
@@ -1857,7 +1852,7 @@ describe("a line sent while they answer", () => {
       await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
       const sent = runner.send(id, "等等");
       // The send is waiting for her.
-      await Bun.sleep(0);
+      await delay(0);
       await runner.stop(id);
       await (await sent).ended;
       expect(answers[1]?.owed).toBeUndefined();
@@ -1879,7 +1874,7 @@ describe("a line sent while they answer", () => {
       await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
       const sent = runner.send(id, "等等");
       // The send is waiting for her.
-      await Bun.sleep(0);
+      await delay(0);
       const dialled = runner.startCall(id, PERSONA);
       expect(await settles(dialled, 1000)).toBe(true);
       await (await sent).ended;
@@ -1904,7 +1899,7 @@ describe("a line sent while they answer", () => {
       scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { hold: hold.promise }));
       await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
       const sent = runner.send(id, "等等");
-      await Bun.sleep(0);
+      await delay(0);
       expect(await runner.startCall(id, "gamma").catch((error: unknown) => error)).toBeInstanceOf(
         NotInChat,
       );
@@ -1923,10 +1918,10 @@ describe("a line sent while they answer", () => {
       scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { hold: hold.promise }));
       await linesOf(await runner.send(id, "聊聊天")).until((line) => line.type === "delta");
       const sent = runner.send(id, "等等");
-      await Bun.sleep(0);
+      await delay(0);
       const removed = runner.changeParticipants(id, [], [PERSONA]);
       const dialled = runner.startCall(id, PERSONA).catch((error: unknown) => error);
-      await Bun.sleep(20);
+      await delay(20);
       expect(requests[0]?.signal.aborted).toBe(false);
       hold.resolve();
       await (await sent).ended;
@@ -1962,7 +1957,7 @@ describe("a line sent while they answer", () => {
       scripts.set(`${PERSONA} 聊聊天`, reply("我先说两句", { untilAborted: true }));
       await linesOf(await runner.send(other, "聊聊天")).until((line) => line.type === "delta");
       const sent = runner.send(other, "等等");
-      await Bun.sleep(0);
+      await delay(0);
       await runner.remove(other);
       await sent;
       expect(answers.at(-1)?.after).toBe(4);
@@ -2010,7 +2005,7 @@ describe("a line sent while they answer", () => {
       await runner.send(id, "第一句");
       await linesOf(await runner.send(id, "第二句")).until((line) => line.type === "delta");
       const third = runner.send(id, "第三句");
-      await Bun.sleep(0);
+      await delay(0);
       hold.resolve();
       await (await third).ended;
       expect(answers.map((answer) => [answer.after, answer.owed])).toEqual([
@@ -2207,7 +2202,7 @@ describe("a call in a chat", () => {
     // What the session reports once the call has ended changes nothing.
     binding.onTranscript({ role: "assistant", text: "再见", interrupted: false });
     binding.onEnded("error");
-    await Bun.sleep(20);
+    await delay(20);
     expect((await log(id)).events).toHaveLength(10);
     expect(logs.lines()).toContain(
       `WARNING Chat ${id}: her line came after call ${call} ended; dropped`,
@@ -2280,7 +2275,7 @@ describe("a call in a chat", () => {
       const posted = voice(id);
       await until(() => heard.length === 1);
       const dialled = server.offer(offerBody({ chatId: id, persona: PERSONA }));
-      await Bun.sleep(20);
+      await delay(20);
       const deleted = await server.call("DELETE", `/chats/${id}`);
       expect([deleted.status, await deleted.json()]).toEqual([200, { ok: true }]);
       expect((await posted).status).toBe(502);
@@ -2334,7 +2329,7 @@ describe("a call in a chat", () => {
   test("is refused unless it names a chat and one of its personas, and nothing is stored", async () => {
     persona("beta", "贝塔");
     const id = await greeted();
-    const unknown = Bun.randomUUIDv7();
+    const unknown = newId();
     for (const [requestData, want] of [
       [{ chatId: "nope", persona: PERSONA }, [400, "bad-request"]],
       [{ chatId: id.toUpperCase(), persona: PERSONA }, [400, "bad-request"]],
@@ -2386,7 +2381,7 @@ describe("a call in a chat", () => {
     ]);
     expect((await server.call("GET", `/chats/${id}/live`)).status).toBe(204);
     (offered[0] as Offered).binding?.onEnded("hangup");
-    await Bun.sleep(20);
+    await delay(20);
     expect((await log(id)).events).toHaveLength(4);
   });
 
@@ -2526,7 +2521,7 @@ describe("a call in a chat", () => {
       { type: "call-ended", reason: "shutdown" },
     ]);
     binding.onEnded("hangup");
-    await Bun.sleep(20);
+    await delay(20);
     expect((await log(id)).events.at(-1)).toMatchObject({ type: "call-ended", reason: "shutdown" });
   });
 
@@ -2549,7 +2544,7 @@ describe("a call in a chat", () => {
       "events 7:call-ended",
     ]);
     const { events } = await log(id);
-    const name = `${new Bun.CryptoHasher("sha256").update(PNG).digest("hex")}.png`;
+    const name = `${createHash("sha256").update(PNG).digest("hex")}.png`;
     const her = { kind: "persona", id: PERSONA } as const;
     expect(events.slice(3).map(({ seq, at, ...event }) => event)).toEqual([
       { type: "message", id: expect.any(String), speaker: her, text: "拍给你看", modality: "call" },

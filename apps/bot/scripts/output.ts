@@ -1,4 +1,5 @@
 // The local app's output, for the scripts that boot it and wait for the link it prints.
+import { setTimeout as delay } from "node:timers/promises";
 
 /** What boot.ts prints once the app listens; its group is the link that signs a browser in. */
 export const READY_LINE = /^Eidolon is ready: (\S+)$/m;
@@ -25,7 +26,7 @@ export class Output {
       const match = pattern.exec(this.text);
       if (match) return match[1] ?? match[0];
       if (over || Date.now() > deadline) throw new Error(`no ${pattern} in the output`);
-      await Bun.sleep(100);
+      await delay(100);
     }
   }
 

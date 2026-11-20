@@ -1,5 +1,4 @@
 import "../../../packages/config/test/isolated-guard.ts";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   copyFileSync,
   existsSync,
@@ -16,6 +15,7 @@ import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import { DEFAULT_IMAGE_MODEL } from "@eidolon/imagegen";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { generateImageMain, outPath } from "../src/index.ts";
 import { blockNetwork, captureIo, FIX, golden, placehold, setEnv, substitute } from "./helpers.ts";
 

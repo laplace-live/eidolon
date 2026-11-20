@@ -1,9 +1,9 @@
 import "../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { dataHome, PROJECT_ROOT } from "@eidolon/config";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   friendSources,
   ImageGenError,

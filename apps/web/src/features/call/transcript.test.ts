@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import type { BotOutputData } from "@laplace.live/eidolon-sdk";
+import { describe, expect, test } from "vitest";
 import {
   type BotEntry,
   botRuns,

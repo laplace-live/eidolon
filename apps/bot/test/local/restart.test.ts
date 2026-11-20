@@ -2,9 +2,9 @@
 // the tracker arms each reader only once it can have read; POST restart asks the supervisor for a
 // new server.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   CREDENTIALS,
   dataHome,
@@ -15,6 +15,7 @@ import {
 } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import { makeReranker, resetRerankerCache } from "@eidolon/retrieval";
+import { afterEach, describe, expect, test } from "vitest";
 import { buildMemoryConfig } from "../../../../packages/memory/src/config.ts";
 import { type MemoryEngine, SharedEngine } from "../../../../packages/memory/src/engine.ts";
 import { BOOT_READ, LIVE_READ, RestartTracker } from "../../src/local/restart.ts";
@@ -85,7 +86,7 @@ describe("BOOT_READ", () => {
     const open = (id: string) =>
       withPersona(id, async () => {
         const { engine } = await engines.get(buildMemoryConfig());
-        await Bun.sleep(1);
+        await delay(1);
         return { engine, reranker: makeReranker() };
       });
     const [alice, bob, again] = await Promise.all([open("alice"), open("bob"), open("alice")]);

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { avatarChanged, avatarSrc, avatarVersion } from "./version";
 
 test("a changed picture gets a URL the page hasn't loaded, for that persona only", () => {

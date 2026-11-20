@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { TaskPending } from "@/lib/api";
 import { approveBody, chosenModel, WEB_MODES } from "./choice";
 

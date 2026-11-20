@@ -1,5 +1,5 @@
 // yt-dlp's command line for one URL, and the cookie settings that feed it.
-import { envOptional, pyPath } from "@eidolon/config";
+import { envOptional, jsRuntime, pyPath } from "@eidolon/config";
 import type { YtDlp } from "./ytdlp.ts";
 
 export const DEFAULT_FORMAT = "bestaudio[ext=m4a]";
@@ -16,13 +16,12 @@ const PROGRESS_TEMPLATE =
 
 /**
  * YouTube's pages carry JavaScript challenges that yt-dlp solves with a runtime it finds, only
- * Deno by default; the Bun running this is always there. yt-dlp still prefers a Deno it finds, and
- * has deprecated Bun: past the last Bun it supports, it warns and runs it anyway
- * (https://github.com/yt-dlp/yt-dlp/issues/16766). Only the managed yt-dlp, always a current
- * release, gets the flag: a YT_DLP_PATH or PATH one may predate it and would fail every URL.
+ * Deno by default; the Node running this, one of the runtimes yt-dlp supports, is always there.
+ * yt-dlp still prefers a Deno it finds. Only the managed yt-dlp, always a current release, gets the
+ * flag: a YT_DLP_PATH or PATH one may predate it and would fail every URL.
  */
 export function jsRuntimeArgs(ytDlp: Pick<YtDlp, "source">): string[] {
-  return ytDlp.source === "managed" ? ["--js-runtimes", `bun:${process.execPath}`] : [];
+  return ytDlp.source === "managed" ? ["--js-runtimes", `node:${jsRuntime().command}`] : [];
 }
 
 /**

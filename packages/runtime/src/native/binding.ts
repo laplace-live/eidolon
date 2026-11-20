@@ -11,7 +11,7 @@ import {
   type Speaker,
   viewOf,
 } from "@eidolon/chat";
-import { errorText, isPlainObject, logger } from "@eidolon/config";
+import { errorText, isPlainObject, logger, newId } from "@eidolon/config";
 import type { ContextProvider } from "@eidolon/core";
 import { groupMemory, type TurnRequest } from "@eidolon/engine";
 import { MEM0_LABEL, MEM0_STORE_KEY } from "@eidolon/memory";
@@ -108,7 +108,7 @@ function seedEvents(seed: readonly unknown[], persona: ParticipantId): ChatEvent
     if (role === "user" || role === "assistant") {
       const speaker: Speaker =
         role === "user" ? { kind: "user" } : { kind: "persona", id: persona };
-      drafts.push({ type: "message", id: Bun.randomUUIDv7(), speaker, text });
+      drafts.push({ type: "message", id: newId(), speaker, text });
     } else if (role === "system" || role === "developer") {
       const position = drafts.length;
       drafts.push({ type: "context", persona, turn: "seed", position, role, content: text });

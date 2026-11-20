@@ -9,7 +9,7 @@ import { logAccess, type MethodRoutes, type RouteHandler, type RouteMethod } fro
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "../memory-admin.ts";
 import type { LocalContext, LocalExtension } from "../server.ts";
 import type { ChatRunner } from "./chats/runner.ts";
-import { allowedHosts, guardRequest, isApiPath, listedOrigin, logRefused } from "./guard.ts";
+import { allowedHosts, guardRequest, isApiPath, listedOrigin } from "./guard.ts";
 import { identityHandlers } from "./identity.ts";
 import {
   createLocalRouter,
@@ -97,7 +97,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
     async (request, server) => {
       const refused = guardRequest(request, server, hostsOf(context), origins);
       if (refused !== null) {
-        logRefused(request, server, refused);
+        logAccess(request, server, refused);
         return refused;
       }
       const origin = listedOrigin(request, origins);
@@ -203,7 +203,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
       return (request, server) => {
         const refused = guardRequest(request, server, hostsOf(context), origins);
         if (refused !== null) {
-          logRefused(request, server, refused);
+          logAccess(request, server, refused);
           return refused;
         }
         const { pathname } = new URL(request.url);

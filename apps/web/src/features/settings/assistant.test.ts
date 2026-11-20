@@ -1,6 +1,5 @@
 // Settings' Assistant Mode section beyond its rows: what keeps a kind or web search from running,
 // the commands allowed for good, and the MCP servers. Rendered to markup, with the macros stubbed.
-import { describe, expect, mock, test } from "bun:test";
 import { SETTINGS } from "@eidolon/config";
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
@@ -8,12 +7,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
+import { describe, expect, test, vi } from "vitest";
 import type { AssistantStatus, SettingRow } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
-mock.module("@lingui/core/macro", linguiMacro);
-mock.module("@lingui/react/macro", linguiReactMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/react/macro", linguiReactMacro);
 const { AssistantCard, KindsCard } = await import("./assistant");
 const { AllowedCommandsCard, allowedCommandsQuery } = await import("./commands-card");
 const { McpServersCard, mcpServersQuery, commandLine } = await import("./mcp-card");

@@ -1,6 +1,5 @@
 // The golden runs (see ingest_streams_golden.ts) replayed through the library, plus what the
 // golden doesn't cover: progress events, cancellation, the meta file and the skip-type settings.
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -17,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, installSettings, logger, pyRepr, resetSettings } from "@eidolon/config";
 import { type EmbeddingClient, resetEmbeddingClient } from "@eidolon/retrieval";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ingestStreams, type ProgressEvent } from "../src/index.ts";
 import { cancelMidRebuild } from "./forced_exit.ts";
 import {
@@ -305,7 +305,7 @@ describe("ingestStreams", () => {
     delete process.env.OPENROUTER_API_KEY;
     resetSettings();
     resetEmbeddingClient();
-    const network = spyOn(globalThis, "fetch").mockImplementation((async () => {
+    const network = vi.spyOn(globalThis, "fetch").mockImplementation((async () => {
       throw new Error("network disabled in tests");
     }) as unknown as typeof fetch);
     try {

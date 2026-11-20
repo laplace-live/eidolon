@@ -1,7 +1,7 @@
 // web_search against a searcher that stands in for the search role's provider, so nothing here
 // touches the network; the provider's own client is tested in @eidolon/providers.
-import { describe, expect, test } from "bun:test";
 import type { TaskToolResult } from "@eidolon/engine";
+import { describe, expect, test } from "vitest";
 import {
   createWebSearchTool,
   WEB_SEARCH,

@@ -1,12 +1,12 @@
-import { describe, expect, mock, test } from "bun:test";
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, test, vi } from "vitest";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
-mock.module("@lingui/core/macro", linguiMacro);
-mock.module("@lingui/react/macro", linguiReactMacro);
+vi.doMock("@lingui/core/macro", linguiMacro);
+vi.doMock("@lingui/react/macro", linguiReactMacro);
 
 const { Markdown, TranscriptLog } = await import("./transcript-view");
 

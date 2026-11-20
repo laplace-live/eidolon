@@ -104,9 +104,9 @@ Trusted Publishing (`laplace-live/eidolon`, workflow `release.yml`). To bootstra
 package in a public repository (npm refuses `--provenance` from private repositories):
 
 1. **Create the initial version on npm.** npm can only attach a trusted publisher to an existing
-   package. Stage its `pack/` directory with the image's Bun version and publish once from an npm
-   account with 2FA that can publish to `@laplace.live` (temporarily omitting `provenance: true`
-   for a local publish, or using `npm stage publish` + `npm stage approve` on npm 12):
+   package. Stage its `pack/` directory and publish once from an npm account with 2FA that can
+   publish to `@laplace.live` (temporarily omitting `provenance: true` for a local publish, or
+   using `npm stage publish` + `npm stage approve` on npm 12):
 
    ```bash
    bun install --frozen-lockfile

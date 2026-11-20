@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test, vi } from "vitest";
 import { QdrantVectorStore } from "../src/qdrant.ts";
 import { FakeQdrant } from "./support.ts";
 
@@ -117,14 +117,20 @@ describe("QdrantVectorStore sets what the JS client defaults differently", () =>
 
   test("the real client is built with qdrant-client's 5 s timeout and the version check", async () => {
     const constructed: unknown[] = [];
-    mock.module("@qdrant/js-client-rest", () => ({
+    vi.resetModules();
+    vi.doMock("@qdrant/js-client-rest", () => ({
       QdrantClient: class {
         constructor(options: unknown) {
           constructed.push(options);
         }
       },
     }));
-    new QdrantVectorStore(SETTINGS);
+    try {
+      const { QdrantVectorStore: Mocked } = await import("../src/qdrant.ts");
+      new Mocked(SETTINGS);
+    } finally {
+      vi.doUnmock("@qdrant/js-client-rest");
+    }
     expect(constructed).toEqual([
       { host: "qdrant", port: 6333, timeout: 5000, checkCompatibility: true },
     ]);

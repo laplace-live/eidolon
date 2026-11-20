@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { describe, expect, test } from "vitest";
 import { reread } from "./reread";
 
 /** An observed query whose first read waits for `release` and answers "stale"; later ones "fresh". */

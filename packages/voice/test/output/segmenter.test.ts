@@ -4,7 +4,7 @@
 //
 // Ported from pipedog packages/core/test/test_simple_text_aggregator.test.ts@ce8f8bc
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "vitest";
 import { hasWords, Segmenter } from "../../src/output/segmenter.ts";
 
 /** Every sentence `deltas` complete, then the flush, marked. */

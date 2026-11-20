@@ -1,6 +1,6 @@
 // The MCP endpoint's HTTP-level answers: transport security, method handling, the
 // Accept/Content-Type gates, the body limit and envelope errors.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { acceptsJson, isExactJsonContentType, parseAllowedHosts } from "../../src/mcp/http.ts";
 import type { McpHandler } from "../../src/mcp/index.ts";
 import { ACCEPT, buildHandler, isolateEnv, resultOf, rpc, withEnv } from "./helpers.ts";
@@ -19,10 +19,14 @@ function post(
     if (value === null) merged.delete(name);
     else merged.set(name, value);
   }
-  return handler.handle(
-    new Request("http://localhost/mcp/", { method: "POST", headers: merged, body }),
-    "testclient",
-  );
+  // Node's Request takes a stream body only with duplex "half", as the Fetch spec has it.
+  const init: RequestInit & { duplex: "half" } = {
+    method: "POST",
+    headers: merged,
+    body,
+    duplex: "half",
+  };
+  return handler.handle(new Request("http://localhost/mcp/", init), "testclient");
 }
 
 function send(handler: McpHandler, method: string, headers: Record<string, string> = {}) {

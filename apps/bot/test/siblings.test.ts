@@ -1,8 +1,8 @@
 // The app with real sibling pieces: @eidolon/access's CORS layer and offer guard, and
 // @eidolon/imagegen's selfie store. Expected headers are Starlette CORSMiddleware's, allow-all.
-import { afterEach, describe, expect, test } from "bun:test";
 import * as access from "@eidolon/access";
 import * as imagegen from "@eidolon/imagegen";
+import { afterEach, describe, expect, test } from "vitest";
 import { type BotAccess, type BotAppParts, createBotApp } from "../src/app.ts";
 import {
   captureLogs,
@@ -22,8 +22,8 @@ afterEach(async () => {
   served = null;
 });
 
-function start(overrides: Partial<BotAppParts> = {}): string {
-  served = serve(createBotApp(fakeParts({ cors: POLICY, ...overrides })));
+async function start(overrides: Partial<BotAppParts> = {}): Promise<string> {
+  served = await serve(createBotApp(fakeParts({ cors: POLICY, ...overrides })));
   return served.url;
 }
 
@@ -46,7 +46,7 @@ const PREFLIGHT_HEADERS = {
 
 describe("with @eidolon/access CORS", () => {
   async function preflight(path: string, headers: Record<string, string>) {
-    const response = await fetch(`${start({ access: withRealCors() })}${path}`, {
+    const response = await fetch(`${await start({ access: withRealCors() })}${path}`, {
       method: "OPTIONS",
       headers: { Origin: ORIGIN, ...headers },
     });
@@ -106,7 +106,7 @@ describe("with @eidolon/access CORS", () => {
   });
 
   test("a simple response echoes Origin with credentials, and varies on Origin either way", async () => {
-    const url = start({ access: withRealCors() });
+    const url = await start({ access: withRealCors() });
     const withOrigin = await fetch(`${url}/api/ice-servers`, { headers: { Origin: ORIGIN } });
     expectHeaders(withOrigin, {
       "access-control-allow-origin": ORIGIN,
@@ -122,7 +122,7 @@ describe("with @eidolon/access CORS", () => {
   });
 
   test("the offer 429 keeps Retry-After and gains CORS, so the browser can read it", async () => {
-    const url = start({
+    const url = await start({
       access: withRealCors({ admitOffer: async (input) => refusedOffer(input) }),
     });
     const response = await fetch(`${url}/api/offer`, {
@@ -144,7 +144,7 @@ describe("with @eidolon/access CORS", () => {
   test("404s, 405s and 500s carry CORS too", async () => {
     const logs = captureLogs();
     try {
-      const url = start({
+      const url = await start({
         access: withRealCors(),
         ice: {
           browserPayload: async () => {
@@ -186,7 +186,7 @@ describe("with the @eidolon/access offer guard", () => {
     const admitted: access.OfferAdmission[] = [];
     const logs = captureLogs();
     try {
-      const url = start({
+      const url = await start({
         access,
         signalling: {
           offer: async (admission) => {
@@ -248,7 +248,9 @@ describe("with the @eidolon/imagegen selfie store", () => {
     const data = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
     const path = store.publish({ data, mediaType: "image/png" }, 600);
     expect(path).toMatch(/^\/api\/selfie\/[A-Za-z0-9_-]{22}\.png$/);
-    const url = start({ selfieResponse: (segment) => imagegen.selfieResponse(segment, store) });
+    const url = await start({
+      selfieResponse: (segment) => imagegen.selfieResponse(segment, store),
+    });
     const id = path.slice("/api/selfie/".length, -".png".length);
     for (const segment of [`${id}.png`, id, `${id}.jpg`]) {
       const response = await fetch(`${url}/api/selfie/${segment}`);

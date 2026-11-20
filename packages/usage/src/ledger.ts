@@ -1,9 +1,9 @@
 // The usage ledger: one SQLite row per request that spent money, or per batch of a call's audio
 // and speech, with the persona it served. The bot, the local app and every CLI job write to the
 // same file, so it runs in WAL mode with a busy timeout.
-import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { activePersona, dataHome, envOptional, errorText, logger } from "@eidolon/config";
 import { setUsageSink, type UsageRecord } from "@eidolon/providers";
 import type { UsageRow, UsageSummary } from "./summary.ts";
@@ -74,15 +74,21 @@ export interface SummaryQuery {
 
 const MAX_INSTANT = 8.64e15;
 
+const distinct = (column: "persona" | "provider"): string =>
+  `SELECT DISTINCT ${column} AS value FROM usage ORDER BY value`;
+
 export class UsageLedger {
   readonly path: string;
-  readonly #db: Database;
-  readonly #insert: ReturnType<Database["prepare"]>;
+  readonly #db: DatabaseSync;
+  readonly #insert: StatementSync;
+  readonly #summary: StatementSync;
+  readonly #personas: StatementSync;
+  readonly #providers: StatementSync;
 
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
     this.path = path;
-    this.#db = new Database(path, { create: true });
+    this.#db = new DatabaseSync(path);
     this.#db.exec("PRAGMA busy_timeout = 5000");
     this.#db.exec("PRAGMA journal_mode = WAL");
     // Records are written on a call's event loop. In WAL mode NORMAL syncs at checkpoints rather
@@ -90,6 +96,9 @@ export class UsageLedger {
     this.#db.exec("PRAGMA synchronous = NORMAL");
     this.#db.exec(SCHEMA);
     this.#insert = this.#db.prepare(INSERT);
+    this.#summary = this.#db.prepare(SUMMARY);
+    this.#personas = this.#db.prepare(distinct("persona"));
+    this.#providers = this.#db.prepare(distinct("provider"));
   }
 
   record(record: UsageRecord, persona: string): void {
@@ -121,22 +130,20 @@ export class UsageLedger {
     const from = query.from ?? null;
     const to = query.to ?? null;
     const persona = query.persona ?? null;
-    const rows = this.#db
-      .query(SUMMARY)
-      .all({ $from: from ?? 0, $to: to ?? MAX_INSTANT, $persona: persona }) as UsageRow[];
-    const distinct = (column: "persona" | "provider"): string[] =>
-      (
-        this.#db.query(`SELECT DISTINCT ${column} AS value FROM usage ORDER BY value`).all() as {
-          value: string;
-        }[]
-      ).map((row) => row.value);
+    const rows = this.#summary.all({
+      $from: from ?? 0,
+      $to: to ?? MAX_INSTANT,
+      $persona: persona,
+    }) as unknown as UsageRow[];
+    const values = (statement: StatementSync): string[] =>
+      statement.all().map((row) => row.value as string);
     return {
       from,
       to,
       persona,
       rows,
-      personas: distinct("persona"),
-      providers: distinct("provider"),
+      personas: values(this.#personas),
+      providers: values(this.#providers),
     };
   }
 

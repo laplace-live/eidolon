@@ -23,20 +23,21 @@ export function ndjsonResponse(body: ReadableStream<Uint8Array>): Response {
   });
 }
 
-/** An image served from the app's own origin: sandboxed, and of the type given, never sniffed. */
+/** The headers of an image served from the app's own origin: sandboxed, of `type`, never sniffed. */
+export function imageHeaders(type: string): Record<string, string> {
+  return {
+    "content-type": type,
+    "x-content-type-options": "nosniff",
+    "content-security-policy": "default-src 'none'; sandbox",
+  };
+}
+
 export function imageResponse(
   body: BodyInit,
   type: string,
   headers: Record<string, string> = {},
 ): Response {
-  return new Response(body, {
-    headers: {
-      "content-type": type,
-      "x-content-type-options": "nosniff",
-      "content-security-policy": "default-src 'none'; sandbox",
-      ...headers,
-    },
-  });
+  return new Response(body, { headers: { ...imageHeaders(type), ...headers } });
 }
 
 /** `{error: {code, message}}`: the SPA shows its own string for the code, the message as detail. */

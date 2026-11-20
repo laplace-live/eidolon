@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataHome, PROJECT_ROOT } from "@eidolon/config";
 import * as lancedb from "@lancedb/lancedb";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   decodeTopics,
   listTableNames,

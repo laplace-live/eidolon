@@ -1,6 +1,6 @@
 // Fakes shared by the tests. FakeQdrant and FakePoster behave exactly like the fakes mem0 ran
 // against to record fixtures/*.json, so a fixture case replays here unchanged.
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, cpLen, type JsonPoster, type LogRecord, logger } from "@eidolon/config";
@@ -192,6 +192,11 @@ export function captureLogs() {
     },
   };
 }
+
+// Parsed, not imported: Vite's JSON import rejects its lone surrogates ("\ud800"), valid JSON.
+export const timeFixtures: typeof import("./fixtures/time.json") = JSON.parse(
+  readFileSync(join(import.meta.dirname, "fixtures", "time.json"), "utf8"),
+);
 
 export function tempPath(name: string): string {
   return join(mkdtempSync(join(tmpdir(), "eidolon-memory-")), name);

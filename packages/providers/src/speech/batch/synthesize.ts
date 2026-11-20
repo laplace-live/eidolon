@@ -184,7 +184,12 @@ const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
       );
     }
     const data = record(body.data);
-    const bytes = Uint8Array.fromHex(typeof data.audio === "string" ? data.audio : "");
+    const hex = typeof data.audio === "string" ? data.audio : "";
+    // Buffer.from stops at the first pair that isn't hex: broken audio would pass, cut short.
+    if (hex.length % 2 !== 0 || /[^0-9a-f]/i.test(hex)) {
+      throw new SyntaxError(`${selection.provider.name} sent audio that isn't hex`);
+    }
+    const bytes = new Uint8Array(Buffer.from(hex, "hex"));
     const length = record(body.extra_info).audio_length;
     return {
       bytes,

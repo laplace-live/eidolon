@@ -1,11 +1,11 @@
 import "../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { dataHome } from "@eidolon/config";
 import type { LlmTool, ToolEffects } from "@eidolon/core";
 import { isSelfieConfigured, type ReferenceImage, SelfieStore } from "@eidolon/imagegen";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   createSelfieTool,
   SELFIE_TOOL_NAME,
@@ -320,7 +320,7 @@ describe("take_selfie", () => {
     const fetched = new Promise<void>((resolve) => {
       started = resolve;
     });
-    const hanging = ((_input: string | URL | Request, init: BunFetchRequestInit = {}) =>
+    const hanging = ((_input: string | URL | Request, init: RequestInit = {}) =>
       new Promise<Response>((_resolve, reject) => {
         started();
         init.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });

@@ -6,7 +6,10 @@ WORKDIR /app
 
 # Bun.serve defaults `development` to NODE_ENV !== "production", which answers an
 # uncaught handler error with an HTML debug page instead of a plain 500.
+# onnxruntime-node uploads telemetry unless ORT_DISABLE_TELEMETRY is set, and reads it
+# with getenv, which Bun's process.env writes never reach: only the environment can set it.
 ENV NODE_ENV=production \
+    ORT_DISABLE_TELEMETRY=1 \
     PIPECAT_HOST=0.0.0.0 \
     PIPECAT_PORT=7860
 

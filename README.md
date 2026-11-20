@@ -4,11 +4,12 @@ A voice bot for a streamer roleplay persona, with optional RAG over
 hand-compiled persona facts and refined past-stream transcripts, and optional
 per-viewer long-term memory via Mem0.
 
-The bot is TypeScript on [Bun](https://bun.sh), on its own voice engine, parts of
-it ported from [pipedog](https://github.com/polvallverdu/pipedog), a TypeScript
-port of [Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`,
-and has run production since 2026-11-04. The offline chain that builds its indexes
-is TypeScript too (`packages/ingest`).
+The bot is TypeScript, on its own voice engine, parts of it ported from
+[pipedog](https://github.com/polvallverdu/pipedog), a TypeScript port of
+[Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`, and has
+run production on [Bun](https://bun.sh) since 2026-11-04. The offline chain that
+builds its indexes is TypeScript too (`packages/ingest`), and it and the local app
+run on Node 24.
 
 The original Python implementation, a Pipecat bot and its offline tools, stays
 in `laplace_eidolon/` as a reference implementation, and CI still publishes it
@@ -38,7 +39,7 @@ and one that shows what each provider has cost. The terminal prints the link tha
 browser in. How it works, and how it stays out of a deployed bot, is in
 [`docs/web-app.md`](docs/web-app.md).
 
-It needs Node.js 20 or later and brings its own Bun. `npx @laplace.live/eidolon <command>` runs
+It needs Node.js 24 or later. `npx @laplace.live/eidolon <command>` runs
 the [offline commands](#building-the-rag-indexes-optional) without a checkout, and `--help` lists
 them. Everything it keeps, settings and keys included, is in the data home, `~/.laplace/eidolon`;
 it never reads a `.env`, so set it up in the app or through the environment.
@@ -61,8 +62,8 @@ LanceDB and ONNX Runtime, its native parts, decide where it runs:
 | Linux on x64 or arm64, with glibc | Yes |
 | Intel Macs, musl Linux (Alpine), Windows | No |
 
-The first `npx` downloads about 280 MB, mostly Bun, LanceDB and ONNX Runtime for your platform,
-which unpack to about 0.7 GB on a Mac and more on Linux. On Linux x64, npm 11 also runs
+The first `npx` downloads about 230 MB, mostly LanceDB and ONNX Runtime for your platform, which
+unpack to about 0.6 GB on a Mac and more on Linux. On Linux x64, npm 11 also runs
 onnxruntime-node's install script, which fetches CUDA libraries Eidolon never uses, about 240 MB
 from NuGet, and fails the install when NuGet is out of reach. Skip it:
 

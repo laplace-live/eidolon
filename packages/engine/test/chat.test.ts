@@ -1,7 +1,6 @@
 // runChat over fake minds and a fake director: who answers in which order, the decisions it gives
 // to store, the chain and its limit, interruption, and the lines a stopped answer still owed.
 import "../../config/test/isolated-guard.ts";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { UserContext } from "@eidolon/access";
@@ -16,6 +15,7 @@ import {
 import { activePersona, consoleSink, dataHome, logger, resetSettings } from "@eidolon/config";
 import { Director, type DirectorDecision, type DirectorInput } from "@eidolon/context";
 import { type UsageRecord, usageRecord } from "@eidolon/providers";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { type ChatDeps, type ChatOutput, type OwedLine, runChat } from "../src/chat.ts";
 import type { MindChunk, MindRequest, PersonaParts, SpeechDeps } from "../src/types.ts";
 

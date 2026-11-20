@@ -54,8 +54,9 @@ Mem0.
 The gate's connection has to outlive the gap between turns. With a 5 s
 keep-alive, a call made 15–40 s after the previous one paid a fresh TLS
 session: about 1.4 s instead of 0.5 s. Bun's fetch pools sockets
-process-wide, and when measured reused an idle one after 90 s; a call that
-finds none still pays the fresh session.
+process-wide, and when measured reused an idle one after 90 s; on Node,
+`installHttpDefaults()` keeps them 90 s, where undici's default is 4 s. A call
+that finds none still pays the fresh session.
 
 ## Accuracy
 

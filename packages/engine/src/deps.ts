@@ -1,3 +1,4 @@
+import { newId } from "@eidolon/config";
 import { fetchStoredSelfie } from "./attachments.ts";
 import { createMind } from "./mind/index.ts";
 import { personaParts } from "./parts.ts";
@@ -16,7 +17,7 @@ export function defaultEngineDeps(options: {
     parts,
     saveAttachment: options.saveAttachment,
     fetchImage: (url) => fetchStoredSelfie(url),
-    newId: () => Bun.randomUUIDv7(),
+    newId,
     speech: batchSpeech,
   };
 }

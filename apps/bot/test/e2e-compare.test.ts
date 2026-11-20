@@ -1,10 +1,11 @@
 // e2e-compare.ts run on made-up reports: its pass bar, as the JSON it writes.
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnProcess } from "@eidolon/config";
+import { afterEach, beforeEach, expect, test } from "vitest";
 
-const SCRIPT = join(import.meta.dir, "../scripts/e2e-compare.ts");
+const SCRIPT = join(import.meta.dirname, "../scripts/e2e-compare.ts");
 
 let dir: string;
 beforeEach(async () => {
@@ -98,17 +99,15 @@ async function bar(
   mode = "text",
 ): Promise<Record<string, boolean>> {
   const files = ["base.json", "cand.json", "out.json"].map((name) => join(dir, name));
-  await Bun.write(files[0] as string, JSON.stringify(baseline));
-  await Bun.write(files[1] as string, JSON.stringify(candidate));
-  const run = Bun.spawn(
+  await writeFile(files[0] as string, JSON.stringify(baseline));
+  await writeFile(files[1] as string, JSON.stringify(candidate));
+  // e2e-compare.ts is a Bun script.
+  const run = spawnProcess(
     ["bun", SCRIPT, files[0] as string, files[1] as string, "--json", files[2] as string],
-    {
-      stdout: "ignore",
-      stderr: "inherit",
-    },
+    { stdout: "ignore", stderr: "inherit" },
   );
   await run.exited;
-  const out = (await Bun.file(files[2] as string).json()) as {
+  const out = JSON.parse(await readFile(files[2] as string, "utf8")) as {
     modes: Record<string, { bar: { name: string; pass: boolean }[] }>;
   };
   const checks = out.modes[mode]?.bar ?? [];

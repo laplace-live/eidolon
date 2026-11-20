@@ -23,6 +23,9 @@ on:
       - "CLAUDE.md"
       - ".github/workflows/ts.yml"
       - ".github/workflows/release.yml"
+      - "vitest.config.ts"
+      - "tsconfig.scripts.json"
+      - "tsconfig.no-bun.d.ts"
       # The bot never runs these. The image copies nothing from apps/cli, apps/web or apps/eidolon
       # but their manifests, whose dependency changes also reach bun.lock, and leaves
       # apps/bot/src/local out. packages/ingest, packages/assistant and packages/sdk hold only while
@@ -50,6 +53,9 @@ on:
       - "CLAUDE.md"
       - ".github/workflows/ts.yml"
       - ".github/workflows/release.yml"
+      - "vitest.config.ts"
+      - "tsconfig.scripts.json"
+      - "tsconfig.no-bun.d.ts"
       - "apps/cli/**"
       - "apps/web/**"
       - "apps/eidolon/**"
