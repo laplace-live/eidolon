@@ -212,13 +212,14 @@ function infoTitle(vodsDir: string, stem: string): string {
  * together. A transcript is named `<upload date>-<stem>.md` by yt-dlp's upload date, in UTC, which
  * can be the day after the stream; so one of a video `official` holds covers no day of its own, the
  * video's day standing for it, and another's day is its info.json title's, else that upload date.
- * A transcribed clip doesn't cover its day's stream, nor do two; one that doesn't say how long it
- * runs does.
+ * One of a video `skipped` names covers none: it isn't hers. A transcribed clip doesn't cover its
+ * day's stream, nor do two; one that doesn't say how long it runs does.
  */
 function transcriptDates(
   streamsDir: string,
   vodsDir: string,
   official: ReadonlyMap<string, Found>,
+  skipped: ReadonlySet<string>,
   minSec: number,
 ): string[] {
   const videos = new Map<string, { readonly day: string; seconds: number }>();
@@ -226,9 +227,10 @@ function transcriptDates(
     const name = /^(\d{4}-\d{2}-\d{2})-(.+)\.md$/.exec(basename(path));
     if (name === null) continue;
     const stem = name[2] as string;
-    // A video's parts are `<id>_p<n>`; `official` keys a YouTube video by its URL.
+    // A video's parts are `<id>_p<n>`, and a YouTube video is keyed by its URL.
     const id = stem.replace(/_p\d+$/, "");
-    if (official.has(id) || official.has(youtubeVideoUrl(id))) continue;
+    const keys = [id, youtubeVideoUrl(id)];
+    if (keys.some((key) => official.has(key) || skipped.has(key))) continue;
     const minutes = /^duration_min:\s*(\d+(?:\.\d+)?)\s*$/m.exec(head(path))?.[1];
     const length = minutes === undefined ? Number.POSITIVE_INFINITY : Number(minutes) * 60;
     const video = videos.get(id);
@@ -562,7 +564,9 @@ export async function discoverVideos(options: DiscoverOptions): Promise<Discover
     );
   }
 
-  const covered = new Set(transcriptDates(options.streamsDir, options.vodsDir, official, minSec));
+  const covered = new Set(
+    transcriptDates(options.streamsDir, options.vodsDir, official, skipped, minSec),
+  );
   // A video skipped as none of her streams covers no day.
   for (const found of official.values()) {
     if (found.date !== null && !skipped.has(found.key)) covered.add(found.date);

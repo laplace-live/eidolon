@@ -413,8 +413,9 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   have one first: only a streamer's own space has a 直播回放 list, and the search may rank a
   namesake above her. Whoever runs it chooses one and passes its list's URL as `--channel`.
 - **`--skip VIDEO`**, repeated for more, leaves a video out of every tier and the batch, by its BV
-  id or its Bilibili or YouTube URL (`videoKey`): one found that isn't her stream. A skipped video,
-  official or a recording, covers no day, so another recording of its day can take its place.
+  id or its Bilibili or YouTube URL (`videoKey`): one found that isn't her stream. A skipped video
+  covers no day by any of its ways (the listing, a `# Covers:` line, the search, its transcript),
+  so another recording of its day can take its place.
 - **`--save`** writes official, then recordings, then clips (with `--clips`) into
   `lists/batches/videos-<time>.txt`, under a `# Source:` line for each channel it listed, a
   Bilibili list by its URL, so the next run finds them without `--channel`, and a

@@ -665,6 +665,22 @@ describe("discoverVideos", () => {
     ]);
   });
 
+  test("a transcribed video --skip names covers no day, its parts included", async () => {
+    writeLists();
+    // Someone else's video of the 18th, transcribed in two parts before it was found not hers.
+    writeFileSync(join(streams, "2026-11-18-BV1nnnnnnnn1_p1.md"), "---\nduration_min: 60\n---\n");
+    writeFileSync(join(streams, "2026-11-18-BV1nnnnnnnn1_p2.md"), "---\nduration_min: 60\n---\n");
+    const recordings = async (skip: string[]) =>
+      (
+        await discover.discoverVideos(options(fakeBilibili(routes()).fetch, { skip }))
+      ).recordings.videos.map(({ url }) => url);
+    expect(await recordings([])).toEqual(["https://www.bilibili.com/video/BV1bbbbbbbb8"]);
+    expect(await recordings(["BV1nnnnnnnn1"])).toEqual([
+      "https://www.bilibili.com/video/BV1bbbbbbbb1",
+      "https://www.bilibili.com/video/BV1bbbbbbbb8",
+    ]);
+  });
+
   test("a video's transcribed parts add up to cover its day, two clips of one day don't", async () => {
     writeLists();
     // Two 40-minute clips of the 18th, and the two 40-minute parts of one video of the 9th.
