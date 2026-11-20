@@ -1,5 +1,16 @@
 # laplace-eidolon
 
+## 0.13.0
+
+### Minor Changes
+
+- db9d808: Run on Windows x64, where tasks run their commands in Git Bash
+- 096fb88: Send her images and text files in chats, in the app and through the SDK
+
+### Patch Changes
+
+- bc0e211: A floating message box in chats, its buttons and permission picker inside it
+
 ## 0.12.0
 
 ### Minor Changes
