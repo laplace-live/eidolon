@@ -408,7 +408,8 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     file as `text/plain`, and the server makes an image ready, upright, stripped and scaled, and
     checks a text file is UTF-8. It shows over the text, an image as a thumbnail and a text file by
     its name, with a spinner until it is kept and an × to take it out. One the server refuses is
-    dropped with a toast saying why; past 8, the rest wait for the next message.
+    dropped with a toast saying why; past 8, the rest are left out with a toast to send them with
+    the next message.
   - **Sending:** Enter or Send takes the words and the files, or the files alone, once every file is
     up; the microphone shows only while there are neither. The line shows its images and files above
     its words, each opening its file from the chat's `files/`, and **Retry** sends them again.

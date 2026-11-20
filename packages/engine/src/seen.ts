@@ -26,10 +26,15 @@ function fileName(file: Attachment): string {
   return (file.kind === "file" && file.filename ? file.filename : "file.txt").replace(/["<>]/g, "");
 }
 
-/** What a line's files leave where only text is read, as the director and a call's seed read it. */
+/**
+ * What a line's files leave where only text is read, as the director and a call's seed read it. A
+ * name loses its @, which the director would read as the viewer mentioning a persona.
+ */
 export function filesNote(files: readonly Attachment[]): string {
   return files
-    .map((file) => (file.kind === "image" ? "（图片）" : `（文件 ${fileName(file)}）`))
+    .map((file) =>
+      file.kind === "image" ? "（图片）" : `（文件 ${fileName(file).replace(/[@＠]/g, "")}）`,
+    )
     .join("");
 }
 

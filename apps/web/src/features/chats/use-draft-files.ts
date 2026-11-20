@@ -46,6 +46,28 @@ export function lineAttachments(drafts: readonly DraftFile[]): Attachment[] {
   return kept;
 }
 
+/**
+ * The files of `picked` a line takes, with their kinds, up to `room` of them; the ones of a kind
+ * it can't take, which leave the room to the rest; and whether more were taken than fit.
+ */
+export function pickedFiles(
+  picked: readonly File[],
+  room: number,
+): {
+  readonly taken: readonly { readonly file: File; readonly kind: "image" | "file" }[];
+  readonly unsupported: readonly File[];
+  readonly over: boolean;
+} {
+  const taken: { file: File; kind: "image" | "file" }[] = [];
+  const unsupported: File[] = [];
+  for (const file of picked) {
+    const kind = chatFileKind(file);
+    if (kind === null) unsupported.push(file);
+    else taken.push({ file, kind });
+  }
+  return { taken: taken.slice(0, Math.max(0, room)), unsupported, over: taken.length > room };
+}
+
 let keys = 0;
 
 /** The files the next line of chat `chatId` carries. */
@@ -85,19 +107,18 @@ export function useDraftFiles(chatId: string): DraftFiles {
 
   const add = useCallback(
     (picked: readonly File[]) => {
-      const room = MAX_LINE_FILES - current.current.length;
-      if (picked.length > room) {
+      const { taken, unsupported, over } = pickedFiles(
+        picked,
+        MAX_LINE_FILES - current.current.length,
+      );
+      for (const file of unsupported) refused(file.name, "unsupported");
+      if (over) {
         const count = MAX_LINE_FILES;
         toast.error(t`A message holds up to ${count} files`, {
           description: t`Send the rest with the next one.`,
         });
       }
-      for (const file of picked.slice(0, Math.max(0, room))) {
-        const kind = chatFileKind(file);
-        if (kind === null) {
-          refused(file.name, "unsupported");
-          continue;
-        }
+      for (const { file, kind } of taken) {
         const key = ++keys;
         const preview = previewUrl(file, PREVIEW_TYPES);
         const draft: DraftFile = { key, filename: file.name, preview, attachment: null };

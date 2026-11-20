@@ -74,8 +74,8 @@ export function fittedSize(width: number, height: number): { width: number; heig
   };
 }
 
-/** What a PNG that goes as it is may hold: its pixels and how to show them, nothing about it. */
-const PLAIN_PNG_CHUNKS: ReadonlySet<string> = new Set([
+/** The chunks of a bare PNG: its pixels and how to show them. */
+const PNG_CHUNKS: ReadonlySet<string> = new Set([
   "IHDR",
   "PLTE",
   "IDAT",
@@ -88,31 +88,77 @@ const PLAIN_PNG_CHUNKS: ReadonlySet<string> = new Set([
   "pHYs",
   "bKGD",
 ]);
+/** The chunks of a bare WebP: its one frame and its transparency. */
+const WEBP_CHUNKS: ReadonlySet<string> = new Set(["VP8 ", "VP8L", "VP8X", "ALPH"]);
+/** The segments of a bare JPEG besides JFIF's header and its scans: SOF0-2, DHT and DQT. */
+const JPEG_SEGMENTS: ReadonlySet<number> = new Set([0xc0, 0xc1, 0xc2, 0xc4, 0xdb]);
+const JFIF = [0x4a, 0x46, 0x49, 0x46, 0];
 
-/**
- * Whether a PNG holds only PLAIN_PNG_CHUNKS: libvips reads its chunks only up to its pixels, and a
- * text chunk can follow them.
- */
-function plainPng(bytes: Uint8Array): boolean {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  for (let at = 8; at + 8 <= bytes.byteLength; at += view.getUint32(at) + 12) {
-    if (!PLAIN_PNG_CHUNKS.has(String.fromCharCode(...bytes.subarray(at + 4, at + 8)))) {
-      return false;
-    }
+const fourcc = (bytes: Uint8Array, at: number) =>
+  String.fromCharCode(...bytes.subarray(at, at + 4));
+
+function barePng(bytes: Uint8Array, view: DataView): boolean {
+  for (let at = 8; at + 12 <= bytes.byteLength; ) {
+    const type = fourcc(bytes, at + 4);
+    if (!PNG_CHUNKS.has(type)) return false;
+    at += view.getUint32(at) + 12;
+    if (type === "IEND") return at === bytes.byteLength;
   }
-  return true;
+  return false;
 }
 
-/** Whether an image goes as it is: one frame, 8-bit sRGB, nothing written in it, and in bounds. */
+function bareWebp(bytes: Uint8Array, view: DataView): boolean {
+  if (view.getUint32(4, true) + 8 !== bytes.byteLength) return false;
+  let at = 12;
+  while (at + 8 <= bytes.byteLength) {
+    if (!WEBP_CHUNKS.has(fourcc(bytes, at))) return false;
+    const size = view.getUint32(at + 4, true);
+    at += 8 + size + (size % 2);
+  }
+  return at === bytes.byteLength;
+}
+
+/**
+ * Where a scan's data from `at` ends: at its first `FF` that isn't `FF 00`. A restart or a fill
+ * byte ends it too, so a JPEG with them is made again.
+ */
+function scanEnd(bytes: Uint8Array, at: number): number {
+  for (; at + 1 < bytes.byteLength; at++) if (bytes[at] === 0xff && bytes[at + 1] !== 0) return at;
+  return bytes.byteLength;
+}
+
+function bareJpeg(bytes: Uint8Array, view: DataView): boolean {
+  let at = 2;
+  while (at + 4 <= bytes.byteLength && bytes[at] === 0xff) {
+    const marker = bytes[at + 1] as number;
+    if (marker === 0xd9) return at + 2 === bytes.byteLength;
+    const end = at + 2 + view.getUint16(at + 2);
+    // JFIF's own header: 16 bytes, so no thumbnail in it.
+    const jfif =
+      marker === 0xe0 && end - at === 18 && JFIF.every((byte, i) => bytes[at + 4 + i] === byte);
+    if (marker === 0xda) at = scanEnd(bytes, end);
+    else if (jfif || JPEG_SEGMENTS.has(marker)) at = end;
+    else return false;
+  }
+  return at + 2 === bytes.byteLength && bytes[at] === 0xff && bytes[at + 1] === 0xd9;
+}
+
+/**
+ * Whether `bytes` hold their image and nothing else, ending where it ends: nothing a camera or an
+ * editor wrote, no second frame, no comment. libvips reads a PNG's chunks only up to its pixels,
+ * and no JPEG comment or trailing bytes at all, so the container is read here.
+ */
+function bare(type: string, bytes: Uint8Array): boolean {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (type === "image/png") return barePng(bytes, view);
+  if (type === "image/webp") return bareWebp(bytes, view);
+  return type === "image/jpeg" && bareJpeg(bytes, view);
+}
+
+/** Whether an image goes as it is: bare, 8-bit sRGB, and in bounds. */
 function goesAsIs(meta: Metadata, type: string, bytes: Uint8Array): boolean {
   return (
-    type !== "image/gif" &&
-    (type !== "image/png" || plainPng(bytes)) &&
-    (meta.pages ?? 1) === 1 &&
-    meta.exif === undefined &&
-    meta.xmp === undefined &&
-    meta.iptc === undefined &&
-    !meta.hasProfile &&
+    bare(type, bytes) &&
     meta.space === "srgb" &&
     bytes.byteLength <= MAX_IMAGE_BYTES &&
     meta.width * meta.height <= MAX_IMAGE_PIXELS &&

@@ -21,7 +21,7 @@ import { dataHome, resetSettings } from "@eidolon/config";
 import type { MindChunk, PersonaParts } from "@eidolon/engine";
 import { ProviderConfigError } from "@eidolon/providers";
 import sharp from "sharp";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { fixture, webmOpus } from "../../../../packages/providers/test/speech/batch/recordings.ts";
 import { type BotAccess, createBotApp } from "../../src/app.ts";
 import { ChatFiles } from "../../src/chat/files.ts";
@@ -31,6 +31,7 @@ import {
   createChatEndpoint,
 } from "../../src/chat/routes.ts";
 import { ChatSigner, MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
+import { normalizeImage } from "../../src/images.ts";
 import { type BotServer, startBotServer } from "../../src/server.ts";
 import {
   allowedOffer,
@@ -63,6 +64,12 @@ const HEADER: ChatHeader = {
   participants: [MILKY],
 };
 const GROUP: ChatHeader = { ...HEADER, participants: [MILKY, BEA] };
+
+// The real one, counted: what a request makes ready is the work it costs.
+vi.mock("../../src/images.ts", async (actual) => {
+  const images = await actual<typeof import("../../src/images.ts")>();
+  return { ...images, normalizeImage: vi.fn(images.normalizeImage) };
+});
 
 const user = (seq: number, text: string): ChatEventOf<"message"> => ({
   seq,
@@ -1082,10 +1089,40 @@ describe("the files a line carries", () => {
     }
   });
 
+  test("an earlier file sent again is made ready once, and no more images than she is shown", async () => {
+    const { url } = await start();
+    const dots = await Promise.all(
+      Array.from({ length: 10 }, async (_, i) => {
+        const dot = sharp({
+          create: { width: 1, height: 1, channels: 3, background: { r: i * 20, g: 0, b: 0 } },
+        });
+        return new Uint8Array(await dot.png().toBuffer());
+      }),
+    );
+    const events = dots.map((dot, i) => ({
+      ...user(i + 1, `第${i}张`),
+      attachments: [{ kind: "image", name: nameOf(dot, "png"), mime: "image/png" }],
+    }));
+    const made = vi.mocked(normalizeImage);
+    made.mockClear();
+    const [first] = dots as [Uint8Array<ArrayBuffer>];
+    await linesOf(
+      await postForm(url, form(events, { text: "还记得吗", seen: Array(20).fill(first) })),
+    );
+    expect(made).toHaveBeenCalledTimes(1);
+    made.mockClear();
+    const again = [...Array(20).fill(first), ...dots];
+    await linesOf(await postForm(url, form(events, { text: "都记得吗", seen: again })));
+    expect(made).toHaveBeenCalledTimes(8);
+  });
+
   test("are refused before anyone is charged unless each is a line's file, up to 8 and 12 MB", async () => {
     const { url, record, resolved } = await start();
     const huge = new Uint8Array(3.5 * 1024 * 1024 + 1);
     huge.set(PNG);
+    // Each within an image's 3.5 MB, and 12.8 MB in all, under the body's 13 MB.
+    const part = new Uint8Array(3.2 * 1024 * 1024);
+    part.set(PNG);
     for (const [fields, want] of [
       [
         { files: [[new TextEncoder().encode("<svg/>"), "image/svg+xml"]] },
@@ -1095,6 +1132,7 @@ describe("the files a line carries", () => {
       [{ files: [[new Uint8Array([0xe7, 0xac]), "text/plain"]] }, [415, "unsupported-media-type"]],
       [{ files: [[new Uint8Array(), "image/png"]] }, [400, "bad-request"]],
       [{ files: [[huge, "image/png"]] }, [413, "payload-too-large"]],
+      [{ files: Array.from({ length: 4 }, () => [part, "image/png"]) }, [413, "payload-too-large"]],
       [{ files: Array.from({ length: 9 }, () => [PNG, "image/png"]) }, [400, "bad-request"]],
       [{ text: "   ", files: [] }, [400, "bad-request"]],
     ] as const) {

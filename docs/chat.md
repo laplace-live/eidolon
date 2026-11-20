@@ -613,8 +613,11 @@ note in place of the rest.
       edge (`MAX_IMAGE_PIXELS`, `MAX_IMAGE_EDGE`; Claude's models see 2576 px), as JPEG, or
       WebP where it has transparency, at quality 85, 75 or 60, whichever first fits 3.5 MB
       (`MAX_IMAGE_BYTES`: Anthropic takes 5 MB of one as base64);
-    - **one already all of that,** a PNG, JPEG or WebP of one frame with nothing written in it,
-      goes as it is, once it decodes whole;
+    - **one already all of that,** a PNG, JPEG or WebP bare of all but its pixels, goes as it is
+      once it decodes whole. Bare is read from its container, since libvips reads no JPEG comment,
+      no PNG chunk after the pixels and no bytes after the end: a JPEG of JFIF's plain header,
+      tables, frame and scans alone, a PNG of the chunks that draw it, a WebP of one frame and its
+      transparency, each ending where it ends. A JPEG with restart markers is made again too;
     - **two at a time:** each is made on libvips's own threads, so a burst of them waits its turn
       beside a call's audio.
   - **a text file,** any `text/` type or a known text extension, UTF-8 with no NUL, at most 1 MB,
@@ -633,14 +636,17 @@ note in place of the rest.
     `（后面还有 n 字，这次没给你看）`. What the budget leaves out, and a file that can't be read, reads
     `（一张图片，这次没给你看）` or `（文件 名字，这次没给你看）`. Each turn makes its own request
     prefix ([Her view](#her-view-viewof)), so a budget that moves between turns costs no cache;
-  - **a mind that can't see images:** the request goes with its images. A model that refuses them,
-    OpenRouter's `404 No endpoints found that support image input`, or a 400, 404, 415 or 422
-    naming the image, is asked again at once with `（一张图片，你看不到）` in place of each, and so
-    is every later request to that provider's model until the process restarts (`refusedImages`,
-    `withoutImages`), so she says she can't see it rather than making one up. DeepSeek Harness
-    refuses the send instead; here each persona in a group may think on another model.
+  - **a mind that can't see images:** the request goes with its images. An OpenAI-compatible
+    model that refuses them, OpenRouter's `404 No endpoints found that support image input`, or a
+    400, 404, 415 or 422 naming the image, as the request's answer or its stream's first event, is
+    asked again at once with `（一张图片，你看不到）` in place of each, and so is every later
+    request to that model on that server until the process restarts (`refusedImages`,
+    `withoutImages`), so she says she can't see it rather than making one up. A refusal after she
+    has said something fails the turn. Anthropic's models all see images. DeepSeek Harness refuses
+    the send instead; here each persona in a group may think on another model.
 - **What reads text alone** reads the line's words with a note of its files after them,
-  `（图片）` and `（文件 名字）` (`filesNote`): the director (`linesOf`), Mem0's lines in a group,
+  `（图片）` and `（文件 名字）` (`filesNote`), a name without its @, which the director would
+    read as a mention: the director (`linesOf`), Mem0's lines in a group,
   and a call's seed. A call's turns have no `readAttachment`, so a group call opening on the chat
   reads its files as the budget's notes. Her recall, the gate and Mem0 in a chat of one read the
   line's words alone.
@@ -1066,7 +1072,9 @@ temporary data home and find it unchanged.
     browser keeps each under that name.
   - **`seen`,** earlier lines' files sent again, any type: each is shown her only while a line of
     the viewer's in the window names its content's hash, an image once `normalizeImage` has made
-    it again. The voice route takes them too.
+    it again. Each is made ready once however often it comes, and no more images than one request
+    shows her (8, `SHOWN_IMAGES`), the first sent; the rest read as notes. The voice route takes
+    them too.
 
   `415` for a file of another type or bytes that aren't one, `413` past its size or 12 MB in
   all, `400` for an empty one or more than 8, all before the viewer is resolved or charged. Only

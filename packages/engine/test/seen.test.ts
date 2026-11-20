@@ -1,4 +1,4 @@
-import type { Attachment, ChatEventOf } from "@eidolon/chat";
+import { type Attachment, type ChatEventOf, parseMentions } from "@eidolon/chat";
 import { ProviderHttpError } from "@eidolon/providers";
 import { describe, expect, test } from "vitest";
 import {
@@ -94,11 +94,19 @@ describe("showFiles", () => {
       content: `第${i}张`,
       attachments: [image(i)],
     }));
-    const shown = (await showFiles(lines, cache, signal)) as { content: unknown }[];
-    expect(shown[0]?.content).toBe(`第0张${UNSHOWN_IMAGE}`);
-    expect(shown[1]?.content).toBe(`第1张${UNSHOWN_IMAGE}`);
-    expect(Array.isArray(shown[2]?.content)).toBe(true);
-    expect(Array.isArray(shown.at(-1)?.content)).toBe(true);
+    expect(await showFiles(lines, cache, signal)).toEqual(
+      lines.map(({ content }, i) =>
+        i < 2
+          ? { role: "user", content: `${content}${UNSHOWN_IMAGE}` }
+          : {
+              role: "user",
+              content: [
+                { type: "text", text: content },
+                { type: "image_url", image_url: { url: url(new Uint8Array([i])) } },
+              ],
+            },
+      ),
+    );
   });
 
   test("a file that can't be read, or a turn with no reader, reads as its note", async () => {
@@ -190,5 +198,12 @@ describe("the notes text alone reads", () => {
     expect(filesNote(line.attachments)).toBe("（图片）（文件 a.md）");
     expect(withFilesNote(line)).toBe("看（图片）（文件 a.md）");
     expect(withFilesNote({ ...line, speaker: { kind: "persona", id: "milky" } })).toBe("看");
+  });
+
+  test("a file named after a persona doesn't mention her", () => {
+    const named = text(3, "@Bea和＠Bea.md");
+    const bea = { id: "bea", name: "Bea", shortName: "Bea" };
+    expect(filesNote([named])).toBe("（文件 Bea和Bea.md）");
+    expect(parseMentions(filesNote([named]), [bea])).toEqual([]);
   });
 });

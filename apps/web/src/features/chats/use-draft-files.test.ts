@@ -4,7 +4,7 @@ import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 vi.doMock("@lingui/core/macro", linguiMacro);
 vi.doMock("@lingui/react/macro", linguiReactMacro);
-const { lineAttachments } = await import("./use-draft-files");
+const { lineAttachments, pickedFiles } = await import("./use-draft-files");
 
 const shot: Attachment = { kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" };
 const notes: Attachment = {
@@ -28,4 +28,17 @@ test("a file picked twice goes once, as POST messages takes a line's files", () 
 
 test("a file still uploading goes with no line", () => {
   expect(lineAttachments([draft(1, null), draft(2, notes)])).toEqual([notes]);
+});
+
+test("a picked file of a kind a line can't take leaves its room to the rest", () => {
+  const pdf = new File(["%PDF"], "paper.pdf", { type: "application/pdf" });
+  const pngs = ["a", "b", "c"].map((name) => new File(["x"], `${name}.png`, { type: "image/png" }));
+  const { taken, unsupported, over } = pickedFiles([pdf, ...pngs], 3);
+  expect(taken.map(({ file, kind }) => [file.name, kind])).toEqual([
+    ["a.png", "image"],
+    ["b.png", "image"],
+    ["c.png", "image"],
+  ]);
+  expect([unsupported.map((file) => file.name), over]).toEqual([["paper.pdf"], false]);
+  expect(pickedFiles(pngs, 2).over).toBe(true);
 });

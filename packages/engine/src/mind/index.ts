@@ -114,7 +114,7 @@ export function createMind(
   });
   return new OpenAIMind({
     client,
-    provider: provider.id,
+    server: baseUrl,
     model,
     live,
     dialect: dialectOf(provider.id, model),

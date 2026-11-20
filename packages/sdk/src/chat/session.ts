@@ -186,11 +186,14 @@ async function seenFiles<TRecord extends BrowserChatRecord>(
   room: number,
 ): Promise<Blob[]> {
   const seen: Blob[] = [];
+  // A file sent with several lines, as Retry sends one again, goes once.
+  const named = new Set<string>();
   let left = Math.min(SEEN_BYTES, room);
   for (const event of [...window.events].reverse()) {
     if (!isChatEvent(event) || event.type !== "message" || event.speaker.kind !== "user") continue;
     for (const file of [...(event.attachments ?? [])].reverse()) {
-      if (file.kind === "audio") continue;
+      if (file.kind === "audio" || named.has(file.name)) continue;
+      named.add(file.name);
       if (seen.length >= SEEN_FILES) return seen;
       const blob = await store.getFile(chatId, file.name).catch(() => null);
       if (blob === null || blob.size > left) continue;

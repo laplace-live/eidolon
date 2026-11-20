@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "vitest";
 import {
+  type Attachment,
   advanceSummary,
   attachmentExtension,
   attachmentKind,
@@ -994,6 +995,45 @@ describe("the files a line carries", () => {
     expect(await (await store.getFile(chat.id, name))?.text()).toBe("new-png");
     const items = eventItems((await store.read(chat.id)).events);
     expect(items.map((item) => item.kind === "message" && item.images.length)).toEqual([1, 1]);
+  });
+
+  test("an earlier file sent with several lines goes again once, leaving room for the rest", async () => {
+    const store = new InMemoryBrowserChatStore();
+    const chat = await createChat(store, ["milky-green"], "https://bot.example");
+    const notes = new Blob(["第一章"], { type: "text/plain" });
+    const picture = new Blob(["old-png"], { type: "image/png" });
+    const notesName = `${await hex(notes)}.txt`;
+    const pictureName = `${await hex(picture)}.png`;
+    const line = (seq: number, attachment: Attachment) => ({
+      seq,
+      at: 100 + seq,
+      type: "message" as const,
+      id: `u${seq}`,
+      speaker: { kind: "user" as const },
+      text: "",
+      attachments: [attachment],
+    });
+    await store.append(chat.id, [
+      line(1, { kind: "file", name: notesName, mime: "text/plain" }),
+      ...[2, 3, 4, 5].map((seq) =>
+        line(seq, { kind: "image", name: pictureName, mime: "image/png" }),
+      ),
+    ]);
+    await store.putFile(chat.id, notesName, notes);
+    await store.putFile(chat.id, pictureName, picture);
+    const sent: FormData[] = [];
+    await sendChatTurn(
+      {
+        store,
+        fetch: async (_url, init) => {
+          sent.push(init?.body as FormData);
+          return ndjsonResponse([]);
+        },
+      },
+      { chatId: chat.id, text: "还记得吗" },
+    );
+    const seen = (sent[0]?.getAll("seen") ?? []) as File[];
+    expect(await Promise.all(seen.map((file) => file.text()))).toEqual(["old-png", "第一章"]);
   });
 
   test("a text file is an attachment of its own kind, which a message item lists", () => {

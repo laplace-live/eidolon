@@ -49,6 +49,7 @@ import { type ChatPersona, shortNameOf } from "./persona";
 import type { VoiceClip } from "./stream";
 import type { DraftFiles } from "./use-draft-files";
 import { useRecorder } from "./use-recorder";
+import { showsMic } from "./voice";
 import { MicButton, type MicState, RecordingBar } from "./voice-recorder";
 
 /** The server's limit, in code points; maxLength counts UTF-16 units, which is stricter. */
@@ -484,7 +485,7 @@ export function Composer({
               <SquareIcon className="size-3 fill-current" />
             </Button>
           )}
-          {trimmed === "" && !attached && !inCall ? (
+          {showsMic({ recording, empty: trimmed === "" && !attached, inCall }) ? (
             // A take under way can always be sent, whatever the chat learned since it started.
             <MicButton
               recorder={recorder}

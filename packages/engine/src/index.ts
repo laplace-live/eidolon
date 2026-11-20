@@ -17,6 +17,7 @@ export {
 export { defaultEngineDeps } from "./deps.ts";
 export { groupMemory } from "./group.ts";
 export { createMind } from "./mind/index.ts";
+export { SHOWN_IMAGES } from "./seen.ts";
 export { estimateTokens } from "./task/context.ts";
 export {
   completeText,

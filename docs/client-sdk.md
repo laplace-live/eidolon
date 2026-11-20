@@ -174,17 +174,20 @@ await sendChatTurn(options, { chatId, text: "看看这个", files });
   beforehand which kind a file is.
 - **The server makes each image ready again** with sharp, as the local app does every image it is
   sent ([chat.md](chat.md#the-viewers-files)): upright, stripped and in sRGB, before her mind sees
-  it. It takes the SDK's as it is, since it fits the same bounds, rounded down alike, but refuses
-  an image past `MAX_IMAGE_PIXELS` or `MAX_IMAGE_BYTES` (`413`), or one that isn't a whole PNG,
-  JPEG or WebP (`415`): a host that sends files without `prepareChatFile` fits them itself.
+  it. It takes one `prepareChatFile` drew as it is, since it fits the same bounds, rounded down
+  alike, and makes again a PNG or WebP the SDK sent as it was when anything is written in it. It
+  refuses an image past `MAX_IMAGE_PIXELS` or `MAX_IMAGE_BYTES` (`413`), or one that isn't a
+  whole PNG, JPEG or WebP (`415`): a host that sends files without `prepareChatFile` fits them
+  itself.
 - **`sendChatTurn({ files })`** sends up to `MAX_LINE_FILES` (8) with the line as a multipart turn,
-  `text` optional; a turn with no file to send still goes as JSON. Once the first `events` line is
-  stored, it keeps each file's Blob under the name the stored message gives it (`putFile`), its
-  content's SHA-256; one that couldn't be kept is reported through `onMissingFiles`.
+  `text` optional; a turn with no file to send, its own or an earlier one, goes as JSON. Once the
+  first `events` line is stored, it keeps each file's Blob under the name the stored message gives
+  it (`putFile`), its content's SHA-256; one that couldn't be kept is reported through
+  `onMissingFiles`.
 - **Earlier files:** the server keeps none of them, so each turn, voice messages included, also
-  sends the files of the window's lines that the store holds, newest first, up to 4 and 4 MB
-  (`seen`), and `MAX_TURN_FILE_BYTES` (12 MB) with the line's own. Her view reads any older one
-  as a note.
+  sends the files of the window's lines that the store holds, newest first, each once, up to 4
+  and 4 MB (`seen`), and `MAX_TURN_FILE_BYTES` (12 MB) with the line's own. Her view reads any
+  older one as a note.
 - **`eventItems`** lists a message's text files as `files`, beside its `images`.
 
 ### Her words before a tool call

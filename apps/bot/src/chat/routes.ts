@@ -40,6 +40,7 @@ import {
   replyModeFor,
   runChat,
   runTurn,
+  SHOWN_IMAGES,
   type ShownFile,
   type TurnRequest,
 } from "@eidolon/engine";
@@ -455,13 +456,21 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
       if ("refused" in file) return fileRefusal(file.refused);
       shown.set((line[i] as LineFile).attachment.name, file);
     }
+    // Each once, and no more images than one request shows her: a copy past those is made for nothing.
+    const again = new Map<string, { readonly bytes: Uint8Array; readonly image: boolean }>();
+    let images = 0;
+    for (const { bytes } of seen) {
+      const type = sendableImageType(bytes);
+      const mime = type ?? (sendableText(bytes) === null ? null : "text/plain");
+      const name = mime === null ? null : attachmentOf(bytes, mime).name;
+      if (name === null || !named.has(name) || shown.has(name) || again.has(name)) continue;
+      const image = type !== null;
+      if (image && images++ >= SHOWN_IMAGES) continue;
+      again.set(name, { bytes, image });
+    }
     await Promise.all(
-      seen.map(async ({ bytes }) => {
-        const image = sendableImageType(bytes);
-        const mime = image ?? (sendableText(bytes) === null ? null : "text/plain");
-        const name = mime === null ? null : attachmentOf(bytes, mime).name;
-        if (name === null || !named.has(name) || shown.has(name)) return;
-        const ready = image === null ? { bytes, mime: "text/plain" } : await imageFor(bytes);
+      [...again].map(async ([name, { bytes, image }]) => {
+        const ready = image ? await imageFor(bytes) : { bytes, mime: "text/plain" };
         if (!("refused" in ready)) shown.set(name, ready);
       }),
     );

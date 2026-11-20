@@ -11,8 +11,18 @@ import {
   queueReplies,
   recordingType,
   releasePlayback,
+  showsMic,
   voiceReplies,
 } from "./voice";
+
+describe("showsMic", () => {
+  test("a take under way keeps the microphone, though a file dropped since fills the box", () => {
+    expect(showsMic({ recording: true, empty: false, inCall: false })).toBe(true);
+    expect(showsMic({ recording: false, empty: true, inCall: false })).toBe(true);
+    expect(showsMic({ recording: false, empty: false, inCall: false })).toBe(false);
+    expect(showsMic({ recording: false, empty: true, inCall: true })).toBe(false);
+  });
+});
 
 describe("recordingType", () => {
   test("is WebM with Opus where the browser records it, else MP4, else none", () => {

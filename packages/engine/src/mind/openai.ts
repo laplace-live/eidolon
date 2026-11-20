@@ -18,8 +18,8 @@ export type OpenAIDialect = "openai" | "compatible" | "gemini" | "deepseek";
 
 export interface OpenAIMindOptions {
   readonly client: OpenAIChatClient;
-  /** Its provider's id: with `model`, what remembers a model that can't see images. */
-  readonly provider: string;
+  /** The API's base URL: with `model`, what remembers a model there that can't see images. */
+  readonly server: string;
   readonly model: string;
   /** The catalog's call-time fields, over the request's own. */
   readonly live: Readonly<Record<string, unknown>>;
@@ -94,7 +94,7 @@ function bodyFor(request: MindRequest, options: OpenAIMindOptions): Message {
 const MALFORMED = new Set(["MALFORMED_RESPONSE", "MALFORMED_FUNCTION_CALL"]);
 const MALFORMED_RETRIES = 2;
 
-/** The models, as `<provider>/<model>`, that refused a request for its images: shown none since. */
+/** The models, as `<server> <model>`, that refused a request for its images: shown none since. */
 const BLIND = new Set<string>();
 
 export class OpenAIMind implements Mind {
@@ -104,29 +104,33 @@ export class OpenAIMind implements Mind {
     this.#options = options;
   }
 
+  get #blind(): string {
+    return `${this.#options.server} ${this.#options.model}`;
+  }
+
+  /** The request's stream, with a note in place of each image for a model that can't see them. */
+  #create(request: MindRequest): Promise<AsyncIterable<unknown>> {
+    const messages = BLIND.has(this.#blind) ? withoutImages(request.messages) : request.messages;
+    return this.#options.client.chat.completions.create(
+      bodyFor({ ...request, messages }, this.#options),
+      { signal: request.signal },
+    ) as Promise<AsyncIterable<unknown>>;
+  }
+
   /**
-   * The request's stream. A model that refuses the images it is shown gets the request again with a
-   * note in place of each, and every later one so, until the process restarts.
+   * Whether `error` refused the images `request` showed: then the model is shown none from now on,
+   * this request's next attempt included, until the process restarts.
    */
-  async #create(request: MindRequest): Promise<AsyncIterable<unknown>> {
-    const { client, provider, model } = this.#options;
-    const key = `${provider}/${model}`;
-    const send = (messages: readonly unknown[]) =>
-      client.chat.completions.create(bodyFor({ ...request, messages }, this.#options), {
-        signal: request.signal,
-      }) as Promise<AsyncIterable<unknown>>;
-    if (!showsImages(request.messages)) return send(request.messages);
-    if (BLIND.has(key)) return send(withoutImages(request.messages));
-    try {
-      return await send(request.messages);
-    } catch (error) {
-      if (request.signal.aborted || !refusedImages(error)) throw error;
-      BLIND.add(key);
-      logger.warning(
-        `${model} can't take images (${errorText(error)}); she is told of them instead`,
-      );
-      return send(withoutImages(request.messages));
+  #refusedImages(request: MindRequest, error: unknown): boolean {
+    if (request.signal.aborted || BLIND.has(this.#blind) || !showsImages(request.messages)) {
+      return false;
     }
+    if (!refusedImages(error)) return false;
+    BLIND.add(this.#blind);
+    logger.warning(
+      `${this.#options.model} can't take images (${errorText(error)}); she is told of them instead`,
+    );
+    return true;
   }
 
   async *stream(request: MindRequest): AsyncGenerator<MindChunk> {
@@ -166,6 +170,8 @@ export class OpenAIMind implements Mind {
         }
       } catch (error) {
         if (signal.aborted) throw signal.reason;
+        // A refusal can come as the request's answer or, once its stream is open, as its first event.
+        if (!said && pending.size === 0 && this.#refusedImages(request, error)) continue;
         throw error;
       }
       signal.throwIfAborted();

@@ -40,6 +40,9 @@ const CAMERA = Buffer.concat([
   Buffer.from("cat\0\0\0\0\0", "latin1"),
 ]);
 
+/** JFIF's header, before its thumbnail's size. */
+const JFIF = "JFIF\x00\x01\x01\x00\x00\x01\x00\x01";
+
 /** Photoshop's IPTC, captioned "a cat". */
 const CAPTION = Buffer.concat([
   Buffer.from("Photoshop 3.0\x008BIM\x04\x04\x00\x00\x00\x00\x00\x0a", "latin1"),
@@ -78,10 +81,27 @@ async function made(bytes: Uint8Array, maxPixels = MAX_SENT_IMAGE_PIXELS) {
 
 describe("normalizeImage", () => {
   test("an image already clean, whole and in bounds goes as it is", async () => {
-    const png = await canvas(8, 8, true).png().toBuffer();
-    const kept = (await normalizeImage(png, MAX_SENT_IMAGE_PIXELS)) as NormalizedImage;
-    expect(kept.mime).toBe("image/png");
-    expect(Buffer.from(kept.bytes).equals(png)).toBe(true);
+    const clean = {
+      "image/png": await canvas(8, 8, true).png().toBuffer(),
+      "image/jpeg": await canvas(8, 8).jpeg().toBuffer(),
+      // As a browser's canvas writes one, with JFIF's header and no thumbnail.
+      "image/jfif-jpeg": withSegment(
+        await canvas(8, 8).jpeg().toBuffer(),
+        0,
+        Buffer.from(`${JFIF}\x00\x00`, "latin1"),
+      ),
+      "image/progressive-jpeg": await noise(64, 64).jpeg({ progressive: true }).toBuffer(),
+      "image/webp": await canvas(8, 8).webp().toBuffer(),
+      "image/transparent-webp": await canvas(8, 8, true).webp().toBuffer(),
+    };
+    for (const [kind, bytes] of Object.entries(clean)) {
+      const kept = (await normalizeImage(bytes, MAX_SENT_IMAGE_PIXELS)) as NormalizedImage;
+      expect([kind, kept.mime, Buffer.from(kept.bytes).equals(bytes)]).toEqual([
+        kind,
+        kind.replace(/(progressive|transparent|jfif)-/, ""),
+        true,
+      ]);
+    }
   });
 
   test("a camera's photo is turned upright, and what the camera wrote in it goes", async () => {
@@ -120,6 +140,24 @@ describe("normalizeImage", () => {
       icc: await canvas(8, 8, true).webp().withIccProfile("p3").toBuffer(),
       "png text": withText(png, "head", "a cat"),
       "png text after its pixels": withText(png, "tail", "a cat"),
+      "bytes after a png's end": Buffer.concat([png, Buffer.from("a cat")]),
+      "jpeg comment": withSegment(jpeg, 0x1e, Buffer.from("a cat")),
+      "bytes after a jpeg's end": Buffer.concat([jpeg, Buffer.from("a cat")]),
+      "jfif thumbnail": withSegment(jpeg, 0, Buffer.from(`${JFIF}\x01\x01cat`, "latin1")),
+      "another app0 the size of jfif's": withSegment(
+        jpeg,
+        0,
+        Buffer.from("a cat".padEnd(14, "\0")),
+      ),
+      // A chunk past the end its RIFF header gives.
+      "bytes after a webp's end": Buffer.concat([
+        await canvas(8, 8).webp().toBuffer(),
+        Buffer.from("VP8 \x03\x00\x00\x00cat\x00", "latin1"),
+      ]),
+      "webp exif": await canvas(8, 8)
+        .webp()
+        .withExif({ IFD0: { ImageDescription: "a cat" } })
+        .toBuffer(),
     };
     const camera = await sharp(written.exif).metadata();
     expect([camera.exif === undefined, camera.orientation]).toEqual([false, undefined]);
