@@ -97,7 +97,8 @@ prepare-batch's series URL among them, so a persona whose batches name hers need
 channel it listed, a space given whole by its 直播回放 list's URL, which is how the next run finds
 them again; to forget a channel, delete its `# Source:` line from every batch that has one. Each
 recording it saves gets a `# Covers: <day>[ <day>] <url>` line there too, the days that recording
-covers, so no later run lists another upload of those days.
+covers, so no later run lists another upload of those days, unless a run's `--skip` names that
+recording as not hers.
 
 ## Layers
 

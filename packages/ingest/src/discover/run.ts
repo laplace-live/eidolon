@@ -567,12 +567,16 @@ export async function discoverVideos(options: DiscoverOptions): Promise<Discover
   for (const found of official.values()) {
     if (found.date !== null && !skipped.has(found.key)) covered.add(found.date);
   }
-  // A saved recording's days, which a search may no longer return.
+  // A saved recording's days, which a search may no longer return: `<day>[ <day>] <url>`.
   for (const covers of batchHeader(listsDir, "Covers")) {
-    for (const word of covers.split(/\s+/)) if (ISO_DAY.test(word)) covered.add(word);
+    const words = covers.split(/\s+/);
+    if (skipped.has(videoKey(words.at(-1) ?? "") ?? "")) continue;
+    for (const word of words) if (ISO_DAY.test(word)) covered.add(word);
   }
   for (const found of recordings) {
-    if (isKnown(found)) for (const day of daysOf(found)) covered.add(day);
+    if (isKnown(found) && !skipped.has(found.key)) {
+      for (const day of daysOf(found)) covered.add(day);
+    }
   }
 
   const fresh = {

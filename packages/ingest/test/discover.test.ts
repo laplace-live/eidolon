@@ -528,39 +528,54 @@ describe("discoverVideos", () => {
     ]);
 
     // Others' uploads of those days, the saved ones no longer among the results.
-    const later = await discover.discoverVideos(
-      options(
-        fakeBilibili(
-          searching([
-            result(
-              "BV1kkkkkkk03",
-              207,
-              "别人",
-              "【明前奶绿】 2026年11月13日 2000开播",
-              "160:0",
-              "2026-11-13T16:00:00Z",
-            ),
-            result(
-              "BV1kkkkkkk04",
-              207,
-              "别人",
-              "【明前奶绿】 2026年11月11日 2000开播",
-              "160:0",
-              "2026-11-11T16:00:00Z",
-            ),
-            result(
-              "BV1kkkkkkk05",
-              207,
-              "别人",
-              "【明前奶绿】 2026年11月10日 2000开播",
-              "160:0",
-              "2026-11-10T16:00:00Z",
-            ),
-          ]),
-        ).fetch,
+    const others = [
+      result(
+        "BV1kkkkkkk03",
+        207,
+        "别人",
+        "【明前奶绿】 2026年11月13日 2000开播",
+        "160:0",
+        "2026-11-13T16:00:00Z",
       ),
-    );
+      result(
+        "BV1kkkkkkk04",
+        207,
+        "别人",
+        "【明前奶绿】 2026年11月11日 2000开播",
+        "160:0",
+        "2026-11-11T16:00:00Z",
+      ),
+      result(
+        "BV1kkkkkkk05",
+        207,
+        "别人",
+        "【明前奶绿】 2026年11月10日 2000开播",
+        "160:0",
+        "2026-11-10T16:00:00Z",
+      ),
+    ];
+    const later = await discover.discoverVideos(options(fakeBilibili(searching(others)).fetch));
     expect(later.recordings.videos.map(({ url }) => url)).toEqual([
+      "https://www.bilibili.com/video/BV1kkkkkkk05",
+    ]);
+
+    // The saved copy of the 13th skipped as not hers, its day is open again, by its # Covers: line
+    // and by the search that finds it once more.
+    const again = result(
+      "BV1kkkkkkk01",
+      205,
+      "搬运",
+      "【明前奶绿】 2026年11月13日20点场",
+      "150:0",
+      "2026-11-13T15:00:00Z",
+    );
+    const skipping = await discover.discoverVideos(
+      options(fakeBilibili(searching([again, ...others])).fetch, {
+        skip: ["https://www.bilibili.com/video/BV1kkkkkkk01"],
+      }),
+    );
+    expect(skipping.recordings.videos.map(({ url }) => url)).toEqual([
+      "https://www.bilibili.com/video/BV1kkkkkkk03",
       "https://www.bilibili.com/video/BV1kkkkkkk05",
     ]);
   });
