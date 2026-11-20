@@ -15,9 +15,15 @@ import {
   isChatId,
   isPermissionLevel,
   isReplyMode,
+  lineFilesOf,
+  lineFileType,
+  MAX_IMAGE_BYTES,
   PERMISSION_LEVELS,
   permissionsOf,
   replyModeOf,
+  sendableImageType,
+  sendableText,
+  sentFilename,
   stampEvents,
   summarize,
 } from "../src/index.ts";
@@ -277,5 +283,64 @@ describe("ids and attachment names", () => {
     expect(attachmentKind("audio/webm;codecs=opus")).toBe("audio");
     expect(attachmentKind("image/png")).toBe("image");
     expect(attachmentKind("video/webm")).toBeNull();
+  });
+});
+
+describe("the files the viewer sends", () => {
+  test("an image is a PNG, JPEG or WebP by its signature, whatever it is called", () => {
+    const bytes = (...values: number[]) => new Uint8Array(values);
+    const ascii = (text: string) => [...text].map((char) => char.charCodeAt(0));
+    expect(sendableImageType(bytes(0x89, ...ascii("PNG\r\n\x1a\n"), 0))).toBe("image/png");
+    expect(sendableImageType(bytes(0xff, 0xd8, 0xff, 0xe0))).toBe("image/jpeg");
+    expect(sendableImageType(bytes(...ascii("RIFF"), 0, 0, 0, 0, ...ascii("WEBPVP8 ")))).toBe(
+      "image/webp",
+    );
+    expect(sendableImageType(bytes(...ascii("GIF89a")))).toBeNull();
+    expect(sendableImageType(bytes(...ascii("<svg xmlns")))).toBeNull();
+    expect(sendableImageType(bytes())).toBeNull();
+  });
+
+  test("a text file is UTF-8 with no NUL, and is kept as text/plain", () => {
+    expect(sendableText(new TextEncoder().encode("第一章\n从前"))).toBe("第一章\n从前");
+    expect(sendableText(new Uint8Array([0xe7, 0xac]))).toBeNull();
+    expect(sendableText(new Uint8Array([0x61, 0, 0x62]))).toBeNull();
+    expect(attachmentKind("text/plain; charset=utf-8")).toBe("file");
+    expect(attachmentExtension("text/plain")).toBe("txt");
+    expect(attachmentMime(`${"a".repeat(64)}.txt`)).toBe("text/plain");
+  });
+});
+
+describe("a line's files", () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+  const named = (ext: string) => `${"e".repeat(64)}.${ext}`;
+
+  test("lineFileType keeps a PNG, JPEG or WebP sent as an image and UTF-8 sent as text", () => {
+    expect(lineFileType("image/png", png)).toEqual({ mime: "image/png" });
+    expect(lineFileType("image/jpeg", png)).toEqual({ mime: "image/png" });
+    expect(lineFileType("text/markdown; charset=utf-8", new TextEncoder().encode("嗯"))).toEqual({
+      mime: "text/plain",
+    });
+    expect(lineFileType("text/plain", png)).toEqual({ refused: "unsupported" });
+    expect(lineFileType("application/pdf", png)).toEqual({ refused: "unsupported" });
+    expect(lineFileType("image/png", new Uint8Array())).toEqual({ refused: "empty" });
+    expect(lineFileType("image/png", new Uint8Array(MAX_IMAGE_BYTES + 1))).toEqual({
+      refused: "too-large",
+    });
+  });
+
+  test("lineFilesOf rebuilds a line's files from their names, or refuses the list", () => {
+    expect(
+      lineFilesOf([{ name: named("webp") }, { name: named("txt"), filename: "a/b\u0007.md" }]),
+    ).toEqual([
+      { kind: "image", name: named("webp"), mime: "image/webp" },
+      { kind: "file", name: named("txt"), mime: "text/plain", filename: "b.md" },
+    ]);
+    expect(lineFilesOf([{ name: named("mp3") }])).toBeNull();
+    expect(lineFilesOf([{ name: named("png") }, { name: named("png") }])).toBeNull();
+    expect(
+      lineFilesOf(Array.from({ length: 9 }, (_, i) => ({ name: `${String(i).repeat(64)}.png` }))),
+    ).toBeNull();
+    expect(lineFilesOf("x")).toBeNull();
+    expect(sentFilename("  ")).toBeNull();
   });
 });

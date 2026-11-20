@@ -1,7 +1,14 @@
-import { parseMentions } from "@eidolon/chat";
+import { type Attachment, parseMentions } from "@eidolon/chat";
+import { CHAT_FILE_ACCEPT } from "@laplace.live/eidolon-sdk";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { ArrowUpIcon, ScrollTextIcon, SquareIcon, SquareSlashIcon } from "lucide-react";
+import {
+  ArrowUpIcon,
+  PaperclipIcon,
+  ScrollTextIcon,
+  SquareIcon,
+  SquareSlashIcon,
+} from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent,
@@ -18,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { InputGroupTextarea } from "@/components/ui/input-group";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
+import { DraftFilesTray } from "./attachments";
 import {
   closedAt,
   type Draft,
@@ -39,6 +47,7 @@ import {
 import { COMMAND_HELP, RECORDER_PROBLEMS } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
 import type { VoiceClip } from "./stream";
+import type { DraftFiles } from "./use-draft-files";
 import { useRecorder } from "./use-recorder";
 import { MicButton, type MicState, RecordingBar } from "./voice-recorder";
 
@@ -147,10 +156,12 @@ function SuggestionList<T>({
  * The message box: the text over a row of controls. Enter sends and Shift+Enter breaks the line. A
  * send while a reply runs is allowed, since the server stops it and still answers every line; Stop
  * shows while one does. With two or more personas, an `@` offers their names, and whoever the line
- * mentions answers first. A `/` that starts the draft offers the commands and `skills`. While the
- * box is empty, the microphone takes the send button's place, and a take replaces the text while it
- * records. During a call it is disabled, keeping any draft, and it takes the focus back when the
- * call ends. A command goes to `onCommand`, never to her; one it can't run keeps the draft.
+ * mentions answers first. A `/` that starts the draft offers the commands and `skills`. Images and
+ * text files go with the line: picked with the paperclip, pasted, or dropped on the chat, shown over
+ * the text until it is sent, which waits for them to be kept. While the box is empty with no file,
+ * the microphone takes the send button's place, and a take replaces the text while it records.
+ * During a call it is disabled, keeping any draft, and it takes the focus back when the call ends.
+ * A command goes to `onCommand`, never to her; one it can't run keeps the draft.
  */
 export function Composer({
   placeholder,
@@ -160,6 +171,7 @@ export function Composer({
   mic,
   inCall,
   leading,
+  files,
   onSend,
   onSendVoice,
   onStop,
@@ -174,7 +186,9 @@ export function Composer({
   readonly inCall: boolean;
   /** The chat's own controls, at the start of the row under the text. */
   readonly leading: ReactNode;
-  readonly onSend: (text: string) => void;
+  /** The files the line carries. */
+  readonly files: DraftFiles;
+  readonly onSend: (text: string, files: readonly Attachment[]) => void;
   readonly onSendVoice: (clip: VoiceClip) => void;
   readonly onStop: () => void;
   readonly onCommand: (command: ChatCommand) => void;
@@ -193,10 +207,12 @@ export function Composer({
   const [highlight, setHighlight] = useState(0);
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const placeCaret = useRef<number | null>(null);
   const listId = useId();
   const { text } = draft;
   const trimmed = text.trim();
+  const attached = files.files.length > 0;
 
   const group = participants.length > 1;
   const open = focused ? openAt(draft, participants, skills) : null;
@@ -256,7 +272,7 @@ export function Composer({
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (trimmed === "" || inCall) return;
+    if ((trimmed === "" && !attached) || inCall) return;
     const parsed = parseCommand(trimmed, skills);
     switch (parsed.kind) {
       case "command":
@@ -275,7 +291,13 @@ export function Composer({
         });
         return;
       case "line":
-        onSend(trimmed);
+        if (!files.ready) {
+          toast.info(t`Files are still uploading`, {
+            description: t`Send the message once they are all up.`,
+          });
+          return;
+        }
+        onSend(trimmed, files.take());
         edit("", 0);
         return;
     }
@@ -378,6 +400,11 @@ export function Composer({
         }}
       >
         {recording && <RecordingBar recorder={recorder} holding={holding} />}
+        {attached && !inCall && !recording && (
+          <div className="px-4 pt-4">
+            <DraftFilesTray files={files.files} onRemove={files.remove} />
+          </div>
+        )}
         {/* The padding is outside the text box, so lines it scrolls away stop short of the edge. */}
         <div hidden={recording} className="px-4 pt-3.5 pb-1">
           <InputGroupTextarea
@@ -389,6 +416,13 @@ export function Composer({
               setDraft((current) => ({ ...current, caret }));
             }}
             onKeyDown={onKeyDown}
+            onPaste={(event) => {
+              const pasted = [...event.clipboardData.files];
+              if (pasted.length === 0 || inCall) return;
+              files.add(pasted);
+              // A copied image can bring its page's words too, which paste as usual.
+              if (!event.clipboardData.types.includes("text/plain")) event.preventDefault();
+            }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={shown}
@@ -405,6 +439,32 @@ export function Composer({
         </div>
         <div className="flex items-center gap-1.5 p-2">
           <div className="flex min-w-0 flex-1 items-center gap-1">
+            {!recording && (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-lg"
+                  className="rounded-full text-muted-foreground"
+                  disabled={inCall}
+                  aria-label={t`Attach Files`}
+                  onClick={() => picker.current?.click()}
+                >
+                  <PaperclipIcon />
+                </Button>
+                <input
+                  ref={picker}
+                  type="file"
+                  multiple
+                  accept={CHAT_FILE_ACCEPT}
+                  hidden
+                  onChange={(event) => {
+                    files.add([...(event.target.files ?? [])]);
+                    event.target.value = "";
+                  }}
+                />
+              </>
+            )}
             {leading}
             {mentioned.length > 0 && (
               <p className="min-w-0 truncate px-2 text-muted-foreground text-xs">
@@ -424,7 +484,7 @@ export function Composer({
               <SquareIcon className="size-3 fill-current" />
             </Button>
           )}
-          {trimmed === "" && !inCall ? (
+          {trimmed === "" && !attached && !inCall ? (
             // A take under way can always be sent, whatever the chat learned since it started.
             <MicButton
               recorder={recorder}
@@ -436,7 +496,7 @@ export function Composer({
               type="submit"
               size="icon-lg"
               className="rounded-full"
-              disabled={inCall}
+              disabled={inCall || !files.ready}
               aria-label={t`Send`}
             >
               <ArrowUpIcon />

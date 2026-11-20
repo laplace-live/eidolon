@@ -29,6 +29,7 @@ import { TaskCard } from "@/features/tasks/task-card";
 import { chatFilePath } from "@/lib/chats";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
+import { SentFiles } from "./attachments";
 import { callLine } from "./call-line";
 import { type CallRow, callRows, type LiveCall, standsIn } from "./call-live";
 import {
@@ -37,6 +38,7 @@ import {
   type ChatItem,
   itemKey,
   manyVoices,
+  type RetryLine,
   startsRun,
 } from "./items";
 import { toolState } from "./labels";
@@ -74,6 +76,7 @@ function UserBubble({
   hearing = "",
   call = false,
   failed = false,
+  files,
   onRetry,
 }: {
   readonly text: string;
@@ -82,22 +85,29 @@ function UserBubble({
   /** Said on a call. */
   readonly call?: boolean;
   readonly failed?: boolean;
+  /** The images and text files sent with it, and the chat that keeps them. */
+  readonly files?: { readonly chatId: string; readonly sent: readonly Attachment[] };
   readonly onRetry?: () => void;
 }) {
   const { t } = useLingui();
   return (
     <div className="flex flex-col items-end gap-1">
-      <div
-        className={cn(
-          "max-w-[80%] whitespace-pre-line break-words rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-primary-foreground text-sm",
-          failed && "opacity-60",
-        )}
-      >
-        <span className="sr-only">{t({ message: `You`, context: "chat speaker" })}: </span>
-        {call && <CallMark />}
-        {text}
-        {hearing && <span className="italic opacity-70">{hearing}</span>}
-      </div>
+      {files !== undefined && files.sent.length > 0 && (
+        <SentFiles chatId={files.chatId} files={files.sent} failed={failed} />
+      )}
+      {(text !== "" || hearing !== "" || files === undefined) && (
+        <div
+          className={cn(
+            "max-w-[80%] whitespace-pre-line break-words rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-primary-foreground text-sm",
+            failed && "opacity-60",
+          )}
+        >
+          <span className="sr-only">{t({ message: `You`, context: "chat speaker" })}: </span>
+          {call && <CallMark />}
+          {text}
+          {hearing && <span className="italic opacity-70">{hearing}</span>}
+        </div>
+      )}
       {failed && (
         <span className="flex items-center gap-2 text-destructive text-xs">
           {t`Not sent`}
@@ -437,7 +447,11 @@ const Item = memo(function Item({
   if (item.kind === "task") return <TaskCard chatId={chatId} item={item} display={display} />;
   if (item.kind === "user") {
     return item.voice === null ? (
-      <UserBubble text={item.text} call={item.call} />
+      <UserBubble
+        text={item.text}
+        call={item.call}
+        {...(item.files === undefined ? {} : { files: { chatId, sent: item.files } })}
+      />
     ) : (
       <UserVoiceBubble
         src={chatFilePath(chatId, item.voice.name)}
@@ -647,13 +661,13 @@ export function ChatLog({
   /** Tools her interrupted turns left running: what they bring lands later. */
   readonly lateTools: readonly string[];
   /** What Retry sends after a failed turn; null offers none. */
-  readonly retry: string | null;
+  readonly retry: RetryLine | null;
   /** The seq of her voice message to play on its own now. */
   readonly autoPlay: number | null;
   readonly onAutoPlayEnd: AutoPlayEnd;
   /** A call is on: its lines arrive as they are said, with no reply to wait for. */
   readonly inCall: boolean;
-  readonly onSend: (text: string) => void;
+  readonly onSend: (text: string, files?: readonly Attachment[]) => void;
   readonly onSendVoice: (clip: VoiceClip) => void;
   /** A task whose card to bring into view, once it is in the log. */
   readonly focusTask: string | null;
@@ -695,7 +709,10 @@ export function ChatLog({
   }, [focusTask, shown, onFocused, contentRef, pinnedRef]);
 
   // Stable, so the memoized last item doesn't re-render with every streamed delta.
-  const retryLast = useMemo(() => (retry === null ? null : () => onSend(retry)), [retry, onSend]);
+  const retryLast = useMemo(
+    () => (retry === null ? null : () => onSend(retry.text, retry.files)),
+    [retry, onSend],
+  );
   const empty = items.length === 0 && turn === null && pending.length === 0;
   const speaker = turn?.persona ?? next ?? (group ? null : (personas[0]?.id ?? null));
   const thinker = speaker === null ? null : personaOf(speaker);
@@ -722,7 +739,8 @@ export function ChatLog({
       <UserBubble
         text={line.text}
         failed={line.failed}
-        onRetry={line.failed ? () => onSend(line.text) : undefined}
+        {...(line.files === undefined ? {} : { files: { chatId, sent: line.files } })}
+        onRetry={line.failed ? () => onSend(line.text, line.files) : undefined}
       />
     ) : (
       <PendingVoice line={line} voice={voice} onRetry={() => onSendVoice(voice)} />

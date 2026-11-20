@@ -11,6 +11,7 @@ import {
   type ChatSummary,
   isChatId,
   isReplyMode,
+  lineFilesOf,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
   stampEvents,
@@ -115,7 +116,9 @@ function seqOf(value: unknown): number | null {
 
 /**
  * One of the viewer's own events, rebuilt from the fields the server reads, or null when it isn't
- * well formed. Attachments are left behind: no turn reads the viewer's, and the browser keeps them.
+ * well formed. A line keeps the images and text files it names, which her view shows when the
+ * request carries their bytes and notes otherwise; a voice message's audio, and files a line
+ * doesn't take, are left behind: the browser keeps them.
  */
 function viewersEvent(raw: Record<string, unknown>, seq: number, at: number): ChatEvent | null {
   switch (raw.type) {
@@ -130,6 +133,8 @@ function viewersEvent(raw: Record<string, unknown>, seq: number, at: number): Ch
       ) {
         return null;
       }
+      const typed = modality === undefined || modality === "text";
+      const files = typed ? (lineFilesOf(raw.attachments) ?? []) : [];
       return {
         seq,
         at,
@@ -138,6 +143,7 @@ function viewersEvent(raw: Record<string, unknown>, seq: number, at: number): Ch
         speaker: { kind: "user" },
         text,
         ...(modality === undefined ? {} : { modality }),
+        ...(files.length > 0 ? { attachments: files } : {}),
       };
     }
     case "title":

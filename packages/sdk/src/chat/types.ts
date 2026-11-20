@@ -42,6 +42,22 @@ export const MAX_VOICE_MS = 120_000;
 /** The largest voice message the viewer can send. */
 export const MAX_VOICE_BYTES = 10 * 1024 * 1024;
 
+/** The most files the viewer sends with one line. */
+export const MAX_LINE_FILES = 8;
+
+/** The largest image the viewer sends: `prepareChatFile` scales a larger one down to fit. */
+export const MAX_IMAGE_BYTES = 3.5 * 1024 * 1024;
+
+/** An image's pixels at most, and its long edge, as `prepareChatFile` fits it and her mind sees it. */
+export const MAX_IMAGE_PIXELS = 2048 * 2048;
+export const MAX_IMAGE_EDGE = 2576;
+
+/** The largest text file the viewer sends. */
+export const MAX_TEXT_FILE_BYTES = 1024 * 1024;
+
+/** What a turn's files weigh at most in all: the line's own, and earlier lines' sent again. */
+export const MAX_TURN_FILE_BYTES = 12 * 1024 * 1024;
+
 /** How personas answer: `auto` lets the director choose voice where a line suits it. */
 export const REPLY_MODES = ["auto", "text", "voice"] as const;
 
@@ -78,7 +94,21 @@ export type Attachment =
       readonly mime: string;
       /** Absent when nothing measured it. */
       readonly durationMs?: number;
+    }
+  | {
+      /** A text file the viewer sent, as UTF-8. */
+      readonly kind: "file";
+      readonly name: string;
+      readonly mime: string;
+      /** What it was called on the viewer's computer. */
+      readonly filename?: string;
     };
+
+/** A file to send with a line: its bytes, typed, and a text file's name. */
+export interface ChatFile {
+  readonly blob: Blob;
+  readonly filename?: string;
+}
 
 export type CutOff = "length" | "refusal";
 
@@ -101,7 +131,7 @@ export type ChatMessageEvent = EventBase & {
   readonly text: string;
   /** Absent means text. */
   readonly modality?: "text" | "voice" | "call";
-  /** A voice message's audio first, then any photos. */
+  /** A voice message's audio first, then any photos; or the images and text files the viewer sent. */
   readonly attachments?: readonly Attachment[];
   readonly interrupted?: boolean;
   readonly cutOff?: CutOff;

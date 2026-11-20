@@ -5,7 +5,12 @@ import {
   CHAT_WINDOW_MESSAGES as SERVER_CHAT_WINDOW_MESSAGES,
   DEFAULT_CHAIN_LIMIT as SERVER_DEFAULT_CHAIN_LIMIT,
   MAX_CHAIN_LIMIT as SERVER_MAX_CHAIN_LIMIT,
+  MAX_IMAGE_BYTES as SERVER_MAX_IMAGE_BYTES,
+  MAX_IMAGE_EDGE as SERVER_MAX_IMAGE_EDGE,
+  MAX_IMAGE_PIXELS as SERVER_MAX_IMAGE_PIXELS,
+  MAX_LINE_FILES as SERVER_MAX_LINE_FILES,
   MAX_PARTICIPANTS as SERVER_MAX_PARTICIPANTS,
+  MAX_TEXT_FILE_BYTES as SERVER_MAX_TEXT_FILE_BYTES,
   MAX_VOICE_MS as SERVER_MAX_VOICE_MS,
   REPLY_MODES as SERVER_REPLY_MODES,
   type ChatEvent as ServerChatEvent,
@@ -21,8 +26,10 @@ import {
   PUBLIC_CHAIN_LIMIT as SERVER_PUBLIC_CHAIN_LIMIT,
   windowOf,
 } from "../../../apps/bot/src/chat/window.ts";
+import { fittedSize as serverFittedSize } from "../../../apps/bot/src/images.ts";
 import { AUDIO_QUALITIES as SERVER_AUDIO_QUALITIES } from "../../access/src/audio-quality.ts";
 import { BOT_ABOUT } from "../../runtime/src/rtvi.ts";
+import { fittedSize } from "../src/chat/files.ts";
 import {
   AUDIO_QUALITIES,
   buildWindow,
@@ -35,8 +42,14 @@ import {
   type ChatHeader,
   DEFAULT_CHAIN_LIMIT,
   MAX_CHAIN_LIMIT,
+  MAX_IMAGE_BYTES,
+  MAX_IMAGE_EDGE,
+  MAX_IMAGE_PIXELS,
+  MAX_LINE_FILES,
   MAX_PARTICIPANTS,
+  MAX_TEXT_FILE_BYTES,
   MAX_TEXT_LENGTH,
+  MAX_TURN_FILE_BYTES,
   MAX_VOICE_BYTES,
   MAX_VOICE_MS,
   NEVER_SENT,
@@ -64,6 +77,24 @@ describe("server and client SDK protocol parity", () => {
     expect(CHAT_WINDOW_MESSAGES).toBe(SERVER_CHAT_WINDOW_MESSAGES);
     expect(MAX_VOICE_MS).toBe(SERVER_MAX_VOICE_MS);
     expect(REPLY_MODES).toEqual(SERVER_REPLY_MODES);
+    expect(MAX_LINE_FILES).toBe(SERVER_MAX_LINE_FILES);
+    expect(MAX_IMAGE_BYTES).toBe(SERVER_MAX_IMAGE_BYTES);
+    expect(MAX_IMAGE_PIXELS).toBe(SERVER_MAX_IMAGE_PIXELS);
+    expect(MAX_IMAGE_EDGE).toBe(SERVER_MAX_IMAGE_EDGE);
+    expect(MAX_TEXT_FILE_BYTES).toBe(SERVER_MAX_TEXT_FILE_BYTES);
+  });
+
+  test("prepareChatFile fits an image as the server does, so the server takes it as it is", () => {
+    for (const [width, height] of [
+      [1170, 2532],
+      [4032, 3024],
+      [6000, 1000],
+      [2049, 2048],
+      [12_345, 6789],
+      [3001, 7],
+    ] as const) {
+      expect(fittedSize(width, height)).toEqual(serverFittedSize(width, height));
+    }
   });
 
   test("route text and voice byte limits match apps/bot/src/chat/routes.ts", () => {
@@ -71,6 +102,8 @@ describe("server and client SDK protocol parity", () => {
     expect(routesSource).toContain(`const MAX_TEXT = ${MAX_TEXT_LENGTH};`);
     expect(routesSource).toContain("const MAX_VOICE_BYTES = 10 * 1024 * 1024;");
     expect(MAX_VOICE_BYTES).toBe(10 * 1024 * 1024);
+    expect(routesSource).toContain("const MAX_TURN_FILE_BYTES = 12 * 1024 * 1024;");
+    expect(MAX_TURN_FILE_BYTES).toBe(12 * 1024 * 1024);
   });
 
   test("audio qualities and bot-ready match the server", () => {

@@ -1,5 +1,6 @@
 // The chats API at /api/local/chats, whose wire types carry @eidolon/chat's format.
 import type {
+  Attachment,
   ChatDisplay,
   ChatStreamLine,
   ChatSummary,
@@ -35,16 +36,36 @@ export function readChat(id: string, signal?: AbortSignal): Promise<ChatContents
 }
 
 /**
- * Sends the viewer's line, stopping any reply still running, and yields the new reply's lines.
- * Aborting `signal` only stops the reading: the reply runs on, and GET live replays it.
+ * Keeps a file the viewer will send with a line in the chat: an image, or a text file named
+ * `filename`. The line names what it answers.
+ */
+export function uploadChatFile(id: string, file: Blob, filename?: string): Promise<Attachment> {
+  return call("POST /api/local/chats/:id/files", {
+    params: { id },
+    ...(filename === undefined ? {} : { query: { filename } }),
+    body: file,
+  });
+}
+
+/**
+ * Sends the viewer's line, with `files` already kept in the chat, stopping any reply still running,
+ * and yields the new reply's lines. Aborting `signal` only stops the reading: the reply runs on, and
+ * GET live replays it.
  */
 export async function* sendMessage(
   id: string,
   text: string,
+  files: readonly Attachment[],
   signal: AbortSignal,
 ): AsyncGenerator<ChatStreamLine> {
+  const attachments = files.map((file) =>
+    file.kind === "file" && file.filename !== undefined
+      ? { name: file.name, filename: file.filename }
+      : { name: file.name },
+  );
+  const body = attachments.length > 0 ? { text, attachments } : { text };
   yield* lines(
-    await stream("POST /api/local/chats/:id/messages", { params: { id }, body: { text }, signal }),
+    await stream("POST /api/local/chats/:id/messages", { params: { id }, body, signal }),
   );
 }
 

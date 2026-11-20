@@ -3,6 +3,7 @@
 // a call's lines as they are stored.
 import { existsSync } from "node:fs";
 import {
+  type Attachment,
   attachmentKind,
   attachmentMime,
   type ChatDisplay,
@@ -11,14 +12,25 @@ import {
   isChatId,
   isPermissionLevel,
   isReplyMode,
+  lineFilesOf,
   MAX_CHAIN_LIMIT,
   MAX_PARTICIPANTS,
+  MAX_TEXT_FILE_BYTES,
   MAX_VOICE_MS,
   type PermissionLevel,
   type ReplyMode,
+  sendableText,
+  sentFilename,
 } from "@eidolon/chat";
 import { isPlainObject, logger, withPersona } from "@eidolon/config";
 import { hasKey, missingKey, ProviderConfigError, trySelect } from "@eidolon/providers";
+import {
+  type ImageRefusal,
+  MAX_SENT_IMAGE_BYTES,
+  MAX_SENT_IMAGE_PIXELS,
+  type NormalizedImage,
+  normalizeImage,
+} from "../../images.ts";
 import { readBytes } from "../../responses.ts";
 import { HearingFailed, hearingRefusal } from "../chats/hearing.ts";
 import { ChatInCall, ChatRunner, type ChatRunnerOptions } from "../chats/runner.ts";
@@ -36,7 +48,7 @@ import type { LocalApp, LocalRouteSpec } from "../router.ts";
 
 const MAX_TEXT = 4000;
 const MAX_TITLE = 80;
-/** 4000 characters, each escaped as JSON at worst. */
+/** 4000 characters, each escaped as JSON at worst, and the names of the line's files. */
 const BODY_LIMIT = 64 * 1024;
 const MAX_VOICE_BYTES = 10 * 1024 * 1024;
 // Attachments are named by their content's hash: a name never changes what it serves.
@@ -45,14 +57,14 @@ const IMMUTABLE = "private, max-age=31536000, immutable";
 const CONTROL_IN_TEXT = /(?![\t\n\r])\p{Cc}/u;
 const CONTROL = /\p{Cc}/u;
 
-/** `body`'s one string field `name`, trimmed, when it is 1 to `max` characters; else null. */
-function field(body: unknown, name: string, max: number, control: RegExp): string | null {
-  if (!isPlainObject(body) || Object.keys(body).some((key) => key !== name)) return null;
-  const value = body[name];
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
+/** PATCH's `title`, trimmed, 1 to MAX_TITLE characters on one line; else null. */
+function titleIn(body: unknown): string | null {
+  if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "title")) return null;
+  const { title } = body;
+  if (typeof title !== "string") return null;
+  const trimmed = title.trim();
   const length = [...trimmed].length;
-  return length === 0 || length > max || control.test(trimmed) ? null : trimmed;
+  return length === 0 || length > MAX_TITLE || CONTROL.test(trimmed) ? null : trimmed;
 }
 
 /** `value` as a list of strings, each once, of `min` to MAX_PARTICIPANTS; else null. */
@@ -103,6 +115,43 @@ function displayIn(body: unknown): ChatDisplay | null {
 function permissionsIn(body: unknown): PermissionLevel | null {
   if (!isPlainObject(body) || Object.keys(body).some((key) => key !== "permissions")) return null;
   return isPermissionLevel(body.permissions) ? body.permissions : null;
+}
+
+/**
+ * POST messages' line: `text`, 0 to MAX_TEXT characters once trimmed, and `attachments`, up to
+ * MAX_LINE_FILES files sent to POST files first, each named once; at least one of the two. Else
+ * null.
+ */
+function lineIn(body: unknown): { text: string; files: Attachment[] } | null {
+  if (!isPlainObject(body)) return null;
+  if (Object.keys(body).some((key) => key !== "text" && key !== "attachments")) return null;
+  const { text = "", attachments = [] } = body;
+  if (typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if ([...trimmed].length > MAX_TEXT || CONTROL_IN_TEXT.test(trimmed)) return null;
+  const exact =
+    Array.isArray(attachments) &&
+    attachments.every(
+      (file) =>
+        isPlainObject(file) &&
+        Object.keys(file).every((key) => key === "name" || key === "filename") &&
+        (file.filename === undefined || typeof file.filename === "string"),
+    );
+  const files = exact ? lineFilesOf(attachments) : null;
+  if (files === null) return null;
+  return trimmed === "" && files.length === 0 ? null : { text: trimmed, files };
+}
+
+/**
+ * A file sent to POST files as the chat keeps it: a `text` one as UTF-8 text, as it is, and anything
+ * else as an image, made ready for her mind; or why it can't be kept.
+ */
+async function keptFile(
+  text: boolean,
+  bytes: Uint8Array,
+): Promise<NormalizedImage | { readonly refused: ImageRefusal }> {
+  if (!text) return normalizeImage(bytes, MAX_SENT_IMAGE_PIXELS);
+  return sendableText(bytes) === null ? { refused: "unsupported" } : { bytes, mime: "text/plain" };
 }
 
 /** POST voice's `durationMs`, a whole number of ms from 1; else null. */
@@ -233,7 +282,7 @@ export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
         if (refused !== null) return refused;
         const body = await readJson(request, BODY_LIMIT);
         if (!body.ok) return body.response;
-        const title = field(body.value, "title", MAX_TITLE, CONTROL);
+        const title = titleIn(body.value);
         const chainLimit = chainLimitOf(body.value);
         const replyMode = replyModeIn(body.value);
         const display = displayIn(body.value);
@@ -275,6 +324,40 @@ export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
       },
     },
     {
+      route: "POST /api/local/chats/:id/files",
+      async handler(request, { params, url }) {
+        const id = params.id as string;
+        const refused = chatRefusal(id);
+        if (refused !== null) return refused;
+        const sentAs = request.headers.get("content-type") ?? "";
+        const text = sentAs.toLowerCase().startsWith("text/");
+        const bytes = await readBytes(request, text ? MAX_TEXT_FILE_BYTES : MAX_SENT_IMAGE_BYTES);
+        if (bytes?.byteLength === 0) return localError(400, "bad-request", "The file is empty");
+        const kept =
+          bytes === null ? { refused: "too-large" as const } : await keptFile(text, bytes);
+        if ("refused" in kept) {
+          if (kept.refused === "too-large") {
+            return localError(
+              413,
+              "payload-too-large",
+              text ? "A text file is at most 1 MB" : "An image is at most 50 MB and 64 megapixels",
+            );
+          }
+          return localError(
+            415,
+            "unsupported-media-type",
+            "Send a PNG, JPEG, WebP or GIF image, or a text file in UTF-8",
+          );
+        }
+        return inChat(async () => {
+          const saved = await runner().store.saveFile(id, kept.bytes, kept.mime);
+          const filename =
+            saved.kind === "file" ? sentFilename(url.searchParams.get("filename")) : null;
+          return localJson(201, filename === null ? saved : { ...saved, filename });
+        });
+      },
+    },
+    {
       route: "POST /api/local/chats/:id/messages",
       async handler(request, { params }) {
         const id = params.id as string;
@@ -282,12 +365,22 @@ export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
         if (refused !== null) return refused;
         const body = await readJson(request, BODY_LIMIT);
         if (!body.ok) return body.response;
-        const text = field(body.value, "text", MAX_TEXT, CONTROL_IN_TEXT);
-        if (text === null) return localError(400, "bad-request", "`text` is 1 to 4000 characters");
+        const line = lineIn(body.value);
+        if (line === null) {
+          return localError(
+            400,
+            "bad-request",
+            "Send `text` of up to 4000 characters, `attachments` naming up to 8 files sent to `files`, or both",
+          );
+        }
         return inChat(async () => {
           const blocked = speakersRefusal(await runner().participants(id));
           if (blocked !== null) return blocked;
-          return ndjsonResponse((await runner().send(id, text)).stream());
+          const store = runner().store;
+          if (line.files.some(({ name }) => !existsSync(store.filePath(id, name)))) {
+            return localError(400, "bad-request", "Send each file to `files` before the line");
+          }
+          return ndjsonResponse((await runner().send(id, line.text, line.files)).stream());
         });
       },
     },
@@ -409,7 +502,9 @@ export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
         }
         const path = runner().store.filePath(id, name);
         if (!existsSync(path)) return localError(404, "not-found", "No such file");
-        return fileResponse(request, path, imageHeaders(mime));
+        // Under nosniff, text with no charset reads as windows-1252; the viewer's is kept as UTF-8.
+        const type = mime === "text/plain" ? "text/plain; charset=utf-8" : mime;
+        return fileResponse(request, path, imageHeaders(type));
       },
     },
   ];

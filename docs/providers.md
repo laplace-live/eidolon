@@ -175,6 +175,11 @@ the response carries what the request cost; on a maker's API the catalog's price
   latency is what the viewer hears. Gemini's API takes one system message, so later ones are sent
   as user messages, and recalled memories go as a `developer` message only to OpenAI's own API,
   as a user message everywhere else.
+- **Images the viewer sent in a chat** go to every OpenAI-compatible API as `image_url` parts with
+  base64 data URLs, and to Anthropic's as base64 `image` blocks. Which models see images isn't
+  in the catalog: a model that refuses them is asked again at once with a note in place of each,
+  and so is every later request to it while the process runs
+  ([chat.md](chat.md#the-viewers-files)).
 - **Both chat clients retry as the SDKs they replace did:** twice, on a dropped connection or a
   408, 409, 429 or 5xx, after the server's `retry-after` or a short backoff, and never once a
   reply has started streaming.

@@ -63,12 +63,12 @@ export function imageProblem(file: Pick<File, "type" | "size">): ImageProblem | 
 }
 
 /**
- * An object URL showing `file` before its upload, typed as one of IMAGE_TYPES; null for a file of
- * any other type. The URL is this page's origin, so one of an SVG or HTML file, opened in a tab,
- * would be a page of the app.
+ * An object URL showing `file` before its upload, typed as one of `types`; null for a file of any
+ * other type. The URL is this page's origin, so one of an SVG or HTML file, opened in a tab, would
+ * be a page of the app.
  */
-export function previewUrl(file: Blob): string | null {
-  const type = IMAGE_TYPES.find((allowed) => allowed === file.type);
+export function previewUrl(file: Blob, types: readonly string[] = IMAGE_TYPES): string | null {
+  const type = types.find((allowed) => allowed === file.type);
   // A Blob of the list's type, not the file: CodeQL's js/xss-through-dom traces an object URL of
   // the file itself back to the <input> that picked it.
   return type === undefined ? null : URL.createObjectURL(new Blob([file], { type }));

@@ -197,6 +197,7 @@ export function chatViewReducer(state: ChatViewState, action: ChatViewAction): C
 
 type ImageAttachment = Extract<Attachment, { readonly kind: "image" }>;
 type AudioAttachment = Extract<Attachment, { readonly kind: "audio" }>;
+type FileAttachment = Extract<Attachment, { readonly kind: "file" }>;
 
 /** One row of a chat as a UI shows it. */
 export type ChatItem =
@@ -210,6 +211,8 @@ export type ChatItem =
       readonly modality: "text" | "voice" | "call";
       readonly audio: AudioAttachment | null;
       readonly images: readonly ImageAttachment[];
+      /** The text files the viewer sent with it. */
+      readonly files: readonly FileAttachment[];
       readonly interrupted: boolean;
       readonly cutOff: CutOff | null;
       /** Meant as a voice message, but her voice failed: show a quiet "sent as text". */
@@ -279,10 +282,14 @@ export function eventItems(events: readonly WireEvent[]): ChatItem[] {
         const images = attachments.filter(
           (attachment): attachment is ImageAttachment => attachment.kind === "image",
         );
+        const files = attachments.filter(
+          (attachment): attachment is FileAttachment => attachment.kind === "file",
+        );
         if (
           event.text === "" &&
           audio === null &&
           images.length === 0 &&
+          files.length === 0 &&
           (event.speaker.kind === "user" || event.cutOff === undefined)
         ) {
           break;
@@ -297,6 +304,7 @@ export function eventItems(events: readonly WireEvent[]): ChatItem[] {
           modality,
           audio,
           images,
+          files,
           interrupted: event.interrupted ?? false,
           cutOff: event.cutOff ?? null,
           sentAsText: false,
@@ -316,6 +324,7 @@ export function eventItems(events: readonly WireEvent[]): ChatItem[] {
             modality: "text",
             audio: null,
             images: [],
+            files: [],
             interrupted: false,
             cutOff: null,
             sentAsText: false,

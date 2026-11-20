@@ -1019,6 +1019,28 @@ describe("callSeed", () => {
       { role: "developer", content: "记得" },
     ]);
   });
+
+  test("the files the viewer sent read as their note after the line's words", () => {
+    const photo = { kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" } as const;
+    const sent = (text: string): ChatEventDraft => ({
+      type: "message",
+      id: `u-${text}`,
+      speaker: { kind: "user" },
+      text,
+      attachments: [photo],
+    });
+    const her: ChatEventDraft = {
+      type: "message",
+      id: "her",
+      speaker: { kind: "persona", id: PERSONA },
+      text: "好看",
+    };
+    expect(callSeed(chat(sent("看"), her, sent("")), PERSONA, "Ken")).toEqual([
+      { role: "user", content: "看（图片）" },
+      { role: "assistant", content: "好看" },
+      { role: "user", content: "（图片）" },
+    ]);
+  });
 });
 
 describe("prepareTurn", () => {

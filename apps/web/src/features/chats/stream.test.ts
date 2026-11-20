@@ -769,3 +769,26 @@ describe("the wait for her report", () => {
     expect(asked).toBe(1);
   });
 });
+
+describe("a line with files", () => {
+  const PHOTO = { kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" } as const;
+  const OTHER = { kind: "image", name: `${"b".repeat(64)}.png`, mime: "image/png" } as const;
+  const sent = (seq: number, text: string, attachments: readonly (typeof PHOTO | typeof OTHER)[]) =>
+    ({ ...userLine(seq, text), attachments }) as ChatEvent;
+
+  test("waits for the stored line that carries its files, its words or none alike", () => {
+    const state = run([
+      { type: "sending", key: 1, after: 2, text: "", files: [PHOTO] },
+      { type: "sending", key: 2, after: 2, text: "", files: [OTHER] },
+    ]);
+    expect(state.pending.map((line) => line.files)).toEqual([[PHOTO], [OTHER]]);
+    const stored = reduceLive(state, { type: "events", events: [sent(3, "", [OTHER])] });
+    expect(stored.pending.map((line) => line.key)).toEqual([1]);
+    // A line of the same words without the files isn't it.
+    const words = run([
+      { type: "sending", key: 3, after: 2, text: "看", files: [PHOTO] },
+      { type: "events", events: [userLine(3, "看")] },
+    ]);
+    expect(words.pending.map((line) => line.key)).toEqual([3]);
+  });
+});

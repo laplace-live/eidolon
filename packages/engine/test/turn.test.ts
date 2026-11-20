@@ -1453,3 +1453,65 @@ describe("the retrieval gate across a chat's turns", () => {
     ]);
   });
 });
+
+describe("the files the viewer sent", () => {
+  const PHOTO = { kind: "image", name: `${"f".repeat(64)}.png`, mime: "image/png" } as const;
+  const sent: ChatEventDraft = {
+    type: "message",
+    id: "u-photo",
+    speaker: { kind: "user" },
+    text: "看看我的猫",
+    attachments: [PHOTO],
+  };
+
+  test("her mind is shown each round's view with the image, which recall reads past", async () => {
+    const tool: LlmTool = {
+      schema: { name: "lookup", description: "", properties: {}, required: [] },
+      cancelOnInterruption: true,
+      timeoutSecs: 0,
+      run: async () => ({ ok: true }),
+    };
+    const { mind, requests } = fakeMind(
+      [{ type: "tool-calls", calls: [{ id: "c1", name: "lookup", arguments: {} }] }, DONE],
+      [{ type: "text", text: "好可爱" }, DONE],
+    );
+    const read: string[] = [];
+    const recalled: unknown[] = [];
+    const provider: ContextProvider = {
+      onContext: async ({ context }: Parameters<ContextProvider["onContext"]>[0]) => {
+        recalled.push(...context.getMessages());
+      },
+      errorMessage: () => "",
+    } as unknown as ContextProvider;
+    const outputs = await collect(
+      runTurn(
+        request({ chat: chat(sent) }),
+        deps(mind, parts({ tools: [tool], providers: [{ label: "p", provider }] }), {
+          readAttachment: async (name) => {
+            read.push(name);
+            return { bytes: new Uint8Array([7]), mime: "image/png" };
+          },
+        }),
+      ),
+    );
+    const shown = {
+      role: "user",
+      content: [
+        { type: "text", text: "看看我的猫" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,Bw==" } },
+      ],
+    };
+    expect(requests.map((each) => each.messages[0])).toEqual([shown, shown]);
+    expect(read).toEqual([PHOTO.name]);
+    expect(recalled).toEqual([{ role: "user", content: "看看我的猫", attachments: [PHOTO] }]);
+    expect(eventsOf(outputs).at(-1)).toMatchObject({ type: "message", text: "好可爱" });
+  });
+
+  test("with nothing to read them, as on a call, she reads a note in their place", async () => {
+    const { mind, requests } = fakeMind([{ type: "text", text: "嗯？" }, DONE]);
+    await collect(runTurn(request({ chat: chat(sent) }), deps(mind, parts())));
+    expect(requests[0]?.messages).toEqual([
+      { role: "user", content: "看看我的猫（一张图片，这次没给你看）" },
+    ]);
+  });
+});

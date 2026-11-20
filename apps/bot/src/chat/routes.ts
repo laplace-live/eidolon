@@ -12,13 +12,22 @@ import {
   type UserContext,
 } from "@eidolon/access";
 import {
+  type Attachment,
   attachmentKind,
   type ChatEvent,
   type ChatEventDraft,
   type ChatStreamLine,
+  type LineFileRefusal,
+  lineFileType,
+  MAX_IMAGE_PIXELS,
+  MAX_LINE_FILES,
   MAX_PARTICIPANTS,
   MAX_VOICE_MS,
   type ParticipantId,
+  sendableImageType,
+  sendableText,
+  sentFilename,
+  sentFiles,
   summarize,
 } from "@eidolon/chat";
 import { isJsonObject, logger, newId } from "@eidolon/config";
@@ -31,11 +40,13 @@ import {
   replyModeFor,
   runChat,
   runTurn,
+  type ShownFile,
   type TurnRequest,
 } from "@eidolon/engine";
 import { ProviderConfigError } from "@eidolon/providers";
 import { recordingDurationMs } from "@eidolon/providers/speech-batch";
 import type { MethodRoutes, RouteServer } from "../app.ts";
+import { type ImageRefusal, normalizeImage } from "../images.ts";
 import { readBytes } from "../responses.ts";
 import { type BoundOffer, bindChatCall } from "./call.ts";
 import { chatError } from "./errors.ts";
@@ -56,6 +67,8 @@ const MAX_TEXT = 4000;
 /** A window is at most 384 KB of events; this leaves room for the rest of the body. */
 const BODY_LIMIT = 1024 * 1024;
 const MAX_VOICE_BYTES = 10 * 1024 * 1024;
+/** What a turn's files weigh at most in all, the line's own and earlier lines' sent again. */
+const MAX_TURN_FILE_BYTES = 12 * 1024 * 1024;
 /**
  * How far past MAX_VOICE_MS a clip may measure: a recorder stopped at the limit by a timer (the web
  * app's ticks every 200 ms) hands over a little more, and frames are counted whole.
@@ -105,12 +118,12 @@ export interface ChatEndpoint {
   bindCall(admission: AllowedOffer): Promise<BoundOffer | Response | null>;
 }
 
-/** `value` trimmed, when it is 1 to MAX_TEXT characters of text; else null. */
-function lineOf(value: unknown): string | null {
+/** `value` trimmed, when it is `min` to MAX_TEXT characters of text; else null. */
+function lineOf(value: unknown, min: number): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   const length = [...trimmed].length;
-  return length === 0 || length > MAX_TEXT || CONTROL_IN_TEXT.test(trimmed) ? null : trimmed;
+  return length < min || length > MAX_TEXT || CONTROL_IN_TEXT.test(trimmed) ? null : trimmed;
 }
 
 /** The voice message's `durationMs`, a whole number of ms from 1; else null. */
@@ -120,7 +133,20 @@ function durationOf(value: string | undefined): number | null {
   return ms > 0 ? ms : null;
 }
 
+/** A turn's request as read: its fields, before any is checked, and the files it carries. */
+interface TurnBody {
+  readonly chat: unknown;
+  readonly text: unknown;
+  /** The Login Sync token it carries, as `loginSyncTokenFrom` reads it. */
+  readonly token: string | null;
+  readonly files: readonly FormPart[];
+  readonly seen: readonly FormPart[];
+}
+
 interface FormPart {
+  readonly name: string;
+  /** A file part's filename, as the browser escaped it: `"` and line breaks percent-encoded. */
+  readonly filename: string | null;
   /** The part's Content-Type, or null without one. */
   readonly type: string | null;
   readonly bytes: Buffer;
@@ -130,18 +156,18 @@ const CRLF = 0x0d0a;
 const DASH_DASH = 0x2d2d;
 
 /**
- * A multipart/form-data body's parts by name, the first of each name kept, or null when it isn't
- * one. Not Bun's formData(), which types a file part by its filename instead of its Content-Type
+ * A multipart/form-data body's parts in order, or null when it isn't one. Not Bun's formData(),
+ * which types a file part by its filename instead of its Content-Type
  * (https://github.com/oven-sh/bun/issues/45707), and a browser names a recorded Blob "blob".
  */
-function formParts(body: Buffer, contentType: string): Map<string, FormPart> | null {
+function formParts(body: Buffer, contentType: string): FormPart[] | null {
   const param = /;\s*boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType);
   const boundary = param?.[1] ?? param?.[2];
   if (boundary === undefined) return null;
   const delimiter = Buffer.from(`\r\n--${boundary}`);
   const first = body.indexOf(delimiter.subarray(2));
   if (first === -1) return null;
-  const parts = new Map<string, FormPart>();
+  const parts: FormPart[] = [];
   let cursor = first + delimiter.length - 2;
   for (;;) {
     if (cursor + 2 > body.length) return null;
@@ -152,6 +178,7 @@ function formParts(body: Buffer, contentType: string): Map<string, FormPart> | n
     const end = body.indexOf(delimiter, blank + 4);
     if (end === -1) return null;
     let name: string | null = null;
+    let filename: string | null = null;
     let type: string | null = null;
     for (const line of body
       .subarray(cursor + 2, blank)
@@ -162,15 +189,71 @@ function formParts(body: Buffer, contentType: string): Map<string, FormPart> | n
       const value = line.slice(colon + 1).trim();
       if (key === "content-disposition") {
         name = /(?:^|;)\s*name="([^"]*)"/i.exec(value)?.[1] ?? null;
+        filename = /(?:^|;)\s*filename="([^"]*)"/i.exec(value)?.[1] ?? null;
       } else if (key === "content-type") {
         type = value;
       }
     }
-    if (name !== null && !parts.has(name)) {
-      parts.set(name, { type, bytes: body.subarray(blank + 4, end) });
-    }
+    if (name !== null) parts.push({ name, filename, type, bytes: body.subarray(blank + 4, end) });
     cursor = end + delimiter.length;
   }
+}
+
+/** The first part named `name`. */
+function partOf(parts: readonly FormPart[], name: string): FormPart | undefined {
+  return parts.find((part) => part.name === name);
+}
+
+/** A part's text, or undefined without the part. */
+function fieldOf(parts: readonly FormPart[], name: string): string | undefined {
+  return partOf(parts, name)?.bytes.toString("utf8");
+}
+
+/** The 413 when a turn's file `parts` weigh more than MAX_TURN_FILE_BYTES in all; else null. */
+function overweight(parts: readonly FormPart[]): Response | null {
+  const weight = parts.reduce((sum, part) => sum + part.bytes.byteLength, 0);
+  return weight > MAX_TURN_FILE_BYTES
+    ? chatError(413, "payload-too-large", "A turn's files are at most 12 MB in all")
+    : null;
+}
+
+/** A file part's filename as the viewer's computer called it, its escapes undone. */
+function filenameOf(part: FormPart): string | null {
+  const raw = part.filename?.replace(/%(22|0A|0D)/gi, (code) => decodeURIComponent(code));
+  return sentFilename(raw);
+}
+
+/** A file a line carries: named by the bytes the browser keeps, and shown to her as `shown`. */
+interface LineFile {
+  readonly attachment: Attachment;
+  readonly shown: ShownFile;
+}
+
+/**
+ * An image a browser sends, made ready for her mind. One past MAX_IMAGE_PIXELS, which
+ * `prepareChatFile` fits it to, is refused, so a decode here stays small.
+ */
+function imageFor(bytes: Uint8Array): ReturnType<typeof normalizeImage> {
+  return normalizeImage(bytes, MAX_IMAGE_PIXELS);
+}
+
+/** A file part of the line's, as `lineFileType` and `imageFor` take it, or why it can't go. */
+async function lineFile(
+  part: FormPart,
+): Promise<LineFile | { readonly refused: LineFileRefusal | ImageRefusal }> {
+  const kept = lineFileType(part.type ?? "", part.bytes);
+  if ("refused" in kept) return kept;
+  const attachment = attachmentOf(part.bytes, kept.mime);
+  if (attachment.kind === "image") {
+    const shown = await imageFor(part.bytes);
+    return "refused" in shown ? shown : { attachment, shown };
+  }
+  const filename = filenameOf(part);
+  return {
+    attachment:
+      attachment.kind === "file" && filename !== null ? { ...attachment, filename } : attachment,
+    shown: { bytes: part.bytes, mime: kept.mime },
+  };
 }
 
 const encoder = new TextEncoder();
@@ -335,19 +418,127 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     })();
   }
 
-  const turn = async (request: Request, clientIp: string): Promise<Response> => {
-    const bytes = await readBytes(request, BODY_LIMIT);
+  /**
+   * The files a request shows her, by name: those its line carries, and those it sends again of the
+   * window's earlier lines (`seen`), each kept only while a line of the viewer's there names it, and
+   * an image only once it is made ready for her mind.
+   */
+  async function shownFiles(
+    chat: TurnRequest["chat"],
+    line: readonly LineFile[],
+    seen: readonly FormPart[],
+  ): Promise<Map<string, ShownFile>> {
+    const named = new Set(
+      chat.events.flatMap((event) =>
+        event.type === "message" ? sentFiles(event).map((file) => file.name) : [],
+      ),
+    );
+    const shown = new Map(line.map(({ attachment, shown }) => [attachment.name, shown]));
+    await Promise.all(
+      seen.map(async ({ bytes }) => {
+        const image = sendableImageType(bytes);
+        const mime = image ?? (sendableText(bytes) === null ? null : "text/plain");
+        const name = mime === null ? null : attachmentOf(bytes, mime).name;
+        if (name === null || !named.has(name) || shown.has(name)) return;
+        const ready = image === null ? { bytes, mime: "text/plain" } : await imageFor(bytes);
+        if (!("refused" in ready)) shown.set(name, ready);
+      }),
+    );
+    return shown;
+  }
+
+  /** `deps` reading the viewer's files from `shown` alone: production keeps none of them. */
+  function withFiles(deps: ChatDeps, shown: ReadonlyMap<string, ShownFile>): ChatDeps {
+    return { ...deps, readAttachment: async (name) => shown.get(name) ?? null };
+  }
+
+  /**
+   * A turn's request, `{ chat, text?, loginSyncToken? }` as JSON, or as the fields of a multipart
+   * form that also carries files: the line's own (`file`, each with its own Content-Type, a text
+   * file's name as its filename) and earlier lines' sent again (`seen`).
+   */
+  async function turnBody(request: Request): Promise<TurnBody | Response> {
+    const type = request.headers.get("content-type") ?? "";
+    if (!/^multipart\/form-data\b/i.test(type)) {
+      const bytes = await readBytes(request, BODY_LIMIT);
+      if (bytes === null) return chatError(413, "payload-too-large", "The body is too large");
+      let body: unknown;
+      try {
+        body = JSON.parse(new TextDecoder().decode(bytes));
+      } catch {
+        return chatError(400, "bad-json", "The body is not valid JSON");
+      }
+      if (!isJsonObject(body)) {
+        return chatError(400, "bad-request", "The body is { chat, text?, loginSyncToken? }");
+      }
+      return {
+        chat: body.chat,
+        text: body.text,
+        token: loginSyncTokenFrom(body),
+        files: [],
+        seen: [],
+      };
+    }
+    const bytes = await readBytes(request, BODY_LIMIT + MAX_TURN_FILE_BYTES);
     if (bytes === null) return chatError(413, "payload-too-large", "The body is too large");
-    let body: unknown;
+    const parts = formParts(bytes, type);
+    if (parts === null) return chatError(400, "bad-request", "The body is not multipart/form-data");
+    let chat: unknown;
     try {
-      body = JSON.parse(new TextDecoder().decode(bytes));
+      chat = JSON.parse(fieldOf(parts, "chat") ?? "null");
     } catch {
-      return chatError(400, "bad-json", "The body is not valid JSON");
+      return chatError(400, "bad-json", "`chat` is not valid JSON");
     }
-    if (!isJsonObject(body)) {
-      return chatError(400, "bad-request", "The body is { chat, text?, loginSyncToken? }");
+    const files = parts.filter((part) => part.name === "file");
+    const seen = parts.filter((part) => part.name === "seen");
+    const heavy = overweight([...files, ...seen]);
+    if (heavy !== null) return heavy;
+    return {
+      chat,
+      text: fieldOf(parts, "text"),
+      token: loginSyncTokenFrom({ loginSyncToken: fieldOf(parts, "loginSyncToken") }),
+      files,
+      seen,
+    };
+  }
+
+  /** The files the line carries, each named once, or the answer refusing them. */
+  async function lineFiles(parts: readonly FormPart[]): Promise<LineFile[] | Response> {
+    if (parts.length > MAX_LINE_FILES) {
+      return chatError(400, "bad-request", `A line carries at most ${MAX_LINE_FILES} files`);
     }
-    const text = body.text === undefined ? null : lineOf(body.text);
+    const files: LineFile[] = [];
+    for (const file of await Promise.all(parts.map((part) => lineFile(part)))) {
+      if ("refused" in file) {
+        if (file.refused === "empty") return chatError(400, "bad-request", "A file is empty");
+        if (file.refused === "too-large") {
+          return chatError(
+            413,
+            "payload-too-large",
+            "An image is at most 3.5 MB and 2048 × 2048 pixels, and a text file at most 1 MB",
+          );
+        }
+        return chatError(
+          415,
+          "unsupported-media-type",
+          "Send a PNG, JPEG or WebP image, or a text file in UTF-8",
+        );
+      }
+      if (!files.some(({ attachment }) => attachment.name === file.attachment.name)) {
+        files.push(file);
+      }
+    }
+    return files;
+  }
+
+  const turn = async (request: Request, clientIp: string): Promise<Response> => {
+    const body = await turnBody(request);
+    if (body instanceof Response) return body;
+    const files = await lineFiles(body.files);
+    if (files instanceof Response) return files;
+    const carries = files.length > 0;
+    const text =
+      body.text === undefined ? (carries ? "" : null) : lineOf(body.text, carries ? 0 : 1);
     if (body.text !== undefined && text === null) {
       return chatError(400, "bad-request", "`text` is 1 to 4000 characters");
     }
@@ -361,18 +552,25 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
         return chatError(400, "bad-request", "Send `text`: only a new chat of one persona greets");
       }
     }
-    const admission = await admit({ token: loginSyncTokenFrom(body), clientIp });
+    const admission = await admit({ token: body.token, clientIp });
     if (!admission.allowed) return admission.response;
     const viewer = admission.user;
-    const deps = engineFor(viewer, clientIp);
+    const deps = withFiles(engineFor(viewer, clientIp), await shownFiles(chat, files, body.seen));
     if (text === null) {
       const greeter = persona as ParticipantId;
       return ndjson(request.signal, (send, signal) =>
         relay(store, [], greet(chat, greeter, viewer, deps, signal), greeter, send),
       );
     }
+    const attachments = files.map((file) => file.attachment);
     const first = await store.add([
-      { type: "message", id: newId(), speaker: { kind: "user" }, text },
+      {
+        type: "message",
+        id: newId(),
+        speaker: { kind: "user" },
+        text,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      },
     ]);
     const after = (first[0] as ChatEvent).seq;
     return ndjson(request.signal, (send, signal) =>
@@ -389,14 +587,16 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
         "Send multipart/form-data: chat, audio and durationMs",
       );
     }
-    const bytes = await readBytes(request, MAX_VOICE_BYTES + BODY_LIMIT);
+    const bytes = await readBytes(request, MAX_VOICE_BYTES + BODY_LIMIT + MAX_TURN_FILE_BYTES);
     if (bytes === null) return chatError(413, "payload-too-large", "The body is too large");
     const form = formParts(bytes, type);
     if (form === null) {
       return chatError(400, "bad-request", "The body is not multipart/form-data");
     }
-    const field = (name: string) => form.get(name)?.bytes.toString("utf8");
-    const audio = form.get("audio");
+    const audio = partOf(form, "audio");
+    const seen = form.filter((part) => part.name === "seen");
+    const heavy = overweight(seen);
+    if (heavy !== null) return heavy;
     if (audio === undefined) return chatError(400, "bad-request", "`audio` is the recording");
     const mime = audio.type ?? "";
     if (attachmentKind(mime) !== "audio") {
@@ -412,7 +612,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     if (audio.bytes.byteLength > MAX_VOICE_BYTES) {
       return chatError(413, "payload-too-large", "A voice message is at most 10 MB");
     }
-    const durationMs = durationOf(field("durationMs"));
+    const durationMs = durationOf(fieldOf(form, "durationMs"));
     if (durationMs === null) {
       return chatError(400, "bad-request", "`durationMs` is the clip's length in ms, from 1");
     }
@@ -433,7 +633,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     }
     let window: unknown;
     try {
-      window = JSON.parse(field("chat") ?? "null");
+      window = JSON.parse(fieldOf(form, "chat") ?? "null");
     } catch {
       return chatError(400, "bad-json", "`chat` is not valid JSON");
     }
@@ -442,7 +642,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     const { store, chat } = opened;
     // Charged before the clip is heard, which bills.
     const admission = await admit({
-      token: loginSyncTokenFrom({ loginSyncToken: field("loginSyncToken") }),
+      token: loginSyncTokenFrom({ loginSyncToken: fieldOf(form, "loginSyncToken") }),
       clientIp,
     });
     if (!admission.allowed) return admission.response;
@@ -467,7 +667,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     }
     const first = await store.add([message]);
     const after = (first[0] as ChatEvent).seq;
-    const deps = engineFor(admission.user, clientIp);
+    const deps = withFiles(engineFor(admission.user, clientIp), await shownFiles(chat, [], seen));
     return ndjson(request.signal, (send, signal) =>
       relay(store, first, answer(store, admission.user, deps, after, signal), null, send),
     );

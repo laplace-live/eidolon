@@ -219,6 +219,14 @@ msgstr "{done} of {total} files"
 msgid "{done} of {total} rows"
 msgstr "{done} of {total} rows"
 
+#: src/features/chats/use-draft-files.ts
+msgid "{filename} can't be sent"
+msgstr "{filename} can't be sent"
+
+#: src/features/chats/use-draft-files.ts
+msgid "{filename} is too large to send"
+msgstr "{filename} is too large to send"
+
 #: src/features/home/readiness-labels.ts
 msgid "{free} free on the data home's disk."
 msgstr "{free} free on the data home's disk."
@@ -520,6 +528,10 @@ msgstr "A job option isn't valid."
 #: src/components/locked-screen.tsx
 msgid "A link works for 10 minutes."
 msgstr "A link works for 10 minutes."
+
+#: src/features/chats/use-draft-files.ts
+msgid "A message holds up to {count} files"
+msgstr "A message holds up to {count} files"
 
 #: src/components/voice-picker/index.tsx
 msgid "A name or a style, e.g. 温柔"
@@ -836,6 +848,10 @@ msgstr "An avatar is optional but recommended."
 msgid "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
 msgstr "An earlier run of Eidolon started this job, so this one can't stop it. It will finish on its own, or be marked interrupted."
 
+#: src/features/chats/use-draft-files.ts
+msgid "An image goes up to 50 MB, a text file up to 1 MB."
+msgstr "An image goes up to 50 MB, a text file up to 1 MB."
+
 #: src/features/settings/mcp-card.tsx
 msgid "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again."
 msgstr "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again."
@@ -1017,6 +1033,14 @@ msgstr "Assistant Spend Pause"
 #: src/lib/labels.ts
 msgid "Assistant Tasks"
 msgstr "Assistant Tasks"
+
+#: src/features/chats/composer.tsx
+msgid "Attach Files"
+msgstr "Attach Files"
+
+#: src/features/chats/attachments.tsx
+msgid "Attachments"
+msgstr "Attachments"
 
 #: src/features/jobs/labels.ts
 msgid "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
@@ -1698,6 +1722,10 @@ msgstr "Downloads use no cookies."
 msgid "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
 msgstr "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
 
+#: src/features/chats/attachments.tsx
+msgid "Drop to Attach"
+msgstr "Drop to Attach"
+
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
 msgid "Duration"
@@ -2033,6 +2061,10 @@ msgstr "ffmpeg isn't installed. Only videos over 5 hours need it."
 #: src/features/studio/facts-editor.tsx
 msgid "File Name"
 msgstr "File Name"
+
+#: src/features/chats/composer.tsx
+msgid "Files are still uploading"
+msgstr "Files are still uploading"
 
 #: src/features/tasks/task-card.tsx
 msgid "Files Written"
@@ -2383,6 +2415,10 @@ msgstr "Identity saved."
 #: src/lib/labels.ts
 msgid "Images"
 msgstr "Images"
+
+#: src/features/chats/attachments.tsx
+msgid "Images and text files go with your next message."
+msgstr "Images and text files go with your next message."
 
 #: src/features/chats/composer.tsx
 msgid "In a call"
@@ -3993,6 +4029,10 @@ msgstr "Remove {name}"
 msgid "Remove {name}?"
 msgstr "Remove {name}?"
 
+#: src/features/chats/attachments.tsx
+msgid "Remove Attachment"
+msgstr "Remove Attachment"
+
 #: src/features/studio/identity-section.tsx
 msgid "Remove her avatar?"
 msgstr "Remove her avatar?"
@@ -4367,9 +4407,21 @@ msgstr "Selfies"
 msgid "Send"
 msgstr "Send"
 
+#: src/features/chats/use-draft-files.ts
+msgid "Send a PNG, JPEG, WebP or GIF picture, or a text file in UTF-8."
+msgstr "Send a PNG, JPEG, WebP or GIF picture, or a text file in UTF-8."
+
 #: src/features/chats/composer.tsx
 msgid "Send it alone. To send a message, don't start it with a slash."
 msgstr "Send it alone. To send a message, don't start it with a slash."
+
+#: src/features/chats/composer.tsx
+msgid "Send the message once they are all up."
+msgstr "Send the message once they are all up."
+
+#: src/features/chats/use-draft-files.ts
+msgid "Send the rest with the next one."
+msgstr "Send the rest with the next one."
 
 #: src/features/chats/voice-recorder.tsx
 msgid "Send Voice Message"
@@ -4390,6 +4442,10 @@ msgstr "Sends transcript refinement to an endpoint of your own instead of the pr
 #: src/features/chats/chat-log.tsx
 msgid "Sent as text"
 msgstr "Sent as text"
+
+#: src/features/chats/attachments.tsx
+msgid "Sent by you"
+msgstr "Sent by you"
 
 #: src/features/settings/account-dialog.tsx
 msgid "Set by {env} in settings.yaml; a value saved here replaces it."
@@ -5495,6 +5551,10 @@ msgstr "This file ships with Eidolon and can't be changed or deleted."
 msgid "This glossary doesn't parse"
 msgstr "This glossary doesn't parse"
 
+#: src/features/chats/attachments.tsx
+msgid "This image couldn't be loaded"
+msgstr "This image couldn't be loaded"
+
 #: src/features/studio/parts.tsx
 msgid "This is {name}'s built-in file. Saving keeps your copy in your data home and leaves the original unchanged."
 msgstr "This is {name}'s built-in file. Saving keeps your copy in your data home and leaves the original unchanged."
@@ -5773,6 +5833,10 @@ msgstr "Upload"
 #: src/features/studio/identity-section.tsx
 msgid "Upload an Avatar"
 msgstr "Upload an Avatar"
+
+#: src/features/chats/attachments.tsx
+msgid "Uploading"
+msgstr "Uploading"
 
 #: src/components/app-sidebar.tsx
 #: src/components/settings-form/labels.ts

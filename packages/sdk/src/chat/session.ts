@@ -1,5 +1,6 @@
 // Browser chat session orchestration: stores each answer as it arrives, fetches her files before
-// they expire, serializes turns and calls per chat with Web Locks, and stores call lines in the chat.
+// they expire, keeps the viewer's own files and sends them again for her to see, serializes turns
+// and calls per chat with Web Locks, and stores call lines in the chat.
 
 import {
   type FetchLike,
@@ -15,9 +16,12 @@ import {
   type BrowserChatRecord,
   type BrowserChatStore,
   type CallEndReason,
+  type ChatEventOf,
+  type ChatFile,
   ChatStoreError,
   type ChatStreamLine,
   type ChatWindow,
+  MAX_TURN_FILE_BYTES,
   type OwnEventDraft,
   type ParticipantId,
   type WireEvent,
@@ -160,10 +164,81 @@ async function keepRecording<TRecord extends BrowserChatRecord>(
   return missing;
 }
 
+/** How many earlier files of the window a turn sends again, newest first, and what they weigh. */
+const SEEN_FILES = 4;
+const SEEN_BYTES = 4 * 1024 * 1024;
+
+/** The lowercase hex SHA-256 of `blob`, which names it as an attachment. */
+async function sha256Of(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * The files of the window's lines this browser keeps, newest first, up to SEEN_FILES and
+ * SEEN_BYTES and what `room` leaves: the server keeps none, so she sees an earlier image again
+ * only when a turn sends it.
+ */
+async function seenFiles<TRecord extends BrowserChatRecord>(
+  store: BrowserChatStore<TRecord>,
+  chatId: string,
+  window: ChatWindow,
+  room: number,
+): Promise<Blob[]> {
+  const seen: Blob[] = [];
+  let left = Math.min(SEEN_BYTES, room);
+  for (const event of [...window.events].reverse()) {
+    if (!isChatEvent(event) || event.type !== "message" || event.speaker.kind !== "user") continue;
+    for (const file of [...(event.attachments ?? [])].reverse()) {
+      if (file.kind === "audio") continue;
+      if (seen.length >= SEEN_FILES) return seen;
+      const blob = await store.getFile(chatId, file.name).catch(() => null);
+      if (blob === null || blob.size > left) continue;
+      seen.push(blob);
+      left -= blob.size;
+    }
+  }
+  return seen;
+}
+
+/** Keeps the line's own files under the names its stored message gives them; the names it couldn't. */
+async function keepFiles<TRecord extends BrowserChatRecord>(
+  store: BrowserChatStore<TRecord>,
+  chatId: string,
+  events: readonly WireEvent[],
+  files: readonly ChatFile[],
+): Promise<string[]> {
+  const line = events.find(
+    (event): event is ChatEventOf<"message"> =>
+      isChatEvent(event) && event.type === "message" && event.speaker.kind === "user",
+  );
+  const named = line?.attachments?.filter((file) => file.kind !== "audio") ?? [];
+  if (named.length === 0) return [];
+  const byHash = new Map<string, Blob>();
+  for (const file of files) byHash.set(await sha256Of(file.blob), file.blob);
+  const missing: string[] = [];
+  for (const file of named) {
+    const blob = byHash.get(file.name.slice(0, file.name.indexOf(".")));
+    const kept =
+      blob !== undefined && (await store.putFile(chatId, file.name, blob).catch(() => false));
+    if (!kept) missing.push(file.name);
+  }
+  return missing;
+}
+
 export interface SendTurnInput {
   readonly chatId: string;
-  /** The viewer's line, checked with `chatTextOf`; with neither it nor `voice`, her greeting. */
+  /**
+   * The viewer's line, checked with `chatTextOf`; with neither it nor `voice` nor `files`, her
+   * greeting. It may be empty with `files`.
+   */
   readonly text?: string;
+  /**
+   * Images and text files the line carries, as `prepareChatFile` makes them, up to
+   * `MAX_LINE_FILES` and `MAX_TURN_FILE_BYTES` in all; each is kept in the store under the name its
+   * stored message gives it.
+   */
+  readonly files?: readonly ChatFile[];
   /** A recorded voice message instead of a line. */
   readonly voice?: { readonly audio: Blob; readonly durationMs: number };
   readonly signal?: AbortSignal;
@@ -179,7 +254,8 @@ export interface TurnResult {
 }
 
 /**
- * Sends a line, a voice message or a greeting request with the chat's newest events, storing each
+ * Sends a line, a voice message or a greeting request with the chat's newest events, and the files
+ * of the window's lines this browser keeps, newest first, for her to see again; storing each
  * `events` line before reading on. Rejects with `ChatBusyError`, `ChatRequestError`, or the
  * signal's `AbortError`; events stored before then stay.
  */
@@ -189,31 +265,36 @@ export async function sendChatTurn<TRecord extends BrowserChatRecord>(
 ): Promise<TurnResult> {
   const { store } = options;
   const { chatId, voice } = input;
+  const files = input.files ?? [];
   const stored: WireEvent[] = [];
   const downloads: Promise<string[]>[] = [];
   try {
     await withChatLock(chatId, async () => {
       const chat = await chatOf(store, chatId);
       await endOpenCall(store, chat);
+      const window = await store.window(chatId);
+      const sent = files.reduce((sum, file) => sum + file.blob.size, 0);
       const request = {
         baseUrl: chat.baseUrl,
-        chat: await store.window(chatId),
+        chat: window,
+        seen: await seenFiles(store, chatId, window, MAX_TURN_FILE_BYTES - sent),
         loginSyncToken: options.loginSyncToken,
         signal: input.signal,
         fetch: options.fetch,
       };
       const lines =
         voice === undefined
-          ? streamTurn({ ...request, text: input.text })
+          ? streamTurn({ ...request, text: input.text, files })
           : streamVoice({ ...request, audio: voice.audio, durationMs: voice.durationMs });
       for await (const line of lines) {
         if (line.type === "events") {
           await store.append(chatId, line.events);
-          if (voice !== undefined && stored.length === 0) {
-            const missingRecording = await keepRecording(store, chatId, line.events, voice.audio);
-            if (missingRecording.length > 0) {
-              downloads.push(Promise.resolve(missingRecording));
-            }
+          if (stored.length === 0) {
+            const missing =
+              voice === undefined
+                ? await keepFiles(store, chatId, line.events, files)
+                : await keepRecording(store, chatId, line.events, voice.audio);
+            if (missing.length > 0) downloads.push(Promise.resolve(missing));
           }
           stored.push(...line.events);
           const names = herFileNames(line.events);

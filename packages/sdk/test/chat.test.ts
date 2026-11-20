@@ -869,6 +869,7 @@ describe("her words before a tool call", () => {
       modality: "text",
       audio: null,
       images: [],
+      files: [],
       interrupted: false,
       cutOff: null,
       sentAsText: false,
@@ -901,5 +902,121 @@ describe("her words before a tool call", () => {
       "别的",
       "查到了",
     ]);
+  });
+});
+
+describe("the files a line carries", () => {
+  const hex = async (blob: Blob) => {
+    const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  };
+
+  test("a turn with files goes as a form: the window, the line, each file and those sent again", async () => {
+    const forms: FormData[] = [];
+    const picture = new Blob(["png-bytes"], { type: "image/png" });
+    const story = new Blob(["第一章"], { type: "text/plain" });
+    const earlier = new Blob(["earlier"], { type: "image/jpeg" });
+    const header = newChatHeader(["milky-green"], 100);
+    for await (const _ of streamTurn({
+      baseUrl: "https://bot.example/",
+      chat: { header, events: [] },
+      text: "看看",
+      files: [{ blob: picture }, { blob: story, filename: "故事.md" }],
+      seen: [earlier],
+      loginSyncToken: " token ",
+      fetch: async (url, init) => {
+        expect(url).toBe("https://bot.example/api/chat/turn");
+        forms.push(init?.body as FormData);
+        return ndjsonResponse([]);
+      },
+    })) {
+      // No lines.
+    }
+    const [form] = forms;
+    expect(JSON.parse(String(form?.get("chat")))).toEqual({ header, events: [] });
+    expect(form?.get("text")).toBe("看看");
+    const files = form?.getAll("file") as File[];
+    expect(files.map((file) => [file.type, file.name])).toEqual([
+      ["image/png", "file"],
+      ["text/plain", "故事.md"],
+    ]);
+    expect(await (form?.get("seen") as File | undefined)?.text()).toBe("earlier");
+    expect(form?.get("loginSyncToken")).toBe("token");
+  });
+
+  test("sendChatTurn keeps the line's files under the names its message gives them, and sends earlier ones again", async () => {
+    const store = new InMemoryBrowserChatStore();
+    const chat = await createChat(store, ["milky-green"], "https://bot.example");
+    const old = new Blob(["old-png"], { type: "image/png" });
+    const oldName = `${await hex(old)}.png`;
+    await store.append(chat.id, [
+      {
+        seq: 1,
+        at: 101,
+        type: "message",
+        id: "u1",
+        speaker: { kind: "user" },
+        text: "",
+        attachments: [{ kind: "image", name: oldName, mime: "image/png" }],
+      },
+    ]);
+    await store.putFile(chat.id, oldName, old);
+    const picture = new Blob(["new-png"], { type: "image/png" });
+    const name = `${await hex(picture)}.png`;
+    const sent: FormData[] = [];
+    const result = await sendChatTurn(
+      {
+        store,
+        fetch: async (_url, init) => {
+          sent.push(init?.body as FormData);
+          return ndjsonResponse([
+            {
+              type: "events",
+              events: [
+                {
+                  seq: 2,
+                  at: 102,
+                  type: "message",
+                  id: "u2",
+                  speaker: { kind: "user" },
+                  text: "这张呢",
+                  attachments: [{ kind: "image", name, mime: "image/png" }],
+                },
+              ],
+            },
+          ]);
+        },
+      },
+      { chatId: chat.id, text: "这张呢", files: [{ blob: picture }] },
+    );
+    expect(result.events.map((event) => event.seq)).toEqual([2]);
+    expect(await (sent[0]?.get("seen") as File | undefined)?.text()).toBe("old-png");
+    expect(await (await store.getFile(chat.id, name))?.text()).toBe("new-png");
+    const items = eventItems((await store.read(chat.id)).events);
+    expect(items.map((item) => item.kind === "message" && item.images.length)).toEqual([1, 1]);
+  });
+
+  test("a text file is an attachment of its own kind, which a message item lists", () => {
+    const file = {
+      kind: "file",
+      name: `${"c".repeat(64)}.txt`,
+      mime: "text/plain",
+      filename: "a.md",
+    };
+    expect(attachmentKind("text/plain; charset=utf-8")).toBe("file");
+    expect(attachmentMimeOf(file.name)).toBe("text/plain");
+    const event = {
+      seq: 1,
+      at: 1,
+      type: "message",
+      id: "u1",
+      speaker: { kind: "user" },
+      text: "",
+      attachments: [file],
+    };
+    expect(isChatEvent(event)).toBe(true);
+    expect(isChatEvent({ ...event, attachments: [{ ...file, filename: 3 }] })).toBe(false);
+    const [item] = eventItems([event]);
+    expect(item?.kind === "message" ? item.files : null).toEqual([file]);
   });
 });

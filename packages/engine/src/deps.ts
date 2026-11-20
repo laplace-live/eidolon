@@ -8,14 +8,17 @@ import { batchSpeech } from "./voice.ts";
 // One cache for the process: deps are made per chat, since `saveAttachment` names the chat.
 const parts = personaParts();
 
-/** The real engine, storing a turn's files through `saveAttachment`. */
-export function defaultEngineDeps(options: {
-  readonly saveAttachment: EngineDeps["saveAttachment"];
-}): EngineDeps {
+/**
+ * The real engine, storing a turn's files through `saveAttachment` and reading the viewer's through
+ * `readAttachment`.
+ */
+export function defaultEngineDeps(
+  files: Pick<EngineDeps, "saveAttachment" | "readAttachment">,
+): EngineDeps {
   return {
     createMind,
     parts,
-    saveAttachment: options.saveAttachment,
+    ...files,
     fetchImage: (url) => fetchStoredSelfie(url),
     newId,
     speech: batchSpeech,

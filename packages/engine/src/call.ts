@@ -3,6 +3,7 @@
 import type { ChatEventDraft, ParticipantId, ViewMessage } from "@eidolon/chat";
 import { newId } from "@eidolon/config";
 import { fetchStoredSelfie, saveSelfies } from "./attachments.ts";
+import { filesNote } from "./seen.ts";
 import { turnView } from "./turn.ts";
 import type { EngineDeps, TurnRequest } from "./types.ts";
 
@@ -10,7 +11,8 @@ import type { EngineDeps, TurnRequest } from "./types.ts";
  * Her view of the chat as her next turn would read it, less her tool calls and their results: what
  * a call bound to it opens on. The call may offer no tools, and Anthropic refuses a request that
  * holds a tool_use block then. What she said before her calls joins her next line into one when no
- * other line comes between, and stands as a line of hers before the next one otherwise.
+ * other line comes between, and stands as a line of hers before the next one otherwise. A line the
+ * viewer sent files with reads their note after its words, since a call's log holds text alone.
  */
 export function callSeed(
   chat: TurnRequest["chat"],
@@ -19,7 +21,11 @@ export function callSeed(
 ): ViewMessage[] {
   const seed: ViewMessage[] = [];
   let said = "";
-  for (const message of turnView(chat, persona, viewerName).messages) {
+  for (const viewed of turnView(chat, persona, viewerName).messages) {
+    const message: ViewMessage =
+      "attachments" in viewed
+        ? { role: "user", content: viewed.content + filesNote(viewed.attachments) }
+        : viewed;
     if (message.role === "tool") continue;
     if ("tool_calls" in message) {
       said += message.content ?? "";

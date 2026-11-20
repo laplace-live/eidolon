@@ -56,6 +56,7 @@ export type {
   MindToolCall,
   PartsOptions,
   PersonaParts,
+  ShownFile,
   SpeechDeps,
   TurnExtras,
   TurnOutput,

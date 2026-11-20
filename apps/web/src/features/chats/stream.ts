@@ -6,7 +6,13 @@
 // reply's last lines come on its own stream, which can arrive after the new reply started. Message
 // events carry no turn, so a stored line is matched to what waits for it by seq: whatever answers a
 // turn or a send is stored after it began.
-import type { ChatEvent, ChatStreamLine, ParticipantId } from "@eidolon/chat";
+import {
+  type Attachment,
+  type ChatEvent,
+  type ChatStreamLine,
+  type ParticipantId,
+  sentFiles,
+} from "@eidolon/chat";
 import { trimTrailingPartialCue } from "@laplace.live/eidolon-sdk";
 import type { ChatContents } from "@/lib/chats";
 
@@ -35,6 +41,8 @@ export interface PendingLine {
   /** Empty for a voice message, whose transcript the server writes. */
   readonly text: string;
   readonly voice?: VoiceClip;
+  /** The files it carries, already kept in the chat. */
+  readonly files?: readonly Attachment[];
   readonly failed: boolean;
 }
 
@@ -75,6 +83,7 @@ export type LiveAction =
       readonly after: number;
       readonly text: string;
       readonly voice?: VoiceClip;
+      readonly files?: readonly Attachment[];
     }
   | { readonly type: "send-failed"; readonly key: number; readonly error: LiveError }
   /** A stream is gone: send `key`'s line is stored or never will be, and nothing finishes `turn`. */
@@ -109,10 +118,14 @@ function afterSaid(turn: LiveTurn, events: readonly ChatEvent[]): LiveTurn {
   return said ? { ...turn, text: "" } : turn;
 }
 
+/** The names of the files a line carries, in order. */
+const namesOf = (files: readonly Attachment[] | undefined): string =>
+  (files ?? []).map((file) => file.name).join("\n");
+
 /**
- * `pending` without the lines `events` store: each the first sent before it with its text, or for
- * a voice message, whose transcript can't be told before, the one sent by `key`, whose stream
- * carried it. Live replays any send's, so it clears none.
+ * `pending` without the lines `events` store: each the first sent before it with its text and
+ * files, or for a voice message, whose transcript can't be told before, the one sent by `key`,
+ * whose stream carried it. Live replays any send's, so it clears none.
  */
 function unstored(
   pending: readonly PendingLine[],
@@ -123,10 +136,13 @@ function unstored(
   for (const event of events) {
     if (event.type !== "message" || event.speaker.kind !== "user") continue;
     const voice = event.modality === "voice";
+    const files = namesOf(sentFiles(event));
     const stored = left.findIndex(
       (line) =>
         event.seq > line.after &&
-        (line.voice === undefined ? !voice && line.text === event.text : voice && line.key === key),
+        (line.voice === undefined
+          ? !voice && line.text === event.text && namesOf(line.files) === files
+          : voice && line.key === key),
     );
     if (stored >= 0) left = left.filter((_, i) => i !== stored);
   }
@@ -181,6 +197,7 @@ export function reduceLive(state: LiveState, action: LiveAction): LiveState {
             after: action.after,
             text: action.text,
             ...(action.voice === undefined ? {} : { voice: action.voice }),
+            ...(action.files?.length ? { files: action.files } : {}),
             failed: false,
           },
         ],

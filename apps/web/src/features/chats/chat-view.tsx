@@ -35,6 +35,7 @@ import { toastError } from "@/lib/feedback";
 import { listOf } from "@/lib/labels";
 import { statusQuery } from "@/lib/query";
 import { useLang } from "@/locales/i18n";
+import { DropFiles } from "./attachments";
 import { CallButton, CallDock } from "./call-dock";
 import { type LiveCall, ongoingCall } from "./call-live";
 import { ChatLog } from "./chat-log";
@@ -44,7 +45,7 @@ import type { ChatCommand } from "./commands";
 import { Composer } from "./composer";
 import { chatName, shortDate } from "./format";
 import { nextUp } from "./group";
-import { chatItems, displayedItems, retryText } from "./items";
+import { chatItems, displayedItems, retryLine } from "./items";
 import { DISPLAY_CHANGED, DISPLAY_HELP } from "./labels";
 import { ParticipantsMenu } from "./participants";
 import { PermissionsPicker } from "./permissions-picker";
@@ -52,6 +53,7 @@ import { chatWith, shortNameOf, usePersonaOf } from "./persona";
 import { chatQuery, useSetDisplay } from "./queries";
 import { callOn, type LiveError } from "./stream";
 import { useChat } from "./use-chat";
+import { useDraftFiles } from "./use-draft-files";
 import { canRecord } from "./use-recorder";
 import type { MicState } from "./voice-recorder";
 
@@ -148,6 +150,7 @@ export function ChatView({ id }: { readonly id: string }) {
   const tasks = useChatTasks(id, events ?? NO_EVENTS);
   // Another tab's call is followed too, so its lines show and its end frees the composer.
   const turns = useChat(id, calling || serverCall !== null, tasks.awaitingReport);
+  const draftFiles = useDraftFiles(id);
   const [recordable] = useState(canRecord);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const ownDisplay = useMemo(() => displayOf(events ?? []), [events]);
@@ -186,6 +189,9 @@ export function ChatView({ id }: { readonly id: string }) {
     [linked, setParams],
   );
   const items = useMemo(() => chatItems(events ?? []), [events]);
+  // Every item, the cards focus hides included: a task her failed turn started holds Retry back.
+  // Kept while the items are, so the log's memoized last item doesn't render again.
+  const retryable = useMemo(() => retryLine(items), [items]);
   // Focus would hide the card on its way into view, and the log could never scroll to it.
   const visible = useMemo(
     () => (focus === null ? revealed.tasks : new Set([...revealed.tasks, focus])),
@@ -264,8 +270,7 @@ export function ChatView({ id }: { readonly id: string }) {
   const menuName = chatName(title, who, createdAt, lang, now);
   // This page knows of its own call before the server's answer says so.
   const inCall = calling || serverCall !== null;
-  // Every item, the cards focus hides included: a task her failed turn started holds Retry back.
-  const retry = turns.busy || inCall ? null : retryText(items);
+  const retry = turns.busy || inCall ? null : retryable;
   const placeholder =
     solo === null ? t`Message everyone` : t`Message ${ph({ name: shortNameOf(solo) })}`;
   const mic: MicState = !recordable
@@ -395,6 +400,7 @@ export function ChatView({ id }: { readonly id: string }) {
                 busy={turns.busy}
                 mic={mic}
                 inCall={inCall}
+                files={draftFiles}
                 leading={
                   // Only a chat of hers alone starts tasks.
                   status?.assistant.enabled &&
@@ -414,6 +420,7 @@ export function ChatView({ id }: { readonly id: string }) {
             </>
           }
         />
+        <DropFiles disabled={inCall} onFiles={draftFiles.add} />
       </div>
       <ChatSettingsSheet
         id={id}

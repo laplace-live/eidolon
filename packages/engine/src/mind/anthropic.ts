@@ -99,6 +99,17 @@ function textOf(content: unknown): string {
     .join(" ");
 }
 
+/** An OpenAI `image_url` part, a base64 data URL as the engine shows a file, as an image block. */
+function imageBlock(part: Record<string, unknown>): Block {
+  const url = isPlainObject(part.image_url) ? String(part.image_url.url ?? "") : "";
+  const comma = url.indexOf(",");
+  const mediaType = url.slice("data:".length, comma).replace(/;base64$/, "");
+  return {
+    type: "image",
+    source: { type: "base64", media_type: mediaType, data: url.slice(comma + 1) },
+  };
+}
+
 function turnOf(message: Record<string, unknown>): Turn {
   const role = String(message.role);
   if (role === "tool") {
@@ -127,11 +138,11 @@ function turnOf(message: Record<string, unknown>): Turn {
   if (Array.isArray(content)) {
     return {
       role,
-      content: content.map((part) =>
-        isPlainObject(part) && part.type === "text" && part.text === ""
-          ? { ...part, text: "(empty)" }
-          : part,
-      ),
+      content: content.map((part) => {
+        if (!isPlainObject(part)) return part;
+        if (part.type === "text" && part.text === "") return { ...part, text: "(empty)" };
+        return part.type === "image_url" ? imageBlock(part) : part;
+      }),
     };
   }
   return { role, content: content === "" ? "(empty)" : String(content ?? "") };

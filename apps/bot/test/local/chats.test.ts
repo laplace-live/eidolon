@@ -5,8 +5,10 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { crc32, deflateSync } from "node:zlib";
 import type { AllowedOffer } from "@eidolon/access";
 import {
+  type Attachment,
   type ChatEvent,
   type ChatEventDraft,
   type ChatEventOf,
@@ -38,9 +40,11 @@ import type {
   SignallingResult,
   SignallingServer,
 } from "@eidolon/runtime";
+import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { serveFetch } from "../../../../packages/config/test/http.ts";
 import type { RouteHandler } from "../../src/app.ts";
+import { MAX_SENT_IMAGE_BYTES } from "../../src/images.ts";
 import type { ChatContents } from "../../src/local/api.ts";
 import type { LiveTurn } from "../../src/local/chats/live.ts";
 import {
@@ -59,7 +63,13 @@ import { ANSWER, type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
 import { serveRoutes } from "../serve.ts";
 
 const PERSONA = "milky-green";
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+/** A 1×1 PNG, which goes to her mind as it is. */
+const PNG = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
+    "base64",
+  ),
+);
 
 const chatsRoot = () => join(dataHome(), "chats");
 
@@ -72,7 +82,7 @@ type Script = (request: TurnRequest, save: Parameters<ChatTurn>[1]) => AsyncIter
 let scripts: Map<string, Script>;
 let requests: TurnRequest[];
 
-const fakeTurn: ChatTurn = (request, save) => {
+const fakeTurn: ChatTurn = (request, files) => {
   requests.push(request);
   const last = request.chat.events.findLast(
     (event): event is ChatEventOf<"message"> =>
@@ -81,7 +91,7 @@ const fakeTurn: ChatTurn = (request, save) => {
   const line = request.kickoff ? "" : (last?.text ?? "");
   const script = scripts.get(`${request.persona} ${line}`) ?? scripts.get(line) ?? scripts.get("*");
   if (script === undefined) throw new Error(`no script for ${JSON.stringify(last?.text)}`);
-  return script(request, save);
+  return script(request, files);
 };
 
 /** One decision of the fake director: who answers, in order. */
@@ -102,7 +112,7 @@ interface Hop {
 let plans: Map<string, readonly Hop[] | "throw">;
 let answers: ChatRequest[];
 
-const fakeAnswer: ChatAnswer = (request, save) => {
+const fakeAnswer: ChatAnswer = (request, files) => {
   answers.push(request);
   return (async function* () {
     const line = request.chat.events.find((event) => event.seq === request.after);
@@ -130,7 +140,7 @@ const fakeAnswer: ChatAnswer = (request, save) => {
         if (request.signal.aborted) return;
         const chat = await request.read();
         const { viewer, signal, late } = request;
-        yield* fakeTurn({ chat, persona, viewer, signal, ...(late ? { late } : {}) }, save);
+        yield* fakeTurn({ chat, persona, viewer, signal, ...(late ? { late } : {}) }, files);
       }
       const spoken = (await request.read()).events.findLast(
         (event) => event.type === "message" && event.speaker.kind === "persona",
@@ -147,10 +157,10 @@ let hearing: (request: HearRequest) => Promise<{ text: string; durationMs?: numb
 let heard: HearRequest[];
 
 /** As the engine's: hears the clip, then saves it, as the viewer's voice message. */
-const fakeHear: ChatHear = async (request, save) => {
+const fakeHear: ChatHear = async (request, files) => {
   heard.push(request);
   const { text, durationMs } = await hearing(request);
-  const audio = await save(request.clip.bytes, request.clip.mime);
+  const audio = await files.saveAttachment(request.clip.bytes, request.clip.mime);
   return {
     type: "message",
     id: crypto.randomUUID(),
@@ -178,7 +188,7 @@ interface ReplyOptions {
 
 /** Her reply `text`, streamed in two deltas; an aborted reply keeps the first. */
 function reply(text: string, options: ReplyOptions = {}): Script {
-  return async function* (request, save) {
+  return async function* (request, files) {
     const turn = crypto.randomUUID();
     const persona = request.persona;
     yield { type: "started", turn, persona };
@@ -190,7 +200,7 @@ function reply(text: string, options: ReplyOptions = {}): Script {
     if (options.untilAborted) await aborted(request.signal);
     await options.hold;
     const said = request.signal.aborted ? half : text;
-    const attachments = options.attach ? [await save(PNG, "image/png")] : undefined;
+    const attachments = options.attach ? [await files.saveAttachment(PNG, "image/png")] : undefined;
     yield {
       type: "events",
       events: [
@@ -222,7 +232,7 @@ const thinking: Script = async function* (request) {
  * cancels it.
  */
 function selfie(photo: Promise<void>, says = "等我"): Script {
-  return async function* (request, save) {
+  return async function* (request, files) {
     const turn = crypto.randomUUID();
     const persona = request.persona;
     const speaker = { kind: "persona", id: persona } as const;
@@ -239,7 +249,7 @@ function selfie(photo: Promise<void>, says = "等我"): Script {
     const brought = async (): Promise<ChatEventDraft[]> => {
       await Promise.race([photo, aborted(late.signal)]);
       if (late.signal.aborted) return [];
-      const attachment = await save(PNG, "image/png");
+      const attachment = await files.saveAttachment(PNG, "image/png");
       return [
         { type: "tool-result", persona, turn, callId: "c1", result: { ok: true, count: 1 } },
         { type: "message", id: crypto.randomUUID(), speaker, text: "", attachments: [attachment] },
@@ -1708,8 +1718,8 @@ async function engineChat(
   test: (engine: ChatsServer, id: string) => Promise<void>,
 ): Promise<void> {
   const engine = await serveChats({
-    answer: (request, saveAttachment) =>
-      runChat(request, { ...deps, saveAttachment, director: new Director(null) }),
+    answer: (request, files) =>
+      runChat(request, { ...deps, ...files, director: new Director(null) }),
   });
   try {
     const { id } = await json<{ id: string }>(
@@ -2581,5 +2591,178 @@ describe("a call in a chat", () => {
       { type: "message", text: "拜拜", modality: "call" },
       { type: "call-ended", reason: "hangup" },
     ]);
+  });
+});
+
+describe("the files the viewer sends", () => {
+  const upload = (id: string, bytes: BodyInit, type: string, query = "") =>
+    server.raw("POST", `/chats/${id}/files${query}`, {
+      body: bytes,
+      headers: { "content-type": type },
+    });
+  const NOTES = new TextEncoder().encode("第一章\n从前有座山");
+
+  test("are kept in the chat by their content, an image as itself and a text file as UTF-8", async () => {
+    const id = await greeted();
+    const image = await json<Attachment>(await upload(id, PNG, "image/png"), 201);
+    expect(image).toEqual({
+      kind: "image",
+      name: `${createHash("sha256").update(PNG).digest("hex")}.png`,
+      mime: "image/png",
+    });
+    const served = await server.call("GET", `/chats/${id}/files/${image.name}`);
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(PNG);
+
+    const text = await json<Attachment>(
+      await upload(id, NOTES, "text/markdown", "?filename=notes%2Fdraft.md"),
+      201,
+    );
+    expect(text).toEqual({
+      kind: "file",
+      name: `${createHash("sha256").update(NOTES).digest("hex")}.txt`,
+      mime: "text/plain",
+      filename: "draft.md",
+    });
+    const file = await server.call("GET", `/chats/${id}/files/${text.name}`);
+    expect(file.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(await file.text()).toBe("第一章\n从前有座山");
+    // Nothing reaches the log until a line names them.
+    expect((await log(id)).events).toHaveLength(2);
+  });
+
+  test("are made ready as they are kept: an image upright, without what its camera wrote", async () => {
+    const id = await greeted();
+    const sideways = await sharp({
+      create: { width: 40, height: 20, channels: 3, background: "#c82828" },
+    })
+      .jpeg()
+      .withExif({ IFD0: { Make: "camera" } })
+      .withMetadata({ orientation: 6 })
+      .toBuffer();
+    const photo = await json<Attachment>(await upload(id, sideways, "image/jpeg"), 201);
+    expect(photo).toMatchObject({ kind: "image", mime: "image/jpeg" });
+    const kept = new Uint8Array(
+      await (await server.call("GET", `/chats/${id}/files/${photo.name}`)).arrayBuffer(),
+    );
+    expect(photo.name).toBe(`${createHash("sha256").update(kept).digest("hex")}.jpg`);
+    const meta = await sharp(kept).metadata();
+    expect([meta.width, meta.height, meta.exif]).toEqual([20, 40, undefined]);
+    const gif = await sharp({ create: { width: 4, height: 4, channels: 3, background: "#fff" } })
+      .gif()
+      .toBuffer();
+    // A browser that can't type a file sends it as octet-stream.
+    expect(
+      await json<Attachment>(await upload(id, gif, "application/octet-stream"), 201),
+    ).toMatchObject({ kind: "image", mime: "image/webp" });
+  });
+
+  test("are refused when they aren't an image or text the minds take, or too large", async () => {
+    const id = await greeted();
+    const gif = new TextEncoder().encode("GIF89a....");
+    expect(await errorCode(await upload(id, "<svg/>", "image/svg+xml"))).toEqual([
+      415,
+      "unsupported-media-type",
+    ]);
+    expect(await errorCode(await upload(id, gif, "image/gif"))).toEqual([
+      415,
+      "unsupported-media-type",
+    ]);
+    expect(await errorCode(await upload(id, "%PDF-1.7\n", "application/pdf"))).toEqual([
+      415,
+      "unsupported-media-type",
+    ]);
+    expect(await errorCode(await upload(id, new Uint8Array([0xe7, 0xac]), "text/plain"))).toEqual([
+      415,
+      "unsupported-media-type",
+    ]);
+    expect(await errorCode(await upload(id, new Uint8Array(), "image/png"))).toEqual([
+      400,
+      "bad-request",
+    ]);
+    const huge = new Uint8Array(MAX_SENT_IMAGE_BYTES + 1);
+    huge.set(PNG);
+    expect(await errorCode(await upload(id, huge, "image/png"))).toEqual([
+      413,
+      "payload-too-large",
+    ]);
+    // A PNG whose header claims 9000 × 9000 pixels, refused before anything decodes them.
+    const chunk = (type: string, data: Uint8Array) => {
+      const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+      const framed = Buffer.alloc(body.byteLength + 8);
+      framed.writeUInt32BE(data.byteLength, 0);
+      body.copy(framed, 4);
+      framed.writeUInt32BE(crc32(body), body.byteLength + 4);
+      return framed;
+    };
+    const header = Buffer.alloc(13);
+    header.writeUInt32BE(9000, 0);
+    header.writeUInt32BE(9000, 4);
+    header.set([8, 0, 0, 0, 0], 8);
+    const vast = Buffer.concat([
+      PNG.subarray(0, 8),
+      chunk("IHDR", header),
+      chunk("IDAT", deflateSync(new Uint8Array())),
+      chunk("IEND", new Uint8Array()),
+    ]);
+    expect(await errorCode(await upload(id, vast, "image/png"))).toEqual([
+      413,
+      "payload-too-large",
+    ]);
+    expect(await errorCode(await upload(crypto.randomUUID(), PNG, "image/png"))).toEqual([
+      404,
+      "unknown-chat",
+    ]);
+  });
+
+  test("go with a line that names them, words or none, and her turn reads them", async () => {
+    const id = await greeted();
+    const image = await json<Attachment>(await upload(id, PNG, "image/png"), 201);
+    const text = await json<Attachment>(
+      await upload(id, NOTES, "text/plain", "?filename=notes.md"),
+      201,
+    );
+    await new Lines(
+      await server.call("POST", `/chats/${id}/messages`, {
+        attachments: [{ name: image.name }, { name: text.name, filename: "notes.md" }],
+      }),
+    ).all();
+    await new Lines(
+      await server.call("POST", `/chats/${id}/messages`, {
+        text: " 看这张 ",
+        attachments: [{ name: image.name }],
+      }),
+    ).all();
+    const lines = (await log(id)).events.filter(
+      (event) => event.type === "message" && event.speaker.kind === "user",
+    );
+    expect(lines).toMatchObject([
+      { text: "", attachments: [image, text] },
+      { text: "看这张", attachments: [image] },
+    ]);
+    expect(requests.at(-1)?.chat.events.at(-2)).toMatchObject({ attachments: [image] });
+  });
+
+  test("are refused in a line unless each was kept first, once, of a kind a line carries", async () => {
+    const id = await greeted();
+    const image = await json<Attachment>(await upload(id, PNG, "image/png"), 201);
+    const post = (body: unknown) => server.call("POST", `/chats/${id}/messages`, body);
+    const unknown = `${"0".repeat(64)}.png`;
+    const voice = `${"1".repeat(64)}.webm`;
+    for (const body of [
+      {},
+      { text: "" },
+      { attachments: [] },
+      { attachments: [{ name: unknown }] },
+      { attachments: [{ name: voice }] },
+      { attachments: [{ name: image.name }, { name: image.name }] },
+      { attachments: [{ name: image.name, kind: "image" }] },
+      {
+        attachments: Array.from({ length: 9 }, (_, i) => ({ name: `${String(i).repeat(64)}.png` })),
+      },
+      { attachments: image.name },
+    ]) {
+      expect([body, await errorCode(await post(body))]).toEqual([body, [400, "bad-request"]]);
+    }
+    expect((await log(id)).events).toHaveLength(2);
   });
 });

@@ -3,12 +3,7 @@
 // A file is named by its content's hash, as the local store names it, so a name is unguessable
 // without the bytes it serves: it needs no session of its own.
 import { createHash } from "node:crypto";
-import {
-  type Attachment,
-  attachmentExtension,
-  attachmentKind,
-  attachmentMime,
-} from "@eidolon/chat";
+import { type Attachment, attachmentExtension, attachmentNamed } from "@eidolon/chat";
 import { envInt } from "@eidolon/config";
 
 export const CHAT_FILES_PATH = "/api/chat/files";
@@ -21,10 +16,7 @@ export function attachmentOf(bytes: Uint8Array, mime: string): Attachment {
   const ext = attachmentExtension(mime);
   if (ext === null) throw new TypeError(`A chat attachment can't be ${mime}`);
   const name = `${createHash("sha256").update(bytes).digest("hex")}.${ext}`;
-  const type = attachmentMime(name) as string;
-  return attachmentKind(type) === "audio"
-    ? { kind: "audio", name, mime: type }
-    : { kind: "image", name, mime: type };
+  return attachmentNamed(name) as Attachment;
 }
 
 interface Entry {

@@ -116,6 +116,13 @@ export {
   type VoiceRequest,
 } from "./chat/client.ts";
 export {
+  CHAT_FILE_ACCEPT,
+  ChatFileError,
+  chatFileKind,
+  type PreparedChatFile,
+  prepareChatFile,
+} from "./chat/files.ts";
+export {
   ChatBusyError,
   chatLocksAvailable,
   holdChatLock,
@@ -181,6 +188,7 @@ export {
   type ChatEvent,
   type ChatEventDraft,
   type ChatEventOf,
+  type ChatFile,
   type ChatHeader,
   type ChatMessageEvent,
   ChatStoreError,
@@ -192,8 +200,14 @@ export {
   DEFAULT_CHAIN_LIMIT,
   isReplyMode,
   MAX_CHAIN_LIMIT,
+  MAX_IMAGE_BYTES,
+  MAX_IMAGE_EDGE,
+  MAX_IMAGE_PIXELS,
+  MAX_LINE_FILES,
   MAX_PARTICIPANTS,
+  MAX_TEXT_FILE_BYTES,
   MAX_TEXT_LENGTH,
+  MAX_TURN_FILE_BYTES,
   MAX_VOICE_BYTES,
   MAX_VOICE_MS,
   type OwnEventDraft,

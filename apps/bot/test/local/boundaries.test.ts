@@ -231,6 +231,7 @@ describe("production never loads the local app", () => {
     );
     expect(Object.fromEntries(external)).toEqual({
       "@modelcontextprotocol/sdk": "1.32.1",
+      sharp: "0.35.5",
       "smol-toml": "1.9.1",
       srvx: "1.0.8",
       yaml: "2.9.1",

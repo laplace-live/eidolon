@@ -1,7 +1,7 @@
 // Installs a packed @laplace.live/eidolon with npm, install scripts and all, as npx would, then runs
 // it on a new HOME and data home: its link, a sign-in with the link's code, the status with the
 // cookie and the proof, a CLI command's help, the eidolon command tasks run, the built-in skills,
-// and a clean exit on SIGTERM. CI runs it on linux-x64.
+// sharp where the bundles import it, and a clean exit on SIGTERM. CI runs it on linux-x64.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,6 +22,15 @@ Installs the tarball with npm into a temporary folder, runs its eidolon on a tem
 data home, and deletes them. Exits 0 when every check passes, else 1.`;
 
 const BOOT_TIMEOUT_MS = 120_000;
+/** An image made and read back by sharp, imported as the bundles import it with a viewer's first. */
+const SHARP_CHECK = `
+const { default: sharp } = await import("sharp");
+const made = await sharp({ create: { width: 2, height: 1, channels: 3, background: "#e33" } })
+  .jpeg()
+  .toBuffer();
+const { format, width, height } = await sharp(made).metadata();
+console.log(\`\${format} \${width}×\${height}\`);
+`;
 const STOP_TIMEOUT_MS = 15_000;
 const TAIL_LINES = 40;
 
@@ -222,6 +231,16 @@ async function checkPackage(tarball: string, temp: string): Promise<void> {
       tasks.code === 0 && tasks.stdout.startsWith("usage: "),
       `eidolon discover --help with ${commands} first on PATH: exit ${tasks.code}` +
         `${tasks.code === 0 ? "" : `: ${tasks.stderr.trim()}`}`,
+    );
+    const images = await run(
+      [process.execPath, "--input-type=module", "--eval", SHARP_CHECK],
+      env,
+      join(prefix, "node_modules", "@laplace.live", "eidolon"),
+    );
+    check(
+      "sharp",
+      images.code === 0 && images.stdout.trim() === "jpeg 2×1",
+      images.code === 0 ? images.stdout.trim() : `exit ${images.code}: ${images.stderr.trim()}`,
     );
     const skills = await fetch(`${app.origin}/api/local/skills`, { headers: session });
     const listing = (await skills.json().catch(() => ({}))) as Partial<SkillsResponse>;

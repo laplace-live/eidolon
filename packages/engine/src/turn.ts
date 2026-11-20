@@ -36,6 +36,7 @@ import { callInstruction, isAsyncTool } from "./async_tool.ts";
 import { saveSelfies } from "./attachments.ts";
 import { TurnConversation } from "./context.ts";
 import { type Group, groupOf, SpeakerCut } from "./group.ts";
+import { FileCache, showFiles } from "./seen.ts";
 import type {
   BackgroundTool,
   BackgroundTools,
@@ -646,6 +647,7 @@ class Turn {
     const signal = this.#signal;
     const cut = group === null ? null : new SpeakerCut(group.names);
     const rounds = chatMaxRounds();
+    const files = new FileCache(this.#deps.readAttachment);
     // A background start in her tool rounds isn't offered again: the answer round then calls none.
     let started = false;
     for (let round = 1; ; round++) {
@@ -665,11 +667,12 @@ class Turn {
         this.#text += said;
         this.#emit({ type: "delta", turn: this.#id, text: said });
       };
+      const messages = await showFiles(conversation.getMessages(), files, signal);
       const ended = this.#mindRequest();
       try {
         for await (const chunk of mind.stream({
           system: parts.systemInstruction,
-          messages: conversation.getMessages(),
+          messages,
           tools: offered.map((tool) => tool.schema),
           ...(none ? { toolChoice: "none" } : {}),
           ...(group === null ? {} : { stop: group.stop }),

@@ -35,16 +35,18 @@ const LAUNCHER = "bin/eidolon.mjs";
 /**
  * What the bundles leave in node_modules, each a dependency of the package: files read beside the
  * code (onnxruntime-node's binaries, LanceDB's per-platform binary, which its inlined loader
- * requires by name), and packages whose prototypes or classes are shared: @eidolon/webrtc patches
- * werift's, and LanceDB checks apache-arrow's tables, which must be one copy for both.
- * libopus-wasm stays a package: inlined, the notices would carry its MIT license but not
- * libopus's, which its THIRD_PARTY_NOTICES.md holds.
+ * requires by name, and sharp's, which its own per-platform packages carry), and packages whose
+ * prototypes or classes are shared: @eidolon/webrtc patches werift's, and LanceDB checks
+ * apache-arrow's tables, which must be one copy for both. libopus-wasm stays a package: inlined,
+ * the notices would carry its MIT license but not libopus's, which its THIRD_PARTY_NOTICES.md
+ * holds.
  */
 const EXTERNAL = [
   "onnxruntime-node",
   "werift",
   "libopus-wasm",
   "apache-arrow",
+  "sharp",
   "@lancedb/lancedb-*",
 ];
 

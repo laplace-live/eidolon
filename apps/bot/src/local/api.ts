@@ -2,6 +2,7 @@
 // apps/web imports with `import type`. Its only import is @eidolon/chat's types, which are
 // browser-safe and erased, so the SPA's typecheck sees no Bun or Node.
 import type {
+  Attachment,
   ChatDisplay,
   ChatEvent,
   ChatHeader,
@@ -67,6 +68,7 @@ export const LOCAL_ROUTES = [
   "GET /api/local/chats/:id",
   "PATCH /api/local/chats/:id",
   "DELETE /api/local/chats/:id",
+  "POST /api/local/chats/:id/files",
   "POST /api/local/chats/:id/messages",
   "POST /api/local/chats/:id/voice",
   "GET /api/local/chats/:id/live",
@@ -1021,6 +1023,7 @@ export interface LocalApi {
   "PATCH /api/local/chats/:id": Endpoint<ChatUpdateRequest, Ok>;
   /** 409 chat-in-call during a call. */
   "DELETE /api/local/chats/:id": Endpoint<undefined, Ok>;
+  "POST /api/local/chats/:id/files": Endpoint<Raw<"image" | "text">, Attachment, ChatFileQuery>;
   "POST /api/local/chats/:id/messages": Endpoint<ChatMessageRequest, Raw<"ndjson">>;
   "POST /api/local/chats/:id/voice": Endpoint<Raw<"audio">, Raw<"ndjson">, ChatVoiceQuery>;
   /**
@@ -1172,13 +1175,31 @@ export interface ChatReadQuery {
 }
 
 /**
- * POST chats/:id/messages: 1 to 4000 characters, answered with ChatStreamLines: the viewer's line,
- * then for each line the director answers, its `decision` and every chosen persona's turn. A reply
- * still running is stopped first, with the hops queued after it, and what it said is stored as
- * interrupted. 409 chat-in-call during a call, as for POST voice.
+ * POST chats/:id/files: a file the viewer sends with a line, its bytes the body: a text file in UTF-8
+ * of at most 1 MB, sent as any `text/` type, or else an image, a PNG, JPEG, WebP or GIF of at most
+ * 50 MB and 64 megapixels, made ready for her mind as it is kept. It is kept in the chat's files/
+ * under its content's hash, and answered 201 with its attachment, which POST messages names. 415 for
+ * bytes that aren't one; 413 past the size; 400 when empty.
+ */
+export interface ChatFileQuery {
+  /** A text file's name on the viewer's computer, which the line shows and her view names it by. */
+  readonly filename?: string;
+}
+
+/**
+ * POST chats/:id/messages: up to 4000 characters, and up to 8 files sent to POST files first,
+ * one at least, answered with ChatStreamLines: the viewer's line, then for each line the director
+ * answers, its `decision` and every chosen persona's turn. A reply still running is stopped first,
+ * with the hops queued after it, and what it said is stored as interrupted. 409 chat-in-call during
+ * a call, as for POST voice.
  */
 export interface ChatMessageRequest {
-  readonly text: string;
+  readonly text?: string;
+  readonly attachments?: readonly {
+    readonly name: string;
+    /** A text file's name, as POST files answered it. */
+    readonly filename?: string;
+  }[];
 }
 
 /**

@@ -44,7 +44,8 @@ export function isChatId(id: string): boolean {
 
 const ATTACHMENT_NAME = /^[0-9a-f]{64}\.([a-z0-9]+)$/;
 
-// No SVG or HTML: a stored Blob is shown from the host app's own origin.
+// No SVG or HTML: a stored Blob is shown from the host app's own origin. A text file the viewer
+// sent is kept as UTF-8.
 const ATTACHMENT_MIME_TO_EXT: Readonly<Record<string, string>> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -55,6 +56,7 @@ const ATTACHMENT_MIME_TO_EXT: Readonly<Record<string, string>> = {
   "audio/webm": "webm",
   "audio/ogg": "ogg",
   "audio/mp4": "m4a",
+  "text/plain": "txt",
 };
 
 const ATTACHMENT_EXT_TO_MIME: Readonly<Record<string, string>> = Object.fromEntries(
@@ -80,11 +82,12 @@ export function attachmentExtension(mime: string): string | null {
     : null;
 }
 
-/** Whether an attachment of type `mime` is an image or audio; null for a type not taken. */
+/** Whether an attachment of type `mime` is an image, audio or a text file; null for a type not taken. */
 export function attachmentKind(mime: string): Attachment["kind"] | null {
   const type = essence(mime);
   if (!Object.hasOwn(ATTACHMENT_MIME_TO_EXT, type)) return null;
-  return type.startsWith("audio/") ? "audio" : "image";
+  if (type.startsWith("audio/")) return "audio";
+  return type.startsWith("text/") ? "file" : "image";
 }
 
 /** Whether `name` is shaped as an attachment's, so it is safe in a URL path. */
@@ -96,6 +99,7 @@ function isAttachment(value: unknown): value is Attachment {
   if (!isJsonObject(value) || !isString(value.name) || !isString(value.mime)) return false;
   if (!isAttachmentName(value.name)) return false;
   if (value.kind === "image") return true;
+  if (value.kind === "file") return value.filename === undefined || isString(value.filename);
   return (
     value.kind === "audio" && (value.durationMs === undefined || isFiniteNumber(value.durationMs))
   );

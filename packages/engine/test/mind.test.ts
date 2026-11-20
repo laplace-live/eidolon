@@ -1351,3 +1351,82 @@ describe("a task's mind", () => {
     expect(tapped.map((record) => [record.role, record.model])).toEqual([["mind", "x/hers"]]);
   });
 });
+
+describe("images the viewer sent", () => {
+  const PNG = "data:image/png;base64,iVBORw0KGgo=";
+  const shown = [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "看看我的猫" },
+        { type: "image_url", image_url: { url: PNG } },
+      ],
+    },
+  ];
+  const said = [
+    { choices: [{ delta: { content: "好可爱" } }] },
+    { choices: [{ delta: {}, finish_reason: "stop" }] },
+  ];
+
+  test("an OpenAI-compatible mind sends them as the request's image parts", async () => {
+    reply = () => completions(said);
+    await drain(createMind(), ask({ messages: shown }));
+    expect(seen[0]?.body.messages).toEqual([{ role: "system", content: "persona" }, ...shown]);
+  });
+
+  test("a model that refuses them is asked again with a note in their place, and from then on", async () => {
+    setEnv({ OPENROUTER_MODEL: "~deepseek/deepseek-pro-latest" });
+    let refusals = 0;
+    reply = () => {
+      const messages = seen.at(-1)?.body.messages as { content: unknown }[];
+      if (messages.some((message) => Array.isArray(message.content))) {
+        refusals += 1;
+        return new Response(
+          JSON.stringify({ error: { message: "No endpoints found that support image input" } }),
+          { status: 404 },
+        );
+      }
+      return completions(said);
+    };
+    const words = [{ role: "user", content: "看看我的猫（一张图片，你看不到）" }];
+    expect(await drain(createMind(), ask({ messages: shown }))).toEqual([
+      { type: "text", text: "好可爱" },
+      { type: "done", finishReason: "stop" },
+    ]);
+    expect(seen.map((request) => (request.body.messages as unknown[]).slice(1))).toEqual([
+      shown,
+      words,
+    ]);
+    expect(logs.some((log) => log.message.includes("can't take images"))).toBe(true);
+    await drain(createMind(), ask({ messages: shown }));
+    expect(refusals).toBe(1);
+    expect((seen.at(-1)?.body.messages as unknown[] | undefined)?.slice(1)).toEqual(words);
+  });
+
+  test("a failure that isn't about images fails the request as it did", async () => {
+    setEnv({ OPENROUTER_MODEL: "~google/gemini-flash-latest" });
+    reply = () =>
+      new Response(JSON.stringify({ error: { message: "Insufficient credits" } }), { status: 402 });
+    const error = await drain(createMind(), ask({ messages: shown })).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderHttpError);
+    expect(seen).toHaveLength(1);
+  });
+
+  test("an Anthropic mind sends each as a base64 image block", async () => {
+    setEnv({ LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "ak", ANTHROPIC_BASE_URL: base() });
+    reply = () =>
+      messages([
+        { type: "message_start", message: { model: "claude-opus-5-5", usage: {} } },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+        { type: "message_stop" },
+      ]);
+    await drain(createMind(), ask({ messages: shown }));
+    const turn = (
+      seen[0]?.body.messages as { content: Record<string, unknown>[] }[] | undefined
+    )?.[0];
+    expect(turn?.content.map(({ cache_control: _, ...block }) => block)).toEqual([
+      { type: "text", text: "看看我的猫" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } },
+    ]);
+  });
+});

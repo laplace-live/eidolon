@@ -4,9 +4,12 @@
 // stop, delete, a call, shutdown and a newer viewer line stop one. A call takes the chat over while
 // it is on: it opens on her view, and stores its lines and her task starts; her tasks' ends and
 // pauses reach her on it, and in a verbose chat their plans' progress.
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isLive } from "@eidolon/assistant";
 import {
+  type Attachment,
+  attachmentMime,
   CHAT_FORMAT,
   type ChatEvent,
   type ChatEventDraft,
@@ -142,22 +145,19 @@ export interface CallInChat extends ChatCallInfo {
   readonly pcId: string | null;
 }
 
-/** One persona's turn, saving its files into the turn's chat. */
-export type ChatTurn = (
-  request: TurnRequest,
-  saveAttachment: EngineDeps["saveAttachment"],
-) => AsyncIterable<TurnOutput>;
+/** How a turn saves files into its chat, and reads the ones the viewer sent there. */
+export type TurnFiles = Pick<EngineDeps, "saveAttachment" | "readAttachment">;
+
+/** One persona's turn, with the files of the turn's chat. */
+export type ChatTurn = (request: TurnRequest, files: TurnFiles) => AsyncIterable<TurnOutput>;
 
 /** A viewer line's answer: the director's decisions and the turns they choose, hop by hop. */
-export type ChatAnswer = (
-  request: ChatRequest,
-  saveAttachment: EngineDeps["saveAttachment"],
-) => AsyncIterable<ChatOutput>;
+export type ChatAnswer = (request: ChatRequest, files: TurnFiles) => AsyncIterable<ChatOutput>;
 
 /** A voice message of the viewer's, heard and saved into the chat, as the message to store. */
 export type ChatHear = (
   request: Parameters<typeof hearVoiceMessage>[0],
-  saveAttachment: EngineDeps["saveAttachment"],
+  files: TurnFiles,
 ) => Promise<MessageDraft>;
 
 export interface ChatRunnerOptions {
@@ -196,14 +196,12 @@ type Tasks = NonNullable<ChatRunnerOptions["tasks"]>;
 /** How long shutdown waits for aborted replies to store what they said. */
 const STOP_WAIT_MS = 2000;
 
-const engineTurn: ChatTurn = (request, saveAttachment) =>
-  runTurn(request, defaultEngineDeps({ saveAttachment }));
+const engineTurn: ChatTurn = (request, files) => runTurn(request, defaultEngineDeps(files));
 
-const engineAnswer: ChatAnswer = (request, saveAttachment) =>
-  runChat(request, defaultEngineDeps({ saveAttachment }));
+const engineAnswer: ChatAnswer = (request, files) => runChat(request, defaultEngineDeps(files));
 
-const engineHear: ChatHear = (request, saveAttachment) =>
-  hearVoiceMessage(request, defaultEngineDeps({ saveAttachment }));
+const engineHear: ChatHear = (request, files) =>
+  hearVoiceMessage(request, defaultEngineDeps(files));
 
 /** Keeps `promise` in `set` until it settles. */
 function track(set: Set<Promise<unknown>>, promise: Promise<unknown>): void {
@@ -625,10 +623,11 @@ export class ChatRunner {
 
   /**
    * Stops the running reply, letting a persona who has written finish her turn, then stores `text`
-   * as the viewer's and starts the answer, the replies the stopped reply still owed first: the
-   * director's decisions and the turns they choose. It streams from the viewer's message on.
+   * as the viewer's, with the `files` they sent with it, already in the chat's files/, and starts
+   * the answer, the replies the stopped reply still owed first: the director's decisions and the
+   * turns they choose. It streams from the viewer's message on.
    */
-  send(id: string, text: string): Promise<LiveTurn> {
+  send(id: string, text: string, files: readonly Attachment[] = []): Promise<LiveTurn> {
     const chat = this.#chat(id);
     return this.#serial(chat, async () => {
       if (chat.call !== null) throw new ChatInCall();
@@ -638,6 +637,7 @@ export class ChatRunner {
         id: newId(),
         speaker: { kind: "user" },
         text,
+        ...(files.length > 0 ? { attachments: [...files] } : {}),
       });
     });
   }
@@ -655,7 +655,7 @@ export class ChatRunner {
       if (chat.call !== null) throw new ChatInCall();
       await this.#yield(chat);
       const request = { chat: await this.store.read(id), clip, signal: chat.cancel.signal };
-      const message = await this.#hear(request, this.#saver(id)).catch((error: unknown) => {
+      const message = await this.#hear(request, this.#files(id)).catch((error: unknown) => {
         throw error instanceof ChatStoreError ? error : new HearingFailed(error);
       });
       return this.#answerLine(id, chat, message);
@@ -919,9 +919,15 @@ export class ChatRunner {
     return chat;
   }
 
-  /** Saves a file into chat `id`'s files/. */
-  #saver(id: string): EngineDeps["saveAttachment"] {
-    return (bytes, mime) => this.store.saveFile(id, bytes, mime);
+  /** Saves a file into chat `id`'s files/, and reads one from there. */
+  #files(id: string): Required<TurnFiles> {
+    return {
+      saveAttachment: (bytes, mime) => this.store.saveFile(id, bytes, mime),
+      readAttachment: async (name) => ({
+        bytes: await readFile(this.store.filePath(id, name)),
+        mime: attachmentMime(name) as string,
+      }),
+    };
   }
 
   #serial<T>(chat: Chat, task: () => Promise<T>): Promise<T> {
@@ -1052,7 +1058,7 @@ export class ChatRunner {
     if (data.type !== "selfie" || !this.#takes(id, call, "her photo")) return;
     const persona = call.group && typeof data.persona === "string" ? data.persona : call.persona;
     // Shutdown waits for it as for her lines.
-    const photos = callPhotos(data, persona, this.#saver(id)).then((draft) =>
+    const photos = callPhotos(data, persona, this.#files(id).saveAttachment).then((draft) =>
       draft === null ? [] : [draft],
     );
     void this.#append(id, chat, photos).catch((error: unknown) => {
@@ -1116,7 +1122,7 @@ export class ChatRunner {
     const { live } = reply;
     live.push({ type: "events", events: stored });
     const { signal } = live.controller;
-    void this.#run(id, chat, reply, null, async (late, save) => {
+    void this.#run(id, chat, reply, null, async (late, files) => {
       const log = await this.store.read(id);
       this.#noteLevel(id, log.events);
       const { participants } = summarize(log.header, log.events);
@@ -1133,7 +1139,7 @@ export class ChatRunner {
         late,
         ...this.#handed(id, chat, answering),
       };
-      return this.#answer(request, save);
+      return this.#answer(request, files);
     });
     return live;
   }
@@ -1151,7 +1157,7 @@ export class ChatRunner {
     const reply = new Reply([]);
     chat.reply = reply;
     const { signal } = reply.live.controller;
-    void this.#run(id, chat, reply, persona, async (late, save) => {
+    void this.#run(id, chat, reply, persona, async (late, files) => {
       const log = await this.store.read(id);
       const viewer = localViewer();
       // With no line to weigh, an auto reply is text.
@@ -1159,7 +1165,7 @@ export class ChatRunner {
       const handed = this.#handed(id, chat, null);
       return this.#turn(
         { chat: log, persona, viewer, signal, late, mode, ...prompt, ...handed },
-        save,
+        files,
       );
     });
   }
@@ -1410,10 +1416,7 @@ export class ChatRunner {
     chat: Chat,
     reply: Reply,
     greeter: ParticipantId | null,
-    start: (
-      late: LateTools,
-      save: EngineDeps["saveAttachment"],
-    ) => Promise<AsyncIterable<ChatOutput>>,
+    start: (late: LateTools, files: TurnFiles) => Promise<AsyncIterable<ChatOutput>>,
   ): Promise<void> {
     const { live } = reply;
     const { signal } = live.controller;
@@ -1428,7 +1431,7 @@ export class ChatRunner {
     try {
       const outputs = await start(
         { signal: chat.cancel.signal, add: (name, events) => this.#late(id, chat, name, events) },
-        this.#saver(id),
+        this.#files(id),
       );
       for await (const output of outputs) {
         if (output.type === "events" || output.type === "decision") {

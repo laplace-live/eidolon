@@ -34,7 +34,9 @@ import {
   chromium,
   type Locator,
   type Page,
+  type Response as PageResponse,
 } from "playwright-core";
+import sharp from "sharp";
 import {
   type AccountsResponse,
   type AccountView,
@@ -221,6 +223,11 @@ const CHAT_MESSAGE = "今天过得怎么样？";
  * the first alone. */
 const REPLY = ["还不错哦，", "[laughing] 刚刚在看猫猫视频。"] as const;
 const REPLY_HOLD_MS = 2000;
+/** What the viewer says with a picture and a text file, and her reply to a line that shows one. */
+const FILES_MESSAGE = "看看这些";
+const FILES_REPLY = "看到啦，故事也读完了。";
+/** A text file sent with a picture. */
+const STORY = "第一章\n从前有座山";
 const CHAT_TITLE = "Local smoke chat";
 /** The group chat's second persona, made from no template. */
 const SECOND = {
@@ -1060,6 +1067,7 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
         const last = body.messages?.at(-1);
         const asked = last?.role === "user" ? last.content : undefined;
         if (asked === CHAT_MESSAGE) return completionStream(REPLY, REPLY_HOLD_MS);
+        if (Array.isArray(asked)) return completionStream([FILES_REPLY], 0);
         if (asked === VOICE_TRANSCRIPT) return completionStream([HEARD_REPLY], 0);
         if (asked === VOICE_ASK) return completionStream([VOICE_REPLY], 0);
         if (asked === CALL_TOLD) return completionStream([CALL_TOLD_REPLY], 0);
@@ -2142,7 +2150,14 @@ async function chatWalk(walk: Walk): Promise<void> {
       `chat.jsonl ${modeOf(logFile)}`,
   );
 
-  await row.getByRole("button", { name: t("en", "Chat Options"), exact: true }).click();
+  await chatFiles(walk, id, box, log);
+  // The list previews the line it ended on now.
+  const filed = page
+    .getByRole("list", { name: t("en", "Chats"), exact: true })
+    .getByRole("listitem")
+    .filter({ hasText: FILES_REPLY });
+
+  await filed.getByRole("button", { name: t("en", "Chat Options"), exact: true }).click();
   await page.getByRole("menuitem", { name: t("en", "Rename"), exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel(t("en", "Title"), { exact: true }).fill(CHAT_TITLE);
@@ -2154,7 +2169,7 @@ async function chatWalk(walk: Walk): Promise<void> {
   await dialog.getByRole("button", { name: t("en", "Save"), exact: true }).click();
   const renameStatus = (await renamed).status();
   const headed = await shows(page.getByRole("heading", { name: CHAT_TITLE, exact: true }));
-  const titled = await shows(row.filter({ hasText: CHAT_TITLE }));
+  const titled = await shows(filed.filter({ hasText: CHAT_TITLE }));
   const titleStored = (await chatLog(walk, id)).some(
     (e) => e.type === "title" && e.title === CHAT_TITLE,
   );
@@ -2189,6 +2204,82 @@ async function chatWalk(walk: Walk): Promise<void> {
     deleteStatus === 200 && empty && gone === 404 && !existsSync(chatDir),
     `DELETE ${deleteStatus}; the page ${empty ? "lists no chats" : "still lists one"}; GET the ` +
       `chat ${gone}; its folder ${existsSync(chatDir) ? "remains" : "is gone"}`,
+  );
+}
+
+/**
+ * A camera's photo taken sideways and a text file picked with the paperclip, each kept in the chat
+ * as it is added, then sent with a line: her mind is shown the photo upright and without its EXIF
+ * as an image part, and the file as its text, and the line shows both, stored as its attachments.
+ */
+async function chatFiles(walk: Walk, id: string, box: Locator, log: Locator): Promise<void> {
+  const { page, checks } = walk;
+  const { chats } = walk.embeddings.seen;
+  const photo = await sharp({ create: { width: 4, height: 2, channels: 3, background: "#c82828" } })
+    .jpeg()
+    .withExif({ IFD0: { Make: "smoke" } })
+    .withMetadata({ orientation: 6 })
+    .toBuffer();
+  const kept: number[] = [];
+  const listen = (response: PageResponse) => {
+    const { pathname } = new URL(response.url());
+    if (pathname === `/api/local/chats/${id}/files`) kept.push(response.status());
+  };
+  page.on("response", listen);
+  await page.locator('input[type="file"]').setInputFiles([
+    { name: "cat.jpg", mimeType: "image/jpeg", buffer: photo },
+    { name: "story.md", mimeType: "text/markdown", buffer: Buffer.from(STORY) },
+  ]);
+  const tray = page.getByRole("list", { name: t("en", "Attachments"), exact: true });
+  const thumbnail = await shows(tray.getByRole("img", { name: "cat.jpg", exact: true }));
+  const named = await shows(tray.getByText("story.md", { exact: true }));
+  const up = await waitFor(() => kept.length === 2, 15_000);
+  const sent = await waitFor(async () => (await tray.getByRole("status").count()) === 0, 15_000);
+  page.off("response", listen);
+  const asked = chats.length;
+  await box.fill(FILES_MESSAGE);
+  await box.press("Enter");
+  const replied = await shows(log.getByText(FILES_REPLY, { exact: true }), 20_000);
+  const parts = chats
+    .slice(asked)
+    .find((each) => Array.isArray(each.messages?.at(-1)?.content))
+    ?.messages?.at(-1)?.content as readonly Record<string, unknown>[] | undefined;
+  const words = String(parts?.find((part) => part.type === "text")?.text ?? "");
+  const image = parts?.find((part) => part.type === "image_url")?.image_url as
+    | { readonly url?: unknown }
+    | undefined;
+  const [type, data] = String(image?.url ?? "").split(";base64,");
+  const made =
+    type === "data:image/jpeg" ? await sharp(Buffer.from(data ?? "", "base64")).metadata() : null;
+  const upright = made !== null && made.width === 2 && made.height === 4 && made.exif === undefined;
+  const shown =
+    words.startsWith(FILES_MESSAGE) &&
+    words.includes(`<file name="story.md">\n${STORY}\n</file>`) &&
+    upright;
+  const onPage =
+    (await shows(log.getByRole("img", { name: t("en", "Sent by you"), exact: true }))) &&
+    (await shows(log.getByRole("link", { name: "story.md" })));
+  const line = (await chatLog(walk, id)).find(
+    (event) => event.type === "message" && event.text === FILES_MESSAGE,
+  );
+  const stored = (line?.attachments ?? []).map((file) => `${file.kind} ${file.mime}`);
+  checks.add(
+    "chat files",
+    thumbnail &&
+      named &&
+      up !== null &&
+      sent !== null &&
+      kept.every((status) => status === 201) &&
+      replied &&
+      shown &&
+      onPage &&
+      JSON.stringify(stored) === JSON.stringify(["image image/jpeg", "file text/plain"]),
+    `the tray ${thumbnail ? "shows" : "lacks"} the picture and ${named ? "names" : "lacks"} the ` +
+      `file; POST files answered ${JSON.stringify(kept)}; her reply ` +
+      `${replied ? "came" : "never came"}; her mind ${shown ? "was shown" : "wasn't shown"} the ` +
+      `photo upright without its EXIF (${type ?? "no image"}, ${made?.width}×${made?.height}) ` +
+      `and the file as its text (${quote(words)}); the line ` +
+      `${onPage ? "shows" : "doesn't show"} both, stored as ${JSON.stringify(stored)}`,
   );
 }
 

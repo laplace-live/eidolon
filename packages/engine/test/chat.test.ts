@@ -8,6 +8,7 @@ import {
   CHAT_FORMAT,
   type ChatEvent,
   type ChatEventDraft,
+  type ChatEventOf,
   type ChatHeader,
   type ParticipantId,
   stampEvents,
@@ -226,6 +227,16 @@ describe("runChat", () => {
       source: "single",
     });
     expect(messages(chat.events)).toEqual(["viewer: 你好", "ann: 安妮说1"]);
+  });
+
+  test("a line of the viewer's files alone reaches the director as their note", async () => {
+    const { createMind } = minds();
+    const director = scripted(["bea"]);
+    const photo = { kind: "image", name: `${"a".repeat(64)}.png`, mime: "image/png" } as const;
+    const line = { ...(user("") as ChatEventOf<"message">), attachments: [photo] };
+    const chat = chatOf(header("ann", "bea"), line);
+    await chat.drive(runChat(request(chat), deps(createMind, director.decide)));
+    expect(director.inputs[0]?.lines).toEqual([{ speaker: { kind: "user" }, text: "（图片）" }]);
   });
 
   test("runs the chosen turns in order, each seeing the last, then asks about the last line", async () => {

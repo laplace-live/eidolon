@@ -80,7 +80,9 @@ export type Input<R extends Route> = ([ParamName<R>] extends [never]
   (Spec<R>["body"] extends undefined
     ? { readonly body?: undefined }
     : {
-        readonly body: Spec<R>["body"] extends Raw<"image" | "audio"> ? Blob : Spec<R>["body"];
+        readonly body: Spec<R>["body"] extends Raw<"image" | "audio" | "text">
+          ? Blob
+          : Spec<R>["body"];
       }) & {
     readonly signal?: AbortSignal;
   };
