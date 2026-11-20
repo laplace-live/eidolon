@@ -1,5 +1,16 @@
 # @laplace.live/eidolon
 
+## 0.12.0
+
+### Minor Changes
+
+- b7bd371: Run on Node 24 with no Bun to download
+- 37f1484: A built-in persona-update skill finds a persona's new streams to transcribe
+
+### Patch Changes
+
+- 72fdd19: Update undici to 7.30.2 and minimatch to 11.0.5 for their security fixes
+
 ## 0.11.0
 
 ### Minor Changes
