@@ -12,8 +12,8 @@ import {
   pyFixed,
   withPersona,
 } from "@eidolon/config";
+import { type DecisionModel, gateDecisionModel } from "@eidolon/providers";
 import { errorRepr } from "./compat.ts";
-import { DecisionsClient, type DecisionsOptions, gateRoleDecisions, noulOf } from "./gate.ts";
 
 // Bars on Jev's nouls. With these, docs/benchmarks/2026-11-10-director decides all 100 of its
 // labelled lines right, and in both its runs still does with any one bar moved: addressed from 0.4
@@ -318,11 +318,11 @@ function decision(
 
 /** Decides who answers each line of a chat; never rejects but for its caller's abort. */
 export class Director {
-  readonly #client: DecisionsClient | null;
+  readonly #decisions: DecisionModel | null;
 
-  /** Without `options`, every group decision falls back to the rules, and auto replies are text. */
-  constructor(options: DecisionsOptions | null) {
-    this.#client = options === null ? null : new DecisionsClient(options, DIRECTOR_TIMEOUT_SEC);
+  /** Without a decision model, every group decision falls back to the rules, and auto replies are text. */
+  constructor(decisions: DecisionModel | null) {
+    this.#decisions = decisions;
   }
 
   /**
@@ -339,10 +339,10 @@ export class Director {
       logger.info(`Director: ${named(fell, candidates)} (fallback, hop ${input.hop})`);
       return fell;
     };
-    if (this.#client === null) return fellBack();
+    if (this.#decisions === null) return fellBack();
     let scores: Record<string, number>;
     try {
-      scores = await scored(this.#client, input, directorQuestions(candidates), signal);
+      scores = await scored(this.#decisions, input, directorQuestions(candidates), signal);
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
       logger.warning(`Director fell back to rules: ${errorRepr(error)}`);
@@ -360,13 +360,13 @@ export class Director {
   ): Promise<DirectorDecision> {
     const alone = candidates.slice(0, 1).map(({ id }) => id);
     const questions = voiceQuestions(candidates);
-    if (this.#client === null || Object.keys(questions).length === 0) {
+    if (this.#decisions === null || Object.keys(questions).length === 0) {
       return decision(input, alone, "single");
     }
     const started = performance.now();
     let scores: Record<string, number>;
     try {
-      scores = await scored(this.#client, input, questions, signal);
+      scores = await scored(this.#decisions, input, questions, signal);
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
       logger.warning(
@@ -378,15 +378,15 @@ export class Director {
   }
 }
 
-/** Jev's noul for each of `questions`. */
+/** The decision model's probability for each of `questions`. */
 async function scored(
-  client: DecisionsClient,
+  decisions: DecisionModel,
   input: DirectorInput,
   questions: DirectorQuestions,
   signal: AbortSignal | undefined,
 ): Promise<Record<string, number>> {
-  const body = await client.ask(directorState(input), questions, signal);
-  return Object.fromEntries(Object.keys(questions).map((key) => [key, noulOf(body, key)]));
+  const answers = await decisions.decide(directorState(input), questions, signal);
+  return Object.fromEntries(Object.keys(questions).map((key) => [key, answers.probability(key)]));
 }
 
 /** Who `decided` chose, by name, each voice reply marked. */
@@ -431,13 +431,13 @@ export function directorParticipant(id: string): DirectorParticipant {
 
 /** The director on the active persona's gate role; without its key, it follows the rules alone. */
 export function directorFromEnv(): Director {
-  const options = gateRoleDecisions((error) =>
+  const decisions = gateDecisionModel({ timeoutSec: DIRECTOR_TIMEOUT_SEC }, (error) =>
     logger.warning(`Director's decision model off: ${error.message}`),
   );
-  if (options === null) {
+  if (decisions === null) {
     logger.info(
       "Director has no decision model: group chats follow rules, and auto replies are text",
     );
   }
-  return new Director(options);
+  return new Director(decisions);
 }

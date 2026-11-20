@@ -15,12 +15,12 @@ import {
   DEFAULT_GATE_MODEL,
   GATE_QUESTIONS,
   GATE_THRESHOLD,
-  GATE_URL,
   gateQuestions,
   gateState,
   TIMELINE_QUESTIONS,
   TIMELINE_THRESHOLD,
 } from "../../../packages/context/src/index.ts";
+import { OPENROUTER_DECISIONS_URL } from "../../../packages/providers/src/index.ts";
 
 interface Turn {
   readonly set: "dev" | "heldout";
@@ -58,7 +58,7 @@ async function ask(turn: Pick<Turn, "text" | "before">): Promise<Omit<Row, "set"
     content,
   }));
   const started = performance.now();
-  const response = await fetch(GATE_URL, {
+  const response = await fetch(OPENROUTER_DECISIONS_URL, {
     method: "POST",
     headers,
     signal: AbortSignal.timeout(20_000),

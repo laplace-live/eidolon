@@ -23,9 +23,9 @@ import {
   logger,
   resetSettings,
 } from "@eidolon/config";
-import { Director } from "@eidolon/context";
+import { DIRECTOR_TIMEOUT_SEC, Director } from "@eidolon/context";
 import type { LlmTool } from "@eidolon/core";
-import { usageRecord } from "@eidolon/providers";
+import { openRouterDecisions, usageRecord } from "@eidolon/providers";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { type ChatDeps, type ChatOutput, runChat } from "../src/chat.ts";
 import { runTurn } from "../src/turn.ts";
@@ -709,18 +709,22 @@ describe("a chat that answers in voice", () => {
   type Body = { state: Record<string, unknown>; questions: Record<string, unknown> };
 
   function jev(noul: number, bodies: Body[]) {
-    return new Director({
-      apiKey: "k",
-      fetch: (async (_url: string, init: RequestInit) => {
-        const body = JSON.parse(String(init.body)) as Body;
-        bodies.push(body);
-        return Response.json({
-          answers: Object.fromEntries(
-            Object.keys(body.questions).map((key) => [key, { type: "noul", noul }]),
-          ),
-        });
-      }) as unknown as typeof fetch,
-    });
+    return new Director(
+      openRouterDecisions({
+        apiKey: "k",
+        model: "jev",
+        timeoutSec: DIRECTOR_TIMEOUT_SEC,
+        fetch: (async (_url: string, init: RequestInit) => {
+          const body = JSON.parse(String(init.body)) as Body;
+          bodies.push(body);
+          return Response.json({
+            answers: Object.fromEntries(
+              Object.keys(body.questions).map((key) => [key, { type: "noul", noul }]),
+            ),
+          });
+        }) as unknown as typeof fetch,
+      }),
+    );
   }
 
   test("a chat of one in auto asks only voice_moment, and her reply follows it", async () => {
@@ -751,19 +755,23 @@ describe("a chat that answers in voice", () => {
         sawText = resolve;
       });
       // Answers once her words stream, or after 500 ms, when they wait for it.
-      const director = new Director({
-        apiKey: "k",
-        fetch: (async (_url: string, init: RequestInit) => {
-          await Promise.race([textSeen, delay(500)]);
-          order.push("director answered");
-          const { questions } = JSON.parse(String(init.body)) as Body;
-          return Response.json({
-            answers: Object.fromEntries(
-              Object.keys(questions).map((key) => [key, { type: "noul", noul }]),
-            ),
-          });
-        }) as unknown as typeof fetch,
-      });
+      const director = new Director(
+        openRouterDecisions({
+          apiKey: "k",
+          model: "jev",
+          timeoutSec: DIRECTOR_TIMEOUT_SEC,
+          fetch: (async (_url: string, init: RequestInit) => {
+            await Promise.race([textSeen, delay(500)]);
+            order.push("director answered");
+            const { questions } = JSON.parse(String(init.body)) as Body;
+            return Response.json({
+              answers: Object.fromEntries(
+                Object.keys(questions).map((key) => [key, { type: "noul", noul }]),
+              ),
+            });
+          }) as unknown as typeof fetch,
+        }),
+      );
       const { speech } = fakeSpeech({
         speak: async () => {
           order.push("spoken");
@@ -816,16 +824,20 @@ describe("a chat that answers in voice", () => {
 
   test("a chat of one interrupted while the director weighs her reply keeps her words as text", async () => {
     const asked: AbortSignal[] = [];
-    const director = new Director({
-      apiKey: "k",
-      fetch: (async (_url: string, init: RequestInit) => {
-        const signal = init.signal as AbortSignal;
-        asked.push(signal);
-        return new Promise((_, reject) => {
-          signal.addEventListener("abort", () => reject(signal.reason));
-        });
-      }) as unknown as typeof fetch,
-    });
+    const director = new Director(
+      openRouterDecisions({
+        apiKey: "k",
+        model: "jev",
+        timeoutSec: DIRECTOR_TIMEOUT_SEC,
+        fetch: (async (_url: string, init: RequestInit) => {
+          const signal = init.signal as AbortSignal;
+          asked.push(signal);
+          return new Promise((_, reject) => {
+            signal.addEventListener("abort", () => reject(signal.reason));
+          });
+        }) as unknown as typeof fetch,
+      }),
+    );
     const { speech, spoken } = fakeSpeech();
     const mind: Mind = {
       async *stream({ signal }) {

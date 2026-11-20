@@ -14,8 +14,13 @@ import {
   stampEvents,
 } from "@eidolon/chat";
 import { activePersona, consoleSink, dataHome, logger, resetSettings } from "@eidolon/config";
-import { Director, type DirectorDecision, type DirectorInput } from "@eidolon/context";
-import { type UsageRecord, usageRecord } from "@eidolon/providers";
+import {
+  DIRECTOR_TIMEOUT_SEC,
+  Director,
+  type DirectorDecision,
+  type DirectorInput,
+} from "@eidolon/context";
+import { openRouterDecisions, type UsageRecord, usageRecord } from "@eidolon/providers";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { type ChatDeps, type ChatOutput, type OwedLine, runChat } from "../src/chat.ts";
 import type { MindChunk, MindRequest, PersonaParts, SpeechDeps } from "../src/types.ts";
@@ -200,13 +205,17 @@ function request(chat: ReturnType<typeof chatOf>, signal = new AbortController()
 describe("runChat", () => {
   test("a chat of one whose voice can't speak asks no model, and she answers as before", async () => {
     let posted = 0;
-    const director = new Director({
-      apiKey: "k",
-      fetch: (async () => {
-        posted++;
-        return Response.json({});
-      }) as unknown as typeof fetch,
-    });
+    const director = new Director(
+      openRouterDecisions({
+        apiKey: "k",
+        model: "jev",
+        timeoutSec: DIRECTOR_TIMEOUT_SEC,
+        fetch: (async () => {
+          posted++;
+          return Response.json({});
+        }) as unknown as typeof fetch,
+      }),
+    );
     const chat = chatOf(header("ann"), user("你好"));
     const { createMind } = minds();
     const outputs = await chat.drive(

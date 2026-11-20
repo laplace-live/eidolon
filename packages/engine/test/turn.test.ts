@@ -27,6 +27,7 @@ import {
   buildGreetingKickoff,
   GATE_FRAME_KEY,
   GATE_QUESTIONS,
+  GATE_TIMEOUT_SEC,
   type GateDecision,
   GREETING_KICKOFF,
   RECALL_TOOL_NAME,
@@ -35,7 +36,7 @@ import {
   TIMELINE_QUESTIONS,
 } from "@eidolon/context";
 import type { ContextProvider, LlmTool, ToolResult, TurnGate } from "@eidolon/core";
-import { usageRecord } from "@eidolon/providers";
+import { openRouterDecisions, usageRecord } from "@eidolon/providers";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { broadcast, FakeRetriever, MemoryCatalog, TODAY } from "../../context/test/helpers.ts";
 import { type PartsDeps, personaParts } from "../src/parts.ts";
@@ -1410,16 +1411,20 @@ describe("the retrieval gate across a chat's turns", () => {
   test("asks again about a line repeated in a full window", async () => {
     const scores = [0.1, 0.9];
     let asked = 0;
-    const gate = new RetrievalGate({
-      apiKey: "test",
-      fetch: (async () => {
-        const noul = scores[asked++];
-        const names = [...Object.keys(GATE_QUESTIONS), ...Object.keys(TIMELINE_QUESTIONS)];
-        return Response.json({
-          answers: Object.fromEntries(names.map((name) => [name, { noul }])),
-        });
-      }) as unknown as typeof fetch,
-    });
+    const gate = new RetrievalGate(
+      openRouterDecisions({
+        apiKey: "test",
+        model: "jev",
+        timeoutSec: GATE_TIMEOUT_SEC,
+        fetch: (async () => {
+          const noul = scores[asked++];
+          const names = [...Object.keys(GATE_QUESTIONS), ...Object.keys(TIMELINE_QUESTIONS)];
+          return Response.json({
+            answers: Object.fromEntries(names.map((name) => [name, { noul }])),
+          });
+        }) as unknown as typeof fetch,
+      }),
+    );
     const verdicts: unknown[] = [];
     const reader: ContextProvider = {
       onContext: async ({ metadata }) => {

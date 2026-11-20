@@ -2,13 +2,19 @@ import "../../config/test/isolated-guard.ts";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, type LogRecord, resetSettings } from "@eidolon/config";
-import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import {
+  OPENROUTER_DECISIONS_URL,
+  openRouterDecisions,
+  setUsageSink,
+  type UsageRecord,
+} from "@eidolon/providers";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { serveFetch } from "../../config/test/http.ts";
 import { VOICE_THRESHOLD, VOICE_THRESHOLD_AFTER_VOICE, voiceThreshold } from "../src/director.ts";
 import {
   ADDRESSED_THRESHOLD,
   DEFAULT_GATE_MODEL,
+  DIRECTOR_TIMEOUT_SEC,
   Director,
   type DirectorInput,
   type DirectorLine,
@@ -17,7 +23,6 @@ import {
   directorParticipant,
   directorQuestions,
   directorState,
-  GATE_URL,
   HOP_STEP,
   INTEREST_THRESHOLD,
   INVITES_THRESHOLD,
@@ -83,11 +88,14 @@ function answering(nouls: Record<string, unknown> = {}, bodies: Body[] = []): Fa
 }
 
 function directorWith(fetch: FakeFetch, options: { timeoutSec?: number } = {}): Director {
-  return new Director({
-    apiKey: "test",
-    fetch: fetch as unknown as typeof globalThis.fetch,
-    ...options,
-  });
+  return new Director(
+    openRouterDecisions({
+      apiKey: "test",
+      model: DEFAULT_GATE_MODEL,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      timeoutSec: options.timeoutSec ?? DIRECTOR_TIMEOUT_SEC,
+    }),
+  );
 }
 
 function input(lines: DirectorLine[], fields: Partial<DirectorInput> = {}): DirectorInput {
@@ -201,7 +209,7 @@ describe("the request", () => {
     });
     const lines = [viewer("大家好"), from("milky", "露比你呢？")];
     const decision = await director.decide(input(lines, { hop: 1 }));
-    expect(requests[0]?.url).toBe(GATE_URL);
+    expect(requests[0]?.url).toBe(OPENROUTER_DECISIONS_URL);
     expect(requests[0]?.init.method).toBe("POST");
     expect(requests[0]?.init.redirect).toBe("manual");
     expect(requests[0]?.init.headers).toEqual({
@@ -470,7 +478,7 @@ describe("falling back to rules", () => {
       input([viewer("hi")]),
     );
     expect(messages("WARNING")).toEqual([
-      `Director fell back to rules: HTTPStatusError("Server error '503' for url '${GATE_URL}'")`,
+      `Director fell back to rules: HTTPStatusError("Server error '503' for url '${OPENROUTER_DECISIONS_URL}'")`,
     ]);
   });
 
@@ -757,7 +765,7 @@ describe("voice replies", () => {
     });
     expect(messages("WARNING")).toEqual([
       "Director couldn't weigh a voice reply, so she answers in text: " +
-        `HTTPStatusError("Server error '503' for url '${GATE_URL}'")`,
+        `HTTPStatusError("Server error '503' for url '${OPENROUTER_DECISIONS_URL}'")`,
     ]);
   });
 

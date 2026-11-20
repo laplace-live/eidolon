@@ -10,6 +10,24 @@ export {
 } from "./accounts.ts";
 export * from "./catalog.ts";
 export {
+  DECISION_MODELS,
+  type DecisionAnswers,
+  type DecisionModel,
+  type DecisionModelOptions,
+  type DecisionQuestion,
+  type DecisionQuestions,
+  decisionModel,
+  gateDecisionModel,
+} from "./decision/index.ts";
+export {
+  decisionsUrl,
+  noulOf,
+  OPENROUTER_DECISIONS_URL,
+  type OpenRouterDecisionsOptions,
+  openRouterDecisions,
+  reportDecision,
+} from "./decision/openrouter.ts";
+export {
   ANTHROPIC_FALLBACK_MODELS,
   AnthropicClient,
   anthropicUnits,
