@@ -1,6 +1,6 @@
 // A whole reply as one audio file in her voice role's voice, for a chat's voice message. Each
 // provider is asked for MP3, the one format every one of them offers and every browser plays.
-import { modelInfo } from "../../catalog.ts";
+import { modelInfo, type ProviderId } from "../../catalog.ts";
 import { ProviderHttpError } from "../../http/errors.ts";
 import { stripMarkup } from "../../markup.ts";
 import { textUnits } from "../../pricing.ts";
@@ -59,7 +59,8 @@ const SONIOX_TTS_URL = "https://tts-rt.soniox.com/tts";
 // The API version pipedog's Cartesia service speaks.
 const CARTESIA_VERSION = "2026-03-01";
 
-const SYNTHESIZERS: Readonly<Record<string, (job: Job) => Promise<Speech>>> = {
+/** Each provider's batch speech synthesis, by catalog id: one for every provider that speaks. */
+export const SYNTHESIZERS: { readonly [P in ProviderId]?: (job: Job) => Promise<Speech> } = {
   async fish({ selection, text, voice, options }) {
     const response = await send(
       selection,

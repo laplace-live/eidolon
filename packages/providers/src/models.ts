@@ -2,7 +2,7 @@
 // own. A provider without a listing, or one that refuses, leaves the caller to take any id typed.
 import { isPlainObject, withoutTrailingSlashes } from "@eidolon/config";
 import type { Account } from "./accounts.ts";
-import { ANTHROPIC_VERSION, type Category } from "./catalog.ts";
+import { ANTHROPIC_VERSION, type Category, type ProviderId } from "./catalog.ts";
 import { errorMessageOf } from "./http/errors.ts";
 
 export interface ListedModel {
@@ -29,6 +29,11 @@ interface Request {
 
 function bearer(key: string | undefined): Record<string, string> {
   return key ? { Authorization: `Bearer ${key}` } : {};
+}
+
+/** `name` set to `value`, or nothing without one. */
+function header(name: string, value: string | undefined): Record<string, string> {
+  return value ? { [name]: value } : {};
 }
 
 function rows(body: unknown, field: string): Record<string, unknown>[] {
@@ -65,117 +70,143 @@ const OPENAI_KINDS: Partial<Record<Category, RegExp>> = {
 const OPENAI_NOT_CHAT =
   /embedding|tts|whisper|transcribe|realtime|audio|dall-e|image|moderation|search|davinci|babbage|sora/;
 
-function byKind(models: ListedModel[], category: Category, provider: string): ListedModel[] {
-  const pick = (test: (id: string) => boolean) => models.filter((model) => test(model.id));
-  if (provider === "openai") {
-    const kind = OPENAI_KINDS[category];
-    if (kind !== undefined) return pick((id) => kind.test(id));
-    return pick((id) => !OPENAI_NOT_CHAT.test(id));
-  }
-  if (provider === "google") {
-    // Gemini's OpenAI-compatible listing names models `models/<id>`; chat takes the bare id.
-    const bare = models.map((model) => ({ ...model, id: model.id.replace(/^models\//, "") }));
-    const embedding = (id: string) => /embedding/.test(id);
-    return bare.filter((model) =>
-      category === "embedding"
-        ? embedding(model.id)
-        : /gemini|gemma/.test(model.id) &&
-          !embedding(model.id) &&
-          !/tts|image|live|audio/.test(model.id),
-    );
-  }
-  return models;
+function openaiKinds(models: ListedModel[], category: Category): ListedModel[] {
+  const kind = OPENAI_KINDS[category];
+  return models.filter((model) =>
+    kind === undefined ? !OPENAI_NOT_CHAT.test(model.id) : kind.test(model.id),
+  );
 }
+
+function geminiKinds(models: ListedModel[], category: Category): ListedModel[] {
+  // Gemini's OpenAI-compatible listing names models `models/<id>`; chat takes the bare id.
+  const bare = models.map((model) => ({ ...model, id: model.id.replace(/^models\//, "") }));
+  const embedding = (id: string) => /embedding/.test(id);
+  return bare.filter((model) =>
+    category === "embedding"
+      ? embedding(model.id)
+      : /gemini|gemma/.test(model.id) &&
+        !embedding(model.id) &&
+        !/tts|image|live|audio/.test(model.id),
+  );
+}
+
+/** How a provider lists `category`'s models for an account at `base`; null where it lists none. */
+type Listing = (
+  category: Category,
+  base: string | undefined,
+  key: string | undefined,
+) => Request | null;
+
+/** An OpenAI-compatible API's `/models`, its kinds told apart by `kinds`. */
+function compatible(
+  kinds: (models: ListedModel[], category: Category) => ListedModel[] = (models) => models,
+): Listing {
+  return (category, base, key) =>
+    base === undefined
+      ? null
+      : {
+          url: `${base}/models`,
+          headers: bearer(key),
+          parse: (body) => kinds(openaiData(body), category),
+        };
+}
+
+// OpenRouter's public lists, one route a kind.
+const OPENROUTER_PATHS: Partial<Record<Category, string>> = {
+  llm: "/models",
+  embedding: "/embeddings/models",
+  rerank: "/models?output_modalities=rerank",
+  decision: "/models?output_modalities=decisions",
+  image: "/models?output_modalities=image",
+};
+
+/**
+ * Each provider's model listing, by catalog id. Fish's models are a closed set, and Cartesia and
+ * MiniMax list none, so they have none here.
+ */
+export const LISTINGS: { readonly [P in ProviderId]?: Listing } = {
+  openrouter: (category, base, key) => {
+    const path = OPENROUTER_PATHS[category];
+    return base === undefined || path === undefined
+      ? null
+      : { url: base + path, headers: bearer(key), parse: openaiData };
+  },
+  openai: compatible(openaiKinds),
+  anthropic: (_category, base, key) =>
+    base === undefined
+      ? null
+      : {
+          url: `${base}/models?limit=1000`,
+          headers: { ...(key ? { "x-api-key": key } : {}), "anthropic-version": ANTHROPIC_VERSION },
+          parse: (body) => named(rows(body, "data"), "id", "display_name"),
+        },
+  google: compatible(geminiKinds),
+  deepseek: compatible(),
+  xai: compatible(),
+  qwen: compatible(),
+  moonshot: compatible(),
+  zhipu: compatible(),
+  ollama: compatible(),
+  "openai-compatible": compatible(),
+  soniox: (category, base, key) =>
+    base === undefined
+      ? null
+      : {
+          url: `${base}/models`,
+          headers: bearer(key),
+          parse: (body) => {
+            const mode = category === "transcription" ? "async" : "real_time";
+            return named(
+              rows(body, "models").filter((row) =>
+                category === "tts"
+                  ? typeof row.id === "string" && row.id.startsWith("tts")
+                  : row.transcription_mode === mode,
+              ),
+              "id",
+              "name",
+            );
+          },
+        },
+  elevenlabs: (category, base, key) =>
+    category !== "tts" || base === undefined
+      ? null
+      : {
+          url: `${base}/v1/models`,
+          headers: header("xi-api-key", key),
+          parse: (body) =>
+            named(
+              rows(body, "models").filter((row) => row.can_do_text_to_speech === true),
+              "model_id",
+              "name",
+            ),
+        },
+  deepgram: (category, base, key) =>
+    category !== "stt" || base === undefined
+      ? null
+      : {
+          url: `${base}/v1/models`,
+          headers: header("Authorization", key && `Token ${key}`),
+          parse: (body) => [
+            ...new Map(
+              named(rows(body, "stt"), "canonical_name").map((model) => [model.id, model]),
+            ).values(),
+          ],
+        },
+  cohere: (category, base, key) =>
+    category !== "rerank" || base === undefined
+      ? null
+      : {
+          // Its listing is under v1 whatever version the account's base names.
+          url: `${base.replace(/\/v\d+$/, "")}/v1/models?endpoint=rerank&page_size=1000`,
+          headers: bearer(key),
+          parse: (body) => named(rows(body, "models"), "name"),
+        },
+};
 
 /** How `account`'s provider lists `category`'s models; null where it has no listing. */
 function requestFor(account: Account, category: Category): Request | null {
   const base = account.baseUrl === undefined ? undefined : withoutTrailingSlashes(account.baseUrl);
-  const key = account.apiKey;
-  switch (account.provider.id) {
-    case "openrouter": {
-      if (base === undefined) return null;
-      const paths: Partial<Record<Category, string>> = {
-        llm: "/models",
-        embedding: "/embeddings/models",
-        rerank: "/models?output_modalities=rerank",
-        decision: "/models?output_modalities=decisions",
-        image: "/models?output_modalities=image",
-      };
-      const path = paths[category];
-      return path === undefined
-        ? null
-        : { url: base + path, headers: bearer(key), parse: openaiData };
-    }
-    case "anthropic":
-      if (base === undefined) return null;
-      return {
-        url: `${base}/models?limit=1000`,
-        headers: { ...(key ? { "x-api-key": key } : {}), "anthropic-version": ANTHROPIC_VERSION },
-        parse: (body) => named(rows(body, "data"), "id", "display_name"),
-      };
-    case "soniox":
-      if (base === undefined) return null;
-      return {
-        url: `${base}/models`,
-        headers: bearer(key),
-        parse: (body) => {
-          const mode = category === "transcription" ? "async" : "real_time";
-          return named(
-            rows(body, "models").filter((row) =>
-              category === "tts"
-                ? typeof row.id === "string" && row.id.startsWith("tts")
-                : row.transcription_mode === mode,
-            ),
-            "id",
-            "name",
-          );
-        },
-      };
-    case "elevenlabs":
-      if (category !== "tts" || base === undefined) return null;
-      return {
-        url: `${base}/v1/models`,
-        headers: key ? { "xi-api-key": key } : {},
-        parse: (body) =>
-          named(
-            rows(body, "models").filter((row) => row.can_do_text_to_speech === true),
-            "model_id",
-            "name",
-          ),
-      };
-    case "deepgram":
-      if (category !== "stt" || base === undefined) return null;
-      return {
-        url: `${base}/v1/models`,
-        headers: key ? { Authorization: `Token ${key}` } : {},
-        parse: (body) => [
-          ...new Map(
-            named(rows(body, "stt"), "canonical_name").map((model) => [model.id, model]),
-          ).values(),
-        ],
-      };
-    case "cohere":
-      if (category !== "rerank" || base === undefined) return null;
-      // Its listing is under v1 whatever version the account's base names.
-      return {
-        url: `${base.replace(/\/v\d+$/, "")}/v1/models?endpoint=rerank&page_size=1000`,
-        headers: bearer(key),
-        parse: (body) => named(rows(body, "models"), "name"),
-      };
-    case "fish":
-    case "cartesia":
-    case "minimax":
-      return null;
-    default:
-      // The OpenAI-compatible APIs: OpenAI, Gemini, DeepSeek, xAI, Qwen, Moonshot, Zhipu, Ollama and
-      // a server of your own.
-      if (base === undefined) return null;
-      return {
-        url: `${base}/models`,
-        headers: bearer(key),
-        parse: (body) => byKind(openaiData(body), category, account.provider.id),
-      };
-  }
+  return LISTINGS[account.provider.id]?.(category, base, account.apiKey) ?? null;
 }
 
 /** Providers whose listing answers without a key. */

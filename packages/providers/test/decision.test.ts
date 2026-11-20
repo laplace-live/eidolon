@@ -1,10 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
-  DECISION_MODELS,
   decisionModel,
   missingKey,
   OPENROUTER_DECISIONS_URL,
-  PROVIDERS,
   select,
   setUsageSink,
   type UsageRecord,
@@ -37,11 +35,6 @@ function answering(answers: unknown, sent: Sent[]): typeof fetch {
 }
 
 describe("decision models", () => {
-  test("every provider whose catalog offers them has one, and no other", () => {
-    const offered = PROVIDERS.filter((provider) => provider.offers.decision !== undefined);
-    expect(Object.keys(DECISION_MODELS).sort()).toEqual(offered.map((p) => p.id).sort());
-  });
-
   test("the gate role's OpenRouter account asks its Decisions route beside its v1 API", async () => {
     const read = reader({
       OPENROUTER_API_KEY: "or",

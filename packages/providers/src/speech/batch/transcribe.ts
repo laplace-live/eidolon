@@ -1,5 +1,6 @@
 // A recorded clip as text, through her hearing role's provider, for a chat's voice message.
 import { envOptional } from "@eidolon/config";
+import type { ProviderId } from "../../catalog.ts";
 import { costOf, priceOf, type Units } from "../../pricing.ts";
 import { hasKey, missingKey, ProviderConfigError, type Selection } from "../../resolve.ts";
 import { reportUsage } from "../../usage.ts";
@@ -43,7 +44,7 @@ interface Job {
 const count = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 
-interface Transcriber {
+export interface Transcriber {
   /** The hearing model for a clip: a provider's realtime-only models have an async twin. */
   readonly model?: (model: string) => string;
   /** The hint a call would give, where it isn't `spokenLanguage()`. */
@@ -51,7 +52,8 @@ interface Transcriber {
   readonly run: (job: Job) => Promise<Heard>;
 }
 
-const TRANSCRIBERS: Readonly<Record<string, Transcriber>> = {
+/** Each provider's batch speech recognition, by catalog id: one for every provider that hears. */
+export const TRANSCRIBERS: { readonly [P in ProviderId]?: Transcriber } = {
   openai: {
     // gpt-realtime-whisper serves the Realtime API's transcription sessions alone.
     model: (model) => (model === "gpt-realtime-whisper" ? "gpt-4o-transcribe" : model),

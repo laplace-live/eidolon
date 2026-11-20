@@ -14,6 +14,29 @@ formats there are (OpenAI-compatible chat and Anthropic's Messages API), which t
 minds call, and a call's recognizers, voices and realtime sessions are fetch and WebSocket clients
 of their own (`stt/`, `speech/stream/`, `realtime/`).
 
+## Implementations
+
+The package is laid out as the Vercel AI SDK lays out its providers, on fetch clients of its own:
+each kind of model has one interface, which everything that uses it calls, and a table of its
+implementations keyed by provider id. Nothing that uses a kind names a provider, and
+`packages/providers/test/registry.test.ts` holds every table to the catalog: a provider whose
+entry offers a kind implements it there, and no other does.
+
+| Kind | Interface | Table |
+| --- | --- | --- |
+| Live speech recognition | `SttStream` | `STT_STREAMS` (`stt/index.ts`) |
+| Batch speech recognition | `transcribe` | `TRANSCRIBERS` (`speech/batch/transcribe.ts`) |
+| Streaming speech | `SpeechStream` | `SPEECH_STREAMS` (`speech/stream/index.ts`) |
+| Batch speech | `synthesize` | `SYNTHESIZERS` (`speech/batch/synthesize.ts`) |
+| Realtime voice | `RealtimeSession` | `REALTIME_DIALECTS` (`realtime/session.ts`) |
+| Decision models | `DecisionModel` | `DECISION_MODELS` (`decision/index.ts`) |
+| Web search | `Searcher` | `SEARCHERS` (`search.ts`) |
+| Model lists | `listModels` | `LISTINGS` (`models.ts`) |
+
+A new provider is its catalog entry (its offers, prices and free key check), a file for each kind
+it offers, beside that kind's others, and a line in each kind's table. The local app checks a key
+with the catalog's `check` unless `KEY_CHECKS` (`apps/bot/src/local/checks.ts`) needs more.
+
 ## Roles
 
 | Role | Settings | Variables | Default | Spends |
