@@ -24,8 +24,8 @@ as Alpine, are not supported.
 On Windows, LanceDB and ONNX Runtime need the Microsoft Visual C++ Redistributable: install it from
 https://aka.ms/vs/17/release/vc_redist.x64.exe if `eidolon` says it is missing. Windows on Arm runs
 it on the x64 build of Node. Tasks run their commands in Git Bash, as pi's do: install Git for
-Windows (https://git-scm.com/download/win) for them; without it, tasks read, write and search, but
-run no commands.
+Windows (https://git-scm.com/download/win) for them, or put Cygwin's or MSYS2's bash on PATH;
+without one, tasks read, write and search, but run no commands.
 
 The first run downloads about 230 MB, mostly LanceDB and ONNX Runtime for your platform, and the
 install takes about 610 MB on disk on a Mac and more on Linux and Windows.

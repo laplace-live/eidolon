@@ -311,10 +311,11 @@ call that started it. Each command waits for the owner's OK first ([Approvals](#
 - **How it runs:** `/bin/bash -c` (pi's shell order) in the task's folder, spawned detached into a
   process group of its own, with input closed and the cut environment ([Rules](#rules)) rebuilt
   at each spawn, so the PATH filter asks the task's policy as it stands. A command that asks a
-  question fails rather than waits. On Windows it is Git Bash's `bash.exe -c`, as pi runs it: in
-  the server's job instead of a group, its console window hidden, the cut environment carrying
-  what Windows programs need (`PASSED_ON_WINDOWS`); the file tools read its `/c/x` paths as
-  `C:\x` (`normalizeWindowsShellPath`).
+  question fails rather than waits. On Windows it is `bash.exe -c` from the bash `windowsBash`
+  finds (Git Bash, else Cygwin's or MSYS2's), as pi runs it: in the server's job instead of a
+  group, its console window hidden, the cut environment carrying what Windows programs need
+  (`PASSED_ON_WINDOWS`); the file tools read its `/c/x` paths as `C:\x`
+  (`normalizeWindowsShellPath`).
 - **Eidolon's own commands:** `<data home>/bin` leads the `PATH` (`BashJobs`' `bin`), past the same
   filter. It holds the managed yt-dlp, once Eidolon has installed it, and `eidolon`,
   which `TaskManager.boot()` writes again at each start (`writeEidolonCommand`, 0700): a `sh`

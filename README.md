@@ -60,7 +60,7 @@ LanceDB and ONNX Runtime, its native parts, decide where it runs:
 | --- | --- |
 | macOS on Apple silicon | Yes, with an arm64 Node: an x64 one under Rosetta looks like an Intel Mac |
 | Linux on x64 or arm64, with glibc | Yes |
-| Windows on x64 | Yes, with the [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe); Windows on Arm runs the x64 Node. Tasks run commands in Git Bash, so only with [Git for Windows](https://git-scm.com/download/win) |
+| Windows on x64 | Yes, with the [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe); Windows on Arm runs the x64 Node. Tasks run commands in Git Bash, so only with [Git for Windows](https://git-scm.com/download/win), or Cygwin's or MSYS2's bash on PATH |
 | Intel Macs, musl Linux (Alpine) | No |
 
 The first `npx` downloads about 230 MB, mostly LanceDB and ONNX Runtime for your platform, which

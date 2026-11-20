@@ -182,7 +182,7 @@ yt-dlp's codes are read off its stderr, so they are a best guess. A job runs
 `jobArgv(entry, command, args)` from `@eidolon/cli/job`, also import-free, with
 `@eidolon/config`'s `cliEntry()` as the entry: `<entry> <command> --json …` on the server's own
 `process.execPath`, started in the data home. A cancel sends it `STOP_MESSAGE` over its IPC
-channel, which `relayStopMessages` in `main.ts` turns into SIGTERM, as Windows has none to send.
+channel, which the CLI's `relayStopMessages` turns into SIGTERM, as Windows has none to send.
 Nothing kills it on a timer: only a forced second cancel (`DELETE jobs/:id?force=1`) of a job
 this server spawned kills it, with what it started (`killTree`) ([web-app.md](web-app.md#jobs)).
 

@@ -710,11 +710,11 @@ watched; and `failed` when it died on its own.
   spawned: its snapshot says `signalable: false`, and its page offers neither Cancel nor Force stop
   and says instead that it will finish on its own or be marked interrupted.
 - **Interrupted and Resume.** Stopping the server asks its jobs to stop and kills none: one
-  finishing an index rebuild runs on in its own process group, and the next start watches it to
-  its end. At a start, a record still `running` whose process is gone, or that began before the
-  computer booted, ends as its events say, else `interrupted`. `POST jobs/:id/resume` reruns an
-  interrupted, failed or cancelled job's request once, as a new job linked to it (`resumedFrom`,
-  `resumedBy`); each stage skips the work already done.
+  finishing an index rebuild runs on in its own process group (on Windows, as a detached process),
+  and the next start watches it to its end. At a start, a record still `running` whose process is
+  gone, or that began before the computer booted, ends as its events say, else `interrupted`.
+  `POST jobs/:id/resume` reruns an interrupted, failed or cancelled job's request once, as a new
+  job linked to it (`resumedFrom`, `resumedBy`); each stage skips the work already done.
 - **Kept.** The newest 50 jobs. Plans and link previews (`plan`, `expand`) don't count: only the
   newest of each per persona is kept, and none survives a restart.
 - **Plans** are cached per persona: a running or finished plan is answered again until a

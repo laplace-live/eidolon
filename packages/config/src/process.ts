@@ -1,5 +1,5 @@
 // The part of Bun.spawn's Subprocess the code was written against, over node:child_process.
-import { type Serializable, type StdioOptions, spawn } from "node:child_process";
+import { type Serializable, type StdioOptions, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { constants } from "node:os";
 import { join, resolve } from "node:path";
@@ -46,7 +46,8 @@ export interface Subprocess {
  */
 function startError(command: string, args: readonly string[], options: SpawnOptions): Error {
   const cwd = options.cwd ?? process.cwd();
-  const path = command.includes("/") ? resolve(cwd, command) : null;
+  const direct = command.includes("/") || (process.platform === "win32" && command.includes("\\"));
+  const path = direct ? resolve(cwd, command) : null;
   let code = "UNKNOWN";
   // A cwd that is no folder throws ENOTDIR from spawn itself, so only a missing one gets here.
   if (!existsSync(cwd)) code = "ENOENT";
@@ -132,17 +133,21 @@ export function spawnProcess(
 /**
  * Kills process `pid` and what it started: its process group, which a child spawned detached
  * leads, else the process alone; on Windows, which has no groups, its tree, through taskkill, as pi
- * does. Call it only while `pid` runs: Windows reuses a pid once its process is gone.
+ * does. Call it only while `pid` runs: Windows reuses a pid once its process is gone. `wait`, as an
+ * exit handler needs, returns only once taskkill has.
  */
-export function killTree(pid: number): void {
+export function killTree(pid: number, options: { readonly wait?: boolean } = {}): void {
   if (process.platform === "win32") {
     const taskkill = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
-    spawn(taskkill, ["/F", "/T", "/PID", String(pid)], {
-      stdio: "ignore",
+    const args = ["/F", "/T", "/PID", String(pid)];
+    if (options.wait) spawnSync(taskkill, args, { stdio: "ignore", windowsHide: true });
+    else {
       // Outside this process's job, which would end taskkill with this process.
-      detached: true,
-      windowsHide: true,
-    }).on("error", () => {});
+      spawn(taskkill, args, { stdio: "ignore", detached: true, windowsHide: true }).on(
+        "error",
+        () => {},
+      );
+    }
     return;
   }
   try {

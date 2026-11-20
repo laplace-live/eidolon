@@ -269,21 +269,27 @@ describe("getShellConfig", () => {
           signal: controller.signal,
         },
       );
-      const pid = await vi.waitFor(
-        () => {
-          const printed = /^(\d+)$/m.exec(output)?.[1];
-          if (printed === undefined) throw new Error("no pid printed yet");
-          return Number(printed);
-        },
-        { timeout: 15_000, interval: 50 },
-      );
-      expect(output).toMatch(/^in (MINGW|MSYS|CYGWIN)/);
-      controller.abort();
-      await expect(running).rejects.toThrow("aborted");
-      await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), {
-        timeout: 5_000,
-        interval: 50,
-      });
+      try {
+        const pid = await vi.waitFor(
+          () => {
+            const printed = /^(\d+)$/m.exec(output)?.[1];
+            if (printed === undefined) throw new Error("no pid printed yet");
+            return Number(printed);
+          },
+          { timeout: 15_000, interval: 50 },
+        );
+        expect(output).toMatch(/^in (MINGW|MSYS|CYGWIN)/);
+        controller.abort();
+        await expect(running).rejects.toThrow("aborted");
+        await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), {
+          timeout: 5_000,
+          interval: 50,
+        });
+      } finally {
+        // A failed check still ends the command's endless node.
+        controller.abort();
+        await running.catch(() => {});
+      }
     },
     30_000,
   );
@@ -305,6 +311,10 @@ describe("on Windows, the bash commands run in", () => {
     const msys = executable(join(root, "msys64", "usr", "bin"));
     const path = [join(system, "System32"), join(root, "msys64", "usr", "bin")].join(delimiter);
     expect(windowsBash(path, { ProgramFiles: programFiles, SystemRoot: system })).toBe(gitBash);
+    // Git's installer for one user puts it under LOCALAPPDATA, and Programs\Git\cmd alone on PATH.
+    const local = join(root, "AppData", "Local");
+    const ownGitBash = executable(join(local, "Programs", "Git", "bin"));
+    expect(windowsBash(path, { LOCALAPPDATA: local, SystemRoot: system })).toBe(ownGitBash);
     expect(windowsBash(path, { SystemRoot: system })).toBe(msys);
     expect(windowsBash(join(system, "System32"), { SystemRoot: system })).toBeNull();
   });

@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { killTree, type Subprocess, spawnProcess } from "@eidolon/config";
+import { killTree, type Subprocess, spawnProcess, which } from "@eidolon/config";
 import { Output, READY_LINE } from "../../bot/scripts/output.ts";
 import {
   type ErrorBody,
@@ -68,11 +68,13 @@ function check(name: string, pass: boolean, detail: string): asserts pass {
 
 /**
  * Runs `command` to its end. On Windows npm, and the .cmd npm links for a package's command, start
- * only through cmd.exe: there the line is the command's own, each argument quoted.
+ * only through cmd.exe: there the line is the command's own, each argument quoted, the command by
+ * its full path, since a batch file cmd.exe finds on PATH by a quoted name reads its own folder
+ * (`%~dp0`) as the working one.
  */
 function runSync(command: string, args: readonly string[], options: SpawnSyncOptions) {
   return WINDOWS
-    ? spawnSync([`"${command}"`, ...args.map((arg) => `"${arg}"`)].join(" "), {
+    ? spawnSync([`"${which(command) ?? command}"`, ...args.map((arg) => `"${arg}"`)].join(" "), {
         ...options,
         shell: true,
       })

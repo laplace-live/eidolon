@@ -9,6 +9,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { McpClient } from "../src/mcp/client.ts";
 import { StdioTransport } from "../src/mcp/transports/stdio.ts";
@@ -48,7 +49,7 @@ function pidsAfterExit(body: string): number[] {
     process.execPath,
     [
       "-e",
-      `const { StdioTransport } = await import(${JSON.stringify(STDIO)});
+      `const { StdioTransport } = await import(${JSON.stringify(pathToFileURL(STDIO).href)});
       const pids = await (async () => { ${body} })();
       process.stdout.write(JSON.stringify(pids), () => process.exit(0));`,
     ],

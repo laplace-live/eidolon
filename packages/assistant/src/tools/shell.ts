@@ -27,12 +27,14 @@ function shellPathExists(path: string): boolean {
 }
 
 /**
- * The bash.exe Windows commands run in, as pi finds it: Git Bash where its installer puts it, then
- * one on `path` (Cygwin, MSYS2), but never WSL's launcher in System32, which runs a command in
- * Linux, far from the task's folder and its PATH. Null when there is none.
+ * The bash.exe Windows commands run in, as pi finds it: Git Bash where its installer puts it, for
+ * everyone or for this user alone, then one on `path` (Cygwin, MSYS2), but never WSL's launcher in
+ * System32, which runs a command in Linux, far from the task's folder and its PATH. Null when there
+ * is none.
  */
 export function windowsBash(path: string, env: NodeJS.ProcessEnv = process.env): string | null {
-  for (const root of [env.ProgramFiles, env["ProgramFiles(x86)"]]) {
+  const programs = env.LOCALAPPDATA && join(env.LOCALAPPDATA, "Programs");
+  for (const root of [env.ProgramFiles, env["ProgramFiles(x86)"], programs]) {
     if (!root) continue;
     const gitBash = join(root, "Git", "bin", "bash.exe");
     if (shellPathExists(gitBash)) return gitBash;

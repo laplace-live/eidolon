@@ -22,7 +22,10 @@ const PIPE_DRAIN_MS = 1_000;
 
 const WINDOWS = process.platform === "win32";
 
-/** Process groups that may still hold a server or what it started, killed if the host exits. */
+/**
+ * Process groups that may still hold a server or what it started, killed if the host exits; on
+ * Windows, the servers still running, whose trees are.
+ */
 const liveProcessGroups = new Set<number>();
 let exitHookInstalled = false;
 
@@ -61,9 +64,13 @@ function killProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
 function installExitHook(): void {
   if (exitHookInstalled) return;
   exitHookInstalled = true;
-  // Not SIGTERM: once this process is gone, no SIGKILL follows it for a group that ignores it.
+  // Not SIGTERM: once this process is gone, no SIGKILL follows it for a group that ignores it. An
+  // exit handler runs nothing after itself, so Windows' taskkill is waited for, as dsh does.
   process.once("exit", () => {
-    for (const pid of liveProcessGroups) signalGroup(pid, "SIGKILL");
+    for (const pid of liveProcessGroups) {
+      if (WINDOWS) killTree(pid, { wait: true });
+      else signalGroup(pid, "SIGKILL");
+    }
   });
 }
 
@@ -123,9 +130,11 @@ export class StdioTransport extends TransportEvents implements McpTransport {
     });
     this.#child = child;
     const pid = child.pid;
-    if (pid !== undefined && !WINDOWS) {
+    if (pid !== undefined) {
       installExitHook();
       liveProcessGroups.add(pid);
+      // Windows finds no tree under a server that has exited, and may give its pid to another.
+      if (WINDOWS) child.once("exit", () => liveProcessGroups.delete(pid));
     }
     child.stdout?.on("data", (chunk: Buffer) => this.#lines.readStdout(chunk));
     child.stdout?.on("error", (error) => this.emitError(error));

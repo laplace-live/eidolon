@@ -74,8 +74,11 @@ describe("a job's run", () => {
     expect(job.record.id).toMatch(JOB_ID);
     await job.ended;
     const files = jobFiles(job.record.id);
-    for (const path of [files.events, files.log]) expect(statSync(path).mode & 0o777).toBe(0o600);
-    expect(statSync(jobsDir()).mode & 0o777).toBe(0o700);
+    // Windows reports 0o666 for every file this user can write: its access lists aren't modes.
+    if (process.platform !== "win32") {
+      for (const path of [files.events, files.log]) expect(statSync(path).mode & 0o777).toBe(0o600);
+      expect(statSync(jobsDir()).mode & 0o777).toBe(0o700);
+    }
     const snapshot = jobs.snapshot(job);
     expect(snapshot).toMatchObject({
       command: "ingest-facts",
@@ -376,7 +379,8 @@ describe("cancelling", () => {
       await until(() => next.snapshot(watched).status !== "running");
       expect(next.snapshot(watched).status).toBe("interrupted");
     } finally {
-      killTree(pid);
+      // Only while it runs: Windows may already have given a dead process's pid to another.
+      if (isAlive(pid)) killTree(pid);
     }
   });
 });
