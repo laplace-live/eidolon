@@ -5,12 +5,16 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 const SRC = join(import.meta.dirname, "..", "src");
-/** A static import's or re-export's specifier, in source order; `import type` evaluates nothing. */
-const STATIC_IMPORT = /^(?:import|export)\s+(?!type\s)(?:[^"';]*?\sfrom\s*)?["']([^"']+)["']/gm;
+/**
+ * A static import's or re-export's specifier, or a dynamic import's, in source order;
+ * `import type` evaluates nothing.
+ */
+const IMPORT =
+  /^(?:import|export)\s+(?!type\s)(?:[^"';]*?\sfrom\s*)?["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']/gm;
 
 async function importsOf(file: string): Promise<string[]> {
   const source = await readFile(join(SRC, file), "utf8");
-  return [...source.matchAll(STATIC_IMPORT)].map((match) => match[1] as string);
+  return [...source.matchAll(IMPORT)].map((match) => (match[1] ?? match[2]) as string);
 }
 
 describe("entry point", () => {

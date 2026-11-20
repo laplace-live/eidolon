@@ -383,6 +383,16 @@ describe("find's walk", () => {
     );
   });
 
+  it("matches a name that starts with a parenthesis, as a Next.js route group's does", async () => {
+    write("app/(auth)/login/page.tsx");
+    write("app/(shop)/page.tsx");
+    write("(draft).md");
+    write("notes.md");
+
+    expect(await findIn(folder, "(draft).md")).toEqual(["(draft).md"]);
+    expect(await findIn(folder, "app/(auth)/**/page.tsx")).toEqual(["app/(auth)/login/page.tsx"]);
+  });
+
   it("never lists .git or node_modules, whatever .gitignore says", async () => {
     write(".git/config");
     write("node_modules/pkg/index.js");

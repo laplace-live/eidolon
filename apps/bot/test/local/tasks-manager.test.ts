@@ -1382,7 +1382,10 @@ describe("a restart", () => {
     expect(userLines(minds.for("Seeded")[0]).at(-1)).toBe("Use tabs.");
     expect(types(seeded.id)).toEqual(["brief", "steer", "assistant", "end"]);
     // The run drops the line from task.json without waiting for the write.
-    await until(async () => !Object.hasOwn((await onDisk(seeded.id)) ?? {}, "inbox"));
+    await until(async () => {
+      const disk = await onDisk(seeded.id);
+      return disk !== null && !Object.hasOwn(disk, "inbox");
+    });
   });
 });
 

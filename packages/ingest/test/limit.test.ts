@@ -320,6 +320,29 @@ describe("runWithSignals", () => {
     }
   }, 10_000);
 
+  test("a real signal sent as a run ends in an I/O callback still decides the exit code", async () => {
+    const limit = join(import.meta.dirname, "../src/limit.ts");
+    const child = spawnProcess(
+      [
+        process.execPath,
+        "-e",
+        `const { readFile } = await import("node:fs/promises");
+         const { runWithSignals } = await import(${JSON.stringify(limit)});
+         process.exitCode = await runWithSignals(async () => {
+           await readFile(${JSON.stringify(limit)});
+           process.kill(process.pid, "SIGTERM");
+           return 0;
+         }, process);`,
+      ],
+      { stdout: "ignore", stderr: "pipe" },
+    );
+    try {
+      expect(await child.exited).toBe(143);
+    } finally {
+      child.kill("SIGKILL");
+    }
+  });
+
   test("a real SIGTERM that arrives twice, as the npm launcher's process group gets one, stops gracefully once", async () => {
     const limit = join(import.meta.dirname, "../src/limit.ts");
     const child = spawnProcess(

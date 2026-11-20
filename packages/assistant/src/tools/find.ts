@@ -186,7 +186,7 @@ export function globMatcher(
 function compileGlob(glob: string): (path: string) => boolean {
   let negations = 0;
   while (glob[negations] === "!") negations++;
-  if (glob[negations] === "(") negations--;
+  if (negations > 0 && glob[negations] === "(") negations--;
   const matcher = new Minimatch(glob.slice(negations), {
     dot: true,
     nocomment: true,

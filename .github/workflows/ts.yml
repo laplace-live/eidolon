@@ -76,6 +76,9 @@ jobs:
 
       - run: bun run test
 
+      # Production runs the same code on Bun.
+      - run: bun apps/bot/scripts/bun-check.ts
+
   # The npm package as npx installs it, install scripts included, on the one supported platform the
   # Mac it's built on can't run: Linux x64 with glibc.
   npm-package:

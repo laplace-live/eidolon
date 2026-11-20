@@ -179,7 +179,7 @@ From the repository root, with the voice role's key (`FISH_API_KEY` by default) 
 ```sh
 bun docs/benchmarks/2026-11-10-fish-flush/measure.ts --dry-run
 bun docs/benchmarks/2026-11-10-fish-flush/measure.ts --wav <path>
-./node_modules/.bin/vitest run docs/benchmarks/2026-11-10-fish-flush
+bun run test docs/benchmarks/2026-11-10-fish-flush
 ```
 
 - **`--dry-run`** prints the persona, account, model, endpoint, characters and estimated cost, and

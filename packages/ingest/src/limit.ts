@@ -134,8 +134,10 @@ export async function runWithSignals(
   try {
     const code = await run(controller.signal);
     // A signal sent during the run's last synchronous stretch reaches its listener when the event
-    // loop next polls; an immediate runs just after that poll, where a due timer could run before
-    // it. Without this wait, the run exits with its own code.
+    // loop next polls. One immediate can run before that poll, when the run ended in an I/O
+    // callback, and a timer can be due before it; a second immediate always runs after one.
+    // Without this wait, the run exits with its own code.
+    await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
     return received === null ? code : SIGNALS[received];
   } finally {
