@@ -361,59 +361,60 @@ export function ChatView({ id }: { readonly id: string }) {
           onSendVoice={turns.sendVoice}
           focusTask={focus}
           onFocused={focused}
-        />
-        <MicPill call={call} />
-      </div>
-      <footer className="shrink-0 border-t bg-muted/50 px-4 py-3 sm:px-6">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-          {tasks.bar !== null && (
-            <WaitingBar
-              task={tasks.bar.task}
-              others={tasks.bar.others}
-              onShow={() => setFocus(tasks.bar?.task.id ?? null)}
-            />
-          )}
-          {docked && (
-            <CallDock
-              call={call}
-              persona={personaOf(callee.persona)}
-              group={callee.group ? personas : null}
-              status={status}
-              onCallAgain={() => startCall(callee.persona, callee.group)}
-              onClose={() => setCallee(null)}
-            />
-          )}
-          {turns.live.error !== null && (
-            <LiveNotice
-              error={turns.live.error}
-              name={solo === null ? null : shortNameOf(solo)}
-              unheard={chat.data.hearingRefusal !== null}
-            />
-          )}
-          <Composer
-            placeholder={placeholder}
-            participants={personas}
-            skills={skills}
-            busy={turns.busy}
-            mic={mic}
-            inCall={inCall}
-            onSend={turns.send}
-            onSendVoice={turns.sendVoice}
-            onStop={turns.stop}
-            onCommand={runCommand}
-          />
-          {/* Only a chat of hers alone starts tasks. */}
-          {status?.assistant.enabled && solo !== null && (
-            <div className="-mt-2 flex">
-              <PermissionsPicker
-                id={id}
-                own={ownPermissions}
-                fallback={chat.data.defaultPermissions}
+          footer={
+            <>
+              <MicPill call={call} className="bottom-full mb-2" />
+              {tasks.bar !== null && (
+                <WaitingBar
+                  task={tasks.bar.task}
+                  others={tasks.bar.others}
+                  onShow={() => setFocus(tasks.bar?.task.id ?? null)}
+                />
+              )}
+              {docked && (
+                <CallDock
+                  call={call}
+                  persona={personaOf(callee.persona)}
+                  group={callee.group ? personas : null}
+                  status={status}
+                  onCallAgain={() => startCall(callee.persona, callee.group)}
+                  onClose={() => setCallee(null)}
+                />
+              )}
+              {turns.live.error !== null && (
+                <LiveNotice
+                  error={turns.live.error}
+                  name={solo === null ? null : shortNameOf(solo)}
+                  unheard={chat.data.hearingRefusal !== null}
+                />
+              )}
+              <Composer
+                placeholder={placeholder}
+                participants={personas}
+                skills={skills}
+                busy={turns.busy}
+                mic={mic}
+                inCall={inCall}
+                leading={
+                  // Only a chat of hers alone starts tasks.
+                  status?.assistant.enabled &&
+                  solo !== null && (
+                    <PermissionsPicker
+                      id={id}
+                      own={ownPermissions}
+                      fallback={chat.data.defaultPermissions}
+                    />
+                  )
+                }
+                onSend={turns.send}
+                onSendVoice={turns.sendVoice}
+                onStop={turns.stop}
+                onCommand={runCommand}
               />
-            </div>
-          )}
-        </div>
-      </footer>
+            </>
+          }
+        />
+      </div>
       <ChatSettingsSheet
         id={id}
         chainLimit={chainLimit}

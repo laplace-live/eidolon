@@ -629,6 +629,7 @@ export function ChatLog({
   onSendVoice,
   focusTask,
   onFocused,
+  footer,
 }: {
   readonly chatId: string;
   /** The chat's display, which opens task cards' steps; null while it isn't known. */
@@ -657,11 +658,13 @@ export function ChatLog({
   /** A task whose card to bring into view, once it is in the log. */
   readonly focusTask: string | null;
   readonly onFocused: (task: string) => void;
+  /** The message box and what sits above it, which the lines scroll under. */
+  readonly footer: ReactNode;
 }) {
   const { t } = useLingui();
   // Each line names its persona once the chat holds more than one, now or in its lines.
   const group = useMemo(() => personas.length > 1 || manyVoices(items), [personas, items]);
-  const { scrollRef, contentRef, pinnedRef, onScroll } = useStickToBottom();
+  const { scrollRef, contentRef, footRef, pinnedRef, onScroll } = useStickToBottom();
   const { turn, pending } = live;
   const from = call?.from ?? null;
   const shown = useMemo(
@@ -729,47 +732,60 @@ export function ChatLog({
   return (
     <div
       ref={scrollRef}
-      role="log"
-      aria-label={t`Conversation`}
       onScroll={onScroll}
-      className="absolute inset-0 overflow-y-auto px-4 pt-5 pb-6 sm:px-6"
+      className="absolute inset-0 flex flex-col overflow-y-auto"
     >
-      <div
-        ref={contentRef}
-        className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end gap-3"
-      >
-        {empty && <Intro personas={personas} />}
-        {shown.map((item, index) => (
-          <Item
-            key={itemKey(item)}
-            item={item}
-            chatId={chatId}
-            display={display}
-            personaOf={personaOf}
-            group={group}
-            first={startsRun(shown, index)}
-            onRetry={index === shown.length - 1 ? retryLast : null}
-            autoPlay={item.seq === autoPlay}
-            onAutoPlayEnd={onAutoPlayEnd}
-          />
-        ))}
-        {call !== null && (
-          <LiveCallRows
-            call={call}
-            before={last}
-            next={next}
-            personas={personas}
-            personaOf={personaOf}
-            group={group}
-          />
-        )}
-        {[...new Set(lateTools)].map((tool) => (
-          <ToolLine key={tool} tool={tool} />
-        ))}
-        {liveRows(live, inCall).map((row) => (
-          <Fragment key={row.kind === "pending" ? row.line.key : row.kind}>{liveRow(row)}</Fragment>
-        ))}
+      <div className="flex shrink-0 grow flex-col px-4 pt-5 pb-2 sm:px-6">
+        {/* What is focused or brought into view here stops above the foot. Scroll padding on the
+            scroller would do that too, but it scrolls the log each time the foot's text box takes
+            the focus or its caret moves. */}
+        <div
+          ref={contentRef}
+          role="log"
+          aria-label={t`Conversation`}
+          className="mx-auto flex w-full max-w-3xl grow flex-col justify-end gap-3 **:scroll-mb-(--foot-height)"
+        >
+          {empty && <Intro personas={personas} />}
+          {shown.map((item, index) => (
+            <Item
+              key={itemKey(item)}
+              item={item}
+              chatId={chatId}
+              display={display}
+              personaOf={personaOf}
+              group={group}
+              first={startsRun(shown, index)}
+              onRetry={index === shown.length - 1 ? retryLast : null}
+              autoPlay={item.seq === autoPlay}
+              onAutoPlayEnd={onAutoPlayEnd}
+            />
+          ))}
+          {call !== null && (
+            <LiveCallRows
+              call={call}
+              before={last}
+              next={next}
+              personas={personas}
+              personaOf={personaOf}
+              group={group}
+            />
+          )}
+          {[...new Set(lateTools)].map((tool) => (
+            <ToolLine key={tool} tool={tool} />
+          ))}
+          {liveRows(live, inCall).map((row) => (
+            <Fragment key={row.kind === "pending" ? row.line.key : row.kind}>
+              {liveRow(row)}
+            </Fragment>
+          ))}
+        </div>
       </div>
+      <footer
+        ref={footRef}
+        className="sticky bottom-0 z-10 shrink-0 bg-linear-to-b to-background to-[1.5rem] px-4 pt-6 pb-4 sm:px-6"
+      >
+        <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-3">{footer}</div>
+      </footer>
     </div>
   );
 }

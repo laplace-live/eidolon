@@ -328,6 +328,11 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - The chats are in the sidebar ([The layout](#the-layout)), newest first, each with who it is
     with, its name, its last line and when, and the open chat fills the rest of the window, its
     lines in a centered column. With none open, `/chats` offers **New Chat**.
+  - **The message box** floats at the foot of the column, with no bar behind it: the lines scroll
+    under it and fade out above it, and the waiting bar, the call's dock and a reply that couldn't
+    start stack above it. Under the text is a row: the chat's permission picker
+    ([Tasks](#tasks)) or whom the line mentions, then **Stop** while a reply runs, and the
+    microphone or **Send**. A press anywhere in the box off its buttons puts the caret in the text.
   - **New Chat**, in the sidebar or on `/chats`, ticks one to six personas, the active one listed
     first, then **Start Chat** or **Start Group Chat**. One persona's greeting then streams in, the
     way a call greets; a group starts quiet, named by the short names of whoever is in it until it
@@ -366,7 +371,7 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - The composer offers the participants' names after `@` (arrow keys, Enter or Tab, Escape),
     inserting one `parseMentions` reads back: her short name, or her name when another
     participant answers to the short one too. A pick closes the list, so the next Enter sends, and
-    a quiet line names whom the message mentions.
+    a quiet line in the box names whom the message mentions.
   - **Stop** and the thinking dots stay up across the whole chain, while the director decides
     between turns.
   - A chain that ends with no one answering shows nothing more.
@@ -548,7 +553,7 @@ tools.
     once.
   - The owner's own Show Steps or Hide Steps holds until the display changes.
 - **The chat's permission level** ([assistant.md](assistant.md#permission-levels)) is the picker
-  under the composer, in a chat of hers alone while Assistant Mode is on
+  in the composer, under the text, in a chat of hers alone while Assistant Mode is on
   (`features/chats/permissions-picker.tsx`): the level's icon and name, Full Access in the warning
   color, opening a menu of **Ask for Approval**, **Approve for Me** and **Full Access**, each with
   what it lets her tasks do, and, while the chat has none of its own, that it follows Settings.
@@ -885,7 +890,7 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
     **Always Allow This Tool**, which `mcp.json` keeps at 0600, the server's process gone once the
     task ends; a second task, called `other` and showing no kind, whose call runs unasked; then
     Settings' **MCP Servers** taking the Always back;
-  - the chat's permission picker under its message box: **Approve for Me**, stored as the chat's
+  - the chat's permission picker in its message box: **Approve for Me**, stored as the chat's
     `settings` event, under which a task outside `assistant.folders` starts with no card and
     runs the command its fake review allows, then asks about the one writing outside its folder,
     the card saying why, answered **Deny**; **Full Access**, in the warning color, her

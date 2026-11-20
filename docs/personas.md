@@ -390,7 +390,7 @@ task may read and write besides its own, where a task she starts runs without as
 macOS and Linux, each waiting for your OK on its card unless you allowed that exact command in its
 folder for good; off, no task starts one, and one already running goes on to its end or its
 timeout. `assistant.permissions` is how much a task asks you, in a chat that picks no level of its
-own beside its message box ([assistant.md](assistant.md#permission-levels)): `ask`, the default,
+own in its message box ([assistant.md](assistant.md#permission-levels)): `ask`, the default,
 asks about every folder outside yours, site, command and MCP call you haven't allowed; `auto` has
 the task's own model review each of those first, billed to the task, and asks only about the ones
 it finds risky; `full` asks about none, so its commands run as you unasked. Any other value reads
