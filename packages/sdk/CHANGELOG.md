@@ -1,5 +1,11 @@
 # @laplace.live/eidolon-sdk
 
+## 0.2.0
+
+### Minor Changes
+
+- 096fb88: Send her images and text files in chats, in the app and through the SDK
+
 ## 0.1.2
 
 ### Patch Changes
