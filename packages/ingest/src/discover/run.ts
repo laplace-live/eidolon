@@ -208,11 +208,12 @@ function infoTitle(vodsDir: string, stem: string): string {
 }
 
 /**
- * The days her transcripts in `streamsDir` cover: those whose parts run `minSec` together. A
- * transcript is named `<upload date>-<stem>.md` by yt-dlp's upload date, in UTC, which can be the
- * day after the stream; so one of a video `official` holds covers no day of its own, the video's
- * day standing for it, and another's day is its info.json title's, else that upload date. A
- * transcribed clip doesn't cover its day's stream; one that doesn't say how long it runs does.
+ * The days her transcripts in `streamsDir` cover: those of the videos whose parts run `minSec`
+ * together. A transcript is named `<upload date>-<stem>.md` by yt-dlp's upload date, in UTC, which
+ * can be the day after the stream; so one of a video `official` holds covers no day of its own, the
+ * video's day standing for it, and another's day is its info.json title's, else that upload date.
+ * A transcribed clip doesn't cover its day's stream, nor do two; one that doesn't say how long it
+ * runs does.
  */
 function transcriptDates(
   streamsDir: string,
@@ -220,19 +221,25 @@ function transcriptDates(
   official: ReadonlyMap<string, Found>,
   minSec: number,
 ): string[] {
-  const seconds = new Map<string, number>();
+  const videos = new Map<string, { readonly day: string; seconds: number }>();
   for (const path of transcriptPaths(streamsDir)) {
     const name = /^(\d{4}-\d{2}-\d{2})-(.+)\.md$/.exec(basename(path));
     if (name === null) continue;
     const stem = name[2] as string;
-    // A video's parts are `<id>_p<n>`.
-    if (official.has(stem.replace(/_p\d+$/, ""))) continue;
-    const date = titleDate(infoTitle(vodsDir, stem)) ?? (name[1] as string);
+    // A video's parts are `<id>_p<n>`; `official` keys a YouTube video by its URL.
+    const id = stem.replace(/_p\d+$/, "");
+    if (official.has(id) || official.has(youtubeVideoUrl(id))) continue;
     const minutes = /^duration_min:\s*(\d+(?:\.\d+)?)\s*$/m.exec(head(path))?.[1];
     const length = minutes === undefined ? Number.POSITIVE_INFINITY : Number(minutes) * 60;
-    seconds.set(date, (seconds.get(date) ?? 0) + length);
+    const video = videos.get(id);
+    if (video !== undefined) video.seconds += length;
+    else
+      videos.set(id, {
+        day: titleDate(infoTitle(vodsDir, stem)) ?? (name[1] as string),
+        seconds: length,
+      });
   }
-  return [...seconds].flatMap(([date, total]) => (total >= minSec ? [date] : []));
+  return [...videos.values()].flatMap(({ day, seconds }) => (seconds >= minSec ? [day] : []));
 }
 
 function bilibiliFound(video: BilibiliVideo, timeZone: string, mid?: string): Found {
@@ -523,8 +530,8 @@ export async function discoverVideos(options: DiscoverOptions): Promise<Discover
     }
   };
   // Clips crowd full streams out of the newest results, a few days' worth filling the pages, so
-  // the long videos are searched for on their own first.
-  if (minSec >= 3600) await search(true);
+  // the videos over an hour are searched for on their own first, whatever the shortest stream.
+  await search(true);
   await search(false);
 
   const candidates: Candidate[] = [];
@@ -556,7 +563,10 @@ export async function discoverVideos(options: DiscoverOptions): Promise<Discover
   }
 
   const covered = new Set(transcriptDates(options.streamsDir, options.vodsDir, official, minSec));
-  for (const found of official.values()) if (found.date !== null) covered.add(found.date);
+  // A video skipped as none of her streams covers no day.
+  for (const found of official.values()) {
+    if (found.date !== null && !skipped.has(found.key)) covered.add(found.date);
+  }
   // A saved recording's days, which a search may no longer return.
   for (const covers of batchHeader(listsDir, "Covers")) {
     for (const word of covers.split(/\s+/)) if (ISO_DAY.test(word)) covered.add(word);

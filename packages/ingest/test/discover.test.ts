@@ -417,7 +417,7 @@ describe("discoverVideos", () => {
     ]);
   });
 
-  test("a video skipped is in no tier and no batch, and another recording takes its day", async () => {
+  test("a video skipped is in no tier and no batch, covers no day, and another recording takes its day", async () => {
     writeLists();
     const now = new Date("2026-11-19T21:00:00Z");
     const found = await discover.discoverVideos(
@@ -436,13 +436,16 @@ describe("discoverVideos", () => {
       "https://www.bilibili.com/video/BV1aaaaaaaa3",
       "https://www.bilibili.com/video/BV1bbbbbbbb5",
     ]);
+    // The 19th's official replay skipped, a copy of that stream is the 19th's recording.
     expect(found.recordings.videos.map(({ url, date }) => [url, date])).toEqual([
+      ["https://www.bilibili.com/video/BV1bbbbbbbb3", "2026-11-19"],
       ["https://www.bilibili.com/video/BV1bbbbbbbb2", "2026-11-18"],
       ["https://www.bilibili.com/video/BV1bbbbbbbb8", "2026-11-09"],
     ]);
     expect(download.readIds(found.batch as string)).toEqual([
       "BV1aaaaaaaa3",
       "BV1bbbbbbbb5",
+      "BV1bbbbbbbb3",
       "BV1bbbbbbbb2",
       "BV1bbbbbbbb8",
     ]);
@@ -631,6 +634,36 @@ describe("discoverVideos", () => {
     expect(found.recordings.videos.map(({ url }) => url)).toEqual([
       "https://www.bilibili.com/video/BV1bbbbbbbb1",
       "https://www.bilibili.com/video/BV1bbbbbbbb8",
+    ]);
+  });
+
+  test("a transcript of an official YouTube replay covers no day of its own", async () => {
+    writeLists();
+    // Named by its upload, the 18th, a day the replay's own title doesn't give.
+    writeFileSync(join(streams, "2026-11-18-AAAAAAAAAA1.md"), "---\nduration_min: 120\n---\n");
+    const found = await discover.discoverVideos(
+      options(fakeBilibili(routes()).fetch, { channels: ["https://www.youtube.com/@milky"] }),
+    );
+    expect(found.recordings.videos.map(({ url }) => url)).toEqual([
+      "https://www.bilibili.com/video/BV1bbbbbbbb1",
+      "https://www.bilibili.com/video/BV1bbbbbbbb8",
+    ]);
+  });
+
+  test("a video's transcribed parts add up to cover its day, two clips of one day don't", async () => {
+    writeLists();
+    // Two 40-minute clips of the 18th, and the two 40-minute parts of one video of the 9th.
+    for (const [file, minutes] of [
+      ["2026-11-18-BV1gggggggg1.md", 40],
+      ["2026-11-18-BV1gggggggg2.md", 40],
+      ["2026-11-09-BV1hhhhhhhh1_p1.md", 40],
+      ["2026-11-09-BV1hhhhhhhh1_p2.md", 40],
+    ] as const) {
+      writeFileSync(join(streams, file), `---\nduration_min: ${minutes}\n---\n`);
+    }
+    const found = await discover.discoverVideos(options(fakeBilibili(routes()).fetch));
+    expect(found.recordings.videos.map(({ url }) => url)).toEqual([
+      "https://www.bilibili.com/video/BV1bbbbbbbb1",
     ]);
   });
 
@@ -912,6 +945,17 @@ describe("discoverVideos", () => {
       pauseMs: 0,
     });
     expect(await client.listVideos(SPACE, { type: "series", id: "7" })).toHaveLength(101);
+  });
+
+  test("a --min-minutes under 60 still searches the videos over an hour on their own first", async () => {
+    const bilibili = fakeBilibili(routes());
+    await discover.discoverVideos(options(bilibili.fetch, { minMinutes: 30, pages: 1 }));
+    const searches = bilibili.sent.filter(
+      ({ url }) =>
+        url.pathname === "/x/web-interface/search/type" &&
+        url.searchParams.get("search_type") === "video",
+    );
+    expect(searches.map(({ url }) => url.searchParams.get("duration"))).toEqual(["4", null]);
   });
 
   test("a space's lists run to as many pages as their total takes, 10 at most", async () => {

@@ -382,8 +382,9 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   official space uploaded is official too. A YouTube replay's day comes from its title alone: a
   flat listing carries no upload date, so an undated one covers no day.
 - **Recordings** are others' uploads over `--min-minutes` from Bilibili's search for her name, one
-  a day, for the days no official video, no transcript of hers running that long (`duration_min`,
-  her parts that day added up) and no recording she already has covers. A day comes from the
+  a day, for the days no official video, no transcribed video of hers running that long
+  (`duration_min`, a video's parts added up, never two clips') and no recording she already has
+  covers. A day comes from the
   title (`2026年11月19日`, `2026-11-19` and the like), else from the upload in her time zone; one
   dated by its upload may be the day before's stream, which ends after midnight at times, so it
   covers both days, whether picked now or hers already, and of two such a day apart only one is
@@ -401,8 +402,8 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   a space's Referer for its lists and the search page's for the search: without them the lists
   answer -352 and the search HTTP 412. At least 300 ms between requests. The search runs twice,
   `--pages` pages of 20 each (5): first its long videos alone (`duration=4`, over an hour), since a
-  few days of clips fill the newest pages, then everything, for clips; the first pass runs only
-  when `--min-minutes` is 60 or more. No login, and no yt-dlp, whose Bilibili search and space
+  few days of clips fill the newest pages, then everything, for clips and the shorter streams a
+  `--min-minutes` under 60 lets in. No login, and no yt-dlp, whose Bilibili search and space
   listing answer 412 without one.
 - **A failure is a warning.** A channel that can't be listed gets `error`, a failed search ends
   that search, a list given whose space's lists can't be read is listed with no `list` name, and
@@ -412,8 +413,8 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   have one first: only a streamer's own space has a 直播回放 list, and the search may rank a
   namesake above her. Whoever runs it chooses one and passes its list's URL as `--channel`.
 - **`--skip VIDEO`**, repeated for more, leaves a video out of every tier and the batch, by its BV
-  id or its Bilibili or YouTube URL (`videoKey`): one found by the search that isn't her stream. A
-  skipped recording covers no day, so another of its day can take its place.
+  id or its Bilibili or YouTube URL (`videoKey`): one found that isn't her stream. A skipped video,
+  official or a recording, covers no day, so another recording of its day can take its place.
 - **`--save`** writes official, then recordings, then clips (with `--clips`) into
   `lists/batches/videos-<time>.txt`, under a `# Source:` line for each channel it listed, a
   Bilibili list by its URL, so the next run finds them without `--channel`, and a
