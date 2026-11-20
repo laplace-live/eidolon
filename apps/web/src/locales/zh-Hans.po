@@ -251,6 +251,10 @@ msgstr "已添加 {name}。"
 msgid "{name} API Key"
 msgstr "{name} API 密钥"
 
+#: src/components/settings-form/account-key-field.tsx
+msgid "{name} API Key (Optional)"
+msgstr "{name} API 密钥（可选）"
+
 #: src/features/chats/chat-view.tsx
 msgid "{name} can't answer yet"
 msgstr "{name}暂时无法回复"
@@ -329,10 +333,6 @@ msgstr "{name}是 Eidolon 自带的人设。你的修改保存在数据目录里
 msgid "{name} speaks first once the call connects."
 msgstr "接通后{name}会先开口。"
 
-#: src/features/setup/voice-step.tsx
-msgid "{name} speaks through {provider}. Continue to keep her voice, or change it later in her studio."
-msgstr "{name}通过 {provider} 说话。继续即可保留她现在的声音，之后也可以在她的工作室里更换。"
-
 #: src/features/home/memory-panel.tsx
 msgid "{name} starts remembering you from your next call."
 msgstr "从下一次通话开始，{name}会记住你。"
@@ -356,6 +356,10 @@ msgstr "{name}的工作室"
 #: src/features/settings/accounts-card.tsx
 msgid "{owner}: {roles}"
 msgstr "{owner}：{roles}"
+
+#: src/features/setup/keys-step.tsx
+msgid "{personaName} talks through {provider}'s realtime model, which hears, thinks and speaks in one. Change that in her studio."
+msgstr "{personaName}通过 {provider} 的实时语音模型说话，由它一并负责听、思考和说话。可以在她的工作室里更换。"
 
 #: src/components/settings-form/model-picker.tsx
 msgid "{provider} doesn't list its models here: type the model id."
@@ -512,6 +516,10 @@ msgstr "一位和猫咪一起经营小花店的中文虚拟主播。自带提示
 #: src/components/settings-form/labels.ts
 msgid "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
 msgstr "供 yt-dlp 使用的 cookies.txt，yt-dlp 会把合并后的 Cookie 写回这个文件。"
+
+#: src/features/setup/keys-step.tsx
+msgid "A decision model: whether a line needs what she knows looked up, and who answers in a group chat."
+msgstr "一个决策模型：判断一句话要不要去查她知道的事，以及群聊里由谁来接话。"
 
 #: src/features/studio/voice-by-id.tsx
 msgid "A Fish voice ID is 32 characters of 0–9 and a–f."
@@ -872,6 +880,10 @@ msgstr "匿名用户每小时的聊天轮数"
 #: src/components/settings-form/labels.ts
 msgid "Anonymous Window Seconds"
 msgstr "匿名限额窗口秒数"
+
+#: src/features/setup/keys-step.tsx
+msgid "Another account, such as your own server or a second key, goes under <0>Providers</0>; it's listed here once added."
+msgstr "其他账号，比如你自己的服务器或另一个密钥，请在「<0>服务商</0>」中添加；添加后会列在这里。"
 
 #: src/features/call/call-notices.tsx
 msgid "Another app is using your microphone. Close it, then call again."
@@ -1791,8 +1803,8 @@ msgid "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
 msgstr "Eidolon 只响应 localhost 或 127.0.0.1，请通过其中之一打开。"
 
 #: src/features/setup/keys-step.tsx
-msgid "Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account."
-msgstr "Eidolon 用你自己的密钥调用付费服务：默认由 Soniox 负责听，OpenRouter 负责思考，Fish Audio 负责说话。每个账户都需要有余额。"
+msgid "Eidolon calls paid services with your own keys. Keep the recommended providers or pick others you have keys for: one provider can fill more than one part. Each needs credit on its account."
+msgstr "Eidolon 用你自己的密钥调用付费服务。可以保留推荐的服务商，也可以换成你有密钥的其他服务商：一个服务商可以同时负责好几项。每个账号都需要有余额。"
 
 #: src/features/tasks/cards.tsx
 msgid "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
@@ -1837,6 +1849,10 @@ msgstr "未设置时，Eidolon 会自行安装并更新 yt-dlp。"
 #: src/features/jobs/detail.tsx
 msgid "Eidolon keeps the last 50 jobs."
 msgstr "Eidolon 只保留最近 50 个作业。"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "Eidolon reaches it at {base}, with no key."
+msgstr "Eidolon 通过 {base} 访问它，不需要密钥。"
 
 #: src/features/settings/restart.ts
 msgid "Eidolon restarted."
@@ -2070,6 +2086,14 @@ msgstr "文件仍在上传"
 msgid "Files Written"
 msgstr "写入的文件"
 
+#: src/features/setup/voice-choice.tsx
+msgid "Find a voice in {provider}'s <0>voice library</0>, then paste its ID here."
+msgstr "在 {provider} 的<0>声音库</0>里找一个声音，然后把它的 ID 粘贴到这里。"
+
+#: src/features/setup/keys-step.tsx
+msgid "Finds her memories and what she knows. Every persona shares it."
+msgstr "用来查找她的记忆和她知道的事。所有人设共用。"
+
 #: src/features/tasks/transcript-view.tsx
 msgid "Finished at {time}"
 msgstr "{time} 完成"
@@ -2238,6 +2262,10 @@ msgstr "挂断"
 #: src/features/call/call-state.tsx
 msgid "Hanging up…"
 msgstr "正在挂断…"
+
+#: src/features/setup/keys-step.tsx
+msgid "Hears you on calls and in voice messages."
+msgstr "在通话和语音消息里听你说话。"
 
 #: src/features/studio/identity-section.tsx
 msgid "Her avatar is built in. Upload one to use your own instead."
@@ -2666,6 +2694,10 @@ msgstr "它会立刻停止，之后无法再继续。已经写入的文件会保
 msgid "It stops once it has finished what it is writing."
 msgstr "写完手头的内容后，它就会停止。"
 
+#: src/components/settings-form/account-key-field.tsx
+msgid "It takes no key."
+msgstr "不需要密钥。"
+
 #: src/features/tasks/labels.ts
 msgid "It waited for your answer."
 msgstr "它在等你答复。"
@@ -2781,6 +2813,7 @@ msgstr "密钥可用"
 msgid "Key removed."
 msgstr "密钥已删除。"
 
+#: src/features/setup/keys-step.tsx
 #: src/features/setup/stepper.tsx
 msgid "Keys"
 msgstr "密钥"
@@ -2901,6 +2934,7 @@ msgstr "正在聆听…"
 #: src/features/chats/chat-list.tsx
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
+#: src/features/setup/keys-step.tsx
 #: src/features/studio/route.tsx
 #: src/features/tasks/list.tsx
 #: src/features/tasks/transcript-view.tsx
@@ -3081,12 +3115,21 @@ msgstr "思维"
 msgid "Missing: {names}. Calls can't start without them."
 msgstr "缺少：{names}。没有它们无法开始通话。"
 
+#: src/features/setup/keys-step.tsx
 #: src/features/tasks/list.tsx
 #: src/features/tasks/parts.tsx
 #: src/features/tasks/task-card.tsx
 #: src/features/usage/tables.tsx
 msgid "Model"
 msgstr "模型"
+
+#: src/features/setup/keys-step.tsx
+msgid "Model ID"
+msgstr "模型 ID"
+
+#: src/features/setup/keys-step.tsx
+msgid "Model: <0>{model}</0>"
+msgstr "模型：<0>{model}</0>"
 
 #: src/components/settings-form/labels.ts
 #: src/features/studio/models-section.tsx
@@ -3212,6 +3255,10 @@ msgstr "还没有作业"
 #: src/features/settings/accounts-card.tsx
 msgid "No key"
 msgstr "没有密钥"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "No key needed"
+msgstr "无需密钥"
 
 #: src/features/settings/accounts-card.tsx
 msgid "No key: calls need one"
@@ -3499,6 +3546,7 @@ msgstr "用一个同时负责听、思考和说话的模型代替三个模型。
 msgid "One of {name}'s voices, by its ID. Find one in its <0>voice library</0>."
 msgstr "{name} 的一个声音，按 ID 填写。可以在它的<0>声音库</0>里找。"
 
+#: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-section.tsx
 msgid "One of {provider}'s voices."
 msgstr "{provider} 提供的声音之一。"
@@ -3583,6 +3631,10 @@ msgstr "OpenRouter 应用网址"
 #: src/features/setup/stepper.tsx
 msgid "Optional"
 msgstr "可选"
+
+#: src/features/setup/keys-step.tsx
+msgid "Optional Providers"
+msgstr "可选服务商"
 
 #: src/features/home/memory-panel.tsx
 msgid "Optional: calls work without it."
@@ -3719,6 +3771,7 @@ msgstr "请为这个账号选择模型。"
 msgid "Pick a PNG, JPEG or WebP image."
 msgstr "请选择 PNG、JPEG 或 WebP 图片。"
 
+#: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Pick a voice"
 msgstr "选一个声音"
@@ -3754,10 +3807,6 @@ msgstr "可以从服务商列出的模型中选择，也可以填写它提供的
 #: src/features/settings/account-dialog.tsx
 msgid "Pick the provider this account is with. You can add more than one of a provider."
 msgstr "选择这个账号所属的服务商。同一个服务商可以添加多个账号。"
-
-#: src/features/setup/keys-step.tsx
-msgid "Pick who hears, thinks and speaks for her from the accounts you have. Add another provider's account under <0>Providers</0>, then choose it here or in her studio."
-msgstr "从已有的账号中选择由谁为她听、思考和说话。在「<0>服务商</0>」中添加其他服务商的账号，然后在这里或她的工作室中选用。"
 
 #: src/features/studio/route.tsx
 msgid "Pictures"
@@ -3952,6 +4001,10 @@ msgstr "重新构建"
 msgid "Rebuild Catalog"
 msgstr "重建目录"
 
+#: src/features/setup/keys-step.tsx
+msgid "Recommended"
+msgstr "推荐"
+
 #: src/features/chats/voice-recorder.tsx
 msgid "Record Voice Message"
 msgstr "录制语音消息"
@@ -4094,6 +4147,11 @@ msgstr "回复方式"
 msgid "Requests"
 msgstr "请求数"
 
+#: src/features/setup/keys-step.tsx
+msgid "Required Providers"
+msgstr "必需服务商"
+
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/setup/persona-fields.tsx
 msgid "Required."
 msgstr "必填。"
@@ -4306,10 +4364,6 @@ msgstr "已保存：{names}。"
 msgid "Saved for every persona"
 msgstr "保存到所有人设共用的设置中"
 
-#: src/features/setup/keys-step.tsx
-msgid "Saved for the active persona. Claude, DeepSeek and others work through your OpenRouter key or with their own."
-msgstr "保存到当前人设的设置中。Claude、DeepSeek 等模型既可以通过你的 OpenRouter 密钥使用，也可以用它们自己的密钥。"
-
 #: src/features/settings/account-dialog.tsx
 msgid "Saved in credentials.json under the provider's own variable; saving a new one moves it into this account."
 msgstr "以服务商自己的变量名保存在 credentials.json 中；保存新密钥后会移入这个账号。"
@@ -4455,6 +4509,7 @@ msgstr "由 settings.yaml 中的 {env} 设置；在这里保存的值会替代�
 msgid "Set by {env} in the environment, which wins over a value saved here."
 msgstr "由环境变量 {env} 设置，它优先于这里保存的值。"
 
+#: src/features/setup/keys-step.tsx
 #: src/features/setup/memory-step.tsx
 #: src/features/setup/persona-step.tsx
 msgid "Set by {env} in the environment, which wins over the value saved here. Change it there."
@@ -4592,8 +4647,16 @@ msgid "She speaks Mandarin, so the search starts among Chinese voices."
 msgstr "她说普通话，所以默认搜索中文声音。"
 
 #: src/features/setup/new-persona.tsx
+msgid "She starts on the providers {herName} uses, so she speaks through {provider}. Change them in her studio."
+msgstr "她会沿用{herName}正在用的服务商，所以通过 {provider} 说话。可以在她的工作室里更换。"
+
+#: src/features/setup/new-persona.tsx
 msgid "She starts with a Chinese prompt skeleton in her name; build her up in the studio."
 msgstr "她会从一份写好名字的中文提示词框架开始，之后在工作室里完善。"
+
+#: src/features/setup/keys-step.tsx
+msgid "She talks without them, but remembers and recalls less."
+msgstr "没有它们她也能聊天，只是记得和回忆起来的会少一些。"
 
 #: src/features/setup/persona-step.tsx
 msgid "She uses it in calls. Leave it empty and she won't use a name."
@@ -4742,6 +4805,10 @@ msgstr "Soniox 拒绝了这个密钥。欧盟、日本或印度项目的密钥�
 msgid "Soniox transcribes the audio, the refine model cleans up each transcript, and the embedding API indexes it. Each step skips what's already done."
 msgstr "Soniox 转写音频，整理模型清理每份转写稿，嵌入 API 建立索引。每一步都会跳过已经完成的部分。"
 
+#: src/features/setup/keys-step.tsx
+msgid "Speaks her replies."
+msgstr "把她的回复说出来。"
+
 #: src/features/home/readiness-labels.ts
 #: src/lib/labels.ts
 msgid "Speech Recognition"
@@ -4851,8 +4918,8 @@ msgid "Starting…"
 msgstr "正在启动…"
 
 #: src/features/setup/persona-step.tsx
-msgid "Starts with a Chinese prompt skeleton in her name. Add facts, videos and outfits in the studio."
-msgstr "从一份写好她名字的中文提示词框架开始。资料、视频和服装可以在工作室里添加。"
+msgid "Starts with a Chinese prompt skeleton in her name, on the providers you picked. Add facts, videos and outfits in the studio."
+msgstr "从一份写好她名字的中文提示词框架开始，用你刚选的服务商。资料、视频和服装可以在工作室里添加。"
 
 #: src/features/studio/video-table.tsx
 msgid "State"
@@ -5523,6 +5590,14 @@ msgstr "在人设工作室里索引资料或添加视频后，作业会出现在
 msgid "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
 msgstr "这些文件已被删除，或不再符合规则。重新索引资料，她就会忘掉它们："
 
+#: src/features/setup/keys-step.tsx
+msgid "Thinks and writes her replies."
+msgstr "思考并写出她的回复。"
+
+#: src/features/setup/keys-step.tsx
+msgid "This account has no default model, so name the one to use."
+msgstr "这个账号没有默认模型，请填写要用的模型。"
+
 #: src/features/studio/videos-section.tsx
 msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
 msgstr "这会向你的 Soniox、OpenRouter 和嵌入服务账户收费：按估价约 {usd}。"
@@ -5890,10 +5965,6 @@ msgstr "改用"
 msgid "Use lowercase letters, digits and single hyphens, 64 at most."
 msgstr "只能用小写字母、数字和单个连字符，最多 64 个字符。"
 
-#: src/features/setup/keys-step.tsx
-msgid "Use Other Providers (Optional)"
-msgstr "使用其他服务商（可选）"
-
 #: src/features/studio/voice-section.tsx
 msgid "Use the Environment's Voice"
 msgstr "改用环境变量里的声音"
@@ -5963,6 +6034,7 @@ msgstr "视图"
 #: src/components/settings-form/labels.ts
 #: src/features/home/readiness-labels.ts
 #: src/features/setup/stepper.tsx
+#: src/features/setup/voice-choice.tsx
 #: src/features/studio/route.tsx
 #: src/features/studio/voice-section.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -5975,6 +6047,7 @@ msgctxt "reply mode"
 msgid "Voice"
 msgstr "语音"
 
+#: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Voice ID"
 msgstr "声音 ID"
@@ -6229,10 +6302,6 @@ msgstr "由哪个服务商的哪个模型朗读她的台词。"
 msgid "Who hears you and who thinks for her: a provider and a model each. She speaks with the voice set under <0>Voice</0>."
 msgstr "由谁听你说话、由谁替她思考：各选一个服务商和模型。她说话用的声音在「<0>声音</0>」中设置。"
 
-#: src/features/setup/keys-step.tsx
-msgid "Who Hears, Thinks and Speaks"
-msgstr "由谁来听、思考和说话"
-
 #: src/features/studio/identity-section.tsx
 msgid "Who she is, as the built-in prompts and the call page name her. Write the names in her language."
 msgstr "她是谁：内置提示词和通话页面会这样称呼她。名字请用她的语言填写。"
@@ -6260,6 +6329,10 @@ msgstr "{name}为什么回答"
 #: src/features/setup/memory-step.tsx
 msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
 msgstr "开启记忆后，她会在多次通话之间记得你。这需要在本机用 Docker 运行 Qdrant 数据库。跳过也不影响其他功能。"
+
+#: src/features/setup/keys-step.tsx
+msgid "Without it, these stay off: {off}."
+msgstr "没有它，以下功能不会启用：{off}。"
 
 #: src/features/tasks/list.tsx
 msgid "Work she does on this computer when you ask her in a chat, such as writing a page or sorting files. Each row opens its chat at the task, where you answer what it asks."

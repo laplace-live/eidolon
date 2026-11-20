@@ -1,20 +1,21 @@
 // One account's key, as the setup wizard asks for it: typed, never shown back, checked at its
-// provider.
+// provider, with the provider's own settings beside it. An account that takes no key is checked
+// by reaching it.
 
 import { msg, ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLinkIcon } from "lucide-react";
-import { useId } from "react";
+import { type ReactNode, useId } from "react";
 import { QuietBadge } from "@/components/quiet-badge";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { accountsQuery } from "@/lib/accounts";
 import type { KeyStatus } from "@/lib/api";
-import { KEY_NOTES, listOf, ROLE_LABELS } from "@/lib/labels";
-import type { RoleId } from "@/lib/providers";
+import { ACCOUNT_FIELD_LABELS, KEY_NOTES, listOf, ROLE_LABELS } from "@/lib/labels";
+import { providerById, type RoleId } from "@/lib/providers";
 import { CheckResultView } from "./check-result";
 import { type KeyPages, keyPages } from "./credentials";
 import type { AccountKeys } from "./use-account-keys";
@@ -48,17 +49,32 @@ export function KeyLinks({ pages }: { readonly pages: KeyPages }) {
   );
 }
 
+function useRoles(need: KeyStatus): string {
+  const { t } = useLingui();
+  return listOf(need.roles.map((role) => t(ROLE_LABELS[role as RoleId])));
+}
+
 export function AccountKeyField({
   need,
   keys,
+  optional = false,
+  note,
+  missing = [],
 }: {
   readonly need: KeyStatus;
   readonly keys: AccountKeys;
+  /** Continue doesn't wait for it. */
+  readonly optional?: boolean;
+  /** What goes without it, under the field. */
+  readonly note?: ReactNode;
+  /** The provider's own settings a save found missing, by field key. */
+  readonly missing?: readonly string[];
 }) {
   const { t } = useLingui();
   const id = useId();
   const { data } = useQuery(accountsQuery);
-  const source = data?.accounts.find((account) => account.id === need.account)?.key.source;
+  const account = data?.accounts.find((entry) => entry.id === need.account);
+  const source = account?.key.source;
   const shown =
     source === "account" || source === "credentials" || source === "env"
       ? STATE[source]
@@ -66,12 +82,17 @@ export function AccountKeyField({
   const typed = keys.typed[need.account] ?? "";
   const outcome = keys.outcomes[need.account];
   const links = keyPages(need.provider);
-  const note = KEY_NOTES[need.provider];
-  const roles = listOf(need.roles.map((role) => t(ROLE_LABELS[role as RoleId])));
+  const keyNote = KEY_NOTES[need.provider];
+  const roles = useRoles(need);
+  const fields = providerById(need.provider)?.fields ?? [];
   return (
     <Field className="max-w-xl">
       <div className="flex flex-wrap items-center gap-2">
-        <FieldLabel htmlFor={id}>{t`${ph({ name: need.name })} API Key`}</FieldLabel>
+        <FieldLabel htmlFor={id}>
+          {optional
+            ? t`${ph({ name: need.name })} API Key (Optional)`
+            : t`${ph({ name: need.name })} API Key`}
+        </FieldLabel>
         <QuietBadge dot={shown.dot}>{t(shown.text)}</QuietBadge>
       </div>
       <div className="flex gap-2">
@@ -113,10 +134,77 @@ export function AccountKeyField({
           </span>
         )}
       </FieldDescription>
-      {note && <FieldDescription>{t(note)}</FieldDescription>}
+      {keyNote && <FieldDescription>{t(keyNote)}</FieldDescription>}
+      {note && <FieldDescription>{note}</FieldDescription>}
       {source === "env" && (
         <FieldDescription>{t`The environment's key wins over one saved here.`}</FieldDescription>
       )}
+      {fields.map((field) => {
+        const label = ACCOUNT_FIELD_LABELS[field.key];
+        const saved = account?.options[field.key]?.value ?? null;
+        return (
+          <div key={field.key} className="flex flex-col gap-2 pt-1">
+            <FieldLabel htmlFor={`${id}-${field.key}`}>{label ? t(label) : field.label}</FieldLabel>
+            <Input
+              id={`${id}-${field.key}`}
+              name={`${need.account}-${field.key}`}
+              autoComplete="off"
+              spellCheck={false}
+              value={keys.options[need.account]?.[field.key] ?? ""}
+              placeholder={saved ?? ""}
+              aria-invalid={missing.includes(field.key)}
+              onChange={(event) => keys.setOption(need.account, field.key, event.target.value)}
+              disabled={keys.saving}
+            />
+            {missing.includes(field.key) && <FieldError>{t`Required.`}</FieldError>}
+          </div>
+        );
+      })}
+      {outcome && <CheckResultView provider={need.provider} outcome={outcome} />}
+    </Field>
+  );
+}
+
+/** An account that takes no key, such as Ollama on this computer: a Check that it answers. */
+export function NoKeyField({
+  need,
+  keys,
+}: {
+  readonly need: KeyStatus;
+  readonly keys: AccountKeys;
+}) {
+  const { t } = useLingui();
+  const { data } = useQuery(accountsQuery);
+  const base =
+    data?.accounts.find((entry) => entry.id === need.account)?.baseUrl.value ??
+    providerById(need.provider)?.baseUrl ??
+    null;
+  const outcome = keys.outcomes[need.account];
+  const roles = useRoles(need);
+  return (
+    <Field className="max-w-xl">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-sm leading-snug">{need.name}</span>
+        <QuietBadge dot="bg-success">{t`No key needed`}</QuietBadge>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 text-muted-foreground text-sm">
+          {base === null
+            ? t`It takes no key.`
+            : t`Eidolon reaches it at ${ph({ base })}, with no key.`}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          disabled={keys.checking.has(need.account) || keys.saving}
+          onClick={() => void keys.check(need.account)}
+        >
+          {keys.checking.has(need.account) && <Spinner />}
+          {t`Check`}
+        </Button>
+      </div>
+      <FieldDescription>{t`Used for: ${roles}.`}</FieldDescription>
       {outcome && <CheckResultView provider={need.provider} outcome={outcome} />}
     </Field>
   );

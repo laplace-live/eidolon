@@ -1,4 +1,3 @@
-import { ph } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon } from "lucide-react";
@@ -8,10 +7,9 @@ import { personasQuery, settingsQuery } from "@/components/settings-form/queries
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { VoicePicker } from "@/components/voice-picker";
 import { accountsQuery } from "@/lib/accounts";
-import { type ApiError, asApiError, type Voice } from "@/lib/api";
-import { providerName } from "@/lib/providers";
+import { type ApiError, asApiError } from "@/lib/api";
+import { defaultVoice, providerById } from "@/lib/providers";
 import { addAvatar } from "./avatar";
 import type { VoiceTarget } from "./persona-step";
 import {
@@ -22,14 +20,15 @@ import {
   saveVoice,
 } from "./personas";
 import { StepCard } from "./step-card";
-import { inheritedValue, otherVoiceProvider, ownValue } from "./wizard";
+import { type ChosenVoice, VoiceChoice } from "./voice-choice";
+import { inheritedValue, ownValue, voiceProvider } from "./wizard";
 
 const VOICE = "voice.voiceId";
 
 /**
- * Picks a public Fish voice, then commits the persona step: saves an existing persona's voice and
- * makes her active, or creates the new one with it, and her avatar. A persona who speaks through
- * another provider keeps her voice.
+ * Picks her voice from the provider she speaks through, then commits the persona step: saves an
+ * existing persona's voice and makes her active, or creates the new one with it, and her avatar.
+ * A new persona starts on the active one's providers, so her voice is that provider's.
  */
 export function VoiceStep({
   target,
@@ -43,41 +42,43 @@ export function VoiceStep({
   const { t } = useLingui();
   const queryClient = useQueryClient();
   const existing = target.kind === "existing" ? target.persona : null;
-  const settings = useQuery({ ...settingsQuery(existing?.id), enabled: existing !== null });
+  // Hers, or for a new persona the active one's, whose providers she starts on.
+  const settings = useQuery(settingsQuery(existing?.id));
   const personas = useQuery(personasQuery);
   const accounts = useQuery(accountsQuery);
-  const [chosen, setChosen] = useState<Voice | null>(null);
+  const [chosen, setChosen] = useState<ChosenVoice | null>(null);
   // Kept so a retry after a refused switch doesn't create her twice.
   const [created, setCreated] = useState<PersonaRef | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
 
-  const row = settings.data?.settings.find((candidate) => candidate.path === VOICE);
+  const row = existing
+    ? settings.data?.settings.find((candidate) => candidate.path === VOICE)
+    : undefined;
   const current = ownValue(row);
   // The environment's voice, which she keeps unless one is picked for her.
   const inherited = existing ? inheritedValue(row) : null;
   const name = existing ? existing.name : target.kind === "create" ? target.draft.name : "";
   const env = row?.env ?? "";
-  const other =
-    existing && settings.data
-      ? otherVoiceProvider(settings.data.settings, accounts.data?.accounts)
-      : null;
-  const ready =
-    other !== null || chosen !== null || (existing !== null && (current ?? inherited) !== null);
+  const provider = voiceProvider(settings.data?.settings ?? [], accounts.data?.accounts);
+  const fallback = current ?? inherited ?? defaultVoice(providerById(provider)?.offers.tts) ?? null;
+  const picked = chosen?.id.trim() ?? "";
+  const voiceId = picked === "" ? fallback : picked;
+  const ready = settings.data !== undefined && voiceId !== null;
 
   async function next() {
+    if (voiceId === null) return;
     setBusy(true);
     setFailure(null);
     try {
       let persona: PersonaRef;
       if (target.kind === "create") {
-        if (!chosen) return;
-        persona = created ?? (await createPersona(target.draft, chosen.id));
+        persona = created ?? (await createPersona(target.draft, voiceId));
         if (created === null && target.avatar) persona = await addAvatar(persona, target.avatar);
         setCreated(persona);
       } else {
         persona = target.persona;
-        if (chosen && chosen.id !== current) await saveVoice(persona.id, chosen.id);
+        if (picked !== "" && picked !== current) await saveVoice(persona.id, picked);
       }
       if (personas.data?.active !== persona.id) await activatePersona(persona.id);
       await refreshPersonas(queryClient);
@@ -93,7 +94,7 @@ export function VoiceStep({
     <StepCard
       title={t`Pick a Voice`}
       description={
-        other === null
+        provider === "fish"
           ? t`How ${name} sounds. Search Fish Audio's public voices and play a sample before you pick one.`
           : t`How ${name} sounds.`
       }
@@ -106,14 +107,7 @@ export function VoiceStep({
         </Button>
       }
     >
-      {other !== null ? (
-        <Alert>
-          <InfoIcon />
-          <AlertDescription>
-            {t`${name} speaks through ${ph({ provider: providerName(other) })}. Continue to keep her voice, or change it later in her studio.`}
-          </AlertDescription>
-        </Alert>
-      ) : inherited !== null && row ? (
+      {inherited !== null && row && (
         <Alert>
           <InfoIcon />
           <AlertDescription>
@@ -123,10 +117,12 @@ export function VoiceStep({
             </Trans>
           </AlertDescription>
         </Alert>
-      ) : null}
-      {other === null && (
-        <VoicePicker
-          value={chosen?.id ?? current ?? inherited}
+      )}
+      {settings.data !== undefined && (
+        <VoiceChoice
+          provider={provider}
+          value={chosen?.id ?? null}
+          fallback={fallback}
           onChange={setChosen}
           disabled={busy}
         />

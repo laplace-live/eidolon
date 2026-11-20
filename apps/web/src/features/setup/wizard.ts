@@ -1,6 +1,7 @@
 // The setup wizard's steps, and what it decides from the API's answers.
 import {
   type AccountList,
+  draftOf,
   effectiveProviderType,
   isTimeZone,
 } from "@/components/settings-form/controls";
@@ -74,15 +75,28 @@ export function inheritedValue(
 }
 
 /**
- * The provider a persona speaks through when it isn't Fish Audio, whose library the voice step
- * searches; null for Fish. Another provider's voice stays as she has it.
+ * Whether a flag row is on: her file's value, else the environment's, else `fallback`, as the
+ * bot reads it.
  */
-export function otherVoiceProvider(
+export function flagOn(
+  row: Pick<SettingRow, "value" | "envValue"> | undefined,
+  fallback: boolean,
+): boolean {
+  const control = { type: "flag" } as const;
+  const own = draftOf(row?.value ?? null, control);
+  const set = own === "" ? draftOf(row?.envValue ?? null, control) : own;
+  return set === "" ? fallback : set === "on";
+}
+
+/**
+ * The provider a persona speaks through, whose voices the voice step offers: Fish Audio while her
+ * settings name no account Eidolon knows, as the server checks a new persona's voice.
+ */
+export function voiceProvider(
   rows: readonly SettingRow[],
   accounts: AccountList | undefined,
-): string | null {
-  const provider = effectiveProviderType(roleById("voice"), rows, {}, accounts);
-  return provider === null || provider === "fish" ? null : provider;
+): string {
+  return effectiveProviderType(roleById("voice"), rows, {}, accounts) ?? "fish";
 }
 
 /** Ids become folder names, lock keys and --persona, so they stay lowercase ASCII. */

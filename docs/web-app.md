@@ -202,7 +202,7 @@ terminal's log line that holds what went wrong, and the app shows it beside the 
 | Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); and her voice styles, with each one the environment sets and whether she inherits it, replaces it with one of hers, or ignores it while her voice isn't the environment's; PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml`; one that turns Assistant Mode off, as the environment and the file decide it, answers once every live task is cancelled |
 | Accounts | `GET`, `POST accounts`, `PUT`, `DELETE accounts/:id`, `POST accounts/check`, `GET accounts/:id/models?category=` | Every provider account: `credentials.json`'s, and each provider's default that the environment configures or her calls need, with where its key comes from and never the key, its API base and settings, and which settings name it; a new one takes its provider's id while that is free, else `<provider>-2` and on; an API base is refused for a provider without a base variable; DELETE is refused while a settings file names it; the check asks the provider about a typed or the saved key, where the catalog says how: a free listing, never a model call; models lists what the provider's API offers now ([providers.md](providers.md#model-lists)) |
 | Credentials | `GET`, `PUT credentials`, `POST credentials/check` | The secrets `credentials.json` keeps under variable names, `{NAME: {set, source}}`, never a value; the check is Qdrant's for the memory step and home |
-| Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice and a starter `prompt.md`), switch (refused during a call, or while one is connecting) |
+| Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice, the providers and models the active persona's `persona.yaml` sets for `hearing`, `mind`, `voice` and `knowledge.gate`, and a starter `prompt.md`), switch (refused during a call, or while one is connecting). A new persona's voice is her voice provider's: a Fish Audio voice id, or for another provider one line of text |
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
 | Voice styles | `PUT personas/:id/voice-styles` | `{styles}`: all of hers, in order, each with a name of its own, a voice and a hint, replacing her `persona.yaml`'s `voice.styles`; answers as `GET settings` does. Any name her file can hold passes, since a save sends back those a hand-written file gave her; the studio names a new style with a lowercase letter, then letters, digits or `_`, never `default` |
 | Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar` | Outfits and friends under `references/`, and the avatar, `avatar.*` at the root of her folder, where selfies never take it for an outfit; a template's pictures can't be deleted |
@@ -278,6 +278,30 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `unknown-mcp-server` | 404 | Changing a server `mcp.json` doesn't hold; the message never names what was sent |
 | `invalid-mcp-config` | 409 | Changing `mcp.json` from Settings, or answering Always on an MCP call's card, while it doesn't parse |
 | `linked-mcp-config` | 409 | The same, while `mcp.json` is a symbolic or hard link to another file, which a write would replace with a copy |
+
+## The setup wizard
+
+`/setup` runs five steps: keys, persona, voice, memory and done. While a key the active persona's
+calls need is missing, every page but Settings sends you to its first.
+
+- **Keys** picks an account for each role a call needs (who hears, thinks and speaks) and for the
+  optional ones (embeddings, for every persona, and her retrieval gate's decision model), from each
+  provider in the catalog that offers the role ([providers.md](providers.md#roles)), its default
+  marked Recommended, and the other accounts Settings → Providers has. An OpenAI-compatible
+  endpoint is listed once an account of it has an API base, and a pick with no default model asks
+  for one. Then it asks for one key per account the picks name, and the accounts her reranking
+  (unless turned off) and selfies (once she has an outfit) run on, saying what each is used for:
+  an account a call's role uses is required; any other is optional and says what stays off without
+  it. Ollama takes no key and MiniMax also takes its group id. Saving writes the picks to her
+  `persona.yaml` and `embeddings.provider` to `settings.yaml`, clears the models and voice the
+  replaced providers owned, asks before another embedding provider on an install that isn't new,
+  then saves and checks every key. A persona on a realtime model is asked for its account's key in
+  place of the three.
+- **Persona** keeps the active persona, takes the demo, or creates one.
+- **Voice** offers the voices of the provider she speaks through: Fish Audio's public library, one
+  of OpenAI's fixed set, or for another provider the id of a voice in its library. A new persona
+  starts on the active persona's providers, so hers is that persona's voice provider, as it is in
+  **New Persona** outside the wizard.
 
 ## The local viewer and memory
 

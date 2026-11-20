@@ -214,7 +214,7 @@ export function PersonaStep({
             </span>
           }
           title={t`Create Your Own`}
-          body={t`Starts with a Chinese prompt skeleton in her name. Add facts, videos and outfits in the studio.`}
+          body={t`Starts with a Chinese prompt skeleton in her name, on the providers you picked. Add facts, videos and outfits in the studio.`}
         />
       </fieldset>
 

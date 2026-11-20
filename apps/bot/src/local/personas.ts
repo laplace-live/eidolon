@@ -25,6 +25,7 @@ import {
   readSettingsLayers,
   resolvePersonaPath,
   resolveProjectPath,
+  SETTINGS,
   sortedPy,
   sourceFolder,
 } from "@eidolon/config";
@@ -292,14 +293,48 @@ export function starterPrompt(name: string, fans: string): string {
 `;
 }
 
-/** What POST personas writes: persona.yaml with her identity and voice, and the starter prompt. */
-export function writeNewPersona(id: string, fields: PersonaIdentityFields, voiceId: string): void {
+/**
+ * What a new persona takes from the active one's persona.yaml: the accounts and models the setup
+ * wizard picks for her, who hears, thinks, speaks and decides.
+ */
+const STARTER_PATHS: ReadonlySet<string> = new Set([
+  "hearing.provider",
+  "hearing.model",
+  "mind.provider",
+  "mind.model",
+  "voice.provider",
+  "voice.model",
+  "knowledge.gate.provider",
+  "knowledge.gate.model",
+]);
+
+/** STARTER_PATHS as persona `from`'s persona.yaml sets them, so a new persona runs on her keys. */
+export function starterSettings(from: string): Tree {
+  const layers = readSettingsLayers(from);
+  const tree: Tree = {};
+  for (const field of SETTINGS) {
+    if (field.scope !== "persona" || !STARTER_PATHS.has(field.path)) continue;
+    const layer = layers.values.get(field.env);
+    if (layer?.source === "persona" && layer.value) setDotted(tree, field.path, layer.raw);
+  }
+  return tree;
+}
+
+/**
+ * What POST personas writes: persona.yaml with her identity, `starter` and her voice, and the
+ * starter prompt.
+ */
+export function writeNewPersona(
+  id: string,
+  fields: PersonaIdentityFields,
+  voiceId: string,
+  starter: Tree,
+): void {
   const identity: Tree = {};
   for (const key of IDENTITY_FIELDS) if (fields[key] !== "") identity[key] = fields[key];
-  writeDataFile(
-    personaWriteTarget(id, "persona.yaml"),
-    stringifyYaml({ identity, voice: { voiceId } }),
-  );
+  const tree: Tree = { identity, ...starter };
+  setDotted(tree, "voice.voiceId", voiceId);
+  writeDataFile(personaWriteTarget(id, "persona.yaml"), stringifyYaml(tree));
   writeDataFile(
     personaWriteTarget(id, "prompt.md"),
     starterPrompt(fields.name, fields.fans || IDENTITY_DEFAULTS.fans),
