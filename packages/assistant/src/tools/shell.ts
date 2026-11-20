@@ -1,27 +1,20 @@
 // Copyright (c) 2025 Mario Zechner
 // SPDX-License-Identifier: MIT
 //
-// Ported from pi-mono packages/coding-agent/src/utils/shell.ts@ac78a60
+// Ported from pi-mono packages/coding-agent/src/utils/shell.ts@ac78a60, its Windows parts @cb1205e
 //
 // The shell a task's commands run in, the environment they get, and the kill that takes a command
-// with everything it started. Commands run on macOS and Linux only.
+// with everything it started. On Windows commands run in Git Bash, as pi's do, and an MCP server
+// gets the same environment.
 import { accessSync, constants } from "node:fs";
-import { basename, delimiter, isAbsolute, sep } from "node:path";
-import { which } from "@eidolon/config";
+import { basename, delimiter, isAbsolute, join, resolve, sep } from "node:path";
+import { killTree, which } from "@eidolon/config";
 import { fold } from "../policy.ts";
 import type { PathGuard } from "../types.ts";
 
 export interface ShellConfig {
   readonly shell: string;
   readonly args: readonly string[];
-}
-
-/**
- * Whether a task may run commands on `platform`: a kill takes a command's process group, which
- * Windows lacks.
- */
-export function bashOffered(platform: NodeJS.Platform = process.platform): boolean {
-  return platform === "darwin" || platform === "linux";
 }
 
 function shellPathExists(path: string): boolean {
@@ -33,8 +26,50 @@ function shellPathExists(path: string): boolean {
   }
 }
 
-/** pi's order: /bin/bash, then bash on `path`, the PATH a command gets, then sh. */
+/**
+ * The bash.exe Windows commands run in, as pi finds it: Git Bash where its installer puts it, for
+ * everyone or for this user alone, then one on `path` (Cygwin, MSYS2), but never WSL's launcher in
+ * System32, which runs a command in Linux, far from the task's folder and its PATH. Null when there
+ * is none.
+ */
+export function windowsBash(path: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  const programs = env.LOCALAPPDATA && join(env.LOCALAPPDATA, "Programs");
+  for (const root of [env.ProgramFiles, env["ProgramFiles(x86)"], programs]) {
+    if (!root) continue;
+    const gitBash = join(root, "Git", "bin", "bash.exe");
+    if (shellPathExists(gitBash)) return gitBash;
+  }
+  const system = env.SystemRoot ?? "C:\\Windows";
+  const launchers = ["System32", "Sysnative"].map((folder) => fold(join(system, folder)));
+  const folders = path
+    .split(delimiter)
+    .filter((folder) => folder !== "" && !launchers.includes(fold(resolve(folder))));
+  return which("bash", folders.join(delimiter), "win32");
+}
+
+// Looked up once, as pi does: a Git installed later shows after the app's next start.
+let foundWindowsBash: string | null | undefined;
+
+/** Whether a task may run commands on `platform`: on Windows, only in a bash it finds. */
+export function bashOffered(platform: NodeJS.Platform = process.platform): boolean {
+  if (platform !== "win32") return platform === "darwin" || platform === "linux";
+  if (foundWindowsBash === undefined) foundWindowsBash = windowsBash(process.env.PATH ?? "");
+  return foundWindowsBash !== null;
+}
+
+/**
+ * pi's order: on Windows windowsBash, else /bin/bash, then bash on `path`, the PATH a command gets,
+ * then sh.
+ */
 export function getShellConfig(path: string): ShellConfig {
+  if (process.platform === "win32") {
+    const bash = windowsBash(path);
+    if (bash !== null) return { shell: bash, args: ["-c"] };
+    throw new Error(
+      "No bash shell found. Install Git for Windows (https://git-scm.com/download/win), or put " +
+        "Cygwin's or MSYS2's bash on PATH, then start Eidolon again.",
+    );
+  }
   if (shellPathExists("/bin/bash")) return { shell: "/bin/bash", args: ["-c"] };
   const bash = which("bash", path);
   if (bash !== null) return { shell: bash, args: ["-c"] };
@@ -63,8 +98,49 @@ const PASSED: ReadonlySet<string> = new Set([
   "no_proxy",
 ]);
 
+/**
+ * What a Windows program needs of the environment that libuv doesn't add back, in any case, as
+ * Windows matches names: npx's cache is under LOCALAPPDATA, Go's os.UserConfigDir reads APPDATA,
+ * and cmd.exe finds a .cmd through PATHEXT.
+ */
+const PASSED_ON_WINDOWS: ReadonlySet<string> = new Set([
+  "SYSTEMROOT",
+  "WINDIR",
+  "SYSTEMDRIVE",
+  "COMSPEC",
+  "PATHEXT",
+  "TEMP",
+  "TMP",
+  "USERPROFILE",
+  "USERNAME",
+  "USERDOMAIN",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "PROGRAMDATA",
+  "ALLUSERSPROFILE",
+  "PUBLIC",
+  "PROGRAMFILES",
+  "PROGRAMFILES(X86)",
+  "PROGRAMW6432",
+  "COMMONPROGRAMFILES",
+  "COMMONPROGRAMFILES(X86)",
+  "COMMONPROGRAMW6432",
+  "COMPUTERNAME",
+  "NUMBER_OF_PROCESSORS",
+  "PROCESSOR_ARCHITECTURE",
+  "OS",
+]);
+
 /** A command's PATH when none of the server's is left: the system's own, which only root writes. */
 const SYSTEM_PATH = ["/usr/bin", "/bin"].join(delimiter);
+
+/** SYSTEM_PATH on Windows, under SystemRoot. */
+function windowsSystemPath(env: NodeJS.ProcessEnv): string {
+  const root = env.SystemRoot ?? env.SYSTEMROOT ?? "C:\\Windows";
+  return [`${root}\\System32`, root].join(";");
+}
 
 /** A folder npm and bun put first on a script's PATH, for the package's own tools. */
 function isPackageBin(entry: string): boolean {
@@ -99,25 +175,33 @@ async function commandPath(path: string, guard: PathGuard | undefined): Promise<
           ),
     ),
   );
-  const kept = entries.filter((_, at) => !writable[at]);
-  // bash takes an empty PATH, and an unset one, to mean the folder the command starts in.
-  return kept.length > 0 ? kept.join(delimiter) : SYSTEM_PATH;
+  return entries.filter((_, at) => !writable[at]).join(delimiter);
 }
 
 /**
- * The environment a command runs with, made again at each spawn: PASSED's variables and every
- * LC_* from `from`, its PATH less what commandPath drops, and TERM=dumb, as a command has no
- * terminal. Without `guard`, PATH keeps the folders a task may write.
+ * The environment a command runs with, made again at each spawn: PASSED's variables, on Windows
+ * PASSED_ON_WINDOWS' too, and every LC_* from `from`, its PATH less what commandPath drops, and
+ * TERM=dumb, as a command has no terminal. Without `guard`, PATH keeps the folders a task may write.
  */
 export async function shellEnv(
   guard?: PathGuard,
   from: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<Record<string, string>> {
+  const windows = platform === "win32";
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(from)) {
-    if (value !== undefined && (PASSED.has(name) || name.startsWith("LC_"))) env[name] = value;
+    if (value === undefined) continue;
+    const passed =
+      PASSED.has(name) ||
+      name.startsWith("LC_") ||
+      (windows && PASSED_ON_WINDOWS.has(name.toUpperCase()));
+    if (passed) env[name] = value;
   }
-  env.PATH = await commandPath(from.PATH ?? "", guard);
+  // bash takes an empty PATH, and an unset one, to mean the folder the command starts in.
+  env.PATH =
+    (await commandPath(from.PATH ?? "", guard)) ||
+    (windows ? windowsSystemPath(from) : SYSTEM_PATH);
   env.TERM = "dumb";
   return env;
 }
@@ -149,14 +233,5 @@ export function killProcessTree(pid: number): void {
       // A failed stop must not prevent the kill attempt or its single-process fallback.
     }
   }
-  try {
-    process.kill(-pid, "SIGKILL");
-  } catch {
-    // Fallback to killing just the child if process group kill fails
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      // Process already dead
-    }
-  }
+  killTree(pid);
 }

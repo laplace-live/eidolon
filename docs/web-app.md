@@ -35,7 +35,10 @@ Eidolon is ready: http://localhost:7860/#1762300800.Lb0Yx…
 `bun run local` keeps the server in a child process. When the server exits 75, which is what
 Restart in the app (`POST /api/local/restart`) does, the supervisor starts a new one on the same
 port without opening another tab; that is how settings read once at boot take effect. It passes
-SIGINT and SIGTERM on, and otherwise exits with the server's code. A data home runs one server,
+SIGINT and SIGTERM on, and otherwise exits with the server's code. On Windows it passes nothing
+on: the server shares its console, which gives every process in it Ctrl-C and the window's
+closing, and a `kill()` there is TerminateProcess, which would end the server in the middle of its
+own stop. A data home runs one server,
 which holds a lock in its `locks/`: starting again on the port it serves prints a fresh link to it
 and exits 0, and on any other port exits 2, naming its pid and port. A port another program holds
 exits 1.
@@ -62,6 +65,14 @@ ignored, so that Ctrl-C reaches a running command once. A SIGTERM sent to the wh
 as `timeout` sends one, reaches the child twice, directly and through the launcher; a command
 counts a second signal within half a second as the first, and only a later one makes it quit
 without finishing an index. A tool that stops the app should send SIGTERM.
+
+Windows has no SIGTERM to send and no process groups. Ctrl-C and closing the console window
+reach the launcher, the supervisor and the server alike, and the first two wait for the server's
+own stop; Windows ends them all some seconds after the window closes. A process the app spawns
+without `detached` sits in its parent's job object, which ends it when the parent ends, however
+it ends: killing the launcher takes the supervisor and the server with it, without their stop.
+The launcher refuses to start without the Visual C++ runtime that LanceDB and onnxruntime-node
+load (`VC_RUNTIME_DLLS`), and points to its installer.
 
 ## What stays out of production
 
@@ -673,34 +684,37 @@ with `-`, is refused. No request reaches `--yt-dlp-args`, a path flag, `--cookie
 
 A job is `node apps/cli/src/main.ts <command> --json …`, on the Node running the server
 (`jobArgv` in `@eidolon/cli/job`), started in the data home, detached in its own process group,
-so Ctrl-C in the terminal reaches only the server. Its files are in `<data home>/jobs/` (0700): the
-record `<id>.json`, its stdout `<id>.ndjson` (the [progress events](typescript.md#progress-events))
-and its stderr `<id>.log`, both 0600. The server tails the files, so a job outlives a reloaded
-page and the server itself. `GET jobs/:id` is a snapshot reduced from the events (status, each
-stage's done and total, cost so far, failures, the end of stderr, and whether the run's summary
-arrived); `events?after=<byte offset>` streams the events from there; `log` is stderr, or its last
-MiB.
+so Ctrl-C in the terminal reaches only the server (on Windows, detached means without a console,
+and outside the server's job, so a job outlives the server there too). Its files are in
+`<data home>/jobs/` (0700): the record `<id>.json`, its stdout `<id>.ndjson` (the
+[progress events](typescript.md#progress-events)) and its stderr `<id>.log`, both 0600. The
+server tails the files, so a job outlives a reloaded page and the server itself. `GET jobs/:id`
+is a snapshot reduced from the events (status, each stage's done and total, cost so far,
+failures, the end of stderr, and whether the run's summary arrived); `events?after=<byte offset>`
+streams the events from there; `log` is stderr, or its last MiB.
 
 A job ends `succeeded` by its run's summary; `cancelled` when you stopped it; `interrupted` when
 the server's own stop or restart stopped it, another signal did, or it ended while no server
 watched; and `failed` when it died on its own.
 
-- **Cancel and force stop.** `DELETE jobs/:id` saves why, then sends the CLI one SIGTERM: it
-  starts nothing new, cancels what runs, and first finishes an index rebuild it is in, so a table
-  is never left half built. The snapshot says `stopping` until it exits, and a repeat sends
-  nothing, since a second SIGTERM makes the CLI quit at once. `DELETE jobs/:id?force=1` on a job
-  already stopping kills its whole process group, which can leave an index without its table or
-  its full-text index until the next ingest; the job page offers it as Force stop once a cancel
-  has hung for 20 s. Nothing is killed on a timer. A job an earlier server started can't be
-  stopped from here (409 `conflict`), since a server signals only the processes it spawned: its
-  snapshot says `signalable: false`, and its page offers neither Cancel nor Force stop and says
-  instead that it will finish on its own or be marked interrupted.
-- **Interrupted and Resume.** Stopping the server sends its jobs SIGTERM and kills none: one
-  finishing an index rebuild runs on in its own process group, and the next start watches it to
-  its end. At a start, a record still `running` whose process is gone, or that began before the
-  computer booted, ends as its events say, else `interrupted`. `POST jobs/:id/resume` reruns an
-  interrupted, failed or cancelled job's request once, as a new job linked to it (`resumedFrom`,
-  `resumedBy`); each stage skips the work already done.
+- **Cancel and force stop.** `DELETE jobs/:id` saves why, then sends the CLI `STOP_MESSAGE` over
+  its IPC channel, which the CLI takes as SIGTERM (`relayStopMessages`), since Windows has no
+  SIGTERM to send: it starts nothing new, cancels what runs, and first finishes an index rebuild
+  it is in, so a table is never left half built. The snapshot says `stopping` until it exits, and
+  a repeat sends nothing, since a second stop makes the CLI quit at once.
+  `DELETE jobs/:id?force=1` on a job already stopping kills it and what it started (`killTree`:
+  its process group, or on Windows its tree through taskkill), which can leave an index without
+  its table or its full-text index until the next ingest; the job page offers it as Force stop
+  once a cancel has hung for 20 s. Nothing is killed on a timer. A job an earlier server started
+  can't be stopped from here (409 `conflict`), since a server signals only the processes it
+  spawned: its snapshot says `signalable: false`, and its page offers neither Cancel nor Force stop
+  and says instead that it will finish on its own or be marked interrupted.
+- **Interrupted and Resume.** Stopping the server asks its jobs to stop and kills none: one
+  finishing an index rebuild runs on in its own process group (on Windows, as a detached process),
+  and the next start watches it to its end. At a start, a record still `running` whose process is
+  gone, or that began before the computer booted, ends as its events say, else `interrupted`.
+  `POST jobs/:id/resume` reruns an interrupted, failed or cancelled job's request once, as a new
+  job linked to it (`resumedFrom`, `resumedBy`); each stage skips the work already done.
 - **Kept.** The newest 50 jobs. Plans and link previews (`plan`, `expand`) don't count: only the
   newest of each per persona is kept, and none survives a restart.
 - **Plans** are cached per persona: a running or finished plan is answered again until a

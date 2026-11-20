@@ -17,15 +17,19 @@ export interface EidolonScript {
   readonly dataHome: string;
   /** The app's environment, whose CARRIED variables the CLI gets too. */
   readonly env: NodeJS.ProcessEnv;
+  /** This process's when omitted. */
+  readonly platform?: NodeJS.Platform;
 }
 
 function quoted(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-/** The script, in POSIX sh. */
+/** The script, in POSIX sh; on Windows, for Git Bash, its paths with forward slashes. */
 export function eidolonScript(options: EidolonScript): string {
   const { env, runtime } = options;
+  const windows = (options.platform ?? process.platform) === "win32";
+  const sh = (value: string) => quoted(windows ? value.replaceAll("\\", "/") : value);
   const variables: [string, string][] = [
     ["EIDOLON_HOME", options.dataHome],
     ...Object.entries(runtime.env),
@@ -37,8 +41,8 @@ export function eidolonScript(options: EidolonScript): string {
   return [
     "#!/bin/sh",
     "# Eidolon's CLI for a task's commands. Eidolon writes this file again each time it starts.",
-    ...variables.map(([name, value]) => `${name}=${quoted(value)}; export ${name}`),
-    `exec ${quoted(runtime.command)} ${quoted(options.entry)} "$@"`,
+    ...variables.map(([name, value]) => `${name}=${sh(value)}; export ${name}`),
+    `exec ${sh(runtime.command)} ${sh(options.entry)} "$@"`,
     "",
   ].join("\n");
 }

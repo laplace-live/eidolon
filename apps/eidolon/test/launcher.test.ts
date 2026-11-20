@@ -1,16 +1,21 @@
 // The launcher's pure parts: what each command line runs, which hosts and Nodes it refuses, and the
 // environment the app gets.
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { COMMANDS } from "@eidolon/cli";
 import { describe, expect, test } from "vitest";
 import {
   CLI_COMMANDS,
   childEnv,
   type Host,
+  hasVcRuntime,
   NODE_MAJOR,
   parseCommand,
   unsupportedNode,
   unsupportedReason,
   usage,
+  VC_RUNTIME_DLLS,
 } from "../src/launcher.ts";
 
 describe("parseCommand", () => {
@@ -57,14 +62,16 @@ describe("unsupportedReason", () => {
     arch,
     glibc: platform === "linux",
     rosetta: false,
+    vcRuntime: true,
     ...extra,
   });
 
-  test("Apple silicon, and glibc Linux on x64 or arm64, are supported", () => {
+  test("Apple silicon, glibc Linux on x64 or arm64, and Windows on x64 are supported", () => {
     for (const [platform, arch] of [
       ["darwin", "arm64"],
       ["linux", "x64"],
       ["linux", "arm64"],
+      ["win32", "x64"],
     ] as const) {
       expect(unsupportedReason(host(platform, arch))).toBeNull();
     }
@@ -78,9 +85,31 @@ describe("unsupportedReason", () => {
     expect(unsupportedReason(host("linux", "x64", { glibc: false }))).toStartWith(
       "Linux with musl",
     );
-    expect(unsupportedReason(host("win32", "x64"))).toStartWith("win32-x64 is not supported");
+    expect(unsupportedReason(host("win32", "x64", { vcRuntime: false }))).toContain(
+      "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+    );
+    expect(unsupportedReason(host("win32", "arm64"))).toContain("Install the x64 build of Node");
+    expect(unsupportedReason(host("win32", "ia32"))).toStartWith("win32-ia32 is not supported");
     expect(unsupportedReason(host("linux", "ia32"))).toStartWith("linux-ia32 is not supported");
     expect(unsupportedReason(host("freebsd", "arm64"))).toContain("LanceDB and onnxruntime-node");
+  });
+});
+
+describe("hasVcRuntime", () => {
+  test("finds each DLL in System32 or a PATH folder, as Windows looks for one", () => {
+    const work = mkdtempSync(join(tmpdir(), "eidolon-vc-runtime-"));
+    try {
+      const [system, tools] = [join(work, "Windows"), join(work, "tools")];
+      mkdirSync(join(system, "System32"), { recursive: true });
+      mkdirSync(tools);
+      const [first, ...rest] = VC_RUNTIME_DLLS as [string, ...string[]];
+      for (const dll of rest) writeFileSync(join(system, "System32", dll), "");
+      expect(hasVcRuntime({ SystemRoot: system, PATH: "" })).toBe(false);
+      writeFileSync(join(tools, first), "");
+      expect(hasVcRuntime({ SystemRoot: system, PATH: `;${tools};` })).toBe(true);
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
   });
 });
 

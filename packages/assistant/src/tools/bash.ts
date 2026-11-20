@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Mario Zechner
 // SPDX-License-Identifier: MIT
 //
-// Ported from pi-mono packages/coding-agent/src/core/tools/bash.ts@ac78a60
+// Ported from pi-mono packages/coding-agent/src/core/tools/bash.ts@ac78a60, its Windows parts @cb1205e
 //
 // The task's commands: bash runs one in the task's folder, and bash_output and bash_kill follow one
 // that moved to the background. A task's BashJobs runs them all, past the calls that start them.
@@ -55,7 +55,10 @@ export interface BashOperations {
   ): Promise<{ readonly exitCode: number | null }>;
 }
 
-/** Commands on this computer: bash, detached, so a kill takes everything a command started. */
+/**
+ * Commands on this computer: bash, detached, so a kill takes everything a command started; on
+ * Windows, which has no groups, in this process's job, and killed by its tree.
+ */
 export function createLocalBashOperations(): BashOperations {
   return {
     async exec(command, cwd, { onData, signal, env }) {
@@ -73,9 +76,18 @@ export function createLocalBashOperations(): BashOperations {
         stdout: "pipe",
         stderr: "pipe",
         // setsid(): its own session and process group, which killProcessTree reaches whole.
-        detached: true,
+        detached: process.platform !== "win32",
       });
-      const kill = () => killProcessTree(child.pid);
+      // On Windows only while the shell runs: a gone shell leaves no tree to find, and its pid may
+      // be another process's by the time an abort lands while the pipes drain.
+      const kill = () => {
+        if (
+          process.platform !== "win32" ||
+          (child.exitCode === null && child.signalCode === null)
+        ) {
+          killProcessTree(child.pid);
+        }
+      };
       signal?.addEventListener("abort", kill, { once: true });
       // An abort that landed while the folder was checked fires no listener added after it.
       if (signal?.aborted) kill();

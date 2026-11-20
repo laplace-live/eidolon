@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { spawnProcess } from "@eidolon/config";
-import { describe, expect, test } from "vitest";
+import { killTree, spawnProcess } from "@eidolon/config";
+import { describe, expect, test, vi } from "vitest";
 import {
   CLEANUP_LIMIT_MS,
   createLimiter,
@@ -15,6 +15,12 @@ import {
   terminateOnAbort,
 } from "../src/index.ts";
 import { makeFifo, whenReading } from "./fifo.ts";
+
+// A fake child's pid must never reach a real kill.
+vi.mock("@eidolon/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@eidolon/config")>()),
+  killTree: vi.fn(),
+}));
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -434,6 +440,27 @@ describe("terminate", () => {
     await delay(100);
     await terminate(child, 100);
     expect(child.signalCode).toBe("SIGKILL");
+  });
+
+  test("on Windows, where kill() ends only the child itself, its tree goes at once", async () => {
+    const child = {
+      pid: 4242,
+      exitCode: null,
+      signalCode: null,
+      exited: Promise.resolve(1),
+      kill: vi.fn(),
+    };
+    const platform = Object.getOwnPropertyDescriptor(process, "platform") as PropertyDescriptor;
+    Object.defineProperty(process, "platform", { ...platform, value: "win32" });
+    let stopping: Promise<void>;
+    try {
+      stopping = terminate(child);
+    } finally {
+      Object.defineProperty(process, "platform", platform);
+    }
+    await stopping;
+    expect(killTree).toHaveBeenCalledWith(4242);
+    expect(child.kill).not.toHaveBeenCalled();
   });
 
   test("an exited child is left alone; an abort terminates a running one", async () => {

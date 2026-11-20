@@ -1,22 +1,33 @@
 // pathlib's PurePosixPath reading of a path string: Python parses paths this way before taking
-// their name, stem or suffix, and prints them in this form.
+// their name, stem or suffix, and prints them in this form. On Windows a backslash separates too
+// and a drive's root is a root, and a path prints with forward slashes, which Windows reads alike.
 import { pyStrRepr } from "./py.ts";
 
-function parts(path: string): string[] {
-  return path.split("/").filter((part) => part !== "" && part !== ".");
+/** `path`'s root ("/", "//", or on Windows a drive's, "C:/"), and its other parts. */
+function split(path: string): [root: string, parts: string[]] {
+  const windows = process.platform === "win32";
+  const rest = windows ? path.replaceAll("\\", "/") : path;
+  const drive = windows ? (/^[A-Za-z]:\//.exec(rest)?.[0] ?? "") : "";
+  // POSIX leaves exactly two leading slashes implementation-defined, so pathlib keeps them.
+  const root =
+    drive ||
+    (rest.startsWith("//") && !rest.startsWith("///") ? "//" : rest.startsWith("/") ? "/" : "");
+  const parts = rest
+    .slice(root.length)
+    .split("/")
+    .filter((part) => part !== "" && part !== ".");
+  return [root, parts];
 }
 
 /** `str(PurePosixPath(path))`: repeated and trailing slashes collapse, `.` segments drop. */
 export function pyPath(path: string): string {
-  // POSIX leaves exactly two leading slashes implementation-defined, so pathlib keeps them.
-  const root =
-    path.startsWith("//") && !path.startsWith("///") ? "//" : path.startsWith("/") ? "/" : "";
-  return root + parts(path).join("/") || ".";
+  const [root, parts] = split(path);
+  return root + parts.join("/") || ".";
 }
 
 /** `PurePosixPath(path).name`. */
 export function pyPathName(path: string): string {
-  return parts(path).at(-1) ?? "";
+  return split(path)[1].at(-1) ?? "";
 }
 
 function suffixAt(name: string): number {
@@ -40,12 +51,8 @@ export function pyPathSuffix(path: string): string {
 
 /** `PurePosixPath(path).parent`. */
 export function pyPathParent(path: string): string {
-  const normalized = pyPath(path);
-  const slash = normalized.lastIndexOf("/");
-  if (slash === -1) return ".";
-  const head = normalized.slice(0, slash);
-  // "/x" and "//x" keep their root.
-  return head === "" || head === "/" ? normalized.slice(0, slash + 1) : head;
+  const [root, parts] = split(path);
+  return parts.length <= 1 ? root || "." : root + parts.slice(0, -1).join("/");
 }
 
 /** `PurePosixPath(path).relative_to(base)`, for a path inside `base`. */

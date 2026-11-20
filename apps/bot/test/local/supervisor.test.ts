@@ -31,6 +31,7 @@ appendFileSync(
   join(import.meta.dirname, "probes.ndjson"),
   JSON.stringify(process.env.EIDOLON_ENV_PROBE ?? null) + "\\n",
 );
+appendFileSync(join(import.meta.dirname, "pids.txt"), process.pid + "\\n");
 appendFileSync(runs, JSON.stringify(process.argv.slice(2)) + "\\n");
 if (step.exit !== undefined) process.exit(step.exit);
 setInterval(() => {}, 1000);
@@ -70,9 +71,10 @@ async function started(count: number): Promise<void> {
   }
 }
 
-function run(argv: string[]): Promise<number> {
+function run(argv: string[], platform?: NodeJS.Platform): Promise<number> {
   return supervise(argv, {
     entry: join(dir, "server.ts"),
+    ...(platform === undefined ? {} : { platform }),
     signals: (forward) => {
       fire = forward;
       return () => {
@@ -110,6 +112,20 @@ describe("supervise", () => {
     expect(await done).toBe(75);
     expect(runs()).toHaveLength(1);
     expect(readFileSync(join(dir, "signals.txt"), "utf8")).toBe("SIGTERM\n");
+  });
+
+  test("on Windows passes nothing on: the server shares the console and hears Ctrl-C itself", async () => {
+    plan([{ onSignal: 75 }, { exit: 9 }]);
+    const done = run([], "win32");
+    await started(1);
+    fire?.("SIGINT");
+    await delay(200);
+    expect(existsSync(join(dir, "signals.txt"))).toBe(false);
+    // As the console delivers it, to every process in it; the 75 after it is still no restart.
+    process.kill(Number(readFileSync(join(dir, "pids.txt"), "utf8").trim()), "SIGINT");
+    expect(await done).toBe(75);
+    expect(runs()).toHaveLength(1);
+    expect(readFileSync(join(dir, "signals.txt"), "utf8")).toBe("SIGINT\n");
   });
 
   test("passes SIGINT on as SIGINT", async () => {

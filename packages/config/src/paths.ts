@@ -54,9 +54,13 @@ export function voiceModelsDir(): string {
   return shippedPath("data/models", "packages/voice/models");
 }
 
-/** `os.path.expanduser` for the current user's `~`. */
+/** `os.path.expanduser` for the current user's `~`, followed on Windows by either separator. */
 export function expandUser(path: string): string {
   if (path === "~") return homedir();
-  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
+  if (startsAtHome(path)) return join(homedir(), path.slice(2));
   return path;
+}
+
+export function startsAtHome(path: string): boolean {
+  return path.startsWith("~/") || (process.platform === "win32" && path.startsWith("~\\"));
 }

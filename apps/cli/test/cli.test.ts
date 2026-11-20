@@ -28,6 +28,7 @@ import {
   taskMain,
   transcribeMain,
 } from "../src/index.ts";
+import { type MessageHost, relayStopMessages, STOP_MESSAGE } from "../src/job.ts";
 import { blockNetwork, captureIo, captureLogs, setEnv, spawnCli } from "./helpers.ts";
 
 blockNetwork();
@@ -315,4 +316,36 @@ test("a job runs the CLI on this runtime and reports NDJSON", () => {
     "--persona",
     "milky-green",
   ]);
+});
+
+describe("relayStopMessages", () => {
+  function host(channel: boolean) {
+    const listeners: ((message: unknown) => void)[] = [];
+    const emitted: string[] = [];
+    let unrefs = 0;
+    const fake: MessageHost = {
+      ...(channel ? { channel: { unref: () => void unrefs++ } } : {}),
+      on: (_, listener) => listeners.push(listener),
+      emit: (event) => emitted.push(event),
+    };
+    return { fake, listeners, emitted, unrefs: () => unrefs };
+  }
+
+  test("makes the local app's stop message a SIGTERM, and the channel keeps nothing alive", () => {
+    const { fake, listeners, emitted, unrefs } = host(true);
+    relayStopMessages(fake);
+    expect(unrefs()).toBe(1);
+    for (const listener of listeners) {
+      listener({ kind: "other" });
+      listener(null);
+      listener(STOP_MESSAGE);
+    }
+    expect(emitted).toEqual(["SIGTERM"]);
+  });
+
+  test("does nothing in a CLI run without an IPC channel", () => {
+    const { fake, listeners, unrefs } = host(false);
+    relayStopMessages(fake);
+    expect({ listeners: listeners.length, unrefs: unrefs() }).toEqual({ listeners: 0, unrefs: 0 });
+  });
 });

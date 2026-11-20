@@ -9,7 +9,13 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, type Mock, test, vi } from "vitest";
 import { createLocalBashOperations } from "../src/tools/bash.ts";
-import { bashOffered, getShellConfig, killProcessTree, shellEnv } from "../src/tools/shell.ts";
+import {
+  bashOffered,
+  getShellConfig,
+  killProcessTree,
+  shellEnv,
+  windowsBash,
+} from "../src/tools/shell.ts";
 import { folderGuard, removeTempFolders, tempFolder } from "./tool-folder.ts";
 
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
@@ -129,6 +135,35 @@ describe("shellEnv", () => {
     });
   });
 
+  test("on Windows also keeps what its programs need, in any case, and falls back to System32", async () => {
+    const from = {
+      PATH: "",
+      SystemRoot: "C:\\Windows",
+      ComSpec: "C:\\Windows\\system32\\cmd.exe",
+      PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      APPDATA: "C:\\Users\\t\\AppData\\Roaming",
+      LocalAppData: "C:\\Users\\t\\AppData\\Local",
+      USERPROFILE: "C:\\Users\\t",
+      "ProgramFiles(x86)": "C:\\Program Files (x86)",
+      OPENROUTER_API_KEY: "sk-or-secret",
+      NODE_OPTIONS: "--require x",
+    };
+    const env = await shellEnv(undefined, from, "win32");
+    expect(env).toEqual({
+      PATH: "C:\\Windows\\System32;C:\\Windows",
+      SystemRoot: "C:\\Windows",
+      ComSpec: "C:\\Windows\\system32\\cmd.exe",
+      PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      APPDATA: "C:\\Users\\t\\AppData\\Roaming",
+      LocalAppData: "C:\\Users\\t\\AppData\\Local",
+      USERPROFILE: "C:\\Users\\t",
+      "ProgramFiles(x86)": "C:\\Program Files (x86)",
+      TERM: "dumb",
+    });
+    // Elsewhere those names are nobody's.
+    expect(Object.keys(await shellEnv(undefined, from, "linux"))).toEqual(["PATH", "TERM"]);
+  });
+
   test("drops empty and relative PATH entries, node_modules/.bin, Bun's node shim and repeats", async () => {
     const path = [
       "",
@@ -214,15 +249,84 @@ describe("shellEnv", () => {
 });
 
 describe("getShellConfig", () => {
-  test.skipIf(!bashOffered())("takes /bin/bash, as pi does", () => {
+  test.skipIf(process.platform === "win32" || !bashOffered())("takes /bin/bash, as pi does", () => {
     expect(getShellConfig("")).toEqual({ shell: "/bin/bash", args: ["-c"] });
+  });
+
+  test.runIf(process.platform === "win32" && bashOffered())(
+    "on Windows runs a command in Git Bash, and a kill takes what it started",
+    async () => {
+      const folder = await tempFolder();
+      const controller = new AbortController();
+      let output = "";
+      const running = createLocalBashOperations().exec(
+        `echo "in $(uname -s)"; node -e "console.log(process.pid); setInterval(() => {}, 1000)"`,
+        folder,
+        {
+          onData: (data) => {
+            output += data.toString();
+          },
+          signal: controller.signal,
+        },
+      );
+      try {
+        const pid = await vi.waitFor(
+          () => {
+            const printed = /^(\d+)$/m.exec(output)?.[1];
+            if (printed === undefined) throw new Error("no pid printed yet");
+            return Number(printed);
+          },
+          { timeout: 15_000, interval: 50 },
+        );
+        expect(output).toMatch(/^in (MINGW|MSYS|CYGWIN)/);
+        controller.abort();
+        await expect(running).rejects.toThrow("aborted");
+        await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), {
+          timeout: 5_000,
+          interval: 50,
+        });
+      } finally {
+        // A failed check still ends the command's endless node.
+        controller.abort();
+        await running.catch(() => {});
+      }
+    },
+    30_000,
+  );
+});
+
+describe("on Windows, the bash commands run in", () => {
+  test("is Git Bash where its installer puts it, then one on PATH, never WSL's launcher", async () => {
+    const root = await tempFolder();
+    const executable = (folder: string): string => {
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(join(folder, "bash.exe"), "");
+      chmodSync(join(folder, "bash.exe"), 0o755);
+      return join(folder, "bash.exe");
+    };
+    const programFiles = join(root, "Program Files");
+    const gitBash = executable(join(programFiles, "Git", "bin"));
+    const system = join(root, "Windows");
+    executable(join(system, "System32"));
+    const msys = executable(join(root, "msys64", "usr", "bin"));
+    const path = [join(system, "System32"), join(root, "msys64", "usr", "bin")].join(delimiter);
+    expect(windowsBash(path, { ProgramFiles: programFiles, SystemRoot: system })).toBe(gitBash);
+    // Git's installer for one user puts it under LOCALAPPDATA, and Programs\Git\cmd alone on PATH.
+    const local = join(root, "AppData", "Local");
+    const ownGitBash = executable(join(local, "Programs", "Git", "bin"));
+    expect(windowsBash(path, { LOCALAPPDATA: local, SystemRoot: system })).toBe(ownGitBash);
+    expect(windowsBash(path, { SystemRoot: system })).toBe(msys);
+    expect(windowsBash(join(system, "System32"), { SystemRoot: system })).toBeNull();
   });
 });
 
 describe("bashOffered", () => {
-  test("offers commands on macOS and Linux only", () => {
-    expect(
-      ["darwin", "linux", "win32", "freebsd"].map((p) => bashOffered(p as NodeJS.Platform)),
-    ).toEqual([true, true, false, false]);
+  test("offers commands on macOS and Linux, and on Windows only with a bash to run them in", () => {
+    expect(["darwin", "linux", "freebsd"].map((p) => bashOffered(p as NodeJS.Platform))).toEqual([
+      true,
+      true,
+      false,
+    ]);
+    expect(bashOffered("win32")).toBe(windowsBash(process.env.PATH ?? "") !== null);
   });
 });

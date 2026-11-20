@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { personaIds, resetSettings, sourceFolder } from "@eidolon/config";
+import { personaIds, resetSettings, type Subprocess, sourceFolder } from "@eidolon/config";
 import {
   acquireLock,
   download,
@@ -39,6 +39,7 @@ import {
   transcriptText,
   writeVods,
 } from "../../../packages/ingest/test/pipeline_helpers.ts";
+import { STOP_MESSAGE } from "../src/job.ts";
 import {
   PIPELINE_PARSER,
   type PipelineDeps,
@@ -682,46 +683,50 @@ describe("--json and locks", () => {
     expect(existsSync(join(work, "elsewhere"))).toBe(false);
   });
 
-  test("a real SIGTERM while refine reads the transcripts: exit 143, the stage and the run cancelled", async () => {
-    const streams = join(work, "streams");
-    mkdirSync(streams);
-    const [first, blocked, last] = [
-      "2026-08-01-BV1aaaaaaaa1",
-      "2026-08-02-BV1bbbbbbbb1",
-      "2026-08-03-BV1cccccccc1",
-    ];
-    writeFileSync(join(streams, `${first}.md`), transcriptText(first, "2026-08-01", 1));
-    writeFileSync(join(streams, `${last}.md`), transcriptText(last, "2026-08-03", 1));
-    // Read second; the read blocks until the test writes it.
-    const fifo = join(streams, `${blocked}.md`);
-    makeFifo(fifo);
-    const child = spawnCli([
-      "pipeline",
-      "--dry-run",
-      "--stages",
-      "refine",
-      "--streams-dir",
-      streams,
-    ]);
-    try {
-      const release = await whenReading(fifo, child);
-      child.kill("SIGTERM");
-      await delay(50);
-      release(transcriptText(blocked, "2026-08-02", 1));
-      const [code, stdout, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]);
-      expect(code).toBe(143);
-      expect(stdout).toContain("\n  refine:     cancelled (");
-      expect(stdout).toContain("⚠  Pipeline cancelled — re-run the same command to resume.");
-      expect(stdout).not.toContain("Dry run — model:");
-      expect(stderr).toContain("Stopping; send SIGTERM again to quit now.\n");
-    } finally {
-      child.kill("SIGKILL");
-    }
-  }, 20_000);
+  test.each([
+    ["a real SIGTERM", (child: Subprocess) => child.kill("SIGTERM")],
+    // As the local app stops a job.
+    ["the stop message over IPC", (child: Subprocess) => child.send(STOP_MESSAGE)],
+  ])(
+    "%s while refine reads the transcripts: exit 143, the stage and the run cancelled",
+    async (_, stop) => {
+      const streams = join(work, "streams");
+      mkdirSync(streams);
+      const [first, blocked, last] = [
+        "2026-08-01-BV1aaaaaaaa1",
+        "2026-08-02-BV1bbbbbbbb1",
+        "2026-08-03-BV1cccccccc1",
+      ];
+      writeFileSync(join(streams, `${first}.md`), transcriptText(first, "2026-08-01", 1));
+      writeFileSync(join(streams, `${last}.md`), transcriptText(last, "2026-08-03", 1));
+      // Read second; the read blocks until the test writes it.
+      const fifo = join(streams, `${blocked}.md`);
+      makeFifo(fifo);
+      const child = spawnCli(
+        ["pipeline", "--dry-run", "--stages", "refine", "--streams-dir", streams],
+        { ipc: true },
+      );
+      try {
+        const release = await whenReading(fifo, child);
+        stop(child);
+        await delay(50);
+        release(transcriptText(blocked, "2026-08-02", 1));
+        const [code, stdout, stderr] = await Promise.all([
+          child.exited,
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+        ]);
+        expect(code).toBe(143);
+        expect(stdout).toContain("\n  refine:     cancelled (");
+        expect(stdout).toContain("⚠  Pipeline cancelled — re-run the same command to resume.");
+        expect(stdout).not.toContain("Dry run — model:");
+        expect(stderr).toContain("Stopping; send SIGTERM again to quit now.\n");
+      } finally {
+        child.kill("SIGKILL");
+      }
+    },
+    20_000,
+  );
 
   test("another run for the persona: exit 1, or a locked setup stage under --json", async () => {
     const list = join(work, "urls.txt");

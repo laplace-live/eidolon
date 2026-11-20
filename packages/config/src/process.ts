@@ -1,8 +1,8 @@
 // The part of Bun.spawn's Subprocess the code was written against, over node:child_process.
-import { type Serializable, type StdioOptions, spawn } from "node:child_process";
+import { type Serializable, type StdioOptions, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { constants } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { Readable, type Writable } from "node:stream";
 import { which } from "./which.ts";
 
@@ -15,7 +15,10 @@ export interface SpawnOptions {
   readonly stdin?: "ignore" | "pipe" | "inherit"; // default "ignore"
   readonly stdout?: StdioTarget; // default "pipe"
   readonly stderr?: StdioTarget; // default "inherit"
-  /** setsid(): its own session and process group, so killing -pid reaches what it started. */
+  /**
+   * setsid(): its own session and process group, so killing -pid reaches what it started. On
+   * Windows: no console, and it outlives this process, which otherwise takes it along.
+   */
   readonly detached?: boolean;
   /** SIGTERM once this many ms have passed. */
   readonly timeout?: number;
@@ -43,7 +46,8 @@ export interface Subprocess {
  */
 function startError(command: string, args: readonly string[], options: SpawnOptions): Error {
   const cwd = options.cwd ?? process.cwd();
-  const path = command.includes("/") ? resolve(cwd, command) : null;
+  const direct = command.includes("/") || (process.platform === "win32" && command.includes("\\"));
+  const path = direct ? resolve(cwd, command) : null;
   let code = "UNKNOWN";
   // A cwd that is no folder throws ENOTDIR from spawn itself, so only a missing one gets here.
   if (!existsSync(cwd)) code = "ENOENT";
@@ -85,6 +89,9 @@ export function spawnProcess(
     env: options.env ?? process.env,
     stdio,
     detached: options.detached ?? false,
+    // A console program started by a process with no console, as a job's yt-dlp is on Windows,
+    // opens a window of its own.
+    windowsHide: true,
     serialization: "json",
     timeout: options.timeout,
   });
@@ -121,4 +128,35 @@ export function spawnProcess(
       child.unref();
     },
   };
+}
+
+/**
+ * Kills process `pid` and what it started: its process group, which a child spawned detached
+ * leads, else the process alone; on Windows, which has no groups, its tree, through taskkill, as pi
+ * does. Call it only while `pid` runs: Windows reuses a pid once its process is gone. `wait`, as an
+ * exit handler needs, returns only once taskkill has.
+ */
+export function killTree(pid: number, options: { readonly wait?: boolean } = {}): void {
+  if (process.platform === "win32") {
+    const taskkill = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
+    const args = ["/F", "/T", "/PID", String(pid)];
+    if (options.wait) spawnSync(taskkill, args, { stdio: "ignore", windowsHide: true });
+    else {
+      // Outside this process's job, which would end taskkill with this process.
+      spawn(taskkill, args, { stdio: "ignore", detached: true, windowsHide: true }).on(
+        "error",
+        () => {},
+      );
+    }
+    return;
+  }
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Already gone.
+    }
+  }
 }

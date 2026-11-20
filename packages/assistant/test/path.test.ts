@@ -8,7 +8,12 @@ import { mkdtempSync, readdirSync, rmdirSync, unlinkSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { expandPath, resolveReadPath, resolveToCwd } from "../src/tools/path.ts";
+import {
+  expandPath,
+  normalizeWindowsShellPath,
+  resolveReadPath,
+  resolveToCwd,
+} from "../src/tools/path.ts";
 
 describe("path-utils", () => {
   describe("expandPath", () => {
@@ -176,5 +181,16 @@ describe("path-utils", () => {
       // This works because tryMacOSScreenshotPath() uses case-insensitive matching
       expect(result).toBe(join(tempDir, macosName));
     });
+  });
+});
+
+describe("normalizeWindowsShellPath", () => {
+  it("makes Git Bash's, Cygwin's and WSL's drive paths Windows', as pi does, and leaves the rest", () => {
+    expect(normalizeWindowsShellPath("/c/Users/t/notes.md")).toBe("C:\\Users\\t\\notes.md");
+    expect(normalizeWindowsShellPath("/mnt/d/work")).toBe("D:\\work");
+    expect(normalizeWindowsShellPath("/cygdrive/c")).toBe("C:\\");
+    for (const kept of ["/usr/bin", "//server/share", "C:\\x", "c/x", "/c\\x", "/cd/x"]) {
+      expect(normalizeWindowsShellPath(kept)).toBe(kept);
+    }
   });
 });

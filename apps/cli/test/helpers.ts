@@ -85,10 +85,11 @@ export function captureLogs(): { readonly records: [LogLevel, string][]; stop():
 }
 
 /** The CLI in a process of its own, as main.ts runs it minus the .env load, in this environment. */
-export function spawnCli(argv: readonly string[]): Subprocess {
+export function spawnCli(argv: readonly string[], options: { ipc?: boolean } = {}): Subprocess {
   return spawnProcess([process.execPath, join(import.meta.dirname, "cli_child.ts"), ...argv], {
     stdout: "pipe",
     stderr: "pipe",
+    ...(options.ipc ? { ipc: () => {} } : {}),
   });
 }
 

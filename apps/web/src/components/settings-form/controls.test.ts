@@ -379,7 +379,7 @@ describe("Assistant Mode", () => {
       value: ["~/Projects", "/Users/me/work", "C:\\work"],
     });
     // The settings file resolves a relative one in the data home, where every task is refused;
-    // expandUser reads `~` and `~/` alone, so `~Projects` is one.
+    // expandUser reads `~` and `~/` alone, and `~\` only on Windows, so `~Projects` is one.
     for (const relative of ["Projects", "./work", "../x", "~Projects", "~me/work", "~\\Projects"]) {
       expect(parseDraft(relative, folders)).toEqual({
         ok: false,
@@ -390,7 +390,7 @@ describe("Assistant Mode", () => {
 
   test("its folders are never the disk or home, which FolderPolicy refuses as a grant", () => {
     const folders = control("assistant.folders");
-    for (const whole of ["/", "~", "~/", "//", "~//"]) {
+    for (const whole of ["/", "~", "~/", "//", "~//", "C:\\", "d:/"]) {
       expect(parseDraft(`~/ok\n${whole}`, folders)).toEqual({
         ok: false,
         error: "settings.form.invalid.home",

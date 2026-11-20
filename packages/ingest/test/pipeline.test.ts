@@ -338,15 +338,27 @@ describe("the transcribe stage", () => {
       "BV1aaaaaaaa3.m4a": '{"upload_date": "20260803"}',
       "BV1aaaaaaaa4.m4a": '{"upload_date": "20260804"}',
     });
-    const soniox = fakeSoniox([1, 2, 3, 4].map(sonioxJob), (request) =>
-      request.method === "POST" &&
-      request.path === "/transcriptions" &&
-      request.json?.includes("BV1aaaaaaaa1")
-        ? sonioxError(400, "invalid_request", "bad audio")
-        : undefined,
-    );
+    let failFirst = (): void => {};
+    const firstFailed = new Promise<void>((resolve) => {
+      failFirst = resolve;
+    });
+    const soniox = fakeSoniox([1, 2, 3, 4].map(sonioxJob), (request) => {
+      const first =
+        request.method === "POST" &&
+        request.path === "/transcriptions" &&
+        request.json?.includes("BV1aaaaaaaa1");
+      if (!first) return undefined;
+      failFirst();
+      return sonioxError(400, "invalid_request", "bad audio");
+    });
+    // The other running job gets its transcript only once the first has failed: on a busy machine
+    // its file reads could let it finish first, and its slot would start a third job.
+    const fetchAfterFailure = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith("/transcript")) await firstFailed;
+      return soniox.fetch(input, init);
+    }) as typeof fetch;
     const report = await pipeline.runPipeline(
-      base({ fetch: soniox.fetch, transcribeConcurrency: 2, abortOnError: true }),
+      base({ fetch: fetchAfterFailure, transcribeConcurrency: 2, abortOnError: true }),
     );
     const t = report.transcribe as pipeline.TranscribeStageReport;
     expect([t.succeeded, t.failed.length]).toEqual([1, 1]);

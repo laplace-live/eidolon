@@ -79,8 +79,8 @@ jobs:
       # Production runs the same code on Bun.
       - run: bun apps/bot/scripts/bun-check.ts
 
-  # The npm package as npx installs it, install scripts included, on the one supported platform the
-  # Mac it's built on can't run: Linux x64 with glibc.
+  # The npm package as npx installs it, install scripts included, on a supported platform the Mac
+  # it's built on can't run: Linux x64 with glibc.
   npm-package:
     runs-on: ubuntu-latest
     steps:
@@ -102,4 +102,52 @@ jobs:
 
       - run: node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/*.tgz
 
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-package
+          path: apps/eidolon/*.tgz
+          retention-days: 3
+
       - run: bun run pack:sdk
+
+  # The same tarball on Windows x64, and the tests of what only Windows runs.
+  windows:
+    needs: npm-package
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: bun install --frozen-lockfile
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm-package
+          path: apps/eidolon
+
+      - run: node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/*.tgz
+
+      - run: >-
+          bun run test packages/config/test/which.test.ts packages/config/test/process.test.ts
+          packages/config/test/pypath.test.ts apps/eidolon/test/launcher.test.ts
+          apps/bot/test/local/jobs-runner.test.ts
+
+      - run: >-
+          bun run test packages/assistant/test/shell.test.ts packages/assistant/test/mcp-stdio.test.ts
+          packages/assistant/test/eidolon-command.test.ts packages/assistant/test/path.test.ts
+          packages/assistant/test/bash-windows.test.ts packages/ingest/test/limit.test.ts
+          -t "Windows|its children, when the host exits without closing it"
+
+      - run: bun run test apps/cli/test/cli.test.ts -t relayStopMessages

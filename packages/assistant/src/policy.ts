@@ -4,6 +4,7 @@
 import { realpathSync } from "node:fs";
 import { lstat, readlink, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { startsAtHome } from "@eidolon/config";
 import { pathExists, resolveReadPath, resolveToCwd } from "./tools/path.ts";
 import { type PathGuard, PathRefused } from "./types.ts";
 
@@ -61,7 +62,7 @@ export function isMissing(error: unknown): boolean {
 /** `path` with a leading ~ meaning `home`; path.ts's ~ is the OS user's. */
 function withHome(path: string, home: string): string {
   const bare = path.startsWith("@") ? path.slice(1) : path;
-  return bare === "~" || bare.startsWith("~/") ? join(home, bare.slice(1)) : path;
+  return bare === "~" || startsAtHome(bare) ? join(home, bare.slice(1)) : path;
 }
 
 /**

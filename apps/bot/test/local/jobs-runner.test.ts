@@ -16,7 +16,7 @@ import {
 import { tmpdir, uptime } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { dataHome, spawnProcess } from "@eidolon/config";
+import { dataHome, killTree, spawnProcess } from "@eidolon/config";
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { JobCommand, JobStatus } from "../../src/local/api.ts";
 import type { JobSpec } from "../../src/local/jobs/argv.ts";
@@ -74,8 +74,11 @@ describe("a job's run", () => {
     expect(job.record.id).toMatch(JOB_ID);
     await job.ended;
     const files = jobFiles(job.record.id);
-    for (const path of [files.events, files.log]) expect(statSync(path).mode & 0o777).toBe(0o600);
-    expect(statSync(jobsDir()).mode & 0o777).toBe(0o700);
+    // Windows reports 0o666 for every file this user can write: its access lists aren't modes.
+    if (process.platform !== "win32") {
+      for (const path of [files.events, files.log]) expect(statSync(path).mode & 0o777).toBe(0o600);
+      expect(statSync(jobsDir()).mode & 0o777).toBe(0o700);
+    }
     const snapshot = jobs.snapshot(job);
     expect(snapshot).toMatchObject({
       command: "ingest-facts",
@@ -119,8 +122,8 @@ describe("a job's run", () => {
     const jobs = runner();
     const job = start(jobs, "slow");
     const pid = job.record.pid as number;
-    // A group whose id is the child's pid exists only if the child leads one.
-    expect(() => process.kill(-pid, 0)).not.toThrow();
+    // A group whose id is the child's pid exists only if the child leads one; Windows has none.
+    if (process.platform !== "win32") expect(() => process.kill(-pid, 0)).not.toThrow();
     jobs.cancel(job);
     await job.ended;
     cli.scenario = "echo";
@@ -266,7 +269,7 @@ process.stderr.write(JSON.stringify(args));`,
 });
 
 describe("cancelling", () => {
-  test("sends one SIGTERM, which the CLI answers by cancelling its run", async () => {
+  test("sends one stop message, which the CLI answers as SIGTERM, by cancelling its run", async () => {
     const jobs = runner();
     const job = start(jobs, "slow");
     await until(() => jobs.snapshot(job).stages.length > 0);
@@ -277,7 +280,7 @@ describe("cancelling", () => {
       stopping: true,
       signalable: true,
     });
-    // A second request must not send a second SIGTERM, which makes the CLI quit at once.
+    // A second request must not send a second stop, which makes the CLI quit at once.
     expect(jobs.cancel(job)).toBe("stopping");
     await job.ended;
     const snapshot = jobs.snapshot(job);
@@ -287,14 +290,15 @@ describe("cancelling", () => {
       stopping: false,
       signalable: false,
     });
-    expect(snapshot.stderrTail).toContain("SIGTERM 1");
+    // Over the job's IPC channel.
+    expect(snapshot.stderrTail).toContain('message {"kind":"stop"}\nSIGTERM 1');
     expect(snapshot.stderrTail).not.toContain("SIGTERM 2");
     expect(jobs.cancel(job)).toBe("ended");
     const stored = JSON.parse(readFileSync(jobFiles(job.record.id).record, "utf8")) as StoredJob;
     expect(stored).toMatchObject({ status: "cancelled", stopReason: "cancel" });
   });
 
-  test("never kills on a timer; a forced repeat kills the whole process group", async () => {
+  test("never kills on a timer; a forced repeat kills the job and what it started", async () => {
     const jobs = runner();
     const job = start(jobs, "stubborn");
     await until(() => jobs.snapshot(job).stages.length > 0);
@@ -307,14 +311,15 @@ describe("cancelling", () => {
     await job.ended;
     expect(jobs.snapshot(job)).toMatchObject({
       status: "cancelled",
-      exitCode: 137,
+      // taskkill's exit code, on Windows.
+      exitCode: process.platform === "win32" ? 1 : 137,
       stopping: false,
       summarySeen: false,
     });
     await until(() => !isAlive(grandchild));
   });
 
-  test("force asks first: on a job not yet stopping it sends SIGTERM alone", async () => {
+  test("force asks first: on a job not yet stopping it sends the stop message alone", async () => {
     const jobs = runner();
     const job = start(jobs, "slow");
     await until(() => jobs.snapshot(job).stages.length > 0);
@@ -335,7 +340,7 @@ describe("cancelling", () => {
     await job.ended;
   });
 
-  test("the stop hook sends SIGTERM to every running job and ends open streams", async () => {
+  test("the stop hook asks every running job to stop and ends open streams", async () => {
     const jobs = runner();
     const job = start(jobs, "slow");
     await until(() => jobs.snapshot(job).stages.length > 0);
@@ -370,15 +375,12 @@ describe("cancelling", () => {
       expect(next.cancel(watched, true)).toBe("not-ours");
       await delay(60);
       expect(isAlive(pid)).toBe(true);
-      process.kill(-pid, "SIGKILL");
+      killTree(pid);
       await until(() => next.snapshot(watched).status !== "running");
       expect(next.snapshot(watched).status).toBe("interrupted");
     } finally {
-      try {
-        process.kill(-pid, "SIGKILL");
-      } catch {
-        // Gone already.
-      }
+      // Only while it runs: Windows may already have given a dead process's pid to another.
+      if (isAlive(pid)) killTree(pid);
     }
   });
 });

@@ -9,7 +9,13 @@
 // A file that doesn't parse starts nothing and decides nothing.
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { envVariable, expandUser, isPlainObject, MCP_SECRETS_KEY } from "@eidolon/config";
+import {
+  envVariable,
+  expandUser,
+  isPlainObject,
+  MCP_SECRETS_KEY,
+  startsAtHome,
+} from "@eidolon/config";
 import { type McpStdioServerConfig, validateMcpServerConfig } from "./config.ts";
 import { mcpNamespace } from "./naming.ts";
 
@@ -81,7 +87,7 @@ function validateOwnFields(config: Record<string, unknown>): string | undefined 
   if (disabled !== undefined && typeof disabled !== "boolean") return "disabled must be a boolean";
   // A relative cwd would be the task's folder, where the worker's own files would run as the
   // owner's: an npx there runs a node_modules the task wrote ahead of the registry.
-  if (typeof cwd === "string" && !isAbsolute(cwd) && cwd !== "~" && !cwd.startsWith("~/")) {
+  if (typeof cwd === "string" && !isAbsolute(cwd) && cwd !== "~" && !startsAtHome(cwd)) {
     return "cwd must be an absolute path or start with ~/";
   }
   return undefined;

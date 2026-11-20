@@ -321,14 +321,17 @@ export function browserTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-/** Absolute, or from the home folder by `~` or `~/`: never resolved in a folder of Eidolon's. */
+/**
+ * Absolute, or from the home folder by `~` or `~/`: never resolved in a folder of Eidolon's. Not by
+ * `~\`, which this page can't know the server reads as home: only Windows does.
+ */
 export function isFullPath(path: string): boolean {
   return /^(?:[/\\]|~(?:\/|$))/.test(path) || /^[A-Za-z]:[/\\]/.test(path);
 }
 
-/** The whole disk, or the home folder itself. */
+/** The whole disk, a Windows drive, or the home folder itself. */
 function holdsHome(path: string): boolean {
-  return /^~?[/\\]*$/.test(path);
+  return /^(?:~|[A-Za-z]:)?[/\\]*$/.test(path);
 }
 
 /** Relative, and never climbing above the folder it resolves in. */

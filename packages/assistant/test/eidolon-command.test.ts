@@ -53,6 +53,25 @@ describe("eidolonScript", () => {
       `exec '/Applications/Eidolon.app/Eidolon' '/opt/eidolon/dist/cli.js' "$@"`,
     );
   });
+
+  test("on Windows its paths take forward slashes, which Git Bash and Node both read", () => {
+    const script = eidolonScript({
+      runtime: { command: "C:\\Program Files\\nodejs\\node.exe", env: {} },
+      entry: "C:\\npx\\node_modules\\@laplace.live\\eidolon\\dist\\cli.js",
+      dataHome: "C:\\Users\\o'neil\\.laplace\\eidolon",
+      env: { EIDOLON_APP_ROOT: "C:\\npx\\node_modules\\@laplace.live\\eidolon" },
+      platform: "win32",
+    });
+    expect(script).toContain(
+      "EIDOLON_HOME='C:/Users/o'\\''neil/.laplace/eidolon'; export EIDOLON_HOME\n",
+    );
+    expect(script).toContain(
+      "EIDOLON_APP_ROOT='C:/npx/node_modules/@laplace.live/eidolon'; export EIDOLON_APP_ROOT\n",
+    );
+    expect(script).toContain(
+      `exec 'C:/Program Files/nodejs/node.exe' 'C:/npx/node_modules/@laplace.live/eidolon/dist/cli.js' "$@"`,
+    );
+  });
 });
 
 describe.skipIf(!bashOffered())("writeEidolonCommand", () => {

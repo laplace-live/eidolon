@@ -4,13 +4,15 @@
 `LICENSE-pi`. Each file whose header names pi-mono is ported from it, at the commit the header
 names. Its MCP client (`src/mcp/`) ports pi's `packages/mcp` and its coding agent's MCP
 extension, with the stdio transport alone: pi's OAuth, which adapts the MCP TypeScript SDK, isn't
-ported. It runs on diff (BSD-3-Clause), htmlparser2 (MIT), ignore (MIT), minimatch
-(BlueOak-1.0.0), undici (MIT) and yaml (ISC), installed as packages with their own notices.
+ported. It runs on cross-spawn (MIT), diff (BSD-3-Clause), htmlparser2 (MIT), ignore (MIT),
+minimatch (BlueOak-1.0.0), undici (MIT) and yaml (ISC), installed as packages with their own
+notices.
 
 ## pi-mono
 
 License: `MIT`  
-Source: https://github.com/badlogic/pi-mono, commit `ac78a60`
+Source: https://github.com/badlogic/pi-mono, commit `ac78a60`; the Windows parts of the shell,
+bash, path and MCP stdio ports, commit `cb1205e`
 
 ```text
 MIT License

@@ -91,10 +91,17 @@ export {
   resolveProjectPath,
   serverEntry,
   shippedPath,
+  startsAtHome,
   voiceModelsDir,
   webDist,
 } from "./paths.ts";
-export { type SpawnOptions, type StdioTarget, type Subprocess, spawnProcess } from "./process.ts";
+export {
+  killTree,
+  type SpawnOptions,
+  type StdioTarget,
+  type Subprocess,
+  spawnProcess,
+} from "./process.ts";
 export {
   cpLen,
   cpSlice,
