@@ -21,6 +21,7 @@ describe("showsMic", () => {
     expect(showsMic({ recording: false, empty: true, inCall: false })).toBe(true);
     expect(showsMic({ recording: false, empty: false, inCall: false })).toBe(false);
     expect(showsMic({ recording: false, empty: true, inCall: true })).toBe(false);
+    expect(showsMic({ recording: true, empty: false, inCall: true })).toBe(false);
   });
 });
 

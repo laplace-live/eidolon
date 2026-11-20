@@ -24,15 +24,16 @@ export function cancelsTake(event: Pick<KeyboardEvent, "key" | "defaultPrevented
 }
 
 /**
- * Whether the message box shows the microphone rather than Send: while a take runs, whatever was
- * added since, so a file dropped on the chat can't send in its place; else for an empty box.
+ * Whether the message box shows the microphone rather than Send, never on a call: while a take
+ * runs, whatever was added since, so a file dropped on the chat can't send in its place; else for
+ * an empty box.
  */
 export function showsMic(box: {
   readonly recording: boolean;
   readonly empty: boolean;
   readonly inCall: boolean;
 }): boolean {
-  return box.recording || (box.empty && !box.inCall);
+  return !box.inCall && (box.recording || box.empty);
 }
 
 /** An audio element's `duration` in ms, or null while it isn't known (NaN, or Infinity). */

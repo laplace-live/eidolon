@@ -1114,6 +1114,21 @@ describe("the files a line carries", () => {
     const again = [...Array(20).fill(first), ...dots];
     await linesOf(await postForm(url, form(events, { text: "都记得吗", seen: again })));
     expect(made).toHaveBeenCalledTimes(8);
+    // A line's own two leave room for six earlier ones.
+    made.mockClear();
+    const own = await Promise.all(
+      [40, 80].map(async (g) => {
+        const dot = sharp({
+          create: { width: 1, height: 1, channels: 3, background: { r: 0, g, b: 0 } },
+        });
+        return [new Uint8Array(await dot.png().toBuffer()), "image/png"] as [
+          Uint8Array<ArrayBuffer>,
+          string,
+        ];
+      }),
+    );
+    await linesOf(await postForm(url, form(events, { files: own, seen: again })));
+    expect(made).toHaveBeenCalledTimes(8);
   });
 
   test("are refused before anyone is charged unless each is a line's file, up to 8 and 12 MB", async () => {

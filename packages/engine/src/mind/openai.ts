@@ -108,9 +108,9 @@ export class OpenAIMind implements Mind {
     return `${this.#options.server} ${this.#options.model}`;
   }
 
-  /** The request's stream, with a note in place of each image for a model that can't see them. */
-  #create(request: MindRequest): Promise<AsyncIterable<unknown>> {
-    const messages = BLIND.has(this.#blind) ? withoutImages(request.messages) : request.messages;
+  /** The request's stream: with its images, or a note in place of each. */
+  #create(request: MindRequest, images: boolean): Promise<AsyncIterable<unknown>> {
+    const messages = images ? request.messages : withoutImages(request.messages);
     return this.#options.client.chat.completions.create(
       bodyFor({ ...request, messages }, this.#options),
       { signal: request.signal },
@@ -118,18 +118,17 @@ export class OpenAIMind implements Mind {
   }
 
   /**
-   * Whether `error` refused the images `request` showed: then the model is shown none from now on,
-   * this request's next attempt included, until the process restarts.
+   * Whether `error` refused the images an attempt showed: then the model is shown none from now on,
+   * that request's next attempt included, until the process restarts.
    */
-  #refusedImages(request: MindRequest, error: unknown): boolean {
-    if (request.signal.aborted || BLIND.has(this.#blind) || !showsImages(request.messages)) {
-      return false;
-    }
+  #refusedImages(error: unknown): boolean {
     if (!refusedImages(error)) return false;
-    BLIND.add(this.#blind);
-    logger.warning(
-      `${this.#options.model} can't take images (${errorText(error)}); she is told of them instead`,
-    );
+    if (!BLIND.has(this.#blind)) {
+      BLIND.add(this.#blind);
+      logger.warning(
+        `${this.#options.model} can't take images (${errorText(error)}); she is told of them instead`,
+      );
+    }
     return true;
   }
 
@@ -141,8 +140,10 @@ export class OpenAIMind implements Mind {
       let finishReason: string | null = null;
       let native: string | null = null;
       let said = false;
+      // Decided per attempt: another request can learn the model is blind while this one runs.
+      const images = showsImages(request.messages) && !BLIND.has(this.#blind);
       try {
-        const chunks = await this.#create(request);
+        const chunks = await this.#create(request, images);
         for await (const chunk of chunks) {
           const choice =
             isPlainObject(chunk) && Array.isArray(chunk.choices) ? chunk.choices[0] : null;
@@ -171,7 +172,7 @@ export class OpenAIMind implements Mind {
       } catch (error) {
         if (signal.aborted) throw signal.reason;
         // A refusal can come as the request's answer or, once its stream is open, as its first event.
-        if (!said && pending.size === 0 && this.#refusedImages(request, error)) continue;
+        if (images && !said && pending.size === 0 && this.#refusedImages(error)) continue;
         throw error;
       }
       signal.throwIfAborted();

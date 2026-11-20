@@ -1406,7 +1406,7 @@ describe("images the viewer sent", () => {
   });
 
   /** A mind on its own OpenAI-compatible `server`, answering each request's body with `answer`. */
-  function mindAt(server: string, answer: (shows: boolean) => Response) {
+  function mindAt(server: string, answer: (shows: boolean) => Response | Promise<Response>) {
     const shows: boolean[] = [];
     const fetch = async (_url: unknown, init: RequestInit) => {
       const { messages } = JSON.parse(String(init.body)) as { messages: { content: unknown }[] };
@@ -1443,6 +1443,43 @@ describe("images the viewer sent", () => {
     const seeing = mindAt("http://b.invalid/v1", () => completions(said));
     await drain(seeing.mind, ask({ messages: shown }));
     expect(seeing.shows).toEqual([true]);
+  });
+
+  test("requests that sent images before either was refused are each asked again", async () => {
+    let refuse = () => {};
+    const refused = new Promise<void>((resolve) => {
+      refuse = resolve;
+    });
+    const answer = async (shows: boolean) => {
+      if (!shows) return completions(said);
+      await refused;
+      return completions([unsupported]);
+    };
+    const chats = [mindAt("http://d.invalid/v1", answer), mindAt("http://d.invalid/v1", answer)];
+    const replies = chats.map(({ mind }) => drain(mind, ask({ messages: shown })));
+    while (chats.some(({ shows }) => shows.length === 0)) await delay(1);
+    refuse();
+    expect(await Promise.all(replies)).toEqual([
+      [
+        { type: "text", text: "好可爱" },
+        { type: "done", finishReason: "stop" },
+      ],
+      [
+        { type: "text", text: "好可爱" },
+        { type: "done", finishReason: "stop" },
+      ],
+    ]);
+    expect(chats.map(({ shows }) => shows)).toEqual([
+      [true, false],
+      [true, false],
+    ]);
+  });
+
+  test("a request refused again once its images are notes fails, asked no more", async () => {
+    const stubborn = mindAt("http://e.invalid/v1", () => completions([unsupported]));
+    const error = await drain(stubborn.mind, ask({ messages: shown })).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderHttpError);
+    expect(stubborn.shows).toEqual([true, false]);
   });
 
   test("a refusal after she has said something fails the request, which isn't asked again", async () => {

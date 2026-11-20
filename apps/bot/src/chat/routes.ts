@@ -458,7 +458,8 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     }
     // Each once, and no more images than one request shows her: a copy past those is made for nothing.
     const again = new Map<string, { readonly bytes: Uint8Array; readonly image: boolean }>();
-    let images = 0;
+    // The line's own are newer, so shown first.
+    let images = line.filter(({ attachment }) => attachment.kind === "image").length;
     for (const { bytes } of seen) {
       const type = sendableImageType(bytes);
       const mime = type ?? (sendableText(bytes) === null ? null : "text/plain");

@@ -20,6 +20,13 @@ function canvas(width: number, height: number, alpha = false) {
   });
 }
 
+/** `webp` with a chunk `type` holding "cat" inside its RIFF, as a second frame would sit. */
+function withChunk(webp: Buffer, type: string): Buffer {
+  const grown = Buffer.concat([webp, Buffer.from(`${type}\x04\x00\x00\x00cat\x00`, "latin1")]);
+  grown.writeUInt32LE(grown.byteLength - 8, 4);
+  return grown;
+}
+
 /** Gaussian noise, which compresses as little as an image can. */
 function noise(width: number, height: number) {
   const pixels = { type: "gaussian", mean: 128, sigma: 60 } as const;
@@ -148,6 +155,11 @@ describe("normalizeImage", () => {
         jpeg,
         0,
         Buffer.from("a cat".padEnd(14, "\0")),
+      ),
+      "a second frame in a webp": withChunk(await canvas(8, 8).webp().toBuffer(), "VP8 "),
+      "a lossless frame beside a lossy one": withChunk(
+        await canvas(8, 8).webp().toBuffer(),
+        "VP8L",
       ),
       // A chunk past the end its RIFF header gives.
       "bytes after a webp's end": Buffer.concat([

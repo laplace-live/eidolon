@@ -1073,8 +1073,8 @@ temporary data home and find it unchanged.
   - **`seen`,** earlier lines' files sent again, any type: each is shown her only while a line of
     the viewer's in the window names its content's hash, an image once `normalizeImage` has made
     it again. Each is made ready once however often it comes, and no more images than one request
-    shows her (8, `SHOWN_IMAGES`), the first sent; the rest read as notes. The voice route takes
-    them too.
+    shows her (8, `SHOWN_IMAGES`) with the line's own, the first sent; the rest read as notes. The
+    voice route takes them too.
 
   `415` for a file of another type or bytes that aren't one, `413` past its size or 12 MB in
   all, `400` for an empty one or more than 8, all before the viewer is resolved or charged. Only

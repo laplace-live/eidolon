@@ -109,13 +109,17 @@ function barePng(bytes: Uint8Array, view: DataView): boolean {
 
 function bareWebp(bytes: Uint8Array, view: DataView): boolean {
   if (view.getUint32(4, true) + 8 !== bytes.byteLength) return false;
+  const chunks = new Set<string>();
   let at = 12;
   while (at + 8 <= bytes.byteLength) {
-    if (!WEBP_CHUNKS.has(fourcc(bytes, at))) return false;
+    const chunk = fourcc(bytes, at);
+    if (!WEBP_CHUNKS.has(chunk) || chunks.has(chunk)) return false;
+    chunks.add(chunk);
     const size = view.getUint32(at + 4, true);
     at += 8 + size + (size % 2);
   }
-  return at === bytes.byteLength;
+  // One frame: lossy or lossless, not both.
+  return at === bytes.byteLength && chunks.has("VP8 ") !== chunks.has("VP8L");
 }
 
 /**
