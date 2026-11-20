@@ -223,37 +223,49 @@ function filenameOf(part: FormPart): string | null {
   return sentFilename(raw);
 }
 
-/** A file a line carries: named by the bytes the browser keeps, and shown to her as `shown`. */
+/** A file a line carries, named by the bytes the browser sent and keeps. */
 interface LineFile {
   readonly attachment: Attachment;
-  readonly shown: ShownFile;
+  readonly bytes: Uint8Array;
 }
 
 /**
- * An image a browser sends, made ready for her mind. One past MAX_IMAGE_PIXELS, which
- * `prepareChatFile` fits it to, is refused, so a decode here stays small.
+ * An image a browser sends, made ready for her mind, which only an admitted turn does: a decode
+ * is the work a request can't make cheap. One past MAX_IMAGE_PIXELS, which `prepareChatFile` fits
+ * it to, is refused, so a decode stays small.
  */
 function imageFor(bytes: Uint8Array): ReturnType<typeof normalizeImage> {
   return normalizeImage(bytes, MAX_IMAGE_PIXELS);
 }
 
-/** A file part of the line's, as `lineFileType` and `imageFor` take it, or why it can't go. */
-async function lineFile(
-  part: FormPart,
-): Promise<LineFile | { readonly refused: LineFileRefusal | ImageRefusal }> {
+/** A file part of the line's, as `lineFileType` takes it, or why it can't go. */
+function lineFile(part: FormPart): LineFile | { readonly refused: LineFileRefusal } {
   const kept = lineFileType(part.type ?? "", part.bytes);
   if ("refused" in kept) return kept;
   const attachment = attachmentOf(part.bytes, kept.mime);
-  if (attachment.kind === "image") {
-    const shown = await imageFor(part.bytes);
-    return "refused" in shown ? shown : { attachment, shown };
-  }
-  const filename = filenameOf(part);
+  const filename = attachment.kind === "file" ? filenameOf(part) : null;
   return {
     attachment:
       attachment.kind === "file" && filename !== null ? { ...attachment, filename } : attachment,
-    shown: { bytes: part.bytes, mime: kept.mime },
+    bytes: part.bytes,
   };
+}
+
+/** The answer refusing a line's file for `reason`. */
+function fileRefusal(reason: LineFileRefusal | ImageRefusal): Response {
+  if (reason === "empty") return chatError(400, "bad-request", "A file is empty");
+  if (reason === "too-large") {
+    return chatError(
+      413,
+      "payload-too-large",
+      "An image is at most 3.5 MB and 2048 × 2048 pixels, and a text file at most 1 MB",
+    );
+  }
+  return chatError(
+    415,
+    "unsupported-media-type",
+    "Send a PNG, JPEG or WebP image, or a text file in UTF-8",
+  );
 }
 
 const encoder = new TextEncoder();
@@ -419,21 +431,30 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
   }
 
   /**
-   * The files a request shows her, by name: those its line carries, and those it sends again of the
-   * window's earlier lines (`seen`), each kept only while a line of the viewer's there names it, and
-   * an image only once it is made ready for her mind.
+   * The files a request shows her, by name, each image made ready for her mind: those its line
+   * carries, refused when one can't be, and those it sends again of the window's earlier lines
+   * (`seen`), each kept only while a line of the viewer's there names it.
    */
   async function shownFiles(
     chat: TurnRequest["chat"],
     line: readonly LineFile[],
     seen: readonly FormPart[],
-  ): Promise<Map<string, ShownFile>> {
+  ): Promise<Map<string, ShownFile> | Response> {
     const named = new Set(
       chat.events.flatMap((event) =>
         event.type === "message" ? sentFiles(event).map((file) => file.name) : [],
       ),
     );
-    const shown = new Map(line.map(({ attachment, shown }) => [attachment.name, shown]));
+    const shown = new Map<string, ShownFile>();
+    const made = await Promise.all(
+      line.map(({ attachment, bytes }) =>
+        attachment.kind === "image" ? imageFor(bytes) : { bytes, mime: attachment.mime },
+      ),
+    );
+    for (const [i, file] of made.entries()) {
+      if ("refused" in file) return fileRefusal(file.refused);
+      shown.set((line[i] as LineFile).attachment.name, file);
+    }
     await Promise.all(
       seen.map(async ({ bytes }) => {
         const image = sendableImageType(bytes);
@@ -503,27 +524,14 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
   }
 
   /** The files the line carries, each named once, or the answer refusing them. */
-  async function lineFiles(parts: readonly FormPart[]): Promise<LineFile[] | Response> {
+  function lineFiles(parts: readonly FormPart[]): LineFile[] | Response {
     if (parts.length > MAX_LINE_FILES) {
       return chatError(400, "bad-request", `A line carries at most ${MAX_LINE_FILES} files`);
     }
     const files: LineFile[] = [];
-    for (const file of await Promise.all(parts.map((part) => lineFile(part)))) {
-      if ("refused" in file) {
-        if (file.refused === "empty") return chatError(400, "bad-request", "A file is empty");
-        if (file.refused === "too-large") {
-          return chatError(
-            413,
-            "payload-too-large",
-            "An image is at most 3.5 MB and 2048 × 2048 pixels, and a text file at most 1 MB",
-          );
-        }
-        return chatError(
-          415,
-          "unsupported-media-type",
-          "Send a PNG, JPEG or WebP image, or a text file in UTF-8",
-        );
-      }
+    for (const part of parts) {
+      const file = lineFile(part);
+      if ("refused" in file) return fileRefusal(file.refused);
       if (!files.some(({ attachment }) => attachment.name === file.attachment.name)) {
         files.push(file);
       }
@@ -534,7 +542,7 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
   const turn = async (request: Request, clientIp: string): Promise<Response> => {
     const body = await turnBody(request);
     if (body instanceof Response) return body;
-    const files = await lineFiles(body.files);
+    const files = lineFiles(body.files);
     if (files instanceof Response) return files;
     const carries = files.length > 0;
     const text =
@@ -555,7 +563,9 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     const admission = await admit({ token: body.token, clientIp });
     if (!admission.allowed) return admission.response;
     const viewer = admission.user;
-    const deps = withFiles(engineFor(viewer, clientIp), await shownFiles(chat, files, body.seen));
+    const shown = await shownFiles(chat, files, body.seen);
+    if (shown instanceof Response) return shown;
+    const deps = withFiles(engineFor(viewer, clientIp), shown);
     if (text === null) {
       const greeter = persona as ParticipantId;
       return ndjson(request.signal, (send, signal) =>
@@ -667,7 +677,8 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     }
     const first = await store.add([message]);
     const after = (first[0] as ChatEvent).seq;
-    const deps = withFiles(engineFor(admission.user, clientIp), await shownFiles(chat, [], seen));
+    const shown = (await shownFiles(chat, [], seen)) as Map<string, ShownFile>;
+    const deps = withFiles(engineFor(admission.user, clientIp), shown);
     return ndjson(request.signal, (send, signal) =>
       relay(store, first, answer(store, admission.user, deps, after, signal), null, send),
     );

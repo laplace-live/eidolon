@@ -1086,6 +1086,28 @@ describe("the files a line carries", () => {
     const { url, record, resolved } = await start();
     const huge = new Uint8Array(3.5 * 1024 * 1024 + 1);
     huge.set(PNG);
+    for (const [fields, want] of [
+      [
+        { files: [[new TextEncoder().encode("<svg/>"), "image/svg+xml"]] },
+        [415, "unsupported-media-type"],
+      ],
+      [{ files: [[PNG, "application/pdf"]] }, [415, "unsupported-media-type"]],
+      [{ files: [[new Uint8Array([0xe7, 0xac]), "text/plain"]] }, [415, "unsupported-media-type"]],
+      [{ files: [[new Uint8Array(), "image/png"]] }, [400, "bad-request"]],
+      [{ files: [[huge, "image/png"]] }, [413, "payload-too-large"]],
+      [{ files: Array.from({ length: 9 }, () => [PNG, "image/png"]) }, [400, "bad-request"]],
+      [{ text: "   ", files: [] }, [400, "bad-request"]],
+    ] as const) {
+      const body = form([], fields as Parameters<typeof form>[1]);
+      body.append("loginSyncToken", "good-token");
+      expect([fields, await errorOf(await postForm(url, body))]).toEqual([fields, want]);
+    }
+    expect(record.minds).toEqual([]);
+    expect(resolved).toEqual([]);
+  });
+
+  test("an image that can't be made ready is refused once the turn is admitted, which decodes it", async () => {
+    const { url, record, resolved } = await start();
     const vast = new Uint8Array(
       await sharp({ create: { width: 2049, height: 2048, channels: 3, background: "#fff" } })
         .png()
@@ -1097,25 +1119,16 @@ describe("the files a line carries", () => {
       .jpeg()
       .toBuffer();
     const cut = new Uint8Array(photo.subarray(0, photo.byteLength / 2));
-    for (const [fields, want] of [
-      [
-        { files: [[new TextEncoder().encode("<svg/>"), "image/svg+xml"]] },
-        [415, "unsupported-media-type"],
-      ],
-      [{ files: [[PNG, "application/pdf"]] }, [415, "unsupported-media-type"]],
-      [{ files: [[new Uint8Array([0xe7, 0xac]), "text/plain"]] }, [415, "unsupported-media-type"]],
-      [{ files: [[new Uint8Array(), "image/png"]] }, [400, "bad-request"]],
-      [{ files: [[huge, "image/png"]] }, [413, "payload-too-large"]],
-      [{ files: [[vast, "image/png"]] }, [413, "payload-too-large"]],
-      [{ files: [[cut, "image/jpeg"]] }, [415, "unsupported-media-type"]],
-      [{ files: Array.from({ length: 9 }, () => [PNG, "image/png"]) }, [400, "bad-request"]],
-      [{ text: "   ", files: [] }, [400, "bad-request"]],
+    for (const [file, type, want] of [
+      [vast, "image/png", [413, "payload-too-large"]],
+      [cut, "image/jpeg", [415, "unsupported-media-type"]],
     ] as const) {
-      const body = form([], fields as Parameters<typeof form>[1]);
-      expect([fields, await errorOf(await postForm(url, body))]).toEqual([fields, want]);
+      const body = form([], { text: "看", files: [[file, type]] });
+      body.append("loginSyncToken", "good-token");
+      expect([type, await errorOf(await postForm(url, body))]).toEqual([type, want]);
     }
     expect(record.minds).toEqual([]);
-    expect(resolved).toEqual([]);
+    expect(resolved).toEqual(["good-token", "good-token"]);
   });
 
   test("the window keeps the files a line of the viewer's names, and drops what a line doesn't take", async () => {

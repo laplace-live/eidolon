@@ -47,9 +47,9 @@ COPY packages/webrtc/package.json packages/webrtc/
 # --filter skips the browser SDK's dependencies (its manifest is still checked
 # against bun.lock). The prune removes what the bot never loads. LanceDB's optional
 # @huggingface/transformers (with a second onnxruntime-node, onnxruntime-web and
-# sharp 0.33, whose libvips is 1.0) is imported only by LanceDB's own embedding
-# functions, while the bot's own sharp, a newer one, stays; typescript is a
-# types-only peer of @qdrant/js-client-rest; onnxruntime-node bundles every
+# an older sharp and its libvips, matched below by version) is imported only by
+# LanceDB's own embedding functions, while the bot's own sharp stays; typescript
+# is a types-only peer of @qdrant/js-client-rest; onnxruntime-node bundles every
 # platform's binaries.
 ARG TARGETARCH
 RUN bun install --frozen-lockfile --production --filter '!@laplace.live/eidolon-sdk' \

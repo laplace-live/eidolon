@@ -33,6 +33,19 @@ export interface DraftFiles {
   take(): readonly Attachment[];
 }
 
+/** The attachments a line of `drafts` carries: each kept one, once. */
+export function lineAttachments(drafts: readonly DraftFile[]): Attachment[] {
+  const kept: Attachment[] = [];
+  for (const { attachment } of drafts) {
+    // The same file picked twice is kept under one name, and POST messages refuses a line that
+    // names one twice.
+    if (attachment !== null && !kept.some(({ name }) => name === attachment.name)) {
+      kept.push(attachment);
+    }
+  }
+  return kept;
+}
+
 let keys = 0;
 
 /** The files the next line of chat `chatId` carries. */
@@ -124,9 +137,7 @@ export function useDraftFiles(chatId: string): DraftFiles {
   );
 
   const take = useCallback(() => {
-    const kept = current.current.flatMap((file) =>
-      file.attachment === null ? [] : [file.attachment],
-    );
+    const kept = lineAttachments(current.current);
     forget(current.current);
     setFiles([]);
     return kept;

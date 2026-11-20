@@ -1068,9 +1068,11 @@ temporary data home and find it unchanged.
     the viewer's in the window names its content's hash, an image once `normalizeImage` has made
     it again. The voice route takes them too.
 
-  `415` for a file of another type or bytes that aren't a whole one, `413` past its size or
-  pixels or 12 MB in all, `400` for an empty one or more than 8, all before the viewer is
-  resolved or charged. Nothing is kept: her turns read the files from the request alone.
+  `415` for a file of another type or bytes that aren't one, `413` past its size or 12 MB in
+  all, `400` for an empty one or more than 8, all before the viewer is resolved or charged. Only
+  an admitted turn decodes an image, the one thing a request can't make cheap, so one that isn't
+  whole (`415`) or is past 2048² pixels (`413`) is refused after. Nothing is kept: her turns read
+  the files from the request alone.
 - **The answer** is NDJSON of `ChatStreamLine`s (`application/x-ndjson`, `no-store`), as the local
   `POST messages` streams them:
   1. an `events` line with the viewer's message, as the server stamped it: `seq`, `at` and `id`
