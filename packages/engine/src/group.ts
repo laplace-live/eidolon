@@ -11,6 +11,7 @@ import {
   viewerLabel,
 } from "@eidolon/chat";
 import { readPersonaIdentity } from "@eidolon/config";
+import { withFilesNote } from "./seen.ts";
 
 /** Stop sequences are `\n名字：` and `\n名字:`, and OpenAI takes at most 4. */
 const STOP_SPEAKERS = 2;
@@ -91,9 +92,10 @@ const saidLine = ({ persona, text }: Said): Line => ({
 });
 
 /**
- * The lines of `events`, its messages with words, in order. What a persona said before her calls
- * joins her next line into one when no other line comes between, and stands as a line of hers
- * before the next one otherwise.
+ * The lines of `events`, its messages with words, in order, the files the viewer sent with a line
+ * reading as their note after its words. What a persona said before her calls joins her next line
+ * into one when no other line comes between, and stands as a line of hers before the next one
+ * otherwise.
  */
 export function linesOf(events: readonly ChatEvent[]): Line[] {
   const lines: Line[] = [];
@@ -106,9 +108,10 @@ export function linesOf(events: readonly ChatEvent[]): Line[] {
         if (said !== null) lines.push(saidLine(said));
         said = { persona: event.persona, text: event.said };
       }
-    } else if (event.type === "message" && event.text !== "") {
+    } else if (event.type === "message") {
+      let text = withFilesNote(event);
+      if (text === "") continue;
       const { speaker, modality } = event;
-      let { text } = event;
       if (said !== null) {
         if (speaker.kind === "persona" && speaker.id === said.persona) text = said.text + text;
         else lines.push(saidLine(said));

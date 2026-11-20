@@ -1,14 +1,15 @@
 // What a chat's log shows: the lines said, her words before a tool call, the turns that failed,
 // where each call began and ended, and a card for each task she started. Recall, other tool events,
 // the greeting prompt and the bookkeeping events stay hidden.
-import type {
-  Attachment,
-  ChatDisplay,
-  ChatEvent,
-  ChatEventOf,
-  CutOff,
-  ParticipantId,
-  Speaker,
+import {
+  type Attachment,
+  type ChatDisplay,
+  type ChatEvent,
+  type ChatEventOf,
+  type CutOff,
+  type ParticipantId,
+  type Speaker,
+  sentFiles,
 } from "@eidolon/chat";
 import { parseMarkup, trimTrailingPartialCue } from "@laplace.live/eidolon-sdk";
 import { type TaskCall, taskCalls } from "@/features/tasks/calls";
@@ -71,6 +72,8 @@ export type ChatItem =
       readonly voice: AudioAttachment | null;
       /** Said on a call, as its transcript. */
       readonly call: boolean;
+      /** The images and text files sent with it, when there are any. */
+      readonly files?: readonly Attachment[];
     }
   | PersonaItem
   | {
@@ -170,8 +173,16 @@ export function chatItems(events: readonly ChatEvent[]): ChatItem[] {
       const voice = voiceOf(event);
       const call = event.modality === "call";
       if (event.speaker.kind === "user") {
-        if (event.text !== "" || voice !== null) {
-          items.push({ kind: "user", seq: event.seq, text: event.text, voice, call });
+        const files = sentFiles(event);
+        if (event.text !== "" || voice !== null || files.length > 0) {
+          items.push({
+            kind: "user",
+            seq: event.seq,
+            text: event.text,
+            voice,
+            call,
+            ...(files.length > 0 ? { files } : {}),
+          });
         }
       } else if (
         event.text !== "" ||
@@ -265,13 +276,25 @@ export function manyVoices(items: readonly ChatItem[]): boolean {
   return false;
 }
 
+/** A line to send again: its words, and the files it carried. */
+export interface RetryLine {
+  readonly text: string;
+  readonly files?: readonly Attachment[];
+}
+
+/** What a line of the viewer's sends again: its words and files; null for a voice message with none. */
+function again(item: Extract<ChatItem, { readonly kind: "user" }>): RetryLine | null {
+  if (item.files !== undefined) return { text: item.text, files: item.files };
+  return item.text === "" ? null : { text: item.text };
+}
+
 /**
  * What Retry sends again: the viewer's last line, if anything followed it only to fail, or her
  * reply to it was cut off, her words before its tool calls being part of that reply. A voice
  * message goes again as its transcript; one with none, not at all. A task her turn started stops
  * it: sending the line again would start another.
  */
-export function retryText(items: readonly ChatItem[]): string | null {
+export function retryLine(items: readonly ChatItem[]): RetryLine | null {
   const last = items.at(-1);
   if (last?.kind === "persona" && last.cutOff !== null) {
     const before = (item: ChatItem | undefined) =>
@@ -279,12 +302,12 @@ export function retryText(items: readonly ChatItem[]): string | null {
     let at = items.length - 2;
     while (before(items[at])) at--;
     const asked = items[at];
-    return asked?.kind === "user" && asked.text !== "" ? asked.text : null;
+    return asked?.kind === "user" ? again(asked) : null;
   }
   if (last?.kind !== "failed") return null;
   for (let index = items.length - 1; index >= 0; index--) {
     const item = items[index]!;
-    if (item.kind === "user") return item.text === "" ? null : item.text;
+    if (item.kind === "user") return again(item);
     if (item.kind === "persona" || item.kind === "call" || item.kind === "task") return null;
   }
   return null;

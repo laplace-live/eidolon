@@ -6,9 +6,10 @@ Eidolon bot over SmallWebRTC and running stateless browser-stored chats against 
 Two entries ship in the npm package, licensed under `AGPL-3.0-only`:
 
 - **`@laplace.live/eidolon-sdk`** (`.`): framework-agnostic `EidolonClient`, RTVI and offer payload
-  contracts, `/api/ice-servers`, `/api/memories`, stateless chat protocol/client/session/view helpers,
-  `BrowserChatStore<TRecord>`, inline delivery-cue markup parser (`parseMarkup`,
-  `parseMarkupWithState`, `stripCues`, `trimTrailingPartialCue`), and `Watchdog`.
+  contracts, `/api/ice-servers`, `/api/memories`, stateless chat protocol/client/session/view
+  helpers, the files a line carries (`prepareChatFile`), `BrowserChatStore<TRecord>`, inline
+  delivery-cue markup parser (`parseMarkup`, `parseMarkupWithState`, `stripCues`,
+  `trimTrailingPartialCue`), and `Watchdog`.
 - **`@laplace.live/eidolon-sdk/react`** (`./react`, optional peer `react >= 18`):
   `EidolonClientProvider`, `EidolonClientAudio`, `useEidolonClient`, `useEidolonEvent`,
   `useEidolonTransportState`, `useEidolonMicControl`, `useEidolonMediaState`,
@@ -150,6 +151,44 @@ import {
 `CHAT_WINDOW_EVENTS` events that aren't `NEVER_SENT` and every state event older than them, oldest
 first. Both give the same window. laplace's store reads exactly that bound, through the SDK's
 `CHAT_WINDOW_EVENTS`, so it reads what each SDK version needs with no change of its own.
+
+### Files with a line
+
+A viewer can send images and text files with a line ([chat.md](chat.md#the-viewers-files)):
+
+```ts
+import { prepareChatFile, sendChatTurn } from "@laplace.live/eidolon-sdk";
+
+const files = await Promise.all(picked.map(prepareChatFile)); // rejects with ChatFileError
+await sendChatTurn(options, { chatId, text: "看看这个", files });
+```
+
+- **`prepareChatFile(file)`** makes a picked, pasted or dropped `File` ready in the browser, so it
+  goes small: a picture the browser opens is drawn upright at no more than `MAX_IMAGE_PIXELS`
+  (2048²) and a `MAX_IMAGE_EDGE` (2576 px) edge, without what its camera wrote in it, as JPEG at
+  quality 0.85, 0.75 or 0.6, whichever fits `MAX_IMAGE_BYTES` (3.5 MB) first, or as WebP (PNG on
+  Safari) where it has transparency; a PNG or WebP that already fits goes as it is. A text file
+  (any `text/` type or a known extension, which `CHAT_FILE_ACCEPT` lists for a file input) must be
+  UTF-8, at most `MAX_TEXT_FILE_BYTES` (1 MB). Anything else, an SVG or a PDF included, is a
+  `ChatFileError` with `code` `unsupported` or `too-large`. `chatFileKind(file)` says
+  beforehand which kind a file is.
+- **The server makes each image ready again** with sharp, as the local app does every image it is
+  sent ([chat.md](chat.md#the-viewers-files)): upright, stripped and in sRGB, before her mind sees
+  it. It takes one `prepareChatFile` drew as it is, since it fits the same bounds, rounded down
+  alike, and makes again a PNG or WebP the SDK sent as it was when anything is written in it. It
+  refuses an image past `MAX_IMAGE_PIXELS` or `MAX_IMAGE_BYTES` (`413`), or one that isn't a
+  whole PNG, JPEG or WebP (`415`): a host that sends files without `prepareChatFile` fits them
+  itself.
+- **`sendChatTurn({ files })`** sends up to `MAX_LINE_FILES` (8) with the line as a multipart turn,
+  `text` optional; a turn with no file to send, its own or an earlier one, goes as JSON. Once the
+  first `events` line is stored, it keeps each file's Blob under the name the stored message gives
+  it (`putFile`), its content's SHA-256; one that couldn't be kept is reported through
+  `onMissingFiles`.
+- **Earlier files:** the server keeps none of them, so each turn, voice messages included, also
+  sends the files of the window's lines that the store holds, newest first, each once, up to 4
+  and 4 MB (`seen`), and `MAX_TURN_FILE_BYTES` (12 MB) with the line's own. Her view reads any
+  older one as a note.
+- **`eventItems`** lists a message's text files as `files`, beside its `images`.
 
 ### Her words before a tool call
 

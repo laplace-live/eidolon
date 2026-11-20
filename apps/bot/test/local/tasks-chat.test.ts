@@ -49,6 +49,7 @@ import {
   ChatRunner,
   type ChatRunnerOptions,
   type ChatTurn,
+  type TurnFiles,
 } from "../../src/local/chats/runner.ts";
 import { allowedHosts, guardRequest, parseListedOrigins } from "../../src/local/guard.ts";
 import { type TaskBriefInput, TaskRefused } from "../../src/local/tasks/manager.ts";
@@ -256,7 +257,7 @@ function engine(
   own: readonly LlmTool[] = [],
 ): Pick<ChatRunnerOptions, "turn" | "answer"> {
   let n = 0;
-  const deps = (saveAttachment: EngineDeps["saveAttachment"]): EngineDeps => ({
+  const deps = (files: TurnFiles): EngineDeps => ({
     createMind: () => {
       if (keyless()) throw new Error("No key for openrouter: set OPENROUTER_API_KEY");
       return mind;
@@ -271,7 +272,7 @@ function engine(
         memories: async () => [],
       };
     },
-    saveAttachment,
+    ...files,
     fetchImage: async () => {
       throw new Error("no images here");
     },
@@ -283,8 +284,8 @@ function engine(
     },
   });
   return {
-    turn: (request, save) => runTurn(request, deps(save)),
-    answer: (request, save) => runChat(request, { ...deps(save), director: new Director(null) }),
+    turn: (request, files) => runTurn(request, deps(files)),
+    answer: (request, files) => runChat(request, { ...deps(files), director: new Director(null) }),
   };
 }
 

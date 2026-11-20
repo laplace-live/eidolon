@@ -1,5 +1,5 @@
 import { isAttachmentName, isJsonObject, parseStreamLine } from "./parse.ts";
-import { type ChatStreamLine, type ChatWindow, MAX_VOICE_MS } from "./types.ts";
+import { type ChatFile, type ChatStreamLine, type ChatWindow, MAX_VOICE_MS } from "./types.ts";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -221,8 +221,18 @@ export const chatAvailability = createChatAvailability();
 export interface TurnRequest {
   readonly baseUrl: string;
   readonly chat: ChatWindow;
-  /** The viewer's line (see `chatTextOf`); absent asks for her greeting in a new chat of one. */
+  /**
+   * The viewer's line (see `chatTextOf`); absent asks for her greeting in a new chat of one, and
+   * may be empty with `files`.
+   */
   readonly text?: string;
+  /** The images and text files the line carries, as `prepareChatFile` makes them. */
+  readonly files?: readonly ChatFile[];
+  /**
+   * Earlier lines' files, as the browser keeps them, for her to see again: the server keeps none,
+   * and shows her only those a line of the window names.
+   */
+  readonly seen?: readonly Blob[];
   /** The Login Sync token a call sends; absent or blank is anonymous. */
   readonly loginSyncToken?: string | null;
   readonly signal?: AbortSignal;
@@ -234,33 +244,46 @@ function tokenOf(token: string | null | undefined): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
+/** Each earlier file sent again, as a `seen` part. */
+function appendSeen(form: FormData, seen: readonly Blob[] | undefined): void {
+  for (const blob of seen ?? []) form.append("seen", blob, "seen");
+}
+
 /**
  * Streams a turn's NDJSON lines as they arrive. Rejects with `ChatRequestError` when refused;
- * stopping early cancels the stream and aborts her reply.
+ * stopping early cancels the stream and aborts her reply. A turn with files goes as a multipart
+ * form, any other as JSON.
  */
 export async function* streamTurn(
   turn: TurnRequest,
 ): AsyncGenerator<ChatStreamLine, void, undefined> {
   const token = tokenOf(turn.loginSyncToken);
-  const body = {
-    chat: turn.chat,
-    ...(turn.text === undefined ? {} : { text: turn.text }),
-    ...(token === null ? {} : { loginSyncToken: token }),
-  };
+  let init: RequestInit;
+  if (!turn.files?.length && !turn.seen?.length) {
+    const body = {
+      chat: turn.chat,
+      ...(turn.text === undefined ? {} : { text: turn.text }),
+      ...(token === null ? {} : { loginSyncToken: token }),
+    };
+    init = { headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
+  } else {
+    const form = new FormData();
+    form.append("chat", JSON.stringify(turn.chat));
+    if (turn.text !== undefined) form.append("text", turn.text);
+    for (const file of turn.files ?? []) form.append("file", file.blob, file.filename ?? "file");
+    appendSeen(form, turn.seen);
+    if (token !== null) form.append("loginSyncToken", token);
+    init = { body: form };
+  }
   const res = await request(
     turn.fetch ?? fetch,
     `${normalizeBaseUrl(turn.baseUrl)}/api/chat/turn`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: turn.signal,
-    },
+    { method: "POST", ...init, signal: turn.signal },
   );
   yield* streamLines(res, turn.signal);
 }
 
-export type VoiceRequest = Omit<TurnRequest, "text"> & {
+export type VoiceRequest = Omit<TurnRequest, "text" | "files"> & {
   /** The recording, typed audio/webm, audio/ogg, audio/mp4 or audio/mpeg, codecs allowed. */
   readonly audio: Blob;
   /** The recorder's clock. */
@@ -283,6 +306,7 @@ export async function* streamVoice(
     "durationMs",
     String(Math.min(MAX_VOICE_MS, Math.max(1, Math.round(voice.durationMs)))),
   );
+  appendSeen(form, voice.seen);
   const token = tokenOf(voice.loginSyncToken);
   if (token !== null) form.append("loginSyncToken", token);
   const res = await request(

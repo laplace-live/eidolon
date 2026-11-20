@@ -20,7 +20,8 @@ import { CHAT_FORMAT, type ChatEvent, type ChatEventOf, type ChatHeader } from "
 import { dataHome, resetSettings } from "@eidolon/config";
 import type { MindChunk, PersonaParts } from "@eidolon/engine";
 import { ProviderConfigError } from "@eidolon/providers";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import sharp from "sharp";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { fixture, webmOpus } from "../../../../packages/providers/test/speech/batch/recordings.ts";
 import { type BotAccess, createBotApp } from "../../src/app.ts";
 import { ChatFiles } from "../../src/chat/files.ts";
@@ -30,6 +31,7 @@ import {
   createChatEndpoint,
 } from "../../src/chat/routes.ts";
 import { ChatSigner, MIN_CHAT_SECRET_LENGTH } from "../../src/chat/sig.ts";
+import { normalizeImage } from "../../src/images.ts";
 import { type BotServer, startBotServer } from "../../src/server.ts";
 import {
   allowedOffer,
@@ -62,6 +64,12 @@ const HEADER: ChatHeader = {
   participants: [MILKY],
 };
 const GROUP: ChatHeader = { ...HEADER, participants: [MILKY, BEA] };
+
+// The real one, counted: what a request makes ready is the work it costs.
+vi.mock("../../src/images.ts", async (actual) => {
+  const images = await actual<typeof import("../../src/images.ts")>();
+  return { ...images, normalizeImage: vi.fn(images.normalizeImage) };
+});
 
 const user = (seq: number, text: string): ChatEventOf<"message"> => ({
   seq,
@@ -956,4 +964,246 @@ test("nothing a chat does is written to the data home", async () => {
   );
   expect(homeFiles()).toEqual(before);
   expect(before.some((path) => path.split("/")[0] === "chats")).toBe(false);
+});
+
+describe("the files a line carries", () => {
+  /** A 1×1 PNG, which goes to her mind as it is. */
+  const PNG = new Uint8Array(
+    Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
+      "base64",
+    ),
+  );
+  const STORY = new TextEncoder().encode("第一章\n从前有座山");
+  const nameOf = (bytes: Uint8Array, ext: string) =>
+    `${createHash("sha256").update(bytes).digest("hex")}.${ext}`;
+  const dataUrl = (bytes: Uint8Array) =>
+    `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
+
+  function form(
+    events: readonly unknown[],
+    fields: {
+      text?: string;
+      files?: [Uint8Array<ArrayBuffer>, string, string?][];
+      seen?: Uint8Array<ArrayBuffer>[];
+    },
+  ): FormData {
+    const body = new FormData();
+    body.append("chat", JSON.stringify({ header: HEADER, events }));
+    if (fields.text !== undefined) body.append("text", fields.text);
+    for (const [bytes, type, filename] of fields.files ?? []) {
+      body.append("file", new Blob([bytes], { type }), filename ?? "file");
+    }
+    for (const bytes of fields.seen ?? []) body.append("seen", new Blob([bytes]), "seen");
+    return body;
+  }
+
+  const postForm = (url: string, body: FormData) =>
+    fetch(`${url}/api/chat/turn`, { method: "POST", headers: { Origin: ORIGIN }, body });
+
+  test("go with the line, named by their content, and her mind is shown them, nothing kept", async () => {
+    const { url, record } = await start();
+    const before = homeFiles();
+    const response = await postForm(
+      url,
+      form([], {
+        text: "看看",
+        files: [
+          [PNG, "image/png"],
+          [STORY, "text/markdown", "故事.md"],
+        ],
+      }),
+    );
+    expect(response.status).toBe(200);
+    const [mine] = eventsIn(await linesOf(response));
+    expect(mine).toMatchObject({
+      seq: 1,
+      speaker: { kind: "user" },
+      text: "看看",
+      attachments: [
+        { kind: "image", name: nameOf(PNG, "png"), mime: "image/png" },
+        { kind: "file", name: nameOf(STORY, "txt"), mime: "text/plain", filename: "故事.md" },
+      ],
+    });
+    expect(mine?.sig).toBeUndefined();
+    expect(record.minds[0]?.messages.at(-1)).toEqual({
+      role: "user",
+      content: [
+        { type: "text", text: '看看\n\n<file name="故事.md">\n第一章\n从前有座山\n</file>' },
+        { type: "image_url", image_url: { url: dataUrl(PNG) } },
+      ],
+    });
+    expect(homeFiles()).toEqual(before);
+  });
+
+  test("a later turn shows an earlier file only when it is sent again and a line names it", async () => {
+    const { url, record } = await start();
+    const first = eventsIn(
+      await linesOf(await postForm(url, form([], { files: [[PNG, "image/png"]] }))),
+    );
+    const other = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9]);
+    await linesOf(await postForm(url, form(first, { text: "还记得吗", seen: [PNG, other] })));
+    expect(record.minds[1]?.messages.slice(-3)).toEqual([
+      { role: "user", content: [{ type: "image_url", image_url: { url: dataUrl(PNG) } }] },
+      { role: "assistant", content: `${MILKY}说1` },
+      { role: "user", content: "还记得吗" },
+    ]);
+    await linesOf(await postTurn(url, { chat: { header: HEADER, events: first }, text: "那张呢" }));
+    expect(record.minds[2]?.messages.slice(-3)).toEqual([
+      { role: "user", content: "（一张图片，这次没给你看）" },
+      { role: "assistant", content: `${MILKY}说1` },
+      { role: "user", content: "那张呢" },
+    ]);
+  });
+
+  test("an image goes to her mind made ready, named by what the browser sent and keeps", async () => {
+    const { url, record } = await start();
+    const sideways = new Uint8Array(
+      await sharp({ create: { width: 40, height: 20, channels: 3, background: "#c82828" } })
+        .jpeg()
+        .withExif({ IFD0: { Make: "camera" } })
+        .withMetadata({ orientation: 6 })
+        .toBuffer(),
+    );
+    const first = eventsIn(
+      await linesOf(await postForm(url, form([], { files: [[sideways, "image/jpeg"]] }))),
+    );
+    expect(first[0]).toMatchObject({
+      attachments: [{ kind: "image", name: nameOf(sideways, "jpg"), mime: "image/jpeg" }],
+    });
+    await linesOf(await postForm(url, form(first, { text: "还记得吗", seen: [sideways] })));
+    for (const mind of record.minds) {
+      const line = (mind.messages as { content: unknown }[]).find((message) =>
+        Array.isArray(message.content),
+      ) as { content: { image_url: { url: string } }[] };
+      const [type, data] = (line.content[0]?.image_url.url ?? "").split(";base64,");
+      const shown = Buffer.from(data as string, "base64");
+      const meta = await sharp(shown).metadata();
+      expect([type, meta.width, meta.height, meta.exif]).toEqual([
+        "data:image/jpeg",
+        20,
+        40,
+        undefined,
+      ]);
+      expect(shown.equals(sideways)).toBe(false);
+    }
+  });
+
+  test("an earlier file sent again is made ready once, and no more images than she is shown", async () => {
+    const { url } = await start();
+    const dots = await Promise.all(
+      Array.from({ length: 10 }, async (_, i) => {
+        const dot = sharp({
+          create: { width: 1, height: 1, channels: 3, background: { r: i * 20, g: 0, b: 0 } },
+        });
+        return new Uint8Array(await dot.png().toBuffer());
+      }),
+    );
+    const events = dots.map((dot, i) => ({
+      ...user(i + 1, `第${i}张`),
+      attachments: [{ kind: "image", name: nameOf(dot, "png"), mime: "image/png" }],
+    }));
+    const made = vi.mocked(normalizeImage);
+    made.mockClear();
+    const [first] = dots as [Uint8Array<ArrayBuffer>];
+    await linesOf(
+      await postForm(url, form(events, { text: "还记得吗", seen: Array(20).fill(first) })),
+    );
+    expect(made).toHaveBeenCalledTimes(1);
+    made.mockClear();
+    const again = [...Array(20).fill(first), ...dots];
+    await linesOf(await postForm(url, form(events, { text: "都记得吗", seen: again })));
+    expect(made).toHaveBeenCalledTimes(8);
+    // A line's own two leave room for six earlier ones.
+    made.mockClear();
+    const own = await Promise.all(
+      [40, 80].map(async (g) => {
+        const dot = sharp({
+          create: { width: 1, height: 1, channels: 3, background: { r: 0, g, b: 0 } },
+        });
+        return [new Uint8Array(await dot.png().toBuffer()), "image/png"] as [
+          Uint8Array<ArrayBuffer>,
+          string,
+        ];
+      }),
+    );
+    await linesOf(await postForm(url, form(events, { files: own, seen: again })));
+    expect(made).toHaveBeenCalledTimes(8);
+  });
+
+  test("are refused before anyone is charged unless each is a line's file, up to 8 and 12 MB", async () => {
+    const { url, record, resolved } = await start();
+    const huge = new Uint8Array(3.5 * 1024 * 1024 + 1);
+    huge.set(PNG);
+    // Each within an image's 3.5 MB, and 12.8 MB in all, under the body's 13 MB.
+    const part = new Uint8Array(3.2 * 1024 * 1024);
+    part.set(PNG);
+    for (const [fields, want] of [
+      [
+        { files: [[new TextEncoder().encode("<svg/>"), "image/svg+xml"]] },
+        [415, "unsupported-media-type"],
+      ],
+      [{ files: [[PNG, "application/pdf"]] }, [415, "unsupported-media-type"]],
+      [{ files: [[new Uint8Array([0xe7, 0xac]), "text/plain"]] }, [415, "unsupported-media-type"]],
+      [{ files: [[new Uint8Array(), "image/png"]] }, [400, "bad-request"]],
+      [{ files: [[huge, "image/png"]] }, [413, "payload-too-large"]],
+      [{ files: Array.from({ length: 4 }, () => [part, "image/png"]) }, [413, "payload-too-large"]],
+      [{ files: Array.from({ length: 9 }, () => [PNG, "image/png"]) }, [400, "bad-request"]],
+      [{ text: "   ", files: [] }, [400, "bad-request"]],
+    ] as const) {
+      const body = form([], fields as Parameters<typeof form>[1]);
+      body.append("loginSyncToken", "good-token");
+      expect([fields, await errorOf(await postForm(url, body))]).toEqual([fields, want]);
+    }
+    expect(record.minds).toEqual([]);
+    expect(resolved).toEqual([]);
+  });
+
+  test("an image that can't be made ready is refused once the turn is admitted, which decodes it", async () => {
+    const { url, record, resolved } = await start();
+    const vast = new Uint8Array(
+      await sharp({ create: { width: 2049, height: 2048, channels: 3, background: "#fff" } })
+        .png()
+        .toBuffer(),
+    );
+    const photo = await sharp({
+      create: { width: 64, height: 64, channels: 3, background: "#fff" },
+    })
+      .jpeg()
+      .toBuffer();
+    const cut = new Uint8Array(photo.subarray(0, photo.byteLength / 2));
+    for (const [file, type, want] of [
+      [vast, "image/png", [413, "payload-too-large"]],
+      [cut, "image/jpeg", [415, "unsupported-media-type"]],
+    ] as const) {
+      const body = form([], { text: "看", files: [[file, type]] });
+      body.append("loginSyncToken", "good-token");
+      expect([type, await errorOf(await postForm(url, body))]).toEqual([type, want]);
+    }
+    expect(record.minds).toEqual([]);
+    expect(resolved).toEqual(["good-token", "good-token"]);
+  });
+
+  test("the window keeps the files a line of the viewer's names, and drops what a line doesn't take", async () => {
+    const { url, record } = await start();
+    const named = { kind: "image", name: nameOf(PNG, "png"), mime: "image/png" };
+    const odd = { kind: "audio", name: `${"a".repeat(64)}.mp3`, mime: "audio/mpeg" };
+    await linesOf(
+      await postTurn(url, {
+        chat: {
+          header: HEADER,
+          events: [
+            { ...user(1, "这张"), attachments: [named] },
+            { ...user(2, "那张"), attachments: [named, odd] },
+          ],
+        },
+        text: "嗯",
+      }),
+    );
+    expect(record.minds[0]?.messages.slice(-3)).toEqual([
+      { role: "user", content: "这张（一张图片，这次没给你看）" },
+      { role: "user", content: "那张" },
+      { role: "user", content: "嗯" },
+    ]);
+  });
 });

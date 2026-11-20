@@ -293,6 +293,7 @@ export function openaiMind(replies: readonly (readonly Readonly<Record<string, u
   });
   const mind = new OpenAIMind({
     client,
+    server: "http://provider.invalid/api/v1",
     model: "anthropic/claude-sonnet-5.5",
     live: {},
     dialect: "compatible",

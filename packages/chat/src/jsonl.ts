@@ -8,8 +8,8 @@ import { join } from "node:path";
 import {
   type Attachment,
   attachmentExtension,
-  attachmentKind,
   attachmentMime,
+  attachmentNamed,
   CHAT_FORMAT,
   type ChatEvent,
   type ChatHeader,
@@ -245,9 +245,7 @@ export class JsonlChatStore implements ChatStore {
     const ext = attachmentExtension(mime);
     if (ext === null) throw new ChatStoreError("invalid", `An attachment can't be ${mime}`);
     const name = `${createHash("sha256").update(bytes).digest("hex")}.${ext}`;
-    const type = attachmentMime(name) as string;
-    const kind = attachmentKind(type) === "audio" ? "audio" : "image";
-    const attachment: Attachment = { kind, name, mime: type };
+    const attachment = attachmentNamed(name) as Attachment;
     return this.#serial(id, async () => {
       await this.#size(id);
       const dir = join(this.#dir(id), FILES);

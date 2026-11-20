@@ -3,6 +3,7 @@ import { consoleSink, type LogRecord, logger, openrouterHeaders } from "@eidolon
 import type { ToolSchema } from "@eidolon/core";
 import {
   ANTHROPIC_VERSION,
+  OpenAIChatClient,
   ProviderHttpError,
   setUsageSink,
   type UsageRecord,
@@ -11,6 +12,7 @@ import {
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { type ServedFetch, serveFetch } from "../../config/test/http.ts";
 import { createMind } from "../src/mind/index.ts";
+import { OpenAIMind } from "../src/mind/openai.ts";
 import type { Mind, MindChunk, MindRequest } from "../src/types.ts";
 
 interface Seen {
@@ -1349,5 +1351,170 @@ describe("a task's mind", () => {
     await drain(createMind("mind", { model: "x/hers", tap: (r) => tapped.push(r) }), ask());
     expect(seen[0]?.body.model).toBe("x/hers");
     expect(tapped.map((record) => [record.role, record.model])).toEqual([["mind", "x/hers"]]);
+  });
+});
+
+describe("images the viewer sent", () => {
+  const PNG = "data:image/png;base64,iVBORw0KGgo=";
+  const shown = [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "看看我的猫" },
+        { type: "image_url", image_url: { url: PNG } },
+      ],
+    },
+  ];
+  const said = [
+    { choices: [{ delta: { content: "好可爱" } }] },
+    { choices: [{ delta: {}, finish_reason: "stop" }] },
+  ];
+
+  test("an OpenAI-compatible mind sends them as the request's image parts", async () => {
+    reply = () => completions(said);
+    await drain(createMind(), ask({ messages: shown }));
+    expect(seen[0]?.body.messages).toEqual([{ role: "system", content: "persona" }, ...shown]);
+  });
+
+  test("a model that refuses them is asked again with a note in their place, and from then on", async () => {
+    setEnv({ OPENROUTER_MODEL: "~deepseek/deepseek-pro-latest" });
+    let refusals = 0;
+    reply = () => {
+      const messages = seen.at(-1)?.body.messages as { content: unknown }[];
+      if (messages.some((message) => Array.isArray(message.content))) {
+        refusals += 1;
+        return new Response(
+          JSON.stringify({ error: { message: "No endpoints found that support image input" } }),
+          { status: 404 },
+        );
+      }
+      return completions(said);
+    };
+    const words = [{ role: "user", content: "看看我的猫（一张图片，你看不到）" }];
+    expect(await drain(createMind(), ask({ messages: shown }))).toEqual([
+      { type: "text", text: "好可爱" },
+      { type: "done", finishReason: "stop" },
+    ]);
+    expect(seen.map((request) => (request.body.messages as unknown[]).slice(1))).toEqual([
+      shown,
+      words,
+    ]);
+    expect(logs.some((log) => log.message.includes("can't take images"))).toBe(true);
+    await drain(createMind(), ask({ messages: shown }));
+    expect(refusals).toBe(1);
+    expect((seen.at(-1)?.body.messages as unknown[] | undefined)?.slice(1)).toEqual(words);
+  });
+
+  /** A mind on its own OpenAI-compatible `server`, answering each request's body with `answer`. */
+  function mindAt(server: string, answer: (shows: boolean) => Response | Promise<Response>) {
+    const shows: boolean[] = [];
+    const fetch = async (_url: unknown, init: RequestInit) => {
+      const { messages } = JSON.parse(String(init.body)) as { messages: { content: unknown }[] };
+      shows.push(messages.some((message) => Array.isArray(message.content)));
+      return answer(shows.at(-1) as boolean);
+    };
+    const client = new OpenAIChatClient({
+      provider: "Compatible",
+      baseUrl: server,
+      apiKey: "key",
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    });
+    const mind = new OpenAIMind({
+      client,
+      server,
+      model: "x/one-name",
+      live: {},
+      dialect: "compatible",
+      takesStop: true,
+    });
+    return { mind, shows };
+  }
+  const unsupported = { error: { code: 400, message: "image input is not supported" } };
+
+  test("a refusal that comes as the stream's first event is asked again, on that server alone", async () => {
+    const refusing = mindAt("http://a.invalid/v1", (shows) =>
+      completions(shows ? [unsupported] : said),
+    );
+    expect(await drain(refusing.mind, ask({ messages: shown }))).toEqual([
+      { type: "text", text: "好可爱" },
+      { type: "done", finishReason: "stop" },
+    ]);
+    expect(refusing.shows).toEqual([true, false]);
+    const seeing = mindAt("http://b.invalid/v1", () => completions(said));
+    await drain(seeing.mind, ask({ messages: shown }));
+    expect(seeing.shows).toEqual([true]);
+  });
+
+  test("requests that sent images before either was refused are each asked again", async () => {
+    let refuse = () => {};
+    const refused = new Promise<void>((resolve) => {
+      refuse = resolve;
+    });
+    const answer = async (shows: boolean) => {
+      if (!shows) return completions(said);
+      await refused;
+      return completions([unsupported]);
+    };
+    const chats = [mindAt("http://d.invalid/v1", answer), mindAt("http://d.invalid/v1", answer)];
+    const replies = chats.map(({ mind }) => drain(mind, ask({ messages: shown })));
+    while (chats.some(({ shows }) => shows.length === 0)) await delay(1);
+    refuse();
+    expect(await Promise.all(replies)).toEqual([
+      [
+        { type: "text", text: "好可爱" },
+        { type: "done", finishReason: "stop" },
+      ],
+      [
+        { type: "text", text: "好可爱" },
+        { type: "done", finishReason: "stop" },
+      ],
+    ]);
+    expect(chats.map(({ shows }) => shows)).toEqual([
+      [true, false],
+      [true, false],
+    ]);
+  });
+
+  test("a request refused again once its images are notes fails, asked no more", async () => {
+    const stubborn = mindAt("http://e.invalid/v1", () => completions([unsupported]));
+    const error = await drain(stubborn.mind, ask({ messages: shown })).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderHttpError);
+    expect(stubborn.shows).toEqual([true, false]);
+  });
+
+  test("a refusal after she has said something fails the request, which isn't asked again", async () => {
+    const talking = mindAt("http://c.invalid/v1", () =>
+      completions([{ choices: [{ delta: { content: "好" } }] }, unsupported]),
+    );
+    const error = await drain(talking.mind, ask({ messages: shown })).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderHttpError);
+    expect(talking.shows).toEqual([true]);
+  });
+
+  test("a failure that isn't about images fails the request as it did", async () => {
+    setEnv({ OPENROUTER_MODEL: "~google/gemini-flash-latest" });
+    reply = () =>
+      new Response(JSON.stringify({ error: { message: "Insufficient credits" } }), { status: 402 });
+    const error = await drain(createMind(), ask({ messages: shown })).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderHttpError);
+    expect(seen).toHaveLength(1);
+  });
+
+  test("an Anthropic mind sends each as a base64 image block", async () => {
+    setEnv({ LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "ak", ANTHROPIC_BASE_URL: base() });
+    reply = () =>
+      messages([
+        { type: "message_start", message: { model: "claude-opus-5-5", usage: {} } },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+        { type: "message_stop" },
+      ]);
+    await drain(createMind(), ask({ messages: shown }));
+    const turn = (
+      seen[0]?.body.messages as { content: Record<string, unknown>[] }[] | undefined
+    )?.[0];
+    expect(turn?.content.map(({ cache_control: _, ...block }) => block)).toEqual([
+      { type: "text", text: "看看我的猫" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } },
+    ]);
   });
 });

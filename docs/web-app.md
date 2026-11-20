@@ -229,7 +229,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `method-not-allowed` | 405 | Another method, any `OPTIONS`, HEAD on a GET route; `Allow` names the right one |
 | `conflict` | 409 | A file that doesn't read as it should (`credentials.json`, a `persona.yaml`, a hand-made URL list, a `settings.yaml` an Always answer would write), a persona `EIDOLON_PERSONA` pins, a job an earlier server started |
 | `payload-too-large` | 413 | A body or upload over its cap |
-| `unsupported-media-type` | 415 | An upload that isn't PNG, JPEG or WebP by its bytes |
+| `unsupported-media-type` | 415 | An upload that isn't one of the image or text types its route takes, by its bytes |
 | `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
 | `upstream-failed` | 502 | Mem0 or Fish Audio failed |
 | `internal` | 500 | A bug; the terminal's line with the answer's `id` has the details |
@@ -399,6 +399,20 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     Pausing one, or playing another, stops the rest. One whose voice failed is text, marked
     **Sent as text**.
   - **Retry** after a failed reply sends a voice message's transcript as text.
+- **Images and text files** ([chat.md](chat.md#the-viewers-files)):
+  - **Adding one:** the paperclip in the message box's row picks images and text files, a paste of
+    a copied image or file into the text adds it (a copied page's words still paste), and a drop
+    anywhere on the chat adds what is dropped, under a **Drop to Attach** cover while it is dragged
+    over. A call takes none.
+  - **On its way:** each is sent to `POST files` at once, as it is (`use-draft-files.ts`), a text
+    file as `text/plain`, and the server makes an image ready, upright, stripped and scaled, and
+    checks a text file is UTF-8. It shows over the text, an image as a thumbnail and a text file by
+    its name, with a spinner until it is kept and an × to take it out. One the server refuses is
+    dropped with a toast saying why; past 8, the rest are left out with a toast to send them with
+    the next message.
+  - **Sending:** Enter or Send takes the words and the files, or the files alone, once every file is
+    up; the microphone shows only while there are neither. The line shows its images and files above
+    its words, each opening its file from the chat's `files/`, and **Retry** sends them again.
 - **The studio's Chats section** edits a persona's `chat.replyMode`, `chat.interests` and
   `chat.talkativeness` ([personas.md](personas.md#personayaml)), showing where each value
   comes from. Her `chat.maxRounds`, **Rounds per Reply**, is in its Advanced card.
@@ -799,7 +813,10 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   jobs page showing it done;
 - a text chat with milky-green, her mind pointed at that server's streaming `/chat/completions`:
   New Chat and her greeting, a reply that streams in with its cue as a chip, the history after a
-  reload, and Rename and Delete from the chat's menus, with `chats/` at 0700 and its log at 0600;
+  reload, a picture and a text file added with the paperclip, shown over the text, kept with
+  `201`s and sent with a line, which reaches her mind as an image part and the file's text and
+  shows both, and Rename and Delete from the chat's menus, with `chats/` at 0700 and its log at
+  0600;
 - a group chat with a second persona made from no template, the director's Decisions requests
   answered by that server through an OpenRouter account pointed at it (the text chat already
   asks it `voice_moment`): no greeting, an @-mention the composer completes, the second persona's

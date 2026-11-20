@@ -79,7 +79,7 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
-| chats, the chat log format, the turn engine, group chats' director, or voice messages (`packages/chat`, `packages/engine`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
+| chats, the chat log format, the turn engine, group chats' director, voice messages, or the images and text files the viewer sends (`packages/chat`, `packages/engine`, `packages/engine/src/seen.ts`, `apps/bot/src/images.ts`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
 | the voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime`), its models, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
@@ -222,6 +222,11 @@ the layout's one line.
   picks one by the hour, behind `referenceSources`
   (`packages/imagegen/src/references.ts`), the choke point the bot and
   `laplace-generate-image` share.
+- **A viewer's image reaches a mind only through `normalizeImage`**
+  (`apps/bot/src/images.ts`, on sharp), which turns it upright, strips what its
+  camera wrote (GPS included) and fits it to what minds take; a route that takes
+  images calls it. Production's is the bot's own sharp: the Dockerfile prunes
+  only LanceDB's older copy, and the npm package depends on it.
 
 ### The TypeScript bot
 

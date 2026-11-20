@@ -4,7 +4,7 @@ import {
   finalEnvelope,
   startedEnvelope,
 } from "./async_tool.ts";
-import type { ChatEvent, ChatEventOf, ChatHeader, ParticipantId } from "./format.ts";
+import type { Attachment, ChatEvent, ChatEventOf, ChatHeader, ParticipantId } from "./format.ts";
 import { summarize } from "./summary.ts";
 
 /** The lines a persona's view keeps; older ones are Mem0's to recall. */
@@ -22,8 +22,20 @@ export interface ViewToolCall {
 /** An OpenAI-shaped message, as a turn's context holds them. */
 export type ViewMessage =
   | { role: "user" | "assistant" | "system" | "developer"; content: string }
+  | ViewUserMessage
   | { role: "assistant"; content?: string; tool_calls: [ViewToolCall] }
   | ViewToolMessage;
+
+/**
+ * A line of the viewer's that came with files. `content` is what they typed, for whatever reads
+ * text alone; the files reach a mind only as the engine shows them to it, as her turn's request
+ * is made.
+ */
+export type ViewUserMessage = {
+  role: "user";
+  content: string;
+  attachments: readonly Attachment[];
+};
 
 type ViewToolMessage = { role: "tool"; tool_call_id: string; content: string };
 
@@ -43,6 +55,17 @@ export function viewerLabel(viewerName: string | undefined): string {
   return viewerName || "观众";
 }
 
+/** The files the viewer sent with a line: a voice message's audio is its transcript instead. */
+export function sentFiles(message: ChatEventOf<"message">): readonly Attachment[] {
+  if (message.speaker.kind !== "user" || message.attachments === undefined) return [];
+  return message.attachments.filter((file) => file.kind !== "audio");
+}
+
+/** Whether a message is a line: it has words, or files the viewer sent. */
+function isLine(message: ChatEventOf<"message">): boolean {
+  return message.text !== "" || sentFiles(message).length > 0;
+}
+
 /**
  * The seq her view starts at: the oldest line in the window, moved on to the first that isn't
  * hers, so the view opens on a user message the way a call's does.
@@ -50,7 +73,7 @@ export function viewerLabel(viewerName: string | undefined): string {
 function windowStart(events: readonly ChatEvent[], id: ParticipantId, size: number): number {
   const lines = events.filter(
     (event): event is Line =>
-      (event.type === "message" && event.text !== "") ||
+      (event.type === "message" && isLine(event)) ||
       (event.type === "kickoff" && event.persona === id),
   );
   if (lines.length <= size) return 0;
@@ -216,10 +239,16 @@ export function viewWithBlocks(
     if (event.seq < start) continue;
     switch (event.type) {
       case "message": {
-        if (event.text === "") break;
+        if (!isLine(event)) break;
         const { speaker } = event;
         if (speaker.kind === "user") {
-          view.push({ role: "user", content: `${viewer}${event.text}` });
+          const content = `${viewer}${event.text}`;
+          const attachments = sentFiles(event);
+          view.push(
+            attachments.length === 0
+              ? { role: "user", content }
+              : { role: "user", content, attachments },
+          );
         } else if (speaker.id === id) {
           view.push({ role: "assistant", content: event.text });
         } else {

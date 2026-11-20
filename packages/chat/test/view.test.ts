@@ -4,6 +4,7 @@ import {
   CHAT_WINDOW_MESSAGES,
   type ChatEvent,
   type ChatEventDraft,
+  type ChatEventOf,
   type ChatHeader,
   cancelledEnvelope,
   finalEnvelope,
@@ -910,5 +911,50 @@ describe("viewOf, older results as stubs", () => {
       from("milky", "答3"),
     );
     expect(tools(events)).toEqual([stub("c1")]);
+  });
+});
+
+describe("viewOf, the viewer's files", () => {
+  const PHOTO = { kind: "image", name: `${"c".repeat(64)}.jpg`, mime: "image/jpeg" } as const;
+  const NOTES = {
+    kind: "file",
+    name: `${"d".repeat(64)}.txt`,
+    mime: "text/plain",
+    filename: "notes.md",
+  } as const;
+  const sent = (text: string, attachments: readonly object[]): ChatEventDraft => ({
+    ...(user(text) as ChatEventOf<"message">),
+    id: `u-files-${text}`,
+    attachments: attachments as ChatEventOf<"message">["attachments"],
+  });
+
+  test("ride beside the line's words, a line of files alone included; a voice message's audio doesn't", () => {
+    const events = log(
+      sent("看看我的猫", [PHOTO]),
+      from("milky", "好可爱"),
+      sent("", [PHOTO, NOTES]),
+      {
+        ...(user("在吗") as ChatEventOf<"message">),
+        modality: "voice",
+        attachments: [{ kind: "audio", name: `${"e".repeat(64)}.webm`, mime: "audio/webm" }],
+      },
+    );
+    expect(view(events)).toEqual([
+      { role: "user", content: "看看我的猫", attachments: [PHOTO] },
+      { role: "assistant", content: "好可爱" },
+      { role: "user", content: "", attachments: [PHOTO, NOTES] },
+      { role: "user", content: "在吗" },
+    ]);
+    expect(groupView(events.slice(0, 1))).toEqual([
+      { role: "user", content: "小明：看看我的猫", attachments: [PHOTO] },
+    ]);
+  });
+
+  test("a line of files alone counts toward the window as a line", () => {
+    const events = log(user("一"), from("milky", "二"), sent("", [PHOTO]), from("milky", "三"));
+    expect(view(events, "milky", 2)).toEqual([
+      { role: "user", content: "", attachments: [PHOTO] },
+      { role: "assistant", content: "三" },
+    ]);
   });
 });

@@ -3,7 +3,7 @@
 // leaves the turn running on the server, so live picks it up again once. Her voice messages
 // answering a send from this tab play on their own, one after another, while the tab has the focus
 // and no call is on.
-import type { ChatEvent, ChatStreamLine } from "@eidolon/chat";
+import type { Attachment, ChatEvent, ChatStreamLine } from "@eidolon/chat";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { asApiError } from "@/lib/api";
@@ -38,7 +38,8 @@ export interface ChatTurns {
   readonly live: LiveState;
   /** A line is on its way to the log, or a reply is under way. */
   readonly busy: boolean;
-  send(text: string): void;
+  /** A line, with the files it carries, already kept in the chat. */
+  send(text: string, files?: readonly Attachment[]): void;
   sendVoice(clip: VoiceClip): void;
   stop(): void;
   /** The seq of her voice message to play now on its own; null for none. */
@@ -202,11 +203,11 @@ export function useChat(id: string, calling: boolean, awaitingReport: number | n
   }, [awaitingReport, calling, id, follow]);
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, files: readonly Attachment[] = []) => {
       const key = sends.current.issue();
       const after = queryClient.getQueryData(chatQuery(id).queryKey)?.events.at(-1)?.seq ?? 0;
-      dispatch({ type: "sending", key, after, text });
-      void follow((signal) => sendMessage(id, text, signal), key, true);
+      dispatch({ type: "sending", key, after, text, files });
+      void follow((signal) => sendMessage(id, text, files, signal), key, true);
     },
     [queryClient, id, follow],
   );

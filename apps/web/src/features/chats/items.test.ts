@@ -7,7 +7,7 @@ import {
   itemKey,
   manyVoices,
   previewText,
-  retryText,
+  retryLine,
   startsRun,
 } from "./items";
 
@@ -197,7 +197,7 @@ describe("voice messages", () => {
       { kind: "user" },
       { kind: "persona", seq: 2, voice: null, sentAsText: true },
     ]);
-    expect(retryText(items)).toBeNull();
+    expect(retryLine(items)).toBeNull();
     // Another persona's, or one with no message of hers right before it, badges nothing.
     expect(chatItems([her, failed(3, "ken")])).toMatchObject([{ sentAsText: false }]);
     expect(chatItems([userLine(1, "唱"), failed(2, "mio")])).toEqual([
@@ -214,8 +214,10 @@ describe("voice messages", () => {
       turn: "t",
       error: "x",
     };
-    expect(retryText(chatItems([voice(1, { kind: "user" }, "你好"), fails]))).toBe("你好");
-    expect(retryText(chatItems([voice(1, { kind: "user" }, ""), fails]))).toBeNull();
+    expect(retryLine(chatItems([voice(1, { kind: "user" }, "你好"), fails]))).toEqual({
+      text: "你好",
+    });
+    expect(retryLine(chatItems([voice(1, { kind: "user" }, ""), fails]))).toBeNull();
   });
 });
 
@@ -387,9 +389,9 @@ describe("a group's lines", () => {
   });
 });
 
-describe("retryText", () => {
+describe("retryLine", () => {
   test("is the viewer's last line when the chat ends in a failure", () => {
-    expect(retryText(chatItems(EVENTS))).toBe("再来一张");
+    expect(retryLine(chatItems(EVENTS))).toEqual({ text: "再来一张" });
   });
 
   test("is the viewer's last line when her reply to it was cut off", () => {
@@ -406,14 +408,41 @@ describe("retryText", () => {
       reason: null,
       call: false,
     } as const;
-    expect(retryText([asked, { ...reply, cutOff: "length" }])).toBe("讲个长故事");
-    expect(retryText([asked, { ...reply, cutOff: null }])).toBeNull();
+    expect(retryLine([asked, { ...reply, cutOff: "length" }])).toEqual({ text: "讲个长故事" });
+    expect(retryLine([asked, { ...reply, cutOff: null }])).toBeNull();
   });
 
   test("is null once something followed the failure, or with no line to send", () => {
     const items = chatItems(EVENTS);
-    expect(retryText(items.slice(0, -1))).toBeNull();
-    expect(retryText([{ kind: "failed", seq: 1, persona: "mio", error: "x" }])).toBeNull();
+    expect(retryLine(items.slice(0, -1))).toBeNull();
+    expect(retryLine([{ kind: "failed", seq: 1, persona: "mio", error: "x" }])).toBeNull();
+  });
+
+  test("sends the files of the viewer's line again, with no words or with them", () => {
+    const notes = { kind: "file", name: `${"b".repeat(64)}.txt`, mime: "text/plain" } as const;
+    const sent = (seq: number, text: string): ChatEvent => ({
+      type: "message",
+      seq,
+      at: seq,
+      id: `m${seq}`,
+      speaker: { kind: "user" },
+      text,
+      attachments: [IMAGE, { ...notes, filename: "notes.md" }],
+    });
+    const fails: ChatEvent = {
+      type: "turn-failed",
+      seq: 9,
+      at: 9,
+      persona: "mio",
+      turn: "t",
+      error: "x",
+    };
+    const files = [IMAGE, { ...notes, filename: "notes.md" }];
+    expect(chatItems([sent(1, "")])).toEqual([
+      { kind: "user", seq: 1, text: "", voice: null, call: false, files },
+    ]);
+    expect(retryLine(chatItems([sent(1, ""), fails]))).toEqual({ text: "", files });
+    expect(retryLine(chatItems([sent(1, "看看"), fails]))).toEqual({ text: "看看", files });
   });
 });
 
@@ -519,7 +548,7 @@ describe("calls", () => {
       turn: "t",
       error: "x",
     };
-    expect(retryText(chatItems([...CALL, failed]))).toBeNull();
+    expect(retryLine(chatItems([...CALL, failed]))).toBeNull();
     expect(manyVoices(items)).toBe(false);
   });
 
@@ -640,7 +669,7 @@ describe("tasks", () => {
       ...events.slice(0, 3),
       { type: "turn-failed", seq: 4, at: 4, persona: "mio", turn: "t1", error: "Timed out" },
     ]);
-    expect(retryText(items)).toBeNull();
+    expect(retryLine(items)).toBeNull();
     const told = chatItems(events.slice(0, 4));
     expect(startsRun(told, 2)).toBe(true);
     expect(manyVoices(told)).toBe(false);
@@ -678,8 +707,8 @@ describe("tasks", () => {
       ...events.slice(0, 3),
       { type: "turn-failed", seq: 4, at: 4, persona: "mio", turn: "t1", error: "Timed out" },
     ]);
-    expect(retryText(items)).toBeNull();
-    expect(retryText(displayedItems(items, "focus", NONE))).toBe("Write one");
+    expect(retryLine(items)).toBeNull();
+    expect(retryLine(displayedItems(items, "focus", NONE))).toEqual({ text: "Write one" });
   });
 });
 
@@ -792,10 +821,10 @@ describe("her words before a tool call", () => {
       cutOff,
     ]);
     expect(cut.map((item) => item.kind)).toEqual(["user", "persona", "persona", "persona"]);
-    expect(retryText(cut)).toBe("Write one");
-    expect(retryText(chatItems([...events.slice(0, 2), call(3, "recall_streams"), cutOff]))).toBe(
-      "Write one",
-    );
+    expect(retryLine(cut)).toEqual({ text: "Write one" });
+    expect(
+      retryLine(chatItems([...events.slice(0, 2), call(3, "recall_streams"), cutOff])),
+    ).toEqual({ text: "Write one" });
     // Her line stands between the owner's and a failure: the failure is her reply's.
     const failed = chatItems([
       ...events.slice(0, 2),
@@ -803,15 +832,15 @@ describe("her words before a tool call", () => {
       { type: "turn-failed", seq: 4, at: 4, persona: "mio", turn: "t1", error: "Timed out" },
     ]);
     expect(failed.map((item) => item.kind)).toEqual(["user", "persona", "failed"]);
-    expect(retryText(failed)).toBeNull();
+    expect(retryLine(failed)).toBeNull();
     // Sending the line again would start another task.
-    expect(retryText(chatItems([...events.slice(0, 4), cutOff]))).toBeNull();
+    expect(retryLine(chatItems([...events.slice(0, 4), cutOff]))).toBeNull();
     expect(
-      retryText(chatItems([...events.slice(0, 4), call(5, "recall_streams", "我查一下"), cutOff])),
+      retryLine(chatItems([...events.slice(0, 4), call(5, "recall_streams", "我查一下"), cutOff])),
     ).toBeNull();
     // Another persona's words before her calls are another's turn.
     const bea = { ...call(5, "recall_streams", "我也查查"), persona: "bea" } as ChatEvent;
-    expect(retryText(chatItems([...events.slice(0, 2), bea, cutOff]))).toBeNull();
+    expect(retryLine(chatItems([...events.slice(0, 2), bea, cutOff]))).toBeNull();
   });
 
   test("continue her run of lines", () => {

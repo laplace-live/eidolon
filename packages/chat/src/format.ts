@@ -38,7 +38,36 @@ export type Attachment =
       readonly mime: string;
       /** Absent when nothing measured it; a player reads it from the file. */
       readonly durationMs?: number;
+    }
+  | {
+      /** A text file the viewer sent, as UTF-8. */
+      readonly kind: "file";
+      readonly name: string;
+      readonly mime: string;
+      /** What the viewer's file was called, which the line shows and her view names it by. */
+      readonly filename?: string;
     };
+
+/** The most files the viewer sends with one line. */
+export const MAX_LINE_FILES = 8;
+/**
+ * The largest image her mind is shown, which the server makes each one fit: Anthropic takes 5 MB of
+ * one as base64, which grows it by a third.
+ */
+export const MAX_IMAGE_BYTES = 3.5 * 1024 * 1024;
+/** An image's pixels at most as her mind is shown it, and its long edge: Claude's models see 2576 px. */
+export const MAX_IMAGE_PIXELS = 2048 * 2048;
+export const MAX_IMAGE_EDGE = 2576;
+/** The largest text file the viewer sends. */
+export const MAX_TEXT_FILE_BYTES = 1024 * 1024;
+/** The types a file the viewer sends is kept as. */
+const LINE_FILE_TYPES: ReadonlySet<string> = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "text/plain",
+]);
+const MAX_FILENAME = 120;
 
 /** How personas answer: `auto` lets the director choose voice where a line suits it. */
 export const REPLY_MODES = ["auto", "text", "voice"] as const;
@@ -275,7 +304,8 @@ export function isChatId(id: string): boolean {
 }
 
 // No SVG: an attachment is served from the app's own origin, where one could run script. The audio
-// is what browsers record (webm, or mp4 on Safari, or ogg) and what TTS providers send (mp3).
+// is what browsers record (webm, or mp4 on Safari, or ogg) and what TTS providers send (mp3). A
+// text file of the viewer's is kept as UTF-8, whatever it was called.
 const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -286,6 +316,7 @@ const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
   "audio/webm": "webm",
   "audio/ogg": "ogg",
   "audio/mp4": "m4a",
+  "text/plain": "txt",
 };
 
 const ATTACHMENT_NAME = /^[0-9a-f]{64}\.([a-z0-9]+)$/;
@@ -301,10 +332,90 @@ export function attachmentExtension(mime: string): string | null {
   return Object.hasOwn(ATTACHMENT_TYPES, type) ? (ATTACHMENT_TYPES[type] as string) : null;
 }
 
-/** Whether an attachment of type `mime` is an image or audio; null for a type not taken. */
+/** Whether an attachment of type `mime` is an image, audio or a text file; null for a type not taken. */
 export function attachmentKind(mime: string): Attachment["kind"] | null {
   if (attachmentExtension(mime) === null) return null;
-  return essence(mime).startsWith("audio/") ? "audio" : "image";
+  const type = essence(mime);
+  if (type.startsWith("audio/")) return "audio";
+  return type.startsWith("text/") ? "file" : "image";
+}
+
+/**
+ * The type of image `bytes` hold, by their signature, when it is one the viewer may send with a
+ * line: PNG, JPEG or WebP, which every mind that sees takes. Else null.
+ */
+export function sendableImageType(bytes: Uint8Array): string | null {
+  const holds = (offset: number, ascii: string): boolean =>
+    [...ascii].every((char, i) => bytes[offset + i] === char.charCodeAt(0));
+  if (bytes[0] === 0x89 && holds(1, "PNG\r\n\x1a\n")) return "image/png";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (holds(0, "RIFF") && holds(8, "WEBP")) return "image/webp";
+  return null;
+}
+
+/** `bytes` as text when they are UTF-8 with no NUL, as a text file the viewer sends is; else null. */
+export function sendableText(bytes: Uint8Array): string | null {
+  if (bytes.includes(0)) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/** Why a file can't go with a line. */
+export type LineFileRefusal = "empty" | "too-large" | "unsupported";
+
+/**
+ * The type a file the viewer sends with a line is kept as, by the type it was sent as and its
+ * bytes: an image (`image/*`) that is a PNG, JPEG or WebP, or a text file (`text/*`) in UTF-8; or
+ * why it can't go.
+ */
+export function lineFileType(
+  sentAs: string,
+  bytes: Uint8Array,
+): { readonly mime: string } | { readonly refused: LineFileRefusal } {
+  const type = essence(sentAs);
+  const image = type.startsWith("image/");
+  if (!image && !type.startsWith("text/")) return { refused: "unsupported" };
+  if (bytes.byteLength === 0) return { refused: "empty" };
+  if (bytes.byteLength > (image ? MAX_IMAGE_BYTES : MAX_TEXT_FILE_BYTES)) {
+    return { refused: "too-large" };
+  }
+  if (!image)
+    return sendableText(bytes) === null ? { refused: "unsupported" } : { mime: "text/plain" };
+  const mime = sendableImageType(bytes);
+  return mime === null ? { refused: "unsupported" } : { mime };
+}
+
+/** What a file the viewer sent was called, without its folders or control characters; null for none. */
+export function sentFilename(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const base = value.slice(Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\")) + 1).trim();
+  const name = [...base.replace(/\p{Cc}/gu, "")].slice(0, MAX_FILENAME).join("");
+  return name === "" ? null : name;
+}
+
+/**
+ * The files a line of the viewer's carries, as an event of theirs that came from a browser names
+ * them, rebuilt from their names; null when one isn't a file a line takes.
+ */
+export function lineFilesOf(value: unknown): Attachment[] | null {
+  if (!Array.isArray(value) || value.length > MAX_LINE_FILES) return null;
+  const files: Attachment[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) return null;
+    const { name, filename } = raw as { name?: unknown; filename?: unknown };
+    const file = typeof name === "string" ? attachmentNamed(name) : null;
+    if (file === null || !LINE_FILE_TYPES.has(file.mime)) return null;
+    if (files.some((each) => each.name === file.name)) return null;
+    if (file.kind !== "file") files.push(file);
+    else {
+      const called = sentFilename(filename);
+      files.push(called === null ? file : { ...file, filename: called });
+    }
+  }
+  return files;
 }
 
 /** The type of the attachment named `name` (`<sha256>.<ext>`), or null when it isn't one. */
@@ -313,4 +424,10 @@ export function attachmentMime(name: string): string | null {
   if (ext === undefined) return null;
   for (const [mime, known] of Object.entries(ATTACHMENT_TYPES)) if (known === ext) return mime;
   return null;
+}
+
+/** The attachment named `name` (`<sha256>.<ext>`), of its type's kind; null when it isn't one. */
+export function attachmentNamed(name: string): Attachment | null {
+  const mime = attachmentMime(name);
+  return mime === null ? null : ({ kind: attachmentKind(mime), name, mime } as Attachment);
 }

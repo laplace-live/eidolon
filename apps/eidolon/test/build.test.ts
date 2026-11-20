@@ -230,11 +230,13 @@ describe("the published manifest", () => {
     const retrieval = manifestOf<{ dependencies: Record<string, string> }>("packages/retrieval");
     const voice = manifestOf<{ dependencies: Record<string, string> }>("packages/voice");
     const webrtc = manifestOf<{ dependencies: Record<string, string> }>("packages/webrtc");
+    const bot = manifestOf<{ dependencies: Record<string, string> }>("apps/bot");
     expect(manifest.dependencies).toEqual({
       "onnxruntime-node": voice.dependencies["onnxruntime-node"],
       werift: webrtc.dependencies.werift,
       "libopus-wasm": webrtc.dependencies["libopus-wasm"],
       "apache-arrow": retrieval.dependencies["apache-arrow"],
+      sharp: bot.dependencies.sharp,
     });
     expect(webrtc.dependencies.werift).toBe(runtime.dependencies.werift);
     expect(manifest.optionalDependencies).toEqual({

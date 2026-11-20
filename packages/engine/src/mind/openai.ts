@@ -2,9 +2,10 @@
 // provider sent, and streaming back her text and whole tool calls.
 // Ports parts of pipedog's OpenAI, OpenRouter and DeepSeek LLM services and OpenAI adapter
 // (BSD-2-Clause; Copyright (c) 2024–2026 Daily, Copyright (c) 2026 pipedog contributors).
-import { isPlainObject, logger } from "@eidolon/config";
+import { errorText, isPlainObject, logger } from "@eidolon/config";
 import type { ToolSchema } from "@eidolon/core";
 import type { OpenAIChatClient } from "@eidolon/providers";
+import { refusedImages, showsImages, withoutImages } from "../seen.ts";
 import type { Mind, MindChunk, MindRequest } from "../types.ts";
 import { assembleCalls, type PendingCall } from "./calls.ts";
 
@@ -17,6 +18,8 @@ export type OpenAIDialect = "openai" | "compatible" | "gemini" | "deepseek";
 
 export interface OpenAIMindOptions {
   readonly client: OpenAIChatClient;
+  /** The API's base URL: with `model`, what remembers a model there that can't see images. */
+  readonly server: string;
   readonly model: string;
   /** The catalog's call-time fields, over the request's own. */
   readonly live: Readonly<Record<string, unknown>>;
@@ -91,11 +94,42 @@ function bodyFor(request: MindRequest, options: OpenAIMindOptions): Message {
 const MALFORMED = new Set(["MALFORMED_RESPONSE", "MALFORMED_FUNCTION_CALL"]);
 const MALFORMED_RETRIES = 2;
 
+/** The models, as `<server> <model>`, that refused a request for its images: shown none since. */
+const BLIND = new Set<string>();
+
 export class OpenAIMind implements Mind {
   readonly #options: OpenAIMindOptions;
 
   constructor(options: OpenAIMindOptions) {
     this.#options = options;
+  }
+
+  get #blind(): string {
+    return `${this.#options.server} ${this.#options.model}`;
+  }
+
+  /** The request's stream: with its images, or a note in place of each. */
+  #create(request: MindRequest, images: boolean): Promise<AsyncIterable<unknown>> {
+    const messages = images ? request.messages : withoutImages(request.messages);
+    return this.#options.client.chat.completions.create(
+      bodyFor({ ...request, messages }, this.#options),
+      { signal: request.signal },
+    ) as Promise<AsyncIterable<unknown>>;
+  }
+
+  /**
+   * Whether `error` refused the images an attempt showed: then the model is shown none from now on,
+   * that request's next attempt included, until the process restarts.
+   */
+  #refusedImages(error: unknown): boolean {
+    if (!refusedImages(error)) return false;
+    if (!BLIND.has(this.#blind)) {
+      BLIND.add(this.#blind);
+      logger.warning(
+        `${this.#options.model} can't take images (${errorText(error)}); she is told of them instead`,
+      );
+    }
+    return true;
   }
 
   async *stream(request: MindRequest): AsyncGenerator<MindChunk> {
@@ -106,11 +140,10 @@ export class OpenAIMind implements Mind {
       let finishReason: string | null = null;
       let native: string | null = null;
       let said = false;
+      // Decided per attempt: another request can learn the model is blind while this one runs.
+      const images = showsImages(request.messages) && !BLIND.has(this.#blind);
       try {
-        const chunks = (await this.#options.client.chat.completions.create(
-          bodyFor(request, this.#options),
-          { signal },
-        )) as AsyncIterable<unknown>;
+        const chunks = await this.#create(request, images);
         for await (const chunk of chunks) {
           const choice =
             isPlainObject(chunk) && Array.isArray(chunk.choices) ? chunk.choices[0] : null;
@@ -138,6 +171,8 @@ export class OpenAIMind implements Mind {
         }
       } catch (error) {
         if (signal.aborted) throw signal.reason;
+        // A refusal can come as the request's answer or, once its stream is open, as its first event.
+        if (images && !said && pending.size === 0 && this.#refusedImages(error)) continue;
         throw error;
       }
       signal.throwIfAborted();

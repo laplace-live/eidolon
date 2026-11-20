@@ -227,6 +227,12 @@ export interface SpeechDeps {
   transcribe(clip: AudioClip, options: { readonly signal: AbortSignal }): Promise<Transcript>;
 }
 
+/** A file the viewer sent, as her mind is shown it: an image can be shown as another type. */
+export interface ShownFile {
+  readonly bytes: Uint8Array;
+  readonly mime: string;
+}
+
 /** Everything a turn takes from outside, so tests can stand in for any of it. */
 export interface EngineDeps {
   /** The mind of the persona whose scope it is called in. */
@@ -243,6 +249,11 @@ export interface EngineDeps {
   ): Promise<PersonaParts>;
   /** Stores a file in the turn's chat. */
   saveAttachment(bytes: Uint8Array, mime: string): Promise<Attachment>;
+  /**
+   * A file the viewer sent in the turn's chat, as her mind is shown it; null when the turn has no
+   * copy of it, and it rejects when reading fails. Without it, the viewer's files read as notes.
+   */
+  readAttachment?(name: string, signal: AbortSignal): Promise<ShownFile | null>;
   fetchImage(url: string, signal: AbortSignal): Promise<{ bytes: Uint8Array; mime: string }>;
   newId(): string;
   /** Production's is `batchSpeech`, on her voice and hearing roles. */

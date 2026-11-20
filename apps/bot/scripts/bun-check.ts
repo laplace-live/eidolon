@@ -1,12 +1,15 @@
 // What production loads, on Bun, while production runs on Bun and the tests run on Node: boots the
 // bot's entry as the image does, on a temporary data home with no keys, and checks its routes, the
-// usage ledger on node:sqlite, the provider socket client against a local server, and a clean exit
-// on SIGTERM. CI runs it.
+// usage ledger on node:sqlite, the provider socket client against a local server, a viewer's image
+// made ready through sharp, and a clean exit on SIGTERM. CI runs it.
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { MAX_IMAGE_PIXELS } from "@eidolon/chat";
 import { connectWs, WsHandshakeError } from "@eidolon/providers";
 import { UsageLedger } from "@eidolon/usage";
+import sharp from "sharp";
+import { normalizeImage } from "../src/images.ts";
 import { Output } from "./output.ts";
 
 const ROOT = resolve(import.meta.dir, "../../..");
@@ -182,12 +185,38 @@ async function checkSocket(): Promise<void> {
   }
 }
 
+/** A photo taken sideways, with its camera's EXIF, made ready as the chat routes make one. */
+async function checkImage(): Promise<void> {
+  const sideways = await sharp({
+    create: { width: 40, height: 20, channels: 3, background: "#e33" },
+  })
+    .jpeg()
+    .withExif({ IFD0: { Make: "check" } })
+    .withMetadata({ orientation: 6 })
+    .toBuffer();
+  const made = await normalizeImage(sideways, MAX_IMAGE_PIXELS);
+  if ("refused" in made) {
+    check("image", false, `refused as ${made.refused}`);
+    return;
+  }
+  const meta = await sharp(made.bytes).metadata();
+  check(
+    "image",
+    made.mime === "image/jpeg" &&
+      meta.width === 20 &&
+      meta.height === 40 &&
+      meta.exif === undefined,
+    `${made.mime}, ${meta.width}×${meta.height}, ${meta.exif === undefined ? "no" : "with"} EXIF`,
+  );
+}
+
 const home = mkdtempSync(join(tmpdir(), "eidolon-bun-check-"));
 try {
   console.log(`Bun ${Bun.version}`);
   await checkBot(home);
   checkLedger(home);
   await checkSocket();
+  await checkImage();
 } finally {
   rmSync(home, { recursive: true, force: true });
 }

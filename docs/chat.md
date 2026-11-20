@@ -50,7 +50,7 @@ isn't stored, she never saw.
 
 | Event | Written by | What it holds |
 | --- | --- | --- |
-| `message` | the runner for the viewer and for a call's lines, the engine for her | `speaker`, `text`, and `attachments` (her selfies; `text` is empty on a message of photos alone); `modality: "voice"` on a voice message, whose first attachment is its audio and whose `text` is its transcript; `modality: "call"` on a line said on a call, the viewer's or hers, its transcript in `text`; `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
+| `message` | the runner for the viewer and for a call's lines, the engine for her | `speaker`, `text`, and `attachments` (her selfies, or the images and text files the viewer sent with a line, [The viewer's files](#the-viewers-files); `text` is empty on a message of photos or files alone); `modality: "voice"` on a voice message, whose first attachment is its audio and whose `text` is its transcript; `modality: "call"` on a line said on a call, the viewer's or hers, its transcript in `text`; `interrupted` when she was cut off, keeping what she had said; `cutOff` when her provider stopped her short: `length` at its token limit, `refusal` when it refused or filtered her |
 | `context` | the engine | A block a context provider put into her view: `role`, `content` and its `position` there; never shown. In the local app, the status block of her tasks (`后台的活：`) is one, replaced each turn ([assistant.md](assistant.md#the-status-block)) |
 | `context-removed` | the engine; the runner as a group call opens | Her earlier `context` blocks, by seq, that a provider took back out; the stream archive replaces its blocks when they change or move, and the status block when it changes or moves. In the local app, a group call's opening takes each persona's stored status blocks and task nudges out, one under the call's id per persona (`staleTaskContext`, [Calls](#calls)) |
 | `tool-call`, `tool-result` | the engine | Her call and what it returned; a call cut off has no result, and one that ran on past an interruption returns further down the log. In a text turn, the first call a round records carries `said`, the words she wrote before it in that round (none for whitespace alone), which her `message` doesn't repeat; a call's turns never store it, and logs from before it have none. An async tool's results carry `stage`: `started` while it runs, then `final` or `cancelled`. pipedog's async tools (`take_selfie` on a call) store `{}` as `started`; a background tool stores what it started (`start_task`'s `{ task, status }`), never `{}`. Nothing else tells the two apart: only a `{}` start's `final` follows pipedog's rule ([Her view](#her-view-viewof)), so a future async tool that stores a value would settle as a background tool's does. `start_task`'s `final` is stored by the runner when the task ends ([The local API](#the-local-api)), and so are its `tool-call` and `started` result when she started it on a call ([assistant.md](assistant.md#calls)) |
@@ -75,6 +75,10 @@ call would hold for her, without the system message:
   out, and an interrupted one keeps what she said. A voice message is its transcript; the
   engine reads the viewer's that was heard as nothing as `（听不清）` (`UNHEARD`). A call's lines
   are messages like any other.
+- **The files the viewer sent** ride beside their line's words as its `attachments`
+  (`ViewUserMessage`), a line of files alone included, which counts as a line for the window. Its
+  `content` stays what was typed, so whatever reads her view as text reads only that; her mind is
+  shown the files as each request is made ([The viewer's files](#the-viewers-files)).
 - **In a chat of two or more personas,** the viewer's lines read `观众名：text`, with the
   viewer's name (`viewerName`, else 观众). A chat of one keeps them unlabelled.
 - **Another persona's messages** fold into one `user` message of `名字：text` lines, one per line,
@@ -133,9 +137,10 @@ record which blocks a provider removed.
 - **Chats aren't in a persona's folder,** since one chat can hold several personas.
 - **Privacy:** folders are made 0700 and files 0600.
 - **Names are checked before they touch the disk.** A chat id must be a lowercase UUID. An
-  attachment is a PNG, JPEG, WebP, GIF or AVIF image, or WebM, Ogg, MP4 or MP3 audio, named by its
-  content's hash. SVG is refused, since the app serves attachments from its own origin. An audio
-  attachment carries `durationMs` where something measured it.
+  attachment is a PNG, JPEG, WebP, GIF or AVIF image, WebM, Ogg, MP4 or MP3 audio, or a text file
+  of the viewer's, kept as UTF-8 under `.txt`, named by its content's hash. SVG is refused, since
+  the app serves attachments from its own origin. An audio attachment carries `durationMs` where
+  something measured it, and a text file the `filename` it had.
 - **Appends:**
   - Each batch is one `appendFile`, then `fsync`, and resolves only once it is durable.
   - A batch that doesn't continue the log's seqs is refused with `seq-gap`, and nothing is
@@ -588,6 +593,73 @@ as `（听不清）`, and the page says no words could be heard in it.
 - **In a chat of one in `auto`,** every viewer line adds one director call, about $0.00003, as a
   group's do.
 
+## The viewer's files
+
+In the local app the viewer can send images and text files with a line, or alone: a `message` of
+theirs whose `attachments` name them in the chat's `files/`. It follows DeepSeek Harness's
+attachments: the bytes are made ready on the server once and kept by their hash before the line is
+stored, the log holds only references, and each request shows her mind what it can take, with a
+note in place of the rest.
+
+- **What goes:**
+  - **an image,** sent as it is and made ready on the server by `normalizeImage`
+    (`apps/bot/src/images.ts`, on sharp, as DeepSeek Harness does it):
+    - **what it takes:** a PNG, JPEG, WebP or GIF by its bytes' signature, so libvips never
+      parses anything else, at most 50 MB and 64 megapixels by its header
+      (`MAX_SENT_IMAGE_BYTES`, `MAX_SENT_IMAGE_PIXELS`), that decodes whole (`failOn: "error"`
+      also fails a truncated one); a GIF or an animated WebP gives its first frame;
+    - **what it makes:** the image upright by its EXIF orientation, with nothing a camera wrote in
+      it (EXIF, GPS, XMP, IPTC, ICC), in 8-bit sRGB, at no more than 2048² pixels and a 2576 px
+      edge (`MAX_IMAGE_PIXELS`, `MAX_IMAGE_EDGE`; Claude's models see 2576 px), as JPEG, or
+      WebP where it has transparency, at quality 85, 75 or 60, whichever first fits 3.5 MB
+      (`MAX_IMAGE_BYTES`: Anthropic takes 5 MB of one as base64);
+    - **one already all of that,** a PNG, JPEG or WebP bare of all but its pixels, goes as it is
+      once it decodes whole. Bare is read from its container, since libvips reads no JPEG comment,
+      no PNG chunk after the pixels and no bytes after the end: a JPEG of JFIF's plain header,
+      tables, frame and scans alone, a PNG of the chunks that draw it, a WebP of one frame and its
+      transparency, each ending where it ends. A JPEG with restart markers is made again too;
+    - **two at a time:** each is made on libvips's own threads, so a burst of them waits its turn
+      beside a call's audio.
+  - **a text file,** any `text/` type or a known text extension, UTF-8 with no NUL, at most 1 MB,
+    kept as `text/plain` with its `filename`.
+
+  Anything else, a PDF or an SVG included, is refused (`415`), and up to 8 files go with a line
+  (`MAX_LINE_FILES`).
+- **How her mind is shown them** (`showFiles`, `packages/engine/src/seen.ts`), anew for each
+  request of her turn, reading each file once a turn through `EngineDeps.readAttachment`:
+  - the line's words, then each text file as `<file name="…">` and its text, then each image as an
+    `image_url` part with a data URL, OpenAI's shape, which the Anthropic mind turns into a base64
+    `image` block;
+  - **the budget,** newest first: 8 images (`SHOWN_IMAGES`) and 12 MB of them
+    (`SHOWN_IMAGE_BYTES`, under Gemini's 20 MB of inline data once base64 grows it), and 40,000
+    characters of text files (`SHOWN_TEXT_CHARS`), each cut at 20,000 (`SHOWN_FILE_CHARS`) with
+    `（后面还有 n 字，这次没给你看）`. What the budget leaves out, and a file that can't be read, reads
+    `（一张图片，这次没给你看）` or `（文件 名字，这次没给你看）`. Each turn makes its own request
+    prefix ([Her view](#her-view-viewof)), so a budget that moves between turns costs no cache;
+  - **a mind that can't see images:** the request goes with its images. An OpenAI-compatible
+    model that refuses them, OpenRouter's `404 No endpoints found that support image input`, or a
+    400, 404, 415 or 422 naming the image, as the request's answer or its stream's first event, is
+    asked again at once with `（一张图片，你看不到）` in place of each, and so is every later
+    request to that model on that server until the process restarts (`refusedImages`,
+    `withoutImages`), so she says she can't see it rather than making one up. A refusal after she
+    has said something fails the turn. Anthropic's models all see images. DeepSeek Harness refuses
+    the send instead; here each persona in a group may think on another model.
+- **What reads text alone** reads the line's words with a note of its files after them,
+  `（图片）` and `（文件 名字）` (`filesNote`), a name without its @, which the director would
+    read as a mention: the director (`linesOf`), Mem0's lines in a group,
+  and a call's seed. A call's turns have no `readAttachment`, so a group call opening on the chat
+  reads its files as the budget's notes. Her recall, the gate and Mem0 in a chat of one read the
+  line's words alone.
+- **In production** the browser keeps the files, and a line sends its own with it
+  ([The routes](#the-routes)). The server keeps none, so a later turn shows her an earlier file
+  only when the browser sends it again (`seen`), which the SDK does for the window's newest 4
+  within 4 MB ([client-sdk.md](client-sdk.md#files-with-a-line)); any other reads the budget's
+  note. A file is named by the bytes the browser sent and keeps, and `normalizeImage` makes each
+  image ready for her mind on every request that shows it, `readAttachment` giving the type it
+  was made; the SDK's `prepareChatFile` makes it ready in the browser first, so it goes small and
+  the server takes it as it is. A public endpoint takes no image past `MAX_IMAGE_PIXELS`, which
+  keeps a decode small, nor past 3.5 MB, nor other than a PNG, JPEG or WebP.
+
 ## Calls
 
 A call is a mode of a chat. The viewer calls one of its personas from the chat page, the call
@@ -837,14 +909,15 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | `GET chats` | | `ChatSummary[]`, newest activity first |
 | `POST chats` | `{ participants: [id] }`, 1 to 6 personas, each once | `201 { id }`; one persona's greeting then runs |
 | `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, call, groupCall, defaultDisplay, defaultPermissions }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; the call on in the chat, `{ id, persona, group? }`, or null; whether its personas can be called together now; and the app's `chats.display` and `assistant.permissions` as the read was made, which the chat follows until a `settings` event of its own sets a `display` or `permissions` |
-| `POST chats/:id/messages` | `{ text }`, 1 to 4000 characters | NDJSON `ChatStreamLine`s from the viewer's line on: each decision as an `events` line, and each turn from `started` to `ended`. `409 chat-in-call` during a call |
+| `POST chats/:id/files?filename=` | A file the viewer sends with a line, as it is: a text file as any `text/*` type, UTF-8, at most 1 MB, named by `filename`, or as any other type an image, a PNG, JPEG, WebP or GIF by its bytes, at most 50 MB and 64 megapixels | `201` with its attachment, kept in `files/` by its hash, an image as `normalizeImage` made it, and in no event until a line names it ([The viewer's files](#the-viewers-files)). `415` for bytes that aren't one, `413` past the size, `400` for an empty body |
+| `POST chats/:id/messages` | `{ text?, attachments? }`: up to 4000 characters, and up to 8 `{ name, filename? }` sent to `POST files` first, each once; one of the two at least | NDJSON `ChatStreamLine`s from the viewer's line on: each decision as an `events` line, and each turn from `started` to `ended`. `400` for a file not in the chat or of a kind a line doesn't carry; `409 chat-in-call` during a call |
 | `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `409 chat-in-call` during a call, `502 upstream-failed` when hearing fails |
 | `GET chats/:id/live` | | NDJSON of the running reply from its start; during a call, each event the chat stores, from `call-started` until the stream ends after `call-ended`; or `204` while neither runs |
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
 | `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, `{ replyMode }`, `auto`, `text` or `voice`, `{ display }`, `focus`, `normal` or `verbose`, or `{ permissions }`, `ask`, `auto` or `full`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line; a `display` applies at once, during a call too, whose feed carries it, and starts no turn; `permissions` reaches her tasks there at their next question, and her texts at her next turn, a call's included, and starts no turn |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
 | `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`; stops the chat's live tasks, after any `start_task` still being answered; then removes `chats/<id>/` and nothing else, leaving the tasks' records. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |
-| `GET chats/:id/files/:name` | | The attachment: its type, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers a single `Range` with a `206` and an unsatisfiable one with a `416` (`ranges.ts`), and always sends `Accept-Ranges: bytes`, with a `Content-Length` on a `200` or `206`, since Safari plays audio only from a server that takes ranges |
+| `GET chats/:id/files/:name` | | The attachment: its type, a text file's with `charset=utf-8`, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers a single `Range` with a `206` and an unsatisfiable one with a `416` (`ranges.ts`), and always sends `Accept-Ranges: bytes`, with a `Content-Length` on a `200` or `206`, since Safari plays audio only from a server that takes ranges |
 
 - **Text** is trimmed. A message may hold tabs and line breaks, but no other control character.
 - **`missing-key`:** when a persona's mind role's provider takes a key and has none, `POST chats`,
@@ -868,8 +941,9 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   OpenAI-compatible server, which also answers the director's Decisions route, OpenAI's speech and
   transcriptions, a call's realtime transcription session, and a task's worker. It bills nothing.
   - **A chat of one:** New Chat and the greeting, a reply that streams in with its cue as a chip,
-    after a decision that asked `voice_moment` alone, the history after a reload, Rename and
-    Delete.
+    after a decision that asked `voice_moment` alone, the history after a reload, a picture and a
+    text file picked with the paperclip and sent with a line, her mind shown the picture as an
+    image part and the file as its text, then Rename and Delete.
   - **A group,** with a second persona made from no template: no greeting, an @-mention the
     composer completes, the second persona's answer, the first's answer to her a hop later, and
     each line under its persona's name.
@@ -987,6 +1061,26 @@ temporary data home and find it unchanged.
   breaks. Its @-mentions are read from it (`parseMentions`).
 - **No `text`** asks for her greeting. Only a chat of one persona with no message in it greets;
   anything else is `400 bad-request`.
+- **A line with files** comes as `multipart/form-data` instead, the same fields as parts (`chat`
+  as JSON), at most 12 MB of files in all (`MAX_TURN_FILE_BYTES`) besides the window:
+  - **`file`,** each image or text file the line carries, up to 8, each its own part with its own
+    Content-Type: an `image/*` PNG, JPEG or WebP by its bytes, at most 3.5 MB and 2048² pixels,
+    which `normalizeImage` makes ready for her mind, or a `text/*` file as `POST files` takes one
+    locally ([The viewer's files](#the-viewers-files)), whose name is its part's filename. `text`
+    may then be empty or absent. The first `events` line's message names them in `attachments`,
+    `<sha256>.<ext>` of the bytes sent, unsigned like the rest of the viewer's own events, and the
+    browser keeps each under that name.
+  - **`seen`,** earlier lines' files sent again, any type: each is shown her only while a line of
+    the viewer's in the window names its content's hash, an image once `normalizeImage` has made
+    it again. Each is made ready once however often it comes, and no more images than one request
+    shows her (8, `SHOWN_IMAGES`) with the line's own, the first sent; the rest read as notes. The
+    voice route takes them too.
+
+  `415` for a file of another type or bytes that aren't one, `413` past its size or 12 MB in
+  all, `400` for an empty one or more than 8, all before the viewer is resolved or charged. Only
+  an admitted turn decodes an image, the one thing a request can't make cheap, so one that isn't
+  whole (`415`) or is past 2048² pixels (`413`) is refused after. Nothing is kept: her turns read
+  the files from the request alone.
 - **The answer** is NDJSON of `ChatStreamLine`s (`application/x-ndjson`, `no-store`), as the local
   `POST messages` streams them:
   1. an `events` line with the viewer's message, as the server stamped it: `seq`, `at` and `id`
@@ -1088,7 +1182,9 @@ temporary data home and find it unchanged.
   newest events. One that sends only its newest events brings back a persona the viewer removed,
   drops one they added, and reverts the chat's reply mode and chain limit.
 - **The viewer's own events** are rebuilt from the fields a turn reads, and dropped when malformed:
-  - messages, without their attachments: no turn reads the viewer's, and the browser keeps them;
+  - messages, with the images and text files a line names (`lineFilesOf`), which her view shows
+    when the request sends them and notes otherwise; a voice message's audio, and a list holding
+    anything a line doesn't take, are left behind, since the browser keeps them;
   - `title`, `participants`, and `settings` with its `replyMode` and `chainLimit` alone, a
     `chainLimit` past 3 read as 3;
   - a call's `call-started` and `call-ended`.
@@ -1125,8 +1221,8 @@ temporary data home and find it unchanged.
   in any way and it fails its signature; key order doesn't matter.
 - **Files beside the events.** An attachment's `name` is its key: fetch
   `/api/chat/files/<name>` as soon as its event arrives, keep the Blob under that name, and never
-  rewrite the event to point at it. Keep the viewer's own recording under the name the server
-  gave it.
+  rewrite the event to point at it. Keep the viewer's own recording, and the files a line of
+  theirs carried, under the names the server gave them.
 - **Its own events:** a title, a participants change or a settings change, numbered on from the
   newest `seq`; a call's `call-started` before it offers, and its `call-ended` after the last line.
 - **Not `started`, `delta` or `tool`:** they show progress, and aren't stored.
