@@ -956,7 +956,7 @@ never resumes a task. `app.onStop` stops it before the chat runner shuts down.
 How much a task asks the owner on its card: its chat's level, the last `settings` event that sets
 `permissions` (`permissionsOf`), else the app's `assistant.permissions` (`ASSISTANT_PERMISSIONS`,
 default `ask`, [personas.md](personas.md#settingsyaml)). The owner sets the chat's with the picker
-under its message box, shown in a chat of hers alone while Assistant Mode is on, or with Task
+in its message box, shown in a chat of hers alone while Assistant Mode is on, or with Task
 Permissions in its Chat Settings; the app's is Task Permissions on Settings → Assistant Mode. The
 manager asks for it (`TaskManagerOptions.permissions`, the runner's `permissionsOf`, which keeps
 each chat's own as its log last said and as it last wrote it) at each question a task would ask,

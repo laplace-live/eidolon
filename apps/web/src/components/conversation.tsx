@@ -63,12 +63,14 @@ export function Thinking({ label }: { readonly label: string }) {
 }
 
 /**
- * Keeps `scrollRef`'s scroller at the bottom as `contentRef` grows, until the viewer scrolls back
- * up; setting `pinnedRef` brings it back down.
+ * Keeps `scrollRef`'s scroller at the bottom as it, `contentRef` or `footRef` changes size, until
+ * the viewer scrolls back up; setting `pinnedRef` brings it back down. `footRef`, when there is one,
+ * floats over the scroller's foot, and its height is the scroller's `--foot-height`.
  */
 export function useStickToBottom() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const footRef = useRef<HTMLElement>(null);
   const pinnedRef = useRef(true);
   const lastTopRef = useRef(0);
 
@@ -76,10 +78,12 @@ export function useStickToBottom() {
     const scroller = scrollRef.current;
     const content = contentRef.current;
     if (scroller === null || content === null) return;
+    const foot = footRef.current;
     const observer = new ResizeObserver(() => {
+      if (foot !== null) scroller.style.setProperty("--foot-height", `${foot.offsetHeight}px`);
       if (pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
     });
-    observer.observe(content);
+    for (const box of [scroller, content, foot]) if (box !== null) observer.observe(box);
     return () => observer.disconnect();
   }, []);
 
@@ -92,5 +96,5 @@ export function useStickToBottom() {
     lastTopRef.current = scrollTop;
   }, []);
 
-  return { scrollRef, contentRef, pinnedRef, onScroll };
+  return { scrollRef, contentRef, footRef, pinnedRef, onScroll };
 }

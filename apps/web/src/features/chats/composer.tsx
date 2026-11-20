@@ -15,7 +15,7 @@ import {
 import { toast } from "sonner";
 import { PersonaAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { InputGroupTextarea } from "@/components/ui/input-group";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import {
@@ -144,13 +144,13 @@ function SuggestionList<T>({
 }
 
 /**
- * The text box: Enter sends and Shift+Enter breaks the line. A send while a reply runs is allowed,
- * since the server stops it and still answers every line; Stop shows while one does. With two or
- * more personas, an `@` offers their names, and whoever the line mentions answers first. A `/` that
- * starts the draft offers the commands and `skills`. While the box is empty, the microphone takes
- * the send button's place, and a take replaces the box while it records. During a call it is
- * disabled, keeping any draft, and it takes the focus back when the call ends. A command goes to
- * `onCommand`, never to her; one it can't run keeps the draft.
+ * The message box: the text over a row of controls. Enter sends and Shift+Enter breaks the line. A
+ * send while a reply runs is allowed, since the server stops it and still answers every line; Stop
+ * shows while one does. With two or more personas, an `@` offers their names, and whoever the line
+ * mentions answers first. A `/` that starts the draft offers the commands and `skills`. While the
+ * box is empty, the microphone takes the send button's place, and a take replaces the text while it
+ * records. During a call it is disabled, keeping any draft, and it takes the focus back when the
+ * call ends. A command goes to `onCommand`, never to her; one it can't run keeps the draft.
  */
 export function Composer({
   placeholder,
@@ -159,6 +159,7 @@ export function Composer({
   busy,
   mic,
   inCall,
+  leading,
   onSend,
   onSendVoice,
   onStop,
@@ -171,6 +172,8 @@ export function Composer({
   readonly busy: boolean;
   readonly mic: MicState;
   readonly inCall: boolean;
+  /** The chat's own controls, at the start of the row under the text. */
+  readonly leading: ReactNode;
   readonly onSend: (text: string) => void;
   readonly onSendVoice: (clip: VoiceClip) => void;
   readonly onStop: () => void;
@@ -314,60 +317,70 @@ export function Composer({
   );
   const listProps = { id: listId, active, onHover: setHighlight };
   return (
-    <form className="flex flex-col gap-1.5" onSubmit={submit}>
-      {mentioned.length > 0 && (
-        <p className="text-muted-foreground text-xs">{t`Mentioned: ${ph({ names })}`}</p>
+    <form className="relative" onSubmit={submit}>
+      {open?.kind === "mention" && (
+        <SuggestionList
+          {...listProps}
+          label={t`Mention`}
+          options={open.options}
+          keyOf={(persona) => persona.id}
+          onChoose={(index) => choose(open, index, false)}
+          className="w-64 max-w-full"
+        >
+          {(persona) => (
+            <>
+              <PersonaAvatar persona={persona} size="xs" />
+              <span className="truncate">{persona.name}</span>
+              {mentionName(persona, participants) !== persona.name && (
+                <span className="ml-auto shrink-0 text-muted-foreground text-xs">
+                  @{mentionName(persona, participants)}
+                </span>
+              )}
+            </>
+          )}
+        </SuggestionList>
       )}
-      <div className="flex items-end gap-2">
+      {open?.kind === "slash" && (
+        <SuggestionList
+          {...listProps}
+          label={t`Commands and Skills`}
+          options={open.options}
+          keyOf={(entry) => entry.name}
+          onChoose={(index) => choose(open, index, false)}
+          className="max-h-72 w-full max-w-md"
+        >
+          {(entry) => (
+            <>
+              {entry.kind === "command" ? (
+                <SquareSlashIcon className="size-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <ScrollTextIcon className="size-4 shrink-0 text-muted-foreground" />
+              )}
+              <span className="min-w-0 truncate font-medium">/{entry.name}</span>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
+                {entry.kind === "command" ? t(COMMAND_HELP[entry.name]) : entry.description}
+              </span>
+            </>
+          )}
+        </SuggestionList>
+      )}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the text box takes the keyboard. */}
+      <div
+        className="flex flex-col rounded-4xl bg-card shadow-[0_6px_24px_-8px_rgb(0_0_0/0.12)] ring-1 ring-foreground/10 transition-shadow has-[textarea:focus]:ring-foreground/20 dark:shadow-none"
+        // A press on the box but off its controls puts the caret in the text, as a text box does.
+        // React bubbles presses on the picker's menu here too, though it renders outside the box.
+        onMouseDown={(event) => {
+          const { target, currentTarget } = event;
+          if (!(target instanceof Element) || !currentTarget.contains(target)) return;
+          if (target.closest("button, textarea, a")) return;
+          event.preventDefault();
+          ref.current?.focus();
+        }}
+      >
         {recording && <RecordingBar recorder={recorder} holding={holding} />}
-        <div className="relative min-w-0 flex-1" hidden={recording}>
-          {open?.kind === "mention" && (
-            <SuggestionList
-              {...listProps}
-              label={t`Mention`}
-              options={open.options}
-              keyOf={(persona) => persona.id}
-              onChoose={(index) => choose(open, index, false)}
-              className="w-64 max-w-full"
-            >
-              {(persona) => (
-                <>
-                  <PersonaAvatar persona={persona} size="xs" />
-                  <span className="truncate">{persona.name}</span>
-                  {mentionName(persona, participants) !== persona.name && (
-                    <span className="ml-auto shrink-0 text-muted-foreground text-xs">
-                      @{mentionName(persona, participants)}
-                    </span>
-                  )}
-                </>
-              )}
-            </SuggestionList>
-          )}
-          {open?.kind === "slash" && (
-            <SuggestionList
-              {...listProps}
-              label={t`Commands and Skills`}
-              options={open.options}
-              keyOf={(entry) => entry.name}
-              onChoose={(index) => choose(open, index, false)}
-              className="max-h-72 w-full max-w-md"
-            >
-              {(entry) => (
-                <>
-                  {entry.kind === "command" ? (
-                    <SquareSlashIcon className="size-4 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <ScrollTextIcon className="size-4 shrink-0 text-muted-foreground" />
-                  )}
-                  <span className="min-w-0 truncate font-medium">/{entry.name}</span>
-                  <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
-                    {entry.kind === "command" ? t(COMMAND_HELP[entry.name]) : entry.description}
-                  </span>
-                </>
-              )}
-            </SuggestionList>
-          )}
-          <Textarea
+        {/* The padding is outside the text box, so lines it scrolls away stop short of the edge. */}
+        <div hidden={recording} className="px-4 pt-3.5 pb-1">
+          <InputGroupTextarea
             ref={ref}
             value={text}
             onChange={(event) => edit(event.target.value, event.target.selectionStart)}
@@ -387,29 +400,49 @@ export function Composer({
             maxLength={TEXT_MAX}
             rows={1}
             enterKeyHint="send"
-            className="max-h-40 min-h-9 resize-none bg-card py-1.5"
+            className="max-h-[25svh] min-h-0 p-0"
           />
         </div>
-        {busy && !inCall && (
-          <Button type="button" variant="outline" size="lg" className="shrink-0" onClick={onStop}>
-            <SquareIcon className="fill-current" />
-            {t`Stop`}
-          </Button>
-        )}
-        {trimmed === "" && !inCall ? (
-          // A take under way can always be sent, whatever the chat learned since it started.
-          <MicButton recorder={recorder} state={recording ? "ready" : mic} onHolding={setHolding} />
-        ) : (
-          <Button
-            type="submit"
-            size="icon-lg"
-            className="shrink-0"
-            disabled={inCall}
-            aria-label={t`Send`}
-          >
-            <ArrowUpIcon />
-          </Button>
-        )}
+        <div className="flex items-center gap-1.5 p-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            {leading}
+            {mentioned.length > 0 && (
+              <p className="min-w-0 truncate px-2 text-muted-foreground text-xs">
+                {t`Mentioned: ${ph({ names })}`}
+              </p>
+            )}
+          </div>
+          {busy && !inCall && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon-lg"
+              className="rounded-full"
+              aria-label={t`Stop`}
+              onClick={onStop}
+            >
+              <SquareIcon className="size-3 fill-current" />
+            </Button>
+          )}
+          {trimmed === "" && !inCall ? (
+            // A take under way can always be sent, whatever the chat learned since it started.
+            <MicButton
+              recorder={recorder}
+              state={recording ? "ready" : mic}
+              onHolding={setHolding}
+            />
+          ) : (
+            <Button
+              type="submit"
+              size="icon-lg"
+              className="rounded-full"
+              disabled={inCall}
+              aria-label={t`Send`}
+            >
+              <ArrowUpIcon />
+            </Button>
+          )}
+        </div>
       </div>
     </form>
   );

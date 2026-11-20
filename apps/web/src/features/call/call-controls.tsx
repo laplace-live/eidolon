@@ -4,6 +4,7 @@ import { type FormEvent, type KeyboardEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import type { Call } from "./use-call";
 
 function MessageInput({
@@ -125,7 +126,7 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
 }
 
 /** Over the transcript's foot during a call: that the bot hears the viewer, or can't. */
-export function MicPill({ call }: { readonly call: Call }) {
+export function MicPill({ call, className }: { readonly call: Call; readonly className?: string }) {
   const { t } = useLingui();
   const live = call.phase.name === "live";
   const muted = live && !call.micOn;
@@ -133,7 +134,10 @@ export function MicPill({ call }: { readonly call: Call }) {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center"
+      className={cn(
+        "pointer-events-none absolute inset-x-0 bottom-2 flex justify-center",
+        className,
+      )}
     >
       {(muted || listening) && (
         <span className="flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm">

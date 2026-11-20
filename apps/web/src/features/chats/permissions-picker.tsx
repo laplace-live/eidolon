@@ -1,4 +1,4 @@
-// The chat's permission level for her tasks, beside its message box: what they may do without your
+// The chat's permission level for her tasks, in its message box: what they may do without your
 // answer on their cards, from their next question on. Until the chat picks one, it follows Settings.
 import { PERMISSION_LEVELS, type PermissionLevel } from "@eidolon/chat";
 import { useLingui } from "@lingui/react/macro";
@@ -47,10 +47,9 @@ export function PermissionsPicker({
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
           data-permissions={shown}
           className={cn(
-            "text-muted-foreground",
+            "rounded-full text-muted-foreground",
             shown === "full" && "text-warning hover:text-warning aria-expanded:text-warning",
           )}
         >

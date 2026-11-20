@@ -31,9 +31,10 @@ function MicUnavailable({ state }: { readonly state: Exclude<MicState, "ready"> 
   return (
     <UnavailableButton
       type="button"
+      variant="ghost"
       size="icon-lg"
       aria-label={t`Record Voice Message`}
-      className="shrink-0"
+      className="rounded-full"
       reason={
         state === "no-key" ? (
           <span>
@@ -126,8 +127,8 @@ export function MicButton({
     <Button
       type="button"
       size="icon-lg"
-      variant={recording ? "default" : "outline"}
-      className="shrink-0 touch-none select-none"
+      variant={recording ? "default" : "ghost"}
+      className="touch-none rounded-full"
       aria-label={recording ? t`Send Voice Message` : t`Record Voice Message`}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
@@ -167,7 +168,7 @@ export function RecordingBar({
   }, [stop]);
 
   return (
-    <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border bg-card pr-3 pl-1 text-sm shadow-xs">
+    <div className="flex h-10.5 items-center gap-2 pt-1 pr-4 pl-2 text-sm md:h-9.5">
       <Button
         type="button"
         variant="ghost"
