@@ -3,8 +3,9 @@
 // run separately and fuse here. Omitting _distance/_score from select() makes lance log a
 // deprecation WARN per query.
 import { errorText, logger, raceAbort } from "@eidolon/config";
+import type { RerankModel } from "@eidolon/providers";
 import type { Table } from "@lancedb/lancedb";
-import { makeReranker, type Reranker } from "./rerank.ts";
+import { makeReranker } from "./rerank.ts";
 import { tokenizeZhQuery } from "./tokenize.ts";
 
 /** Table columns (never `vector`), plus `_relevance_score` or, for vectorSearch, `_distance`. */
@@ -26,7 +27,7 @@ export interface HybridSearchOptions {
   finalK?: number | null;
   rerank?: boolean;
   /** Overrides makeReranker(), so a benchmark can compare models. */
-  reranker?: Reranker | null;
+  reranker?: RerankModel | null;
   ftsField?: string;
   signal?: AbortSignal;
 }
@@ -159,10 +160,10 @@ export async function hybridSearch(
     // fusion we'd run with no reranker at all.
     try {
       const merged = mergeLegs(vectorRows, ftsRows);
-      // The query is the jieba token string; documents are the raw column.
+      // The query is the jieba token string; documents are the raw text column.
       const results = await reranker.rerank(
         tokens,
-        merged.map((row) => row[reranker.column] ?? null),
+        merged.map((row) => row.text ?? null),
         signal ? { signal } : {},
       );
       const rows = results.map(({ index, relevanceScore }) => {

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { type GenerateOptions, generate, ImageGenError } from "../src/index.ts";
 import {
-  CancelledError,
-  clearSelfieEnv,
-  fakeFetch,
-  hangingFetch,
-  jsonResponse,
-  restoreEnv,
-} from "./helpers.ts";
+  ImageGenError,
+  type ImageRequest,
+  imageModel,
+  openRouterImages,
+  select,
+  setUsageSink,
+  type UsageRecord,
+} from "../src/index.ts";
 
 // The dispatcher as the timeout it was made for, which a test can read.
 vi.mock("@eidolon/config", async (importOriginal) => ({
@@ -18,9 +18,71 @@ vi.mock("@eidolon/config", async (importOriginal) => ({
 // base64 of b"\x89PNG fake".
 const B64 = "iVBORyBmYWtl";
 const BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x20, 0x66, 0x61, 0x6b, 0x65]);
+const MODEL = "openai/gpt-image-2.5-flare";
 
-beforeEach(clearSelfieEnv);
-afterEach(restoreEnv);
+const ATTRIBUTION = ["OPENROUTER_APP_NAME", "OPENROUTER_APP_URL"] as const;
+const saved = new Map(ATTRIBUTION.map((name) => [name, process.env[name]]));
+
+beforeEach(() => {
+  for (const name of ATTRIBUTION) delete process.env[name];
+});
+afterEach(() => {
+  for (const [name, value] of saved) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+  setUsageSink(null);
+});
+
+class CancelledError extends Error {
+  override name = "CancelledError";
+}
+
+/** fetch's init, with the dispatcher Node's fetch reads. */
+type FetchInit = RequestInit & { readonly dispatcher?: unknown };
+
+interface FetchCall {
+  readonly url: string;
+  readonly init: FetchInit;
+}
+
+/** A fetch that records each request and answers with `respond`. */
+function fakeFetch(respond: (call: FetchCall) => Response | Promise<Response>): {
+  fetch: typeof fetch;
+  calls: FetchCall[];
+} {
+  const calls: FetchCall[] = [];
+  const impl = async (input: string | URL | Request, init: FetchInit = {}) => {
+    const call = { url: String(input), init };
+    calls.push(call);
+    return respond(call);
+  };
+  return { fetch: impl as typeof fetch, calls };
+}
+
+/** A fetch that never answers and rejects with the signal's reason once aborted, as fetch does. */
+function hangingFetch(): { fetch: typeof fetch; started: Promise<void> } {
+  let markStarted = () => {};
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const impl = (_input: string | URL | Request, init: FetchInit = {}) =>
+    new Promise<Response>((_resolve, reject) => {
+      markStarted();
+      const signal = init.signal;
+      if (!signal) return;
+      if (signal.aborted) reject(signal.reason);
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  return { fetch: impl as typeof fetch, started };
+}
+
+function jsonResponse(status: number, body: unknown): Response {
+  return new Response(typeof body === "string" ? body : JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 async function failure(promise: Promise<unknown>): Promise<unknown> {
   try {
@@ -31,21 +93,29 @@ async function failure(promise: Promise<unknown>): Promise<unknown> {
   throw new Error("expected a rejection");
 }
 
-function answering(response: () => Response, options: Partial<GenerateOptions> = {}) {
+function answering(
+  response: () => Response,
+  request: Partial<ImageRequest> = {},
+  signal?: AbortSignal,
+) {
   const { fetch, calls } = fakeFetch(response);
-  return { calls, run: () => generate({ apiKey: "sk-or-test", prompt: "p", fetch, ...options }) };
+  const model = openRouterImages({ apiKey: "sk-or-test", model: MODEL, fetch });
+  return { calls, run: () => model.generate({ prompt: "p", ...request }, signal) };
 }
 
-describe("generate request", () => {
+const reader =
+  (values: Readonly<Record<string, string>>) =>
+  (name: string): string | undefined =>
+    values[name] || undefined;
+
+describe("OpenRouter's image request", () => {
   test("posts Python's payload, headers and idle timeout", async () => {
     const { fetch, calls } = fakeFetch(() =>
       jsonResponse(200, { data: [{ b64_json: B64 }], usage: { cost: 0.04 } }),
     );
-    const result = await generate({
-      apiKey: "sk-or-test",
+    const result = await openRouterImages({ apiKey: "sk-or-test", model: MODEL, fetch }).generate({
       prompt: "p 七海",
       references: [{ type: "image_url", image_url: { url: "data:image/png;base64,AAA" } }],
-      fetch,
     });
     expect(calls).toHaveLength(1);
     const [call] = calls;
@@ -68,16 +138,19 @@ describe("generate request", () => {
 
   test("omits empty references and auto settings, keeps the rest in order", async () => {
     const { fetch, calls } = fakeFetch(() => jsonResponse(200, { data: [{ b64_json: B64 }] }));
-    const base = { apiKey: "k", prompt: "p", fetch };
-    await generate({
-      ...base,
+    await openRouterImages({ apiKey: "k", model: "m/x", fetch }).generate({
+      prompt: "p",
       references: [],
       aspectRatio: "3:4",
       quality: "high",
       n: 2,
-      model: "m/x",
     });
-    await generate({ ...base, references: null, aspectRatio: "auto", quality: "auto" });
+    await openRouterImages({ apiKey: "k", model: MODEL, fetch }).generate({
+      prompt: "p",
+      references: null,
+      aspectRatio: "auto",
+      quality: "auto",
+    });
     expect(calls.map((call) => call.init.body)).toEqual([
       '{"model":"m/x","prompt":"p","n":2,"aspect_ratio":"3:4","quality":"high"}',
       '{"model":"openai/gpt-image-2.5-flare","prompt":"p","n":1}',
@@ -86,15 +159,12 @@ describe("generate request", () => {
 
   test("encodes the body as httpx's compact JSON", async () => {
     const { fetch, calls } = fakeFetch(() => jsonResponse(200, { data: [{ b64_json: B64 }] }));
-    await generate({
-      apiKey: "k",
+    await openRouterImages({ apiKey: "k", model: "m", fetch }).generate({
       prompt: '七海 —   \x01 "q" \\ /',
       references: [{ type: "image_url", image_url: { url: "https://x/y.png" } }],
       aspectRatio: "3:4",
       quality: "high",
       n: 2,
-      model: "m",
-      fetch,
     });
     expect(calls[0]?.init.body).toBe(
       '{"model":"m","prompt":"七海 —   \\u0001 \\"q\\" \\\\ /","n":2,"input_references":[{"type":"image_url","image_url":{"url":"https://x/y.png"}}],"aspect_ratio":"3:4","quality":"high"}',
@@ -102,7 +172,7 @@ describe("generate request", () => {
   });
 });
 
-describe("generate errors", () => {
+describe("OpenRouter's image errors", () => {
   test("a non-200 status carries OpenRouter's message, or the body as Python prints it", async () => {
     const rows: [number, string, string][] = [
       [402, '{"error":{"message":"Insufficient credits","code":402}}', "402: Insufficient credits"],
@@ -167,9 +237,8 @@ describe("generate errors", () => {
   test("an abort rejects with the signal's reason, unwrapped", async () => {
     const { fetch, started } = hangingFetch();
     const controller = new AbortController();
-    const pending = failure(
-      generate({ apiKey: "k", prompt: "p", fetch, signal: controller.signal }),
-    );
+    const model = openRouterImages({ apiKey: "k", model: MODEL, fetch });
+    const pending = failure(model.generate({ prompt: "p" }, controller.signal));
     await started;
     const reason = new CancelledError("Task cancelled");
     controller.abort(reason);
@@ -190,7 +259,8 @@ describe("generate errors", () => {
         });
         return new Response(stream, { status: 200 });
       },
-      { signal: controller.signal },
+      {},
+      controller.signal,
     );
     expect(await failure(run())).toBe(reason);
   });
@@ -248,7 +318,7 @@ describe("generate errors", () => {
   });
 });
 
-describe("generate results", () => {
+describe("OpenRouter's image results", () => {
   test("keeps image rows in order with their media types", async () => {
     const { run } = answering(() =>
       jsonResponse(200, {
@@ -296,5 +366,56 @@ describe("generate results", () => {
       const { run } = answering(() => jsonResponse(200, { data: [{ b64_json: B64 }], usage }));
       expect((await run()).costUsd).toBe(cost);
     }
+  });
+});
+
+describe("the selfie role's image model", () => {
+  test("draws on its account's API base, each render reported as a selfie", async () => {
+    const read = reader({
+      OPENROUTER_API_KEY: "or",
+      OPENROUTER_API_BASE: "https://proxy.example.com/api/v1/",
+      SELFIE_MODEL: "m/x",
+    });
+    const selection = select("selfie", read);
+    if (selection === null) throw new Error("the selfie role is on by default");
+    const records: UsageRecord[] = [];
+    setUsageSink((record) => records.push(record));
+    const { fetch, calls } = fakeFetch(() =>
+      jsonResponse(200, { data: [{ b64_json: B64 }, { b64_json: B64 }], usage: { cost: 0.08 } }),
+    );
+    const model = imageModel(selection, { fetch });
+    expect([model.provider, model.model]).toEqual(["openrouter", "m/x"]);
+    await model.generate({ prompt: "p" });
+    expect(calls[0]?.url).toBe("https://proxy.example.com/api/v1/images");
+    expect(calls[0]?.init.headers).toMatchObject({ Authorization: "Bearer or" });
+    expect(
+      records.map(({ role, provider, model, units, costUsd }) => ({
+        role,
+        provider,
+        model,
+        units,
+        costUsd,
+      })),
+    ).toEqual([
+      { role: "selfie", provider: "openrouter", model: "m/x", units: { images: 2 }, costUsd: 0.08 },
+    ]);
+  });
+
+  test("a failed render reports nothing", async () => {
+    const records: UsageRecord[] = [];
+    setUsageSink((record) => records.push(record));
+    const { run } = answering(() =>
+      jsonResponse(402, { error: { message: "Insufficient credits", code: 402 } }),
+    );
+    expect(await failure(run())).toBeInstanceOf(ImageGenError);
+    const empty = answering(() => jsonResponse(200, { data: [] }));
+    expect(await failure(empty.run())).toBeInstanceOf(ImageGenError);
+    expect(records).toEqual([]);
+  });
+
+  test("a role without its key asks nothing", () => {
+    const keyless = select("selfie", reader({}));
+    if (keyless === null) throw new Error("the selfie role is on by default");
+    expect(() => imageModel(keyless)).toThrow("OpenRouter needs an API key");
   });
 });

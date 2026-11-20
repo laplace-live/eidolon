@@ -1,15 +1,18 @@
 import { logger, pyFixed } from "@eidolon/config";
-import { ImageGenError } from "./errors.ts";
-import { DEFAULT_IMAGE_MODEL, type Generation, generate, MAX_REFERENCES } from "./generate.ts";
+import {
+  type Generation,
+  ImageGenError,
+  type ImageModel,
+  type ReferenceImage,
+} from "@eidolon/providers";
+import { generate, MAX_REFERENCES } from "./generate.ts";
 import type { PersonaClock } from "./prompt.ts";
-import { loadReferences, type ReferenceImage } from "./references.ts";
+import { loadReferences } from "./references.ts";
 import { type SelfieStore, selfieStore } from "./store.ts";
 
 export interface RenderSelfieOptions {
-  readonly apiKey: string;
-  /** The images endpoint; OpenRouter's by default. */
-  readonly url?: string;
-  readonly model: string;
+  /** The selfie role's image model. */
+  readonly model: ImageModel;
   readonly aspectRatio: string;
   readonly quality: string;
   readonly ttlSeconds: number;
@@ -22,11 +25,10 @@ export interface RenderSelfieOptions {
   readonly root?: string;
   readonly signal?: AbortSignal;
   readonly store?: SelfieStore;
-  readonly fetch?: typeof fetch;
 }
 
 export type SelfieRender =
-  | { readonly ok: true; readonly urls: readonly string[]; readonly costUsd: number | null }
+  | { readonly ok: true; readonly urls: readonly string[] }
   | {
       readonly ok: false;
       /** `Selfie generation failed: <ImageGenError message>`. */
@@ -46,15 +48,12 @@ export async function renderSelfie(options: RenderSelfieOptions): Promise<Selfie
       ...(options.extraReferences ?? []),
     ].slice(0, MAX_REFERENCES);
     result = await generate({
-      apiKey: options.apiKey,
-      ...(options.url === undefined ? {} : { url: options.url }),
+      model: options.model,
       prompt: options.prompt,
       references,
-      model: options.model || DEFAULT_IMAGE_MODEL,
       aspectRatio: options.aspectRatio,
       quality: options.quality,
       signal: options.signal,
-      fetch: options.fetch,
     });
   } catch (e) {
     if (!(e instanceof ImageGenError)) throw e;
@@ -67,5 +66,5 @@ export async function renderSelfie(options: RenderSelfieOptions): Promise<Selfie
   );
   const store = options.store ?? selfieStore;
   const urls = result.images.map((image) => store.publish(image, options.ttlSeconds));
-  return { ok: true, urls, costUsd: cost };
+  return { ok: true, urls };
 }

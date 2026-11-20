@@ -2,13 +2,11 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pyJsonDumps } from "@eidolon/config";
+import { openRouterRerank, type RerankModel, type RerankResult } from "@eidolon/providers";
 import type { Table } from "@lancedb/lancedb";
 import { describe, expect, test } from "vitest";
 import {
   hybridSearch,
-  OpenRouterReranker,
-  type Reranker,
-  type RerankResult,
   rrfFuse,
   type SearchRow,
   scoreOf,
@@ -73,11 +71,11 @@ const COLUMNS = ["id", "source", "date", "floor", "text", "tokens"];
 
 function recordingReranker(
   answer: (documents: readonly unknown[]) => RerankResult[] | Promise<RerankResult[]>,
-): Reranker & { calls: { query: string; documents: readonly unknown[] }[] } {
+): RerankModel & { calls: { query: string; documents: readonly unknown[] }[] } {
   const calls: { query: string; documents: readonly unknown[] }[] = [];
   return {
-    modelName: "fake",
-    column: "text",
+    provider: "fake",
+    model: "fake",
     calls,
     async rerank(query, documents) {
       calls.push({ query, documents });
@@ -280,8 +278,9 @@ describe("parity with Python on the committed tables", () => {
             });
           },
         ]);
-        const reranker = new OpenRouterReranker({
+        const reranker = openRouterRerank({
           apiKey: "k",
+          model: "cohere/rerank-4-fast",
           baseUrl: "https://example.invalid/v1/",
           fetch,
         });

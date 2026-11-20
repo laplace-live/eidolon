@@ -31,6 +31,8 @@ entry offers a kind implements it there, and no other does.
 | Batch speech | `synthesize` | `SYNTHESIZERS` (`speech/batch/synthesize.ts`) |
 | Realtime voice | `RealtimeSession` | `REALTIME_DIALECTS` (`realtime/session.ts`) |
 | Decision models | `DecisionModel` | `DECISION_MODELS` (`decision/index.ts`) |
+| Reranking | `RerankModel` | `RERANK_MODELS` (`rerank/index.ts`) |
+| Image generation | `ImageModel` | `IMAGE_MODELS` (`image/index.ts`) |
 | Web search | `Searcher` | `SEARCHERS` (`search.ts`) |
 | Model lists | `listModels` | `LISTINGS` (`models.ts`) |
 

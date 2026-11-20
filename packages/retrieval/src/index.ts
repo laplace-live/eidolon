@@ -67,18 +67,7 @@ export {
   type MessageLike,
   SHORT_QUERY_CHARS,
 } from "./query.ts";
-export {
-  DEFAULT_RERANK_BASE_URL,
-  DEFAULT_RERANK_MODEL,
-  makeReranker,
-  OpenRouterReranker,
-  type OpenRouterRerankerOptions,
-  RERANK_MAX_ATTEMPTS,
-  RERANK_TIMEOUT_SEC,
-  type Reranker,
-  type RerankResult,
-  resetRerankerCache,
-} from "./rerank.ts";
+export { makeReranker, resetRerankerCache } from "./rerank.ts";
 export {
   LanceRetriever,
   type LanceRetrieverOptions,

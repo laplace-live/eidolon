@@ -26,9 +26,8 @@ import {
   sortedPy,
   sourceFolder,
 } from "@eidolon/config";
-import { accountOf, billingProvider, reportUsage } from "@eidolon/providers";
+import { accountOf, openRouterRerank, type RerankModel } from "@eidolon/providers";
 import {
-  DEFAULT_RERANK_BASE_URL,
   dbPathArgument,
   embedTexts,
   extractDateFilter,
@@ -37,9 +36,7 @@ import {
   type LanceTable,
   listTableNames,
   makeReranker,
-  OpenRouterReranker,
   openTable,
-  type Reranker,
   type SearchRow,
   vectorSearch,
 } from "@eidolon/retrieval";
@@ -279,9 +276,9 @@ export interface EvalDeps extends Partial<CliIo> {
   ) => Promise<SearchRow[]>;
   readonly hybridSearch?: (table: unknown, options: HybridSearchOptions) => Promise<SearchRow[]>;
   /** The configured cross-encoder, or null; makeReranker by default. */
-  readonly makeReranker?: () => Reranker | null;
+  readonly makeReranker?: () => RerankModel | null;
   /** A fresh reranker for one benchmarked model; throws without an API key. */
-  readonly namedReranker?: (model: string) => Reranker;
+  readonly namedReranker?: (model: string) => RerankModel;
   /** Milliseconds, for the benchmark's timer; performance.now by default. */
   readonly now?: () => number;
 }
@@ -289,7 +286,7 @@ export interface EvalDeps extends Partial<CliIo> {
 type Resolved = Required<Omit<EvalDeps, keyof CliIo>>;
 
 /** A reranker for `model`, even where the settings select another one or switch reranking off. */
-export function namedReranker(model: string): Reranker {
+export function namedReranker(model: string): RerankModel {
   const apiKey = envOptional("RERANK_API_KEY") ?? accountOf("openrouter")?.apiKey;
   if (!apiKey) {
     throw new Error(
@@ -298,14 +295,7 @@ export function namedReranker(model: string): Reranker {
         "is the same RRF for every 'model').",
     );
   }
-  const baseUrl = envOptional("RERANK_BASE_URL") ?? DEFAULT_RERANK_BASE_URL;
-  const provider = billingProvider("openrouter", baseUrl);
-  return new OpenRouterReranker({
-    modelName: model,
-    apiKey,
-    baseUrl,
-    onUsage: (units, costUsd) => reportUsage({ role: "rerank", provider, model, units, costUsd }),
-  });
+  return openRouterRerank({ apiKey, model, baseUrl: envOptional("RERANK_BASE_URL") });
 }
 
 function resolveDeps(deps: EvalDeps): Resolved {
@@ -536,11 +526,11 @@ async function evaluateWithReranker(
   query: EvalQuery,
   table: unknown,
   options: QueryOptions,
-  reranker: Reranker,
+  reranker: RerankModel,
   d: Resolved,
 ): Promise<[QueryResult, number]> {
   const where = dateWhere(query, options.useDateFilter);
-  const mode = `rerank:${reranker.modelName}`;
+  const mode = `rerank:${reranker.model}`;
   const vector = (await d.embed([query.text]))[0];
   if (vector === undefined) {
     return [{ query, mode, rank: null, topKHits: new Map(), topText: "" }, 0];
@@ -574,7 +564,7 @@ export async function benchmarkRerankerModels(
   const d = resolveDeps(deps);
   const out: RerankerBenchmark[] = [];
   for (const model of options.models) {
-    let reranker: Reranker;
+    let reranker: RerankModel;
     try {
       reranker = d.namedReranker(model);
     } catch (error) {

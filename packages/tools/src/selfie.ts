@@ -1,4 +1,4 @@
-// take_selfie: the persona redraws her reference image through the selfie role's image route, and
+// take_selfie: the persona redraws her reference image through the selfie role's image model, and
 // the picture reaches the viewer's screen as an RTVI server message carrying its URL.
 import {
   activePersona,
@@ -25,7 +25,7 @@ import {
   renderSelfie,
   type SelfieStore,
 } from "@eidolon/imagegen";
-import { hasKey, ProviderConfigError, reportUsage, select } from "@eidolon/providers";
+import { hasKey, imageModel, ProviderConfigError, select } from "@eidolon/providers";
 
 export const SELFIE_TOOL_NAME = "take_selfie";
 
@@ -93,8 +93,6 @@ export function createSelfieTool(options: SelfieToolOptions = {}): LlmTool | nul
     logger.info(`[selfie] Disabled: ${selection?.keyName ?? "the selfie key"} is unset.`);
     return null;
   }
-  const apiKey = selection.apiKey as string;
-  const provider = selection.provider.id;
   const root = options.root;
   const clock = personaClock(options.now?.());
   const sources = referenceSources({ root, clock });
@@ -113,15 +111,12 @@ export function createSelfieTool(options: SelfieToolOptions = {}): LlmTool | nul
     return null;
   }
   const settings = {
-    apiKey,
-    url: `${(selection.baseUrl as string).replace(/\/+$/, "")}/images`,
-    model: selection.model,
+    model: imageModel(selection, { fetch: options.fetch }),
     aspectRatio: envStr("SELFIE_ASPECT_RATIO", "3:4"),
     quality: envStr("SELFIE_QUALITY", "auto"),
     ttlSeconds: envInt("SELFIE_TTL_SECONDS", 600),
     root,
     store: options.store,
-    fetch: options.fetch,
   };
   const timeoutSecs = envInt("SELFIE_TIMEOUT_SECONDS", 120);
   logger.info(
@@ -174,13 +169,6 @@ export function createSelfieTool(options: SelfieToolOptions = {}): LlmTool | nul
         logger.warning(`[selfie] ${result.error}`);
         return { ok: false, error: result.error };
       }
-      reportUsage({
-        role: "selfie",
-        provider,
-        model: settings.model,
-        units: { images: result.urls.length },
-        costUsd: result.costUsd,
-      });
       if (result.urls.length === 0) return { ok: false, error: "no image" };
       await effects.sendServerMessage({ type: "selfie", urls: [...result.urls] });
       return { ok: true, count: result.urls.length };

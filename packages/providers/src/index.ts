@@ -53,10 +53,30 @@ export {
   toAnthropicRequest,
 } from "./http/json.ts";
 export { type SseEvent, sseEvents } from "./http/sse.ts";
+export { ImageGenError } from "./image/errors.ts";
+export {
+  type GeneratedImage,
+  type Generation,
+  IMAGE_MODELS,
+  type ImageModel,
+  type ImageModelOptions,
+  type ImageRequest,
+  imageModel,
+  type ReferenceImage,
+} from "./image/index.ts";
+export { type OpenRouterImagesOptions, openRouterImages } from "./image/openrouter.ts";
 export { stripMarkup, unreadCues } from "./markup.ts";
 export { Meter } from "./meter.ts";
 export { type ListedModel, listModels, type ModelListing } from "./models.ts";
 export { costOf, priceOf, textUnits, type Units } from "./pricing.ts";
+export {
+  RERANK_MODELS,
+  type RerankModel,
+  type RerankModelOptions,
+  type RerankResult,
+  rerankModel,
+} from "./rerank/index.ts";
+export { type OpenRouterRerankOptions, openRouterRerank } from "./rerank/openrouter.ts";
 export {
   type AccountNeed,
   accountsFor,

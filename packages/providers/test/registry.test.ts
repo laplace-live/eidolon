@@ -4,8 +4,10 @@ import { describe, expect, test } from "vitest";
 import { type Category, PROVIDER_IDS, PROVIDERS } from "../src/catalog.ts";
 import { CHAT_DIALECTS } from "../src/chat/index.ts";
 import { DECISION_MODELS } from "../src/decision/index.ts";
+import { IMAGE_MODELS } from "../src/image/index.ts";
 import { LISTINGS } from "../src/models.ts";
 import { REALTIME_DIALECTS } from "../src/realtime/session.ts";
+import { RERANK_MODELS } from "../src/rerank/index.ts";
 import { SEARCHERS } from "../src/search.ts";
 import { SYNTHESIZERS } from "../src/speech/batch/synthesize.ts";
 import { TRANSCRIBERS } from "../src/speech/batch/transcribe.ts";
@@ -25,6 +27,8 @@ const KINDS: readonly (readonly [string, Category, object])[] = [
   ["batch speech", "tts", SYNTHESIZERS],
   ["realtime voice", "realtime", REALTIME_DIALECTS],
   ["decision models", "decision", DECISION_MODELS],
+  ["reranking", "rerank", RERANK_MODELS],
+  ["image generation", "image", IMAGE_MODELS],
   ["web search", "search", SEARCHERS],
 ];
 

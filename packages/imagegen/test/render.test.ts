@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { openRouterImages } from "@eidolon/providers";
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   type ReferenceImage,
@@ -38,10 +39,15 @@ afterEach(() => {
 });
 afterAll(removeTempDirs);
 
-function options(overrides: Partial<RenderSelfieOptions>): RenderSelfieOptions {
+/** The bot's settings, on OpenRouter's image model answering through `fetch`. */
+function options({
+  fetch,
+  ...overrides
+}: Partial<RenderSelfieOptions> & {
+  readonly fetch?: typeof globalThis.fetch;
+}): RenderSelfieOptions {
   return {
-    apiKey: "sk-test",
-    model: "openai/gpt-image-2.5-flare",
+    model: openRouterImages({ apiKey: "sk-test", model: "openai/gpt-image-2.5-flare", fetch }),
     aspectRatio: "3:4",
     quality: "auto",
     ttlSeconds: 600,
@@ -105,7 +111,6 @@ describe("renderSelfie", () => {
     );
     const result = await renderSelfie(options({ fetch, store }));
     if (!result.ok) throw new Error(result.error);
-    expect(result.costUsd).toBe(0.04);
     expect(result.urls).toHaveLength(2);
     expect(result.urls[1]).toMatch(/\.webp$/);
     for (const url of result.urls)

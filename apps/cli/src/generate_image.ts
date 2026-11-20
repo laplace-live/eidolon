@@ -1,5 +1,5 @@
-// laplace-generate-image: a text prompt plus optional reference images through the same OpenRouter
-// call and built-in selfie prompt the bot's take_selfie tool uses, so what you probe here is what a
+// laplace-generate-image: a text prompt plus optional reference images through the same image model
+// and built-in selfie prompt the bot's take_selfie tool uses, so what you probe here is what a
 // viewer gets.
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -33,7 +33,7 @@ import {
   QUALITIES,
   referenceSources,
 } from "@eidolon/imagegen";
-import { hasKey, missingKey, reportUsage, trySelect } from "@eidolon/providers";
+import { hasKey, imageModel, missingKey, trySelect } from "@eidolon/providers";
 import { ArgparseExit, INT, type ParserSpec, parseArgs } from "./argparse.ts";
 import { type CliIo, printer, reportExit, resolveIo } from "./io.ts";
 import { textwrapIndent } from "./py.ts";
@@ -184,7 +184,7 @@ export async function generateImageMain(
     );
     return 1;
   }
-  const apiKey = selfie.apiKey as string;
+  const model = imageModel({ ...selfie, model: args.model }, { fetch: deps.fetch });
 
   const friends = args.friend ?? [];
   const missing = friends.filter((name) => !knownFriends.has(name));
@@ -223,28 +223,18 @@ export async function generateImageMain(
   try {
     const references = sources.map((source) => loadReference(source));
     result = await generate({
-      apiKey,
-      url: `${(selfie.baseUrl as string).replace(/\/+$/, "")}/images`,
+      model,
       prompt,
       references,
-      model: args.model,
       n: args.n,
       aspectRatio: args.aspectRatio,
       quality: args.quality,
-      ...(deps.fetch ? { fetch: deps.fetch } : {}),
     });
   } catch (error) {
     if (!(error instanceof ImageGenError)) throw error;
     io.stderr(`${error.message}\n`);
     return 1;
   }
-  reportUsage({
-    role: "selfie",
-    provider: selfie.provider.id,
-    model: args.model,
-    units: { images: result.images.length },
-    costUsd: result.costUsd,
-  });
 
   const base = pyPath(expandUser(args.out));
   mkdirSync(dirname(base), { recursive: true });
