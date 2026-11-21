@@ -1,17 +1,41 @@
-/* The shell pages: passive, in apps/web's colours, following the system's light or dark. */
+/* The shell pages, in apps/web's colours, light or dark as the window's theme is. Each page carries
+   this inline: the waiting page is served at the app's own address, where nothing else of the
+   shell's resolves. */
 :root {
   color-scheme: light dark;
-  font:
-    13px / 1.5 system-ui,
-    sans-serif;
   --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
+  --border: oklch(0.922 0 0);
+  /* An outline button: apps/web's background, border and accent, or its input in the dark. */
+  --control: oklch(1 0 0);
+  --control-border: oklch(0.922 0 0);
+  --control-hover: oklch(0.97 0 0);
+  --ring: oklch(0.708 0 0);
+  --primary: oklch(0.488 0.243 264.376);
+  --primary-foreground: oklch(0.97 0.014 254.604);
+  /* apps/web's 3.5rem header row, which Windows' caption buttons fill, and never shorter than the
+     area the Window Controls Overlay reports for them. Its rem is apps/web's: the root keeps the
+     browser's font size. */
+  --strip: max(3.5rem, calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px)));
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --muted: oklch(0.269 0 0);
     --muted-foreground: oklch(0.708 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --control: oklch(1 0 0 / 4.5%);
+    --control-border: oklch(1 0 0 / 15%);
+    --control-hover: oklch(1 0 0 / 7.5%);
+    --ring: oklch(0.556 0 0);
+    --primary: oklch(0.546 0.245 262.881);
+    --primary-foreground: oklch(0.97 0.014 254.604);
   }
 }
 
@@ -22,18 +46,179 @@ body {
 }
 
 body {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
   background: var(--background);
-  color: var(--muted-foreground);
+  color: var(--foreground);
+  font:
+    14px / 1.5 system-ui,
+    sans-serif;
+  cursor: default;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* With no system title bar, the window moves only by a drag region. */
+/* With no system title bar, the window moves only by a drag region. Nothing sits in the strip, so
+   nothing reaches under the traffic lights or the caption buttons. */
 .drag {
-  position: fixed;
-  inset: 0 0 auto;
-  height: 56px;
+  flex: none;
+  height: var(--strip);
   -webkit-app-region: drag;
   app-region: drag;
+}
+
+/* What's below the strip scrolls on its own, and sits centred in the window, not below the strip:
+   where apps/web's own loading spinner takes over. */
+main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 1rem var(--strip);
+}
+
+main > * {
+  margin-block: auto;
+}
+
+.spinner {
+  position: relative;
+  display: flex;
+  color: var(--muted-foreground);
+}
+
+.spinner svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  animation: spin 1s linear infinite;
+}
+
+/* Below the spinner, which keeps the window's centre. */
+.status {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  translate: -50%;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+  margin: 0.75rem 0 0;
+  text-align: center;
+}
+
+@keyframes spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner svg {
+    animation-duration: 3s;
+  }
+}
+
+.card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 32rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: var(--card);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 5%);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.message {
+  margin: 0;
+  color: var(--muted-foreground);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* The backend's last lines of stderr, as it wrote them, scrolled to the end, where its error is. */
+.output {
+  display: flex;
+  flex-direction: column-reverse;
+  max-height: 15rem;
+  margin: 0;
+  overflow: auto;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--muted);
+  font:
+    12px / 1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+  user-select: text;
+}
+
+.output code {
+  font: inherit;
+}
+
+.message:empty,
+.output:has(> code:empty) {
+  display: none;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Show Logs to the left, Quit and Try Again to the right. */
+.actions > :first-child {
+  margin-inline-end: auto;
+}
+
+button {
+  height: 2.25rem;
+  padding: 0 1rem;
+  border: 1px solid var(--control-border);
+  border-radius: 0.5rem;
+  background: var(--control);
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+button:hover {
+  background: var(--control-hover);
+}
+
+button.primary {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+button.primary:hover {
+  background: color-mix(in oklch, var(--primary) 90%, transparent);
+}
+
+button:focus-visible,
+.output:focus-visible {
+  outline: 3px solid color-mix(in oklch, var(--ring) 50%, transparent);
+  outline-offset: 0;
 }

@@ -3,11 +3,24 @@
 import "./instance.ts";
 import { app, type BrowserWindow } from "electron";
 import { isLaunchRequest, primary, request } from "./instance.ts";
-import { handleScheme, LOADING_PAGE, registerScheme } from "./protocol.ts";
+import { handleScheme, LOADING_PAGE, registerScheme, type ShellPages } from "./protocol.ts";
 import { createWindow } from "./window.ts";
 
 /** NSIS gives the Start menu shortcut appId as its AppUserModelID. */
 const APP_USER_MODEL_ID = "live.laplace.eidolon";
+
+/** The shell pages in English, with nothing failed yet. */
+const shellPages: ShellPages = {
+  strings: () => ({
+    lang: "en",
+    starting: "Starting Eidolon…",
+    waiting: "Waiting for Eidolon's server…",
+    tryAgain: "Try Again",
+    showLogs: "Show Logs",
+    quit: "Quit",
+  }),
+  failure: () => ({ title: "Eidolon Couldn't Start", message: "", stderr: "" }),
+};
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -37,7 +50,7 @@ if (!primary || request.command === "quit") {
     else showWindow();
   });
   void app.whenReady().then(() => {
-    handleScheme();
+    handleScheme(shellPages);
     showWindow();
   });
 }

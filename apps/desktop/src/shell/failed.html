@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- biome-ignore lint/a11y/useValidLang: main fills in the language -->
+<html lang="{{lang}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eidolon</title>
+    <style>
+      @import "./shell.css";
+    </style>
+    <script type="module" src="./failed.ts"></script>
+  </head>
+  <body>
+    <div class="drag" aria-hidden="true"></div>
+    <main>
+      <section class="card" aria-labelledby="title">
+        <h1 id="title">{{title}}</h1>
+        <p class="message">{{message}}</p>
+        <pre class="output"><code>{{stderr}}</code></pre>
+        <div class="actions">
+          <button type="button" data-action="showLogs">{{showLogs}}</button>
+          <button type="button" data-action="quit">{{quit}}</button>
+          <button type="button" class="primary" data-action="retry">{{tryAgain}}</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

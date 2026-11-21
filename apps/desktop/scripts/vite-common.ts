@@ -71,9 +71,13 @@ export function preloadBundle({ dev = false } = {}): InlineConfig {
   );
 }
 
-/** The pages main serves at eidolon-app://shell/, each linking its assets relatively. */
-export function shellPages(): InlineConfig {
+/**
+ * The shell's pages, which main fills in and serves: each with its stylesheet inline, as Vite
+ * builds an `@import` inside a `<style>`, and the failure page's script linked relatively.
+ */
+export function shellPages({ outDir = join(DESKTOP, "dist", "shell") } = {}): InlineConfig {
   const root = join(DESKTOP, "src", "shell");
+  const page = (name: string) => join(root, `${name}.html`);
   return {
     configFile: false,
     envDir: false,
@@ -82,10 +86,13 @@ export function shellPages(): InlineConfig {
     base: "./",
     logLevel: "warn",
     build: {
-      outDir: join(DESKTOP, "dist", "shell"),
+      outDir,
       emptyOutDir: true,
       reportCompressedSize: false,
-      rolldownOptions: { input: { loading: join(root, "loading.html") } },
+      modulePreload: { polyfill: false },
+      rolldownOptions: {
+        input: { loading: page("loading"), failed: page("failed"), waiting: page("waiting") },
+      },
     },
   };
 }
