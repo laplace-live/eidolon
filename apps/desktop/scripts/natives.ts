@@ -57,7 +57,7 @@ export interface NativesReport {
   readonly speech: number;
   /** What sharp reads back of the JPEG it made: `jpeg 2x1`. */
   readonly image: string;
-  /** The natives and runtime libraries the process mapped, by path (payloadLibraries). */
+  /** The natives and VC++ runtime DLLs the process mapped, by path: payloadLibraries' pick. */
   readonly loaded: readonly string[];
 }
 

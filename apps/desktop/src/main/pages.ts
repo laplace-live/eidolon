@@ -103,9 +103,9 @@ export class WindowPages {
   /**
    * The backend moved on. Ready takes the loading page to the app, or reloads the app after the
    * waiting page stood in for it, or when the server runs another version than the page came from:
-   * its UI would call an API it wasn't built for. A failure shows the failure page. A window failure
-   * waits for Try Again whatever the backend does, and a restart or a grace period that ends on the
-   * same version leaves the app as it is.
+   * its UI would call an API it wasn't built for. A failure shows the failure page. A window
+   * failure waits for Try Again whatever the backend does, and a restart or a grace period that
+   * ends on the same version leaves the app as it is.
    */
   backend(state: BackendState): void {
     if (state.phase === "failed") {

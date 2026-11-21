@@ -19,7 +19,8 @@ export function archiveName(file: string, n: number): string {
  * the limit rotates again at the next one.
  */
 export function rotate(file: string, keep: number = LOG_ARCHIVES): void {
-  // No archive moves before the log has, to a name none of them has.
+  // The log goes first, to a name no archive has: shifted before a rename that then failed, the
+  // archives would lose one at every line.
   const aside = archiveName(file, 0);
   try {
     if (!moveAside(file, aside)) return;

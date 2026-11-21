@@ -320,7 +320,7 @@ export class BackendController {
   #stopped = false;
   #stopping: Promise<void> | null = null;
   #child: Spawned | null = null;
-  /** Our backends sent their stop trigger that haven't exited: a session end waits for each. */
+  /** Our backends sent their stop trigger and not yet exited: a session end waits for each. */
   readonly #exiting = new Set<Spawned>();
   /** A failed attempt's child, being stopped: the next attempt waits for it. */
   #cleanup: Promise<void> = Promise.resolve();
