@@ -602,11 +602,13 @@ the layout's one line.
   Watchtower on the production host restarts the bot from it, dropping live
   calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`,
   the offline chain (`apps/cli`, `packages/ingest`), the local web app
-  (`apps/web`, `apps/bot/src/local`), the npm packages (`apps/eidolon`,
-  `packages/sdk`), the desktop app (`apps/desktop`, `.github/workflows/desktop.yml`)
-  or `.env.example` skip the image build (`paths-ignore` in `docker.yml`);
-  anything else, `personas/` included, ships, and so does a bump of the desktop's
-  Electron or electron-builder, which changes `bun.lock`.
+  (`apps/web`, `apps/bot/src/local`), the assistant (`packages/assistant`), the npm
+  packages (`apps/eidolon`, `packages/sdk`), the desktop app (`apps/desktop`,
+  `.github/workflows/desktop.yml`), `.env.example`, or the rest of `docker.yml`'s
+  `paths-ignore` (`README.md`, `CLAUDE.md`, the `ts.yml` and `release.yml` workflows,
+  `vitest.config.ts`, `tsconfig.scripts.json`, `tsconfig.no-bun.d.ts`) skip the image
+  build; anything else, `personas/` included, ships, and so does a bump of the
+  desktop's Electron or electron-builder, which changes `bun.lock`.
 - **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
   publish to npm.** Merging the Release workflow's version PR bumps
   `apps/bot/package.json`, `apps/eidolon/package.json`, and/or
