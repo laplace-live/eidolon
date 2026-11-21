@@ -8,7 +8,8 @@ import { refuseDebugging } from "./navigation.ts";
 
 /** EIDOLON_DESKTOP_BACKGROUND: nothing this run does shows on screen or takes the focus. */
 export const background = backgroundMode(process.env);
-// At module load, before the app can finish launching as one with a Dock icon.
+// As early as main's code can: macOS registers each launch as a regular app, Dock icon included,
+// before any of it runs (only LSUIElement in Info.plist would start it as an accessory).
 const policy = activationPolicy(process.platform, background);
 if (policy !== null) app.setActivationPolicy(policy);
 

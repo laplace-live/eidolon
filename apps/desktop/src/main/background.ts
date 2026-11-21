@@ -12,7 +12,11 @@ import type {
 import { launchFlag } from "./environment.ts";
 import { loggedUrl } from "./policy.ts";
 
-/** Chromium's capture device that plays a file or a tone, which the smokes give a call. */
+/**
+ * Chromium's capture device that plays a file or a tone, which the smokes give a call. Chromium's
+ * --use-fake-ui-for-media-stream answers a request itself, past the session's permission handler:
+ * a run with that switch gets the camera too.
+ */
 export const FAKE_MEDIA_DEVICE = "use-fake-device-for-media-stream";
 /** In the profile: where background mode saves downloads. */
 export const DOWNLOADS_FOLDER = "downloads";
@@ -117,7 +121,11 @@ export interface MessageBoxAnswer {
   readonly checkboxChecked: boolean;
 }
 
-/** The calls into Electron that could put something in front of the owner. */
+/**
+ * The calls into Electron that could put something in front of the owner. Chromium opens a file
+ * input's chooser, a date field's calendar and a datalist's suggestions with none of them, and
+ * Electron gives main no hook on those.
+ */
 export interface NativeUi {
   messageBox(box: MessageBoxOptions): Promise<MessageBoxAnswer>;
   openExternal(url: string): Promise<void>;
