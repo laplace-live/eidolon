@@ -79,11 +79,31 @@ async function applicationType(pid: number): Promise<string | null> {
     : parseType(await lsappinfo("info", "-only", "ApplicationType", asn));
 }
 
-interface Main {
+/** The app's main process, as the watch has seen it. */
+export interface WatchedMain {
   readonly pid: number;
   readonly since: number;
+  /** Seen as an accessory (UIElement) at least once. */
   accessory: boolean;
+  /** Failed for its type already. */
   reported: boolean;
+  /** Its type at the last sample, or null while LaunchServices has known no app by it. */
+  last: string | null;
+}
+
+/**
+ * What a stopped watch can't vouch for: a front app it never sampled, or a main it never saw as an
+ * accessory, such as one that ran less than ACCESSORY_WITHIN_MS as a regular app.
+ */
+export function unproven(samples: number, mains: readonly WatchedMain[]): string[] {
+  const failures = samples === 0 ? ["lsappinfo named no front app in any sample"] : [];
+  for (const main of mains) {
+    if (main.accessory || main.reported) continue;
+    failures.push(
+      `the app's main (pid ${main.pid}) was never seen as an accessory (UIElement)${main.last === null ? ": LaunchServices never knew it" : `, only as ${main.last}`}`,
+    );
+  }
+  return failures;
 }
 
 /** Starts the watch; stop() ends it and reports. */
@@ -107,7 +127,7 @@ export function watchFocus({ ours, skip }: FocusOptions): FocusWatch {
   const started = Date.now();
   const fronts: Record<string, number> = {};
   const types: Record<string, number> = {};
-  const mains: Main[] = [];
+  const mains: WatchedMain[] = [];
   /** The pids seen in front; whether each is the app's is a lookup the sampling doesn't wait on. */
   const looked = new Set<number>();
   const lookups: Promise<void>[] = [];
@@ -167,7 +187,7 @@ export function watchFocus({ ours, skip }: FocusOptions): FocusWatch {
     }
   })();
 
-  async function sampleType(main: Main): Promise<void> {
+  async function sampleType(main: WatchedMain): Promise<void> {
     let type: string | null;
     try {
       type = await applicationType(main.pid);
@@ -175,6 +195,7 @@ export function watchFocus({ ours, skip }: FocusOptions): FocusWatch {
       return;
     }
     if (type === null) return;
+    main.last = type;
     types[type] = (types[type] ?? 0) + 1;
     if (type === "UIElement") {
       main.accessory = true;
@@ -193,12 +214,13 @@ export function watchFocus({ ours, skip }: FocusOptions): FocusWatch {
 
   return {
     main(pid) {
-      mains.push({ pid, since: Date.now(), accessory: false, reported: false });
+      mains.push({ pid, since: Date.now(), accessory: false, reported: false, last: null });
     },
     failures,
     async stop() {
       stopping = true;
       await Promise.all([sampling, typing, ...lookups]);
+      for (const failure of unproven(samples, mains)) fail(failure);
       return {
         skipped: null,
         samples,

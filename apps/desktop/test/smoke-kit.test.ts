@@ -1,6 +1,6 @@
 // The desktop smokes' kit, without Electron: the app's environment, its drop list and a canary;
 // the arguments; the server lock's .info and the token; the logs' error lines; the process table;
-// the focus watch's parsing; and the fakes, over real loopback requests.
+// the focus watch's parsing and verdict; and the fakes, over real loopback requests.
 import "../../../packages/config/test/isolated-guard.ts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -29,7 +29,7 @@ import {
   startFakes,
   VOICE_TRANSCRIPT,
 } from "../scripts/smoke/fakes.ts";
-import { parseFront, parseType } from "../scripts/smoke/focus.ts";
+import { parseFront, parseType, unproven } from "../scripts/smoke/focus.ts";
 import {
   errorLines,
   fakeMicrophoneArgs,
@@ -308,6 +308,20 @@ test("the focus watch reads lsappinfo's front app and an application's type", ()
   const type = ` !cgsConnection !signalled type="UIElement" flavor=[ NULL ]  Version=[ NULL ]`;
   expect(parseType(type)).toBe("UIElement");
   expect(parseType("type=[ NULL ]")).toBeNull();
+});
+
+test("the focus watch fails what it can't vouch for: no sample, or a main never an accessory", () => {
+  const main = { pid: 4242, since: 0, accessory: false, reported: false, last: null };
+  expect(unproven(120, [{ ...main, accessory: true, last: "UIElement" }])).toEqual([]);
+  expect(unproven(0, [])).toEqual(["lsappinfo named no front app in any sample"]);
+  expect(unproven(120, [main])).toEqual([
+    "the app's main (pid 4242) was never seen as an accessory (UIElement): LaunchServices never knew it",
+  ]);
+  // A regular app for less than the time it has to become an accessory.
+  expect(unproven(120, [{ ...main, last: "Foreground" }])).toEqual([
+    "the app's main (pid 4242) was never seen as an accessory (UIElement), only as Foreground",
+  ]);
+  expect(unproven(120, [{ ...main, reported: true, last: "Foreground" }])).toEqual([]);
 });
 
 describe("the fakes", () => {
