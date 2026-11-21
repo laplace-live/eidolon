@@ -2,12 +2,13 @@
 // script) on temporary homes: what the window is told, each server's version read once, and the
 // quit check for our own backend alone.
 import "../../../packages/config/test/isolated-guard.ts";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Backend, licensesFile } from "../src/main/backend.ts";
 import type { BackendState } from "../src/main/controller.ts";
+import { UNREACHABLE } from "../src/main/forwarder.ts";
 import {
   environment,
   makeHome,
@@ -95,6 +96,32 @@ const statusReads = () =>
   requests(home)
     .filter(({ path }) => path === "/api/local/status")
     .map(({ pid }) => pid);
+
+describe("before the environment is read", () => {
+  test("the app host answers as with no server: a document waits, a fetch is unreachable", async () => {
+    const { backend, told } = follow();
+    const page = await backend.handle(app("/", { headers: { accept: "text/html" } }));
+    expect([page.status, await page.text()]).toEqual([
+      200,
+      "<!doctype html><title>Eidolon</title>",
+    ]);
+    const status = await backend.handle(app("/api/local/status"));
+    expect([status.status, await status.json()]).toEqual([503, UNREACHABLE]);
+    expect(backend.quitCheck()).toBeNull();
+    expect(told).toEqual([]);
+  });
+
+  test("a stop while it's read, as a quit at startup, starts nothing", async () => {
+    const { backend, told } = follow();
+    const started = backend.start();
+    await backend.stop();
+    await started;
+    await sleep(500);
+    expect(backend.home).toBeNull();
+    expect(existsSync(join(home, "runs.ndjson"))).toBe(false);
+    expect(told).toEqual([]);
+  });
+});
 
 describe("attached to a terminal's server", () => {
   test("idle, it stays ready: reading the version once starts no grace period", async () => {
