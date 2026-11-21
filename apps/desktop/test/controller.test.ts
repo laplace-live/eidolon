@@ -710,7 +710,9 @@ describe("while attached", () => {
   test("stopping leaves it running: no signal, no disconnect", async () => {
     const r = rig();
     await attached(r);
-    await r.controller.stop();
+    const stopped = r.controller.stop();
+    expect(r.controller.state).toEqual({ phase: "holding", owned: false });
+    await stopped;
     expect(r.controller.state).toEqual({ phase: "stopped" });
     expect(r.trace.filter((line) => !line.startsWith("alive?"))).toEqual([]);
   });
@@ -845,6 +847,8 @@ describe("the stop (2.4)", () => {
     const child = await running(r);
     const stopped = r.controller.stop();
     expect(r.trace.at(-1)).toBe("disconnect");
+    // No Bearer from the stop on: the backend closes its listener long before it exits.
+    expect(r.controller.state).toEqual({ phase: "holding", owned: true });
     await vi.advanceTimersByTimeAsync(9_999);
     expect(child.kills).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
@@ -874,7 +878,7 @@ describe("the stop (2.4)", () => {
     child.exit(0);
     await stopped;
     expect(child.kills).toEqual([]);
-    expect(r.states.map((state) => state.phase)).toEqual(["ready", "stopped"]);
+    expect(r.states.map((state) => state.phase)).toEqual(["ready", "holding", "stopped"]);
   });
 
   test("nothing starts after it: no restart, no Try Again, no grace", async () => {

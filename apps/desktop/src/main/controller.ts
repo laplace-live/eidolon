@@ -363,6 +363,9 @@ export class BackendController {
     this.#stopped = true;
     this.#epoch++;
     if (this.#vetoTimer !== null) clearTimeout(this.#vetoTimer);
+    // No Bearer from here on: the backend closes its listener long before it exits.
+    const state = this.#state;
+    if (state.phase === "ready") this.#set({ phase: "holding", owned: state.owned });
     const spawned = this.#child;
     this.#child = null;
     this.#attached = null;
