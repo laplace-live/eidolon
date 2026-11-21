@@ -1,10 +1,12 @@
 // The payloads staged in apps/desktop/.stage (`bun run build:desktop` stages this machine's): what
 // each holds, pinned to bun.lock and pruned, its natives loading from it, on Windows the VC++
 // runtime and the unsigned-PE list, and the packaged app holding it file for file. A target with
-// no stage skips, unless EIDOLON_REQUIRE_STAGE=1 and it is this machine's.
+// no stage, or one staged from another version or bun.lock, skips, unless EIDOLON_REQUIRE_STAGE=1
+// and it is this machine's.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { describe, expect, test } from "vitest";
 import { packageManifest } from "../../eidolon/scripts/build.ts";
 import { PLATFORMS, VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
@@ -31,6 +33,31 @@ const PACKAGED: Record<Target, string> = {
   "darwin-arm64": join(DESKTOP, ".out", "mac-arm64", "Eidolon.app", "Contents", "Resources"),
   "win32-x64": join(DESKTOP, ".out", "win-unpacked", "resources"),
 };
+const STALE = "the stage is from another version or bun.lock: run bun run build:desktop";
+
+/** The package.json a stage of this checkout holds: the npm package's, pinned to bun.lock. */
+function currentManifest(): Record<string, unknown> {
+  const npm = packageManifest();
+  const roots = { ...npm.dependencies, ...npm.optionalDependencies };
+  const overrides = pinOverrides(lockedTree(readBunLock(join(ROOT, "bun.lock")), roots).values());
+  return { ...npm, overrides };
+}
+
+function readManifest(payload: string): {
+  dependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+} {
+  return JSON.parse(readFileSync(join(payload, "package.json"), "utf8"));
+}
+
+/** Whether the stage at `payload` is this checkout's, so a version bump leaves an old one alone. */
+function isCurrent(payload: string): boolean {
+  try {
+    return isDeepStrictEqual(readManifest(payload), currentManifest());
+  } catch {
+    return false;
+  }
+}
 
 /** Every file under `dir`, relative to it with `/`, and every symbolic link among them. */
 function listing(dir: string): { files: string[]; links: string[] } {
@@ -54,12 +81,15 @@ function same(path: string): string {
 for (const target of Object.keys(TARGETS) as Target[]) {
   const payload = payloadDir(target);
   const staged = existsSync(payload);
+  const current = staged && isCurrent(payload);
   const { os, cpu, onnxruntime } = TARGETS[target];
   const modules = join(payload, "node_modules");
+  const title = `the ${target} payload${staged && !current ? ` (${STALE})` : ""}`;
 
-  describe.skipIf(!staged && !(REQUIRED && target === HOST))(`the ${target} payload`, () => {
+  describe.skipIf(!current && !(REQUIRED && target === HOST))(title, () => {
     test("holds what the npm package does, its node_modules and their licenses, and no links", () => {
       expect(staged, `no stage at ${payload}: run bun run build:desktop`).toBe(true);
+      expect(readManifest(payload), STALE).toEqual(currentManifest());
       const { files, links } = listing(payload);
       // What main runs, and what the resolvers find under EIDOLON_APP_ROOT.
       for (const file of [
@@ -85,13 +115,6 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       expect(files.filter((file) => /(^|\/)(\.bin\/|\.?package-lock\.json$)/.test(file))).toEqual(
         [],
       );
-      const manifest = JSON.parse(readFileSync(join(payload, "package.json"), "utf8"));
-      const npm = packageManifest();
-      const roots = { ...npm.dependencies, ...npm.optionalDependencies };
-      expect(manifest).toEqual({
-        ...npm,
-        overrides: pinOverrides(lockedTree(readBunLock(join(ROOT, "bun.lock")), roots).values()),
-      });
       const licenses = readFileSync(join(payload, LICENSES_FILE), "utf8");
       for (const name of [
         "onnxruntime-node",
