@@ -25,7 +25,7 @@ import {
 } from "../../eidolon/scripts/build.ts";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { type LsNode, lockDrift, lockedTree, pinOverrides, readBunLock } from "./lockfile.ts";
-import { compareVersions, readPe } from "./pe.ts";
+import { compareVersions, type Pe, readPe } from "./pe.ts";
 import { readZip } from "./zip.ts";
 
 const DESKTOP = resolve(import.meta.dirname, "..");
@@ -51,6 +51,15 @@ export type Target = keyof typeof TARGETS;
 export const LICENSES_FILE = "THIRD_PARTY_LICENSES.txt";
 /** Beside win32-x64's payload: the names of its unsigned PE files, and Electron's, for signExts. */
 export const UNSIGNED_PE_FILE = "unsigned-pe.json";
+/**
+ * The signers whose `.node` and `.dll` files ship with their own signature, which the release
+ * mustn't replace: onnxruntime's, Electron's d3dcompiler_47.dll and the VC++ runtime's.
+ */
+export const MICROSOFT_SIGNERS: readonly string[] = [
+  "Microsoft Corporation",
+  "Microsoft Windows",
+  "Microsoft Windows Software Compatibility Publisher",
+];
 
 export function stageDir(target: Target): string {
   return join(DESKTOP, ".stage", target);
@@ -222,26 +231,38 @@ export function vcRuntimeNeeds(modules: string, redist: string): Map<string, str
   return needs;
 }
 
-/** The basenames of the `.node` and `.dll` files under `dir` whose certificate table is empty. */
-export function unsignedPeIn(dir: string): string[] {
-  const names = files(dir)
-    .filter((file) => /\.(node|dll)$/i.test(file) && readPe(file)?.signed === false)
-    .map((file) => basename(file));
-  return [...new Set(names)].sort();
+/** A `.node` or `.dll` file, by the basename signExts matches it by, and what its headers say. */
+export type PeFile = readonly [name: string, pe: Pe];
+
+/** Each `.node` and `.dll` file under `dir`. */
+export function peFilesIn(dir: string): PeFile[] {
+  return files(dir)
+    .filter((file) => /\.(node|dll)$/i.test(file))
+    .flatMap((file) => {
+      const pe = readPe(file);
+      return pe === null ? [] : [[basename(file), pe] as const];
+    });
 }
 
 /**
  * The same of Electron's zip at `zip`, under the names electron-builder gives them in the app: it
  * renames electron_wer.dll after the executable, `<productName>_wer.dll`.
  */
-export function unsignedPeInZip(zip: string, productName: string): string[] {
+export function peFilesInZip(zip: string, productName: string): PeFile[] {
   const archive = readZip(zip);
-  const names = archive.entries
+  return archive.entries
     .filter((entry) => /\.(node|dll)$/i.test(entry.name))
-    .filter((entry) => readPe(archive.read(entry))?.signed === false)
-    .map((entry) => basename(entry.name))
-    .map((name) => (name === "electron_wer.dll" ? `${productName}_wer.dll` : name));
-  return [...new Set(names)].sort();
+    .flatMap((entry) => {
+      const pe = readPe(archive.read(entry));
+      const name = basename(entry.name);
+      if (pe === null) return [];
+      return [[name === "electron_wer.dll" ? `${productName}_wer.dll` : name, pe] as const];
+    });
+}
+
+/** The names of the files among `pes` whose certificate table is empty, once each. */
+export function unsignedNames(pes: readonly PeFile[]): string[] {
+  return [...new Set(pes.filter(([, pe]) => !pe.signed).map(([name]) => name))].sort();
 }
 
 interface ElectronGet {
@@ -258,7 +279,7 @@ interface ElectronGet {
  * The Electron zip electron-builder packs for win32-x64, from @electron/get's cache or downloaded
  * into it, checked against the electron package's checksums as its own install checks them.
  */
-async function electronZip(): Promise<string> {
+export async function electronZip(): Promise<string> {
   const electron = dirname(createRequire(import.meta.url).resolve("electron/package.json"));
   const { version } = JSON.parse(readFileSync(join(electron, "package.json"), "utf8")) as {
     version: string;
@@ -480,9 +501,10 @@ export async function stageBackend(
       for (const [folder, dlls] of vcRuntimeNeeds(modules, vcRuntime.dir)) {
         for (const dll of dlls) copyFileSync(join(vcRuntime.dir, dll), join(folder, dll));
       }
-      const unsigned = [
-        ...new Set([...unsignedPeIn(payload), ...unsignedPeInZip(await electronZip(), "Eidolon")]),
-      ].sort();
+      const unsigned = unsignedNames([
+        ...peFilesIn(payload),
+        ...peFilesInZip(await electronZip(), "Eidolon"),
+      ]);
       writeFileSync(
         join(stageDir(target), UNSIGNED_PE_FILE),
         `${JSON.stringify(unsigned, null, 2)}\n`,

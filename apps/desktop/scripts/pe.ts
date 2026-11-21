@@ -1,5 +1,5 @@
 // What staging needs from a Windows PE file, read from its headers on any OS: whether it carries an
-// Authenticode signature, the DLLs it imports, its linker version and its file version.
+// Authenticode signature and whose, the DLLs it imports, its linker version and its file version.
 // https://learn.microsoft.com/en-us/windows/win32/debug/pe-format
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 
@@ -9,12 +9,20 @@ const DIRECTORY_SECURITY = 4;
 const DIRECTORY_DELAY_IMPORT = 13;
 const RT_VERSION = 16;
 const FIXED_FILE_INFO = 0xfeef04bd;
+const WIN_CERT_TYPE_PKCS_SIGNED_DATA = 2;
+/** The DER of the common name's object identifier, 2.5.4.3. */
+const COMMON_NAME = Buffer.of(0x06, 0x03, 0x55, 0x04, 0x03);
 
 export interface Pe {
   /** `<major>.<minor>`, the toolset that linked it, as `14.44`. */
   readonly linker: string;
   /** Whether its certificate table holds anything: an unsigned file's is empty. */
   readonly signed: boolean;
+  /**
+   * The common name on its signer's certificate, as `Microsoft Corporation`: null when it is
+   * unsigned, or its signature can't be read. Only read, never verified.
+   */
+  readonly signer: string | null;
   readonly imports: readonly string[];
   readonly delayImports: readonly string[];
   /** VS_FIXEDFILEINFO's file version, as `14.52.37029.0`; null without a version resource. */
@@ -131,15 +139,110 @@ function parse(source: Source): Pe | null {
       if (dll) delayImports.push(dll);
     }
   }
+  // The certificate table's address is a file offset, not an RVA.
   const certificates = directory(DIRECTORY_SECURITY);
+  const signed = certificates.address !== 0 && certificates.size > 0;
   return {
     linker: `${optional.readUInt8(2)}.${String(optional.readUInt8(3)).padStart(2, "0")}`,
-    // The certificate table's address is a file offset, not an RVA.
-    signed: certificates.address !== 0 && certificates.size > 0,
+    signed,
+    signer: signed ? signerName(source, certificates.address, certificates.size) : null,
     imports,
     delayImports,
     fileVersion: fileVersion(source, directory(DIRECTORY_RESOURCE).address, offsetOf),
   };
+}
+
+/** A DER element: its tag, where it starts, and where its contents start and end. */
+interface Der {
+  readonly tag: number;
+  readonly at: number;
+  readonly start: number;
+  readonly end: number;
+}
+
+function element(der: Buffer, at: number, limit = der.length): Der {
+  const tag = der.readUInt8(at);
+  let length = der.readUInt8(at + 1);
+  let start = at + 2;
+  if (length & 0x80) {
+    // BER's indefinite length, 0x80, isn't DER.
+    const count = length & 0x7f;
+    if (count === 0 || count > 4) throw new RangeError("not DER");
+    length = der.readUIntBE(start, count);
+    start += count;
+  }
+  if (start + length > limit) throw new RangeError("a DER element runs past its parent");
+  return { tag, at, start, end: start + length };
+}
+
+function children(der: Buffer, parent: Der | undefined): Der[] {
+  if (parent === undefined) throw new RangeError("a DER element is missing");
+  const found: Der[] = [];
+  for (let at = parent.start; at < parent.end; ) {
+    const child = element(der, at, parent.end);
+    found.push(child);
+    at = child.end;
+  }
+  return found;
+}
+
+function encoded(der: Buffer, item: Der | undefined): Buffer {
+  if (item === undefined) throw new RangeError("a DER element is missing");
+  return der.subarray(item.at, item.end);
+}
+
+/**
+ * The common name on the certificate of a WIN_CERTIFICATE's signer: in its PKCS#7 SignedData, the
+ * certificate whose issuer and serial number the first SignerInfo names (RFC 2315). Authenticode's
+ * certificates come in no set order: Electron's d3dcompiler_47.dll lists its signer's second.
+ */
+function signerName(source: Source, at: number, size: number): string | null {
+  if (size < 8 || at + size > source.size) return null;
+  const header = source.read(at, 8);
+  const length = header.readUInt32LE(0);
+  if (header.readUInt16LE(6) !== WIN_CERT_TYPE_PKCS_SIGNED_DATA || length <= 8 || length > size) {
+    return null;
+  }
+  const der = source.read(at + 8, length - 8);
+  try {
+    const [, content] = children(der, element(der, 0));
+    const fields = children(der, children(der, content)[0]);
+    const certificates = fields.find((field) => field.tag === 0xa0);
+    const [, named] = children(der, children(der, fields.at(-1))[0]);
+    // A SignerInfo that names its certificate by key identifier, [0], has no issuer to match.
+    if (named?.tag !== 0x30) return null;
+    const [issuer, serial] = children(der, named);
+    for (const certificate of children(der, certificates)) {
+      const tbs = children(der, children(der, certificate)[0]);
+      // The version, [0], is optional.
+      const [number, , by, , subject] = tbs[0]?.tag === 0xa0 ? tbs.slice(1) : tbs;
+      if (
+        encoded(der, number).equals(encoded(der, serial)) &&
+        encoded(der, by).equals(encoded(der, issuer))
+      ) {
+        return commonName(der, subject);
+      }
+    }
+    return null;
+  } catch (error) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+}
+
+/** The common name in an X.501 Name, decoded by its string type. */
+function commonName(der: Buffer, name: Der | undefined): string | null {
+  for (const set of children(der, name)) {
+    for (const attribute of children(der, set)) {
+      const [type, value] = children(der, attribute);
+      if (value === undefined || !encoded(der, type).equals(COMMON_NAME)) continue;
+      const text = der.subarray(value.start, value.end);
+      // BMPString is UTF-16 big-endian, UTF8String UTF-8, and the rest ASCII.
+      if (value.tag === 0x1e) return Buffer.from(text).swap16().toString("utf16le");
+      return text.toString(value.tag === 0x0c ? "utf8" : "latin1");
+    }
+  }
+  return null;
 }
 
 /** The first entry of the resource directory at `at`, or the one with `id`. */

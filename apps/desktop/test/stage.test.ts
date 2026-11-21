@@ -1,8 +1,8 @@
 // The payloads staged in apps/desktop/.stage (`bun run build:desktop` stages this machine's): what
 // each holds, pinned to bun.lock and pruned, its natives loading from it, on Windows the VC++
-// runtime and the unsigned-PE list, and the packaged app holding it file for file. A target with
-// no stage, or one staged from another version or bun.lock, skips, unless EIDOLON_REQUIRE_STAGE=1
-// and it is this machine's.
+// runtime and the signatures, and the packaged app holding it file for file. A target with no
+// stage, or one staged from another version or bun.lock, skips, unless EIDOLON_REQUIRE_STAGE=1 and
+// it is this machine's.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
@@ -14,14 +14,17 @@ import { lockDrift, lockedTree, pinOverrides, readBunLock } from "../scripts/loc
 import { checkNatives } from "../scripts/natives.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
+  electronZip,
   LICENSES_FILE,
+  MICROSOFT_SIGNERS,
   npmLs,
   payloadDir,
+  peFilesIn,
+  peFilesInZip,
   stageDir,
   TARGETS,
   type Target,
   UNSIGNED_PE_FILE,
-  unsignedPeIn,
 } from "../scripts/stage-backend.ts";
 
 const ROOT = join(import.meta.dirname, "../../..");
@@ -255,11 +258,29 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       },
     );
 
-    test.skipIf(target !== "win32-x64")("lists every unsigned .node and .dll it holds", () => {
-      const listed = JSON.parse(readFileSync(join(stageDir(target), UNSIGNED_PE_FILE), "utf8"));
-      expect(unsignedPeIn(payload).filter((name) => !listed.includes(name))).toEqual([]);
-      expect(listed).toEqual([...new Set(listed as string[])].sort());
-    });
+    // The release signs only the listed files; every other keeps the signature it came with, and
+    // the only ones vetted are Microsoft's.
+    test.skipIf(target !== "win32-x64")(
+      "has each .node and .dll, Electron's included, signed by Microsoft or listed to sign",
+      async () => {
+        const listed: string[] = JSON.parse(
+          readFileSync(join(stageDir(target), UNSIGNED_PE_FILE), "utf8"),
+        );
+        expect(listed).toEqual([...new Set(listed)].sort());
+        const pes = [...peFilesIn(payload), ...peFilesInZip(await electronZip(), "Eidolon")];
+        const neither = pes
+          .filter(
+            ([name, { signer }]) =>
+              !listed.includes(name) && !MICROSOFT_SIGNERS.includes(signer ?? ""),
+          )
+          .map(
+            ([name, { signed, signer }]) =>
+              `${name}: ${signed ? (signer ?? "unreadable") : "unsigned"}`,
+          );
+        expect(neither).toEqual([]);
+      },
+      120_000,
+    );
 
     // An app packaged before the last stage holds an older payload.
     const packaged = join(PACKAGED[target], "eidolon");

@@ -23,12 +23,13 @@ import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
   newestVcRedist,
   parseTarget,
+  peFilesIn,
+  peFilesInZip,
   pruneOnnxruntime,
   stageBackend,
   stageDir,
   thirdPartyLicenses,
-  unsignedPeIn,
-  unsignedPeInZip,
+  unsignedNames,
   vcRuntimeNeeds,
 } from "../scripts/stage-backend.ts";
 
@@ -61,8 +62,91 @@ interface PeSpec {
   readonly linker?: string;
   readonly imports?: readonly string[];
   readonly delayImports?: readonly string[];
+  /** A certificate table of zeros, which says nothing of its signer. */
   readonly signed?: boolean;
+  /** The certificate table, as `authenticode()` writes one. */
+  readonly certificate?: Buffer;
   readonly fileVersion?: readonly [number, number, number, number];
+}
+
+/** A DER element of `tag` holding `content`. */
+function der(tag: number, ...content: Buffer[]): Buffer {
+  const body = Buffer.concat(content);
+  const size = body.length;
+  const length =
+    size < 0x80
+      ? Buffer.of(size)
+      : size < 0x100
+        ? Buffer.of(0x81, size)
+        : Buffer.of(0x82, size >> 8, size & 0xff);
+  return Buffer.concat([Buffer.of(tag), length, body]);
+}
+const SEQUENCE = 0x30;
+const SET = 0x31;
+const INTEGER = 0x02;
+
+/** An X.501 Name: an organization, then the common name, a UTF8String unless `tag` says. */
+function name(commonName: string, tag = 0x0c): Buffer {
+  const text =
+    tag === 0x1e ? Buffer.from(commonName, "utf16le").swap16() : Buffer.from(commonName, "utf8");
+  const attribute = (oid: number, value: Buffer) =>
+    der(SET, der(SEQUENCE, der(0x06, Buffer.of(0x55, 0x04, oid)), value));
+  return der(
+    SEQUENCE,
+    attribute(10, der(0x13, Buffer.from("Microsoft Corporation"))),
+    attribute(3, der(tag, text)),
+  );
+}
+
+/** As much of an X.509 certificate as names it: its version, serial, issuer and subject. */
+function certificate(serial: number, issuer: Buffer, subject: Buffer): Buffer {
+  const tbs = der(
+    SEQUENCE,
+    der(0xa0, der(INTEGER, Buffer.of(2))),
+    der(INTEGER, Buffer.of(serial)),
+    der(SEQUENCE),
+    issuer,
+    der(SEQUENCE),
+    subject,
+    der(SEQUENCE),
+  );
+  return der(SEQUENCE, tbs, der(SEQUENCE), der(0x03, Buffer.of(0)));
+}
+
+/** A WIN_CERTIFICATE whose PKCS#7 SignedData holds `certificates` and names its signer's. */
+function authenticode(certificates: readonly Buffer[], issuer: Buffer, serial: number): Buffer {
+  const signerInfo = der(
+    SEQUENCE,
+    der(INTEGER, Buffer.of(1)),
+    der(SEQUENCE, issuer, der(INTEGER, Buffer.of(serial))),
+    der(SEQUENCE),
+    der(SEQUENCE),
+    der(0x04),
+  );
+  const signedData = der(
+    SEQUENCE,
+    der(INTEGER, Buffer.of(1)),
+    der(SET),
+    der(SEQUENCE),
+    der(0xa0, ...certificates),
+    der(SET, signerInfo),
+  );
+  // 1.2.840.113549.1.7.2, signedData.
+  const signedDataOid = Buffer.of(0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02);
+  const pkcs7 = der(SEQUENCE, der(0x06, signedDataOid), der(0xa0, signedData));
+  const header = Buffer.alloc(8);
+  header.writeUInt32LE(8 + pkcs7.length, 0);
+  header.writeUInt16LE(0x0200, 4);
+  header.writeUInt16LE(2, 6);
+  return Buffer.concat([header, pkcs7, Buffer.alloc((8 - (pkcs7.length % 8)) % 8)]);
+}
+
+/** A signature by `signer`, whose certificate follows its issuer's, as d3dcompiler_47.dll's does. */
+function signedBy(signer: string, tag?: number): Buffer {
+  const pca = name("Microsoft Code Signing PCA 2024");
+  const root = name("Microsoft Root Certificate Authority 2011");
+  // The intermediate shares the signer's serial number, under another issuer.
+  return authenticode([certificate(7, root, pca), certificate(7, pca, name(signer, tag))], pca, 7);
 }
 
 /** A PE32+ image with one section holding its import tables and version resource. */
@@ -114,7 +198,8 @@ function pe(spec: PeSpec = {}): Buffer {
     body.writeUInt32LE(((a << 16) | b) >>> 0, info + 48);
     body.writeUInt32LE(((c << 16) | d) >>> 0, info + 52);
   }
-  const file = Buffer.alloc(rawAt + body.length + (spec.signed ? 16 : 0));
+  const certificates = spec.certificate ?? Buffer.alloc(spec.signed ? 16 : 0);
+  const file = Buffer.alloc(rawAt + body.length + certificates.length);
   file.write("MZ", 0, "latin1");
   file.writeUInt32LE(0x40, 0x3c);
   file.write("PE\0\0", 0x40, "latin1");
@@ -133,7 +218,7 @@ function pe(spec: PeSpec = {}): Buffer {
   };
   if (imports.length > 0) directory(1, rvaBase + importsAt, (imports.length + 1) * 20);
   if (spec.fileVersion !== undefined) directory(2, rvaBase + resources, 16);
-  if (spec.signed) directory(4, rawAt + body.length, 16);
+  if (certificates.length > 0) directory(4, rawAt + body.length, certificates.length);
   if (delays.length > 0) directory(13, rvaBase + delaysAt, (delays.length + 1) * 32);
   const section = optional + 240;
   file.write(".data", section, "latin1");
@@ -142,6 +227,7 @@ function pe(spec: PeSpec = {}): Buffer {
   file.writeUInt32LE(body.length, section + 16);
   file.writeUInt32LE(rawAt, section + 20);
   body.copy(file, rawAt);
+  certificates.copy(file, rawAt + body.length);
   return file;
 }
 
@@ -365,6 +451,7 @@ describe("a PE file", () => {
     ).toEqual({
       linker: "14.51",
       signed: true,
+      signer: null,
       imports: ["VCRUNTIME140.dll", "KERNEL32.dll"],
       delayImports: ["DirectML.dll"],
       fileVersion: "14.52.37029.0",
@@ -372,10 +459,33 @@ describe("a PE file", () => {
     expect(readPe(pe())).toEqual({
       linker: "14.44",
       signed: false,
+      signer: null,
       imports: [],
       delayImports: [],
       fileVersion: null,
     });
+  });
+
+  test("names its signer from the certificate its signature names, in any string type", () => {
+    const signer = (certificate: Buffer) => readPe(pe({ certificate }))?.signer;
+    expect(signer(signedBy("Microsoft Corporation"))).toBe("Microsoft Corporation");
+    expect(signer(signedBy("Microsoft Windows", 0x13))).toBe("Microsoft Windows");
+    expect(signer(signedBy("微软 Windows", 0x1e))).toBe("微软 Windows");
+    expect(readPe(pe({ certificate: signedBy("LAPLACE Live LLC") }))).toMatchObject({
+      signed: true,
+      signer: "LAPLACE Live LLC",
+    });
+  });
+
+  test("names no signer it can't find: none listed, a certificate it lacks, or no DER", () => {
+    const pca = name("Microsoft Code Signing PCA 2024");
+    const leaf = certificate(7, pca, name("Microsoft Corporation"));
+    expect(readPe(pe({ certificate: authenticode([leaf], pca, 8) }))?.signer).toBeNull();
+    expect(readPe(pe({ certificate: authenticode([], pca, 7) }))?.signer).toBeNull();
+    // BER's indefinite length, where the SignedData's own would be.
+    const ber = signedBy("Microsoft Corporation");
+    ber.writeUInt8(0x80, 9);
+    expect(readPe(pe({ certificate: ber }))).toMatchObject({ signed: true, signer: null });
   });
 
   test("is read from disk the same, and anything else is no PE file", () => {
@@ -517,21 +627,33 @@ describe("the unsigned-PE list", () => {
     put(join(payload, "node_modules", "d", "node_modules", "c", "lib", "c.dll"), pe());
     put(join(payload, "node_modules", "e", "e.exe"), pe());
     put(join(payload, "node_modules", "f", "f.dll"), "not a PE file");
-    expect(unsignedPeIn(payload)).toEqual(["a.node", "c.dll"]);
+    const pes = peFilesIn(payload);
+    expect(pes.map(([name]) => name).sort()).toEqual(["a.node", "b.dll", "c.dll", "c.dll"]);
+    expect(unsignedNames(pes)).toEqual(["a.node", "c.dll"]);
   });
 
-  test("names Electron's unsigned DLLs as the app names them", () => {
+  test("names Electron's DLLs as the app names them, with their signers", () => {
     const file = put(
       join(temp(), "electron-v45.4.1-win32-x64.zip"),
       zip([
         { name: "electron.exe", data: pe(), deflate: true },
         { name: "ffmpeg.dll", data: pe(), deflate: true },
-        { name: "d3dcompiler_47.dll", data: pe({ signed: true }), deflate: true },
+        {
+          name: "d3dcompiler_47.dll",
+          data: pe({ certificate: signedBy("Microsoft Corporation") }),
+          deflate: true,
+        },
         { name: "electron_wer.dll", data: pe(), deflate: false },
         { name: "locales/en-US.pak", data: Buffer.from("pak"), deflate: true },
       ]),
     );
-    expect(unsignedPeInZip(file, "Eidolon")).toEqual(["Eidolon_wer.dll", "ffmpeg.dll"]);
+    const pes = peFilesInZip(file, "Eidolon");
+    expect(pes.map(([name, { signer }]) => [name, signer])).toEqual([
+      ["ffmpeg.dll", null],
+      ["d3dcompiler_47.dll", "Microsoft Corporation"],
+      ["Eidolon_wer.dll", null],
+    ]);
+    expect(unsignedNames(pes)).toEqual(["Eidolon_wer.dll", "ffmpeg.dll"]);
   });
 });
 
