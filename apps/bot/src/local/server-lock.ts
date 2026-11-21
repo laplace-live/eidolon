@@ -1,5 +1,5 @@
 // One local server per data home: the server holds the offline chain's lock `local-server` while it
-// runs, and adds its port to the pid in the lock's .info, so a second start can name it.
+// runs, and adds its address to the pid in the lock's .info, so a second start can name it.
 import { readFileSync } from "node:fs";
 import { isPlainObject } from "@eidolon/config";
 import { acquireLock, LockedError, lockInfoPath } from "@eidolon/ingest";
@@ -44,7 +44,12 @@ export function takeServerLock():
   }
 }
 
-/** Adds the port this server listens on to the .info its lock wrote. */
-export function recordServerPort(port: number): void {
-  writeDataFile(serverLockInfoPath(), JSON.stringify({ ...readInfo(), port }));
+/**
+ * Adds where this server listens to the .info its lock wrote: `port`, and `host`, a loopback
+ * address it bound as a URL names it (`127.0.0.1`, `[::1]`). A client that finds the server
+ * through the .info talks to that address alone: on another loopback address the port may be any
+ * local account's.
+ */
+export function recordServerPort(port: number, host: string): void {
+  writeDataFile(serverLockInfoPath(), JSON.stringify({ ...readInfo(), port, host }));
 }

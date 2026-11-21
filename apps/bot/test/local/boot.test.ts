@@ -23,6 +23,12 @@ import {
 
 const NO_OPEN = ["--host", "127.0.0.1", "--port", "0", "--no-open"];
 
+const IPV6_LOOPBACK = await new Promise<boolean>((resolve) => {
+  const probe = createServer();
+  probe.once("error", () => resolve(false));
+  probe.listen({ host: "::1", port: 0 }, () => probe.close(() => resolve(true)));
+});
+
 let booted: Booted | null = null;
 const timeline: string[] = [];
 
@@ -202,6 +208,7 @@ describe("one server per data home", () => {
     expect(JSON.parse(readFileSync(serverLockInfoPath(), "utf8"))).toMatchObject({
       pid: process.pid,
       port: booted.port,
+      host: "127.0.0.1",
       command: "eidolon",
     });
     expect("holder" in takeServerLock()).toBe(true);
@@ -209,6 +216,17 @@ describe("one server per data home", () => {
     booted = await bootFixture();
     expect(booted.io.exits).toEqual([]);
   });
+
+  test.skipIf(!IPV6_LOOPBACK)(
+    "one bound to ::1 alone records that host, as a URL names it",
+    async () => {
+      booted = await bootFixture({ argv: ["--host", "::1", "--port", "0", "--no-open"] });
+      expect(JSON.parse(readFileSync(serverLockInfoPath(), "utf8"))).toMatchObject({
+        port: booted.port,
+        host: "[::1]",
+      });
+    },
+  );
 });
 
 describe("stopping", () => {

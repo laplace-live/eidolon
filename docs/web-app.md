@@ -41,7 +41,10 @@ closing, and a `kill()` there is TerminateProcess, which would end the server in
 own stop. A data home runs one server,
 which holds a lock in its `locks/`: starting again on the port it serves prints a fresh link to it
 and exits 0, and on any other port exits 2, naming its pid and port. A port another program holds
-exits 1.
+exits 1. Once it listens, the server adds its `port` and `host` to the lock's `.info`
+(`locks/4273f434b594.info`, JSON beside its `pid`): `host` is the first loopback address it
+bound, as a URL names it (`127.0.0.1`, `[::1]`). A client that finds the server there talks to
+that address alone, since another local account could hold the port on another loopback address.
 
 `bun run dev:local` has no supervisor, so Restart stops it, and every reload `--watch` makes
 opens another tab unless you pass `--no-open` (`bun run dev:local --no-open`). To work on the

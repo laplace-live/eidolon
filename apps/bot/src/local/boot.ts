@@ -289,9 +289,9 @@ export async function bootLocal(
   io.onShutdown(() => stop(0));
   const port = bot.server.port;
   try {
-    recordServerPort(port);
+    recordServerPort(port, new URL(bot.server.url).hostname);
   } catch (error) {
-    logger.warning(`A second start won't be told this one's port: ${errorText(error)}`);
+    logger.warning(`A second start won't be told where this one listens: ${errorText(error)}`);
   }
   await local.startTasks();
   io.notify({ kind: "listening", port });
