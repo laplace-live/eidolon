@@ -21,4 +21,9 @@ const vitest = spawnSync(
   ],
   { cwd: ROOT, stdio: "inherit", env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
 );
+if (vitest.error !== undefined) {
+  console.error(`test-on-electron: ${electron} didn't run:`, vitest.error);
+} else if (vitest.signal !== null) {
+  console.error(`test-on-electron: Electron ended on ${vitest.signal}`);
+}
 process.exit(vitest.status ?? 1);
