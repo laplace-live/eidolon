@@ -554,7 +554,7 @@ that could show something through it.
   the speakers, a call's reply included. WebRTC still receives that reply, so a test can check it
   arrived. Measured with Electron 45.4.1 on macOS, Chromium hands the switch to its audio service
   (not to the renderer), and a tone the app page plays is never `isCurrentlyAudible()`, where the
-  same tone with only the page muted is.
+  same tone in a window muted only by `setAudioMuted(true)` is.
 - **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
   Developer Tools, which opens a window, isn't offered unpackaged either.
 - **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
