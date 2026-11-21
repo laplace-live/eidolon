@@ -728,7 +728,8 @@ Each step prints one line, made of the checks inside it:
 
 1. **Cold start:** Home at `eidolon-app://app/`, with no sign-in and no console error, its footer
    naming both versions; the backend on a free port, with no try at 7860; main off screen (an
-   accessory, its window neither visible nor focused); the canary key never reaches the backend.
+   accessory, its window neither visible nor focused). The kit's canary check follows it, on a line
+   of its own: the key the smoke puts in its own environment never reaches the backend.
 2. **A chat:** her reply streams through the forwarder, its first part shown about 2 s before the
    rest, as the fake holds it. A picture and a text file sent with a line (set on the composer's
    input, never a click, which opens the file chooser) reach her mind; the picture opens in the

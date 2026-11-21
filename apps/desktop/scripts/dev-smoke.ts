@@ -153,6 +153,9 @@ interface Walk {
 }
 
 const smoke = await startSmoke({ label: LABEL });
+console.log(
+  `${LABEL}: the unpackaged app on ${process.platform}-${process.arch}, ${smoke.args.headful ? "headful" : "in background mode"}; the run's folder is ${smoke.run.root}`,
+);
 const results = join(smoke.run.root, "results");
 const steps = new Steps(smoke.checks, results);
 const windowWatch = watchWindows({
