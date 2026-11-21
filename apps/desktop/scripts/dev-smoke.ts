@@ -1,9 +1,9 @@
 // `bun run smoke:desktop:dev`, the dev smoke: Playwright's Electron driver on the unpackaged app,
 // its backend from source, on the kit's fakes, temporary data home and profile, in background mode
-// under the focus watch (both off with --headful). It builds the web app and apps/desktop/dist
-// first, so it never runs on a stale build (--no-build runs on what is there), and prints one line
-// per step. The run's folder holds results.json and the screenshots, and goes after a pass, as the
-// kit has it; --keep copies them beside it first.
+// under the focus watch and the window watch (all off with --headful). It builds the web app and
+// apps/desktop/dist first, so it never runs on a stale build (--no-build runs on what is there),
+// and prints one line per step. The run's folder holds results.json and the screenshots, and goes
+// after a pass, as the kit has it; --keep copies them beside it first.
 import { execFile } from "node:child_process";
 import {
   closeSync,
@@ -22,6 +22,7 @@ import { STRINGS } from "../src/main/strings.ts";
 import { buildApp, missingBuilds } from "./dev-smoke/build.ts";
 import { type Microphone, microphoneWav } from "./dev-smoke/speech.ts";
 import { described, type Step, Steps, writeResults } from "./dev-smoke/steps.ts";
+import { type WindowReport, watchWindows } from "./dev-smoke/windows.ts";
 import {
   CHAT_MESSAGE,
   FILES_REPLY,
@@ -158,6 +159,17 @@ interface Walk {
 const smoke = await startSmoke({ label: LABEL });
 const results = join(smoke.run.root, "results");
 const steps = new Steps(smoke.checks, results);
+const windowWatch = watchWindows({
+  ours: underSmoke,
+  skip:
+    process.platform !== "darwin"
+      ? "it runs on macOS only"
+      : smoke.args.headful
+        ? "--headful"
+        : null,
+  doing: () => steps.current ?? "between steps",
+});
+await windowWatch.ready;
 const startedAt = Date.now();
 const walk: Walk = {
   smoke,
@@ -176,6 +188,8 @@ try {
   const text = error instanceof Error ? (error.stack ?? error.message) : String(error);
   smoke.checks.add(`${LABEL} ran to its end`, false, text.split("\n").slice(0, 4).join(" | "));
 }
+const watched = await windowWatch.stop();
+checkWindows(watched);
 
 const record = (): object => ({
   smoke: LABEL,
@@ -186,6 +200,7 @@ const record = (): object => ({
   microphone: walk.microphone,
   steps: steps.records,
   checks: smoke.checks.list,
+  windowWatch: watched,
   fakes: smoke.fakes.counts(),
 });
 writeResults(results, record());
@@ -197,6 +212,32 @@ for (const folder of [results, kept]) {
   console.log(`${LABEL}: results in ${writeResults(folder, record())}`);
 }
 process.exit(code);
+
+/** Which of `pids` run under this smoke, where every launch of the app is its child. */
+async function underSmoke(pids: readonly number[]): Promise<number[]> {
+  const under = new Set(descendants(await processTable(), [process.pid]).map((row) => row.pid));
+  return pids.filter((pid) => under.has(pid));
+}
+
+/** The window watch's check, after the last launch: no window of the app's was ever on screen. */
+function checkWindows(report: WindowReport): void {
+  if (report.skipped !== null) {
+    console.log(`(the window watch is off: ${report.skipped})`);
+    return;
+  }
+  const looked = `${report.looks} looks over ${report.seconds.toFixed(1)} s (longest gap ${report.maxGapMs} ms)`;
+  const seen =
+    report.failures.length > 0
+      ? report.failures.join("; ")
+      : report.windows === 0
+        ? "no window on screen at all, so it couldn't have seen the app's"
+        : `up to ${report.windows} windows on screen, none of them the app's`;
+  smoke.checks.add(
+    "the window watch: no window of the app's ever on screen",
+    report.windows > 0 && report.failures.length === 0,
+    `${looked}; ${seen}`,
+  );
+}
 
 async function walkApp(walk: Walk): Promise<void> {
   const { smoke, steps } = walk;

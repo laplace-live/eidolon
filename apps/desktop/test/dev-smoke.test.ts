@@ -1,11 +1,12 @@
-// The dev smoke's parts that need no Electron: the fake microphone's WAV, and its steps' lines,
-// records and results.
+// The dev smoke's parts that need no Electron: the fake microphone's WAV, its steps' lines, records
+// and results, and the window watch's reading of osascript's lines.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { framed, RATE, wavFile, wavSamples } from "../scripts/dev-smoke/speech.ts";
 import { described, Steps, stepLine, writeResults } from "../scripts/dev-smoke/steps.ts";
+import { parseLook } from "../scripts/dev-smoke/windows.ts";
 import { Checks } from "../scripts/smoke/kit.ts";
 
 /** A RIFF chunk, padded to an even size as the format has it. */
@@ -114,11 +115,15 @@ describe("the dev smoke's steps", () => {
   test("each step adds one check, and a throw fails it with what it had checked", async () => {
     const checks = new Checks();
     const steps = new Steps(checks, folder);
+    let during: string | null = null;
     expect(
       await steps.run("passes", async (step) => {
+        during = steps.current;
         step.check("a check", true, "found");
       }),
     ).toBe(true);
+    expect(during).toBe("passes");
+    expect(steps.current).toBeNull();
     expect(
       await steps.run("throws", async (step) => {
         step.check("before it", false, "wrong");
@@ -142,5 +147,27 @@ describe("the dev smoke's steps", () => {
     const file = writeResults(folder, { smoke: "dev", steps: [] });
     expect(file).toBe(join(folder, "results.json"));
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ smoke: "dev", steps: [] });
+  });
+});
+
+describe("the window watch's looks", () => {
+  test("reads each look the script prints", () => {
+    expect(parseLook('{"looks":3,"maxGapMs":61,"windows":58,"fresh":[615,10609]}')).toEqual({
+      looks: 3,
+      maxGapMs: 61,
+      windows: 58,
+      fresh: [615, 10609],
+    });
+    expect(parseLook('{"looks":4,"maxGapMs":61,"windows":58,"fresh":[]}')?.fresh).toEqual([]);
+  });
+
+  test("takes nothing else osascript prints for a look", () => {
+    expect(
+      parseLook("execution error: Error: ReferenceError: Can't find variable (-2700)"),
+    ).toBeNull();
+    expect(parseLook("null")).toBeNull();
+    expect(parseLook('{"looks":3,"maxGapMs":61,"windows":58}')).toBeNull();
+    expect(parseLook('{"looks":3,"maxGapMs":61,"windows":58,"fresh":["615"]}')).toBeNull();
+    expect(parseLook('{"looks":"3","maxGapMs":61,"windows":58,"fresh":[]}')).toBeNull();
   });
 });

@@ -63,6 +63,7 @@ export class Steps {
   readonly records: StepRecord[] = [];
   readonly #checks: Checks;
   readonly #screenshots: string;
+  #current: string | null = null;
 
   /** Screenshots go into `folder`/screenshots. */
   constructor(checks: Checks, folder: string) {
@@ -71,15 +72,23 @@ export class Steps {
     mkdirSync(this.#screenshots, { recursive: true, mode: 0o700 });
   }
 
+  /** The step running now, or null between steps. */
+  get current(): string | null {
+    return this.#current;
+  }
+
   /** Runs `body`, then adds the step's one check; a throw fails it with what it had checked. */
   async run(name: string, body: (step: Step) => Promise<void>): Promise<boolean> {
     const step = new Step(this.#screenshots);
     const started = Date.now();
     let error: string | null = null;
+    this.#current = name;
     try {
       await body(step);
     } catch (thrown) {
       error = described(thrown);
+    } finally {
+      this.#current = null;
     }
     if (error === null && step.checks.length === 0) error = "it checked nothing";
     const pass = error === null && step.checks.every((check) => check.pass);
