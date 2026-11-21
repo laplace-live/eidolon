@@ -407,8 +407,9 @@ The backend runs on the environment main reads, plus four variables of its own, 
   inside Electron. A task's commands and MCP servers never get it, since `shellEnv()` passes listed
   names alone, and neither may any spawn that can start a program the owner chose, or an Electron
   app such as VS Code's `code` would run as Node. yt-dlp keeps it on purpose: its JS runtime is the
-  app binary. Electron's GUI starts through `electronEnv()` (`scripts/electron-env.ts`), which
-  deletes it, as `dev:desktop` does.
+  app binary. Electron's GUI starts without it: `dev:desktop` through `electronEnv()`
+  (`scripts/electron-env.ts`), which deletes it from a copy of the environment, and the smokes on
+  the environment `appEnv()` builds, which takes no `ELECTRON_*` name.
 - **Node mode's flags.** Every node-mode process the app starts carries `--disable-sigusr1
   --use-system-ca` before its script: `jsRuntime().args` for the jobs, grep's matcher and the
   `eidolon` command, and main's own copy, `BACKEND_RUNTIME_ARGS`, for the backend. With the

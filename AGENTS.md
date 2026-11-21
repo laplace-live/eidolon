@@ -469,10 +469,12 @@ the layout's one line.
   `--remote-debugging-pipe` exits.
 - **Main logs the backend's output but never a line that holds a link code:** `log-filter.ts` drops
   `Eidolon is ready:` and `Eidolon is already running:` after the controller has read them.
-- **Our own JS starts only through `jsRuntime()`, and Electron's GUI only through `electronEnv()`.**
-  Inside Electron `jsRuntime()` adds `ELECTRON_RUN_AS_NODE=1`, at whose every non-empty value, `0`
-  included, an Electron binary runs as Node: no spawn that can start a program the owner chose (a
-  task's command, an MCP server) may carry it, or VS Code's `code` would run as Node.
+- **Our own JS starts only through `jsRuntime()`, and Electron's GUI never with
+  `ELECTRON_RUN_AS_NODE`:** `electronEnv()` deletes it from a copy (`dev:desktop`), and the smokes'
+  `appEnv()` builds one without any `ELECTRON_*` name. Inside Electron `jsRuntime()` adds
+  `ELECTRON_RUN_AS_NODE=1`, at whose every non-empty value, `0` included, an Electron binary runs as
+  Node: no spawn that can start a program the owner chose (a task's command, an MCP server) may
+  carry it, or VS Code's `code` would run as Node.
 - **Every node-mode process the app starts carries `--disable-sigusr1 --use-system-ca`** before its
   script (yt-dlp's JS runtime, which yt-dlp starts, aside): `jsRuntime().args`, which main mirrors
   as `BACKEND_RUNTIME_ARGS`, a test holding the two equal. The inspect fuse doesn't reach node mode,
