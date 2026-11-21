@@ -1,6 +1,7 @@
 // A plain script that answers as the local server does (IPC listening, probe proofs, the Bearer,
 // status with a version, exit 75 on restart, a stop on the channel's close), on a temporary data
 // home, and a terminal's server started from it the way `bun run app` runs one.
+import "../../../packages/config/test/isolated-guard.ts";
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
