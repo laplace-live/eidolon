@@ -33,7 +33,8 @@ export function rotate(file: string, keep: number = LOG_ARCHIVES): void {
     }
     renameSync(aside, archiveName(file, 1));
   } catch {
-    // An archive held open on Windows: the log waits aside until the next rotation.
+    // An archive held open on Windows stops the shift: the log stays aside, and the next rotation
+    // replaces it.
   }
 }
 
