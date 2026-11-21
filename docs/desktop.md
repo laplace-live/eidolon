@@ -645,7 +645,8 @@ Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers
   macOS's `live.laplace.eidolon` preferences a packaged run writes.
 - **`focus.ts`:** on macOS in background mode, `lsappinfo front` every 50 ms: the app in front, by
   name or by a process the smoke started or one under it, fails the run, and so does its main
-  process not being an accessory (`UIElement`) once it runs.
+  process not being an accessory (`UIElement`) once it runs, or never being seen as one, and a
+  watch that sampled nothing.
 
 #### The dev smoke
 
@@ -706,8 +707,8 @@ and runs the app's binary in node mode beside it, as main runs the backend:
 - **The app:** it starts on the run's home and profile; its backend is the binary in node mode on
   the payload's `server.js`, under main, with no key from the smoke's own environment; main.log
   names a packaged build on the pinned Electron, and the server reports the payload's version; the
-  Bearer gets a session, none gets a 401, and main's probe proves the token; the status answers
-  and `/` is the web app.
+  Bearer gets a session, a wrong one or none a 401, and main's probe proves the token; the status
+  answers and `/` is the web app.
 - **Its natives in use:** a photo with EXIF orientation 6 comes back from a chat upright and bare,
   through the backend's sharp; the backend maps LanceDB from its start and sharp with the photo,
   from the payload; an `ingest-facts` job, the binary in node mode under the backend, writes her
@@ -715,7 +716,10 @@ and runs the app's binary in node mode beside it, as main runs the backend:
 - **A restart** through Settings' route keeps the port and changes the backend's pid.
 - **`--quit`:** the second launch and main exit 0, the backend stops on its stop trigger rather
   than being killed, nothing the app started is left running, and neither log holds an error line,
-  a link code or the token.
+  a link code or the token. What runs under the app is tracked at each step, and on macOS so is
+  any process whose environment names the run's folder, wherever it was reparented: `ps` shows
+  the environment of any but Apple's own binaries. The backend's error lines include a JavaScript
+  error printed past its logger.
 
 On Windows it first installs the NSIS setup, the only `.exe` in `.out`, silently for the user
 (`/S`), and smokes the installed `%LOCALAPPDATA%\Programs\eidolon\Eidolon.exe`. After the quit it
@@ -729,6 +733,8 @@ In CI, `ts.yml` runs the Vitest project with the rest of `bun run test`, where t
 skips. `.github/workflows/desktop.yml`, which `docker.yml` skips, builds, stages and packages the
 app unsigned on macOS arm64 and Windows x64, and runs the stage test, the Electron lane (on
 Windows, the tests `ts.yml`'s Windows job runs), the packaged smoke and the system CA proof on each.
+When the packaged smoke fails, its `results.json`, the profile's logs and the launches' output are
+uploaded as `<OS>-smoke-desktop`, without the run's home and its `local-token`.
 
 ### Running it by hand
 
