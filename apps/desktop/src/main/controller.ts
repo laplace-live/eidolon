@@ -525,11 +525,13 @@ export class BackendController {
 
   /** Probes every 500 ms for up to 60 s; null when nothing proved itself, or the flow moved on. */
   async #recover<T>(epoch: number, prove: () => Promise<T | null>): Promise<T | null> {
-    const deadline = Date.now() + RECOVER_MS;
+    // The timers' clock: the wall clock moves on while a Mac sleeps, and would end the wait at the
+    // first probe after it wakes.
+    const deadline = performance.now() + RECOVER_MS;
     for (;;) {
       const found = await prove();
       if (!this.#current(epoch) || found !== null) return found;
-      if (Date.now() + PROBE_EVERY_MS > deadline) return null;
+      if (performance.now() + PROBE_EVERY_MS > deadline) return null;
       await sleep(PROBE_EVERY_MS);
       if (!this.#current(epoch)) return null;
     }

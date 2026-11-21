@@ -281,7 +281,7 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
         unsubscribe();
         done(ready);
       };
-      const timer = setTimeout(() => finish(null), Math.max(0, deadline - Date.now()));
+      const timer = setTimeout(() => finish(null), Math.max(0, deadline - performance.now()));
       const unsubscribe = backend.subscribe((next) => {
         if (next.phase !== "holding") finish(next.phase === "ready" ? next : null);
       });
@@ -289,7 +289,9 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
   }
 
   async function toBackend(request: Request, url: URL): Promise<Response> {
-    const deadline = Date.now() + HOLD_MS;
+    // The timers' clock: the wall clock moves on while a Mac sleeps, and a request held again after
+    // it wakes would have no time left.
+    const deadline = performance.now() + HOLD_MS;
     for (;;) {
       const target = await settled(deadline);
       if (target === null) return noBackend(request);

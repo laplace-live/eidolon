@@ -732,6 +732,30 @@ describe("holding", () => {
     expect(sent).toEqual([]);
   });
 
+  test("counts the timers' time, which stops while a Mac sleeps, not the wall clock's", async () => {
+    const backend = new FakeBackend();
+    backend.set({ phase: "holding", owned: true });
+    const sent: string[] = [];
+    const fetch: UpstreamFetch = async (url) => {
+      sent.push(url.origin);
+      if (url.port !== "7860") return new Response("ok");
+      const cause = Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:7860"), {
+        code: "ECONNREFUSED",
+      });
+      throw new TypeError("fetch failed", { cause });
+    };
+    backend.onRefused = () => backend.set({ phase: "holding", owned: true });
+    const pending = forwarder(backend, { fetch }).handle(app("/api/local/status"));
+    await vi.advanceTimersByTimeAsync(1000);
+    // The lid closes for an hour, and on waking the server refuses it: held again, not given up.
+    vi.setSystemTime(Date.now() + 3_600_000);
+    backend.ready("http://127.0.0.1:7860");
+    await vi.advanceTimersByTimeAsync(1000);
+    backend.ready("http://127.0.0.1:7861");
+    expect((await pending).status).toBe(200);
+    expect(sent).toEqual(["http://127.0.0.1:7860", "http://127.0.0.1:7861"]);
+  });
+
   test("a hold that ends in failure answers at once", async () => {
     const backend = new FakeBackend();
     backend.set({ phase: "holding", owned: true });

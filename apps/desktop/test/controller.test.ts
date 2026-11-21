@@ -923,6 +923,57 @@ describe("our own server", () => {
   });
 });
 
+describe("the 60 s waits", () => {
+  test("count the timers' time, which stops while a Mac sleeps, not the wall clock's", async () => {
+    const waits: [string, (r: Rig) => Promise<BackendState>][] = [
+      [
+        "our own backend's hold",
+        async (r) => {
+          await running(r);
+          r.controller.refused("http://127.0.0.1:7860");
+          return { phase: "holding", owned: true };
+        },
+      ],
+      [
+        "an attached server's grace",
+        async (r) => {
+          const origin = await attached(r);
+          r.proves = () => false;
+          r.controller.refused(origin);
+          return { phase: "holding", owned: false };
+        },
+      ],
+      [
+        "the wait after a refused spawn",
+        async (r) => {
+          r.controller.start();
+          await settle();
+          r.info = { pid: 4242, port: 7861, host: "127.0.0.1" };
+          r.last().complain(
+            "eidolon: Eidolon is already running on this data home (pid 4242, port 7861); stop it first",
+          );
+          r.last().exit(2);
+          await settle();
+          return { phase: "starting" };
+        },
+      ],
+    ];
+    for (const [wait, begin] of waits) {
+      const r = rig();
+      const waiting = await begin(r);
+      const spawned = r.children.length;
+      await vi.advanceTimersByTimeAsync(1200);
+      // The lid closes for an hour.
+      vi.setSystemTime(Date.now() + 3_600_000);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect([wait, r.controller.state, r.children.length]).toEqual([wait, waiting, spawned]);
+      r.proves = () => true;
+      await vi.advanceTimersByTimeAsync(500);
+      expect([wait, r.controller.state.phase]).toEqual([wait, "ready"]);
+    }
+  });
+});
+
 describe("the stop (2.4)", () => {
   test("closes the IPC channel, then kill() after 10 s and SIGKILL 5 s later on macOS, then gives up", async () => {
     const r = rig();
