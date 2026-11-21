@@ -34,7 +34,8 @@ export function Stepper({ step }: { readonly step: Step }) {
   return (
     <ol
       aria-label={t`Setup Steps`}
-      className="flex items-center gap-2 md:sticky md:top-24 md:flex-col md:items-stretch md:gap-0"
+      // A browser scrolls the page under the 3.5rem header; the desktop app scrolls it below.
+      className="flex items-center gap-2 md:sticky md:top-24 md:flex-col md:items-stretch md:gap-0 shell:md:top-10"
     >
       {STEPS.map((name, index) => {
         const done = index < at;

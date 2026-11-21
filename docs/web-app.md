@@ -387,19 +387,21 @@ window drags by the row, while its links, buttons and fields keep their clicks. 
 sidebar's first row (the logo), each page's header (a chat's, the call's, setup's), and the bar
 above a page without one, `MobileBar`. A browser shows that bar only below `md`, with the sidebar's
 button and the logo; the desktop app keeps it from `md` up too, empty, 3.5rem tall: the height of a
-chat's header, and the height the window's caption buttons on Windows should take. The page's
-column starts below it, and what sticks in a page sticks below it (`shell:` in
-`components/section-layout.tsx`). An error, the sign-in screen and the loading spinner get a strip
-of their own (`WindowDragStrip`). The rows keep clear of the window's buttons, whose place the
-Window Controls Overlay gives as `env(titlebar-area-*)`:
+chat's header, and the height the window's caption buttons on Windows should take. The page
+scrolls in a box of its own below it, not in the frame (`PageLayout` in
+`components/app-shell.tsx`), as setup's page does below its header, so no row is in what scrolls;
+the skip link focuses that box, which the keys then scroll. An error, the sign-in screen and the
+loading spinner get a strip of their own (`WindowDragStrip`). The rows keep clear of the window's
+buttons, whose place the Window Controls Overlay gives as `env(titlebar-area-*)`:
 
 - **macOS:** the traffic lights sit at the top left. A page's row starts after them, measured from
   the window's edge: at the edge while the sidebar is a sheet, beside the 3rem rail when collapsed.
   The sidebar's first row starts below them, open or collapsed, so the lights sit in an empty strip
   above it. The facts editor's sheet, as wide as a narrow window, stops short of them, and the skip
   link shows below them. Fullscreen hides them, and drops every inset.
-- **Windows:** the caption buttons sit at the top right, where every page row ends before them. A
-  sheet at the right edge starts below them, and a dialog centres below them.
+- **Windows:** the caption buttons sit at the top right, where every page row ends before them.
+  They take every press over them, so a page's scrollbar, with its box, starts below them; a sheet
+  at the right edge starts below them, and a dialog centres below them.
 - Menus, popovers, dialogs, sheets and tooltips portal out of `#root` and never drag. A press on a
   drag row never reaches the page, so while one of them is open no row drags, and a press there
   closes it.

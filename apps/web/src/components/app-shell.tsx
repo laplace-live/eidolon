@@ -36,13 +36,22 @@ function CloseOnNavigate() {
   return null;
 }
 
-/** A page that scrolls in the frame, in a column. */
+/**
+ * A page in a column, which scrolls in the frame, or in the desktop app in a box below MobileBar:
+ * there the frame's scrollbar would run under Windows' caption buttons, which take a press on it.
+ */
 export function PageLayout() {
   return (
     <>
       <MobileBar />
-      <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 shell:md:pt-0">
-        <Outlet />
+      <div
+        id="content"
+        tabIndex={-1}
+        className="outline-none shell:min-h-0 shell:flex-1 shell:overflow-y-auto"
+      >
+        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 shell:md:pt-0">
+          <Outlet />
+        </div>
       </div>
     </>
   );
@@ -73,7 +82,11 @@ export function AppShell() {
     >
       <button
         type="button"
-        onClick={() => main.current?.focus()}
+        // The keys scroll the box around the focus: in the desktop app, a page's own. Focused with
+        // preventScroll, or below md a browser would slide the page's top under MobileBar.
+        onClick={() =>
+          (document.getElementById("content") ?? main.current)?.focus({ preventScroll: true })
+        }
         className="sr-only font-medium text-sm focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:shadow-md focus:outline-none focus:ring-[3px] focus:ring-ring/50 shell:focus:top-[calc(env(titlebar-area-height,0px)+0.75rem)]"
       >
         {t`Skip to content`}
