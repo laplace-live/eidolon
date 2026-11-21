@@ -11,8 +11,9 @@ import { type LoginShellFailure, PROBE_ENVIRONMENT, readLoginShell } from "./log
 /** They describe the probe's own shell process, not the owner's configuration. */
 const SESSION = new Set(["PWD", "OLDPWD", "SHLVL", "_", ...Object.keys(PROBE_ENVIRONMENT)]);
 
-/** As @eidolon/config's envFlag reads a flag that defaults to on. */
+/** As @eidolon/config's envFlag reads a flag. */
 const FLAG_OFF = new Set(["false", "0", "no", "off"]);
+const FLAG_ON = new Set(["true", "1", "yes", "on"]);
 
 /**
  * How long the startup read stands in for the first spawn's: a cold start spawns within a hint
@@ -75,13 +76,28 @@ function write(
   env[key] = value;
 }
 
+/**
+ * A flag in the launch environment, read as @eidolon/config's envFlag reads one: a default-on flag
+ * turns off only for false, 0, no or off, a default-off one on only for true, 1, yes or on, in any
+ * case and spacing. Blank counts as unset.
+ */
+export function launchFlag(
+  launch: NodeJS.ProcessEnv,
+  name: string,
+  fallback: boolean,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  const raw = read(launch, name, platform)?.trim().toLowerCase();
+  if (raw === undefined || raw === "") return fallback;
+  return fallback ? !FLAG_OFF.has(raw) : FLAG_ON.has(raw);
+}
+
 /** `EIDOLON_DESKTOP_LOGIN_SHELL` turned off in the launch environment, as both smokes turn it. */
 export function loginShellOff(
   launch: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform,
 ): boolean {
-  const raw = read(launch, "EIDOLON_DESKTOP_LOGIN_SHELL", platform)?.trim().toLowerCase();
-  return raw !== undefined && FLAG_OFF.has(raw);
+  return !launchFlag(launch, "EIDOLON_DESKTOP_LOGIN_SHELL", true, platform);
 }
 
 /**

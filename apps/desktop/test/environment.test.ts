@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { backendEnv } from "../src/main/controller.ts";
 import {
+  launchFlag,
   loginShellOff,
   mergeShellEnvironment,
   readEnvironment,
@@ -132,6 +133,19 @@ test.skipIf(process.platform === "win32")(
     ).toBe("/a");
   },
 );
+
+test("a launch flag reads as envFlag does, on and off both ways, blank as unset", () => {
+  const flag = (value: string | undefined, fallback: boolean) =>
+    launchFlag(value === undefined ? {} : { FLAG: value }, "FLAG", fallback, "darwin");
+  for (const fallback of [false, true]) {
+    for (const on of ["1", "true", " Yes ", "ON"]) expect(flag(on, fallback), on).toBe(true);
+    for (const off of ["0", "false", " no ", "OFF"]) expect(flag(off, fallback), off).toBe(false);
+    for (const unset of [undefined, "", "  "]) expect(flag(unset, fallback)).toBe(fallback);
+  }
+  // Anything else leaves a flag as it defaults.
+  expect(flag("maybe", false)).toBe(false);
+  expect(flag("maybe", true)).toBe(true);
+});
 
 describe("loginShellOff", () => {
   test("only EIDOLON_DESKTOP_LOGIN_SHELL off in the launch environment turns the read off", () => {
