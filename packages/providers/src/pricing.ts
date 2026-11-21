@@ -28,8 +28,9 @@ export function priceOf(
 
 const n = (value: number | undefined): number => (value !== undefined && value > 0 ? value : 0);
 
-/** What `units` cost at `price`, in USD; null when they hold nothing the price charges for. */
-export function costOf(price: Price, units: Units): number | null {
+/** What `units` cost at `price`, in USD; null without a price, or units it doesn't charge for. */
+export function costOf(price: Price | undefined, units: Units): number | null {
+  if (price === undefined) return null;
   switch (price.unit) {
     case "tokens": {
       const counted =

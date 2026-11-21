@@ -8,7 +8,11 @@ import { Link } from "react-router";
 import { ErrorAlert } from "@/components/error-alert";
 import { FieldSkeletons } from "@/components/section-card";
 import { AccountKeyField, NoKeyField } from "@/components/settings-form/account-key-field";
-import { effectiveProvider } from "@/components/settings-form/controls";
+import {
+  effectiveProvider,
+  effectiveProviderType,
+  REINDEX_PATHS,
+} from "@/components/settings-form/controls";
 import { refreshSettings, settingsQuery } from "@/components/settings-form/queries";
 import { ReindexDialog } from "@/components/settings-form/reindex-dialog";
 import { useAccountKeys } from "@/components/settings-form/use-account-keys";
@@ -28,7 +32,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { accountsQuery } from "@/lib/accounts";
 import { type AccountView, type ApiError, asApiError, call, type SettingRow } from "@/lib/api";
 import { listOf, ROLE_LABELS } from "@/lib/labels";
-import { providerName, providerOfAccount, roleById } from "@/lib/providers";
+import { providerName, providerOfAccount, roleById, SETUP_ROLES } from "@/lib/providers";
 import { statusQuery } from "@/lib/query";
 import {
   callNeeds,
@@ -36,7 +40,6 @@ import {
   keyNeeds,
   missingFields,
   modelAfter,
-  PICKS,
   type Picked,
   type PickedRole,
   pickChanges,
@@ -166,7 +169,7 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
   const realtime = status.data?.call.realtime
     ? effectiveProvider(roleById("realtime"), rows, {})
     : null;
-  const picks = PICKS.filter((role) => realtime === null || !callNeeds(role));
+  const picks = SETUP_ROLES.filter((role) => realtime === null || !callNeeds(role));
   const required = picks.filter(callNeeds);
   const optional = picks.filter((role) => !callNeeds(role));
   // Reranking, unless she turned it off, and selfies, once she has an outfit to draw.
@@ -215,8 +218,14 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
     setTried(true);
     if (!settings.data || modelless.length > 0 || incomplete) return;
     const changes = pickChanges(rows, drafts, listed);
-    // A new install has no index or memories yet for another embedding model to cost.
-    if (!confirmed && newInstall.current !== true && "embeddings.provider" in changes.app) {
+    // As Settings asks: another embedding provider or model costs every index and the memories
+    // kept, which a new install has none of yet; another account of the same provider costs nothing.
+    const embeddings = roleById("embeddings");
+    const reembeds =
+      effectiveProviderType(embeddings, rows, {}, listed) !==
+        effectiveProviderType(embeddings, rows, drafts, listed) ||
+      REINDEX_PATHS.some((path) => path in changes.app);
+    if (!confirmed && newInstall.current !== true && reembeds) {
       setConfirming(true);
       return;
     }

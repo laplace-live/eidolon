@@ -27,7 +27,7 @@ import { addAvatar } from "./avatar";
 import { AvatarPicker } from "./avatar-picker";
 import { MandarinNote, PersonaFields } from "./persona-fields";
 import { activatePersona, createPersona, refreshPersonas } from "./personas";
-import { type ChosenVoice, VoiceChoice } from "./voice-choice";
+import { VoiceChoice } from "./voice-choice";
 import { EMPTY_PERSONA, type PersonaDraft, personaErrors, voiceProvider } from "./wizard";
 
 /**
@@ -52,13 +52,13 @@ export function NewPersonaDialog({
   const blank = () => ({ ...EMPTY_PERSONA, timezone: browserTimeZone() });
   const [draft, setDraft] = useState<PersonaDraft>(blank);
   const [avatar, setAvatar] = useState<File | null>(null);
-  const [voice, setVoice] = useState<ChosenVoice | null>(null);
+  const [voice, setVoice] = useState<string | null>(null);
   const [activate, setActivate] = useState(true);
   const [showErrors, setShowErrors] = useState(false);
   const taken = personas.data?.personas.map((persona) => persona.id) ?? [];
   const provider = voiceProvider(active.data?.settings ?? [], accounts.data?.accounts);
   const fallback = defaultVoice(providerById(provider)?.offers.tts) ?? null;
-  const picked = voice?.id.trim() ?? "";
+  const picked = voice?.trim() ?? "";
   const voiceId = picked === "" ? fallback : picked;
   const her = personas.data?.personas.find((persona) => persona.id === personas.data?.active);
   const herName = her ? her.shortName || her.name : "";
@@ -150,7 +150,7 @@ export function NewPersonaDialog({
             )}
             <VoiceChoice
               provider={provider}
-              value={voice?.id ?? null}
+              value={voice}
               fallback={fallback}
               onChange={setVoice}
               disabled={create.isPending || active.data === undefined}

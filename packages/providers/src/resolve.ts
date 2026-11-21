@@ -10,6 +10,7 @@ import {
   LEGACY_VOICE_ENV,
   type Offer,
   type Provider,
+  type ProviderId,
   REALTIME_VOICE_ENV,
   type Role,
   type RoleId,
@@ -37,6 +38,8 @@ export interface Selection {
   /** The provider's own settings, by field key. */
   readonly options: Readonly<Record<string, string>>;
 }
+
+export type KeyedSelection = Selection & { readonly apiKey: string };
 
 const CATEGORY_NAMES: Readonly<Record<Category, string>> = {
   llm: "chat model",
@@ -232,6 +235,24 @@ export function missingKey(selection: Selection): ProviderConfigError {
   return new ProviderConfigError(
     `${provider.name} needs an API key: set ${keyName} in credentials.json or the environment${alone}`,
   );
+}
+
+/**
+ * `selection`'s model from a kind's `table`, which names the kind as `what`; throws before any
+ * request when its provider has none there, or no key.
+ */
+export function openModel<O, M>(
+  table: { readonly [P in ProviderId]?: (selection: KeyedSelection, options: O) => M },
+  what: string,
+  selection: Selection,
+  options: O,
+): M {
+  const open = table[selection.provider.id];
+  if (open === undefined) {
+    throw new ProviderConfigError(`${selection.provider.name} has no ${what} in Eidolon`);
+  }
+  if (!hasKey(selection)) throw missingKey(selection);
+  return open(selection as KeyedSelection, options);
 }
 
 /** The TTS voice: TTS_VOICE_ID, Fish's FISH_VOICE_ID while Fish speaks, else the provider's own. */

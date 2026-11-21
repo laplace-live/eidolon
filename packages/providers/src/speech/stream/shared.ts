@@ -10,7 +10,7 @@ import { spokenLanguage } from "../../stt/index.ts";
 import { connectWs, type WsConnection, type WsData } from "../../ws.ts";
 import type { UtteranceAudio } from "./index.ts";
 
-export type KeyedSelection = Selection & { readonly apiKey: string };
+export type { KeyedSelection } from "../../resolve.ts";
 
 /** Speech that owes audio and sends none for this long has stalled. */
 export const SPEECH_STALL_MS = 15_000;

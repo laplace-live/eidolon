@@ -246,8 +246,7 @@ export function glossaryPath(persona: string): string {
 
 /** What `durationSec` of audio costs with `model` at the catalog's price; null when it has none. */
 export function estimateTranscribeUsd(durationSec: number, model: string): number | null {
-  const price = priceOf("soniox", "transcription", model);
-  return price === undefined ? null : costOf(price, { audioSeconds: durationSec });
+  return costOf(priceOf("soniox", "transcription", model), { audioSeconds: durationSec });
 }
 
 /**

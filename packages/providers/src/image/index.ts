@@ -1,7 +1,7 @@
 // Image models: one request draws images from a prompt and reference images. @eidolon/imagegen's
 // generate(), which the selfie tool and laplace-generate-image share, draws through this interface.
 import type { ProviderId } from "../catalog.ts";
-import { hasKey, missingKey, ProviderConfigError, type Selection } from "../resolve.ts";
+import { type KeyedSelection, openModel, type Selection } from "../resolve.ts";
 import { imagesUrl, openRouterImages } from "./openrouter.ts";
 
 /** One reference image: an http(s) URL, or a `data:` URL carrying its real media type. */
@@ -48,8 +48,6 @@ export interface ImageModelOptions {
   readonly fetch?: typeof fetch;
 }
 
-type KeyedSelection = Selection & { readonly apiKey: string };
-
 /** Each provider's image models, by catalog id: one for every provider whose offer has them. */
 export const IMAGE_MODELS: {
   readonly [P in ProviderId]?: (
@@ -68,10 +66,5 @@ export const IMAGE_MODELS: {
 
 /** `selection`'s image model; throws before any request when it has no key. */
 export function imageModel(selection: Selection, options: ImageModelOptions = {}): ImageModel {
-  const open = IMAGE_MODELS[selection.provider.id];
-  if (open === undefined) {
-    throw new ProviderConfigError(`${selection.provider.name} has no image models in Eidolon`);
-  }
-  if (!hasKey(selection)) throw missingKey(selection);
-  return open(selection as KeyedSelection, options);
+  return openModel(IMAGE_MODELS, "image models", selection, options);
 }

@@ -29,18 +29,18 @@ import type { EmbeddingModel, EmbeddingRetries } from "./index.ts";
 // the ~60s Vertex AI quota window to reset, and often several of them since
 // the OpenRouter pool is shared — exponential backoff alone exhausts in ~30s
 // and kills the run on the first quota incident.
-export const MAX_EMBED_DATA_RETRIES = 5;
-export const EMBED_RETRY_BASE_DELAY = 1.0;
-export const MAX_EMBED_QUOTA_RETRIES = 10;
-export const EMBED_QUOTA_BACKOFF = 60.0;
+const MAX_EMBED_DATA_RETRIES = 5;
+const EMBED_RETRY_BASE_DELAY = 1.0;
+const MAX_EMBED_QUOTA_RETRIES = 10;
+const EMBED_QUOTA_BACKOFF = 60.0;
 
 // The OpenAI SDK's transport policy with 5 retries: connection errors, timeouts, 408, 409, 429 and
 // 5xx are retried, the timeout is 600 s, and Retry-After is honoured up to 120 s.
-export const EMBED_HTTP_MAX_RETRIES = 5;
-export const EMBED_HTTP_TIMEOUT_SEC = 600;
+const EMBED_HTTP_MAX_RETRIES = 5;
+const EMBED_HTTP_TIMEOUT_SEC = 600;
 
 /** Every budget above: what a request gets unless its caller asks for less. */
-export const EMBED_RETRIES: EmbeddingRetries = {
+const EMBED_RETRIES: EmbeddingRetries = {
   http: EMBED_HTTP_MAX_RETRIES,
   empty: MAX_EMBED_DATA_RETRIES,
   quota: MAX_EMBED_QUOTA_RETRIES,

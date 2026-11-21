@@ -164,7 +164,7 @@ export async function hybridSearch(
       const results = await reranker.rerank(
         tokens,
         merged.map((row) => row.text ?? null),
-        signal ? { signal } : {},
+        signal,
       );
       const rows = results.map(({ index, relevanceScore }) => {
         const row = merged[index];

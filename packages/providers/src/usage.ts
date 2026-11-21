@@ -78,8 +78,7 @@ export function usageRecord(report: UsageReport, at: number = Date.now()): Usage
       (report.requested === undefined
         ? undefined
         : priceOf(report.provider, category, report.requested, at));
-    const catalog = price === undefined ? null : costOf(price, report.units);
-    const estimate = catalog ?? report.estimatedUsd ?? null;
+    const estimate = costOf(price, report.units) ?? report.estimatedUsd ?? null;
     if (estimate !== null && Number.isFinite(estimate)) {
       costUsd = estimate;
       costSource = "estimated";

@@ -3,12 +3,14 @@
 import {
   extractCostUsd,
   httpxStatusMessage,
+  isJsonObject,
   isPlainObject,
   openrouterHeaders,
   pyError,
   pyParseFloat,
   pyStrRepr,
   pyTypeName,
+  withoutTrailingSlashes,
 } from "@eidolon/config";
 import { reportUsage } from "../usage.ts";
 import type { DecisionAnswers, DecisionModel, DecisionModelOptions } from "./index.ts";
@@ -17,7 +19,7 @@ export const OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisio
 
 /** OpenRouter's Decisions route sits beside its v1 API, not under it. */
 export function decisionsUrl(baseUrl: string): string {
-  return `${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/alpha/decisions`;
+  return `${withoutTrailingSlashes(baseUrl).replace(/\/v1$/, "")}/alpha/decisions`;
 }
 
 /** Reports one Decisions answer's usage to the ledger, as the gate's role. */
@@ -52,15 +54,15 @@ function pyFloat(value: unknown): number {
 }
 
 function subscript(container: unknown, key: string): unknown {
-  if (typeof container !== "object" || container === null || Array.isArray(container)) {
+  if (!isJsonObject(container)) {
     throw pyError("TypeError", `'${pyTypeName(container)}' object is not subscriptable`);
   }
   if (!Object.hasOwn(container, key)) throw pyError("KeyError", key);
-  return (container as Record<string, unknown>)[key];
+  return container[key];
 }
 
 /** Question `name`'s noul in a Decisions answer; throws on a missing or malformed one. */
-export function noulOf(body: unknown, name: string): number {
+function noulOf(body: unknown, name: string): number {
   return pyFloat(subscript(subscript(subscript(body, "answers"), name), "noul"));
 }
 

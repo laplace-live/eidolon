@@ -31,7 +31,7 @@ import {
 } from "@eidolon/config";
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { indexMetaPath, ingestFacts } from "@eidolon/ingest";
-import { trySelect } from "@eidolon/providers";
+import { roleById, SETUP_ROLES, trySelect } from "@eidolon/providers";
 import {
   CATALOG_FILENAME,
   INDEX_DIR,
@@ -297,16 +297,9 @@ export function starterPrompt(name: string, fans: string): string {
  * What a new persona takes from the active one's persona.yaml: the accounts and models the setup
  * wizard picks for her, who hears, thinks, speaks and decides.
  */
-const STARTER_PATHS: ReadonlySet<string> = new Set([
-  "hearing.provider",
-  "hearing.model",
-  "mind.provider",
-  "mind.model",
-  "voice.provider",
-  "voice.model",
-  "knowledge.gate.provider",
-  "knowledge.gate.model",
-]);
+const STARTER_PATHS: ReadonlySet<string> = new Set(
+  SETUP_ROLES.map(roleById).flatMap(({ path }) => [`${path}.provider`, `${path}.model`]),
+);
 
 /** STARTER_PATHS as persona `from`'s persona.yaml sets them, so a new persona runs on her keys. */
 export function starterSettings(from: string): Tree {

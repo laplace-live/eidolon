@@ -1,7 +1,7 @@
 // Decision models: one request answers named questions about one state, each with the probability
 // of yes. The retrieval gate and a group chat's director ask them through this interface alone.
 import type { ProviderId } from "../catalog.ts";
-import { hasKey, missingKey, ProviderConfigError, type Selection, trySelect } from "../resolve.ts";
+import { hasKey, type KeyedSelection, openModel, type Selection, trySelect } from "../resolve.ts";
 import { decisionsUrl, openRouterDecisions } from "./openrouter.ts";
 
 export interface DecisionQuestion {
@@ -36,8 +36,6 @@ export interface DecisionModelOptions {
   readonly fetch?: typeof fetch;
 }
 
-type KeyedSelection = Selection & { readonly apiKey: string };
-
 /** Each provider's decision models, by catalog id: one for every provider whose offer has them. */
 export const DECISION_MODELS: {
   readonly [P in ProviderId]?: (
@@ -56,12 +54,7 @@ export const DECISION_MODELS: {
 
 /** `selection`'s decision model; throws before any request when it has no key. */
 export function decisionModel(selection: Selection, options: DecisionModelOptions): DecisionModel {
-  const open = DECISION_MODELS[selection.provider.id];
-  if (open === undefined) {
-    throw new ProviderConfigError(`${selection.provider.name} has no decision models in Eidolon`);
-  }
-  if (!hasKey(selection)) throw missingKey(selection);
-  return open(selection as KeyedSelection, options);
+  return openModel(DECISION_MODELS, "decision models", selection, options);
 }
 
 /**

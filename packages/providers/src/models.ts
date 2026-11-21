@@ -91,24 +91,17 @@ function geminiKinds(models: ListedModel[], category: Category): ListedModel[] {
 }
 
 /** How a provider lists `category`'s models for an account at `base`; null where it lists none. */
-type Listing = (
-  category: Category,
-  base: string | undefined,
-  key: string | undefined,
-) => Request | null;
+type Listing = (category: Category, base: string, key: string | undefined) => Request | null;
 
 /** An OpenAI-compatible API's `/models`, its kinds told apart by `kinds`. */
 function compatible(
   kinds: (models: ListedModel[], category: Category) => ListedModel[] = (models) => models,
 ): Listing {
-  return (category, base, key) =>
-    base === undefined
-      ? null
-      : {
-          url: `${base}/models`,
-          headers: bearer(key),
-          parse: (body) => kinds(openaiData(body), category),
-        };
+  return (category, base, key) => ({
+    url: `${base}/models`,
+    headers: bearer(key),
+    parse: (body) => kinds(openaiData(body), category),
+  });
 }
 
 // OpenRouter's public lists, one route a kind.
@@ -127,19 +120,16 @@ const OPENROUTER_PATHS: Partial<Record<Category, string>> = {
 export const LISTINGS: { readonly [P in ProviderId]?: Listing } = {
   openrouter: (category, base, key) => {
     const path = OPENROUTER_PATHS[category];
-    return base === undefined || path === undefined
+    return path === undefined
       ? null
       : { url: base + path, headers: bearer(key), parse: openaiData };
   },
   openai: compatible(openaiKinds),
-  anthropic: (_category, base, key) =>
-    base === undefined
-      ? null
-      : {
-          url: `${base}/models?limit=1000`,
-          headers: { ...(key ? { "x-api-key": key } : {}), "anthropic-version": ANTHROPIC_VERSION },
-          parse: (body) => named(rows(body, "data"), "id", "display_name"),
-        },
+  anthropic: (_category, base, key) => ({
+    url: `${base}/models?limit=1000`,
+    headers: { ...header("x-api-key", key), "anthropic-version": ANTHROPIC_VERSION },
+    parse: (body) => named(rows(body, "data"), "id", "display_name"),
+  }),
   google: compatible(geminiKinds),
   deepseek: compatible(),
   xai: compatible(),
@@ -148,27 +138,24 @@ export const LISTINGS: { readonly [P in ProviderId]?: Listing } = {
   zhipu: compatible(),
   ollama: compatible(),
   "openai-compatible": compatible(),
-  soniox: (category, base, key) =>
-    base === undefined
-      ? null
-      : {
-          url: `${base}/models`,
-          headers: bearer(key),
-          parse: (body) => {
-            const mode = category === "transcription" ? "async" : "real_time";
-            return named(
-              rows(body, "models").filter((row) =>
-                category === "tts"
-                  ? typeof row.id === "string" && row.id.startsWith("tts")
-                  : row.transcription_mode === mode,
-              ),
-              "id",
-              "name",
-            );
-          },
-        },
+  soniox: (category, base, key) => ({
+    url: `${base}/models`,
+    headers: bearer(key),
+    parse: (body) => {
+      const mode = category === "transcription" ? "async" : "real_time";
+      return named(
+        rows(body, "models").filter((row) =>
+          category === "tts"
+            ? typeof row.id === "string" && row.id.startsWith("tts")
+            : row.transcription_mode === mode,
+        ),
+        "id",
+        "name",
+      );
+    },
+  }),
   elevenlabs: (category, base, key) =>
-    category !== "tts" || base === undefined
+    category !== "tts"
       ? null
       : {
           url: `${base}/v1/models`,
@@ -181,7 +168,7 @@ export const LISTINGS: { readonly [P in ProviderId]?: Listing } = {
             ),
         },
   deepgram: (category, base, key) =>
-    category !== "stt" || base === undefined
+    category !== "stt"
       ? null
       : {
           url: `${base}/v1/models`,
@@ -193,7 +180,7 @@ export const LISTINGS: { readonly [P in ProviderId]?: Listing } = {
           ],
         },
   cohere: (category, base, key) =>
-    category !== "rerank" || base === undefined
+    category !== "rerank"
       ? null
       : {
           // Its listing is under v1 whatever version the account's base names.
@@ -205,7 +192,8 @@ export const LISTINGS: { readonly [P in ProviderId]?: Listing } = {
 
 /** How `account`'s provider lists `category`'s models; null where it has no listing. */
 function requestFor(account: Account, category: Category): Request | null {
-  const base = account.baseUrl === undefined ? undefined : withoutTrailingSlashes(account.baseUrl);
+  if (account.baseUrl === undefined) return null;
+  const base = withoutTrailingSlashes(account.baseUrl);
   return LISTINGS[account.provider.id]?.(category, base, account.apiKey) ?? null;
 }
 

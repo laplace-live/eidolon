@@ -9,10 +9,12 @@ import {
   PROVIDERS,
   type Provider,
   providerById,
+  providersFor,
   ROLES,
   type Role,
   type RoleId,
   roleById,
+  SETUP_ROLES,
 } from "@eidolon/providers/catalog";
 
 export type { Category, Provider, Role, RoleId };
@@ -23,8 +25,10 @@ export {
   modelInfo,
   PROVIDERS,
   providerById,
+  providersFor,
   ROLES,
   roleById,
+  SETUP_ROLES,
 };
 
 /** The role whose provider row is `env`, such as LLM_PROVIDER's mind. */

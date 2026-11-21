@@ -85,7 +85,7 @@ export function cohereRerank(options: CohereRerankOptions): RerankModel {
   return {
     provider,
     model,
-    async rerank(query, documents, { signal } = {}) {
+    async rerank(query, documents, signal) {
       if (documents.length === 0) return [];
       const payload: Record<string, unknown> = { model, query, documents };
       if (options.topN !== undefined) payload.top_n = options.topN;

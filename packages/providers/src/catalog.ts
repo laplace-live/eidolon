@@ -1183,3 +1183,15 @@ export const REALTIME_VOICE_ENV = "REALTIME_VOICE";
 
 /** The roles a call runs, which a realtime model narrows to itself and the knowledge roles. */
 export const CALL_ROLES: readonly RoleId[] = ["hearing", "mind", "voice"];
+
+/**
+ * The roles the local app's setup picks an account for, a call's three first; a new persona starts
+ * on the active one's picks for those of them that are hers.
+ */
+export const SETUP_ROLES = [
+  "hearing",
+  "mind",
+  "voice",
+  "embeddings",
+  "gate",
+] as const satisfies readonly RoleId[];

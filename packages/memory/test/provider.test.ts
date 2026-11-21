@@ -537,6 +537,24 @@ describe("SharedEngine", () => {
     expect(opened).toHaveLength(1);
   });
 
+  test("the embeddings account's name and its key's source open no other engine", async () => {
+    const { shared, opened } = opener();
+    const first = await shared.get(CONFIG);
+    const { selection } = CONFIG.embedder;
+    const account = { ...selection.account, name: "Mine", keySource: "credentials" as const };
+    const renamed = await shared.get({
+      ...CONFIG,
+      embedder: { ...CONFIG.embedder, selection: { ...selection, account } },
+    });
+    const otherModel = await shared.get({
+      ...CONFIG,
+      embedder: { ...CONFIG.embedder, selection: { ...selection, model: "other" } },
+    });
+    expect(renamed.engine).toBe(first.engine);
+    expect(otherModel.engine).not.toBe(first.engine);
+    expect(opened).toHaveLength(2);
+  });
+
   test("concurrent gets of one configuration open it once", async () => {
     const { shared, opened } = opener();
     const [a, b] = await Promise.all([shared.get(CONFIG), shared.get(withLlm({}))]);

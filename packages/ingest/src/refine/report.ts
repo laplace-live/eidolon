@@ -126,9 +126,7 @@ function guessTokens(chunks: number, chars: number): { tokensIn: number; tokensO
 }
 
 function guessUsd(price: Price | undefined, tokensIn: number, tokensOut: number): number | null {
-  return price === undefined
-    ? null
-    : costOf(price, { inputTokens: tokensIn, outputTokens: tokensOut });
+  return costOf(price, { inputTokens: tokensIn, outputTokens: tokensOut });
 }
 
 export interface DryRunReport {

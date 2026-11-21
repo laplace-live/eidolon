@@ -15,12 +15,6 @@ import {
 import { VoicePicker } from "@/components/voice-picker";
 import { providerById, providerName } from "@/lib/providers";
 
-export interface ChosenVoice {
-  readonly id: string;
-  /** Fish's name for it. */
-  readonly title?: string;
-}
-
 export function VoiceChoice({
   provider,
   value,
@@ -34,7 +28,7 @@ export function VoiceChoice({
   readonly value: string | null;
   /** What she speaks with while none is chosen: hers, the environment's, or the provider's own. */
   readonly fallback: string | null;
-  readonly onChange: (voice: ChosenVoice) => void;
+  readonly onChange: (voice: string) => void;
   readonly disabled?: boolean;
 }) {
   const { t } = useLingui();
@@ -46,7 +40,7 @@ export function VoiceChoice({
     return (
       <VoicePicker
         value={value ?? fallback}
-        onChange={(voice) => onChange({ id: voice.id, title: voice.title })}
+        onChange={(voice) => onChange(voice.id)}
         disabled={disabled}
       />
     );
@@ -55,11 +49,7 @@ export function VoiceChoice({
     return (
       <Field className="max-w-xs">
         <FieldLabel htmlFor={id}>{t`Voice`}</FieldLabel>
-        <Select
-          value={value ?? fallback ?? ""}
-          onValueChange={(next) => onChange({ id: next })}
-          disabled={disabled}
-        >
+        <Select value={value ?? fallback ?? ""} onValueChange={onChange} disabled={disabled}>
           <SelectTrigger id={id} className="w-full">
             <SelectValue placeholder={t`Pick a voice`} />
           </SelectTrigger>
@@ -85,7 +75,7 @@ export function VoiceChoice({
         spellCheck={false}
         value={value ?? ""}
         placeholder={fallback ?? ""}
-        onChange={(event) => onChange({ id: event.target.value })}
+        onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
       />
       <FieldDescription className="inline-links">

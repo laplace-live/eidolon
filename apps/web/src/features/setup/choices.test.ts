@@ -1,14 +1,13 @@
 import { SETTINGS } from "@eidolon/config";
 import { describe, expect, test } from "vitest";
 import type { AccountView, SettingRow } from "../../lib/api";
-import { roleById } from "../../lib/providers";
+import { roleById, SETUP_ROLES } from "../../lib/providers";
 import {
   callNeeds,
   choicesFor,
   keyNeeds,
   missingFields,
   modelAfter,
-  PICKS,
   pickChanges,
   RIDERS,
 } from "./choices";
@@ -234,8 +233,8 @@ describe("the keys the picks need", () => {
   });
 
   test("the picks put a call's roles first, and every role but those is optional", () => {
-    expect(PICKS.filter(callNeeds)).toEqual(["hearing", "mind", "voice"]);
-    expect([...PICKS, ...RIDERS].filter((role) => !callNeeds(role))).toEqual([
+    expect(SETUP_ROLES.filter(callNeeds)).toEqual(["hearing", "mind", "voice"]);
+    expect([...SETUP_ROLES, ...RIDERS].filter((role) => !callNeeds(role))).toEqual([
       "embeddings",
       "gate",
       "rerank",

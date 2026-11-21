@@ -20,7 +20,7 @@ import {
   saveVoice,
 } from "./personas";
 import { StepCard } from "./step-card";
-import { type ChosenVoice, VoiceChoice } from "./voice-choice";
+import { VoiceChoice } from "./voice-choice";
 import { inheritedValue, ownValue, voiceProvider } from "./wizard";
 
 const VOICE = "voice.voiceId";
@@ -46,7 +46,7 @@ export function VoiceStep({
   const settings = useQuery(settingsQuery(existing?.id));
   const personas = useQuery(personasQuery);
   const accounts = useQuery(accountsQuery);
-  const [chosen, setChosen] = useState<ChosenVoice | null>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
   // Kept so a retry after a refused switch doesn't create her twice.
   const [created, setCreated] = useState<PersonaRef | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,7 +62,7 @@ export function VoiceStep({
   const env = row?.env ?? "";
   const provider = voiceProvider(settings.data?.settings ?? [], accounts.data?.accounts);
   const fallback = current ?? inherited ?? defaultVoice(providerById(provider)?.offers.tts) ?? null;
-  const picked = chosen?.id.trim() ?? "";
+  const picked = chosen?.trim() ?? "";
   const voiceId = picked === "" ? fallback : picked;
   const ready = settings.data !== undefined && voiceId !== null;
 
@@ -121,7 +121,7 @@ export function VoiceStep({
       {settings.data !== undefined && (
         <VoiceChoice
           provider={provider}
-          value={chosen?.id ?? null}
+          value={chosen}
           fallback={fallback}
           onChange={setChosen}
           disabled={busy}

@@ -1,7 +1,7 @@
 // Rerankers: one request orders documents by how well each answers a query. Hybrid search reranks
 // its candidates through this interface alone.
 import type { ProviderId } from "../catalog.ts";
-import { hasKey, missingKey, ProviderConfigError, type Selection } from "../resolve.ts";
+import { type KeyedSelection, openModel, type Selection } from "../resolve.ts";
 import { cohereRerank } from "./cohere.ts";
 import { openRouterRerank } from "./openrouter.ts";
 
@@ -22,15 +22,13 @@ export interface RerankModel {
   rerank(
     query: string,
     documents: readonly unknown[],
-    options?: { readonly signal?: AbortSignal },
+    signal?: AbortSignal,
   ): Promise<RerankResult[]>;
 }
 
 export interface RerankModelOptions {
   readonly fetch?: typeof fetch;
 }
-
-type KeyedSelection = Selection & { readonly apiKey: string };
 
 /** Each provider's rerankers, by catalog id: one for every provider whose offer has them. */
 export const RERANK_MODELS: {
@@ -57,10 +55,5 @@ export const RERANK_MODELS: {
 
 /** `selection`'s reranker; throws before any request when it has no key. */
 export function rerankModel(selection: Selection, options: RerankModelOptions = {}): RerankModel {
-  const open = RERANK_MODELS[selection.provider.id];
-  if (open === undefined) {
-    throw new ProviderConfigError(`${selection.provider.name} has no rerankers in Eidolon`);
-  }
-  if (!hasKey(selection)) throw missingKey(selection);
-  return open(selection as KeyedSelection, options);
+  return openModel(RERANK_MODELS, "rerankers", selection, options);
 }

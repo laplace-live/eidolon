@@ -191,7 +191,7 @@ describe("OpenRouter's reranker", () => {
         }),
     ]);
     const reranker = openRouterRerank({ apiKey: "k", model: MODEL, fetch });
-    await expect(reranker.rerank("q", ["a"], { signal: controller.signal })).rejects.toBe(reason);
+    await expect(reranker.rerank("q", ["a"], controller.signal)).rejects.toBe(reason);
   });
 });
 

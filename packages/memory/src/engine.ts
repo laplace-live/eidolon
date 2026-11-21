@@ -478,7 +478,7 @@ export class SharedEngine {
 
   /** `fresh` is true when this call (or the one it joined) just ran the collection setup. */
   async get(config: MemoryConfig): Promise<{ engine: MemoryEngine; fresh: boolean }> {
-    const key = JSON.stringify(config);
+    const key = engineKey(config);
     const engine = this.#engines.get(key);
     if (engine) return { engine, fresh: false };
     let opening = this.#opening.get(key);
@@ -495,6 +495,16 @@ export class SharedEngine {
     }
     return { engine: await opening, fresh: true };
   }
+}
+
+/** `config` as it tells engines apart: of the embeddings account, only what its requests use. */
+function engineKey(config: MemoryConfig): string {
+  const { selection, dims } = config.embedder;
+  const { provider, model, apiKey, baseUrl } = selection;
+  return JSON.stringify({
+    ...config,
+    embedder: { provider: provider.id, model, apiKey, baseUrl, dims },
+  });
 }
 
 /**

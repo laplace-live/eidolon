@@ -10,7 +10,6 @@ export {
 } from "./accounts.ts";
 export * from "./catalog.ts";
 export {
-  CHAT_DIALECTS,
   type ChatDialect,
   type CompletionsDialect,
   chatDialect,
@@ -18,7 +17,6 @@ export {
   type MessagesDialect,
 } from "./chat/index.ts";
 export {
-  DECISION_MODELS,
   type DecisionAnswers,
   type DecisionModel,
   type DecisionModelOptions,
@@ -28,15 +26,12 @@ export {
   gateDecisionModel,
 } from "./decision/index.ts";
 export {
-  decisionsUrl,
-  noulOf,
   OPENROUTER_DECISIONS_URL,
   type OpenRouterDecisionsOptions,
   openRouterDecisions,
   reportDecision,
 } from "./decision/openrouter.ts";
 export {
-  EMBEDDING_MODELS,
   type EmbeddingModel,
   type EmbeddingModelOptions,
   type EmbeddingRetries,
@@ -71,7 +66,6 @@ export { ImageGenError } from "./image/errors.ts";
 export {
   type GeneratedImage,
   type Generation,
-  IMAGE_MODELS,
   type ImageModel,
   type ImageModelOptions,
   type ImageRequest,
@@ -84,7 +78,6 @@ export { Meter } from "./meter.ts";
 export { type ListedModel, listModels, type ModelListing } from "./models.ts";
 export { costOf, priceOf, textUnits, type Units } from "./pricing.ts";
 export {
-  RERANK_MODELS,
   type RerankModel,
   type RerankModelOptions,
   type RerankResult,

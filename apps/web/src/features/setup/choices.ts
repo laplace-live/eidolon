@@ -12,26 +12,16 @@ import {
 import type { AccountView, SettingRow } from "@/lib/api";
 import {
   CALL_ROLES,
-  PROVIDERS,
   providerById,
   providerOfAccount,
+  providersFor,
   type Role,
   type RoleId,
   roleById,
+  SETUP_ROLES,
 } from "@/lib/providers";
 
-/**
- * Every role the step picks for: a call's three, which it can't run without, then the optional
- * ones, the install's embeddings and her decision model.
- */
-export const PICKS = [
-  "hearing",
-  "mind",
-  "voice",
-  "embeddings",
-  "gate",
-] as const satisfies readonly RoleId[];
-export type PickedRole = (typeof PICKS)[number];
+export type PickedRole = (typeof SETUP_ROLES)[number];
 
 /** Whether a call can't run without `role`. */
 export function callNeeds(role: RoleId): boolean {
@@ -65,8 +55,7 @@ export function choicesFor(
 ): Choice[] {
   const listed = accounts ?? [];
   const choices: Choice[] = [];
-  for (const provider of PROVIDERS) {
-    if (provider.offers[role.category] === undefined) continue;
+  for (const provider of providersFor(role.category)) {
     const own = listed.filter((account) => account.provider === provider.id);
     const fallback = own.find((account) => account.id === provider.id);
     if (fallback !== undefined || provider.baseUrl !== null) {
@@ -130,7 +119,7 @@ export function pickChanges(
     const row = rows.find((candidate) => candidate.path === path);
     if (row === undefined || row.envOverride) continue;
     const value = strip(draft);
-    const role = PICKS.map(roleById).find((entry) => `${entry.path}.provider` === path);
+    const role = SETUP_ROLES.map(roleById).find((entry) => `${entry.path}.provider` === path);
     if (role === undefined) {
       if (value !== "") values[path] = value;
     } else if (value !== effectiveProvider(role, rows, {})) {

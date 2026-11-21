@@ -2,7 +2,7 @@
 // embed through this interface alone.
 import { openrouterHeaders } from "@eidolon/config";
 import type { ProviderId } from "../catalog.ts";
-import { hasKey, missingKey, ProviderConfigError, type Selection } from "../resolve.ts";
+import { openModel, type Selection } from "../resolve.ts";
 import { billingProvider, reportUsage } from "../usage.ts";
 import { type EmbeddingClientOptions, type EmbeddingUsage, openAIEmbeddings } from "./openai.ts";
 
@@ -73,12 +73,7 @@ export function embeddingModel(
   selection: Selection,
   options: EmbeddingModelOptions = {},
 ): EmbeddingModel {
-  const open = EMBEDDING_MODELS[selection.provider.id];
-  if (open === undefined) {
-    throw new ProviderConfigError(`${selection.provider.name} has no embedding models in Eidolon`);
-  }
-  if (!hasKey(selection)) throw missingKey(selection);
-  return open(selection, options);
+  return openModel(EMBEDDING_MODELS, "embedding models", selection, options);
 }
 
 /** Records what one of `model`'s requests used, as the embeddings role's spend. */

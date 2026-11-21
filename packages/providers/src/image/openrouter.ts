@@ -9,6 +9,7 @@ import {
   pyStr,
   pyStrip,
   pyTruthy,
+  withoutTrailingSlashes,
 } from "@eidolon/config";
 import { reportUsage } from "../usage.ts";
 import { ImageGenError } from "./errors.ts";
@@ -23,7 +24,7 @@ const IMAGE_REQUEST_IDLE_TIMEOUT_MS = 600_000;
 
 /** The images route under an API base. */
 export function imagesUrl(baseUrl: string): string {
-  return `${baseUrl.replace(/\/+$/, "")}/images`;
+  return `${withoutTrailingSlashes(baseUrl)}/images`;
 }
 
 /** OpenRouter's `{"error": {"message": ...}}`, falling back to the raw body. */

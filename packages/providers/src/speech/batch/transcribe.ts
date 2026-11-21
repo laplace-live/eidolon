@@ -44,7 +44,7 @@ interface Job {
 const count = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 
-export interface Transcriber {
+interface Transcriber {
   /** The hearing model for a clip: a provider's realtime-only models have an async twin. */
   readonly model?: (model: string) => string;
   /** The hint a call would give, where it isn't `spokenLanguage()`. */
@@ -197,7 +197,7 @@ export async function transcribe(
     provider: selection.provider.id,
     model,
     units,
-    estimatedUsd: price === undefined ? null : costOf(price, units),
+    estimatedUsd: costOf(price, units),
   });
   return { text: heard.text.trim(), durationMs };
 }

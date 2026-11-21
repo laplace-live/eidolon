@@ -86,8 +86,7 @@ export function extractUsage(response: unknown, model: string): Usage {
   const completion = tokenCount(usage.completion_tokens);
   const cost = extractCostUsd(usage);
   if (cost !== null) return usageOf(prompt, completion, cost, "openrouter");
-  const price = refinePrice(model);
-  const estimate = price === undefined ? null : costOf(price, openaiUnits(usage));
+  const estimate = costOf(refinePrice(model), openaiUnits(usage));
   if (estimate !== null) return usageOf(prompt, completion, estimate, "estimate");
   logger.warning(`No cost data and no pricing entry for ${pyRepr(model)}; reporting tokens only.`);
   return usageOf(prompt, completion, 0, "unknown");
