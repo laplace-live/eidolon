@@ -45,10 +45,9 @@ export function takeServerLock():
 }
 
 /**
- * Adds where this server listens to the .info its lock wrote: `port`, and `host`, a loopback
- * address it bound as a URL names it (`127.0.0.1`, `[::1]`). A client that finds the server
- * through the .info talks to that address alone: on another loopback address the port may be any
- * local account's.
+ * Adds where this server listens to the .info its lock wrote: `port`, and `host`, the first
+ * loopback address it bound, as a URL names it (`127.0.0.1`, `[::1]`). The desktop app attaches
+ * at that address alone: on another loopback address the port may be another local account's.
  */
 export function recordServerPort(port: number, host: string): void {
   writeDataFile(serverLockInfoPath(), JSON.stringify({ ...readInfo(), port, host }));

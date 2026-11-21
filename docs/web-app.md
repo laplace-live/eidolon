@@ -43,8 +43,10 @@ which holds a lock in its `locks/`: starting again on the port it serves prints 
 and exits 0, and on any other port exits 2, naming its pid and port. A port another program holds
 exits 1. Once it listens, the server adds its `port` and `host` to the lock's `.info`
 (`locks/4273f434b594.info`, JSON beside its `pid`): `host` is the first loopback address it
-bound, as a URL names it (`127.0.0.1`, `[::1]`). A client that finds the server there talks to
-that address alone, since another local account could hold the port on another loopback address.
+bound, as a URL names it (`127.0.0.1`, `[::1]`). The desktop app attaches to a server it finds
+there at that address alone, since another local account could hold the port on another loopback
+address. A second start reads only the `port`: asked for that port, it probes `127.0.0.1` and
+then `[::1]` for a server that proves it holds the token, and prints the link on its own `--host`.
 
 `bun run dev:local` has no supervisor, so Restart stops it, and every reload `--watch` makes
 opens another tab unless you pass `--no-open` (`bun run dev:local --no-open`). To work on the
