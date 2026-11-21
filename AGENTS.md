@@ -83,7 +83,7 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
-| the desktop app (`apps/desktop`): its main process, the backend it stages and spawns, the `eidolon-app:` forwarder, attaching to a running server, its window, environment, logs or packaging, background mode, its smokes, or an Electron bump | [desktop.md](docs/desktop.md) |
+| the desktop app (`apps/desktop`): its main process, the backend it stages and spawns, the `eidolon-app:` forwarder, attaching to a running server, its window, environment, logs or packaging, background mode, its tests, or an Electron bump | [desktop.md](docs/desktop.md) |
 | chats, the chat log format, the turn engine, group chats' director, voice messages, or the images and text files the viewer sends (`packages/chat`, `packages/engine`, `packages/engine/src/seen.ts`, `apps/bot/src/images.ts`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
 | the voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime`), its models, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
@@ -130,8 +130,8 @@ The desktop app, Eidolon ([desktop.md](docs/desktop.md)); a test run of it is al
 bun run dev:desktop                    # the unpackaged app: pages from Vite on :5173, its backend from source
 bun run build:desktop                  # stages this machine's backend in apps/desktop/.stage, then builds dist/
 bun run package:desktop                # electron-builder into apps/desktop/.out: unsigned, ad hoc on macOS
-bun run smoke:desktop:dev              # the dev smoke: Playwright on the unpackaged app
-bun run smoke:desktop                  # the packaged smoke: the fused app, through its backend's API
+bun run smoke:desktop:dev              # the dev smoke: not written yet, so it exits 1
+bun run smoke:desktop                  # the packaged smoke: not written yet, so it exits 1
 ```
 
 The offline chain, each command taking `--persona <id>` and working in that
@@ -185,7 +185,8 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`; a task that needs a lookup and a run, which names its kind, asks on its card before the command and searches. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64 and Windows x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, loads its native modules, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
-| `apps/desktop`, or what its payload takes from `apps/eidolon`'s stage | `bun run typecheck`, `bun run lint` and `bun run test apps/desktop`, whose tests never load `electron`; then `bun run build:desktop` with `EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts`, `bun run smoke:desktop:dev`, and `bun run package:desktop` with `bun run smoke:desktop`, both smokes in background mode. An Electron bump follows [desktop.md's procedure](docs/desktop.md#bumping-electron); a bump, a change to `jsRuntime()`, or a test that spawns `process.execPath` with an environment of its own also runs [the Electron lane](docs/desktop.md#the-electron-lane), the backend suite on Electron's Node |
+| `apps/desktop`, or what its payload takes from `apps/eidolon`'s stage | `bun run typecheck`, `bun run lint` and `bun run test apps/desktop`, whose tests never load `electron`; then `bun run build:desktop`, `bun run package:desktop` and `EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts`, which also holds the packaged payload to the stage. What the window or the backend does is checked by running the app in background mode ([by hand](docs/desktop.md#running-it-by-hand)): the smokes aren't written. An Electron bump follows [desktop.md's procedure](docs/desktop.md#bumping-electron) |
+| `jsRuntime()` (`packages/config/src/runtime.ts`), or a test that spawns `process.execPath` with an environment of its own | the gates above, then the backend suite on Electron's Node, [the Electron lane](docs/desktop.md#the-electron-lane): there `process.execPath` is Electron's binary, which starts as an app, not as Node, unless the child's environment carries `jsRuntime().env` |
 
 ## Rules
 
@@ -456,8 +457,9 @@ the layout's one line.
 - **Only main holds `local-token`.** It never reaches the page, a URL, argv, a log, the preload or
   any process's environment. The forwarder adds the Bearer only to requests for `eidolon-app://app`
   whose `initiatorOrigin` is that origin or absent, never judged by `Origin`, and only over a
-  connection the server proved itself on; requests to Vite in dev never carry it
-  ([desktop.md](docs/desktop.md#the-forwarder)).
+  connection the server proved itself on; requests to Vite in dev never carry it. The default
+  session loads only `eidolon-app://` pages: anything else ever embedded gets a partition of its
+  own ([desktop.md](docs/desktop.md#the-forwarder)).
 - **The window never leaves `eidolon-app://`:** `window.open` is denied, a navigation or redirect
   anywhere else is cancelled and a landing elsewhere put back, web links open in the default
   browser, there is no `<webview>`, and a packaged app started with `--remote-debugging-port` or
@@ -482,9 +484,9 @@ the layout's one line.
   `laplace-eidolon-desktop`, since one naming it beside a released package fails.
 - **Installing, updating and uninstalling the app never touch the data home,** which it shares with
   npx and `bun run app`; its uninstaller removes the install folder alone.
-- **Every local test run of the app is in background mode** (`EIDOLON_DESKTOP_BACKGROUND=1`): local
-  runs share the machine the owner works on, so no test may put a window, a dialog or a prompt in
-  front of them, or take the focus. Both smokes set it unless run with `--headful`
+- **Every local test run of the app is in background mode** (`EIDOLON_DESKTOP_BACKGROUND=1`,
+  packaged or not): local runs share the machine the owner works on, so no test may put a window,
+  a dialog or a prompt in front of them, or take the focus
   ([desktop.md](docs/desktop.md#background-mode)).
 - **deepseek-harness-derived code carries its MIT header,** then
   `Ported from deepseek-harness <path>@2e39e70496`; `apps/desktop` keeps `LICENSE-deepseek` and
