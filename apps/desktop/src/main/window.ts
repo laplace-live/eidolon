@@ -17,7 +17,10 @@ import {
 const SAVE_AFTER_MS = 500;
 
 let window: BrowserWindow | null = null;
-/** Whether the window shows, as main left it: hidden by a close, shown by a launch or a click. */
+/**
+ * Whether the window shows, as main left it: hidden by a close, shown by a launch or a click. Only
+ * main's own calls move it: on macOS Electron fires show and hide as fullscreen comes and goes.
+ */
 let shown = false;
 
 /** The window, while it exists: a page's window.close() destroys it, and showWindow() makes another. */
@@ -89,9 +92,6 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
   shown = false;
   if (saved.maximized) win.maximize();
   win.once("ready-to-show", () => showWindow());
-  win.on("show", () => {
-    shown = true;
-  });
   // Main owns the title: the page's <title> would name the window after each page.
   win.on("page-title-updated", (event) => event.preventDefault());
 
