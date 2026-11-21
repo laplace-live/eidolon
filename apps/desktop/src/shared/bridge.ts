@@ -47,6 +47,11 @@ export const BRIDGE = {
   theme: "eidolon:theme",
   /** App page → main: the page's Language, for the shell's own strings. */
   language: "eidolon:language",
+  /**
+   * App page → main, synchronous: the DesktopVersions, which the preload needs before the page's
+   * first script, and the server's only once the backend has answered.
+   */
+  versions: "eidolon:versions",
   /** Main → app page: a DesktopCommand. */
   command: "eidolon:command",
   /**
@@ -64,6 +69,7 @@ export const BRIDGE = {
 const SENDERS = {
   [BRIDGE.theme]: "app",
   [BRIDGE.language]: "app",
+  [BRIDGE.versions]: "app",
   [BRIDGE.retry]: "shell",
   [BRIDGE.showLogs]: "shell",
   [BRIDGE.quit]: "shell",
@@ -77,8 +83,11 @@ export interface IpcSender {
   readonly window: boolean;
   /** Whether it came from that window's main frame. */
   readonly mainFrame: boolean;
-  /** The sending frame's URL; null once the frame is gone. */
-  readonly url: string | null;
+  /**
+   * The sending frame's origin, not its URL: a sandboxed document the backend serves has an app
+   * URL and an opaque origin, "null". Null once the frame is gone.
+   */
+  readonly origin: string | null;
 }
 
 /**
@@ -89,30 +98,24 @@ export function accepts(channel: PageChannel, sender: IpcSender): boolean {
   return (
     sender.window &&
     sender.mainFrame &&
-    sender.url !== null &&
-    pageAt(sender.url) === SENDERS[channel]
+    sender.origin !== null &&
+    pageAt(sender.origin) === SENDERS[channel]
   );
 }
 
-/** The desktop app's version and that of the server it ships, which may not be the one it shows. */
+/** The desktop app's version and that of the server it shows, which may be a terminal's. */
 export interface DesktopVersions {
   readonly version: string;
   readonly serverVersion: string;
 }
 
-const VERSION_ARGUMENT = "--eidolon-desktop-version=";
-const SERVER_VERSION_ARGUMENT = "--eidolon-server-version=";
-
-/** The versions as the window's `webPreferences.additionalArguments`: the preload's argv. */
-export function versionArguments({ version, serverVersion }: DesktopVersions): string[] {
-  return [`${VERSION_ARGUMENT}${version}`, `${SERVER_VERSION_ARGUMENT}${serverVersion}`];
-}
-
-/** The versions from the preload's argv; empty when main passed none. */
-export function versionsFrom(argv: readonly string[]): DesktopVersions {
-  const value = (prefix: string) =>
-    argv.findLast((arg) => arg.startsWith(prefix))?.slice(prefix.length) ?? "";
-  return { version: value(VERSION_ARGUMENT), serverVersion: value(SERVER_VERSION_ARGUMENT) };
+/** Main's answer on BRIDGE.versions, or empty versions when it sent something else. */
+export function versionsOf(answer: unknown): DesktopVersions {
+  const { version, serverVersion } = (answer ?? {}) as Partial<Record<string, unknown>>;
+  return {
+    version: typeof version === "string" ? version : "",
+    serverVersion: typeof serverVersion === "string" ? serverVersion : "",
+  };
 }
 
 /** `window.eidolonDesktop`, on the app's page alone (docs/web-app.md, "In the desktop app"). */

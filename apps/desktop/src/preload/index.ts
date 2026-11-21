@@ -2,7 +2,7 @@
 // sits beside, before its first paint, for apps/web's [data-shell] styles, and gives the app's
 // page and the shell pages each its own bridge to main.
 import { contextBridge, ipcRenderer } from "electron";
-import { BRIDGE, versionsFrom } from "../shared/bridge.ts";
+import { BRIDGE, versionsOf } from "../shared/bridge.ts";
 import { bridgeFor, desktopBridge, shellBridge } from "./bridges.ts";
 
 const marks = { shell: process.platform === "darwin" ? "mac" : "win", fullscreen: false };
@@ -29,9 +29,11 @@ if (process.platform === "darwin") {
 
 const page = bridgeFor(location.href, process.isMainFrame);
 if (page === "app") {
+  // contextBridge copies values as it exposes them, so they must be known before the page's script.
+  const versions = versionsOf(ipcRenderer.sendSync(BRIDGE.versions));
   contextBridge.exposeInMainWorld(
     "eidolonDesktop",
-    desktopBridge(ipcRenderer, process.platform, versionsFrom(process.argv)),
+    desktopBridge(ipcRenderer, process.platform, versions),
   );
 } else if (page === "shell") {
   contextBridge.exposeInMainWorld("eidolonShell", shellBridge(ipcRenderer));

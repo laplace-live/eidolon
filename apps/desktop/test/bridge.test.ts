@@ -11,8 +11,7 @@ import {
   isThemeSetting,
   type PageChannel,
   pageAt,
-  versionArguments,
-  versionsFrom,
+  versionsOf,
 } from "../src/shared/bridge.ts";
 
 const SRC = resolve(import.meta.dirname, "../src");
@@ -60,11 +59,12 @@ describe("pageAt", () => {
 });
 
 describe("accepts", () => {
-  const app: IpcSender = { window: true, mainFrame: true, url: "eidolon-app://app/settings" };
-  const shell: IpcSender = { window: true, mainFrame: true, url: "eidolon-app://shell/failed" };
+  const APP_CHANNELS: PageChannel[] = [BRIDGE.theme, BRIDGE.language, BRIDGE.versions];
+  const app: IpcSender = { window: true, mainFrame: true, origin: "eidolon-app://app" };
+  const shell: IpcSender = { window: true, mainFrame: true, origin: "eidolon-app://shell" };
 
-  test("the app's page alone sets the theme and the language", () => {
-    for (const channel of [BRIDGE.theme, BRIDGE.language]) {
+  test("the app's page alone sets the theme and the language, and asks for the versions", () => {
+    for (const channel of APP_CHANNELS) {
       expect(accepts(channel, app)).toBe(true);
       expect(accepts(channel, shell)).toBe(false);
     }
@@ -81,17 +81,25 @@ describe("accepts", () => {
     const channels: PageChannel[] = [
       BRIDGE.theme,
       BRIDGE.language,
+      BRIDGE.versions,
       BRIDGE.retry,
       BRIDGE.showLogs,
       BRIDGE.quit,
     ];
     for (const channel of channels) {
-      const own = channel === BRIDGE.theme || channel === BRIDGE.language ? app : shell;
+      const own = APP_CHANNELS.includes(channel) ? app : shell;
+      expect(accepts(channel, own)).toBe(true);
       expect(accepts(channel, { ...own, mainFrame: false })).toBe(false);
       expect(accepts(channel, { ...own, window: false })).toBe(false);
-      expect(accepts(channel, { ...own, url: null })).toBe(false);
-      expect(accepts(channel, { ...own, url: "eidolon-app://other/" })).toBe(false);
-      expect(accepts(channel, { ...own, url: "data:text/html," })).toBe(false);
+      expect(accepts(channel, { ...own, origin: null })).toBe(false);
+      expect(accepts(channel, { ...own, origin: "eidolon-app://other" })).toBe(false);
+      expect(accepts(channel, { ...own, origin: "data:text/html," })).toBe(false);
+    }
+  });
+
+  test("never from a document at the app's address with an opaque origin, as a sandboxed one has", () => {
+    for (const channel of APP_CHANNELS) {
+      expect(accepts(channel, { ...app, origin: "null" })).toBe(false);
     }
   });
 });
@@ -113,18 +121,16 @@ test("the channels are distinct and Eidolon's own", () => {
   for (const channel of channels) expect(channel).toMatch(/^eidolon:[a-z-]+$/);
 });
 
-test("the versions reach the preload's argv and back, and are empty when main passed none", () => {
+test("the versions are main's answer, and empty strings where it answered something else", () => {
   const versions = { version: "0.1.0", serverVersion: "0.13.0" };
-  const argv = [
-    "/path/to/Eidolon Helper (Renderer)",
-    "--type=renderer",
-    ...versionArguments(versions),
-  ];
-  expect(versionsFrom(argv)).toEqual(versions);
-  expect(versionsFrom(["/path/to/Eidolon Helper (Renderer)"])).toEqual({
-    version: "",
+  expect(versionsOf(versions)).toEqual(versions);
+  expect(versionsOf({ version: "0.1.0", extra: true })).toEqual({
+    version: "0.1.0",
     serverVersion: "",
   });
+  for (const answer of [null, undefined, "0.1.0", 1, { version: 1, serverVersion: ["0.13.0"] }]) {
+    expect(versionsOf(answer)).toEqual({ version: "", serverVersion: "" });
+  }
 });
 
 describe("the preload's bridges", () => {
