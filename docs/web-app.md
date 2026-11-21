@@ -363,6 +363,64 @@ and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
   layout that sits side by side when wide, such as the studio's and Settings' sections, goes by the
   width it is given, through a container query, not the window's, which the sidebar shares.
 
+## In the desktop app
+
+The desktop app (`apps/desktop`) shows this same app in its own window, at `eidolon-app://app/`,
+and its main process adds the Bearer to every request, so the page never signs in. Its preload
+gives the page two things; a browser has neither, and without them nothing below happens.
+
+- **The bridge**, `window.eidolonDesktop` (`lib/desktop.ts`): `{platform, version, serverVersion,
+  setTheme(setting), setLanguage(language), onCommand(callback)}`, `platform` being Node's name for
+  the OS (`darwin`, `win32`). The page reports the theme *setting* (`light`, `dark` or `system`,
+  never the theme System resolves to) and the active language (`en`, `zh-Hans`) once at start and
+  on every change. `onCommand` hands it the menus' commands: `settings` opens `/settings`, and one
+  it doesn't know is ignored (`COMMANDS` in `lib/desktop.ts`).
+- **The marks** on `<html>`: `data-shell`, `mac` or `win`, and on macOS `data-fullscreen` while the
+  window is fullscreen. The preload may set them only once `<html>` exists, after the page's script
+  has run; nothing in the page waits for them. The chrome they turn on is in `index.css`, at its
+  end, and the `shell:` variant there styles a component only in the desktop app.
+
+**The chrome.** The window has no title bar. A row marked `data-window-drag` stands in for it: the
+window drags by the row, while its links, buttons and fields keep their clicks. The rows are the
+sidebar's first row (the logo), each page's header (a chat's, the call's, setup's), and the bar
+above a page without one, `MobileBar`, which in the desktop app stays beside the sidebar at any
+width, empty, 3.5rem tall: the height of a chat's header, and the height the window's caption
+buttons on Windows should take. An error, the sign-in screen and the loading spinner get a strip of
+their own (`WindowDragStrip`). The rows keep clear of the window's buttons, whose place the Window
+Controls Overlay gives as `env(titlebar-area-*)`:
+
+- **macOS:** the traffic lights sit at the top left. A page's row starts after them, measured from
+  the window's edge: at the edge while the sidebar is a sheet, beside the 3rem rail when collapsed.
+  The sidebar's first row starts below them, open or collapsed, so the lights sit in an empty strip
+  above it. Fullscreen hides them, and drops every inset.
+- **Windows:** the caption buttons sit at the top right, where every page row ends before them. A
+  sheet at the right edge starts below them, and a dialog centres below them.
+- Menus, popovers, dialogs, sheets and tooltips portal out of `#root` and never drag. A press on a
+  drag row never reaches the page, so while one of them is open no row drags, and a press there
+  closes it.
+- Electron collects the drag regions again only when an `app-region` value changes
+  ([electron/electron#32341](https://github.com/electron/electron/issues/32341)), so
+  `lib/window-drag.ts` watches the rows and, whenever one moves, resizes, comes or goes (the
+  sidebar collapsing, a page changing), flips the region of an empty element of its own, once a
+  frame, which makes Electron collect them again.
+
+**What else differs:**
+
+- **Home's footer** names both versions, `Eidolon 0.1.0 · server 0.13.0`: the desktop app's own,
+  from the bridge, and the server's, from status, which may be a terminal's server it attached to.
+- **Pictures and files open in place.** The window has no tabs: a picture in a chat or a call, the
+  owner's or hers, opens in a viewer over the page with **Save**, and a text file saves through
+  `<a download>`, which the desktop app turns into a Save dialog (`components/picture-viewer.tsx`).
+- **No terminal.** Where the browser's text sends you to the terminal, the desktop app's says to
+  quit and reopen Eidolon, or where its logs are: **Show Logs**, in the Help menu on macOS and in
+  the tray icon's menu on Windows (`DESKTOP_ERRORS` in `lib/labels.ts`, the restart's toast, a
+  call refused for its session). Without a session, the sign-in screen asks for no link: it says
+  the window isn't signed in, to quit and reopen Eidolon, and offers **Try Again**.
+- **Nothing depends on an http(s) origin.** API calls are root-relative; the proof's key is
+  `eidolon_proof_` there, with no port, and nothing writes it, since the window never trades a link
+  code; and `eidolon-app:` is a secure scheme, so the notice that the microphone needs a secure
+  page never shows.
+
 ## Chats
 
 `/chats` talks with the personas, one or several at once, in text and voice messages or on a call
