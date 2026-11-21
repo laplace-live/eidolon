@@ -65,6 +65,8 @@ export function NewPersonaDialog({
   const taken = personas.data?.personas.map((persona) => persona.id) ?? [];
   const provider =
     active.data === undefined ? null : voiceProvider(active.data.settings, accounts.data?.accounts);
+  // A failed request leaves no provider to offer voices from.
+  const unavailable = provider === null ? (active.error ?? accounts.error) : null;
   const voice = pickedVoice(pick, provider);
   const fallback =
     provider === null ? null : (defaultVoice(providerById(provider)?.offers.tts) ?? null);
@@ -167,7 +169,10 @@ export function NewPersonaDialog({
                 disabled={create.isPending}
               />
             )}
-            {showErrors && voiceId === null && <FieldError>{t`Pick a voice for her.`}</FieldError>}
+            {unavailable && <ErrorAlert error={unavailable} />}
+            {showErrors && voiceId === null && !unavailable && (
+              <FieldError>{t`Pick a voice for her.`}</FieldError>
+            )}
           </FieldSet>
         </div>
         {create.isError && <ErrorAlert error={create.error} />}

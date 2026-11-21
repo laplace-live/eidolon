@@ -11,8 +11,8 @@ export interface EmbeddingModel {
   readonly provider: string;
   readonly model: string;
   /**
-   * One request's vectors, in the order the response lists them, and what it used; no texts, no
-   * request. Rejects on any failure, `signal`'s abort included.
+   * One request's vectors, in the order of `texts`, and what it used; no texts, no request.
+   * Rejects on any failure, `signal`'s abort included.
    */
   embed(
     texts: readonly string[],

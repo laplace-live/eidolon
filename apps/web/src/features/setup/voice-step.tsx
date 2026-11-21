@@ -64,6 +64,8 @@ export function VoiceStep({
     settings.data === undefined
       ? null
       : voiceProvider(settings.data.settings, accounts.data?.accounts);
+  // A failed request leaves no provider to offer voices from.
+  const unavailable = provider === null ? (settings.error ?? accounts.error) : null;
   const chosen = pickedVoice(pick, provider);
   const fallback =
     provider === null
@@ -133,6 +135,7 @@ export function VoiceStep({
           disabled={busy}
         />
       )}
+      {unavailable && <ErrorAlert error={unavailable} />}
       {failure && <ErrorAlert error={failure} />}
     </StepCard>
   );
