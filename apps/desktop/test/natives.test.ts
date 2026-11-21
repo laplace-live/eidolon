@@ -1,0 +1,56 @@
+// Which of the libraries a process mapped the natives check holds to the payload: stage.test.ts
+// requires each one it keeps to load from there.
+import { expect, test } from "vitest";
+import { payloadLibraries } from "../scripts/natives.ts";
+
+test("on Windows, the payload's natives and VC++ runtime, never the system's own C++ runtime", () => {
+  const modules = "C:\\Program Files\\Eidolon\\resources\\eidolon\\node_modules";
+  const lancedb = `${modules}\\@lancedb\\lancedb-win32-x64-msvc`;
+  const ort = `${modules}\\onnxruntime-node\\bin\\napi-v6\\win32\\x64`;
+  const sharp = `${modules}\\@img\\sharp-win32-x64\\lib`;
+  expect(
+    payloadLibraries([
+      "C:\\Program Files\\Eidolon\\Eidolon.exe",
+      "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+      "C:\\WINDOWS\\System32\\USER32.dll",
+      "C:\\WINDOWS\\System32\\gdi32full.dll",
+      // USER32 → GDI32 → gdi32full maps it in every process with a window.
+      "C:\\WINDOWS\\System32\\msvcp_win.dll",
+      "C:\\WINDOWS\\System32\\ucrtbase.dll",
+      `\\\\?\\${lancedb}\\lancedb.win32-x64-msvc.node`,
+      `${lancedb}\\vcruntime140.dll`,
+      `\\\\?\\${ort}\\onnxruntime_binding.node`,
+      `${ort}\\onnxruntime.dll`,
+      `${ort}\\MSVCP140.dll`,
+      `${ort}\\VCRUNTIME140_1.dll`,
+      `\\\\?\\${sharp}\\sharp-win32-x64.node`,
+      `${sharp}\\libvips-42.dll`,
+    ]),
+  ).toEqual([
+    `${lancedb}\\lancedb.win32-x64-msvc.node`,
+    `${lancedb}\\vcruntime140.dll`,
+    `${ort}\\onnxruntime_binding.node`,
+    `${ort}\\onnxruntime.dll`,
+    `${ort}\\MSVCP140.dll`,
+    `${ort}\\VCRUNTIME140_1.dll`,
+    `${sharp}\\sharp-win32-x64.node`,
+    `${sharp}\\libvips-42.dll`,
+  ]);
+});
+
+test("on macOS, the payload's natives, by their own names and not their folders'", () => {
+  const modules = "/Users/sharp/Eidolon.app/Contents/Resources/eidolon/node_modules";
+  expect(
+    payloadLibraries([
+      "/Users/sharp/Eidolon.app/Contents/MacOS/Eidolon",
+      "/usr/lib/libc++.1.dylib",
+      `${modules}/@lancedb/lancedb-darwin-arm64/lancedb.darwin-arm64.node`,
+      `${modules}/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.dylib`,
+      `${modules}/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib`,
+    ]),
+  ).toEqual([
+    `${modules}/@lancedb/lancedb-darwin-arm64/lancedb.darwin-arm64.node`,
+    `${modules}/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.dylib`,
+    `${modules}/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib`,
+  ]);
+});

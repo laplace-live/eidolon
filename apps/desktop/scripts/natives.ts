@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 
 /** Run as `<runtime> natives.mjs <payload> <LanceDB's package for this platform>`. */
 const SCRIPT = `
@@ -38,15 +39,11 @@ try {
     .jpeg()
     .toBuffer();
   const { format, width, height } = await sharp(made).metadata();
-  const loaded = process.report
-    .getReport()
-    .sharedObjects.map((path) => path.replace(/^\\\\\\\\\\?\\\\/, ""))
-    .filter((path) => /onnxruntime|lancedb|sharp|vips|vcruntime|msvcp/i.test(path));
   console.log(JSON.stringify({
     rows,
     speech: out[session.outputNames[0]].data[0],
     image: format + " " + width + "x" + height,
-    loaded,
+    mapped: process.report.getReport().sharedObjects,
   }));
 } finally {
   rmSync(dir, { recursive: true, force: true });
@@ -60,8 +57,21 @@ export interface NativesReport {
   readonly speech: number;
   /** What sharp reads back of the JPEG it made: `jpeg 2x1`. */
   readonly image: string;
-  /** The natives and runtime libraries the process mapped, by path. */
+  /** The natives and runtime libraries the process mapped, by path (payloadLibraries). */
   readonly loaded: readonly string[];
+}
+
+/**
+ * Of the libraries a process mapped, by path, the natives' and the VC++ runtime DLLs the payload
+ * ships, each by its file's name: Windows' own msvcp_win.dll is in every process with a window.
+ */
+export function payloadLibraries(mapped: readonly string[]): string[] {
+  return mapped
+    .map((path) => path.replace(/^\\\\\?\\/, ""))
+    .filter((path) => {
+      const name = path.split(/[\\/]/).at(-1)?.toLowerCase() ?? "";
+      return /onnxruntime|lancedb|sharp|vips/.test(name) || VC_RUNTIME_DLLS.includes(name);
+    });
 }
 
 export interface Runtime {
@@ -86,7 +96,10 @@ export function checkNatives(payload: string, lancedb: string, runtime: Runtime)
     if (run.status !== 0 || !line.startsWith("{")) {
       throw new Error(`The natives check exited ${run.status}:\n${run.stdout}\n${run.stderr}`);
     }
-    return JSON.parse(line) as NativesReport;
+    const { mapped, ...report } = JSON.parse(line) as Omit<NativesReport, "loaded"> & {
+      mapped: string[];
+    };
+    return { ...report, loaded: payloadLibraries(mapped) };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
