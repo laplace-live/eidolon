@@ -292,7 +292,9 @@ describe("EmbeddingClient", () => {
     const empty = once(Response.json({}), { empty: 0 });
     await expect(empty.run).rejects.toThrow("after 1 attempts (1 data, 0 quota)");
     const quota = once(Response.json({ error: { message: "RESOURCE_EXHAUSTED" } }), { quota: 0 });
-    await expect(quota.run).rejects.toThrow("after 1 attempts (0 data, 1 quota)");
+    await expect(quota.run).rejects.toThrow(
+      /after 1 attempts \(0 data, 1 quota\)\. Last error: RESOURCE_EXHAUSTED$/,
+    );
     const down = once(Response.json({ error: { message: "x" } }, { status: 503 }), { http: 0 });
     await expect(down.run).rejects.toThrow("Error code: 503");
     expect([empty.calls.length, quota.calls.length, down.calls.length]).toEqual([1, 1, 1]);

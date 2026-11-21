@@ -227,7 +227,7 @@ export class EmbeddingClient {
       throw new Error(
         `Embedding provider returned no data after ${dataFailures + quotaFailures} attempts ` +
           `(${dataFailures} data, ${quotaFailures} quota). ` +
-          `Last error: ${lastError}${quotaFailures > 0 ? QUOTA_SUGGESTIONS : ""}`,
+          `Last error: ${lastError}${quotaFailures > 0 && this.#retries.quota > 0 ? QUOTA_SUGGESTIONS : ""}`,
       );
     }
     const data = body.data;
