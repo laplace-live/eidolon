@@ -124,7 +124,8 @@ bun run build:web                      # apps/web/dist
 bun run i18n                           # extract the app's strings into apps/web/src/locales/*.po
 ```
 
-The desktop app, Eidolon ([desktop.md](docs/desktop.md)); a test run of it is always in background mode:
+The desktop app, Eidolon ([desktop.md](docs/desktop.md)); a test run of it is always in background
+mode, on a temporary data home and profile ([Rules](#the-desktop-app)):
 
 ```bash
 bun run dev:desktop                    # the unpackaged app: pages from Vite on :5173, its backend from source
@@ -490,11 +491,14 @@ the layout's one line.
 - **Installing, updating and uninstalling the app never touch the data home,** which it shares with
   npx and `bun run app`; its uninstaller removes the install folder alone.
 - **Every local test run of the app is in background mode** (`EIDOLON_DESKTOP_BACKGROUND=1`,
-  packaged or not): local runs share the machine the owner works on, so no test may put a window,
-  a dialog or a prompt in front of them, take the focus or play a sound. A driver passes Chromium's
-  fake microphone alone, never `--use-fake-ui-for-media-stream`, and uploads through
-  `setInputFiles`, never a click on a file input
-  ([desktop.md](docs/desktop.md#driving-it-in-background-mode)).
+  packaged or not), on a temporary `EIDOLON_HOME` and profile (`--user-data-dir`), with
+  `EIDOLON_DESKTOP_LOGIN_SHELL=0` and no credential, as `appEnv()` in
+  `apps/desktop/scripts/smoke/env.ts` builds it: local runs share the machine the owner works on, so
+  no test may put a window, a dialog or a prompt in front of them, take the focus or play a sound,
+  and without its own home a run, `dev:desktop` included, uses the owner's data home, or attaches to
+  their running server, and bills their keys. A driver passes Chromium's fake microphone alone,
+  never `--use-fake-ui-for-media-stream`, and uploads through `setInputFiles`, never a click on a
+  file input ([desktop.md](docs/desktop.md#driving-it-in-background-mode)).
 - **deepseek-harness-derived code carries its MIT header,** then
   `Ported from deepseek-harness <path>@2e39e70496`; `apps/desktop` keeps `LICENSE-deepseek` and
   `THIRD_PARTY.md`, and `NOTICE` names the holder (`build.test.ts` checks it).
