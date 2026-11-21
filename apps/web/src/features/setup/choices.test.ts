@@ -5,6 +5,7 @@ import { roleById, SETUP_ROLES } from "../../lib/providers";
 import {
   callNeeds,
   choicesFor,
+  envLock,
   keyNeeds,
   missingFields,
   modelAfter,
@@ -100,6 +101,17 @@ describe("the model a pick runs", () => {
     expect(modelAfter(mind, set, { "mind.provider": "openai" }, [])).toBe("gpt-6-luna");
     expect(modelAfter(mind, set, { "mind.provider": "openrouter" }, [])).toBe(
       "~anthropic/claude-sonnet-latest",
+    );
+  });
+
+  test("the environment holds a pick with its provider, or a model any provider would get", () => {
+    const embeddings = roleById("embeddings");
+    expect(envLock(embeddings, rows())).toBeUndefined();
+    const model = { envValue: "google/gemini-embedding-2-preview", envOverride: true };
+    expect(envLock(embeddings, rows({ "embeddings.model": model }))?.env).toBe("EMBED_MODEL");
+    const provider = { envValue: "google", envOverride: true };
+    expect(envLock(embeddings, rows({ "embeddings.provider": provider }))?.env).toBe(
+      "EMBED_PROVIDER",
     );
   });
 

@@ -98,6 +98,18 @@ export function modelAfter(
     : effectiveModel(role, rows, drafts, accounts);
 }
 
+/**
+ * The row whose environment value holds `role`'s pick: its provider's, or its model's, which would
+ * go to whichever provider the pick moves it to.
+ */
+export function envLock<R extends Pick<SettingRow, "path" | "envOverride">>(
+  role: Role,
+  rows: readonly R[],
+): R | undefined {
+  const paths = [`${role.path}.provider`, `${role.path}.model`];
+  return rows.find((row) => row.envOverride && paths.includes(row.path));
+}
+
 /** What saving the drafts writes, split by the file each value lives in. */
 export interface PickChanges {
   readonly persona: Readonly<Record<string, unknown>>;

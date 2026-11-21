@@ -90,13 +90,28 @@ export function flagOn(
 
 /**
  * The provider a persona speaks through, whose voices the voice step offers: Fish Audio while her
- * settings name no account Eidolon knows, as the server checks a new persona's voice.
+ * settings name no account Eidolon knows, as the server checks a new persona's voice; null while
+ * the account they name waits on `accounts`.
  */
 export function voiceProvider(
   rows: readonly SettingRow[],
   accounts: AccountList | undefined,
-): string {
-  return effectiveProviderType(roleById("voice"), rows, {}, accounts) ?? "fish";
+): string | null {
+  return (
+    effectiveProviderType(roleById("voice"), rows, {}, accounts) ??
+    (accounts === undefined ? null : "fish")
+  );
+}
+
+/** A voice picked from one provider's voices. */
+export interface VoicePick {
+  readonly provider: string;
+  readonly voice: string;
+}
+
+/** `pick`'s voice while she still speaks through the provider it came from. */
+export function pickedVoice(pick: VoicePick | null, provider: string | null): string | null {
+  return pick !== null && pick.provider === provider ? pick.voice : null;
 }
 
 /** Ids become folder names, lock keys and --persona, so they stay lowercase ASCII. */

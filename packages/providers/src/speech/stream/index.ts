@@ -1,7 +1,7 @@
 // Streaming speech synthesis for the voice engine: one stream per persona per call, one utterance
 // per stretch of a reply in one voice.
 import type { ProviderId } from "../../catalog.ts";
-import { hasKey, missingKey, selectRequired } from "../../resolve.ts";
+import { openModel, selectRequired } from "../../resolve.ts";
 import { CartesiaSpeech } from "./cartesia.ts";
 import { ElevenLabsSpeech } from "./elevenlabs.ts";
 import { FishSpeech } from "./fish.ts";
@@ -69,11 +69,5 @@ export const SPEECH_STREAMS: {
 
 /** The voice role in the current persona scope; throws before connecting without its key. */
 export function openSpeech(): SpeechStream {
-  const selection = selectRequired("voice");
-  if (!hasKey(selection)) throw missingKey(selection);
-  const open = SPEECH_STREAMS[selection.provider.id];
-  if (open === undefined) {
-    throw new Error(`${selection.provider.name} has no speech synthesis in Eidolon yet`);
-  }
-  return open(selection as KeyedSelection);
+  return openModel(SPEECH_STREAMS, "speech synthesis", selectRequired("voice"), undefined);
 }

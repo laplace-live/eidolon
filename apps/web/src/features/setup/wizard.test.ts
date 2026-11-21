@@ -18,6 +18,7 @@ import {
   nextStep,
   PERSONA_ID,
   personaErrors,
+  pickedVoice,
   previousStep,
   QDRANT_COMMAND,
   QDRANT_IMAGE,
@@ -131,6 +132,16 @@ test("the voice step offers the voices of the provider she speaks through", () =
   expect(voiceProvider([provider({ envValue: "elevenlabs" })], [])).toBe("elevenlabs");
   // An account Eidolon doesn't know: the Fish library, as the server takes a new persona's voice.
   expect(voiceProvider([provider({ value: "nobody", source: "persona" })], [])).toBe("fish");
+  // Until the accounts load, an account's provider is unknown, not Fish's.
+  expect(voiceProvider([provider({ value: "speech", source: "persona" })], undefined)).toBeNull();
+});
+
+test("a voice picked from one provider is dropped once she speaks through another", () => {
+  const pick = { provider: "fish", voice: "fish-voice" };
+  expect(pickedVoice(pick, "fish")).toBe("fish-voice");
+  expect(pickedVoice(pick, "openai")).toBeNull();
+  expect(pickedVoice(pick, null)).toBeNull();
+  expect(pickedVoice(null, "fish")).toBeNull();
 });
 
 test("a flag reads her value, else the environment's, else its default", () => {

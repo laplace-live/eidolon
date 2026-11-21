@@ -7,7 +7,7 @@
 // OpenAI's Realtime API in transcription-only mode, with server VAD off: the local VAD commits
 // each segment. It takes 24 kHz audio.
 // https://platform.openai.com/docs/guides/realtime-transcription
-import { logger, pyJsonDumps } from "@eidolon/config";
+import { logger, pyJsonDumps, withoutTrailingSlashes } from "@eidolon/config";
 import type { Selection } from "../resolve.ts";
 import type { WsData } from "../ws.ts";
 import type { SttStream } from "./index.ts";
@@ -19,7 +19,7 @@ const COMMIT = pyJsonDumps({ type: "input_audio_buffer.commit" });
 
 /** The Realtime WebSocket under the account's API base, as its HTTP requests use that base. */
 export function openaiSttUrl(selection: Selection): string {
-  const base = (selection.baseUrl as string).replace(/\/+$/, "").replace(/^http/, "ws");
+  const base = withoutTrailingSlashes(selection.baseUrl as string).replace(/^http/, "ws");
   return `${base}/realtime?intent=transcription`;
 }
 

@@ -37,6 +37,7 @@ import { statusQuery } from "@/lib/query";
 import {
   callNeeds,
   choicesFor,
+  envLock,
   keyNeeds,
   missingFields,
   modelAfter,
@@ -80,7 +81,7 @@ function RolePicker({
   const entry = roleById(role);
   const path = `${entry.path}.provider`;
   const modelPath = `${entry.path}.model`;
-  const row = rows.find((candidate) => candidate.path === path);
+  const locked = envLock(entry, rows);
   const current = effectiveProvider(entry, rows, drafts);
   const model = modelAfter(entry, rows, drafts, accounts);
   return (
@@ -89,7 +90,7 @@ function RolePicker({
       <Select
         value={current ?? ""}
         onValueChange={(next) => onDraft(path, next)}
-        disabled={disabled || row?.envOverride}
+        disabled={disabled || locked !== undefined}
       >
         <SelectTrigger id={id} className="w-full">
           <SelectValue />
@@ -104,9 +105,9 @@ function RolePicker({
         </SelectContent>
       </Select>
       <FieldDescription>{t(ROLE_HINTS[role])}</FieldDescription>
-      {row?.envOverride ? (
+      {locked ? (
         <FieldDescription>
-          {t`Set by ${ph({ env: row.env })} in the environment, which wins over the value saved here. Change it there.`}
+          {t`Set by ${ph({ env: locked.env })} in the environment, which wins over the value saved here. Change it there.`}
         </FieldDescription>
       ) : model !== null && drafts[modelPath] === undefined ? (
         <FieldDescription>

@@ -289,7 +289,8 @@ calls need is missing, every page but Settings sends you to its first.
   provider in the catalog that offers the role ([providers.md](providers.md#roles)), its default
   marked Recommended, and the other accounts Settings → Providers has. An OpenAI-compatible
   endpoint is listed once an account of it has an API base, and a pick with no default model asks
-  for one. Then it asks for one key per account the picks name, and the accounts her reranking
+  for one. A role whose provider or model the environment sets is locked, naming the variable:
+  the environment's model would go to whichever provider took the role. Then it asks for one key per account the picks name, and the accounts her reranking
   (unless turned off) and selfies (once she has an outfit) run on, saying what each is used for:
   an account a call's role uses is required; any other is optional and says what stays off without
   it. Ollama takes no key and MiniMax also takes its group id. Saving writes the picks to her

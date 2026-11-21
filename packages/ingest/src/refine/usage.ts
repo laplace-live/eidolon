@@ -17,6 +17,7 @@ import {
   openaiUnits,
   type Price,
   priceOf,
+  providerById,
   trySelect,
 } from "@eidolon/providers";
 
@@ -49,14 +50,19 @@ function usageOf(prompt: number, completion: number, cost: number, source: CostS
   return usage;
 }
 
+const FREE: Price = { unit: "tokens", input: 0, output: 0 };
+
 /**
- * The catalog's price for `model` where the refine role's requests go, as the ledger prices them;
- * undefined when it lists none there, as for OpenRouter's chat models, or the role won't resolve.
+ * The catalog's price for `model` where the refine role's requests go, as the ledger prices them:
+ * nothing at a free provider; undefined when it lists none there, as for OpenRouter's chat models,
+ * or the role won't resolve.
  */
 export function refinePrice(model: string): Price | undefined {
   const selection = trySelect("refine");
   if (selection === null) return undefined;
-  return priceOf(billingProvider(selection.provider.id, selection.baseUrl), "llm", model);
+  const provider = billingProvider(selection.provider.id, selection.baseUrl);
+  if (providerById(provider)?.free === true) return FREE;
+  return priceOf(provider, "llm", model);
 }
 
 /** `int(value or 0)` for a token count. */

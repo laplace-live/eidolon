@@ -6,7 +6,7 @@
 //
 // What a dialect of the realtime protocol settles, and the JSON both dialects share.
 
-import { isPlainObject } from "@eidolon/config";
+import { isPlainObject, withoutTrailingSlashes } from "@eidolon/config";
 import type { ToolSchema } from "@eidolon/core";
 import type { Selection } from "../resolve.ts";
 import type { RealtimeOptions } from "./index.ts";
@@ -56,7 +56,7 @@ export const BENIGN_CODES: ReadonlySet<unknown> = new Set([
 
 /** The realtime WebSocket under the account's API base, as pipedog's services were given it. */
 export function realtimeBase(selection: Selection): string {
-  return `${(selection.baseUrl as string).replace(/\/+$/, "").replace(/^http/, "ws")}/realtime`;
+  return `${withoutTrailingSlashes(selection.baseUrl as string).replace(/^http/, "ws")}/realtime`;
 }
 
 /** The function tool format both dialects take. */

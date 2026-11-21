@@ -5,6 +5,7 @@
 // Ported from pipedog packages/openai/src/tts.ts@ce8f8bc
 //
 // OpenAI's speech endpoint, whose `pcm` format is 24 kHz.
+import { withoutTrailingSlashes } from "@eidolon/config";
 import { voiceOf } from "../../resolve.ts";
 import { HttpUtterance, SpeechError } from "./http.ts";
 import type { SpeechStream, Utterance } from "./index.ts";
@@ -23,7 +24,7 @@ export class OpenAISpeech implements SpeechStream {
   constructor(selection: KeyedSelection) {
     this.#selection = selection;
     this.#text = new SpokenText(selection);
-    this.#url = `${(selection.baseUrl as string).replace(/\/+$/, "")}/audio/speech`;
+    this.#url = `${withoutTrailingSlashes(selection.baseUrl as string)}/audio/speech`;
     this.#voice = voiceOf(selection) ?? null;
   }
 

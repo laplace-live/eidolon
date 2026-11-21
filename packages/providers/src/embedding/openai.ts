@@ -1,7 +1,7 @@
 // OpenAI's `/embeddings` request, which OpenRouter, Gemini's OpenAI-compatible API and any
 // compatible server take too: its retries, and what each request used.
-import { setTimeout as sleep } from "node:timers/promises";
 import {
+  abortableSleep,
   cpSlice,
   extractCostUsd,
   isJsonObject,
@@ -127,7 +127,7 @@ export interface EmbeddingClientOptions {
   /** Sends OpenRouter's `usage` request field, which other APIs refuse as unknown. */
   openrouter?: boolean;
   fetch?: typeof fetch;
-  sleep?: (seconds: number) => Promise<void>;
+  sleep?: (seconds: number, signal?: AbortSignal) => Promise<void>;
   random?: () => number;
   /** Each budget left out is EMBED_RETRIES'. */
   retries?: Partial<EmbeddingRetries>;
@@ -144,6 +144,17 @@ function statusError(status: number, body: string): Error {
   }
 }
 
+/** Each item's vector, in input order by its `index`: a server may list a batch out of order. */
+function inInputOrder(data: readonly unknown[]): number[][] {
+  const items = data.map((item) => {
+    if (!isJsonObject(item) || !Array.isArray(item.embedding)) {
+      throw new TypeError("an embedding in the response has no vector");
+    }
+    return { index: Number(item.index), vector: item.embedding as number[] };
+  });
+  return items.sort((a, b) => a.index - b.index).map((item) => item.vector);
+}
+
 function toInt(value: unknown): number {
   return Math.trunc(Number(value));
 }
@@ -154,7 +165,7 @@ export class EmbeddingClient {
   readonly #headers: Record<string, string>;
   readonly #openrouter: boolean;
   readonly #fetch: typeof fetch | null;
-  readonly #sleep: (seconds: number) => Promise<void>;
+  readonly #sleep: (seconds: number, signal?: AbortSignal) => Promise<void>;
   readonly #random: () => number;
   readonly #retries: EmbeddingRetries;
   readonly #timeoutSec: number;
@@ -165,13 +176,13 @@ export class EmbeddingClient {
     this.#headers = { ...(options.headers ?? {}) };
     this.#openrouter = options.openrouter ?? true;
     this.#fetch = options.fetch ?? null;
-    this.#sleep = options.sleep ?? ((seconds) => sleep(seconds * 1000));
+    this.#sleep = options.sleep ?? ((seconds, signal) => abortableSleep(seconds * 1000, signal));
     this.#random = options.random ?? Math.random;
     this.#retries = { ...EMBED_RETRIES, ...options.retries };
     this.#timeoutSec = options.timeoutSec ?? EMBED_HTTP_TIMEOUT_SEC;
   }
 
-  /** Vectors in response order, plus the provider-reported usage of this one call. */
+  /** Vectors in input order, plus the provider-reported usage of this one call. */
   async embedWithUsage(
     texts: readonly string[],
     options: { model: string; dimensions: number; signal?: AbortSignal },
@@ -232,7 +243,7 @@ export class EmbeddingClient {
     }
     const data = body.data;
     if (!Array.isArray(data)) throw new TypeError("embedding data is not a list");
-    const vectors = data.map((d: unknown) => (d as { embedding: number[] }).embedding);
+    const vectors = inInputOrder(data);
 
     const usage = isJsonObject(body.usage) && pyTruthy(body.usage) ? body.usage : {};
     const promptTokens = toInt(usage.prompt_tokens || 0);
@@ -305,7 +316,7 @@ export class EmbeddingClient {
 
   #abortableSleep(seconds: number, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
-    return raceAbort(this.#sleep(seconds), signal);
+    return raceAbort(this.#sleep(seconds, signal), signal);
   }
 }
 

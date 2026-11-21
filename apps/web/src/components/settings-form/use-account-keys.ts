@@ -8,6 +8,16 @@ import type { CheckOutcome } from "./check-result";
 
 type Options = Readonly<Record<string, string>>;
 
+/** `entries` without those of `accounts`. */
+export function withoutAccounts<T>(
+  entries: Readonly<Record<string, T>>,
+  accounts: readonly string[],
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(entries).filter(([account]) => !accounts.includes(account)),
+  );
+}
+
 export function useAccountKeys() {
   const queryClient = useQueryClient();
   const [typed, setTypedState] = useState<Readonly<Record<string, string>>>({});
@@ -49,7 +59,7 @@ export function useAccountKeys() {
     return outcome;
   }
 
-  /** Saves what was typed for each of `accounts` into it, and clears what was typed. */
+  /** Saves what was typed for each of `accounts` into it, and clears what it saved. */
   async function save(accounts: readonly string[]): Promise<void> {
     const updates: [string, AccountUpdate][] = [];
     for (const account of accounts) {
@@ -72,8 +82,9 @@ export function useAccountKeys() {
       for (const [account, body] of updates) {
         await call("PUT /api/local/accounts/:id", { params: { id: account }, body });
       }
-      setTypedState({});
-      setOptionsState({});
+      const saved = updates.map(([account]) => account);
+      setTypedState((current) => withoutAccounts(current, saved));
+      setOptionsState((current) => withoutAccounts(current, saved));
       await refreshAccounts(queryClient);
     } finally {
       setSaving(false);

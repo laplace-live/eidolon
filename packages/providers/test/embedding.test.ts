@@ -1,9 +1,11 @@
+import { join } from "node:path";
 import {
   consoleSink,
   DEFAULT_EMBED_MODEL,
   type LogRecord,
   logger,
   openrouterHeaders,
+  spawnProcess,
 } from "@eidolon/config";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { EmbeddingClient, EmbeddingUsage, isQuotaError } from "../src/embedding/openai.ts";
@@ -100,11 +102,20 @@ describe("EmbeddingClient", () => {
     }
   });
 
-  test("vectors keep response order, whatever their index", async () => {
-    const body = vectors([1], [2]);
+  test("vectors come back in input order, by each one's index", async () => {
+    const body = vectors([1], [2], [3]);
     body.data.reverse();
     const { embeddings } = client([Response.json(body)]);
-    expect((await embeddings.embedWithUsage(["a", "b"], opts))[0]).toEqual([[2], [1]]);
+    expect((await embeddings.embedWithUsage(["a", "b", "c"], opts))[0]).toEqual([[1], [2], [3]]);
+  });
+
+  test("an item without a vector fails the call", async () => {
+    const body = vectors([1], [2]);
+    delete (body.data[1] as { embedding?: number[] }).embedding;
+    const { embeddings } = client([Response.json(body)]);
+    await expect(embeddings.embedWithUsage(["a", "b"], opts)).rejects.toThrow(
+      "an embedding in the response has no vector",
+    );
   });
 
   test("empty input makes no request", async () => {
@@ -231,6 +242,38 @@ describe("EmbeddingClient", () => {
       embeddings.embedWithUsage(["a"], { ...opts, signal: controller.signal }),
     ).rejects.toBe(reason);
   });
+
+  test("a cancel during the default backoff clears its timer, so the process exits at once", async () => {
+    const module = join(import.meta.dirname, "../src/embedding/openai.ts");
+    const child = spawnProcess(
+      [
+        process.execPath,
+        "-e",
+        `const { EmbeddingClient } = await import(${JSON.stringify(module)});
+         const controller = new AbortController();
+         const client = new EmbeddingClient({
+           baseUrl: "https://example.test/v1",
+           apiKey: "k",
+           fetch: async () => {
+             setTimeout(() => controller.abort(new Error("cancelled")), 20);
+             return Response.json({ error: { message: "Rate limit exceeded: 429" } });
+           },
+         });
+         await client
+           .embedWithUsage(["a"], { model: "m", dimensions: 1, signal: controller.signal })
+           .catch((error) => console.log(error.message));`,
+      ],
+      { stdout: "pipe", stderr: "ignore" },
+    );
+    try {
+      const started = performance.now();
+      expect(await child.exited).toBe(0);
+      expect(performance.now() - started).toBeLessThan(5_000);
+      expect(await new Response(child.stdout).text()).toBe("cancelled\n");
+    } finally {
+      child.kill("SIGKILL");
+    }
+  }, 90_000);
 
   test("usage: reported cost, BYOK estimate, unknown", async () => {
     const usage = async (model: string, block: unknown) => {

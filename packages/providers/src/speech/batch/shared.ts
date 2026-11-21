@@ -1,6 +1,6 @@
 // What every batch speech request shares: the account's API base, one fetch that turns an error
 // status into a ProviderHttpError, a time limit, and the spoken language a call would use.
-import { envOptional, isPlainObject } from "@eidolon/config";
+import { envOptional, isPlainObject, withoutTrailingSlashes } from "@eidolon/config";
 import { httpError } from "../../http/errors.ts";
 import { ProviderConfigError, type Selection } from "../../resolve.ts";
 
@@ -16,7 +16,7 @@ export function baseOf(selection: Selection): string {
   if (selection.baseUrl === undefined) {
     throw new ProviderConfigError(`${selection.account.name} has no API base`);
   }
-  return selection.baseUrl.replace(/\/+$/, "");
+  return withoutTrailingSlashes(selection.baseUrl);
 }
 
 /** The answer to `init` at `url`, or the provider's error. */

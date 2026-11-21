@@ -1,4 +1,5 @@
 import { OpenAIClient } from "@eidolon/config";
+import { openAIEmbeddings } from "@eidolon/providers";
 import { describe, expect, test } from "vitest";
 import {
   extractionRequestBody,
@@ -80,6 +81,25 @@ describe("mem0's embedder", () => {
     const vectors = await new Mem0Embedder(model, 1).embedBatch(texts);
     expect(model.calls.map((call) => (call.input as string[]).length)).toEqual([100, 100, 50]);
     expect(vectors).toEqual(texts.map((text) => [text.length, 1, 0, 0]));
+  });
+
+  test("a batch the API lists out of order keeps each text's own vector", async () => {
+    const { fetch } = fakeFetch([
+      json({
+        data: [
+          { object: "embedding", index: 1, embedding: [2] },
+          { object: "embedding", index: 0, embedding: [1] },
+        ],
+      }),
+    ]);
+    const model = openAIEmbeddings({
+      provider: "openrouter",
+      model: "m",
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: "sk-test",
+      fetch,
+    });
+    expect(await new Mem0Embedder(model, 1).embedBatch(["a", "b"])).toEqual([[1], [2]]);
   });
 
   test("a short batch raises mem0's count error", async () => {

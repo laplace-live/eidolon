@@ -48,13 +48,17 @@ function canonical(value: unknown): string {
 }
 
 let records: [string, string][] = [];
+// The prices these tests expect are the default refine provider's, whatever the shell exports.
+let restoreEnv = () => {};
 beforeEach(() => {
   records = [];
+  restoreEnv = setEnv({ REFINE_PROVIDER: undefined, REFINE_BASE_URL: undefined });
   logger.setSink((record: LogRecord) => {
     records.push([record.level, record.message]);
   });
 });
 afterEach(() => {
+  restoreEnv();
   logger.setSink(consoleSink);
 });
 
@@ -287,6 +291,18 @@ describe("the catalog's prices", () => {
       expect(usage.costUsd).toBeCloseTo((234 * 0.3 + 1000 * 0.006 + 567 * 1.2) / 1_000_000, 15);
       const reported = refine.extractUsage({ usage: { ...cached, cost: 0.5 } }, "deepseek-flash");
       expect([reported.costUsd, reported.costSource]).toEqual([0.5, "openrouter"]);
+      expect(records).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  test("a free provider's calls cost nothing, as the ledger counts them", () => {
+    const restore = setEnv({ REFINE_PROVIDER: "ollama" });
+    try {
+      const usage = refine.extractUsage({ usage: unreported }, "qwen3");
+      expect([usage.costUsd, usage.costSource]).toEqual([0, "estimate"]);
+      expect(refine.fmtCost(usage)).toBe("$0.0000 (estimate)");
       expect(records).toEqual([]);
     } finally {
       restore();

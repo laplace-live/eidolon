@@ -28,7 +28,14 @@ import { AvatarPicker } from "./avatar-picker";
 import { MandarinNote, PersonaFields } from "./persona-fields";
 import { activatePersona, createPersona, refreshPersonas } from "./personas";
 import { VoiceChoice } from "./voice-choice";
-import { EMPTY_PERSONA, type PersonaDraft, personaErrors, voiceProvider } from "./wizard";
+import {
+  EMPTY_PERSONA,
+  type PersonaDraft,
+  personaErrors,
+  pickedVoice,
+  type VoicePick,
+  voiceProvider,
+} from "./wizard";
 
 /**
  * Creates a persona, with the fields and the voice she needs and an avatar, outside the wizard. She
@@ -52,12 +59,15 @@ export function NewPersonaDialog({
   const blank = () => ({ ...EMPTY_PERSONA, timezone: browserTimeZone() });
   const [draft, setDraft] = useState<PersonaDraft>(blank);
   const [avatar, setAvatar] = useState<File | null>(null);
-  const [voice, setVoice] = useState<string | null>(null);
+  const [pick, setPick] = useState<VoicePick | null>(null);
   const [activate, setActivate] = useState(true);
   const [showErrors, setShowErrors] = useState(false);
   const taken = personas.data?.personas.map((persona) => persona.id) ?? [];
-  const provider = voiceProvider(active.data?.settings ?? [], accounts.data?.accounts);
-  const fallback = defaultVoice(providerById(provider)?.offers.tts) ?? null;
+  const provider =
+    active.data === undefined ? null : voiceProvider(active.data.settings, accounts.data?.accounts);
+  const voice = pickedVoice(pick, provider);
+  const fallback =
+    provider === null ? null : (defaultVoice(providerById(provider)?.offers.tts) ?? null);
   const picked = voice?.trim() ?? "";
   const voiceId = picked === "" ? fallback : picked;
   const her = personas.data?.personas.find((persona) => persona.id === personas.data?.active);
@@ -82,7 +92,7 @@ export function NewPersonaDialog({
     if (!next) {
       setDraft(blank());
       setAvatar(null);
-      setVoice(null);
+      setPick(null);
       setShowErrors(false);
       create.reset();
     }
@@ -143,18 +153,20 @@ export function NewPersonaDialog({
           {/* A fieldset grows to fit the voice list's rows unless held to the dialog's width. */}
           <FieldSet className="min-w-0">
             <FieldLegend>{t`Her Voice`}</FieldLegend>
-            {herName !== "" && (
+            {herName !== "" && provider !== null && (
               <FieldDescription>
                 {t`She starts on the providers ${herName} uses, so she speaks through ${ph({ provider: providerName(provider) })}. Change them in her studio.`}
               </FieldDescription>
             )}
-            <VoiceChoice
-              provider={provider}
-              value={voice}
-              fallback={fallback}
-              onChange={setVoice}
-              disabled={create.isPending || active.data === undefined}
-            />
+            {provider !== null && (
+              <VoiceChoice
+                provider={provider}
+                value={voice}
+                fallback={fallback}
+                onChange={(next) => setPick({ provider, voice: next })}
+                disabled={create.isPending}
+              />
+            )}
             {showErrors && voiceId === null && <FieldError>{t`Pick a voice for her.`}</FieldError>}
           </FieldSet>
         </div>

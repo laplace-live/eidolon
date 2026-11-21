@@ -33,8 +33,8 @@ npx @laplace.live/eidolon
 ```
 
 That opens the local web app, which runs on your computer only: a wizard for your keys (Soniox,
-OpenRouter and Fish Audio are recommended, and any provider Eidolon supports can hear, think,
-speak or embed instead), the 明前奶绿 demo or a persona of your own built from her prompt, facts
+OpenRouter and Fish Audio are recommended, and another provider Eidolon supports can take any part
+it offers: hearing, thinking, speaking or embedding), the 明前奶绿 demo or a persona of your own built from her prompt, facts
 and stream videos, a page to call her, and one that shows what each provider has cost. The
 terminal prints the link that signs your browser in. How it works, and how it stays out of a
 deployed bot, is in [`docs/web-app.md`](docs/web-app.md).

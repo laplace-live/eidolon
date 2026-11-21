@@ -108,8 +108,7 @@ function asked(requests: readonly { input: string[]; model: string; dimensions: 
 }
 
 describe("add replays mem0", () => {
-  // batch_reversed has the API list the batch's vectors out of order, which mem0 put back by their
-  // index: an embedding model's vectors come in the order its response lists them.
+  // batch_reversed's out-of-order response is the embedding model's to put back (http.test.ts).
   for (const c of fixtures.add.filter((a) => a.name !== "batch_reversed")) {
     test(c.name, async () => {
       const pins = pinned(c.input.base, c.input.step);

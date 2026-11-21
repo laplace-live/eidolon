@@ -5,7 +5,7 @@
 // Ported from pipedog packages/minimax/src/tts.ts@ce8f8bc
 //
 // MiniMax's T2A HTTP API, streamed: the body is `data:` blocks of JSON whose audio is hex PCM.
-import { logger, pyJsonDumps } from "@eidolon/config";
+import { logger, pyJsonDumps, withoutTrailingSlashes } from "@eidolon/config";
 import { voiceOf } from "../../resolve.ts";
 import { HttpUtterance, SpeechError } from "./http.ts";
 import type { SpeechStream, Utterance } from "./index.ts";
@@ -64,7 +64,7 @@ export class MiniMaxSpeech implements SpeechStream {
     }
     this.#selection = selection;
     this.#text = new SpokenText(selection);
-    this.#url = `${(selection.baseUrl as string).replace(/\/+$/, "")}/t2a_v2?GroupId=${groupId}`;
+    this.#url = `${withoutTrailingSlashes(selection.baseUrl as string)}/t2a_v2?GroupId=${groupId}`;
     this.#voice = voiceOf(selection) ?? DEFAULT_VOICE;
   }
 

@@ -177,7 +177,7 @@ function participantOf(id: string): DirectorParticipant {
   return { id, name, shortName, summary, interests, talkativeness };
 }
 
-/** Each question's answer from a stored row, as the Decisions API shapes it. */
+/** A decision model that answers each question with the score stored in `row`. */
 function replaying(row: Row): DecisionModel {
   return {
     provider: "openrouter",

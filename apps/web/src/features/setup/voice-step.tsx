@@ -21,7 +21,7 @@ import {
 } from "./personas";
 import { StepCard } from "./step-card";
 import { VoiceChoice } from "./voice-choice";
-import { inheritedValue, ownValue, voiceProvider } from "./wizard";
+import { inheritedValue, ownValue, pickedVoice, type VoicePick, voiceProvider } from "./wizard";
 
 const VOICE = "voice.voiceId";
 
@@ -46,7 +46,7 @@ export function VoiceStep({
   const settings = useQuery(settingsQuery(existing?.id));
   const personas = useQuery(personasQuery);
   const accounts = useQuery(accountsQuery);
-  const [chosen, setChosen] = useState<string | null>(null);
+  const [pick, setPick] = useState<VoicePick | null>(null);
   // Kept so a retry after a refused switch doesn't create her twice.
   const [created, setCreated] = useState<PersonaRef | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,11 +60,17 @@ export function VoiceStep({
   const inherited = existing ? inheritedValue(row) : null;
   const name = existing ? existing.name : target.kind === "create" ? target.draft.name : "";
   const env = row?.env ?? "";
-  const provider = voiceProvider(settings.data?.settings ?? [], accounts.data?.accounts);
-  const fallback = current ?? inherited ?? defaultVoice(providerById(provider)?.offers.tts) ?? null;
+  const provider =
+    settings.data === undefined
+      ? null
+      : voiceProvider(settings.data.settings, accounts.data?.accounts);
+  const chosen = pickedVoice(pick, provider);
+  const fallback =
+    provider === null
+      ? null
+      : (current ?? inherited ?? defaultVoice(providerById(provider)?.offers.tts) ?? null);
   const picked = chosen?.trim() ?? "";
   const voiceId = picked === "" ? fallback : picked;
-  const ready = settings.data !== undefined && voiceId !== null;
 
   async function next() {
     if (voiceId === null) return;
@@ -101,7 +107,7 @@ export function VoiceStep({
       onBack={onBack}
       busy={busy}
       footer={
-        <Button onClick={() => void next()} disabled={busy || !ready}>
+        <Button onClick={() => void next()} disabled={busy || voiceId === null}>
           {busy && <Spinner />}
           {target.kind === "create" ? t`Create Her` : t`Continue`}
         </Button>
@@ -118,12 +124,12 @@ export function VoiceStep({
           </AlertDescription>
         </Alert>
       )}
-      {settings.data !== undefined && (
+      {provider !== null && (
         <VoiceChoice
           provider={provider}
           value={chosen}
           fallback={fallback}
-          onChange={setChosen}
+          onChange={(voice) => setPick({ provider, voice })}
           disabled={busy}
         />
       )}
