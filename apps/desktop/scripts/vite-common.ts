@@ -30,7 +30,7 @@ function nodeBundle(
       ssr: join(DESKTOP, entry),
       outDir: join(DESKTOP, outDir),
       emptyOutDir: true,
-      // Electron 45 runs Node 24.
+      // Electron's own Node.
       target: "node24",
       minify: false,
       // Dev builds only: electron-builder leaves maps out of the asar.

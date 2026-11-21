@@ -1,7 +1,7 @@
 /*
- * Designated requirement for release builds (electron-builder.release.mjs): code signed by either of
- * the org's Apple teams, Sparanoid, Inc. (B5483RCL5H) or LAPLACE Live LLC (9H3CCD4YMM), so an install
- * accepts updates signed by either. Team-only on purpose: electron-builder applies this to every
- * signed file, and helpers carry their own identifiers.
+ * Designated requirement for release builds: code signed by either of the org's Apple teams,
+ * Sparanoid, Inc. (B5483RCL5H) or LAPLACE Live LLC (9H3CCD4YMM), so an install accepts updates
+ * signed by either. Team-only on purpose: electron-builder applies this to every signed file, and
+ * helpers carry their own identifiers.
  */
 designated => anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and (certificate leaf[subject.OU] = "B5483RCL5H" or certificate leaf[subject.OU] = "9H3CCD4YMM")
