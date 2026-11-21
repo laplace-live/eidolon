@@ -4,18 +4,17 @@
 // Ported from deepseek-harness apps/desktop/tests/login-shell-environment.spec.ts@2e39e70496
 //
 // deepseek's merge, with Eidolon's own rules: the launch environment's EIDOLON_* names win, Windows
-// reads and writes names in any case, and the backend runs as the app's Node on the payload and on
-// main's data home.
+// reads and writes names in any case, and a respawn stays on main's data home.
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { backendEnv } from "../src/main/controller.ts";
 import {
   loginShellOff,
   mergeShellEnvironment,
   readEnvironment,
   startupEnvironment,
-  withBackendVariables,
 } from "../src/main/environment.ts";
 
 let directory: string;
@@ -110,93 +109,29 @@ describe("mergeShellEnvironment", () => {
   });
 });
 
-describe("withBackendVariables", () => {
-  const home = "/Users/owner/.laplace/eidolon";
-
-  test("runs the app's binary as Node on main's data home and the payload, with no .env", () => {
-    const launch = { PATH: "/usr/bin", ELECTRON_RUN_AS_NODE: "0", EIDOLON_HOME: "/from-rc" };
-    expect(
-      withBackendVariables(launch, { home, appRoot: "/Applications/Eidolon.app/x" }, "darwin"),
-    ).toEqual({
-      PATH: "/usr/bin",
-      EIDOLON_HOME: home,
-      EIDOLON_APP_ROOT: "/Applications/Eidolon.app/x",
-      EIDOLON_NO_DOTENV: "1",
-      ELECTRON_RUN_AS_NODE: "1",
-    });
-    expect(launch).toEqual({
-      PATH: "/usr/bin",
-      ELECTRON_RUN_AS_NODE: "0",
-      EIDOLON_HOME: "/from-rc",
-    });
-  });
-
-  test("leaves EIDOLON_APP_ROOT out for the dev backend, which finds its files in the checkout", () => {
-    expect(
-      withBackendVariables({ EIDOLON_APP_ROOT: "/stale" }, { home, appRoot: null }, "darwin"),
-    ).toEqual({ EIDOLON_HOME: home, EIDOLON_NO_DOTENV: "1", ELECTRON_RUN_AS_NODE: "1" });
-  });
-
-  test("on Windows, starting from {Path: C:\\Windows}, writes each name once in any case", () => {
-    const windowsHome = "C:\\Users\\owner\\.laplace\\eidolon";
-    const payload = "C:\\Users\\owner\\AppData\\Local\\Programs\\eidolon\\resources\\eidolon";
-    const env = withBackendVariables(
-      {
-        Path: "C:\\Windows",
-        Eidolon_Home: "C:\\from-rc",
-        eidolon_app_root: "C:\\old",
-        Electron_Run_As_Node: "0",
-        EIDOLON_NO_DOTENV: "0",
-        eidolon_no_dotenv: "0",
-      },
-      { home: windowsHome, appRoot: payload },
-      "win32",
+// The stand-in shell is a POSIX script.
+test.skipIf(process.platform === "win32")(
+  "a respawn stays on main's data home after the rc's EIDOLON_HOME moves",
+  async () => {
+    const exported = join(directory, "home");
+    writeFileSync(exported, "/a");
+    const login = shell("login", `export EIDOLON_HOME="$(cat '${exported}')"`);
+    // A Finder launch, with no EIDOLON_HOME of its own: main's home comes from the rc's.
+    const startup = await startupEnvironment(
+      { PATH: "/usr/bin:/bin" },
+      { platform: "darwin", shells: [login] },
     );
-    expect(env).toEqual({
-      Path: "C:\\Windows",
-      Eidolon_Home: windowsHome,
-      eidolon_app_root: payload,
-      Electron_Run_As_Node: "1",
-      EIDOLON_NO_DOTENV: "1",
-    });
+    const resolved = startup.env.EIDOLON_HOME as string;
+    expect(resolved).toBe("/a");
+    await startup.forSpawn();
+    writeFileSync(exported, "/b");
+    const respawn = await startup.forSpawn();
+    expect(respawn.EIDOLON_HOME).toBe("/b");
     expect(
-      withBackendVariables(
-        { Path: "C:\\Windows", eidolon_app_root: "x" },
-        { home: windowsHome, appRoot: null },
-        "win32",
-      ),
-    ).toEqual({
-      Path: "C:\\Windows",
-      EIDOLON_HOME: windowsHome,
-      EIDOLON_NO_DOTENV: "1",
-      ELECTRON_RUN_AS_NODE: "1",
-    });
-  });
-
-  // The stand-in shell is a POSIX script.
-  test.skipIf(process.platform === "win32")(
-    "keeps a respawn on main's data home after the rc's EIDOLON_HOME moves",
-    async () => {
-      const exported = join(directory, "home");
-      writeFileSync(exported, "/a");
-      const login = shell("login", `export EIDOLON_HOME="$(cat '${exported}')"`);
-      // A Finder launch, with no EIDOLON_HOME of its own: main's home comes from the rc's.
-      const startup = await startupEnvironment(
-        { PATH: "/usr/bin:/bin" },
-        { platform: "darwin", shells: [login] },
-      );
-      const resolved = startup.env.EIDOLON_HOME as string;
-      expect(resolved).toBe("/a");
-      await startup.forSpawn();
-      writeFileSync(exported, "/b");
-      const respawn = await startup.forSpawn();
-      expect(respawn.EIDOLON_HOME).toBe("/b");
-      expect(
-        withBackendVariables(respawn, { home: resolved, appRoot: null }, "darwin").EIDOLON_HOME,
-      ).toBe("/a");
-    },
-  );
-});
+      backendEnv(respawn, { home: resolved, appRoot: null, platform: "darwin" }).EIDOLON_HOME,
+    ).toBe("/a");
+  },
+);
 
 describe("loginShellOff", () => {
   test("only EIDOLON_DESKTOP_LOGIN_SHELL off in the launch environment turns the read off", () => {

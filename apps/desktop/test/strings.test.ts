@@ -4,13 +4,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { titleCase } from "../../web/scripts/title-case.ts";
-import {
-  isLanguage,
-  LANGUAGES,
-  STRINGS,
-  type Strings,
-  shellLanguage,
-} from "../src/main/strings.ts";
+import { STRINGS, type Strings, shellLanguage } from "../src/main/strings.ts";
+import { isLanguage, LANGUAGES } from "../src/shared/bridge.ts";
 
 const ROOT = join(import.meta.dirname, "../../..");
 const en = STRINGS.en;

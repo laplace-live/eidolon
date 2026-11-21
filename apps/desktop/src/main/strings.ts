@@ -1,9 +1,7 @@
 // The shell's own words, in the web app's two languages: its menus, the tray, its dialogs, and the
 // pages main serves while the web app can't show. They follow the language the page reports, and
 // the system's before it has.
-
-export const LANGUAGES = ["en", "zh-Hans"] as const;
-export type Language = (typeof LANGUAGES)[number];
+import type { Language } from "../shared/bridge.ts";
 
 /** What a quit would stop. */
 export interface Stopping {
@@ -265,10 +263,6 @@ const zhHans: Strings = {
 };
 
 export const STRINGS: Readonly<Record<Language, Strings>> = { en, "zh-Hans": zhHans };
-
-export function isLanguage(value: unknown): value is Language {
-  return (LANGUAGES as readonly unknown[]).includes(value);
-}
 
 /**
  * The language the page last reported, else the first Chinese or English entry of the system's

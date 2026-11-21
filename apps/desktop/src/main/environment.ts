@@ -4,8 +4,8 @@
 // Ported from deepseek-harness apps/desktop/src/login-shell-environment.ts@2e39e70496
 //
 // The backend's environment: on macOS the owner's login shell's over the one the app was launched
-// with, on Windows the launch environment as it is, plus what runs the app's binary as the
-// backend's Node on main's data home.
+// with, on Windows the launch environment as it is. The controller adds its own variables
+// (backendEnv).
 import { type LoginShellFailure, PROBE_ENVIRONMENT, readLoginShell } from "./login-shell.ts";
 
 /** They describe the probe's own shell process, not the owner's configuration. */
@@ -47,16 +47,6 @@ export interface StartupEnvironment {
   readonly forSpawn: () => Promise<NodeJS.ProcessEnv>;
 }
 
-export interface BackendVariables {
-  /** The data home main resolved at startup, whose local-token and lock main reads. */
-  readonly home: string;
-  /**
-   * The payload's folder, for `EIDOLON_APP_ROOT`; null for the dev backend, which runs from the
-   * checkout and finds its files there.
-   */
-  readonly appRoot: string | null;
-}
-
 /** Every key of `env` that names `name`: on Windows, whose names have no case, each spelling. */
 function keysOf(env: NodeJS.ProcessEnv, name: string, platform: NodeJS.Platform): string[] {
   if (platform !== "win32") return Object.hasOwn(env, name) ? [name] : [];
@@ -83,10 +73,6 @@ function write(
   const [key = name, ...others] = keysOf(env, name, platform);
   for (const other of others) delete env[other];
   env[key] = value;
-}
-
-function remove(env: NodeJS.ProcessEnv, name: string, platform: NodeJS.Platform): void {
-  for (const key of keysOf(env, name, platform)) delete env[key];
 }
 
 /** `EIDOLON_DESKTOP_LOGIN_SHELL` turned off in the launch environment, as both smokes turn it. */
@@ -116,26 +102,6 @@ export function mergeShellEnvironment(
     write(merged, name, value, platform);
   }
   return merged;
-}
-
-/**
- * `env` as the backend runs on it: on main's data home, with the app's binary as Node, the
- * payload's files, and no .env.
- */
-export function withBackendVariables(
-  env: NodeJS.ProcessEnv,
-  { home, appRoot }: BackendVariables,
-  platform: NodeJS.Platform = process.platform,
-): NodeJS.ProcessEnv {
-  const out = { ...env };
-  // Each spawn reads the login shell again, whose EIDOLON_HOME may have moved since main resolved
-  // the home it reads local-token from.
-  write(out, "EIDOLON_HOME", home, platform);
-  if (appRoot === null) remove(out, "EIDOLON_APP_ROOT", platform);
-  else write(out, "EIDOLON_APP_ROOT", appRoot, platform);
-  write(out, "EIDOLON_NO_DOTENV", "1", platform);
-  write(out, "ELECTRON_RUN_AS_NODE", "1", platform);
-  return out;
 }
 
 /**
