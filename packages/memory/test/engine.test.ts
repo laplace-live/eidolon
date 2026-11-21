@@ -2,22 +2,19 @@
 // Memory.add/search/get_all/delete_all and Qdrant.create_col against the fakes in support.ts, with
 // the clock and uuid4 pinned. Each replays here and must match call for call, row for row.
 import { DatabaseSync } from "node:sqlite";
-import { setUsageSink, type UsageRecord } from "@eidolon/providers";
+import { type Selection, select, setUsageSink, type UsageRecord } from "@eidolon/providers";
 import { describe, expect, test } from "vitest";
 import { MemoryEngine, openMemoryEngine, sortNewestFirst } from "../src/engine.ts";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "../src/extraction-prompt.ts";
 import { HistoryStore } from "../src/history.ts";
-import {
-  EXTRACTION_MAX_TOKENS,
-  OpenAICompatibleChat,
-  OpenAICompatibleEmbedder,
-} from "../src/openai.ts";
+import { EXTRACTION_MAX_TOKENS, Mem0Embedder, OpenAICompatibleChat } from "../src/openai.ts";
 import { QdrantVectorStore } from "../src/qdrant.ts";
 import type { MemoryItem } from "../src/types.ts";
 import fixtures from "./fixtures/engine.json";
 import {
   type ChatResponse,
   captureLogs,
+  FakeEmbeddings,
   FakePoster,
   FakeQdrant,
   type Payload,
@@ -36,6 +33,7 @@ function build(options: {
   fake: FakeQdrant;
   poster: FakePoster;
   pins: ReturnType<typeof pinned>;
+  embeddings?: FakeEmbeddings;
   model?: string;
   vectorSize?: number;
 }) {
@@ -50,10 +48,7 @@ function build(options: {
   });
   const engine = new MemoryEngine({
     store,
-    embedder: new OpenAICompatibleEmbedder(
-      { model: "google/gemini-embedding-2-preview", dims: 4 },
-      options.poster,
-    ),
+    embedder: new Mem0Embedder(options.embeddings ?? new FakeEmbeddings(), 4),
     llm: new OpenAICompatibleChat(options.model ?? "~google/gemini-flash-latest", options.poster),
     history,
     clock: options.pins.clock,
@@ -107,8 +102,14 @@ function withPortTokenCap(request: unknown): unknown {
   return body;
 }
 
+/** What each of mem0's embedding requests asked the model for; the wire format is its own. */
+function asked(requests: readonly { input: string[]; model: string; dimensions: number }[]) {
+  return requests.map(({ input, model, dimensions }) => ({ input, model, dimensions }));
+}
+
 describe("add replays mem0", () => {
-  for (const c of fixtures.add) {
+  // batch_reversed's out-of-order response is the embedding model's to put back (http.test.ts).
+  for (const c of fixtures.add.filter((a) => a.name !== "batch_reversed")) {
     test(c.name, async () => {
       const pins = pinned(c.input.base, c.input.step);
       const fake = new FakeQdrant({ fail: c.input.fail });
@@ -116,8 +117,15 @@ describe("add replays mem0", () => {
       fake.scores = c.input.scores as Record<string, number>;
       const poster = new FakePoster();
       poster.responses = [...(c.input.responses as ChatResponse[])];
-      poster.embedPlan = [...c.input.embed_plan];
-      const { engine, history, dbPath } = build({ fake, poster, pins, model: c.input.model });
+      const embeddings = new FakeEmbeddings();
+      embeddings.plan = [...c.input.embed_plan];
+      const { engine, history, dbPath } = build({
+        fake,
+        poster,
+        pins,
+        embeddings,
+        model: c.input.model,
+      });
       const prior = c.input.prior_messages as [Payload[], string] | null;
       if (prior) {
         history.saveMessages(prior[0], prior[1]);
@@ -138,7 +146,7 @@ describe("add replays mem0", () => {
       expect(logs.at(...PROBLEM_LEVELS)).toEqual(c.logs as [string, string][]);
       // Stringified so payload key order is compared too: these points must match mem0's exactly.
       expect(json(fake.calls)).toBe(json(c.qdrant));
-      expect(json(poster.embedCalls)).toBe(json(c.embed));
+      expect(json(embeddings.calls)).toBe(json(asked(c.embed)));
       const chat = poster.chatCalls.map((call) => {
         const messages = (call.messages as { role: string; content: string }[]).map((m) => ({
           ...m,
@@ -172,8 +180,8 @@ describe("search replays mem0", () => {
     test(c.name, async () => {
       const pins = pinned(1793678706123456, 1000001);
       const fake = seeded(fixtures.search_points, fixtures.search_scores);
-      const poster = new FakePoster();
-      const { engine } = build({ fake, poster, pins });
+      const embeddings = new FakeEmbeddings();
+      const { engine } = build({ fake, poster: new FakePoster(), pins, embeddings });
       const logs = captureLogs();
       const result = await outcome(() =>
         engine.search(c.input.query, {
@@ -188,7 +196,7 @@ describe("search replays mem0", () => {
       );
       expect(logs.at(...PROBLEM_LEVELS)).toEqual(c.logs as [string, string][]);
       expect(json(fake.calls)).toBe(json(c.qdrant));
-      expect(json(poster.embedCalls)).toBe(json(c.embed));
+      expect(json(embeddings.calls)).toBe(json(asked(c.embed)));
       expect(pins.state.clockReads).toBe(c.clock_reads);
     });
   }
@@ -287,15 +295,16 @@ describe("collection setup replays mem0", () => {
 });
 
 describe("openMemoryEngine", () => {
+  const settings: Readonly<Record<string, string>> = {
+    EMBED_PROVIDER: "openai-compatible",
+    EMBED_MODEL: "embed-model",
+    OPENAI_COMPATIBLE_API_KEY: "sk-embed",
+    OPENAI_COMPATIBLE_BASE_URL: "https://embed.test/v1",
+  };
+  const embeddings = select("embeddings", (name) => settings[name]) as Selection;
   const config = (apiKey: string | null) => ({
     qdrant: { host: "h", port: 6333, collection: "c", vectorSize: 4 },
-    embedder: {
-      provider: "openai-compatible",
-      model: "embed-model",
-      apiKey: "sk-embed",
-      baseUrl: "https://embed.test/v1",
-      dims: 4,
-    },
+    embedder: { selection: embeddings, dims: 4 },
     llm: {
       provider: "openai-compatible",
       model: "x/extractor",
@@ -386,6 +395,49 @@ describe("openMemoryEngine", () => {
       "the memory key is missing",
     );
     expect(fake.calls[0]).toEqual(["getCollections"]);
+  });
+
+  /** A search whose embedding requests get `replies` in turn; resolves to its error and requests. */
+  async function failedSearch(replies: Response[]): Promise<[string, number]> {
+    let requests = 0;
+    const fetch = (async () => {
+      requests++;
+      return replies.shift() ?? Response.json({}, { status: 500 });
+    }) as unknown as typeof globalThis.fetch;
+    const engine = await openMemoryEngine(config("sk-llm"), {
+      qdrantClient: new FakeQdrant().api,
+      http: { fetch },
+    });
+    const error = await engine.search("q", { filters: { userId: "1" } }).catch((e: Error) => e);
+    return [(error as Error).message, requests];
+  }
+
+  test("a 200 without vectors fails at once: a turn sits out no quota window", async () => {
+    expect(await failedSearch([Response.json({ object: "list" })])).toEqual([
+      "Embedding provider returned no data after 1 attempts (1 data, 0 quota). " +
+        "Last error: provider returned no embedding data",
+      1,
+    ]);
+    const [quota, requests] = await failedSearch([
+      Response.json({ error: { message: "Rate limit exceeded: 429" } }),
+    ]);
+    expect(quota).toStartWith(
+      "Embedding provider returned no data after 1 attempts (0 data, 1 quota). " +
+        "Last error: Rate limit exceeded: 429",
+    );
+    expect(requests).toBe(1);
+  });
+
+  test("a failed request goes again twice, as the OpenAI SDK sent mem0's", async () => {
+    const down = () =>
+      Response.json(
+        { error: { message: "down" } },
+        { status: 503, headers: { "retry-after-ms": "1" } },
+      );
+    expect(await failedSearch([down(), down(), down()])).toEqual([
+      "Error code: 503 - {'error': {'message': 'down'}}",
+      3,
+    ]);
   });
 });
 

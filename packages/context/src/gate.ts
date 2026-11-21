@@ -4,28 +4,19 @@
 import {
   activePersona,
   envFlag,
-  extractCostUsd,
-  httpxStatusMessage,
-  isPlainObject,
   logger,
-  openrouterHeaders,
-  pyError,
   pyFixed,
-  pyParseFloat,
   pyRepr,
   pyStrip,
-  pyStrRepr,
-  pyTypeName,
   raceAbort,
 } from "@eidolon/config";
 import type { FrameMetadata } from "@eidolon/core";
-import { hasKey, reportUsage, trySelect } from "@eidolon/providers";
+import { type DecisionAnswers, type DecisionModel, gateDecisionModel } from "@eidolon/providers";
 import { errorRepr } from "./compat.ts";
 import { isMessage, sameTurn, type TurnKey, turnKeyOf } from "./messages.ts";
 
 export const GATE_FRAME_KEY = "retrieval_gate";
 export const DEFAULT_GATE_MODEL = "~typesafe/jev-latest";
-export const GATE_URL = "https://openrouter.ai/api/alpha/decisions";
 export const GATE_TIMEOUT_SEC = 10;
 
 // Set on jev-1.13 against 185 labeled turns: the lowest of the 93 that needed
@@ -224,109 +215,28 @@ export class GateDecision {
   }
 }
 
-/** A Decisions API model and where to reach it. */
-export interface DecisionsOptions {
-  readonly apiKey: string;
-  readonly model?: string;
-  readonly url?: string;
-  /** Whose Decisions API it calls, for the usage ledger. */
-  readonly provider?: string;
-  readonly fetch?: typeof fetch;
-  readonly timeoutSec?: number;
-}
-
-/** OpenRouter's Decisions route sits beside its v1 API, not under it. */
-export function decisionsUrl(baseUrl: string): string {
-  return `${baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/alpha/decisions`;
-}
-
-/** Reports one Decisions answer's usage to the ledger, as the gate's role. */
-export function reportDecision(provider: string, model: string, body: unknown): void {
-  const usage = isPlainObject(body) && isPlainObject(body.usage) ? body.usage : null;
-  if (usage === null) return;
-  const count = (value: unknown) => (typeof value === "number" && value > 0 ? value : 0);
-  const served = isPlainObject(body) && typeof body.model === "string" ? body.model : model;
-  reportUsage({
-    role: "gate",
-    provider,
-    model: served,
-    units: { inputTokens: count(usage.input_tokens), outputTokens: count(usage.output_tokens) },
-    costUsd: extractCostUsd(usage),
-  });
-}
-
-/** One model's Decisions API, billed to the gate's role. */
-export class DecisionsClient {
-  readonly model: string;
-  readonly #provider: string;
-  readonly #headers: Record<string, string>;
-  readonly #url: string;
-  readonly #fetch: typeof fetch;
-  readonly #timeoutSec: number;
-
-  /** `timeoutSec` applies when `options` sets none. */
-  constructor(options: DecisionsOptions, timeoutSec: number) {
-    this.model = options.model ?? DEFAULT_GATE_MODEL;
-    this.#provider = options.provider ?? "openrouter";
-    this.#headers = {
-      ...openrouterHeaders(),
-      Authorization: `Bearer ${options.apiKey}`,
-      "Content-Type": "application/json",
-    };
-    this.#url = options.url ?? GATE_URL;
-    this.#fetch = options.fetch ?? fetch;
-    this.#timeoutSec = options.timeoutSec ?? timeoutSec;
-  }
-
-  /** The answer's body, its usage reported; rejects on any failure, `signal`'s abort included. */
-  async ask(state: unknown, questions: object, signal?: AbortSignal): Promise<unknown> {
-    const timeout = AbortSignal.timeout(this.#timeoutSec * 1000);
-    const post = this.#fetch;
-    // The connection must outlive the gap between turns: with httpx's 5 s keep-alive, turns
-    // 15-40 s apart paid a fresh TLS session each, ~1.4 s a call instead of ~0.5 s. Bun's
-    // fetch pools sockets process-wide and reused an idle one after 90 s when measured.
-    const response = await post(this.#url, {
-      method: "POST",
-      headers: this.#headers,
-      body: JSON.stringify({ model: this.model, state, questions }),
-      // httpx follows no redirects, so a 3xx failed open there too.
-      redirect: "manual",
-      signal: signal === undefined ? timeout : AbortSignal.any([timeout, signal]),
-    });
-    if (!response.ok) {
-      throw pyError(
-        "HTTPStatusError",
-        httpxStatusMessage(response, this.#url, { statusLineOnly: true }),
-      );
-    }
-    const body: unknown = await response.json();
-    reportDecision(this.#provider, this.model, body);
-    return body;
-  }
-}
-
 /** Attaches one Jev decision per user turn to every context frame of that turn. */
 export class RetrievalGate {
   readonly model: string;
-  readonly #client: DecisionsClient;
+  readonly #decisions: DecisionModel;
   #turn: TurnKey | null = null;
   #turnId: string | undefined;
   #decision: GateDecision | null = null;
 
-  constructor(options: DecisionsOptions) {
-    this.#client = new DecisionsClient(options, GATE_TIMEOUT_SEC);
-    this.model = this.#client.model;
+  constructor(decisions: DecisionModel) {
+    this.#decisions = decisions;
+    this.model = decisions.model;
   }
 
   /** One POST; any failure retrieves without a timeline (fail open). A null state asks nothing. */
   async decide(state: GateState | null): Promise<GateVerdict> {
     if (state === null) return FAIL_OPEN;
     const started = performance.now();
-    let body: unknown;
+    let answers: DecisionAnswers;
     let score: number;
     try {
-      body = await this.#client.ask(state, { ...gateQuestions(), ...TIMELINE_QUESTIONS });
-      score = maxNoul(body, Object.keys(GATE_QUESTIONS));
+      answers = await this.#decisions.decide(state, { ...gateQuestions(), ...TIMELINE_QUESTIONS });
+      score = highest(answers, Object.keys(GATE_QUESTIONS));
     } catch (error) {
       logger.warning(`Retrieval gate failed open: ${errorRepr(error)}`);
       return FAIL_OPEN;
@@ -334,7 +244,7 @@ export class RetrievalGate {
     // A bad timeline answer only costs the timeline, never the skip.
     let timelineScore = 0;
     try {
-      timelineScore = maxNoul(body, Object.keys(TIMELINE_QUESTIONS));
+      timelineScore = highest(answers, Object.keys(TIMELINE_QUESTIONS));
     } catch (error) {
       logger.warning(`Retrieval gate's timeline answer unreadable: ${errorRepr(error)}`);
     }
@@ -372,33 +282,18 @@ export class RetrievalGate {
   }
 }
 
-/**
- * The active persona's gate role as a Decisions API: null when its key is unset, or when its
- * settings name no decision model, which `onError` hears.
- */
-export function gateRoleDecisions(onError: (error: Error) => void): DecisionsOptions | null {
-  const selection = trySelect("gate", undefined, onError);
-  if (selection === null || !hasKey(selection)) return null;
-  return {
-    apiKey: selection.apiKey as string,
-    model: selection.model,
-    provider: selection.provider.id,
-    url: decisionsUrl(selection.baseUrl as string),
-  };
-}
-
 /** null when the gate's key is unset, its settings name no decision model, or it is disabled. */
 export function retrievalGateFromEnv(): RetrievalGate | null {
   if (!envFlag("RETRIEVAL_GATE_ENABLED", true)) {
     logger.info("RETRIEVAL_GATE_ENABLED is off — every turn searches both LanceDB tiers");
     return null;
   }
-  const options = gateRoleDecisions((error) =>
+  const decisions = gateDecisionModel({ timeoutSec: GATE_TIMEOUT_SEC }, (error) =>
     logger.warning(`Retrieval gate off: ${error.message}`),
   );
-  if (options === null) return null;
-  logger.info(`Retrieval gate enabled: model=${pyRepr(options.model)}`);
-  return new RetrievalGate(options);
+  if (decisions === null) return null;
+  logger.info(`Retrieval gate enabled: model=${pyRepr(decisions.model)}`);
+  return new RetrievalGate(decisions);
 }
 
 /** The decision a frame carries, or null when no gate ran. */
@@ -441,39 +336,11 @@ export async function unlessSkipped<T>(
   }
 }
 
-// Python float(): a malformed noul must fail open, and Number(null) === 0 would read as a skip.
-function pyFloat(value: unknown): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "boolean") return value ? 1 : 0;
-  if (typeof value === "string") {
-    const parsed = pyParseFloat(value);
-    if (parsed !== null) return parsed;
-    throw pyError("ValueError", `could not convert string to float: ${pyStrRepr(value)}`);
-  }
-  throw pyError(
-    "TypeError",
-    `float() argument must be a string or a real number, not '${pyTypeName(value)}'`,
-  );
-}
-
-function subscript(container: unknown, key: string): unknown {
-  if (!isMessage(container)) {
-    throw pyError("TypeError", `'${pyTypeName(container)}' object is not subscriptable`);
-  }
-  if (!Object.hasOwn(container, key)) throw pyError("KeyError", key);
-  return container[key];
-}
-
-/** Question `name`'s noul in a Decisions answer; throws on a missing or malformed one. */
-export function noulOf(body: unknown, name: string): number {
-  return pyFloat(subscript(subscript(subscript(body, "answers"), name), "noul"));
-}
-
 // Python's max() keeps the first of equal or unordered values, so a NaN noul only wins first.
-function maxNoul(body: unknown, names: readonly string[]): number {
+function highest(answers: DecisionAnswers, names: readonly string[]): number {
   let score: number | undefined;
   for (const name of names) {
-    const noul = noulOf(body, name);
+    const noul = answers.probability(name);
     if (score === undefined || noul > score) score = noul;
   }
   return score as number;

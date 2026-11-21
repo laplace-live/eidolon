@@ -18,14 +18,17 @@ the set; every env var it reads is documented in `.env.example`.
 viewer: "拍张自拍给我看看"
   → LLM calls take_selfie (no arguments)
   → the tool runs renderSelfie(built-in prompt), which calls generate()
-  → POST https://openrouter.ai/api/v1/images  { prompt, input_references }
+  → the selfie role's image model: POST https://openrouter.ai/api/v1/images
+    { prompt, input_references }
   → bytes land in a TTL store, served at GET /api/selfie/<id>.png
   → RTVI server message { type: "selfie", urls: [...] } → client
   → the LLM gets { ok: true } and says something about it
 ```
 
-`packages/imagegen` owns the prompt, the references, the request and the
-store; the tool itself is `packages/tools/src/selfie.ts`.
+`packages/imagegen` owns the prompt, the references and the store. The request
+is the selfie role's image model, an `ImageModel` from
+`packages/providers/src/image/`, which `generate()` asks and which reports each
+render to the usage ledger; the tool itself is `packages/tools/src/selfie.ts`.
 `laplace-generate-image` calls the same `generate()`, so what you probe from
 the CLI is what a viewer gets.
 
@@ -70,9 +73,9 @@ broken. The persona prompt tells it to say something like 等我一下 on the wa
 out, and the schema description tells it not to read the URL aloud.
 
 `timeoutSecs` (`SELFIE_TIMEOUT_SECONDS`, 120 by default) bounds it. The
-request's own idle timeout (`IMAGE_REQUEST_IDLE_TIMEOUT_MS`, 600 s) is
-deliberately much longer, for the CLI's benefit: a max-quality render runs for
-minutes.
+request's own idle timeout (`IMAGE_REQUEST_IDLE_TIMEOUT_MS`, 600 s, in
+`packages/providers/src/image/openrouter.ts`) is deliberately much longer, for
+the CLI's benefit: a max-quality render runs for minutes.
 
 ## The frontend side
 

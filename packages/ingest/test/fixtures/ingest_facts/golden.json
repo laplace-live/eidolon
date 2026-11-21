@@ -2033,7 +2033,7 @@
         ["INFO", "Built FTS index on 'tokens' for persona_facts"],
         [
           "INFO",
-          "Embedding totals: 133 facts, 0 tokens (provider did not report cost and no local price entry — add the model to embeddings.EMBED_PRICING_USD_PER_1M to fix)"
+          "Embedding totals: 133 facts, 0 tokens (provider did not report cost and no local price entry — add the model's price to the provider catalog to fix)"
         ]
       ],
       "calls": [],

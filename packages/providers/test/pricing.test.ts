@@ -35,6 +35,10 @@ describe("costOf", () => {
     expect(costOf({ unit: "images", usd: 0.04 }, { images: 2 })).toBeCloseTo(0.08);
     expect(costOf({ unit: "audio-hours", usd: 0.12 }, {})).toBeNull();
   });
+
+  test("no price, no cost", () => {
+    expect(costOf(undefined, { inputTokens: 1_000_000, audioSeconds: 3600 })).toBeNull();
+  });
 });
 
 test("a promotion's price holds until its end", () => {

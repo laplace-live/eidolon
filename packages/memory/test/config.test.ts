@@ -4,6 +4,7 @@ import { dataHome } from "@eidolon/config";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   buildMemoryConfig,
+  type EmbedderSettings,
   memorySearchSettingsFromEnv,
   qdrantHost,
   requireLlmKey,
@@ -20,6 +21,12 @@ beforeEach(() => {
   });
 });
 afterEach(resetEnv);
+
+/** The embeddings role's account, model and key, and the dimension sent. */
+function embedder({ selection, dims }: EmbedderSettings) {
+  const { provider, model, apiKey, baseUrl } = selection;
+  return { provider: provider.id, model, apiKey, baseUrl, dims };
+}
 
 describe("enablement", () => {
   test("a whitespace-only host leaves memory off", () => {
@@ -52,7 +59,7 @@ describe("buildMemoryConfig", () => {
       collection: "eidolon_memories",
       vectorSize: 3072,
     });
-    expect(config.embedder).toEqual({
+    expect(embedder(config.embedder)).toEqual({
       provider: "openrouter",
       model: "google/gemini-embedding-2-preview",
       apiKey: "sk-or",
@@ -84,7 +91,7 @@ describe("buildMemoryConfig", () => {
       EMBED_DIM: "8",
     });
     const config = buildMemoryConfig();
-    expect(config.embedder).toEqual({
+    expect(embedder(config.embedder)).toEqual({
       provider: "openrouter",
       model: "m",
       apiKey: "sk-embed",

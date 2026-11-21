@@ -82,10 +82,11 @@ test.skipIf((real === null || !haveStreams || !existsSync(CACHE)) && !REQUIRED)(
       dbPath: db,
       skipTypes: ingestStreams.parseSkipTypes(ingestStreams.DEFAULT_SKIP_TYPES),
       cachePath: clone,
-      model: DEFAULT_EMBED_MODEL,
       dim: DIM,
-      client: {
-        embedWithUsage: () => Promise.reject(new Error("a cache miss would call the API")),
+      embedding: {
+        provider: "openrouter",
+        model: DEFAULT_EMBED_MODEL,
+        embed: () => Promise.reject(new Error("a cache miss would call the API")),
       },
     });
     expect([report.ok, report.error, report.embedded]).toEqual([true, null, 0]);

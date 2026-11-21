@@ -295,9 +295,8 @@ export function openaiMind(replies: readonly (readonly Readonly<Record<string, u
     client,
     server: "http://provider.invalid/api/v1",
     model: "anthropic/claude-sonnet-5.5",
-    live: {},
-    dialect: "compatible",
-    takesStop: true,
+    extra: {},
+    dialect: { wire: "openai" },
   });
   return { mind, bodies };
 }

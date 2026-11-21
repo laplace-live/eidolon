@@ -3,7 +3,7 @@
 // process-local: a second worker would 404 on the first one's ids.
 import { randomBytes } from "node:crypto";
 import { pyPathStem } from "@eidolon/config";
-import type { GeneratedImage } from "./generate.ts";
+import type { GeneratedImage } from "@eidolon/providers";
 import { imageSuffix } from "./mime.ts";
 
 export const SELFIE_PATH = "/api/selfie";

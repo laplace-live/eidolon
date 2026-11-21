@@ -45,7 +45,7 @@ export {
   selectStreams,
   streamContext,
 } from "./run.ts";
-export { extractUsage, fmtCost, PRICING_USD_PER_1M, Usage } from "./usage.ts";
+export { extractUsage, fmtCost, Usage } from "./usage.ts";
 export {
   type Extract,
   isV2Refinement,

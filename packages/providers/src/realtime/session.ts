@@ -8,6 +8,7 @@
 // One realtime socket and the bookkeeping both dialects share: when the session is ready, whether
 // a response is running or owed, and which function calls the model waits on.
 import { AsyncQueue, errorText, isPlainObject, logger, pyJsonDumps } from "@eidolon/config";
+import type { ProviderId } from "../catalog.ts";
 import { Meter } from "../meter.ts";
 import { priceOf } from "../pricing.ts";
 import type { Selection } from "../resolve.ts";
@@ -20,7 +21,11 @@ import { OPENAI } from "./openai.ts";
 import { type Dialect, type Json, num, obj, str, type Tokens } from "./wire.ts";
 import { XAI } from "./xai.ts";
 
-const DIALECTS: Readonly<Record<string, Dialect>> = { openai: OPENAI, xai: XAI };
+/** Each provider's realtime dialect, by catalog id: one for every provider that offers it. */
+export const REALTIME_DIALECTS: { readonly [P in ProviderId]?: Dialect } = {
+  openai: OPENAI,
+  xai: XAI,
+};
 
 /** The id pipedog gave the items it created. */
 function itemId(): string {
@@ -482,7 +487,7 @@ export async function openRealtimeSession(
   selection: Selection,
   options: RealtimeOptions,
 ): Promise<RealtimeSession> {
-  const dialect = DIALECTS[selection.provider.id];
+  const dialect = REALTIME_DIALECTS[selection.provider.id];
   if (dialect === undefined) {
     throw new Error(`${selection.provider.name} has no realtime voice model in Eidolon yet`);
   }

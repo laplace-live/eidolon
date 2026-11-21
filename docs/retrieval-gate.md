@@ -96,6 +96,12 @@ After touching the timeline questions or `TIMELINE_THRESHOLD`, re-run
 `bun docs/benchmarks/2026-11-07-timeline-question/score.ts`. It exits
 non-zero if any labeled turn lands on the wrong side of the threshold.
 
+The gate and the group chats' director ask through `DecisionModel`
+(`packages/providers/src/decision`), which a provider's decision API implements: OpenRouter's
+Decisions route today. Another provider's decision models are an implementation there, listed in
+`DECISION_MODELS`, and a `decision` offer in its catalog entry; the threshold was set on Jev, so
+benchmark a new model before trusting it.
+
 Live before/after calls and their method are in the
 [benchmark](benchmarks/2026-09-19-retrieval-gate/README.md); the timeline
 questions' are in [their own](benchmarks/2026-11-07-timeline-question/README.md).

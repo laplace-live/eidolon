@@ -1,6 +1,7 @@
 // Streaming speech synthesis for the voice engine: one stream per persona per call, one utterance
 // per stretch of a reply in one voice.
-import { hasKey, missingKey, selectRequired } from "../../resolve.ts";
+import type { ProviderId } from "../../catalog.ts";
+import { openModel, selectRequired } from "../../resolve.ts";
 import { CartesiaSpeech } from "./cartesia.ts";
 import { ElevenLabsSpeech } from "./elevenlabs.ts";
 import { FishSpeech } from "./fish.ts";
@@ -54,25 +55,19 @@ export type UtteranceAudio =
   | { readonly kind: "end" }
   | { readonly kind: "error"; readonly message: string };
 
+/** Each provider's streaming speech, by catalog id: one for every provider that offers it. */
+export const SPEECH_STREAMS: {
+  readonly [P in ProviderId]?: (selection: KeyedSelection) => SpeechStream;
+} = {
+  fish: (selection) => new FishSpeech(selection),
+  elevenlabs: (selection) => new ElevenLabsSpeech(selection),
+  cartesia: (selection) => new CartesiaSpeech(selection),
+  soniox: (selection) => new SonioxSpeech(selection),
+  minimax: (selection) => new MiniMaxSpeech(selection),
+  openai: (selection) => new OpenAISpeech(selection),
+};
+
 /** The voice role in the current persona scope; throws before connecting without its key. */
 export function openSpeech(): SpeechStream {
-  const selection = selectRequired("voice");
-  if (!hasKey(selection)) throw missingKey(selection);
-  const keyed = selection as KeyedSelection;
-  switch (selection.provider.id) {
-    case "fish":
-      return new FishSpeech(keyed);
-    case "elevenlabs":
-      return new ElevenLabsSpeech(keyed);
-    case "cartesia":
-      return new CartesiaSpeech(keyed);
-    case "soniox":
-      return new SonioxSpeech(keyed);
-    case "minimax":
-      return new MiniMaxSpeech(keyed);
-    case "openai":
-      return new OpenAISpeech(keyed);
-    default:
-      throw new Error(`${selection.provider.name} has no speech synthesis in Eidolon yet`);
-  }
+  return openModel(SPEECH_STREAMS, "speech synthesis", selectRequired("voice"), undefined);
 }

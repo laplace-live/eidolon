@@ -18,7 +18,6 @@ import {
   type DirectorInput,
   type DirectorLine,
   type DirectorParticipant,
-  gateRoleDecisions,
   HOP_STEP,
   INTEREST_THRESHOLD,
   INVITES_THRESHOLD,
@@ -30,6 +29,7 @@ import {
   VOICE_THRESHOLD_AFTER_VOICE,
   voiceThreshold,
 } from "../../../packages/context/src/director.ts";
+import { type DecisionModel, gateDecisionModel } from "../../../packages/providers/src/index.ts";
 
 const VIEWER = "viewer";
 const MODALITIES = ["text", "voice", "call"] as const;
@@ -177,19 +177,19 @@ function participantOf(id: string): DirectorParticipant {
   return { id, name, shortName, summary, interests, talkativeness };
 }
 
-/** Each question's answer from a stored row, as the Decisions API shapes it. */
-function replaying(row: Row): typeof fetch {
-  return (async (_url: string, init: RequestInit) => {
-    const { questions } = JSON.parse(String(init.body)) as { questions: Record<string, unknown> };
-    const missing = Object.keys(questions).filter((key) => !(key in row.scores));
-    if (missing.length > 0) {
-      throw new Error(`${row.id} has no stored ${missing.join(", ")}: score it without --cached`);
-    }
-    const answers = Object.fromEntries(
-      Object.keys(questions).map((key) => [key, { type: "noul", noul: row.scores[key] }]),
-    );
-    return Response.json({ model: row.model, answers });
-  }) as unknown as typeof fetch;
+/** A decision model that answers each question with the score stored in `row`. */
+function replaying(row: Row): DecisionModel {
+  return {
+    provider: "openrouter",
+    model: row.model,
+    async decide(_state, questions) {
+      const missing = Object.keys(questions).filter((key) => !(key in row.scores));
+      if (missing.length > 0) {
+        throw new Error(`${row.id} has no stored ${missing.join(", ")}: score it without --cached`);
+      }
+      return { probability: (name) => row.scores[name] as number };
+    },
+  };
 }
 
 let answered: { ms: number; model: string; costUsd: number | null } | null = null;
@@ -212,14 +212,14 @@ const recording = (async (url: string, init: RequestInit) => {
 }) as unknown as typeof fetch;
 
 function liveDirector(): Director {
-  const options = gateRoleDecisions((error) => {
+  // The bot gives up after DIRECTOR_TIMEOUT_SEC; a benchmark waits, and counts the slow answers.
+  const decisions = gateDecisionModel({ fetch: recording, timeoutSec: 30 }, (error) => {
     throw error;
   });
-  if (options === null) {
+  if (decisions === null) {
     throw new Error("the gate role has no key: set OPENROUTER_API_KEY, or its account's key");
   }
-  // The bot gives up after DIRECTOR_TIMEOUT_SEC; a benchmark waits, and counts the slow answers.
-  return new Director({ ...options, fetch: recording, timeoutSec: 30 });
+  return new Director(decisions);
 }
 
 /** `line` as a chat asks about it; with `voice`, every persona's reply mode is auto. */
@@ -306,7 +306,7 @@ if (cached) {
     const row = stored.get(line.id);
     if (row === undefined)
       throw new Error(`${line.id} has no stored scores: score it without --cached`);
-    const director = new Director({ apiKey: "cached", fetch: replaying(row) });
+    const director = new Director(replaying(row));
     // A label added since the last real run has no stored voice_moment to replay.
     const voiced = line.voice_moment !== undefined && "voice_moment" in row.scores;
     rows.push(rowOf(line, await decide(director, line, voiced), row.ms, row.model, voiced));

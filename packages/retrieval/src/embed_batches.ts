@@ -1,15 +1,14 @@
 // Embeds a run's texts for both ingests: cache hits first, then the misses one request at a time,
 // each batch written through to the cache.
 import { embedDim, logger, pyFixed } from "@eidolon/config";
-import type { EmbedCache } from "./embed_cache.ts";
 import {
-  type CostSource,
-  defaultEmbeddingClient,
-  type EmbeddingClient,
+  type EmbeddingCostSource,
+  type EmbeddingModel,
   EmbeddingUsage,
-  embeddingSelection,
   reportEmbedding,
-} from "./embeddings.ts";
+} from "@eidolon/providers";
+import type { EmbedCache } from "./embed_cache.ts";
+import { defaultEmbeddingModel, embeddingSelection } from "./embeddings.ts";
 
 // Cache hits are read a window at a time and copied straight into the result, so a whole stream
 // ingest's vectors (44k rows, 545 MB at 3072 dimensions) are never held twice.
@@ -28,12 +27,14 @@ export interface EmbedInBatchesOptions {
   /** What the log lines count: "chunks" or "facts". */
   readonly noun: string;
   readonly cache?: EmbedCache | null;
-  /** EMBED_MODEL when omitted. Resolved once, so the cache key matches what the API is sent. */
-  readonly model?: string;
+  /**
+   * The model, or what opens one for EMBED_MODEL at the first miss, so a fully cached run needs no
+   * key: the install's own when omitted. Its id is resolved once, so the cache key matches what
+   * the API is sent.
+   */
+  readonly embedding?: EmbeddingModel | ((model: string) => EmbeddingModel);
   /** EMBED_DIM when omitted. */
   readonly dim?: number;
-  /** The default client is built at the first miss, so a fully cached run needs no key. */
-  readonly client?: Pick<EmbeddingClient, "embedWithUsage">;
   /** Called after each batch. */
   readonly onProgress?: (progress: EmbedProgress) => void;
   readonly signal?: AbortSignal;
@@ -69,7 +70,8 @@ export async function embedInBatches(
   options: EmbedInBatchesOptions,
 ): Promise<EmbedReport> {
   const { batchSize, noun, cache, signal } = options;
-  const model = options.model ?? embeddingSelection().model;
+  const given = options.embedding ?? defaultEmbeddingModel;
+  const model = typeof given === "function" ? embeddingSelection().model : given.model;
   const dim = options.dim ?? embedDim();
   signal?.throwIfAborted();
   const vectors = new Float32Array(texts.length * dim);
@@ -104,13 +106,14 @@ export async function embedInBatches(
     return { model, dim, vectors, cacheHits, embedded: 0, usage };
   }
 
-  const client = options.client ?? defaultEmbeddingClient();
+  const embedding = typeof given === "function" ? given(model) : given;
   for (let start = 0; start < misses.length; start += batchSize) {
     signal?.throwIfAborted();
     const batch = misses.slice(start, start + batchSize);
-    const [fresh, batchUsage] = await client.embedWithUsage(
+    const [fresh, batchUsage] = await embedding.embed(
       batch.map((row) => texts[row] as string),
-      { model, dimensions: dim, ...(signal ? { signal } : {}) },
+      dim,
+      signal,
     );
     if (fresh.length < batch.length) {
       throw new Error(
@@ -132,7 +135,7 @@ export async function embedInBatches(
       batch.map((row) => [texts[row] as string, vectors.subarray(row * dim, (row + 1) * dim)]),
     );
     usage.add(batchUsage);
-    reportEmbedding(model, batchUsage);
+    reportEmbedding(embedding, batchUsage);
     const done = Math.min(start + batchSize, misses.length);
     logger.info(
       `Embedded ${done}/${misses.length} ${noun} (${batchUsage.totalTokens} tokens` +
@@ -143,7 +146,7 @@ export async function embedInBatches(
   return { model, dim, vectors, cacheHits, embedded: misses.length, usage };
 }
 
-const TOTALS_NOTES: Partial<Record<CostSource, string>> = {
+const TOTALS_NOTES: Partial<Record<EmbeddingCostSource, string>> = {
   openrouter: "",
   estimate: " (client-side estimate; BYOK on /v1/embeddings — OpenRouter withholds cost data)",
   mixed: " (mixed: some batches reported, some estimated)",
@@ -156,7 +159,7 @@ export function embeddingTotalsMessage(rows: number, noun: string, usage: Embedd
     return (
       `Embedding totals: ${rows} ${noun}, ${usage.totalTokens} tokens ` +
       "(provider did not report cost and no local price entry — " +
-      "add the model to embeddings.EMBED_PRICING_USD_PER_1M to fix)"
+      "add the model's price to the provider catalog to fix)"
     );
   }
   return (

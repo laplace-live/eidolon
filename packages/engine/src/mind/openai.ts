@@ -4,44 +4,36 @@
 // (BSD-2-Clause; Copyright (c) 2024–2026 Daily, Copyright (c) 2026 pipedog contributors).
 import { errorText, isPlainObject, logger } from "@eidolon/config";
 import type { ToolSchema } from "@eidolon/core";
-import type { OpenAIChatClient } from "@eidolon/providers";
+import type { CompletionsDialect, OpenAIChatClient } from "@eidolon/providers";
 import { refusedImages, showsImages, withoutImages } from "../seen.ts";
 import type { Mind, MindChunk, MindRequest } from "../types.ts";
 import { assembleCalls, type PendingCall } from "./calls.ts";
-
-/**
- * How a provider's chat API differs from OpenAI's own: only OpenAI's takes a `developer` message,
- * Gemini's takes one system message, and DeepSeek's wants its thinking off and a
- * `reasoning_content` on every assistant message.
- */
-export type OpenAIDialect = "openai" | "compatible" | "gemini" | "deepseek";
 
 export interface OpenAIMindOptions {
   readonly client: OpenAIChatClient;
   /** The API's base URL: with `model`, what remembers a model there that can't see images. */
   readonly server: string;
   readonly model: string;
-  /** The catalog's call-time fields, over the request's own. */
-  readonly live: Readonly<Record<string, unknown>>;
-  readonly dialect: OpenAIDialect;
-  /** Whether the provider takes the request's `stop`. */
-  readonly takesStop: boolean;
+  /** Fields over the request's own: the catalog's call-time ones, and the dialect's. */
+  readonly extra: Readonly<Record<string, unknown>>;
+  /** Where the provider's API parts from OpenAI's own. */
+  readonly dialect: CompletionsDialect;
 }
 
 type Message = Record<string, unknown>;
 
-function messagesFor(request: MindRequest, dialect: OpenAIDialect): Message[] {
+function messagesFor(request: MindRequest, { dialect, model }: OpenAIMindOptions): Message[] {
   const messages: Message[] = request.system ? [{ role: "system", content: request.system }] : [];
   for (const message of request.messages) {
     if (!isPlainObject(message)) continue;
     let out: Message = message;
-    if (dialect !== "openai" && out.role === "developer") out = { ...out, role: "user" };
-    if (dialect === "deepseek" && out.role === "assistant" && !("reasoning_content" in out)) {
+    if (!dialect.developer && out.role === "developer") out = { ...out, role: "user" };
+    if (dialect.reasoningContent && out.role === "assistant" && !("reasoning_content" in out)) {
       out = { ...out, reasoning_content: "" };
     }
     messages.push(out);
   }
-  if (dialect !== "gemini") return messages;
+  if (!dialect.oneSystem?.(model)) return messages;
   let seen = false;
   return messages.map((message) => {
     if (message.role !== "system") return message;
@@ -73,17 +65,15 @@ function bodyFor(request: MindRequest, options: OpenAIMindOptions): Message {
     model: options.model,
     stream: true,
     stream_options: { include_usage: true },
-    messages: messagesFor(request, options.dialect),
+    messages: messagesFor(request, options),
   };
   // OpenAI refuses a tool_choice sent without tools.
   if (request.tools.length > 0) {
     body.tools = request.tools.map(toolFor);
     if (request.toolChoice !== undefined) body.tool_choice = request.toolChoice;
   }
-  if (options.takesStop && request.stop?.length) body.stop = [...request.stop];
-  Object.assign(body, options.live);
-  // pipedog sends DeepSeek's `thinking` in `extra_body`, which lands over every other field.
-  if (options.dialect === "deepseek") body.thinking = { type: "disabled" };
+  if (!options.dialect.rejectsStop && request.stop?.length) body.stop = [...request.stop];
+  Object.assign(body, options.extra);
   return body;
 }
 

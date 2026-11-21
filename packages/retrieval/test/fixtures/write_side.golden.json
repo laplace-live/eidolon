@@ -428,8 +428,8 @@
     "facts/estimate": "Embedding totals: 2 facts, 12 tokens, $0.000002 USD (client-side estimate; BYOK on /v1/embeddings — OpenRouter withholds cost data)",
     "chunks/mixed": "Embedding totals: 2 chunks, 13 tokens, $0.000002 USD (mixed: some batches reported, some estimated)",
     "facts/mixed": "Embedding totals: 2 facts, 13 tokens, $0.000002 USD (mixed: some batches reported, some estimated)",
-    "chunks/unknown": "Embedding totals: 2 chunks, 14 tokens (provider did not report cost and no local price entry — add the model to embeddings.EMBED_PRICING_USD_PER_1M to fix)",
-    "facts/unknown": "Embedding totals: 2 facts, 14 tokens (provider did not report cost and no local price entry — add the model to embeddings.EMBED_PRICING_USD_PER_1M to fix)"
+    "chunks/unknown": "Embedding totals: 2 chunks, 14 tokens (provider did not report cost and no local price entry — add the model's price to the provider catalog to fix)",
+    "facts/unknown": "Embedding totals: 2 facts, 14 tokens (provider did not report cost and no local price entry — add the model's price to the provider catalog to fix)"
   },
   "schemas": {
     "persona_facts": {

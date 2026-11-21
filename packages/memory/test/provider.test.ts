@@ -4,18 +4,20 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { activePersona, dataHome, resetSettings, withPersona } from "@eidolon/config";
 import type { ContextTurn, ConversationContext } from "@eidolon/core";
+import { type Selection, select } from "@eidolon/providers";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { LlmSettings, MemoryConfig } from "../src/config.ts";
 import { MemoryEngine, SharedEngine } from "../src/engine.ts";
 import { HistoryStore } from "../src/history.ts";
 import { createMemoryProvider, MEM0_STORE_KEY } from "../src/index.ts";
-import { OpenAICompatibleChat, OpenAICompatibleEmbedder } from "../src/openai.ts";
+import { Mem0Embedder, OpenAICompatibleChat } from "../src/openai.ts";
 import { Mem0MemoryProvider, openMemoryProvider } from "../src/provider.ts";
 import { QdrantVectorStore } from "../src/qdrant.ts";
 import type { MemoryItem } from "../src/types.ts";
 import {
   captureLogs,
   clearMemoryEnv,
+  FakeEmbeddings,
   FakePoster,
   FakeQdrant,
   pinned,
@@ -334,7 +336,7 @@ describe("the background store", () => {
         { host: "h", port: 6333, collection: "c", vectorSize: 4 },
         fake.api,
       ),
-      embedder: new OpenAICompatibleEmbedder({ model: "m", dims: 4 }, poster),
+      embedder: new Mem0Embedder(new FakeEmbeddings("m"), 4),
       llm: new OpenAICompatibleChat("~google/gemini-flash-latest", poster),
       history: new HistoryStore(tempPath("h.db"), { clock: pins.clock, newId: pins.newId }),
       clock: pins.clock,
@@ -477,13 +479,14 @@ describe("openMemoryProvider", () => {
 
 describe("SharedEngine", () => {
   const BASE = "https://openrouter.ai/api/v1";
+  const settings: Readonly<Record<string, string>> = {
+    OPENROUTER_API_KEY: "sk-or",
+    EMBED_MODEL: "embed",
+  };
   const CONFIG: MemoryConfig = {
     qdrant: { host: "qdrant", port: 6333, collection: "eidolon_memories", vectorSize: 1536 },
     embedder: {
-      provider: "openrouter",
-      model: "embed",
-      apiKey: "sk-or",
-      baseUrl: BASE,
+      selection: select("embeddings", (name) => settings[name]) as Selection,
       dims: 1536,
     },
     llm: {
@@ -532,6 +535,24 @@ describe("SharedEngine", () => {
     expect(again.engine).toBe(first.engine);
     expect([first.fresh, again.fresh]).toEqual([true, false]);
     expect(opened).toHaveLength(1);
+  });
+
+  test("the embeddings account's name and its key's source open no other engine", async () => {
+    const { shared, opened } = opener();
+    const first = await shared.get(CONFIG);
+    const { selection } = CONFIG.embedder;
+    const account = { ...selection.account, name: "Mine", keySource: "credentials" as const };
+    const renamed = await shared.get({
+      ...CONFIG,
+      embedder: { ...CONFIG.embedder, selection: { ...selection, account } },
+    });
+    const otherModel = await shared.get({
+      ...CONFIG,
+      embedder: { ...CONFIG.embedder, selection: { ...selection, model: "other" } },
+    });
+    expect(renamed.engine).toBe(first.engine);
+    expect(otherModel.engine).not.toBe(first.engine);
+    expect(opened).toHaveLength(2);
   });
 
   test("concurrent gets of one configuration open it once", async () => {

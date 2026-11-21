@@ -1,5 +1,6 @@
 // Live speech recognition for the voice engine, one stream per call.
 import { envOptional } from "@eidolon/config";
+import type { ProviderId } from "../catalog.ts";
 import { hasKey, missingKey, type Selection, selectRequired } from "../resolve.ts";
 import { openDeepgramStt } from "./deepgram.ts";
 import { openElevenLabsStt } from "./elevenlabs.ts";
@@ -34,29 +35,30 @@ export interface SttStream {
   close(): Promise<void>;
 }
 
+/** Each provider's live speech recognition, by catalog id: one for every provider that offers it. */
+export const STT_STREAMS: {
+  readonly [P in ProviderId]?: (
+    selection: Selection,
+    language: string | null,
+    signal: AbortSignal,
+  ) => Promise<SttStream>;
+} = {
+  soniox: openSonioxStt,
+  deepgram: openDeepgramStt,
+  elevenlabs: openElevenLabsStt,
+  openai: openOpenAIStt,
+};
+
 /** The hearing role in the current persona scope. Throws `missingKey` before connecting. */
 export async function openStt(signal: AbortSignal): Promise<SttStream> {
   const selection = selectRequired("hearing");
   if (!hasKey(selection)) throw missingKey(selection);
   signal.throwIfAborted();
-  const language = sttLanguage(selection);
-  let stream: SttStream;
-  switch (selection.provider.id) {
-    case "soniox":
-      stream = await openSonioxStt(selection, language, signal);
-      break;
-    case "deepgram":
-      stream = await openDeepgramStt(selection, language, signal);
-      break;
-    case "elevenlabs":
-      stream = await openElevenLabsStt(selection, language, signal);
-      break;
-    case "openai":
-      stream = await openOpenAIStt(selection, language, signal);
-      break;
-    default:
-      throw new Error(`${selection.provider.name} has no live speech recognition in Eidolon yet`);
+  const open = STT_STREAMS[selection.provider.id];
+  if (open === undefined) {
+    throw new Error(`${selection.provider.name} has no live speech recognition in Eidolon yet`);
   }
+  const stream = await open(selection, sttLanguage(selection), signal);
   signal.throwIfAborted();
   return stream;
 }

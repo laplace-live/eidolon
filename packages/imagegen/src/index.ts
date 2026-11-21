@@ -1,18 +1,19 @@
-// Selfies: OpenRouter image generation, the selfie prompt and references, and the TTL store that
-// serves the results. Shared by the take_selfie tool, apps/bot's /api/selfie route and the
-// generate-image CLI, so what the CLI probes is what a viewer gets.
-export { ImageGenError } from "./errors.ts";
+// Selfies: the selfie prompt and references, the render through the selfie role's image model, and
+// the TTL store that serves the results. Shared by the take_selfie tool, apps/bot's /api/selfie
+// route and the generate-image CLI, so what the CLI probes is what a viewer gets.
+export {
+  type GeneratedImage,
+  type Generation,
+  ImageGenError,
+  type ReferenceImage,
+} from "@eidolon/providers";
 export {
   ASPECT_RATIOS,
   DEFAULT_IMAGE_MODEL,
-  type GeneratedImage,
   type GenerateOptions,
-  type Generation,
   generate,
-  IMAGE_REQUEST_IDLE_TIMEOUT_MS,
   MAX_IMAGES,
   MAX_REFERENCES,
-  OPENROUTER_IMAGES_URL,
   QUALITIES,
 } from "./generate.ts";
 export { imageMediaType, imageSuffix, REFERENCE_EXTENSIONS } from "./mime.ts";
@@ -38,7 +39,6 @@ export {
   loadReference,
   loadReferences,
   OUTFITS,
-  type ReferenceImage,
   type ReferenceOptions,
   referenceCandidates,
   referenceRoots,

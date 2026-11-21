@@ -94,10 +94,7 @@ describe("BOOT_READ", () => {
       { model: "alice/memory" },
       { model: "bob/memory" },
     ] as unknown as MemoryEngine[]);
-    expect([alice.reranker?.modelName, bob.reranker?.modelName]).toEqual([
-      "alice/rerank",
-      "bob/rerank",
-    ]);
+    expect([alice.reranker?.model, bob.reranker?.model]).toEqual(["alice/rerank", "bob/rerank"]);
     expect(again.engine).toBe(alice.engine);
     expect(again.reranker).toBe(alice.reranker);
   });

@@ -5,13 +5,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  DEFAULT_EMBED_MODEL,
-  type EmbeddingClient,
-  EmbeddingUsage,
-  type LanceTable,
-  openTable,
-} from "@eidolon/retrieval";
+import { type EmbeddingModel, EmbeddingUsage } from "@eidolon/providers";
+import { DEFAULT_EMBED_MODEL, type LanceTable, openTable } from "@eidolon/retrieval";
 
 const FIXTURES = join(import.meta.dirname, "fixtures");
 
@@ -71,13 +66,13 @@ function fakeVector(text: string): number[] {
   return [base / 7, (0 - base) / 3, 0.1 * base, 1 / (base + 3)];
 }
 
-/** The golden's stubbed embedding call; `calls` records each batch's size. */
-export function fakeClient(calls: number[]): Pick<EmbeddingClient, "embedWithUsage"> {
+/** The golden's stubbed embedding model; `calls` records each batch's size. */
+export function fakeModel(calls: number[]): EmbeddingModel {
   return {
-    async embedWithUsage(texts, options) {
-      if (options.model !== GOLDEN_MODEL || options.dimensions !== GOLDEN_DIM) {
-        throw new Error(`unexpected model ${options.model} at ${options.dimensions}`);
-      }
+    provider: "openrouter",
+    model: GOLDEN_MODEL,
+    async embed(texts, dimensions) {
+      if (dimensions !== GOLDEN_DIM) throw new Error(`unexpected dimensions ${dimensions}`);
       calls.push(texts.length);
       const n = texts.length;
       const usage = new EmbeddingUsage({

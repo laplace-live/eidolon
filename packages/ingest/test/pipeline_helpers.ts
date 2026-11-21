@@ -5,7 +5,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { consoleSink, type LogLevel, type LogRecord, logger } from "@eidolon/config";
-import { type EmbeddingClient, EmbeddingUsage } from "@eidolon/retrieval";
+import { type EmbeddingModel, EmbeddingUsage } from "@eidolon/providers";
+import { DEFAULT_EMBED_MODEL } from "@eidolon/retrieval";
 import type { FakeJob } from "./fake_soniox.ts";
 
 export const PIPELINE_FIXTURES = join(import.meta.dirname, "fixtures", "pipeline");
@@ -199,18 +200,18 @@ export function routeFetch(soniox: typeof fetch, other: typeof fetch): typeof fe
   return route as unknown as typeof fetch;
 }
 
-/** An embedding API answering every batch with vectors of the asked-for size; or failing. */
-export function fakeEmbeddings(
-  fail = false,
-): Pick<EmbeddingClient, "embedWithUsage"> & { batches: number[] } {
+/** An embedding model answering every batch with vectors of the asked-for size; or failing. */
+export function fakeEmbeddings(fail = false): EmbeddingModel & { batches: number[] } {
   const batches: number[] = [];
   return {
     batches,
-    async embedWithUsage(texts, options) {
+    provider: "openrouter",
+    model: DEFAULT_EMBED_MODEL,
+    async embed(texts, dimensions) {
       if (fail) throw new Error("embedding test failure");
       batches.push(texts.length);
       const vectors = texts.map((text, i) =>
-        Array.from({ length: options.dimensions }, (_, k) => ((text.length + i + k) % 7) / 7),
+        Array.from({ length: dimensions }, (_, k) => ((text.length + i + k) % 7) / 7),
       );
       const usage = new EmbeddingUsage({
         promptTokens: texts.length,

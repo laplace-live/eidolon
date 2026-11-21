@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
 import * as lancedb from "@lancedb/lancedb";
 import { afterEach, beforeEach, type Mock, vi } from "vitest";
-import { openTable, resetEmbeddingClient, resetRerankerCache } from "../src/index.ts";
+import { openTable, resetEmbeddingModel, resetRerankerCache } from "../src/index.ts";
 
 /** Routes the logger into the returned array for each test, and back to the console after. */
 export function captureLogs(): LogRecord[] {
@@ -45,7 +45,7 @@ const ISOLATED = [
 
 /**
  * Unsets ISOLATED for each test and restores the original values after, with the env-derived
- * reranker and embedding-client caches cleared, and makes the global fetch throw: a test that
+ * reranker and embedding-model caches cleared, and makes the global fetch throw: a test that
  * wants it replaces the mock's implementation.
  */
 export function isolateEnv(): { network: () => Mock<typeof fetch> } {
@@ -57,7 +57,7 @@ export function isolateEnv(): { network: () => Mock<typeof fetch> } {
       delete process.env[key];
     }
     resetRerankerCache();
-    resetEmbeddingClient();
+    resetEmbeddingModel();
     network = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: unknown) => {
       throw new Error(`network disabled in tests: ${String(input)}`);
     }) as unknown as typeof fetch);
@@ -65,7 +65,7 @@ export function isolateEnv(): { network: () => Mock<typeof fetch> } {
   afterEach(() => {
     network?.mockRestore();
     resetRerankerCache();
-    resetEmbeddingClient();
+    resetEmbeddingModel();
     for (const [key, value] of saved) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;

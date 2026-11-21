@@ -18,15 +18,8 @@ import {
   pyRound,
   sortedPy,
 } from "@eidolon/config";
-import {
-  DEFAULT_GATE_MODEL,
-  GATE_THRESHOLD,
-  GATE_URL,
-  gateQuestions,
-  gateState,
-  reportDecision,
-} from "@eidolon/context";
-import { accountOf } from "@eidolon/providers";
+import { DEFAULT_GATE_MODEL, GATE_THRESHOLD, gateQuestions, gateState } from "@eidolon/context";
+import { accountOf, OPENROUTER_DECISIONS_URL, reportDecision } from "@eidolon/providers";
 import { parse as parseToml } from "smol-toml";
 import { type CliIo, printer, resolveIo } from "./io.ts";
 import { median, numOf, type PyNumber, quantilesExclusive } from "./py.ts";
@@ -136,7 +129,7 @@ export async function ask(turn: GateTurnSpec, options: AskOptions): Promise<Gate
   if (typeof turn.text !== "string") throw pyError("TypeError", "turn text is not a str");
   const history = turn.before ?? [];
   const started = options.now();
-  const response = await options.fetch(GATE_URL, {
+  const response = await options.fetch(OPENROUTER_DECISIONS_URL, {
     method: "POST",
     headers: options.headers,
     body: JSON.stringify({
@@ -150,7 +143,7 @@ export async function ask(turn: GateTurnSpec, options: AskOptions): Promise<Gate
   const text = await response.text();
   const ms = options.now() - started;
   if (!response.ok) {
-    throw pyError("HTTPStatusError", httpxStatusMessage(response, GATE_URL));
+    throw pyError("HTTPStatusError", httpxStatusMessage(response, OPENROUTER_DECISIONS_URL));
   }
   const body = loadsPy(text);
   // Plain numbers: loadsPy keeps a float a PyFloat, which the ledger would read as no cost.

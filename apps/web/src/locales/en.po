@@ -251,6 +251,10 @@ msgstr "{name} added."
 msgid "{name} API Key"
 msgstr "{name} API Key"
 
+#: src/components/settings-form/account-key-field.tsx
+msgid "{name} API Key (Optional)"
+msgstr "{name} API Key (Optional)"
+
 #: src/features/chats/chat-view.tsx
 msgid "{name} can't answer yet"
 msgstr "{name} can't answer yet"
@@ -329,10 +333,6 @@ msgstr "{name} ships with Eidolon. Your edits are saved in your data home, and t
 msgid "{name} speaks first once the call connects."
 msgstr "{name} speaks first once the call connects."
 
-#: src/features/setup/voice-step.tsx
-msgid "{name} speaks through {provider}. Continue to keep her voice, or change it later in her studio."
-msgstr "{name} speaks through {provider}. Continue to keep her voice, or change it later in her studio."
-
 #: src/features/home/memory-panel.tsx
 msgid "{name} starts remembering you from your next call."
 msgstr "{name} starts remembering you from your next call."
@@ -356,6 +356,10 @@ msgstr "{name}'s Studio"
 #: src/features/settings/accounts-card.tsx
 msgid "{owner}: {roles}"
 msgstr "{owner}: {roles}"
+
+#: src/features/setup/keys-step.tsx
+msgid "{personaName} talks through {provider}'s realtime model, which hears, thinks and speaks in one. Change that in her studio."
+msgstr "{personaName} talks through {provider}'s realtime model, which hears, thinks and speaks in one. Change that in her studio."
 
 #: src/components/settings-form/model-picker.tsx
 msgid "{provider} doesn't list its models here: type the model id."
@@ -512,6 +516,10 @@ msgstr "A Chinese VTuber who runs a little flower shop with her cat. She comes w
 #: src/components/settings-form/labels.ts
 msgid "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
 msgstr "A cookies.txt for yt-dlp, which writes the merged cookies back into it."
+
+#: src/features/setup/keys-step.tsx
+msgid "A decision model: whether a line needs what she knows looked up, and who answers in a group chat."
+msgstr "A decision model: whether a line needs what she knows looked up, and who answers in a group chat."
 
 #: src/features/studio/voice-by-id.tsx
 msgid "A Fish voice ID is 32 characters of 0–9 and a–f."
@@ -872,6 +880,10 @@ msgstr "Anonymous Chat Turns per Hour"
 #: src/components/settings-form/labels.ts
 msgid "Anonymous Window Seconds"
 msgstr "Anonymous Window Seconds"
+
+#: src/features/setup/keys-step.tsx
+msgid "Another account, such as your own server or a second key, goes under <0>Providers</0>; it's listed here once added."
+msgstr "Another account, such as your own server or a second key, goes under <0>Providers</0>; it's listed here once added."
 
 #: src/features/call/call-notices.tsx
 msgid "Another app is using your microphone. Close it, then call again."
@@ -1791,8 +1803,8 @@ msgid "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
 msgstr "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
 
 #: src/features/setup/keys-step.tsx
-msgid "Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account."
-msgstr "Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account."
+msgid "Eidolon calls paid services with your own keys. Keep the recommended providers or pick others you have keys for: one provider can fill more than one part. Each needs credit on its account."
+msgstr "Eidolon calls paid services with your own keys. Keep the recommended providers or pick others you have keys for: one provider can fill more than one part. Each needs credit on its account."
 
 #: src/features/tasks/cards.tsx
 msgid "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
@@ -1837,6 +1849,10 @@ msgstr "Eidolon installs and updates its own yt-dlp unless this is set."
 #: src/features/jobs/detail.tsx
 msgid "Eidolon keeps the last 50 jobs."
 msgstr "Eidolon keeps the last 50 jobs."
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "Eidolon reaches it at {base}, with no key."
+msgstr "Eidolon reaches it at {base}, with no key."
 
 #: src/features/settings/restart.ts
 msgid "Eidolon restarted."
@@ -2070,6 +2086,14 @@ msgstr "Files are still uploading"
 msgid "Files Written"
 msgstr "Files Written"
 
+#: src/features/setup/voice-choice.tsx
+msgid "Find a voice in {provider}'s <0>voice library</0>, then paste its ID here."
+msgstr "Find a voice in {provider}'s <0>voice library</0>, then paste its ID here."
+
+#: src/features/setup/keys-step.tsx
+msgid "Finds her memories and what she knows. Every persona shares it."
+msgstr "Finds her memories and what she knows. Every persona shares it."
+
 #: src/features/tasks/transcript-view.tsx
 msgid "Finished at {time}"
 msgstr "Finished at {time}"
@@ -2238,6 +2262,10 @@ msgstr "Hang Up"
 #: src/features/call/call-state.tsx
 msgid "Hanging up…"
 msgstr "Hanging up…"
+
+#: src/features/setup/keys-step.tsx
+msgid "Hears you on calls and in voice messages."
+msgstr "Hears you on calls and in voice messages."
 
 #: src/features/studio/identity-section.tsx
 msgid "Her avatar is built in. Upload one to use your own instead."
@@ -2666,6 +2694,10 @@ msgstr "It stops at once and can't go on afterwards. The files it already wrote 
 msgid "It stops once it has finished what it is writing."
 msgstr "It stops once it has finished what it is writing."
 
+#: src/components/settings-form/account-key-field.tsx
+msgid "It takes no key."
+msgstr "It takes no key."
+
 #: src/features/tasks/labels.ts
 msgid "It waited for your answer."
 msgstr "It waited for your answer."
@@ -2781,6 +2813,7 @@ msgstr "Key accepted"
 msgid "Key removed."
 msgstr "Key removed."
 
+#: src/features/setup/keys-step.tsx
 #: src/features/setup/stepper.tsx
 msgid "Keys"
 msgstr "Keys"
@@ -2901,6 +2934,7 @@ msgstr "Listening…"
 #: src/features/chats/chat-list.tsx
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
+#: src/features/setup/keys-step.tsx
 #: src/features/studio/route.tsx
 #: src/features/tasks/list.tsx
 #: src/features/tasks/transcript-view.tsx
@@ -3081,12 +3115,21 @@ msgstr "Mind"
 msgid "Missing: {names}. Calls can't start without them."
 msgstr "Missing: {names}. Calls can't start without them."
 
+#: src/features/setup/keys-step.tsx
 #: src/features/tasks/list.tsx
 #: src/features/tasks/parts.tsx
 #: src/features/tasks/task-card.tsx
 #: src/features/usage/tables.tsx
 msgid "Model"
 msgstr "Model"
+
+#: src/features/setup/keys-step.tsx
+msgid "Model ID"
+msgstr "Model ID"
+
+#: src/features/setup/keys-step.tsx
+msgid "Model: <0>{model}</0>"
+msgstr "Model: <0>{model}</0>"
 
 #: src/components/settings-form/labels.ts
 #: src/features/studio/models-section.tsx
@@ -3212,6 +3255,10 @@ msgstr "No jobs yet"
 #: src/features/settings/accounts-card.tsx
 msgid "No key"
 msgstr "No key"
+
+#: src/components/settings-form/account-key-field.tsx
+msgid "No key needed"
+msgstr "No key needed"
 
 #: src/features/settings/accounts-card.tsx
 msgid "No key: calls need one"
@@ -3499,6 +3546,7 @@ msgstr "One model hears, thinks and speaks, in place of the three. Experimental.
 msgid "One of {name}'s voices, by its ID. Find one in its <0>voice library</0>."
 msgstr "One of {name}'s voices, by its ID. Find one in its <0>voice library</0>."
 
+#: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-section.tsx
 msgid "One of {provider}'s voices."
 msgstr "One of {provider}'s voices."
@@ -3583,6 +3631,10 @@ msgstr "OpenRouter App URL"
 #: src/features/setup/stepper.tsx
 msgid "Optional"
 msgstr "Optional"
+
+#: src/features/setup/keys-step.tsx
+msgid "Optional Providers"
+msgstr "Optional Providers"
 
 #: src/features/home/memory-panel.tsx
 msgid "Optional: calls work without it."
@@ -3719,6 +3771,7 @@ msgstr "Pick a model for this account."
 msgid "Pick a PNG, JPEG or WebP image."
 msgstr "Pick a PNG, JPEG or WebP image."
 
+#: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Pick a voice"
 msgstr "Pick a voice"
@@ -3754,10 +3807,6 @@ msgstr "Pick one the provider lists, or type any model id it serves."
 #: src/features/settings/account-dialog.tsx
 msgid "Pick the provider this account is with. You can add more than one of a provider."
 msgstr "Pick the provider this account is with. You can add more than one of a provider."
-
-#: src/features/setup/keys-step.tsx
-msgid "Pick who hears, thinks and speaks for her from the accounts you have. Add another provider's account under <0>Providers</0>, then choose it here or in her studio."
-msgstr "Pick who hears, thinks and speaks for her from the accounts you have. Add another provider's account under <0>Providers</0>, then choose it here or in her studio."
 
 #: src/features/studio/route.tsx
 msgid "Pictures"
@@ -3952,6 +4001,10 @@ msgstr "Rebuild"
 msgid "Rebuild Catalog"
 msgstr "Rebuild Catalog"
 
+#: src/features/setup/keys-step.tsx
+msgid "Recommended"
+msgstr "Recommended"
+
 #: src/features/chats/voice-recorder.tsx
 msgid "Record Voice Message"
 msgstr "Record Voice Message"
@@ -4094,6 +4147,11 @@ msgstr "Reply Mode"
 msgid "Requests"
 msgstr "Requests"
 
+#: src/features/setup/keys-step.tsx
+msgid "Required Providers"
+msgstr "Required Providers"
+
+#: src/components/settings-form/account-key-field.tsx
 #: src/features/setup/persona-fields.tsx
 msgid "Required."
 msgstr "Required."
@@ -4306,10 +4364,6 @@ msgstr "Saved for {names}."
 msgid "Saved for every persona"
 msgstr "Saved for every persona"
 
-#: src/features/setup/keys-step.tsx
-msgid "Saved for the active persona. Claude, DeepSeek and others work through your OpenRouter key or with their own."
-msgstr "Saved for the active persona. Claude, DeepSeek and others work through your OpenRouter key or with their own."
-
 #: src/features/settings/account-dialog.tsx
 msgid "Saved in credentials.json under the provider's own variable; saving a new one moves it into this account."
 msgstr "Saved in credentials.json under the provider's own variable; saving a new one moves it into this account."
@@ -4455,6 +4509,7 @@ msgstr "Set by {env} in settings.yaml; a value saved here replaces it."
 msgid "Set by {env} in the environment, which wins over a value saved here."
 msgstr "Set by {env} in the environment, which wins over a value saved here."
 
+#: src/features/setup/keys-step.tsx
 #: src/features/setup/memory-step.tsx
 #: src/features/setup/persona-step.tsx
 msgid "Set by {env} in the environment, which wins over the value saved here. Change it there."
@@ -4592,8 +4647,16 @@ msgid "She speaks Mandarin, so the search starts among Chinese voices."
 msgstr "She speaks Mandarin, so the search starts among Chinese voices."
 
 #: src/features/setup/new-persona.tsx
+msgid "She starts on the providers {herName} uses, so she speaks through {provider}. Change them in her studio."
+msgstr "She starts on the providers {herName} uses, so she speaks through {provider}. Change them in her studio."
+
+#: src/features/setup/new-persona.tsx
 msgid "She starts with a Chinese prompt skeleton in her name; build her up in the studio."
 msgstr "She starts with a Chinese prompt skeleton in her name; build her up in the studio."
+
+#: src/features/setup/keys-step.tsx
+msgid "She talks without them, but remembers and recalls less."
+msgstr "She talks without them, but remembers and recalls less."
 
 #: src/features/setup/persona-step.tsx
 msgid "She uses it in calls. Leave it empty and she won't use a name."
@@ -4742,6 +4805,10 @@ msgstr "Soniox rejected this key. A key from an EU, Japan or India project doesn
 msgid "Soniox transcribes the audio, the refine model cleans up each transcript, and the embedding API indexes it. Each step skips what's already done."
 msgstr "Soniox transcribes the audio, the refine model cleans up each transcript, and the embedding API indexes it. Each step skips what's already done."
 
+#: src/features/setup/keys-step.tsx
+msgid "Speaks her replies."
+msgstr "Speaks her replies."
+
 #: src/features/home/readiness-labels.ts
 #: src/lib/labels.ts
 msgid "Speech Recognition"
@@ -4851,8 +4918,8 @@ msgid "Starting…"
 msgstr "Starting…"
 
 #: src/features/setup/persona-step.tsx
-msgid "Starts with a Chinese prompt skeleton in her name. Add facts, videos and outfits in the studio."
-msgstr "Starts with a Chinese prompt skeleton in her name. Add facts, videos and outfits in the studio."
+msgid "Starts with a Chinese prompt skeleton in her name, on the providers you picked. Add facts, videos and outfits in the studio."
+msgstr "Starts with a Chinese prompt skeleton in her name, on the providers you picked. Add facts, videos and outfits in the studio."
 
 #: src/features/studio/video-table.tsx
 msgid "State"
@@ -5523,6 +5590,14 @@ msgstr "They appear here when you index facts or add videos in a persona's studi
 msgid "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
 msgstr "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
 
+#: src/features/setup/keys-step.tsx
+msgid "Thinks and writes her replies."
+msgstr "Thinks and writes her replies."
+
+#: src/features/setup/keys-step.tsx
+msgid "This account has no default model, so name the one to use."
+msgstr "This account has no default model, so name the one to use."
+
 #: src/features/studio/videos-section.tsx
 msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
 msgstr "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
@@ -5890,10 +5965,6 @@ msgstr "Use It"
 msgid "Use lowercase letters, digits and single hyphens, 64 at most."
 msgstr "Use lowercase letters, digits and single hyphens, 64 at most."
 
-#: src/features/setup/keys-step.tsx
-msgid "Use Other Providers (Optional)"
-msgstr "Use Other Providers (Optional)"
-
 #: src/features/studio/voice-section.tsx
 msgid "Use the Environment's Voice"
 msgstr "Use the Environment's Voice"
@@ -5963,6 +6034,7 @@ msgstr "View"
 #: src/components/settings-form/labels.ts
 #: src/features/home/readiness-labels.ts
 #: src/features/setup/stepper.tsx
+#: src/features/setup/voice-choice.tsx
 #: src/features/studio/route.tsx
 #: src/features/studio/voice-section.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -5975,6 +6047,7 @@ msgctxt "reply mode"
 msgid "Voice"
 msgstr "Voice"
 
+#: src/features/setup/voice-choice.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Voice ID"
 msgstr "Voice ID"
@@ -6229,10 +6302,6 @@ msgstr "Which provider and model read her lines."
 msgid "Who hears you and who thinks for her: a provider and a model each. She speaks with the voice set under <0>Voice</0>."
 msgstr "Who hears you and who thinks for her: a provider and a model each. She speaks with the voice set under <0>Voice</0>."
 
-#: src/features/setup/keys-step.tsx
-msgid "Who Hears, Thinks and Speaks"
-msgstr "Who Hears, Thinks and Speaks"
-
 #: src/features/studio/identity-section.tsx
 msgid "Who she is, as the built-in prompts and the call page name her. Write the names in her language."
 msgstr "Who she is, as the built-in prompts and the call page name her. Write the names in her language."
@@ -6260,6 +6329,10 @@ msgstr "Why {name} Answered"
 #: src/features/setup/memory-step.tsx
 msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
 msgstr "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
+
+#: src/features/setup/keys-step.tsx
+msgid "Without it, these stay off: {off}."
+msgstr "Without it, these stay off: {off}."
 
 #: src/features/tasks/list.tsx
 msgid "Work she does on this computer when you ask her in a chat, such as writing a page or sorting files. Each row opens its chat at the task, where you answer what it asks."

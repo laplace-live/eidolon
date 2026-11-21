@@ -12,7 +12,8 @@ import {
   noProgress,
   zeroCounts,
 } from "@eidolon/ingest";
-import { type EmbeddingClient, PERSONA_FACTS_TABLE } from "@eidolon/retrieval";
+import type { EmbeddingModel } from "@eidolon/providers";
+import { PERSONA_FACTS_TABLE } from "@eidolon/retrieval";
 import { ArgparseExit, commandPersona, INT, type ParserSpec, parseArgs } from "./argparse.ts";
 import { writerDbPath } from "./ingest_streams.ts";
 import { type CommandDeps, reportExit, resolveIo } from "./io.ts";
@@ -129,8 +130,8 @@ export function parseIngestFactsArgs(argv: readonly string[]): IngestFactsArgs {
 }
 
 export interface IngestFactsDeps extends CommandDeps {
-  /** The embedding client; the env-configured one, built at the first cache miss, by default. */
-  readonly client?: Pick<EmbeddingClient, "embedWithUsage">;
+  /** The embedding model; the install's, opened at the first cache miss, by default. */
+  readonly embedding?: EmbeddingModel;
   readonly now?: () => Date;
 }
 
@@ -174,7 +175,7 @@ export async function ingestFactsMain(
       clearCache: args.clearCache,
       onProgress: emit,
       signal: deps.signal,
-      client: deps.client,
+      embedding: deps.embedding,
       now: deps.now,
     });
     return report.ok ? 0 : 1;

@@ -1,6 +1,7 @@
 // The provider catalog as the pages use it: which providers can fill a role, the defaults that apply
 // when a persona names none, and the provider an account stands for.
 import {
+  CALL_ROLES,
   type Category,
   defaultModel,
   defaultVoice,
@@ -8,14 +9,27 @@ import {
   PROVIDERS,
   type Provider,
   providerById,
+  providersFor,
   ROLES,
   type Role,
   type RoleId,
   roleById,
+  SETUP_ROLES,
 } from "@eidolon/providers/catalog";
 
 export type { Category, Provider, Role, RoleId };
-export { defaultModel, defaultVoice, modelInfo, PROVIDERS, providerById, ROLES, roleById };
+export {
+  CALL_ROLES,
+  defaultModel,
+  defaultVoice,
+  modelInfo,
+  PROVIDERS,
+  providerById,
+  providersFor,
+  ROLES,
+  roleById,
+  SETUP_ROLES,
+};
 
 /** The role whose provider row is `env`, such as LLM_PROVIDER's mind. */
 export function roleOfProviderEnv(env: string): Role | undefined {

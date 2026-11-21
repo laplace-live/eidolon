@@ -60,6 +60,13 @@ const ENV = [
   "OPENAI_BASE_URL",
   "OPENAI_COMPATIBLE_API_KEY",
   "OPENAI_COMPATIBLE_BASE_URL",
+  "DASHSCOPE_API_KEY",
+  "DASHSCOPE_BASE_URL",
+  "MOONSHOT_API_KEY",
+  "MOONSHOT_BASE_URL",
+  "ZHIPU_API_KEY",
+  "ZHIPU_BASE_URL",
+  "OLLAMA_BASE_URL",
   "ASSISTANT_PROVIDER",
   "ASSISTANT_MODEL",
 ];
@@ -324,6 +331,185 @@ describe("an OpenAI-compatible mind", () => {
       expect(sent[4]?.tool_calls).toEqual(view[3]?.tool_calls);
     }
     expect(seen[0]?.headers.get("authorization")).toBeNull();
+  });
+
+  test("every OpenAI-compatible provider's request: its headers, its whole body and its cost", async () => {
+    reply = () =>
+      completions([
+        { choices: [{ delta: { content: "嗯" }, finish_reason: "stop" }] },
+        { choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, cost: 0.5 } },
+      ]);
+    const called = {
+      role: "assistant",
+      content: "我查查",
+      tool_calls: [
+        { id: "c1", type: "function", function: { name: "recall_streams", arguments: "{}" } },
+      ],
+    };
+    const result = { role: "tool", tool_call_id: "c1", content: "COMPLETED" };
+    const view = [
+      { role: "user", content: "早" },
+      { role: "developer", content: "memories" },
+      { role: "system", content: "archive" },
+      called,
+      result,
+      { role: "assistant", content: "嗯" },
+    ];
+    const stop = ["\nKen：", "\nKen:"];
+    const selfie = {
+      type: "function",
+      function: {
+        name: "take_selfie",
+        description: "拍一张自拍",
+        parameters: {
+          type: "object",
+          properties: { scene: { type: "string" } },
+          required: ["scene"],
+        },
+      },
+    };
+    /** The view as sent: the memories' role, the archive's, and whether her lines reason. */
+    const sent = (memories: string, archive: string, reasoning = false) => {
+      const reasoned = reasoning ? { reasoning_content: "" } : {};
+      return [
+        { role: "system", content: "persona" },
+        { role: "user", content: "早" },
+        { role: memories, content: "memories" },
+        { role: archive, content: "archive" },
+        { ...called, ...reasoned },
+        result,
+        { role: "assistant", content: "嗯", ...reasoned },
+      ];
+    };
+    const bodyOf = (
+      model: string,
+      messages: unknown[],
+      fields: Record<string, unknown> = {},
+      stops = true,
+    ) => ({
+      model,
+      stream: true,
+      stream_options: { include_usage: true },
+      messages,
+      tools: [selfie],
+      tool_choice: "auto",
+      ...(stops ? { stop } : {}),
+      ...fields,
+    });
+    const routed = (model: string, messages: unknown[]) => ({
+      usage: { include: true },
+      ...bodyOf(model, messages),
+    });
+    const cases: {
+      readonly env: Record<string, string>;
+      readonly key: string | null;
+      readonly openrouter: boolean;
+      readonly body: Record<string, unknown>;
+    }[] = [
+      {
+        env: { LLM_PROVIDER: "openrouter" },
+        key: "Bearer or-key",
+        openrouter: true,
+        body: routed("~google/gemini-flash-latest", sent("user", "user")),
+      },
+      {
+        env: { LLM_PROVIDER: "openrouter", OPENROUTER_MODEL: "Google/Gemini-Next" },
+        key: "Bearer or-key",
+        openrouter: true,
+        body: routed("Google/Gemini-Next", sent("user", "user")),
+      },
+      {
+        env: { LLM_PROVIDER: "openrouter", OPENROUTER_MODEL: "anthropic/claude-haiku-5.5" },
+        key: "Bearer or-key",
+        openrouter: true,
+        body: routed("anthropic/claude-haiku-5.5", sent("user", "system")),
+      },
+      {
+        env: { LLM_PROVIDER: "openai", OPENAI_API_KEY: "sk", OPENAI_BASE_URL: base() },
+        key: "Bearer sk",
+        openrouter: false,
+        body: bodyOf(
+          "gpt-6-luna",
+          sent("developer", "system"),
+          { reasoning_effort: "none" },
+          false,
+        ),
+      },
+      {
+        env: { LLM_PROVIDER: "google", GEMINI_API_KEY: "gk", GEMINI_BASE_URL: base() },
+        key: "Bearer gk",
+        openrouter: false,
+        body: bodyOf("gemini-3.8-flash", sent("user", "user")),
+      },
+      {
+        env: { LLM_PROVIDER: "deepseek", DEEPSEEK_API_KEY: "dk", DEEPSEEK_BASE_URL: base() },
+        key: "Bearer dk",
+        openrouter: false,
+        body: bodyOf("deepseek-flash", sent("user", "system", true), {
+          thinking: { type: "disabled" },
+        }),
+      },
+      {
+        env: { LLM_PROVIDER: "xai", XAI_API_KEY: "xk", XAI_BASE_URL: base() },
+        key: "Bearer xk",
+        openrouter: false,
+        body: bodyOf("grok-4.20-non-reasoning", sent("user", "system"), {}, false),
+      },
+      {
+        env: { LLM_PROVIDER: "qwen", DASHSCOPE_API_KEY: "qk", DASHSCOPE_BASE_URL: base() },
+        key: "Bearer qk",
+        openrouter: false,
+        body: bodyOf("qwen-plus", sent("user", "system")),
+      },
+      {
+        env: { LLM_PROVIDER: "moonshot", MOONSHOT_API_KEY: "mk", MOONSHOT_BASE_URL: base() },
+        key: "Bearer mk",
+        openrouter: false,
+        body: bodyOf("kimi-k3.1-pro", sent("user", "system"), { reasoning_effort: "low" }),
+      },
+      {
+        env: { LLM_PROVIDER: "zhipu", ZHIPU_API_KEY: "zk", ZHIPU_BASE_URL: base() },
+        key: "Bearer zk",
+        openrouter: false,
+        body: bodyOf("glm-5.3-flash", sent("user", "system")),
+      },
+      {
+        env: { LLM_PROVIDER: "ollama", OLLAMA_BASE_URL: base() },
+        key: null,
+        openrouter: false,
+        body: bodyOf("qwen3", sent("user", "system")),
+      },
+      {
+        env: {
+          LLM_PROVIDER: "openai-compatible",
+          OPENAI_COMPATIBLE_API_KEY: "ck",
+          OPENAI_COMPATIBLE_BASE_URL: base(),
+          LLM_MODEL: "local-model",
+        },
+        key: "Bearer ck",
+        openrouter: false,
+        body: bodyOf("local-model", sent("user", "system")),
+      },
+    ];
+    for (const { env, key, openrouter, body } of cases) {
+      seen = [];
+      records = [];
+      setEnv({ LLM_MODEL: undefined, OPENROUTER_MODEL: undefined, ...env });
+      await drain(createMind(), ask({ messages: view, tools: [SELFIE], toolChoice: "auto", stop }));
+      const request = seen[0];
+      const label = `${env.LLM_PROVIDER} ${String(body.model)}`;
+      expect([label, request?.path]).toEqual([label, "/v1/chat/completions"]);
+      expect([label, request?.headers.get("authorization")]).toEqual([label, key]);
+      expect([label, request?.headers.get("x-title") !== null]).toEqual([label, openrouter]);
+      expect([label, request?.headers.get("http-referer") !== null]).toEqual([label, openrouter]);
+      expect([label, request?.body]).toEqual([label, body]);
+      expect([label, Object.keys(request?.body ?? {})]).toEqual([label, Object.keys(body)]);
+      // Only OpenRouter's usage block says what the request cost.
+      expect([label, records.map((record) => record.costSource === "reported")]).toEqual([
+        label,
+        [openrouter],
+      ]);
+    }
   });
 
   test("her words before a call go as its message's content, beside its tool_calls, on every dialect", async () => {
@@ -603,6 +789,8 @@ describe("an Anthropic mind", () => {
     ]);
     expect(seen[0]?.path).toBe("/v1/messages");
     expect(seen[0]?.headers.get("x-api-key")).toBe("ak");
+    expect(seen[0]?.headers.get("authorization")).toBeNull();
+    expect(seen[0]?.headers.get("x-title")).toBeNull();
     expect(seen[0]?.headers.get("anthropic-version")).toBe(ANTHROPIC_VERSION);
     expect(seen[0]?.headers.get("anthropic-beta")).toBe(
       "interleaved-thinking-2025-05-14,server-side-fallback-2026-07-01",
@@ -661,6 +849,16 @@ describe("an Anthropic mind", () => {
       fallbacks: "default",
       output_config: { effort: "low" },
     });
+    expect(Object.keys(seen[0]?.body ?? {})).toEqual([
+      "model",
+      "max_tokens",
+      "stream",
+      "system",
+      "messages",
+      "tools",
+      "fallbacks",
+      "output_config",
+    ]);
     expect(records).toEqual([
       expect.objectContaining({
         role: "mind",
@@ -1423,9 +1621,8 @@ describe("images the viewer sent", () => {
       client,
       server,
       model: "x/one-name",
-      live: {},
-      dialect: "compatible",
-      takesStop: true,
+      extra: {},
+      dialect: { wire: "openai" },
     });
     return { mind, shows };
   }

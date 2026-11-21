@@ -1,10 +1,10 @@
 // The mind a persona's chat turn talks to: whichever provider fills her mind role in the persona
 // scope it is made in, over @eidolon/providers' fetch clients. A task's mind fills the assistant
 // role instead.
-import { accountProvider, openrouterHeaders } from "@eidolon/config";
+import { accountProvider } from "@eidolon/config";
 import {
-  ANTHROPIC_FALLBACK_MODELS,
   AnthropicClient,
+  chatDialect,
   hasKey,
   installedSources,
   missingKey,
@@ -18,37 +18,7 @@ import {
 } from "@eidolon/providers";
 import type { Mind } from "../types.ts";
 import { AnthropicMind } from "./anthropic.ts";
-import { type OpenAIDialect, OpenAIMind } from "./openai.ts";
-
-/**
- * OpenAI's and xAI's reasoning models reject a request with `stop`
- * (https://platform.openai.com/docs/api-reference/chat/create#chat-create-stop,
- * https://docs.x.ai/docs/guides/reasoning).
- */
-const REJECTS_STOP: ReadonlySet<string> = new Set(["openai", "xai"]);
-
-/**
- * A task's reply cap on Anthropic, thinking included: the most every model Anthropic serves accepts
- * (Haiku 4.5, Sonnet 4.5 and Opus 4.5 stop at 64K, the rest at 128K), so one long `write` fits
- * (https://platform.claude.com/docs/en/build-with-claude/thinking#output-limits).
- */
-const TASK_MAX_TOKENS = 64_000;
-
-function dialectOf(provider: string, model: string): OpenAIDialect {
-  switch (provider) {
-    case "openai":
-      return "openai";
-    case "deepseek":
-      return "deepseek";
-    case "google":
-      return "gemini";
-    case "openrouter":
-      // pipedog's OpenRouter service sends Gemini's routes one system message, matched by name.
-      return model.toLowerCase().includes("gemini") ? "gemini" : "compatible";
-    default:
-      return "compatible";
-  }
-}
+import { OpenAIMind } from "./openai.ts";
 
 /** The settings as they stand, but with `account` and `model` filling `role`. */
 function overridden(
@@ -94,30 +64,24 @@ export function createMind(
   const { apiKey, model, provider } = selection;
   const baseUrl = selection.baseUrl as string;
   const onUsage = usageHook(role, provider.id, options.tap);
-  const live = modelInfo(provider.id, "llm", model)?.live ?? {};
-  if (provider.id === "anthropic") {
+  const dialect = chatDialect(provider.id);
+  const extra = { ...modelInfo(provider.id, "llm", model)?.live, ...dialect.fields?.(model) };
+  if (dialect.wire === "anthropic") {
     return new AnthropicMind({
       client: new AnthropicClient({ provider: provider.name, baseUrl, apiKey, onUsage }),
       model,
-      extra: { ...live, ...(ANTHROPIC_FALLBACK_MODELS.has(model) ? { fallbacks: "default" } : {}) },
-      ...(role === "assistant" ? { maxTokens: TASK_MAX_TOKENS } : {}),
+      extra,
+      ...(role === "assistant" ? { maxTokens: dialect.taskMaxTokens } : {}),
     });
   }
-  const openrouter = provider.id === "openrouter";
   const client = new OpenAIChatClient({
     provider: provider.name,
     baseUrl,
     apiKey,
-    headers: openrouter ? openrouterHeaders() : {},
+    headers: dialect.headers?.(),
     onUsage,
-    ...(openrouter ? { extraBody: { usage: { include: true } }, reportsCost: true } : {}),
+    extraBody: dialect.extraBody,
+    reportsCost: dialect.reportsCost,
   });
-  return new OpenAIMind({
-    client,
-    server: baseUrl,
-    model,
-    live,
-    dialect: dialectOf(provider.id, model),
-    takesStop: !REJECTS_STOP.has(provider.id),
-  });
+  return new OpenAIMind({ client, server: baseUrl, model, extra, dialect });
 }

@@ -1,9 +1,10 @@
-// Fakes shared by the tests. FakeQdrant and FakePoster behave exactly like the fakes mem0 ran
-// against to record fixtures/*.json, so a fixture case replays here unchanged.
+// Fakes shared by the tests. FakeQdrant, FakePoster and FakeEmbeddings behave exactly like the
+// fakes mem0 ran against to record fixtures/*.json, so a fixture case replays here unchanged.
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, cpLen, type JsonPoster, type LogRecord, logger } from "@eidolon/config";
+import { type EmbeddingModel, EmbeddingUsage } from "@eidolon/providers";
 import type { QdrantApi } from "../src/qdrant.ts";
 
 export type Payload = Record<string, unknown>;
@@ -134,26 +135,32 @@ export class FakeQdrant {
 
 export type ChatResponse = string | null | { raise: string };
 
-/** OpenAI-compatible endpoints: embeddings follow a plan, chat replies with queued contents. */
+/** The embedding model: each request follows the plan, and is recorded as what it asked for. */
+export class FakeEmbeddings implements EmbeddingModel {
+  readonly provider = "openrouter";
+  readonly model: string;
+  readonly calls: Record<string, unknown>[] = [];
+  plan: string[] = [];
+
+  constructor(model = "google/gemini-embedding-2-preview") {
+    this.model = model;
+  }
+
+  async embed(texts: readonly string[], dimensions: number): Promise<[number[][], EmbeddingUsage]> {
+    this.calls.push({ input: [...texts], model: this.model, dimensions });
+    const plan = this.plan.shift() ?? "ok";
+    if (plan === "fail") throw new Error("embedding request failed");
+    const vectors = texts.map((text) => [cpLen(text), 1, 0, 0]);
+    return [plan === "short" ? vectors.slice(0, -1) : vectors, new EmbeddingUsage()];
+  }
+}
+
+/** An OpenAI-compatible chat endpoint, replying with queued contents. */
 export class FakePoster implements JsonPoster {
-  readonly embedCalls: Record<string, unknown>[] = [];
   readonly chatCalls: Record<string, unknown>[] = [];
-  embedPlan: string[] = [];
   responses: ChatResponse[] = [];
 
-  async post(path: string, body: Readonly<Record<string, unknown>>): Promise<unknown> {
-    if (path === "embeddings") {
-      this.embedCalls.push({ ...body });
-      const plan = this.embedPlan.shift() ?? "ok";
-      if (plan === "fail") throw new Error("embedding request failed");
-      let data = (body.input as string[]).map((text, index) => ({
-        index,
-        embedding: [cpLen(text), 1, 0, 0],
-      }));
-      if (plan === "short") data = data.slice(0, -1);
-      if (plan === "reversed") data = data.reverse();
-      return { data };
-    }
+  async post(_path: string, body: Readonly<Record<string, unknown>>): Promise<unknown> {
     this.chatCalls.push({ ...body });
     const reply = this.responses.shift();
     if (reply !== null && typeof reply === "object") throw new Error(reply.raise);

@@ -1,11 +1,12 @@
 import { GATE_QUESTION_KEYS, type LogRecord } from "@eidolon/config";
+import { OPENROUTER_DECISIONS_URL, openRouterDecisions } from "@eidolon/providers";
 import type { SearchRow } from "@eidolon/retrieval";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   DEFAULT_GATE_MODEL,
   GATE_FRAME_KEY,
   GATE_QUESTIONS,
-  GATE_URL,
+  GATE_TIMEOUT_SEC,
   GateDecision,
   type GateVerdict,
   gateQuestions,
@@ -70,11 +71,14 @@ class SlowSearch {
 type FakeFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 function gateWith(fetch: FakeFetch, options: { timeoutSec?: number } = {}): RetrievalGate {
-  return new RetrievalGate({
-    apiKey: "test",
-    fetch: fetch as unknown as typeof globalThis.fetch,
-    ...options,
-  });
+  return new RetrievalGate(
+    openRouterDecisions({
+      apiKey: "test",
+      model: DEFAULT_GATE_MODEL,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      timeoutSec: options.timeoutSec ?? GATE_TIMEOUT_SEC,
+    }),
+  );
 }
 
 function answering(
@@ -315,7 +319,7 @@ describe("RetrievalGate.decide", () => {
     });
     expect((await gate.decide(state)).retrieve).toBe(true);
     const [request] = requests;
-    expect(request?.url).toBe(GATE_URL);
+    expect(request?.url).toBe(OPENROUTER_DECISIONS_URL);
     expect(request?.init.method).toBe("POST");
     expect(request?.init.headers).toEqual({
       "HTTP-Referer": "https://laplace.live/ai",
@@ -443,7 +447,7 @@ describe("RetrievalGate.decide", () => {
   test("a 5xx logs like httpx's raise_for_status", async () => {
     await gateWith(async () => new Response(null, { status: 503 })).decide(state);
     expect(warnings()[0]).toBe(
-      `Retrieval gate failed open: HTTPStatusError("Server error '503' for url '${GATE_URL}'")`,
+      `Retrieval gate failed open: HTTPStatusError("Server error '503' for url '${OPENROUTER_DECISIONS_URL}'")`,
     );
   });
 

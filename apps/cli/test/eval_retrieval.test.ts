@@ -4,8 +4,8 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
-import { setUsageSink, type UsageRecord } from "@eidolon/providers";
-import type { HybridSearchOptions, Reranker, SearchRow } from "@eidolon/retrieval";
+import { type RerankModel, setUsageSink, type UsageRecord } from "@eidolon/providers";
+import type { HybridSearchOptions, SearchRow } from "@eidolon/retrieval";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   aggregate,
@@ -107,7 +107,7 @@ function fakes(reranker: string | null) {
     },
     hybridSearch: async (table, options: HybridSearchOptions) => {
       const name = (table as { name: string }).name;
-      const model = options.rerank ? (options.reranker?.modelName ?? null) : null;
+      const model = options.rerank ? (options.reranker?.model ?? null) : null;
       calls.push([
         "hybrid",
         name,
@@ -123,10 +123,10 @@ function fakes(reranker: string | null) {
       if (model === "dead") throw new Error("model gone");
       return rows(`${name}|${options.queryText}|${model === null ? "rrf" : `rerank:${model}`}`);
     },
-    makeReranker: () =>
+    makeReranker: (): RerankModel | null =>
       reranker === null
         ? null
-        : ({ modelName: reranker, column: "text", rerank: async () => [] } as Reranker),
+        : { provider: "openrouter", model: reranker, rerank: async () => [] },
     now: () => {
       clock += STEPS[ticks++ % STEPS.length] as number;
       return clock;
@@ -263,13 +263,24 @@ describe("pieces", () => {
     }
   });
 
-  test("namedReranker takes RERANK_* over OPENROUTER_API_KEY and needs one of them", () => {
+  test("namedReranker takes RERANK_* over OPENROUTER_API_KEY and needs one of them", async () => {
     expect(() => namedReranker("m")).toThrow("--rerank-models requires RERANK_API_KEY");
     process.env.OPENROUTER_API_KEY = "or";
     process.env.RERANK_BASE_URL = "https://api.cohere.com/v1/";
-    const reranker = namedReranker("rerank-v4.0-fast") as Reranker & { baseUrl: string };
-    expect(reranker.modelName).toBe("rerank-v4.0-fast");
-    expect(reranker.baseUrl).toBe("https://api.cohere.com/v1");
+    const urls: string[] = [];
+    const blocked = globalThis.fetch;
+    globalThis.fetch = (async (url: string) => {
+      urls.push(url);
+      return Response.json({ results: [] });
+    }) as unknown as typeof globalThis.fetch;
+    try {
+      const reranker = namedReranker("rerank-v4.0-fast");
+      expect(reranker.model).toBe("rerank-v4.0-fast");
+      await reranker.rerank("q", ["a"]);
+    } finally {
+      globalThis.fetch = blocked;
+    }
+    expect(urls).toEqual(["https://api.cohere.com/v1/rerank"]);
   });
 
   test("namedReranker reports each rerank to the usage ledger, as the provider it went to", async () => {
@@ -308,7 +319,7 @@ describe("pieces", () => {
     );
     installSettings();
     try {
-      expect(namedReranker("m").modelName).toBe("m");
+      expect(namedReranker("m").model).toBe("m");
     } finally {
       rmSync(credentials, { force: true });
       resetSettings();

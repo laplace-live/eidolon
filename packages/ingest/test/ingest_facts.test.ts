@@ -18,20 +18,15 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
   consoleSink,
+  DEFAULT_EMBED_MODEL,
   installSettings,
   type LogRecord,
   logger,
   resetSettings,
   sortedPy,
 } from "@eidolon/config";
-import {
-  EmbeddingClient,
-  EmbeddingUsage,
-  type LanceTable,
-  openTable,
-  resetEmbeddingClient,
-  tokenizeZh,
-} from "@eidolon/retrieval";
+import { type EmbeddingModel, EmbeddingUsage, openAIEmbeddings } from "@eidolon/providers";
+import { type LanceTable, openTable, resetEmbeddingModel, tokenizeZh } from "@eidolon/retrieval";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { indexMetaPath, ingestFacts, type ProgressEvent } from "../src/index.ts";
 import { cancelMidRebuild } from "./forced_exit.ts";
@@ -101,7 +96,7 @@ beforeEach(() => {
     delete process.env[key];
   }
   resetSettings();
-  resetEmbeddingClient();
+  resetEmbeddingModel();
   work = mkdtempSync(join(tmpdir(), "ingest-facts-"));
   records = [];
   logger.setSink((record) => records.push(record));
@@ -114,7 +109,7 @@ afterEach(() => {
     else process.env[key] = value;
   }
   resetSettings();
-  resetEmbeddingClient();
+  resetEmbeddingModel();
 });
 
 const logLines = (): [string, string][] => records.map((r) => [r.level, r.message]);
@@ -133,9 +128,11 @@ function fakeVector(text: string): number[] {
   return [base / 7, (0 - base) / 3, 0.1 * base, 1 / (base + 3)];
 }
 
-function fakeClient(calls: string[][] = []) {
+function fakeModel(calls: string[][] = []): EmbeddingModel {
   return {
-    async embedWithUsage(texts: readonly string[]) {
+    provider: "openrouter",
+    model: DEFAULT_EMBED_MODEL,
+    async embed(texts) {
       calls.push([...texts]);
       const tokens = texts.reduce((n, t) => n + [...t].length, 0);
       return [
@@ -146,7 +143,7 @@ function fakeClient(calls: string[][] = []) {
           costUsd: (tokens * 0.15) / 1e6,
           costSource: "estimate",
         }),
-      ] as [number[][], EmbeddingUsage];
+      ];
     },
   };
 }
@@ -333,7 +330,7 @@ describe("ingestFactFiles", () => {
   test("reports each file, the embedding's progress and a summary, and records the build", async () => {
     const calls: string[][] = [];
     const { events, report } = run({
-      client: fakeClient(calls),
+      embedding: fakeModel(calls),
       now: () => new Date("2026-11-05T01:02:03.004Z"),
     });
     const done = await report;
@@ -402,7 +399,7 @@ describe("ingestFactFiles", () => {
   });
 
   test("a fully cached run needs no key, and costs nothing", async () => {
-    await run({ client: fakeClient() }).report;
+    await run({ embedding: fakeModel() }).report;
     const { events, report } = run();
     expect(await report).toMatchObject({ ok: true, cacheHits: 133, embedded: 0 });
     expect(events.at(-1)).toMatchObject({ type: "summary", ok: true, costUsd: 0 });
@@ -410,7 +407,7 @@ describe("ingestFactFiles", () => {
   });
 
   test("a cache miss without a key fails as missing-credential, and the old table stays", async () => {
-    await run({ client: fakeClient(), cachePath: null }).report;
+    await run({ embedding: fakeModel(), cachePath: null }).report;
     const before = await tableState(join(work, "index"), "persona_facts");
     const { events, report } = run({ cachePath: null });
     expect(await report).toMatchObject({ ok: false, code: "missing-credential", written: false });
@@ -425,7 +422,9 @@ describe("ingestFactFiles", () => {
   });
 
   test("a provider that rejects the key fails the run with code auth-failed", async () => {
-    const rejected = new EmbeddingClient({
+    const rejected = openAIEmbeddings({
+      provider: "openrouter",
+      model: DEFAULT_EMBED_MODEL,
       baseUrl: "https://x.invalid/v1",
       apiKey: "k",
       fetch: (async () =>
@@ -435,9 +434,9 @@ describe("ingestFactFiles", () => {
             status: 401,
           },
         )) as unknown as typeof fetch,
-      maxRetries: 0,
+      retries: { http: 0 },
     });
-    const { events, report } = run({ client: rejected, cachePath: null });
+    const { events, report } = run({ embedding: rejected, cachePath: null });
     expect(await report).toMatchObject({ ok: false, written: false });
     expect(events.at(-2)).toMatchObject({
       type: "stage",
@@ -448,18 +447,20 @@ describe("ingestFactFiles", () => {
   });
 
   test("an abort while embedding cancels the run and keeps the old table and its record", async () => {
-    await run({ client: fakeClient() }).report;
+    await run({ embedding: fakeModel() }).report;
     const before = await tableState(join(work, "index"), "persona_facts");
     const metaBefore = readFileSync(indexMetaPath(join(work, "index"), "persona_facts"), "utf8");
     const controller = new AbortController();
-    const client = {
-      async embedWithUsage(_texts: readonly string[], options: { signal?: AbortSignal }) {
+    const embedding: EmbeddingModel = {
+      provider: "openrouter",
+      model: DEFAULT_EMBED_MODEL,
+      async embed(_texts, _dimensions, signal) {
         controller.abort(new DOMException("Interrupted by SIGINT", "AbortError"));
-        options.signal?.throwIfAborted();
+        signal?.throwIfAborted();
         throw new Error("the signal should have been passed");
       },
     };
-    const { events, report } = run({ client, cachePath: null, signal: controller.signal });
+    const { events, report } = run({ embedding, cachePath: null, signal: controller.signal });
     expect(await report).toMatchObject({ ok: false, cancelled: true, written: false });
     expect(events.at(-2)).toEqual({
       type: "stage",
@@ -476,13 +477,13 @@ describe("ingestFactFiles", () => {
   });
 
   test("a cancel's forced exit waits for the rebuild: table, FTS index and build record", async () => {
-    await run({ client: fakeClient() }).report;
+    await run({ embedding: fakeModel() }).report;
     const index = join(work, "index");
     const metaPath = indexMetaPath(index, "persona_facts");
     const before = await tableState(index, "persona_facts");
     rmSync(metaPath);
     const { code, exits } = await cancelMidRebuild(
-      (signal) => run({ client: fakeClient(), signal }).report,
+      (signal) => run({ embedding: fakeModel(), signal }).report,
       metaPath,
     );
     expect([code, exits]).toEqual([130, [true]]);
@@ -492,7 +493,7 @@ describe("ingestFactFiles", () => {
   test("an abort before the run starts reads nothing", async () => {
     const controller = new AbortController();
     controller.abort();
-    const { events, report } = run({ client: fakeClient(), signal: controller.signal });
+    const { events, report } = run({ embedding: fakeModel(), signal: controller.signal });
     expect(await report).toMatchObject({ ok: false, cancelled: true, rows: 0 });
     expect(events.map((e) => e.type)).toEqual(["stage", "summary"]);
     expect(existsSync(join(work, "index"))).toBe(false);
@@ -500,7 +501,7 @@ describe("ingestFactFiles", () => {
 
   test("a file that isn't UTF-8 fails the run, naming it", async () => {
     writeFileSync(join(facts, "坏设定集.txt"), Buffer.from([0x61, 0xff, 0x0a]));
-    const { events, report } = run({ client: fakeClient() });
+    const { events, report } = run({ embedding: fakeModel() });
     const done = await report;
     expect(done).toMatchObject({ ok: false, written: false });
     expect(done.error).toEndWith("坏设定集.txt is not valid UTF-8");
@@ -514,7 +515,7 @@ describe("ingestFactFiles", () => {
 
   test("explicit files record no patterns; a missing one is reported skipped", async () => {
     const { events, report } = run({
-      client: fakeClient(),
+      embedding: fakeModel(),
       files: [join(facts, "甲设定集.txt"), join(facts, "missing.txt")],
     });
     expect(await report).toMatchObject({ ok: true, rows: 3 });
@@ -530,7 +531,7 @@ describe("ingestFactFiles", () => {
   });
 
   test("nothing to read is skipped, not failed", async () => {
-    const empty = run({ client: fakeClient(), factsDir: join(work, "nowhere") });
+    const empty = run({ embedding: fakeModel(), factsDir: join(work, "nowhere") });
     expect(await empty.report).toMatchObject({ ok: true, rows: 0 });
     expect(empty.events).toEqual([
       expect.objectContaining({ type: "stage", status: "skipped" }),

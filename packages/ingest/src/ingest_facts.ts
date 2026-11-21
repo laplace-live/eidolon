@@ -18,9 +18,8 @@ import {
   sortedPy,
   splitlines,
 } from "@eidolon/config";
+import { type EmbeddingModel, EmbeddingUsage } from "@eidolon/providers";
 import {
-  type EmbeddingClient,
-  EmbeddingUsage,
   type EmbedReport,
   embeddingTotalsMessage,
   embedInBatches,
@@ -31,7 +30,7 @@ import {
   tokenizeZh,
   writeTable,
 } from "@eidolon/retrieval";
-import { ingestFailure, lazyDefaultClient, openEmbedCache, writeIndexMeta } from "./index_build.ts";
+import { ingestFailure, openDefaultModel, openEmbedCache, writeIndexMeta } from "./index_build.ts";
 import { criticalSection } from "./limit.ts";
 import {
   costFields,
@@ -449,11 +448,10 @@ export interface IngestFactsOptions extends RunOptions {
   readonly cachePath?: string | null;
   /** Empties the cache first, every persona's and model's vectors included. */
   readonly clearCache?: boolean;
-  /** EMBED_MODEL and EMBED_DIM when omitted. */
-  readonly model?: string;
+  /** The install's, opened at the first cache miss, when omitted. */
+  readonly embedding?: EmbeddingModel;
+  /** EMBED_DIM when omitted. */
   readonly dim?: number;
-  /** The env-configured client, built at the first cache miss, when omitted. */
-  readonly client?: Pick<EmbeddingClient, "embedWithUsage">;
   readonly now?: () => Date;
 }
 
@@ -585,8 +583,7 @@ export async function ingestFactFiles(options: IngestFactsOptions): Promise<Inge
           batchSize: FACTS_BATCH_SIZE,
           noun: "facts",
           cache,
-          client: options.client ?? lazyDefaultClient,
-          model: options.model,
+          embedding: options.embedding ?? openDefaultModel,
           dim: options.dim,
           onProgress: ({ done, total }) =>
             emit({ type: "progress", stage: "ingest-facts", done, total, unit: "rows" }),

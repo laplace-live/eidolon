@@ -337,9 +337,9 @@ director decides who answers each line, and the personas may answer each other.
 
 ### The director
 
-`Director` (`packages/context/src/director.ts`) sends one Decisions request per line. It runs on
-the gate's plumbing: the active persona's `gate` role and its key, `decisionsUrl`,
-`reportDecision`, and the `noul` questions. `DecisionsClient` (`gate.ts`) is the POST both share.
+`Director` (`packages/context/src/director.ts`) sends one Decisions request per line. It asks the
+gate's decision model: the active persona's `gate` role and its key, through `gateDecisionModel`
+(`@eidolon/providers`), which both share, and its `noul` questions.
 
 - **What Jev reads:**
   - `participants`: each one's id, name, `identity.summary` and `chat.interests`;

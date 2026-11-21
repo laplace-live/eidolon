@@ -229,6 +229,7 @@ export const PROVIDERS: readonly Provider[] = [
         modelsUrl: "https://openrouter.ai/models?output_modalities=embeddings",
         models: [
           { id: "google/gemini-embedding-2-preview", maxDim: 3072, price: tokens(0.15, 0) },
+          { id: "~google/gemini-embedding-2-preview", maxDim: 3072, price: tokens(0.15, 0) },
           { id: "openai/text-embedding-3-large", maxDim: 3072, price: tokens(0.13, 0) },
           { id: "openai/text-embedding-3-small", maxDim: 1536, price: tokens(0.02, 0) },
           { id: "qwen/qwen3-embedding-8b", maxDim: 4096 },
@@ -694,6 +695,11 @@ export const PROVIDERS: readonly Provider[] = [
           {
             id: "stt-async-v5",
             note: "Soniox removes it on 2026-12-15 and sends its requests to stt-async-v6",
+            price: { unit: "audio-hours", usd: 0.1 },
+          },
+          {
+            id: "stt-async-v4",
+            note: "Soniox removed it on 2026-06-30 and sends its requests to stt-async-v5",
             price: { unit: "audio-hours", usd: 0.1 },
           },
         ],
@@ -1177,3 +1183,15 @@ export const REALTIME_VOICE_ENV = "REALTIME_VOICE";
 
 /** The roles a call runs, which a realtime model narrows to itself and the knowledge roles. */
 export const CALL_ROLES: readonly RoleId[] = ["hearing", "mind", "voice"];
+
+/**
+ * The roles the local app's setup picks an account for, a call's three first; a new persona starts
+ * on the active one's picks for those of them that are hers.
+ */
+export const SETUP_ROLES = [
+  "hearing",
+  "mind",
+  "voice",
+  "embeddings",
+  "gate",
+] as const satisfies readonly RoleId[];

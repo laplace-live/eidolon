@@ -20,7 +20,7 @@ import {
   pyJsonDumps,
   pyJsonLoads,
 } from "@eidolon/config";
-import type { CostSource } from "@eidolon/retrieval";
+import type { EmbeddingCostSource as CostSource } from "@eidolon/providers";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { type ProgressEvent, parseStream, refine } from "../src/index.ts";
 
@@ -48,13 +48,17 @@ function canonical(value: unknown): string {
 }
 
 let records: [string, string][] = [];
+// The prices these tests expect are the default refine provider's, whatever the shell exports.
+let restoreEnv = () => {};
 beforeEach(() => {
   records = [];
+  restoreEnv = setEnv({ REFINE_PROVIDER: undefined, REFINE_BASE_URL: undefined });
   logger.setSink((record: LogRecord) => {
     records.push([record.level, record.message]);
   });
 });
 afterEach(() => {
+  restoreEnv();
   logger.setSink(consoleSink);
 });
 
@@ -252,6 +256,72 @@ describe("refine.py's vectors", () => {
   test("isV2Refinement", () => {
     for (const { record, v2 } of vectors.v2)
       expect([record, refine.isV2Refinement(record)]).toEqual([record, v2]);
+  });
+});
+
+/** Sets (or, for undefined, deletes) env vars; the returned function restores them. */
+function setEnv(vars: Readonly<Record<string, string | undefined>>): () => void {
+  const saved = Object.entries(vars).map(([key]) => [key, process.env[key]] as const);
+  for (const [key, value] of Object.entries(vars)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  return () => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+}
+
+describe("the catalog's prices", () => {
+  const unreported = { prompt_tokens: 1234, completion_tokens: 567 };
+
+  test("a call that reports no cost is estimated at the refine role's provider's price", () => {
+    const restore = setEnv({ REFINE_PROVIDER: "deepseek" });
+    try {
+      const cached = { ...unreported, prompt_tokens_details: { cached_tokens: 1000 } };
+      const usage = refine.extractUsage({ usage: cached }, "deepseek-flash");
+      expect([usage.promptTokens, usage.completionTokens, usage.costSource]).toEqual([
+        1234,
+        567,
+        "estimate",
+      ]);
+      // Cache hits at their own price, as the usage ledger counts them.
+      expect(usage.costUsd).toBeCloseTo((234 * 0.3 + 1000 * 0.006 + 567 * 1.2) / 1_000_000, 15);
+      const reported = refine.extractUsage({ usage: { ...cached, cost: 0.5 } }, "deepseek-flash");
+      expect([reported.costUsd, reported.costSource]).toEqual([0.5, "openrouter"]);
+      expect(records).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  test("a free provider's calls cost nothing, as the ledger counts them", () => {
+    const restore = setEnv({ REFINE_PROVIDER: "ollama" });
+    try {
+      const usage = refine.extractUsage({ usage: unreported }, "qwen3");
+      expect([usage.costUsd, usage.costSource]).toEqual([0, "estimate"]);
+      expect(refine.fmtCost(usage)).toBe("$0.0000 (estimate)");
+      expect(records).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  test("a model is priced by the API its requests reach, and OpenRouter's go unpriced", () => {
+    const restore = setEnv({ REFINE_BASE_URL: "https://api.deepseek.com" });
+    try {
+      expect(refine.extractUsage({ usage: unreported }, "deepseek-flash").costSource).toBe(
+        "estimate",
+      );
+    } finally {
+      restore();
+    }
+    expect(refine.extractUsage({ usage: unreported }, "deepseek-flash").costSource).toBe("unknown");
+    expect(records).toEqual([
+      ["WARNING", "No cost data and no pricing entry for 'deepseek-flash'; reporting tokens only."],
+    ]);
   });
 });
 
@@ -600,12 +670,17 @@ describe("a signal", () => {
 
 describe("estimates for the plan", () => {
   test("refineCost is the dry run's arithmetic on counts, for a video not yet transcribed", () => {
-    expect(refine.refineCost("~google/gemini-flash-latest", 2, 101)).toEqual({
-      tokensIn: 3450,
-      tokensOut: 2800,
-      costUsd: (3450 * 0.075 + 2800 * 0.3) / 1_000_000,
-      basis: "price-table",
-    });
+    const restore = setEnv({ REFINE_PROVIDER: "deepseek" });
+    try {
+      expect(refine.refineCost("deepseek-flash", 2, 101)).toEqual({
+        tokensIn: 3450,
+        tokensOut: 2800,
+        costUsd: (3450 * 0.3 + 2800 * 1.2) / 1_000_000,
+        basis: "price-table",
+      });
+    } finally {
+      restore();
+    }
     const history = { model: "m", usdPerChunk: 0.5, sidecars: 1, chunks: 4 };
     expect(refine.refineCost("m", 3, 0, history)).toEqual({
       tokensIn: 5100,
@@ -620,7 +695,7 @@ describe("estimates for the plan", () => {
     });
   });
 
-  test("estimateRefine counts what the dry run counts, priced by history, the table, or nothing", () => {
+  test("estimateRefine counts what the dry run counts, priced by history, the catalog, or nothing", () => {
     const parsed = parseStream(transcript("e", 3));
     const v2 = { heading: "h", details: "d", key_quotes: [] };
     const sidecar = { chunks: { [chunkId("e", 0)]: v2, [chunkId("e", 1)]: { heading: "v1" } } };
@@ -630,15 +705,19 @@ describe("estimates for the plan", () => {
     );
     const tokensIn = 1700 * 2 + Math.floor(chars / 2);
     const tokensOut = 1400 * 2;
-    const flash = refine.estimateRefine(parsed, "~google/gemini-flash-latest", { sidecar });
-    expect(flash).toEqual({
-      chunks: 3,
-      done: 1,
-      tokensIn,
-      tokensOut,
-      costUsd: (tokensIn * 0.075 + tokensOut * 0.3) / 1_000_000,
-      basis: "price-table",
-    });
+    const restore = setEnv({ REFINE_PROVIDER: "deepseek" });
+    try {
+      expect(refine.estimateRefine(parsed, "deepseek-flash", { sidecar })).toEqual({
+        chunks: 3,
+        done: 1,
+        tokensIn,
+        tokensOut,
+        costUsd: (tokensIn * 0.3 + tokensOut * 1.2) / 1_000_000,
+        basis: "price-table",
+      });
+    } finally {
+      restore();
+    }
     expect(refine.estimateRefine(parsed, "~google/gemini-pro-latest", { sidecar })).toEqual({
       chunks: 3,
       done: 1,

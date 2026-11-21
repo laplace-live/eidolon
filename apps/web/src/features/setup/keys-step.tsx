@@ -1,32 +1,146 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, ph } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRightIcon, LockIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { InfoIcon, LockIcon } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ErrorAlert } from "@/components/error-alert";
-import { AccountKeyField } from "@/components/settings-form/account-key-field";
-import { settingsQuery } from "@/components/settings-form/queries";
-import { SettingsCard } from "@/components/settings-form/settings-card";
+import { FieldSkeletons } from "@/components/section-card";
+import { AccountKeyField, NoKeyField } from "@/components/settings-form/account-key-field";
+import {
+  effectiveProvider,
+  effectiveProviderType,
+  REINDEX_PATHS,
+} from "@/components/settings-form/controls";
+import { refreshSettings, settingsQuery } from "@/components/settings-form/queries";
+import { ReindexDialog } from "@/components/settings-form/reindex-dialog";
 import { useAccountKeys } from "@/components/settings-form/use-account-keys";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { FieldGroup } from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { accountsQuery } from "@/lib/accounts";
-import { type ApiError, asApiError, call } from "@/lib/api";
+import { type AccountView, type ApiError, asApiError, call, type SettingRow } from "@/lib/api";
+import { listOf, ROLE_LABELS } from "@/lib/labels";
+import { providerName, providerOfAccount, roleById, SETUP_ROLES } from "@/lib/providers";
 import { statusQuery } from "@/lib/query";
+import {
+  callNeeds,
+  choicesFor,
+  envLock,
+  keyNeeds,
+  missingFields,
+  modelAfter,
+  type Picked,
+  type PickedRole,
+  pickChanges,
+  RIDERS,
+} from "./choices";
 import { StepCard } from "./step-card";
-import { cookieDefault, isNewInstall } from "./wizard";
+import { cookieDefault, flagOn, isNewInstall } from "./wizard";
 
-/** The providers a call runs on, which decide the keys this step asks for. */
-const CALL_PROVIDERS = [
-  ["hearing.provider", "hearing.model"],
-  ["mind.provider", "mind.model"],
-  ["voice.provider", "voice.model"],
-] as const;
+const ROLE_HINTS = {
+  hearing: msg`Hears you on calls and in voice messages.`,
+  mind: msg`Thinks and writes her replies.`,
+  voice: msg`Speaks her replies.`,
+  embeddings: msg`Finds her memories and what she knows. Every persona shares it.`,
+  gate: msg`A decision model: whether a line needs what she knows looked up, and who answers in a group chat.`,
+} satisfies Record<PickedRole, MessageDescriptor>;
 
-/** Keys for the accounts a call needs, with "use other providers" folded beneath. */
+/** Which account fills one role, the recommended one marked, and the model it runs. */
+function RolePicker({
+  role,
+  rows,
+  drafts,
+  accounts,
+  invalid,
+  disabled,
+  onDraft,
+}: {
+  readonly role: PickedRole;
+  readonly rows: readonly SettingRow[];
+  readonly drafts: Readonly<Record<string, string>>;
+  readonly accounts: readonly AccountView[] | undefined;
+  /** A save was tried while it still needs a model named. */
+  readonly invalid: boolean;
+  readonly disabled: boolean;
+  readonly onDraft: (path: string, value: string) => void;
+}) {
+  const { t } = useLingui();
+  const id = useId();
+  const entry = roleById(role);
+  const path = `${entry.path}.provider`;
+  const modelPath = `${entry.path}.model`;
+  const locked = envLock(entry, rows);
+  const current = effectiveProvider(entry, rows, drafts);
+  const model = modelAfter(entry, rows, drafts, accounts);
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{t(ROLE_LABELS[role])}</FieldLabel>
+      <Select
+        value={current ?? ""}
+        onValueChange={(next) => onDraft(path, next)}
+        disabled={disabled || locked !== undefined}
+      >
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {choicesFor(entry, accounts, current).map((choice) => (
+            <SelectItem key={choice.account} value={choice.account}>
+              {choice.name}
+              {choice.recommended && <Badge variant="secondary">{t`Recommended`}</Badge>}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <FieldDescription>{t(ROLE_HINTS[role])}</FieldDescription>
+      {locked ? (
+        <FieldDescription>
+          {t`Set by ${ph({ env: locked.env })} in the environment, which wins over the value saved here. Change it there.`}
+        </FieldDescription>
+      ) : model !== null && drafts[modelPath] === undefined ? (
+        <FieldDescription>
+          <Trans>
+            Model: <code className="font-mono text-foreground/80">{model}</code>
+          </Trans>
+        </FieldDescription>
+      ) : (
+        <>
+          <Input
+            aria-label={t`Model`}
+            className="font-mono md:text-[0.8125rem]"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={t`Model ID`}
+            value={drafts[modelPath] ?? ""}
+            aria-invalid={invalid}
+            onChange={(event) => onDraft(modelPath, event.target.value)}
+            disabled={disabled}
+          />
+          <FieldDescription className={invalid ? "text-destructive" : undefined}>
+            {t`This account has no default model, so name the one to use.`}
+          </FieldDescription>
+        </>
+      )}
+    </Field>
+  );
+}
+
+/**
+ * Which providers hear, think and speak for the active persona and embed for every one, each with
+ * the recommended one marked, then a key for every account they name.
+ */
 export function KeysStep({ onDone }: { readonly onDone: () => void }) {
   const { t } = useLingui();
   const queryClient = useQueryClient();
@@ -34,10 +148,11 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
   const settings = useQuery(settingsQuery());
   const status = useQuery(statusQuery);
   const accounts = useQuery(accountsQuery);
-  const needed = status.data?.keys ?? [];
-  const required = needed.map((key) => key.account);
   // Decided from the first answers: once the keys are saved, the install no longer looks new.
   const newInstall = useRef<boolean | null>(null);
+  const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
+  const [tried, setTried] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [missing, setMissing] = useState(false);
@@ -49,27 +164,105 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
     }
   }, [settings.data, accounts.data]);
 
-  async function next() {
+  const rows = settings.data?.settings ?? [];
+  const listed = accounts.data?.accounts;
+  // A realtime model hears, thinks and speaks in one, on the account her studio picked for it.
+  const realtime = status.data?.call.realtime
+    ? effectiveProvider(roleById("realtime"), rows, {})
+    : null;
+  const picks = SETUP_ROLES.filter((role) => realtime === null || !callNeeds(role));
+  const required = picks.filter(callNeeds);
+  const optional = picks.filter((role) => !callNeeds(role));
+  // Reranking, unless she turned it off, and selfies, once she has an outfit to draw.
+  const riders = RIDERS.filter((role) =>
+    role === "rerank"
+      ? flagOn(
+          rows.find((row) => row.path === "knowledge.rerank.enabled"),
+          true,
+        )
+      : (status.data?.selfieReferences ?? 0) > 0,
+  );
+  const picked: Picked[] = [
+    ...(realtime === null ? [] : [{ role: "realtime" as const, account: realtime, call: true }]),
+    ...picks.map((role) => ({
+      role,
+      account: effectiveProvider(roleById(role), rows, drafts),
+      call: callNeeds(role),
+    })),
+    ...riders.map((role) => ({
+      role,
+      account: effectiveProvider(roleById(role), rows, {}),
+      call: false,
+    })),
+  ];
+  const needs = keyNeeds(picked, listed);
+  const modelless = picks.filter(
+    (role) => modelAfter(roleById(role), rows, drafts, listed) === null,
+  );
+  const lacking = new Map(
+    needs.map((need) => [need.account, missingFields(need, listed, keys.options[need.account])]),
+  );
+  const incomplete = [...lacking.values()].some((fields) => fields.length > 0);
+  const loading = settings.isPending || accounts.isPending || status.isPending;
+
+  function draft(path: string, value: string) {
+    setDrafts((current) => {
+      const next = { ...current, [path]: value };
+      // A model typed for one provider means nothing to another.
+      if (path.endsWith(".provider")) delete next[path.replace(/\.provider$/, ".model")];
+      return next;
+    });
+    setChecksFailed(false);
+  }
+
+  async function next(confirmed = false) {
+    setTried(true);
+    if (!settings.data || modelless.length > 0 || incomplete) return;
+    const changes = pickChanges(rows, drafts, listed);
+    // As Settings asks: another embedding provider or model costs every index and the memories
+    // kept, which a new install has none of yet; another account of the same provider costs nothing.
+    const embeddings = roleById("embeddings");
+    const reembeds =
+      effectiveProviderType(embeddings, rows, {}, listed) !==
+        effectiveProviderType(embeddings, rows, drafts, listed) ||
+      REINDEX_PATHS.some((path) => path in changes.app);
+    if (!confirmed && newInstall.current !== true && reembeds) {
+      setConfirming(true);
+      return;
+    }
     setBusy(true);
     setFailure(null);
     setMissing(false);
     setChecksFailed(false);
     try {
-      const cookie = settings.data
-        ? cookieDefault(settings.data.settings, newInstall.current === true)
-        : null;
-      if (cookie) {
-        await call("PUT /api/local/settings", { body: { scope: "app", values: cookie } });
-        await queryClient.invalidateQueries({ queryKey: ["settings"] });
+      const app = {
+        ...cookieDefault(settings.data.settings, newInstall.current === true),
+        ...changes.app,
+      };
+      if (Object.keys(changes.persona).length > 0) {
+        const saved = await call("PUT /api/local/settings", {
+          body: { scope: "persona", persona: settings.data.persona, values: changes.persona },
+        });
+        await refreshSettings(queryClient, undefined, saved);
       }
-      await keys.save();
+      if (Object.keys(app).length > 0) {
+        const saved = await call("PUT /api/local/settings", {
+          body: { scope: "app", values: app },
+        });
+        await refreshSettings(queryClient, undefined, saved);
+      }
+      setDrafts({});
+      setTried(false);
+      await keys.save(needs.map((need) => need.account));
       const fresh = await queryClient.fetchQuery(statusQuery);
       if (fresh.keys.some((key) => !key.set)) {
         setMissing(true);
         return;
       }
-      const outcomes = await Promise.all(required.map((account) => keys.check(account)));
-      if (outcomes.every((outcome) => outcome?.result?.ok)) onDone();
+      const keyed = await queryClient.fetchQuery(accountsQuery);
+      const checked = keyNeeds(picked, keyed.accounts).filter((need) => need.set);
+      const outcomes = await Promise.all(checked.map((need) => keys.check(need.account)));
+      if (outcomes.every((outcome) => outcome.result?.ok)) onDone();
       else setChecksFailed(true);
     } catch (error) {
       setFailure(asApiError(error));
@@ -78,10 +271,24 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
     }
   }
 
+  const personaName = status.data ? status.data.persona.shortName || status.data.persona.name : "";
+  const picker = (role: PickedRole) => (
+    <RolePicker
+      key={role}
+      role={role}
+      rows={rows}
+      drafts={drafts}
+      accounts={listed}
+      invalid={tried && modelless.includes(role)}
+      disabled={busy}
+      onDraft={draft}
+    />
+  );
+
   return (
     <StepCard
       title={t`Your API Keys`}
-      description={t`Eidolon calls paid services with your own keys: by default Soniox hears you, OpenRouter thinks and Fish Audio speaks. Each needs credit on its account.`}
+      description={t`Eidolon calls paid services with your own keys. Keep the recommended providers or pick others you have keys for: one provider can fill more than one part. Each needs credit on its account.`}
       note={
         <span className="flex items-center gap-1.5">
           <LockIcon className="size-3.5 shrink-0" aria-hidden />
@@ -95,47 +302,84 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
               {t`Continue Anyway`}
             </Button>
           )}
-          <Button onClick={() => void next()} disabled={busy || accounts.isPending}>
+          <Button onClick={() => void next()} disabled={busy || loading}>
             {busy && <Spinner />}
             {t`Save and Continue`}
           </Button>
         </>
       }
     >
+      {settings.isError && <ErrorAlert error={settings.error} />}
       {accounts.isError && <ErrorAlert error={accounts.error} />}
-      <FieldGroup className="gap-7">
-        {needed.map((key) => (
-          <AccountKeyField key={key.account} need={key} keys={keys} />
-        ))}
-      </FieldGroup>
+      {loading ? (
+        <div className="flex flex-col gap-6" role="status" aria-busy="true">
+          <span className="sr-only">{t`Loading…`}</span>
+          <FieldSkeletons rows={4} />
+        </div>
+      ) : (
+        <>
+          <FieldSet className="gap-6">
+            <FieldLegend>{t`Required Providers`}</FieldLegend>
+            {realtime !== null ? (
+              <Alert>
+                <InfoIcon />
+                <AlertDescription>
+                  {t`${personaName} talks through ${ph({ provider: providerName(providerOfAccount(realtime, listed)) })}'s realtime model, which hears, thinks and speaks in one. Change that in her studio.`}
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="grid gap-6 sm:grid-cols-2">{required.map(picker)}</div>
+            )}
+          </FieldSet>
 
-      <Collapsible className="-mx-6 flex flex-col gap-6 border-t px-6 pt-4">
-        <CollapsibleTrigger asChild>
-          <Button
-            variant="ghost"
-            className="group -ml-2.5 w-fit text-muted-foreground hover:text-foreground aria-expanded:bg-transparent"
-          >
-            <ChevronRightIcon className="transition-transform group-data-[state=open]:rotate-90" />
-            {t`Use Other Providers (Optional)`}
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col gap-6">
-          <p className="inline-links text-muted-foreground text-sm">
-            <Trans>
-              Pick who hears, thinks and speaks for her from the accounts you have. Add another
-              provider's account under <Link to="/settings?tab=providers">Providers</Link>, then
-              choose it here or in her studio.
-            </Trans>
-          </p>
-          <SettingsCard
-            scope="persona"
-            paths={CALL_PROVIDERS}
-            title={<span className="block text-base">{t`Who Hears, Thinks and Speaks`}</span>}
-            description={t`Saved for the active persona. Claude, DeepSeek and others work through your OpenRouter key or with their own.`}
-            onSaved={() => void queryClient.invalidateQueries({ queryKey: statusQuery.queryKey })}
-          />
-        </CollapsibleContent>
-      </Collapsible>
+          {/* A fieldset draws its legend over its own top border, so the divider is outside it. */}
+          <div className="border-t pt-6">
+            <FieldSet className="gap-6">
+              <div className="flex flex-col gap-1.5">
+                <FieldLegend className="mb-0">{t`Optional Providers`}</FieldLegend>
+                <FieldDescription>{t`She talks without them, but remembers and recalls less.`}</FieldDescription>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2">{optional.map(picker)}</div>
+              <p className="inline-links text-muted-foreground text-sm">
+                <Trans>
+                  Another account, such as your own server or a second key, goes under{" "}
+                  <Link to="/settings?tab=providers">Providers</Link>; it's listed here once added.
+                </Trans>
+              </p>
+            </FieldSet>
+          </div>
+
+          <div className="border-t pt-6">
+            <FieldSet className="gap-6">
+              <FieldLegend>{t`Keys`}</FieldLegend>
+              {/* Not a FieldGroup: inside its @container, Chrome 157 drops the box of a field kept
+                  while the fields beside it come and go, and the key field vanishes. */}
+              <div className="flex flex-col gap-7">
+                {needs.map((need) => {
+                  if (need.key === "none") {
+                    return <NoKeyField key={need.account} need={need} keys={keys} />;
+                  }
+                  const off = listOf(need.roles.map((role) => t(ROLE_LABELS[role])));
+                  return (
+                    <AccountKeyField
+                      key={need.account}
+                      need={need}
+                      keys={keys}
+                      optional={!need.required}
+                      note={
+                        need.key === "required" && !need.required
+                          ? t`Without it, these stay off: ${off}.`
+                          : undefined
+                      }
+                      missing={tried ? lacking.get(need.account) : undefined}
+                    />
+                  );
+                })}
+              </div>
+            </FieldSet>
+          </div>
+        </>
+      )}
 
       {missing && (
         <Alert variant="destructive">
@@ -149,6 +393,14 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
         </Alert>
       )}
       {failure && <ErrorAlert error={failure} />}
+      <ReindexDialog
+        open={confirming}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false);
+          void next(true);
+        }}
+      />
     </StepCard>
   );
 }

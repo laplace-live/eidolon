@@ -219,6 +219,46 @@ describe("listing and creating", () => {
     expect(readFileSync(join(personaHomeDir("aria"), "prompt.md"), "utf8")).toContain("观众");
   });
 
+  test("starts on the active persona's providers, and speaks with one of her voice's", async () => {
+    const own = await call("PUT", "/settings", {
+      scope: "persona",
+      persona: MILKY,
+      values: {
+        "hearing.provider": "deepgram",
+        "hearing.language": "en",
+        "mind.provider": "anthropic",
+        "mind.model": "claude-sonnet-5-5",
+        "voice.provider": "openai",
+        "voice.model": "gpt-4o-mini-tts",
+        "voice.voiceId": "marin",
+        "knowledge.gate.provider": "openrouter",
+        "knowledge.gate.model": "morph/reflex",
+        "knowledge.gate.enabled": false,
+      },
+    });
+    expect(own.status).toBe(200);
+    for (const voiceId of ["", " ", "a\nb", "x".repeat(201), 7]) {
+      const refused = await call("POST", "/personas", { ...NEW_PERSONA, voiceId });
+      expect([JSON.stringify(voiceId), refused.status]).toEqual([JSON.stringify(voiceId), 400]);
+    }
+    const created = await call("POST", "/personas", { ...NEW_PERSONA, voiceId: " nova " });
+    expect(created.status).toBe(201);
+    const yaml = parseYaml(readFileSync(join(personaHomeDir("aria"), "persona.yaml"), "utf8"));
+    expect(yaml).toEqual({
+      identity: {
+        name: "阿莉亚",
+        shortName: "莉亚",
+        fans: "星星",
+        summary: NEW_PERSONA.summary,
+        timezone: "Asia/Tokyo",
+      },
+      voice: { provider: "openai", model: "gpt-4o-mini-tts", voiceId: "nova" },
+      hearing: { provider: "deepgram" },
+      mind: { provider: "anthropic", model: "claude-sonnet-5-5" },
+      knowledge: { gate: { provider: "openrouter", model: "morph/reflex" } },
+    });
+  });
+
   test("refuses a bad slug, a route word, a taken id, no name, voice or known zone", async () => {
     for (const [change, status, code] of [
       [{ id: "Aria" }, 400, "invalid-persona-id"],

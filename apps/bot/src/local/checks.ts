@@ -6,6 +6,7 @@ import {
   type KeyCheck,
   LEGACY_VOICE_ENV,
   type Provider,
+  type ProviderId,
   providerById,
   type RoleId,
   roleById,
@@ -564,36 +565,35 @@ export async function checkAccount(
     }
     return { result: finish(await checkListing(deps, undefined, base), envOverride) };
   }
-  switch (provider.id) {
-    case "soniox":
-      return { result: finish(await checkSoniox(deps, key, base), envOverride) };
-    case "fish": {
-      const verdict = await checkFish(deps, key, target.account);
-      return {
-        result: finish(verdict, envOverride),
-        ...(verdict.voice === undefined ? {} : { voice: verdict.voice }),
-      };
-    }
-    case "openrouter": {
-      const at = base ?? OPENROUTER_BASE;
-      const verdict = isOpenRouter(at)
-        ? await checkOpenRouterKey(deps, key, at)
-        : await checkListing(deps, key, at);
-      return { result: finish(verdict, envOverride) };
-    }
-    case "cohere":
-      return { result: finish(await checkCohere(deps, key), envOverride) };
-    default: {
-      if (provider.check === undefined || base === undefined) {
-        const note = `${provider.name} offers nothing to check the key against for free`;
-        const verdict: Verdict = {
-          ok: true,
-          code: "ok",
-          warnings: [warning("cannot-verify", note)],
-        };
-        return { result: finish(verdict, envOverride) };
-      }
-      return { result: finish(await checkListing(deps, key, base, provider.check), envOverride) };
-    }
-  }
+  const check = KEY_CHECKS[provider.id] ?? catalogCheck;
+  const verdict = await check({ ...target, apiKey: key }, deps);
+  return {
+    result: finish(verdict, envOverride),
+    ...(verdict.voice === undefined ? {} : { voice: verdict.voice }),
+  };
 }
+
+type KeyCheckRun = (
+  target: CheckTarget & { readonly apiKey: string },
+  deps: CheckDeps,
+) => Promise<FishVerdict>;
+
+/** The catalog's free request, a listing, where the provider offers one. */
+const catalogCheck: KeyCheckRun = async ({ provider, apiKey, baseUrl }, deps) => {
+  if (provider.check === undefined || baseUrl === undefined) {
+    const note = `${provider.name} offers nothing to check the key against for free`;
+    return { ok: true, code: "ok", warnings: [warning("cannot-verify", note)] };
+  }
+  return checkListing(deps, apiKey, baseUrl, provider.check);
+};
+
+/** The providers whose keys need more than the catalog's check, by catalog id. */
+const KEY_CHECKS: { readonly [P in ProviderId]?: KeyCheckRun } = {
+  soniox: ({ apiKey, baseUrl }, deps) => checkSoniox(deps, apiKey, baseUrl),
+  fish: ({ apiKey, account }, deps) => checkFish(deps, apiKey, account),
+  openrouter: ({ apiKey, baseUrl }, deps) => {
+    const at = baseUrl ?? OPENROUTER_BASE;
+    return isOpenRouter(at) ? checkOpenRouterKey(deps, apiKey, at) : checkListing(deps, apiKey, at);
+  },
+  cohere: ({ apiKey }, deps) => checkCohere(deps, apiKey),
+};

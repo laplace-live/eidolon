@@ -14,7 +14,8 @@ import {
   refuseTemplatePath,
   zeroCounts,
 } from "@eidolon/ingest";
-import { type EmbeddingClient, STREAM_CHUNKS_TABLE } from "@eidolon/retrieval";
+import type { EmbeddingModel } from "@eidolon/providers";
+import { STREAM_CHUNKS_TABLE } from "@eidolon/retrieval";
 import {
   ArgparseExit,
   commandPersona,
@@ -160,7 +161,7 @@ export function parseIngestStreamsArgs(argv: readonly string[]): IngestStreamsAr
 }
 
 export interface IngestStreamsDeps extends CommandDeps {
-  readonly embeddingClient?: Pick<EmbeddingClient, "embedWithUsage">;
+  readonly embeddingModel?: EmbeddingModel;
   /** When the table was built, for the meta file. */
   readonly now?: () => Date;
 }
@@ -199,7 +200,7 @@ export async function ingestStreamsMain(
       dryRun: args.dryRun,
       cachePath: args.cachePath,
       clearCache: args.clearCache,
-      client: deps.embeddingClient,
+      embedding: deps.embeddingModel,
       now: deps.now,
       onProgress: emit,
       signal: deps.signal,

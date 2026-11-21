@@ -6,6 +6,7 @@
 // tokens; and told to search once per topic, the carrier asked for three searches, all three
 // counted in server_tool_use_details, while the request was billed for one.
 import { extractCostUsd, isPlainObject, openrouterHeaders } from "@eidolon/config";
+import type { ProviderId } from "./catalog.ts";
 import { OpenAIChatClient, openaiUnits } from "./http/chat.ts";
 import { hasKey, type Selection, trySelect } from "./resolve.ts";
 import { reportUsage, type UsageSink } from "./usage.ts";
@@ -148,10 +149,16 @@ export function openRouterSearcher(selection: Selection, options: SearcherOption
   };
 }
 
+/** Each provider's web search, by catalog id: one for every provider that offers it. */
+export const SEARCHERS: {
+  readonly [P in ProviderId]?: (selection: Selection, options: SearcherOptions) => Searcher;
+} = {
+  openrouter: openRouterSearcher,
+};
+
 /** The search role's searcher, as its settings stand: none until it has an account and its key. */
 export function roleSearcher(tap: UsageSink): Searcher | undefined {
   const selection = trySelect("search");
-  return selection !== null && hasKey(selection)
-    ? openRouterSearcher(selection, { tap })
-    : undefined;
+  if (selection === null || !hasKey(selection)) return undefined;
+  return SEARCHERS[selection.provider.id]?.(selection, { tap });
 }

@@ -14,6 +14,34 @@ formats there are (OpenAI-compatible chat and Anthropic's Messages API), which t
 minds call, and a call's recognizers, voices and realtime sessions are fetch and WebSocket clients
 of their own (`stt/`, `speech/stream/`, `realtime/`).
 
+## Implementations
+
+The package is laid out as the Vercel AI SDK lays out its providers, on fetch clients of its own:
+each kind of model has one interface, which everything that uses it calls, and a table of its
+implementations keyed by provider id. Nothing that uses a kind names a provider, and
+`packages/providers/test/registry.test.ts` holds every table to the catalog: a provider whose
+entry offers a kind implements it there, and no other does.
+
+| Kind | Interface | Table |
+| --- | --- | --- |
+| Chat | `Mind` (`createMind`, in `@eidolon/engine`), `chatPoster` | `CHAT_DIALECTS` (`chat/index.ts`) |
+| Live speech recognition | `SttStream` | `STT_STREAMS` (`stt/index.ts`) |
+| Batch speech recognition | `transcribe` | `TRANSCRIBERS` (`speech/batch/transcribe.ts`) |
+| Streaming speech | `SpeechStream` | `SPEECH_STREAMS` (`speech/stream/index.ts`) |
+| Batch speech | `synthesize` | `SYNTHESIZERS` (`speech/batch/synthesize.ts`) |
+| Realtime voice | `RealtimeSession` | `REALTIME_DIALECTS` (`realtime/session.ts`) |
+| Embedding models | `EmbeddingModel` | `EMBEDDING_MODELS` (`embedding/index.ts`) |
+| Decision models | `DecisionModel` | `DECISION_MODELS` (`decision/index.ts`) |
+| Reranking | `RerankModel` | `RERANK_MODELS` (`rerank/index.ts`) |
+| Image generation | `ImageModel` | `IMAGE_MODELS` (`image/index.ts`) |
+| Web search | `Searcher` | `SEARCHERS` (`search.ts`) |
+| Model lists | `listModels` | `LISTINGS` (`models.ts`) |
+
+A new provider is its catalog entry (its offers, prices and free key check), a file for each kind
+it offers, beside that kind's others, and a line in each kind's table; chat needs only its line
+([Requests](#requests)). The local app checks a key with the catalog's `check` unless `KEY_CHECKS`
+(`apps/bot/src/local/checks.ts`) needs more.
+
 ## Roles
 
 | Role | Settings | Variables | Default | Spends |
@@ -32,6 +60,10 @@ of their own (`stt/`, `speech/stream/`, `realtime/`).
 | assistant | `assistant.provider`, `.model` (app-wide) | `ASSISTANT_PROVIDER`, `ASSISTANT_MODEL` | off | tasks |
 | assistant-quick, -coding, -research | `assistant.quick.provider`, `.model`, and `.coding`'s and `.research`'s (app-wide) | `ASSISTANT_QUICK_PROVIDER`, `ASSISTANT_QUICK_MODEL`, and `_CODING_`'s and `_RESEARCH_`'s | the assistant's | tasks of that kind |
 | search | `assistant.search.provider`, `.model` (app-wide) | `ASSISTANT_SEARCH_PROVIDER`, `ASSISTANT_SEARCH_MODEL` | off; OpenRouter `exa` once its account is picked | a task's `web_search` |
+
+The local app's setup wizard picks hearing, mind and voice, which a call needs, and the optional
+embeddings and gate, among every provider that offers each, and marks each role's default
+Recommended ([web-app.md](web-app.md#the-setup-wizard)).
 
 The decision models the retrieval gate asks are a category of their own, `decision`: OpenRouter
 lists them under `output_modalities=decisions` (Jev, Reflex, d1 and others), and the catalog
@@ -166,6 +198,12 @@ the response carries what the request cost; on a maker's API the catalog's price
 
 ## Requests
 
+A chat provider's line in `CHAT_DIALECTS` names the wire it speaks, Anthropic's Messages API or
+OpenAI-compatible chat, and where its API parts from OpenAI's own: whether it takes `developer`
+messages, `stop` or a second system message, the fields a mind sends over every other (DeepSeek's
+thinking off, Anthropic's fallbacks), OpenRouter's attribution, cost and own fields, and what a
+JSON caller's body becomes there. The minds and the JSON posters read it and name no provider.
+
 - **Anthropic** goes through `AnthropicClient`: `x-api-key`, `anthropic-version`, prompt caching,
   and the server-side fallback beta with `fallbacks: "default"` on the models that offer one. It
   sends no `temperature`, `top_p` or `top_k`, which the current models refuse.
@@ -185,8 +223,13 @@ the response carries what the request cost; on a maker's API the catalog's price
   reply has started streaming.
 - **OpenAI's own API** gets `max_completion_tokens` for `max_tokens`, and no `temperature` or
   `top_p` for its reasoning models, which refuse them; OpenRouter makes that translation itself.
-- **The rest** (embeddings, reranking, the decision API, image generation, memory extraction and
-  refinement) post plain JSON with `fetch` and report what they used the same way.
+- **Embeddings**, retrieval's and Mem0's alike, are one `EmbeddingModel` request: on OpenRouter it
+  asks for its cost (`usage.include`) and carries the attribution headers. Retrieval's retries a
+  failed request five times, and a 200 without vectors, OpenRouter's way of passing an upstream
+  error on, five times more, a quota error's ten times a minute apart; Mem0's, made during a
+  turn, retries twice, as the OpenAI SDK did, and fails on such a 200 at once.
+- **The rest** (reranking, the decision API, image generation, memory extraction and refinement)
+  post plain JSON with `fetch` and report what they used the same way.
 
 ## Speech without a WebSocket
 
@@ -248,7 +291,7 @@ Its length is the provider's figure (MiniMax's) or counted from the MP3's frame 
 | OpenAI | `POST {base}/audio/transcriptions`, multipart, the file named `voice.<ext>` | `gpt-realtime-whisper`, which serves Realtime sessions alone, becomes `gpt-4o-transcribe` | Its length when `usage` is in seconds; token usage is reported as tokens |
 | Deepgram | `POST {base}/v1/listen?model=…&punctuate=true`, the raw clip | as set | `detect_language` without a hint; the length from `metadata.duration` |
 | ElevenLabs | `POST {base}/v1/speech-to-text`, multipart | `_realtime` dropped | `tag_audio_events: false`, so the transcript holds only words, as a call's does |
-| Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run after the transcript is returned, without holding it up, and even when the request fails or is abandoned, each with 10 s of its own; a 404 is quiet. It is its own client: `@eidolon/ingest`'s never reaches the bot image |
+| Soniox | Its async files API: upload, create a transcription, poll every 500 ms, fetch the transcript, then delete both | `stt-rt-*` becomes `stt-async-*` | Only `STT_LANGUAGE` becomes a hint, as in a call. The deletes run after the transcript is returned, without holding it up, and even when the request fails or is abandoned, each with 10 s of its own; a 404 is quiet. It shares only the endpoints with `laplace-transcribe`'s client, whose retries, uploads streamed from disk, reference ids and error texts a voice message doesn't want |
 
 Each request reports the clip's seconds, the provider's figure else the recorder's, under the
 hearing role, priced as the transcription role prices that model: Soniox's async models by the
@@ -294,7 +337,9 @@ promotions included, else the caller's own estimate, else none, and it is kept a
 its usage. A record names the provider whose API the request reached, so a role's own base at
 another provider's API (`RERANK_BASE_URL` at Cohere's) is that provider's spend, priced from its
 models. A task's mind also hands each of its records, cost and all, to the task's own meter
-(`createMind`'s `tap`), whose spend pauses read it.
+(`createMind`'s `tap`), whose spend pauses read it. The offline chain's own reports,
+`laplace-transcribe`'s, `laplace-refine`'s and the pipeline's plan, price from the catalog the same
+way ([typescript.md](typescript.md#refine)).
 
 `@eidolon/usage` keeps the records in SQLite, at `EIDOLON_USAGE_DB` or `<data home>/usage.db`, in
 WAL mode with a busy timeout, because the bot, the local app and every job's CLI write to one file.

@@ -97,7 +97,7 @@ Keep — cites an external system, with a link (`packages/retrieval/src/tokenize
 ```
 
 Keep — a trap, where removing the field breaks everything quietly
-(`packages/retrieval/src/embeddings.ts`):
+(`packages/providers/src/embedding/openai.ts`):
 
 ```ts
 // encoding_format "float" is always sent: providers that mishandle base64 round-trip an empty

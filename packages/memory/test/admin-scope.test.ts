@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createMemoryAdmin } from "../src/admin.ts";
 import { MemoryEngine, SharedEngine } from "../src/engine.ts";
 import { HistoryStore } from "../src/history.ts";
-import { OpenAICompatibleChat, OpenAICompatibleEmbedder } from "../src/openai.ts";
+import { Mem0Embedder, OpenAICompatibleChat } from "../src/openai.ts";
 import { QdrantVectorStore } from "../src/qdrant.ts";
 import {
   clearMemoryEnv,
+  FakeEmbeddings,
   FakePoster,
   FakeQdrant,
   pinned,
@@ -48,7 +49,7 @@ function adminOver(fake: FakeQdrant) {
       { host: "h", port: 6333, collection: "c", vectorSize: 4 },
       fake.api,
     ),
-    embedder: new OpenAICompatibleEmbedder({ model: "m", dims: 4 }, poster),
+    embedder: new Mem0Embedder(new FakeEmbeddings("m"), 4),
     llm: new OpenAICompatibleChat("m", poster),
     history: new HistoryStore(tempPath("h.db"), { clock: pins.clock, newId: pins.newId }),
     clock: pins.clock,

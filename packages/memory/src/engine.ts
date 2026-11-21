@@ -22,16 +22,11 @@ import {
   utcIsoDate,
   wallClockMicros,
 } from "@eidolon/config";
-import { billingProvider, jsonPoster, reportUsage, usageHook } from "@eidolon/providers";
+import { embeddingModel, jsonPoster, usageHook } from "@eidolon/providers";
 import { type MemoryConfig, requireLlmKey } from "./config.ts";
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "./extraction-prompt.ts";
 import { type HistoryEntry, HistoryStore } from "./history.ts";
-import {
-  type Embedder,
-  type ExtractionLlm,
-  OpenAICompatibleChat,
-  OpenAICompatibleEmbedder,
-} from "./openai.ts";
+import { type Embedder, type ExtractionLlm, Mem0Embedder, OpenAICompatibleChat } from "./openai.ts";
 import { generateAdditiveExtractionPrompt } from "./prompts.ts";
 import {
   type QdrantApi,
@@ -48,6 +43,9 @@ export const LIST_LIMIT = 1000;
 export const DELETE_ALL_BATCH_SIZE = 1000;
 const EXISTING_MEMORY_LOOKUP = 10;
 const LAST_MESSAGES = 10;
+// mem0's client retries as the OpenAI SDK does, twice. A turn can't sit out a quota window as an
+// ingest does, nor resend a request whose answer held no vectors.
+const EMBEDDING_RETRIES = { http: 2, empty: 0, quota: 0 };
 
 /** A user/assistant message with string content, as the provider hands it over. */
 export type ConversationMessage = Readonly<Record<string, unknown>> & {
@@ -437,25 +435,21 @@ export class MemoryEngine {
   }
 }
 
-/** Builds the engine's clients, runs mem0's collection setup and opens the history DB. */
+/**
+ * Builds the engine's clients, runs mem0's collection setup and opens the history DB. `http` is
+ * the extraction client's; the embedding model takes only its fetch.
+ */
 export async function openMemoryEngine(
   config: MemoryConfig,
   options: { readonly qdrantClient?: QdrantApi; readonly http?: OpenAIClientOptions } = {},
 ): Promise<MemoryEngine> {
   const { embedder: embedding, llm: chat } = config;
-  const embedder = new OpenAICompatibleEmbedder(
-    embedding,
-    // The configured model, as retrieval records it: OpenRouter answers with the id unprefixed.
-    jsonPoster(embedding, options.http, (units, _model, reportedUsd) =>
-      reportUsage({
-        role: "embeddings",
-        provider: billingProvider(embedding.provider, embedding.baseUrl),
-        model: embedding.model,
-        units,
-        costUsd: reportedUsd,
-      }),
-    ),
-  );
+  const fetch = options.http?.fetch;
+  const model = embeddingModel(embedding.selection, {
+    retries: EMBEDDING_RETRIES,
+    ...(fetch === undefined ? {} : { fetch }),
+  });
+  const embedder = new Mem0Embedder(model, embedding.dims);
   const store = new QdrantVectorStore(config.qdrant, options.qdrantClient);
   await store.ensureCollection();
   const llmClient = jsonPoster(
@@ -484,7 +478,7 @@ export class SharedEngine {
 
   /** `fresh` is true when this call (or the one it joined) just ran the collection setup. */
   async get(config: MemoryConfig): Promise<{ engine: MemoryEngine; fresh: boolean }> {
-    const key = JSON.stringify(config);
+    const key = engineKey(config);
     const engine = this.#engines.get(key);
     if (engine) return { engine, fresh: false };
     let opening = this.#opening.get(key);
@@ -501,6 +495,16 @@ export class SharedEngine {
     }
     return { engine: await opening, fresh: true };
   }
+}
+
+/** `config` as it tells engines apart: of the embeddings account, only what its requests use. */
+function engineKey(config: MemoryConfig): string {
+  const { selection, dims } = config.embedder;
+  const { provider, model, apiKey, baseUrl } = selection;
+  return JSON.stringify({
+    ...config,
+    embedder: { provider: provider.id, model, apiKey, baseUrl, dims },
+  });
 }
 
 /**

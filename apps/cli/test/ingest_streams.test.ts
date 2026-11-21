@@ -14,10 +14,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installSettings, PROJECT_ROOT, resetSettings, sourceFolder } from "@eidolon/config";
 import { acquireLock, embedCachePath, indexLockKey } from "@eidolon/ingest";
-import { resetEmbeddingClient } from "@eidolon/retrieval";
+import { resetEmbeddingModel } from "@eidolon/retrieval";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
-  fakeClient,
+  fakeModel,
   GOLDEN,
   materialize,
   placehold,
@@ -95,7 +95,7 @@ describe("ingestStreamsMain", () => {
       const argv = run.argv.map((arg) => substitute(arg, paths));
       const code = await ingestStreamsMain(argv, {
         ...captureIo().io,
-        embeddingClient: fakeClient(calls),
+        embeddingModel: fakeModel(calls),
       });
       const [first, ...rest] = logs.records.map(([level, message]) => [
         level,
@@ -218,7 +218,7 @@ describe("ingestStreamsMain", () => {
     const io = captureIo();
     const db = join(work, "db");
     const argv = ["--json", "--streams-dir", streams, "--db-path", db, "--no-cache"];
-    expect(await ingestStreamsMain(argv, { ...io.io, embeddingClient: fakeClient([]) })).toBe(0);
+    expect(await ingestStreamsMain(argv, { ...io.io, embeddingModel: fakeModel([]) })).toBe(0);
     const lines = events(io.stdout());
     expect(lines[0]).toEqual({
       type: "stage",
@@ -241,7 +241,7 @@ describe("ingestStreamsMain", () => {
   });
 
   test("a cache miss without a key: exit 1, code missing-credential", async () => {
-    resetEmbeddingClient();
+    resetEmbeddingModel();
     const io = captureIo();
     const argv = ["--json", "--streams-dir", streams, "--db-path", join(work, "db"), "--no-cache"];
     expect(await ingestStreamsMain(argv, io.io)).toBe(1);

@@ -18,9 +18,8 @@ import {
   pyTruthy,
   sortedPy,
 } from "@eidolon/config";
+import type { EmbeddingModel, EmbeddingUsage } from "@eidolon/providers";
 import {
-  type EmbeddingClient,
-  type EmbeddingUsage,
   type EmbedReport,
   embeddingTotalsMessage,
   embedInBatches,
@@ -29,7 +28,7 @@ import {
   tokenizeZh,
   writeTable,
 } from "@eidolon/retrieval";
-import { ingestFailure, lazyDefaultClient, openEmbedCache, writeIndexMeta } from "./index_build.ts";
+import { ingestFailure, openDefaultModel, openEmbedCache, writeIndexMeta } from "./index_build.ts";
 import { criticalSection } from "./limit.ts";
 import { canonicalPath } from "./paths.ts";
 import {
@@ -277,10 +276,10 @@ export interface IngestStreamsOptions extends RunOptions {
   readonly cachePath: string | null;
   /** Empty the cache first. Every persona and model shares it. */
   readonly clearCache?: boolean;
-  /** EMBED_MODEL and EMBED_DIM when omitted. */
-  readonly model?: string;
+  /** The install's, opened at the first cache miss, when omitted. */
+  readonly embedding?: EmbeddingModel;
+  /** EMBED_DIM when omitted. */
   readonly dim?: number;
-  readonly client?: Pick<EmbeddingClient, "embedWithUsage">;
   /** When the table was built, for the meta file. */
   readonly now?: () => Date;
 }
@@ -394,9 +393,8 @@ export async function ingestStreams(options: IngestStreamsOptions): Promise<Inge
           batchSize: EMBED_BATCH_SIZE,
           noun: "chunks",
           cache,
-          model: options.model,
+          embedding: options.embedding ?? openDefaultModel,
           dim: options.dim,
-          client: options.client ?? lazyDefaultClient,
           signal,
           onProgress: (progress) => {
             embedded = progress.done;

@@ -7,37 +7,13 @@ import {
   type JsonPoster,
   OpenAIClient,
   type OpenAIClientOptions,
-  openrouterHeaders,
 } from "@eidolon/config";
 import { ANTHROPIC_VERSION } from "../catalog.ts";
+import { type CompletionsDialect, chatDialect, OPENROUTER_FIELDS } from "../chat/index.ts";
 import { hasKey, missingKey, type Selection } from "../resolve.ts";
 import { anthropicUnits, openaiUnits, type UsageHook } from "./chat.ts";
 
 type Body = Readonly<Record<string, unknown>>;
-
-// OpenRouter's own request fields, which OpenAI and others refuse as unknown arguments.
-const OPENROUTER_ONLY = ["usage", "provider"] as const;
-
-// OpenAI's reasoning models: the o series and GPT-5 on. They refuse a temperature or top_p.
-const OPENAI_REASONING = /^(?:o\d|gpt-(?:[5-9]|\d{2,}))/;
-
-/**
- * A body as OpenAI's own API takes it: `max_tokens` is `max_completion_tokens` there, which every
- * model accepts and its newer ones require; OpenRouter translates this itself.
- */
-export function forOpenAI(body: Body): Record<string, unknown> {
-  const { max_tokens: cap, ...rest } = body;
-  const model = typeof body.model === "string" ? body.model.toLowerCase() : "";
-  const out: Record<string, unknown> = { ...rest };
-  if (OPENAI_REASONING.test(model)) {
-    delete out.temperature;
-    delete out.top_p;
-  }
-  if (cap !== undefined && out.max_completion_tokens === undefined) {
-    out.max_completion_tokens = cap;
-  }
-  return out;
-}
 
 function text(content: unknown): string {
   if (typeof content === "string") return content;
@@ -135,13 +111,16 @@ class AnthropicPoster implements JsonPoster {
 
 class CompatiblePoster implements JsonPoster {
   readonly #client: OpenAIClient;
-  readonly #openrouter: boolean;
-  readonly #openai: boolean;
+  readonly #dialect: CompletionsDialect;
   readonly #onUsage: UsageHook | undefined;
 
-  constructor(target: PostTarget, options: OpenAIClientOptions, onUsage?: UsageHook) {
-    this.#openrouter = target.provider === "openrouter";
-    this.#openai = target.provider === "openai";
+  constructor(
+    target: PostTarget,
+    dialect: CompletionsDialect,
+    options: OpenAIClientOptions,
+    onUsage?: UsageHook,
+  ) {
+    this.#dialect = dialect;
     this.#client = new OpenAIClient(
       { baseUrl: target.baseUrl, apiKey: target.apiKey ?? "" },
       options,
@@ -150,17 +129,21 @@ class CompatiblePoster implements JsonPoster {
   }
 
   async post(path: string, body: Body): Promise<unknown> {
+    const dialect = this.#dialect;
     let payload = body;
-    if (!this.#openrouter) {
+    if (!dialect.openRouterFields) {
       const copy: Record<string, unknown> = { ...body };
-      for (const key of OPENROUTER_ONLY) delete copy[key];
-      payload = this.#openai && path === "chat/completions" ? forOpenAI(copy) : copy;
+      for (const key of OPENROUTER_FIELDS) delete copy[key];
+      payload =
+        path === "chat/completions" && dialect.chatBody !== undefined
+          ? dialect.chatBody(copy)
+          : copy;
     }
     const response = await this.#client.post(path, payload);
     if (isPlainObject(response) && isPlainObject(response.usage)) {
       const model =
         typeof response.model === "string" && response.model ? response.model : String(body.model);
-      const reported = this.#openrouter ? extractCostUsd(response.usage) : null;
+      const reported = dialect.reportsCost ? extractCostUsd(response.usage) : null;
       this.#onUsage?.(openaiUnits(response.usage), model, reported, String(body.model));
     }
     return response;
@@ -176,9 +159,10 @@ export function jsonPoster(
   options: OpenAIClientOptions = {},
   onUsage?: UsageHook,
 ): JsonPoster {
-  return target.provider === "anthropic"
+  const dialect = chatDialect(target.provider);
+  return dialect.wire === "anthropic"
     ? new AnthropicPoster(target, options, onUsage)
-    : new CompatiblePoster(target, options, onUsage);
+    : new CompatiblePoster(target, dialect, options, onUsage);
 }
 
 /**
@@ -191,10 +175,9 @@ export function chatPoster(
   onUsage?: UsageHook,
 ): JsonPoster {
   if (!hasKey(selection)) throw missingKey(selection);
-  const headers =
-    selection.provider.id === "openrouter"
-      ? { ...openrouterHeaders(), ...options.headers }
-      : options.headers;
+  const dialect = chatDialect(selection.provider.id);
+  const own = dialect.wire === "openai" ? dialect.headers?.() : undefined;
+  const headers = own === undefined ? options.headers : { ...own, ...options.headers };
   return jsonPoster(
     {
       provider: selection.provider.id,

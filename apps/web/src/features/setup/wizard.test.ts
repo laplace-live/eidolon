@@ -11,13 +11,14 @@ import {
   DEMO_PERSONA,
   EMPTY_PERSONA,
   firstStep,
+  flagOn,
   inheritedValue,
   isNewInstall,
   memoryStepAction,
   nextStep,
-  otherVoiceProvider,
   PERSONA_ID,
   personaErrors,
+  pickedVoice,
   previousStep,
   QDRANT_COMMAND,
   QDRANT_IMAGE,
@@ -25,6 +26,7 @@ import {
   STEPS,
   savedQdrant,
   suggestPersonaId,
+  voiceProvider,
 } from "./wizard";
 
 const keys = (fish: boolean) => ({
@@ -117,17 +119,39 @@ test("a persona inherits the environment's value only while her file leaves it u
   expect(inheritedValue(undefined)).toBeNull();
 });
 
-test("the voice step leaves a voice with a provider other than Fish as she has it", () => {
+test("the voice step offers the voices of the provider she speaks through", () => {
   const provider = (patch: Partial<SettingRow>) =>
     setting("voice.provider", { env: "TTS_PROVIDER", scope: "persona", ...patch });
   const accounts = [{ id: "speech", provider: "openai" }];
-  expect(otherVoiceProvider([], undefined)).toBeNull();
-  expect(otherVoiceProvider([provider({ value: "fish", source: "persona" })], [])).toBeNull();
-  expect(otherVoiceProvider([provider({ value: "openai", source: "persona" })], [])).toBe("openai");
-  expect(otherVoiceProvider([provider({ value: "speech", source: "persona" })], accounts)).toBe(
+  expect(voiceProvider([], undefined)).toBe("fish");
+  expect(voiceProvider([provider({ value: "fish", source: "persona" })], [])).toBe("fish");
+  expect(voiceProvider([provider({ value: "openai", source: "persona" })], [])).toBe("openai");
+  expect(voiceProvider([provider({ value: "speech", source: "persona" })], accounts)).toBe(
     "openai",
   );
-  expect(otherVoiceProvider([provider({ envValue: "elevenlabs" })], [])).toBe("elevenlabs");
+  expect(voiceProvider([provider({ envValue: "elevenlabs" })], [])).toBe("elevenlabs");
+  // An account Eidolon doesn't know: the Fish library, as the server takes a new persona's voice.
+  expect(voiceProvider([provider({ value: "nobody", source: "persona" })], [])).toBe("fish");
+  // Until the accounts load, an account's provider is unknown, not Fish's.
+  expect(voiceProvider([provider({ value: "speech", source: "persona" })], undefined)).toBeNull();
+});
+
+test("a voice picked from one provider is dropped once she speaks through another", () => {
+  const pick = { provider: "fish", voice: "fish-voice" };
+  expect(pickedVoice(pick, "fish")).toBe("fish-voice");
+  expect(pickedVoice(pick, "openai")).toBeNull();
+  expect(pickedVoice(pick, null)).toBeNull();
+  expect(pickedVoice(null, "fish")).toBeNull();
+});
+
+test("a flag reads her value, else the environment's, else its default", () => {
+  const flag = (patch: Partial<SettingRow>) =>
+    setting("knowledge.rerank.enabled", { env: "RERANK_ENABLED", kind: "flag", ...patch });
+  expect(flagOn(undefined, true)).toBe(true);
+  expect(flagOn(flag({}), false)).toBe(false);
+  expect(flagOn(flag({ value: false, source: "persona" }), true)).toBe(false);
+  expect(flagOn(flag({ envValue: "off" }), true)).toBe(false);
+  expect(flagOn(flag({ value: true, source: "persona", envValue: "0" }), false)).toBe(true);
 });
 
 describe("creating a persona", () => {

@@ -372,7 +372,6 @@ describe("--json", () => {
           index: 4,
           total: 6,
           message: "2 of 2 chunks failed",
-          costUsd: 0,
         }),
         video: undefined,
       },
@@ -400,7 +399,7 @@ describe("--json", () => {
         },
         durationSec: 0,
         costUsd: expect.any(Number),
-        costSource: "estimated",
+        costSource: "reported",
         failures: [
           { item: "2026-01-03-BV1bbbbbbbbb_p1", error: "1 of 1 chunks failed" },
           { item: "2026-01-05-BV1ddddddddd", error: "2 of 2 chunks failed" },
@@ -432,25 +431,87 @@ describe("--json", () => {
     ).toBe(0);
     const scenario = golden_.scenarios.find((s) => s.name === "dry-run") as Scenario;
     expect(io.stderr()).toBe(scenario.stdout);
+    const counts = {
+      streams: 6,
+      chunksNew: 12,
+      chunksSkipped: 1,
+      chunksFailed: 0,
+      tokensIn: 20539,
+      tokensOut: 16800,
+    };
+    // OpenRouter reports what each call costs, so the catalog prices none of its chat models.
     expect(events(io.stdout())).toEqual([
       {
         v: 1,
         type: "summary",
         stage: "refine",
         ok: true,
-        counts: {
-          streams: 6,
-          chunksNew: 12,
-          chunksSkipped: 1,
-          chunksFailed: 0,
-          tokensIn: 20539,
-          tokensOut: 16800,
-        },
+        counts,
         durationSec: 0,
-        costUsd: (20539 * 0.075 + 16800 * 0.3) / 1_000_000,
-        costSource: "estimated",
+        costSource: "unpriced",
       },
     ]);
+
+    const restore = setEnv({ REFINE_PROVIDER: "deepseek" });
+    try {
+      const argv = ["--dry-run", "--streams-dir", streams, "--model", "deepseek-flash"];
+      const plain = captureIo();
+      expect(await refineMain(argv, plain.io)).toBe(0);
+      expect(plain.stdout()).toContain(
+        "\nEstimated total: 12 chunks (2 passes each), ~20,539 in / ~16,800 out → ~$0.0263\n\n",
+      );
+      const priced = captureIo();
+      expect(await refineMain(["--json", ...argv], { ...priced.io, monotonic: FIXED_CLOCK })).toBe(
+        0,
+      );
+      expect(priced.stderr()).toBe(plain.stdout());
+      expect(events(priced.stdout())).toEqual([
+        {
+          v: 1,
+          type: "summary",
+          stage: "refine",
+          ok: true,
+          counts,
+          durationSec: 0,
+          costUsd: (20539 * 0.3 + 16800 * 1.2) / 1_000_000,
+          costSource: "estimated",
+        },
+      ]);
+    } finally {
+      restore();
+    }
+  });
+
+  test("a run on a provider the catalog prices estimates each call at its price", async () => {
+    const restore = setEnv({ REFINE_PROVIDER: "deepseek", DEEPSEEK_API_KEY: "deepseek-key" });
+    try {
+      const seen: SeenRequest[] = [];
+      const canned = cannedFetch(RESPONSES.force as Canned[], seen);
+      const io = captureIo();
+      const code = await refineMain(
+        [
+          "--json",
+          "--force",
+          "--model",
+          "deepseek-flash",
+          join(streams, "2026-01-04-BV1ccccccccc.md"),
+        ],
+        { ...io.io, fetch: canned.fetch, now: FIXED_NOW, monotonic: FIXED_CLOCK },
+      );
+      expect(code).toBe(0);
+      expect(seen.map((request) => request.url)).toEqual(
+        Array(2).fill("https://api.deepseek.com/chat/completions"),
+      );
+      expect(events(io.stdout()).at(-1)).toMatchObject({
+        type: "summary",
+        ok: true,
+        costUsd: (1600 * 0.3 + 120 * 1.2) / 1_000_000,
+        costSource: "estimated",
+      });
+      expect(logs.records.filter(([level]) => level === "WARNING")).toEqual([]);
+    } finally {
+      restore();
+    }
   });
 
   test("a cancel before the transcripts are read ends in a cancelled stage and summary", async () => {

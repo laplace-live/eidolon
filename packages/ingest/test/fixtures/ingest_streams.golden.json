@@ -1170,7 +1170,7 @@
         ["INFO", "Built FTS index on 'tokens' for stream_chunks"],
         [
           "INFO",
-          "Embedding totals: 13 chunks, 0 tokens (provider did not report cost and no local price entry — add the model to embeddings.EMBED_PRICING_USD_PER_1M to fix)"
+          "Embedding totals: 13 chunks, 0 tokens (provider did not report cost and no local price entry — add the model's price to the provider catalog to fix)"
         ]
       ],
       "embed_calls": [],

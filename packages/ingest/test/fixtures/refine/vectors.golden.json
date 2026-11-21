@@ -619,9 +619,9 @@
       },
       "prompt_tokens": 1234,
       "completion_tokens": 567,
-      "cost_usd": "0.00026264999999999996",
-      "cost_source": "estimate",
-      "fmt": "$0.0003 (estimate)"
+      "cost_usd": "0.0",
+      "cost_source": "unknown",
+      "fmt": "(not priced)"
     },
     {
       "model": "~google/gemini-flash-latest",
@@ -631,8 +631,8 @@
       "prompt_tokens": 0,
       "completion_tokens": 0,
       "cost_usd": "0.0",
-      "cost_source": "estimate",
-      "fmt": "$0.0000 (estimate)"
+      "cost_source": "unknown",
+      "fmt": "(not priced)"
     },
     {
       "model": "~google/gemini-flash-latest",
@@ -640,8 +640,8 @@
       "prompt_tokens": 0,
       "completion_tokens": 0,
       "cost_usd": "0.0",
-      "cost_source": "estimate",
-      "fmt": "$0.0000 (estimate)"
+      "cost_source": "unknown",
+      "fmt": "(not priced)"
     },
     {
       "model": "~google/gemini-flash-latest",
@@ -672,9 +672,9 @@
       },
       "prompt_tokens": 1,
       "completion_tokens": 0,
-      "cost_usd": "7.5e-08",
-      "cost_source": "estimate",
-      "fmt": "$0.0000 (estimate)"
+      "cost_usd": "0.0",
+      "cost_source": "unknown",
+      "fmt": "(not priced)"
     },
     {
       "model": "~google/gemini-flash-latest",

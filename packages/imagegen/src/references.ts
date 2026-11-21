@@ -10,8 +10,7 @@ import {
   pyStrip,
   sortedPy,
 } from "@eidolon/config";
-import { hasKey, trySelect } from "@eidolon/providers";
-import { ImageGenError } from "./errors.ts";
+import { hasKey, ImageGenError, type ReferenceImage, trySelect } from "@eidolon/providers";
 import { imageMediaType } from "./mime.ts";
 import { AFTER_DARK, ambience, type PersonaClock, personaClock } from "./prompt.ts";
 
@@ -23,12 +22,6 @@ export const FRIENDS = "friends";
 /** The persona's references/ folders, the user's first: the template ships outfits, friends stay private. */
 export function referenceRoots(): string[] {
   return personaFolders("references");
-}
-
-/** One `input_references` entry. */
-export interface ReferenceImage {
-  readonly type: "image_url";
-  readonly image_url: { readonly url: string };
 }
 
 export interface ReferenceOptions {

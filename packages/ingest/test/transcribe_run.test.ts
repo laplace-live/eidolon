@@ -573,8 +573,10 @@ describe("skip rules", () => {
     expect(listAudioFiles(join(work, "missing"))).toEqual([]);
   });
 
-  test("a transcription's price comes from Soniox's hourly rate", () => {
-    expect(transcribe.estimateTranscribeUsd(3_600, "stt-async-v5")).toBeCloseTo(0.1);
+  test("a transcription's price is the catalog's hourly rate for its model", () => {
+    for (const model of ["stt-async-v6", "stt-async-v5", "stt-async-v4"]) {
+      expect([model, transcribe.estimateTranscribeUsd(3_600, model)]).toEqual([model, 0.1]);
+    }
     expect(transcribe.estimateTranscribeUsd(3_600, "some-new-model")).toBeNull();
   });
 });

@@ -16,7 +16,7 @@ import {
   pyFloatRepr,
   pyStrip,
 } from "@eidolon/config";
-import { hasKey, missingKey, selectRequired } from "@eidolon/providers";
+import { hasKey, missingKey, type Selection, selectRequired } from "@eidolon/providers";
 import type { QdrantSettings } from "./qdrant.ts";
 
 export const DEFAULT_QDRANT_PORT = 6333;
@@ -27,10 +27,8 @@ export const DEFAULT_SEARCH_LIMIT = 10;
 export const DEFAULT_SEARCH_THRESHOLD = 0.3;
 
 export interface EmbedderSettings {
-  readonly provider: string;
-  readonly model: string;
-  readonly apiKey: string;
-  readonly baseUrl: string;
+  /** The embeddings role, whose key is set. */
+  readonly selection: Selection;
   readonly dims: number;
 }
 
@@ -99,13 +97,7 @@ export function buildMemoryConfig(): MemoryConfig {
       collection: envOptional("MEM0_QDRANT_COLLECTION") ?? DEFAULT_COLLECTION,
       vectorSize: dims,
     },
-    embedder: {
-      provider: embeddings.provider.id,
-      model: embeddings.model,
-      apiKey: embeddings.apiKey ?? "",
-      baseUrl: embeddings.baseUrl as string,
-      dims,
-    },
+    embedder: { selection: embeddings, dims },
     llm: llmSettings(),
     historyDbPath,
   };

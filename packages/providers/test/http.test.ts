@@ -1,3 +1,4 @@
+import { openrouterHeaders } from "@eidolon/config";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { type ServedFetch, serveFetch } from "../../config/test/http.ts";
 import {
@@ -5,6 +6,7 @@ import {
   chatPoster,
   forOpenAI,
   fromAnthropicResponse,
+  jsonPoster,
   OpenAIChatClient,
   ProviderHttpError,
   select,
@@ -266,6 +268,108 @@ describe("chatPoster", () => {
       provider: { require_parameters: true },
     });
     expect(seen[0]?.body).toEqual({ model: "deepseek-flash", messages: [] });
+    expect(seen[0]?.headers.get("x-title")).toBeNull();
+  });
+
+  test("OpenRouter gets its own fields and its attribution under the caller's headers, and reports the cost", async () => {
+    seen.length = 0;
+    reply = () =>
+      Response.json({
+        model: "served",
+        choices: [],
+        usage: { prompt_tokens: 1, completion_tokens: 1, cost: 0.5 },
+      });
+    const selection = select(
+      "refine",
+      reader({ OPENROUTER_API_KEY: "or-key", OPENROUTER_API_BASE: base() }),
+    );
+    if (selection === null) throw new Error("no selection");
+    const reported: (number | null)[] = [];
+    const body = {
+      model: "~google/gemini-pro-latest",
+      messages: [],
+      max_tokens: 100,
+      temperature: 0.1,
+      usage: { include: true },
+      provider: { require_parameters: true },
+    };
+    await chatPoster(selection, { headers: { "X-Title": "Refine" } }, (_units, _model, cost) =>
+      reported.push(cost),
+    ).post("chat/completions", body);
+    expect(seen[0]?.path).toBe("/v1/chat/completions");
+    expect(seen[0]?.headers.get("authorization")).toBe("Bearer or-key");
+    expect(seen[0]?.headers.get("x-title")).toBe("Refine");
+    expect(seen[0]?.headers.get("http-referer")).toBe(openrouterHeaders()["HTTP-Referer"]);
+    expect(seen[0]?.body).toEqual(body);
+    expect(Object.keys(seen[0]?.body ?? {})).toEqual(Object.keys(body));
+    expect(reported).toEqual([0.5]);
+  });
+
+  test("OpenAI's own API gets its chat body as forOpenAI writes it, and its other paths as sent", async () => {
+    seen.length = 0;
+    reply = () =>
+      Response.json({ model: "m", choices: [], usage: { prompt_tokens: 1, cost: 0.5 } });
+    const selection = select(
+      "refine",
+      reader({ REFINE_PROVIDER: "openai", OPENAI_API_KEY: "sk", OPENAI_BASE_URL: base() }),
+    );
+    if (selection === null) throw new Error("no selection");
+    const reported: (number | null)[] = [];
+    await chatPoster(selection, {}, (_units, _model, cost) => reported.push(cost)).post(
+      "chat/completions",
+      {
+        model: "gpt-6-luna",
+        messages: [],
+        max_tokens: 100,
+        temperature: 0.1,
+        usage: { include: true },
+        provider: { require_parameters: true },
+      },
+    );
+    const embeddings = jsonPoster(
+      { provider: "openai", baseUrl: base(), apiKey: "sk" },
+      {},
+      (_units, _model, cost) => reported.push(cost),
+    );
+    await embeddings.post("embeddings", {
+      model: "text-embedding-3-large",
+      input: ["早"],
+      max_tokens: 100,
+      usage: { include: true },
+    });
+    expect(seen.map((request) => request.path)).toEqual(["/v1/chat/completions", "/v1/embeddings"]);
+    expect(seen[0]?.headers.get("x-title")).toBeNull();
+    expect(seen.map((request) => request.body)).toEqual([
+      { model: "gpt-6-luna", messages: [], max_completion_tokens: 100 },
+      { model: "text-embedding-3-large", input: ["早"], max_tokens: 100 },
+    ]);
+    expect(Object.keys(seen[0]?.body ?? {})).toEqual([
+      "model",
+      "messages",
+      "max_completion_tokens",
+    ]);
+    expect(reported).toEqual([null, null]);
+  });
+
+  test("a provider with no chat of its own is posted to as a plain OpenAI-compatible API", async () => {
+    seen.length = 0;
+    reply = () => Response.json({ data: [], usage: { prompt_tokens: 1, cost: 0.5 } });
+    const reported: (number | null)[] = [];
+    await jsonPoster({ provider: "voyage", baseUrl: base(), apiKey: "vk" }, {}, (_u, _m, cost) =>
+      reported.push(cost),
+    ).post("embeddings", { model: "e", input: ["早"], usage: { include: true } });
+    expect(seen[0]?.headers.get("authorization")).toBe("Bearer vk");
+    expect(seen[0]?.body).toEqual({ model: "e", input: ["早"] });
+    expect(reported).toEqual([null]);
+  });
+
+  test("Anthropic's poster takes chat completions alone", async () => {
+    seen.length = 0;
+    const poster = jsonPoster({ provider: "anthropic", baseUrl: base(), apiKey: "ak" });
+    await expect(poster.post("embeddings", { model: "m", input: ["早"] })).rejects.toThrow(
+      "Anthropic has no embeddings here",
+    );
+    expect(seen).toEqual([]);
   });
 
   test("speaks the Messages API to Anthropic and answers in chat-completions shape", async () => {

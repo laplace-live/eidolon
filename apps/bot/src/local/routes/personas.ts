@@ -19,6 +19,7 @@ import {
 } from "@eidolon/config";
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { transcribe } from "@eidolon/ingest";
+import { trySelect } from "@eidolon/providers";
 import { parse as parseToml, TomlError } from "smol-toml";
 import { readBytes } from "../../responses.ts";
 import {
@@ -48,6 +49,7 @@ import {
   type SniffedImage,
   setDotted,
   sniffImage,
+  starterSettings,
   writeFailure,
   writeIdentityFields,
   writeNewPersona,
@@ -83,6 +85,7 @@ const RESERVED_IDS = new Set(
 );
 
 const CONTROL = /\p{Cc}/u;
+const MAX_VOICE_ID_CHARS = 200;
 
 /** Typed by the bytes, never by the name. */
 async function serveImage(path: string): Promise<Response> {
@@ -135,6 +138,10 @@ function line(value: unknown, max: number): string | null {
   return trimmed.length <= max ? trimmed : null;
 }
 
+function fishVoiceId(value: unknown): string | null {
+  return typeof value === "string" && VOICE_ID.test(value) ? value : null;
+}
+
 /**
  * The identity fields a body sends, checked; "" leaves a field to its default. With `partial`, a
  * field the body leaves out is left out, so a save can't undo another card's newer value.
@@ -178,7 +185,7 @@ function voiceStylesFrom(body: unknown): VoiceStyle[] | Response {
     if (name === "" || styles.some((other) => other.name === name)) {
       return localError(400, "invalid-setting", "Each style has a name of its own");
     }
-    const voice = line(voiceId, 200);
+    const voice = line(voiceId, MAX_VOICE_ID_CHARS);
     if (!voice) return localError(400, "invalid-setting", "A style's voice is one line of text");
     styles.push({ name, voiceId: voice, hint: hint.trim() });
   }
@@ -339,11 +346,15 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
         const fields = identityFrom(body.value);
         if (fields instanceof Response) return fields;
         if (fields.name === "") return localError(400, "bad-request", "A new persona needs a name");
-        if (typeof voiceId !== "string" || !VOICE_ID.test(voiceId)) {
-          return localError(400, "bad-request", "Pick a Fish voice for her");
+        // She starts on the active persona's providers, so she speaks through the same one.
+        const fish = (trySelect("voice")?.provider.id ?? "fish") === "fish";
+        const voice = fish ? fishVoiceId(voiceId) : line(voiceId, MAX_VOICE_ID_CHARS);
+        if (!voice) {
+          const message = fish ? "Pick a Fish voice for her" : "Pick a voice for her";
+          return localError(400, "bad-request", message);
         }
         try {
-          writeNewPersona(id, fields, voiceId);
+          writeNewPersona(id, fields, voice, starterSettings(activePersona().id));
         } catch (error) {
           return writeFailure(error);
         }
