@@ -93,8 +93,10 @@ checks.M4 = {
 // M5
 const expected = normalizedRequirement(readFileSync(join(SPIKE, "resources/requirements.mac.txt"), "utf8"));
 const requirementOf = (path) => {
+  // The requirement goes to stdout, the Executable= line to stderr: compare the requirement line only.
   const { code, out } = run("codesign", ["-d", "-r-", path]);
-  return { code, text: out.match(/designated => .*/)?.[0] ?? short(out), normalized: normalizedRequirement(out) };
+  const line = out.match(/designated => .*/)?.[0] ?? null;
+  return { code, text: line ?? short(out), normalized: line === null ? null : normalizedRequirement(line) };
 };
 const appRequirement = requirementOf(APP);
 const helpers = readdirSync(join(APP, "Contents/Frameworks"))

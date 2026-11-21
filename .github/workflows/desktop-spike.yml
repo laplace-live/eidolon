@@ -105,7 +105,7 @@ jobs:
 
       - id: install
         name: Install per user, silently (W1)
-        run: node scripts/windows.mjs install .out/*.exe --label unsigned
+        run: node scripts/windows.mjs install .out --label unsigned
 
       - name: Walk the installed app (W2 to W6)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -136,12 +136,12 @@ jobs:
 
       - name: Signatures (S1)
         if: ${{ !cancelled() && steps.signed.outcome == 'success' }}
-        run: node scripts/windows.mjs signatures .out-signed/win-unpacked --setup .out-signed/*.exe --label signed
+        run: node scripts/windows.mjs signatures .out-signed/win-unpacked --setup .out-signed --label signed
 
       - id: install-signed
         name: Install the signed build
         if: ${{ !cancelled() && steps.signed.outcome == 'success' }}
-        run: node scripts/windows.mjs install .out-signed/*.exe --label signed
+        run: node scripts/windows.mjs install .out-signed --label signed
 
       - name: Walk the signed build (S2)
         if: ${{ !cancelled() && steps.install-signed.outcome == 'success' }}

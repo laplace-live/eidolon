@@ -1,11 +1,11 @@
 // The Windows steps around the NSIS installer, each writing <evidence>/windows-<label>-<step>.json and
 // exiting 1 when its check fails:
-//   install <setup.exe> --label <l>             W1: a silent per-user install, where it went, and the
+//   install <setup or its folder> --label <l>   W1: a silent per-user install, where it went, and the
 //                                               Start-menu shortcut's AppUserModelID
 //   uninstall --label <l> --run <run name>      W7: a silent uninstall leaves the run's data home as it was
-//   signatures <win-unpacked> --setup <exe>     S1: Authenticode on the build's PE files
+//   signatures <win-unpacked> --setup <folder>  S1: Authenticode on the build's PE files
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import { powershellJson, RUNS, SPIKE, sleep, writeEvidence } from "./lib.mjs";
 
@@ -22,6 +22,15 @@ const EXE = join(INSTALL_DIR, "Eidolon.exe");
 const UNINSTALLER = join(INSTALL_DIR, "Uninstall Eidolon.exe");
 const START_MENU_LINK = join(process.env.APPDATA ?? "", "Microsoft", "Windows", "Start Menu", "Programs", "Eidolon.lnk");
 const quote = (path) => `'${String(path).replace(/'/g, "''")}'`;
+
+/** The NSIS setup in electron-builder's output folder `dir`, or `dir` itself when it is the file. */
+function setupIn(dir) {
+  const path = resolve(dir);
+  if (!statSync(path).isDirectory()) return path;
+  const found = readdirSync(path).filter((f) => /^Eidolon Setup .*\.exe$/.test(f) && !f.includes("__uninstaller"));
+  if (found.length !== 1) throw new Error(`expected one setup in ${path}, found ${JSON.stringify(found)}`);
+  return join(path, found[0]);
+}
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -42,6 +51,7 @@ function finish(step, pass, evidence) {
 /** Authenticode status, signer and timestamper of each path. */
 function signatures(paths) {
   if (paths.length === 0) return [];
+  mkdirSync(RUNS, { recursive: true });
   const list = join(RUNS, `signature-paths-${process.pid}.txt`);
   writeFileSync(list, paths.join("\n"), "utf8");
   return powershellJson(
@@ -75,7 +85,7 @@ try { $start = @(Get-StartApps -Name 'Eidolon' | Select-Object Name,AppID) } cat
 }
 
 if (command === "install") {
-  const setup = resolve(positional);
+  const setup = setupIn(positional);
   const startedAt = Date.now();
   const [started] = powershellJson(`$p = Start-Process -FilePath ${quote(setup)} -ArgumentList '/S' -Wait -PassThru; [pscustomobject]@{ exitCode = $p.ExitCode }`);
   for (let i = 0; i < 120 && !existsSync(EXE); i++) await sleep(500);
@@ -157,7 +167,7 @@ if (command === "signatures") {
   const dir = resolve(positional);
   const payload = join(dir, "resources", "eidolon");
   const listed = new Set(JSON.parse(readFileSync(join(SPIKE, ".stage", "win32-x64", "unsigned-pe.json"), "utf8")).map((n) => n.toLowerCase()));
-  const setup = option("setup", null);
+  const setup = option("setup", null) === null ? null : setupIn(option("setup", null));
   const files = walk(dir).filter((f) => /\.(exe|dll|node)$/i.test(f));
   const results = signatures([...files, ...(setup ? [resolve(setup)] : [])]);
   const byPath = new Map(results.map((r) => [resolve(r.path).toLowerCase(), r]));
@@ -198,5 +208,5 @@ if (command === "signatures") {
   finish("signatures", pass, evidence);
 }
 
-console.error("usage: node scripts/windows.mjs install <setup.exe> | uninstall --run <name> | signatures <win-unpacked> --setup <exe>");
+console.error("usage: node scripts/windows.mjs install <setup or folder> | uninstall --run <name> | signatures <win-unpacked> --setup <setup or folder>");
 process.exit(2);
