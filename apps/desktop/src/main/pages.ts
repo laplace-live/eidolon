@@ -2,7 +2,7 @@
 // app, and the failure page when the backend fails or the window's own page does. It also words
 // the shell pages. Electron-free: index.ts drives it with the backend's states and the window's
 // failures, and loads what it asks for.
-import type { Language } from "../shared/bridge.ts";
+import type { DesktopCommand, Language } from "../shared/bridge.ts";
 import type { BackendFailure, BackendState } from "./controller.ts";
 import type { ShellFailure, ShellPageStrings } from "./shell-pages.ts";
 import type { Strings } from "./strings.ts";
@@ -155,5 +155,38 @@ export class WindowPages {
   #show(page: WindowPage): void {
     this.#page = page;
     this.#io.load(page);
+  }
+}
+
+/**
+ * The menus' commands to the app's page, which hears them only once its script listens. One sent
+ * before that, while the window shows a shell page, loads, or was made again, waits for it.
+ */
+export class PageCommands {
+  readonly #send: (command: DesktopCommand) => void;
+  #listening = false;
+  #held: DesktopCommand | null = null;
+
+  constructor(send: (command: DesktopCommand) => void) {
+    this.#send = send;
+  }
+
+  /** A menu's command: to the page now if it listens, else once it does. */
+  send(command: DesktopCommand): void {
+    if (this.#listening) this.#send(command);
+    else this.#held = command;
+  }
+
+  /** The app's page listens: it gets the command held for it. */
+  listening(): void {
+    this.#listening = true;
+    const held = this.#held;
+    this.#held = null;
+    if (held !== null) this.#send(held);
+  }
+
+  /** A new document in the window, or a new window: nothing listens until it says so. */
+  replaced(): void {
+    this.#listening = false;
   }
 }

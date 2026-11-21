@@ -41,6 +41,7 @@ export function desktopBridge(
       ipc.on(BRIDGE.command, (_event, command) => {
         if (typeof command === "string") callback(command);
       });
+      ipc.send(BRIDGE.takesCommands);
     },
   };
 }

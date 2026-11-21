@@ -55,6 +55,11 @@ export const BRIDGE = {
   /** Main → app page: a DesktopCommand. */
   command: "eidolon:command",
   /**
+   * App page → main, with nothing: the page listens for commands now, so main sends it one held
+   * while it loaded.
+   */
+  takesCommands: "eidolon:takes-commands",
+  /**
    * Main → any page, on macOS: whether the window is fullscreen, on entering and leaving it and
    * after each navigation, since a new page starts without the mark.
    */
@@ -70,6 +75,7 @@ const SENDERS = {
   [BRIDGE.theme]: "app",
   [BRIDGE.language]: "app",
   [BRIDGE.versions]: "app",
+  [BRIDGE.takesCommands]: "app",
   [BRIDGE.retry]: "shell",
   [BRIDGE.showLogs]: "shell",
   [BRIDGE.quit]: "shell",

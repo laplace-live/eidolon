@@ -6,6 +6,7 @@ import type { BackendFailure, BackendState } from "../src/main/controller.ts";
 import {
   type Failure,
   failurePage,
+  PageCommands,
   shellPageStrings,
   type WindowPage,
   WindowPages,
@@ -241,6 +242,41 @@ describe("the failure page's words", () => {
       message: zh.text.failed,
       stderr: "the preload failed: x",
     });
+  });
+});
+
+describe("the menus' commands to the app's page", () => {
+  function commands(): { commands: PageCommands; sent: string[] } {
+    const sent: string[] = [];
+    return { sent, commands: new PageCommands((command) => sent.push(command)) };
+  }
+
+  test("go at once while the page listens", () => {
+    const { commands: page, sent } = commands();
+    page.listening();
+    page.send("settings");
+    expect(sent).toEqual(["settings"]);
+  });
+
+  test("wait while it doesn't: a new window, the loading page, a page still loading", () => {
+    const { commands: page, sent } = commands();
+    page.send("settings");
+    page.send("settings");
+    expect(sent).toEqual([]);
+    page.listening();
+    expect(sent).toEqual(["settings"]);
+    page.listening();
+    expect(sent).toEqual(["settings"]);
+  });
+
+  test("a new document listens only once it says so", () => {
+    const { commands: page, sent } = commands();
+    page.listening();
+    page.replaced();
+    page.send("settings");
+    expect(sent).toEqual([]);
+    page.listening();
+    expect(sent).toEqual(["settings"]);
   });
 });
 

@@ -16,7 +16,13 @@ import { backendLog, logStart, logsFolder, mainLog } from "./log.ts";
 import { attachContextMenu, setApplicationMenu } from "./menu.ts";
 import { aboutPanel, type TrayActions } from "./menus.ts";
 import { guardNavigation } from "./navigation.ts";
-import { failurePage, shellPageStrings, type WindowPage, WindowPages } from "./pages.ts";
+import {
+  failurePage,
+  PageCommands,
+  shellPageStrings,
+  type WindowPage,
+  WindowPages,
+} from "./pages.ts";
 import { guardPermissions } from "./permissions.ts";
 import {
   FAILED_PAGE,
@@ -72,6 +78,7 @@ function run(): void {
       loadUrl(pageAt(url) === "app" ? url : `${APP_ORIGIN}/`);
     },
   });
+  const commands = new PageCommands((command) => sendCommand(command));
   const backend = new Backend({
     app: paths,
     env: process.env,
@@ -99,7 +106,7 @@ function run(): void {
     open: () => openWindow(),
     settings: () => {
       openWindow();
-      sendCommand("settings");
+      commands.send("settings");
     },
     showLogs: () => open(logsFolder()),
     openDataFolder: () => open(backend.home ?? dataHome(process.env)),
@@ -137,6 +144,8 @@ function run(): void {
     createWindow({
       created: (win) => {
         guardNavigation(win.webContents, mainLog, () => pages.strayed());
+        // At the commit of a new document, before its script can say it listens.
+        win.webContents.on("did-navigate", () => commands.replaced());
         attachContextMenu(win.webContents, strings);
         dressWindow(win);
         watchSession(win, flow, backend);
@@ -149,6 +158,7 @@ function run(): void {
         pages.window(detail);
       },
     });
+    commands.replaced();
     pages.opened(backend.state);
   }
 
@@ -194,6 +204,7 @@ function run(): void {
       handleAppBridge({
         versions: () => ({ version, serverVersion: backend.serverVersion }),
         language: languageChanged,
+        takesCommands: () => commands.listening(),
       });
       setApplicationMenu(strings(), actions);
       setAbout();

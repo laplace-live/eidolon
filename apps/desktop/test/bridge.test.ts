@@ -59,11 +59,16 @@ describe("pageAt", () => {
 });
 
 describe("accepts", () => {
-  const APP_CHANNELS: PageChannel[] = [BRIDGE.theme, BRIDGE.language, BRIDGE.versions];
+  const APP_CHANNELS: PageChannel[] = [
+    BRIDGE.theme,
+    BRIDGE.language,
+    BRIDGE.versions,
+    BRIDGE.takesCommands,
+  ];
   const app: IpcSender = { window: true, mainFrame: true, origin: "eidolon-app://app" };
   const shell: IpcSender = { window: true, mainFrame: true, origin: "eidolon-app://shell" };
 
-  test("the app's page alone sets the theme and the language, and asks for the versions", () => {
+  test("the app's page alone sets the theme and the language, asks for the versions and takes commands", () => {
     for (const channel of APP_CHANNELS) {
       expect(accepts(channel, app)).toBe(true);
       expect(accepts(channel, shell)).toBe(false);
@@ -82,6 +87,7 @@ describe("accepts", () => {
       BRIDGE.theme,
       BRIDGE.language,
       BRIDGE.versions,
+      BRIDGE.takesCommands,
       BRIDGE.retry,
       BRIDGE.showLogs,
       BRIDGE.quit,
@@ -160,11 +166,13 @@ describe("the preload's bridges", () => {
   });
 
   test("a command reaches the page's callback as its name alone, never with the IPC event", () => {
-    const { ipc, deliver } = fakeIpc();
+    const { ipc, sent, deliver } = fakeIpc();
     const received: unknown[][] = [];
     desktopBridge(ipc, "win32", { version: "", serverVersion: "" }).onCommand((...args) =>
       received.push(args),
     );
+    // Once it listens, main may send the command it held while the page loaded.
+    expect(sent).toEqual([[BRIDGE.takesCommands]]);
     deliver(BRIDGE.command, "settings");
     deliver(BRIDGE.command, { name: "settings" });
     deliver(BRIDGE.command);

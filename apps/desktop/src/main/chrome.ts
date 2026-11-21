@@ -40,6 +40,8 @@ export interface AppBridge {
   /** The desktop's version and the server's, as the backend last reported it. */
   readonly versions: () => DesktopVersions;
   readonly language: (language: Language) => void;
+  /** The page listens for commands now. */
+  readonly takesCommands: () => void;
 }
 
 /**
@@ -57,6 +59,9 @@ export function handleAppBridge(bridge: AppBridge): void {
     if (accepts(BRIDGE.language, ipcSender(event)) && isLanguage(language)) {
       bridge.language(language);
     }
+  });
+  ipcMain.on(BRIDGE.takesCommands, (event) => {
+    if (accepts(BRIDGE.takesCommands, ipcSender(event))) bridge.takesCommands();
   });
   // A synchronous message keeps the page waiting until it has an answer, so every path answers.
   ipcMain.on(BRIDGE.versions, (event) => {
