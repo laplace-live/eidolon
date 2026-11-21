@@ -21,7 +21,7 @@ import type { ElectronApplication, Locator, Page } from "playwright-core";
 import { STRINGS } from "../src/main/strings.ts";
 import { buildApp, missingBuilds } from "./dev-smoke/build.ts";
 import { type Microphone, microphoneWav } from "./dev-smoke/speech.ts";
-import { type Step, Steps, writeResults } from "./dev-smoke/steps.ts";
+import { described, type Step, Steps, writeResults } from "./dev-smoke/steps.ts";
 import {
   CHAT_MESSAGE,
   FILES_REPLY,
@@ -382,36 +382,103 @@ async function served(walk: Walk, path: string): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
-/**
- * Clicks `link`, which downloads the chat's file at `path` as `name`: it must save whole, into
- * the profile's downloads folder, and in background mode with main.log naming what and where.
- */
-async function saves(
+/** The server's status for `path`, asked as main's forwarder asks, or why it gave none. */
+async function serverStatus(
   walk: Walk,
-  link: Locator,
   path: string,
-  name: string,
-): Promise<{ readonly ok: boolean; readonly detail: string }> {
+): Promise<{ readonly status: number | null; readonly detail: string }> {
   const { smoke } = walk;
+  try {
+    const response = await smoke.api(path);
+    await response.body?.cancel();
+    return { status: response.status, detail: `status ${response.status}` };
+  } catch (error) {
+    if (smoke.server() === null) {
+      return { status: null, detail: "gone: no server holds the home any more" };
+    }
+    if (localToken(smoke.run.home) === null) {
+      return { status: null, detail: "unreachable: the home has no local-token" };
+    }
+    return { status: null, detail: `no answer: ${described(error)}` };
+  }
+}
+
+/** A link as the page has it: a download in place is an <a download> with no target. */
+interface LinkShape {
+  readonly tag: string;
+  readonly download: string | null;
+  readonly target: string | null;
+}
+
+function savesInPlace(link: LinkShape): boolean {
+  return (
+    link.tag === "a" &&
+    link.download !== null &&
+    (link.target === null || link.target === "" || link.target === "_self")
+  );
+}
+
+function shapeOf(link: LinkShape): string {
+  if (link.tag !== "a") return `a <${link.tag}>`;
+  const download =
+    link.download === null
+      ? ""
+      : link.download === ""
+        ? " download"
+        : ` download="${link.download}"`;
+  return `an <a${download}${link.target === null ? "" : ` target="${link.target}"`}>`;
+}
+
+interface Saved {
+  readonly ok: boolean;
+  readonly detail: string;
+  /** Where it was saved, or null when nothing was. */
+  readonly path: string | null;
+}
+
+/**
+ * Clicks `link`, which must be an <a download> that saves the chat's file at `path`: whole, into
+ * the profile's downloads folder, and in background mode with main.log naming what and where. A
+ * headful run finds it there as `name`. Main's downloadURL fallback saves a target="_blank" link
+ * with the same lines in main.log, so only the link itself shows the page saved it in place.
+ */
+async function saves(walk: Walk, link: Locator, path: string, name: string): Promise<Saved> {
+  const { smoke } = walk;
+  const shape = await link.evaluate((element) => ({
+    tag: element.tagName.toLowerCase(),
+    download: element.getAttribute("download"),
+    target: element.getAttribute("target"),
+  }));
+  const inPlace = savesInPlace(shape);
   const from = smoke.log("main").length;
   await link.click();
-  let saved = join(walk.downloads, name);
+  let saved: string | null = null;
   let logged = true;
   if (walk.background) {
-    const done = await smoke.waitForLine("main", DOWNLOADED, { from, timeoutMs: 20_000 });
-    const [, to, state] = DOWNLOADED.exec(done) ?? [];
+    const done = await smoke
+      .waitForLine("main", DOWNLOADED, { from, timeoutMs: 20_000 })
+      .catch(() => null);
+    const [, to, state] = (done === null ? null : DOWNLOADED.exec(done)) ?? [];
     const url = /background mode saves (\S+) to /.exec(smoke.log("main").slice(from))?.[1];
     logged = state === "completed" && url === `eidolon-app://app${path}`;
-    saved = to ?? "";
+    saved = to ?? null;
   } else {
-    await until(`a download at ${saved}`, () => existsSync(saved), 20_000);
+    const expected = join(walk.downloads, name);
+    saved = await until(`a download at ${expected}`, () => existsSync(expected), 20_000).then(
+      () => expected,
+      () => null,
+    );
   }
-  const inFolder =
-    existsSync(saved) && dirname(realpathSync(saved)) === realpathSync(walk.downloads);
-  const whole = existsSync(saved) && readFileSync(saved).equals(await served(walk, path));
+  const what = `${shapeOf(shape)}${inPlace ? "" : ", not an <a download> saving in place"}`;
+  if (saved === null || !existsSync(saved)) {
+    return { ok: false, detail: `${what}: nothing saved`, path: null };
+  }
+  const inFolder = dirname(realpathSync(saved)) === realpathSync(walk.downloads);
+  const whole = readFileSync(saved).equals(await served(walk, path));
   return {
-    ok: logged && inFolder && whole,
-    detail: `${basename(saved)}${logged ? "" : " (main.log names another download)"} ${inFolder ? "in" : "outside"} the profile's downloads, ${whole ? "as served" : "not as served"}`,
+    ok: inPlace && logged && inFolder && whole,
+    detail: `${what}: ${basename(saved)}${logged ? "" : " (main.log names another download)"} ${inFolder ? "in" : "outside"} the profile's downloads, ${whole ? "as served" : "not as served"}`,
+    path: saved,
   };
 }
 
@@ -470,6 +537,15 @@ async function coldStart(walk: Walk, driven: Driven, launchedAt: number, step: S
     started !== null && server !== null && Number(started[1]) === server.pid,
     `backend pid ${server?.pid} on ${server?.origin}`,
   );
+  if (walk.background) {
+    // Where 7860 is taken, main test-binds it, says so, and then asks for port 0 all the same.
+    const tried = /port 7860 (is|turned out) taken/.test(smoke.log("main"));
+    step.check(
+      "background mode's backend takes a free port, never trying 7860",
+      started?.[2] === "0" && !tried,
+      `it asked for port ${started?.[2] ?? "none"}${tried ? " after trying 7860" : ""}, and listens on ${server?.port ?? "none"}`,
+    );
+  }
   if (server !== null) await smoke.processes.adopt("backend", server.pid);
   const page1 = await page.evaluate(() => {
     const bridge = (globalThis as { eidolonDesktop?: Record<string, unknown> }).eidolonDesktop;
@@ -644,18 +720,24 @@ async function chat(walk: Walk, driven: Driven, step: Step) {
   await page.keyboard.press("Escape");
   await viewer.waitFor({ state: "hidden", timeout: 10_000 });
 
-  // The text file saves through <a download>.
+  // The text file saves through <a download>, under the name it was sent with.
   const savedText = await saves(
     walk,
     page.getByRole("link", { name: "story.txt" }),
     `/api/local/chats/${id}/files/${files.text.name}`,
     "story.txt",
   );
-  const asSent = readFileSync(join(walk.downloads, "story.txt"), "utf8") === UPLOADED_TEXT;
+  const asSent = savedText.path !== null && readFileSync(savedText.path, "utf8") === UPLOADED_TEXT;
   step.check(
     "the text file saves through <a download>",
     savedText.ok && asSent,
     `${savedText.detail}${asSent ? ", the story as sent" : ", not the story sent"}`,
+  );
+  const savedAs = savedText.path === null ? null : basename(savedText.path);
+  step.check(
+    "the text file keeps the name it was sent with",
+    savedAs === "story.txt",
+    savedAs === null ? "nothing saved" : `saved as ${savedAs}`,
   );
   const afterOpening = await windowsOf(driven);
   step.check(
@@ -1061,12 +1143,12 @@ async function closeAndReopen(walk: Walk, driven: Driven, step: Step) {
     from,
     timeoutMs: 10_000,
   });
-  const serving = (await smoke.api("/api/local/status")).status;
+  const serving = await serverStatus(walk, "/api/local/status");
   const windows = await windowsOf(driven);
   step.check(
     "closing hides the window, and the backend keeps serving",
-    windows === 1 && serving === 200,
-    `${after(hidden)}; ${windows} window kept; status ${serving}`,
+    windows === 1 && serving.status === 200,
+    `${after(hidden)}; ${windows} window kept; the backend: ${serving.detail}`,
   );
   await checkOffScreen(walk, driven, step, "after the close");
   const second = smoke.launch("second", walk.launch, LANGUAGE_ARGS);
@@ -1262,11 +1344,11 @@ async function attached(
   const quitFrom = smoke.log("main").length;
   const ending = await quitApp(walk, driven.main, null);
   const asked = smoke.log("main").slice(quitFrom).includes("to a message box");
-  const still = (await smoke.api("/api/local/status")).status;
+  const still = await serverStatus(walk, "/api/local/status");
   step.check(
     "quitting the app asks nothing and leaves the server running",
-    ending.ok && !asked && still === 200,
-    `${ending.detail}; ${asked ? "a quit box" : "no quit box"}; the server answers ${still}`,
+    ending.ok && !asked && still.status === 200,
+    `${ending.detail}; ${asked ? "a quit box" : "no quit box"}; the server: ${still.detail}`,
   );
   supervisor.child.kill("SIGTERM");
   const stopped = await Promise.race([supervisor.exited, sleep(20_000).then(() => null)]);
