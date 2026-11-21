@@ -1,0 +1,84 @@
+# The base config. `bun run package:desktop` builds from it unsigned, at version 0.0.0-dev
+# (scripts/package.ts).
+appId: live.laplace.eidolon
+productName: Eidolon
+electronVersion: 45.4.1
+# A per-user NSIS install goes to %LOCALAPPDATA%\Programs\<name>, from the package name, not
+# productName, and electron-updater caches in <name>-updater. Updates keep the first install's folder.
+extraMetadata:
+  name: eidolon
+# Main and the preload are bundles: the app has no dependencies to rebuild or collect.
+npmRebuild: false
+asar: true
+directories:
+  output: .out
+  # The root .gitignore ignores build/ at any depth.
+  buildResources: resources
+files:
+  - dist/**
+  - package.json
+  - "!**/*.map"
+extraResources:
+  # What main loads at run time, from process.resourcesPath: the tray icon.
+  - from: assets
+    to: assets
+# The feed electron-updater reads, written into app-update.yml. electron-builder uploads nothing
+# (--publish never).
+publish:
+  provider: generic
+  url: https://downloads.vrp.moe/eidolon
+  # Multi-range differential downloads throw in main on a dropped connection
+  # (electron-userland/electron-builder#10020): drop once a v26 release carries #10021.
+  useMultipleRangeRequest: false
+# Every fuse electron-builder knows, since an unlisted one keeps Electron's default. wasmTrapHandlers
+# keeps its default, on: electron-builder has no key for it.
+electronFuses:
+  # The backend, its jobs and the eidolon command run as this binary in node mode.
+  runAsNode: true
+  enableCookieEncryption: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  # No page loads over file:.
+  grantFileProtocolExtraPrivileges: false
+  # Not a fuse: flipping fuses breaks Electron's ad-hoc signature, so an unsigned build is re-signed
+  # ad hoc to launch on Apple silicon.
+  resetAdHocDarwinSignature: true
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  category: public.app-category.productivity
+  icon: resources/icon.png
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.inherit.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Eidolon uses your microphone for calls and voice messages.
+  # The backend, outside the asar so onnxruntime and LanceDB open real files. electron-builder skips a
+  # source folder's own top-level node_modules whatever the filter, so the source is the folder above
+  # the payload.
+  extraResources:
+    - from: .stage/darwin-arm64
+      to: .
+      filter: ["eidolon/**/*"]
+dmg:
+  # Updates take the zip, so the DMG needs no blockmap.
+  writeUpdateInfo: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.png
+  extraResources:
+    - from: .stage/win32-x64
+      to: .
+      filter: ["eidolon/**/*"]
+# electron-builder's defaults, oneClick and perMachine false, install per user under
+# %LOCALAPPDATA%\Programs, which updates need. The shortcut's AppUserModelID is appId.
+nsis:
+  include: resources/installer.nsh
