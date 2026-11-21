@@ -1,0 +1,39 @@
+/* The shell pages: passive, in apps/web's colours, following the system's light or dark. */
+:root {
+  color-scheme: light dark;
+  font:
+    13px / 1.5 system-ui,
+    sans-serif;
+  --background: oklch(1 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.145 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+  }
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  background: var(--background);
+  color: var(--muted-foreground);
+  user-select: none;
+}
+
+/* With no system title bar, the window moves only by a drag region. */
+.drag {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 56px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}

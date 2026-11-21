@@ -25,6 +25,7 @@
   "include": [
     "apps/*/src",
     "apps/*/test",
+    "apps/desktop/scripts",
     "apps/eidolon/scripts",
     "packages/*/src",
     "packages/*/test",
