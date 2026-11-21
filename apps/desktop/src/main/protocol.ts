@@ -1,9 +1,11 @@
-// The eidolon-app: scheme the window loads. Its shell host serves the pages main shows while there
-// is no backend to show; every other host is a 404 for now.
+// The eidolon-app: scheme the window loads (§3). Its shell host serves the pages main shows while
+// there is no backend to show, its app host is the backend through the forwarder, and every other
+// host is a 404.
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { app, protocol } from "electron";
-import { SCHEME } from "../shared/bridge.ts";
+import { app, ipcMain, protocol } from "electron";
+import { accepts, BRIDGE, SCHEME } from "../shared/bridge.ts";
+import type { SchemeRequest } from "./forwarder.ts";
 import {
   type RenderedPage,
   renderFailedPage,
@@ -14,6 +16,7 @@ import {
   type ShellPageStrings,
   shellRoute,
 } from "./shell-pages.ts";
+import { ipcSender } from "./window.ts";
 
 export { SCHEME };
 export const LOADING_PAGE = `${SCHEME}://shell/loading`;
@@ -105,11 +108,39 @@ export async function waitingPage(strings: ShellPageStrings): Promise<Response> 
   return pageResponse(renderWaitingPage(html, strings));
 }
 
-/** Serves the scheme on the default session; after `ready`. */
-export function handleScheme(pages: ShellPages): void {
+/**
+ * Serves the scheme on the default session, after `ready` and before the first load: the shell
+ * host from the pages, the app host from `forward`.
+ */
+export function handleScheme(
+  pages: ShellPages,
+  forward: (request: SchemeRequest) => Promise<Response>,
+): void {
   protocol.handle(SCHEME, (request) => {
     const url = new URL(request.url);
+    if (url.host === "app") return forward(request);
     if (url.host === "shell" && request.method === "GET") return shellResponse(url, pages);
     return notFound();
   });
+}
+
+/** The failure page's buttons. */
+export interface ShellBridge {
+  readonly retry: () => void;
+  readonly showLogs: () => void;
+  readonly quit: () => void;
+}
+
+/** Takes each button's message only from the window's main frame at eidolon-app://shell. */
+export function handleShellBridge(bridge: ShellBridge): void {
+  const channels = [
+    [BRIDGE.retry, bridge.retry],
+    [BRIDGE.showLogs, bridge.showLogs],
+    [BRIDGE.quit, bridge.quit],
+  ] as const;
+  for (const [channel, act] of channels) {
+    ipcMain.on(channel, (event) => {
+      if (accepts(channel, ipcSender(event))) act();
+    });
+  }
 }

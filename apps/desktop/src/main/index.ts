@@ -1,57 +1,231 @@
-// The desktop app's main process: the profile and the single-instance lock first, then the scheme,
-// and once Electron is ready, the window on the loading page.
+// The desktop app's main process, in §2.1's order: the profile, the logs and the single-instance
+// lock first (instance.ts), then the scheme; once Electron is ready, the session's guards and the
+// scheme's handler, the window on the loading page, and then the environment and the backend, which
+// the window follows.
 import "./instance.ts";
-import { app, type BrowserWindow } from "electron";
-import { isLaunchRequest, primary, request } from "./instance.ts";
-import { handleScheme, LOADING_PAGE, registerScheme, type ShellPages } from "./protocol.ts";
-import { createWindow } from "./window.ts";
+import { join } from "node:path";
+import { app, dialog, nativeImage, session, shell } from "electron";
+import { type Language, pageAt } from "../shared/bridge.ts";
+import { dataHome } from "./attach.ts";
+import { Backend, licensesFile } from "./backend.ts";
+import { dressWindow, handleAppBridge, sendCommand } from "./chrome.ts";
+import { APP_ORIGIN, DEV_SERVER } from "./forwarder.ts";
+import { isLaunchRequest, primary, refused, request } from "./instance.ts";
+import { logStart, logsFolder, mainLog } from "./log.ts";
+import { attachContextMenu, setApplicationMenu } from "./menu.ts";
+import { aboutPanel, type TrayActions } from "./menus.ts";
+import { guardNavigation } from "./navigation.ts";
+import { failurePage, shellPageStrings, type WindowPage, WindowPages } from "./pages.ts";
+import { guardPermissions } from "./permissions.ts";
+import {
+  FAILED_PAGE,
+  handleScheme,
+  handleShellBridge,
+  LOADING_PAGE,
+  registerScheme,
+  waitingPage,
+} from "./protocol.ts";
+import { installQuit, watchSession } from "./quit.ts";
+import { HideNotice } from "./quit-flow.ts";
+import { STRINGS, shellLanguage } from "./strings.ts";
+import { AppTray, trayIconPath } from "./tray.ts";
+import { createWindow, mainWindow, showWindow } from "./window.ts";
 
 /** NSIS gives the Start menu shortcut appId as its AppUserModelID. */
 const APP_USER_MODEL_ID = "live.laplace.eidolon";
+/** dev.ts's switch: Vite serves every path but the backend's (§3). Unpackaged runs only. */
+const DEV_SWITCH = "eidolon-dev-server";
+/** In userData: the Windows tray notice has shown. */
+const TRAY_NOTICE_MARKER = "tray-notice-shown";
 
-/** The shell pages in English, with nothing failed yet. */
-const shellPages: ShellPages = {
-  strings: () => ({
-    lang: "en",
-    starting: "Starting Eidolon…",
-    waiting: "Waiting for Eidolon's server…",
-    tryAgain: "Try Again",
-    showLogs: "Show Logs",
-    quit: "Quit",
-    details: "Details",
-  }),
-  failure: () => ({ title: "Eidolon Couldn't Start", message: "", stderr: "" }),
-};
-
-let mainWindow: BrowserWindow | null = null;
-
-/** Brings the window forward from hidden or minimized, or opens it again once it's gone. */
-function showWindow(): void {
-  if (mainWindow === null || mainWindow.isDestroyed()) {
-    mainWindow = createWindow();
-    mainWindow.loadURL(LOADING_PAGE).catch((error: unknown) => {
-      console.error("Eidolon: the loading page didn't load", error);
-    });
-    return;
-  }
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+function open(path: string): void {
+  shell.openPath(path).then(
+    (error) => {
+      if (error !== "") mainLog.warn(`Eidolon: couldn't open ${path}: ${error}`);
+    },
+    (error: unknown) => mainLog.warn(`Eidolon: couldn't open ${path}: ${String(error)}`),
+  );
 }
 
-if (!primary || request.command === "quit") {
-  // The running instance got this launch's request. A --quit with none running has nothing to quit.
-  app.exit(0);
-} else {
-  registerScheme();
-  // Before any window: Electron's own default, electron.app.Eidolon, isn't the shortcut's.
-  if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);
+function run(): void {
+  // Unpackaged, Electron's own version would stand in for the app's.
+  const version = app.isPackaged ? app.getVersion() : "0.0.0-dev";
+  let reported: Language | null = null;
+  const language = () => shellLanguage(reported, app.getPreferredSystemLanguages());
+  const strings = () => STRINGS[language()];
+  let tray: AppTray | null = null;
+  let hideNotice: HideNotice | null = null;
+  /** The scheme and the session's guards are in place, so a window may load. */
+  let started = false;
+
+  const pages = new WindowPages({
+    load: (page) => load(page),
+    reloadApp: () => {
+      const url = mainWindow()?.webContents.getURL() ?? "";
+      loadUrl(pageAt(url) === "app" ? url : `${APP_ORIGIN}/`);
+    },
+  });
+  const backend = new Backend({
+    devServer: !app.isPackaged && app.commandLine.hasSwitch(DEV_SWITCH) ? DEV_SERVER : undefined,
+    waitingPage: () => {
+      pages.waited();
+      return waitingPage(shellPageStrings(language(), strings()));
+    },
+  });
+  const icon =
+    process.platform === "win32" ? nativeImage.createFromPath(trayIconPath()) : undefined;
+  const flow = installQuit({
+    backend,
+    strings,
+    icon,
+    approved: () => {
+      tray?.destroy();
+      tray = null;
+    },
+  });
+
+  const actions: TrayActions = {
+    open: () => openWindow(),
+    settings: () => {
+      openWindow();
+      sendCommand("settings");
+    },
+    showLogs: () => open(logsFolder()),
+    openDataFolder: () => open(backend.home ?? dataHome(process.env)),
+    licenses: () => open(licensesFile()),
+    about: () => app.showAboutPanel(),
+    quit: () => app.quit(),
+  };
+
+  function loadUrl(url: string): void {
+    // A failed load is did-fail-load's, which decides; a replaced one is no failure.
+    mainWindow()
+      ?.loadURL(url)
+      .catch(() => {});
+  }
+
+  function load(page: WindowPage): void {
+    loadUrl(page === "app" ? `${APP_ORIGIN}/` : page === "failed" ? FAILED_PAGE : LOADING_PAGE);
+  }
+
+  function setAbout(): void {
+    const versions = { version, serverVersion: backend.serverVersion };
+    app.setAboutPanelOptions(aboutPanel(process.platform, versions, strings(), trayIconPath()));
+  }
+
+  function languageChanged(next: Language): void {
+    const before = language();
+    reported = next;
+    if (language() === before) return;
+    setApplicationMenu(strings(), actions);
+    tray?.relabel(strings());
+    setAbout();
+  }
+
+  function newWindow(): void {
+    createWindow({
+      created: (win) => {
+        guardNavigation(win.webContents, mainLog);
+        attachContextMenu(win.webContents, strings);
+        dressWindow(win);
+        watchSession(win, flow, backend);
+      },
+      hidesOnClose: () => flow.closeHides(),
+      hidOnClose: () => hideNotice?.hidden(),
+      failed: (detail) => {
+        if (flow.quitting) return;
+        mainLog.error(`Eidolon: ${detail}`);
+        pages.window(detail);
+      },
+    });
+    pages.opened(backend.state);
+  }
+
+  /** Shows the window, from hidden or minimized, or makes it again after the page closed it. */
+  function openWindow(): void {
+    if (!started || flow.quitting) return;
+    if (mainWindow() === null) newWindow();
+    showWindow();
+  }
+
   app.on("second-instance", (_event, _argv, _cwd, data) => {
     if (isLaunchRequest(data) && data.command === "quit") app.quit();
-    else showWindow();
+    else openWindow();
   });
-  void app.whenReady().then(() => {
-    handleScheme(shellPages);
-    showWindow();
-  });
+  app.on("activate", () => openWindow());
+  // A page's window.close() destroys the window with no close event; the app stays, for the Dock,
+  // the tray or a second launch to make another.
+  app.on("window-all-closed", () => {});
+
+  void app
+    .whenReady()
+    .then(async () => {
+      logStart(version);
+      // Before the first load: with no handlers, Electron grants every request.
+      guardPermissions(session.defaultSession, {
+        isWindow: (contents) => contents !== null && contents === mainWindow()?.webContents,
+        strings,
+      });
+      handleScheme(
+        {
+          strings: () => shellPageStrings(language(), strings()),
+          failure: () => failurePage(pages.failure ?? { kind: "window", detail: "" }, strings()),
+        },
+        (request) => backend.handle(request),
+      );
+      handleShellBridge({
+        retry: () => {
+          if (pages.retry(backend.state)) backend.retry();
+        },
+        showLogs: actions.showLogs,
+        quit: actions.quit,
+      });
+      handleAppBridge({
+        versions: () => ({ version, serverVersion: backend.serverVersion }),
+        language: languageChanged,
+      });
+      setApplicationMenu(strings(), actions);
+      setAbout();
+      if (process.platform === "win32") {
+        tray = new AppTray(strings(), actions);
+        hideNotice = new HideNotice({
+          marker: join(app.getPath("userData"), TRAY_NOTICE_MARKER),
+          show: () => {
+            const { label, text } = strings();
+            return dialog.showMessageBox({
+              type: "none",
+              title: "Eidolon",
+              message: text.hideNoticeTitle,
+              detail: text.hideNotice,
+              buttons: [label.ok],
+              noLink: true,
+              icon,
+            });
+          },
+          log: mainLog,
+        });
+      }
+      backend.subscribe((state) => {
+        pages.backend(state);
+        if (state.phase === "ready") setAbout();
+      });
+      started = true;
+      newWindow();
+      await backend.start();
+    })
+    .catch((error: unknown) => {
+      mainLog.error(`Eidolon: the app failed to start: ${String(error)}`);
+      pages.window(`the app failed to start: ${String(error)}`);
+    });
+}
+
+if (!refused) {
+  // The running instance got this launch's request. A --quit with none running has nothing to quit.
+  if (!primary || request.command === "quit") app.exit(0);
+  else {
+    registerScheme();
+    // Before any window: Electron's own default, electron.app.Eidolon, isn't the shortcut's.
+    if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);
+    run();
+  }
 }

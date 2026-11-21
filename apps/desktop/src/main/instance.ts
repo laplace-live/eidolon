@@ -1,7 +1,9 @@
 // This launch's profile, its logs folder and the single-instance lock. index.ts imports it first, so
-// all three are settled before any other module can touch userData or start a log.
+// all three are settled before any other module can touch userData or start a log; a packaged
+// launch with a debugging switch exits before any of them.
 import { join } from "node:path";
 import { app } from "electron";
+import { refuseDebugging } from "./navigation.ts";
 
 /** What a launch asks of the instance already running: --quit quits it, as the tray's Quit does. */
 export interface LaunchRequest {
@@ -17,16 +19,21 @@ export function isLaunchRequest(data: unknown): data is LaunchRequest {
   return command === "show" || command === "quit";
 }
 
-// productName's profile, and the lock it scopes, are the installed app's. A launch given
-// --user-data-dir (the smokes) keeps it: setPath would replace it.
-if (!app.isPackaged && !app.commandLine.hasSwitch("user-data-dir")) {
-  app.setPath("userData", join(app.getPath("appData"), "Eidolon Dev"));
-}
-// On macOS the logs folder is ~/Library/Logs/<productName> whatever the profile, so a dev or smoke
-// run would append to the installed app's logs.
-if (app.getPath("userData") !== join(app.getPath("appData"), app.getName())) {
-  app.setAppLogsPath(join(app.getPath("userData"), "logs"));
+/** A packaged launch with a switch that opens CDP is exiting; nothing else runs. */
+export const refused = refuseDebugging();
+
+if (!refused) {
+  // productName's profile, and the lock it scopes, are the installed app's. A launch given
+  // --user-data-dir (the smokes) keeps it: setPath would replace it.
+  if (!app.isPackaged && !app.commandLine.hasSwitch("user-data-dir")) {
+    app.setPath("userData", join(app.getPath("appData"), "Eidolon Dev"));
+  }
+  // On macOS the logs folder is ~/Library/Logs/<productName> whatever the profile, so a dev or smoke
+  // run would append to the installed app's logs.
+  if (app.getPath("userData") !== join(app.getPath("appData"), app.getName())) {
+    app.setAppLogsPath(join(app.getPath("userData"), "logs"));
+  }
 }
 
 /** False when another instance holds this profile, which gets `request` as `second-instance`. */
-export const primary = app.requestSingleInstanceLock(request);
+export const primary = !refused && app.requestSingleInstanceLock(request);
