@@ -1,10 +1,19 @@
 // The packaged smoke's own helpers, without Electron or Windows: a packaged app's layout, command
 // lines as ps and Windows give them, the natives lsof and PowerShell list, the photo and icon it
-// reads, the logs' errors and leaks, the processes naming a run's folder, a folder's hashes, and
-// the NSIS setup's uninstall entry and silent uninstall.
+// reads, the logs' errors and leaks, the processes naming a run's folder, a folder's hashes, the
+// marker it leaves in a data home, and the NSIS setup's uninstall entry and silent uninstall.
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -26,6 +35,7 @@ import {
   lineTime,
   lsofLibraries,
   modulesScript,
+  placeMarker,
   powershellCommand,
   processesNaming,
   ROTATED_PHOTO,
@@ -304,6 +314,46 @@ describe("a folder's files by hash", () => {
     expect(changedFiles(before, fileHashes(dir))).toEqual(["a", "b", "c"]);
     expect(changedFiles(before, null)).toEqual(["the folder is gone"]);
     expect(changedFiles(null, before)).toEqual(["the folder appeared"]);
+  });
+});
+
+describe("a marker in a data home", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "eidolon-smoke-marker-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("is made with the folders it needs, and goes with them, leaving what was there", () => {
+    const home = join(dir, ".laplace", "eidolon");
+    const marker = placeMarker(home, "smoke-marker.txt");
+    expect(marker.folder).toBe(home);
+    expect(readdirSync(home)).toEqual(["smoke-marker.txt"]);
+    // The uninstall check hashes the home around the uninstall: an uninstaller that removed it
+    // would leave nothing to hash.
+    const before = fileHashes(home);
+    expect(Object.keys(before ?? {})).toEqual(["smoke-marker.txt"]);
+    marker.remove();
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  test("in a home that was there, goes alone", () => {
+    const home = join(dir, "eidolon");
+    mkdirSync(home);
+    writeFileSync(join(home, "local-token"), "secret\n");
+    placeMarker(home, "smoke-marker.txt").remove();
+    expect(readdirSync(home)).toEqual(["local-token"]);
+  });
+
+  test("leaves a folder it made that something else wrote in since", () => {
+    const home = join(dir, ".laplace", "eidolon");
+    const marker = placeMarker(home, "smoke-marker.txt");
+    writeFileSync(join(home, "settings.yaml"), "{}\n");
+    marker.remove();
+    expect(readdirSync(home)).toEqual(["settings.yaml"]);
+    expect(existsSync(join(dir, ".laplace"))).toBe(true);
   });
 });
 

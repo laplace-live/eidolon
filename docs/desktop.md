@@ -795,12 +795,16 @@ main's forwarder does, and runs the app's binary in node mode beside it, as main
 
 On Windows it first installs the NSIS setup silently for the user (`/S`), and smokes the
 installed `%LOCALAPPDATA%\Programs\eidolon\Eidolon.exe`. After the quit it runs HKCU's uninstall
-command with `/S` and checks that the install folder and its entry are gone and the run's data home
-is unchanged, file for file by hash. Where Eidolon is installed for the user already, it refuses to
-run rather than replace and remove that install. Each step has a time limit of its own, so a hung
-run still ends in failed checks, its uninstall and results included, well inside `desktop.yml`'s 15
-minutes. After `finish()` it writes `results.json`, every check with the timings, into the run's
-folder, which a pass leaves holding that file alone. A run takes about 6–8 s on macOS.
+command with `/S` and checks that the install folder and its entry are gone and the data homes are
+as they were, file for file by hash: the run's, and on a CI runner (`CI=true`) the default one,
+`%USERPROFILE%\.laplace\eidolon`, where it puts a marker before the install. The uninstaller never
+learns the run's home, so only the default one would show it touching a data home; the smoke
+writes there on a CI runner alone, and removes the marker and the folders it made after. Where
+Eidolon is installed for the user already, it refuses to run rather than replace and remove that
+install. Each step has a time limit of its own, so a hung run still ends in failed checks, its
+uninstall and results included, well inside `desktop.yml`'s 15 minutes. After `finish()` it writes
+`results.json`, every check with the timings, into the run's folder, which a pass leaves holding
+that file alone. A run takes about 6–8 s on macOS.
 
 ### In CI
 

@@ -1,9 +1,18 @@
 // What only the packaged smoke (scripts/smoke.ts) reads of a packaged app and its processes. Paths
 // and command lines follow the platform passed in, so Windows' rules are tested on any OS.
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { posix, win32 } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, posix, win32 } from "node:path";
 import { promisify } from "node:util";
 import { BACKEND_RUNTIME_ARGS } from "../../src/main/controller.ts";
 import { type ProcessRow, parseTable, processTable } from "./processes.ts";
@@ -224,6 +233,36 @@ export function fileHashes(dir: string): Readonly<Record<string, string>> | null
   };
   walk(dir, "");
   return hashes;
+}
+
+/** A file of random bytes placed in a folder, and what takes it away again. */
+export interface Marker {
+  readonly folder: string;
+  /** Deletes the marker, then each folder placeMarker made, deepest first, that holds nothing. */
+  remove(): void;
+}
+
+/** Writes `name` into `folder`, making the folder and its parents as needed. */
+export function placeMarker(folder: string, name: string): Marker {
+  const made: string[] = [];
+  for (let at = folder; !existsSync(at) && dirname(at) !== at; at = dirname(at)) made.unshift(at);
+  for (const at of made) mkdirSync(at, { mode: 0o700 });
+  const path = join(folder, name);
+  writeFileSync(path, randomBytes(16).toString("hex"), { flag: "wx", mode: 0o600 });
+  return {
+    folder,
+    remove() {
+      rmSync(path, { force: true });
+      for (const at of [...made].reverse()) {
+        try {
+          rmdirSync(at);
+        } catch {
+          // Something else wrote in it since: what isn't the smoke's stays.
+          return;
+        }
+      }
+    },
+  };
 }
 
 /** What differs between two of fileHashes' answers, by path: changed, added or gone. */

@@ -16,7 +16,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import type { JobRecord, Status } from "../../bot/src/local/api.ts";
 import { PLATFORMS } from "../../eidolon/src/launcher.ts";
-import { isAlive, probe, readToken } from "../src/main/attach.ts";
+import { dataHome, isAlive, probe, readToken } from "../src/main/attach.ts";
 import { BACKEND_RUNTIME_ARGS, backendEnv, RESTART_EXIT_CODE } from "../src/main/controller.ts";
 import { checkNatives, type NativesReport } from "./natives.ts";
 import {
@@ -44,7 +44,9 @@ import {
   jpegFacts,
   leaks,
   lineTime,
+  type Marker,
   mappedNatives,
+  placeMarker,
   processesNaming,
   ROTATED_PHOTO,
   runsOnBinary,
@@ -644,11 +646,36 @@ function leftIn(folder: string): string {
   }
 }
 
-/** Windows: the uninstaller removes the app silently and leaves the data home as it was. */
-async function uninstall(smoke: Smoke, binary: string, numbers: Numbers): Promise<void> {
+/** The default data home with the smoke's marker in it, as it was before the install. */
+interface MarkedHome {
+  readonly marker: Marker;
+  readonly before: Readonly<Record<string, string>> | null;
+}
+
+/**
+ * On a CI runner, a marker in the default data home, the one npx and `bun run app` share: the
+ * uninstaller never learns the run's own home, so this is the home the install and uninstall
+ * could touch. Never elsewhere, where that home may hold someone's own data.
+ */
+function markDefaultHome(): MarkedHome | null {
+  if (process.env.CI !== "true") return null;
+  const marker = placeMarker(dataHome({}), `eidolon-smoke-${randomBytes(6).toString("hex")}`);
+  return { marker, before: fileHashes(marker.folder) };
+}
+
+/**
+ * Windows: the uninstaller removes the app silently and leaves the data homes as they were: the
+ * run's, and on a CI runner the default one, marked before the install.
+ */
+async function uninstall(
+  smoke: Smoke,
+  binary: string,
+  numbers: Numbers,
+  marked: MarkedHome | null,
+): Promise<void> {
   const folder = dirname(binary);
   const UNINSTALL =
-    "the uninstaller removes the app silently and leaves the data home as it was, file for file";
+    "the uninstaller removes the app silently and leaves the data homes as they were, file for file";
   await smoke.checks.step(UNINSTALL, async () => {
     // After a walk that failed midway: the uninstaller would end the app with no stop of its own.
     if ((await smoke.processes.running()).length > 0) await smoke.processes.stopAll();
@@ -674,6 +701,8 @@ async function uninstall(smoke: Smoke, binary: string, numbers: Numbers): Promis
     numbers.uninstallSeconds = Math.round((Date.now() - at) / 100) / 10;
     const changed = changedFiles(before, fileHashes(smoke.run.home));
     const files = Object.keys(before ?? {}).length;
+    const changedDefault =
+      marked === null ? null : changedFiles(marked.before, fileHashes(marked.marker.folder));
     const remaining = existsSync(folder) ? leftIn(folder) : null;
     smoke.checks.add(
       UNINSTALL,
@@ -681,8 +710,9 @@ async function uninstall(smoke: Smoke, binary: string, numbers: Numbers): Promis
         remaining === null &&
         entries.length === 0 &&
         files > 0 &&
-        changed.length === 0,
-      `${basename(command)} ${args.join(" ")} exited ${exit === null ? "not in time" : (exit.code ?? exit.signal)}; after ${numbers.uninstallSeconds} s the install folder ${remaining === null ? "is gone" : `remains, holding ${remaining}`}, ${entries.length} uninstall entr${entries.length === 1 ? "y" : "ies"} left; the data home's ${files} files ${changed.length === 0 ? "are unchanged" : `changed: ${changed.slice(0, 5).join(", ")}`}`,
+        changed.length === 0 &&
+        (changedDefault?.length ?? 0) === 0,
+      `${basename(command)} ${args.join(" ")} exited ${exit === null ? "not in time" : (exit.code ?? exit.signal)}; after ${numbers.uninstallSeconds} s the install folder ${remaining === null ? "is gone" : `remains, holding ${remaining}`}, ${entries.length} uninstall entr${entries.length === 1 ? "y" : "ies"} left; the run's data home's ${files} files ${changed.length === 0 ? "are unchanged" : `changed: ${changed.slice(0, 5).join(", ")}`}; the default data home ${changedDefault === null ? "is checked on a CI runner only" : changedDefault.length === 0 ? "holds the marker as it was" : `changed: ${changedDefault.slice(0, 5).join(", ")}`}`,
     );
   });
 }
@@ -725,11 +755,15 @@ console.log(
 try {
   if (planned.setup === null) await walk(smoke, appLayout(planned.binary), numbers);
   else {
+    const marked = markDefaultHome();
     try {
       await install(smoke, planned.setup, planned.binary, numbers);
       if (existsSync(planned.binary)) await walk(smoke, appLayout(planned.binary), numbers);
     } finally {
-      if (existsSync(dirname(planned.binary))) await uninstall(smoke, planned.binary, numbers);
+      if (existsSync(dirname(planned.binary))) {
+        await uninstall(smoke, planned.binary, numbers, marked);
+      }
+      marked?.marker.remove();
     }
   }
 } catch (error) {
