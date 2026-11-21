@@ -64,6 +64,7 @@
     "apps/desktop": {
       "name": "laplace-eidolon-desktop",
       "devDependencies": {
+        "@eidolon/config": "workspace:*",
         "electron": "45.4.1",
         "electron-builder": "26.18.1",
         "electron-log": "5.4.4",
