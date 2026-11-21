@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router/dom";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { connectDesktop } from "@/lib/desktop";
 import { createQueryClient } from "@/lib/query";
 import { exchangeLinkCode, takeLinkCode } from "@/lib/session";
 import { initTheme } from "@/lib/theme";
@@ -22,6 +23,8 @@ const exchanged = code ? exchangeLinkCode(code) : Promise.resolve(null);
 let router: ReturnType<typeof createRouter> | undefined;
 const queryClient = createQueryClient(() => void router?.revalidate());
 router = createRouter({ queryClient, exchanged });
+
+connectDesktop((to) => void router?.navigate(to));
 
 // Rendered once a language is active: the viewer's, else English.
 void dynamicActivate(initialLang()).then(() => {
