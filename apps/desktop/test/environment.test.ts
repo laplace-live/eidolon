@@ -8,12 +8,13 @@
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
-  backendEnvironment,
   dataHome,
   loginShellOff,
   mergeShellEnvironment,
+  readEnvironment,
+  startupEnvironment,
   withBackendVariables,
 } from "../src/main/environment.ts";
 
@@ -166,24 +167,14 @@ describe("loginShellOff", () => {
   });
 });
 
-describe("backendEnvironment", () => {
-  test("on Windows, takes the launch environment as it is, without running a shell", async () => {
+describe("readEnvironment", () => {
+  test("on Windows, takes a copy of the launch environment as it is, without running a shell", async () => {
     const marker = join(directory, "ran");
     const unused = shell("unused", `touch '${marker}'`);
-    await expect(
-      backendEnvironment(
-        { Path: "C:\\Windows" },
-        { appRoot: "C:\\eidolon", platform: "win32", shells: [unused] },
-      ),
-    ).resolves.toEqual({
-      env: {
-        Path: "C:\\Windows",
-        EIDOLON_APP_ROOT: "C:\\eidolon",
-        EIDOLON_NO_DOTENV: "1",
-        ELECTRON_RUN_AS_NODE: "1",
-      },
-      failures: [],
-    });
+    const launch = { Path: "C:\\Windows" };
+    const read = await readEnvironment(launch, { platform: "win32", shells: [unused] });
+    expect(read).toEqual({ env: { Path: "C:\\Windows" }, failures: [] });
+    expect(read.env).not.toBe(launch);
     expect(existsSync(marker)).toBe(false);
   });
 
@@ -191,61 +182,124 @@ describe("backendEnvironment", () => {
     const marker = join(directory, "ran");
     const unused = shell("unused", `touch '${marker}'`);
     const launch = { PATH: "/usr/bin", EIDOLON_DESKTOP_LOGIN_SHELL: "0" };
-    const { env, failures } = await backendEnvironment(launch, {
-      appRoot: null,
-      platform: "darwin",
-      shells: [unused],
-    });
-    expect(env).toEqual({ ...launch, EIDOLON_NO_DOTENV: "1", ELECTRON_RUN_AS_NODE: "1" });
-    expect(failures).toEqual([]);
+    await expect(
+      readEnvironment(launch, { platform: "darwin", shells: [unused] }),
+    ).resolves.toEqual({ env: launch, failures: [] });
     expect(existsSync(marker)).toBe(false);
   });
 
   // The stand-in shells are POSIX scripts.
   test.skipIf(process.platform === "win32")(
-    "on macOS, merges the login shell's over the launch environment, read at each call",
+    "on macOS, merges the login shell's over the launch environment",
     async () => {
-      const counter = join(directory, "reads");
       const login = shell(
         "login",
-        `echo x >> '${counter}'\nexport PATH="/opt/homebrew/bin:$PATH" EIDOLON_HOME=/rc PWD=/elsewhere`,
+        'export PATH="/opt/homebrew/bin:$PATH" EIDOLON_HOME=/rc PWD=/elsewhere',
       );
       const launch = { PATH: "/usr/bin:/bin", EIDOLON_HOME: "/tmp/smoke", HOME: homedir() };
-      const options = { appRoot: "/payload", platform: "darwin", shells: [login] } as const;
-      const first = await backendEnvironment(launch, options);
-      expect(first.failures).toEqual([]);
-      expect(first.env).toMatchObject({
+      const { env, failures } = await readEnvironment(launch, {
+        platform: "darwin",
+        shells: [login],
+      });
+      expect(failures).toEqual([]);
+      expect(env).toMatchObject({
         PATH: "/opt/homebrew/bin:/usr/bin:/bin",
         EIDOLON_HOME: "/tmp/smoke",
-        EIDOLON_APP_ROOT: "/payload",
-        EIDOLON_NO_DOTENV: "1",
-        ELECTRON_RUN_AS_NODE: "1",
       });
-      expect(first.env).not.toHaveProperty("PWD");
-      expect(first.env).not.toHaveProperty("DISABLE_AUTO_UPDATE");
-      await backendEnvironment(launch, options);
-      expect(readFileSync(counter, "utf8")).toBe("x\nx\n");
+      expect(env).not.toHaveProperty("PWD");
+      expect(env).not.toHaveProperty("DISABLE_AUTO_UPDATE");
     },
   );
 
   test.skipIf(process.platform === "win32")(
-    "keeps the launch environment when every login shell fails, and says why",
+    "keeps the launch environment when every login shell fails, and logs why",
     async () => {
       const failing = shell("failing", "exit 3");
-      const launch = { PATH: "/usr/bin:/bin" };
+      const warn = vi.fn<(message: string) => void>();
       await expect(
-        backendEnvironment(launch, { appRoot: "/payload", platform: "darwin", shells: [failing] }),
+        readEnvironment(
+          { PATH: "/usr/bin:/bin" },
+          { platform: "darwin", shells: [failing], log: { warn } },
+        ),
       ).resolves.toEqual({
-        env: {
-          PATH: "/usr/bin:/bin",
-          EIDOLON_APP_ROOT: "/payload",
-          EIDOLON_NO_DOTENV: "1",
-          ELECTRON_RUN_AS_NODE: "1",
-        },
+        env: { PATH: "/usr/bin:/bin" },
         failures: [{ shell: failing, reason: "exit 3" }],
       });
+      expect(warn.mock.calls).toEqual([
+        [
+          `Eidolon: no login shell gave its environment, so the backend runs on the launch's: ${failing} (exit 3)`,
+        ],
+      ]);
     },
   );
+
+  test.skipIf(process.platform === "win32")(
+    "logs the login shells that failed before one gave its environment",
+    async () => {
+      const failing = shell("failing", "exit 3");
+      const working = shell("working", "export FROM=working");
+      const warn = vi.fn<(message: string) => void>();
+      const { env } = await readEnvironment(
+        { PATH: "/usr/bin:/bin" },
+        { platform: "darwin", shells: [failing, working], log: { warn } },
+      );
+      expect(env.FROM).toBe("working");
+      expect(warn.mock.calls).toEqual([
+        [`Eidolon: login shells that gave no environment before one did: ${failing} (exit 3)`],
+      ]);
+    },
+  );
+});
+
+describe.skipIf(process.platform === "win32")("startupEnvironment", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A login shell that counts its runs and puts the folder written in `bin` first on PATH. */
+  function counting(): { login: string; reads: () => number; bin: (folder: string) => void } {
+    const counter = join(directory, "reads");
+    const bin = join(directory, "bin");
+    writeFileSync(bin, "/first/bin");
+    return {
+      login: shell("login", `echo x >> '${counter}'\nexport PATH="$(cat '${bin}'):$PATH"`),
+      reads: () => (existsSync(counter) ? readFileSync(counter, "utf8").length / 2 : 0),
+      bin: (folder) => writeFileSync(bin, folder),
+    };
+  }
+
+  test("a cold start's first spawn takes the startup read, and every later spawn reads again", async () => {
+    const { login, reads, bin } = counting();
+    const environment = await startupEnvironment(
+      { PATH: "/usr/bin:/bin" },
+      { platform: "darwin", shells: [login] },
+    );
+    expect(environment.env.PATH).toBe("/first/bin:/usr/bin:/bin");
+    expect(reads()).toBe(1);
+    await expect(environment.forSpawn()).resolves.toBe(environment.env);
+    expect(reads()).toBe(1);
+    bin("/second/bin");
+    await expect(environment.forSpawn()).resolves.toMatchObject({
+      PATH: "/second/bin:/usr/bin:/bin",
+    });
+    await environment.forSpawn();
+    expect(reads()).toBe(3);
+  });
+
+  test("a first spawn long after startup, once an attached server has gone, reads again", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { login, reads, bin } = counting();
+    const environment = await startupEnvironment(
+      { PATH: "/usr/bin:/bin" },
+      { platform: "darwin", shells: [login] },
+    );
+    vi.setSystemTime(Date.now() + 10_001);
+    bin("/second/bin");
+    await expect(environment.forSpawn()).resolves.toMatchObject({
+      PATH: "/second/bin:/usr/bin:/bin",
+    });
+    expect(reads()).toBe(2);
+  });
 });
 
 describe("dataHome", () => {

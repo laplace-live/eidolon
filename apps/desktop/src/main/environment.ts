@@ -16,23 +16,37 @@ const SESSION = new Set(["PWD", "OLDPWD", "SHLVL", "_", ...Object.keys(PROBE_ENV
 /** As @eidolon/config's envFlag reads a flag that defaults to on. */
 const FLAG_OFF = new Set(["false", "0", "no", "off"]);
 
-export interface BackendEnvironment {
-  readonly env: NodeJS.ProcessEnv;
-  /** The login shells that gave nothing, in the order tried; empty when none was read. */
-  readonly failures: readonly LoginShellFailure[];
-}
+/**
+ * How long the startup read stands in for the first spawn's: a cold start spawns within a hint
+ * probe's 2 s of it, and a server attached at startup gives way to ours only after 60 s.
+ */
+const STARTUP_READ_MS = 10_000;
 
-export interface BackendEnvironmentOptions {
-  /**
-   * The payload's folder, for `EIDOLON_APP_ROOT`; null for the dev backend, which runs from the
-   * checkout and finds its files there.
-   */
-  readonly appRoot: string | null;
+export interface EnvironmentOptions {
   readonly platform?: NodeJS.Platform;
   /** The login shells to try; the account's, then zsh, bash and sh, unless a test names its own. */
   readonly shells?: readonly string[];
   /** Aborting ends a login shell's read: the launch environment is used. */
   readonly signal?: AbortSignal;
+  /** Where a login shell's failure goes: main.log. */
+  readonly log?: { warn(message: string): void };
+}
+
+export interface EnvironmentRead {
+  readonly env: NodeJS.ProcessEnv;
+  /** The login shells that gave nothing, in the order tried; empty when none was read. */
+  readonly failures: readonly LoginShellFailure[];
+}
+
+export interface StartupEnvironment {
+  /** What the startup read gave, which the data home comes from. */
+  readonly env: NodeJS.ProcessEnv;
+  /**
+   * The controller's `environment`, called before each spawn: a fresh read, so a Restart sees a
+   * changed PATH, but for a first spawn just after startup, which takes the startup read so a cold
+   * start runs the owner's rc files once.
+   */
+  readonly forSpawn: () => Promise<NodeJS.ProcessEnv>;
 }
 
 /** Every key of `env` that names `name`: on Windows, whose names have no case, each spelling. */
@@ -111,20 +125,47 @@ export function withBackendVariables(
 }
 
 /**
- * The environment for one spawn of the backend, read afresh each time so a restart sees a changed
- * PATH: on macOS the login shell's merged over `launch`, unless `EIDOLON_DESKTOP_LOGIN_SHELL` is
- * off or every shell fails, and on Windows `launch` as it is. Never rejects.
+ * What the backend runs on before its own variables: on macOS the login shell's merged over
+ * `launch`, unless `EIDOLON_DESKTOP_LOGIN_SHELL` is off or every shell fails, and on Windows
+ * `launch` as it is. Never rejects; a shell that fails is logged.
  */
-export async function backendEnvironment(
+export async function readEnvironment(
   launch: NodeJS.ProcessEnv,
-  { appRoot, platform = process.platform, shells, signal }: BackendEnvironmentOptions,
-): Promise<BackendEnvironment> {
+  { platform = process.platform, shells, signal, log = console }: EnvironmentOptions = {},
+): Promise<EnvironmentRead> {
   if (platform === "win32" || loginShellOff(launch, platform)) {
-    return { env: withBackendVariables(launch, appRoot, platform), failures: [] };
+    return { env: { ...launch }, failures: [] };
   }
   const { variables, failures } = await readLoginShell(launch, { shells, signal });
-  const env = variables === null ? launch : mergeShellEnvironment(launch, variables, platform);
-  return { env: withBackendVariables(env, appRoot, platform), failures };
+  if (failures.length > 0) {
+    const failed = failures.map(({ shell, reason }) => `${shell} (${reason})`).join(", ");
+    log.warn(
+      variables === null
+        ? `Eidolon: no login shell gave its environment, so the backend runs on the launch's: ${failed}`
+        : `Eidolon: login shells that gave no environment before one did: ${failed}`,
+    );
+  }
+  const env =
+    variables === null ? { ...launch } : mergeShellEnvironment(launch, variables, platform);
+  return { env, failures };
+}
+
+/** Reads the environment at startup, for the data home, and serves each spawn's after it. */
+export async function startupEnvironment(
+  launch: NodeJS.ProcessEnv,
+  options: EnvironmentOptions = {},
+): Promise<StartupEnvironment> {
+  const { env } = await readEnvironment(launch, options);
+  const readAt = Date.now();
+  let unused: NodeJS.ProcessEnv | null = env;
+  return {
+    env,
+    forSpawn: async () => {
+      const startup = unused !== null && Date.now() - readAt <= STARTUP_READ_MS ? unused : null;
+      unused = null;
+      return startup ?? (await readEnvironment(launch, options)).env;
+    },
+  };
 }
 
 /** The data home the backend finds in `env`, as @eidolon/config's dataHome() does. */
