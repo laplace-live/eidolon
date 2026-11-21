@@ -223,8 +223,10 @@ original) or one code path against another (the pipeline's dry run against the p
   loader off for what still runs on Bun, which would expand bare `$VAR` and read `.env.local`;
   `vitest.config.ts` loads none into a test.
 - **No module reads env at import.** Everything reads at call time, so the order of imports
-  against the `.env` load cannot pin a fallback. The one exception is
-  `apps/bot/src/local/environ.ts`, below.
+  against the `.env` load cannot pin a fallback. The exceptions are
+  `apps/bot/src/local/environ.ts`, below, and the desktop's `apps/desktop/src/main/instance.ts`,
+  whose process loads no `.env` and must settle background mode before Electron's `ready`
+  ([desktop.md](desktop.md#startup)).
 - **A child inherits what `.env` set, unless it reads `.env` itself.** `spawnProcess` without
   `env` passes `process.env` as it is now, and `which` reads its `PATH` at call time, so yt-dlp
   gets a proxy the `.env` sets. A child that runs a `load-env.ts` of its own, a job's CLI or the

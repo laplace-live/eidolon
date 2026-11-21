@@ -256,7 +256,9 @@ the layout's one line.
   `bunfig.toml` sets `env = false` for what runs on Bun, and `vitest.config.ts`
   loads none into a test. No module reads env at import but
   `apps/bot/src/local/environ.ts`, which the local entries import before
-  `load-env.ts` so the server and jobs they spawn start without its keys. It walks
+  `load-env.ts` so the server and jobs they spawn start without its keys, and the
+  desktop's `apps/desktop/src/main/instance.ts`, whose process loads no `.env` and
+  must settle background mode before Electron's `ready`. `load-env.ts` walks
   up to the first `.env`, and a git worktree without one, wherever it lives,
   reads its main checkout's, real keys included; `EIDOLON_NO_DOTENV=1` skips it.
 - **Production never runs local mode.** `main.ts` and the code it loads never
