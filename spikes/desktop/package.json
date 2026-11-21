@@ -1,0 +1,15 @@
+{
+  "name": "eidolon-desktop-spike",
+  "productName": "Eidolon",
+  "version": "0.0.0-spike",
+  "description": "Phase 0 spike of the Eidolon desktop app",
+  "private": true,
+  "main": "app/main.cjs",
+  "author": "LAPLACE Live!",
+  "license": "AGPL-3.0-only",
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.18.1",
+    "playwright-core": "1.64.1"
+  }
+}

@@ -1,0 +1,64 @@
+# Phase 0 spike: electron-builder 26 on persona's pattern (apps/desktop/electron-builder.yml there).
+# Every build passes -c.extraMetadata.version; release signing is electron-builder.release.mjs.
+appId: live.laplace.eidolon
+productName: Eidolon
+electronVersion: 45.4.1
+# A per-user NSIS install goes to %LOCALAPPDATA%\Programs\<name>, from the package name.
+extraMetadata:
+  name: eidolon
+npmRebuild: false
+asar: true
+directories:
+  output: .out
+  # The root .gitignore ignores build/ at any depth.
+  buildResources: resources
+files:
+  - app/**
+  - package.json
+publish:
+  provider: generic
+  url: https://downloads.vrp.moe/eidolon
+  useMultipleRangeRequest: false
+# Every fuse electron-builder 26.18.1 knows, listed, since unlisted fuses keep Electron's defaults.
+electronFuses:
+  runAsNode: true
+  enableCookieEncryption: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  grantFileProtocolExtraPrivileges: false
+  resetAdHocDarwinSignature: true
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.inherit.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Eidolon uses your microphone for calls and voice messages.
+  # The backend payload, outside the asar so onnxruntime and LanceDB open real files, run by this
+  # binary as Node. electron-builder drops a source folder's own top-level node_modules whatever the
+  # filter (app-builder-lib out/util/filter.js), so the source is the folder above the payload.
+  extraResources:
+    - from: .stage/darwin-arm64
+      to: .
+      filter: ["eidolon/**/*"]
+dmg:
+  writeUpdateInfo: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  extraResources:
+    - from: .stage/win32-x64
+      to: .
+      filter: ["eidolon/**/*"]
+nsis:
+  # electron-builder#6865 workaround, from persona.
+  include: resources/installer.nsh

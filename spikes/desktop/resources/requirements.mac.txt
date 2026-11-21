@@ -1,0 +1,6 @@
+/*
+ * Designated requirement for release builds: code from the old (Sparanoid, Inc.) or new (LAPLACE Live LLC)
+ * Apple team, so installs accept updates across the team switch (docs/release.md). Team-only on purpose:
+ * electron-builder applies this to every signed file, and helpers carry their own identifiers.
+ */
+designated => anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and (certificate leaf[subject.OU] = "B5483RCL5H" or certificate leaf[subject.OU] = "9H3CCD4YMM")
