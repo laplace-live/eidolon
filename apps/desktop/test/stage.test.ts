@@ -78,6 +78,25 @@ function same(path: string): string {
   return process.platform === "win32" ? path.toLowerCase() : path;
 }
 
+/** The folder, under node_modules, of the package a path there belongs to. */
+function packageOf(path: string): string {
+  const parts = path.split("/");
+  const at = parts.lastIndexOf("node_modules");
+  const rest = parts.slice(at + 1);
+  const name = rest[0]?.startsWith("@") ? rest.slice(0, 2) : rest.slice(0, 1);
+  return [...parts.slice(0, at + 1), ...name].join("/");
+}
+
+/** THIRD_PARTY_LICENSES.txt's sections, by title. */
+function licenseSections(text: string): Map<string, string> {
+  const parts = text.split(/^={78}\n(.+)\n={78}\n/m);
+  const found = new Map<string, string>();
+  for (let i = 1; i < parts.length; i += 2) {
+    found.set(parts[i] as string, (parts[i + 1] as string).trim());
+  }
+  return found;
+}
+
 for (const target of Object.keys(TARGETS) as Target[]) {
   const payload = payloadDir(target);
   const staged = existsSync(payload);
@@ -115,7 +134,11 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       expect(files.filter((file) => /(^|\/)(\.bin\/|\.?package-lock\.json$)/.test(file))).toEqual(
         [],
       );
-      const licenses = readFileSync(join(payload, LICENSES_FILE), "utf8");
+    });
+
+    test("gives every license it holds in the one file the Licenses item opens", () => {
+      const licenses = licenseSections(readFileSync(join(payload, LICENSES_FILE), "utf8"));
+      const titles = [...licenses.keys()];
       for (const name of [
         "onnxruntime-node",
         "sharp",
@@ -123,7 +146,40 @@ for (const target of Object.keys(TARGETS) as Target[]) {
         "apache-arrow",
         PLATFORMS[target],
       ]) {
-        expect([name, licenses.includes(`\n${name} `)]).toEqual([name, true]);
+        expect([name, titles.some((title) => title.startsWith(`${name} `))]).toEqual([name, true]);
+      }
+      for (const file of [
+        "NOTICE",
+        "THIRD_PARTY_NOTICES.md",
+        "data/jieba/LICENSE",
+        "data/models/THIRD_PARTY_LICENSES.md",
+        "data/resampler/LICENSE",
+        "data/resampler/THIRD_PARTY_LICENSES.md",
+      ]) {
+        expect([file, licenses.get(file)]).toEqual([
+          file,
+          readFileSync(join(payload, file), "utf8").trim(),
+        ]);
+      }
+      // libvips is LGPL-3.0-or-later: in its own package on macOS, in sharp's build on Windows.
+      const libvips = new Set(
+        listing(modules)
+          .files.filter((file) => /(^|\/)libvips[-.][^/]*\.(dll|dylib|so)/.test(file))
+          .map((file) => {
+            const dir = join(modules, packageOf(file));
+            const { name, version } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+            return `${name} ${version} `;
+          }),
+      );
+      expect(libvips.size).toBeGreaterThan(0);
+      for (const prefix of libvips) {
+        const text = [...licenses].find(([title]) => title.startsWith(prefix))?.[1] ?? "";
+        for (const line of [
+          "Its source is at https://github.com/libvips/libvips",
+          "GNU LESSER GENERAL PUBLIC LICENSE",
+        ]) {
+          expect([prefix, line, text.includes(line)]).toEqual([prefix, line, true]);
+        }
       }
     });
 

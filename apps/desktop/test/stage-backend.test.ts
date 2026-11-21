@@ -536,10 +536,36 @@ describe("the unsigned-PE list", () => {
 });
 
 describe("THIRD_PARTY_LICENSES.txt", () => {
-  test("gives each package its own license, else SPDX's, and says where libvips's source is", () => {
-    const modules = temp();
-    const manifest = (dir: string, fields: Record<string, string>) =>
-      put(join(dir, "package.json"), JSON.stringify(fields));
+  const LIBVIPS_SOURCE = "Its source is at https://github.com/libvips/libvips";
+  const LGPL_TITLE = "GNU LESSER GENERAL PUBLIC LICENSE";
+
+  /** A payload with what stage() writes beside node_modules: NOTICE, the notices and data/. */
+  function payload(): string {
+    const dir = temp();
+    put(join(dir, "NOTICE"), "Eidolon\n\nNOTICE's own text\n");
+    put(join(dir, "THIRD_PARTY_NOTICES.md"), "# Third-party notices\n\n### inlined 1.0.0 (MIT)\n");
+    put(join(dir, "data", "jieba", "LICENSE"), "jieba's license\n");
+    put(join(dir, "data", "jieba", "dict.txt"), "dict\n");
+    put(join(dir, "data", "models", "THIRD_PARTY_LICENSES.md"), "the models' licenses\n");
+    put(join(dir, "web", "assets", "notices-x.js"), "export {};\n");
+    return dir;
+  }
+  function manifest(dir: string, fields: Record<string, string>): void {
+    put(join(dir, "package.json"), JSON.stringify(fields));
+  }
+  /** Each section's title, and the text under it. */
+  function sections(text: string): Map<string, string> {
+    const parts = text.split(/^={78}\n(.+)\n={78}\n/m);
+    const found = new Map<string, string>();
+    for (let i = 1; i < parts.length; i += 2) {
+      found.set(parts[i] as string, (parts[i + 1] as string).trim());
+    }
+    return found;
+  }
+
+  test("gives each package its own license, else SPDX's, then the payload's own notices", () => {
+    const root = payload();
+    const modules = join(root, "node_modules");
     manifest(join(modules, "own"), { name: "own", version: "1.0.0", license: "MIT" });
     put(join(modules, "own", "LICENSE.md"), "Copyright (c) Own\n");
     manifest(join(modules, "bare"), { name: "bare", version: "2.0.0", license: "Apache-2.0" });
@@ -548,36 +574,78 @@ describe("THIRD_PARTY_LICENSES.txt", () => {
       version: "1.0.0",
       license: "MIT",
     });
-    manifest(join(modules, "@img", "sharp-libvips-darwin-arm64"), {
+    put(join(modules, ".package-lock.json"), "{}");
+    const text = thirdPartyLicenses(root, null);
+    const found = sections(text);
+    expect([...found.keys()]).toEqual([
+      "bare 1.0.0 (MIT)",
+      "bare 2.0.0 (Apache-2.0)",
+      "own 1.0.0 (MIT)",
+      "NOTICE",
+      "THIRD_PARTY_NOTICES.md",
+      "data/jieba/LICENSE",
+      "data/models/THIRD_PARTY_LICENSES.md",
+    ]);
+    expect(found.get("own 1.0.0 (MIT)")).toBe("Copyright (c) Own");
+    expect(found.get("bare 1.0.0 (MIT)")).toContain("Permission is hereby granted, free of charge");
+    expect(found.get("bare 2.0.0 (Apache-2.0)")).toContain("Version 2.0, January 2004");
+    expect(found.get("NOTICE")).toBe("Eidolon\n\nNOTICE's own text");
+    expect(found.get("THIRD_PARTY_NOTICES.md")).toContain("### inlined 1.0.0 (MIT)");
+    expect(found.get("data/models/THIRD_PARTY_LICENSES.md")).toBe("the models' licenses");
+    expect(text).not.toContain(LIBVIPS_SOURCE);
+    expect(text).not.toContain(LGPL_TITLE);
+    expect(text).not.toContain("Visual C++");
+  });
+
+  test("says where libvips's source is and gives the LGPL, from its own package or sharp's", () => {
+    const root = payload();
+    const modules = join(root, "node_modules");
+    // macOS: libvips in its own package, which ships no license file.
+    const darwin = join(modules, "@img", "sharp-libvips-darwin-arm64");
+    manifest(darwin, {
       name: "@img/sharp-libvips-darwin-arm64",
       version: "1.3.4",
       license: "LGPL-3.0-or-later",
     });
-    put(join(modules, ".package-lock.json"), "{}");
-    const text = thirdPartyLicenses(modules, null);
-    const titles = [...text.matchAll(/^=+\n(.+)\n=+$/gm)].map((match) => match[1]);
-    expect(titles).toEqual([
+    put(join(darwin, "lib", "libvips-cpp.8.18.7.dylib"));
+    put(join(darwin, "README.md"), "| glib | LGPLv3 |\n");
+    // Windows: libvips inside sharp's own build, whose license file is the Apache half.
+    const win32 = join(modules, "@img", "sharp-win32-x64");
+    manifest(win32, {
+      name: "@img/sharp-win32-x64",
+      version: "0.35.5",
+      license: "Apache-2.0 AND LGPL-3.0-or-later",
+    });
+    put(join(win32, "LICENSE"), "Apache License\nVersion 2.0, January 2004\n");
+    put(join(win32, "lib", "libvips-42.dll"));
+    put(join(win32, "lib", "libvips-cpp-8.18.7.dll"));
+    put(join(win32, "lib", "sharp-win32-x64-0.35.5.node"));
+    // sharp's JS names libvips too, but ships none of it.
+    manifest(join(modules, "sharp"), { name: "sharp", version: "0.35.5", license: "Apache-2.0" });
+    put(join(modules, "sharp", "dist", "libvips.cjs"));
+    const found = sections(thirdPartyLicenses(root, null));
+    for (const title of [
       "@img/sharp-libvips-darwin-arm64 1.3.4 (LGPL-3.0-or-later)",
-      "bare 1.0.0 (MIT)",
-      "bare 2.0.0 (Apache-2.0)",
-      "own 1.0.0 (MIT)",
-    ]);
-    for (const line of [
-      "Copyright (c) Own",
-      "Permission is hereby granted, free of charge",
-      "Version 2.0, January 2004",
-      "sharp links libvips dynamically. Its source is at https://github.com/libvips/libvips",
-      "GNU LESSER GENERAL PUBLIC LICENSE",
-      "GNU GENERAL PUBLIC LICENSE",
-      "THIRD_PARTY_NOTICES.md",
+      "@img/sharp-win32-x64 0.35.5 (Apache-2.0 AND LGPL-3.0-or-later)",
     ]) {
-      expect([line, text.includes(line)]).toEqual([line, true]);
+      const text = found.get(title) ?? "";
+      for (const line of [LIBVIPS_SOURCE, "https://github.com/lovell/sharp-libvips", LGPL_TITLE]) {
+        expect([title, line, text.includes(line)]).toEqual([title, line, true]);
+      }
+      expect(text.split(LGPL_TITLE)).toHaveLength(2);
     }
-    expect(text).not.toContain("Visual C++");
+    expect(found.get("@img/sharp-libvips-darwin-arm64 1.3.4 (LGPL-3.0-or-later)")).toContain(
+      "| glib | LGPLv3 |",
+    );
+    const win32Text = found.get("@img/sharp-win32-x64 0.35.5 (Apache-2.0 AND LGPL-3.0-or-later)");
+    expect(win32Text).toContain(
+      "Apache License\nVersion 2.0, January 2004\n\nThe package also declares LGPL-3.0-or-later",
+    );
+    expect(found.get("sharp 0.35.5 (Apache-2.0)")).not.toContain(LIBVIPS_SOURCE);
   });
 
   test("names the VC++ runtime on Windows, and the terms it ships under", () => {
-    const text = thirdPartyLicenses(temp(), { version: "14.52.37029", dir: "C:\\redist" });
+    const text = thirdPartyLicenses(payload(), { version: "14.52.37029", dir: "C:\\redist" });
     expect(text).toContain("Microsoft Visual C++ runtime 14.52.37029\n");
     expect(text).toContain(`${VC.join(", ")}, beside the native modules that load them`);
     expect(text).toContain("the Visual Studio license terms");

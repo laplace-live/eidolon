@@ -329,20 +329,26 @@ export function inlinedPackages(inlined: ReadonlyMap<string, string>): Bundled[]
   });
 }
 
+/** SPDX's text of the license `identifier` names, or null when spdx/ has none. */
+export function spdxText(identifier: string): string | null {
+  const known = readdirSync(SPDX_DIR).map((file) => basename(file, ".txt"));
+  if (!known.includes(identifier)) return null;
+  return readFileSync(join(SPDX_DIR, `${identifier}.txt`), "utf8").trim();
+}
+
 /**
  * A package's license text: its own file's, else SPDX's text of the license it declares. One with
  * neither fails the build, so no notice ships without its text.
  */
 export function licenseText(pkg: Bundled): string {
   if (pkg.text) return pkg.text;
-  const known = readdirSync(SPDX_DIR).map((file) => basename(file, ".txt"));
-  if (pkg.identifier === undefined || !known.includes(pkg.identifier)) {
+  const spdx = pkg.identifier === undefined ? null : spdxText(pkg.identifier);
+  if (spdx === null) {
     throw new Error(
       `${pkg.name} ships no license file, and ${relative(ROOT, SPDX_DIR)}/ has no text for ` +
         `${pkg.identifier === undefined ? "its license, which it doesn't name" : pkg.identifier}`,
     );
   }
-  const spdx = readFileSync(join(SPDX_DIR, `${pkg.identifier}.txt`), "utf8").trim();
   return (
     `The package ships no license file; this is SPDX's text of ${pkg.identifier}, the license ` +
     `its package.json declares.\n\n${spdx}`

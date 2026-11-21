@@ -14,9 +14,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { type Bundled, inlinedPackages, licenseText, stage } from "../../eidolon/scripts/build.ts";
+import {
+  type Bundled,
+  inlinedPackages,
+  licenseText,
+  spdxText,
+  stage,
+} from "../../eidolon/scripts/build.ts";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { type LsNode, lockDrift, lockedTree, pinOverrides, readBunLock } from "./lockfile.ts";
 import { compareVersions, readPe } from "./pe.ts";
@@ -41,7 +47,7 @@ export const TARGETS = {
 
 export type Target = keyof typeof TARGETS;
 
-/** The license texts of node_modules, which the app's Licenses item opens. */
+/** In the payload: the licenses of the third-party code and data it holds, for the Licenses item. */
 export const LICENSES_FILE = "THIRD_PARTY_LICENSES.txt";
 /** Beside win32-x64's payload: the names of its unsigned PE files, and Electron's, for signExts. */
 export const UNSIGNED_PE_FILE = "unsigned-pe.json";
@@ -297,33 +303,81 @@ function section(title: string, text: string): string {
   return `${rule}\n${title}\n${rule}\n\n${text}\n`;
 }
 
+/** sharp's libvips: its own package's on macOS, inside sharp's on Windows. */
+const LIBVIPS = /^libvips[-.].*\.(dll|dylib|so)(\.\d+)*$/;
+const LGPL = "LGPL-3.0-or-later";
+/** The license files in the payload's data/. */
+const DATA_LICENSE = /^(LICENSE|THIRD_PARTY_LICENSES)(\.\w+)?$/;
+
+/** Whether the package at `dir` ships libvips, its own node_modules aside. */
+function shipsLibvips(dir: string): boolean {
+  return files(dir).some((file) => {
+    const path = relative(dir, file).split(sep);
+    return !path.includes("node_modules") && LIBVIPS.test(path.at(-1) ?? "");
+  });
+}
+
 /**
- * THIRD_PARTY_LICENSES.txt: each package in `modules` with its license text, and on Windows the
- * VC++ runtime copied from `vcRuntime`.
+ * A node_modules package's license text, and for one that ships libvips, which is LGPL-3.0-or-later
+ * and linked dynamically, where its source is and the libraries its build includes. A license file
+ * that covers only part of what the package declares, as sharp's Windows build's covers the Apache
+ * half of `Apache-2.0 AND LGPL-3.0-or-later`, is followed by the LGPL's text.
  */
-export function thirdPartyLicenses(modules: string, vcRuntime: VcRedist | null): string {
-  const packages = new Map<string, Bundled>();
-  for (const [name, dir] of installedPackages(modules)) {
+function packageLicense(pkg: Bundled, dir: string): string {
+  const own = licenseText(pkg);
+  const parts = [own];
+  const declared: readonly string[] = pkg.identifier?.match(/[\w.+-]+/g) ?? [];
+  if (declared.includes(LGPL)) {
+    const lgpl = spdxText(LGPL);
+    if (lgpl === null) throw new Error(`apps/eidolon/spdx/ has no text for ${LGPL}`);
+    if (!own.includes(lgpl.split("\n", 1)[0] as string)) {
+      parts.push(
+        `The package also declares ${LGPL}, whose text its license file lacks; this is ` +
+          "SPDX's text of it.",
+        lgpl,
+      );
+    }
+  }
+  if (!shipsLibvips(dir)) return parts.join("\n\n");
+  const readme = join(dir, "README.md");
+  return [
+    "sharp links libvips dynamically. Its source is at https://github.com/libvips/libvips, and " +
+      "the source of this build of it, with the libraries it includes, at " +
+      "https://github.com/lovell/sharp-libvips.",
+    ...parts,
+    ...(existsSync(readme)
+      ? [
+          "The package's README.md, which lists those libraries and their licenses:",
+          readFileSync(readme, "utf8").trim(),
+        ]
+      : []),
+  ].join("\n\n");
+}
+
+/**
+ * THIRD_PARTY_LICENSES.txt, the one file the Licenses item opens, so it holds every license the
+ * payload carries: each node_modules package's, on Windows the VC++ runtime's copied from
+ * `vcRuntime`, then the payload's own NOTICE, THIRD_PARTY_NOTICES.md and its data's licenses.
+ */
+export function thirdPartyLicenses(payload: string, vcRuntime: VcRedist | null): string {
+  const packages = new Map<string, { pkg: Bundled; dir: string }>();
+  for (const [name, dir] of installedPackages(join(payload, "node_modules"))) {
     for (const pkg of inlinedPackages(new Map([[name, dir]]))) {
-      packages.set(`${pkg.name}@${pkg.version}`, pkg);
+      packages.set(`${pkg.name}@${pkg.version}`, { pkg, dir });
     }
   }
   const sections = [...packages.values()]
     .sort(
-      (a, b) =>
+      ({ pkg: a }, { pkg: b }) =>
         a.name.localeCompare(b.name) ||
         a.version.localeCompare(b.version, undefined, { numeric: true }),
     )
-    .map((pkg) => {
-      const note = pkg.name.startsWith("@img/sharp-libvips-")
-        ? "sharp links libvips dynamically. Its source is at https://github.com/libvips/libvips, " +
-          "and the source of this build of it, with the libraries it includes, at " +
-          "https://github.com/lovell/sharp-libvips; the package's README.md lists those " +
-          "libraries and their licenses.\n\n"
-        : "";
-      const title = `${pkg.name} ${pkg.version} (${pkg.identifier ?? "no license field"})`;
-      return section(title, `${note}${licenseText(pkg)}`);
-    });
+    .map(({ pkg, dir }) =>
+      section(
+        `${pkg.name} ${pkg.version} (${pkg.identifier ?? "no license field"})`,
+        packageLicense(pkg, dir),
+      ),
+    );
   const runtime =
     vcRuntime === null
       ? []
@@ -335,14 +389,24 @@ export function thirdPartyLicenses(modules: string, vcRuntime: VcRedist | null):
               "the Visual Studio license terms.",
           ),
         ];
+  const data = join(payload, "data");
+  const dataLicenses = existsSync(data)
+    ? files(data).filter((file) => DATA_LICENSE.test(basename(file)))
+    : [];
+  const notices = [
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    ...dataLicenses.map((file) => relative(payload, file).split(sep).join("/")).sort(),
+  ].map((path) => section(path, readFileSync(join(payload, path), "utf8").trim()));
   return [
     "Third-party licenses\n",
-    "Eidolon's backend runs on the packages below, from its node_modules folder, each with its",
-    "license. The packages its bundles in dist/ and its web app in web/ include are listed in",
-    "THIRD_PARTY_NOTICES.md, beside this file; NOTICE covers the code Eidolon ports from other",
-    "projects, and the data and the font it ships.\n",
+    "Eidolon's backend includes the third-party code and data below, each with its license: first",
+    "what its node_modules folder holds, then NOTICE, which covers the code Eidolon ports from other",
+    "projects and the data and the font it ships, then THIRD_PARTY_NOTICES.md, for the packages its",
+    "bundles in dist/ and its web app in web/ include, and last the license files of its data.\n",
     ...sections,
     ...runtime,
+    ...notices,
   ].join("\n");
 }
 
@@ -424,7 +488,7 @@ export async function stageBackend(
         `${JSON.stringify(unsigned, null, 2)}\n`,
       );
     }
-    writeFileSync(join(payload, LICENSES_FILE), thirdPartyLicenses(modules, vcRuntime));
+    writeFileSync(join(payload, LICENSES_FILE), thirdPartyLicenses(payload, vcRuntime));
   } catch (error) {
     rmSync(stageDir(target), { recursive: true, force: true });
     throw error;
