@@ -1,6 +1,7 @@
 // The controller and the forwarder against real processes: a plain script that answers as the local
 // server does (IPC listening, probe proofs, the Bearer, exit 75 on restart, a stop on the channel's
 // close), on temporary homes and ports the OS picks.
+import "../../../packages/config/test/isolated-guard.ts";
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
