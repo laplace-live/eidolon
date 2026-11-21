@@ -151,7 +151,7 @@ function vcRedist() {
 /** File versions, through PowerShell: the PE header holds none. */
 function fileVersions(paths) {
   const list = paths.map((p) => `'${p.replace(/'/g, "''")}'`).join(",");
-  const script = `@(${list}) | ForEach-Object { $v = (Get-Item -LiteralPath $_).VersionInfo; [pscustomobject]@{ path = $_; file = $v.FileVersion; product = $v.ProductVersion } } | ConvertTo-Json -Compress`;
+  const script = `$ProgressPreference = "SilentlyContinue"; @(${list}) | ForEach-Object { $v = (Get-Item -LiteralPath $_).VersionInfo; [pscustomobject]@{ path = $_; file = $v.FileVersion; product = $v.ProductVersion } } | ConvertTo-Json -Compress`;
   const out = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" });
   const parsed = JSON.parse(out);
   return Array.isArray(parsed) ? parsed : [parsed];

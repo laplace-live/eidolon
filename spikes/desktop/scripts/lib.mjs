@@ -211,7 +211,8 @@ export async function appPage(browser, timeoutMs = 30_000) {
 // ---- processes -------------------------------------------------------------------------------
 /** Runs a PowerShell script, passed encoded so no quoting reaches the command line. */
 export function powershell(script, options = {}) {
-  const encoded = Buffer.from(`[Console]::OutputEncoding = [Text.Encoding]::UTF8\n${script}`, "utf16le").toString("base64");
+  // No progress records: redirected, PowerShell writes them to stderr as CLIXML.
+  const encoded = Buffer.from(`$ProgressPreference = "SilentlyContinue"\n[Console]::OutputEncoding = [Text.Encoding]::UTF8\n${script}`, "utf16le").toString("base64");
   return execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -248,7 +249,7 @@ export function processes(needle) {
 /** Starts a background poll that appends every process named `name` to `file` as JSON lines. */
 export function watchProcesses(file, name) {
   if (IS_WINDOWS) {
-    const script = `while ($true) { Get-CimInstance Win32_Process -Filter "Name='${name}'" | Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress | Add-Content -LiteralPath '${file.replace(/'/g, "''")}' -Encoding UTF8; Start-Sleep -Milliseconds 50 }`;
+    const script = `$ProgressPreference = "SilentlyContinue"; while ($true) { Get-CimInstance Win32_Process -Filter "Name='${name}'" | Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress | Add-Content -LiteralPath '${file.replace(/'/g, "''")}' -Encoding UTF8; Start-Sleep -Milliseconds 50 }`;
     const encoded = Buffer.from(script, "utf16le").toString("base64");
     const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], { stdio: "ignore" });
     recordPid(child.pid, `process watch for ${name}`);

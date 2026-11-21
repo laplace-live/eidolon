@@ -41,11 +41,15 @@ function walk(dir, out = []) {
   return out;
 }
 
-function finish(step, pass, evidence) {
+/**
+ * Records the check and exits 1 only when `done` is false: the install or uninstall didn't happen.
+ * A check that fails otherwise leaves the next steps running; report.mjs fails the job for it.
+ */
+function finish(step, pass, evidence, done = true) {
   const file = writeEvidence(`windows-${LABEL}-${step}.json`, { label: LABEL, step, status: pass ? "pass" : "fail", ...evidence });
   console.log(JSON.stringify({ status: pass ? "pass" : "fail", ...evidence }, null, 1));
   console.log(`${step} (${LABEL}): ${pass ? "pass" : "fail"}; evidence in ${file}`);
-  process.exit(pass ? 0 : 1);
+  process.exit(done ? 0 : 1);
 }
 
 /** Authenticode status, signer and timestamper of each path. */
@@ -55,7 +59,7 @@ function signatures(paths) {
   const list = join(RUNS, `signature-paths-${process.pid}.txt`);
   writeFileSync(list, paths.join("\n"), "utf8");
   return powershellJson(
-    `Get-Content -LiteralPath ${quote(list)} -Encoding UTF8 | Where-Object { $_ } | ForEach-Object { $s = Get-AuthenticodeSignature -LiteralPath $_; [pscustomobject]@{ path = $_; status = $s.Status.ToString(); signer = $s.SignerCertificate.Subject; issuer = $s.SignerCertificate.Issuer; timestamper = $s.TimeStamperCertificate.Subject } }`,
+    `Get-Content -LiteralPath ${quote(list)} -Encoding UTF8 | Where-Object { $_ } | ForEach-Object { $s = Get-AuthenticodeSignature -LiteralPath $_; [pscustomobject]@{ path = [string]$_; status = $s.Status.ToString(); signer = $s.SignerCertificate.Subject; issuer = $s.SignerCertificate.Issuer; timestamper = $s.TimeStamperCertificate.Subject } }`,
   );
 }
 const cnOf = (subject) => subject?.match(/CN=("([^"]+)"|[^,]+)/)?.slice(2).find(Boolean) ?? subject?.match(/CN=([^,]+)/)?.[1] ?? null;
@@ -71,8 +75,8 @@ function shortcutFacts() {
   const [facts] = powershellJson(
     `$lnk = ${quote(START_MENU_LINK)}
 $target = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath
-$folder = (New-Object -ComObject Shell.Application).Namespace((Split-Path -LiteralPath $lnk))
-$item = $folder.ParseName((Split-Path -Leaf -LiteralPath $lnk))
+$folder = (New-Object -ComObject Shell.Application).Namespace([System.IO.Path]::GetDirectoryName($lnk))
+$item = $folder.ParseName([System.IO.Path]::GetFileName($lnk))
 $aumid = $null
 try { $aumid = $item.ExtendedProperty('System.AppUserModel.ID') } catch {}
 $start = $null
@@ -83,6 +87,13 @@ try { $start = @(Get-StartApps -Name 'Eidolon' | Select-Object Name,AppID) } cat
   const raw = readFileSync(START_MENU_LINK).includes(Buffer.from(APP_USER_MODEL_ID, "utf16le"));
   return { exists: true, path: START_MENU_LINK, ...facts, aumidInLinkBytes: raw };
 }
+
+// A crash still leaves evidence.
+process.on("uncaughtException", (error) => {
+  writeEvidence(`windows-${LABEL}-${command}.json`, { label: LABEL, step: command, status: "fail", error: String(error?.stack ?? error) });
+  console.error(error);
+  process.exit(1);
+});
 
 if (command === "install") {
   const setup = setupIn(positional);
@@ -118,7 +129,7 @@ if (command === "install") {
     machine.length === 0 &&
     shortcut.exists &&
     aumid === APP_USER_MODEL_ID;
-  finish("install", pass, evidence);
+  finish("install", pass, evidence, evidence.exe);
 }
 
 /** Every file under `dir` with its size and SHA-256. */
@@ -160,7 +171,7 @@ if (command === "uninstall") {
     defaultProfileExists: existsSync(join(process.env.APPDATA ?? "", "Eidolon")),
   };
   const pass = started?.exitCode === 0 && !existsSync(EXE) && evidence.dataHome.files > 0 && changed.length === 0;
-  finish("uninstall", pass, evidence);
+  finish("uninstall", pass, evidence, !existsSync(EXE));
 }
 
 if (command === "signatures") {

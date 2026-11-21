@@ -151,6 +151,12 @@ jobs:
         if: ${{ !cancelled() && steps.install-signed.outcome == 'success' }}
         run: node scripts/windows.mjs uninstall --label signed --run signed
 
+      # The step scripts fail only when an install or uninstall didn't happen; this fails the job
+      # for any check that did not pass.
+      - name: Report
+        if: always()
+        run: node scripts/report.mjs windows
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -246,6 +252,10 @@ jobs:
       - name: Walk the signed app (M6)
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         run: node scripts/checks.mjs --suite mac-signed --name signed --app .out/mac-arm64/Eidolon.app/Contents/MacOS/Eidolon
+
+      - name: Report
+        if: always()
+        run: node scripts/report.mjs macos
 
       - uses: actions/upload-artifact@v7
         if: always()
