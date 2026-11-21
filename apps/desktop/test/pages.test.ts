@@ -169,36 +169,54 @@ describe("Try Again", () => {
 describe("the failure page's words", () => {
   const backend = (failure: BackendFailure): Failure => ({ kind: "backend", failure });
 
-  test("a backend that ended: its stderr's tail, then why, in a line", () => {
+  test("a backend that ended: why, in the page's language, and its stderr as it wrote it", () => {
     expect(failurePage(backend(EXITED), en)).toEqual({
       title: "Eidolon's server stopped",
-      message: "Try again. If it happens again, Show Logs has the details.",
-      stderr: "boom\nThe server exited with code 1.",
+      message: "It exited with code 1.\nTry again. If it happens again, Show Logs has the details.",
+      stderr: "boom",
+    });
+    expect(failurePage(backend(EXITED), zh)).toEqual({
+      title: "Eidolon 的服务器停止了",
+      message: "它退出了，退出码为 1。\n请重试。如果再次出现，详情请在「显示日志」中查看。",
+      stderr: "boom",
     });
     const killed = { reason: "exited", code: null, signal: "SIGKILL", stderr: [] } as const;
-    expect(failurePage(backend(killed), en).stderr).toBe("The server stopped on SIGKILL.");
-    for (const [failure, line] of [
-      [{ reason: "no-listening", stderr: [] }, "The server didn't start listening within 60 s."],
-      [
-        { reason: "token", stderr: [] },
-        "The server listened, but left no local-token to reach it with.",
-      ],
-      [{ reason: "unanswered", stderr: [] }, "The server stopped answering for 60 s."],
-      [
-        { reason: "error", message: "spawn EACCES", stderr: [] },
-        "The server couldn't be started: spawn EACCES",
-      ],
+    expect(failurePage(backend(killed), en)).toMatchObject({
+      message: `It was ended by SIGKILL.\n${en.text.failed}`,
+      stderr: "",
+    });
+    for (const failure of [
+      { reason: "no-listening", stderr: ["a", "b"] },
+      { reason: "token", stderr: ["a", "b"] },
+      { reason: "unanswered", stderr: ["a", "b"] },
     ] as const) {
-      expect(failurePage(backend(failure), en).stderr).toBe(line);
+      expect(failurePage(backend(failure), zh)).toEqual({
+        title: zh.text.serverStopped,
+        message: `${zh.text.serverStop(failure)}\n${zh.text.failed}`,
+        stderr: "a\nb",
+      });
     }
   });
 
+  test("a spawn that failed: its error under the details, where its stderr would be", () => {
+    const failed = { reason: "error", message: "spawn EACCES", stderr: [] } as const;
+    expect(failurePage(backend(failed), en)).toEqual({
+      title: "Eidolon's server stopped",
+      message: `It couldn't be started.\n${en.text.failed}`,
+      stderr: "spawn EACCES",
+    });
+  });
+
   test("another Eidolon on the data home: who it is", () => {
-    const held: BackendFailure = { reason: "held", holder: { pid: 4821, port: 7861 }, stderr: [] };
+    const held: BackendFailure = {
+      reason: "held",
+      holder: { pid: 4821, port: 7861 },
+      stderr: ["eidolon: Eidolon is already running on this data home (pid 4821, port 7861)"],
+    };
     expect(failurePage(backend(held), en)).toEqual({
       title: "Another Eidolon is using this data home",
       message: en.text.heldDetail({ pid: 4821, port: 7861 }),
-      stderr: "Another Eidolon holds this data home and didn't answer.",
+      stderr: "eidolon: Eidolon is already running on this data home (pid 4821, port 7861)",
     });
     expect(failurePage(backend({ reason: "held", stderr: [] }), zh).message).toBe(
       zh.text.heldDetail({ pid: null, port: null }),

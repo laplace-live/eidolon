@@ -21,38 +21,28 @@ export interface PagesIo {
   reloadApp(): void;
 }
 
-/** The backend's failure in one line, after its stderr: the page shows the tail's end first. */
-function summary(failure: BackendFailure): string {
-  switch (failure.reason) {
-    case "exited":
-      return failure.signal
-        ? `The server stopped on ${failure.signal}.`
-        : `The server exited with code ${failure.code ?? "unknown"}.`;
-    case "no-listening":
-      return "The server didn't start listening within 60 s.";
-    case "token":
-      return "The server listened, but left no local-token to reach it with.";
-    case "unanswered":
-      return "The server stopped answering for 60 s.";
-    case "held":
-      return "Another Eidolon holds this data home and didn't answer.";
-    case "error":
-      return `The server couldn't be started: ${failure.message ?? "unknown error"}`;
-  }
-}
-
-/** The failure page's words for `failure`, in `strings`' language; its details stay as written. */
+/**
+ * The failure page's words for `failure`, in `strings`' language: why in its message, and under
+ * Details the backend's stderr, or what failed, as they were written.
+ */
 export function failurePage(failure: Failure, { text }: Strings): ShellFailure {
   if (failure.kind === "window") {
     return { title: text.windowFailed, message: text.failed, stderr: failure.detail };
   }
   const { failure: backend } = failure;
-  const stderr = [...backend.stderr, summary(backend)].join("\n");
-  if (backend.reason === "held") {
+  const { reason, code, signal, message } = backend;
+  // A spawn that failed wrote nothing: its error is what there is to show.
+  const lines = reason === "error" && message ? [...backend.stderr, message] : backend.stderr;
+  const stderr = lines.join("\n");
+  if (reason === "held") {
     const holder = backend.holder ?? { pid: null, port: null };
     return { title: text.held, message: text.heldDetail(holder), stderr };
   }
-  return { title: text.serverStopped, message: text.failed, stderr };
+  return {
+    title: text.serverStopped,
+    message: `${text.serverStop({ reason, code, signal })}\n${text.failed}`,
+    stderr,
+  };
 }
 
 /** The shell pages' own strings, in `language`. */

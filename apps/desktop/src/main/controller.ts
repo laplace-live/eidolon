@@ -54,7 +54,7 @@ export interface BackendFailure {
   /** For `held`: the other Eidolon, as its lock or its refusal named it. */
   readonly holder?: Holder;
   readonly message?: string;
-  /** The backend's last lines on stderr, for the failure page. */
+  /** The backend's last lines on stderr, since it listened if it did, for the failure page. */
   readonly stderr: readonly string[];
 }
 
@@ -707,6 +707,9 @@ export class BackendController {
     }
     const origin = `http://127.0.0.1:${message.port}`;
     this.#log.info(`Eidolon: the backend listens on ${origin}`);
+    // What it wrote while booting belongs to a start that worked, such as a fresh home's warnings
+    // that name commands to build its indexes: a failure from here on shows what came after.
+    spawned.stderr.length = 0;
     this.#begin({ phase: "ready", origin, token, owned: true, pid: spawned.child.pid ?? null });
   }
 

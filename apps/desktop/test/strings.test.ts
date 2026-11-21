@@ -95,6 +95,38 @@ describe("STRINGS", () => {
     );
   });
 
+  test("says why the server stopped in both languages, as a sentence", () => {
+    const stops = [
+      { reason: "exited", code: 1, signal: null },
+      { reason: "exited", code: null, signal: "SIGKILL" },
+      { reason: "exited" },
+      { reason: "no-listening" },
+      { reason: "token" },
+      { reason: "unanswered" },
+      { reason: "error" },
+    ] as const;
+    expect(stops.map((stop) => en.text.serverStop(stop))).toEqual([
+      "It exited with code 1.",
+      "It was ended by SIGKILL.",
+      "It exited.",
+      "It didn't finish starting within 60 seconds, so Eidolon stopped it.",
+      "It started but left no local-token to connect with, so Eidolon stopped it.",
+      "It didn't answer for 60 seconds, so Eidolon stopped it.",
+      "It couldn't be started.",
+    ]);
+    expect(stops.map((stop) => zh.text.serverStop(stop))).toEqual([
+      "它退出了，退出码为 1。",
+      "它被 SIGKILL 信号结束了。",
+      "它退出了。",
+      "它没有在 60 秒内完成启动，Eidolon 已将它停止。",
+      "它启动了，但没有留下可用于连接的 local-token，Eidolon 已将它停止。",
+      "它已有 60 秒没有响应，Eidolon 已将它停止。",
+      "它无法启动。",
+    ]);
+    const english = stops.map((stop) => en.text.serverStop(stop));
+    expect(english.filter((line) => titleCase(line) === line)).toEqual([]);
+  });
+
   test("counts what a quit stops in Chinese, and names both versions in the About panel", () => {
     expect(zh.text.quitDetail({ calls: 2, tasks: 0, jobs: 1 })).toBe(
       "2 个通话和 1 个作业会在退出时中断。",

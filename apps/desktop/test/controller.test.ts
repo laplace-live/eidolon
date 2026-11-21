@@ -837,6 +837,26 @@ describe("our own server", () => {
     expect(r.backendLines.join("\n")).not.toContain(LINK);
   });
 
+  test("what it wrote while it booted isn't a later failure's: the tail starts when it listens", async () => {
+    const r = rig();
+    r.controller.start();
+    await settle();
+    const child = r.last();
+    child.complain(
+      "Persona facts: no LanceDB table. Run `bun run laplace-ingest-facts` to build it.",
+    );
+    await settle();
+    child.listen(7860);
+    child.complain("boom");
+    child.exit(1);
+    await settle();
+    const { failure } = r.controller.state as Extract<BackendState, { phase: "failed" }>;
+    expect(failure.stderr).toEqual(["boom"]);
+    expect(r.backendLines).toContain(
+      "stderr: Persona facts: no LanceDB table. Run `bun run laplace-ingest-facts` to build it.",
+    );
+  });
+
   test("a signal, or an exit 0 it wasn't asked for, fails too", async () => {
     for (const [code, signal] of [
       [null, "SIGKILL"],

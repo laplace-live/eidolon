@@ -16,6 +16,16 @@ export interface Holder {
   readonly port: number | null;
 }
 
+/**
+ * Why the server stopped, or never started: `no-listening`, `token` and `unanswered` are main
+ * stopping it, after 60 s without listening, with no local-token, or 60 s without an answer.
+ */
+export interface ServerStop {
+  readonly reason: "exited" | "no-listening" | "token" | "unanswered" | "error";
+  readonly code?: number | null;
+  readonly signal?: string | null;
+}
+
 export interface Strings {
   /** Menu items, buttons and the tray's tooltip: Title Case in English. */
   readonly label: {
@@ -73,6 +83,8 @@ export interface Strings {
     readonly windowFailed: string;
     /** The failure page's text under either title. */
     readonly failed: string;
+    /** The failure page's first line under `serverStopped`: why. */
+    readonly serverStop: (stop: ServerStop) => string;
     /** The failure page's title when another Eidolon holds the data home. */
     readonly held: string;
     readonly heldDetail: (holder: Holder) => string;
@@ -149,6 +161,21 @@ const en: Strings = {
     serverStopped: "Eidolon's server stopped",
     windowFailed: "Eidolon's window ran into a problem",
     failed: "Try again. If it happens again, Show Logs has the details.",
+    serverStop: ({ reason, code, signal }) => {
+      switch (reason) {
+        case "exited":
+          if (signal) return `It was ended by ${signal}.`;
+          return typeof code === "number" ? `It exited with code ${code}.` : "It exited.";
+        case "no-listening":
+          return "It didn't finish starting within 60 seconds, so Eidolon stopped it.";
+        case "token":
+          return "It started but left no local-token to connect with, so Eidolon stopped it.";
+        case "unanswered":
+          return "It didn't answer for 60 seconds, so Eidolon stopped it.";
+        case "error":
+          return "It couldn't be started.";
+      }
+    },
     held: "Another Eidolon is using this data home",
     heldDetail: ({ pid, port }) => {
       const known =
@@ -230,6 +257,21 @@ const zhHans: Strings = {
     serverStopped: "Eidolon 的服务器停止了",
     windowFailed: "Eidolon 的窗口出了问题",
     failed: "请重试。如果再次出现，详情请在「显示日志」中查看。",
+    serverStop: ({ reason, code, signal }) => {
+      switch (reason) {
+        case "exited":
+          if (signal) return `它被 ${signal} 信号结束了。`;
+          return typeof code === "number" ? `它退出了，退出码为 ${code}。` : "它退出了。";
+        case "no-listening":
+          return "它没有在 60 秒内完成启动，Eidolon 已将它停止。";
+        case "token":
+          return "它启动了，但没有留下可用于连接的 local-token，Eidolon 已将它停止。";
+        case "unanswered":
+          return "它已有 60 秒没有响应，Eidolon 已将它停止。";
+        case "error":
+          return "它无法启动。";
+      }
+    },
     held: "另一个 Eidolon 正在使用这个数据目录",
     heldDetail: ({ pid, port }) => {
       const known =
