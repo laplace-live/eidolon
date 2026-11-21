@@ -1,7 +1,8 @@
 // `bun run dev:desktop`: watch-builds main, the preload and the shell pages, serves apps/web from
-// Vite's dev server on 127.0.0.1:5173, and runs the unpackaged app. Arguments after it go to Electron,
-// such as `--user-data-dir=<folder>` for a profile of its own.
+// Vite's dev server on 127.0.0.1:5173, and runs the unpackaged app on it. Arguments after it go to
+// Electron, such as `--user-data-dir=<folder>` for a profile of its own.
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { build, createServer, type InlineConfig, type Rolldown } from "vite";
@@ -10,6 +11,12 @@ import { mainBundle, preloadBundle, shellPages } from "./vite-common.ts";
 
 const DESKTOP = resolve(import.meta.dirname, "..");
 const WEB = resolve(DESKTOP, "../web");
+
+// The backend, run from the checkout, won't start without a web build, even though Vite serves the
+// pages here; `bun run app` builds it the same way.
+if (!existsSync(join(WEB, "dist", "index.html"))) {
+  await build({ root: WEB, configFile: join(WEB, "vite.config.ts"), envDir: false });
+}
 
 /** A watch build, once its first bundle is written. */
 async function watch(config: InlineConfig): Promise<Rolldown.RolldownWatcher> {
@@ -49,7 +56,8 @@ await web.listen();
 // Required from Node, `electron` is the path to the binary it downloads on first use.
 const electron: unknown = createRequire(import.meta.url)("electron");
 if (typeof electron !== "string") throw new Error("electron didn't resolve to its binary");
-const app = spawn(electron, [DESKTOP, ...process.argv.slice(2)], {
+// The switch routes every path but the backend's to Vite (main's index.ts).
+const app = spawn(electron, [DESKTOP, "--eidolon-dev-server", ...process.argv.slice(2)], {
   stdio: "inherit",
   env: electronEnv(),
 });
