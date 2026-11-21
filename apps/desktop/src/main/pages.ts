@@ -1,7 +1,7 @@
 // Which page the window shows (§2.1, §2.3): the loading page until the backend is ready, then the
 // app, and the failure page when the backend fails or the window's own page does. It also words
-// the shell pages. Electron-free: backend.ts drives it with the controller's states and the window's
-// failures, and window.ts loads what it asks for.
+// the shell pages. Electron-free: index.ts drives it with the backend's states and the window's
+// failures, and loads what it asks for.
 import type { Language } from "../shared/bridge.ts";
 import type { BackendFailure, BackendState } from "./controller.ts";
 import type { ShellFailure, ShellPageStrings } from "./shell-pages.ts";

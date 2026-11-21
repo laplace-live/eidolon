@@ -1,6 +1,6 @@
 // What the window may do (§1.4, §1.9, §5.5): where a link opens and a navigation goes, which
 // permissions its page gets, and whether a packaged app may start with a debugging switch.
-// Electron-free: navigation.ts, permissions.ts and instance.ts apply it.
+// Electron-free: navigation.ts and permissions.ts apply it.
 import { pageAt, SCHEME } from "../shared/bridge.ts";
 
 /** What a link the page opens in a new window becomes; no window ever opens. */
