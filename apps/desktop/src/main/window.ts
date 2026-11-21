@@ -22,8 +22,10 @@ let window: BrowserWindow | null = null;
  * main's own calls move it: on macOS Electron fires show and hide as fullscreen comes and goes.
  */
 let shown = false;
+/** Its first page has painted. Until then it stays hidden, whatever asks to show it. */
+let painted = false;
 
-/** The window, while it exists: a page's window.close() destroys it, and showWindow() makes another. */
+/** The window, while it exists: a page's window.close() destroys it, and a launch makes another. */
 export function mainWindow(): BrowserWindow | null {
   return window !== null && !window.isDestroyed() ? window : null;
 }
@@ -89,9 +91,16 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
     },
   });
   window = win;
-  shown = false;
-  if (saved.maximized) win.maximize();
-  win.once("ready-to-show", () => showWindow());
+  // It shows once its first page paints, unless a quit hides it first.
+  shown = true;
+  painted = false;
+  win.once("ready-to-show", () => {
+    painted = true;
+    if (!shown) return;
+    // maximize() shows a hidden window at once, before anything has painted.
+    if (saved.maximized) win.maximize();
+    showWindow();
+  });
   // Main owns the title: the page's <title> would name the window after each page.
   win.on("page-title-updated", (event) => event.preventDefault());
 
@@ -141,14 +150,15 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
   return win;
 }
 
-/** Brings the window forward, from hidden or minimized. */
+/** Brings the window forward, from hidden or minimized; a new one, once it has painted. */
 export function showWindow(): void {
   const win = mainWindow();
   if (win === null) return;
+  shown = true;
+  if (!painted) return;
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
-  shown = true;
 }
 
 /**
@@ -159,6 +169,7 @@ export function hideWindow(): void {
   const win = mainWindow();
   if (win === null) return;
   shown = false;
+  if (!painted) return;
   if (process.platform === "darwin" && win.isFullScreen()) {
     win.once("leave-full-screen", () => {
       if (!win.isDestroyed() && !shown) win.hide();
