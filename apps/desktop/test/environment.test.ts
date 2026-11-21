@@ -181,15 +181,15 @@ describe("withBackendVariables", () => {
       writeFileSync(exported, "/a");
       const login = shell("login", `export EIDOLON_HOME="$(cat '${exported}')"`);
       // A Finder launch, with no EIDOLON_HOME of its own: main's home comes from the rc's.
-      const environment = await startupEnvironment(
+      const startup = await startupEnvironment(
         { PATH: "/usr/bin:/bin" },
         { platform: "darwin", shells: [login] },
       );
-      const resolved = environment.env.EIDOLON_HOME as string;
+      const resolved = startup.env.EIDOLON_HOME as string;
       expect(resolved).toBe("/a");
-      await environment.forSpawn();
+      await startup.forSpawn();
       writeFileSync(exported, "/b");
-      const respawn = await environment.forSpawn();
+      const respawn = await startup.forSpawn();
       expect(respawn.EIDOLON_HOME).toBe("/b");
       expect(
         withBackendVariables(respawn, { home: resolved, appRoot: null }, "darwin").EIDOLON_HOME,
@@ -315,32 +315,32 @@ describe.skipIf(process.platform === "win32")("startupEnvironment", () => {
 
   test("a cold start's first spawn takes the startup read, and every later spawn reads again", async () => {
     const { login, reads, bin } = counting();
-    const environment = await startupEnvironment(
+    const startup = await startupEnvironment(
       { PATH: "/usr/bin:/bin" },
       { platform: "darwin", shells: [login] },
     );
-    expect(environment.env.PATH).toBe("/first/bin:/usr/bin:/bin");
+    expect(startup.env.PATH).toBe("/first/bin:/usr/bin:/bin");
     expect(reads()).toBe(1);
-    await expect(environment.forSpawn()).resolves.toBe(environment.env);
+    await expect(startup.forSpawn()).resolves.toBe(startup.env);
     expect(reads()).toBe(1);
     bin("/second/bin");
-    await expect(environment.forSpawn()).resolves.toMatchObject({
+    await expect(startup.forSpawn()).resolves.toMatchObject({
       PATH: "/second/bin:/usr/bin:/bin",
     });
-    await environment.forSpawn();
+    await startup.forSpawn();
     expect(reads()).toBe(3);
   });
 
   test("a first spawn long after startup, once an attached server has gone, reads again", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const { login, reads, bin } = counting();
-    const environment = await startupEnvironment(
+    const startup = await startupEnvironment(
       { PATH: "/usr/bin:/bin" },
       { platform: "darwin", shells: [login] },
     );
     vi.setSystemTime(Date.now() + 10_001);
     bin("/second/bin");
-    await expect(environment.forSpawn()).resolves.toMatchObject({
+    await expect(startup.forSpawn()).resolves.toMatchObject({
       PATH: "/second/bin:/usr/bin:/bin",
     });
     expect(reads()).toBe(2);
