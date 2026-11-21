@@ -3,7 +3,7 @@
 // launch with a debugging switch exits before any of them. Background mode is settled first of all.
 import { join } from "node:path";
 import { app } from "electron";
-import { activationPolicy, backgroundMode } from "./background.ts";
+import { activationPolicy, backgroundMode, chromiumSwitches } from "./background.ts";
 import { refuseDebugging } from "./navigation.ts";
 
 /** EIDOLON_DESKTOP_BACKGROUND: nothing this run does shows on screen or takes the focus. */
@@ -12,6 +12,8 @@ export const background = backgroundMode(process.env);
 // before any of it runs (only LSUIElement in Info.plist would start it as an accessory).
 const policy = activationPolicy(process.platform, background);
 if (policy !== null) app.setActivationPolicy(policy);
+// Before ready, as Electron's docs ask of Chromium's switches.
+for (const name of chromiumSwitches(background)) app.commandLine.appendSwitch(name);
 
 /** What a launch asks of the instance already running: --quit quits it, as the tray's Quit does. */
 export interface LaunchRequest {

@@ -18,8 +18,12 @@ import { loggedUrl } from "./policy.ts";
  * a run with that switch gets the camera too.
  */
 export const FAKE_MEDIA_DEVICE = "use-fake-device-for-media-stream";
+/** Chromium's switch that sends no page's sound to the speakers. */
+export const MUTE_AUDIO = "mute-audio";
 /** In the profile: where background mode saves downloads. */
 export const DOWNLOADS_FOLDER = "downloads";
+/** main.log's line once background mode is on. */
+export const BACKGROUND_LINE = `Eidolon: background mode: nothing shows on screen or takes the focus, and nothing is heard (--${MUTE_AUDIO})`;
 
 interface Log {
   info(message: string): void;
@@ -39,6 +43,14 @@ export function activationPolicy(
   background: boolean,
 ): "accessory" | null {
   return background && platform === "darwin" ? "accessory" : null;
+}
+
+/**
+ * Chromium's switches to set before ready: mute-audio, so a call's reply never plays through the
+ * owner's speakers. WebRTC still receives it.
+ */
+export function chromiumSwitches(background: boolean): readonly string[] {
+  return background ? [MUTE_AUDIO] : [];
 }
 
 /** On Windows, background mode's window has no taskbar button. */

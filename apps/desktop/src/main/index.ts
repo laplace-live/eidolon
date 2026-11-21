@@ -8,7 +8,7 @@ import { type AboutPanelOptionsOptions, app, nativeImage, session } from "electr
 import { type Language, pageAt } from "../shared/bridge.ts";
 import { dataHome } from "./attach.ts";
 import { Backend, licensesFile } from "./backend.ts";
-import { hasTray } from "./background.ts";
+import { BACKGROUND_LINE, hasTray } from "./background.ts";
 import { dressWindow, handleAppBridge, sendCommand } from "./chrome.ts";
 import type { AppPaths } from "./controller.ts";
 import { APP_ORIGIN, DEV_SERVER } from "./forwarder.ts";
@@ -193,9 +193,7 @@ function run(): void {
     .whenReady()
     .then(async () => {
       logStart(version);
-      if (background) {
-        mainLog.info("Eidolon: background mode: nothing shows on screen or takes the focus");
-      }
+      if (background) mainLog.info(BACKGROUND_LINE);
       // Before the first load: with no handlers, Electron grants every request.
       guardPermissions(session.defaultSession, {
         isWindow: (contents) => contents !== null && contents === mainWindow()?.webContents,

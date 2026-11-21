@@ -7,9 +7,11 @@ import type { MessageBoxOptions } from "electron";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   activationPolicy,
+  BACKGROUND_LINE,
   backgroundMicrophone,
   backgroundMode,
   backgroundWindowOptions,
+  chromiumSwitches,
   DownloadPaths,
   hasTray,
   type NativeUi,
@@ -49,6 +51,14 @@ test("off, the app is a regular one; on, it's an accessory on macOS, with no tas
   expect(hasTray("win32", false)).toBe(true);
   expect(hasTray("win32", true)).toBe(false);
   expect(hasTray("darwin", false)).toBe(false);
+});
+
+test("on, Chromium is muted, and main.log's line says so; off, no switch is set", () => {
+  expect(chromiumSwitches(true)).toEqual(["mute-audio"]);
+  expect(chromiumSwitches(false)).toEqual([]);
+  expect(BACKGROUND_LINE).toBe(
+    "Eidolon: background mode: nothing shows on screen or takes the focus, and nothing is heard (--mute-audio)",
+  );
 });
 
 describe("showCalls", () => {

@@ -516,7 +516,8 @@ onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
 - There is no `log.initialize()`, which would inject electron-log's own preload into every session,
   and its IPC transport is off.
 - **Lines a test can wait on,** in main.log: `Eidolon: background mode: nothing shows on screen or
-  takes the focus`, right after the first line when it's on; `Eidolon: the data home is …`;
+  takes the focus, and nothing is heard (--mute-audio)`, right after the first line when it's on;
+  `Eidolon: the data home is …`;
   `Eidolon: started the backend (pid N) on port P` or `Eidolon: using the server already on this
   data home, <origin>`; `Eidolon: the backend listens on <origin>`; `Eidolon: the window shows
   <url>`; `Eidolon: the window is shown`, `… is hidden` and `… is closed` as main's own record of
@@ -549,6 +550,11 @@ that could show something through it.
   link, Show Logs, Open Data Folder, Licenses, the About panel and a context menu open nothing. A
   download saves, with no Save dialog, into the profile's `downloads` folder under the name
   Chromium suggests, numbered ` (1)` on while that name is taken.
+- **Nothing is heard:** Chromium's `--mute-audio` is set before `ready`, so no page plays through
+  the speakers, a call's reply included. WebRTC still receives that reply, so a test can check it
+  arrived. Measured with Electron 45.4.1 on macOS, Chromium hands the switch to its audio service
+  (not to the renderer), and a tone the app page plays is never `isCurrentlyAudible()`, where the
+  same tone with only the page muted is.
 - **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
   Developer Tools, which opens a window, isn't offered unpackaged either.
 - **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
