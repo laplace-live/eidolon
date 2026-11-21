@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { jsRuntime } from "@eidolon/config";
 import { describe, expect, it } from "vitest";
 import { McpClient } from "../src/mcp/client.ts";
 import { StdioTransport } from "../src/mcp/transports/stdio.ts";
@@ -70,6 +71,7 @@ describe("StdioTransport", () => {
   it("connects to a newline-delimited MCP server and captures stderr", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
+      env: jsRuntime().env,
       args: [fixture],
     });
     const client = new McpClient({ name: "stdio-test", version: "1.0.0" });
@@ -87,6 +89,7 @@ describe("StdioTransport", () => {
   it("kills a server that ignores shutdown, including its children", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
+      env: jsRuntime().env,
       args: [stubborn],
       closeTimeoutMs: 100,
     });
@@ -109,6 +112,7 @@ describe("StdioTransport", () => {
   it("kills children still holding the pipes after the server process exited", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
+      env: jsRuntime().env,
       args: [exitingParent],
       closeTimeoutMs: 100,
     });
@@ -140,6 +144,7 @@ describe("StdioTransport", () => {
   it("lets go of the pipes a process outside the server's group holds, so close() still ends", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
+      env: jsRuntime().env,
       args: [daemon],
       closeTimeoutMs: 100,
     });
@@ -166,6 +171,7 @@ describe("StdioTransport", () => {
   it("kills what a server that exits on its stdin closing leaves in its group, SIGTERM or not", async () => {
     const transport = new StdioTransport({
       command: process.execPath,
+      env: jsRuntime().env,
       args: [leftover],
       closeTimeoutMs: 100,
     });
@@ -189,6 +195,7 @@ describe("StdioTransport", () => {
     const pids = pidsAfterExit(`
       const transport = new StdioTransport({
         command: process.execPath,
+        env: ${JSON.stringify(jsRuntime().env)},
         args: [${JSON.stringify(stubborn)}],
       });
       await transport.start();
@@ -209,6 +216,7 @@ describe("StdioTransport", () => {
     const pids = pidsAfterExit(`
       const transport = new StdioTransport({
         command: process.execPath,
+        env: ${JSON.stringify(jsRuntime().env)},
         args: [${JSON.stringify(leftover)}, "--exit"],
         closeTimeoutMs: 60_000,
       });
@@ -268,7 +276,7 @@ describe("StdioTransport", () => {
         "-e",
         "console.error(JSON.stringify(Object.keys(process.env).filter((key) => key.startsWith('EIDOLON_MCP'))))",
       ],
-      env: { EIDOLON_MCP_GIVEN: "1" },
+      env: { ...jsRuntime().env, EIDOLON_MCP_GIVEN: "1" },
     });
     try {
       await transport.start();

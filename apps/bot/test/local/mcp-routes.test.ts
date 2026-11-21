@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { type TaskSnapshot, tasksDir } from "@eidolon/assistant";
-import { type AssistantSettings, dataHome, newId } from "@eidolon/config";
+import { type AssistantSettings, dataHome, jsRuntime, newId } from "@eidolon/config";
 import type { createMind, MindChunk } from "@eidolon/engine";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { RouteHandler } from "../../src/app.ts";
@@ -443,7 +443,12 @@ describe("an MCP card's answer", () => {
       MCP_JSON(),
       JSON.stringify({
         mcpServers: {
-          fake: { command: process.execPath, args: [FIXTURE], tools: ["echo"] },
+          fake: {
+            command: process.execPath,
+            args: [FIXTURE],
+            env: jsRuntime().env,
+            tools: ["echo"],
+          },
         },
       }),
     );

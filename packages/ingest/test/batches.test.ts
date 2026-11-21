@@ -1,5 +1,6 @@
 // batches.ts against the download golden's prepare cases (download_helpers.ts). The golden's data/
 // is the persona's lists/ here and data/auto-embed/ its lists/batches/.
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -12,6 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { jsRuntime } from "@eidolon/config";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { download } from "../src/index.ts";
 import { downloadGolden as golden, type PrepareGolden } from "./download_helpers.ts";
@@ -19,6 +21,26 @@ import { downloadGolden as golden, type PrepareGolden } from "./download_helpers
 const ARCHIVE_URL = "https://space.bilibili.com/2132180406/lists/2484684?type=series";
 // The golden's clock: 2026-09-08 10:02:09 in Los Angeles.
 const NOW = new Date("2026-09-08T17:02:09Z");
+
+/**
+ * localIsoSeconds(NOW) in a process that starts in time zone `tz`. Not by setting TZ here: under
+ * Electron's Node a Date keeps its local hours when TZ changes from Los Angeles to Kolkata.
+ */
+function localIsoSecondsIn(tz: string): string {
+  const batches = join(import.meta.dirname, "../src/download/batches.ts");
+  const run = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `const { localIsoSeconds } = await import(${JSON.stringify(batches)});
+       process.stdout.write(localIsoSeconds(new Date(${NOW.getTime()})));`,
+    ],
+    { env: { ...process.env, ...jsRuntime().env, TZ: tz }, encoding: "utf8" },
+  );
+  expect(run.stderr).toBe("");
+  return run.stdout;
+}
 
 let tz: string | undefined;
 beforeAll(() => {
@@ -186,15 +208,8 @@ describe("lists", () => {
   test("local time with its offset, as datetime.astimezone() prints it", () => {
     expect(download.localIsoSeconds(NOW)).toBe("2026-09-08T10:02:09-07:00");
     expect(download.batchName(NOW)).toBe("videos-2026-09-08-100209.txt");
-    const saved = process.env.TZ;
-    try {
-      process.env.TZ = "Asia/Kolkata";
-      expect(download.localIsoSeconds(NOW)).toBe("2026-09-08T22:32:09+05:30");
-      process.env.TZ = "UTC";
-      expect(download.localIsoSeconds(NOW)).toBe("2026-09-08T17:02:09+00:00");
-    } finally {
-      process.env.TZ = saved;
-    }
+    expect(localIsoSecondsIn("Asia/Kolkata")).toBe("2026-09-08T22:32:09+05:30");
+    expect(localIsoSecondsIn("UTC")).toBe("2026-09-08T17:02:09+00:00");
     expect(existsSync(lists)).toBe(false);
   });
 });

@@ -2,6 +2,7 @@
 // resolver and settings.
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { jsRuntime } from "@eidolon/config";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   ANONYMOUS,
@@ -64,7 +65,7 @@ describe("env is read after import", () => {
       console.log("@@" + JSON.stringify({ first, memoized }));
     `;
     const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
-      env: {},
+      env: { ...jsRuntime().env },
       encoding: "utf8",
     });
     const stdout = run.stdout;

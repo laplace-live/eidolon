@@ -1,5 +1,6 @@
 // The bash tool's Windows branch, on any computer: the shell is this Node, and the tree kill a spy
 // that ends the direct child.
+import { jsRuntime } from "@eidolon/config";
 import { afterEach, expect, test, vi } from "vitest";
 import { createLocalBashOperations } from "../src/tools/bash.ts";
 import { killProcessTree } from "../src/tools/shell.ts";
@@ -24,7 +25,7 @@ async function onWindows(code: string, signal?: AbortSignal): Promise<unknown> {
   Object.defineProperty(process, "platform", { ...platform, value: "win32" });
   return createLocalBashOperations().exec(code, folder, {
     onData: () => {},
-    env: { PATH: process.env.PATH ?? "" },
+    env: { ...jsRuntime().env, PATH: process.env.PATH ?? "" },
     ...(signal === undefined ? {} : { signal }),
   });
 }

@@ -174,7 +174,7 @@ describe("spawnProcess", () => {
         node(
           "process.stdin.pipe(process.stdout); process.stdin.on('end', () => process.stdout.write(':' + Object.keys(process.env).filter((k) => k.startsWith('EIDOLON_SPAWN')).join(',')));",
         ),
-        { stdin: "pipe", stdout: fd, env: { EIDOLON_SPAWN_ONLY: "1" } },
+        { stdin: "pipe", stdout: fd, env: { ...jsRuntime().env, EIDOLON_SPAWN_ONLY: "1" } },
       );
     } finally {
       closeSync(fd);

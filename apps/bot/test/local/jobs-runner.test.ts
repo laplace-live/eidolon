@@ -16,7 +16,7 @@ import {
 import { tmpdir, uptime } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { dataHome, killTree, spawnProcess } from "@eidolon/config";
+import { dataHome, jsRuntime, killTree, spawnProcess } from "@eidolon/config";
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import { asElectron } from "../../../../packages/config/test/electron.ts";
 import type { JobCommand, JobStatus } from "../../src/local/api.ts";
@@ -279,7 +279,12 @@ process.stderr.write(JSON.stringify([process.execArgv, process.env.ELECTRON_RUN_
   test("a job inherits the environment the server started with, and nothing it applied since", async () => {
     mkdirSync(dataHome(), { recursive: true });
     const child = spawnProcess([process.execPath, join(import.meta.dirname, "jobs-env-child.ts")], {
-      env: { PATH: process.env.PATH ?? "", EIDOLON_HOME: dataHome(), EIDOLON_NO_DOTENV: "1" },
+      env: {
+        ...jsRuntime().env,
+        PATH: process.env.PATH ?? "",
+        EIDOLON_HOME: dataHome(),
+        EIDOLON_NO_DOTENV: "1",
+      },
       stdout: "pipe",
       stderr: "pipe",
     });

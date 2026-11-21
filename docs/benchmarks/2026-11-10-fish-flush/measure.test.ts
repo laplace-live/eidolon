@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { jsRuntime } from "../../../packages/config/src/index.ts";
 import { costOf, priceOf } from "../../../packages/providers/src/index.ts";
 import { packMsg, unpackMsg } from "../../../packages/providers/src/speech/stream/msgpack.ts";
 import {
@@ -293,6 +294,7 @@ describe("the script against a fake Fish", () => {
     const child = spawn(process.execPath, [SCRIPT, ...args], {
       cwd: ROOT,
       env: {
+        ...jsRuntime().env,
         PATH: process.env.PATH ?? "",
         TMPDIR: tmpdir(),
         HOME: home,
