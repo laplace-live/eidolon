@@ -383,11 +383,13 @@ gives the page two things; a browser has neither, and without them nothing below
 **The chrome.** The window has no title bar. A row marked `data-window-drag` stands in for it: the
 window drags by the row, while its links, buttons and fields keep their clicks. The rows are the
 sidebar's first row (the logo), each page's header (a chat's, the call's, setup's), and the bar
-above a page without one, `MobileBar`, which in the desktop app stays beside the sidebar at any
-width, empty, 3.5rem tall: the height of a chat's header, and the height the window's caption
-buttons on Windows should take. An error, the sign-in screen and the loading spinner get a strip of
-their own (`WindowDragStrip`). The rows keep clear of the window's buttons, whose place the Window
-Controls Overlay gives as `env(titlebar-area-*)`:
+above a page without one, `MobileBar`. A browser shows that bar only below `md`, with the sidebar's
+button and the logo; the desktop app keeps it from `md` up too, empty, 3.5rem tall: the height of a
+chat's header, and the height the window's caption buttons on Windows should take. The page's
+column starts below it, and what sticks in a page sticks below it (`shell:` in
+`components/section-layout.tsx`). An error, the sign-in screen and the loading spinner get a strip
+of their own (`WindowDragStrip`). The rows keep clear of the window's buttons, whose place the
+Window Controls Overlay gives as `env(titlebar-area-*)`:
 
 - **macOS:** the traffic lights sit at the top left. A page's row starts after them, measured from
   the window's edge: at the edge while the sidebar is a sheet, beside the 3rem rail when collapsed.

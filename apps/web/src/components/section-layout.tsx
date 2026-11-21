@@ -47,12 +47,14 @@ export function SectionLayout({ nav, active, label, children }: SectionLayoutPro
   }, [active]);
 
   return (
-    <div ref={root} className="@container scroll-mt-20 md:scroll-mt-6">
+    // From md up the desktop app keeps MobileBar's h-14 above the page: a section lands, and the
+    // nav sticks, below it.
+    <div ref={root} className="@container scroll-mt-20 md:scroll-mt-6 shell:md:scroll-mt-14">
       <div className="flex flex-col gap-8 @3xl:grid @3xl:grid-cols-[13rem_minmax(0,1fr)] @3xl:items-start @3xl:gap-10">
         <nav
           ref={scroller}
           aria-label={label}
-          className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 sm:-mx-6 sm:px-6 @3xl:sticky @3xl:top-10 @3xl:mx-0 @3xl:flex-col @3xl:overflow-visible @3xl:px-0"
+          className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 sm:-mx-6 sm:px-6 @3xl:sticky @3xl:top-10 @3xl:mx-0 @3xl:flex-col @3xl:overflow-visible @3xl:px-0 shell:@3xl:top-14"
         >
           {nav.map((item) => {
             const current = item.id === active;
