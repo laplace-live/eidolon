@@ -2,7 +2,7 @@
 // link to the app's own files saves through a download, no window ever opens, and a navigation or a
 // redirect anywhere else is cancelled. A packaged app also refuses the switches that open CDP.
 // instance.ts runs that refusal before the profile and the logs exist, so this loads no logger.
-import { app, shell, type WebContents } from "electron";
+import { app, type WebContents } from "electron";
 import {
   leftTheApp,
   loggedUrl,
@@ -12,29 +12,31 @@ import {
   refusesDebugging,
 } from "./policy.ts";
 
-interface Log {
-  info(message: string): void;
-  warn(message: string): void;
+export interface NavigationGuard {
+  readonly log: { info(message: string): void; warn(message: string): void };
+  /** The default browser's, as native.ts gives it. */
+  readonly openExternal: (url: string) => Promise<void>;
+  /** Puts main's page back when the main frame lands somewhere no navigation event could stop. */
+  readonly strayed: () => void;
 }
 
-function openInBrowser(url: string, log: Log): void {
-  shell.openExternal(url).catch((error: unknown) => {
-    log.warn(`Eidolon: the default browser didn't open a link: ${String(error)}`);
-  });
-}
-
-/**
- * Guards the window's webContents; `strayed` puts main's page back when the main frame lands
- * somewhere no navigation event let it be stopped.
- */
-export function guardNavigation(contents: WebContents, log: Log, strayed: () => void): void {
+/** Guards the window's webContents. */
+export function guardNavigation(
+  contents: WebContents,
+  { log, openExternal, strayed }: NavigationGuard,
+): void {
+  const openInBrowser = (url: string): void => {
+    openExternal(url).catch((error: unknown) => {
+      log.warn(`Eidolon: the default browser didn't open a link: ${String(error)}`);
+    });
+  };
   contents.setWindowOpenHandler(({ url }) => {
     const action = openAction(url);
     if (action === "browser") {
-      openInBrowser(url, log);
+      openInBrowser(url);
     } else if (action === "download") {
       // The window has no tabs: a picture or file the page opens in one saves instead, through
-      // Electron's Save dialog.
+      // Electron's Save dialog, or in background mode quietly (native.ts).
       contents.downloadURL(url);
     } else {
       const scheme = URL.parse(url)?.protocol ?? "an unreadable URL";
@@ -46,7 +48,7 @@ export function guardNavigation(contents: WebContents, log: Log, strayed: () => 
     const action = navigationAction(event.url);
     if (action === "allow") return;
     event.preventDefault();
-    if (action === "browser") openInBrowser(event.url, log);
+    if (action === "browser") openInBrowser(event.url);
   });
   contents.on("will-redirect", (event) => {
     if (mayRedirect(event.url)) return;

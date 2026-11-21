@@ -1,9 +1,10 @@
 // Close and quit on Electron: quit-flow.ts's flow on before-quit, the quit check's native box
 // with no owner window, macOS's power-off notice, and Windows' session end, which never reaches
 // before-quit.
-import { app, type BrowserWindow, dialog, type NativeImage, powerMonitor } from "electron";
+import { app, type BrowserWindow, type NativeImage, powerMonitor } from "electron";
 import type { Backend } from "./backend.ts";
 import { mainLog } from "./log.ts";
+import { native } from "./native.ts";
 import { QuitConfirmation } from "./quit-check.ts";
 import { QuitFlow } from "./quit-flow.ts";
 import type { Strings } from "./strings.ts";
@@ -23,10 +24,10 @@ export function installQuit(options: QuitOptions): QuitFlow {
     check: () => options.backend.quitCheck(),
     strings: options.strings,
     // No owner window: a hidden window stays hidden, and the box is a window of its own.
-    show: (box) => dialog.showMessageBox(options.icon ? { ...box, icon: options.icon } : box),
+    show: (box) => native.messageBox(options.icon ? { ...box, icon: options.icon } : box),
     // macOS raises the open box with the app; Windows gives no handle to its task dialog.
     focus: () => {
-      if (process.platform === "darwin") app.focus({ steal: true });
+      if (process.platform === "darwin") native.stealFocus();
     },
     log: mainLog,
   });

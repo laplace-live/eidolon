@@ -12,12 +12,12 @@ export interface MenuActions {
   readonly showLogs: () => void;
   readonly openDataFolder: () => void;
   readonly licenses: () => void;
+  readonly about: () => void;
 }
 
 /** The tray's items, beside the menus'. */
 export interface TrayActions extends MenuActions {
   readonly open: () => void;
-  readonly about: () => void;
   readonly quit: () => void;
 }
 
@@ -37,18 +37,21 @@ const separator = (): MenuItemConstructorOptions => ({ type: "separator" });
 
 /**
  * macOS's menu bar, declared in full since a custom menu replaces Electron's default: without the
- * Edit roles, copy and paste break. ⌘W's close hides the window (quit.ts).
+ * Edit roles, copy and paste break. ⌘W's close hides the window (quit.ts). In background mode, About
+ * is the app's own action, which logs the panel, and the developer tools, a window, aren't offered.
  */
 export function macMenu(
   { label }: Strings,
   actions: MenuActions,
-  { packaged }: { readonly packaged: boolean },
+  { packaged, background }: { readonly packaged: boolean; readonly background: boolean },
 ): MenuItemConstructorOptions[] {
   return [
     {
       label: "Eidolon",
       submenu: [
-        { role: "about", label: label.aboutEidolon },
+        background
+          ? { label: label.aboutEidolon, click: () => actions.about() }
+          : { role: "about", label: label.aboutEidolon },
         separator(),
         { label: label.settings, accelerator: "Command+,", click: () => actions.settings() },
         separator(),
@@ -81,7 +84,7 @@ export function macMenu(
         { role: "zoomOut", label: label.zoomOut },
         separator(),
         { role: "togglefullscreen", label: label.toggleFullScreen },
-        ...(packaged
+        ...(packaged || background
           ? []
           : [separator(), { role: "toggleDevTools", label: label.toggleDevTools } as const]),
       ],

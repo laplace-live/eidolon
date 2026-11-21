@@ -1,8 +1,11 @@
 // The page's permissions, on the session before its first load: with no handlers,
 // Electron grants every request and passes every check. policy.ts decides; this asks macOS for the
-// microphone and says where to turn it on once it's been denied.
-import { dialog, type Session, systemPreferences, type WebContents } from "electron";
+// microphone and says where to turn it on once it's been denied, but never in background mode.
+import { app, type Session, systemPreferences, type WebContents } from "electron";
+import { backgroundMicrophone, FAKE_MEDIA_DEVICE } from "./background.ts";
+import { background } from "./instance.ts";
 import { mainLog } from "./log.ts";
+import { native } from "./native.ts";
 import { checkAllows, microphoneStep, requestAction } from "./policy.ts";
 import type { Strings } from "./strings.ts";
 
@@ -13,6 +16,9 @@ export interface PermissionContext {
 }
 
 async function microphone({ text, label }: Strings): Promise<boolean> {
+  if (background) {
+    return backgroundMicrophone(app.commandLine.hasSwitch(FAKE_MEDIA_DEVICE), mainLog);
+  }
   const step = microphoneStep(
     process.platform,
     process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("microphone") : "",
@@ -20,7 +26,7 @@ async function microphone({ text, label }: Strings): Promise<boolean> {
   if (step === "grant") return true;
   if (step === "ask") return systemPreferences.askForMediaAccess("microphone");
   // No owner window: the box stands on its own, whatever the page does meanwhile.
-  await dialog.showMessageBox({
+  await native.messageBox({
     type: "warning",
     title: "Eidolon",
     message: text.microphoneTitle,

@@ -1,8 +1,11 @@
 // The app's one window: no system title bar, its bounds kept across launches, closed only by
-// a quit. Main keeps whether it shows itself: Electron reports an occluded window as hidden.
+// a quit. Main keeps whether it shows itself: Electron reports an occluded window as hidden. In
+// background mode main keeps that state alone, and never puts the window on screen.
 import { join } from "node:path";
 import { app, BrowserWindow, type IpcMainEvent, nativeTheme, screen } from "electron";
 import type { IpcSender } from "../shared/bridge.ts";
+import { backgroundWindowOptions, showCalls } from "./background.ts";
+import { background } from "./instance.ts";
 import { mainLog } from "./log.ts";
 import { loggedUrl } from "./policy.ts";
 import {
@@ -26,6 +29,15 @@ let shown = false;
 /** Its first page has painted. Until then it stays hidden, whatever asks to show it. */
 let painted = false;
 
+/** Moves main's shown state; each change to what the window is goes to main.log, for the smokes. */
+function setShown(next: { readonly shown?: boolean; readonly painted?: boolean }): void {
+  const before = shown && painted;
+  shown = next.shown ?? shown;
+  painted = next.painted ?? painted;
+  const after = shown && painted;
+  if (after !== before) mainLog.info(`Eidolon: the window is ${after ? "shown" : "hidden"}`);
+}
+
 /** The window, while it exists: a page's window.close() destroys it, and a launch makes another. */
 export function mainWindow(): BrowserWindow | null {
   return window !== null && !window.isDestroyed() ? window : null;
@@ -45,10 +57,10 @@ function boundsFile(): string {
   return join(app.getPath("userData"), BOUNDS_FILE);
 }
 
-function saveBounds(win: BrowserWindow): void {
+function saveBounds(win: BrowserWindow, maximized: boolean): void {
   if (win.isDestroyed()) return;
   try {
-    writeBounds(boundsFile(), { ...win.getNormalBounds(), maximized: win.isMaximized() });
+    writeBounds(boundsFile(), { ...win.getNormalBounds(), maximized });
   } catch (error) {
     mainLog.warn(`Eidolon: couldn't keep the window's bounds: ${String(error)}`);
   }
@@ -83,6 +95,7 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
     title: "Eidolon",
     backgroundColor: backgroundColor(dark),
     ...chromeOptions(process.platform, dark),
+    ...backgroundWindowOptions(process.platform, background),
     webPreferences: {
       preload: join(app.getAppPath(), "dist", "preload", "index.cjs"),
       contextIsolation: true,
@@ -96,28 +109,28 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
   shown = true;
   painted = false;
   win.once("ready-to-show", () => {
-    painted = true;
-    if (!shown) return;
+    setShown({ painted: true });
     // maximize() shows a hidden window at once, before anything has painted.
-    if (saved.maximized) win.maximize();
-    showWindow();
+    if (shown) bringForward(win, saved.maximized);
   });
   // Main owns the title: the page's <title> would name the window after each page.
   win.on("page-title-updated", (event) => event.preventDefault());
 
+  // Background mode never maximizes the window, so it keeps the flag as it was read.
+  const maximized = (): boolean => (background ? saved.maximized : win.isMaximized());
   let timer: ReturnType<typeof setTimeout> | null = null;
   const later = (): void => {
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
-      saveBounds(win);
+      saveBounds(win, maximized());
     }, SAVE_AFTER_MS);
   };
   win.on("resize", later);
   win.on("move", later);
   win.on("close", (event) => {
     if (timer !== null) clearTimeout(timer);
-    saveBounds(win);
+    saveBounds(win, maximized());
     if (!hooks.hidesOnClose()) return;
     event.preventDefault();
     hideWindow();
@@ -125,7 +138,10 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
   });
   win.on("closed", () => {
     if (timer !== null) clearTimeout(timer);
-    if (window === win) window = null;
+    if (window !== win) return;
+    window = null;
+    painted = false;
+    mainLog.info("Eidolon: the window is closed");
   });
 
   const contents = win.webContents;
@@ -148,15 +164,19 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
   return win;
 }
 
+/** What showing the window calls on it: nothing at all in background mode (background.ts). */
+function bringForward(win: BrowserWindow, maximize: boolean): void {
+  for (const call of showCalls(background, { minimized: win.isMinimized(), maximize })) {
+    win[call]();
+  }
+}
+
 /** Brings the window forward, from hidden or minimized; a new one, once it has painted. */
 export function showWindow(): void {
   const win = mainWindow();
   if (win === null) return;
-  shown = true;
-  if (!painted) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
+  setShown({ shown: true });
+  if (painted) bringForward(win, false);
 }
 
 /**
@@ -166,7 +186,7 @@ export function showWindow(): void {
 export function hideWindow(): void {
   const win = mainWindow();
   if (win === null) return;
-  shown = false;
+  setShown({ shown: false });
   if (!painted) return;
   if (process.platform === "darwin" && win.isFullScreen()) {
     win.once("leave-full-screen", () => {

@@ -1,14 +1,16 @@
 // The application menu and the window's context menu, in the shell's language: menus.ts holds
 // them as data.
 import { app, BrowserWindow, Menu, type WebContents } from "electron";
+import { background } from "./instance.ts";
 import { contextMenu, type MenuActions, macMenu, windowsMenu } from "./menus.ts";
+import { native } from "./native.ts";
 import type { Strings } from "./strings.ts";
 
 /** Sets the application menu; again whenever the shell's language changes. */
 export function setApplicationMenu(strings: Strings, actions: MenuActions): void {
   const template =
     process.platform === "darwin"
-      ? macMenu(strings, actions, { packaged: app.isPackaged })
+      ? macMenu(strings, actions, { packaged: app.isPackaged, background })
       : windowsMenu(strings);
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -18,7 +20,7 @@ export function attachContextMenu(contents: WebContents, strings: () => Strings)
   contents.on("context-menu", (_event, params) => {
     const items = contextMenu(strings(), params);
     if (items.length === 0) return;
-    Menu.buildFromTemplate(items).popup({
+    native.popup(items, {
       window: BrowserWindow.fromWebContents(contents) ?? undefined,
       frame: params.frame ?? undefined,
     });

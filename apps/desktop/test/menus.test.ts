@@ -54,25 +54,17 @@ function click(item: MenuItemConstructorOptions | undefined): void {
 describe("macOS's menu bar", () => {
   test("holds the app, Edit, View, Window and Help menus, worded in the shell's language", () => {
     const { actions } = recordingActions();
-    expect(macMenu(en, actions, { packaged: true }).map((menu) => menu.label)).toEqual([
-      "Eidolon",
-      "Edit",
-      "View",
-      "Window",
-      "Help",
-    ]);
-    expect(macMenu(zh, actions, { packaged: true }).map((menu) => menu.label)).toEqual([
-      "Eidolon",
-      "编辑",
-      "显示",
-      "窗口",
-      "帮助",
-    ]);
+    expect(
+      macMenu(en, actions, { packaged: true, background: false }).map((menu) => menu.label),
+    ).toEqual(["Eidolon", "Edit", "View", "Window", "Help"]);
+    expect(
+      macMenu(zh, actions, { packaged: true, background: false }).map((menu) => menu.label),
+    ).toEqual(["Eidolon", "编辑", "显示", "窗口", "帮助"]);
   });
 
   test("its app menu: About, Settings… on ⌘, Hide, Hide Others, Show All, Quit; no update check yet", () => {
     const { actions, calls } = recordingActions();
-    const [app] = macMenu(en, actions, { packaged: true });
+    const [app] = macMenu(en, actions, { packaged: true, background: false });
     const items = itemsOf(app);
     expect(outline(items)).toEqual([
       "about",
@@ -97,12 +89,14 @@ describe("macOS's menu bar", () => {
     expect(settings?.accelerator).toBe("Command+,");
     click(settings);
     expect(calls).toEqual(["settings"]);
-    expect(JSON.stringify(macMenu(en, actions, { packaged: false }))).not.toMatch(/Update/i);
+    expect(
+      JSON.stringify(macMenu(en, actions, { packaged: false, background: false })),
+    ).not.toMatch(/Update/i);
   });
 
   test("its Edit menu has every role copy and paste need", () => {
     const { actions } = recordingActions();
-    const edit = itemsOf(macMenu(en, actions, { packaged: true })[1]);
+    const edit = itemsOf(macMenu(en, actions, { packaged: true, background: false })[1]);
     expect(outline(edit)).toEqual([
       "undo",
       "redo",
@@ -119,7 +113,8 @@ describe("macOS's menu bar", () => {
 
   test("View zooms and goes fullscreen; Toggle Developer Tools only unpackaged", () => {
     const { actions } = recordingActions();
-    const view = (packaged: boolean) => outline(itemsOf(macMenu(en, actions, { packaged })[2]));
+    const view = (packaged: boolean) =>
+      outline(itemsOf(macMenu(en, actions, { packaged, background: false })[2]));
     expect(view(true)).toEqual(["resetZoom", "zoomIn", "zoomOut", "-", "togglefullscreen"]);
     expect(view(false)).toEqual([
       "resetZoom",
@@ -132,9 +127,26 @@ describe("macOS's menu bar", () => {
     ]);
   });
 
+  test("in background mode, About is the app's own item, which logs the panel, and there are no developer tools", () => {
+    const { actions, calls } = recordingActions();
+    const menus = macMenu(en, actions, { packaged: false, background: true });
+    const [about] = itemsOf(menus[0]);
+    expect(about?.role).toBeUndefined();
+    expect(about?.label).toBe("About Eidolon");
+    click(about);
+    expect(calls).toEqual(["about"]);
+    expect(outline(itemsOf(menus[2]))).toEqual([
+      "resetZoom",
+      "zoomIn",
+      "zoomOut",
+      "-",
+      "togglefullscreen",
+    ]);
+  });
+
   test("Window minimizes, zooms, closes (which hides) and brings all to front; Help opens three things", () => {
     const { actions, calls } = recordingActions();
-    const menus = macMenu(en, actions, { packaged: true });
+    const menus = macMenu(en, actions, { packaged: true, background: false });
     expect(menus[3]?.role).toBe("window");
     expect(outline(itemsOf(menus[3]))).toEqual(["minimize", "zoom", "-", "close", "-", "front"]);
     expect(menus[4]?.role).toBe("help");

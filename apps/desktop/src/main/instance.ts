@@ -1,9 +1,16 @@
 // This launch's profile, its logs folder and the single-instance lock. index.ts imports it first, so
 // all three are settled before any other module can touch userData or start a log; a packaged
-// launch with a debugging switch exits before any of them.
+// launch with a debugging switch exits before any of them. Background mode is settled first of all.
 import { join } from "node:path";
 import { app } from "electron";
+import { activationPolicy, backgroundMode } from "./background.ts";
 import { refuseDebugging } from "./navigation.ts";
+
+/** EIDOLON_DESKTOP_BACKGROUND: nothing this run does shows on screen or takes the focus. */
+export const background = backgroundMode(process.env);
+// At module load, before the app can finish launching as one with a Dock icon.
+const policy = activationPolicy(process.platform, background);
+if (policy !== null) app.setActivationPolicy(policy);
 
 /** What a launch asks of the instance already running: --quit quits it, as the tray's Quit does. */
 export interface LaunchRequest {

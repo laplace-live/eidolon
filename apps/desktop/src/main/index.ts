@@ -4,17 +4,19 @@
 // the window follows.
 import "./instance.ts";
 import { join } from "node:path";
-import { app, dialog, nativeImage, session, shell } from "electron";
+import { type AboutPanelOptionsOptions, app, nativeImage, session } from "electron";
 import { type Language, pageAt } from "../shared/bridge.ts";
 import { dataHome } from "./attach.ts";
 import { Backend, licensesFile } from "./backend.ts";
+import { hasTray } from "./background.ts";
 import { dressWindow, handleAppBridge, sendCommand } from "./chrome.ts";
 import type { AppPaths } from "./controller.ts";
 import { APP_ORIGIN, DEV_SERVER } from "./forwarder.ts";
-import { isLaunchRequest, primary, refused, request } from "./instance.ts";
+import { background, isLaunchRequest, primary, refused, request } from "./instance.ts";
 import { backendLog, logStart, logsFolder, mainLog } from "./log.ts";
 import { attachContextMenu, setApplicationMenu } from "./menu.ts";
 import { aboutPanel, type TrayActions } from "./menus.ts";
+import { native, saveDownloads } from "./native.ts";
 import { guardNavigation } from "./navigation.ts";
 import {
   failurePage,
@@ -46,7 +48,7 @@ const DEV_SWITCH = "eidolon-dev-server";
 const TRAY_NOTICE_MARKER = "tray-notice-shown";
 
 function open(path: string): void {
-  shell.openPath(path).then(
+  native.openPath(path).then(
     (error) => {
       if (error !== "") mainLog.warn(`Eidolon: couldn't open ${path}: ${error}`);
     },
@@ -111,7 +113,7 @@ function run(): void {
     showLogs: () => open(logsFolder()),
     openDataFolder: () => open(backend.home ?? dataHome(process.env)),
     licenses: () => open(licensesFile(paths)),
-    about: () => app.showAboutPanel(),
+    about: () => native.aboutPanel(aboutOptions()),
     quit: () => app.quit(),
   };
 
@@ -126,9 +128,13 @@ function run(): void {
     loadUrl(page === "app" ? `${APP_ORIGIN}/` : page === "failed" ? FAILED_PAGE : LOADING_PAGE);
   }
 
-  function setAbout(): void {
+  function aboutOptions(): AboutPanelOptionsOptions {
     const versions = { version, serverVersion: backend.serverVersion };
-    app.setAboutPanelOptions(aboutPanel(process.platform, versions, strings(), trayIconPath()));
+    return aboutPanel(process.platform, versions, strings(), trayIconPath());
+  }
+
+  function setAbout(): void {
+    app.setAboutPanelOptions(aboutOptions());
   }
 
   function languageChanged(next: Language): void {
@@ -143,7 +149,11 @@ function run(): void {
   function newWindow(): void {
     createWindow({
       created: (win) => {
-        guardNavigation(win.webContents, mainLog, () => pages.strayed());
+        guardNavigation(win.webContents, {
+          log: mainLog,
+          openExternal: (url) => native.openExternal(url),
+          strayed: () => pages.strayed(),
+        });
         // At the commit of a new document, before its script can say it listens.
         win.webContents.on("did-navigate", () => commands.replaced());
         attachContextMenu(win.webContents, strings);
@@ -182,11 +192,15 @@ function run(): void {
     .whenReady()
     .then(async () => {
       logStart(version);
+      if (background) {
+        mainLog.info("Eidolon: background mode: nothing shows on screen or takes the focus");
+      }
       // Before the first load: with no handlers, Electron grants every request.
       guardPermissions(session.defaultSession, {
         isWindow: (contents) => contents !== null && contents === mainWindow()?.webContents,
         strings,
       });
+      saveDownloads(session.defaultSession);
       handleScheme(
         {
           strings: () => shellPageStrings(language(), strings()),
@@ -208,13 +222,13 @@ function run(): void {
       });
       setApplicationMenu(strings(), actions);
       setAbout();
-      if (process.platform === "win32") {
+      if (hasTray(process.platform, background)) {
         tray = new AppTray(strings(), actions);
         hideNotice = new HideNotice({
           marker: join(app.getPath("userData"), TRAY_NOTICE_MARKER),
           show: () => {
             const { label, text } = strings();
-            return dialog.showMessageBox({
+            return native.messageBox({
               type: "none",
               title: "Eidolon",
               message: text.hideNoticeTitle,
