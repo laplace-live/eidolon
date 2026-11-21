@@ -74,7 +74,7 @@ export function AppShell() {
       <button
         type="button"
         onClick={() => main.current?.focus()}
-        className="sr-only font-medium text-sm focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:shadow-md focus:outline-none focus:ring-[3px] focus:ring-ring/50"
+        className="sr-only font-medium text-sm focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:shadow-md focus:outline-none focus:ring-[3px] focus:ring-ring/50 shell:focus:top-[calc(env(titlebar-area-height,0px)+0.75rem)]"
       >
         {t`Skip to content`}
       </button>

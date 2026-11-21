@@ -394,7 +394,8 @@ Window Controls Overlay gives as `env(titlebar-area-*)`:
 - **macOS:** the traffic lights sit at the top left. A page's row starts after them, measured from
   the window's edge: at the edge while the sidebar is a sheet, beside the 3rem rail when collapsed.
   The sidebar's first row starts below them, open or collapsed, so the lights sit in an empty strip
-  above it. Fullscreen hides them, and drops every inset.
+  above it. The facts editor's sheet, as wide as a narrow window, stops short of them, and the skip
+  link shows below them. Fullscreen hides them, and drops every inset.
 - **Windows:** the caption buttons sit at the top right, where every page row ends before them. A
   sheet at the right edge starts below them, and a dialog centres below them.
 - Menus, popovers, dialogs, sheets and tooltips portal out of `#root` and never drag. A press on a
