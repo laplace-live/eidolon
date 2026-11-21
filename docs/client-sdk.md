@@ -45,10 +45,12 @@ zero `@pipecat-ai/*` packages directly.
   `useEidolonConversation` and `eventItems` don't model.
 - **A host app on another origin needs a bot that answers it.** A production-mode bot (`bun run
   dev`, `bun run start` or the image) allows every origin unless `PIPECAT_ALLOWED_ORIGINS` narrows
-  it. The local app (`bun run app`, `bun run local`, `eidolon`) answers only its own pages until
-  `EIDOLON_LOCAL_ALLOWED_ORIGINS` lists the host's origin, and then serves it the bot's API as a
-  deployment would, never as the local viewer ([web-app.md](web-app.md#security)). Text chats
-  also need `EIDOLON_CHAT_SECRET`; without it the probe reports `"off"`.
+  it. The local app (`bun run app`, `bun run local`, `eidolon`, the desktop app) answers only its
+  own pages until `EIDOLON_LOCAL_ALLOWED_ORIGINS` lists the host's origin, and then serves it the
+  bot's API as a deployment would, never as the local viewer ([web-app.md](web-app.md#security)).
+  The desktop app's server reads it from the environment the app gives it, on macOS the login
+  shell's and never a `.env` ([desktop.md](desktop.md#the-environment)). Text chats also need
+  `EIDOLON_CHAT_SECRET`; without it the probe reports `"off"`.
 
 ---
 
