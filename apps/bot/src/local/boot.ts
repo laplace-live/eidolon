@@ -304,7 +304,8 @@ export async function bootLocal(
   };
   shutdown = shutdownOnce(bot, (code) => io.exit(code));
   const stop = shutdown;
-  // Before the tasks load: the supervisor's disconnect comes once, so a later handler misses it.
+  // Before the tasks load: a signal or the supervisor's going during it must stop the runs it
+  // resumes, not kill the server under them or let them go on.
   io.onShutdown(() => stop(0));
   const port = bot.server.port;
   try {
