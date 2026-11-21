@@ -734,9 +734,9 @@ Each step prints one line, made of the checks inside it:
    input, never a click, which opens the file chooser) reach her mind; the picture opens in the
    in-page viewer, whose Save saves it, and the text file saves through `<a download>` under the
    name it was sent with, each whole into the profile's `downloads` folder. Her selfie, from
-   `take_selfie` on the fakes' image model, opens and saves the same way. Each link must be an
-   `<a download>`: main's `downloadURL` fallback would save a `target="_blank"` one too, with the
-   same lines in main.log.
+   `take_selfie` on the fakes' image model, which the chat must offer while the persona has an
+   outfit to draw, opens and saves the same way. Each link must be an `<a download>`: main's
+   `downloadURL` fallback would save a `target="_blank"` one too, with the same lines in main.log.
 3. **Theme and language:** the page's theme setting reaches `nativeTheme.themeSource` as it is, its
    language rebuilds the menus in it, and its `[data-shell]` rows drag while their controls don't,
    the sidebar's clear of the traffic lights on macOS.

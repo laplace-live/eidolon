@@ -797,10 +797,11 @@ async function chat(walk: Walk, driven: Driven, step: Step) {
     );
     await photo.click();
   } else {
+    // On the fakes' image model, only a persona with no outfit to draw goes without the tool.
     step.check(
-      "no take_selfie: her photo is the viewer's picture instead",
-      true,
-      `the chat offered no take_selfie (${references} outfit reference(s)), so the picture sent above stands in`,
+      "the chat offers take_selfie while the persona has an outfit to draw",
+      references === 0,
+      `the chat offered no take_selfie, with ${references} outfit reference(s); the picture sent above stands in for her photo`,
     );
     await page.getByRole("button", { name: "Sent by you" }).click();
   }
