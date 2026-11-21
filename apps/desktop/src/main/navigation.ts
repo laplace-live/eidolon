@@ -1,4 +1,4 @@
-// The window never leaves eidolon-app:// (§1.4, §5.5): a web link opens in the default browser, a
+// The window never leaves eidolon-app://: a web link opens in the default browser, a
 // link to the app's own files saves through a download, no window ever opens, and a navigation or a
 // redirect anywhere else is cancelled. A packaged app also refuses the switches that open CDP.
 // instance.ts runs that refusal before the profile and the logs exist, so this loads no logger.

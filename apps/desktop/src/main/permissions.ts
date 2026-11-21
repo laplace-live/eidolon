@@ -1,4 +1,4 @@
-// The page's permissions (§1.9, §5.5), on the session before its first load: with no handlers,
+// The page's permissions, on the session before its first load: with no handlers,
 // Electron grants every request and passes every check. policy.ts decides; this asks macOS for the
 // microphone and says where to turn it on once it's been denied.
 import { dialog, type Session, systemPreferences, type WebContents } from "electron";

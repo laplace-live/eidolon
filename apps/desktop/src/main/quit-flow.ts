@@ -1,4 +1,4 @@
-// Closing and quitting (§2.5): a close hides the window, and every quit, from ⌘Q, a menu, the
+// Closing and quitting: a close hides the window, and every quit, from ⌘Q, a menu, the
 // Dock, the tray or a second launch's --quit, goes through one flow: ask when work would be cut,
 // hide, stop our own backend, then let the quit through. Electron-free: quit.ts wires it to the
 // app's events, and the confirmation (quit-check.ts) decides whether to ask.
@@ -9,7 +9,7 @@ export interface QuitEffects {
   /** The quit check and its box; true to quit. Asked again while open, it joins the open box. */
   readonly confirm: () => Promise<boolean>;
   readonly hideWindows: () => void;
-  /** §2.4's stop of our own backend; nothing for an attached server. */
+  /** The stop of our own backend; nothing for an attached server. */
   readonly stopBackend: () => Promise<void>;
   /** app.quit(), which runs before-quit again, now let through. */
   readonly quit: () => void;

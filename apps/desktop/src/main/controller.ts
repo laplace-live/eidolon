@@ -1,6 +1,6 @@
 // The backend controller: one attempt at a time to reach a server on the data home, by attaching
 // to one that proves itself or by spawning the app's own, and what follows: restarts, the attach
-// grace period, the wait after a refused spawn, failures and the stop (§2.2–§2.5). Electron-free:
+// grace period, the wait after a refused spawn, failures and the stop. Electron-free:
 // the wiring gives it the launch, the environment and the data home, and follows its state.
 import { type SpawnOptions, spawn } from "node:child_process";
 import { createServer, type Socket } from "node:net";

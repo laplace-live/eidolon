@@ -1,4 +1,4 @@
-// The desktop app's main process, in §2.1's order: the profile, the logs and the single-instance
+// The desktop app's main process, in this order: the profile, the logs and the single-instance
 // lock first (instance.ts), then the scheme; once Electron is ready, the session's guards and the
 // scheme's handler, the window on the loading page, and then the environment and the backend, which
 // the window follows.
@@ -40,7 +40,7 @@ import { createWindow, mainWindow, showWindow } from "./window.ts";
 
 /** NSIS gives the Start menu shortcut appId as its AppUserModelID. */
 const APP_USER_MODEL_ID = "live.laplace.eidolon";
-/** dev.ts's switch: Vite serves every path but the backend's (§3). Unpackaged runs only. */
+/** dev.ts's switch: Vite serves every path but the backend's. Unpackaged runs only. */
 const DEV_SWITCH = "eidolon-dev-server";
 /** In userData: the Windows tray notice has shown. */
 const TRAY_NOTICE_MARKER = "tray-notice-shown";

@@ -1,4 +1,4 @@
-// Which page the window shows (§2.1, §2.3): the loading page until the backend is ready, then the
+// Which page the window shows: the loading page until the backend is ready, then the
 // app, and the failure page when the backend fails or the window's own page does. It also words
 // the shell pages. Electron-free: index.ts drives it with the backend's states and the window's
 // failures, and loads what it asks for.

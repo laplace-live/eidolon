@@ -1,5 +1,5 @@
 // Finding a server that already serves the data home, and proving it is this home's Eidolon before
-// a Bearer goes to it (§2.2): the hint its lock's .info gives, and a probe that only a holder of
+// a Bearer goes to it: the hint its lock's .info gives, and a probe that only a holder of
 // local-token can answer.
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";

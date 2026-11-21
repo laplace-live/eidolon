@@ -1,5 +1,5 @@
 // The eidolon-app://app host: every request the window makes, forwarded to the server the
-// controller proved, with the Bearer that only main holds (§3). Electron-free: the scheme's
+// controller proved, with the Bearer that only main holds. Electron-free: the scheme's
 // handler hands it protocol.handle's requests.
 import type { Socket } from "node:net";
 import { Agent, buildConnector, fetch } from "undici";

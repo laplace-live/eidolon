@@ -1,4 +1,4 @@
-// The shell's menus as data (§5.3, §5.4): macOS's application menu, Windows' (zoom alone, under a
+// The shell's menus as data: macOS's application menu, Windows' (zoom alone, under a
 // hidden title bar) and its tray icon's, the context menu Electron doesn't have, and the About
 // panel they open. Electron-free: menu.ts, tray.ts and index.ts hand them to Electron.
 import type { AboutPanelOptionsOptions, MenuItemConstructorOptions } from "electron";
@@ -163,7 +163,7 @@ export function contextMenu(
 }
 
 /**
- * The About panel: the app's own version, and the server's beside it once one has answered (§6),
+ * The About panel: the app's own version, and the server's beside it once one has answered,
  * which may be a terminal's of another version. macOS shows it beside the app's, Windows among
  * the credits.
  */

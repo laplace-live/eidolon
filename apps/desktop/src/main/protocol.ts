@@ -1,4 +1,4 @@
-// The eidolon-app: scheme the window loads (§3). Its shell host serves the pages main shows while
+// The eidolon-app: scheme the window loads. Its shell host serves the pages main shows while
 // there is no backend to show, its app host is the backend through the forwarder, and every other
 // host is a 404.
 import { readFile } from "node:fs/promises";

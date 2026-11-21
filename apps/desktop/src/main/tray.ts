@@ -1,4 +1,4 @@
-// Windows' notification-area icon (§5.4, C1): Windows has no Dock to bring a hidden window back, so
+// Windows' notification-area icon: Windows has no Dock to bring a hidden window back, so
 // the icon stays for the whole run, opens the window on a click, and holds the items macOS's menu
 // bar has.
 import { join } from "node:path";

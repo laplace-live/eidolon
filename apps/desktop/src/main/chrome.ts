@@ -1,4 +1,4 @@
-// The window's chrome (§5.2) and the app's bridge to main (§5.9): the theme the page reports, which
+// The window's chrome and the app's bridge to main: the theme the page reports, which
 // native menus, dialogs and the caption buttons follow; the fullscreen mark on macOS; the page's
 // language; and the versions its bridge carries.
 import { type BrowserWindow, ipcMain, nativeTheme } from "electron";

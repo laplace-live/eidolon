@@ -1,4 +1,4 @@
-// Close and quit on Electron (§2.5): quit-flow.ts's flow on before-quit, the quit check's native box
+// Close and quit on Electron: quit-flow.ts's flow on before-quit, the quit check's native box
 // with no owner window, macOS's power-off notice, and Windows' session end, which never reaches
 // before-quit.
 import { app, type BrowserWindow, dialog, type NativeImage, powerMonitor } from "electron";

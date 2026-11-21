@@ -1,4 +1,4 @@
-// The window's options (§5.1, §5.2): its chrome on each platform, and its bounds, kept in a JSON file
+// The window's options: its chrome on each platform, and its bounds, kept in a JSON file
 // in userData across launches. Electron-free: window.ts and chrome.ts apply them.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -100,7 +100,7 @@ export function titleBarOverlay(dark: boolean): TitleBarOverlayOptions {
   return { color: "#00000000", symbolColor: symbolColor(dark), height: HEADER_ROW_PX };
 }
 
-/** No system title bar (D6): the page's rows stand in for it, beside the window's own buttons. */
+/** No system title bar: the page's rows stand in for it, beside the window's own buttons. */
 export function chromeOptions(
   platform: NodeJS.Platform,
   dark: boolean,

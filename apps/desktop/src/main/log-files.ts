@@ -1,4 +1,4 @@
-// The logs' rotation (§5.7): main.log and backend.log each move aside at 2 MB, keeping five
+// The logs' rotation: main.log and backend.log each move aside at 2 MB, keeping five
 // archives, rather than electron-log's single .old file. Electron-free: log.ts hands it to
 // electron-log.
 import { renameSync, rmSync } from "node:fs";

@@ -1,4 +1,4 @@
-// The logs (§5.7, D11): main's own in main.log and the backend's output in backend.log, both in
+// The logs: main's own in main.log and the backend's output in backend.log, both in
 // app.getPath("logs"), which instance.ts has moved into a profile given on the command line.
 // console goes to main.log too, electron-updater's included.
 import { mkdirSync } from "node:fs";

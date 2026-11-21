@@ -1,4 +1,4 @@
-// The app's one window (§5.1): no system title bar, its bounds kept across launches, closed only by
+// The app's one window: no system title bar, its bounds kept across launches, closed only by
 // a quit. Main keeps whether it shows itself: Electron reports an occluded window as hidden.
 import { join } from "node:path";
 import { app, BrowserWindow, type IpcMainEvent, nativeTheme, screen } from "electron";

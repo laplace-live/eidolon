@@ -1,4 +1,4 @@
-// The application menu and the window's context menu (§5.3), in the shell's language: menus.ts holds
+// The application menu and the window's context menu, in the shell's language: menus.ts holds
 // them as data.
 import { app, BrowserWindow, Menu, type WebContents } from "electron";
 import { contextMenu, type MenuActions, macMenu, windowsMenu } from "./menus.ts";
