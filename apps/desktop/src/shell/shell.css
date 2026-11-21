@@ -186,7 +186,6 @@ h1 {
   gap: 0.5rem;
 }
 
-/* Show Logs to the left, Quit and Try Again to the right. */
 .actions > :first-child {
   margin-inline-end: auto;
 }

@@ -1,6 +1,6 @@
 // Runs sandboxed before each page in the window. It marks the page with the window controls it
-// sits beside, before its first paint, for apps/web's [data-shell] styles and the shell pages'
-// insets, and gives the app's page and the shell pages each its own bridge to main.
+// sits beside, before its first paint, for apps/web's [data-shell] styles, and gives the app's
+// page and the shell pages each its own bridge to main.
 import { contextBridge, ipcRenderer } from "electron";
 import { BRIDGE, versionsFrom } from "../shared/bridge.ts";
 import { bridgeFor, desktopBridge, shellBridge } from "./bridges.ts";
