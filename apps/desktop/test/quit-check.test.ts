@@ -10,16 +10,20 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { JobSnapshot, Status } from "../../bot/src/local/api.ts";
 import {
   type BackendFetch,
+  type BackendResponse,
   checkQuit,
   type QuitCheck,
   QuitConfirmation,
   quitBox,
 } from "../src/main/quit-check.ts";
-import { STRINGS } from "../src/main/strings.ts";
+import { STRINGS, type Stopping } from "../src/main/strings.ts";
 
 afterEach(() => {
   vi.useRealTimers();
 });
+
+const STATUS = "/api/local/status";
+const JOBS = "/api/local/jobs";
 
 type StatusAnswer = Pick<Status, "activeCalls"> & {
   readonly assistant: Pick<Status["assistant"], "running">;
@@ -27,6 +31,15 @@ type StatusAnswer = Pick<Status, "activeCalls"> & {
 
 function job(status: JobSnapshot["status"]): Pick<JobSnapshot, "id" | "status"> {
   return { id: `20261121T000000-${status}`, status };
+}
+
+const status = (activeCalls: number, running: number): StatusAnswer => ({
+  activeCalls,
+  assistant: { running },
+});
+
+function answer(body: unknown): BackendResponse {
+  return { ok: true, status: 200, json: async () => body };
 }
 
 interface Requested {
@@ -42,93 +55,147 @@ function backend(answers: Readonly<Record<string, unknown>>): {
   const requests: Requested[] = [];
   const fetch: BackendFetch = async (path, { signal }) => {
     requests.push({ path, signal });
-    const answer = answers[path];
-    if (answer instanceof Error) throw answer;
-    if (typeof answer === "number") return { ok: false, json: async () => ({}) };
-    return { ok: true, json: async () => answer };
+    const body = answers[path];
+    if (body instanceof Error) throw body;
+    if (typeof body === "number") return { ok: false, status: body, json: async () => ({}) };
+    return answer(body);
   };
   return { fetch, requests };
 }
 
-const status = (activeCalls: number, running: number): StatusAnswer => ({
-  activeCalls,
-  assistant: { running },
-});
+/** What a quit over `checkQuit(fetch)` logs, having asked as when the backend can't say. */
+async function logged(fetch: BackendFetch): Promise<string[]> {
+  const warn = vi.fn<(message: string) => void>();
+  const shown: MessageBoxOptions[] = [];
+  const confirmation = new QuitConfirmation({
+    check: () => checkQuit(fetch),
+    strings: () => STRINGS.en,
+    show: async (box) => {
+      shown.push(box);
+      return { response: 1 };
+    },
+    focus: () => {},
+    log: { warn },
+    platform: "darwin",
+  });
+  expect(await confirmation.confirm()).toBe(false);
+  expect(shown.map((box) => box.detail)).toEqual([STRINGS.en.text.quitUnknown]);
+  return warn.mock.calls.map(([message]) => message);
+}
+
+const WHY = "Eidolon: couldn't check what quitting stops:";
 
 describe("checkQuit", () => {
   test("counts the calls, the running tasks and the running jobs, from one request each", async () => {
     const { fetch, requests } = backend({
-      "/api/local/status": { ...status(1, 2), version: "0.13.0", restartRequired: false },
-      "/api/local/jobs": [job("running"), job("succeeded"), job("interrupted"), job("running")],
+      [STATUS]: { ...status(1, 2), version: "0.13.0", restartRequired: false },
+      [JOBS]: [job("running"), job("succeeded"), job("interrupted"), job("running")],
     });
     await expect(checkQuit(fetch)).resolves.toEqual({ calls: 1, tasks: 2, jobs: 2 });
-    expect(requests.map(({ path }) => path).sort()).toEqual([
-      "/api/local/jobs",
-      "/api/local/status",
-    ]);
+    expect(requests.map(({ path }) => path).sort()).toEqual([JOBS, STATUS]);
     const [first, second] = requests;
     expect(first?.signal).toBe(second?.signal);
   });
 
   test("finds nothing running on an idle backend", async () => {
-    const { fetch } = backend({ "/api/local/status": status(0, 0), "/api/local/jobs": [] });
+    const { fetch } = backend({ [STATUS]: status(0, 0), [JOBS]: [] });
     await expect(checkQuit(fetch)).resolves.toEqual({ calls: 0, tasks: 0, jobs: 0 });
   });
 
-  test.each<[string, Readonly<Record<string, unknown>>]>([
-    ["a refused status", { "/api/local/status": 401, "/api/local/jobs": [] }],
-    ["a refused job list", { "/api/local/status": status(0, 0), "/api/local/jobs": 503 }],
-    ["a failed request", { "/api/local/status": new Error("ECONNREFUSED"), "/api/local/jobs": [] }],
+  const noCounts = `GET ${STATUS}: no counts in activeCalls and assistant.running`;
+  test.each<[string, Readonly<Record<string, unknown>>, string]>([
+    ["a refused status", { [STATUS]: 401, [JOBS]: [] }, `GET ${STATUS}: answered 401`],
+    ["a refused job list", { [STATUS]: status(0, 0), [JOBS]: 503 }, `GET ${JOBS}: answered 503`],
     [
-      "no activeCalls",
-      { "/api/local/status": { assistant: { running: 0 } }, "/api/local/jobs": [] },
+      "a failed request",
+      {
+        [STATUS]: new TypeError("fetch failed", {
+          cause: new Error("connect ECONNREFUSED 127.0.0.1:7860"),
+        }),
+        [JOBS]: [],
+      },
+      `GET ${STATUS}: fetch failed: connect ECONNREFUSED 127.0.0.1:7860`,
     ],
-    ["no assistant", { "/api/local/status": { activeCalls: 0 }, "/api/local/jobs": [] }],
-    ["a count below 0", { "/api/local/status": status(-1, 0), "/api/local/jobs": [] }],
-    ["a count that isn't whole", { "/api/local/status": status(0, 0.5), "/api/local/jobs": [] }],
-    ["jobs that aren't a list", { "/api/local/status": status(0, 0), "/api/local/jobs": {} }],
-    ["a status that isn't an object", { "/api/local/status": null, "/api/local/jobs": [] }],
-  ])("is unknown on %s", async (_name, answers) => {
-    await expect(checkQuit(backend(answers).fetch)).resolves.toBe("unknown");
+    ["no activeCalls", { [STATUS]: { assistant: { running: 0 } }, [JOBS]: [] }, noCounts],
+    ["no assistant", { [STATUS]: { activeCalls: 0 }, [JOBS]: [] }, noCounts],
+    ["a count below 0", { [STATUS]: status(-1, 0), [JOBS]: [] }, noCounts],
+    ["a count that isn't whole", { [STATUS]: status(0, 0.5), [JOBS]: [] }, noCounts],
+    ["jobs that aren't a list", { [STATUS]: status(0, 0), [JOBS]: {} }, `GET ${JOBS}: no list`],
+    ["a status that isn't an object", { [STATUS]: null, [JOBS]: [] }, noCounts],
+  ])("fails on %s, and the quit asks and logs why", async (_name, answers, why) => {
+    await expect(checkQuit(backend(answers).fetch)).rejects.toThrow();
+    await expect(logged(backend(answers).fetch)).resolves.toEqual([`${WHY} ${why}`]);
   });
 
-  test("is unknown when a body can't be read", async () => {
-    const fetch: BackendFetch = async () => ({
-      ok: true,
-      json: () => Promise.reject(new SyntaxError("Unexpected end of JSON input")),
-    });
-    await expect(checkQuit(fetch)).resolves.toBe("unknown");
+  test("fails when a body can't be read", async () => {
+    const fetch: BackendFetch = async (path) =>
+      path === STATUS
+        ? {
+            ok: true,
+            status: 200,
+            json: () => Promise.reject(new SyntaxError("Unexpected end of JSON input")),
+          }
+        : answer([]);
+    await expect(logged(fetch)).resolves.toEqual([
+      `${WHY} GET ${STATUS}: Unexpected end of JSON input`,
+    ]);
   });
+
+  /** The check's outcome so far: null until it settles, then its counts or its error's message. */
+  function watch(check: Promise<Stopping>): { readonly settled: () => unknown } {
+    let settled: unknown = null;
+    check.then(
+      (stopping) => {
+        settled = stopping;
+      },
+      (error: Error) => {
+        settled = error.message;
+      },
+    );
+    return { settled: () => settled };
+  }
 
   test("gives both requests 2 s in all, then cancels them, even a fetch that ignores its signal", async () => {
     vi.useFakeTimers();
     const signals: AbortSignal[] = [];
     const fetch: BackendFetch = (path, { signal }) => {
       signals.push(signal);
-      return path === "/api/local/status"
-        ? Promise.resolve({ ok: true, json: async () => status(0, 0) })
-        : new Promise(() => {});
+      return path === STATUS ? Promise.resolve(answer(status(0, 0))) : new Promise(() => {});
     };
-    let settled = false;
-    const check = checkQuit(fetch).finally(() => {
-      settled = true;
-    });
+    const check = watch(checkQuit(fetch));
     await vi.advanceTimersByTimeAsync(1_999);
-    expect(settled).toBe(false);
+    expect(check.settled()).toBeNull();
     expect(signals.map((signal) => signal.aborted)).toEqual([false, false]);
     await vi.advanceTimersByTimeAsync(1);
-    await expect(check).resolves.toBe("unknown");
+    expect(check.settled()).toBe("no answer in 2 s");
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, true]);
+  });
+
+  test("counts the bodies in those 2 s: a body that never ends is as late as no answer", async () => {
+    vi.useFakeTimers();
+    const signals: AbortSignal[] = [];
+    const fetch: BackendFetch = async (path, { signal }) => {
+      signals.push(signal);
+      return path === STATUS
+        ? { ok: true, status: 200, json: () => new Promise(() => {}) }
+        : answer([]);
+    };
+    const check = watch(checkQuit(fetch));
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(check.settled()).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(check.settled()).toBe("no answer in 2 s");
     expect(signals.map((signal) => signal.aborted)).toEqual([true, true]);
   });
 
   test("cancels the other request as soon as one fails", async () => {
     let jobsSignal: AbortSignal | null = null;
     const fetch: BackendFetch = (path, { signal }) => {
-      if (path === "/api/local/status") return Promise.reject(new Error("ECONNRESET"));
+      if (path === STATUS) return Promise.reject(new Error("ECONNRESET"));
       jobsSignal = signal;
       return new Promise(() => {});
     };
-    await expect(checkQuit(fetch)).resolves.toBe("unknown");
+    await expect(checkQuit(fetch)).rejects.toThrow(`GET ${STATUS}`);
     expect((jobsSignal as AbortSignal | null)?.aborted).toBe(true);
   });
 });
@@ -179,10 +246,11 @@ describe("quitBox", () => {
   });
 });
 
-function setup(check: () => Promise<QuitCheck> | null, platform: NodeJS.Platform = "darwin") {
+function setup(check: () => Promise<Stopping> | null, platform: NodeJS.Platform = "darwin") {
   const shown: MessageBoxOptions[] = [];
   let response = 0;
   const focus = vi.fn();
+  const warn = vi.fn<(message: string) => void>();
   const confirmation = new QuitConfirmation({
     check,
     strings: () => STRINGS.en,
@@ -191,12 +259,14 @@ function setup(check: () => Promise<QuitCheck> | null, platform: NodeJS.Platform
       return { response };
     },
     focus,
+    log: { warn },
     platform,
   });
   return {
     confirmation,
     shown,
     focus,
+    warn,
     answer: (value: number) => {
       response = value;
     },
@@ -216,14 +286,22 @@ describe("QuitConfirmation", () => {
     const quit = setup(async () => ({ calls: 1, tasks: 0, jobs: 0 }));
     expect(await quit.confirmation.confirm()).toBe(true);
     expect(quit.shown.map((box) => box.detail)).toEqual(["Quitting stops the call."]);
-    const cancel = setup(async () => "unknown" as const);
+    const cancel = setup(async () => ({ calls: 0, tasks: 0, jobs: 2 }));
     cancel.answer(1);
     expect(await cancel.confirmation.confirm()).toBe(false);
-    expect(cancel.shown.map((box) => box.detail)).toEqual([STRINGS.en.text.quitUnknown]);
+    expect(cancel.shown.map((box) => box.detail)).toEqual(["Quitting stops 2 jobs."]);
+    expect([...quit.warn.mock.calls, ...cancel.warn.mock.calls]).toEqual([]);
+  });
+
+  test("asks as when the backend can't say when the check fails, and logs why", async () => {
+    const f = setup(() => Promise.reject(new Error("no answer in 2 s")));
+    expect(await f.confirmation.confirm()).toBe(true);
+    expect(f.shown.map((box) => box.detail)).toEqual([STRINGS.en.text.quitUnknown]);
+    expect(f.warn.mock.calls).toEqual([[`${WHY} no answer in 2 s`]]);
   });
 
   test("joins an open decision instead of stacking a second box, and checks once per decision", async () => {
-    const checked = Promise.withResolvers<QuitCheck>();
+    const checked = Promise.withResolvers<Stopping>();
     const check = vi.fn(() => checked.promise);
     const f = setup(check);
     const first = f.confirmation.confirm();
@@ -240,7 +318,7 @@ describe("QuitConfirmation", () => {
   });
 
   test("once disposed, a pending decision answers false without a box, and so does every later one", async () => {
-    const checked = Promise.withResolvers<QuitCheck>();
+    const checked = Promise.withResolvers<Stopping>();
     const f = setup(() => checked.promise);
     const pending = f.confirmation.confirm();
     f.confirmation.dispose();

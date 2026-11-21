@@ -9,7 +9,7 @@ import type { MessageBoxOptions } from "electron";
 import type { JobSnapshot, Status } from "../../../bot/src/local/api.ts";
 import type { Stopping, Strings } from "./strings.ts";
 
-/** What quitting would stop, or `unknown` when the backend didn't say in time. */
+/** What quitting would stop, or `unknown` when the backend couldn't say. */
 export type QuitCheck = Stopping | "unknown";
 
 /** A GET to our own backend, Bearer included, at a root-relative `path`. */
@@ -20,8 +20,12 @@ export type BackendFetch = (
 
 export interface BackendResponse {
   readonly ok: boolean;
+  readonly status: number;
   json(): Promise<unknown>;
 }
+
+const STATUS = "/api/local/status";
+const JOBS = "/api/local/jobs";
 
 /** One deadline for both requests, their bodies included. */
 const DEADLINE_MS = 2_000;
@@ -30,50 +34,69 @@ const DEADLINE_MS = 2_000;
 const QUIT = 0;
 const CANCEL = 1;
 
-async function body(fetch: BackendFetch, path: string, signal: AbortSignal): Promise<unknown> {
-  const response = await fetch(path, { signal });
-  if (!response.ok) throw new Error(`${path} failed`);
-  return response.json();
+async function get(fetch: BackendFetch, path: string, signal: AbortSignal): Promise<unknown> {
+  try {
+    const response = await fetch(path, { signal });
+    if (!response.ok) throw new Error(`answered ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    throw new Error(`GET ${path}`, { cause: error });
+  }
 }
 
 function count(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
-/** The answers' counts, or null when either isn't the shape GET status and GET jobs answer. */
-function counted(status: unknown, jobs: unknown): Stopping | null {
+/** The answers' counts; throws when either isn't the shape GET status and GET jobs answer. */
+function counted(status: unknown, jobs: unknown): Stopping {
   const { activeCalls, assistant } = (status ?? {}) as Partial<
     Pick<Status, "activeCalls" | "assistant">
   >;
   const calls = count(activeCalls);
   const tasks = count(assistant?.running);
-  if (calls === null || tasks === null || !Array.isArray(jobs)) return null;
+  if (calls === null || tasks === null) {
+    throw new Error(`GET ${STATUS}: no counts in activeCalls and assistant.running`);
+  }
+  if (!Array.isArray(jobs)) throw new Error(`GET ${JOBS}: no list`);
   const running = (jobs as readonly (Partial<Pick<JobSnapshot, "status">> | null)[]).filter(
     (job) => job?.status === "running",
   );
   return { calls, tasks, jobs: running.length };
 }
 
+/** `error`'s message and its causes', as one line. */
+function explain(error: unknown): string {
+  const messages: string[] = [];
+  let at: unknown = error;
+  while (at !== undefined) {
+    messages.push(at instanceof Error ? at.message : String(at));
+    at = at instanceof Error ? at.cause : undefined;
+  }
+  return messages.join(": ");
+}
+
 /**
  * Asks our own ready backend what quitting would stop: GET /api/local/status's `activeCalls` and
  * `assistant.running`, and the running jobs of GET /api/local/jobs, both under one deadline.
- * Anything else, a failure or no answer in time, is `unknown`, and the requests are cancelled.
+ * Rejects with the cause when a request fails, an answer has another shape, or the deadline
+ * passes; the requests are cancelled either way.
  */
-export async function checkQuit(fetch: BackendFetch): Promise<QuitCheck> {
+export async function checkQuit(fetch: BackendFetch): Promise<Stopping> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<"unknown">((resolve) => {
-    timer = setTimeout(() => resolve("unknown"), DEADLINE_MS);
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`no answer in ${DEADLINE_MS / 1000} s`)),
+      DEADLINE_MS,
+    );
   });
-  const answer = Promise.all([
-    body(fetch, "/api/local/status", controller.signal),
-    body(fetch, "/api/local/jobs", controller.signal),
-  ]).then(
-    ([status, jobs]) => counted(status, jobs) ?? "unknown",
-    () => "unknown" as const,
-  );
   try {
-    return await Promise.race([answer, deadline]);
+    const [status, jobs] = await Promise.race([
+      Promise.all([get(fetch, STATUS, controller.signal), get(fetch, JOBS, controller.signal)]),
+      deadline,
+    ]);
+    return counted(status, jobs);
   } finally {
     clearTimeout(timer);
     controller.abort();
@@ -102,13 +125,18 @@ export function quitBox(
 }
 
 export interface QuitConfirmationOptions {
-  /** Starts one check; null while no backend of ours is ready, and the quit goes ahead unasked. */
-  readonly check: () => Promise<QuitCheck> | null;
+  /**
+   * Starts one check; null while no backend of ours is ready, and the quit goes ahead unasked. A
+   * check that rejects asks as when the backend can't say, and its cause goes to `log`.
+   */
+  readonly check: () => Promise<Stopping> | null;
   readonly strings: () => Strings;
   /** A native box with no owner window, so a hidden window stays hidden. */
   readonly show: (options: MessageBoxOptions) => Promise<{ readonly response: number }>;
   /** Brings the open box forward when quitting is asked for again meanwhile. */
   readonly focus: () => void;
+  /** main.log. */
+  readonly log?: { warn(message: string): void };
   readonly platform?: NodeJS.Platform;
 }
 
@@ -150,9 +178,14 @@ export class QuitConfirmation {
   }
 
   async #decide(): Promise<boolean> {
-    const check = this.#options.check();
-    if (check === null) return true;
-    const box = quitBox(await check, this.#options.strings(), this.#options.platform);
+    const pending = this.#options.check();
+    if (pending === null) return true;
+    const check = await pending.catch((error: unknown): QuitCheck => {
+      const log = this.#options.log ?? console;
+      log.warn(`Eidolon: couldn't check what quitting stops: ${explain(error)}`);
+      return "unknown";
+    });
+    const box = quitBox(check, this.#options.strings(), this.#options.platform);
     if (this.#disposed) return false;
     if (box === null) return true;
     const { response } = await this.#options.show(box);
