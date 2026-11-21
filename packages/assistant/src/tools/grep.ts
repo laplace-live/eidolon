@@ -86,8 +86,8 @@ class LineMatcher {
   #settle: ((outcome: Matched | Error) => void) | null = null;
 
   constructor(regex: RegExp) {
-    const { command, env } = jsRuntime();
-    const child = spawnProcess([command, "-e", MATCHER_SOURCE], {
+    const { command, args, env } = jsRuntime();
+    const child = spawnProcess([command, ...args, "-e", MATCHER_SOURCE], {
       // Node took 160 ms to start in a removed working folder, as this process's may be, and 40 in
       // one that is there.
       cwd: parse(command).root,

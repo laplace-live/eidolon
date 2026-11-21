@@ -320,10 +320,10 @@ call that started it. Each command waits for the owner's OK first ([Approvals](#
   filter. It holds the managed yt-dlp, once Eidolon has installed it, and `eidolon`,
   which `TaskManager.boot()` writes again at each start (`writeEidolonCommand`, 0700): a `sh`
   script (its paths with forward slashes on Windows, for Git Bash) that runs this install's CLI
-  (`cliEntry()`) on the app's own runtime (`jsRuntime()`), setting `EIDOLON_HOME` to the app's
-  data home, `ELECTRON_RUN_AS_NODE` inside Electron, and the npm launcher's `EIDOLON_APP_ROOT` and
-  `EIDOLON_NO_DOTENV` when the app has them. `eidolon discover` is the
-  [persona-update](#the-built-in-skills) skill's step; `eidolon pipeline` and the rest run too,
+  (`cliEntry()`) on the app's own runtime (`jsRuntime()`, its flags before the CLI), setting
+  `EIDOLON_HOME` to the app's data home, `ELECTRON_RUN_AS_NODE` inside Electron, and the npm
+  launcher's `EIDOLON_APP_ROOT` and `EIDOLON_NO_DOTENV` when the app has them. `eidolon discover`
+  is the [persona-update](#the-built-in-skills) skill's step; `eidolon pipeline` and the rest run too,
   each behind the card like any other command, but a task's command dies at 30 minutes, so the
   paid stages stay Studio's. An app task's commands also get
   `EIDOLON_TASK_PERSONA` (`BashJobs`' `variables`), its chat's persona; a skill names it as

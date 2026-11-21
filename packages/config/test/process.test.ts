@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { describe, expect, test } from "vitest";
 import { jsRuntime, killTree, spawnProcess } from "../src/index.ts";
+import { asElectron, asNode } from "./electron.ts";
 
 /** Node running `script` as CommonJS (no top-level await), so `require` is there. */
 function node(script: string): [string, ...string[]] {
@@ -199,6 +200,47 @@ describe("spawnProcess", () => {
   });
 });
 
-test("jsRuntime runs our own JS on this runtime, with nothing to add outside Electron", () => {
-  expect(jsRuntime()).toEqual({ command: process.execPath, env: {} });
+describe("jsRuntime", () => {
+  test("on Node: this runtime, with nothing to add", () => {
+    const restore = asNode();
+    try {
+      expect(jsRuntime()).toEqual({ command: process.execPath, args: [], env: {} });
+    } finally {
+      restore();
+    }
+  });
+
+  test("inside Electron: its binary as Node, deaf to SIGUSR1 and trusting the OS's CAs", () => {
+    const restore = asElectron();
+    try {
+      expect(jsRuntime()).toEqual({
+        command: process.execPath,
+        args: ["--disable-sigusr1", "--use-system-ca"],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  test("its flags, put before the script, are this runtime's own options", async () => {
+    const restore = asElectron();
+    let runtime: ReturnType<typeof jsRuntime>;
+    try {
+      runtime = jsRuntime();
+    } finally {
+      restore();
+    }
+    const child = spawnProcess(
+      [
+        runtime.command,
+        ...runtime.args,
+        "-e",
+        "process.stdout.write(JSON.stringify([process.execArgv.slice(0, 2), process.argv.length]))",
+      ],
+      { env: runtime.env },
+    );
+    const [text, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+    expect([code, JSON.parse(text)]).toEqual([0, [["--disable-sigusr1", "--use-system-ca"], 1]]);
+  });
 });

@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { dataHome, killTree, spawnProcess } from "@eidolon/config";
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
+import { asElectron } from "../../../../packages/config/test/electron.ts";
 import type { JobCommand, JobStatus } from "../../src/local/api.ts";
 import type { JobSpec } from "../../src/local/jobs/argv.ts";
 import { type Job, JobRunner, type JobRunnerOptions } from "../../src/local/jobs/runner.ts";
@@ -235,6 +236,34 @@ process.stderr.write(JSON.stringify(args));`,
         stderrTail: '["--json","--persona","milky-green"]',
       });
     } finally {
+      delete process.env.EIDOLON_APP_ROOT;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("inside Electron, runs the CLI with the runtime's flags before it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "eidolon-app-root-"));
+    mkdirSync(join(root, "dist"));
+    writeFileSync(
+      join(root, "dist", "cli.js"),
+      `const summary = { v: 1, t: Date.now(), type: "summary", stage: process.argv[2], ok: true, counts: {}, durationSec: 0 };
+process.stdout.write(JSON.stringify(summary) + "\\n");
+process.stderr.write(JSON.stringify([process.execArgv, process.env.ELECTRON_RUN_AS_NODE]));`,
+    );
+    process.env.EIDOLON_APP_ROOT = root;
+    const restore = asElectron();
+    try {
+      const jobs = new JobRunner({ pollMs: 20 });
+      runners.push(jobs);
+      const job = jobs.start(spec());
+      restore();
+      await job.ended;
+      expect(jobs.snapshot(job)).toMatchObject({
+        status: "succeeded",
+        stderrTail: '[["--disable-sigusr1","--use-system-ca"],"1"]',
+      });
+    } finally {
+      restore();
       delete process.env.EIDOLON_APP_ROOT;
       rmSync(root, { recursive: true, force: true });
     }

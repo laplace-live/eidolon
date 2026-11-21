@@ -70,7 +70,8 @@ export async function supervise(
       boundPort = null;
       const runtime = jsRuntime();
       // The environment this process started with: the server applies the .env itself.
-      child = spawnProcess([runtime.command, options.entry ?? serverEntry(), ...localArgv(args)], {
+      const entry = options.entry ?? serverEntry();
+      child = spawnProcess([runtime.command, ...runtime.args, entry, ...localArgv(args)], {
         env: { ...STARTED_ENV, ...runtime.env },
         stdin: "ignore",
         stdout: "inherit",
