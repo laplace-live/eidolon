@@ -30,13 +30,14 @@ apps/desktop/
                          requirement release builds will carry
   assets/                what main loads at run time through process.resourcesPath: the tray icon
   scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
-                         zip.ts and natives.ts; vite-common.ts, electron-env.ts; smoke.ts and
-                         dev-smoke.ts
+                         zip.ts and natives.ts; vite-common.ts, electron-env.ts; and smoke.ts and
+                         dev-smoke.ts, the smokes' placeholders
   src/main/              main: the Electron-free modules that decide (controller, attach, forwarder,
                          backend, environment, login-shell, pages, policy, menus, window-options,
-                         quit-check, quit-flow, strings, shell-pages, log-filter, log-files), and
-                         thin Electron layers over them (index, instance, protocol, window, chrome,
-                         menu, tray, permissions, navigation, quit, log)
+                         quit-check, quit-flow, strings, shell-pages, log-filter, log-files,
+                         background), and thin Electron layers over them (index, instance,
+                         protocol, window, chrome, menu, tray, permissions, navigation, native,
+                         quit, log)
   src/preload/           the sandboxed CommonJS preload: the page's marks and its bridge
   src/shared/bridge.ts   the IPC channels and who may send on each; it imports nothing
   src/shell/             the loading, failure and waiting pages
@@ -50,8 +51,8 @@ apps/desktop/
 | `bun run dev:desktop` | `scripts/dev.ts`: watch-builds main, the preload and the shell pages, serves `apps/web` from Vite on `127.0.0.1:5173`, and runs the unpackaged app with `--eidolon-dev-server`, its backend from source. It builds `apps/web/dist` first when there is none, since that backend won't start without one. Arguments after it go to Electron, such as `--user-data-dir=<folder>` |
 | `bun run build:desktop` | `scripts/build.ts`: stages this machine's backend in `apps/desktop/.stage/<target>/eidolon` ([The payload](#the-payload)), then Vite-builds `apps/desktop/dist`: main as one ES module with every dependency but `electron` inlined, the preload as CommonJS (a sandboxed preload can't be a module), and the shell pages |
 | `bun run package:desktop` | `scripts/package.ts`: electron-builder on `dist/` and this machine's stage, into `apps/desktop/.out`, unsigned, at version `0.0.0-dev` ([Packaging](#packaging)). Arguments after it go to electron-builder, such as `-c.compression=store` |
-| `bun run smoke:desktop:dev` | the dev smoke: the unpackaged app under Playwright ([The smokes](#the-smokes)) |
-| `bun run smoke:desktop` | the packaged smoke: the fused app, through its backend's API |
+| `bun run smoke:desktop:dev` | `scripts/dev-smoke.ts`, the dev smoke: not written yet, so it says so and exits 1 ([The smokes](#the-smokes)) |
+| `bun run smoke:desktop` | `scripts/smoke.ts`, the packaged smoke: not written yet either |
 
 Closing the window only hides it. Quit from the menus, ⌘Q, the tray, or a second launch with
 `--quit` (and the run's `--user-data-dir`, if it had one), which `dev:desktop` follows by closing
@@ -88,24 +89,27 @@ the app is in [background mode](#background-mode).
 
 `instance.ts` runs first, before any other module can touch the profile or start a log:
 
-1. A packaged launch with `--remote-debugging-port` or `--remote-debugging-pipe`, which no fuse
+1. [Background mode](#background-mode) is read first of all: on macOS it makes the app an
+   accessory before the app can finish launching as one with a Dock icon.
+2. A packaged launch with `--remote-debugging-port` or `--remote-debugging-pipe`, which no fuse
    covers, exits 1 before the profile, the logs and the lock exist.
-2. Unpackaged, the profile (userData) becomes `<appData>/Eidolon Dev`, unless the launch passes
-   `--user-data-dir`, as the smokes do. Whenever the profile isn't the default, the logs move into
-   `<profile>/logs`: on macOS `app.getPath("logs")` is `~/Library/Logs/Eidolon` whatever the
+3. Unpackaged, the profile (userData) becomes `<appData>/Eidolon Dev`, unless the launch passes
+   `--user-data-dir`, as a test run does. Whenever the profile isn't the default, the logs move
+   into `<profile>/logs`: on macOS `app.getPath("logs")` is `~/Library/Logs/Eidolon` whatever the
    profile, so a test would append to the installed app's logs.
-3. The single-instance lock, scoped to the profile. A second launch shows and focuses the window,
+4. The single-instance lock, scoped to the profile. A second launch shows and focuses the window,
    from hidden or minimized, or makes it again if the page closed it; with `--quit` it quits the
    running app through the normal quit, and with no app running it exits 0 and starts nothing.
 
 Then main registers the scheme and, on Windows, sets the AppUserModelID `live.laplace.eidolon`,
 which the installer's shortcut carries, before any window. Once Electron is ready it installs the
-session's permission handlers, the scheme's handler, the bridges' handlers, the menus and the
-tray, opens the window on the loading page, and only then reads the environment, resolves the data
-home and starts the controller. The window moves to `eidolon-app://app/` once the backend is
-ready. The data home is `EIDOLON_HOME` from that environment, else `~/.laplace/eidolon`
-(`%USERPROFILE%\.laplace\eidolon`), the one npx and `bun run app` use; the backend gets it as its
-`EIDOLON_HOME`, so the two never read different homes.
+session's permission handlers, the scheme's handler, the bridges' handlers, the menus and, on
+Windows outside background mode, the tray, opens the window on the loading page, and only then
+reads the environment, resolves the data home and starts the controller. The window moves to
+`eidolon-app://app/` once the backend is ready. The data home is `EIDOLON_HOME` from that
+environment, else `~/.laplace/eidolon` (`%USERPROFILE%\.laplace\eidolon`), the one npx and
+`bun run app` use; the backend gets it as its `EIDOLON_HOME`, so the two never read different
+homes.
 
 ### The backend
 
@@ -195,7 +199,8 @@ proof, nor the token.
   gets 503 `{"error":{"code":"unreachable","message":"Eidolon's server isn't running"}}`, which
   apps/web reads as its `unreachable` error while its restart poll keeps polling. The waiting page
   is passive, and main reloads the window once a server answers. It is a 200, because Chromium logs
-  a document answered with a 5xx as a console error, which the smokes count as a failure.
+  a document answered with a 5xx as a console error, which a walk such as local-smoke's counts as a
+  failure.
 - **Requests** go through undici's `fetch` with `redirect: "manual"`, so no redirect is followed
   with the Bearer, and an `Agent` whose `bodyTimeout` and `headersTimeout` are 0: undici's 300 s
   defaults would cut an NDJSON stream that idles, such as a task card waiting on the owner.
@@ -359,15 +364,16 @@ The backend runs on the environment main reads, plus four variables of its own, 
   timeout or a quit. When every one fails, the launch environment stands, and main.log names why.
 - **The merge.** The shell's values win, except `PWD`, `OLDPWD`, `SHLVL`, `_` and the probe's own
   variables; `ELECTRON_*`, which never come from the shell; and an `EIDOLON_*` the launch
-  environment sets to a non-blank value, so a smoke's or a terminal launch's `EIDOLON_HOME` holds.
+  environment sets to a non-blank value, so a test's or a terminal launch's `EIDOLON_HOME` holds.
 - **When.** Once at startup, which names the data home. The first spawn within 10 s takes that read,
   so a cold start runs the owner's rc files once; every later spawn reads afresh, so a Restart sees
   a changed `PATH`.
-- **`EIDOLON_DESKTOP_LOGIN_SHELL=0`** (or `false`, `no`, `off`) in the launch environment skips the
-  read, and the launch environment is used as it is. Both smokes set it, and remove local-smoke's
-  credential, setting and provider variables: otherwise a key the developer's shell exports would
-  reach the backend, win over the smoke's fake accounts (a non-empty variable beats
-  `credentials.json`) and bill.
+- **`EIDOLON_DESKTOP_LOGIN_SHELL=0`** (or `false`, `no`, `off`, in any case) in the launch
+  environment skips the read, and the launch environment is used as it is. A test run of the app
+  sets it, and starts the app with no credential, setting or provider variable, as
+  `local-smoke.ts` starts its server: otherwise a key the developer's shell exports would reach the
+  backend, win over the test's fake accounts (a non-empty variable beats `credentials.json`) and
+  bill.
 - **Windows** takes the launch environment as it is; an Explorer launch carries the registry's user
   and system variables. Git for Windows installed later is found after a Restart, because
   `windowsBash()` checks its install folders first, but a tool found only on a newer `PATH` needs
@@ -498,8 +504,10 @@ onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
   `--user-data-dir`). Show Logs, in the Help menu on macOS and the tray on Windows, opens it.
 - **`main.log`:** main's own lines at info and up, `console` included; uncaught errors in main,
   with no dialog; renderers and Electron's helpers going away. Each run starts with a line naming
-  the app's version, Electron's, Chromium's and Node's, and the OS. A URL is logged without its
-  query or fragment.
+  the app's version, Electron's, Chromium's and Node's, and the OS. The window's page, a landing
+  off the app and background mode's lines give a URL without its query or fragment (`loggedUrl()`
+  in `policy.ts`), and the forwarder's failures only its path; a failed load and a renderer gone
+  give the URL whole.
 - **`backend.log`:** the backend's stdout and stderr, each line timestamped, since it carries its
   own level, and echoed to the terminal unpackaged. Main never logs a line that holds a link code:
   `log-filter.ts` drops `Eidolon is ready:` and `Eidolon is already running:` (and any other line
@@ -507,32 +515,45 @@ onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
 - **Rotation:** each file moves aside at 2 MB, to `main.1.log` through `main.5.log` and the like.
 - There is no `log.initialize()`, which would inject electron-log's own preload into every session,
   and its IPC transport is off.
-- **Lines a test can wait on,** in main.log: `Eidolon: the data home is …`; `Eidolon: started the
-  backend (pid N) on port P` or `Eidolon: using the server already on this data home, <origin>`;
-  `Eidolon: the backend listens on <origin>`; `Eidolon: the window shows <url>`; and at a quit
-  `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`.
+- **Lines a test can wait on,** in main.log: `Eidolon: background mode: nothing shows on screen or
+  takes the focus`, right after the first line when it's on; `Eidolon: the data home is …`;
+  `Eidolon: started the backend (pid N) on port P` or `Eidolon: using the server already on this
+  data home, <origin>`; `Eidolon: the backend listens on <origin>`; `Eidolon: the window shows
+  <url>`; `Eidolon: the window is shown`, `… is hidden` and `… is closed` as main's own record of
+  the window changes, which counts it as shown once it has painted, in background mode too; and at
+  a quit `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`. Background mode also
+  logs each thing it keeps off the screen ([below](#background-mode)).
 
 ## Background mode
 
-`EIDOLON_DESKTOP_BACKGROUND=1` in the environment the app starts with, packaged or not, makes it a
-background app. Local test runs use the machine the owner is working on, so a test must never put
-a window, a dialog or a prompt in front of them, nor take the focus: both smokes set it unless run
-with `--headful`, and so does every other local test run of the app, an agent's Playwright walk
-included.
+`EIDOLON_DESKTOP_BACKGROUND` in the environment the app starts with, packaged or not, makes it a
+background app: on for `1`, `true`, `yes` or `on` in any case, as the repo reads any flag, and off
+otherwise. Local test runs use the machine the owner is working on, so a test must never put a
+window, a dialog or a prompt in front of them, nor take the focus: every local test run of the app
+sets it, an agent's Playwright walk included. `background.ts` makes each decision without
+Electron, and `test/background.test.ts` covers them; `native.ts` puts each of Electron's calls
+that could show something through it.
 
-- **macOS:** the app is an accessory from module load (`app.setActivationPolicy("accessory")`): no
-  Dock icon, and it never activates.
-- **No window is shown.** Main keeps and logs its own shown state, but calls no `show`, `focus`,
-  `restore`, `maximize` (which shows a hidden window) or `moveTop`, and never `app.focus()`; on
-  Windows the window skips the taskbar too. A window that is never shown still paints
-  (`ready-to-show` fires), runs `requestAnimationFrame` at the display's rate and its timers on
-  time, and takes Playwright's screenshots and clicks, with no Chromium switch and no
+- **macOS:** the app is an accessory from its first module (`app.setActivationPolicy("accessory")`
+  in `instance.ts`): no Dock icon, and it never becomes the active app.
+- **Windows:** no tray icon, so no notice at the first hide either, and no taskbar button for the
+  window (`skipTaskbar`).
+- **No window is shown.** Main keeps and logs its own record of whether the window shows, as
+  always, but calls no `show`, `focus`, `restore` or `maximize` (which shows a hidden window), and
+  never `app.focus()`. Measured with Electron 45.4.1 on macOS, a window that is never shown still
+  paints (`ready-to-show` fires), runs `requestAnimationFrame` at the display's rate and its timers
+  on time, and takes Playwright's screenshots and clicks, with no Chromium switch and no
   `backgroundThrottling` change.
-- **Nothing native appears.** A message box is logged with its text and answered with its default
-  button; `openExternal`, `openPath` and `showItemInFolder` are logged, not opened; the About panel
-  is logged; a download saves into the profile's `downloads` folder, logged, with no Save dialog;
-  macOS's microphone prompt is skipped, so a call needs Chromium's fake media switches, which the
-  smokes pass; and Windows gets no tray icon and no notice.
+- **Nothing native appears, and main.log names each thing kept off the screen.** A message box is
+  answered with its default button, so a quit that stops a call, a task or a job goes ahead. A web
+  link, Show Logs, Open Data Folder, Licenses, the About panel and a context menu open nothing. A
+  download saves, with no Save dialog, into the profile's `downloads` folder under the name
+  Chromium suggests, numbered ` (1)` on while that name is taken.
+- **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
+  Developer Tools, which opens a window, isn't offered unpackaged either.
+- **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
+  is granted only when the app runs with Chromium's `--use-fake-device-for-media-stream`, on any
+  platform, and otherwise denied, since a grant would record the owner; main.log says which.
 
 ## Testing
 
@@ -546,10 +567,10 @@ states, races and port fallbacks against fake children and real processes (`test
 answers as the local server does); the forwarder's headers, gating, holding, connection proofs and
 errors against real local servers and the real local server booted in the test; the login-shell
 read and the merge, Windows' case-blind names included; the quit check and flow; links,
-navigation, permissions and the debugging switches; the bounds, chrome, menus and pages; both
-languages' strings; the shell pages' escaping and CSP; the bridges' sender rule; the logs'
-rotation and link filter; stage-backend's parts on made-up lockfiles, PE files and zips; the
-manifest; and the import boundary.
+navigation, permissions and the debugging switches; the bounds, chrome, menus and pages;
+background mode's decisions; both languages' strings; the shell pages' escaping and CSP; the
+bridges' sender rule; the logs' rotation and link filter; stage-backend's parts on made-up
+lockfiles, PE files and zips; the manifest; and the import boundary.
 
 ### The stage test
 
@@ -557,8 +578,9 @@ manifest; and the import boundary.
 against `bun.lock`, the pruning, its natives loading from it (a LanceDB table, an onnxruntime
 session and sharp, through `scripts/natives.ts`), on a Windows stage the VC++ copies and the
 signers, and, once the app was packaged after the stage, that the packaged payload holds the same
-files. A target with no stage, or one staged from another version or `bun.lock`, skips, its title
-saying to run `bun run build:desktop`; `EIDOLON_REQUIRE_STAGE=1` requires this machine's, current:
+files. A target with no stage skips, and so does one staged from another version or `bun.lock`,
+whose title then says to run `bun run build:desktop`. `EIDOLON_REQUIRE_STAGE=1` requires this
+machine's stage, current, and fails with that hint when it isn't:
 
 ```bash
 bun run build:desktop && EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts
@@ -566,8 +588,10 @@ bun run build:desktop && EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/
 
 ### The Electron lane
 
-The backend runs on Electron's Node, not the Node `bun run test` uses, so the backend suite runs
-there too, from the repository root and with temporary homes, as any test run:
+The backend runs on Electron's Node, not the Node `bun run test` uses, so after an Electron bump,
+a change to `jsRuntime()`, or a test that spawns `process.execPath` with an environment of its
+own, the backend suite runs there too. No workflow runs it: run it by hand from the repository
+root, with temporary homes as any test run:
 
 ```bash
 ELECTRON=$(cd apps/desktop && node -p 'require("electron")')
@@ -583,31 +607,27 @@ another time zone runs in a child process started in it.
 
 ### The smokes
 
-Both run on a temporary `EIDOLON_HOME` and a profile of their own (`--user-data-dir`, which keeps
-the logs inside it), with `EIDOLON_DESKTOP_LOGIN_SHELL=0` and local-smoke's credential and provider
-variables removed, in background mode unless run with `--headful`.
+`bun run smoke:desktop:dev` (`scripts/dev-smoke.ts`, the dev smoke, for the unpackaged app) and
+`bun run smoke:desktop` (`scripts/smoke.ts`, the packaged smoke, for the fused app) aren't written
+yet: each says so and exits 1. Meanwhile what the window or the backend does is checked by running
+the app in background mode ([by hand](#running-it-by-hand)).
 
-- **The dev smoke** (`bun run smoke:desktop:dev`) drives the unpackaged app with Playwright's
-  Electron driver, against loopback fakes ported from `apps/bot/scripts/local-smoke.ts`, which it
-  never edits: that file isn't paths-ignored, so a change to it deploys production. It walks Home,
-  a chat's stream, an upload and opening it, a picture, Restart, a call on Chromium's fake
-  microphone, close and reopen, attaching to a server started first on the same home (Restart while
-  attached, and a restart of that server from outside the app), and Quit, after which the backend
-  has exited 0.
-- **The packaged smoke** (`bun run smoke:desktop`) runs the fused app, which Playwright and CDP
-  can't drive, through its backend's API with the Bearer: the version, session and status;
-  LanceDB, onnxruntime and sharp loading; the tray icon shipped; a restart keeping the port; and
-  `--quit` giving main's exit 0 and the backend's clean stop, with nothing left running and no error
-  line in either log. On Windows it first installs the setup silently and smokes the installed
-  `Eidolon.exe`, then uninstalls it and checks the data home is untouched.
-
-`.github/workflows/desktop.yml` builds, packages and runs the packaged smoke on macOS (arm64) and
-Windows (x64), for pull requests and on dispatch.
+In CI, `ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test
+skips. No workflow stages, packages or runs the app, or runs the Electron lane:
+`.github/workflows/desktop.yml`, which `docker.yml` already skips, isn't written.
 
 ### Running it by hand
 
-A test run of the app by hand takes the smokes' setup: a temporary `EIDOLON_HOME`, a profile of its
-own, `EIDOLON_DESKTOP_LOGIN_SHELL=0` and `EIDOLON_DESKTOP_BACKGROUND=1`.
+A test run of the app gets a temporary `EIDOLON_HOME`, a profile of its own
+(`--user-data-dir=<profile>`, which keeps the logs inside it) and `EIDOLON_DESKTOP_BACKGROUND=1`.
+It also gets `EIDOLON_DESKTOP_LOGIN_SHELL=0` and an environment with no credential, setting,
+provider or other `EIDOLON_*` variable, as `childEnv()` in `apps/bot/scripts/local-smoke.ts`
+builds one, with an `EIDOLON_SHARED_SKILLS` beside the home so the owner's shared skills stay out
+too ([The environment](#the-environment)). Copy that function rather than export it: the file
+isn't paths-ignored, so a change to it deploys production. A call needs Chromium's
+`--use-fake-device-for-media-stream`, or background mode denies the microphone; to feed it a WAV
+file, add `--use-file-for-fake-audio-capture=<file>` and `--disable-features=AudioServiceSandbox`,
+without which it captures silence.
 
 - **Unpackaged,** after `bun run build:desktop` (or only its Vite builds) and `bun run build:web`,
   `"$ELECTRON" apps/desktop --user-data-dir=<profile>` runs it with its backend from source serving
@@ -650,21 +670,29 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
    - its Node's major, which Vite's `node24` target (`scripts/vite-common.ts`) and the repo's Node
      24 assume, and its system minimums, which this doc restates;
    - on Windows, the unsigned-PE list, which takes Electron's own DLLs from its zip.
-5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)), `bun run test
-   apps/desktop`, the dev smoke, and the packaged smoke, here and on desktop.yml's Windows leg.
+5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `bun run test
+   apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test); and,
+   with the smokes not written, run the unpackaged and the packaged app in background mode
+   ([by hand](#running-it-by-hand)), on macOS and on Windows, which no workflow covers yet.
 
 ## Measured
 
-On an Apple silicon Mac (macOS 27), 2026-11-21, unless said otherwise:
+On an Apple silicon Mac (macOS 27), 2026-11-21, every run of the app with the login-shell read
+off:
 
 - **The stage** (darwin-arm64): 4,515 files and 372 MiB, of which LanceDB 250, onnxruntime 43, sharp
   and libvips 19, `dist/` 7.5 and the web app 2; about 11 s with npm's cache warm. A win32-x64
-  payload is about 447 MiB before its VC++ copies.
-- **Packaging** takes about 63 s: Eidolon.app is 628 MiB, the DMG 261 MB and the zip 255 MB.
-- **Cold start,** packaged: the loading page at about 0.4 s, the backend listening at 1.3 s, Home
-  painted at 1.5 s, of which the login-shell read (fish) is about 0.6 s. The first launch after
-  packaging listened only at 3.6–4.2 s, and a freshly signed app on CI at 5.5 s.
-- **Streaming** through the forwarder: a chat reply's first chunk 27–51 ms after sending, the rest
-  as the fake sent it, nothing buffered; an aborted reply's socket to the backend was gone within
-  about 100 ms. A restart is back on its port in about 0.5 s.
-- **Memory** with Home open: about 760 MB, the backend 277 MB of it.
+  payload, installed for that target from a Mac, is about 447 MiB before its VC++ copies.
+- **Packaging** takes 61–64 s: Eidolon.app is 628 MiB, the DMG 261 MB and the zip 255 MB.
+- **Starting:** the packaged app shows its page about 1.1 s after launch, and the unpackaged app
+  paints Home in 1.3–1.8 s. The first run after packaging is slower: the packaged binary's backend
+  listened 3.6–4.2 s after it started, against 0.55 s warm.
+- **Streaming** through the forwarder: a chat reply's first chunk 25–28 ms after sending, the rest
+  as the fake sent it, nothing buffered. Inside Electron, an aborted stream's socket to the backend
+  closed within 2 ms.
+
+A prototype measured on 2026-11-20 and 21, whose main forwarded through Node's global fetch, adds
+what this app hasn't measured yet: with the login-shell read on, Home painted at 1.5 s, about
+0.6 s of it the read (fish); a restart was back on its port in about 0.5 s; memory with Home open
+was about 760 MB, the backend 277 MB of it; and a freshly signed app's first launch on a CI runner
+listened at 5.5 s.
