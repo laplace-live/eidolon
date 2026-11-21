@@ -317,35 +317,6 @@ describe("QuitConfirmation", () => {
     expect(check).toHaveBeenCalledTimes(2);
   });
 
-  test("once disposed, a pending decision answers false without a box, and so does every later one", async () => {
-    const checked = Promise.withResolvers<Stopping>();
-    const f = setup(() => checked.promise);
-    const pending = f.confirmation.confirm();
-    f.confirmation.dispose();
-    checked.resolve({ calls: 0, tasks: 1, jobs: 0 });
-    expect(await pending).toBe(false);
-    expect(f.shown).toEqual([]);
-    expect(await f.confirmation.confirm()).toBe(false);
-    expect(f.focus).not.toHaveBeenCalled();
-  });
-
-  test("doesn't quit on a box answered after it was disposed", async () => {
-    const answered = Promise.withResolvers<{ response: number }>();
-    const show = vi.fn(() => answered.promise);
-    const confirmation = new QuitConfirmation({
-      check: async () => ({ calls: 1, tasks: 0, jobs: 0 }),
-      strings: () => STRINGS.en,
-      show,
-      focus: () => {},
-      platform: "darwin",
-    });
-    const pending = confirmation.confirm();
-    await vi.waitFor(() => expect(show).toHaveBeenCalledOnce());
-    confirmation.dispose();
-    answered.resolve({ response: 0 });
-    expect(await pending).toBe(false);
-  });
-
   test("takes the platform's box", async () => {
     const f = setup(async () => ({ calls: 0, tasks: 0, jobs: 1 }), "win32");
     await f.confirmation.confirm();

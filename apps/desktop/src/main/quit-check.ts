@@ -148,7 +148,6 @@ export interface QuitConfirmationOptions {
 export class QuitConfirmation {
   readonly #options: QuitConfirmationOptions;
   #pending: Promise<boolean> | null = null;
-  #disposed = false;
 
   constructor(options: QuitConfirmationOptions) {
     this.#options = options;
@@ -156,7 +155,6 @@ export class QuitConfirmation {
 
   /** True to quit now; false when the owner cancelled. */
   confirm(): Promise<boolean> {
-    if (this.#disposed) return Promise.resolve(false);
     if (this.#pending !== null) {
       this.#options.focus();
       return this.#pending;
@@ -168,15 +166,6 @@ export class QuitConfirmation {
     return pending;
   }
 
-  /**
-   * The app is quitting by a way that doesn't ask, such as an update's install: a decision still
-   * pending, and every later one, answers false without a box. A box already open is left to its
-   * answer, which no longer quits.
-   */
-  dispose(): void {
-    this.#disposed = true;
-  }
-
   async #decide(): Promise<boolean> {
     const pending = this.#options.check();
     if (pending === null) return true;
@@ -186,9 +175,8 @@ export class QuitConfirmation {
       return "unknown";
     });
     const box = quitBox(check, this.#options.strings(), this.#options.platform);
-    if (this.#disposed) return false;
     if (box === null) return true;
     const { response } = await this.#options.show(box);
-    return !this.#disposed && response === QUIT;
+    return response === QUIT;
   }
 }
