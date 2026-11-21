@@ -250,7 +250,11 @@ describe("StdioTransport", () => {
       const transport = new StdioTransport({
         command: "fixture-server",
         args,
-        env: { PATH: `${dir};${process.env.PATH ?? ""}`, PATHEXT: ".COM;.EXE;.BAT;.CMD" },
+        env: {
+          ...jsRuntime().env,
+          PATH: `${dir};${process.env.PATH ?? ""}`,
+          PATHEXT: ".COM;.EXE;.BAT;.CMD",
+        },
         closeTimeoutMs: 100,
       });
       try {

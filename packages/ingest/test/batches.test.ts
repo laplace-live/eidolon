@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { jsRuntime } from "@eidolon/config";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { download } from "../src/index.ts";
@@ -27,7 +28,7 @@ const NOW = new Date("2026-09-08T17:02:09Z");
  * Electron's Node a Date keeps its local hours when TZ changes from Los Angeles to Kolkata.
  */
 function localIsoSecondsIn(tz: string): string {
-  const batches = join(import.meta.dirname, "../src/download/batches.ts");
+  const batches = pathToFileURL(join(import.meta.dirname, "../src/download/batches.ts")).href;
   const run = spawnSync(
     process.execPath,
     [
