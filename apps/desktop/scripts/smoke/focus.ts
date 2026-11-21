@@ -108,14 +108,22 @@ export function watchFocus({ ours, skip }: FocusOptions): FocusWatch {
   const fronts: Record<string, number> = {};
   const types: Record<string, number> = {};
   const mains: Main[] = [];
-  /** The pids seen in front, and whether each is the app's. */
-  const classified = new Map<number, Promise<boolean>>();
+  /** The pids seen in front; whether each is the app's is a lookup the sampling doesn't wait on. */
+  const looked = new Set<number>();
+  const lookups: Promise<void>[] = [];
   let samples = 0;
   let maxGapMs = 0;
   let stopping = false;
   const fail = (failure: string): void => {
     failures.push(failure);
     process.stderr.write(`focus watch: ${failure}\n`);
+  };
+  /** What was in front that shouldn't be, reported at its first sample. */
+  const reported = new Set<string>();
+  const inFront = (key: string, failure: string): void => {
+    if (reported.has(key)) return;
+    reported.add(key);
+    fail(failure);
   };
 
   const sampling = (async () => {
@@ -129,17 +137,20 @@ export function watchFocus({ ours, skip }: FocusOptions): FocusWatch {
         samples++;
         fronts[name] = (fronts[name] ?? 0) + 1;
         const seconds = ((at - started) / 1000).toFixed(2);
-        if (APP_NAMES.test(name)) fail(`${name} (pid ${pid}) was in front at +${seconds} s`);
-        else if (PROMPT_NAMES.test(name))
-          fail(`a system prompt (${name}) was in front at +${seconds} s`);
-        else if (pid !== null) {
-          let check = classified.get(pid);
-          if (check === undefined) {
-            check = ours(pid).catch(() => false);
-            classified.set(pid, check);
-          }
-          if (await check)
-            fail(`${name} (pid ${pid}), a process of the app's, was in front at +${seconds} s`);
+        const key = `${name}:${pid}`;
+        if (APP_NAMES.test(name)) {
+          inFront(key, `${name} (pid ${pid}) was in front at +${seconds} s`);
+        } else if (PROMPT_NAMES.test(name)) {
+          inFront(key, `a system prompt (${name}) was in front at +${seconds} s`);
+        } else if (pid !== null && !looked.has(pid)) {
+          looked.add(pid);
+          const failure = `${name} (pid ${pid}), a process of the app's, was in front at +${seconds} s`;
+          lookups.push(
+            ours(pid).then(
+              (app) => (app ? inFront(key, failure) : undefined),
+              () => undefined,
+            ),
+          );
         }
       } catch {
         // lsappinfo between apps; the next sample looks again.
@@ -187,7 +198,7 @@ export function watchFocus({ ours, skip }: FocusOptions): FocusWatch {
     failures,
     async stop() {
       stopping = true;
-      await Promise.all([sampling, typing]);
+      await Promise.all([sampling, typing, ...lookups]);
       return {
         skipped: null,
         samples,
