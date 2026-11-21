@@ -94,7 +94,8 @@ the app is in [background mode](#background-mode).
 `instance.ts` runs first, before any other module can touch the profile or start a log:
 
 1. [Background mode](#background-mode) is read first of all: on macOS it makes the app an
-   accessory before the app can finish launching as one with a Dock icon.
+   accessory from main's first line, though macOS has shown the launch's Dock icon for its first
+   50–150 ms by then.
 2. A packaged launch with `--remote-debugging-port` or `--remote-debugging-pipe`, which no fuse
    covers, exits 1 before the profile, the logs and the lock exist.
 3. Unpackaged, the profile (userData) becomes `<appData>/Eidolon Dev`, unless the launch passes
@@ -154,8 +155,15 @@ the install folder), its console hidden, and not detached.
 - **Windows' session end** never reaches `before-quit`: Electron emits `session-end` to each window
   and then ends the process. So the stop starts on the window's `query-session-end`, whose handler
   only disconnects and returns (Node closes the channel on the next tick, which a handler that
-  blocked would never reach), and `session-end` waits, blocking, up to about 4 s for that exit. If
-  another app vetoes the shutdown, the backend starts again 10 s later.
+  blocked would never reach), and `session-end` waits, blocking, up to about 4 s for every stop
+  under way: that one, or a quit's or a failure's begun before the owner signed out, since Electron
+  ends main, and the backend in its job object with it, once `session-end` returns. If another app
+  vetoes the shutdown, the backend starts again 10 s later.
+- **Its waits** (the 60 s after a refused spawn, an attached server's grace, the hold on our own
+  backend after a refused connection, and the forwarder's 15 s hold) count the timers' time
+  (`performance.now()`), not the wall clock's. A Mac's sleep stops the first and moves the second
+  on, so a wait spanning a sleep would end at its first probe after waking, and stop a healthy
+  backend as unanswered.
 
 ## The forwarder
 
@@ -268,7 +276,10 @@ and leaves it running when it quits.
 - **The page matches the server.** It comes from whichever server answers, so its UI and API match
   even when a terminal's server runs another version; only the desktop's chrome can be missing
   then. Main reads each server's version from `GET /api/local/status` once, before the window
-  follows it, for the bridge and the About panel.
+  follows it, for the bridge and the About panel. Main reloads the app's page when the server ready
+  next runs another version than the one it loaded the page with: after a grace that ends on our
+  own backend, or a terminal's server restarted onto another version. A restart onto the same
+  version keeps the page, which apps/web's restart flow recovers without a reload.
 
 ## The window
 
@@ -509,15 +520,20 @@ onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
   `--user-data-dir`). Show Logs, in the Help menu on macOS and the tray on Windows, opens it.
 - **`main.log`:** main's own lines at info and up, `console` included; uncaught errors in main,
   with no dialog; renderers and Electron's helpers going away. Each run starts with a line naming
-  the app's version, Electron's, Chromium's and Node's, and the OS. The window's page, a landing
-  off the app and background mode's lines give a URL without its query or fragment (`loggedUrl()`
-  in `policy.ts`), and the forwarder's failures only its path; a failed load and a renderer gone
-  give the URL whole.
+  the app's version, Electron's, Chromium's and Node's, and the OS. The window's page, a failed
+  load, a renderer gone, a landing off the app and background mode's lines give a URL without its
+  query or fragment (`loggedUrl()` in `policy.ts`), and the forwarder's failures only its path.
 - **`backend.log`:** the backend's stdout and stderr, each line timestamped, since it carries its
   own level, and echoed to the terminal unpackaged. Main never logs a line that holds a link code:
   `log-filter.ts` drops `Eidolon is ready:` and `Eidolon is already running:` (and any other line
   holding one) after the controller has read them.
 - **Rotation:** each file moves aside at 2 MB, to `main.1.log` through `main.5.log` and the like.
+  The log moves first, to `main.0.log`, and only then do the archives move along, the oldest
+  dropped. A log Windows won't rename, because another program holds it open without delete
+  sharing (a tail such as `Get-Content -Wait`, or an antivirus scan), is copied there and emptied
+  instead. Nothing in the rotation throws: electron-log would lose the line and, its size count
+  still over 2 MB, rotate again at every later line. An archive held open stops the rotation where
+  it is, the log left at `main.0.log` until the next rotation replaces it.
 - There is no `log.initialize()`, which would inject electron-log's own preload into every session,
   and its IPC transport is off.
 - **Lines a test can wait on,** in main.log: `Eidolon: background mode: nothing shows on screen or
@@ -541,7 +557,8 @@ Electron, and `test/background.test.ts` covers them; `native.ts` puts each of El
 that could show something through it.
 
 - **macOS:** the app is an accessory from its first module (`app.setActivationPolicy("accessory")`
-  in `instance.ts`): no Dock icon, and it never becomes the active app.
+  in `instance.ts`): no Dock icon past the launch's first 50–150 ms (the limits below), and it
+  never becomes the active app.
 - **Windows:** no tray icon, so no notice at the first hide either, and no taskbar button for the
   window (`skipTaskbar`).
 - **No window is shown.** Main keeps and logs its own record of whether the window shows, as
@@ -598,11 +615,14 @@ included; the manifest; and the import boundary.
 
 `test/stage.test.ts`, in the same project, checks a real stage: its files and manifest, its tree
 against `bun.lock`, the pruning, its natives loading from it (a LanceDB table, an onnxruntime
-session and sharp, through `scripts/natives.ts`), on a Windows stage the VC++ copies and the
-signers, and, once the app was packaged after the stage, that the packaged payload holds the same
-files. A target with no stage skips, and so does one staged from another version or `bun.lock`,
-whose title then says to run `bun run build:desktop`. `EIDOLON_REQUIRE_STAGE=1` requires this
-machine's stage, current, and fails with that hint when it isn't:
+session and sharp, through `scripts/natives.ts`, with every native library and VC++ DLL the
+process mapped coming from the payload: `payloadLibraries()` picks them by file name, so Windows'
+own `msvcp_win.dll`, mapped in every process with a window, isn't one), on a Windows stage the
+VC++ copies and the signers, and, once the app was packaged after the stage, that the packaged
+payload holds the same files. A target with no stage skips, and so does one staged from another
+version or `bun.lock`, whose title then says to run `bun run build:desktop`.
+`EIDOLON_REQUIRE_STAGE=1` requires this machine's stage, current, and fails with that hint when it
+isn't:
 
 ```bash
 bun run build:desktop && EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts
