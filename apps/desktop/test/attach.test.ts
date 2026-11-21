@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import { connect, type Socket } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inspect } from "node:util";
@@ -19,6 +20,7 @@ import {
   probe,
   probeNonce,
   probeProof,
+  proveSocket,
   readServerInfo,
   readToken,
   SERVER_INFO,
@@ -159,17 +161,27 @@ describe("liveness", () => {
 interface SeenProbe {
   readonly url: string;
   readonly headers: IncomingHttpHeaders;
+  /** The client's end of the connection it came over. */
+  readonly from: number | undefined;
 }
 
-/** A server that answers probes as session.ts does, holding `secret`. */
+/**
+ * A server that answers probes as session.ts does, holding `secret`: by length, or in chunks as
+ * the real one does; closing the connection after if `close`.
+ */
 async function prover(
   secret: string,
   answer?: (nonce: string) => { status: number; body: string } | null,
+  framing: { chunked?: boolean; close?: boolean } = {},
 ): Promise<{ server: Server; origin: string; seen: SeenProbe[] }> {
   const local = new LocalToken(secret);
   const seen: SeenProbe[] = [];
   const server = createServer((request, response) => {
-    seen.push({ url: request.url ?? "", headers: request.headers });
+    seen.push({
+      url: request.url ?? "",
+      headers: request.headers,
+      from: request.socket.remotePort,
+    });
     const nonce = new URL(request.url ?? "/", "http://x").searchParams.get("probe") ?? "";
     const custom = answer?.(nonce);
     if (custom === null) return; // never answers
@@ -177,7 +189,12 @@ async function prover(
       status: 200,
       body: JSON.stringify({ proof: local.probeProof(nonce) }),
     };
-    response.writeHead(status, { "content-type": "application/json" }).end(body);
+    response.writeHead(status, {
+      "content-type": "application/json",
+      ...(framing.close ? { connection: "close" } : {}),
+    });
+    if (framing.chunked) response.write(body);
+    response.end(framing.chunked ? undefined : body);
   });
   await new Promise<void>((done) => server.listen({ host: "127.0.0.1", port: 0 }, done));
   const { port } = server.address() as { port: number };
@@ -187,6 +204,15 @@ async function prover(
 function close(server: Server): Promise<void> {
   server.closeAllConnections();
   return new Promise((done) => server.close(() => done()));
+}
+
+function connectTo(origin: string): Promise<Socket> {
+  const { hostname, port } = new URL(origin);
+  return new Promise((done, fail) => {
+    const host = hostname.replace(/^\[(.*)\]$/, "$1");
+    const socket = connect(Number(port), host, () => done(socket));
+    socket.once("error", fail);
+  });
 }
 
 describe("the probe", () => {
@@ -247,6 +273,70 @@ describe("the probe", () => {
     }
   });
 
+  test("over a connection of its own: sent over the connection itself, which then takes the next request", async () => {
+    for (const chunked of [false, true]) {
+      const { server, origin, seen } = await prover(SECRET, undefined, { chunked });
+      const socket = await connectTo(origin);
+      try {
+        expect([chunked, await proveSocket(socket, origin, new BearerToken(SECRET))]).toEqual([
+          chunked,
+          true,
+        ]);
+        const [first] = seen;
+        expect(first?.url).toMatch(/^\/api\/local\/session\?probe=[A-Za-z0-9_-]{16,64}$/);
+        expect(first?.headers.connection).toBe("keep-alive");
+        expect(first?.headers.authorization).toBeUndefined();
+        expect(first?.headers.host).toBe(new URL(origin).host);
+        // Left paused, as the next client finds it: nothing of the answer is left to read.
+        expect(socket.isPaused()).toBe(true);
+        expect(socket.readableLength).toBe(0);
+        const answer = new Promise<string>((done) =>
+          socket.once("data", (chunk: Buffer) => done(chunk.toString("latin1"))),
+        );
+        socket.resume();
+        socket.write(
+          `GET /next?probe=${"m".repeat(22)} HTTP/1.1\r\nHost: ${first?.headers.host}\r\n\r\n`,
+        );
+        expect(await answer).toMatch(/^HTTP\/1\.1 200 /);
+        expect(seen.map((probed) => probed.from)).toEqual([first?.from, first?.from]);
+      } finally {
+        socket.destroy();
+        await close(server);
+      }
+    }
+  });
+
+  test("over a connection of its own: fails for another token, a wrong answer, an error, a closing connection or a late one", async () => {
+    const token = new BearerToken(SECRET);
+    const nonceProof = (nonce: string) =>
+      JSON.stringify({ proof: new LocalToken(SECRET).probeProof(nonce) });
+    const servers = [
+      await prover("o".repeat(43)),
+      await prover(SECRET, () => ({ status: 200, body: '{"proof":"nope"}' })),
+      await prover(SECRET, (nonce) => ({ status: 500, body: nonceProof(nonce) })),
+      await prover(SECRET, undefined, { close: true }),
+      await prover(SECRET, undefined, { chunked: true, close: true }),
+    ];
+    const late = await prover(SECRET, () => null);
+    try {
+      for (const [index, { origin }] of servers.entries()) {
+        const socket = await connectTo(origin);
+        try {
+          expect([index, await proveSocket(socket, origin, token)]).toEqual([index, false]);
+        } finally {
+          socket.destroy();
+        }
+      }
+      const socket = await connectTo(late.origin);
+      const started = performance.now();
+      expect(await proveSocket(socket, late.origin, token, 300)).toBe(false);
+      expect(performance.now() - started).toBeLessThan(2000);
+      expect(socket.destroyed).toBe(true);
+    } finally {
+      for (const { server } of [...servers, late]) await close(server);
+    }
+  });
+
   test.skipIf(!IPV6_LOOPBACK)("reaches a server that bound ::1 alone", async () => {
     const local = new LocalToken(SECRET);
     const server = createServer((request, response) => {
@@ -254,10 +344,14 @@ describe("the probe", () => {
       response.end(JSON.stringify({ proof: local.probeProof(nonce) }));
     });
     await new Promise<void>((done) => server.listen({ host: "::1", port: 0 }, done));
+    const { port } = server.address() as { port: number };
+    const origin = originOf({ host: "[::1]", port });
+    const socket = await connectTo(origin);
     try {
-      const { port } = server.address() as { port: number };
-      expect(await probe(originOf({ host: "[::1]", port }), new BearerToken(SECRET))).toBe(true);
+      expect(await probe(origin, new BearerToken(SECRET))).toBe(true);
+      expect(await proveSocket(socket, origin, new BearerToken(SECRET))).toBe(true);
     } finally {
+      socket.destroy();
       await close(server);
     }
   });

@@ -4,6 +4,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { request } from "node:http";
+import type { Socket } from "node:net";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -122,20 +123,25 @@ function digest(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
 }
 
-/** A JSON answer with status 200 within `timeoutMs`, over a connection of its own; else null. */
-function getJson(url: URL, timeoutMs: number): Promise<unknown> {
+/**
+ * A JSON answer with status 200 within `timeoutMs`, else null: over `socket` when given, which a
+ * kept-alive answer leaves open, else over a connection of its own, closed after.
+ */
+function getJson(url: URL, timeoutMs: number, socket?: Socket): Promise<unknown> {
   return new Promise((done) => {
+    let answer: unknown = null;
     const sent = request(
       url,
-      {
-        agent: false,
-        signal: AbortSignal.timeout(timeoutMs),
-        headers: { accept: "application/json" },
-      },
+      socket === undefined
+        ? { agent: false, headers: { accept: "application/json" } }
+        : {
+            createConnection: () => socket,
+            // With no agent, Node closes the connection after one answer unless told otherwise.
+            headers: { accept: "application/json", connection: "keep-alive" },
+          },
       (response) => {
         if (response.statusCode !== 200) {
-          response.resume();
-          done(null);
+          sent.destroy();
           return;
         }
         const chunks: Buffer[] = [];
@@ -146,19 +152,33 @@ function getJson(url: URL, timeoutMs: number): Promise<unknown> {
           else chunks.push(chunk);
         });
         response.on("end", () => {
+          if (size > MAX_ANSWER_BYTES) return;
           try {
-            done(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-          } catch {
-            done(null);
-          }
+            answer = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          } catch {}
         });
-        response.on("error", () => done(null));
-        response.on("close", () => done(null));
       },
     );
-    sent.on("error", () => done(null));
+    const timer = setTimeout(() => sent.destroy(), timeoutMs);
+    sent.on("error", () => {});
+    // Every path ends here, a kept-alive answer once Node has let its socket go.
+    sent.on("close", () => {
+      clearTimeout(timer);
+      done(answer);
+    });
     sent.end();
   });
+}
+
+function isProof(answer: unknown, token: BearerToken, nonce: string): boolean {
+  const proof = (answer as { proof?: unknown } | null)?.proof;
+  return (
+    typeof proof === "string" && timingSafeEqual(digest(proof), digest(probeProof(token, nonce)))
+  );
+}
+
+function probeUrl(origin: string, nonce: string): URL {
+  return new URL(`/api/local/session?probe=${nonce}`, origin);
 }
 
 /**
@@ -171,11 +191,25 @@ export async function probe(
   timeoutMs = PROBE_TIMEOUT_MS,
 ): Promise<boolean> {
   const nonce = probeNonce();
-  const answer = await getJson(new URL(`/api/local/session?probe=${nonce}`, origin), timeoutMs);
-  const proof = (answer as { proof?: unknown } | null)?.proof;
-  return (
-    typeof proof === "string" && timingSafeEqual(digest(proof), digest(probeProof(token, nonce)))
-  );
+  return isProof(await getJson(probeUrl(origin, nonce), timeoutMs), token, nonce);
+}
+
+/**
+ * The probe sent over `socket`, a new connection to `origin`, so that what proves itself is what
+ * the next requests on it reach. When it proves, the socket is left open and paused at the end of
+ * the answer, for another client to read; otherwise the caller destroys it.
+ */
+export async function proveSocket(
+  socket: Socket,
+  origin: string,
+  token: BearerToken,
+  timeoutMs = PROBE_TIMEOUT_MS,
+): Promise<boolean> {
+  const nonce = probeNonce();
+  const answer = await getJson(probeUrl(origin, nonce), timeoutMs, socket);
+  // Node leaves a kept-alive socket flowing with no reader, which would drop the next bytes.
+  socket.pause();
+  return isProof(answer, token, nonce) && !socket.destroyed && socket.writable;
 }
 
 /** EIDOLON_HOME, or ~/.laplace/eidolon, read from `env` as the backend's dataHome() reads it. */

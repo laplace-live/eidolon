@@ -3,7 +3,7 @@
 // grace period, the wait after a refused spawn, failures and the stop (§2.2–§2.5). Electron-free:
 // the wiring gives it the launch, the environment and the data home, and follows its state.
 import { type SpawnOptions, spawn } from "node:child_process";
-import { createServer } from "node:net";
+import { createServer, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Readable } from "node:stream";
@@ -14,6 +14,7 @@ import {
   isPort,
   originOf,
   probe,
+  proveSocket,
   readServerInfo,
   readToken,
   type ServerInfo,
@@ -159,6 +160,7 @@ export interface ControllerIo {
   readToken(home: string): BearerToken | null;
   isAlive(pid: number): boolean;
   probe(origin: string, token: BearerToken): Promise<boolean>;
+  proveSocket(socket: Socket, origin: string, token: BearerToken): Promise<boolean>;
   /** Blocks the thread; only the session end, which has no event loop left, may. */
   sleepSync(ms: number): void;
 }
@@ -187,6 +189,7 @@ export const processIo: ControllerIo = {
   readToken,
   isAlive,
   probe: (origin, token) => probe(origin, token),
+  proveSocket: (socket, origin, token) => proveSocket(socket, origin, token),
   sleepSync: (ms) => {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
   },
@@ -380,12 +383,12 @@ export class BackendController {
     return this.#stopping;
   }
 
-  /** The forwarder's report of a connection `origin` refused. */
+  /** The forwarder's report of a connection to `origin` refused, or that didn't prove itself. */
   refused(origin: string): void {
     const state = this.#state;
     if (state.phase !== "ready" || state.origin !== origin) return;
     if (state.owned) this.#holdOwned(state);
-    else this.#grace(`${origin} refused a connection`);
+    else this.#grace(`a connection to ${origin} was refused or didn't prove itself`);
   }
 
   /** The forwarder's report of a POST /api/local/restart that `origin` answered with a 2xx. */
@@ -404,6 +407,23 @@ export class BackendController {
   disconnected(origin: string): void {
     const state = this.#state;
     if (state.phase === "ready" && !state.owned && state.origin === origin) this.#grace(null);
+  }
+
+  /**
+   * Whether `socket`, the forwarder's new connection to `origin`, reaches the server ready there,
+   * proved over the socket itself. A server restarted elsewhere while no connection was open gives
+   * no other sign, and whatever holds its address next gets the new connection. An attached
+   * server's hint must still name `origin`, so that a relay there can't pass on the probe to a
+   * server that moved.
+   */
+  async proveConnection(socket: Socket, origin: string): Promise<boolean> {
+    const state = this.#state;
+    if (state.phase !== "ready" || state.origin !== origin) return false;
+    if (!state.owned) {
+      const hint = hintFrom(this.#io.readServerInfo(this.#home));
+      if (hint === null || originOf(hint) !== origin || !this.#io.isAlive(hint.pid)) return false;
+    }
+    return this.#io.proveSocket(socket, origin, state.token);
   }
 
   /**
@@ -524,12 +544,17 @@ export class BackendController {
     });
   }
 
-  /** Our own server refused a connection: it may be closing. A proof or its exit ends the hold. */
+  /**
+   * A connection to our own server was refused or didn't prove itself: it may be closing. A proof
+   * or its exit ends the hold.
+   */
   #holdOwned(ready: ReadyState): void {
     const spawned = this.#child;
     if (spawned === null) return;
     const { origin, token } = ready;
-    this.#log.warn(`Eidolon: ${origin} refused a connection; requests wait for it`);
+    this.#log.warn(
+      `Eidolon: a connection to ${origin} was refused or didn't prove itself; requests wait for it`,
+    );
     const epoch = this.#begin({ phase: "holding", owned: true });
     this.#run(epoch, async () => {
       const answered = await this.#recover(epoch, async () =>

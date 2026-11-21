@@ -1,7 +1,7 @@
 import type { SpawnOptions } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import { createServer } from "node:net";
+import { createServer, Socket } from "node:net";
 import { join, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { jsRuntime } from "@eidolon/config";
@@ -102,6 +102,8 @@ interface Rig {
   readonly backendLines: string[];
   readonly trace: string[];
   readonly probes: string[];
+  /** Each connection proof asked for: its origin and the secret it checked. */
+  readonly connectionProofs: [string, string][];
   readonly taken: Set<number>;
   info: ServerInfo | null;
   token: string | null;
@@ -129,6 +131,7 @@ function rig(
     backendLines: [],
     trace,
     probes: [],
+    connectionProofs: [],
     taken: new Set(),
     info: null,
     token: TOKEN_A,
@@ -155,6 +158,10 @@ function rig(
     },
     probe: async (origin, token) => {
       r.probes.push(origin);
+      return r.proves(origin, token.secret);
+    },
+    proveSocket: async (_socket, origin, token) => {
+      r.connectionProofs.push([origin, token.secret]);
       return r.proves(origin, token.secret);
     },
     sleepSync: (ms) => {
@@ -715,6 +722,60 @@ describe("while attached", () => {
     await stopped;
     expect(r.controller.state).toEqual({ phase: "stopped" });
     expect(r.trace.filter((line) => !line.startsWith("alive?"))).toEqual([]);
+  });
+});
+
+describe("a new connection the forwarder opens (1.3)", () => {
+  const socket = new Socket();
+
+  test("to our own server is proved over itself, with the token read once it listened", async () => {
+    const r = rig();
+    await running(r);
+    r.proves = (origin, secret) => origin === "http://127.0.0.1:7860" && secret === TOKEN_A;
+    expect(await r.controller.proveConnection(socket, "http://127.0.0.1:7860")).toBe(true);
+    r.proves = () => false;
+    expect(await r.controller.proveConnection(socket, "http://127.0.0.1:7860")).toBe(false);
+    expect(r.connectionProofs).toEqual([
+      ["http://127.0.0.1:7860", TOKEN_A],
+      ["http://127.0.0.1:7860", TOKEN_A],
+    ]);
+  });
+
+  test("never to another address, and never while no server is ready", async () => {
+    const r = rig();
+    r.proves = () => true;
+    r.controller.start();
+    expect(await r.controller.proveConnection(socket, "http://127.0.0.1:7860")).toBe(false);
+    await settle();
+    const child = r.last();
+    child.listen(7860);
+    expect(await r.controller.proveConnection(socket, "http://127.0.0.1:7861")).toBe(false);
+    expect(await r.controller.proveConnection(socket, "http://[::1]:7860")).toBe(false);
+    r.controller.restarted("http://127.0.0.1:7860");
+    expect(await r.controller.proveConnection(socket, "http://127.0.0.1:7860")).toBe(false);
+    child.exit(1);
+    await settle();
+    expect(r.controller.state.phase).toBe("failed");
+    expect(await r.controller.proveConnection(socket, "http://127.0.0.1:7860")).toBe(false);
+    expect(r.connectionProofs).toEqual([]);
+  });
+
+  test("to an attached server, only while its hint still names that address and a live pid", async () => {
+    const r = rig();
+    const origin = await attached(r);
+    expect(await r.controller.proveConnection(socket, origin)).toBe(true);
+    // It moved: whatever holds its old address now could pass the probe on to it.
+    r.proves = () => true;
+    r.info = { pid: 4343, port: 7999, host: "127.0.0.1" };
+    expect(await r.controller.proveConnection(socket, origin)).toBe(false);
+    r.info = { pid: 4242, port: 7861, host: "[::1]" };
+    expect(await r.controller.proveConnection(socket, origin)).toBe(false);
+    r.info = null;
+    expect(await r.controller.proveConnection(socket, origin)).toBe(false);
+    r.info = { pid: 4242, port: 7861, host: "127.0.0.1" };
+    r.alive = () => false;
+    expect(await r.controller.proveConnection(socket, origin)).toBe(false);
+    expect(r.connectionProofs).toEqual([[origin, TOKEN_A]]);
   });
 });
 

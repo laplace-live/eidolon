@@ -2,10 +2,11 @@
 // packages and a fixture web build: its session route signs the probe, and its guard refuses the
 // page's Host, Origin and fetch metadata unless the forwarder drops them.
 import "../../../packages/config/test/isolated-guard.ts";
+import { connect, type Socket } from "node:net";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { type CapturedLogs, captureLogs } from "../../bot/test/fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, raw } from "../../bot/test/local/harness.ts";
-import { BearerToken, probe } from "../src/main/attach.ts";
+import { BearerToken, probe, proveSocket } from "../src/main/attach.ts";
 import type { BackendState } from "../src/main/controller.ts";
 import { createForwarder, type Forwarder } from "../src/main/forwarder.ts";
 
@@ -16,12 +17,8 @@ let logs: CapturedLogs;
 beforeAll(async () => {
   logs = captureLogs();
   booted = await bootFixture();
-  const state: BackendState = {
-    phase: "ready",
-    origin: booted.base,
-    token: new BearerToken(booted.token.secret),
-    owned: false,
-  };
+  const token = new BearerToken(booted.token.secret);
+  const state: BackendState = { phase: "ready", origin: booted.base, token, owned: false };
   forwarder = createForwarder({
     backend: {
       state,
@@ -29,6 +26,7 @@ beforeAll(async () => {
       refused: () => {},
       restarted: () => {},
       disconnected: () => {},
+      proveConnection: (socket, origin) => proveSocket(socket, origin, token),
     },
     waitingPage: () => "",
   });
@@ -57,6 +55,47 @@ function app(path: string, init: RequestInit = {}): Request {
 test("the probe proves the server holding the token, and no other", async () => {
   expect(await probe(booted.base, new BearerToken(booted.token.secret))).toBe(true);
   expect(await probe(booted.base, new BearerToken("x".repeat(43)))).toBe(false);
+});
+
+function connected(): Promise<Socket> {
+  return new Promise((done, fail) => {
+    const socket = connect(booted.port, "127.0.0.1", () => done(socket));
+    socket.once("error", fail);
+  });
+}
+
+/** The first answer to arrive on `socket`, whole or not. */
+function nextAnswer(socket: Socket): Promise<string> {
+  return new Promise((done) => {
+    socket.once("data", (chunk: Buffer) => done(chunk.toString("latin1")));
+  });
+}
+
+test("a connection proves itself over itself, its chunked answer read to the end, then takes the next request", async () => {
+  const answered = await raw(
+    booted.port,
+    `GET /api/local/session?probe=${"n".repeat(22)} HTTP/1.1\nHost: 127.0.0.1:${booted.port}`,
+  );
+  expect(answered.headers.get("transfer-encoding")).toBe("chunked");
+  const socket = await connected();
+  try {
+    expect(await proveSocket(socket, booted.base, new BearerToken(booted.token.secret))).toBe(true);
+    const answer = nextAnswer(socket);
+    socket.resume();
+    socket.write(
+      `GET /api/local/status HTTP/1.1\r\nHost: 127.0.0.1:${booted.port}\r\n` +
+        `Authorization: Bearer ${booted.token.secret}\r\n\r\n`,
+    );
+    expect(await answer).toMatch(/^HTTP\/1\.1 200 /);
+  } finally {
+    socket.destroy();
+  }
+  const other = await connected();
+  try {
+    expect(await proveSocket(other, booted.base, new BearerToken("x".repeat(43)))).toBe(false);
+  } finally {
+    other.destroy();
+  }
 });
 
 test("the guard refuses what the page sends as it is", async () => {

@@ -4,6 +4,7 @@
 import "../../../packages/config/test/isolated-guard.ts";
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -52,6 +53,7 @@ function stop(code) {
   rmSync(info, { force: true });
   process.exit(code);
 }
+if (process.env.FAKE_KEEP_ALIVE_MS) server.keepAliveTimeout = Number(process.env.FAKE_KEEP_ALIVE_MS);
 server.listen({ host: "127.0.0.1", port: Number(argv[argv.indexOf("--port") + 1]) }, () => {
   const { port } = server.address();
   if (process.env.FAKE_RECORDS_INFO === "1") {
@@ -193,12 +195,17 @@ test("our own backend: listens, takes the Bearer, restarts on its port with the 
 });
 
 /** A terminal's server on the data home, as `bun run app` runs it, which records where it listens. */
-function terminalServer(port: number): Promise<ChildProcess> {
+function terminalServer(port: number, keepAliveMs?: number): Promise<ChildProcess> {
   const child = spawn(
     process.execPath,
     [script, "--host", "127.0.0.1", "--port", String(port), "--no-open"],
     {
-      env: { ...environment(), EIDOLON_HOME: home, FAKE_RECORDS_INFO: "1" },
+      env: {
+        ...environment(),
+        EIDOLON_HOME: home,
+        FAKE_RECORDS_INFO: "1",
+        ...(keepAliveMs === undefined ? {} : { FAKE_KEEP_ALIVE_MS: String(keepAliveMs) }),
+      },
       stdio: ["ignore", "pipe", "ignore"],
     },
   );
@@ -258,4 +265,81 @@ test("attached to a terminal's server: a restart started outside the app is a gr
   await controller.stop();
   expect(replacement.exitCode).toBeNull();
   expect(isAlive(replacement.pid as number)).toBe(true);
+});
+
+test("attached and idle with no connection open: a restart from outside, and a relay on the old port, get no Bearer", async () => {
+  const terminal = await terminalServer(0, 200);
+  const { port } = JSON.parse(readFileSync(join(home, "locks", "4273f434b594.info"), "utf8"));
+  const controller = new BackendController({
+    home,
+    launch: { command: process.execPath, entry: script, appRoot: null },
+    environment,
+    log: { info: () => {}, warn: () => {}, error: () => {} },
+    port: 0,
+    cwd: dir,
+  });
+  cleanups.push(() => controller.stop());
+  const phases: string[] = [];
+  controller.subscribe((state) =>
+    phases.push(`${state.phase}${"owned" in state && !state.owned ? " attached" : ""}`),
+  );
+  const forwarder = forwarderFor(controller);
+  controller.start();
+  await next(controller, (state) => state.phase === "ready");
+  expect(await (await forwarder.handle(app("/api/local/status"))).json()).toEqual({
+    pid: terminal.pid,
+  });
+  // The server closes the idle connection: a grace period proves it again, leaving none open.
+  await vi.waitFor(
+    () => expect(phases).toEqual(["ready attached", "holding attached", "ready attached"]),
+    {
+      timeout: 5000,
+    },
+  );
+
+  // Restarted from a browser tab: the next server starts elsewhere, and something else takes the
+  // old port, passing whatever it gets on to the new server, the probe included.
+  const exited = new Promise((done) => terminal.once("exit", done));
+  await fetch(`http://127.0.0.1:${port}/api/local/restart`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN_A}` },
+  });
+  expect(await exited).toBe(75);
+  const replacement = await terminalServer(0);
+  const moved = JSON.parse(readFileSync(join(home, "locks", "4273f434b594.info"), "utf8")).port;
+  const relayed: (string | undefined)[] = [];
+  const relay = createServer((request, response) => {
+    relayed.push(request.headers.authorization);
+    const upstream = httpRequest(
+      {
+        host: "127.0.0.1",
+        port: moved,
+        path: request.url,
+        method: request.method,
+        headers: request.headers,
+      },
+      (answer) => {
+        response.writeHead(answer.statusCode ?? 502, answer.headers);
+        answer.pipe(response);
+      },
+    );
+    request.pipe(upstream);
+  });
+  let connections = 0;
+  relay.on("connection", () => connections++);
+  await new Promise<void>((done) => relay.listen({ host: "127.0.0.1", port }, done));
+  cleanups.push(() => {
+    relay.closeAllConnections();
+    return new Promise((done) => relay.close(() => done()));
+  });
+
+  const status = await forwarder.handle(app("/api/local/status"));
+  expect(await status.json()).toEqual({ pid: replacement.pid });
+  expect(connections).toBe(1);
+  expect(relayed).toEqual([]);
+  expect(controller.state).toMatchObject({
+    phase: "ready",
+    origin: `http://127.0.0.1:${moved}`,
+    owned: false,
+  });
 });

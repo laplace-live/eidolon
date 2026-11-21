@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { Socket } from "node:net";
 import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { BearerToken } from "../src/main/attach.ts";
+import { LocalToken } from "../../bot/src/local/token.ts";
+import { BearerToken, proveSocket } from "../src/main/attach.ts";
 import type { BackendState } from "../src/main/controller.ts";
 import {
   type BackendSource,
@@ -27,6 +29,13 @@ class FakeBackend implements BackendSource {
   subscribe(listener: (state: BackendState) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /** As the controller proves a connection to its own server: over it, with the ready token. */
+  proveConnection(socket: Socket, origin: string): Promise<boolean> {
+    const { state } = this;
+    if (state.phase !== "ready" || state.origin !== origin) return Promise.resolve(false);
+    return proveSocket(socket, origin, state.token);
   }
 
   set(state: BackendState): void {
@@ -56,12 +65,19 @@ interface Seen {
   readonly method: string;
   readonly url: string;
   readonly headers: IncomingMessage["headers"];
+  /** Which of the server's connections it came over, numbered from 1. */
+  readonly connection: number;
+  /** Whether a probe had come over that connection before it. */
+  readonly afterProbe: boolean;
 }
 
 interface Upstream {
   readonly server: Server;
   readonly origin: string;
+  /** Every request but the probes. */
   readonly seen: Seen[];
+  /** The connections a probe came over, in order. */
+  readonly proved: number[];
 }
 
 type Handler = (request: IncomingMessage, response: ServerResponse) => void;
@@ -69,17 +85,38 @@ type Handler = (request: IncomingMessage, response: ServerResponse) => void;
 const servers: Server[] = [];
 const forwarders: Forwarder[] = [];
 
-async function upstream(handler?: Handler): Promise<Upstream> {
+/** A server holding `secret`, answering probes as session.ts does, and the rest with `handler`. */
+async function upstream(handler?: Handler, secret = SECRET): Promise<Upstream> {
+  const local = new LocalToken(secret);
   const seen: Seen[] = [];
+  const proved: number[] = [];
+  const connections = new WeakMap<object, number>();
   const server = createServer((request, response) => {
-    seen.push({ method: request.method ?? "", url: request.url ?? "", headers: request.headers });
+    const connection = connections.get(request.socket) ?? 0;
+    const url = new URL(request.url ?? "/", "http://x");
+    const nonce = url.pathname === "/api/local/session" ? url.searchParams.get("probe") : null;
+    if (nonce !== null) {
+      proved.push(connection);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ proof: local.probeProof(nonce) }));
+      return;
+    }
+    seen.push({
+      method: request.method ?? "",
+      url: request.url ?? "",
+      headers: request.headers,
+      connection,
+      afterProbe: proved.includes(connection),
+    });
     if (handler !== undefined) handler(request, response);
     else response.writeHead(200, { "content-type": "text/plain" }).end("ok");
   });
+  let count = 0;
+  server.on("connection", (socket) => connections.set(socket, ++count));
   await new Promise<void>((done) => server.listen({ host: "127.0.0.1", port: 0 }, done));
   servers.push(server);
   const { port } = server.address() as { port: number };
-  return { server, origin: `http://127.0.0.1:${port}`, seen };
+  return { server, origin: `http://127.0.0.1:${port}`, seen, proved };
 }
 
 /** A port nothing listens on. */
@@ -407,7 +444,7 @@ describe("reports to the controller", () => {
   test("a refused connection, held the same way until a server is ready again", async () => {
     const backend = new FakeBackend();
     const gone = await closedOrigin();
-    const up = await upstream();
+    const up = await upstream(undefined, "n".repeat(43));
     backend.ready(gone);
     backend.onRefused = () => {
       backend.set({ phase: "holding", owned: true });
@@ -442,7 +479,7 @@ describe("reports to the controller", () => {
     expect(backend.reports).toEqual([`refused ${gone}`]);
   });
 
-  test("a server that drops the request without an answer is the no-backend answer, not a refusal", async () => {
+  test("a proven server that drops the request without an answer is the no-backend answer, not a refusal", async () => {
     const backend = new FakeBackend();
     const up = await upstream((request) => request.socket.destroy());
     backend.ready(up.origin);
@@ -459,6 +496,64 @@ describe("reports to the controller", () => {
     expect((await forward.handle(app("/api/local/status"))).status).toBe(200);
     up.server.closeAllConnections();
     await vi.waitFor(() => expect(backend.reports).toContain(`disconnected ${up.origin}`));
+  });
+});
+
+describe("a new connection", () => {
+  test("carries a request only once the server proved itself over it, once per connection", async () => {
+    const backend = new FakeBackend();
+    const up = await upstream();
+    backend.ready(up.origin);
+    const forward = forwarder(backend);
+    for (let round = 0; round < 3; round++) {
+      expect(await (await forward.handle(app("/api/local/status"))).text()).toBe("ok");
+    }
+    await Promise.all(
+      [1, 2, 3].map(async () => (await forward.handle(app("/api/local/status"))).text()),
+    );
+    expect(up.seen).toHaveLength(6);
+    expect(up.seen.filter((seen) => !seen.afterProbe)).toEqual([]);
+    expect(new Set(up.proved).size).toBe(up.proved.length);
+    expect(new Set(up.seen.map((seen) => seen.connection))).toEqual(new Set(up.proved));
+  });
+
+  test("to a server that doesn't prove itself on it carries nothing: refused, and held for the next", async () => {
+    const backend = new FakeBackend();
+    const impostor = await upstream(undefined, "x".repeat(43));
+    const next = await upstream();
+    backend.ready(impostor.origin);
+    backend.onRefused = () => {
+      backend.set({ phase: "holding", owned: true });
+      setTimeout(() => backend.ready(next.origin), 50);
+    };
+    const forward = forwarder(backend);
+    const held = await forward.handle(app("/api/local/status"));
+    expect(held.status).toBe(200);
+    expect(impostor.proved).toHaveLength(1);
+    expect(impostor.seen).toEqual([]);
+    expect(backend.reports).toEqual([`refused ${impostor.origin}`]);
+    expect(next.seen.map((seen) => seen.headers.authorization)).toEqual([`Bearer ${SECRET}`]);
+    // undici has taken a body by then, which is never buffered: it can't go again.
+    backend.ready(impostor.origin);
+    backend.onRefused = null;
+    const post = await forward.handle(
+      app("/api/local/chats", { method: "POST", body: '{"title":"x"}' }),
+    );
+    expect([post.status, await post.json()]).toEqual([503, UNREACHABLE]);
+    expect(impostor.seen).toEqual([]);
+  });
+
+  test("nor while the server it would reach isn't the one ready", async () => {
+    const backend = new FakeBackend();
+    const up = await upstream();
+    backend.ready(up.origin);
+    // What a controller answers once it has moved on from that server.
+    backend.proveConnection = async () => false;
+    const response = await forwarder(backend).handle(app("/api/local/status"));
+    expect([response.status, await response.json()]).toEqual([503, UNREACHABLE]);
+    expect(up.proved).toEqual([]);
+    expect(up.seen).toEqual([]);
+    expect(backend.reports).toEqual([`refused ${up.origin}`]);
   });
 });
 
@@ -591,6 +686,8 @@ describe("in dev", () => {
       ["/mcp", `Bearer ${SECRET}`],
       ["/mcp/x", `Bearer ${SECRET}`],
     ]);
+    expect(api.seen.every((seen) => seen.afterProbe)).toBe(true);
+    expect(vite.proved).toEqual([]);
   });
 
   test("Vite's server still answers while the backend is starting", async () => {

@@ -1,7 +1,8 @@
 // The eidolon-app://app host: every request the window makes, forwarded to the server the
 // controller proved, with the Bearer that only main holds (§3). Electron-free: the scheme's
 // handler hands it protocol.handle's requests.
-import { Agent, fetch } from "undici";
+import type { Socket } from "node:net";
+import { Agent, buildConnector, fetch } from "undici";
 import type { BackendState, ReadyState } from "./controller.ts";
 
 export const APP_ORIGIN = "eidolon-app://app";
@@ -9,6 +10,8 @@ export const APP_ORIGIN = "eidolon-app://app";
 export const DEV_SERVER = "http://127.0.0.1:5173";
 const HOLD_MS = 15_000;
 const RESTART_PATH = "/api/local/restart";
+/** The code of the connection error for a new connection that didn't prove itself. */
+export const UNPROVEN = "EIDOLON_UNPROVEN";
 
 // The guard answers 421 to a Host that isn't the bound loopback address, 403 under /api and /mcp
 // to an Origin other than http://<Host>, and 403 to a Sec-Fetch-Site other than same-origin or
@@ -55,6 +58,8 @@ export interface BackendSource {
   refused(origin: string): void;
   restarted(origin: string): void;
   disconnected(origin: string): void;
+  /** Whether a new connection to `origin` reaches the server ready there, before any request. */
+  proveConnection(socket: Socket, origin: string): Promise<boolean>;
 }
 
 /** A request as protocol.handle hands it: Electron adds the origin that made it. */
@@ -142,27 +147,59 @@ function errorCodes(error: unknown): string[] {
   ];
 }
 
-/** Nothing listens there: the request never reached a server, so it can go again. */
+/**
+ * Nothing listens there, or what does didn't prove itself: the server may have changed, and the
+ * request reached none, so it can go again.
+ */
 function refusedConnection(error: unknown): boolean {
-  return errorCodes((error as { cause?: unknown } | null)?.cause).includes("ECONNREFUSED");
+  const codes = errorCodes((error as { cause?: unknown } | null)?.cause);
+  return codes.includes("ECONNREFUSED") || codes.includes(UNPROVEN);
 }
 
 function originOf(url: unknown): string {
   return new URL(String(url)).origin;
 }
 
+/** undici's own connector, handing a new connection on once the backend proved itself on it. */
+function provingConnector(backend: BackendSource): buildConnector.connector {
+  const connect = buildConnector({});
+  return (connection, callback) => {
+    // A failed connect calls back with the error alone, no null after it.
+    connect(connection, (...connected) => {
+      if (connected[0] !== null) {
+        callback(connected[0], null);
+        return;
+      }
+      const socket = connected[1];
+      const origin = originOf(`${connection.protocol}//${connection.host}`);
+      const unproven = (): void => {
+        socket.destroy();
+        const error = new Error(`${origin} didn't prove itself on a new connection`);
+        callback(Object.assign(error, { code: UNPROVEN }), null);
+      };
+      backend
+        .proveConnection(socket, origin)
+        .then((proven) => (proven ? callback(null, socket) : unproven()), unproven);
+    });
+  };
+}
+
+// undici's 300 s defaults would cut an NDJSON stream that idles, such as a task card that waits on
+// the owner.
+const TIMEOUTS = { bodyTimeout: 0, headersTimeout: 0 } as const;
+
 export function createForwarder(options: ForwarderOptions): Forwarder {
   const { backend, waitingPage, devServer } = options;
   const log = options.log ?? console;
-  // undici's 300 s defaults would cut an NDJSON stream that idles, such as a task card that waits
-  // on the owner.
-  const agent = new Agent({ bodyTimeout: 0, headersTimeout: 0 });
+  // The Bearer goes only over a connection the backend proved itself on.
+  const agent = new Agent({ ...TIMEOUTS, connect: provingConnector(backend) });
+  // Vite's server gets no Bearer, so its connections need no proof.
+  const devAgent = new Agent(TIMEOUTS);
   const upstreamFetch: UpstreamFetch =
     options.fetch ??
     ((url, init) =>
       fetch(url, init as Parameters<typeof fetch>[1]) as unknown as Promise<UpstreamResponse>);
-  // A restart started elsewhere sends no other sign: undici would just connect to whatever binds
-  // the port next.
+  // An attached server closing a connection may be restarting, maybe onto another address.
   agent.on("disconnect", (origin) => backend.disconnected(originOf(origin)));
 
   function send(
@@ -170,6 +207,7 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
     url: URL,
     origin: string,
     secret: string | null,
+    dispatcher: Agent,
   ): Promise<UpstreamResponse> {
     const target = new URL(origin);
     target.pathname = url.pathname;
@@ -188,7 +226,7 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
       body: bodiless ? null : request.body,
       duplex: "half",
       redirect: "manual",
-      dispatcher: agent,
+      dispatcher,
     });
   }
 
@@ -249,16 +287,16 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
       if (target === null) return noBackend(request);
       let upstream: UpstreamResponse;
       try {
-        upstream = await send(request, url, target.origin, target.token.secret);
+        upstream = await send(request, url, target.origin, target.token.secret, agent);
       } catch (error) {
         if (!refusedConnection(error)) {
           const cause = (error as { cause?: unknown } | null)?.cause ?? error;
           log.warn(`Eidolon: ${request.method} ${url.pathname} found no server: ${String(cause)}`);
           return noBackend(request);
         }
-        // The server may be closing for a restart: held like the requests after it. undici takes
-        // a request's body even when the connection is refused, and a body is never buffered, so
-        // only a request without one can go again.
+        // The server may be closing for a restart, or another may hold its address: held like the
+        // requests after it. undici takes a request's body even when the connection fails, and a
+        // body is never buffered, so only a request without one can go again.
         backend.refused(target.origin);
         if (request.body !== null || backend.state === target) return noBackend(request);
         continue;
@@ -277,7 +315,7 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
 
   async function toDevServer(request: Request, url: URL, server: string): Promise<Response> {
     try {
-      return relay(await send(request, url, server, null));
+      return relay(await send(request, url, server, null, devAgent));
     } catch (error) {
       log.warn(`Eidolon: Vite's dev server didn't answer ${url.pathname}: ${String(error)}`);
       return discard(request, 502);
@@ -296,6 +334,8 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
       }
       return toBackend(request, url);
     },
-    destroy: () => agent.destroy(),
+    async destroy() {
+      await Promise.all([agent.destroy(), devAgent.destroy()]);
+    },
   };
 }
