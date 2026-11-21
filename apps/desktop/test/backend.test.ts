@@ -156,10 +156,10 @@ describe("attached to a terminal's server", () => {
     ]);
   });
 
-  test("restarted from outside, the next server's version is read once it proves itself", async () => {
+  test("restarted from outside while no page connection was open, the next server's version is read once the page's next request meets it", async () => {
     const first = await terminal({ version: "0.13.0" });
     const { port } = JSON.parse(readFileSync(join(home, "locks", "4273f434b594.info"), "utf8"));
-    const { backend, told } = follow();
+    const { backend, told, readies } = follow();
     await backend.start();
     await vi.waitFor(() => expect(told).toEqual(["ready attached"]));
     const exited = new Promise((done) => first.once("exit", done));
@@ -168,14 +168,16 @@ describe("attached to a terminal's server", () => {
       headers: { authorization: `Bearer ${TOKEN}` },
     });
     expect(await exited).toBe(75);
-    const next = await terminal({ port, version: "0.14.0" });
-    // The page's next request reaches it over a connection it proved itself on; that connection
-    // closing proves it again, as a new process.
+    // Its connections stay open long after this test: no idle close comes to start a grace.
+    const next = await terminal({ port, version: "0.14.0", keepAliveMs: 60_000 });
+    // The page's next request finds the hint naming another process, which a grace period attaches
+    // to: a new server, whose version is read.
     expect(await (await backend.handle(app("/api/local/chats"))).json()).toEqual({
       pid: next.pid,
     });
     await vi.waitFor(() => expect(backend.serverVersion).toBe("0.14.0"));
-    expect(told.at(-1)).toBe("ready attached");
+    expect(told).toEqual(["ready attached", "holding attached", "ready attached"]);
+    expect(readies).toEqual([first.pid, next.pid]);
     expect(statusReads()).toEqual([first.pid, next.pid]);
   });
 });

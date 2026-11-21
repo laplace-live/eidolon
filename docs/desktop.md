@@ -194,10 +194,11 @@ proof, nor the token.
   get the next connection. So each new connection the forwarder opens to the backend first carries
   the probe ([below](#attaching-to-a-server-already-on-the-data-home)) over that same socket, and
   only one that proves itself carries a request; for an attached server, its lock's `.info` must
-  also still name that address and a live pid, so a relay on the old port can't pass the probe on
-  to a server that moved. A connection that doesn't prove itself is destroyed and handled as a
-  refused one. The cost is one loopback round trip per new connection, under the probe's 2 s
-  deadline.
+  also still name that address and the pid main attached to, alive: a relay on the old port can't
+  pass the probe on to a server that moved, and a server restarted at that address, which holds
+  the same token, is attached to afresh through a grace period, as the new process it is, whose
+  version main reads. A connection that doesn't prove itself is destroyed and handled as a refused
+  one. The cost is one loopback round trip per new connection, under the probe's 2 s deadline.
 - **Holding.** From a forwarded `POST /api/local/restart` that answers 2xx, our own backend's exit
   75, a refused or unproven connection, or an [attached server's grace
   period](#attaching-to-a-server-already-on-the-data-home), requests wait, with no Bearer, until a

@@ -185,6 +185,53 @@ test("attached to a terminal's server: a restart started outside the app is a gr
   expect(isAlive(replacement.pid as number)).toBe(true);
 });
 
+test("attached and idle with no connection open: a restart from outside on the same port is a new server, attached to before a request reaches it", async () => {
+  const terminal = await terminalServer(0, 200);
+  const { port } = JSON.parse(readFileSync(join(home, "locks", "4273f434b594.info"), "utf8"));
+  const controller = new BackendController({
+    home,
+    launch: { command: process.execPath, entry: script, appRoot: null },
+    environment,
+    log: { info: () => {}, warn: () => {}, error: () => {} },
+    port: 0,
+    cwd: dir,
+  });
+  cleanups.push(() => controller.stop());
+  const phases: string[] = [];
+  const readies: (number | null)[] = [];
+  controller.subscribe((state) => {
+    phases.push(`${state.phase}${"owned" in state && !state.owned ? " attached" : ""}`);
+    if (state.phase === "ready") readies.push(state.pid);
+  });
+  const forwarder = forwarderFor(controller);
+  controller.start();
+  await next(controller, (state) => state.phase === "ready");
+  expect(await (await forwarder.handle(app("/api/local/status"))).json()).toMatchObject({
+    pid: terminal.pid,
+  });
+  await vi.waitFor(
+    () => expect(phases).toEqual(["ready attached", "holding attached", "ready attached"]),
+    { timeout: 5000 },
+  );
+
+  // A browser tab restarts it, and the terminal's supervisor starts the next on the same port.
+  const exited = new Promise((done) => terminal.once("exit", done));
+  await fetch(`http://127.0.0.1:${port}/api/local/restart`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN_A}` },
+  });
+  expect(await exited).toBe(75);
+  const replacement = await terminalServer(port);
+  expect(phases).toHaveLength(3);
+
+  // The page's next connection finds the hint naming another process: a grace period attaches to
+  // it, and only then does the request, sent again, reach it.
+  const status = await forwarder.handle(app("/api/local/status"));
+  expect(await status.json()).toMatchObject({ pid: replacement.pid });
+  expect(phases.slice(3)).toEqual(["holding attached", "ready attached"]);
+  expect(readies.slice(2)).toEqual([replacement.pid]);
+});
+
 test("attached and idle with no connection open: a restart from outside, and a relay on the old port, get no Bearer", async () => {
   const terminal = await terminalServer(0, 200);
   const { port } = JSON.parse(readFileSync(join(home, "locks", "4273f434b594.info"), "utf8"));

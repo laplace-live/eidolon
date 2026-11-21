@@ -422,14 +422,22 @@ export class BackendController {
    * proved over the socket itself. A server restarted elsewhere while no connection was open gives
    * no other sign, and whatever holds its address next gets the new connection. An attached
    * server's hint must still name `origin`, so that a relay there can't pass on the probe to a
-   * server that moved.
+   * server that moved, and the pid it attached to: a server restarted at that address proves the
+   * same token, but is another process, whose version the window hasn't followed.
    */
   async proveConnection(socket: Socket, origin: string): Promise<boolean> {
     const state = this.#state;
     if (state.phase !== "ready" || state.origin !== origin) return false;
     if (!state.owned) {
       const hint = hintFrom(this.#io.readServerInfo(this.#home));
-      if (hint === null || originOf(hint) !== origin || !this.#io.isAlive(hint.pid)) return false;
+      if (
+        hint === null ||
+        originOf(hint) !== origin ||
+        hint.pid !== state.pid ||
+        !this.#io.isAlive(hint.pid)
+      ) {
+        return false;
+      }
     }
     return this.#io.proveSocket(socket, origin, state.token);
   }

@@ -761,7 +761,7 @@ describe("a new connection the forwarder opens", () => {
     expect(r.connectionProofs).toEqual([]);
   });
 
-  test("to an attached server, only while its hint still names that address and a live pid", async () => {
+  test("to an attached server, only while its hint still names that address and the live pid it attached to", async () => {
     const r = rig();
     const origin = await attached(r);
     expect(await r.controller.proveConnection(socket, origin)).toBe(true);
@@ -770,6 +770,10 @@ describe("a new connection the forwarder opens", () => {
     r.info = { pid: 4343, port: 7999, host: "127.0.0.1" };
     expect(await r.controller.proveConnection(socket, origin)).toBe(false);
     r.info = { pid: 4242, port: 7861, host: "[::1]" };
+    expect(await r.controller.proveConnection(socket, origin)).toBe(false);
+    // Restarted at the same address: another server, holding the same token, whose version main
+    // hasn't read.
+    r.info = { pid: 4343, port: 7861, host: "127.0.0.1" };
     expect(await r.controller.proveConnection(socket, origin)).toBe(false);
     r.info = null;
     expect(await r.controller.proveConnection(socket, origin)).toBe(false);
