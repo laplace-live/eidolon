@@ -19,6 +19,8 @@ export interface PagesIo {
   load(page: WindowPage): void;
   /** Loads again the app page the window shows, the waiting page served in place of it. */
   reloadApp(): void;
+  /** The version of the server the window follows, as the backend last read it. */
+  serverVersion(): string;
 }
 
 /**
@@ -68,6 +70,8 @@ export class WindowPages {
   #failure: Failure | null = null;
   /** The forwarder served the waiting page since the backend was last ready. */
   #waited = false;
+  /** The server's version when main last loaded the app's page, which its bridge holds too. */
+  #version: string | null = null;
 
   constructor(io: PagesIo) {
     this.#io = io;
@@ -98,8 +102,10 @@ export class WindowPages {
 
   /**
    * The backend moved on. Ready takes the loading page to the app, or reloads the app after the
-   * waiting page stood in for it; a failure shows the failure page. A window failure waits for Try
-   * Again whatever the backend does, and a restart or a grace period leaves the app as it is.
+   * waiting page stood in for it, or when the server runs another version than the page came from:
+   * its UI would call an API it wasn't built for. A failure shows the failure page. A window failure
+   * waits for Try Again whatever the backend does, and a restart or a grace period that ends on the
+   * same version leaves the app as it is.
    */
   backend(state: BackendState): void {
     if (state.phase === "failed") {
@@ -109,8 +115,12 @@ export class WindowPages {
     if (state.phase !== "ready") return;
     const waited = this.#waited;
     this.#waited = false;
+    const version = this.#io.serverVersion();
     if (this.#page === "loading") this.#show("app");
-    else if (this.#page === "app" && waited) this.#io.reloadApp();
+    else if (this.#page === "app" && (waited || version !== this.#version)) {
+      this.#version = version;
+      this.#io.reloadApp();
+    }
   }
 
   /**
@@ -154,6 +164,7 @@ export class WindowPages {
 
   #show(page: WindowPage): void {
     this.#page = page;
+    if (page === "app") this.#version = this.#io.serverVersion();
     this.#io.load(page);
   }
 }

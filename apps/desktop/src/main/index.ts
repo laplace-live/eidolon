@@ -79,6 +79,7 @@ function run(): void {
       const url = mainWindow()?.webContents.getURL() ?? "";
       loadUrl(pageAt(url) === "app" ? url : `${APP_ORIGIN}/`);
     },
+    serverVersion: () => backend.serverVersion,
   });
   const commands = new PageCommands((command) => sendCommand(command));
   const backend = new Backend({

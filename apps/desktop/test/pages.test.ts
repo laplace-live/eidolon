@@ -25,16 +25,33 @@ const READY: BackendState = {
   pid: 4242,
 };
 const HOLDING: BackendState = { phase: "holding", owned: true };
+/** A terminal's server on the data home, which the app attached to. */
+const ATTACHED: BackendState = {
+  phase: "ready",
+  origin: "http://127.0.0.1:7861",
+  token: new BearerToken("t".repeat(43)),
+  owned: false,
+  pid: 5151,
+};
+const HOLDING_ATTACHED: BackendState = { phase: "holding", owned: false };
 const EXITED: BackendFailure = { reason: "exited", code: 1, signal: null, stderr: ["boom"] };
 const FAILED: BackendState = { phase: "failed", failure: EXITED };
 
-function pages(): { pages: WindowPages; loads: (WindowPage | "reload")[] } {
+function pages(): {
+  pages: WindowPages;
+  loads: (WindowPage | "reload")[];
+  /** The version of the server the window follows, as the backend last read it. */
+  server: { version: string };
+} {
   const loads: (WindowPage | "reload")[] = [];
+  const server = { version: "0.13.0" };
   return {
     loads,
+    server,
     pages: new WindowPages({
       load: (page) => loads.push(page),
       reloadApp: () => loads.push("reload"),
+      serverVersion: () => server.version,
     }),
   };
 }
@@ -68,6 +85,30 @@ describe("the window's page", () => {
     window.backend(HOLDING);
     window.backend(READY);
     expect(loads).toEqual(["app", "reload"]);
+  });
+
+  test("reloads the app when the server ready next runs another version, so its UI matches the API", () => {
+    const { pages: window, loads, server } = pages();
+    window.opened(ATTACHED);
+    // The terminal's server stops, and after the grace the app's own starts, at its own version.
+    window.backend(HOLDING_ATTACHED);
+    window.backend(STARTING);
+    server.version = "0.14.0";
+    window.backend(READY);
+    expect(loads).toEqual(["app", "reload"]);
+    // The page is that version's now: a restart onto it keeps the page.
+    window.backend(HOLDING);
+    window.backend(READY);
+    expect(loads).toEqual(["app", "reload"]);
+  });
+
+  test("keeps the app when the server ready next runs the same version, as a restart's page recovers", () => {
+    const { pages: window, loads } = pages();
+    window.opened(ATTACHED);
+    window.backend(HOLDING_ATTACHED);
+    window.backend(STARTING);
+    window.backend(READY);
+    expect(loads).toEqual(["app"]);
   });
 
   test("a new window opens on the page the backend's state calls for", () => {
