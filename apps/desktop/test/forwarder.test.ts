@@ -13,11 +13,17 @@ import {
   fromApp,
   UNREACHABLE,
   type UpstreamFetch,
-  WAITING_PAGE_CSP,
 } from "../src/main/forwarder.ts";
 
 const SECRET = "t".repeat(43);
 const WAITING = "<!doctype html><title>Eidolon</title><p>Waiting for Eidolon's server…";
+const WAITING_CSP = "default-src 'none'; style-src 'sha256-x'";
+
+/** Main's waiting page: the shell's, at 200, with its own CSP. */
+const waitingPage = async () =>
+  new Response(WAITING, {
+    headers: { "content-type": "text/html; charset=utf-8", "content-security-policy": WAITING_CSP },
+  });
 
 /** The controller as the forwarder sees it: a state, its changes, and what it is told. */
 class FakeBackend implements BackendSource {
@@ -131,7 +137,7 @@ async function closedOrigin(): Promise<string> {
 function forwarder(backend: BackendSource, options: Partial<ForwarderOptions> = {}): Forwarder {
   const created = createForwarder({
     backend,
-    waitingPage: () => WAITING,
+    waitingPage,
     log: { warn: () => {} },
     ...options,
   });
@@ -582,10 +588,73 @@ describe("no backend", () => {
           headers: { accept: "text/html,application/xhtml+xml,*/*;q=0.8" },
         }),
       );
-      expect([page.status, await page.text()]).toEqual([503, WAITING]);
+      expect([page.status, await page.text()]).toEqual([200, WAITING]);
       expect(page.headers.get("content-type")).toBe("text/html; charset=utf-8");
-      expect(page.headers.get("content-security-policy")).toBe(WAITING_PAGE_CSP);
+      expect(page.headers.get("content-security-policy")).toBe(WAITING_CSP);
     }
+  });
+
+  test("tells main each time it serves the waiting page, and only for a document", async () => {
+    const backend = new FakeBackend();
+    let served = 0;
+    const forward = forwarder(backend, {
+      waitingPage: () => {
+        served++;
+        return waitingPage();
+      },
+    });
+    await forward.handle(app("/api/local/status"));
+    await forward.handle(app("/", { headers: { accept: "*/*" } }));
+    expect(served).toBe(0);
+    await forward.handle(app("/chats", { headers: { accept: "text/html" } }));
+    expect(served).toBe(1);
+  });
+});
+
+describe("main's own requests", () => {
+  test("go to the server ready now with the Bearer, over a proven connection", async () => {
+    const backend = new FakeBackend();
+    const up = await upstream((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" }).end('{"version":"0.13.0"}');
+    });
+    backend.ready(up.origin);
+    const response = await forwarder(backend).get(
+      "/api/local/status?x=1",
+      AbortSignal.timeout(5000),
+    );
+    expect(await response.json()).toEqual({ version: "0.13.0" });
+    expect(
+      up.seen.map(({ url, headers, afterProbe }) => [url, headers.authorization, afterProbe]),
+    ).toEqual([["/api/local/status?x=1", `Bearer ${SECRET}`, true]]);
+  });
+
+  test("keep to the ready server's origin whatever the path names", async () => {
+    const backend = new FakeBackend();
+    const up = await upstream();
+    const elsewhere = await upstream();
+    backend.ready(up.origin);
+    await forwarder(backend).get(`${elsewhere.origin}/api/x`, AbortSignal.timeout(5000));
+    await forwarder(backend).get(
+      `//${new URL(elsewhere.origin).host}/api/y`,
+      AbortSignal.timeout(5000),
+    );
+    expect(up.seen.map(({ url }) => url)).toEqual(["/api/x", "/api/y"]);
+    expect(elsewhere.seen).toEqual([]);
+    expect(elsewhere.proved).toEqual([]);
+  });
+
+  test("reject while no server is ready, and when cancelled", async () => {
+    const backend = new FakeBackend();
+    await expect(
+      forwarder(backend).get("/api/local/status", AbortSignal.timeout(5000)),
+    ).rejects.toThrow("no server is ready");
+    const up = await upstream(() => {});
+    backend.ready(up.origin);
+    const cancel = new AbortController();
+    const pending = forwarder(backend).get("/api/local/status", cancel.signal);
+    await vi.waitFor(() => expect(up.seen).toHaveLength(1));
+    cancel.abort();
+    await expect(pending).rejects.toThrow();
   });
 });
 

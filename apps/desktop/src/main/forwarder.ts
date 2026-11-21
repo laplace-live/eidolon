@@ -45,12 +45,6 @@ export const UNREACHABLE = {
   error: { code: "unreachable", message: "Eidolon's server isn't running" },
 } as const;
 
-/** The waiting page is passive: no script, its styles inline or the shell's. */
-export const WAITING_PAGE_CSP =
-  "default-src 'none'; style-src 'unsafe-inline' eidolon-app://shell; " +
-  "img-src data: eidolon-app://shell; font-src eidolon-app://shell; " +
-  "base-uri 'none'; form-action 'none'";
-
 /** What the forwarder follows and tells: the controller. */
 export interface BackendSource {
   readonly state: BackendState;
@@ -83,10 +77,15 @@ export interface UpstreamResponse {
 
 export type UpstreamFetch = (url: URL, init: UpstreamInit) => Promise<UpstreamResponse>;
 
+/**
+ * The small page a document gets while no server answers, with its own CSP; main reloads the window
+ * once one does.
+ */
+export type WaitingPage = () => Promise<Response>;
+
 export interface ForwarderOptions {
   readonly backend: BackendSource;
-  /** The small page a document gets while no server answers; main reloads once one does. */
-  readonly waitingPage: () => string;
+  readonly waitingPage: WaitingPage;
   /** Dev: Vite's server, which gets every path but /api/ and /mcp, without the Bearer. */
   readonly devServer?: string;
   readonly log?: { warn(message: string): void };
@@ -96,6 +95,11 @@ export interface ForwarderOptions {
 export interface Forwarder {
   /** protocol.handle's handler for the app host. */
   handle(request: SchemeRequest): Promise<Response>;
+  /**
+   * A GET of main's own at `path`, such as the quit check's, to the server ready now, with the
+   * Bearer and over a proven connection; rejects while none is ready.
+   */
+  get(path: string, signal: AbortSignal): Promise<Response>;
   /** Drops every connection it holds. */
   destroy(): Promise<void>;
 }
@@ -135,6 +139,18 @@ function isDocument(request: Request): boolean {
   return (
     (request.method === "GET" || request.method === "HEAD") &&
     /\btext\/html\b/i.test(request.headers.get("accept") ?? "")
+  );
+}
+
+/**
+ * The answer while no server answers: the waiting page for a document, else the 503 that apps/web
+ * reads as `unreachable`.
+ */
+export function unreachable(request: Request, waitingPage: WaitingPage): Promise<Response> {
+  void request.body?.cancel().catch(() => {});
+  if (isDocument(request)) return waitingPage();
+  return Promise.resolve(
+    Response.json(UNREACHABLE, { status: 503, headers: { "cache-control": "no-store" } }),
   );
 }
 
@@ -247,20 +263,7 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
     return new Response(null, { status });
   }
 
-  function noBackend(request: Request): Response {
-    void request.body?.cancel().catch(() => {});
-    if (isDocument(request)) {
-      return new Response(waitingPage(), {
-        status: 503,
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-          "cache-control": "no-store",
-          "content-security-policy": WAITING_PAGE_CSP,
-        },
-      });
-    }
-    return Response.json(UNREACHABLE, { status: 503, headers: { "cache-control": "no-store" } });
-  }
+  const noBackend = (request: Request): Promise<Response> => unreachable(request, waitingPage);
 
   /** The server to forward to: at once when ready, after the hold while holding, else none. */
   function settled(deadline: number): Promise<ReadyState | null> {
@@ -333,6 +336,22 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
         return toDevServer(request, url, devServer);
       }
       return toBackend(request, url);
+    },
+    async get(path, signal) {
+      const state = backend.state;
+      if (state.phase !== "ready") throw new Error("no server is ready");
+      // The path's own host, if it named one, never takes the Bearer elsewhere.
+      const target = new URL(state.origin);
+      const { pathname, search } = new URL(path, target);
+      target.pathname = pathname;
+      target.search = search;
+      const response = await fetch(target, {
+        headers: { authorization: `Bearer ${state.token.secret}` },
+        redirect: "manual",
+        signal,
+        dispatcher: agent,
+      });
+      return response as unknown as Response;
     },
     async destroy() {
       await Promise.all([agent.destroy(), devAgent.destroy()]);

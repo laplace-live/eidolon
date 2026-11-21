@@ -28,7 +28,7 @@ beforeAll(async () => {
       disconnected: () => {},
       proveConnection: (socket, origin) => proveSocket(socket, origin, token),
     },
-    waitingPage: () => "",
+    waitingPage: async () => new Response(""),
   });
 });
 
