@@ -18,7 +18,8 @@ const zh = STRINGS["zh-Hans"];
 
 /** The web app's Chinese for the English `id`, from its catalog. */
 function webChinese(id: string): string {
-  const lines = readFileSync(join(ROOT, "apps/web/src/locales/zh-Hans.po"), "utf8").split("\n");
+  // A Windows checkout's catalog has CRLF line ends under Git's default autocrlf.
+  const lines = readFileSync(join(ROOT, "apps/web/src/locales/zh-Hans.po"), "utf8").split(/\r?\n/);
   const msgstr = lines[lines.indexOf(`msgid ${JSON.stringify(id)}`) + 1] ?? "";
   if (!msgstr.startsWith("msgstr ")) throw new Error(`apps/web has no ${id}`);
   return JSON.parse(msgstr.slice("msgstr ".length)) as string;
