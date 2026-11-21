@@ -252,12 +252,15 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
         upstream = await send(request, url, target.origin, target.token.secret);
       } catch (error) {
         if (!refusedConnection(error)) {
-          log.warn(`Eidolon: ${request.method} ${url.pathname} found no server: ${String(error)}`);
+          const cause = (error as { cause?: unknown } | null)?.cause ?? error;
+          log.warn(`Eidolon: ${request.method} ${url.pathname} found no server: ${String(cause)}`);
           return noBackend(request);
         }
-        // The server may be closing for a restart: held like the requests after it.
+        // The server may be closing for a restart: held like the requests after it. undici takes
+        // a request's body even when the connection is refused, and a body is never buffered, so
+        // only a request without one can go again.
         backend.refused(target.origin);
-        if (backend.state === target) return noBackend(request);
+        if (request.body !== null || backend.state === target) return noBackend(request);
         continue;
       }
       if (

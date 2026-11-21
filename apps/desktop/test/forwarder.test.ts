@@ -419,6 +419,20 @@ describe("reports to the controller", () => {
     expect(up.seen.map((seen) => seen.headers.authorization)).toEqual([`Bearer ${"n".repeat(43)}`]);
   });
 
+  test("a refused request with a body isn't held: undici has taken the body, which is never buffered", async () => {
+    const backend = new FakeBackend();
+    const gone = await closedOrigin();
+    backend.ready(gone);
+    backend.onRefused = () => backend.set({ phase: "holding", owned: true });
+    const started = performance.now();
+    const response = await forwarder(backend).handle(
+      app("/api/local/chats/c/messages", { method: "POST", body: '{"text":"hi"}' }),
+    );
+    expect([response.status, await response.json()]).toEqual([503, UNREACHABLE]);
+    expect(performance.now() - started).toBeLessThan(5000);
+    expect(backend.reports).toEqual([`refused ${gone}`]);
+  });
+
   test("a refused connection the controller doesn't act on is the no-backend answer at once", async () => {
     const backend = new FakeBackend();
     const gone = await closedOrigin();
