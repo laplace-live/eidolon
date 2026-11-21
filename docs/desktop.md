@@ -30,8 +30,8 @@ apps/desktop/
                          requirement release builds will carry
   assets/                what main loads at run time through process.resourcesPath: the tray icon
   scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
-                         zip.ts and natives.ts; vite-common.ts, electron-env.ts; and smoke.ts and
-                         dev-smoke.ts, the smokes' placeholders
+                         zip.ts and natives.ts; vite-common.ts, electron-env.ts; smoke.ts and
+                         dev-smoke.ts, the smokes' placeholders, and smoke/, the kit both share
   src/main/              main: the Electron-free modules that decide (controller, attach, forwarder,
                          backend, environment, login-shell, pages, policy, menus, window-options,
                          quit-check, quit-flow, strings, shell-pages, log-filter, log-files,
@@ -618,19 +618,42 @@ another time zone runs in a child process started in it.
 yet: each says so and exits 1. Meanwhile what the window or the backend does is checked by running
 the app in background mode ([by hand](#running-it-by-hand)).
 
+Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers without Electron:
+
+- **`fakes.ts`:** loopback stand-ins on `node:http` for every provider the app reaches, ported from
+  `local-smoke.ts`'s: her mind's streamed chat completions, with a hold between and after a
+  reply's parts; the retrieval gate's and the director's decisions; embeddings, with a hold;
+  OpenAI's speech, transcriptions and realtime transcription sessions, for a voice message and a
+  call; OpenRouter's images, for a selfie; and the model listings. They answer one key, and count
+  what they answer by route.
+- **`env.ts`:** the app's environment, which takes only the OS's own variables from the smoke's,
+  never a credential, setting or provider URL (`local-smoke.ts`'s drop list), then adds the fakes'
+  accounts, the run's homes and the test switches: no `.env`, no login shell, background mode
+  unless `--headful`.
+- **`kit.ts`:** `runSmoke()`, which gives each run a temporary data home and profile (under
+  `RUNNER_TEMP` in CI), removed after a pass and kept after a failure; launches the app as its
+  binary or under Playwright; reads main.log, backend.log, the server lock's `.info` and
+  `local-token`, and calls the backend as main's forwarder does; and at the end, or on Ctrl-C,
+  stops by pid whatever still runs (`processes.ts`), fails the run for anything left, and puts back
+  macOS's `live.laplace.eidolon` preferences a packaged run writes.
+- **`focus.ts`:** on macOS in background mode, `lsappinfo front` every 50 ms: the app in front, by
+  name or by a process the smoke started or one under it, fails the run, and so does its main
+  process not being an accessory (`UIElement`) once it runs.
+
 In CI, `ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test
-skips. No workflow stages, packages or runs the app, or runs the Electron lane:
-`.github/workflows/desktop.yml`, which `docker.yml` already skips, isn't written.
+skips. `.github/workflows/desktop.yml`, which `docker.yml` skips, builds, stages and packages the
+app unsigned on macOS arm64 and Windows x64, and runs the stage test, the Electron lane (on
+Windows, the tests `ts.yml`'s Windows job runs), the packaged smoke and the system CA proof on each.
 
 ### Running it by hand
 
 A test run of the app gets a temporary `EIDOLON_HOME`, a profile of its own
 (`--user-data-dir=<profile>`, which keeps the logs inside it) and `EIDOLON_DESKTOP_BACKGROUND=1`.
 It also gets `EIDOLON_DESKTOP_LOGIN_SHELL=0` and an environment with no credential, setting,
-provider or other `EIDOLON_*` variable, as `childEnv()` in `apps/bot/scripts/local-smoke.ts`
-builds one, with an `EIDOLON_SHARED_SKILLS` beside the home so the owner's shared skills stay out
-too ([The environment](#the-environment)). Copy that function rather than export it: the file
-isn't paths-ignored, so a change to it deploys production. A call needs Chromium's
+provider or other `EIDOLON_*` variable, with an `EIDOLON_SHARED_SKILLS` of its own so the owner's
+shared skills stay out too ([The environment](#the-environment)): `appEnv()` in
+`scripts/smoke/env.ts` builds one, from `local-smoke.ts`'s drop list. Leave `local-smoke.ts`
+itself alone: it isn't paths-ignored, so a change to it deploys production. A call needs Chromium's
 `--use-fake-device-for-media-stream`, or background mode denies the microphone; to feed it a WAV
 file, add `--use-file-for-fake-audio-capture=<file>` and `--disable-features=AudioServiceSandbox`,
 without which it captures silence.
