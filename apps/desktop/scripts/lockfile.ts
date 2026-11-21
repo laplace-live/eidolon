@@ -139,7 +139,7 @@ export type Overrides = { [name: string]: string | Overrides };
 
 /**
  * npm `overrides` that pin each package to its version in `tree`, nested where bun.lock nests a
- * second version: `{"tsyringe": {".": "4.10.0", "tslib": "1.14.1"}}` holds tsyringe's own tslib.
+ * second version: `{"tsyringe": {".": <its version>, "tslib": <its own tslib's>}}`.
  */
 export function pinOverrides(tree: Iterable<Locked>): Overrides {
   const overrides: Overrides = {};
@@ -176,16 +176,18 @@ function installed(node: LsNode): node is LsNode & { version: string } {
 }
 
 /**
- * Where an install `npm ls` describes differs from bun.lock: a version npm resolved otherwise, a
- * package missing on either side, and npm's own problems. Empty when they agree.
+ * Where an install of `roots`, its manifest's dependencies and optional dependencies, differs from
+ * bun.lock, as `npm ls` describes it: a version npm resolved otherwise, a package missing on either
+ * side, and npm's own problems. Empty when they agree. The roots come from the manifest because
+ * npm skips an optional package it fails to fetch, exits 0, and lists it as one the platform skips.
  */
-export function lockDrift(ls: LsNode, lock: BunLock, platform: Platform): string[] {
+export function lockDrift(
+  ls: LsNode,
+  lock: BunLock,
+  roots: Readonly<Record<string, string>>,
+  platform: Platform,
+): string[] {
   const drift = [...(ls.problems ?? [])];
-  const roots = Object.fromEntries(
-    Object.entries(ls.dependencies ?? {}).flatMap(([name, node]) =>
-      installed(node) ? [[name, node.version]] : [],
-    ),
-  );
   let expected: Map<string, Locked>;
   try {
     expected = lockedTree(lock, roots, platform);

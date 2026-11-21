@@ -128,9 +128,10 @@ for (const target of Object.keys(TARGETS) as Target[]) {
     });
 
     test("is the tree bun.lock pins, as npm ls shows it", () => {
-      expect(lockDrift(npmLs(payload), readBunLock(join(ROOT, "bun.lock")), { os, cpu })).toEqual(
-        [],
-      );
+      const { dependencies, optionalDependencies } = readManifest(payload);
+      const roots = { ...dependencies, ...optionalDependencies };
+      const lock = readBunLock(join(ROOT, "bun.lock"));
+      expect(lockDrift(npmLs(payload), lock, roots, { os, cpu })).toEqual([]);
     }, 60_000);
 
     test("keeps only the target's onnxruntime binding and the library it loads", () => {

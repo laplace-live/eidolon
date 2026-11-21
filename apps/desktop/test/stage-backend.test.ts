@@ -187,6 +187,7 @@ function zip(entries: readonly { name: string; data: Buffer; deflate: boolean }[
 
 // a nests its own b, which nests its own c; d takes the top-level b. One optional package is for
 // macOS on Apple silicon, one for Windows x64, one for anything but Windows; q is an optional peer.
+// bin-mac and bin-win are a manifest's own optional binaries, as LanceDB's are the payload's.
 const LOCK = `{
   "lockfileVersion": 1,
   "workspaces": { "": { "name": "a, ] and } in a string", "dependencies": { "a": "1.0.0", }, }, },
@@ -195,6 +196,8 @@ const LOCK = `{
     "a/b": ["b@1.1.0", "", { "dependencies": { "c": "^1", }, }, "sha512-ab"],
     "a/b/c": ["c@1.0.0", "", {}, "sha512-abc"],
     "b": ["b@2.0.0", "", {}, "sha512-b"],
+    "bin-mac": ["bin-mac@1.0.0", "", { "os": "darwin", "cpu": "arm64", }, "sha512-bm"],
+    "bin-win": ["bin-win@1.0.0", "", { "os": "win32", "cpu": "x64", }, "sha512-bw"],
     "c": ["c@2.0.0", "", {}, "sha512-c"],
     "d": ["d@1.0.0", "", { "dependencies": { "b": "^2", }, "optionalDependencies": { "not-win": "1.0.0", }, }, "sha512-d"],
     "mac-only": ["mac-only@1.0.0", "", { "os": "darwin", "cpu": "arm64", }, "sha512-m"],
@@ -213,7 +216,7 @@ describe("bun.lock", () => {
   const lock: BunLock = parseBunLock(LOCK);
 
   test("reads its trailing commas as JSON, and leaves the ones inside strings", () => {
-    expect(Object.keys(lock.packages)).toHaveLength(11);
+    expect(Object.keys(lock.packages)).toHaveLength(13);
     expect(parseBunLock(LOCK)).toMatchObject({
       workspaces: { "": { name: "a, ] and } in a string" } },
     });
@@ -311,7 +314,7 @@ describe("an install against bun.lock", () => {
   });
 
   test("agrees when npm installed bun.lock's tree, the platform's skips aside", () => {
-    expect(lockDrift(darwin(), lock, DARWIN)).toEqual([]);
+    expect(lockDrift(darwin(), lock, ROOTS, DARWIN)).toEqual([]);
   });
 
   test("names a version npm resolved otherwise, what either side lacks, and npm's problems", () => {
@@ -323,15 +326,26 @@ describe("an install against bun.lock", () => {
       version: "1.0.0",
       dependencies: { b: { version: "2.0.0" }, x: { version: "9.0.0" }, "not-win": {} },
     };
-    expect(lockDrift({ ...ls, problems: ["invalid: c@1.0.1"] }, lock, DARWIN)).toEqual([
+    expect(lockDrift({ ...ls, problems: ["invalid: c@1.0.1"] }, lock, ROOTS, DARWIN)).toEqual([
       "invalid: c@1.0.1",
       "a > b > c: npm installed 1.0.1, bun.lock has 1.0.0",
       "d > x@9.0.0: not in bun.lock",
       "p@1.0.0 (p): not installed",
       "not-win@1.0.0 (not-win): not installed",
     ]);
-    expect(lockDrift({ dependencies: { a: { version: "1.0.1" } } }, lock, DARWIN)).toEqual([
+    expect(lockDrift(darwin(), lock, { ...ROOTS, a: "1.0.1" }, DARWIN)).toEqual([
       "bun.lock has a at 1.0.0, not 1.0.1: run bun install",
+    ]);
+  });
+
+  test("names the platform's own binary when npm skipped it, as it skips one it fails to fetch", () => {
+    const roots = { ...ROOTS, "bin-mac": "1.0.0", "bin-win": "1.0.0" };
+    const ls = (binary: LsNode): LsNode => ({
+      dependencies: { ...darwin().dependencies, "bin-mac": binary, "bin-win": {} },
+    });
+    expect(lockDrift(ls({ version: "1.0.0" }), lock, roots, DARWIN)).toEqual([]);
+    expect(lockDrift(ls({}), lock, roots, DARWIN)).toEqual([
+      "bin-mac@1.0.0 (bin-mac): not installed",
     ]);
   });
 });

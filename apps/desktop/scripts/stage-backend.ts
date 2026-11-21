@@ -399,7 +399,7 @@ export async function stageBackend(
     ];
     console.log(`npm ${install.join(" ")}`);
     if (npm(install, payload).status !== 0) throw new Error("npm install failed");
-    const drift = lockDrift(npmLs(payload), lock, { os, cpu });
+    const drift = lockDrift(npmLs(payload), lock, roots, { os, cpu });
     if (drift.length > 0) {
       throw new Error(`npm installed what bun.lock doesn't:\n${drift.join("\n")}`);
     }
