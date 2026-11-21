@@ -52,6 +52,9 @@ bun install
 bun run app        # builds the web app when it isn't built, then opens it
 ```
 
+The desktop app, which isn't released yet, runs it in a window of its own: `bun run dev:desktop`
+([`docs/desktop.md`](docs/desktop.md)).
+
 ### Supported platforms
 
 LanceDB and ONNX Runtime, its native parts, decide where it runs:

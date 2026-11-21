@@ -3,8 +3,9 @@
 The bot, and the offline chain that builds its indexes, in TypeScript, on eidolon's own voice engine
 ([voice-engine.md](voice-engine.md)), parts of it ported from
 [pipedog](https://github.com/polvallverdu/pipedog) (a TypeScript port of Pipecat). The bot has run
-production on Bun since 2026-11-04; the local app, the CLI and the npm package run on Node 24. The
-code and its own tests are the only source of truth for how it behaves.
+production on Bun since 2026-11-04; the local app, the CLI and the npm package run on Node 24, and
+the desktop app runs the local app on Electron's own Node 24 ([desktop.md](desktop.md)). The code
+and its own tests are the only source of truth for how it behaves.
 
 ## Layout
 
@@ -34,8 +35,8 @@ nothing.
 | `apps/cli` | every `laplace-*` command and the gate benchmark: argparse specs, the persona, locks, printing, exit codes |
 
 A new context tier implements `ContextProvider`; a new LLM tool implements `LlmTool`; the turn
-engine runs both, in a chat and a call alike. Clients (the `/ai` page today; Electron or Expo
-later) talk to `apps/bot` over HTTP and RTVI.
+engine runs both, in a chat and a call alike. Clients (the `/ai` page, and the local app's pages in
+a browser or the desktop app's window; Expo later) talk to `apps/bot` over HTTP and RTVI.
 
 The bot reads each persona's index from the data home ([personas.md](personas.md)) and viewers'
 memories from Qdrant. The compose `bot-ts` service keeps Mem0's `history.db` on a volume of its
@@ -204,7 +205,8 @@ original) or one code path against another (the pipeline's dry run against the p
 - **pipedog-derived code carries its BSD-2 header**, then `Ported from pipedog <path>@ce8f8bc`.
   pipedog is never followed past that commit; `NOTICE` names every copyright holder a ported
   file's header does, and `apps/eidolon/test/build.test.ts` holds it to that. Code ported from
-  pi-mono carries its MIT header the same way, at `ac78a60` ([assistant.md](assistant.md)).
+  pi-mono carries its MIT header the same way, at `ac78a60` ([assistant.md](assistant.md)), and so
+  does code ported from deepseek-harness, at `2e39e70496` ([desktop.md](desktop.md)).
 - **Only `packages/runtime` imports `@eidolon/voice` and `@eidolon/webrtc`.** Biome's
   `noRestrictedImports` enforces it, so every other package is testable without a call.
 - **`@eidolon/ingest` stays out of the bot image.** Biome forbids importing it under `apps/bot/**`

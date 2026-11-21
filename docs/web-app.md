@@ -23,6 +23,9 @@ bun run app        # builds apps/web/dist when it has no index.html, then `local
 | `bun run dev:web` | Vite on `http://127.0.0.1:5173`, proxying `/api` and `/mcp` to the server on `localhost:7860` |
 | `bun run build:web` | `apps/web/dist` |
 
+The desktop app (`apps/desktop`) runs this server too, as its own backend, and shows the app in
+its window with no link to open ([desktop.md](desktop.md)).
+
 The server's flags: `--host` (default `localhost`; loopback addresses only), `--port` (default
 7860; `0` picks a free one), `-v` (DEBUG; `-vv` TRACE; INFO without), and `--open`/`--no-open`
 (default open, except over SSH, where `SSH_CONNECTION` is set). Its last boot line, written to
@@ -366,8 +369,9 @@ and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
 ## In the desktop app
 
 The desktop app (`apps/desktop`) shows this same app in its own window, at `eidolon-app://app/`,
-and its main process adds the Bearer to every request, so the page never signs in. Its preload
-gives the page two things; a browser has neither, and without them nothing below happens.
+and its main process adds the Bearer to every request, so the page never signs in
+([desktop.md](desktop.md) has the app itself). Its preload gives the page two things; a browser
+has neither, and without them nothing below happens.
 
 - **The bridge**, `window.eidolonDesktop` (`lib/desktop.ts`): `{platform, version, serverVersion,
   setTheme(setting), setLanguage(language), onCommand(callback)}`, `platform` being Node's name for

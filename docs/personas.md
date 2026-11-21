@@ -34,7 +34,8 @@ else the first folder found.
 ## The data home
 
 `EIDOLON_HOME`, or `~/.laplace/eidolon`. A deployment mounts it as a volume: both Docker images
-set `EIDOLON_HOME=/data`.
+set `EIDOLON_HOME=/data`. On one computer `bun run app`, npx and the desktop app share it, one
+server at a time ([desktop.md](desktop.md#attaching-to-a-server-already-on-the-data-home)).
 
 ```text
 <data home>/
