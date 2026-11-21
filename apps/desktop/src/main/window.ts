@@ -148,7 +148,7 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     // -3 is ERR_ABORTED: a load that another replaced, such as main's own next page.
     if (!isMainFrame || code === -3) return;
-    hooks.failed(`${description} (${code}) loading ${url}`);
+    hooks.failed(`${description} (${code}) loading ${loggedUrl(url)}`);
   });
   contents.on("preload-error", (_event, _path, error) => {
     hooks.failed(`the preload failed: ${error.message}`);

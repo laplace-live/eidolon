@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { app } from "electron";
 import log from "electron-log/main";
 import { LOG_MAX_BYTES, rotate } from "./log-files.ts";
+import { loggedUrl } from "./policy.ts";
 
 type FileLogger = typeof log;
 
@@ -38,7 +39,7 @@ log.errorHandler.startCatching({ showDialog: false });
 
 app.on("render-process-gone", (_event, contents, details) => {
   log.error(
-    `Eidolon: a renderer is gone (${details.reason}, exit code ${details.exitCode}) at ${contents.getURL()}`,
+    `Eidolon: a renderer is gone (${details.reason}, exit code ${details.exitCode}) at ${loggedUrl(contents.getURL())}`,
   );
 });
 app.on("child-process-gone", (_event, details) => {
