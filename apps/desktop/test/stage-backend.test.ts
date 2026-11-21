@@ -1,8 +1,10 @@
-// stage-backend's parts, on made-up lockfiles and folders: the pinning to bun.lock, what is pruned
-// and the license texts. The staged payload itself is stage.test.ts's.
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+// stage-backend's parts, on made-up lockfiles, folders, PE files and zips: the pinning to bun.lock,
+// what is pruned, where the VC++ runtime goes, the unsigned-PE list and the license texts. The
+// staged payload itself is stage.test.ts's.
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { crc32, deflateRawSync } from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
 import { packageManifest } from "../../eidolon/scripts/build.ts";
 import {
@@ -17,9 +19,28 @@ import {
   resolveFrom,
   supports,
 } from "../scripts/lockfile.ts";
-import { parseTarget, pruneOnnxruntime, thirdPartyLicenses } from "../scripts/stage-backend.ts";
+import { compareVersions, readPe } from "../scripts/pe.ts";
+import {
+  newestVcRedist,
+  parseTarget,
+  pruneOnnxruntime,
+  stageBackend,
+  stageDir,
+  thirdPartyLicenses,
+  unsignedPeIn,
+  unsignedPeInZip,
+  vcRuntimeNeeds,
+} from "../scripts/stage-backend.ts";
 
 const ROOT = join(import.meta.dirname, "../../..");
+const VC = [
+  "vcruntime140.dll",
+  "vcruntime140_1.dll",
+  "msvcp140.dll",
+  "msvcp140_1.dll",
+  "msvcp140_atomic_wait.dll",
+];
+
 const temps: string[] = [];
 function temp(): string {
   const dir = mkdtempSync(join(tmpdir(), "eidolon-stage-test-"));
@@ -34,6 +55,134 @@ function put(file: string, content: string | Buffer = ""): string {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, content);
   return file;
+}
+
+interface PeSpec {
+  readonly linker?: string;
+  readonly imports?: readonly string[];
+  readonly delayImports?: readonly string[];
+  readonly signed?: boolean;
+  readonly fileVersion?: readonly [number, number, number, number];
+}
+
+/** A PE32+ image with one section holding its import tables and version resource. */
+function pe(spec: PeSpec = {}): Buffer {
+  const rvaBase = 0x1000;
+  const rawAt = 0x200;
+  const body = Buffer.alloc(0x800);
+  let used = 0;
+  const alloc = (size: number) => {
+    const at = used;
+    used += Math.ceil(size / 8) * 8;
+    return at;
+  };
+  const string = (text: string) => {
+    const at = alloc(text.length + 1);
+    body.write(text, at, "latin1");
+    return rvaBase + at;
+  };
+  const imports = spec.imports ?? [];
+  const importsAt = alloc((imports.length + 1) * 20);
+  for (const [i, name] of imports.entries()) {
+    body.writeUInt32LE(string(name), importsAt + i * 20 + 12);
+  }
+  const delays = spec.delayImports ?? [];
+  const delaysAt = alloc((delays.length + 1) * 32);
+  for (const [i, name] of delays.entries()) {
+    body.writeUInt32LE(1, delaysAt + i * 32);
+    body.writeUInt32LE(string(name), delaysAt + i * 32 + 4);
+  }
+  const resources = alloc(180);
+  if (spec.fileVersion !== undefined) {
+    // Type RT_VERSION, then name 1, then language 0x409, each one entry, then the data entry.
+    const level = (at: number, id: number, target: number) => {
+      body.writeUInt16LE(1, resources + at + 14);
+      body.writeUInt32LE(id, resources + at + 16);
+      body.writeUInt32LE(target, resources + at + 20);
+    };
+    level(0, 16, 0x80000000 + 24);
+    level(24, 1, 0x80000000 + 48);
+    level(48, 0x409, 72);
+    const info = resources + 88;
+    body.writeUInt32LE(rvaBase + info, resources + 72);
+    body.writeUInt32LE(92, resources + 76);
+    body.writeUInt16LE(92, info);
+    body.writeUInt16LE(52, info + 2);
+    body.write("VS_VERSION_INFO", info + 6, "utf16le");
+    const [a, b, c, d] = spec.fileVersion;
+    body.writeUInt32LE(0xfeef04bd, info + 40);
+    body.writeUInt32LE(((a << 16) | b) >>> 0, info + 48);
+    body.writeUInt32LE(((c << 16) | d) >>> 0, info + 52);
+  }
+  const file = Buffer.alloc(rawAt + body.length + (spec.signed ? 16 : 0));
+  file.write("MZ", 0, "latin1");
+  file.writeUInt32LE(0x40, 0x3c);
+  file.write("PE\0\0", 0x40, "latin1");
+  file.writeUInt16LE(0x8664, 0x44);
+  file.writeUInt16LE(1, 0x46);
+  file.writeUInt16LE(240, 0x54);
+  const optional = 0x58;
+  file.writeUInt16LE(0x20b, optional);
+  const [major, minor] = (spec.linker ?? "14.44").split(".").map(Number) as [number, number];
+  file.writeUInt8(major, optional + 2);
+  file.writeUInt8(minor, optional + 3);
+  file.writeUInt32LE(16, optional + 108);
+  const directory = (index: number, address: number, size: number) => {
+    file.writeUInt32LE(address, optional + 112 + index * 8);
+    file.writeUInt32LE(size, optional + 116 + index * 8);
+  };
+  if (imports.length > 0) directory(1, rvaBase + importsAt, (imports.length + 1) * 20);
+  if (spec.fileVersion !== undefined) directory(2, rvaBase + resources, 16);
+  if (spec.signed) directory(4, rawAt + body.length, 16);
+  if (delays.length > 0) directory(13, rvaBase + delaysAt, (delays.length + 1) * 32);
+  const section = optional + 240;
+  file.write(".data", section, "latin1");
+  file.writeUInt32LE(body.length, section + 8);
+  file.writeUInt32LE(rvaBase, section + 12);
+  file.writeUInt32LE(body.length, section + 16);
+  file.writeUInt32LE(rawAt, section + 20);
+  body.copy(file, rawAt);
+  return file;
+}
+
+/** A zip of `entries`, deflated or stored. */
+function zip(entries: readonly { name: string; data: Buffer; deflate: boolean }[]): Buffer {
+  const parts: Buffer[] = [];
+  const directory: Buffer[] = [];
+  let offset = 0;
+  for (const { name, data, deflate } of entries) {
+    const body = deflate ? deflateRawSync(data) : data;
+    const nameBytes = Buffer.from(name);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(deflate ? 8 : 0, 8);
+    local.writeUInt32LE(crc32(data), 14);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(deflate ? 8 : 0, 10);
+    central.writeUInt32LE(crc32(data), 16);
+    central.writeUInt32LE(body.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBytes.length, 28);
+    central.writeUInt32LE(offset, 42);
+    parts.push(local, nameBytes, body);
+    directory.push(central, nameBytes);
+    offset += 30 + nameBytes.length + body.length;
+  }
+  const listing = Buffer.concat(directory);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(listing.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, listing, end]);
 }
 
 // a nests its own b, which nests its own c; d takes the top-level b. One optional package is for
@@ -187,6 +336,49 @@ describe("an install against bun.lock", () => {
   });
 });
 
+describe("a PE file", () => {
+  test("gives its linker, its imports, whether it is signed and its file version", () => {
+    expect(
+      readPe(
+        pe({
+          linker: "14.51",
+          imports: ["VCRUNTIME140.dll", "KERNEL32.dll"],
+          delayImports: ["DirectML.dll"],
+          signed: true,
+          fileVersion: [14, 52, 37029, 0],
+        }),
+      ),
+    ).toEqual({
+      linker: "14.51",
+      signed: true,
+      imports: ["VCRUNTIME140.dll", "KERNEL32.dll"],
+      delayImports: ["DirectML.dll"],
+      fileVersion: "14.52.37029.0",
+    });
+    expect(readPe(pe())).toEqual({
+      linker: "14.44",
+      signed: false,
+      imports: [],
+      delayImports: [],
+      fileVersion: null,
+    });
+  });
+
+  test("is read from disk the same, and anything else is no PE file", () => {
+    const dir = temp();
+    const file = put(join(dir, "x.dll"), pe({ imports: ["MSVCP140.dll"] }));
+    expect(readPe(file)?.imports).toEqual(["MSVCP140.dll"]);
+    expect(readPe(put(join(dir, "x.node"), "#!/usr/bin/env node\n".repeat(8)))).toBeNull();
+    expect(readPe(Buffer.from("MZ"))).toBeNull();
+  });
+
+  test("versions compare part by part", () => {
+    expect(compareVersions("14.52.37029.0", "14.51")).toBeGreaterThan(0);
+    expect(compareVersions("14.44", "14.44.0")).toBe(0);
+    expect(compareVersions("14.9", "14.10")).toBeLessThan(0);
+  });
+});
+
 describe("onnxruntime-node", () => {
   const ORT = {
     "darwin/arm64": [
@@ -227,16 +419,105 @@ describe("onnxruntime-node", () => {
       "dist",
       "dist/index.js",
     ]);
+    const win32 = modules();
+    pruneOnnxruntime(win32, "win32-x64");
+    expect(left(win32)).toEqual([
+      "bin/napi-v6/win32/x64/onnxruntime.dll",
+      "bin/napi-v6/win32/x64/onnxruntime_binding.node",
+      "dist",
+      "dist/index.js",
+    ]);
   });
 
   test("refuses a build that lacks them", () => {
     const dir = modules();
-    rmSync(
-      join(dir, "onnxruntime-node", "bin", "napi-v6", "darwin", "arm64", "libonnxruntime.1.dylib"),
+    rmSync(join(dir, "onnxruntime-node", "bin", "napi-v6", "win32", "x64", "onnxruntime.dll"));
+    expect(() => pruneOnnxruntime(dir, "win32-x64")).toThrow(
+      "onnxruntime-node has no onnxruntime.dll in win32/x64",
     );
-    expect(() => pruneOnnxruntime(dir, "darwin-arm64")).toThrow(
-      "onnxruntime-node has no libonnxruntime.1.dylib in darwin/arm64",
+  });
+});
+
+describe("the VC++ runtime", () => {
+  function install(root: string, version: string, crt: string, names = VC): string {
+    const dir = join(root, "VC", "Redist", "MSVC", version, "x64", crt);
+    for (const name of names) put(join(dir, name), pe());
+    return dir;
+  }
+
+  test("comes from the newest redist that has all five DLLs", () => {
+    const vs2022 = temp();
+    const vs2026 = temp();
+    install(vs2022, "14.44.35112", "Microsoft.VC143.CRT");
+    // Incomplete, older than 14.44 numerically, and not a version.
+    install(vs2026, "14.50.35710", "Microsoft.VC145.CRT", VC.slice(0, 4));
+    install(vs2026, "14.9.0", "Microsoft.VC145.CRT");
+    install(vs2026, "v145", "Microsoft.VC145.CRT");
+    expect(newestVcRedist([vs2022, vs2026]).dir).toBe(
+      join(vs2022, "VC", "Redist", "MSVC", "14.44.35112", "x64", "Microsoft.VC143.CRT"),
     );
+    const vs2027 = temp();
+    install(vs2027, "14.52.37029", "Microsoft.VC145.CRT");
+    expect(newestVcRedist([vs2022, vs2026, vs2027])).toEqual({
+      version: "14.52.37029",
+      dir: join(vs2027, "VC", "Redist", "MSVC", "14.52.37029", "x64", "Microsoft.VC145.CRT"),
+    });
+    expect(() => newestVcRedist([temp()])).toThrow("No Visual Studio redist with vcruntime140.dll");
+  });
+
+  test("goes beside each native that imports it, with what its DLLs import in turn", () => {
+    const redist = temp();
+    const runtimeImports: Record<string, string[]> = {
+      "vcruntime140_1.dll": ["VCRUNTIME140.dll"],
+      "msvcp140.dll": ["VCRUNTIME140.dll", "VCRUNTIME140_1.dll"],
+      "msvcp140_1.dll": ["MSVCP140.dll"],
+    };
+    for (const name of VC) put(join(redist, name), pe({ imports: runtimeImports[name] ?? [] }));
+    const modules = temp();
+    const ort = join(modules, "onnxruntime-node", "bin", "napi-v6", "win32", "x64");
+    put(join(ort, "onnxruntime_binding.node"), pe({ imports: ["MSVCP140.dll"] }));
+    put(
+      join(ort, "onnxruntime.dll"),
+      pe({ imports: ["MSVCP140_1.dll"], delayImports: ["MSVCP140_ATOMIC_WAIT.dll"] }),
+    );
+    const lancedb = join(modules, "@lancedb", "lancedb-win32-x64-msvc");
+    put(join(lancedb, "lancedb.win32-x64-msvc.node"), pe({ imports: ["VCRUNTIME140.dll"] }));
+    const sharp = join(modules, "@img", "sharp-win32-x64", "lib");
+    put(join(sharp, "sharp-win32-x64.node"), pe({ imports: ["KERNEL32.dll"] }));
+    put(join(sharp, "libvips-42.dll"), pe());
+    expect(vcRuntimeNeeds(modules, redist)).toEqual(
+      new Map([
+        [lancedb, ["vcruntime140.dll"]],
+        [ort, [...VC].sort()],
+      ]),
+    );
+  });
+});
+
+describe("the unsigned-PE list", () => {
+  test("names each unsigned .node and .dll in the payload once", () => {
+    const payload = temp();
+    put(join(payload, "node_modules", "a", "a.node"), pe());
+    put(join(payload, "node_modules", "b", "b.dll"), pe({ signed: true }));
+    put(join(payload, "node_modules", "c", "lib", "c.dll"), pe());
+    put(join(payload, "node_modules", "d", "node_modules", "c", "lib", "c.dll"), pe());
+    put(join(payload, "node_modules", "e", "e.exe"), pe());
+    put(join(payload, "node_modules", "f", "f.dll"), "not a PE file");
+    expect(unsignedPeIn(payload)).toEqual(["a.node", "c.dll"]);
+  });
+
+  test("names Electron's unsigned DLLs as the app names them", () => {
+    const file = put(
+      join(temp(), "electron-v45.4.1-win32-x64.zip"),
+      zip([
+        { name: "electron.exe", data: pe(), deflate: true },
+        { name: "ffmpeg.dll", data: pe(), deflate: true },
+        { name: "d3dcompiler_47.dll", data: pe({ signed: true }), deflate: true },
+        { name: "electron_wer.dll", data: pe(), deflate: false },
+        { name: "locales/en-US.pak", data: Buffer.from("pak"), deflate: true },
+      ]),
+    );
+    expect(unsignedPeInZip(file, "Eidolon")).toEqual(["Eidolon_wer.dll", "ffmpeg.dll"]);
   });
 });
 
@@ -259,7 +540,7 @@ describe("THIRD_PARTY_LICENSES.txt", () => {
       license: "LGPL-3.0-or-later",
     });
     put(join(modules, ".package-lock.json"), "{}");
-    const text = thirdPartyLicenses(modules);
+    const text = thirdPartyLicenses(modules, null);
     const titles = [...text.matchAll(/^=+\n(.+)\n=+$/gm)].map((match) => match[1]);
     expect(titles).toEqual([
       "@img/sharp-libvips-darwin-arm64 1.3.4 (LGPL-3.0-or-later)",
@@ -278,14 +559,34 @@ describe("THIRD_PARTY_LICENSES.txt", () => {
     ]) {
       expect([line, text.includes(line)]).toEqual([line, true]);
     }
+    expect(text).not.toContain("Visual C++");
+  });
+
+  test("names the VC++ runtime on Windows, and the terms it ships under", () => {
+    const text = thirdPartyLicenses(temp(), { version: "14.52.37029", dir: "C:\\redist" });
+    expect(text).toContain("Microsoft Visual C++ runtime 14.52.37029\n");
+    expect(text).toContain(`${VC.join(", ")}, beside the native modules that load them`);
+    expect(text).toContain("the Visual Studio license terms");
   });
 });
 
 describe("staging", () => {
-  test("is for darwin-arm64", () => {
-    expect(parseTarget("darwin-arm64")).toBe("darwin-arm64");
+  test("is for darwin-arm64 and win32-x64", () => {
+    expect([parseTarget("darwin-arm64"), parseTarget("win32-x64")]).toEqual([
+      "darwin-arm64",
+      "win32-x64",
+    ]);
     expect(() => parseTarget("linux-x64")).toThrow(
-      "The desktop app ships for darwin-arm64, not linux-x64",
+      "The desktop app ships for darwin-arm64 and win32-x64, not linux-x64",
     );
+  });
+
+  test("refuses win32-x64 off Windows before touching any stage", async () => {
+    const before = existsSync(stageDir("win32-x64"));
+    await expect(stageBackend("win32-x64", { platform: "darwin" })).rejects.toThrow(
+      "win32-x64 can only be staged on Windows: its natives get the VC++ runtime copied beside " +
+        "them from this machine's Visual Studio redistributable",
+    );
+    expect(existsSync(stageDir("win32-x64"))).toBe(before);
   });
 });

@@ -1,12 +1,26 @@
 // Stages the backend the desktop app ships for one target, in apps/desktop/.stage/<target>/eidolon
-// (`node apps/desktop/scripts/stage-backend.ts [--target darwin-arm64]`, this machine's by
+// (`node apps/desktop/scripts/stage-backend.ts [--target darwin-arm64|win32-x64]`, this machine's by
 // default): what the npm package stages, plus its dependencies installed by npm for the target,
-// pinned to bun.lock and pruned.
+// pinned to bun.lock and pruned. On Windows the natives also get the VC++ runtime beside them, and
+// .stage/win32-x64/unsigned-pe.json lists the PE files the release signs.
 import { type SpawnSyncOptionsWithStringEncoding, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
+import { basename, dirname, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { type Bundled, inlinedPackages, licenseText, stage } from "../../eidolon/scripts/build.ts";
+import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { type LsNode, lockDrift, lockedTree, pinOverrides, readBunLock } from "./lockfile.ts";
+import { compareVersions, readPe } from "./pe.ts";
+import { readZip } from "./zip.ts";
 
 const DESKTOP = resolve(import.meta.dirname, "..");
 const ROOT = resolve(DESKTOP, "../..");
@@ -18,12 +32,19 @@ export const TARGETS = {
     cpu: "arm64",
     onnxruntime: ["onnxruntime_binding.node", "libonnxruntime.1.dylib"],
   },
+  "win32-x64": {
+    os: "win32",
+    cpu: "x64",
+    onnxruntime: ["onnxruntime_binding.node", "onnxruntime.dll"],
+  },
 } as const;
 
 export type Target = keyof typeof TARGETS;
 
 /** The license texts of node_modules, which the app's Licenses item opens. */
 export const LICENSES_FILE = "THIRD_PARTY_LICENSES.txt";
+/** Beside win32-x64's payload: the names of its unsigned PE files, and Electron's, for signExts. */
+export const UNSIGNED_PE_FILE = "unsigned-pe.json";
 
 export function stageDir(target: Target): string {
   return join(DESKTOP, ".stage", target);
@@ -81,7 +102,7 @@ export function npmLs(payload: string): LsNode {
 
 /**
  * Keeps only the target's onnxruntime-node folder, and in it the binding and the library it loads:
- * darwin-arm64's second, identical dylib, which nothing loads, goes.
+ * darwin-arm64's second, identical dylib and Windows' DirectML, which CPU sessions never load, go.
  */
 export function pruneOnnxruntime(modules: string, target: Target): void {
   const bin = join(modules, "onnxruntime-node", "bin", "napi-v6");
@@ -105,6 +126,151 @@ export function pruneOnnxruntime(modules: string, target: Target): void {
       rmSync(join(kept, name), { recursive: true, force: true });
     }
   }
+}
+
+/** A Microsoft.VC14x.CRT folder of a Visual Studio install, with the redist version it's under. */
+export interface VcRedist {
+  readonly version: string;
+  readonly dir: string;
+}
+
+/** The installs vswhere knows, which only Windows has. */
+function visualStudioRoots(): string[] {
+  const vswhere = join(
+    process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)",
+    "Microsoft Visual Studio",
+    "Installer",
+    "vswhere.exe",
+  );
+  if (!existsSync(vswhere)) return [];
+  const listed = spawnSync(vswhere, ["-all", "-products", "*", "-property", "installationPath"], {
+    encoding: "utf8",
+  });
+  return listed.stdout.split(/\r?\n/).filter(Boolean);
+}
+
+/**
+ * The newest x64 VC++ runtime among the Visual Studio installs at `roots`: every copy comes from
+ * this one folder, since whichever copy loads first serves the whole process.
+ */
+export function newestVcRedist(roots: readonly string[] = visualStudioRoots()): VcRedist {
+  const found: VcRedist[] = [];
+  for (const root of roots) {
+    const msvc = join(root, "VC", "Redist", "MSVC");
+    if (!existsSync(msvc)) continue;
+    for (const name of readdirSync(msvc)) {
+      const version = /^\d+\.\d+\.\d+/.exec(name)?.[0];
+      const x64 = join(msvc, name, "x64");
+      if (version === undefined || !existsSync(x64)) continue;
+      for (const crt of readdirSync(x64).filter((name) => /^Microsoft\.VC\d+\.CRT$/.test(name))) {
+        const dir = join(x64, crt);
+        if (VC_RUNTIME_DLLS.every((dll) => existsSync(join(dir, dll)))) {
+          found.push({ version, dir });
+        }
+      }
+    }
+  }
+  const newest = found.sort((a, b) => compareVersions(b.version, a.version))[0];
+  if (newest === undefined) {
+    throw new Error(
+      `No Visual Studio redist with ${VC_RUNTIME_DLLS.join(", ")} under ` +
+        `${roots.join(", ") || "any install vswhere lists"}`,
+    );
+  }
+  return newest;
+}
+
+/** The VC++ runtime DLLs a PE file imports, by their lowercase names. */
+function vcImports(file: string): string[] {
+  const pe = readPe(file);
+  if (pe === null) return [];
+  return [...pe.imports, ...pe.delayImports]
+    .map((name) => name.toLowerCase())
+    .filter((name) => VC_RUNTIME_DLLS.includes(name));
+}
+
+/**
+ * Each folder under `modules` holding a native addon, with the VC++ runtime DLLs its own natives
+ * import and the ones those import in turn: Node loads an addon with LOAD_WITH_ALTERED_SEARCH_PATH,
+ * which looks in the addon's folder first.
+ */
+export function vcRuntimeNeeds(modules: string, redist: string): Map<string, string[]> {
+  const runtime = new Map(VC_RUNTIME_DLLS.map((dll) => [dll, vcImports(join(redist, dll))]));
+  const folders = new Set(
+    files(modules)
+      .filter((file) => file.endsWith(".node"))
+      .map((file) => dirname(file)),
+  );
+  const needs = new Map<string, string[]>();
+  for (const folder of [...folders].sort()) {
+    const needed = new Set(
+      readdirSync(folder)
+        .filter(
+          (name) => /\.(node|dll)$/i.test(name) && !VC_RUNTIME_DLLS.includes(name.toLowerCase()),
+        )
+        .flatMap((name) => vcImports(join(folder, name))),
+    );
+    for (const dll of needed) for (const more of runtime.get(dll) ?? []) needed.add(more);
+    if (needed.size > 0) needs.set(folder, [...needed].sort());
+  }
+  return needs;
+}
+
+/** The basenames of the `.node` and `.dll` files under `dir` whose certificate table is empty. */
+export function unsignedPeIn(dir: string): string[] {
+  const names = files(dir)
+    .filter((file) => /\.(node|dll)$/i.test(file) && readPe(file)?.signed === false)
+    .map((file) => basename(file));
+  return [...new Set(names)].sort();
+}
+
+/**
+ * The same of Electron's zip at `zip`, under the names electron-builder gives them in the app: it
+ * renames electron_wer.dll after the executable, `<productName>_wer.dll`.
+ */
+export function unsignedPeInZip(zip: string, productName: string): string[] {
+  const archive = readZip(zip);
+  const names = archive.entries
+    .filter((entry) => /\.(node|dll)$/i.test(entry.name))
+    .filter((entry) => readPe(archive.read(entry))?.signed === false)
+    .map((entry) => basename(entry.name))
+    .map((name) => (name === "electron_wer.dll" ? `${productName}_wer.dll` : name));
+  return [...new Set(names)].sort();
+}
+
+interface ElectronGet {
+  downloadArtifact(details: {
+    version: string;
+    platform: string;
+    arch: string;
+    artifactName: string;
+    checksums: Record<string, string>;
+  }): Promise<string>;
+}
+
+/**
+ * The Electron zip electron-builder packs for win32-x64, from @electron/get's cache or downloaded
+ * into it, checked against the electron package's checksums as its own install checks them.
+ */
+async function electronZip(): Promise<string> {
+  const electron = dirname(createRequire(import.meta.url).resolve("electron/package.json"));
+  const { version } = JSON.parse(readFileSync(join(electron, "package.json"), "utf8")) as {
+    version: string;
+  };
+  const builder = readFileSync(join(DESKTOP, "electron-builder.yml"), "utf8");
+  const packed = /^electronVersion:\s*(\S+)\s*$/m.exec(builder)?.[1];
+  if (packed !== version) {
+    throw new Error(`electron-builder.yml packs Electron ${packed}, but electron is ${version}`);
+  }
+  const get = createRequire(join(electron, "package.json")).resolve("@electron/get");
+  const { downloadArtifact } = (await import(pathToFileURL(get).href)) as ElectronGet;
+  return downloadArtifact({
+    version,
+    platform: "win32",
+    arch: "x64",
+    artifactName: "electron",
+    checksums: JSON.parse(readFileSync(join(electron, "checksums.json"), "utf8")),
+  });
 }
 
 /** Every package folder under `modules`, by name, nested node_modules included. */
@@ -131,8 +297,11 @@ function section(title: string, text: string): string {
   return `${rule}\n${title}\n${rule}\n\n${text}\n`;
 }
 
-/** THIRD_PARTY_LICENSES.txt: each package in `modules` with its license text. */
-export function thirdPartyLicenses(modules: string): string {
+/**
+ * THIRD_PARTY_LICENSES.txt: each package in `modules` with its license text, and on Windows the
+ * VC++ runtime copied from `vcRuntime`.
+ */
+export function thirdPartyLicenses(modules: string, vcRuntime: VcRedist | null): string {
   const packages = new Map<string, Bundled>();
   for (const [name, dir] of installedPackages(modules)) {
     for (const pkg of inlinedPackages(new Map([[name, dir]]))) {
@@ -155,6 +324,17 @@ export function thirdPartyLicenses(modules: string): string {
       const title = `${pkg.name} ${pkg.version} (${pkg.identifier ?? "no license field"})`;
       return section(title, `${note}${licenseText(pkg)}`);
     });
+  const runtime =
+    vcRuntime === null
+      ? []
+      : [
+          section(
+            `Microsoft Visual C++ runtime ${vcRuntime.version}`,
+            `${VC_RUNTIME_DLLS.join(", ")}, beside the native modules that load them, are ` +
+              "Microsoft's, from Visual Studio's redistributable files, and redistributed under " +
+              "the Visual Studio license terms.",
+          ),
+        ];
   return [
     "Third-party licenses\n",
     "Eidolon's backend runs on the packages below, from its node_modules folder, each with its",
@@ -162,8 +342,13 @@ export function thirdPartyLicenses(modules: string): string {
     "THIRD_PARTY_NOTICES.md, beside this file; NOTICE covers the code Eidolon ports from other",
     "projects, and the data and the font it ships.\n",
     ...sections,
+    ...runtime,
   ].join("\n");
 }
+
+const WIN32_ON_ANOTHER_OS =
+  "win32-x64 can only be staged on Windows: its natives get the VC++ runtime copied beside them " +
+  "from this machine's Visual Studio redistributable, which only Windows has";
 
 export interface StageSummary {
   readonly target: Target;
@@ -183,7 +368,11 @@ function bytesUnder(path: string): number {
 }
 
 /** Stages the payload for `target`, replacing what was there; a failed stage leaves none. */
-export async function stageBackend(target: Target): Promise<StageSummary> {
+export async function stageBackend(
+  target: Target,
+  { platform = process.platform }: { platform?: NodeJS.Platform } = {},
+): Promise<StageSummary> {
+  if (target === "win32-x64" && platform !== "win32") throw new Error(WIN32_ON_ANOTHER_OS);
   const started = performance.now();
   const payload = payloadDir(target);
   const modules = join(payload, "node_modules");
@@ -221,7 +410,21 @@ export async function stageBackend(target: Target): Promise<StageSummary> {
     for (const entry of links) rmSync(join(entry.parentPath, entry.name), { recursive: true });
     rmSync(join(modules, ".package-lock.json"), { force: true });
     pruneOnnxruntime(modules, target);
-    writeFileSync(join(payload, LICENSES_FILE), thirdPartyLicenses(modules));
+    let vcRuntime: VcRedist | null = null;
+    if (target === "win32-x64") {
+      vcRuntime = newestVcRedist();
+      for (const [folder, dlls] of vcRuntimeNeeds(modules, vcRuntime.dir)) {
+        for (const dll of dlls) copyFileSync(join(vcRuntime.dir, dll), join(folder, dll));
+      }
+      const unsigned = [
+        ...new Set([...unsignedPeIn(payload), ...unsignedPeInZip(await electronZip(), "Eidolon")]),
+      ].sort();
+      writeFileSync(
+        join(stageDir(target), UNSIGNED_PE_FILE),
+        `${JSON.stringify(unsigned, null, 2)}\n`,
+      );
+    }
+    writeFileSync(join(payload, LICENSES_FILE), thirdPartyLicenses(modules, vcRuntime));
   } catch (error) {
     rmSync(stageDir(target), { recursive: true, force: true });
     throw error;

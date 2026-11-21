@@ -1,20 +1,25 @@
 // The payloads staged in apps/desktop/.stage (`bun run build:desktop` stages this machine's): what
-// each holds, pinned to bun.lock and pruned, its natives loading from it, and the packaged app
-// holding it file for file. A target with no stage skips, unless EIDOLON_REQUIRE_STAGE=1 and it is
-// this machine's.
+// each holds, pinned to bun.lock and pruned, its natives loading from it, on Windows the VC++
+// runtime and the unsigned-PE list, and the packaged app holding it file for file. A target with
+// no stage skips, unless EIDOLON_REQUIRE_STAGE=1 and it is this machine's.
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { describe, expect, test } from "vitest";
 import { packageManifest } from "../../eidolon/scripts/build.ts";
-import { PLATFORMS } from "../../eidolon/src/launcher.ts";
+import { PLATFORMS, VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { lockDrift, lockedTree, pinOverrides, readBunLock } from "../scripts/lockfile.ts";
 import { checkNatives } from "../scripts/natives.ts";
+import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
   LICENSES_FILE,
   npmLs,
   payloadDir,
+  stageDir,
   TARGETS,
   type Target,
+  UNSIGNED_PE_FILE,
+  unsignedPeIn,
 } from "../scripts/stage-backend.ts";
 
 const ROOT = join(import.meta.dirname, "../../..");
@@ -24,6 +29,7 @@ const HOST = `${process.platform}-${process.arch}`;
 /** Where electron-builder puts each target's payload in the unpacked app. */
 const PACKAGED: Record<Target, string> = {
   "darwin-arm64": join(DESKTOP, ".out", "mac-arm64", "Eidolon.app", "Contents", "Resources"),
+  "win32-x64": join(DESKTOP, ".out", "win-unpacked", "resources"),
 };
 
 /** Every file under `dir`, relative to it with `/`, and every symbolic link among them. */
@@ -38,6 +44,11 @@ function listing(dir: string): { files: string[]; links: string[] } {
       .sort(),
     links: entries.filter((entry) => entry.isSymbolicLink()).map(path),
   };
+}
+
+/** A path compared as the OS compares them. */
+function same(path: string): string {
+  return process.platform === "win32" ? path.toLowerCase() : path;
 }
 
 for (const target of Object.keys(TARGETS) as Target[]) {
@@ -103,7 +114,10 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       const bin = join(modules, "onnxruntime-node", "bin", "napi-v6");
       expect(readdirSync(bin)).toEqual([os]);
       expect(readdirSync(join(bin, os))).toEqual([cpu]);
-      expect(readdirSync(join(bin, os, cpu)).sort()).toEqual([...onnxruntime].sort());
+      const kept = readdirSync(join(bin, os, cpu)).filter(
+        (name) => !VC_RUNTIME_DLLS.includes(name.toLowerCase()),
+      );
+      expect(kept.sort()).toEqual([...onnxruntime].sort());
     });
 
     test.skipIf(target !== HOST)(
@@ -113,18 +127,59 @@ for (const target of Object.keys(TARGETS) as Target[]) {
         expect(report).toMatchObject({ rows: 2, image: "jpeg 2x1" });
         expect(report.speech).toBeGreaterThanOrEqual(0);
         expect(report.speech).toBeLessThanOrEqual(1);
-        const home = realpathSync(payload);
-        const natives = report.loaded.filter((path) => /\.(node|dylib)$/.test(path));
+        const home = same(realpathSync(payload));
+        const natives = report.loaded.filter((path) => /\.(node|dll|dylib)$/i.test(path));
         for (const name of ["lancedb", "onnxruntime_binding", "sharp-", "vips"]) {
           expect([name, natives.some((path) => basename(path).includes(name))]).toEqual([
             name,
             true,
           ]);
         }
-        expect(natives.filter((path) => !realpathSync(path).startsWith(home))).toEqual([]);
+        expect(natives.filter((path) => !same(realpathSync(path)).startsWith(home))).toEqual([]);
       },
       60_000,
     );
+
+    test.skipIf(target !== "win32-x64")(
+      "has the VC++ runtime from one redist beside the natives that import it, as new as their linker",
+      () => {
+        const copies = new Map<string, string[]>();
+        for (const file of listing(modules).files) {
+          if (VC_RUNTIME_DLLS.includes(basename(file).toLowerCase())) {
+            copies.set(dirname(file), [...(copies.get(dirname(file)) ?? []), basename(file)]);
+          }
+        }
+        expect(copies.get("onnxruntime-node/bin/napi-v6/win32/x64")?.sort()).toEqual(
+          [...VC_RUNTIME_DLLS].sort(),
+        );
+        expect(copies.get("@lancedb/lancedb-win32-x64-msvc")).toEqual(["vcruntime140.dll"]);
+        const hashes = new Map<string, Set<string>>();
+        for (const [folder, dlls] of copies) {
+          const natives = readdirSync(join(modules, folder)).filter(
+            (name) => /\.(node|dll)$/i.test(name) && !dlls.includes(name),
+          );
+          for (const dll of dlls) {
+            const file = join(modules, folder, dll);
+            const version = readPe(file)?.fileVersion ?? "0";
+            for (const native of natives) {
+              const linker = readPe(join(modules, folder, native))?.linker ?? "99";
+              expect([dll, version, native, linker, compareVersions(version, linker) >= 0]).toEqual(
+                [dll, version, native, linker, true],
+              );
+            }
+            const hash = createHash("sha256").update(readFileSync(file)).digest("hex");
+            hashes.set(dll, new Set([...(hashes.get(dll) ?? []), hash]));
+          }
+        }
+        for (const [dll, distinct] of hashes) expect([dll, distinct.size]).toEqual([dll, 1]);
+      },
+    );
+
+    test.skipIf(target !== "win32-x64")("lists every unsigned .node and .dll it holds", () => {
+      const listed = JSON.parse(readFileSync(join(stageDir(target), UNSIGNED_PE_FILE), "utf8"));
+      expect(unsignedPeIn(payload).filter((name) => !listed.includes(name))).toEqual([]);
+      expect(listed).toEqual([...new Set(listed as string[])].sort());
+    });
 
     // An app packaged before the last stage holds an older payload.
     const packaged = join(PACKAGED[target], "eidolon");
