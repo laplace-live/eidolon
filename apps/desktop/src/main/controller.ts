@@ -320,6 +320,8 @@ export class BackendController {
   #stopped = false;
   #stopping: Promise<void> | null = null;
   #child: Spawned | null = null;
+  /** Our backends sent their stop trigger that haven't exited: a session end waits for each. */
+  readonly #exiting = new Set<Spawned>();
   /** A failed attempt's child, being stopped: the next attempt waits for it. */
   #cleanup: Promise<void> = Promise.resolve();
   #attached: { readonly origin: string; readonly port: number } | null = null;
@@ -440,23 +442,22 @@ export class BackendController {
     const spawned = this.#child;
     if (this.#stopped || spawned === null || spawned.exit !== null || spawned.stopping) return;
     spawned.sessionEnd = true;
+    this.#exiting.add(spawned);
     if (spawned.child.connected) spawned.child.disconnect();
     this.#begin({ phase: "holding", owned: true });
   }
 
   /**
-   * Windows' session-end, after which Electron ends this process: waits, blocking, up to about 4 s
-   * for the exit sessionEnding started. No event can run here, so the exit shows only as the pid
-   * going away.
+   * Windows' session-end, after which Electron ends this process and our backend with it: waits,
+   * blocking, up to about 4 s for every stop under way, sessionEnding's, a quit's or a failure's.
+   * No event can run here, so an exit shows only as its pid going away.
    */
   sessionEnded(): void {
-    const spawned = this.#child;
-    const pid = spawned?.child.pid;
-    if (spawned === null || !spawned.sessionEnd || spawned.exit !== null || pid === undefined) {
-      return;
-    }
+    const pids = [...this.#exiting].flatMap(({ child }) => child.pid ?? []);
     const deadline = Date.now() + SESSION_END_WAIT_MS;
-    while (this.#io.isAlive(pid) && Date.now() < deadline) this.#io.sleepSync(SESSION_END_POLL_MS);
+    while (pids.some((pid) => this.#io.isAlive(pid)) && Date.now() < deadline) {
+      this.#io.sleepSync(SESSION_END_POLL_MS);
+    }
   }
 
   #set(state: BackendState): void {
@@ -654,6 +655,7 @@ export class BackendController {
     child.on("message", (message) => this.#message(spawned, message));
     child.on("exit", (code, signal) => {
       spawned.exit = { code, signal };
+      this.#exiting.delete(spawned);
       gone();
       void within(drained, DRAIN_MS).then(() => this.#exited(spawned));
     });
@@ -662,6 +664,7 @@ export class BackendController {
       // No pid: it never started, and no exit follows.
       if (child.pid !== undefined || spawned.exit !== null) return;
       spawned.exit = { code: null, signal: null };
+      this.#exiting.delete(spawned);
       gone();
       this.#exited(spawned, error.message);
     });
@@ -814,6 +817,7 @@ export class BackendController {
     const { child } = spawned;
     if (spawned.listenTimer !== null) clearTimeout(spawned.listenTimer);
     if (spawned.exit !== null) return;
+    this.#exiting.add(spawned);
     if (child.connected) child.disconnect();
     if (await within(spawned.gone, STOP_GRACE_MS)) return;
     this.#log.warn(`Eidolon: the backend (pid ${child.pid}) didn't stop within 10 s; killing it`);

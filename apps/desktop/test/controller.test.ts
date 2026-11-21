@@ -1010,6 +1010,34 @@ describe("the Windows session end (2.5)", () => {
     expect(r.trace.filter((line) => line === "sleep 50")).toHaveLength(80);
   });
 
+  test("waits as long for a stop already under way: a quit's, or a failure's", async () => {
+    const stops: [string, (r: Rig) => Promise<void>][] = [
+      // The owner approved a quit with a task running, and signs out while the backend stops it.
+      ["a quit", async (r) => void r.controller.stop()],
+      [
+        "a failure",
+        async (r) => {
+          r.controller.refused("http://127.0.0.1:7860");
+          await vi.advanceTimersByTimeAsync(60_000);
+          expect(r.controller.state.phase).toBe("failed");
+        },
+      ],
+    ];
+    for (const [why, stopping] of stops) {
+      const r = rig({ platform: "win32" });
+      const child = await running(r);
+      await stopping(r);
+      expect([why, child.connected]).toEqual([why, false]);
+      r.trace.length = 0;
+      let polls = 0;
+      r.alive = () => ++polls < 3;
+      r.controller.sessionEnding();
+      r.controller.sessionEnded();
+      const alive = `alive? ${child.pid}`;
+      expect([why, r.trace]).toEqual([why, [alive, "sleep 50", alive, "sleep 50", alive]]);
+    }
+  });
+
   test("an exit seen before session-end leaves nothing to wait for", async () => {
     const r = rig({ platform: "win32" });
     const child = await running(r);
