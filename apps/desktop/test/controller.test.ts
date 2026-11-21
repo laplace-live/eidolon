@@ -530,7 +530,7 @@ describe("attaching", () => {
   });
 });
 
-describe("a refused spawn (2.2)", () => {
+describe("a refused spawn", () => {
   test("exit 0 after 'Eidolon is already running:': waits for the holder to prove itself, then attaches", async () => {
     const r = rig();
     r.controller.start();
@@ -726,7 +726,7 @@ describe("while attached", () => {
   });
 });
 
-describe("a new connection the forwarder opens (1.3)", () => {
+describe("a new connection the forwarder opens", () => {
   const socket = new Socket();
 
   test("to our own server is proved over itself, with the token read once it listened", async () => {
@@ -974,7 +974,7 @@ describe("the 60 s waits", () => {
   });
 });
 
-describe("the stop (2.4)", () => {
+describe("the stop", () => {
   test("closes the IPC channel, then kill() after 10 s and SIGKILL 5 s later on macOS, then gives up", async () => {
     const r = rig();
     const child = await running(r);
@@ -1028,7 +1028,7 @@ describe("the stop (2.4)", () => {
   });
 });
 
-describe("the Windows session end (2.5)", () => {
+describe("the Windows session end", () => {
   test("issues the stop trigger before any synchronous wait", async () => {
     const r = rig({ platform: "win32" });
     const child = await running(r);
