@@ -18,12 +18,11 @@ import type {
   PersonasResponse,
 } from "../../bot/src/local/api.ts";
 import type { ListeningMessage } from "../../bot/src/local/supervisor.ts";
+import { BACKEND_RUNTIME_ARGS } from "../src/main/controller.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const DESKTOP = join(ROOT, "apps", "desktop");
-/** What main puts before the server's script, and jsRuntime().args before every job's. */
-const FLAGS = ["--disable-sigusr1", "--use-system-ca"] as const;
-const WITHOUT = ["--disable-sigusr1"] as const;
+const WITHOUT = BACKEND_RUNTIME_ARGS.filter((flag) => flag !== "--use-system-ca");
 const MODELS = "GET /api/v1/models";
 const EMBEDDINGS = "POST /api/v1/embeddings";
 /** The one model the host lists. */
@@ -472,12 +471,12 @@ async function prove(app: PackagedApp, host: Host, work: string, checks: Check[]
   } finally {
     await without.stop();
   }
-  const main = await startBackend(app, FLAGS, env);
+  const main = await startBackend(app, BACKEND_RUNTIME_ARGS, env);
   try {
     const { listing, seen } = await listModels(main, host);
     checks.push({
       passed: listing.status === "ok" && listing.models.some((model) => model.id === MODEL),
-      name: "the backend with --use-system-ca, as main starts it, lists the host's models",
+      name: `the backend with main's flags (${BACKEND_RUNTIME_ARGS.join(" ")}) lists the host's models`,
       detail: `${JSON.stringify({ listing, seen })}\n${main.stderr()}`,
     });
   } finally {
