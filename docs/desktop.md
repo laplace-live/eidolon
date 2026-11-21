@@ -654,16 +654,22 @@ Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers
 shell pages with Vite, so it never walks a stale build (`--no-build` runs on what is there; the
 backend runs from source, so the stage isn't one of them). Then it drives the unpackaged app with
 Playwright's `_electron`, on the kit's fakes, temporary home and profile, in background mode under
-the focus watch, and prints a line for each step:
+the focus watch and a window watch of its own (`dev-smoke/windows.ts`), and prints a line for each
+step. The window watch reads the window server's list of on-screen windows every 50 ms through
+`osascript`: a window of the app's on screen fails the run, even one never in front or focused,
+which the focus watch can't see, and the owner's own windows in the list show that it sees any.
 
 1. **Cold start:** Home at `eidolon-app://app/`, with no sign-in and no console error, its footer
-   naming both versions; the canary key never reaches the backend.
+   naming both versions; the backend on a free port, with no try at 7860; the canary key never
+   reaches the backend.
 2. **A chat:** her reply streams through the forwarder, its first part shown about 2 s before the
    rest, as the fake holds it. A picture and a text file sent with a line (set on the composer's
    input, never a click, which opens the file chooser) reach her mind; the picture opens in the
-   in-page viewer, whose Save saves it, and the text file saves through `<a download>`, each whole
-   into the profile's `downloads` folder. Her selfie, from `take_selfie` on the fakes' image
-   model, opens and saves the same way.
+   in-page viewer, whose Save saves it, and the text file saves through `<a download>` under the
+   name it was sent with, each whole into the profile's `downloads` folder. Her selfie, from
+   `take_selfie` on the fakes' image model, opens and saves the same way. Each link must be an
+   `<a download>`: main's `downloadURL` fallback would save a `target="_blank"` one too, with the
+   same lines in main.log.
 3. **Theme and language:** the page's theme setting reaches `nativeTheme.themeSource` as it is, its
    language rebuilds the menus in it, and its `[data-shell]` rows drag while their controls don't,
    the sidebar's clear of the traffic lights on macOS.
@@ -681,9 +687,10 @@ the focus watch, and prints a line for each step:
 8. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
    with exit 0, leaving nothing running and no error line in either log.
 
-The run's folder keeps `results/results.json`, with every check and each step's time, and the
-screenshots; like the rest of the folder they go after a pass, unless `--keep` copies them beside it
-first. A run takes about 30 s and bills nothing.
+After the steps come the window watch's line and the kit's. The run's folder keeps
+`results/results.json`, with every check and each step's time, and the screenshots; like the rest of
+the folder they go after a pass, unless `--keep` copies them beside it first. A run takes about
+30 s and bills nothing.
 
 In CI, `ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test
 skips. `.github/workflows/desktop.yml`, which `docker.yml` skips, builds, stages and packages the
