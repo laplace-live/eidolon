@@ -97,7 +97,8 @@ export interface Forwarder {
   handle(request: SchemeRequest): Promise<Response>;
   /**
    * A GET of main's own at `path`, such as the quit check's, to the server ready now, with the
-   * Bearer and over a proven connection; rejects while none is ready.
+   * Bearer and over a proven connection; rejects while none is ready. Its connections closing
+   * tell the controller nothing.
    */
   get(path: string, signal: AbortSignal): Promise<Response>;
   /** Drops every connection it holds. */
@@ -209,6 +210,10 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
   const log = options.log ?? console;
   // The Bearer goes only over a connection the backend proved itself on.
   const agent = new Agent({ ...TIMEOUTS, connect: provingConnector(backend) });
+  // Main's own connections close idle soon after each read. On the page's agent each close would
+  // start an attached server's grace period, holding the page's requests for a server that never
+  // changed.
+  const ownAgent = new Agent({ ...TIMEOUTS, connect: provingConnector(backend) });
   // Vite's server gets no Bearer, so its connections need no proof.
   const devAgent = new Agent(TIMEOUTS);
   const upstreamFetch: UpstreamFetch =
@@ -349,12 +354,12 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
         headers: { authorization: `Bearer ${state.token.secret}` },
         redirect: "manual",
         signal,
-        dispatcher: agent,
+        dispatcher: ownAgent,
       });
       return response as unknown as Response;
     },
     async destroy() {
-      await Promise.all([agent.destroy(), devAgent.destroy()]);
+      await Promise.all([agent.destroy(), ownAgent.destroy(), devAgent.destroy()]);
     },
   };
 }

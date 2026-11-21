@@ -1,11 +1,18 @@
-// The backend on Electron (§2): the environment, the data home, the controller that attaches to its
-// server or spawns the app's own (the packaged payload, or unpackaged the checkout's server on the
-// dev Electron's node mode), backend.log, and the forwarder the app host goes through. The window
-// follows its state, and learns the server's version before it shows the app.
+// The backend as main follows it: the environment, the data home, the controller that attaches to
+// its server or spawns the app's own (the packaged payload, or unpackaged the checkout's server on
+// the dev Electron's node mode), and the forwarder the app host goes through. The window follows
+// its state, and learns each server's version before it shows the app. Electron-free: index.ts
+// hands it Electron's values and the logs.
 import { join } from "node:path";
-import { app } from "electron";
 import { dataHome } from "./attach.ts";
-import { BackendController, type BackendState, backendLaunch } from "./controller.ts";
+import {
+  type AppPaths,
+  BackendController,
+  type BackendState,
+  backendLaunch,
+  type MainLog,
+  type ReadyState,
+} from "./controller.ts";
 import { startupEnvironment } from "./environment.ts";
 import {
   createForwarder,
@@ -14,24 +21,37 @@ import {
   unreachable,
   type WaitingPage,
 } from "./forwarder.ts";
-import { backendLog, mainLog } from "./log.ts";
 import { checkQuit } from "./quit-check.ts";
 import type { Stopping } from "./strings.ts";
 
 /** The license texts the Licenses item opens, which stage-backend writes into the payload. */
-export function licensesFile(): string {
-  const payload = app.isPackaged
-    ? join(process.resourcesPath, "eidolon")
-    : join(app.getAppPath(), ".stage", `${process.platform}-${process.arch}`, "eidolon");
+export function licensesFile(app: AppPaths): string {
+  const payload = app.packaged
+    ? join(app.resourcesPath, "eidolon")
+    : join(app.appPath, ".stage", `${process.platform}-${process.arch}`, "eidolon");
   return join(payload, "THIRD_PARTY_LICENSES.txt");
 }
 
 const VERSION_TIMEOUT_MS = 2_000;
 
 export interface BackendOptions {
+  readonly app: AppPaths;
+  /** The environment the app was launched with. */
+  readonly env: NodeJS.ProcessEnv;
+  /** main.log. */
+  readonly log: MainLog;
+  /** backend.log: each line the backend prints, but the two with a link code. */
+  readonly backendLog: (line: string) => void;
   /** Dev: apps/web's Vite server, for every path but the backend's own. */
   readonly devServer?: string;
   readonly waitingPage: WaitingPage;
+  /** The port a first spawn asks for. */
+  readonly port?: number;
+}
+
+/** Whether `a` and `b` are one server: the same address and process, ours or attached. */
+function sameServer(a: ReadyState, b: ReadyState): boolean {
+  return a.origin === b.origin && a.pid === b.pid && a.owned === b.owned;
 }
 
 export class Backend {
@@ -42,7 +62,8 @@ export class Backend {
   #controller: BackendController | null = null;
   #forwarder: Forwarder | null = null;
   #home: string | null = null;
-  #serverVersion = "";
+  /** The version a server reported, and which server it was. */
+  #version: { readonly server: ReadyState; readonly version: string } | null = null;
   #stopped = false;
 
   constructor(options: BackendOptions) {
@@ -59,14 +80,14 @@ export class Backend {
     return this.#home;
   }
 
-  /** The version the server ready last reported in its status; empty before any. */
+  /** The version of the server the window follows, from its status; empty while unknown. */
   get serverVersion(): string {
-    return this.#serverVersion;
+    return this.#version?.version ?? "";
   }
 
   /**
-   * Calls `listener` with each state for the window to follow: a ready one only once the server's
-   * version is known, so the page's bridge has it.
+   * Calls `listener` with each state for the window to follow: a ready one only once its server's
+   * version is known, so the page's bridge has it, and never one the controller has moved past.
    */
   subscribe(listener: (state: BackendState) => void): () => void {
     this.#listeners.add(listener);
@@ -78,31 +99,25 @@ export class Backend {
    * starts the controller, whose first spawn takes that same read.
    */
   async start(): Promise<void> {
-    const startup = await startupEnvironment(process.env, {
-      log: mainLog,
-      signal: this.#abort.signal,
-    });
+    const { app, env, log } = this.#options;
+    const startup = await startupEnvironment(env, { log, signal: this.#abort.signal });
     if (this.#stopped) return;
     const home = dataHome(startup.env);
     this.#home = home;
-    mainLog.info(`Eidolon: the data home is ${home}`);
+    log.info(`Eidolon: the data home is ${home}`);
     const controller = new BackendController({
       home,
-      launch: backendLaunch({
-        packaged: app.isPackaged,
-        execPath: process.execPath,
-        resourcesPath: process.resourcesPath,
-        appPath: app.getAppPath(),
-      }),
+      launch: backendLaunch(app),
       environment: startup.forSpawn,
-      backendLog: (_stream, line) => backendLog.info(line),
-      log: mainLog,
+      backendLog: (_stream, line) => this.#options.backendLog(line),
+      log,
+      ...(this.#options.port === undefined ? {} : { port: this.#options.port }),
     });
     this.#forwarder = createForwarder({
       backend: controller,
       waitingPage: this.#options.waitingPage,
       devServer: this.#options.devServer,
-      log: mainLog,
+      log,
     });
     this.#controller = controller;
     controller.subscribe((state) => void this.#changed(controller, state));
@@ -127,7 +142,7 @@ export class Backend {
     return checkQuit((path, { signal }) => forwarder.get(path, signal));
   }
 
-  /** §2.4's stop: our own backend only, never an attached server. */
+  /** The stop of our own backend only, never an attached server. */
   async stop(): Promise<void> {
     this.#stopped = true;
     this.#abort.abort();
@@ -146,24 +161,34 @@ export class Backend {
   }
 
   async #changed(controller: BackendController, state: BackendState): Promise<void> {
-    if (state.phase === "ready") {
-      await this.#readVersion();
+    if (state.phase === "ready" && !this.#knows(state)) {
+      const version = await this.#readVersion();
       // It moved on meanwhile, and that state has been told already.
       if (controller.state !== state) return;
+      // One that can't be read is unknown, never the server before's.
+      this.#version = version === null ? null : { server: state, version };
     }
     for (const listener of [...this.#listeners]) {
       try {
         listener(state);
       } catch (error) {
-        mainLog.error(`Eidolon: following the backend failed: ${String(error)}`);
+        this.#options.log.error(`Eidolon: following the backend failed: ${String(error)}`);
       }
     }
   }
 
-  /** The status's version: the server shown may be a terminal's of another version. */
-  async #readVersion(): Promise<void> {
+  /**
+   * Whether `ready`'s server is the one whose version is known. An attached server proved again
+   * after an idle close is the same; a restart, ours or one from outside, is a new process.
+   */
+  #knows(ready: ReadyState): boolean {
+    return this.#version !== null && sameServer(this.#version.server, ready);
+  }
+
+  /** The ready server's status's version: it may be a terminal's of another version. */
+  async #readVersion(): Promise<string | null> {
     const forwarder = this.#forwarder;
-    if (forwarder === null) return;
+    if (forwarder === null) return null;
     try {
       const response = await forwarder.get(
         "/api/local/status",
@@ -171,9 +196,11 @@ export class Backend {
       );
       if (!response.ok) throw new Error(`answered ${response.status}`);
       const { version } = (await response.json()) as { version?: unknown };
-      if (typeof version === "string") this.#serverVersion = version;
+      if (typeof version !== "string") throw new Error("its status has no version");
+      return version;
     } catch (error) {
-      mainLog.warn(`Eidolon: couldn't read the server's version: ${String(error)}`);
+      this.#options.log.warn(`Eidolon: couldn't read the server's version: ${String(error)}`);
+      return null;
     }
   }
 }

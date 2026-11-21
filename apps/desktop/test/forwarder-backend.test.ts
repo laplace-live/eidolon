@@ -18,7 +18,13 @@ beforeAll(async () => {
   logs = captureLogs();
   booted = await bootFixture();
   const token = new BearerToken(booted.token.secret);
-  const state: BackendState = { phase: "ready", origin: booted.base, token, owned: false };
+  const state: BackendState = {
+    phase: "ready",
+    origin: booted.base,
+    token,
+    owned: false,
+    pid: null,
+  };
   forwarder = createForwarder({
     backend: {
       state,

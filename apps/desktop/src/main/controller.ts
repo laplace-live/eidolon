@@ -75,6 +75,8 @@ export type BackendState =
       readonly origin: string;
       readonly token: BearerToken;
       readonly owned: boolean;
+      /** The server's process: our child, or the one an attached server's lock names. */
+      readonly pid: number | null;
     }
   | { readonly phase: "holding"; readonly owned: boolean }
   | { readonly phase: "failed"; readonly failure: BackendFailure }
@@ -91,14 +93,17 @@ export interface BackendLaunch {
   readonly appRoot: string | null;
 }
 
-/** The staged payload's server when packaged; in dev, the checkout's, from source. */
-export function backendLaunch(app: {
+/** Where the app runs from, as Electron gives it. */
+export interface AppPaths {
   readonly packaged: boolean;
   readonly execPath: string;
   readonly resourcesPath: string;
   /** app.getAppPath(): apps/desktop unpackaged. */
   readonly appPath: string;
-}): BackendLaunch {
+}
+
+/** The staged payload's server when packaged; in dev, the checkout's, from source. */
+export function backendLaunch(app: AppPaths): BackendLaunch {
   if (!app.packaged) {
     const entry = resolve(app.appPath, "..", "bot", "src", "local", "server.ts");
     return { command: app.execPath, entry, appRoot: null };
@@ -246,6 +251,7 @@ interface Spawned {
 interface Found {
   readonly origin: string;
   readonly port: number;
+  readonly pid: number;
   readonly token: BearerToken;
 }
 
@@ -497,7 +503,9 @@ export class BackendController {
     const token = this.#io.readToken(this.#home);
     if (token === null) return null;
     const origin = originOf(hint);
-    return (await this.#io.probe(origin, token)) ? { origin, port: hint.port, token } : null;
+    return (await this.#io.probe(origin, token))
+      ? { origin, port: hint.port, pid: hint.pid, token }
+      : null;
   }
 
   #attachTo(found: Found): void {
@@ -505,7 +513,13 @@ export class BackendController {
       this.#log.info(`Eidolon: using the server already on this data home, ${found.origin}`);
     }
     this.#attached = { origin: found.origin, port: found.port };
-    this.#begin({ phase: "ready", origin: found.origin, token: found.token, owned: false });
+    this.#begin({
+      phase: "ready",
+      origin: found.origin,
+      token: found.token,
+      owned: false,
+      pid: found.pid,
+    });
   }
 
   /** Probes every 500 ms for up to 60 s; null when nothing proved itself, or the flow moved on. */
@@ -693,7 +707,7 @@ export class BackendController {
     }
     const origin = `http://127.0.0.1:${message.port}`;
     this.#log.info(`Eidolon: the backend listens on ${origin}`);
-    this.#begin({ phase: "ready", origin, token, owned: true });
+    this.#begin({ phase: "ready", origin, token, owned: true, pid: spawned.child.pid ?? null });
   }
 
   #noListening(spawned: Spawned): void {

@@ -216,7 +216,7 @@ async function attached(r: Rig, host = "127.0.0.1", port = 7861): Promise<string
   r.proves = (at) => at === origin;
   r.controller.start();
   await settle();
-  expect(r.controller.state).toMatchObject({ phase: "ready", origin, owned: false });
+  expect(r.controller.state).toMatchObject({ phase: "ready", origin, owned: false, pid: 4242 });
   return origin;
 }
 
@@ -265,6 +265,7 @@ describe("the spawn", () => {
       phase: "ready",
       origin: "http://127.0.0.1:7860",
       owned: true,
+      pid: child.pid,
     });
     expect(ready(r).token.secret).toBe(TOKEN_A);
   });

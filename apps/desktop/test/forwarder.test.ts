@@ -50,7 +50,7 @@ class FakeBackend implements BackendSource {
   }
 
   ready(origin: string, secret = SECRET): void {
-    this.set({ phase: "ready", origin, token: new BearerToken(secret), owned: true });
+    this.set({ phase: "ready", origin, token: new BearerToken(secret), owned: true, pid: null });
   }
 
   refused(origin: string): void {
@@ -626,6 +626,22 @@ describe("main's own requests", () => {
     expect(
       up.seen.map(({ url, headers, afterProbe }) => [url, headers.authorization, afterProbe]),
     ).toEqual([["/api/local/status?x=1", `Bearer ${SECRET}`, true]]);
+  });
+
+  test("tell the controller nothing when their connections close, unlike the page's", async () => {
+    const backend = new FakeBackend();
+    const up = await upstream();
+    backend.ready(up.origin);
+    const forward = forwarder(backend);
+    expect(await (await forward.get("/api/local/status", AbortSignal.timeout(5000))).text()).toBe(
+      "ok",
+    );
+    up.server.closeAllConnections();
+    expect(await (await forward.handle(app("/api/local/status"))).text()).toBe("ok");
+    // That close has been read by now: a new connection was opened, proved and answered since.
+    expect(backend.reports).toEqual([]);
+    up.server.closeAllConnections();
+    await vi.waitFor(() => expect(backend.reports).toEqual([`disconnected ${up.origin}`]));
   });
 
   test("keep to the ready server's origin whatever the path names", async () => {

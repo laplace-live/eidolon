@@ -21,6 +21,7 @@ const READY: BackendState = {
   origin: "http://127.0.0.1:7860",
   token: new BearerToken("t".repeat(43)),
   owned: true,
+  pid: 4242,
 };
 const HOLDING: BackendState = { phase: "holding", owned: true };
 const EXITED: BackendFailure = { reason: "exited", code: 1, signal: null, stderr: ["boom"] };

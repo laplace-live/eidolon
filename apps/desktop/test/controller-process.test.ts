@@ -1,9 +1,7 @@
-// The controller and the forwarder against real processes: a plain script that answers as the local
-// server does (IPC listening, probe proofs, the Bearer, exit 75 on restart, a stop on the channel's
-// close), on temporary homes and ports the OS picks.
+// The controller and the forwarder against real processes: test/fake-server.ts's script, which
+// answers as the local server does, on temporary homes and ports the OS picks.
 import "../../../packages/config/test/isolated-guard.ts";
-import { type ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,62 +9,13 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { isAlive } from "../src/main/attach.ts";
 import { BackendController, type BackendState, type ReadyState } from "../src/main/controller.ts";
 import { createForwarder, type Forwarder } from "../src/main/forwarder.ts";
-
-const FAKE_SERVER = `
-import { createHmac } from "node:crypto";
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
-import { join } from "node:path";
-const home = process.env.EIDOLON_HOME;
-const argv = process.argv.slice(2);
-appendFileSync(join(home, "runs.ndjson"), JSON.stringify({
-  pid: process.pid,
-  execArgv: process.execArgv,
-  argv,
-  cwd: process.cwd(),
-  env: {
-    ELECTRON_RUN_AS_NODE: process.env.ELECTRON_RUN_AS_NODE ?? null,
-    EIDOLON_NO_DOTENV: process.env.EIDOLON_NO_DOTENV ?? null,
-    EIDOLON_APP_ROOT: process.env.EIDOLON_APP_ROOT ?? null,
-    EIDOLON_HOME: home,
-  },
-}) + "\\n");
-const secret = readFileSync(join(home, "local-token"), "utf8").trim();
-const sign = (message) => createHmac("sha256", secret).update(message, "utf8").digest("base64url");
-const info = join(home, "locks", "4273f434b594.info");
-const server = createServer((request, response) => {
-  const url = new URL(request.url, "http://x");
-  if (url.pathname === "/api/local/session" && url.searchParams.has("probe")) {
-    response.end(JSON.stringify({ proof: sign("probe:" + url.searchParams.get("probe")) }));
-  } else if (request.headers.authorization !== "Bearer " + secret) {
-    response.writeHead(401).end();
-  } else if (request.method === "POST" && url.pathname === "/api/local/restart") {
-    response.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
-    setTimeout(() => stop(75), 100);
-  } else {
-    response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ pid: process.pid }));
-  }
-});
-function stop(code) {
-  server.close();
-  server.closeAllConnections();
-  rmSync(info, { force: true });
-  process.exit(code);
-}
-if (process.env.FAKE_KEEP_ALIVE_MS) server.keepAliveTimeout = Number(process.env.FAKE_KEEP_ALIVE_MS);
-server.listen({ host: "127.0.0.1", port: Number(argv[argv.indexOf("--port") + 1]) }, () => {
-  const { port } = server.address();
-  if (process.env.FAKE_RECORDS_INFO === "1") {
-    mkdirSync(join(home, "locks"), { recursive: true });
-    writeFileSync(info, JSON.stringify({ pid: process.pid, command: "eidolon", key: "local-server", start: "now", port, host: "127.0.0.1" }));
-  }
-  process.send?.({ kind: "listening", port });
-  process.stdout.write("Eidolon is ready: http://127.0.0.1:" + port + "/#1793000000." + "d".repeat(43) + "\\n");
-  process.stderr.write("[local] listening on " + port + "\\n");
-});
-process.on("disconnect", () => stop(0));
-process.on("SIGTERM", () => stop(0));
-`;
+import {
+  environment as environmentIn,
+  makeHome,
+  runs as runsOn,
+  terminalServer as terminalServerOn,
+  writeFakeServer,
+} from "./fake-server.ts";
 
 const TOKEN_A = "A".repeat(43);
 const TOKEN_B = "B".repeat(43);
@@ -79,10 +28,9 @@ const cleanups: (() => Promise<void> | void)[] = [];
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "eidolon-desktop-process-"));
   home = join(dir, "home");
-  mkdirSync(home, { mode: 0o700 });
-  writeFileSync(join(home, "local-token"), `${TOKEN_A}\n`, { mode: 0o600 });
+  makeHome(home, TOKEN_A);
   script = join(dir, "server.mjs");
-  writeFileSync(script, FAKE_SERVER);
+  writeFakeServer(script);
 });
 
 afterEach(async () => {
@@ -90,23 +38,12 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** What a test's backend runs with: no developer keys, and every Eidolon folder a temporary one. */
-function environment(): NodeJS.ProcessEnv {
-  return {
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
-    TMPDIR: process.env.TMPDIR,
-    EIDOLON_REAL_HOME: join(dir, "real-home"),
-    EIDOLON_SHARED_SKILLS: join(dir, "shared-skills"),
-  };
-}
+const environment = (): NodeJS.ProcessEnv => environmentIn(dir);
+const runs = () => runsOn(home);
 
-function runs(): { pid: number; execArgv: string[]; argv: string[]; cwd: string; env: object }[] {
-  return readFileSync(join(home, "runs.ndjson"), "utf8")
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line));
-}
+/** A terminal's server on the data home, as `bun run app` runs it, which records where it listens. */
+const terminalServer = (port: number, keepAliveMs?: number) =>
+  terminalServerOn({ script, home, dir, port, keepAliveMs }, cleanups);
 
 /** Resolves with the first state `accept` takes. */
 function next(
@@ -159,6 +96,7 @@ test("our own backend: listens, takes the Bearer, restarts on its port with the 
   const port = Number(new URL(first.origin).port);
 
   const [run] = runs();
+  expect(first.pid).toBe(run?.pid);
   expect(run).toMatchObject({
     execArgv: ["--disable-sigusr1", "--use-system-ca"],
     argv: ["--host", "127.0.0.1", "--port", "0", "--no-open"],
@@ -171,7 +109,7 @@ test("our own backend: listens, takes the Bearer, restarts on its port with the 
     },
   });
   const status = await forwarder.handle(app("/api/local/status"));
-  expect(await status.json()).toEqual({ pid: run?.pid });
+  expect(await status.json()).toMatchObject({ pid: run?.pid });
 
   // Deleting local-token rotates it: the next server makes another, which main must read again.
   writeFileSync(join(home, "local-token"), `${TOKEN_B}\n`, { mode: 0o600 });
@@ -182,9 +120,14 @@ test("our own backend: listens, takes the Bearer, restarts on its port with the 
   const held = await forwarder.handle(app("/api/local/status"));
   expect(held.status).toBe(200);
   const second = runs()[1];
-  expect(await held.json()).toEqual({ pid: second?.pid });
+  expect(await held.json()).toMatchObject({ pid: second?.pid });
   expect(second?.argv).toEqual(["--host", "127.0.0.1", "--port", String(port), "--no-open"]);
-  expect(controller.state).toMatchObject({ phase: "ready", origin: first.origin, owned: true });
+  expect(controller.state).toMatchObject({
+    phase: "ready",
+    origin: first.origin,
+    owned: true,
+    pid: second?.pid,
+  });
   expect((controller.state as ReadyState).token.secret).toBe(TOKEN_B);
 
   await controller.stop();
@@ -193,35 +136,6 @@ test("our own backend: listens, takes the Bearer, restarts on its port with the 
   expect(lines).toContain(`stderr: [local] listening on ${port}`);
   expect(lines.some((line) => line.includes("Eidolon is ready"))).toBe(false);
 });
-
-/** A terminal's server on the data home, as `bun run app` runs it, which records where it listens. */
-function terminalServer(port: number, keepAliveMs?: number): Promise<ChildProcess> {
-  const child = spawn(
-    process.execPath,
-    [script, "--host", "127.0.0.1", "--port", String(port), "--no-open"],
-    {
-      env: {
-        ...environment(),
-        EIDOLON_HOME: home,
-        FAKE_RECORDS_INFO: "1",
-        ...(keepAliveMs === undefined ? {} : { FAKE_KEEP_ALIVE_MS: String(keepAliveMs) }),
-      },
-      stdio: ["ignore", "pipe", "ignore"],
-    },
-  );
-  cleanups.push(async () => {
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill();
-      await new Promise((done) => child.once("exit", done));
-    }
-  });
-  return new Promise((done, fail) => {
-    child.stdout?.on("data", (chunk: Buffer) => {
-      if (chunk.toString().includes("Eidolon is ready")) done(child);
-    });
-    child.once("exit", (code) => fail(new Error(`the terminal's server exited ${code}`)));
-  });
-}
 
 test("attached to a terminal's server: a restart started outside the app is a grace period, then the new server", async () => {
   const terminal = await terminalServer(0);
@@ -242,9 +156,13 @@ test("attached to a terminal's server: a restart started outside the app is a gr
   const forwarder = forwarderFor(controller);
   controller.start();
   await next(controller, (state) => state.phase === "ready");
-  expect(controller.state).toMatchObject({ origin: `http://127.0.0.1:${port}`, owned: false });
+  expect(controller.state).toMatchObject({
+    origin: `http://127.0.0.1:${port}`,
+    owned: false,
+    pid: terminal.pid,
+  });
   const before = await forwarder.handle(app("/api/local/status"));
-  expect(await before.json()).toEqual({ pid: terminal.pid });
+  expect(await before.json()).toMatchObject({ pid: terminal.pid });
 
   // A browser tab restarts it, and the terminal's supervisor starts the next on the same port.
   const exited = new Promise((done) => terminal.once("exit", done));
@@ -259,7 +177,7 @@ test("attached to a terminal's server: a restart started outside the app is a gr
     timeout: 5000,
   });
   const after = await forwarder.handle(app("/api/local/status"));
-  expect(await after.json()).toEqual({ pid: replacement.pid });
+  expect(await after.json()).toMatchObject({ pid: replacement.pid });
   expect(runs()).toHaveLength(2);
 
   await controller.stop();
@@ -286,7 +204,7 @@ test("attached and idle with no connection open: a restart from outside, and a r
   const forwarder = forwarderFor(controller);
   controller.start();
   await next(controller, (state) => state.phase === "ready");
-  expect(await (await forwarder.handle(app("/api/local/status"))).json()).toEqual({
+  expect(await (await forwarder.handle(app("/api/local/status"))).json()).toMatchObject({
     pid: terminal.pid,
   });
   // The server closes the idle connection: a grace period proves it again, leaving none open.
@@ -334,7 +252,7 @@ test("attached and idle with no connection open: a restart from outside, and a r
   });
 
   const status = await forwarder.handle(app("/api/local/status"));
-  expect(await status.json()).toEqual({ pid: replacement.pid });
+  expect(await status.json()).toMatchObject({ pid: replacement.pid });
   expect(connections).toBe(1);
   expect(relayed).toEqual([]);
   expect(controller.state).toMatchObject({

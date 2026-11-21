@@ -9,9 +9,10 @@ import { type Language, pageAt } from "../shared/bridge.ts";
 import { dataHome } from "./attach.ts";
 import { Backend, licensesFile } from "./backend.ts";
 import { dressWindow, handleAppBridge, sendCommand } from "./chrome.ts";
+import type { AppPaths } from "./controller.ts";
 import { APP_ORIGIN, DEV_SERVER } from "./forwarder.ts";
 import { isLaunchRequest, primary, refused, request } from "./instance.ts";
-import { logStart, logsFolder, mainLog } from "./log.ts";
+import { backendLog, logStart, logsFolder, mainLog } from "./log.ts";
 import { attachContextMenu, setApplicationMenu } from "./menu.ts";
 import { aboutPanel, type TrayActions } from "./menus.ts";
 import { guardNavigation } from "./navigation.ts";
@@ -50,6 +51,12 @@ function open(path: string): void {
 function run(): void {
   // Unpackaged, Electron's own version would stand in for the app's.
   const version = app.isPackaged ? app.getVersion() : "0.0.0-dev";
+  const paths: AppPaths = {
+    packaged: app.isPackaged,
+    execPath: process.execPath,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+  };
   let reported: Language | null = null;
   const language = () => shellLanguage(reported, app.getPreferredSystemLanguages());
   const strings = () => STRINGS[language()];
@@ -66,6 +73,10 @@ function run(): void {
     },
   });
   const backend = new Backend({
+    app: paths,
+    env: process.env,
+    log: mainLog,
+    backendLog: (line) => backendLog.info(line),
     devServer: !app.isPackaged && app.commandLine.hasSwitch(DEV_SWITCH) ? DEV_SERVER : undefined,
     waitingPage: () => {
       pages.waited();
@@ -92,7 +103,7 @@ function run(): void {
     },
     showLogs: () => open(logsFolder()),
     openDataFolder: () => open(backend.home ?? dataHome(process.env)),
-    licenses: () => open(licensesFile()),
+    licenses: () => open(licensesFile(paths)),
     about: () => app.showAboutPanel(),
     quit: () => app.quit(),
   };
