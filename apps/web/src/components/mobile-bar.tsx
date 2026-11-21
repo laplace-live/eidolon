@@ -3,8 +3,8 @@ import { AppMark } from "@/components/app-mark";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 /**
- * On a phone, above a page: the button that opens the sidebar, and the logo. In the desktop app it
- * stays, empty, beside the sidebar as the row the window drags by.
+ * On a phone, above a page: the button that opens the sidebar, and the logo. From md up, where a
+ * browser hides it, the desktop app keeps it, empty, as the row the window drags by.
  */
 export function MobileBar() {
   return (

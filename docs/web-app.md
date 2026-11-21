@@ -376,9 +376,11 @@ gives the page two things; a browser has neither, and without them nothing below
   on every change. `onCommand` hands it the menus' commands: `settings` opens `/settings`, and one
   it doesn't know is ignored (`COMMANDS` in `lib/desktop.ts`).
 - **The marks** on `<html>`: `data-shell`, `mac` or `win`, and on macOS `data-fullscreen` while the
-  window is fullscreen. The preload may set them only once `<html>` exists, after the page's script
-  has run; nothing in the page waits for them. The chrome they turn on is in `index.css`, at its
-  end, and the `shell:` variant there styles a component only in the desktop app.
+  window is fullscreen. The preload sets `data-shell` as `<html>` is created, before the page's
+  script runs and before its first paint, and `data-fullscreen` as the window enters and leaves
+  fullscreen; nothing in the page depends on when a mark lands. The chrome they turn on is in
+  `index.css`, at its end, and the `shell:` variant there styles a component only in the desktop
+  app.
 
 **The chrome.** The window has no title bar. A row marked `data-window-drag` stands in for it: the
 window drags by the row, while its links, buttons and fields keep their clicks. The rows are the
@@ -412,8 +414,9 @@ Window Controls Overlay gives as `env(titlebar-area-*)`:
 - **Home's footer** names both versions, `Eidolon 0.1.0 · server 0.13.0`: the desktop app's own,
   from the bridge, and the server's, from status, which may be a terminal's server it attached to.
 - **Pictures and files open in place.** The window has no tabs: a picture in a chat or a call, the
-  owner's or hers, opens in a viewer over the page with **Save**, and a text file saves through
-  `<a download>`, which the desktop app turns into a Save dialog (`components/picture-viewer.tsx`).
+  owner's or hers, opens in a viewer over the page with **Save** (`components/picture-viewer.tsx`),
+  and a text file saves through `<a download>` (`features/chats/attachments.tsx`), which the desktop
+  app turns into a Save dialog.
 - **No terminal.** Where the browser's text sends you to the terminal, the desktop app's says to
   quit and reopen Eidolon, or where its logs are: **Show Logs**, in the Help menu on macOS and in
   the tray icon's menu on Windows (`DESKTOP_ERRORS` in `lib/labels.ts`, the restart's toast, a

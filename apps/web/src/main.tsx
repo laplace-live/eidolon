@@ -26,7 +26,6 @@ const queryClient = createQueryClient(() => void router?.revalidate());
 router = createRouter({ queryClient, exchanged });
 
 connectDesktop((to) => void router?.navigate(to));
-// The preload can mark <html> only once it exists, after this runs; its bridge is here already.
 if (desktop() !== null) watchWindowDrag();
 
 // Rendered once a language is active: the viewer's, else English.
