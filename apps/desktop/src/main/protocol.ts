@@ -53,9 +53,8 @@ function shellFile(name: string): string {
   return join(app.getAppPath(), "dist", "shell", name);
 }
 
-function pageResponse({ html, csp }: RenderedPage, status = 200): Response {
+function pageResponse({ html, csp }: RenderedPage): Response {
   return new Response(html, {
-    status,
     headers: {
       "content-type": "text/html; charset=utf-8",
       "content-security-policy": csp,
@@ -97,12 +96,13 @@ export async function shellResponse(url: URL, pages: ShellPages): Promise<Respon
 
 /**
  * The answer to a document request at the app's address while there is no backend: a page that
- * waits, in place, for main to reload the window once one answers.
+ * waits, in place, for main to reload the window once one answers. It is a 200, because Chromium
+ * logs a document answered with a 5xx as a console error.
  */
 export async function waitingPage(strings: ShellPageStrings): Promise<Response> {
   const html = await template("waiting");
   if (html === null) return new Response(null, { status: 503 });
-  return pageResponse(renderWaitingPage(html, strings), 503);
+  return pageResponse(renderWaitingPage(html, strings));
 }
 
 /** Serves the scheme on the default session; after `ready`. */
