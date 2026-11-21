@@ -69,7 +69,7 @@ export function localFailure(
 
 /** The 500 for a request that threw, logged with its stack. */
 export function internalError(request: Request, error: unknown): Response {
-  return localFailure(500, "internal", "Eidolon hit an error; the terminal has the details", (id) =>
+  return localFailure(500, "internal", "Eidolon hit an error; its log has the details", (id) =>
     logger.exception(
       `${request.method} ${new URL(request.url).pathname} failed (error ${id})`,
       error,

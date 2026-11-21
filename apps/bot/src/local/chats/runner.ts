@@ -1513,7 +1513,7 @@ export class ChatRunner {
     live.push({
       type: "error",
       code: "internal",
-      message: "Eidolon hit an error; the terminal has the details",
+      message: "Eidolon hit an error; its log has the details",
     });
   }
 }

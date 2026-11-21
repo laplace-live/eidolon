@@ -246,7 +246,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `unsupported-media-type` | 415 | An upload that isn't one of the image or text types its route takes, by its bytes |
 | `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
 | `upstream-failed` | 502 | Mem0 or Fish Audio failed |
-| `internal` | 500 | A bug; the terminal's line with the answer's `id` has the details |
+| `internal` | 500 | A bug; the server log's line with the answer's `id` has the details |
 | `invalid-persona-id` | 400 | A persona id that isn't a slug |
 | `unknown-persona` | 404, 400 | No persona has that id; 400 in a job's body |
 | `persona-exists` | 409 | Creating a persona with an id in use |
