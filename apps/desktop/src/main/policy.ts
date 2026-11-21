@@ -75,6 +75,23 @@ export function mayRedirect(url: string): boolean {
   return pageAt(url) === "app";
 }
 
+/**
+ * Whether the window's main frame committed a page off eidolon-app://. Chromium runs no navigation
+ * throttle for about:blank or about:srcdoc, so Electron emits no will-navigate to cancel them.
+ */
+export function leftTheApp(url: string): boolean {
+  return pageAt(url) === null;
+}
+
+/** `url` for main.log: without the query or fragment, which the page fills. */
+export function loggedUrl(url: string): string {
+  const parsed = parse(url);
+  if (parsed === null) return "an unreadable URL";
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.href;
+}
+
 /** Who asked for a permission, as the request handler sees it. */
 export interface PermissionAsker {
   /** Whether the request came from the app window's webContents. */

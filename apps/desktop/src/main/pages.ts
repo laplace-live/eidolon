@@ -127,6 +127,11 @@ export class WindowPages {
     this.#waited = true;
   }
 
+  /** The window's main frame landed off eidolon-app://, where main never sent it: its page again. */
+  strayed(): void {
+    if (this.#page !== null) this.#io.load(this.#page);
+  }
+
   /**
    * Try Again. True when the backend should start again: it failed. A window failure goes back to
    * the app if the backend is ready, else to the loading page until it is.

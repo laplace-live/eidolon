@@ -136,7 +136,7 @@ function run(): void {
   function newWindow(): void {
     createWindow({
       created: (win) => {
-        guardNavigation(win.webContents, mainLog);
+        guardNavigation(win.webContents, mainLog, () => pages.strayed());
         attachContextMenu(win.webContents, strings);
         dressWindow(win);
         watchSession(win, flow, backend);

@@ -3,7 +3,14 @@
 // redirect anywhere else is cancelled. A packaged app also refuses the switches that open CDP.
 // instance.ts runs that refusal before the profile and the logs exist, so this loads no logger.
 import { app, shell, type WebContents } from "electron";
-import { mayRedirect, navigationAction, openAction, refusesDebugging } from "./policy.ts";
+import {
+  leftTheApp,
+  loggedUrl,
+  mayRedirect,
+  navigationAction,
+  openAction,
+  refusesDebugging,
+} from "./policy.ts";
 
 interface Log {
   info(message: string): void;
@@ -16,7 +23,11 @@ function openInBrowser(url: string, log: Log): void {
   });
 }
 
-export function guardNavigation(contents: WebContents, log: Log): void {
+/**
+ * Guards the window's webContents; `strayed` puts main's page back when the main frame lands
+ * somewhere no navigation event let it be stopped.
+ */
+export function guardNavigation(contents: WebContents, log: Log, strayed: () => void): void {
   contents.setWindowOpenHandler(({ url }) => {
     const action = openAction(url);
     if (action === "browser") {
@@ -41,6 +52,12 @@ export function guardNavigation(contents: WebContents, log: Log): void {
     if (mayRedirect(event.url)) return;
     event.preventDefault();
     log.warn("Eidolon: cancelled a redirect away from the app");
+  });
+  // Emitted for the main frame alone, and never for an error page.
+  contents.on("did-navigate", (_event, url) => {
+    if (!leftTheApp(url)) return;
+    log.warn(`Eidolon: the window left the app for ${loggedUrl(url)}; showing it again`);
+    strayed();
   });
   contents.on("will-attach-webview", (event) => event.preventDefault());
 }

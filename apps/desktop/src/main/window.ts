@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { app, BrowserWindow, type IpcMainEvent, nativeTheme, screen } from "electron";
 import type { IpcSender } from "../shared/bridge.ts";
 import { mainLog } from "./log.ts";
+import { loggedUrl } from "./policy.ts";
 import {
   BOUNDS_FILE,
   backgroundColor,
@@ -141,10 +142,7 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
     hooks.failed(`the page's renderer is gone (${details.reason})`);
   });
   contents.on("did-finish-load", () => {
-    const url = URL.parse(contents.getURL());
-    if (url !== null) {
-      mainLog.info(`Eidolon: the window shows ${url.protocol}//${url.host}${url.pathname}`);
-    }
+    mainLog.info(`Eidolon: the window shows ${loggedUrl(contents.getURL())}`);
   });
   hooks.created(win);
   return win;

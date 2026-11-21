@@ -5,6 +5,8 @@ import {
   checkAllows,
   DEBUGGING_SWITCHES,
   isAppOrigin,
+  leftTheApp,
+  loggedUrl,
   mayRedirect,
   microphoneStep,
   navigationAction,
@@ -92,6 +94,31 @@ describe("navigations", () => {
       expect([url, mayRedirect(url)]).toEqual([url, false]);
     }
   });
+
+  test("a page committed off eidolon-app://, which no event let main cancel, has left the app", () => {
+    for (const url of [
+      "about:blank",
+      "about:blank#x",
+      "about:blank?y",
+      "about:srcdoc",
+      "data:text/html,x",
+      "https://example.com/",
+      "eidolon-app://other/",
+    ]) {
+      expect([url, leftTheApp(url)]).toEqual([url, true]);
+    }
+    for (const url of ["eidolon-app://app/chats/c1", "eidolon-app://shell/loading"]) {
+      expect([url, leftTheApp(url)]).toEqual([url, false]);
+    }
+  });
+});
+
+test("main.log names an address without the query or fragment the page put on it", () => {
+  expect(loggedUrl("eidolon-app://app/chats/c1?tab=files#end")).toBe("eidolon-app://app/chats/c1");
+  expect(loggedUrl("eidolon-app://shell/loading")).toBe("eidolon-app://shell/loading");
+  expect(loggedUrl("about:blank#x")).toBe("about:blank");
+  expect(loggedUrl("about:blank?y")).toBe("about:blank");
+  expect(loggedUrl("not a url")).toBe("an unreadable URL");
 });
 
 describe("permission requests", () => {

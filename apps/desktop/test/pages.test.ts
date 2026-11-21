@@ -119,6 +119,18 @@ describe("failures", () => {
     });
   });
 
+  test("a main frame that landed off eidolon-app:// gets main's page again, whichever it was", () => {
+    const { pages: window, loads } = pages();
+    window.strayed();
+    window.opened(STARTING);
+    window.strayed();
+    window.backend(READY);
+    window.strayed();
+    window.backend(FAILED);
+    window.strayed();
+    expect(loads).toEqual(["loading", "loading", "app", "app", "failed", "failed"]);
+  });
+
   test("a window failure waits for Try Again whatever the backend does", () => {
     const { pages: window, loads } = pages();
     window.opened(READY);
