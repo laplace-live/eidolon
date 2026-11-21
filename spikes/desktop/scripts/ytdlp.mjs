@@ -47,6 +47,15 @@ const version = spawnSync(ytDlp, ["--version"], { encoding: "utf8", env, timeout
 const node = spawnSync(APP, ["--version"], { encoding: "utf8", env, timeout: 60_000 });
 evidence.ytDlpVersion = version.stdout?.trim() ?? null;
 evidence.appAsNode = `${node.stdout?.trim() ?? ""}${node.stderr?.trim() ?? ""}` || `exit ${node.status}`;
+// How yt-dlp's challenge solver runs the runtime: --permission, and its script on stdin. Recorded on
+// its own, since YouTube's bot check can stop yt-dlp before it gets there.
+const solver = spawnSync(APP, ["--permission", "-"], {
+  encoding: "utf8",
+  env,
+  timeout: 60_000,
+  input: "console.log(JSON.stringify({ node: process.version, permissionModel: typeof process.permission?.has === 'function', fsWrite: process.permission?.has('fs.write') ?? null }))",
+});
+evidence.solverInvocation = { command: "<app> --permission - (script on stdin)", exitCode: solver.status, stdout: solver.stdout?.trim() ?? "", stderr: (solver.stderr ?? "").trim().slice(0, 300) };
 const args = ["--ignore-config", "--no-cache-dir", "--no-js-runtimes", "--js-runtimes", `node:${APP}`, "--simulate", "-v", "--print", "%(id)s|%(duration)s|%(title)s", VIDEO];
 const result = spawnSync(ytDlp, args, { encoding: "utf8", env, timeout: 240_000 });
 const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;

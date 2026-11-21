@@ -125,7 +125,8 @@ if (command === "install") {
     evidence.exe &&
     evidence.uninstaller &&
     evidence.programFiles.length === 0 &&
-    user.some((e) => resolve(String(e.InstallLocation ?? "")).toLowerCase() === INSTALL_DIR.toLowerCase()) &&
+    // electron-builder's entry has no InstallLocation: its uninstaller's path and /currentuser say it.
+    user.some((e) => String(e.UninstallString ?? "").toLowerCase().includes(UNINSTALLER.toLowerCase()) && /\/currentuser\b/.test(e.UninstallString)) &&
     machine.length === 0 &&
     shortcut.exists &&
     aumid === APP_USER_MODEL_ID;

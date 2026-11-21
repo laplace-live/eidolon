@@ -79,9 +79,11 @@ const APP_PAYLOAD = unpackaged
     ? join(dirname(BINARY), "resources", "eidolon")
     : join(dirname(dirname(BINARY)), "Resources", "eidolon");
 const CDP_PORT = 9333;
-const same = (a, b) => (IS_WINDOWS ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b));
-const underPayload = (file) => (IS_WINDOWS ? resolve(file).toLowerCase().startsWith(APP_PAYLOAD.toLowerCase() + sep) : resolve(file).startsWith(APP_PAYLOAD + sep));
-const short = (file) => String(file).replace(APP_PAYLOAD, "<payload>").replace(dirname(BINARY), "<app>");
+// process.report names Windows modules with the \\?\ long-path prefix.
+const plain = (file) => resolve(String(file).replace(/^\\\\\?\\/, ""));
+const same = (a, b) => (IS_WINDOWS ? plain(a).toLowerCase() === plain(b).toLowerCase() : plain(a) === plain(b));
+const underPayload = (file) => (IS_WINDOWS ? plain(file).toLowerCase().startsWith(APP_PAYLOAD.toLowerCase() + sep) : plain(file).startsWith(APP_PAYLOAD + sep));
+const short = (file) => String(file).replace(/^\\\\\?\\/, "").replace(APP_PAYLOAD, "<payload>").replace(dirname(BINARY), "<app>");
 
 const GREETING = "晚上好呀，今天也来陪我聊天啦？";
 const CHAT_MESSAGE = "今天过得怎么样？";
@@ -616,7 +618,8 @@ const STEPS = {
     const events = since(at).map((e) => e.event).filter((e) => !["forward", "forward-headers", "console", "permission-check"].includes(e));
     const stopped = since(at).find((e) => e.event === "backend-stopped");
     const leftovers = IS_WINDOWS
-      ? powershellJson("Get-Process -Name Eidolon -ErrorAction SilentlyContinue | Select-Object Id,Path").map((p) => `${p.Id} ${p.Path}`)
+      ? // Get-Process -Name fails the script when nothing matches.
+        powershellJson("Get-Process | Where-Object { $_.ProcessName -eq 'Eidolon' } | Select-Object Id,Path").map((p) => `${p.Id} ${p.Path}`)
       : [...processes(unpackaged ? join(SPIKE, "node_modules/electron/dist") : dirname(dirname(dirname(BINARY)))), ...processes(APP_PAYLOAD)]
           .filter((p) => p.pid !== process.pid)
           .map((p) => `${p.pid} ${short(p.command).slice(0, 160)}`);
