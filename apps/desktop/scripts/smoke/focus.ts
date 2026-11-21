@@ -72,7 +72,7 @@ async function front(): Promise<{ readonly name: string; readonly pid: number | 
 }
 
 /** `pid`'s ApplicationType, or null while LaunchServices knows no app by it. */
-async function applicationType(pid: number): Promise<string | null> {
+export async function applicationType(pid: number): Promise<string | null> {
   const asn = /ASN:0x[0-9a-f]+-0x[0-9a-f]+/.exec(await lsappinfo("find", `pid=${pid}`))?.[0];
   return asn === undefined
     ? null

@@ -30,6 +30,7 @@ import {
   packagedApp,
   packagedBinary,
   type Smoke,
+  sleep,
   startSmoke,
 } from "./smoke/kit.ts";
 import { namesUninstaller, silentUninstall, UNINSTALLER, uninstallEntries } from "./smoke/nsis.ts";
@@ -73,8 +74,6 @@ const QUIT_MS = 60_000;
 const UNINSTALL_MS = 120_000;
 /** Timings the results keep, in ms unless named otherwise. */
 type Numbers = Record<string, number>;
-
-const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
 /** `promise`'s value, or null once `ms` have passed. */
 function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {

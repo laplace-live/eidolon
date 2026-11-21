@@ -180,6 +180,10 @@ export function readLog(run: Run, name: LogName): string {
   }
 }
 
+export function sleep(ms: number): Promise<void> {
+  return new Promise((done) => setTimeout(done, ms));
+}
+
 export interface WaitOptions {
   /** 60 s by default. */
   readonly timeoutMs?: number;
@@ -204,7 +208,7 @@ export async function waitForLine(
       );
     if (line !== undefined) return line;
     if (Date.now() >= deadline) throw new Error(`${name}.log has no line with ${String(pattern)}`);
-    await new Promise((done) => setTimeout(done, 100));
+    await sleep(100);
   }
 }
 

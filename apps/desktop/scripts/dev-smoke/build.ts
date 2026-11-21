@@ -5,11 +5,10 @@
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { build } from "vite";
+import { DESKTOP, ROOT } from "../smoke/kit.ts";
 import { mainBundle, preloadBundle, shellPages } from "../vite-common.ts";
 
-const DESKTOP = resolve(import.meta.dirname, "../..");
 const WEB = resolve(DESKTOP, "../web");
-const ROOT = resolve(DESKTOP, "../..");
 
 /** A file of each build, which a run without it can't start. */
 const BUILT = [

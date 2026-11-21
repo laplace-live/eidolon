@@ -4,7 +4,6 @@
 // apps/desktop/dist first, so it never runs on a stale build (--no-build runs on what is there),
 // and prints one line per step. The run's folder holds results.json and the screenshots, and goes
 // after a pass, as the kit has it; --keep copies them beside it first.
-import { execFile } from "node:child_process";
 import {
   closeSync,
   cpSync,
@@ -15,7 +14,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
-import { promisify } from "node:util";
 import { crc32, deflateSync } from "node:zlib";
 import type { ElectronApplication, Locator, Page } from "playwright-core";
 import { STRINGS } from "../src/main/strings.ts";
@@ -33,6 +31,7 @@ import {
   SELFIE_REQUEST,
   VOICE_TRANSCRIPT,
 } from "./smoke/fakes.ts";
+import { applicationType } from "./smoke/focus.ts";
 import {
   type AppLaunch,
   devApp,
@@ -44,6 +43,7 @@ import {
   parseSmokeArgs,
   ROOT,
   type Smoke,
+  sleep,
   startSmoke,
 } from "./smoke/kit.ts";
 import { descendants, processTable, type Started } from "./smoke/processes.ts";
@@ -66,8 +66,6 @@ const ATTACHED_LINE = "看看这张图和这个故事";
 const DOWNLOADED = /background mode's download to (.+): (\w+)$/;
 const SIGN_IN = /This Window Isn't Signed In|Open Eidolon from Your Terminal/;
 
-const execFileAsync = promisify(execFile);
-
 const { rest } = parseSmokeArgs(process.argv.slice(2));
 const unknown = rest.filter((arg) => !OWN_ARGS.includes(arg));
 if (unknown.length > 0) {
@@ -89,8 +87,6 @@ if (rest.includes("--no-build")) {
 }
 // Electron's package downloads its binary on the first require, blocking: before the focus watch.
 electronBinary();
-
-const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
 function seconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)} s`;
@@ -329,21 +325,6 @@ async function home(page: Page): Promise<string> {
   return (await footer.textContent()) ?? "";
 }
 
-/** macOS's ApplicationType for `pid`: UIElement is an accessory, with no Dock icon. */
-async function applicationType(pid: number): Promise<string | null> {
-  if (process.platform !== "darwin") return null;
-  try {
-    const found = (await execFileAsync("lsappinfo", ["find", `pid=${pid}`])).stdout;
-    const asn = /ASN:0x[0-9a-f]+-0x[0-9a-f]+/.exec(found)?.[0];
-    if (asn === undefined) return null;
-    const info = (await execFileAsync("lsappinfo", ["info", "-only", "ApplicationType", asn]))
-      .stdout;
-    return /\btype="([^"]*)"/.exec(info)?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Off screen as background mode has it: on macOS an accessory, and no window visible or focused.
  * A headful run shows the window, so it checks nothing.
@@ -356,7 +337,8 @@ async function checkOffScreen(walk: Walk, driven: Driven, step: Step, when: stri
       focused: win.isFocused(),
     })),
   );
-  const type = await applicationType(driven.pid);
+  const type =
+    process.platform === "darwin" ? await applicationType(driven.pid).catch(() => null) : null;
   const accessory = process.platform !== "darwin" || type === "UIElement";
   step.check(
     `off screen ${when}`,
