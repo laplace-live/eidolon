@@ -13,11 +13,12 @@ ENV NODE_ENV=production \
     PIPECAT_HOST=0.0.0.0 \
     PIPECAT_PORT=7860
 
-# Every workspace manifest, apps/cli's, apps/eidolon's and apps/web's included, so
+# Every workspace manifest, apps/cli's, apps/desktop's, apps/eidolon's and apps/web's included, so
 # --frozen-lockfile checks each against bun.lock and fails on one that drifted.
 COPY package.json bun.lock ./
 COPY apps/bot/package.json apps/bot/
 COPY apps/cli/package.json apps/cli/
+COPY apps/desktop/package.json apps/desktop/
 COPY apps/eidolon/package.json apps/eidolon/
 COPY apps/web/package.json apps/web/
 COPY packages/access/package.json packages/access/
