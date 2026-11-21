@@ -109,7 +109,7 @@ jobs:
         env:
           EIDOLON_DESKTOP_BACKGROUND: "1"
 
-      # Adds a throwaway CA to this runner's trust store, and removes it after.
+      # Adds a throwaway CA to this runner's trust store, and deletes the certificate after.
       - name: "--use-system-ca on the packaged binary"
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         timeout-minutes: 10

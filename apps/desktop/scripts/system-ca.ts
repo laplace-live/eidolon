@@ -484,12 +484,21 @@ async function prove(app: PackagedApp, host: Host, work: string, checks: Check[]
   }
 }
 
+const STORE = process.platform === "darwin" ? "the System keychain" : "LocalMachine's Root store";
+
+/** Runs a trust store command, its output shown: undefined once it succeeded, else why not. */
+function onStore([command, ...args]: readonly string[]): string | undefined {
+  const ran = spawnSync(command as string, args, { stdio: "inherit", timeout: 60_000 });
+  if (ran.status === 0) return undefined;
+  return ran.error?.message ?? `exit ${ran.status ?? ran.signal}`;
+}
+
 /**
  * Puts the CA in the machine's trust store: the admin domain on macOS and LocalMachine's Root on
  * Windows, which a runner can write without anyone answering a prompt, as the user's can't be.
  */
 function trust(certs: Certs): void {
-  const [command, ...args] =
+  const failed = onStore(
     process.platform === "darwin"
       ? [
           "sudo",
@@ -503,23 +512,28 @@ function trust(certs: Certs): void {
           SYSTEM_KEYCHAIN,
           certs.caPem,
         ]
-      : ["certutil", "-addstore", "-f", "Root", certs.caDer];
-  const added = spawnSync(command as string, args, { stdio: "inherit", timeout: 60_000 });
-  if (added.status !== 0) throw new Error(`${command} couldn't add the CA (exit ${added.status})`);
+      : ["certutil", "-addstore", "-f", "Root", certs.caDer],
+  );
+  if (failed !== undefined) throw new Error(`Couldn't add the CA to ${STORE}: ${failed}`);
 }
 
+/**
+ * Deletes the CA, which ends its trust, since the host sends only its own cert. macOS keeps the
+ * admin trust entry, orphaned: removing one (`remove-trusted-cert -d`) waits on an authorization
+ * dialog no hosted runner can answer (https://github.com/taucad/tau/pull/1300).
+ */
 function distrust(certs: Certs): void {
-  const commands =
+  const failed = onStore(
     process.platform === "darwin"
-      ? [
-          ["sudo", "-n", "security", "remove-trusted-cert", "-d", certs.caPem],
-          ["sudo", "-n", "security", "delete-certificate", "-Z", certs.thumbprint, SYSTEM_KEYCHAIN],
-        ]
-      : [["certutil", "-delstore", "Root", certs.thumbprint]];
-  for (const [command, ...args] of commands) {
-    const removed = spawnSync(command as string, args, { stdio: "inherit", timeout: 60_000 });
-    if (removed.status !== 0) console.warn(`system-ca: ${command} ${args[0]} failed; the CA stays`);
-  }
+      ? ["sudo", "-n", "security", "delete-certificate", "-Z", certs.thumbprint, SYSTEM_KEYCHAIN]
+      : ["certutil", "-delstore", "Root", certs.thumbprint],
+  );
+  const kept = process.platform === "darwin" ? "; its admin trust entry stays, orphaned" : "";
+  console.log(
+    failed === undefined
+      ? `system-ca: deleted the CA from ${STORE}${kept}`
+      : `system-ca: couldn't delete the CA from ${STORE} (${failed}); it stays there`,
+  );
 }
 
 if (import.meta.main) {
