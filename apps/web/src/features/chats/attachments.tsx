@@ -4,9 +4,11 @@ import type { Attachment } from "@eidolon/chat";
 import { useLingui } from "@lingui/react/macro";
 import { FileTextIcon, ImageOffIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { OpenPicture } from "@/components/picture-viewer";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { chatFilePath } from "@/lib/chats";
+import { desktop } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import type { DraftFile } from "./use-draft-files";
 
@@ -27,16 +29,17 @@ function SentImage({ src, single }: { readonly src: string; readonly single: boo
       </div>
     );
   }
+  const alt = t`Sent by you`;
   return (
-    <a href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl">
+    <OpenPicture src={src} alt={alt} className="block overflow-hidden rounded-xl">
       <img
         src={src}
-        alt={t`Sent by you`}
+        alt={alt}
         decoding="async"
         onError={() => setFailed(true)}
         className={cn(box, "bg-muted object-cover")}
       />
-    </a>
+    </OpenPicture>
   );
 }
 
@@ -48,10 +51,14 @@ function FileChip({ href, filename }: { readonly href?: string; readonly filenam
     </>
   );
   const chip = "flex max-w-60 items-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-sm";
-  return href === undefined ? (
-    <div className={chip}>{body}</div>
-  ) : (
+  if (href === undefined) return <div className={chip}>{body}</div>;
+  // The desktop app has no tab to open it in: it saves it.
+  return desktop() === null ? (
     <a href={href} target="_blank" rel="noreferrer" className={cn(chip, "hover:bg-accent")}>
+      {body}
+    </a>
+  ) : (
+    <a href={href} download={filename} className={cn(chip, "hover:bg-accent")}>
       {body}
     </a>
   );

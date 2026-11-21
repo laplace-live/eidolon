@@ -2,6 +2,7 @@
 // that keeps to the newest line.
 import { ImageOffIcon } from "lucide-react";
 import { type UIEvent, useCallback, useEffect, useRef, useState } from "react";
+import { OpenPicture } from "@/components/picture-viewer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +31,7 @@ export function Photo({
           {failed}
         </div>
       ) : (
-        <a href={src} target="_blank" rel="noreferrer" className="block size-full">
+        <OpenPicture src={src} alt={alt} className="block size-full">
           <img
             src={src}
             alt={alt}
@@ -39,7 +40,7 @@ export function Photo({
             onError={() => setState("failed")}
             className={cn("size-full object-cover", state === "loading" && "opacity-0")}
           />
-        </a>
+        </OpenPicture>
       )}
       {state === "loading" && <Skeleton className="absolute inset-0 rounded-none" />}
     </div>

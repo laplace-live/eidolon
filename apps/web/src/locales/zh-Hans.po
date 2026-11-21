@@ -1798,6 +1798,10 @@ msgstr "Eidolon"
 msgid "Eidolon {version}"
 msgstr "Eidolon {version}"
 
+#: src/features/home/route.tsx
+msgid "Eidolon {version} · server {server}"
+msgstr "Eidolon {version} · 服务器 {server}"
+
 #: src/lib/labels.ts
 msgid "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
 msgstr "Eidolon 只响应 localhost 或 127.0.0.1，请通过其中之一打开。"
@@ -4327,6 +4331,7 @@ msgstr "与{role}相同（{value}）"
 msgid "Same as Assistant Tasks"
 msgstr "与助手任务相同"
 
+#: src/components/picture-viewer.tsx
 #: src/components/settings-form/settings-card.tsx
 #: src/features/chats/chat-menu.tsx
 #: src/features/settings/account-dialog.tsx
