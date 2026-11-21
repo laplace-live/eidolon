@@ -389,26 +389,31 @@ export function copyTracked(from: string, to: string): void {
   }
 }
 
-/** Writes the package into PACK_DIR, replacing what was there. */
-async function stage(): Promise<Manifest> {
+/**
+ * Writes the package into `root`, replacing what was there: PACK_DIR for npm, a payload folder for
+ * the desktop app.
+ */
+export async function stage(root: string): Promise<Manifest> {
+  // The sources are this checkout's, whatever the shell exports.
+  delete process.env.EIDOLON_APP_ROOT;
   const manifest = packageManifest();
-  rmSync(PACK_DIR, { recursive: true, force: true });
-  mkdirSync(PACK_DIR);
-  const bundles = await bundle(PACK_DIR);
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+  const bundles = await bundle(root);
   checkImports(bundles.imports, manifest);
-  const web = await buildWeb(inPackage(PACK_DIR, webDist));
-  copyTracked(templatesDir(), inPackage(PACK_DIR, templatesDir));
-  copyTracked(builtinSkillsDir(), inPackage(PACK_DIR, builtinSkillsDir));
-  copyTracked(jiebaDir(), inPackage(PACK_DIR, jiebaDir));
-  copyTracked(resamplerDir(), inPackage(PACK_DIR, resamplerDir));
-  copyTracked(voiceModelsDir(), inPackage(PACK_DIR, voiceModelsDir));
+  const web = await buildWeb(inPackage(root, webDist));
+  copyTracked(templatesDir(), inPackage(root, templatesDir));
+  copyTracked(builtinSkillsDir(), inPackage(root, builtinSkillsDir));
+  copyTracked(jiebaDir(), inPackage(root, jiebaDir));
+  copyTracked(resamplerDir(), inPackage(root, resamplerDir));
+  copyTracked(voiceModelsDir(), inPackage(root, voiceModelsDir));
   writeFileSync(
-    join(PACK_DIR, "THIRD_PARTY_NOTICES.md"),
+    join(root, "THIRD_PARTY_NOTICES.md"),
     notices(inlinedPackages(bundles.inlined), web),
   );
-  cpSync(join(HERE, "README.md"), join(PACK_DIR, "README.md"));
-  for (const file of ["LICENSE", "NOTICE"]) cpSync(join(ROOT, file), join(PACK_DIR, file));
-  writeFileSync(join(PACK_DIR, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  cpSync(join(HERE, "README.md"), join(root, "README.md"));
+  for (const file of ["LICENSE", "NOTICE"]) cpSync(join(ROOT, file), join(root, file));
+  writeFileSync(join(root, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }
 
@@ -426,9 +431,7 @@ function pack(): string {
 }
 
 if (import.meta.main) {
-  // The sources are this checkout's, whatever the shell exports.
-  delete process.env.EIDOLON_APP_ROOT;
-  const manifest = await stage();
+  const manifest = await stage(PACK_DIR);
   console.log(`${manifest.name}@${manifest.version} staged in ${relative(ROOT, PACK_DIR)}`);
   if (process.argv.includes("--pack")) console.log(pack());
 }

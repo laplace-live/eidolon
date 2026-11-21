@@ -26,6 +26,7 @@ import {
   type Manifest,
   notices,
   packageManifest,
+  stage,
 } from "../scripts/build.ts";
 import { ENTRIES, NODE_MAJOR, PLATFORMS } from "../src/launcher.ts";
 
@@ -107,6 +108,33 @@ describe("the bundles", () => {
     expect(unknown.status).toBe(2);
     expect(unknown.stderr).toStartWith('eidolon: unknown command "serve"');
   });
+});
+
+describe("the stage", () => {
+  // The desktop app stages its backend the same way, into a folder of its own.
+  test("writes the whole package into the folder it is given", async () => {
+    const at = join(root, "staged", "eidolon");
+    const staged = await stage(at);
+    expect(staged).toEqual(manifest);
+    expect(JSON.parse(readFileSync(join(at, "package.json"), "utf8"))).toEqual(manifest);
+    for (const file of [
+      ...Object.values(ENTRIES),
+      "dist/server.js",
+      LAUNCHER,
+      "web/index.html",
+      "personas/milky-green/persona.yaml",
+      "skills/persona-update/SKILL.md",
+      "data/jieba/dict.txt",
+      "data/resampler/resampler.wasm",
+      "data/models/silero_vad.onnx",
+      "README.md",
+      "LICENSE",
+      "NOTICE",
+      "THIRD_PARTY_NOTICES.md",
+    ]) {
+      expect([file, existsSync(join(at, file))]).toEqual([file, true]);
+    }
+  }, 120_000);
 });
 
 describe("the voice models", () => {
