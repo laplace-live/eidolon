@@ -41,12 +41,16 @@ closing, and a `kill()` there is TerminateProcess, which would end the server in
 own stop. A data home runs one server,
 which holds a lock in its `locks/`: starting again on the port it serves prints a fresh link to it
 and exits 0, and on any other port exits 2, naming its pid and port. A port another program holds
-exits 1. Once it listens, the server adds its `port` and `host` to the lock's `.info`
-(`locks/4273f434b594.info`, JSON beside its `pid`): `host` is the first loopback address it
-bound, as a URL names it (`127.0.0.1`, `[::1]`). The desktop app attaches to a server it finds
-there at that address alone, since another local account could hold the port on another loopback
-address. A second start reads only the `port`: asked for that port, it probes `127.0.0.1` and
-then `[::1]` for a server that proves it holds the token, and prints the link on its own `--host`.
+exits 1. Once it listens, the server adds its `port`, `host` and `linkHost` to the lock's
+`.info` (`locks/4273f434b594.info`, JSON beside its `pid`): `host` is the first loopback address
+it bound, as a URL names it (`127.0.0.1`, `[::1]`), and `linkHost` the host its own links name,
+`localhost` where it bound every address that name has. A second start asked for that port, and
+the desktop app attaching to a server it finds there, reach it at `host` alone, since another
+local account could hold the port on another loopback address. The second start proves there that
+the server holds the token, and prints the link that server would print, never one on its own
+`--host`: beside a server bound to `127.0.0.1` alone, a `localhost` link could take a browser to
+`[::1]` first. Beside a server that records no `host`, from an older version, it exits 2 as on
+another port.
 
 `bun run dev:local` has no supervisor, so Restart stops it, and every reload `--watch` makes
 opens another tab unless you pass `--no-open` (`bun run dev:local --no-open`). To work on the

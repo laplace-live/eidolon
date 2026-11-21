@@ -9,7 +9,7 @@ import {
   spawnProcess,
 } from "@eidolon/config";
 import { type BotDeps, type BotServer, startBotServer } from "../server.ts";
-import { type LocalHost, parseLocalArgs, resolveLocalHost } from "./args.ts";
+import { parseLocalArgs, resolveLocalHost } from "./args.ts";
 import { createLocalExtension } from "./extension.ts";
 import { parseListedOrigins } from "./guard.ts";
 import { usePersonaMemoryScope } from "./identity.ts";
@@ -119,19 +119,26 @@ export function shutdownOnce(
   };
 }
 
-function linkUrl(host: LocalHost, port: number, token: LocalToken, nowSeconds: number): string {
-  return `http://${host.urlHost}:${port}/#${token.linkCode(nowSeconds)}`;
+function linkUrl(urlHost: string, port: number, token: LocalToken, nowSeconds: number): string {
+  return `http://${urlHost}:${port}/#${token.linkCode(nowSeconds)}`;
 }
 
 function isAddressInUse(error: unknown): boolean {
   return (error as { code?: unknown } | null)?.code === "EADDRINUSE";
 }
 
-/** Whether `port` is this data home's Eidolon: it proves it holds the token without seeing ours. */
-async function answersAsThisEidolon(port: number, token: LocalToken): Promise<boolean> {
+/**
+ * Whether `port` is this data home's Eidolon at one of `hosts`: it proves it holds the token
+ * without seeing ours.
+ */
+async function answersAsThisEidolon(
+  hosts: readonly string[],
+  port: number,
+  token: LocalToken,
+): Promise<boolean> {
   const nonce = probeNonce();
   const expected = token.probeProof(nonce);
-  for (const host of ["127.0.0.1", "[::1]"]) {
+  for (const host of hosts) {
     try {
       const response = await fetch(`http://${host}:${port}/api/local/session?probe=${nonce}`, {
         redirect: "manual",
@@ -158,32 +165,34 @@ function tokenOrExit(io: BootIo): LocalToken | null {
   }
 }
 
-/** Prints a fresh link to this data home's Eidolon and exits 0, if `port` answers as it. */
+/**
+ * Prints a fresh link to this data home's Eidolon, naming `urlHost`, and exits 0, if `port`
+ * answers as it at one of `hosts`.
+ */
 async function linkToRunning(
   port: number,
-  host: LocalHost,
+  hosts: readonly string[],
+  urlHost: string,
   token: LocalToken,
   io: BootIo,
 ): Promise<boolean> {
-  if (!(await answersAsThisEidolon(port, token))) return false;
-  io.stdout(`Eidolon is already running: ${linkUrl(host, port, token, io.nowSeconds())}\n`);
+  if (!(await answersAsThisEidolon(hosts, port, token))) return false;
+  io.stdout(`Eidolon is already running: ${linkUrl(urlHost, port, token, io.nowSeconds())}\n`);
   io.exit(0);
   return true;
 }
 
 /**
  * A second server on the data home exits 2 naming the first, unless it was asked for the first's
- * port, which gets that server's link as a taken port would.
+ * port, which gets the link that server would print, as a taken port would.
  */
-async function refuseSecond(
-  holder: ServerHolder,
-  port: number,
-  host: LocalHost,
-  io: BootIo,
-): Promise<null> {
-  if (holder.port !== null && holder.port === port) {
+async function refuseSecond(holder: ServerHolder, port: number, io: BootIo): Promise<null> {
+  // Probed only at the address it records: on another loopback address the port may be another
+  // local account's, which could relay a probe to it and pass.
+  const { host, linkHost } = holder;
+  if (holder.port === port && host !== null && linkHost !== null) {
     const token = tokenOrExit(io);
-    if (token === null || (await linkToRunning(port, host, token, io))) return null;
+    if (token === null || (await linkToRunning(port, [host], linkHost, token, io))) return null;
   }
   const named = [
     holder.pid === null ? null : `pid ${holder.pid}`,
@@ -220,7 +229,7 @@ export async function bootLocal(
   ensureDataHome();
   // Before the token, which a first start makes: two first starts would each write their own.
   const lock = takeServerLock();
-  if ("holder" in lock) return refuseSecond(lock.holder, args.port, host, io);
+  if ("holder" in lock) return refuseSecond(lock.holder, args.port, io);
   let token: LocalToken | null = null;
   try {
     token = tokenOrExit(io);
@@ -277,7 +286,7 @@ export async function bootLocal(
   } catch (error) {
     lock.release();
     if (!isAddressInUse(error)) throw error;
-    if (!(await linkToRunning(args.port, host, token, io))) {
+    if (!(await linkToRunning(args.port, ["127.0.0.1", "[::1]"], host.urlHost, token, io))) {
       io.stderr(`eidolon: port ${args.port} is taken by another program; choose one with --port\n`);
       io.exit(1);
     }
@@ -299,13 +308,13 @@ export async function bootLocal(
   io.onShutdown(() => stop(0));
   const port = bot.server.port;
   try {
-    recordServerPort(port, new URL(bot.server.url).hostname);
+    recordServerPort(port, new URL(bot.server.url).hostname, host.urlHost);
   } catch (error) {
     logger.warning(`A second start won't be told where this one listens: ${errorText(error)}`);
   }
   await local.startTasks();
   io.notify({ kind: "listening", port });
-  const url = linkUrl(host, port, token, io.nowSeconds());
+  const url = linkUrl(host.urlHost, port, token, io.nowSeconds());
   io.stdout(`Eidolon is ready: ${url}\n`);
   if (args.open && !envOptional("SSH_CONNECTION")) io.openBrowser(url);
   return { bot, url, restart };
