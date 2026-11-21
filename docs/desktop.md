@@ -31,10 +31,11 @@ apps/desktop/
                          requirement release builds will carry
   assets/                what main loads at run time through process.resourcesPath: the tray icon
   scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
-                         zip.ts and natives.ts; vite-common.ts, electron-env.ts; dev-smoke.ts
-                         with dev-smoke/, the dev smoke; smoke.ts, the packaged smoke; and
-                         smoke/, the kit both share, with the packaged smoke's packaged.ts and
-                         nsis.ts
+                         zip.ts and natives.ts; vite-common.ts, electron-env.ts;
+                         test-on-electron.ts, the Electron lane; system-ca.ts, CI's system CA
+                         proof; dev-smoke.ts with dev-smoke/, the dev smoke; smoke.ts, the
+                         packaged smoke; and smoke/, the kit both share, with the packaged
+                         smoke's packaged.ts and nsis.ts
   src/main/              main: the Electron-free modules that decide (controller, attach, forwarder,
                          backend, environment, login-shell, pages, policy, menus, window-options,
                          quit-check, quit-flow, strings, shell-pages, log-filter, log-files,
@@ -54,8 +55,8 @@ apps/desktop/
 | `bun run dev:desktop` | `scripts/dev.ts`: watch-builds main, the preload and the shell pages, serves `apps/web` from Vite on `127.0.0.1:5173`, and runs the unpackaged app with `--eidolon-dev-server`, its backend from source. It builds `apps/web/dist` first when there is none, since that backend won't start without one. Arguments after it go to Electron, such as `--user-data-dir=<folder>` |
 | `bun run build:desktop` | `scripts/build.ts`: stages this machine's backend in `apps/desktop/.stage/<target>/eidolon` ([The payload](#the-payload)), then Vite-builds `apps/desktop/dist`: main as one ES module with every dependency but `electron` inlined, the preload as CommonJS (a sandboxed preload can't be a module), and the shell pages |
 | `bun run package:desktop` | `scripts/package.ts`: electron-builder on `dist/` and this machine's stage, into `apps/desktop/.out`, unsigned, at version `0.0.0-dev` ([Packaging](#packaging)). Arguments after it go to electron-builder, such as `-c.compression=store` |
-| `bun run smoke:desktop:dev` | `scripts/dev-smoke.ts`, the dev smoke, on macOS: builds `apps/web/dist` and `apps/desktop/dist` (`--no-build` runs on what is there), then walks the unpackaged app under Playwright in background mode, on loopback fakes, a line per step ([The dev smoke](#the-dev-smoke)). `--keep` keeps its screenshots and results after a pass |
-| `bun run smoke:desktop` | `scripts/smoke.ts`, the packaged smoke: the app `package:desktop` left in `apps/desktop/.out`, on a temporary home and profile with its providers faked, in background mode unless `--headful` ([The packaged smoke](#the-packaged-smoke)). It never builds or packages |
+| `bun run smoke:desktop:dev` | `scripts/dev-smoke.ts`, the dev smoke, on macOS: builds `apps/web/dist` and `apps/desktop/dist` (`--no-build` runs on what is there), then walks the unpackaged app under Playwright on a temporary home and profile with its providers faked, in background mode unless `--headful`, a line per step ([The dev smoke](#the-dev-smoke)). `--keep` keeps its screenshots and results after a pass |
+| `bun run smoke:desktop` | `scripts/smoke.ts`, the packaged smoke: the app `package:desktop` left in `apps/desktop/.out`, on a temporary home and profile with its providers faked, in background mode unless `--headful`, driven through its backend's API; on Windows it installs the NSIS setup first and uninstalls it after ([The packaged smoke](#the-packaged-smoke)). It never builds or packages |
 
 Closing the window only hides it. Quit from the menus, ⌘Q, the tray, or a second launch with
 `--quit` (and the run's `--user-data-dir`, if it had one), which `dev:desktop` follows by closing
@@ -568,6 +569,12 @@ that could show something through it.
 - **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
   is granted only when the app runs with Chromium's `--use-fake-device-for-media-stream`, on any
   platform, and otherwise denied, since a grant would record the owner; main.log says which.
+- **Its limits:** macOS registers each launch, a second launch and a `--quit` included, as a
+  regular app, Dock icon and all, for about 50–150 ms before main's first line can make it an
+  accessory; only `LSUIElement` in the Info.plist would avoid that, and the shipped app needs its
+  Dock icon. Chromium opens a file input's chooser, a date field's picker and a datalist's
+  suggestions from the page, with no hook in main. A test keeps to [the rules for a
+  driver](#driving-it-in-background-mode).
 
 ## Testing
 
@@ -584,7 +591,8 @@ read and the merge, Windows' case-blind names included; the quit check and flow;
 navigation, permissions and the debugging switches; the bounds, chrome, menus and pages;
 background mode's decisions; both languages' strings; the shell pages' escaping and CSP; the
 bridges' sender rule; the logs' rotation and link filter; stage-backend's parts on made-up
-lockfiles, PE files and zips; the manifest; and the import boundary.
+lockfiles, PE files and zips; the smokes' kit and parts, the fakes over real loopback requests
+included; the manifest; and the import boundary.
 
 ### The stage test
 
@@ -604,26 +612,47 @@ bun run build:desktop && EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/
 
 The backend runs on Electron's Node, not the Node `bun run test` uses, so after an Electron bump,
 a change to `jsRuntime()`, or a test that spawns `process.execPath` with an environment of its
-own, the backend suite runs there too. No workflow runs it: run it by hand from the repository
-root, with temporary homes as any test run:
+own, the backend suite runs there too. From the repository root:
 
 ```bash
-ELECTRON=$(cd apps/desktop && node -p 'require("electron")')
-ELECTRON_RUN_AS_NODE=1 "$ELECTRON" node_modules/vitest/vitest.mjs run --project node
+node apps/desktop/scripts/test-on-electron.ts [paths] [vitest flags]
 ```
 
-The first `require("electron")` downloads the binary and says so on stdout, so let it finish once
-before taking the path. Two things differ on that Node. `process.execPath` is the Electron binary,
-which starts its GUI unless the child's environment carries `ELECTRON_RUN_AS_NODE`: a test that
-spawns `process.execPath` with an environment of its own merges `jsRuntime().env` into it, as the
-app's own spawns do. And a `Date` keeps its local hours when `TZ` changes at run time, so a test of
-another time zone runs in a child process started in it.
+It runs Vitest's `node` project, or the paths given in it, on the binary `require("electron")`
+names from `apps/desktop` (downloaded on the first run), as Node (`ELECTRON_RUN_AS_NODE=1`), and
+exits with Vitest's code. `desktop.yml` runs the whole project there on macOS, and on Windows the
+tests `ts.yml`'s Windows job runs ([In CI](#in-ci)). Two things differ on that Node.
+`process.execPath` is the Electron binary, which starts its GUI unless the child's environment
+carries `ELECTRON_RUN_AS_NODE`: a test that spawns `process.execPath` with an environment of its
+own merges `jsRuntime().env` into it, as the app's own spawns do. And a `Date` keeps its local hours
+when `TZ` changes at run time, so a test of another time zone runs in a child process started in
+it.
 
 ### The smokes
 
-`bun run smoke:desktop:dev` (`scripts/dev-smoke.ts`, the dev smoke, for the unpackaged app) walks the
-app as its owner would ([below](#the-dev-smoke)). `bun run smoke:desktop` (`scripts/smoke.ts`, the
-packaged smoke, for the fused app) checks what packaging made of it ([below](#the-packaged-smoke)).
+Two smokes run the app end to end on a temporary data home and profile, every provider it reaches
+faked on loopback, so they bill nothing. `bun run smoke:desktop:dev` (`scripts/dev-smoke.ts`, [the
+dev smoke](#the-dev-smoke)) walks the unpackaged app as its owner would, under Playwright;
+`bun run smoke:desktop` (`scripts/smoke.ts`, [the packaged smoke](#the-packaged-smoke)) checks what
+packaging made of the fused app, through its backend's API. Each runs on Node from the repository
+root, prints a `PASS` or `FAIL` line for each check with what decided it, and exits 0 only when
+every check passed.
+
+- **Background mode.** Each runs the app in [background mode](#background-mode), under the focus
+  watch below, and keeps to the [rules for a driver](#driving-it-in-background-mode). `--headful`
+  turns background mode and the watches off, for a developer watching on their own screen: the
+  window shows, and a call is heard.
+- **The run's folder,** printed at the start: `eidolon-smoke-desktop-dev-*` or
+  `eidolon-smoke-desktop-*`, under `RUNNER_TEMP` in CI and the OS's temporary folder elsewhere. It
+  holds the app's data home (`home`), its `real-home` and `shared-skills`, its profile (`profile`:
+  `logs/main.log`, `logs/backend.log` and background mode's `downloads`), and `scratch`, the
+  launches' output and the files the smoke sends. A passing run removes it, all but the packaged
+  smoke's `results.json`, and a failing one keeps it; Ctrl-C stops whatever the smoke started,
+  keeps it and exits 130 (143 on SIGTERM).
+- **The kit's last checks,** after the smoke's own: nothing the smoke started is left running
+  (anything that is gets stopped by pid), the focus watch saw nothing wrong, and every request to
+  the fakes carried their key to a route they serve; after a packaged run on macOS, also that
+  `live.laplace.eidolon`'s preferences are as they were.
 
 Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers without Electron:
 
@@ -637,32 +666,47 @@ Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers
   never a credential, setting or provider URL (`local-smoke.ts`'s drop list), then adds the fakes'
   accounts, the run's homes and the test switches: no `.env`, no login shell, background mode
   unless `--headful`.
-- **`kit.ts`:** `runSmoke()`, which gives each run a temporary data home and profile (under
-  `RUNNER_TEMP` in CI), removed after a pass and kept after a failure; launches the app as its
-  binary or under Playwright; reads main.log, backend.log, the server lock's `.info` and
-  `local-token`, and calls the backend as main's forwarder does; and at the end, or on Ctrl-C,
-  stops by pid whatever still runs (`processes.ts`), fails the run for anything left, and puts back
-  macOS's `live.laplace.eidolon` preferences a packaged run writes.
-- **`focus.ts`:** on macOS in background mode, `lsappinfo front` every 50 ms: the app in front, by
-  name or by a process the smoke started or one under it, fails the run, and so does its main
-  process not being an accessory (`UIElement`) once it runs, or never being seen as one, and a
-  watch that sampled nothing.
+- **`kit.ts`:** `startSmoke()`, which makes the run's folder, starts the fakes and the focus watch
+  and catches Ctrl-C, and `finish()`, which adds the last checks and removes or keeps the folder
+  (`runSmoke()` wraps the two around a body). It launches the app as its binary or under
+  Playwright's `_electron`, reads main.log, backend.log, the server lock's `.info` and
+  `local-token`, calls the backend as main's forwarder does, and on macOS puts back the
+  `live.laplace.eidolon` preferences a packaged run writes. `checkCanary()` checks that a key the
+  smoke puts in its own environment never reaches the backend: only the fakes' accounts take a key
+  from the environment, and on macOS `ps` shows the backend's environment without it.
+- **`processes.ts`:** what the smoke started and everything under it, from the process table (`ps`,
+  or PowerShell's `Win32_Process` on Windows), recorded as it goes so a child that outlives its
+  parent is still known, and stopped by pid at the end (`killTree` on Windows).
+- **`focus.ts`, the focus watch,** on macOS outside `--headful`: `lsappinfo front` every 50 ms. The
+  app in front, by name (Electron or Eidolon) or as a process the smoke started or one under it,
+  fails the run, and so does a system prompt in front (SecurityAgent, UserNotificationCenter,
+  CoreServicesUIAgent, universalAccessAuthWarn, the Open and Save panel), whoever raised it: one the
+  owner opens during a run fails it too. The owner switching between their own apps is no failure.
+  Every 500 ms it reads each main process's `ApplicationType`, which must be `UIElement` (an
+  accessory) within 10 s of its launch, stay so, and be seen so at least once; and a watch that
+  sampled nothing fails.
 
 #### The dev smoke
 
-`bun run smoke:desktop:dev` runs on Node from the repository root, on macOS: its call speaks through
-`say` and `afconvert`. It first builds `apps/web/dist` and `apps/desktop/dist`'s main, preload and
-shell pages with Vite, so it never walks a stale build (`--no-build` runs on what is there; the
-backend runs from source, so the stage isn't one of them). Then it drives the unpackaged app with
-Playwright's `_electron`, on the kit's fakes, temporary home and profile, in background mode under
-the focus watch and a window watch of its own (`dev-smoke/windows.ts`), and prints a line for each
-step. The window watch reads the window server's list of on-screen windows every 50 ms through
+`bun run smoke:desktop:dev [--no-build] [--keep] [--headful]` runs on macOS: its call speaks through
+`say` and `afconvert`, and its window watch reads macOS's window server. It first builds
+`apps/web/dist` and `apps/desktop/dist`'s main, preload and shell pages with Vite, in about half a
+second, so it never walks a stale build (`--no-build` runs on what is there, and refuses when a
+build is missing; the backend runs from source, so the stage isn't one of them). It renders the
+call's speech before the app starts: Tingting's Mandarin from `say -v Tingting -o <file>`, never
+aloud, converted by `afconvert` to a 48 kHz mono 16-bit WAV and turned down 12 dB, between 1 s and
+3 s of silence. Then it drives the unpackaged app with Playwright's `_electron`, with
+`--lang=en-US`, so the page's labels are English on any machine, and Chromium's fake microphone
+playing that WAV, under the focus watch and a window watch of its own (`dev-smoke/windows.ts`).
+The window watch reads the window server's list of on-screen windows every 50 ms through
 `osascript`: a window of the app's on screen fails the run, even one never in front or focused,
 which the focus watch can't see, and the owner's own windows in the list show that it sees any.
 
+Each step prints one line, made of the checks inside it:
+
 1. **Cold start:** Home at `eidolon-app://app/`, with no sign-in and no console error, its footer
-   naming both versions; the backend on a free port, with no try at 7860; the canary key never
-   reaches the backend.
+   naming both versions; the backend on a free port, with no try at 7860; main off screen (an
+   accessory, its window neither visible nor focused); the canary key never reaches the backend.
 2. **A chat:** her reply streams through the forwarder, its first part shown about 2 s before the
    rest, as the fake holds it. A picture and a text file sent with a line (set on the composer's
    input, never a click, which opens the file chooser) reach her mind; the picture opens in the
@@ -676,9 +720,9 @@ which the focus watch can't see, and the owner's own windows in the list show th
    the sidebar's clear of the traffic lights on macOS.
 4. **Settings' Restart,** from the banner a setting read at boot puts up: main holds requests, the
    backend exits 75 and comes back on the same port, and the page says it's back.
-5. **A call** on Chromium's fake microphone, fed Tingting's Mandarin (rendered by `say -o` into a
-   file, never aloud): her hearing gets the speech, her answer is in the chat's log, her voice
-   arrives over WebRTC and plays in the page, and the window is never audible.
+5. **A call** on Chromium's fake microphone: her hearing gets the speech, her answer is in the
+   chat's log, her voice arrives over WebRTC and plays in the page, and the window is never audible
+   while the audio service runs with `--mute-audio`.
 6. **Close and reopen:** closing hides the window while the backend serves on, and a second launch
    shows it again, never on screen or in front.
 7. **Attach:** after `--quit` ends that launch and its backend, a server started first on the same
@@ -689,16 +733,20 @@ which the focus watch can't see, and the owner's own windows in the list show th
    with exit 0, leaving nothing running and no error line in either log.
 
 After the steps come the window watch's line and the kit's. The run's folder keeps
-`results/results.json`, with every check and each step's time, and the screenshots; like the rest of
-the folder they go after a pass, unless `--keep` copies them beside it first. A run takes about
-30 s and bills nothing.
+`results/results.json`, with every check and each step's time, and `results/screenshots`; a pass
+removes them with the rest of the folder, unless `--keep` first copies them to
+`<run's folder>-results`. A run takes about 30 s. With `--headful`, the checks that only background
+mode makes true (off screen, never audible, main.log's background lines) are skipped, and a hook
+the smoke adds in main saves downloads into the same folder instead of asking.
 
 #### The packaged smoke
 
-`bun run smoke:desktop` (`scripts/smoke.ts`, the packaged smoke) smokes the fused app
-`bun run package:desktop` left in `apps/desktop/.out`, or says how to make it. Playwright and CDP
-can't drive a fused build, so it calls the backend's API with the Bearer, as main's forwarder does,
-and runs the app's binary in node mode beside it, as main runs the backend:
+`bun run smoke:desktop [--headful]` smokes the fused app `bun run package:desktop` left in
+`apps/desktop/.out`: on macOS `mac-arm64/Eidolon.app`, on Windows the NSIS setup, the only `.exe`
+there. It never builds or packages: with no build it says how to make one (`bun run build:web &&
+bun run build:desktop && bun run package:desktop`) and exits 1 before starting anything.
+Playwright and CDP can't drive a fused build, so it calls the backend's API with the Bearer, as
+main's forwarder does, and runs the app's binary in node mode beside it, as main runs the backend:
 
 - **The payload's natives,** before the app starts: `scripts/natives.ts` on the binary writes and
   opens a LanceDB table, runs Silero on an onnxruntime CPU session and makes a JPEG with sharp,
@@ -711,8 +759,9 @@ and runs the app's binary in node mode beside it, as main runs the backend:
   answers and `/` is the web app.
 - **Its natives in use:** a photo with EXIF orientation 6 comes back from a chat upright and bare,
   through the backend's sharp; the backend maps LanceDB from its start and sharp with the photo,
-  from the payload; an `ingest-facts` job, the binary in node mode under the backend, writes her
-  facts through the fakes' embeddings, and a search on the binary reads them back.
+  from the payload (`lsof` on macOS, the process's modules on Windows); an `ingest-facts` job, the
+  binary in node mode under the backend, writes her facts through the fakes' embeddings, and a
+  search on the binary reads them back.
 - **A restart** through Settings' route keeps the port and changes the backend's pid.
 - **`--quit`:** the second launch and main exit 0, the backend stops on its stop trigger rather
   than being killed, nothing the app started is left running, and neither log holds an error line,
@@ -721,20 +770,83 @@ and runs the app's binary in node mode beside it, as main runs the backend:
   the environment of any but Apple's own binaries. The backend's error lines include a JavaScript
   error printed past its logger.
 
-On Windows it first installs the NSIS setup, the only `.exe` in `.out`, silently for the user
-(`/S`), and smokes the installed `%LOCALAPPDATA%\Programs\eidolon\Eidolon.exe`. After the quit it
-runs HKCU's uninstall command with `/S` and checks that the install folder and its entry are gone
-and the run's data home is unchanged, file for file by hash. Where Eidolon is installed for the
-user already, it refuses to run rather than replace and remove that install. Each check prints a
-line, and `results.json` in the run's folder keeps them with the timings: all that stays of a
-passing run.
+On Windows it first installs the NSIS setup silently for the user (`/S`), and smokes the
+installed `%LOCALAPPDATA%\Programs\eidolon\Eidolon.exe`. After the quit it runs HKCU's uninstall
+command with `/S` and checks that the install folder and its entry are gone and the run's data home
+is unchanged, file for file by hash. Where Eidolon is installed for the user already, it refuses to
+run rather than replace and remove that install. Each step has a time limit of its own, so a hung
+run still ends in failed checks, its uninstall and results included, well inside `desktop.yml`'s 15
+minutes. After `finish()` it writes `results.json`, every check with the timings, into the run's
+folder, which a pass leaves holding that file alone. A run takes about 6–8 s on macOS.
 
-In CI, `ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test
-skips. `.github/workflows/desktop.yml`, which `docker.yml` skips, builds, stages and packages the
-app unsigned on macOS arm64 and Windows x64, and runs the stage test, the Electron lane (on
-Windows, the tests `ts.yml`'s Windows job runs), the packaged smoke and the system CA proof on each.
-When the packaged smoke fails, its `results.json`, the profile's logs and the launches' output are
-uploaded as `<OS>-smoke-desktop`, without the run's home and its `local-token`.
+### In CI
+
+`ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips.
+`.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
+request that changes more than docs, and on a dispatch: the payload comes from `bun.lock` and the
+backend's packages, so a filter on `apps/desktop` would miss the changes it checks. Its one job runs
+on `macos-latest` (macOS arm64) and `windows-latest` (Windows x64), neither cancelling the other,
+in bash on both, with Bun from `package.json` and Node 24:
+
+1. **Install:** `bun install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
+   build step needs a package's install script, and a signing step must follow none.
+2. **Build:** `bun run build:desktop` stages the runner's backend and builds `dist/`.
+3. **Package:** `bun run package:desktop -c.compression=store`, unsigned at `0.0.0-dev`, ad hoc on
+   macOS and never with a keychain identity, an NSIS setup on Windows; stored uncompressed, which
+   packs faster.
+4. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
+   instead of skipping; run after packaging, it also holds the app's payload to the stage.
+5. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
+   Windows the tests `ts.yml`'s Windows job runs, with its filters.
+6. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
+   NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
+   output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds
+   `local-token`.
+7. **`--use-system-ca` on the packaged binary:** `scripts/system-ca.ts` puts a throwaway CA in the
+   runner's machine trust store (the System keychain through `sudo -n security` on macOS,
+   LocalMachine's Root through `certutil` on Windows), serves https on loopback with a certificate
+   it signed, and checks that the packaged binary in node mode reaches it with `--use-system-ca`
+   and not without, from the backend and from a job the backend runs. Then it deletes the CA, while
+   macOS keeps its admin trust entry, orphaned: removing that waits on a dialog no runner answers.
+   It runs only where `CI=true`, and refuses anywhere else: it changes the machine's trust store.
+8. **The installers,** the DMG and the NSIS setup, uploaded as `<OS>-installers-dev` and kept 14
+   days; not the macOS zip, which only updates read.
+
+Each check runs once the step it needs succeeded, so one that fails hides none of the others. A
+push to a pull request cancels the run it replaces; a dispatch neither waits nor cancels. No
+identity signs anything, and nothing goes anywhere but the run's own artifacts.
+
+### Driving it in background mode
+
+Anything that drives the app on a machine someone is working on, the smokes and an agent's walk
+alike, runs it in background mode on a temporary home and profile ([below](#running-it-by-hand)),
+and keeps to these rules:
+
+- **The microphone:** only Chromium's `--use-fake-device-for-media-stream`, with
+  `--use-file-for-fake-audio-capture=<wav>` and `--disable-features=AudioServiceSandbox` to feed a
+  call a file (without the last it captures silence). Never `--use-fake-ui-for-media-stream`, which
+  answers a request past main's permission handler, the camera included: the kit refuses it.
+- **Files** go up through Playwright's `setInputFiles` or its `filechooser` event, never a click on a
+  file input, and nothing opens a date field's picker or types into a datalist's field: Chromium
+  opens those from the page, with no hook in main to keep them off the screen.
+- **After a navigation main cancelled,** such as a link to the web, Playwright's locator clicks wait
+  forever: use `page.mouse` or `page.evaluate`.
+- **Off screen** is checked by main's pid: `lsappinfo` gives its `ApplicationType` as `UIElement`,
+  and every window's `isVisible()` and `isFocused()` are false. `app.dock.isVisible()` can read true
+  while a second launch's process exists, and `isVisible()` reads false for a window behind
+  another's, which is why the dev smoke also watches the window server's list.
+- **Nothing is heard:** background mode mutes Chromium, and a call's reply still arrives over
+  WebRTC for a check to find. Speech for a call comes from `say -o <file>`, never aloud, and nothing
+  runs `afplay`.
+- **macOS's preferences:** a packaged run writes `~/Library/Preferences/live.laplace.eidolon.plist`
+  whatever its profile, so put it back as it was: `defaults export live.laplace.eidolon <file>`
+  before, then `defaults import` it after, or where there was none, `defaults delete
+  live.laplace.eidolon` and delete the file, which cfprefsd leaves behind empty. The packaged smoke
+  does this itself. An unpackaged run writes `com.github.Electron.plist`, which predates these
+  runs: leave it.
+- **The one thing on screen:** a watch from outside sees the Dock flicker of each launch,
+  [background mode's limit](#background-mode), as a regular app for 50–150 ms that never comes to
+  the front. The focus watch gives main 10 s to become an accessory.
 
 ### Running it by hand
 
@@ -745,13 +857,12 @@ provider or other `EIDOLON_*` variable, with an `EIDOLON_SHARED_SKILLS` of its o
 shared skills stay out too ([The environment](#the-environment)): `appEnv()` in
 `scripts/smoke/env.ts` builds one, from `local-smoke.ts`'s drop list. Leave `local-smoke.ts`
 itself alone: it isn't paths-ignored, so a change to it deploys production. A call needs Chromium's
-`--use-fake-device-for-media-stream`, or background mode denies the microphone; to feed it a WAV
-file, add `--use-file-for-fake-audio-capture=<file>` and `--disable-features=AudioServiceSandbox`,
-without which it captures silence.
+fake microphone, or background mode denies it ([above](#driving-it-in-background-mode)).
 
 - **Unpackaged,** after `bun run build:desktop` (or only its Vite builds) and `bun run build:web`,
-  `"$ELECTRON" apps/desktop --user-data-dir=<profile>` runs it with its backend from source serving
-  `apps/web/dist`; Playwright's `_electron` drives it the same way.
+  `"$(cd apps/desktop && node -p 'require("electron")')" apps/desktop --user-data-dir=<profile>`
+  runs it with its backend from source serving `apps/web/dist`; Playwright's `_electron` drives it
+  the same way.
 - **Packaged,** run `apps/desktop/.out/mac-arm64/Eidolon.app/Contents/MacOS/Eidolon
   --user-data-dir=<profile>` (`.out\win-unpacked\Eidolon.exe` on Windows), and drive its backend
   once main.log says the window shows `eidolon-app://app/`:
@@ -761,9 +872,8 @@ without which it captures silence.
     "http://127.0.0.1:$(jq .port "$EIDOLON_HOME/locks/4273f434b594.info")/api/local/status"
   ```
 
-- **Stop** either with the same command and `--quit`. On macOS a packaged run writes
-  `~/Library/Preferences/live.laplace.eidolon.plist` whatever the profile: run
-  `defaults delete live.laplace.eidolon`, then delete the file, which cfprefsd leaves behind empty.
+- **Stop** either with the same command and `--quit`, then put macOS's preferences back after a
+  packaged run ([above](#driving-it-in-background-mode)).
 
 ## Bumping Electron
 
@@ -784,17 +894,18 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
      page in dev, with no permission asked;
    - node mode's flags: its Node still takes `--disable-sigusr1` and `--use-system-ca`, SIGUSR1 to
      the backend opens no inspector, and an https fetch from the backend and from a job trusts a CA
-     only the OS store holds;
+     only the OS store holds, which `desktop.yml`'s `--use-system-ca` step proves on both
+     platforms ([In CI](#in-ci));
    - the fuses: a new one keeps Electron's default unless `electron-builder.yml` lists it, so read
      the packaged binary's fuse wire with a current `@electron/fuses`;
    - its Node's major, which Vite's `node24` target (`scripts/vite-common.ts`) and the repo's Node
      24 assume, and its system minimums, which this doc restates;
    - on Windows, the unsigned-PE list, which takes Electron's own DLLs from its zip.
 5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `bun run test
-5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `bun run test
-   apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test) and
-   `bun run smoke:desktop`, which `desktop.yml` also runs on Windows; and run [the dev
-   smoke](#the-dev-smoke) on macOS.
+   apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test) and both
+   [smokes](#the-smokes), `bun run smoke:desktop` and, on macOS, `bun run smoke:desktop:dev`.
+   Then let `desktop.yml` run on the pull request: the system CA proof runs only there, and so does
+   the packaged smoke on Windows, with its install and uninstall.
 
 ## Measured
 
