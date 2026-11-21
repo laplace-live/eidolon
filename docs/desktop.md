@@ -30,8 +30,9 @@ apps/desktop/
                          requirement release builds will carry
   assets/                what main loads at run time through process.resourcesPath: the tray icon
   scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
-                         zip.ts and natives.ts; vite-common.ts, electron-env.ts; smoke.ts and
-                         dev-smoke.ts, the smokes' placeholders, and smoke/, the kit both share
+                         zip.ts and natives.ts; vite-common.ts, electron-env.ts; dev-smoke.ts
+                         with dev-smoke/, the dev smoke; smoke.ts, the packaged smoke's
+                         placeholder; and smoke/, the kit both share
   src/main/              main: the Electron-free modules that decide (controller, attach, forwarder,
                          backend, environment, login-shell, pages, policy, menus, window-options,
                          quit-check, quit-flow, strings, shell-pages, log-filter, log-files,
@@ -51,7 +52,7 @@ apps/desktop/
 | `bun run dev:desktop` | `scripts/dev.ts`: watch-builds main, the preload and the shell pages, serves `apps/web` from Vite on `127.0.0.1:5173`, and runs the unpackaged app with `--eidolon-dev-server`, its backend from source. It builds `apps/web/dist` first when there is none, since that backend won't start without one. Arguments after it go to Electron, such as `--user-data-dir=<folder>` |
 | `bun run build:desktop` | `scripts/build.ts`: stages this machine's backend in `apps/desktop/.stage/<target>/eidolon` ([The payload](#the-payload)), then Vite-builds `apps/desktop/dist`: main as one ES module with every dependency but `electron` inlined, the preload as CommonJS (a sandboxed preload can't be a module), and the shell pages |
 | `bun run package:desktop` | `scripts/package.ts`: electron-builder on `dist/` and this machine's stage, into `apps/desktop/.out`, unsigned, at version `0.0.0-dev` ([Packaging](#packaging)). Arguments after it go to electron-builder, such as `-c.compression=store` |
-| `bun run smoke:desktop:dev` | `scripts/dev-smoke.ts`, the dev smoke: not written yet, so it says so and exits 1 ([The smokes](#the-smokes)) |
+| `bun run smoke:desktop:dev` | `scripts/dev-smoke.ts`, the dev smoke, on macOS: builds `apps/web/dist` and `apps/desktop/dist` (`--no-build` runs on what is there), then walks the unpackaged app under Playwright in background mode, on loopback fakes, a line per step ([The dev smoke](#the-dev-smoke)). `--keep` keeps its screenshots and results after a pass |
 | `bun run smoke:desktop` | `scripts/smoke.ts`, the packaged smoke: not written yet either |
 
 Closing the window only hides it. Quit from the menus, ⌘Q, the tray, or a second launch with
@@ -613,10 +614,10 @@ another time zone runs in a child process started in it.
 
 ### The smokes
 
-`bun run smoke:desktop:dev` (`scripts/dev-smoke.ts`, the dev smoke, for the unpackaged app) and
-`bun run smoke:desktop` (`scripts/smoke.ts`, the packaged smoke, for the fused app) aren't written
-yet: each says so and exits 1. Meanwhile what the window or the backend does is checked by running
-the app in background mode ([by hand](#running-it-by-hand)).
+`bun run smoke:desktop:dev` (`scripts/dev-smoke.ts`, the dev smoke, for the unpackaged app) walks the
+app as its owner would ([below](#the-dev-smoke)). `bun run smoke:desktop` (`scripts/smoke.ts`, the
+packaged smoke, for the fused app) isn't written yet: it says so and exits 1, and meanwhile the
+packaged app is checked by running it in background mode ([by hand](#running-it-by-hand)).
 
 Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers without Electron:
 
@@ -639,6 +640,44 @@ Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers
 - **`focus.ts`:** on macOS in background mode, `lsappinfo front` every 50 ms: the app in front, by
   name or by a process the smoke started or one under it, fails the run, and so does its main
   process not being an accessory (`UIElement`) once it runs.
+
+#### The dev smoke
+
+`bun run smoke:desktop:dev` runs on Node from the repository root, on macOS: its call speaks through
+`say` and `afconvert`. It first builds `apps/web/dist` and `apps/desktop/dist`'s main, preload and
+shell pages with Vite, so it never walks a stale build (`--no-build` runs on what is there; the
+backend runs from source, so the stage isn't one of them). Then it drives the unpackaged app with
+Playwright's `_electron`, on the kit's fakes, temporary home and profile, in background mode under
+the focus watch, and prints a line for each step:
+
+1. **Cold start:** Home at `eidolon-app://app/`, with no sign-in and no console error, its footer
+   naming both versions; the canary key never reaches the backend.
+2. **A chat:** her reply streams through the forwarder, its first part shown about 2 s before the
+   rest, as the fake holds it. A picture and a text file sent with a line (set on the composer's
+   input, never a click, which opens the file chooser) reach her mind; the picture opens in the
+   in-page viewer, whose Save saves it, and the text file saves through `<a download>`, each whole
+   into the profile's `downloads` folder. Her selfie, from `take_selfie` on the fakes' image
+   model, opens and saves the same way.
+3. **Theme and language:** the page's theme setting reaches `nativeTheme.themeSource` as it is, its
+   language rebuilds the menus in it, and its `[data-shell]` rows drag while their controls don't,
+   the sidebar's clear of the traffic lights on macOS.
+4. **Settings' Restart,** from the banner a setting read at boot puts up: main holds requests, the
+   backend exits 75 and comes back on the same port, and the page says it's back.
+5. **A call** on Chromium's fake microphone, fed Tingting's Mandarin (rendered by `say -o` into a
+   file, never aloud): her hearing gets the speech, her answer is in the chat's log, her voice
+   arrives over WebRTC and plays in the page, and the window is never audible.
+6. **Close and reopen:** closing hides the window while the backend serves on, and a second launch
+   shows it again, never on screen or in front.
+7. **Attach:** after `--quit` ends that launch and its backend, a server started first on the same
+   home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced: Settings'
+   Restart there waits for the supervisor's next server, a restart from outside the app is
+   survived, and quitting leaves the server running until the smoke stops it.
+8. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
+   with exit 0, leaving nothing running and no error line in either log.
+
+The run's folder keeps `results/results.json`, with every check and each step's time, and the
+screenshots; like the rest of the folder they go after a pass, unless `--keep` copies them beside it
+first. A run takes about 30 s and bills nothing.
 
 In CI, `ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test
 skips. `.github/workflows/desktop.yml`, which `docker.yml` skips, builds, stages and packages the
@@ -700,9 +739,10 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
      24 assume, and its system minimums, which this doc restates;
    - on Windows, the unsigned-PE list, which takes Electron's own DLLs from its zip.
 5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `bun run test
-   apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test); and,
-   with the smokes not written, run the unpackaged and the packaged app in background mode
-   ([by hand](#running-it-by-hand)), on macOS and on Windows, which no workflow covers yet.
+   apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test); run
+   [the dev smoke](#the-dev-smoke) on macOS; and, with the packaged smoke not written, run the
+   packaged app in background mode ([by hand](#running-it-by-hand)), on macOS and on Windows,
+   which no workflow covers yet.
 
 ## Measured
 
