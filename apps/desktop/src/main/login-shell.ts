@@ -98,6 +98,9 @@ function readShell(
       resolve(String(error));
       return;
     }
+    // Out of file descriptors (EMFILE, ENFILE), spawn returns a child without stdout, whatever its
+    // types say, and emits `error` on the next tick.
+    const stdout: Readable | undefined = child.stdout;
     const chunks: Buffer[] = [];
     let tail = Buffer.alloc(0);
     let markers = 0;
@@ -139,12 +142,12 @@ function readShell(
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
       // Still drained, so an rc-started child that writes to stdout doesn't fail with EPIPE.
-      child.stdout.off("data", onData);
-      child.stdout.resume();
+      stdout?.off("data", onData);
+      stdout?.resume();
       resolve(result);
     }
     signal?.addEventListener("abort", onAbort, { once: true });
-    child.stdout.on("data", onData);
+    stdout?.on("data", onData);
     child.on("error", (error) => finish(error.message));
     child.on("close", (code, closeSignal) => {
       if (code !== 0) finish(closeSignal ?? `exit ${String(code)}`);

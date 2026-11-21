@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: MIT
 //
 // Ported from deepseek-harness apps/desktop/tests/login-shell-environment.spec.ts@2e39e70496
+import { execFile } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest";
 import {
   loginShellCandidates,
@@ -18,6 +21,7 @@ vi.mock("node:os", async (importOriginal) => ({
   userInfo: account.userInfo,
 }));
 
+const MODULE = join(import.meta.dirname, "../src/main/login-shell.ts");
 const DELIMITER = "_EIDOLON_SHELL_ENV_DELIMITER_";
 const timeoutMs = 5_000;
 let directory: string;
@@ -161,6 +165,44 @@ describe.skipIf(process.platform === "win32")("readLoginShell on POSIX", () => {
     expect(result.failures).toEqual([]);
     expect(result.variables?.FROM).toBe("detaching");
     expect(exited(child)).toBe(false);
+  });
+
+  test("records each shell that can't spawn for want of file descriptors, without throwing", async () => {
+    // A Node of its own, out of descriptors: there spawn returns a child without stdout.
+    const probe = join(directory, "probe.mjs");
+    writeFileSync(
+      probe,
+      [
+        'import { closeSync, openSync } from "node:fs";',
+        "const { readLoginShell } = await import(process.argv[2]);",
+        "const held = [];",
+        'try { for (;;) held.push(openSync("/dev/null", "r")); } catch {}',
+        "const read = await readLoginShell({}, { shells: process.argv.slice(3), timeoutMs: 5000 });",
+        "for (const fd of held) closeSync(fd);",
+        "process.stdout.write(JSON.stringify(read));",
+      ].join("\n"),
+    );
+    const candidates = [shell("first", "export FROM=first"), shell("second", "export FROM=second")];
+    const { stdout } = await promisify(execFile)(
+      "/bin/sh",
+      [
+        "-c",
+        'ulimit -n 256 && exec "$@"',
+        "sh",
+        process.execPath,
+        probe,
+        pathToFileURL(MODULE).href,
+        ...candidates,
+      ],
+      { env: { PATH: "/usr/bin:/bin", HOME: directory } },
+    );
+    expect(JSON.parse(stdout)).toEqual({
+      variables: null,
+      failures: candidates.map((candidate) => ({
+        shell: candidate,
+        reason: `spawn ${candidate} EMFILE`,
+      })),
+    });
   });
 
   test("kills a shell past its deadline with its background children, and gives nothing", async () => {
