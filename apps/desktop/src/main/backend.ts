@@ -12,6 +12,7 @@ import {
   backendLaunch,
   type MainLog,
   type ReadyState,
+  sameServer,
 } from "./controller.ts";
 import { startupEnvironment } from "./environment.ts";
 import {
@@ -47,11 +48,6 @@ export interface BackendOptions {
   readonly waitingPage: WaitingPage;
   /** The port a first spawn asks for. */
   readonly port?: number;
-}
-
-/** Whether `a` and `b` are one server: the same address and process, ours or attached. */
-function sameServer(a: ReadyState, b: ReadyState): boolean {
-  return a.origin === b.origin && a.pid === b.pid && a.owned === b.owned;
 }
 
 export class Backend {

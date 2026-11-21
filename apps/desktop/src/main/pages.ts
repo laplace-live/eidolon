@@ -3,7 +3,12 @@
 // the shell pages. Electron-free: index.ts drives it with the backend's states and the window's
 // failures, and loads what it asks for.
 import type { DesktopCommand, Language } from "../shared/bridge.ts";
-import type { BackendFailure, BackendState } from "./controller.ts";
+import {
+  type BackendFailure,
+  type BackendState,
+  type ReadyState,
+  sameServer,
+} from "./controller.ts";
 import type { ShellFailure, ShellPageStrings } from "./shell-pages.ts";
 import type { Strings } from "./strings.ts";
 
@@ -19,7 +24,7 @@ export interface PagesIo {
   load(page: WindowPage): void;
   /** Loads again the app page the window shows, the waiting page served in place of it. */
   reloadApp(): void;
-  /** The version of the server the window follows, as the backend last read it. */
+  /** The version of the server the window follows, as the backend read it; "" while unknown. */
   serverVersion(): string;
 }
 
@@ -70,8 +75,11 @@ export class WindowPages {
   #failure: Failure | null = null;
   /** The forwarder served the waiting page since the backend was last ready. */
   #waited = false;
-  /** The server's version when main last loaded the app's page, which its bridge holds too. */
-  #version: string | null = null;
+  /**
+   * The server main last loaded the app's page from, and its version then, which the page's bridge
+   * holds too: empty while unknown, until that server's version reads.
+   */
+  #from: { readonly server: ReadyState; readonly version: string } | null = null;
 
   constructor(io: PagesIo) {
     this.#io = io;
@@ -97,13 +105,15 @@ export class WindowPages {
       return;
     }
     this.#failure = null;
-    this.#show(state.phase === "ready" ? "app" : "loading");
+    if (state.phase === "ready") this.#showApp(state);
+    else this.#show("loading");
   }
 
   /**
    * The backend moved on. Ready takes the loading page to the app, or reloads the app after the
-   * waiting page stood in for it, or when the server runs another version than the page came from:
-   * its UI would call an API it wasn't built for. A failure shows the failure page. A window
+   * waiting page stood in for it, or when a server other than the page came from runs another
+   * version, or one that couldn't be read: its UI would call an API it wasn't built for. The page's
+   * own server keeps it, its version read late included. A failure shows the failure page. A window
    * failure waits for Try Again whatever the backend does, and a restart or a grace period that
    * ends on the same version leaves the app as it is.
    */
@@ -115,11 +125,13 @@ export class WindowPages {
     if (state.phase !== "ready") return;
     const waited = this.#waited;
     this.#waited = false;
-    const version = this.#io.serverVersion();
-    if (this.#page === "loading") this.#show("app");
-    else if (this.#page === "app" && (waited || version !== this.#version)) {
-      this.#version = version;
-      this.#io.reloadApp();
+    if (this.#page === "loading") this.#showApp(state);
+    else if (this.#page === "app") {
+      const version = this.#io.serverVersion();
+      if (waited || this.#another(state, version)) {
+        this.#from = { server: state, version };
+        this.#io.reloadApp();
+      } else if (version !== "") this.#from = { server: state, version };
     }
   }
 
@@ -150,7 +162,7 @@ export class WindowPages {
     if (this.#page !== "failed") return false;
     this.#failure = null;
     if (state.phase === "ready") {
-      this.#show("app");
+      this.#showApp(state);
       return false;
     }
     this.#show("loading");
@@ -162,9 +174,20 @@ export class WindowPages {
     this.#show("failed");
   }
 
+  /** Whether `ready` is another server than the page's, at another version or one unknown. */
+  #another(ready: ReadyState, version: string): boolean {
+    const from = this.#from;
+    if (from !== null && sameServer(from.server, ready)) return false;
+    return version === "" || version !== from?.version;
+  }
+
+  #showApp(ready: ReadyState): void {
+    this.#from = { server: ready, version: this.#io.serverVersion() };
+    this.#show("app");
+  }
+
   #show(page: WindowPage): void {
     this.#page = page;
-    if (page === "app") this.#version = this.#io.serverVersion();
     this.#io.load(page);
   }
 }

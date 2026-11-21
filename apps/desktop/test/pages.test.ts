@@ -24,6 +24,8 @@ const READY: BackendState = {
   owned: true,
   pid: 4242,
 };
+/** Our backend after a restart: the same address, another process. */
+const RESTARTED: BackendState = { ...READY, pid: 4343 };
 const HOLDING: BackendState = { phase: "holding", owned: true };
 /** A terminal's server on the data home, which the app attached to. */
 const ATTACHED: BackendState = {
@@ -109,6 +111,37 @@ describe("the window's page", () => {
     window.backend(STARTING);
     window.backend(READY);
     expect(loads).toEqual(["app"]);
+  });
+
+  test("reloads the app for a new server whose version couldn't be read, and not again once it reads", () => {
+    const { pages: window, loads, server } = pages();
+    window.opened(READY);
+    // Our backend restarts, and the new one's status misses its deadline.
+    window.backend(HOLDING);
+    server.version = "";
+    window.backend(RESTARTED);
+    expect(loads).toEqual(["app", "reload"]);
+    // A hold on that same server ends, and its version reads this time: the page came from it.
+    window.backend(HOLDING);
+    server.version = "0.13.0";
+    window.backend(RESTARTED);
+    expect(loads).toEqual(["app", "reload"]);
+    // The next server is compared with the version read late.
+    window.backend(HOLDING);
+    window.backend(READY);
+    expect(loads).toEqual(["app", "reload"]);
+  });
+
+  test("keeps the app shown from a server whose version couldn't be read once it reads", () => {
+    const { pages: window, loads, server } = pages();
+    server.version = "";
+    window.opened(STARTING);
+    window.backend(ATTACHED);
+    // An idle close's grace proves the same server again, and its version reads this time.
+    window.backend(HOLDING_ATTACHED);
+    server.version = "0.13.0";
+    window.backend({ ...ATTACHED });
+    expect(loads).toEqual(["loading", "app"]);
   });
 
   test("a new window opens on the page the backend's state calls for", () => {

@@ -277,10 +277,11 @@ and leaves it running when it quits.
 - **The page matches the server.** It comes from whichever server answers, so its UI and API match
   even when a terminal's server runs another version; only the desktop's chrome can be missing
   then. Main reads each server's version from `GET /api/local/status` once, before the window
-  follows it, for the bridge and the About panel. Main reloads the app's page when the server ready
-  next runs another version than the one it loaded the page with: after a grace that ends on our
-  own backend, or a terminal's server restarted onto another version. A restart onto the same
-  version keeps the page, which apps/web's restart flow recovers without a reload.
+  follows it, for the bridge and the About panel. Main reloads the app's page when a server other
+  than the one it loaded the page from is ready next at another version, or at one its 2 s read
+  missed: after a grace that ends on our own backend, or a terminal's server restarted onto another
+  version. A restart onto the same version keeps the page, which apps/web's restart flow recovers
+  without a reload, and so does the page's own server when its version reads only later.
 
 ## The window
 

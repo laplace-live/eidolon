@@ -84,6 +84,11 @@ export type BackendState =
 
 export type ReadyState = Extract<BackendState, { phase: "ready" }>;
 
+/** Whether `a` and `b` are one server: the same address and process, ours or attached. */
+export function sameServer(a: ReadyState, b: ReadyState): boolean {
+  return a.origin === b.origin && a.pid === b.pid && a.owned === b.owned;
+}
+
 /** What starts the backend. */
 export interface BackendLaunch {
   /** The app binary, which runs it as Node. */
