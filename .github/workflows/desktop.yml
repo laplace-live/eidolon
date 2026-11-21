@@ -102,12 +102,27 @@ jobs:
       # The packaged app in apps/desktop/.out on a temporary data home and profile, driven through
       # its backend's API, with no window shown. On Windows it installs the NSIS setup silently
       # first and uninstalls it after.
-      - name: The packaged smoke
+      - id: smoke
+        name: The packaged smoke
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         timeout-minutes: 15
         run: bun run smoke:desktop
         env:
           EIDOLON_DESKTOP_BACKGROUND: "1"
+
+      # A failed run keeps its folder: its results, the app's logs and its launches' output. Not
+      # its home, which holds local-token, nor the rest of its profile.
+      - name: Upload the failed smoke's logs
+        if: ${{ failure() && steps.smoke.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 5
+        with:
+          name: ${{ runner.os }}-smoke-desktop
+          path: |
+            ${{ runner.temp }}/eidolon-smoke-desktop-*/results.json
+            ${{ runner.temp }}/eidolon-smoke-desktop-*/profile/logs
+            ${{ runner.temp }}/eidolon-smoke-desktop-*/scratch
+          retention-days: 7
 
       # Adds a throwaway CA to this runner's trust store, and deletes the certificate after.
       - name: "--use-system-ca on the packaged binary"
