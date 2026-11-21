@@ -39,7 +39,10 @@ export function Component() {
   return (
     <div className="flex min-h-svh flex-col">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2.5 px-4 sm:px-6">
+        <div
+          data-window-drag
+          className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2.5 px-4 sm:px-6 shell:max-w-none"
+        >
           <span className="flex shrink-0 items-center gap-1.5 font-semibold">
             <AppMark />
             <span className="sr-only font-logo text-xl sm:not-sr-only">LAPLACE Eidolon</span>

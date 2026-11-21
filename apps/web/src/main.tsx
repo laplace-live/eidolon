@@ -6,10 +6,11 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router/dom";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { connectDesktop } from "@/lib/desktop";
+import { connectDesktop, desktop } from "@/lib/desktop";
 import { createQueryClient } from "@/lib/query";
 import { exchangeLinkCode, takeLinkCode } from "@/lib/session";
 import { initTheme } from "@/lib/theme";
+import { watchWindowDrag } from "@/lib/window-drag";
 import { dynamicActivate, initialLang } from "@/locales/i18n";
 import { createRouter } from "@/router";
 import "@/index.css";
@@ -25,6 +26,8 @@ const queryClient = createQueryClient(() => void router?.revalidate());
 router = createRouter({ queryClient, exchanged });
 
 connectDesktop((to) => void router?.navigate(to));
+// The preload can mark <html> only once it exists, after this runs; its bridge is here already.
+if (desktop() !== null) watchWindowDrag();
 
 // Rendered once a language is active: the viewer's, else English.
 void dynamicActivate(initialLang()).then(() => {

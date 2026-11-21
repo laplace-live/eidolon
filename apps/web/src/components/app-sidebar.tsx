@@ -64,7 +64,7 @@ function Brand() {
   const { t } = useLingui();
   const { toggleSidebar } = useSidebar();
   return (
-    <div className="flex h-9 items-center gap-1">
+    <div data-window-drag className="flex h-9 items-center gap-1">
       <Link
         to="/"
         className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 font-logo font-semibold text-xl outline-none ring-sidebar-ring focus-visible:ring-2 group-data-[collapsible=icon]:hidden"

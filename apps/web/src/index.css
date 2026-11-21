@@ -4,6 +4,8 @@
 @import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
+/* In the desktop app, whose preload marks <html> with data-shell (see the end of this file). */
+@custom-variant shell (&:where([data-shell] *));
 
 /* The LAPLACE wordmark: Barlow Condensed SemiBold, Latin only, the file laplace-clock ships. */
 @font-face {
@@ -196,4 +198,86 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+}
+
+/*
+ * The desktop app has no title bar. Its preload marks <html> with data-shell, "mac" or "win", and
+ * on macOS with data-fullscreen while fullscreen hides the traffic lights; a browser sets neither.
+ * A row marked data-window-drag stands in for the title bar: the window drags by it, never by its
+ * controls, and its content keeps clear of the window's buttons, whose place the Window Controls
+ * Overlay gives as env(titlebar-area-*). Unlayered, so it wins over the rows' own padding.
+ *
+ * Electron builds the regions from boxes in document order, not from what is on top, and in its
+ * Chromium app-region inherits: a row's text drags with it, and a control's insides don't.
+ */
+[data-shell] [data-window-drag] {
+  -webkit-app-region: drag;
+}
+
+[data-shell]
+  [data-window-drag]
+  :is(a, button, input, select, textarea, [role="button"], [tabindex]) {
+  -webkit-app-region: no-drag;
+}
+
+/* Menus, popovers, dialogs, sheets and tooltips portal out of #root, after the rows. */
+[data-shell] body > :not(#root) {
+  -webkit-app-region: no-drag;
+}
+
+/* Windows: the caption buttons, over the window's top right, where a page's rows end. */
+[data-shell="win"] [data-window-drag]:not([data-sidebar="sidebar"] *) {
+  padding-inline-end: max(
+    1rem,
+    calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 0.5rem)
+  );
+}
+
+/* A sheet at the right edge starts below them, or they would cover its close button. */
+[data-shell="win"] [data-slot="sheet-content"][data-side="right"] {
+  top: env(titlebar-area-height, 0px);
+  height: auto;
+}
+
+/* A dialog centres below them, so a tall one's corner clears them in a narrow window. */
+[data-shell="win"] :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+  top: calc(50% + env(titlebar-area-height, 0px) / 2);
+}
+
+/* macOS: the traffic lights, at the window's top left. A page's row starts after them, measured
+   from the window's edge: it sits there while the sidebar is a sheet, beside the 3rem rail when
+   collapsed, and clear of them beside the open sidebar. */
+[data-shell="mac"]:not([data-fullscreen]) [data-window-drag] {
+  padding-inline-start: max(1rem, calc(env(titlebar-area-x, 0px) + 0.25rem));
+}
+
+/* The sidebar's first row starts below them, inside its header's 0.5rem: beside them, the rail has
+   no room, and the open sidebar leaves the name 116 of the 152px it takes. */
+[data-shell="mac"]:not([data-fullscreen]) [data-sidebar="sidebar"] [data-window-drag] {
+  box-sizing: content-box;
+  padding-top: calc(env(titlebar-area-height, 0px) - 0.5rem);
+  padding-inline-start: revert-layer;
+}
+
+[data-shell="mac"]:not([data-fullscreen])
+  [data-slot="sidebar"][data-state="collapsed"]
+  ~ [data-slot="sidebar-inset"]
+  [data-window-drag] {
+  padding-inline-start: max(
+    1rem,
+    calc(env(titlebar-area-x, 0px) + 0.25rem - var(--sidebar-width-icon))
+  );
+}
+
+[data-shell="mac"]:not([data-fullscreen])
+  [data-slot="sidebar"][data-state="expanded"]
+  ~ [data-slot="sidebar-inset"]
+  [data-window-drag] {
+  padding-inline-start: revert-layer;
+}
+
+/* A press on a row never reaches the page, so while a menu, a dialog or a sheet is open the rows
+   stop dragging, and a press on one closes it as a press anywhere else does. */
+[data-shell] body:has(> :not(#root) [data-state="open"]) [data-window-drag] {
+  -webkit-app-region: no-drag;
 }

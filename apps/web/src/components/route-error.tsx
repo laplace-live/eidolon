@@ -3,6 +3,7 @@ import { isRouteErrorResponse, Link, useRouteError } from "react-router";
 import { LockedScreen } from "@/components/locked-screen";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { WindowDragStrip } from "@/components/window-drag-strip";
 import { ApiError, errorDetail } from "@/lib/api";
 import { errorMessage } from "@/lib/labels";
 
@@ -22,27 +23,30 @@ export function RouteError() {
     return <LockedScreen expired={expired} />;
   }
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
-      <Alert variant="destructive">
-        <AlertTitle>
-          {status === 404 ? t`This page doesn't exist.` : t`Something went wrong`}
-        </AlertTitle>
-        {status !== 404 && (
-          <AlertDescription>
-            <p>{t(errorMessage(error))}</p>
-            {error instanceof Error && <p className="font-mono text-xs">{errorDetail(error)}</p>}
-          </AlertDescription>
-        )}
-      </Alert>
-      <div className="flex gap-2">
-        <Button variant="outline" asChild>
-          <Link to="/">{t`Back to Home`}</Link>
-        </Button>
-        {status !== 404 && (
-          // A reload, not a revalidation: a lazy route whose chunk failed to load stays failed.
-          <Button onClick={() => window.location.reload()}>{t`Try Again`}</Button>
-        )}
+    <>
+      <WindowDragStrip />
+      <div className="mx-auto flex max-w-lg flex-col gap-4 p-6">
+        <Alert variant="destructive">
+          <AlertTitle>
+            {status === 404 ? t`This page doesn't exist.` : t`Something went wrong`}
+          </AlertTitle>
+          {status !== 404 && (
+            <AlertDescription>
+              <p>{t(errorMessage(error))}</p>
+              {error instanceof Error && <p className="font-mono text-xs">{errorDetail(error)}</p>}
+            </AlertDescription>
+          )}
+        </Alert>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/">{t`Back to Home`}</Link>
+          </Button>
+          {status !== 404 && (
+            // A reload, not a revalidation: a lazy route whose chunk failed to load stays failed.
+            <Button onClick={() => window.location.reload()}>{t`Try Again`}</Button>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
