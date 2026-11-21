@@ -16,7 +16,10 @@
       <section class="card" aria-labelledby="title">
         <h1 id="title">{{title}}</h1>
         <p class="message">{{message}}</p>
-        <pre class="output"><code>{{stderr}}</code></pre>
+        <div class="details">
+          <h2>{{details}}</h2>
+          <pre class="output"><code>{{stderr}}</code></pre>
+        </div>
         <div class="actions">
           <button type="button" data-action="showLogs">{{showLogs}}</button>
           <button type="button" data-action="quit">{{quit}}</button>

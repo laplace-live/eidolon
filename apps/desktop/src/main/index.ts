@@ -18,6 +18,7 @@ const shellPages: ShellPages = {
     tryAgain: "Try Again",
     showLogs: "Show Logs",
     quit: "Quit",
+    details: "Details",
   }),
   failure: () => ({ title: "Eidolon Couldn't Start", message: "", stderr: "" }),
 };

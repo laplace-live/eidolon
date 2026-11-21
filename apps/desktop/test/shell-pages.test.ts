@@ -30,6 +30,7 @@ const EN: ShellPageStrings = {
   tryAgain: "Try Again",
   showLogs: "Show Logs",
   quit: "Quit",
+  details: "Details",
 };
 
 const ZH: ShellPageStrings = {
@@ -39,6 +40,7 @@ const ZH: ShellPageStrings = {
   tryAgain: "重试",
   showLogs: "显示日志",
   quit: "退出",
+  details: "详情",
 };
 
 const FAILURE: ShellFailure = {
@@ -82,7 +84,7 @@ describe("the shell pages", () => {
       expect(render("loading", strings).html).toContain(escapeHtml(strings.starting));
       expect(render("waiting", strings).html).toContain(escapeHtml(strings.waiting));
       const failed = render("failed", strings).html;
-      for (const label of [strings.tryAgain, strings.showLogs, strings.quit]) {
+      for (const label of [strings.tryAgain, strings.showLogs, strings.quit, strings.details]) {
         expect(failed).toContain(escapeHtml(label));
       }
     }
@@ -154,6 +156,10 @@ describe("the failure page's output", () => {
   });
 
   test("and the block and the message are empty, so the page hides them, when there are none", () => {
+    expect(template("failed")).toMatch(
+      /<div class="details">\s*<h2>\{\{details\}\}<\/h2>\s*<pre class="output">/,
+    );
+    expect(readFileSync(join(SHELL, "shell.css"), "utf8")).toContain(".details:has(code:empty)");
     expect(output("")).toBe("");
     expect(output("\n  \n")).toBe("");
     expect(renderFailedPage(template("failed"), EN, { ...FAILURE, message: "" }).html).toContain(

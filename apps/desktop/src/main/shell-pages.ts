@@ -16,6 +16,8 @@ export interface ShellPageStrings {
   readonly tryAgain: string;
   readonly showLogs: string;
   readonly quit: string;
+  /** The failure page's heading over the stderr tail. */
+  readonly details: string;
 }
 
 /** What the failure page says went wrong, in the strings' language. */
