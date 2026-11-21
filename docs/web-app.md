@@ -403,11 +403,6 @@ Window Controls Overlay gives as `env(titlebar-area-*)`:
 - Menus, popovers, dialogs, sheets and tooltips portal out of `#root` and never drag. A press on a
   drag row never reaches the page, so while one of them is open no row drags, and a press there
   closes it.
-- Electron collects the drag regions again only when an `app-region` value changes
-  ([electron/electron#32341](https://github.com/electron/electron/issues/32341)), so
-  `lib/window-drag.ts` watches the rows and, whenever one moves, resizes, comes or goes (the
-  sidebar collapsing, a page changing), flips the region of an empty element of its own, once a
-  frame, which makes Electron collect them again.
 
 **What else differs:**
 
