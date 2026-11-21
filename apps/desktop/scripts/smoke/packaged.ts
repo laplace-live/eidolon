@@ -6,6 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { posix, win32 } from "node:path";
 import { promisify } from "node:util";
 import { BACKEND_RUNTIME_ARGS } from "../../src/main/controller.ts";
+import { type ProcessRow, parseTable, processTable } from "./processes.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -235,6 +236,59 @@ export function changedFiles(
   }
   const names = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]);
   return [...names].filter((name) => before?.[name] !== after?.[name]).sort();
+}
+
+/**
+ * On macOS, every process but this one whose command line or environment holds `text`, as rows
+ * without the environment: whatever the app started inherits the run's homes, even once
+ * reparented. ps shows no environment of Apple's own binaries, such as /bin/sh, which this finds
+ * only by their command lines. Elsewhere, none.
+ */
+export async function processesNaming(
+  text: string,
+  platform: NodeJS.Platform = process.platform,
+): Promise<ProcessRow[]> {
+  if (platform !== "darwin") return [];
+  const [{ stdout }, plain] = await Promise.all([
+    execFileAsync("ps", ["-axwwE", "-o", "pid=,ppid=,command="], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    }),
+    processTable(platform),
+  ]);
+  const naming = new Set(
+    parseTable(stdout, platform)
+      .filter((row) => row.command.includes(text))
+      .map((row) => row.pid),
+  );
+  return plain.filter((row) => naming.has(row.pid) && row.pid !== process.pid);
+}
+
+/**
+ * backend.log's lines that open a JavaScript error outside the backend's logger format: what
+ * console.error printed past it, Node's report of an uncaught error or rejection, or the stack
+ * under one of the logger's own ERROR lines.
+ */
+export function strayErrorLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .filter((line) =>
+      /^\[[^\]]+\] \[?(?:\w*Error\b|Uncaught\b|UnhandledPromiseRejection\b|node:internal\/)/.test(
+        line,
+      ),
+    );
+}
+
+/** Where `text`, a log, gives away a link code's line or `token`, by line, never the value. */
+export function leaks(text: string, token: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .flatMap((line, index) => [
+      ...(/Eidolon is (ready|already running):/.test(line)
+        ? [`line ${index + 1} holds a link code's line`]
+        : []),
+      ...(line.includes(token) ? [`line ${index + 1} holds the token`] : []),
+    ]);
 }
 
 /** `[2026-11-21 12:16:20.083]` at the start of an electron-log line, as epoch ms; null if none. */

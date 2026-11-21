@@ -1,6 +1,9 @@
 // The packaged smoke's own helpers, without Electron or Windows: a packaged app's layout, command
 // lines as ps and Windows give them, the natives lsof and PowerShell list, the photo and icon it
-// reads, a folder's hashes, and the NSIS setup's uninstall entry and silent uninstall.
+// reads, the logs' errors and leaks, the processes naming a run's folder, a folder's hashes, and
+// the NSIS setup's uninstall entry and silent uninstall.
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,12 +22,15 @@ import {
   inside,
   jpegFacts,
   jsonList,
+  leaks,
   lineTime,
   lsofLibraries,
   modulesScript,
   powershellCommand,
+  processesNaming,
   ROTATED_PHOTO,
   runsOnBinary,
+  strayErrorLines,
   windowsArgs,
 } from "../scripts/smoke/packaged.ts";
 
@@ -135,7 +141,7 @@ describe("where a library was mapped from", () => {
     ]);
   });
 
-  test("PowerShell's modules of one live process, by its id, as the CI spike listed them", () => {
+  test("PowerShell's modules of one live process, found by its id", () => {
     const script = modulesScript(4242);
     expect(script).toMatch(/^\(Get-Process -Id 4242\)\.Modules \| Where-Object /);
     expect(script).toContain("Select-Object FileName");
@@ -202,6 +208,73 @@ describe("the files the smoke reads", () => {
   });
 });
 
+describe("the logs", () => {
+  const stamp = "[2026-11-21 12:35:21.804]";
+  const logged = `${stamp} 2026-11-21T20:35:21.800Z |`;
+
+  test("backend.log's JavaScript errors outside its logger's lines, not its warnings", () => {
+    const opened = [
+      `${stamp} Error: Could not load the "sharp" module using the darwin-arm64 runtime`,
+      `${stamp} TypeError: Cannot read properties of undefined (reading 'id')`,
+      `${stamp} Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'x'`,
+      `${stamp} [Error: no stack]`,
+      `${stamp} Uncaught Error: thrown`,
+      `${stamp} node:internal/process/promises:394`,
+      `${stamp} [UnhandledPromiseRejection: This error originated either by throwing inside of an async function]`,
+    ];
+    const text = [
+      `${logged} INFO     | Bot server listening on http://127.0.0.1:62688/`,
+      `${logged} ERROR    | POST /api/local/chats/x/files failed (error 98cd3ba3)`,
+      ...opened,
+      `${stamp}     at ModuleJob.run (node:internal/modules/esm/module_job:561:25)`,
+      `${stamp} (node:4242) ExperimentalWarning: SQLite is an experimental feature`,
+      `${stamp} Errors: 0`,
+      "",
+    ].join("\r\n");
+    expect(strayErrorLines(text)).toEqual(opened);
+  });
+
+  test("where a log gives away a link code's line or the token, never what it gave", () => {
+    const token = "s3cr3t-token-43-characters-of-base64url-xyz";
+    const text = [
+      `${stamp} [info]  Eidolon: the backend listens on http://127.0.0.1:62688`,
+      `${stamp} Eidolon is ready: http://127.0.0.1:62688/#link`,
+      `${stamp} the token is ${token}`,
+    ].join("\n");
+    expect(leaks(text, token)).toEqual([
+      "line 2 holds a link code's line",
+      "line 3 holds the token",
+    ]);
+    expect(leaks(text.split("\n")[0] as string, token)).toEqual([]);
+  });
+});
+
+describe("processes naming the run's folder", () => {
+  test("none off macOS", async () => {
+    expect(await processesNaming("anything", "win32")).toEqual([]);
+  });
+
+  test.skipIf(process.platform !== "darwin")(
+    "on macOS, by their environment as well as their command line",
+    async () => {
+      const marker = `eidolon-smoke-packaged-${process.pid}-${Date.now()}`;
+      const idle = ["-e", "setTimeout(() => {}, 30000)"];
+      // Node, not /bin/sleep: macOS shows no other process the environment of Apple's own binaries.
+      const named = spawn(process.execPath, idle, { env: { ...process.env, MARKED: marker } });
+      const other = spawn(process.execPath, idle);
+      try {
+        await Promise.all([once(named, "spawn"), once(other, "spawn")]);
+        const found = await processesNaming(marker);
+        expect(found.map((row) => row.pid)).toEqual([named.pid]);
+        expect(found[0]?.command).toBe(`${process.execPath} -e setTimeout(() => {}, 30000)`);
+      } finally {
+        named.kill("SIGKILL");
+        other.kill("SIGKILL");
+      }
+    },
+  );
+});
+
 describe("a folder's files by hash", () => {
   let dir: string;
   beforeEach(() => {
@@ -241,7 +314,7 @@ describe("the NSIS setup's uninstall", () => {
     UninstallString: `"${WIN_UNINSTALLER}" /currentuser`,
   };
 
-  test("lists this user's entries as the CI spike's working pipeline did", () => {
+  test("lists this user's Eidolon entries from HKCU's uninstall key", () => {
     expect(UNINSTALL_KEY).toBe("HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall");
     expect(ENTRIES_SCRIPT).toBe(
       "Get-ChildItem -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath } | Where-Object { $_.DisplayName -like 'Eidolon*' } | Select-Object DisplayName,DisplayVersion,UninstallString",

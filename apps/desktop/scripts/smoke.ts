@@ -4,7 +4,15 @@
 // build. On Windows it installs the NSIS setup silently, smokes the installed app and uninstalls it.
 // It never builds or packages. Each check prints a line, and results.json in the run's folder keeps
 // them all, a passing run's folder included.
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { JobRecord, Status } from "../../bot/src/local/api.ts";
 import { PLATFORMS } from "../../eidolon/src/launcher.ts";
@@ -33,10 +41,13 @@ import {
   icoImages,
   inside,
   jpegFacts,
+  leaks,
   lineTime,
   mappedNatives,
+  processesNaming,
   ROTATED_PHOTO,
   runsOnBinary,
+  strayErrorLines,
 } from "./smoke/packaged.ts";
 import { processTable } from "./smoke/processes.ts";
 
@@ -50,6 +61,16 @@ const QUERY = "她的猫叫什么名字";
 /** What checkNatives must find mapped from the payload, by file name. */
 const EVERY_NATIVE = ["lancedb", "onnxruntime_binding", "sharp-", "vips"];
 const JSON_TYPE = { "content-type": "application/json" };
+// Each step's limit. Together they end a hung run in failed checks, its uninstall and results.json
+// included, well inside desktop.yml's 15 minutes; a run takes about 6 s on macOS, and the NSIS
+// setup alone took 58 s on windows-latest.
+const INSTALL_MS = 180_000;
+const START_MS = 90_000;
+const JOB_MS = 90_000;
+const SEARCH_MS = 60_000;
+const RESTART_MS = 60_000;
+const QUIT_MS = 60_000;
+const UNINSTALL_MS = 120_000;
 /** Timings the results keep, in ms unless named otherwise. */
 type Numbers = Record<string, number>;
 
@@ -58,6 +79,12 @@ const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 /** `promise`'s value, or null once `ms` have passed. */
 function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([promise, sleep(ms).then(() => null)]);
+}
+
+/** The ms left of a step's `ms`, for each of its waits in turn: at least 1, a last look. */
+function budget(ms: number): () => number {
+  const end = Date.now() + ms;
+  return () => Math.max(end - Date.now(), 1);
 }
 
 /** `read()`'s value once `done` holds for it, or its last one at the timeout. */
@@ -87,7 +114,8 @@ async function line(
     return await smoke.waitForLine(name, pattern, { timeoutMs, from });
   } catch (error) {
     const last = smoke.log(name).trimEnd().split(/\r?\n/).at(-1) ?? "";
-    throw new Error(`${(error as Error).message} within ${timeoutMs / 1000} s; its last: ${last}`);
+    const waited = (timeoutMs / 1000).toFixed(1);
+    throw new Error(`${(error as Error).message} within ${waited} s; its last: ${last}`);
   }
 }
 
@@ -198,10 +226,11 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   const main = smoke.start(app);
   const START = "the app starts on the run's home and profile and shows the web app";
   const shown = await checks.step(START, async () => {
-    if (!smoke.args.headful) await line(smoke, "main", LINES.background, 30_000);
-    const home = LINES.dataHome.exec(await line(smoke, "main", LINES.dataHome, 60_000))?.[1];
-    const listens = await line(smoke, "main", LINES.listens, 90_000);
-    const page = await line(smoke, "main", LINES.appShown, 60_000);
+    const left = budget(START_MS);
+    if (!smoke.args.headful) await line(smoke, "main", LINES.background, left());
+    const home = LINES.dataHome.exec(await line(smoke, "main", LINES.dataHome, left()))?.[1];
+    const listens = await line(smoke, "main", LINES.listens, left());
+    const page = await line(smoke, "main", LINES.appShown, left());
     numbers.listeningMs = (lineTime(listens) ?? Date.now()) - launchedAt;
     numbers.appShownMs = (lineTime(page) ?? Date.now()) - launchedAt;
     checks.add(
@@ -258,20 +287,29 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   });
 
   const SESSION =
-    "the session: the Bearer signs in, none gets a 401, and the server proves it holds local-token";
+    "the session: the Bearer signs in, a wrong one or none gets a 401, and the server proves it holds local-token";
   await checks.step(SESSION, async () => {
     const signed = await smoke.api("/api/local/session");
     const body = (await signed.json()) as { ok?: unknown };
-    const anonymous = await fetch(new URL("/api/local/session", server.origin), {
-      signal: AbortSignal.timeout(10_000),
+    const answer = async (headers: Record<string, string>) => {
+      const response = await fetch(new URL("/api/local/session", server.origin), {
+        headers,
+        signal: AbortSignal.timeout(10_000),
+      });
+      await response.body?.cancel();
+      return response.status;
+    };
+    const anonymous = await answer({});
+    // Shaped as local-token's secret is: 32 random bytes in base64url.
+    const wrong = await answer({
+      authorization: `Bearer ${randomBytes(32).toString("base64url")}`,
     });
-    await anonymous.body?.cancel();
     const token = readToken(run.home);
     const proved = token !== null && (await probe(server.origin, token));
     checks.add(
       SESSION,
-      signed.status === 200 && body.ok === true && anonymous.status === 401 && proved,
-      `with the Bearer ${signed.status} ${JSON.stringify(body)}; without it ${anonymous.status}; main's probe ${proved ? "proved" : "didn't prove"} the token`,
+      signed.status === 200 && body.ok === true && anonymous === 401 && wrong === 401 && proved,
+      `with the Bearer ${signed.status} ${JSON.stringify(body)}; with a wrong one ${wrong}; without one ${anonymous}; main's probe ${proved ? "proved" : "didn't prove"} the token`,
     );
   });
 
@@ -363,6 +401,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
       },
     );
     await put.body?.cancel();
+    const left = budget(JOB_MS);
     const embedded = fakes.count("POST /v1/embeddings");
     const release = fakes.holdEmbeddings();
     let job: JobRecord;
@@ -374,13 +413,26 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
         headers: JSON_TYPE,
         body: JSON.stringify({ command: "ingest-facts", persona: PERSONA }),
       });
-      job = (await started.json()) as JobRecord;
+      const answer = (await started.json()) as Partial<JobRecord> & {
+        error?: { message?: string };
+      };
+      if (started.status !== 201 || typeof answer.id !== "string") {
+        checks.add(
+          JOB,
+          false,
+          `${name} ${put.status}; POST jobs answered ${started.status}: ${answer.error?.message ?? "no job"}`,
+        );
+        return;
+      }
+      job = answer as JobRecord;
       // Held at its embeddings, the job runs on while its process is looked at.
       await until(
         () => fakes.count("POST /v1/embeddings"),
         (count) => count > embedded,
-        60_000,
+        left(),
       );
+      // Tracked from here, it fails the run if it outlives the backend.
+      await smoke.processes.snapshot();
       const row = (await processTable()).find(
         (candidate) =>
           candidate.ppid === server.pid &&
@@ -397,7 +449,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
     const done = await until(
       async () => (await (await smoke.api(`/api/local/jobs/${job.id}`)).json()) as JobRecord,
       (record) => record.status !== "running",
-      120_000,
+      left(),
       300,
     );
     const metaFile = join(run.home, "personas", PERSONA, "index", "persona_facts.meta.json");
@@ -428,7 +480,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
       layout,
       [cliScript(layout), "search", "--table", "persona_facts", "--json", "--top-k", "2", QUERY],
       { ...nodeEnv, RERANK_ENABLED: "false" },
-      60_000,
+      SEARCH_MS,
     );
     numbers.searchMs = Date.now() - at;
     const hits = searched.code === 0 ? (JSON.parse(searched.stdout) as { text?: unknown }[]) : [];
@@ -444,16 +496,19 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   const RESTART = "a restart through Settings' route keeps the port and changes the backend's pid";
   await checks.step(RESTART, async () => {
     const before = smoke.server() ?? server;
+    // What the old backend started is tracked before it exits and leaves its children unparented.
+    await smoke.processes.snapshot();
+    const left = budget(RESTART_MS);
     const from = smoke.log("main").length;
     const answer = await smoke.api("/api/local/restart", { method: "POST" });
     await answer.body?.cancel();
-    const exited = await line(smoke, "main", exitOf(before.pid), 30_000, from);
-    const respawned = await line(smoke, "main", LINES.started, 30_000, from);
-    const listens = await line(smoke, "main", LINES.listens, 60_000, from);
+    const exited = await line(smoke, "main", exitOf(before.pid), left(), from);
+    const respawned = await line(smoke, "main", LINES.started, left(), from);
+    const listens = await line(smoke, "main", LINES.listens, left(), from);
     const after = await until(
       () => smoke.server(),
       (now) => now !== null && now.pid !== before.pid,
-      30_000,
+      left(),
     );
     if (after !== null && after.pid !== before.pid) {
       await smoke.processes.adopt("backend after the restart", after.pid);
@@ -481,14 +536,15 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   await checks.step(QUIT, async () => {
     const backend = smoke.server();
     await smoke.processes.snapshot();
+    const left = budget(QUIT_MS);
     const from = smoke.log("main").length;
-    const second = await smoke.quit(app);
+    const second = await smoke.quit(app, left());
     numbers.quitLaunchMs = second.ms;
-    const exit = await within(main.exited, 30_000);
+    const exit = await within(main.exited, left());
     const stopped =
       backend === null
         ? null
-        : await line(smoke, "main", exitOf(backend.pid), 15_000, from).catch(() => null);
+        : await line(smoke, "main", exitOf(backend.pid), left(), from).catch(() => null);
     const code =
       stopped === null || backend === null ? null : exitOf(backend.pid).exec(stopped)?.[1];
     const quitting = smoke.log("main").slice(from).includes(LINES.quitting);
@@ -499,12 +555,17 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
     checks.add(
       QUIT,
       second.code === 0 && exit?.code === 0 && quitting && code === "0" && forced === undefined,
-      `the second launch exited ${second.code ?? second.signal} in ${second.ms} ms; main ${exit === null ? "still ran 30 s on" : `exited ${exit.code ?? exit.signal}`}${quitting ? ", having logged its quit" : " with no quit in main.log"}; the backend ${code === null || code === undefined ? "logged no exit" : `(pid ${backend?.pid}) exited (${code})`}${forced === undefined ? "" : `, after ${forced}`}`,
+      `the second launch exited ${second.code ?? second.signal} in ${second.ms} ms; main ${exit === null ? "still ran on" : `exited ${exit.code ?? exit.signal}`}${quitting ? ", having logged its quit" : " with no quit in main.log"}; the backend ${code === null || code === undefined ? "logged no exit" : `(pid ${backend?.pid}) exited (${code})`}${forced === undefined ? "" : `, after ${forced}`}`,
     );
   });
 
   const LEFT = "nothing the app started is left running after the quit";
   await checks.step(LEFT, async () => {
+    // On macOS, also what was started between two snapshots and lost its parent since.
+    for (const row of await processesNaming(run.root)) {
+      const what = `${short(row.command).slice(0, 160)}, naming the run's folder`;
+      await smoke.processes.adopt(what, row.pid);
+    }
     const left = await smoke.processes.settle(15_000);
     checks.add(
       LEFT,
@@ -516,7 +577,11 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   const ERRORS = "no error lines in either log of the run's profile";
   const mainLog = smoke.log("main");
   const backendLog = smoke.log("backend");
-  const errors = [...errorLines(mainLog, "main"), ...errorLines(backendLog, "backend")];
+  const errors = [
+    ...errorLines(mainLog, "main"),
+    ...errorLines(backendLog, "backend"),
+    ...strayErrorLines(backendLog),
+  ];
   checks.add(
     ERRORS,
     errors.length === 0 && backendLog.length > 0,
@@ -524,13 +589,17 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
       ? errors.slice(0, 3).join(" | ")
       : `main.log ${mainLog.split("\n").length} lines, backend.log ${backendLog.split("\n").length}`,
   );
+  const leaked =
+    token === null
+      ? []
+      : [
+          ...leaks(mainLog, token).map((where) => `main.log's ${where}`),
+          ...leaks(backendLog, token).map((where) => `backend.log's ${where}`),
+        ];
   checks.add(
     "neither log holds a link code's line or the token",
-    !/Eidolon is (ready|already running):/.test(backendLog) &&
-      token !== null &&
-      !mainLog.includes(token) &&
-      !backendLog.includes(token),
-    token === null ? "no token to look for" : "",
+    token !== null && leaked.length === 0,
+    token === null ? "no token to look for" : leaked.slice(0, 3).join("; "),
   );
 }
 
@@ -554,7 +623,7 @@ async function install(
   await smoke.checks.step(INSTALL, async () => {
     const at = Date.now();
     const running = smoke.processes.spawn("setup", setup, ["/S"], { stdio: "ignore" });
-    const exit = await within(running.exited, 300_000);
+    const exit = await within(running.exited, INSTALL_MS);
     numbers.installSeconds = Math.round((Date.now() - at) / 100) / 10;
     const entry = (await uninstallEntries()).find((candidate) =>
       namesUninstaller(candidate, folder),
@@ -562,9 +631,18 @@ async function install(
     smoke.checks.add(
       INSTALL,
       exit?.code === 0 && existsSync(binary) && existsSync(join(folder, UNINSTALLER)) && !!entry,
-      `${basename(setup)} exited ${exit === null ? "not within 300 s" : (exit.code ?? exit.signal)} after ${numbers.installSeconds} s; ${binary} ${existsSync(binary) ? "is there" : "is missing"}; HKCU's uninstall entry: ${entry?.UninstallString ?? "none for its uninstaller"}`,
+      `${basename(setup)} exited ${exit === null ? `not within ${INSTALL_MS / 1000} s` : (exit.code ?? exit.signal)} after ${numbers.installSeconds} s; ${binary} ${existsSync(binary) ? "is there" : "is missing"}; HKCU's uninstall entry: ${entry?.UninstallString ?? "none for its uninstaller"}`,
     );
   });
+}
+
+/** A few of what `folder` still holds, by path from it; or why it can't be read, as it goes. */
+function leftIn(folder: string): string {
+  try {
+    return readdirSync(folder, { recursive: true }).slice(0, 5).join(", ") || "nothing";
+  } catch (error) {
+    return (error as Error).message;
+  }
 }
 
 /** Windows: the uninstaller removes the app silently and leaves the data home as it was. */
@@ -577,33 +655,35 @@ async function uninstall(smoke: Smoke, binary: string, numbers: Numbers): Promis
     if ((await smoke.processes.running()).length > 0) await smoke.processes.stopAll();
     const before = fileHashes(smoke.run.home);
     const { command, args } = silentUninstall((await uninstallEntries())[0], folder);
+    const left = budget(UNINSTALL_MS);
     const at = Date.now();
     const running = smoke.processes.spawn("uninstaller", command, args, { stdio: "ignore" });
-    const exit = await within(running.exited, 120_000);
+    const exit = await within(running.exited, left());
     // NSIS's uninstaller returns at once and removes the app from a copy of itself in %TEMP%.
     await until(
       () => existsSync(folder),
       (there) => !there,
-      120_000,
+      left(),
       500,
     );
     const entries = await until(
       () => uninstallEntries(),
-      (left) => left.length === 0,
-      30_000,
+      (found) => found.length === 0,
+      left(),
       1000,
     );
     numbers.uninstallSeconds = Math.round((Date.now() - at) / 100) / 10;
     const changed = changedFiles(before, fileHashes(smoke.run.home));
     const files = Object.keys(before ?? {}).length;
+    const remaining = existsSync(folder) ? leftIn(folder) : null;
     smoke.checks.add(
       UNINSTALL,
       exit?.code === 0 &&
-        !existsSync(folder) &&
+        remaining === null &&
         entries.length === 0 &&
         files > 0 &&
         changed.length === 0,
-      `${basename(command)} ${args.join(" ")} exited ${exit === null ? "not within 120 s" : (exit.code ?? exit.signal)}; after ${numbers.uninstallSeconds} s the install folder ${existsSync(folder) ? "remains" : "is gone"}, ${entries.length} uninstall entr${entries.length === 1 ? "y" : "ies"} left; the data home's ${files} files ${changed.length === 0 ? "are unchanged" : `changed: ${changed.slice(0, 5).join(", ")}`}`,
+      `${basename(command)} ${args.join(" ")} exited ${exit === null ? "not in time" : (exit.code ?? exit.signal)}; after ${numbers.uninstallSeconds} s the install folder ${remaining === null ? "is gone" : `remains, holding ${remaining}`}, ${entries.length} uninstall entr${entries.length === 1 ? "y" : "ies"} left; the data home's ${files} files ${changed.length === 0 ? "are unchanged" : `changed: ${changed.slice(0, 5).join(", ")}`}`,
     );
   });
 }
