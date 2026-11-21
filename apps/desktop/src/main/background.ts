@@ -53,6 +53,15 @@ export function chromiumSwitches(background: boolean): readonly string[] {
   return background ? [MUTE_AUDIO] : [];
 }
 
+/**
+ * The port the backend's first spawn asks for: in background mode a free one, never 7860, where the
+ * owner's own Eidolon may be between two processes in a restart, and its supervisor ends when the
+ * next one finds the port taken. Otherwise the controller's own.
+ */
+export function backendPort(background: boolean): number | undefined {
+  return background ? 0 : undefined;
+}
+
 /** On Windows, background mode's window has no taskbar button. */
 export function backgroundWindowOptions(
   platform: NodeJS.Platform,

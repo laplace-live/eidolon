@@ -16,7 +16,8 @@ Eidolon (main process)
  ├─ the backend controller, one attempt at a time
  │    ├─ attach: locks/4273f434b594.info names a live server that proves it holds local-token
  │    └─ spawn:  <app binary> --disable-sigusr1 --use-system-ca <payload>/dist/server.js
- │                 --host 127.0.0.1 --port 7860 --no-open      (--port 0 when 7860 is taken)
+ │                 --host 127.0.0.1 --port 7860 --no-open      (--port 0 when 7860 is taken,
+ │                                                             and in background mode)
  ├─ the eidolon-app: scheme
  │    ├─ shell/  the loading and failure pages
  │    └─ app/    forwarded to the backend, with the Bearer only main holds
@@ -125,7 +126,8 @@ the install folder), its console hidden, and not detached.
   `EADDRINUSE` or `EACCES` (a Hyper-V or WinNAT excluded range on Windows), spawns with `--port 0`
   at once: the server would meet the error only after loading everything. A race lost anyway, an
   exit 1 on `port … is taken by another program` or `listen EACCES`, respawns on `--port 0`. The
-  server never falls back by itself.
+  server never falls back by itself. In [background mode](#background-mode) the first spawn asks
+  for `--port 0` straight away.
 - **Its exits:** 0, stopped, or before any listening, this home's server already serves the port
   asked for; 75, a restart; 1, an unusable token, a port another program holds, or a crash at boot;
   2, a usage error, a missing web build, or a home another server holds on another port. The two
@@ -556,6 +558,10 @@ that could show something through it.
   arrived. Measured with Electron 45.4.1 on macOS, Chromium hands the switch to its audio service
   (not to the renderer), and a tone the app page plays is never `isCurrentlyAudible()`, where the
   same tone in a window muted only by `setAudioMuted(true)` is.
+- **Never port 7860:** the backend's first spawn asks for a free port (`--port 0`), and a restart
+  keeps it. The owner's own Eidolon serves on 7860, and while it restarts the port is free for a
+  moment: a test run that took it then would leave the owner's next server exiting on a taken port,
+  and their `bun run app` with it.
 - **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
   Developer Tools, which opens a window, isn't offered unpackaged either.
 - **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through

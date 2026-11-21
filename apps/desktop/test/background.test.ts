@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   activationPolicy,
   BACKGROUND_LINE,
+  backendPort,
   backgroundMicrophone,
   backgroundMode,
   backgroundWindowOptions,
@@ -51,6 +52,11 @@ test("off, the app is a regular one; on, it's an accessory on macOS, with no tas
   expect(hasTray("win32", false)).toBe(true);
   expect(hasTray("win32", true)).toBe(false);
   expect(hasTray("darwin", false)).toBe(false);
+});
+
+test("on, the backend's first spawn asks for a free port, never 7860; off, the controller's own", () => {
+  expect(backendPort(true)).toBe(0);
+  expect(backendPort(false)).toBeUndefined();
 });
 
 test("on, Chromium is muted, and main.log's line says so; off, no switch is set", () => {

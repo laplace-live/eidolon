@@ -8,7 +8,7 @@ import { type AboutPanelOptionsOptions, app, nativeImage, session } from "electr
 import { type Language, pageAt } from "../shared/bridge.ts";
 import { dataHome } from "./attach.ts";
 import { Backend, licensesFile } from "./backend.ts";
-import { BACKGROUND_LINE, hasTray } from "./background.ts";
+import { BACKGROUND_LINE, backendPort, hasTray } from "./background.ts";
 import { dressWindow, handleAppBridge, sendCommand } from "./chrome.ts";
 import type { AppPaths } from "./controller.ts";
 import { APP_ORIGIN, DEV_SERVER } from "./forwarder.ts";
@@ -88,6 +88,7 @@ function run(): void {
     log: mainLog,
     backendLog: (line) => backendLog.info(line),
     devServer: !app.isPackaged && app.commandLine.hasSwitch(DEV_SWITCH) ? DEV_SERVER : undefined,
+    port: backendPort(background),
     waitingPage: () => {
       pages.waited();
       return waitingPage(shellPageStrings(language(), strings()));
