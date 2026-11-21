@@ -28,7 +28,10 @@ export interface BootIo {
   stderr(text: string): void;
   exit(code: number): void;
   openBrowser(url: string): void;
-  /** Calls `handler` on SIGINT, SIGTERM and SIGHUP, and when the supervisor goes away. */
+  /**
+   * Calls `handler` on SIGINT, SIGTERM and SIGHUP, and when the supervisor goes away, or at once if
+   * it went while the server started.
+   */
   onShutdown(handler: () => void): void;
   /** Tells the supervisor the port, which a restart keeps so an open tab reconnects. */
   notify(message: ListeningMessage): void;
@@ -50,17 +53,24 @@ function openBrowser(url: string): void {
   }
 }
 
-const processIo: BootIo = {
+export const processIo: BootIo = {
   stdout: (text) => void process.stdout.write(text),
   stderr: (text) => void process.stderr.write(text),
   exit: (code) => process.exit(code),
   openBrowser,
   onShutdown(handler) {
     for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, handler);
-    // Killed outright, the supervisor can't forward a signal; its IPC channel just closes.
-    if (process.send) process.on("disconnect", handler);
+    // Killed outright, the supervisor can't forward a signal; its IPC channel just closes. That
+    // can come before this runs, and the event comes only once.
+    if (process.send) {
+      process.on("disconnect", handler);
+      if (!process.connected) handler();
+    }
   },
-  notify: (message) => void process.send?.(message),
+  // A send on a closed channel is an uncaught error, a tick later.
+  notify: (message) => {
+    if (process.connected) process.send?.(message);
+  },
   nowSeconds: () => Date.now() / 1000,
 };
 

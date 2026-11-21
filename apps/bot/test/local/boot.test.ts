@@ -1,12 +1,21 @@
 // Booting the local server: what it prints and when, the browser, the log level, the exits for
 // a missing build, a bad token and a taken port, and stopping or restarting it.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { activePersona, consoleSink, envOptional, logger } from "@eidolon/config";
+import { pathToFileURL } from "node:url";
+import {
+  activePersona,
+  consoleSink,
+  dataHome,
+  envOptional,
+  jsRuntime,
+  logger,
+} from "@eidolon/config";
 import { afterEach, describe, expect, test } from "vitest";
 import { serveFetch } from "../../../../packages/config/test/http.ts";
 import { bootLocal, shutdownOnce } from "../../src/local/boot.ts";
@@ -31,6 +40,13 @@ const IPV6_LOOPBACK = await new Promise<boolean>((resolve) => {
 
 let booted: Booted | null = null;
 const timeline: string[] = [];
+
+/** All of `stream`, once it ends. */
+async function text(stream: NodeJS.ReadableStream | null): Promise<string> {
+  let all = "";
+  for await (const chunk of stream ?? []) all += chunk;
+  return all;
+}
 
 function recordLogs(): void {
   logger.setSink((record) => timeline.push(`log ${record.level} ${record.message}`));
@@ -252,6 +268,40 @@ describe("stopping", () => {
       await delay(20);
     }
     expect(booted.io.exits).toEqual([75]);
+  });
+
+  test("a supervisor gone before the server listened for it still stops it, and is told nothing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eidolon-boot-channel-"));
+    try {
+      const script = join(dir, "server.mjs");
+      const boot = pathToFileURL(join(import.meta.dirname, "../../src/local/boot.ts")).href;
+      writeFileSync(
+        script,
+        `const { processIo } = await import(${JSON.stringify(boot)});
+// As a boot can: the channel closes while the server still starts.
+while (process.connected) await new Promise((done) => setTimeout(done, 10));
+processIo.onShutdown(() => process.stdout.write("shutdown\\n"));
+processIo.notify({ kind: "listening", port: 1 });
+setTimeout(() => process.exit(0), 200);
+`,
+      );
+      const child = spawn(process.execPath, [...jsRuntime().args, script], {
+        env: {
+          ...jsRuntime().env,
+          PATH: process.env.PATH ?? "",
+          EIDOLON_HOME: dataHome(),
+          EIDOLON_NO_DOTENV: "1",
+        },
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+      });
+      child.disconnect();
+      // Node emits no close for a child whose channel the parent closed first.
+      const exited = new Promise((done) => child.on("exit", done));
+      const [out, err] = await Promise.all([text(child.stdout), text(child.stderr)]);
+      expect([await exited, out, err]).toEqual([0, "shutdown\n", ""]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("shutdownOnce: a repeat within half a second is the same Ctrl-C; a later one exits now", async () => {
