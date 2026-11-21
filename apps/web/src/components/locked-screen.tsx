@@ -10,14 +10,52 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { WindowDragStrip } from "@/components/window-drag-strip";
+import { desktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/labels";
 import { exchangeLinkCode, linkCodeIn } from "@/lib/session";
 
 const EXPIRED = msg`That link has expired or isn't valid. A link works for 10 minutes: run the same command again for a fresh one.`;
 const INVALID = msg`That isn't an Eidolon link.`;
 
-/** Shown without a session: open the terminal's link, or paste it here. */
+/**
+ * Shown without a session: open the terminal's link, or paste it here. The desktop app signs its
+ * window in itself and has no link, so there it can only start over.
+ */
 export function LockedScreen({ expired }: { readonly expired: boolean }) {
+  const app = desktop();
+  return app === null ? (
+    <LinkScreen expired={expired} />
+  ) : (
+    <DesktopLockedScreen platform={app.platform} />
+  );
+}
+
+function DesktopLockedScreen({ platform }: { readonly platform: string }) {
+  const { t } = useLingui();
+  return (
+    <div className="flex min-h-svh flex-col items-center justify-center gap-6 px-4 py-10">
+      <WindowDragStrip className="fixed inset-x-0 top-0" />
+      <div className="flex items-center gap-1.5 font-logo font-semibold text-xl">
+        <AppMark />
+        LAPLACE Eidolon
+      </div>
+      <SectionCard
+        className="w-full max-w-md"
+        title={t`This Window Isn't Signed In`}
+        description={t`Eidolon's server didn't accept this window. Quit Eidolon and open it again.`}
+        note={
+          platform === "darwin"
+            ? t`If it happens again, Show Logs in the Help menu has the details.`
+            : t`If it happens again, Show Logs in the tray icon's menu has the details.`
+        }
+        actions={<Button onClick={() => window.location.reload()}>{t`Try Again`}</Button>}
+      />
+    </div>
+  );
+}
+
+function LinkScreen({ expired }: { readonly expired: boolean }) {
   const { t } = useLingui();
   const id = useId();
   const revalidator = useRevalidator();

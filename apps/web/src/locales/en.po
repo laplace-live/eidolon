@@ -1243,6 +1243,10 @@ msgstr "Can't be stopped from here"
 msgid "Can't reach Eidolon. Check that it's still running in the terminal."
 msgstr "Can't reach Eidolon. Check that it's still running in the terminal."
 
+#: src/lib/labels.ts
+msgid "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and open it again."
+msgstr "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and open it again."
+
 #: src/components/settings-form/reindex-dialog.tsx
 #: src/features/chats/chat-menu.tsx
 #: src/features/jobs/parts.tsx
@@ -1843,6 +1847,14 @@ msgid "Eidolon has no such provider account."
 msgstr "Eidolon has no such provider account."
 
 #: src/lib/labels.ts
+msgid "Eidolon hit an internal error. Show Logs in the Help menu has the details."
+msgstr "Eidolon hit an internal error. Show Logs in the Help menu has the details."
+
+#: src/lib/labels.ts
+msgid "Eidolon hit an internal error. Show Logs in the tray icon's menu has the details."
+msgstr "Eidolon hit an internal error. Show Logs in the tray icon's menu has the details."
+
+#: src/lib/labels.ts
 msgid "Eidolon hit an internal error. The terminal has the details."
 msgstr "Eidolon hit an internal error. The terminal has the details."
 
@@ -1885,6 +1897,14 @@ msgstr "Eidolon's Folder"
 #: src/features/settings/skills-card.tsx
 msgid "Eidolon's folder:"
 msgstr "Eidolon's folder:"
+
+#: src/components/locked-screen.tsx
+msgid "Eidolon's server didn't accept this window. Quit Eidolon and open it again."
+msgstr "Eidolon's server didn't accept this window. Quit Eidolon and open it again."
+
+#: src/features/settings/restart.ts
+msgid "Eidolon's server didn't come back. Quit Eidolon and open it again."
+msgstr "Eidolon's server didn't come back. Quit Eidolon and open it again."
 
 #: src/lib/labels.ts
 msgid "Eidolon's skills folder already has a skill by that name."
@@ -2443,6 +2463,14 @@ msgstr "Identity"
 #: src/features/studio/identity-section.tsx
 msgid "Identity saved."
 msgstr "Identity saved."
+
+#: src/components/locked-screen.tsx
+msgid "If it happens again, Show Logs in the Help menu has the details."
+msgstr "If it happens again, Show Logs in the Help menu has the details."
+
+#: src/components/locked-screen.tsx
+msgid "If it happens again, Show Logs in the tray icon's menu has the details."
+msgstr "If it happens again, Show Logs in the tray icon's menu has the details."
 
 #: src/lib/labels.ts
 msgid "Images"
@@ -5732,6 +5760,15 @@ msgstr "This task works without MCP servers: {error}"
 msgid "This video has no upload date, so it can't be placed among the streams."
 msgstr "This video has no upload date, so it can't be placed among the streams."
 
+#: src/components/locked-screen.tsx
+msgid "This Window Isn't Signed In"
+msgstr "This Window Isn't Signed In"
+
+#: src/features/call/call-notices.tsx
+#: src/lib/labels.ts
+msgid "This window isn't signed in. Quit Eidolon and open it again."
+msgstr "This window isn't signed in. Quit Eidolon and open it again."
+
 #: src/features/studio/models-section.tsx
 msgid "Three models take turns to hear you, think and speak for {name}. A realtime model does all three in one session, and can answer sooner."
 msgstr "Three models take turns to hear you, think and speak for {name}. A realtime model does all three in one session, and can answer sooner."
@@ -5828,6 +5865,7 @@ msgstr "Trigger Words"
 msgid "Trigger words: {words}"
 msgstr "Trigger words: {words}"
 
+#: src/components/locked-screen.tsx
 #: src/components/route-error.tsx
 #: src/features/home/memory-panel.tsx
 msgid "Try Again"
