@@ -364,6 +364,8 @@ export interface Smoke {
   readonly checks: Checks;
   /** Starts `app` with `extra` arguments, tracked, its output in the scratch folder. */
   launch(what: string, app: AppLaunch, extra?: readonly string[]): Started;
+  /** Starts the app's main process, as launch("main") does, and has the focus watch check it. */
+  start(app: AppLaunch, extra?: readonly string[]): Started;
   /** `app` under Playwright's Electron driver, tracked, its main watched: unpackaged only. */
   drive(app: AppLaunch, extra?: readonly string[]): Promise<DrivenApp>;
   /** A second launch of `app` with --quit, as a terminal would quit it; null code at the timeout. */
@@ -453,6 +455,11 @@ export async function startSmoke({
       } finally {
         closeSync(output);
       }
+    },
+    start(app, extra = []) {
+      const main = smoke.launch("main", app, extra);
+      if (main.child.pid !== undefined) focus.main(main.child.pid);
+      return main;
     },
     async drive(app, extra = []) {
       refuseFakeUi(extra);
