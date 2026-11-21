@@ -5761,7 +5761,7 @@ msgid "This video has no upload date, so it can't be placed among the streams."
 msgstr "该视频没有上传日期，无法归入直播记录。"
 
 #: src/components/locked-screen.tsx
-msgid "This Window Isn't Signed In"
+msgid "This window isn't signed in"
 msgstr "这个窗口尚未登录"
 
 #: src/features/call/call-notices.tsx

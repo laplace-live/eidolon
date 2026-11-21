@@ -42,7 +42,7 @@ function DesktopLockedScreen({ platform }: { readonly platform: string }) {
       </div>
       <SectionCard
         className="w-full max-w-md"
-        title={t`This Window Isn't Signed In`}
+        title={t`This window isn't signed in`}
         description={t`Eidolon's server didn't accept this window. Quit Eidolon and open it again.`}
         note={
           platform === "darwin"

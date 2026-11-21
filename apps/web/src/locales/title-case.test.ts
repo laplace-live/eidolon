@@ -8,7 +8,7 @@ import { describe, expect, test } from "vitest";
 import { keepsSentenceCase, labelsIn, titleCase } from "../../scripts/title-case.ts";
 
 /** Headings phrased as a sentence, which nothing in their text marks as one. */
-const SENTENCE_HEADINGS = new Set(["You're all set"]);
+const SENTENCE_HEADINGS = new Set(["You're all set", "This window isn't signed in"]);
 
 const SRC = join(import.meta.dirname, "..");
 
@@ -71,6 +71,11 @@ test("every label is in Title Case", () => {
         `${label.file}:${label.line} ${label.slot} "${label.text}" → "${titleCase(label.text)}"`,
     );
   expect(wrong).toEqual([]);
+});
+
+test("every heading listed as a sentence is one, written in sentence case", () => {
+  const found = new Set(labels.map((label) => label.text));
+  expect([...SENTENCE_HEADINGS].filter((heading) => !found.has(heading))).toEqual([]);
 });
 
 describe("titleCase", () => {

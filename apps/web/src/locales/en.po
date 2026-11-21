@@ -5761,8 +5761,8 @@ msgid "This video has no upload date, so it can't be placed among the streams."
 msgstr "This video has no upload date, so it can't be placed among the streams."
 
 #: src/components/locked-screen.tsx
-msgid "This Window Isn't Signed In"
-msgstr "This Window Isn't Signed In"
+msgid "This window isn't signed in"
+msgstr "This window isn't signed in"
 
 #: src/features/call/call-notices.tsx
 #: src/lib/labels.ts
