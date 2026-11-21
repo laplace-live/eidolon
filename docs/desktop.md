@@ -63,12 +63,13 @@ Closing the window only hides it. Quit from the menus, ⌘Q, the tray, or a seco
 Vite and exiting:
 
 ```bash
-"$(cd apps/desktop && node -p 'require("electron")')" apps/desktop --quit
+"$(cd apps/desktop && node -p 'require("electron")' | tail -n 1)" apps/desktop --quit
 ```
 
 `require("electron")` from `apps/desktop` gives the path to Electron's binary, which its package
-downloads on first use. Unpackaged, the profile is `Eidolon Dev`, never the installed app's, and
-the dev backend uses the normal data home: a `bun run app` or `dev:local` already serving it is
+downloads on first use, after printing a line of its own to stdout: hence the `tail`. Unpackaged,
+the profile is `Eidolon Dev`, never the installed app's, and the dev backend uses the normal data
+home: a `bun run app` or `dev:local` already serving it is
 [attached to](#attaching-to-a-server-already-on-the-data-home), not replaced. Every test run of
 the app is in [background mode](#background-mode).
 
@@ -479,8 +480,7 @@ no stage. On macOS it writes `.out/mac-arm64/Eidolon.app`, a DMG and a zip; on W
 and `.out/win-unpacked`. The flags stay on the command line, never in `electron-builder.yml`, which
 a release config will extend: an identity there would replace the release's. Builds are unsigned
 (ad hoc on macOS, where that signs every Mach-O, the payload's natives included, with the hardened
-runtime): signing, notarization, the updater and releases come later, so the update hooks
-`.env.example` lists do nothing yet.
+runtime): signing, notarization, the updater and releases come later.
 
 `electron-builder.yml`:
 
@@ -888,9 +888,10 @@ itself alone: it isn't paths-ignored, so a change to it deploys production. A ca
 fake microphone, or background mode denies it ([above](#driving-it-in-background-mode)).
 
 - **Unpackaged,** after `bun run build:desktop` (or only its Vite builds) and `bun run build:web`,
-  `"$(cd apps/desktop && node -p 'require("electron")')" apps/desktop --user-data-dir=<profile>`
-  runs it with its backend from source serving `apps/web/dist`; Playwright's `_electron` drives it
-  the same way.
+  `"$(cd apps/desktop && node -p 'require("electron")' | tail -n 1)" apps/desktop --user-data-dir=<profile>`
+  runs it with its backend from source serving `apps/web/dist`; the `tail` drops the line the first
+  `require` prints as it downloads the binary, which neither build fetches on macOS. Playwright's
+  `_electron` drives it the same way.
 - **Packaged,** run `apps/desktop/.out/mac-arm64/Eidolon.app/Contents/MacOS/Eidolon
   --user-data-dir=<profile>` (`.out\win-unpacked\Eidolon.exe` on Windows), and drive its backend
   once main.log says the window shows `eidolon-app://app/`:
