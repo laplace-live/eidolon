@@ -175,12 +175,12 @@ describe("the third-party notices", () => {
 
   test("NOTICE, which the package ships, names every copyright a ported file's header does", () => {
     const notice = readFileSync(join(ROOT, "NOTICE"), "utf8");
-    // pipedog's ports are BSD-2, pi-mono's MIT.
+    // pipedog's ports are BSD-2, pi-mono's and deepseek-harness's MIT.
     const holders = new Map<string, Set<string>>([
       ["BSD-2-Clause", new Set()],
       ["MIT", new Set()],
     ]);
-    for (const file of globSync("packages/*/src/**/*.ts", { cwd: ROOT })) {
+    for (const file of globSync("{apps,packages}/*/src/**/*.ts", { cwd: ROOT })) {
       const source = readFileSync(join(ROOT, file), "utf8");
       const license = /^\/\/ SPDX-License-Identifier: (BSD-2-Clause|MIT)$/m.exec(source)?.[1];
       if (license === undefined) continue;
