@@ -1,0 +1,7 @@
+# The release feed for EIDOLON_DESKTOP_DEV_UPDATE=1 (forceDevUpdateConfig): electron-updater reads
+# this file only in an unpackaged build, and electron-builder never packs it. The feed is
+# electron-builder.yml's publish block; the cache is apart from the installed app's eidolon-updater.
+provider: generic
+url: https://downloads.vrp.moe/eidolon
+useMultipleRangeRequest: false
+updaterCacheDirName: eidolon-dev-updater

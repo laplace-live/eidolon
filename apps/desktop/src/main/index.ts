@@ -15,7 +15,7 @@ import { APP_ORIGIN, DEV_SERVER } from "./forwarder.ts";
 import { background, isLaunchRequest, primary, refused, request } from "./instance.ts";
 import { backendLog, logStart, logsFolder, mainLog } from "./log.ts";
 import { attachContextMenu, setApplicationMenu } from "./menu.ts";
-import { aboutPanel, type TrayActions } from "./menus.ts";
+import { aboutPanel, type TrayActions, type UpdatesItem, updatesItem } from "./menus.ts";
 import { native, saveDownloads } from "./native.ts";
 import { guardNavigation } from "./navigation.ts";
 import {
@@ -38,6 +38,8 @@ import { installQuit, watchSession } from "./quit.ts";
 import { HideNotice } from "./quit-flow.ts";
 import { STRINGS, shellLanguage } from "./strings.ts";
 import { AppTray, trayIconPath } from "./tray.ts";
+import type { UpdateFlow } from "./update-flow.ts";
+import { installUpdater } from "./updater.ts";
 import { createWindow, mainWindow, showWindow } from "./window.ts";
 
 /** NSIS gives the Start menu shortcut appId as its AppUserModelID. */
@@ -70,6 +72,9 @@ function run(): void {
   const strings = () => STRINGS[language()];
   let tray: AppTray | null = null;
   let hideNotice: HideNotice | null = null;
+  let updates: UpdateFlow | null = null;
+  /** Check for Updates… as the menus have it. */
+  let menuUpdates: UpdatesItem = "hidden";
   /** The scheme and the session's guards are in place, so a window may load. */
   let started = false;
 
@@ -112,6 +117,7 @@ function run(): void {
       openWindow();
       commands.send("settings");
     },
+    checkForUpdates: () => updates?.checkByHand(),
     showLogs: () => open(logsFolder()),
     openDataFolder: () => open(backend.home ?? dataHome(process.env)),
     licenses: () => open(licensesFile(paths)),
@@ -139,12 +145,18 @@ function run(): void {
     app.setAboutPanelOptions(aboutOptions());
   }
 
+  /** The application menu and the tray's, in the shell's language, as the updater stands. */
+  function setMenus(): void {
+    menuUpdates = updates === null ? "hidden" : updatesItem(updates.state.phase);
+    setApplicationMenu(strings(), actions, menuUpdates);
+    tray?.relabel(strings(), menuUpdates);
+  }
+
   function languageChanged(next: Language): void {
     const before = language();
     reported = next;
     if (language() === before) return;
-    setApplicationMenu(strings(), actions);
-    tray?.relabel(strings());
+    setMenus();
     setAbout();
   }
 
@@ -195,6 +207,16 @@ function run(): void {
     .then(async () => {
       logStart(version);
       if (background) mainLog.info(BACKGROUND_LINE);
+      updates = installUpdater({
+        quit: flow,
+        strings,
+        version,
+        icon,
+        // A download's progress leaves the item as it is.
+        changed: (state) => {
+          if (updatesItem(state.phase) !== menuUpdates) setMenus();
+        },
+      });
       // Before the first load: with no handlers, Electron grants every request.
       guardPermissions(session.defaultSession, {
         isWindow: (contents) => contents !== null && contents === mainWindow()?.webContents,
@@ -220,10 +242,10 @@ function run(): void {
         language: languageChanged,
         takesCommands: () => commands.listening(),
       });
-      setApplicationMenu(strings(), actions);
+      setMenus();
       setAbout();
       if (hasTray(process.platform, background)) {
-        tray = new AppTray(strings(), actions);
+        tray = new AppTray(strings(), actions, menuUpdates);
         hideNotice = new HideNotice({
           marker: join(app.getPath("userData"), TRAY_NOTICE_MARKER),
           show: () => {
@@ -243,7 +265,9 @@ function run(): void {
       }
       backend.subscribe((state) => {
         pages.backend(state);
-        if (state.phase === "ready") setAbout();
+        if (state.phase !== "ready") return;
+        setAbout();
+        updates?.backendReady();
       });
       started = true;
       newWindow();

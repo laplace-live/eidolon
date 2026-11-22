@@ -1,5 +1,5 @@
-// The menus as data: what each holds, in either language, with no Check for Updates… before the
-// updater exists.
+// The menus as data: what each holds, in either language, and Check for Updates… as the updater
+// stands.
 import { describe, expect, test } from "vitest";
 import {
   aboutPanel,
@@ -7,6 +7,7 @@ import {
   macMenu,
   type TrayActions,
   trayMenu,
+  updatesItem,
   windowsMenu,
 } from "../src/main/menus.ts";
 import { STRINGS } from "../src/main/strings.ts";
@@ -31,6 +32,7 @@ function recordingActions(): { actions: TrayActions; calls: string[] } {
       licenses: act("licenses"),
       open: act("open"),
       about: act("about"),
+      checkForUpdates: act("checkForUpdates"),
       quit: act("quit"),
     },
   };
@@ -55,19 +57,24 @@ describe("macOS's menu bar", () => {
   test("holds the app, Edit, View, Window and Help menus, worded in the shell's language", () => {
     const { actions } = recordingActions();
     expect(
-      macMenu(en, actions, { packaged: true, background: false }).map((menu) => menu.label),
+      macMenu(en, actions, { packaged: true, background: false, updates: "enabled" }).map(
+        (menu) => menu.label,
+      ),
     ).toEqual(["Eidolon", "Edit", "View", "Window", "Help"]);
     expect(
-      macMenu(zh, actions, { packaged: true, background: false }).map((menu) => menu.label),
+      macMenu(zh, actions, { packaged: true, background: false, updates: "enabled" }).map(
+        (menu) => menu.label,
+      ),
     ).toEqual(["Eidolon", "编辑", "显示", "窗口", "帮助"]);
   });
 
-  test("its app menu: About, Settings… on ⌘, Services, Hide, Hide Others, Show All, Quit; no update check yet", () => {
+  test("its app menu: About, Check for Updates…, Settings… on ⌘, Services, Hide, Hide Others, Show All, Quit", () => {
     const { actions, calls } = recordingActions();
-    const [app] = macMenu(en, actions, { packaged: true, background: false });
+    const [app] = macMenu(en, actions, { packaged: true, background: false, updates: "enabled" });
     const items = itemsOf(app);
     expect(outline(items)).toEqual([
       "about",
+      "Check for Updates…",
       "-",
       "Settings…",
       "-",
@@ -81,6 +88,7 @@ describe("macOS's menu bar", () => {
     ]);
     expect(items.map((item) => item.label).filter(Boolean)).toEqual([
       "About Eidolon",
+      "Check for Updates…",
       "Settings…",
       "Services",
       "Hide Eidolon",
@@ -88,21 +96,33 @@ describe("macOS's menu bar", () => {
       "Show All",
       "Quit Eidolon",
     ]);
-    expect(itemsOf(macMenu(zh, actions, { packaged: true, background: false })[0])[4]?.label).toBe(
-      "服务",
-    );
+    expect(
+      itemsOf(macMenu(zh, actions, { packaged: true, background: false, updates: "enabled" })[0])
+        .map((item) => item.label)
+        .slice(1, 6),
+    ).toEqual(["检查更新…", undefined, "设置…", undefined, "服务"]);
     const settings = items.find((item) => item.label === "Settings…");
     expect(settings?.accelerator).toBe("Command+,");
     click(settings);
-    expect(calls).toEqual(["settings"]);
-    expect(
-      JSON.stringify(macMenu(en, actions, { packaged: false, background: false })),
-    ).not.toMatch(/Update/i);
+    click(items[1]);
+    expect(calls).toEqual(["settings", "checkForUpdates"]);
+  });
+
+  test("Check for Updates… is disabled while a check, a download or the restart runs, and absent when this run can't update", () => {
+    const { actions } = recordingActions();
+    const app = (updates: "enabled" | "disabled" | "hidden") =>
+      itemsOf(macMenu(en, actions, { packaged: true, background: false, updates })[0]);
+    expect(app("enabled")[1]).toMatchObject({ label: "Check for Updates…", enabled: true });
+    expect(app("disabled")[1]).toMatchObject({ label: "Check for Updates…", enabled: false });
+    expect(outline(app("hidden")).slice(0, 3)).toEqual(["about", "-", "Settings…"]);
+    expect(JSON.stringify(app("hidden"))).not.toMatch(/Update/i);
   });
 
   test("its Edit menu has every role copy and paste need", () => {
     const { actions } = recordingActions();
-    const edit = itemsOf(macMenu(en, actions, { packaged: true, background: false })[1]);
+    const edit = itemsOf(
+      macMenu(en, actions, { packaged: true, background: false, updates: "enabled" })[1],
+    );
     expect(outline(edit)).toEqual([
       "undo",
       "redo",
@@ -120,7 +140,7 @@ describe("macOS's menu bar", () => {
   test("View zooms and goes fullscreen; Toggle Developer Tools only unpackaged", () => {
     const { actions } = recordingActions();
     const view = (packaged: boolean) =>
-      outline(itemsOf(macMenu(en, actions, { packaged, background: false })[2]));
+      outline(itemsOf(macMenu(en, actions, { packaged, background: false, updates: "hidden" })[2]));
     expect(view(true)).toEqual(["resetZoom", "zoomIn", "zoomOut", "-", "togglefullscreen"]);
     expect(view(false)).toEqual([
       "resetZoom",
@@ -135,7 +155,7 @@ describe("macOS's menu bar", () => {
 
   test("in background mode, About is the app's own item, which logs the panel, and there are no developer tools", () => {
     const { actions, calls } = recordingActions();
-    const menus = macMenu(en, actions, { packaged: false, background: true });
+    const menus = macMenu(en, actions, { packaged: false, background: true, updates: "hidden" });
     const [about] = itemsOf(menus[0]);
     expect(about?.role).toBeUndefined();
     expect(about?.label).toBe("About Eidolon");
@@ -152,7 +172,7 @@ describe("macOS's menu bar", () => {
 
   test("Window minimizes, zooms, closes (which hides) and brings all to front; Help opens three things", () => {
     const { actions, calls } = recordingActions();
-    const menus = macMenu(en, actions, { packaged: true, background: false });
+    const menus = macMenu(en, actions, { packaged: true, background: false, updates: "enabled" });
     expect(menus[3]?.role).toBe("window");
     expect(outline(itemsOf(menus[3]))).toEqual(["minimize", "zoom", "-", "close", "-", "front"]);
     expect(menus[4]?.role).toBe("help");
@@ -175,12 +195,13 @@ test("Windows' menu holds View's zoom roles alone, whose accelerators work with 
   ]);
 });
 
-test("the tray's menu: Open, Settings…, Show Logs, Open Data Folder, Licenses, About and Quit", () => {
+test("the tray's menu: Open, Settings…, Check for Updates…, Show Logs, Open Data Folder, Licenses, About and Quit", () => {
   const { actions, calls } = recordingActions();
-  const items = trayMenu(en, actions);
+  const items = trayMenu(en, actions, "enabled");
   expect(outline(items)).toEqual([
     "Open Eidolon",
     "Settings…",
+    "Check for Updates…",
     "-",
     "Show Logs",
     "Open Data Folder",
@@ -193,13 +214,28 @@ test("the tray's menu: Open, Settings…, Show Logs, Open Data Folder, Licenses,
   expect(calls).toEqual([
     "open",
     "settings",
+    "checkForUpdates",
     "showLogs",
     "openDataFolder",
     "licenses",
     "about",
     "quit",
   ]);
-  expect(outline(trayMenu(zh, actions))).toContain("退出 Eidolon");
+  expect(outline(trayMenu(zh, actions, "enabled"))).toEqual(
+    expect.arrayContaining(["检查更新…", "退出 Eidolon"]),
+  );
+  expect(trayMenu(en, actions, "disabled")[2]).toMatchObject({ enabled: false });
+  expect(outline(trayMenu(en, actions, "hidden"))).not.toContain("Check for Updates…");
+});
+
+test("updatesItem: hidden while unsupported, disabled while a check, a download or the restart runs", () => {
+  expect(updatesItem("unsupported")).toBe("hidden");
+  for (const phase of ["checking", "downloading", "installing"] as const) {
+    expect([phase, updatesItem(phase)]).toEqual([phase, "disabled"]);
+  }
+  for (const phase of ["idle", "available", "downloaded", "error"] as const) {
+    expect([phase, updatesItem(phase)]).toEqual([phase, "enabled"]);
+  }
 });
 
 describe("the context menu", () => {

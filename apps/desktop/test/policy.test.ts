@@ -6,6 +6,7 @@ import {
   DEBUGGING_SWITCHES,
   isAppOrigin,
   leftTheApp,
+  loggedText,
   loggedUrl,
   mayRedirect,
   microphoneStep,
@@ -122,6 +123,20 @@ test("main.log names an address without its user name, password, query or fragme
   expect(loggedUrl("https://owner@example.com/")).toBe("https://example.com/");
   expect(loggedUrl("eidolon-app://owner:hunter2@app/chats")).toBe("eidolon-app://app/chats");
   expect(loggedUrl("not a url")).toBe("an unreadable URL");
+});
+
+test("loggedText gives each web URL in a line as loggedUrl does, and leaves the rest", () => {
+  expect(
+    loggedText(
+      'HttpError: 404 "method: GET url: https://downloads.vrp.moe/eidolon/latest-mac.yml?noCache=1j2k3"',
+    ),
+  ).toBe('HttpError: 404 "method: GET url: https://downloads.vrp.moe/eidolon/latest-mac.yml"');
+  expect(loggedText("from https://a:b@x.test/v1/E.zip?t=1#f, HTTP://y.test/?k")).toBe(
+    "from https://x.test/v1/E.zip, http://y.test/",
+  );
+  expect(loggedText("Found version 0.2.0 (url: Eidolon-0.2.0-arm64-mac.zip)")).toBe(
+    "Found version 0.2.0 (url: Eidolon-0.2.0-arm64-mac.zip)",
+  );
 });
 
 describe("permission requests", () => {

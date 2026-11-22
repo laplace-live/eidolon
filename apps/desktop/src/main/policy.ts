@@ -94,6 +94,14 @@ export function loggedUrl(url: string): string {
   return parsed.href;
 }
 
+/** `text` for main.log, each web URL in it as loggedUrl gives it, the sentence's punctuation kept. */
+export function loggedText(text: string): string {
+  return text.replace(/\bhttps?:\/\/[^\s"'<>]+/gi, (match) => {
+    const [, url = match, tail = ""] = /^(.*?)([.,;:!?)\]]*)$/.exec(match) ?? [];
+    return loggedUrl(url) + tail;
+  });
+}
+
 /** Who asked for a permission, as the request handler sees it. */
 export interface PermissionAsker {
   /** Whether the request came from the app window's webContents. */

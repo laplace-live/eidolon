@@ -55,8 +55,37 @@ describe("STRINGS", () => {
       en.text.held,
       en.text.hideNoticeTitle,
       en.text.microphoneTitle,
+      en.text.updateAvailableTitle("0.2.0"),
+      en.text.updateDownloadedTitle,
+      en.text.upToDateTitle,
+      en.text.checkFailedTitle,
+      en.text.downloadFailedTitle,
     ];
     expect(titles.filter((title) => titleCase(title) === title)).toEqual([]);
+  });
+
+  test("the update's labels are Title Case, and the Chinese ones the web app's where it has them", () => {
+    expect([
+      en.label.checkForUpdates,
+      en.label.download,
+      en.label.later,
+      en.label.releaseNotes,
+      en.label.restart,
+    ]).toEqual(["Check for Updates…", "Download", "Later", "Release Notes", "Restart"]);
+    expect(webChinese("Download")).toBe(zh.label.download);
+    expect(zh.label.checkForUpdates).toBe("检查更新…");
+  });
+
+  test("the update's boxes name both versions, in both languages", () => {
+    expect(en.text.updateAvailableTitle("0.2.0")).toBe("Eidolon 0.2.0 is available");
+    expect(en.text.updateAvailable("0.1.0")).toContain("You have 0.1.0.");
+    expect(en.text.updateDownloaded("0.2.0")).toContain("installs the next time you quit Eidolon");
+    expect(en.text.upToDate("0.1.0")).toBe("Eidolon 0.1.0 is the latest version.");
+    expect(en.text.updateFailed).toContain(`${en.label.showLogs} has the details`);
+    expect(zh.text.updateAvailableTitle("0.2.0")).toBe("Eidolon 0.2.0 已发布");
+    expect(zh.text.updateAvailable("0.1.0")).toContain("当前版本为 0.1.0");
+    expect(zh.text.updateDownloaded("0.2.0")).toContain("下次退出 Eidolon 时安装");
+    expect(zh.text.updateFailed).toContain(`「${zh.label.showLogs}」`);
   });
 
   test("names the Help menu, Show Logs and the tray icon as the web app's desktop copy does", () => {
