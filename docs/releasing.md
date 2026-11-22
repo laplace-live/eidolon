@@ -38,22 +38,85 @@ The fixed group bumps both packages whichever one a changeset names, but each `C
 lists only the changesets that name its own package. A changeset that names only one leaves the
 other's release notes without that line, or saying "No changes in this release." when it was the
 only one. `--minor`, `--patch` and the summary's form are in
-[AGENTS.md](../AGENTS.md#shipping-a-change).
+[AGENTS.md](../AGENTS.md#shipping-a-change). The summary's prefix is its kind in
+[changelog.json](#changelogjson), and `.changeset/changelog.mjs` leaves it out of `CHANGELOG.md`.
 
 ## The version PR
 
 On every push to `master` while changesets are pending, the workflow keeps a `chore: version
 packages` PR open. Its commit is `bun run version`:
 
-1. `changeset version` bumps `apps/bot/package.json`, `apps/eidolon/package.json`,
+1. `changeset status --output=.changeset/.status.json` saves what the release holds: each
+   changeset's summary and packages, and each package's new version.
+2. `changeset version` bumps `apps/bot/package.json`, `apps/eidolon/package.json`,
    `packages/sdk/package.json` and/or `apps/desktop/package.json`, adds each package's entry to its
    `CHANGELOG.md`, and deletes the changesets.
-2. `apps/bot/scripts/sync-version.ts` copies the version into `packages/runtime/src/rtvi.ts`,
+3. `apps/bot/scripts/sync-version.ts` copies the version into `packages/runtime/src/rtvi.ts`,
    and into the Python reference implementation's `pyproject.toml`, `uv.lock` and bot entry
    point (AGENTS.md, "The Python").
+4. `node scripts/changelog.ts sync` adds the release to [changelog.json](#changelogjson) from the
+   saved status, and deletes it.
 
 The PR runs the full CI. `bun.lock` keeps the old workspace versions until a later `bun install`
 rewrites them, which `--frozen-lockfile` tolerates.
+
+## changelog.json
+
+`changelog.json`, at the root, is every release of every released package in one file, newest
+first: the website shows it, and the desktop app's update box shows its slice. No `CHANGELOG.md`
+can: each lists only its own package's changes, and without their kind.
+
+```json
+{
+  "schema": 1,
+  "releases": [
+    {
+      "date": "2026-11-22T19:41:36.000Z",
+      "versions": { "@laplace.live/eidolon": "0.14.0", "laplace-eidolon": "0.14.0" },
+      "items": [
+        {
+          "kind": "fix",
+          "packages": ["@laplace.live/eidolon", "laplace-eidolon"],
+          "text": "Stop a cancelled ingest at once, even while it waits out an embedding quota error"
+        }
+      ]
+    }
+  ]
+}
+```
+
+A release is what one `changeset version` released, so `versions` names each package it bumped
+and no other; an item is one changeset, with every package it named and its summary as `text`.
+The `kind` is the summary's prefix: `feat:` is `feature`, `perf:` is `performance`, `fix:` and
+`revert:` are `fix`, `chore:`, `refactor:`, `docs:` and their like are `improvement`, and anything
+else is `other` (`classify` in [scripts/changelog.ts](../scripts/changelog.ts)). The shape is
+laplace-persona's, so the website reads both apps' files alike.
+
+- **`bun run version` writes it**, in the version PR: `sync` adds the release from the status
+  saved before `changeset version` consumed the changesets, dated when the PR was last updated.
+  It records a summary whole, so a second line would reach the website; the update box shows
+  only the first.
+- **`bun run changelog:backfill` rebuilds it** from the release tags and the `CHANGELOG.md`
+  sections they name, so it needs the whole history and every tag (`git fetch --tags`). The tags
+  one `changeset publish` left on a commit make one release, dated by that commit. Each item's
+  kind is the prefix of the changeset its version commit deleted; a bullet with no changeset in
+  the history gets one from its opening verb and its bump, which only the SDK's 0.1.0, published
+  by hand, needs. That version has no tag either, so its release is dated by the commit that
+  wrote its section. A re-run rewrites the whole file, `sync`'s dates with the tags'.
+- **The website reads it** at `https://downloads.vrp.moe/eidolon/changelog.json`, where the
+  desktop's release uploads it.
+- **The update manifest carries the desktop's slice.** `node scripts/changelog.ts manifest`
+  prints one line, `eidolonNotes: [...]`: the desktop app's 10 newest releases (`MANIFEST_LIMIT`)
+  as JSON, which is YAML, for desktop.yml to append to `latest-mac.yml` and `latest.yml`.
+  electron-updater parses the whole manifest, so the notes arrive with the version check's own
+  request, frozen as they were when the release uploaded it.
+  `apps/desktop/src/shared/release-notes.ts` reads them as remote input, keeps the releases of
+  the desktop app after the running version and up to the offered one, with their items about the
+  app or the backend it ships (none about the SDK alone), and writes them as the box's text: a
+  line per item after its kind's label, at most 8, and a line that counts the rest.
+
+`scripts/changelog.test.ts` covers the script, with `bun run version`'s own steps in a fixture
+repository, and `apps/desktop/test/release-notes.test.ts` the desktop's side.
 
 ## Tags, GitHub Releases and images
 

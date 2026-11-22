@@ -1,5 +1,19 @@
 # laplace-eidolon
 
+## 0.14.0
+
+### Minor Changes
+
+- ea544a4: Pick any supported provider for hearing, chat, voice, embeddings and decisions in setup
+
+### Patch Changes
+
+- 13ad749: Estimate refinement costs at each provider's current prices, not outdated ones
+- db02978: Starting Eidolon again links to the running one at the address it listens on
+- b9cf40b: Say Eidolon's log, not just the terminal, has an internal error's details
+- e2e6262: Stop a cancelled ingest at once, even while it waits out an embedding quota error
+- 04d0e3f: Estimate memory's embedding spend when the provider reports none, as knowledge search does
+
 ## 0.13.0
 
 ### Minor Changes

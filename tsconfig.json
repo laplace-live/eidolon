@@ -29,6 +29,7 @@
     "apps/eidolon/scripts",
     "packages/*/src",
     "packages/*/test",
+    "scripts",
     "vitest.config.ts"
   ],
   "exclude": ["apps/web", "packages/sdk"]

@@ -4,7 +4,9 @@
     "includes": [
       "apps/**",
       "packages/**",
+      "scripts/**",
       "*.json",
+      "!changelog.json",
       "*.ts",
       "!**/node_modules",
       "!packages/retrieval/data",
