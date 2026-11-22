@@ -45,7 +45,11 @@ function bufferSource(buffer: Buffer): Source {
   };
 }
 
-/** The PE facts of `file`, a path or the file's bytes; null when it isn't a PE image. */
+/**
+ * The PE facts of `file`, a path or the file's bytes; null when it isn't a PE image. A header or
+ * table that runs past its end throws a RangeError, so a broken DLL fails staging rather than being
+ * skipped; a certificate table that does gives no signer.
+ */
 export function readPe(file: string | Buffer): Pe | null {
   if (Buffer.isBuffer(file)) return parse(bufferSource(file));
   const fd = openSync(file, "r");
