@@ -3,6 +3,7 @@
 // installs, its boxes, and EIDOLON_DESKTOP_MOCK_UPDATE's fakes. updater.ts runs it on
 // electron-updater.
 import type { MessageBoxOptions } from "electron";
+import type { UpdateInfo } from "electron-updater";
 import { launchFlag } from "./environment.ts";
 import { loggedText } from "./policy.ts";
 import type { Strings } from "./strings.ts";
@@ -129,7 +130,13 @@ export function releaseNotesUrl(version: string): string {
 
 /** A box the flow shows. */
 export type UpdateBox =
-  | { readonly kind: "available"; readonly version: string; readonly current: string }
+  | {
+      readonly kind: "available";
+      readonly version: string;
+      readonly current: string;
+      /** The release's notes, under the box's text; none when empty. */
+      readonly notes?: string;
+    }
   | { readonly kind: "downloaded"; readonly version: string }
   | { readonly kind: "up-to-date"; readonly current: string }
   | { readonly kind: "check-failed" }
@@ -169,7 +176,7 @@ export function updateBox(
       return ask(
         "info",
         text.updateAvailableTitle(box.version),
-        text.updateAvailable(box.current),
+        [text.updateAvailable(box.current), box.notes].filter(Boolean).join("\n\n"),
         [label.download, label.later, label.releaseNotes],
       );
     case "downloaded":
@@ -191,8 +198,11 @@ export function updateBox(
 
 /** What the flow runs on: electron-updater's autoUpdater, or the mock. */
 export interface UpdateDriver {
-  /** Checks the feed once: the newer version it offers, or null. Rejects when the check fails. */
-  check(): Promise<string | null>;
+  /**
+   * Checks the feed once: a newer version's manifest as electron-updater parsed it, every key of
+   * latest*.yml kept, or null. Rejects when the check fails.
+   */
+  check(): Promise<UpdateInfo | null>;
   /** Downloads what the last check found, telling its percent. Rejects when it fails. */
   download(progress: (percent: number) => void): Promise<void>;
   /** quitAndInstall: quits, installs silently and starts the new version. */
@@ -223,6 +233,8 @@ export interface UpdateFlowOptions {
   readonly log: { info(message: string): void; warn(message: string): void };
   /** Each new state: the menus follow it. */
   readonly changed?: (state: UpdateState) => void;
+  /** The release's notes for the box that offers it, from its manifest; none unless given. */
+  readonly notes?: (info: UpdateInfo, current: string) => string;
 }
 
 /** An error's first line for main.log and the state, its URLs without their queries. */
@@ -239,6 +251,8 @@ export class UpdateFlow {
   readonly #options: UpdateFlowOptions;
   readonly #driver: UpdateDriver | null;
   #state: UpdateState;
+  /** The manifest of the update the last check found. */
+  #found: UpdateInfo | null = null;
   #checking: Promise<UpdateCheckOutcome> | null = null;
   /** Whether the running check reports "up to date" and failures: Check for Updates… asked too. */
   #manual = false;
@@ -394,8 +408,10 @@ export class UpdateFlow {
     this.#options.log.info("Eidolon: checking for updates");
     let outcome: UpdateCheckOutcome;
     try {
-      const version = await driver.check();
-      outcome = version === null ? { outcome: "none" } : { outcome: "available", version };
+      const found = await driver.check();
+      if (found !== null) this.#found = found;
+      outcome =
+        found === null ? { outcome: "none" } : { outcome: "available", version: found.version };
     } catch (error) {
       outcome = { outcome: "error", message: reason(error) };
     }
@@ -423,10 +439,13 @@ export class UpdateFlow {
     const state = this.#state;
     if (state.phase !== "available") return;
     const { version } = state;
+    const { version: current, notes } = this.#options;
+    const found = this.#found;
     const response = await this.#ask({
       kind: "available",
       version,
-      current: this.#options.version,
+      current,
+      notes: found === null ? "" : (notes?.(found, current) ?? ""),
     });
     if (response === GO) this.download();
     else if (response === RELEASE_NOTES) this.#options.open(releaseNotesUrl(version));
@@ -509,7 +528,7 @@ export function mockUpdates(log: { info(message: string): void }): {
     driver: {
       check: async () => {
         await sleep(MOCK_CHECK_MS);
-        return MOCK_VERSION;
+        return { version: MOCK_VERSION, files: [], path: "", sha512: "", releaseDate: "" };
       },
       download: (progress) => {
         const fails = ++downloads === 1;

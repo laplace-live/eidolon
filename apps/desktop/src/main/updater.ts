@@ -53,7 +53,7 @@ function releaseFeed(dev: boolean): UpdateDriver {
     check: async () => {
       const result = await updater.checkForUpdates();
       if (result === null) throw new Error("electron-updater is inactive in this build");
-      return result.isUpdateAvailable ? result.updateInfo.version : null;
+      return result.isUpdateAvailable ? result.updateInfo : null;
     },
     download: async (progress) => {
       const listener = (info: ProgressInfo) => progress(info.percent);

@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MessageBoxOptions } from "electron";
+import type { UpdateInfo } from "electron-updater";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { type NativeUi, nativeUi } from "../src/main/background.ts";
 import { QuitConfirmation } from "../src/main/quit-check.ts";
@@ -280,6 +281,16 @@ describe("updateBox", () => {
     });
   });
 
+  test("an update's notes go under the box's text, and an empty one adds nothing", () => {
+    const box = { kind: "available", version: "0.2.0", current: "0.1.0" } as const;
+    expect(updateBox({ ...box, notes: "• Faster calls" }, en, "darwin").detail).toBe(
+      `${en.text.updateAvailable("0.1.0")}\n\n• Faster calls`,
+    );
+    expect(updateBox({ ...box, notes: "" }, en, "darwin").detail).toBe(
+      en.text.updateAvailable("0.1.0"),
+    );
+  });
+
   test("in the shell's language", () => {
     expect(
       updateBox(
@@ -294,14 +305,26 @@ describe("updateBox", () => {
   });
 });
 
+/** A newer version's manifest, as electron-updater parses latest*.yml, with any key it adds. */
+function release(version: string, extra: Record<string, unknown> = {}): UpdateInfo {
+  return {
+    version,
+    files: [],
+    path: "",
+    sha512: "",
+    releaseDate: "2026-11-22T00:00:00.000Z",
+    ...extra,
+  };
+}
+
 /** A driver whose every check and download waits on the test. */
 function scripted() {
-  const checks: PromiseWithResolvers<string | null>[] = [];
+  const checks: PromiseWithResolvers<UpdateInfo | null>[] = [];
   const downloads: { progress: (percent: number) => void; done: PromiseWithResolvers<void> }[] = [];
   const installs: string[] = [];
   const driver: UpdateDriver = {
     check: () => {
-      const check = Promise.withResolvers<string | null>();
+      const check = Promise.withResolvers<UpdateInfo | null>();
       checks.push(check);
       return check.promise;
     },
@@ -453,7 +476,7 @@ describe("UpdateFlow", () => {
     let response = LATER;
     const f = harness(s.driver, { answer: () => response });
     const found = f.flow.check(false);
-    s.checks[0]?.resolve("0.2.0");
+    s.checks[0]?.resolve(release("0.2.0"));
     expect(await found).toEqual({ outcome: "available", version: "0.2.0" });
     await settle();
     expect(messages(f.shown)).toEqual(["Eidolon 0.2.0 is available"]);
@@ -468,11 +491,38 @@ describe("UpdateFlow", () => {
     expect(s.downloads).toHaveLength(0);
   });
 
+  test("the box that offers an update shows what `notes` makes of its whole manifest, and no notes without it", async () => {
+    const s = scripted();
+    const read: unknown[] = [];
+    const f = harness(s.driver, {
+      answer: () => LATER,
+      notes: (info, current) => {
+        read.push(info);
+        return `${(info as UpdateInfo & { eidolonNotes?: string }).eidolonNotes} since ${current}`;
+      },
+    });
+    const manifest = release("0.2.0", { eidolonNotes: "• Faster calls" });
+    void f.flow.check(false);
+    s.checks[0]?.resolve(manifest);
+    await settle();
+    expect(read).toEqual([manifest]);
+    expect(f.shown[0]?.detail).toBe(
+      `${en.text.updateAvailable("0.1.0")}\n\n• Faster calls since 0.1.0`,
+    );
+
+    const plain = scripted();
+    const g = harness(plain.driver, { answer: () => LATER });
+    void g.flow.check(false);
+    plain.checks[0]?.resolve(manifest);
+    await settle();
+    expect(g.shown[0]?.detail).toBe(en.text.updateAvailable("0.1.0"));
+  });
+
   test("Download shows its progress on the Dock or the taskbar, cleared at the end, then asks to restart", async () => {
     const s = scripted();
     const f = harness(s.driver, { answer: (box) => (box.buttons?.[0] === "Restart" ? LATER : 0) });
     void f.flow.check(false);
-    s.checks[0]?.resolve("0.2.0");
+    s.checks[0]?.resolve(release("0.2.0"));
     await settle();
     expect(f.flow.state).toEqual({ phase: "downloading", version: "0.2.0", percent: 0 });
     s.downloads[0]?.progress(12.4);
@@ -495,7 +545,7 @@ describe("UpdateFlow", () => {
     const s = scripted();
     const f = harness(s.driver);
     void f.flow.check(true);
-    s.checks[0]?.resolve("0.2.0");
+    s.checks[0]?.resolve(release("0.2.0"));
     await settle();
     s.downloads[0]?.progress(40);
     s.downloads[0]?.done.reject(new Error("socket hang up"));
@@ -521,7 +571,7 @@ describe("UpdateFlow", () => {
       },
     });
     void f.flow.check(false);
-    s.checks[0]?.resolve("0.2.0");
+    s.checks[0]?.resolve(release("0.2.0"));
     await settle();
     f.flow.checkByHand();
     f.flow.checkByHand();
@@ -542,7 +592,7 @@ async function downloaded(overrides: Partial<UpdateFlowOptions> = {}) {
     ...overrides,
   });
   void f.flow.check(false);
-  s.checks[0]?.resolve("0.2.0");
+  s.checks[0]?.resolve(release("0.2.0"));
   await settle();
   s.downloads[0]?.done.resolve();
   await settle();
@@ -633,7 +683,7 @@ describe("Restart", () => {
       },
     );
     void f.flow.check(false);
-    s.checks[0]?.resolve("0.2.0");
+    s.checks[0]?.resolve(release("0.2.0"));
     await settle();
     s.downloads[0]?.done.resolve();
     await settle();
@@ -712,7 +762,7 @@ describe("Restart", () => {
     );
     flow = f.flow;
     void f.flow.check(false);
-    s.checks[0]?.resolve("0.2.0");
+    s.checks[0]?.resolve(release("0.2.0"));
     await settle();
     s.downloads[0]?.done.resolve();
     await settle();
@@ -852,7 +902,7 @@ describe("background mode's answers", () => {
       log: { info: (line) => lines.push(line), error: (line) => lines.push(line) },
     });
     const driver: UpdateDriver = {
-      check: async () => "0.0.2",
+      check: async () => release("0.0.2"),
       download: async (progress) => progress(100),
       install: () => steps.push(`quitAndInstall (latched: ${!quit.closeHides()})`),
     };
