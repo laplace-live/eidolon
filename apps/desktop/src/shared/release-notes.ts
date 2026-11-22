@@ -148,5 +148,8 @@ export function manifestNotes(
   running: string,
   labels: NotesLabels,
 ): string {
-  return notesText(notesBetween(parseReleaseNotes(info.eidolonNotes), running, info.version), labels);
+  return notesText(
+    notesBetween(parseReleaseNotes(info.eidolonNotes), running, info.version),
+    labels,
+  );
 }
