@@ -383,7 +383,7 @@ export async function writeFacts(backend: Backend): Promise<string> {
   const persona = personas.active;
   const facts = `/api/local/personas/${persona}/facts`;
   const { body: listing } = await api<FactsResponse>(backend, "GET", facts);
-  const name = listing.patterns[0]?.replace("*", "system-ca") ?? "system-ca.txt";
+  const name = listing.patterns[0]?.replaceAll("*", "system-ca") ?? "system-ca.txt";
   const put = await api<FactFile>(backend, "PUT", `${facts}/${encodeURIComponent(name)}`, {
     text: FACTS,
   });

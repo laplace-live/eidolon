@@ -392,7 +392,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
     const { patterns } = (await (
       await smoke.api(`/api/local/personas/${PERSONA}/facts`)
     ).json()) as { patterns: string[] };
-    const name = (patterns[0] ?? "*.txt").replace("*", "smoke");
+    const name = (patterns[0] ?? "*.txt").replaceAll("*", "smoke");
     const put = await smoke.api(
       `/api/local/personas/${PERSONA}/facts/${encodeURIComponent(name)}`,
       {
