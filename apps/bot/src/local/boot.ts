@@ -67,9 +67,11 @@ export const processIo: BootIo = {
       if (!process.connected) handler();
     }
   },
-  // A send on a closed channel is an uncaught error, a tick later.
+  // A send on a closed channel is an uncaught error, a tick later, unless it has a callback; the
+  // supervisor can close it while `connected` still reads true, before this side has read that.
+  // The disconnect handler stops the server then.
   notify: (message) => {
-    if (process.connected) process.send?.(message);
+    if (process.connected) process.send?.(message, undefined, {}, () => {});
   },
   nowSeconds: () => Date.now() / 1000,
 };

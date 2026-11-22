@@ -396,6 +396,47 @@ setTimeout(() => process.exit(0), 200);
     }
   });
 
+  test("a supervisor that goes as the server tells it its port, before the server has read the close, still stops it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eidolon-boot-channel-"));
+    try {
+      const script = join(dir, "server.mjs");
+      const boot = pathToFileURL(join(import.meta.dirname, "../../src/local/boot.ts")).href;
+      writeFileSync(
+        script,
+        `const { processIo } = await import(${JSON.stringify(boot)});
+processIo.onShutdown(() => process.stdout.write("shutdown\\n"));
+process.once("message", () => {
+  // The supervisor closes the channel now; blocking keeps this side from reading that, so
+  // process.connected still reads true when the send meets the closed channel.
+  const until = Date.now() + 300;
+  while (Date.now() < until);
+  processIo.notify({ kind: "listening", port: 1 });
+  setTimeout(() => process.exit(0), 300);
+});
+process.send("ready");
+`,
+      );
+      const child = spawn(process.execPath, [...jsRuntime().args, script], {
+        env: {
+          ...jsRuntime().env,
+          PATH: process.env.PATH ?? "",
+          EIDOLON_HOME: dataHome(),
+          EIDOLON_NO_DOTENV: "1",
+        },
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+      });
+      child.once("message", () => {
+        child.send("go");
+        child.disconnect();
+      });
+      const exited = new Promise((done) => child.on("exit", done));
+      const [out, err] = await Promise.all([text(child.stdout), text(child.stderr)]);
+      expect([await exited, out, err]).toEqual([0, "shutdown\n", ""]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("shutdownOnce: a repeat within half a second is the same Ctrl-C; a later one exits now", async () => {
     const exits: number[] = [];
     let stops = 0;
