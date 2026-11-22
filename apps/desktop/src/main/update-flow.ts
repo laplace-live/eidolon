@@ -252,10 +252,11 @@ export interface UpdateFlowOptions {
   /** With no driver: updaterMode's read-only, whose Check for Updates… says to move the app. */
   readonly readOnly?: boolean;
   /**
-   * The restart that installs: the quit check and its box, the latch and the backend's stop, then
-   * `install`. False when it didn't go ahead, which hands the state back to downloaded.
+   * The restart that installs: the quit check and its box, `installable` once it's answered, the
+   * latch and the backend's stop, then `install`. False when it didn't go ahead, which hands the
+   * state back to downloaded, or, when no longer installable, shows the failure's box.
    */
-  readonly restart: (install: () => void) => Promise<boolean>;
+  readonly restart: (install: () => void, installable: () => boolean) => Promise<boolean>;
   /** Starts the app again as it is, for an update that failed once the restart had stopped it. */
   readonly relaunch: () => void;
   /** native.ts's box, which background mode answers with its default button. */
@@ -419,7 +420,18 @@ export class UpdateFlow {
     const { version } = state;
     this.#set({ phase: "installing", version });
     this.#options.log.info(`Eidolon: restarting to install ${version}`);
+    let calledOff = false;
+    const installable = () => {
+      if (this.#state.phase === "installing") return true;
+      calledOff = true;
+      this.#options.log.warn(`Eidolon: not restarting, since ${version} can't be installed`);
+      return false;
+    };
     const notRestarted = () => {
+      if (calledOff) {
+        void this.#offerRetry();
+        return;
+      }
       if (this.#state.phase !== "installing") return;
       this.#set({ phase: "downloaded", version });
       this.#options.log.info(
@@ -427,7 +439,7 @@ export class UpdateFlow {
       );
     };
     this.#options
-      .restart(() => this.#installNow(version))
+      .restart(() => this.#installNow(version), installable)
       .then(
         (went) => {
           if (!went) notRestarted();

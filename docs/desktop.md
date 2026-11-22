@@ -766,9 +766,12 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
   fires, so a latch set there would let the hide-on-close window veto the relaunch, as persona's
   did from 0.32.0 to 0.63.2.
 - **An error after the download,** such as Squirrel.Mac refusing the update, takes Restart away:
-  the update is in error, and the box offers Try Again. One that comes once the restart has
-  stopped the backend, or from inside `quitAndInstall`, which then never quits, starts the app
-  again as it was (`app.relaunch()`) rather than leave it hidden with its backend stopped.
+  the update is in error, and the box offers Try Again. One that comes while the restart's quit
+  check asks calls the restart off once it's answered, before the latch: nothing is hidden or
+  stopped, main.log says `Eidolon: not restarting, since X.Y.Z can't be installed`, and the
+  failure's box offers Try Again. One that comes once the restart has stopped the backend, or from
+  inside `quitAndInstall`, which then never quits, starts the app again as it was
+  (`app.relaunch()`) rather than leave it hidden with its backend stopped.
 - **main.log** has a line for each step: `Eidolon: checking for updates`; then `Eidolon: update
   available: X.Y.Z`, `Eidolon: up to date: X.Y.Z is the latest` or `Eidolon: the update check
   failed: <reason>`; `Eidolon: downloading X.Y.Z`; `Eidolon: update downloaded: X.Y.Z` or

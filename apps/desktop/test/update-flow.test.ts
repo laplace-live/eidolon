@@ -690,8 +690,12 @@ describe("UpdateFlow", () => {
   });
 });
 
-/** A flow that has downloaded 0.2.0, its restart box answered Later. */
-async function downloaded(overrides: Partial<UpdateFlowOptions> = {}) {
+/** A flow that has downloaded 0.2.0, its restart box answered Later unless `answer` says. */
+async function downloaded(
+  overrides: Partial<UpdateFlowOptions> & {
+    readonly answer?: (box: MessageBoxOptions) => number;
+  } = {},
+) {
   const s = scripted();
   const f = harness(s.driver, {
     answer: (box) => (box.buttons?.[0] === "Restart" ? LATER : 0),
@@ -784,7 +788,7 @@ describe("Restart", () => {
         },
       },
       {
-        restart: (install) => quit.restart(install),
+        restart: (install, installable) => quit.restart(install, installable),
         answer: (box) => (box.buttons?.[0] === "Restart" ? LATER : 0),
       },
     );
@@ -818,16 +822,56 @@ describe("Restart", () => {
     expect(f.installs).toEqual([]);
   });
 
-  test("an error while the restart asks or stops brings the app back without the update, never a quitAndInstall", async () => {
+  test("an error while the restart asks calls it off once it's answered: no latch, no stop, and the failure's box", async () => {
+    const steps: string[] = [];
+    const answered = Promise.withResolvers<boolean>();
+    const quit = new QuitFlow({
+      confirm: (purpose) => {
+        steps.push(`confirm ${purpose}`);
+        return answered.promise;
+      },
+      hideWindows: () => steps.push("hide"),
+      stopBackend: async () => {
+        steps.push("stop");
+      },
+      quit: () => steps.push("quit"),
+      log: { info: () => {}, error: () => {} },
+    });
+    const f = await downloaded({
+      restart: (install, installable) => quit.restart(install, installable),
+      answer: (box) => (box.buttons?.[0] === "Download" ? 0 : LATER),
+    });
+    f.flow.install();
+    await settle();
+    expect(steps).toEqual(["confirm restart"]);
+    f.flow.failed(new Error("Cannot update while running on a read-only volume"));
+    answered.resolve(true);
+    await settle();
+    expect(steps).toEqual(["confirm restart"]);
+    expect([quit.quitting, quit.closeHides()]).toEqual([false, true]);
+    expect(f.installs).toEqual([]);
+    expect(f.flow.state).toMatchObject({ phase: "error", version: "0.2.0" });
+    expect(messages(f.shown).at(-1)).toBe("Eidolon couldn't download the update");
+    expect(f.lines.slice(-2)).toEqual([
+      "Eidolon: 0.2.0 can't be installed: Cannot update while running on a read-only volume",
+      "Eidolon: not restarting, since 0.2.0 can't be installed",
+    ]);
+  });
+
+  test("an error once the quit check has let the restart through brings the app back without the update, never a quitAndInstall", async () => {
     const restart = Promise.withResolvers<boolean>();
     let install: () => void = () => {};
+    let installable: () => boolean = () => false;
     const f = await downloaded({
-      restart: (next) => {
+      restart: (next, check) => {
         install = next;
+        installable = check;
         return restart.promise;
       },
     });
     f.flow.install();
+    // The check's answer: the latch and the backend's stop come next.
+    expect(installable()).toBe(true);
     f.flow.failed(new Error("Squirrel.Mac: update failed"));
     install();
     restart.resolve(true);
@@ -1014,7 +1058,7 @@ describe("background mode's answers", () => {
     };
     const flow = new UpdateFlow({
       driver,
-      restart: (install) => quit.restart(install),
+      restart: (install, installable) => quit.restart(install, installable),
       relaunch: () => steps.push("relaunch"),
       show: (box) => native.messageBox(box),
       open: (url) => void native.openExternal(url),

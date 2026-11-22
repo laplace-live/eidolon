@@ -50,6 +50,8 @@ function flow() {
 }
 
 const settle = () => new Promise((done) => setTimeout(done, 0));
+/** A restart whose update stays installable. */
+const installable = () => true;
 
 describe("closing", () => {
   test("hides the window until a quit is approved, then lets it close", async () => {
@@ -154,7 +156,7 @@ describe("quitting", () => {
       quit.steps.push(
         `install (a close hides: ${quit.flow.closeHides()}; before-quit lets by: ${quit.flow.beforeQuit()})`,
       );
-    });
+    }, installable);
     await settle();
     expect(quit.steps).toEqual(["confirm restart"]);
     // The box is open: nothing is latched yet.
@@ -173,9 +175,38 @@ describe("quitting", () => {
     ]);
   });
 
+  test("a restart whose update can't install once the box is answered goes no further: no latch, no hide, no stop", async () => {
+    const quit = flow();
+    let failed = false;
+    const asked: boolean[] = [];
+    const restarted = quit.flow.restart(
+      () => quit.steps.push("install"),
+      () => {
+        asked.push(!failed);
+        return !failed;
+      },
+    );
+    await settle();
+    // Not while the box is open.
+    expect(asked).toEqual([]);
+    failed = true;
+    quit.answer(true);
+    await settle();
+    expect(asked).toEqual([false]);
+    expect(quit.steps).toEqual(["confirm restart"]);
+    expect([quit.flow.quitting, quit.flow.closeHides()]).toEqual([false, true]);
+    expect(await restarted).toBe(false);
+    expect(quit.flow.beforeQuit()).toBe(false);
+    await settle();
+    expect(quit.steps).toEqual(["confirm restart", "confirm"]);
+  });
+
   test("a cancelled restart resolves false and leaves everything running; the next quit asks as a quit", async () => {
     const quit = flow();
-    const restarted = quit.flow.restart(() => quit.steps.push("install"));
+    const restarted = quit.flow.restart(
+      () => quit.steps.push("install"),
+      () => quit.steps.push("installable?") > 0,
+    );
     await settle();
     quit.answer(false);
     expect(await restarted).toBe(false);
@@ -188,7 +219,7 @@ describe("quitting", () => {
 
   test("a quit while the restart's box is open joins it, and the restart goes on as answered", async () => {
     const quit = flow();
-    const restarted = quit.flow.restart(() => quit.steps.push("install"));
+    const restarted = quit.flow.restart(() => quit.steps.push("install"), installable);
     await settle();
     expect(quit.flow.beforeQuit()).toBe(false);
     expect(quit.asked()).toBe(2);
@@ -203,11 +234,11 @@ describe("quitting", () => {
     const quit = flow();
     quit.flow.beforeQuit();
     await settle();
-    expect(await quit.flow.restart(() => quit.steps.push("install"))).toBe(false);
+    expect(await quit.flow.restart(() => quit.steps.push("install"), installable)).toBe(false);
     expect(quit.asked()).toBe(2);
     quit.answer(true);
     await settle();
-    expect(await quit.flow.restart(() => quit.steps.push("install"))).toBe(false);
+    expect(await quit.flow.restart(() => quit.steps.push("install"), installable)).toBe(false);
     quit.stopped();
     await settle();
     expect(quit.steps).toEqual(["confirm", "hide", "stop", "quit"]);

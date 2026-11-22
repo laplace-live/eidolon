@@ -52,14 +52,16 @@ export class QuitFlow {
   /**
    * The restart that installs an update, `install` being quitAndInstall: the quit's check, with a
    * box naming what a restart stops, its latch and its stop, then `install` in place of the quit.
-   * Never from before-quit: on macOS quitAndInstall closes every window before before-quit fires,
-   * so a latch set there lets the hide-on-close window veto the relaunch. False when it didn't go
-   * ahead: cancelled, or a quit was already under way, whose box comes forward.
+   * `installable` is asked once the check lets it through, before the latch: the update can fail
+   * while the box is open. Never from before-quit: on macOS quitAndInstall closes every window
+   * before before-quit fires, so a latch set there lets the hide-on-close window veto the
+   * relaunch. False when it didn't go ahead: cancelled, no longer installable, or a quit was
+   * already under way, whose box comes forward.
    */
-  restart(install: () => void): Promise<boolean> {
+  restart(install: () => void, installable: () => boolean): Promise<boolean> {
     if (this.#phase === "asking") void this.#effects.confirm("quit");
     if (this.#phase !== "running") return Promise.resolve(false);
-    return this.#run("restart", install);
+    return this.#run("restart", install, installable);
   }
 
   /** macOS's powerMonitor shutdown: the system powers off, so the quit that follows doesn't ask. */
@@ -78,7 +80,11 @@ export class QuitFlow {
   }
 
   /** True once `finish` ran: the quit, or the update's install. */
-  async #run(purpose: QuitPurpose, finish: () => void): Promise<boolean> {
+  async #run(
+    purpose: QuitPurpose,
+    finish: () => void,
+    proceed: () => boolean = () => true,
+  ): Promise<boolean> {
     this.#phase = "asking";
     let approved: boolean;
     try {
@@ -88,7 +94,7 @@ export class QuitFlow {
       approved = true;
     }
     if (this.#phase !== "asking") return false;
-    if (!approved) {
+    if (!approved || !proceed()) {
       this.#phase = "running";
       return false;
     }

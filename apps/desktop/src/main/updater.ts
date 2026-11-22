@@ -90,7 +90,8 @@ export function installUpdater(options: UpdaterOptions): UpdateFlow {
   const flow = new UpdateFlow({
     driver: mock?.driver ?? feed,
     readOnly: mode === "read-only",
-    restart: mock?.restart ?? ((install) => options.quit.restart(install)),
+    restart:
+      mock?.restart ?? ((install, installable) => options.quit.restart(install, installable)),
     relaunch: () => {
       app.relaunch();
       app.quit();
