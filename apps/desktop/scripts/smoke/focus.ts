@@ -49,16 +49,41 @@ export interface FocusOptions {
   readonly skip: string | null;
 }
 
-/** The front app's name and pid, from `lsappinfo info -only name -only pid`. */
-export function parseFront(text: string): { readonly name: string; readonly pid: number | null } {
-  const name = /^\s*"([^"]*)"/.exec(text)?.[1] ?? (text.includes("[ NULL ]") ? "(none)" : "?");
-  const pid = /\bpid = (\d+)/.exec(text)?.[1];
-  return { name, pid: pid === undefined ? null : Number(pid) };
+/**
+ * `lsappinfo info -only`'s answer as macOS 26 prints it, a `"pid"=612` pair for each key asked
+ * for, a NULL value as null; or null for what macOS 27 prints instead, ignoring -only: the whole
+ * record, `"Finder" ASN:…` and then `pid = 612 … type="UIElement"`.
+ */
+function pairs(text: string): Map<string, string | null> | null {
+  const found = new Map<string, string | null>();
+  for (const [, key, value] of text.matchAll(/"(\w+)"=("[^"]*"|\[ NULL \]|[^\s"]+)/g)) {
+    found.set(key, value === "[ NULL ]" ? null : value.replace(/^"(.*)"$/, "$1"));
+  }
+  return found.size > 0 ? found : null;
 }
 
-/** `type="UIElement"` in `lsappinfo info -only ApplicationType`'s answer, or null. */
+/** The front app's name and pid, from `lsappinfo info -only name -only pid`. */
+export function parseFront(text: string): { readonly name: string; readonly pid: number | null } {
+  const found = pairs(text);
+  const name = found === null ? /^\s*"([^"]*)"/.exec(text)?.[1] : found.get("LSDisplayName");
+  const pid = found === null ? /\bpid = (\d+)/.exec(text)?.[1] : found.get("pid");
+  return {
+    name: name ?? (text.includes("[ NULL ]") ? "(none)" : "?"),
+    pid: typeof pid === "string" && /^\d+$/.test(pid) ? Number(pid) : null,
+  };
+}
+
+/** The type in `lsappinfo info -only ApplicationType`'s answer, as `UIElement`, or null. */
 export function parseType(text: string): string | null {
-  return /\btype="([^"]*)"/.exec(text)?.[1] ?? null;
+  const found = pairs(text);
+  return found === null
+    ? (/\btype="([^"]*)"/.exec(text)?.[1] ?? null)
+    : (found.get("ApplicationType") ?? null);
+}
+
+/** The ASN in `lsappinfo find pid=<pid>`'s answer, as `ASN:0x0-0x4e04e`, or null. */
+export function parseFind(text: string): string | null {
+  return /ASN:0x[0-9a-f]+-0x[0-9a-f]+/i.exec(text)?.[0] ?? null;
 }
 
 async function lsappinfo(...args: string[]): Promise<string> {
@@ -73,10 +98,8 @@ async function front(): Promise<{ readonly name: string; readonly pid: number | 
 
 /** `pid`'s ApplicationType, or null while LaunchServices knows no app by it. */
 export async function applicationType(pid: number): Promise<string | null> {
-  const asn = /ASN:0x[0-9a-f]+-0x[0-9a-f]+/.exec(await lsappinfo("find", `pid=${pid}`))?.[0];
-  return asn === undefined
-    ? null
-    : parseType(await lsappinfo("info", "-only", "ApplicationType", asn));
+  const asn = parseFind(await lsappinfo("find", `pid=${pid}`));
+  return asn === null ? null : parseType(await lsappinfo("info", "-only", "ApplicationType", asn));
 }
 
 /** The app's main process, as the watch has seen it. */

@@ -29,7 +29,7 @@ import {
   startFakes,
   VOICE_TRANSCRIPT,
 } from "../scripts/smoke/fakes.ts";
-import { parseFront, parseType, unproven } from "../scripts/smoke/focus.ts";
+import { parseFind, parseFront, parseType, unproven } from "../scripts/smoke/focus.ts";
 import {
   errorLines,
   fakeMicrophoneArgs,
@@ -302,12 +302,24 @@ setInterval(() => {}, 1000);`;
 });
 
 test("the focus watch reads lsappinfo's front app and an application's type", () => {
+  // macOS 27: the whole record, whatever -only asks for.
   const front = `"Google Chrome" ASN:0x0-0x5859854: (in front) \n    bundleID=[ NULL ] \n    pid = 92667 !cgsConnection !signalled type=[ NULL ]  flavor=[ NULL ]\n`;
   expect(parseFront(front)).toEqual({ name: "Google Chrome", pid: 92667 });
   expect(parseFront("[ NULL ]  [ NULL ]  \n")).toEqual({ name: "(none)", pid: null });
   const type = ` !cgsConnection !signalled type="UIElement" flavor=[ NULL ]  Version=[ NULL ]`;
   expect(parseType(type)).toBe("UIElement");
   expect(parseType("type=[ NULL ]")).toBeNull();
+  // macOS 26: a "key"=value pair for each key -only asks for, on lines of their own or on one.
+  expect(parseFront('"LSDisplayName"="Finder"\n"pid"=612\n')).toEqual({ name: "Finder", pid: 612 });
+  expect(parseFront('"LSDisplayName"="Google Chrome" "pid"=92667')).toEqual({
+    name: "Google Chrome",
+    pid: 92667,
+  });
+  expect(parseType('"ApplicationType"="UIElement"\n')).toBe("UIElement");
+  expect(parseType('"ApplicationType"=[ NULL ]\n')).toBeNull();
+  expect(parseFind('ASN:0x0-0x4e04e-"Finder":\n')).toBe("ASN:0x0-0x4e04e");
+  expect(parseFind('ASN:0x0-0x4E04E-"Finder":\n')).toBe("ASN:0x0-0x4E04E");
+  expect(parseFind("")).toBeNull();
 });
 
 test("the focus watch fails what it can't vouch for: no sample, or a main never an accessory", () => {
