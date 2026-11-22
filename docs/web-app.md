@@ -408,8 +408,9 @@ buttons, whose place the Window Controls Overlay gives as `env(titlebar-area-*)`
 
 **What else differs:**
 
-- **Home's footer** names both versions, `Eidolon 0.1.0 · server 0.13.0`: the desktop app's own,
-  from the bridge, and the server's, from status, which may be a terminal's server it attached to.
+- **Home's footer** names both versions, as in `Eidolon 0.1.0 · server 0.13.0`: the desktop app's
+  own, from the bridge, and the server's, from status, which may be a terminal's server it attached
+  to.
 - **Pictures and files open in place.** The window has no tabs: a picture in a chat or a call, the
   owner's or hers, opens in a viewer over the page with **Save** (`components/picture-viewer.tsx`),
   and a text file saves through `<a download>` (`features/chats/attachments.tsx`), which the desktop
