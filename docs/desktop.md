@@ -250,9 +250,9 @@ and leaves it running when it quits.
 - **The hint.** `<home>/locks/4273f434b594.info` is JSON with the holder's `pid`, and once it
   listens its `port` and `host`, the first loopback address it bound (`127.0.0.1`, `[::1]`). It is
   only a hint, written in place and left behind by a crash: one that doesn't parse is no hint, and
-  main never opens the `.lock` itself. A server older than the recorded `host` is never attached to:
-  the probe proves only what answers on one address, and with the server on `::1`, another local
-  account could bind `127.0.0.1` and relay it.
+  main never opens the `.lock` itself. A server whose `.info` records no `host`, one from before the
+  hint carried it, is never probed: the probe proves only what answers on one address, and with the
+  server on `::1`, another local account could bind `127.0.0.1` and relay it.
 - **The probe.** When the hint names a pid that is alive, a port and a host, and `local-token`
   holds a token, main sends `GET http://<host>:<port>/api/local/session?probe=<nonce>` over a
   connection of its own, with a 2 s deadline, and compares the answer's `proof` with

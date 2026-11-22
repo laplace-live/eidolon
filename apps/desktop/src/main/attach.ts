@@ -77,7 +77,7 @@ export function readServerInfo(home: string): ServerInfo | null {
   };
 }
 
-/** Null unless the .info names all three: a server older than the recorded host is never probed. */
+/** Null unless the .info names all three: a server whose .info records no host is never probed. */
 export function hintFrom(info: ServerInfo | null): ServerHint | null {
   if (info === null || info.pid === null || info.port === null || info.host === null) return null;
   return { pid: info.pid, port: info.port, host: info.host };
