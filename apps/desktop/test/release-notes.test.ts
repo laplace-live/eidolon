@@ -4,6 +4,7 @@ import {
   compareVersions,
   DESKTOP_PACKAGE,
   MAX_NOTE_ITEMS,
+  MAX_NOTE_LINE,
   manifestNotes,
   type NotesLabels,
   notesBetween,
@@ -218,6 +219,27 @@ describe("notesText", () => {
 
   test("writes nothing for no notes", () => {
     expect(notesText([], LABELS)).toBe("");
+  });
+
+  test(`cuts a line or a version heading past ${MAX_NOTE_LINE} characters, a 200 KB one too, to end in "…"`, () => {
+    const huge = "x".repeat(200_000);
+    const text = notesText([entry(huge, { items: [item(huge)] }), entry("0.2.0")], LABELS);
+    expect(text.split("\n")).toEqual([
+      `${"x".repeat(MAX_NOTE_LINE - 1)}…`,
+      `New: ${"x".repeat(MAX_NOTE_LINE - 6)}…`,
+      "",
+      "0.2.0",
+      "New: In 0.2.0",
+    ]);
+    const fits = "y".repeat(MAX_NOTE_LINE - "New: ".length);
+    expect(notesText([entry("0.2.0", { items: [item(fits)] })], LABELS)).toBe(`New: ${fits}`);
+  });
+
+  test("never cuts a character in two", () => {
+    // The emoji's two UTF-16 units straddle the cut.
+    const before = "a".repeat(MAX_NOTE_LINE - "New: ".length - 2);
+    const text = notesText([entry("0.2.0", { items: [item(`${before}😀 and more`)] })], LABELS);
+    expect(text).toBe(`New: ${before}…`);
   });
 });
 
