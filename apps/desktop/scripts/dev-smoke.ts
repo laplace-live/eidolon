@@ -1157,15 +1157,21 @@ async function closeAndReopen(walk: Walk, driven: Driven, step: Step) {
     `${after(hidden)}; ${windows} window kept; the backend: ${serving.detail}`,
   );
   await checkOffScreen(walk, driven, step, "after the close");
+  const SECOND = "a second launch of the same app and profile shows it again, and exits";
   const second = smoke.launch("second", walk.launch, LANGUAGE_ARGS);
-  const exit = await second.exited;
+  const exit = await Promise.race([second.exited, sleep(30_000).then(() => null)]);
+  if (exit === null) {
+    second.child.kill("SIGKILL");
+    step.check(SECOND, false, "the second launch still ran after 30 s, so the smoke killed it");
+    return;
+  }
   const shown = await smoke.waitForLine("main", "Eidolon: the window is shown", {
     from,
     timeoutMs: 10_000,
   });
   const spawned = LINES.started.test(smoke.log("main").slice(from));
   step.check(
-    "a second launch of the same app and profile shows it again, and exits",
+    SECOND,
     exit.code === 0 && !spawned,
     `the second launch exited ${exit.code ?? exit.signal}${spawned ? ", and a backend started" : ""}; ${after(shown)}`,
   );

@@ -749,7 +749,7 @@ Each step prints one line, made of the checks inside it:
    chat's log, her voice arrives over WebRTC and plays in the page, and the window is never audible
    while the audio service runs with `--mute-audio`.
 6. **Close and reopen:** closing hides the window while the backend serves on, and a second launch
-   shows it again, never on screen or in front.
+   shows it again, never on screen or in front, and exits within 30 s, or the smoke kills it.
 7. **Attach:** after `--quit` ends that launch and its backend, a server started first on the same
    home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced: Settings'
    Restart there waits for the supervisor's next server, a restart from outside the app is
