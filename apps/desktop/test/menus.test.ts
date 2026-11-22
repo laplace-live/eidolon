@@ -62,7 +62,7 @@ describe("macOS's menu bar", () => {
     ).toEqual(["Eidolon", "编辑", "显示", "窗口", "帮助"]);
   });
 
-  test("its app menu: About, Settings… on ⌘, Hide, Hide Others, Show All, Quit; no update check yet", () => {
+  test("its app menu: About, Settings… on ⌘, Services, Hide, Hide Others, Show All, Quit; no update check yet", () => {
     const { actions, calls } = recordingActions();
     const [app] = macMenu(en, actions, { packaged: true, background: false });
     const items = itemsOf(app);
@@ -70,6 +70,8 @@ describe("macOS's menu bar", () => {
       "about",
       "-",
       "Settings…",
+      "-",
+      "services",
       "-",
       "hide",
       "hideOthers",
@@ -80,11 +82,15 @@ describe("macOS's menu bar", () => {
     expect(items.map((item) => item.label).filter(Boolean)).toEqual([
       "About Eidolon",
       "Settings…",
+      "Services",
       "Hide Eidolon",
       "Hide Others",
       "Show All",
       "Quit Eidolon",
     ]);
+    expect(itemsOf(macMenu(zh, actions, { packaged: true, background: false })[0])[4]?.label).toBe(
+      "服务",
+    );
     const settings = items.find((item) => item.label === "Settings…");
     expect(settings?.accelerator).toBe("Command+,");
     click(settings);

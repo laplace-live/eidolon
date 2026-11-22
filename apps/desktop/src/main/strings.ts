@@ -31,6 +31,8 @@ export interface Strings {
   readonly label: {
     readonly aboutEidolon: string;
     readonly settings: string;
+    /** macOS's Services submenu, which the system fills. */
+    readonly services: string;
     readonly hideEidolon: string;
     readonly hideOthers: string;
     readonly showAll: string;
@@ -119,6 +121,7 @@ const en: Strings = {
   label: {
     aboutEidolon: "About Eidolon",
     settings: "Settings…",
+    services: "Services",
     hideEidolon: "Hide Eidolon",
     hideOthers: "Hide Others",
     showAll: "Show All",
@@ -215,6 +218,7 @@ const zhHans: Strings = {
   label: {
     aboutEidolon: "关于 Eidolon",
     settings: "设置…",
+    services: "服务",
     hideEidolon: "隐藏 Eidolon",
     hideOthers: "隐藏其他",
     showAll: "全部显示",

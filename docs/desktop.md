@@ -327,12 +327,12 @@ window's top, and a window saved maximized is maximized only once it has painted
   publishes no `env(titlebar-area-*)` for the page's insets. On Windows, a hidden title bar under a
   transparent 56 px overlay, whose caption glyphs main recolours on each theme change.
 - **Menus and the tray.** macOS's menu bar is declared in full, since a custom menu replaces
-  Electron's: Eidolon (About, Settings…, Hide, Hide Others, Show All, Quit), Edit (its roles,
-  without which copy and paste break), View (zoom, full screen, and Toggle Developer Tools only
-  unpackaged), Window (⌘W hides) and Help (Show Logs, Open Data Folder, Licenses). Windows has no
-  menu bar: main sets a menu of View's zoom roles alone, since Electron would otherwise install its
-  default one, whose accelerators act even under a hidden title bar, and a notification-area icon
-  holds the rest for the whole run (Open Eidolon, Settings…, Show Logs, Open Data Folder,
+  Electron's: Eidolon (About, Settings…, Services, Hide, Hide Others, Show All, Quit), Edit (its
+  roles, without which copy and paste break), View (zoom, full screen, and Toggle Developer Tools
+  only unpackaged), Window (⌘W hides) and Help (Show Logs, Open Data Folder, Licenses). Windows has
+  no menu bar: main sets a menu of View's zoom roles alone, since Electron would otherwise install
+  its default one, whose accelerators act even under a hidden title bar, and a notification-area
+  icon holds the rest for the whole run (Open Eidolon, Settings…, Show Logs, Open Data Folder,
   Licenses, About Eidolon, Quit Eidolon); a click on it opens the window. Both get a context menu,
   since Electron has none: cut, copy, paste and select all in a field, copy over selected text. The
   About panel names the app's version and the server's.

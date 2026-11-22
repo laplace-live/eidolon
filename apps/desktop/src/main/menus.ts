@@ -55,6 +55,8 @@ export function macMenu(
         separator(),
         { label: label.settings, accelerator: "Command+,", click: () => actions.settings() },
         separator(),
+        { role: "services", label: label.services },
+        separator(),
         { role: "hide", label: label.hideEidolon },
         { role: "hideOthers", label: label.hideOthers },
         { role: "unhide", label: label.showAll },
