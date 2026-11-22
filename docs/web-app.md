@@ -202,7 +202,7 @@ Under `/api/local`, JSON in and out; the wire types are `apps/bot/src/local/api.
 imports type-only. An error is `{"error": {"code": "…", "message": "…"}}`: the app shows its own
 string for `code`, in English or 简体中文, and the English `message` only as detail. A 5xx's
 message is fixed and never carries an exception's text or stack; it adds `"id"`, which names the
-terminal's log line that holds what went wrong, and the app shows it beside the detail.
+server log's line that holds what went wrong, and the app shows it beside the detail.
 
 | Area | Routes | What |
 | --- | --- | --- |
