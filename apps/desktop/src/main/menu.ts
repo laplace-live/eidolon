@@ -2,15 +2,19 @@
 // them as data.
 import { app, BrowserWindow, Menu, type WebContents } from "electron";
 import { background } from "./instance.ts";
-import { contextMenu, type MenuActions, macMenu, windowsMenu } from "./menus.ts";
+import { contextMenu, type MenuActions, macMenu, type UpdatesItem, windowsMenu } from "./menus.ts";
 import { native } from "./native.ts";
 import type { Strings } from "./strings.ts";
 
-/** Sets the application menu; again whenever the shell's language changes. */
-export function setApplicationMenu(strings: Strings, actions: MenuActions): void {
+/** Sets the application menu; again whenever the shell's language or Check for Updates… changes. */
+export function setApplicationMenu(
+  strings: Strings,
+  actions: MenuActions,
+  updates: UpdatesItem,
+): void {
   const template =
     process.platform === "darwin"
-      ? macMenu(strings, actions, { packaged: app.isPackaged, background })
+      ? macMenu(strings, actions, { packaged: app.isPackaged, background, updates })
       : windowsMenu(strings);
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

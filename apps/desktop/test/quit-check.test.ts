@@ -244,6 +244,30 @@ describe("quitBox", () => {
       noLink: true,
     });
   });
+
+  test("before the restart that installs an update, names what a restart stops, Restart the default", () => {
+    expect(quitBox({ calls: 0, tasks: 0, jobs: 0 }, en, "darwin", "restart")).toBeNull();
+    expect(quitBox({ calls: 1, tasks: 0, jobs: 2 }, en, "darwin", "restart")).toEqual({
+      type: "warning",
+      title: "Eidolon",
+      message: "Restart Eidolon?",
+      detail: "Restarting stops the call and 2 jobs.",
+      buttons: ["Restart", "Cancel"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    expect(quitBox("unknown", en, "darwin", "restart")?.detail).toBe(en.text.restartUnknown);
+    expect(
+      quitBox({ calls: 0, tasks: 1, jobs: 1 }, STRINGS["zh-Hans"], "win32", "restart"),
+    ).toEqual(
+      expect.objectContaining({
+        message: "重启 Eidolon？",
+        detail: "1 个任务和 1 个作业会在重启时中断。",
+        buttons: ["重启", "取消"],
+      }),
+    );
+  });
 });
 
 function setup(check: () => Promise<Stopping> | null, platform: NodeJS.Platform = "darwin") {
@@ -321,5 +345,17 @@ describe("QuitConfirmation", () => {
     const f = setup(async () => ({ calls: 0, tasks: 0, jobs: 1 }), "win32");
     await f.confirmation.confirm();
     expect(f.shown.map((box) => box.type)).toEqual(["none"]);
+  });
+
+  test("asks before a restart in the restart's words, and a quit asked meanwhile joins that box", async () => {
+    const checked = Promise.withResolvers<Stopping>();
+    const f = setup(() => checked.promise);
+    const restart = f.confirmation.confirm("restart");
+    expect(f.confirmation.confirm("quit")).toBe(restart);
+    checked.resolve({ calls: 1, tasks: 0, jobs: 0 });
+    expect(await restart).toBe(true);
+    expect(f.shown.map((box) => [box.message, box.detail])).toEqual([
+      ["Restart Eidolon?", "Restarting stops the call."],
+    ]);
   });
 });

@@ -30,6 +30,7 @@ export interface Strings {
   /** Menu items, buttons and the tray's tooltip: Title Case in English. */
   readonly label: {
     readonly aboutEidolon: string;
+    readonly checkForUpdates: string;
     readonly settings: string;
     /** macOS's Services submenu, which the system fills. */
     readonly services: string;
@@ -72,6 +73,12 @@ export interface Strings {
     readonly tryAgain: string;
     /** Over the failure page's last lines of the server's stderr. */
     readonly details: string;
+    readonly download: string;
+    readonly later: string;
+    /** Opens the release's page on GitHub. */
+    readonly releaseNotes: string;
+    /** Restarts into a downloaded update. */
+    readonly restart: string;
   };
   /** Sentences, titles phrased as one, and statuses: sentence case. */
   readonly text: {
@@ -94,6 +101,22 @@ export interface Strings {
     readonly quitDetail: (stopping: Stopping) => string;
     /** The quit box's text when the backend didn't say in time what runs. */
     readonly quitUnknown: string;
+    /** The same box before the restart that installs an update. */
+    readonly restartTitle: string;
+    readonly restartDetail: (stopping: Stopping) => string;
+    readonly restartUnknown: string;
+    readonly updateAvailableTitle: (version: string) => string;
+    /** Under it, with the version that runs now. */
+    readonly updateAvailable: (current: string) => string;
+    readonly updateDownloadedTitle: string;
+    readonly updateDownloaded: (version: string) => string;
+    /** Check for Updates… alone says so; the check after launch only logs it. */
+    readonly upToDateTitle: string;
+    readonly upToDate: (version: string) => string;
+    readonly checkFailedTitle: string;
+    readonly downloadFailedTitle: string;
+    /** Under either failure. */
+    readonly updateFailed: string;
     /** Windows' one-time notice when closing first hides the window. */
     readonly hideNoticeTitle: string;
     readonly hideNotice: string;
@@ -117,9 +140,32 @@ function listZh(items: readonly string[]): string {
   return `${items.slice(0, -1).join("、")}和${/^[0-9A-Za-z]/.test(last) ? " " : ""}${last}`;
 }
 
+/** "the call, 2 tasks and a job". */
+function stoppingEn({ calls, tasks, jobs }: Stopping): string {
+  return listEn(
+    [
+      calls === 1 ? "the call" : calls > 1 ? `${calls} calls` : null,
+      tasks === 1 ? "a task" : tasks > 1 ? `${tasks} tasks` : null,
+      jobs === 1 ? "a job" : jobs > 1 ? `${jobs} jobs` : null,
+    ].filter((part) => part !== null),
+  );
+}
+
+/** "通话、2 个任务和 1 个作业". */
+function stoppingZh({ calls, tasks, jobs }: Stopping): string {
+  return listZh(
+    [
+      calls === 1 ? "通话" : calls > 1 ? `${calls} 个通话` : null,
+      tasks > 0 ? `${tasks} 个任务` : null,
+      jobs > 0 ? `${jobs} 个作业` : null,
+    ].filter((part) => part !== null),
+  );
+}
+
 const en: Strings = {
   label: {
     aboutEidolon: "About Eidolon",
+    checkForUpdates: "Check for Updates…",
     settings: "Settings…",
     services: "Services",
     hideEidolon: "Hide Eidolon",
@@ -157,6 +203,10 @@ const en: Strings = {
     ok: "OK",
     tryAgain: "Try Again",
     details: "Details",
+    download: "Download",
+    later: "Later",
+    releaseNotes: "Release Notes",
+    restart: "Restart",
   },
   text: {
     loading: "Starting Eidolon…",
@@ -192,16 +242,25 @@ const en: Strings = {
       return `${known}This window can't connect to it. Quit it, then try again.`;
     },
     quitTitle: "Quit Eidolon?",
-    quitDetail: ({ calls, tasks, jobs }) => {
-      const parts = [
-        calls === 1 ? "the call" : calls > 1 ? `${calls} calls` : null,
-        tasks === 1 ? "a task" : tasks > 1 ? `${tasks} tasks` : null,
-        jobs === 1 ? "a job" : jobs > 1 ? `${jobs} jobs` : null,
-      ].filter((part) => part !== null);
-      return `Quitting stops ${listEn(parts)}.`;
-    },
+    quitDetail: (stopping) => `Quitting stops ${stoppingEn(stopping)}.`,
     quitUnknown:
       "Eidolon couldn't check what's running. Quitting stops any call, task or job in progress.",
+    restartTitle: "Restart Eidolon?",
+    restartDetail: (stopping) => `Restarting stops ${stoppingEn(stopping)}.`,
+    restartUnknown:
+      "Eidolon couldn't check what's running. Restarting stops any call, task or job in progress.",
+    updateAvailableTitle: (version) => `Eidolon ${version} is available`,
+    updateAvailable: (current) =>
+      `You have ${current}. Eidolon downloads the update in the background, then asks before restarting.`,
+    updateDownloadedTitle: "Restart to finish updating",
+    updateDownloaded: (version) =>
+      `Eidolon ${version} is downloaded. Restart now to install it, or it installs the next time you quit Eidolon.`,
+    upToDateTitle: "Eidolon is up to date",
+    upToDate: (version) => `Eidolon ${version} is the latest version.`,
+    checkFailedTitle: "Eidolon couldn't check for updates",
+    downloadFailedTitle: "Eidolon couldn't download the update",
+    updateFailed:
+      "Check your internet connection, then try again. If it happens again, Show Logs has the details.",
     hideNoticeTitle: "Eidolon is still running",
     hideNotice:
       "Calls, tasks and jobs keep going while the window is closed. Click the tray icon to open it " +
@@ -217,6 +276,7 @@ const en: Strings = {
 const zhHans: Strings = {
   label: {
     aboutEidolon: "关于 Eidolon",
+    checkForUpdates: "检查更新…",
     settings: "设置…",
     services: "服务",
     hideEidolon: "隐藏 Eidolon",
@@ -254,6 +314,10 @@ const zhHans: Strings = {
     ok: "确定",
     tryAgain: "重试",
     details: "详情",
+    download: "下载",
+    later: "稍后",
+    releaseNotes: "发行说明",
+    restart: "重启",
   },
   text: {
     loading: "正在启动 Eidolon…",
@@ -289,15 +353,22 @@ const zhHans: Strings = {
       return `${known}这个窗口无法连接到它。请先退出它，然后重试。`;
     },
     quitTitle: "退出 Eidolon？",
-    quitDetail: ({ calls, tasks, jobs }) => {
-      const parts = [
-        calls === 1 ? "通话" : calls > 1 ? `${calls} 个通话` : null,
-        tasks > 0 ? `${tasks} 个任务` : null,
-        jobs > 0 ? `${jobs} 个作业` : null,
-      ].filter((part) => part !== null);
-      return `${listZh(parts)}会在退出时中断。`;
-    },
+    quitDetail: (stopping) => `${stoppingZh(stopping)}会在退出时中断。`,
     quitUnknown: "Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在退出时中断。",
+    restartTitle: "重启 Eidolon？",
+    restartDetail: (stopping) => `${stoppingZh(stopping)}会在重启时中断。`,
+    restartUnknown: "Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在重启时中断。",
+    updateAvailableTitle: (version) => `Eidolon ${version} 已发布`,
+    updateAvailable: (current) =>
+      `当前版本为 ${current}。Eidolon 会在后台下载更新，下载完成后会先询问再重启。`,
+    updateDownloadedTitle: "重启以完成更新",
+    updateDownloaded: (version) =>
+      `Eidolon ${version} 已下载完成。现在重启即可安装，否则会在下次退出 Eidolon 时安装。`,
+    upToDateTitle: "Eidolon 已是最新版本",
+    upToDate: (version) => `Eidolon ${version} 是最新版本。`,
+    checkFailedTitle: "Eidolon 无法检查更新",
+    downloadFailedTitle: "Eidolon 无法下载更新",
+    updateFailed: "请检查网络连接，然后重试。如果再次出现，详情请在「显示日志」中查看。",
     hideNoticeTitle: "Eidolon 仍在运行",
     hideNotice:
       "关闭窗口后，通话、任务和作业会继续进行。点击托盘图标即可重新打开窗口，也可以在托盘图标的菜单中退出 Eidolon。",

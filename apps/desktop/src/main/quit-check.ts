@@ -12,6 +12,9 @@ import type { Stopping, Strings } from "./strings.ts";
 /** What quitting would stop, or `unknown` when the backend couldn't say. */
 export type QuitCheck = Stopping | "unknown";
 
+/** What stops the backend: a quit, or the restart that installs an update. */
+export type QuitPurpose = "quit" | "restart";
+
 /** A GET to our own backend, Bearer included, at a root-relative `path`. */
 export type BackendFetch = (
   path: string,
@@ -103,21 +106,28 @@ export async function checkQuit(fetch: BackendFetch): Promise<Stopping> {
   }
 }
 
-/** The "Quit Eidolon?" box for `check`, or null when quitting cuts nothing off. */
+/**
+ * The "Quit Eidolon?" box for `check`, or "Restart Eidolon?" before an update's restart; null when
+ * it cuts nothing off.
+ */
 export function quitBox(
   check: QuitCheck,
-  strings: Strings,
+  { label, text }: Strings,
   platform: NodeJS.Platform = process.platform,
+  purpose: QuitPurpose = "quit",
 ): MessageBoxOptions | null {
   if (check !== "unknown" && check.calls + check.tasks + check.jobs === 0) return null;
+  const restart = purpose === "restart";
+  const detail = restart ? text.restartDetail : text.quitDetail;
   // Windows' task dialog takes the app's icon, which the caller can add; macOS draws it on its own
   // warning icon.
   return {
     type: platform === "win32" ? "none" : "warning",
     title: "Eidolon",
-    message: strings.text.quitTitle,
-    detail: check === "unknown" ? strings.text.quitUnknown : strings.text.quitDetail(check),
-    buttons: [strings.label.quit, strings.label.cancel],
+    message: restart ? text.restartTitle : text.quitTitle,
+    detail:
+      check === "unknown" ? (restart ? text.restartUnknown : text.quitUnknown) : detail(check),
+    buttons: [restart ? label.restart : label.quit, label.cancel],
     defaultId: QUIT,
     cancelId: CANCEL,
     noLink: true,
@@ -153,20 +163,20 @@ export class QuitConfirmation {
     this.#options = options;
   }
 
-  /** True to quit now; false when the owner cancelled. */
-  confirm(): Promise<boolean> {
+  /** True to go ahead now; false when the owner cancelled. One asked meanwhile joins the open box. */
+  confirm(purpose: QuitPurpose = "quit"): Promise<boolean> {
     if (this.#pending !== null) {
       this.#options.focus();
       return this.#pending;
     }
-    const pending = this.#decide().finally(() => {
+    const pending = this.#decide(purpose).finally(() => {
       if (this.#pending === pending) this.#pending = null;
     });
     this.#pending = pending;
     return pending;
   }
 
-  async #decide(): Promise<boolean> {
+  async #decide(purpose: QuitPurpose): Promise<boolean> {
     const pending = this.#options.check();
     if (pending === null) return true;
     const check = await pending.catch((error: unknown): QuitCheck => {
@@ -174,7 +184,7 @@ export class QuitConfirmation {
       log.warn(`Eidolon: couldn't check what quitting stops: ${explain(error)}`);
       return "unknown";
     });
-    const box = quitBox(check, this.#options.strings(), this.#options.platform);
+    const box = quitBox(check, this.#options.strings(), this.#options.platform, purpose);
     if (box === null) return true;
     const { response } = await this.#options.show(box);
     return response === QUIT;
