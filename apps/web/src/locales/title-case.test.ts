@@ -75,7 +75,11 @@ test("every label is in Title Case", () => {
 
 test("every heading listed as a sentence is one, written in sentence case", () => {
   const found = new Set(labels.map((label) => label.text));
-  expect([...SENTENCE_HEADINGS].filter((heading) => !found.has(heading))).toEqual([]);
+  expect(
+    [...SENTENCE_HEADINGS].filter(
+      (heading) => !found.has(heading) || titleCase(heading) === heading,
+    ),
+  ).toEqual([]);
 });
 
 describe("titleCase", () => {
