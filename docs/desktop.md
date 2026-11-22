@@ -754,6 +754,9 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
   shows on the Dock or the taskbar, cleared when it ends or fails; a failure offers Try Again, the
   default, and Later. On macOS it is done only once Squirrel.Mac has fetched the zip from
   electron-updater's local proxy, after `update-downloaded`.
+- **No box during a quit:** once a quit is under way, the window hidden and the backend stopping,
+  a check that lands or a download that ends shows no box, only main.log's `Eidolon: no update box
+  while quitting (available X.Y.Z)` or the like.
 - **Installing:** "Restart to finish updating" offers Restart, the default, and Later, which leaves
   the update to `autoInstallOnAppQuit` at the next quit, with no relaunch. Restart moves the state
   to installing first, so a second Restart does nothing: `quitAndInstall` twice asks Squirrel to

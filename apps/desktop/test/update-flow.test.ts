@@ -666,6 +666,50 @@ describe("UpdateFlow", () => {
     expect(f.flow.state).toEqual({ phase: "downloading", version: "0.2.0", percent: 0 });
   });
 
+  test("no box on an app that is quitting: the quiet check landing during the owner's quit only logs", async () => {
+    const steps: string[] = [];
+    const quit = new QuitFlow({
+      confirm: async () => true,
+      hideWindows: () => steps.push("hide"),
+      // Still stopping.
+      stopBackend: () => new Promise<void>(() => {}),
+      quit: () => steps.push("quit"),
+      log: { info: () => {}, error: () => {} },
+    });
+    const s = scripted();
+    const f = harness(s.driver, { quitting: () => quit.quitting });
+    f.flow.backendReady();
+    await vi.advanceTimersByTimeAsync(LAUNCH_CHECK_DELAY_MS);
+    expect(s.checks).toHaveLength(1);
+    expect(quit.beforeQuit()).toBe(false);
+    await settle();
+    expect(steps).toEqual(["hide"]);
+    s.checks[0]?.resolve(release("0.2.0"));
+    await settle();
+    expect(f.shown).toEqual([]);
+    expect(s.downloads).toHaveLength(0);
+    expect(f.lines.slice(-2)).toEqual([
+      "Eidolon: update available: 0.2.0",
+      "Eidolon: no update box while quitting (available 0.2.0)",
+    ]);
+  });
+
+  test("nor the box that asks to restart, for a download that ends during a quit", async () => {
+    const s = scripted();
+    let quitting = false;
+    const f = harness(s.driver, { quitting: () => quitting });
+    void f.flow.check(false);
+    s.checks[0]?.resolve(release("0.2.0"));
+    await settle();
+    quitting = true;
+    s.downloads[0]?.done.resolve();
+    await settle();
+    expect(messages(f.shown)).toEqual(["Eidolon 0.2.0 is available"]);
+    expect(f.flow.state).toEqual({ phase: "downloaded", version: "0.2.0" });
+    expect(f.restarts).toEqual([]);
+    expect(f.lines.at(-1)).toBe("Eidolon: no update box while quitting (downloaded 0.2.0)");
+  });
+
   test("one update box at a time: Check for Updates… while one is open shows no second", async () => {
     const s = scripted();
     const open = Promise.withResolvers<{ response: number }>();
@@ -839,6 +883,7 @@ describe("Restart", () => {
     });
     const f = await downloaded({
       restart: (install, installable) => quit.restart(install, installable),
+      quitting: () => quit.quitting,
       answer: (box) => (box.buttons?.[0] === "Download" ? 0 : LATER),
     });
     f.flow.install();
@@ -1061,6 +1106,7 @@ describe("background mode's answers", () => {
       restart: (install, installable) => quit.restart(install, installable),
       relaunch: () => steps.push("relaunch"),
       show: (box) => native.messageBox(box),
+      quitting: () => quit.quitting,
       open: (url) => void native.openExternal(url),
       progress: () => {},
       strings: () => en,

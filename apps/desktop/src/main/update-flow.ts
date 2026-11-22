@@ -261,6 +261,8 @@ export interface UpdateFlowOptions {
   readonly relaunch: () => void;
   /** native.ts's box, which background mode answers with its default button. */
   readonly show: (box: MessageBoxOptions) => Promise<{ readonly response: number }>;
+  /** The quit flow's: once a quit is under way, the app hidden and exiting, no box shows. */
+  readonly quitting?: () => boolean;
   /** Opens a release's page in the default browser. */
   readonly open: (url: string) => void;
   /** The download's share on the Dock or the taskbar; null clears it. */
@@ -526,9 +528,14 @@ export class UpdateFlow {
     if ((await this.#ask({ kind: "download-failed" })) === GO) this.download();
   }
 
-  /** The box's answer, or null when one is already open or it didn't show. */
+  /** The box's answer, or null when one is already open, the app is quitting, or it didn't show. */
   async #ask(box: UpdateBox): Promise<number | null> {
     if (this.#asking) return null;
+    if (this.#options.quitting?.()) {
+      const which = "version" in box ? `${box.kind} ${box.version}` : box.kind;
+      this.#options.log.info(`Eidolon: no update box while quitting (${which})`);
+      return null;
+    }
     this.#asking = true;
     const { show, strings, platform = process.platform } = this.#options;
     try {

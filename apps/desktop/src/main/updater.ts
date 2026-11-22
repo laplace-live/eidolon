@@ -97,6 +97,7 @@ export function installUpdater(options: UpdaterOptions): UpdateFlow {
       app.quit();
     },
     show: (box) => native.messageBox(options.icon ? { ...box, icon: options.icon } : box),
+    quitting: () => options.quit.quitting,
     open: (url) => {
       if (openAction(url) !== "browser") return;
       native.openExternal(url).catch((error: unknown) => {
