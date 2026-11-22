@@ -129,12 +129,13 @@ export function watchWindows({ ours, skip, doing }: WindowOptions): WindowWatch 
   const child = spawn("osascript", ["-l", "JavaScript", "-e", SCRIPT, String(SAMPLE_MS)], {
     stdio: ["ignore", "ignore", "pipe"],
   });
+  // At close, not exit: its last looks can still be in the pipe once it has exited.
   const exited = new Promise<void>((done) => {
     child.once("error", (error) => {
       other.push(String(error));
       done();
     });
-    child.once("exit", () => done());
+    child.once("close", () => done());
   });
   void exited.then(() => {
     if (!stopping) fail(`it stopped looking at ${since()}: ${printed() || "osascript ended"}`);

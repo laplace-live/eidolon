@@ -1,12 +1,12 @@
 // The dev smoke's parts that need no Electron: the fake microphone's WAV, its steps' lines, records
 // and results, and the window watch's reading of osascript's lines.
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { delimiter, join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { framed, RATE, wavFile, wavSamples } from "../scripts/dev-smoke/speech.ts";
 import { described, Steps, stepLine, writeResults } from "../scripts/dev-smoke/steps.ts";
-import { parseLook } from "../scripts/dev-smoke/windows.ts";
+import { parseLook, watchWindows } from "../scripts/dev-smoke/windows.ts";
 import { Checks } from "../scripts/smoke/kit.ts";
 
 /** A RIFF chunk, padded to an even size as the format has it. */
@@ -169,5 +169,35 @@ describe("the window watch's looks", () => {
     expect(parseLook('{"looks":3,"maxGapMs":61,"windows":58}')).toBeNull();
     expect(parseLook('{"looks":3,"maxGapMs":61,"windows":58,"fresh":["615"]}')).toBeNull();
     expect(parseLook('{"looks":"3","maxGapMs":61,"windows":58,"fresh":[]}')).toBeNull();
+  });
+});
+
+// The stand-in osascript is a POSIX script.
+describe.skipIf(process.platform === "win32")("the window watch", () => {
+  let bin: string;
+  beforeEach(() => {
+    bin = mkdtempSync(join(tmpdir(), "eidolon-window-watch-"));
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(bin, { recursive: true, force: true });
+  });
+
+  test("reads every look osascript printed before it stops, the last after it exits", async () => {
+    // A child of its own prints the last look 300 ms in, past the stop's SIGTERM, on its stderr.
+    writeFileSync(
+      join(bin, "osascript"),
+      [
+        "#!/bin/sh",
+        `echo '{"looks":1,"maxGapMs":0,"windows":3,"fresh":[]}' >&2`,
+        `(sleep 0.3; echo '{"looks":2,"maxGapMs":50,"windows":4,"fresh":[]}' >&2) &`,
+        "exec sleep 30",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    vi.stubEnv("PATH", `${bin}${delimiter}${process.env.PATH}`);
+    const watch = watchWindows({ ours: async () => [], skip: null, doing: () => "the test" });
+    await watch.ready;
+    expect(await watch.stop()).toMatchObject({ looks: 2, windows: 4, failures: [] });
   });
 });
