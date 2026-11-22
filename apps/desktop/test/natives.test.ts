@@ -1,7 +1,9 @@
 // Which of the libraries a process mapped the natives check holds to the payload: stage.test.ts
-// requires each one it keeps to load from there.
+// requires each one it keeps to load from there. And how a failed check says it ended.
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vitest";
-import { payloadLibraries } from "../scripts/natives.ts";
+import { checkNatives, payloadLibraries } from "../scripts/natives.ts";
 
 test("on Windows, the payload's natives and VC++ runtime, never the system's own C++ runtime", () => {
   const modules = "C:\\Program Files\\Eidolon\\resources\\eidolon\\node_modules";
@@ -53,4 +55,22 @@ test("on macOS, the payload's natives, by their own names and not their folders'
     `${modules}/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.dylib`,
     `${modules}/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib`,
   ]);
+});
+
+test("a check that never ran says why, as spawnSync gives it", () => {
+  const runtime = join(tmpdir(), "eidolon-no-such-runtime");
+  expect(() => checkNatives("/payload", "lancedb", { command: runtime })).toThrow(
+    `The natives check failed: spawnSync ${runtime} ENOENT:`,
+  );
+});
+
+// Windows ends a process with TerminateProcess, whatever signal process.kill names.
+test.skipIf(process.platform === "win32")("a check a signal ended names the signal", () => {
+  const runtime = {
+    command: process.execPath,
+    args: ["-e", "process.kill(process.pid, 'SIGKILL')"],
+  };
+  expect(() => checkNatives("/payload", "lancedb", runtime)).toThrow(
+    "The natives check exited SIGKILL:",
+  );
 });

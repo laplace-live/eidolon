@@ -93,8 +93,13 @@ export function checkNatives(payload: string, lancedb: string, runtime: Runtime)
       timeout: 60_000,
     });
     const line = run.stdout?.trim().split("\n").at(-1) ?? "";
-    if (run.status !== 0 || !line.startsWith("{")) {
-      throw new Error(`The natives check exited ${run.status}:\n${run.stdout}\n${run.stderr}`);
+    if (run.error !== undefined || run.status !== 0 || !line.startsWith("{")) {
+      // spawnSync's error is a failed start, or its timeout, whose kill names the signal.
+      const how =
+        run.error === undefined
+          ? `exited ${run.status ?? run.signal}`
+          : `failed: ${run.error.message}${run.signal === null ? "" : `, ended by ${run.signal}`}`;
+      throw new Error(`The natives check ${how}:\n${run.stdout ?? ""}\n${run.stderr ?? ""}`);
     }
     const { mapped, ...report } = JSON.parse(line) as Omit<NativesReport, "loaded"> & {
       mapped: string[];
