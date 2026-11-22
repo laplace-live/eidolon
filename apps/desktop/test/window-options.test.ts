@@ -15,6 +15,7 @@ import {
   type SavedBounds,
   symbolColor,
   titleBarOverlay,
+  workAreas,
   writeBounds,
 } from "../src/main/window-options.ts";
 
@@ -63,8 +64,27 @@ describe("where the window opens", () => {
   const laptop = { x: 0, y: 25, width: 1512, height: 920 };
   const external = { x: 1512, y: -200, width: 2560, height: 1415 };
 
-  test("at the default size, centred, the first time", () => {
+  test("the first time, centred at the default size, as much of it as the first work area holds", () => {
     expect(placement(null, [laptop])).toEqual({ ...DEFAULT_SIZE, maximized: false });
+    // A 1366×768 laptop under Windows' taskbar, beside a larger display.
+    const small = { x: 0, y: 0, width: 1366, height: 728 };
+    expect(placement(null, [small, external])).toEqual({
+      width: 1280,
+      height: 728,
+      maximized: false,
+    });
+    const tiny = { x: 0, y: 0, width: 480, height: 360 };
+    expect(placement(null, [tiny])).toEqual({ ...MIN_SIZE, maximized: false });
+    expect(placement(null, [])).toEqual({ ...DEFAULT_SIZE, maximized: false });
+  });
+
+  test("looks at the primary display's work area first, where a window with no position is centred", () => {
+    const primary = { id: 2, workArea: laptop };
+    expect(workAreas(primary, [{ id: 1, workArea: external }, primary])).toEqual([
+      laptop,
+      external,
+    ]);
+    expect(workAreas(primary, [primary])).toEqual([laptop]);
   });
 
   test("where it was, on whichever display still shows its top", () => {

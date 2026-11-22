@@ -70,24 +70,46 @@ function overlap(a: Rectangle, b: Rectangle): { width: number; height: number } 
   };
 }
 
+/** A display's id and work area, as Electron's screen gives them. */
+export interface DisplayArea {
+  readonly id: number;
+  readonly workArea: Rectangle;
+}
+
+/** The displays' work areas, the primary's first: Electron centres a window with no position there. */
+export function workAreas(primary: DisplayArea, displays: readonly DisplayArea[]): Rectangle[] {
+  return [primary, ...displays.filter((display) => display.id !== primary.id)].map(
+    (display) => display.workArea,
+  );
+}
+
+/** `size` cut to `area`'s, where there is one, and never below the minimum. */
+function fitted(
+  size: { readonly width: number; readonly height: number },
+  area: Rectangle | undefined,
+): { width: number; height: number } {
+  return {
+    width: Math.max(MIN_SIZE.width, area ? Math.min(size.width, area.width) : size.width),
+    height: Math.max(MIN_SIZE.height, area ? Math.min(size.height, area.height) : size.height),
+  };
+}
+
 /**
  * Where the window opens: the saved bounds while a display still shows enough of its top to drag it
- * by, else centred at the saved size. Its size fits the display it lands on, and is never below the
- * minimum.
+ * by, else centred at the saved size, or at the default size the first time. Its size fits the
+ * display it lands on, the first of `areas` when it is centred, and is never below the minimum.
  */
-export function placement(saved: SavedBounds | null, workAreas: readonly Rectangle[]): Placement {
-  if (saved === null) return { ...DEFAULT_SIZE, maximized: false };
+export function placement(saved: SavedBounds | null, areas: readonly Rectangle[]): Placement {
+  if (saved === null) return { ...fitted(DEFAULT_SIZE, areas[0]), maximized: false };
   const strip = { x: saved.x, y: saved.y, width: saved.width, height: VISIBLE_STRIP.height };
-  const area = workAreas.find((candidate) => {
+  const area = areas.find((candidate) => {
     const shown = overlap(strip, candidate);
     return shown.width >= VISIBLE_STRIP.width && shown.height >= VISIBLE_STRIP.height;
   });
-  const fit = area ?? workAreas[0];
-  const width = Math.max(MIN_SIZE.width, fit ? Math.min(saved.width, fit.width) : saved.width);
-  const height = Math.max(MIN_SIZE.height, fit ? Math.min(saved.height, fit.height) : saved.height);
+  const size = fitted(saved, area ?? areas[0]);
   return area === undefined
-    ? { width, height, maximized: saved.maximized }
-    : { x: saved.x, y: saved.y, width, height, maximized: saved.maximized };
+    ? { ...size, maximized: saved.maximized }
+    : { x: saved.x, y: saved.y, ...size, maximized: saved.maximized };
 }
 
 /** The caption buttons' glyphs, which Windows draws in the colour it's given. */

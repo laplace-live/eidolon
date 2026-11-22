@@ -286,11 +286,12 @@ and leaves it running when it quits.
 
 ## The window
 
-One window, 1280×820 at first and at least 520×600, hidden until its first page is ready to paint,
-at the bounds it had last: `window-bounds.json` in the profile, written through a temporary file. A
-saved position is dropped when no display shows 100×40 px of the window's top, and a window saved
-maximized is maximized only once it has painted, since `maximize()` shows a hidden window. Main
-owns its title.
+One window, 1280×820 at first and at least 520×600, never larger than the work area of the display
+it opens on (the primary one, centred, when it has no position, as at first), hidden until its first
+page is ready to paint, at the bounds it had last: `window-bounds.json` in the profile, written
+through a temporary file. A saved position is dropped when no display shows 100×40 px of the
+window's top, and a window saved maximized is maximized only once it has painted, since
+`maximize()` shows a hidden window. Main owns its title.
 
 - **Its pages.** The window shows `eidolon-app://shell/loading` until the backend is ready, then
   `eidolon-app://app/`. The failure page, `eidolon-app://shell/failed`, says why in the shell's

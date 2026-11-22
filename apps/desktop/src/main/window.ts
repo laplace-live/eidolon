@@ -15,6 +15,7 @@ import {
   MIN_SIZE,
   placement,
   readBounds,
+  workAreas,
   writeBounds,
 } from "./window-options.ts";
 
@@ -82,7 +83,7 @@ export interface WindowHooks {
 export function createWindow(hooks: WindowHooks): BrowserWindow {
   const saved = placement(
     readBounds(boundsFile()),
-    screen.getAllDisplays().map((display) => display.workArea),
+    workAreas(screen.getPrimaryDisplay(), screen.getAllDisplays()),
   );
   const dark = nativeTheme.shouldUseDarkColors;
   const win = new BrowserWindow({
