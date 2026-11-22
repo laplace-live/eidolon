@@ -34,10 +34,11 @@ since 2026-11-04. The offline chain is TypeScript too: `packages/ingest`, run
 through the `laplace-*` commands in `apps/cli`. The local web app and the
 offline commands run on Node 24, and also ship as the npm package
 `@laplace.live/eidolon` (`apps/eidolon`), which runs them, bundled, on the
-user's Node. The desktop app, Eidolon (`apps/desktop`, unreleased), shows the
-local app in a window and runs its server on Electron's own binary as Node
-([desktop.md](docs/desktop.md)). The original Python runtime is in the repo
-too, for human readers only; agents never touch it ([The Python](#the-python)).
+user's Node. The desktop app, Eidolon (`apps/desktop`), shows the local app in
+a window and runs its server on Electron's own binary as Node, and ships signed
+from its own release tags ([desktop.md](docs/desktop.md)). The original Python
+runtime is in the repo too, for human readers only; agents never touch it
+([The Python](#the-python)).
 
 ## Repository layout
 
@@ -49,7 +50,7 @@ apps/web/             the local web app's pages (Vite, React, shadcn), served by
 apps/cli/             every laplace-* command, the offline chain's included
 apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, and a build that
                       bundles the local app and the CLI with the web app, templates and jieba
-apps/desktop/         the desktop app, Eidolon (Electron, unreleased): apps/web in a window, on a
+apps/desktop/         the desktop app, Eidolon (Electron): apps/web in a window, on a
                       backend staged from the npm build and run on Electron's binary as Node
 packages/             subsystems, one Bun workspace package each (docs/typescript.md);
                       packages/ingest is the offline chain, packages/assistant the tools,
@@ -83,12 +84,12 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
-| the desktop app (`apps/desktop`): its main process, the backend it stages and spawns, the `eidolon-app:` forwarder, attaching to a running server, its window, environment, logs or packaging, background mode, its tests and smokes, `desktop.yml`, or an Electron bump | [desktop.md](docs/desktop.md) |
+| the desktop app (`apps/desktop`): its main process, the backend it stages and spawns, the `eidolon-app:` forwarder, attaching to a running server, its window, environment, logs or packaging, background mode, its tests and smokes, `desktop.yml`, its releases (the signing overlay, the signed build's checks, the R2 upload, `changelog.json` and `releases.json`), or an Electron bump | [desktop.md](docs/desktop.md) |
 | chats, the chat log format, the turn engine, group chats' director, voice messages, or the images and text files the viewer sends (`packages/chat`, `packages/engine`, `packages/engine/src/seen.ts`, `apps/bot/src/images.ts`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
 | the voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime`), its models, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
-| changesets, the version PR, tags, or publishing the npm packages (`apps/eidolon`, `packages/sdk`) | [releasing.md](docs/releasing.md) |
+| changesets, the version PR, tags (the desktop app's included), or publishing the npm packages (`apps/eidolon`, `packages/sdk`) | [releasing.md](docs/releasing.md) |
 | the browser client SDK (`@laplace.live/eidolon-sdk`, `packages/sdk`) | [client-sdk.md](docs/client-sdk.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
@@ -188,6 +189,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64 and Windows x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, loads its native modules, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
 | `apps/desktop`, or what its payload takes from `apps/eidolon`'s stage | `bun run typecheck`, `bun run lint` and `bun run test apps/desktop`, whose tests never load `electron`; then `bun run build:desktop`, `bun run package:desktop` and `EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts`, which also holds the packaged payload to the stage; then both [smokes](docs/desktop.md#the-smokes), which bill nothing and show nothing: `bun run smoke:desktop` (the packaged app's natives, its backend's API, a restart and `--quit`) and, on macOS, `bun run smoke:desktop:dev`, which builds and walks the unpackaged app (Home, a chat, a call, Restart, attaching and quitting). `desktop.yml` runs the packaged smoke on Windows too. An Electron bump follows [desktop.md's procedure](docs/desktop.md#bumping-electron) |
+| the desktop app's release: `apps/desktop/electron-builder.release.mjs`, `apps/desktop/scripts/signed-check.ts`, or `desktop.yml`'s tag check, signing, upload, index or probe | the row above, whose `bun run test apps/desktop` holds the overlay to electron-builder's loader and schema and the checks' verdicts to the tools' output; then, since only a run proves them, a `sign` dispatch from `electron` or `master` that passes both legs (notarized and stapled on macOS, Authenticode-valid on Windows), and an `r2_probe` dispatch for the upload's credentials. The upload itself runs only from a release's tag ([desktop.md](docs/desktop.md#releasing)) |
 | `jsRuntime()` (`packages/config/src/runtime.ts`), or a test that spawns `process.execPath` with an environment of its own | the gates above, then the backend suite on Electron's Node, `node apps/desktop/scripts/test-on-electron.ts` ([the Electron lane](docs/desktop.md#the-electron-lane)): there `process.execPath` is Electron's binary, which starts as an app, not as Node, unless the child's environment carries `jsRuntime().env` |
 
 ## Rules
@@ -485,9 +487,21 @@ the layout's one line.
   a sandboxed document the backend serves has an app URL and an opaque origin. Every other
   permission, the camera included, is denied.
 - **The shell and its backend are one release.** Nothing updates the backend alone: the app runs
-  only its own payload, or a server on its data home that proves it holds `local-token`. Releases,
-  signed, come later; until `apps/desktop/package.json` has a version, no changeset names
-  `laplace-eidolon-desktop`, since one naming it beside a released package fails.
+  only its own payload, or a server on its data home that proves it holds `local-token`.
+- **A desktop release is only the version PR's `laplace-eidolon-desktop@<version>` tag.**
+  `desktop.yml` signs and uploads it after checking the tag's commit is on master and names the
+  package's version: never sign a build, push such a tag or write to R2's `eidolon/` by hand.
+  `eidolon/v<version>/` is never overwritten or deleted, since installs download from it: a bad
+  release is withdrawn by shipping a higher one ([desktop.md](docs/desktop.md#releasing)).
+- **The signers change only with an overlap.** A Windows install takes updates signed only by a
+  name in its `publish.publisherName` list, and macOS only from a team
+  `resources/designated-requirement.mac` names, so a new name or team first ships in a release the
+  old one signed ([desktop.md](docs/desktop.md#signing-identities)). The requirement stays
+  team-only: electron-builder stamps it on every helper.
+- **The signing secrets reach their own platform's leg alone,** in `desktop.yml`'s signed package
+  step, which runs only for a tag or a `sign` dispatch on `master` or `electron`. Before it nothing
+  runs that the run fetched but the toolchain and what `bun.lock` pins, and no package's install
+  script (`--ignore-scripts`): one could rewrite the electron-builder that step runs.
 - **Installing, updating and uninstalling the app never touch the data home,** which it shares with
   npx and `bun run app`; its uninstaller removes the install folder alone.
 - **Every local test run of the app is in background mode** (`EIDOLON_DESKTOP_BACKGROUND=1`,
@@ -596,8 +610,12 @@ the layout's one line.
   (`apps/bot`) and the npm package `@laplace.live/eidolon` (`apps/eidolon`) are
   released together at one version, so name both: each changelog lists only the
   changesets naming it. `@laplace.live/eidolon-sdk` (`packages/sdk`) is versioned
-  independently — name it on changesets that change the client SDK. `@eidolon/*`
-  are ignored.
+  independently — name it on changesets that change the client SDK. The desktop
+  app, `laplace-eidolon-desktop` (`apps/desktop`), is versioned on its own too —
+  name it on every changeset whose change desktop users get (the local app, the
+  web app, the CLI it ships, the shell), beside the fixed pair when the npm
+  package ships it as well ([releasing.md](docs/releasing.md#changesets)).
+  `@eidolon/*` are ignored.
 - **A push to `master` is a production deploy.** CI rebuilds `:edge`, and
   Watchtower on the production host restarts the bot from it, dropping live
   calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`,
@@ -611,15 +629,16 @@ the layout's one line.
   desktop's Electron or electron-builder, which changes `bun.lock`.
 - **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
   publish to npm.** Merging the Release workflow's version PR bumps
-  `apps/bot/package.json`, `apps/eidolon/package.json`, and/or
-  `packages/sdk/package.json`, copies the bot's version into
+  `apps/bot/package.json`, `apps/eidolon/package.json`, `packages/sdk/package.json`
+  and/or `apps/desktop/package.json`, copies the bot's version into
   `packages/runtime/src/rtvi.ts` and into the Python's files as "The Python"
   allows (`apps/bot/scripts/sync-version.ts`), publishes unpublished npm
   packages (`@laplace.live/eidolon`, `@laplace.live/eidolon-sdk`) via OIDC
   trusted publishing, and tags `laplace-eidolon@<version>` (which builds the
   image tagged `<version>`, `<major>.<minor>` and `<major>`),
-  `@laplace.live/eidolon@<version>`, and/or `@laplace.live/eidolon-sdk@<version>`;
-  only one-time trusted-publisher setup is done by hand
+  `@laplace.live/eidolon@<version>`, `@laplace.live/eidolon-sdk@<version>`, and/or
+  `laplace-eidolon-desktop@<version>` (which signs the desktop app and uploads it
+  to R2); only one-time trusted-publisher setup is done by hand
   ([releasing.md](docs/releasing.md)).
 - **Fix defects you can trigger; don't harden against ones you can't.** Before
   adding a guard — including for a review finding — name the input or sequence

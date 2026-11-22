@@ -478,10 +478,11 @@ VC++ copies.
 `-c.extraMetadata.version=0.0.0-dev`, and with `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never
 signs with an identity from the keychain or asks for one. It needs `dist/` and warns when there is
 no stage. On macOS it writes `.out/mac-arm64/Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
-and `.out/win-unpacked`. The flags stay on the command line, never in `electron-builder.yml`, which
-a release config will extend: an identity there would replace the release's. Builds are unsigned
-(ad hoc on macOS, where that signs every Mach-O, the payload's natives included, with the hardened
-runtime): signing, notarization, the updater and releases come later.
+and `.out/win-unpacked`. Its builds are unsigned: ad hoc on macOS, where that signs every Mach-O,
+the payload's natives included, with the hardened runtime. The flags stay on the command line,
+never in `electron-builder.yml`, which the release overlay extends: an identity there would replace
+the release's Developer ID, and `test/release-config.test.ts` fails on one. Only `desktop.yml`
+builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing)).
 
 `electron-builder.yml`:
 
@@ -514,8 +515,164 @@ runtime): signing, notarization, the updater and releases come later.
 - **`publish`** names the update feed, which electron-builder writes into the app's
   `app-update.yml` for the updater to come; nothing is uploaded.
 
+`electron-builder.release.mjs`, the release overlay, extends it with the signing; only
+`desktop.yml`'s signed builds load it, and `test/release-config.test.ts` checks what it computes and
+what electron-builder's own loader and schema make of it:
+
+- **`publish.publisherName`:** `Sparanoid, Inc.` and `LAPLACE Live LLC`, the signer names a Windows
+  install accepts updates from ([Signing identities](#signing-identities)).
+- **macOS:** `notarize`, with the App Store Connect key from `APPLE_API_KEY`, `APPLE_API_KEY_ID` and
+  `APPLE_API_ISSUER` (notarizing staples the app); `forceCodeSigning`, so a build that finds no
+  Developer ID fails rather than ships ad hoc; and `requirements`, the designated requirement in
+  `resources/designated-requirement.mac`, whose name has no `.txt`: GitHub's dependency graph read
+  `requirements.mac.txt` as a package list and failed on it. The DMG stays unsigned and
+  unnotarized: electron-builder notarizes and staples only the app inside it, and updates take the
+  zip.
+- **Windows,** added only when it runs on Windows, since electron-builder's schema requires the
+  Azure names only that leg's environment has: `azureSignOptions` (Azure Trusted Signing at
+  `https://eus.codesigning.azure.net`, the account and profile from `AZURE_SIGNING_ACCOUNT_NAME` and
+  `AZURE_CERTIFICATE_PROFILE_NAME`), `forceCodeSigning`, and `signExts`, the names in
+  `.stage/win32-x64/unsigned-pe.json` ([The payload](#the-payload)), without which it throws.
+  electron-builder signs only `.exe` files unless told, and signs every file whose path ends with a
+  listed entry: an extension would re-sign Microsoft's DLLs over their signatures. Signing made the
+  Windows packaging 43–57 s longer on CI's runner, 2–4 s a file.
+
 The app needs macOS 13 or Windows 10 (x64), Electron's minimums. Intel Macs have no LanceDB or
 onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
+
+## Releasing
+
+A desktop release is a `laplace-eidolon-desktop@X.Y.Z` tag, and only the Release workflow makes one
+([releasing.md](releasing.md)): a changeset that names `laplace-eidolon-desktop` puts it in the
+version PR, which bumps `apps/desktop/package.json` and writes `apps/desktop/CHANGELOG.md`, and
+merging that PR pushes the tag with the release bot's token and creates its GitHub Release from the
+changelog. The tag runs `desktop.yml` in the tagged commit:
+
+1. **The tag check,** on each leg: it fails unless the commit is on master and the tag names
+   `apps/desktop/package.json`'s version. No ruleset guards the tags, so this is what keeps a token
+   that can push one from shipping a signed release of any other commit.
+2. **The signed build,** on each leg ([In CI](#in-ci)): the release overlay with that leg's own
+   secrets alone, then [the signed build's checks](#the-signed-builds-checks), then every check an
+   unsigned build gets, the packaged smoke of the signed app included. Once all of them passed, the
+   leg keeps its installers, the macOS zip, the blockmaps and `latest*.yml` as `<OS>-installers`,
+   for 90 days.
+3. **The upload,** a job of its own after both legs, so that a re-run sends the very bytes the legs
+   signed, where re-running a leg would sign new ones. Through the S3 API, to the `downloads`
+   bucket that `https://downloads.vrp.moe` serves:
+   - each installer and blockmap once, to `eidolon/v<version>/`, cached for a year as immutable. It
+     reads the SHA-256 the first upload stored with the key, and fails when another object is
+     there: Cloudflare would keep serving the first, and electron-updater rejects other bytes on
+     their checksum. A pattern that matches nothing fails it too, rather than upload nothing;
+   - `latest-mac.yml` and `latest.yml`, uncached, with `url:` and `path:` pointed into
+     `v<version>/` (electron-updater resolves both, and the previous version's blockmap it derives
+     from them, against the manifest's own URL) and the update dialog's notes appended, the one
+     `eidolonNotes:` line `node scripts/changelog.ts manifest` prints: first to `v<version>/`, then
+     to flat `eidolon/`, where installs look;
+   - the download links, uncached: `eidolon/Eidolon-mac-arm64.dmg` and
+     `eidolon/Eidolon-win-x64.exe`, the version's DMG and NSIS setup;
+   - `eidolon/changelog.json`, uncached: the repository's `changelog.json`, every release's notes,
+     for the website, at `https://downloads.vrp.moe/eidolon/changelog.json`.
+4. **The index:** `eidolon/releases.json`, the website's version history at
+   `https://downloads.vrp.moe/eidolon/releases.json`, rebuilt from a listing of `eidolon/v*`: each
+   version with the date of its first file, and its files but the blockmaps and manifests, each by
+   its URL from `eidolon/` and its size. It runs after the upload whatever became of it, so it
+   always lists what R2 holds.
+
+Nothing under `eidolon/v<version>/` is ever deleted or overwritten: installs download from there.
+Every check of an object goes through the S3 API, never `https://downloads.vrp.moe`, whose zone
+answers curl and scripts with a challenge; electron-updater, whose user agent is `electron-builder`,
+gets through.
+
+### Dispatches
+
+A dispatch of `desktop.yml` builds unsigned, at `0.0.0-dev`, unless an input says otherwise:
+
+- **`sign`** builds signed, as a tag does, and keeps the installers, zip, blockmaps and manifests a
+  day as `<OS>-installers-signed-unreleased`, never on R2: in this public repository any signed-in
+  user can download a run's artifacts. With it go `version`, a plain `X.Y.Z`, since electron-builder
+  takes a prerelease id for the update channel, and `feed_url`, the feed the build reads instead of
+  R2's, such as a local server for the update test.
+- **`r2_probe`** puts, heads and deletes `eidolon/.probe-<run id>` with the upload's credentials and
+  calls, and fails on any step: the proof the R2 token writes, before a release needs it.
+- **`release_index`** rebuilds `releases.json`.
+
+The last two run alone and build nothing. All three run only on `master` and `electron`, and a run
+elsewhere fails before any secret is read.
+
+### Recovery
+
+- **A failed upload:** "Re-run failed jobs". It sends the same bytes again, which the SHA-256 check
+  lets through, then the manifests, the links, `changelog.json` and the index. Never "Re-run all
+  jobs" once an upload began: the legs would sign new bytes, which the upload refuses.
+- **A failed leg** uploaded nothing: "Re-run failed jobs" builds and signs it again, then uploads
+  both legs.
+- **A missing tag,** when the Release workflow failed before it pushed one: re-running that workflow
+  tags it ([releasing.md](releasing.md)).
+- **A bad release** is withdrawn by shipping a higher version, since electron-updater never offers a
+  lower one. Copying an older version's manifests and the download links back to flat `eidolon/`
+  only stops new installs of the bad one.
+
+### Signing identities
+
+- **A Windows install takes updates signed only by a name it already trusts.** electron-updater
+  checks each setup it downloads against the signer names frozen into the install's
+  `app-update.yml`, the overlay's `publish.publisherName`, and fails with
+  `ERR_UPDATER_INVALID_SIGNATURE` otherwise; nothing on the feed widens an installed list. Every
+  release lists both of the org's names. Signing as a third takes an overlap: add it to
+  `PUBLISHER_NAMES`, keep signing as a listed name until installs have moved onto a release that
+  lists the new one, then switch the Azure profile secrets. An install that sits the overlap out
+  needs a reinstall.
+- **macOS pins the Apple team the same way.** Squirrel.Mac, under electron-updater, installs an
+  update only when it satisfies the running app's designated requirement, and the microphone grant
+  is tied to it too. `resources/designated-requirement.mac` accepts either of the org's teams,
+  `B5483RCL5H` or `9H3CCD4YMM`; electron-builder stamps it on every file it signs, helpers included,
+  so it names no bundle identifier, which would fail the helpers. Another team takes the same
+  overlap: ship a requirement that names it, signed by a team the old one accepts, then switch
+  `APPLE_CERTIFICATE` and `APPLE_API_*`.
+
+### The signed build's checks
+
+`scripts/signed-check.ts` (`node apps/desktop/scripts/signed-check.ts`, on what a signed package
+step left in `.out`) prints a `PASS` or `FAIL` line per check, as the smokes do, and exits 1 when
+one failed. `test/signed-check.test.ts` holds its verdicts to the tools' own output.
+
+- **macOS,** on `.out/mac-arm64/Eidolon.app`: `codesign --verify --deep --strict` passes; `spctl
+  --assess` accepts it as a notarized Developer ID; `stapler validate` finds the ticket; every
+  `.node` and `.dylib` in the payload has the hardened runtime and a secure timestamp from Apple's
+  server, which neither an ad-hoc signature nor `Signed Time` alone gives; and the designated
+  requirement of the app and of each helper app and framework is the requirement file's, as `csreq
+  -t` prints it.
+- **Windows:** it installs the setup silently for the user, refusing where Eidolon is installed
+  already, then reads `Get-AuthenticodeSignature` on the setup and on every PE file of the install,
+  found by its headers whatever its name. Each must be Valid. The setup, every `.exe` in the install
+  (`Eidolon.exe`, the uninstaller, `elevate.exe`) and every name the stage listed must be signed by
+  one of `publish.publisherName`'s names; every other file must keep the Microsoft signature it
+  came with (`MICROSOFT_SIGNERS`): onnxruntime's, the VC++ runtime and Electron's
+  `d3dcompiler_47.dll`. The install must hold each of those and every listed file, so no check
+  passes on nothing. Then it uninstalls.
+
+### Secrets
+
+Each leg gets its own platform's alone, in the signed package step:
+
+- **macOS:** `APPLE_CERTIFICATE` and `APPLE_CERTIFICATE_PASSWORD`, as `CSC_LINK` and
+  `CSC_KEY_PASSWORD`, which on Windows would send electron-builder to signtool (it imports the
+  Developer ID certificate into a temporary keychain itself); `APPLE_API_KEY`, written to
+  `$RUNNER_TEMP/apple-api-key.p8` by the step before and removed by one after, whatever happened;
+  `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`.
+- **Windows:** `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
+  `AZURE_SIGNING_ACCOUNT_NAME` and `AZURE_CERTIFICATE_PROFILE_NAME`.
+
+Those are the org's secrets. The upload, the index and the probe take the repository's own:
+`R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, and `CLOUDFLARE_ACCOUNT_ID` for the endpoint. Before
+the signed package step nothing runs that the run fetched, but the toolchain and what `bun.lock`
+pins, and no package's install script, which could rewrite the electron-builder the step runs with
+the secrets. In that step electron-builder installs Azure's TrustedSigning module from the
+PowerShell Gallery, at its newest version, to sign with.
+
+Only a run proves the release: the overlay and the checks' verdicts have their tests, but signing
+needs a `sign` dispatch from `master` or `electron` that passes both legs, the R2 credentials an
+`r2_probe` dispatch, and the upload a release's tag.
 
 ## Logs
 
@@ -816,38 +973,46 @@ macOS.
 
 `ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips.
 `.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
-request that changes more than docs, and on a dispatch: the payload comes from `bun.lock` and the
-backend's packages, so a filter on `apps/desktop` would miss the changes it checks. Its one job runs
-on `macos-latest` (macOS arm64) and `windows-latest` (Windows x64), neither cancelling the other,
-in bash on both, with Bun from `package.json` and Node 24:
+request that changes more than docs, on a dispatch, and from a release's tag
+([Releasing](#releasing)): the payload comes from `bun.lock` and the backend's packages, so a filter
+on `apps/desktop` would miss the changes it checks. Its build job runs on `macos-latest` (macOS
+arm64) and `windows-latest` (Windows x64), neither cancelling the other, in bash on both, with Bun
+from `package.json` and Node 24:
 
-1. **Install:** `bun install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
-   build step needs a package's install script, and a signing step must follow none.
-2. **Build:** `bun run build:desktop` stages the runner's backend and builds `dist/`.
-3. **Package:** `bun run package:desktop -c.compression=store`, unsigned at `0.0.0-dev`, ad hoc on
-   macOS and never with a keychain identity, an NSIS setup on Windows; stored uncompressed, which
-   packs faster.
-4. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
+1. **The checks before anything installs:** a tag's ([Releasing](#releasing)), or a dispatch's
+   inputs ([Dispatches](#dispatches)).
+2. **Install:** `bun install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
+   build step needs a package's install script, and the signing step must follow none.
+3. **Build:** `bun run build:desktop` stages the runner's backend and builds `dist/`.
+4. **Package:** unsigned, `bun run package:desktop -c.compression=store`, at `0.0.0-dev`, ad hoc on
+   macOS and never with a keychain identity, an NSIS setup on Windows, stored uncompressed, which
+   packs faster. From a tag or a `sign` dispatch, signed instead: electron-builder with the release
+   overlay and that leg's secrets ([Secrets](#secrets)), then [the signed build's
+   checks](#the-signed-builds-checks).
+5. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
    instead of skipping; run after packaging, it also holds the app's payload to the stage.
-5. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
+6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
    Windows the tests `ts.yml`'s Windows job runs, with its filters.
-6. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
+7. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
    NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
    output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds
    `local-token`.
-7. **`--use-system-ca` on the packaged binary:** `scripts/system-ca.ts` puts a throwaway CA in the
+8. **`--use-system-ca` on the packaged binary:** `scripts/system-ca.ts` puts a throwaway CA in the
    runner's machine trust store (the System keychain through `sudo -n security` on macOS,
    LocalMachine's Root through `certutil` on Windows), serves https on loopback with a certificate
    it signed, and checks that the packaged binary in node mode reaches it with `--use-system-ca`
    and not without, from the backend and from a job the backend runs. Then it deletes the CA, while
    macOS keeps its admin trust entry, orphaned: removing that waits on a dialog no runner answers.
    It runs only where `CI=true`, and refuses anywhere else: it changes the machine's trust store.
-8. **The installers,** the DMG and the NSIS setup, uploaded as `<OS>-installers-dev` and kept 14
-   days; not the macOS zip, which only updates read.
+9. **The installers:** unsigned, the DMG and the NSIS setup, uploaded as `<OS>-installers-dev` and
+   kept 14 days; not the macOS zip, which only updates read. Signed, once every check passed, the
+   installers, the zip, the blockmaps and `latest*.yml`: a tag's as `<OS>-installers` for the
+   upload, a `sign` dispatch's as `<OS>-installers-signed-unreleased`.
 
 Each check runs once the step it needs succeeded, so one that fails hides none of the others. A
-push to a pull request cancels the run it replaces; a dispatch neither waits nor cancels. No
-identity signs anything, and nothing goes anywhere but the run's own artifacts.
+push to a pull request cancels the run it replaces, a tag's run is never cancelled, and a dispatch
+neither waits nor cancels. A pull request's run and an unsigned dispatch sign nothing, and send
+nothing anywhere but the run's own artifacts.
 
 ### Driving it in background mode
 

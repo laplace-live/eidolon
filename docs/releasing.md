@@ -4,27 +4,35 @@ Every release is cut by the Release workflow (`.github/workflows/release.yml`) w
 [Changesets](https://github.com/changesets/changesets). Nobody bumps a version, pushes a tag or
 edits a `CHANGELOG.md` by hand.
 
-Three packages are released. `.changeset/config.json` puts the bot and `@laplace.live/eidolon` in
-one `fixed` group so they always share a version, while `@laplace.live/eidolon-sdk` versions
-independently.
+Four packages are released. `.changeset/config.json` puts the bot and `@laplace.live/eidolon` in
+one `fixed` group so they always share a version, while `@laplace.live/eidolon-sdk` and the desktop
+app, `laplace-eidolon-desktop`, each version independently.
 
 | Package | Folder | A release makes |
 | --- | --- | --- |
 | `laplace-eidolon` | `apps/bot` | the tag `laplace-eidolon@X.Y.Z`, its GitHub Release, and the images |
 | `@laplace.live/eidolon` | `apps/eidolon` | the tag `@laplace.live/eidolon@X.Y.Z`, its GitHub Release, and the npm package |
 | `@laplace.live/eidolon-sdk` | `packages/sdk` | the tag `@laplace.live/eidolon-sdk@X.Y.Z`, its GitHub Release, and the npm package |
+| `laplace-eidolon-desktop` | `apps/desktop` | the tag `laplace-eidolon-desktop@X.Y.Z`, its GitHub Release, and the signed installers on R2 ([desktop.md](desktop.md#releasing)) |
 
 The `@eidolon/*` workspace packages are never released; Changesets ignores them.
 
 ## Changesets
 
 A user-facing bot change ships with a changeset in the same commit, naming both fixed-group
-packages; a client SDK change names `@laplace.live/eidolon-sdk` (too, or alone):
+packages; a client SDK change names `@laplace.live/eidolon-sdk` (too, or alone); a change desktop
+users get names `laplace-eidolon-desktop`, beside the fixed pair when the npm package ships it too:
 
 ```bash
 bunx changeset add --minor laplace-eidolon,@laplace.live/eidolon -m "feat: Remember a viewer's nickname"
 bunx changeset add --minor @laplace.live/eidolon-sdk -m "feat: Add useEidolonWatchdog hook"
+bunx changeset add --minor laplace-eidolon,@laplace.live/eidolon,laplace-eidolon-desktop -m "feat: Search a chat's history"
+bunx changeset add --patch laplace-eidolon-desktop -m "fix: Reopen the window where it was closed"
 ```
+
+Desktop users get the local app, the web app, the CLI the app ships, and the shell in
+`apps/desktop`; a change to production alone, or to the npm launcher alone, doesn't name the
+desktop app. Its version line is its own, so 0.1.0 can ship beside the npm package's 0.14.
 
 The fixed group bumps both packages whichever one a changeset names, but each `CHANGELOG.md`
 lists only the changesets that name its own package. A changeset that names only one leaves the
@@ -37,9 +45,9 @@ only one. `--minor`, `--patch` and the summary's form are in
 On every push to `master` while changesets are pending, the workflow keeps a `chore: version
 packages` PR open. Its commit is `bun run version`:
 
-1. `changeset version` bumps `apps/bot/package.json`, `apps/eidolon/package.json` and/or
-   `packages/sdk/package.json`, adds each package's entry to its `CHANGELOG.md`, and deletes the
-   changesets.
+1. `changeset version` bumps `apps/bot/package.json`, `apps/eidolon/package.json`,
+   `packages/sdk/package.json` and/or `apps/desktop/package.json`, adds each package's entry to its
+   `CHANGELOG.md`, and deletes the changesets.
 2. `apps/bot/scripts/sync-version.ts` copies the version into `packages/runtime/src/rtvi.ts`,
    and into the Python reference implementation's `pyproject.toml`, `uv.lock` and bot entry
    point (AGENTS.md, "The Python").
@@ -52,9 +60,9 @@ rewrites them, which `--frozen-lockfile` tolerates.
 When the version PR merges, no changeset is pending, so the workflow runs `bun run release`
 (`bun run build:npm && bun run build:sdk && changeset publish`). `changeset publish` publishes each
 unpublished non-private package to npm and tags every released package whose current version has no
-tag yet (`laplace-eidolon@X.Y.Z` via `privatePackages.tag`, `@laplace.live/eidolon@X.Y.Z` and/or
-`@laplace.live/eidolon-sdk@X.Y.Z`). The action pushes the new tags and creates a GitHub Release for
-each from its `CHANGELOG.md` entry.
+tag yet (`laplace-eidolon@X.Y.Z` and `laplace-eidolon-desktop@X.Y.Z` via `privatePackages.tag`,
+`@laplace.live/eidolon@X.Y.Z` and/or `@laplace.live/eidolon-sdk@X.Y.Z`). The action pushes the new
+tags and creates a GitHub Release for each from its `CHANGELOG.md` entry.
 
 - **A GitHub App pushes the tags.** Events caused by the workflow's own `GITHUB_TOKEN` start no
   other workflow, so the laplace-release-bot App's token (the `RELEASE_APP_CLIENT_ID` and
@@ -63,6 +71,13 @@ each from its `CHANGELOG.md` entry.
   `ghcr.io/laplace-live/eidolon` and `ghcr.io/laplace-live/eidolon-python` tagged `X.Y.Z`, `X.Y`
   and `X`. `@laplace.live/eidolon@X.Y.Z` and `@laplace.live/eidolon-sdk@X.Y.Z` match no workflow's
   trigger and build no image.
+- **`laplace-eidolon-desktop@X.Y.Z` releases the desktop app.** It fires `desktop.yml` in the tagged
+  commit, which checks that the commit is on master and the tag names the package's version, signs
+  and notarizes each platform's build, checks it, and uploads it to R2, where installs update from
+  ([desktop.md](desktop.md#releasing)). Its GitHub Release carries the notes, not the installers.
+  `desktop.yml` signs with the org's Apple and Azure secrets and uploads with the repository's R2
+  ones ([desktop.md](desktop.md#secrets)). A run of it that fails is re-run with "Re-run failed
+  jobs", never "Re-run all jobs" once its upload began ([desktop.md](desktop.md#recovery)).
 - **Production follows `:edge`, not the tags.** Every push to `master` that `docker.yml` doesn't
   ignore rebuilds `:edge`, and Watchtower restarts the production bot from it
   ([AGENTS.md](../AGENTS.md#shipping-a-change)).
@@ -91,9 +106,10 @@ When `release` fails before `npm publish` finishes, fix the cause and re-run the
 `changeset publish` re-checks the registry and publishes and tags whatever is still missing on npm.
 If `npm publish` succeeded for a public package (`@laplace.live/eidolon` or
 `@laplace.live/eidolon-sdk`) before a later step failed, a fresh run sees that version on npm and
-skips its tag and GitHub Release (`privatePackages.tag` re-checks missing tags only for private
-`laplace-eidolon`): push the missing `<pkg>@<version>` tag on the release commit and create its
-GitHub Release with `gh release create` from `CHANGELOG.md`. An `ENEEDAUTH` error means npm found
+skips its tag and GitHub Release (`privatePackages.tag` re-checks missing tags only for the private
+packages, `laplace-eidolon` and `laplace-eidolon-desktop`, so a re-run tags those): push the missing
+`<pkg>@<version>` tag on the release commit and create its GitHub Release with `gh release create`
+from `CHANGELOG.md`. An `ENEEDAUTH` error means npm found
 no trusted publisher matching the job: check the workflow file name (`release.yml`) in the
 package's settings on npmjs.com.
 
