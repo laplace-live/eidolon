@@ -88,7 +88,7 @@ a row here and writing the prose there — not a new section in this file.**
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
 | the voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime`), its models, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
-| changesets, the version PR, tags, or publishing the npm packages (`apps/eidolon`, `packages/sdk`) | [releasing.md](docs/releasing.md) |
+| changesets, the version PR, `changelog.json` (`scripts/changelog.ts`), tags, or publishing the npm packages (`apps/eidolon`, `packages/sdk`) | [releasing.md](docs/releasing.md) |
 | the browser client SDK (`@laplace.live/eidolon-sdk`, `packages/sdk`) | [client-sdk.md](docs/client-sdk.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
@@ -591,7 +591,8 @@ the layout's one line.
   `--minor` for features and substantial behavior changes, `--patch` for fixes
   and small changes. Start with `feat:`/`fix:`/`perf:`/`chore:`, then one
   capitalized plain sentence under ~80 chars, written for users; the prefix is
-  stripped and the rest ships as the GitHub Release notes. No changeset for CI,
+  the change's kind (New, Fixed…) in `changelog.json`, and the rest ships as the
+  GitHub Release notes and the desktop's update notes. No changeset for CI,
   docs, tests, dev-only tooling, or refactors nobody notices. `laplace-eidolon`
   (`apps/bot`) and the npm package `@laplace.live/eidolon` (`apps/eidolon`) are
   released together at one version, so name both: each changelog lists only the
