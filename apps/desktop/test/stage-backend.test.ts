@@ -113,8 +113,16 @@ function certificate(serial: number, issuer: Buffer, subject: Buffer): Buffer {
   return der(SEQUENCE, tbs, der(SEQUENCE), der(0x03, Buffer.of(0)));
 }
 
-/** A WIN_CERTIFICATE whose PKCS#7 SignedData holds `certificates` and names its signer's. */
-function authenticode(certificates: readonly Buffer[], issuer: Buffer, serial: number): Buffer {
+/**
+ * A WIN_CERTIFICATE whose PKCS#7 SignedData holds `certificates` and names its signer's; with
+ * `indefinite`, the SignedData in BER's indefinite length, ended by two zero octets.
+ */
+function authenticode(
+  certificates: readonly Buffer[],
+  issuer: Buffer,
+  serial: number,
+  indefinite = false,
+): Buffer {
   const signerInfo = der(
     SEQUENCE,
     der(INTEGER, Buffer.of(1)),
@@ -123,14 +131,16 @@ function authenticode(certificates: readonly Buffer[], issuer: Buffer, serial: n
     der(SEQUENCE),
     der(0x04),
   );
-  const signedData = der(
-    SEQUENCE,
+  const fields = [
     der(INTEGER, Buffer.of(1)),
     der(SET),
     der(SEQUENCE),
     der(0xa0, ...certificates),
     der(SET, signerInfo),
-  );
+  ];
+  const signedData = indefinite
+    ? Buffer.concat([Buffer.of(SEQUENCE, 0x80), ...fields, Buffer.of(0, 0)])
+    : der(SEQUENCE, ...fields);
   // 1.2.840.113549.1.7.2, signedData.
   const signedDataOid = Buffer.of(0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02);
   const pkcs7 = der(SEQUENCE, der(0x06, signedDataOid), der(0xa0, signedData));
@@ -482,10 +492,14 @@ describe("a PE file", () => {
     const leaf = certificate(7, pca, name("Microsoft Corporation"));
     expect(readPe(pe({ certificate: authenticode([leaf], pca, 8) }))?.signer).toBeNull();
     expect(readPe(pe({ certificate: authenticode([], pca, 7) }))?.signer).toBeNull();
-    // BER's indefinite length, where the SignedData's own would be.
-    const ber = signedBy("Microsoft Corporation");
-    ber.writeUInt8(0x80, 9);
-    expect(readPe(pe({ certificate: ber }))).toMatchObject({ signed: true, signer: null });
+    // The same signature with its SignedData in BER's indefinite length, which DER forbids.
+    expect(readPe(pe({ certificate: authenticode([leaf], pca, 7) }))?.signer).toBe(
+      "Microsoft Corporation",
+    );
+    expect(readPe(pe({ certificate: authenticode([leaf], pca, 7, true) }))).toMatchObject({
+      signed: true,
+      signer: null,
+    });
   });
 
   test("is read from disk the same, and anything else is no PE file", () => {
