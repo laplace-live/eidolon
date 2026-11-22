@@ -1,11 +1,11 @@
-// The dev smoke's parts that need no Electron: the fake microphone's WAV, its steps' lines, records
-// and results, and the window watch's reading of osascript's lines.
+// The dev smoke's parts that need no Electron: the fake microphone's WAV, its steps' lines, records,
+// results and wait, and the window watch's reading of osascript's lines.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { framed, RATE, wavFile, wavSamples } from "../scripts/dev-smoke/speech.ts";
-import { described, Steps, stepLine, writeResults } from "../scripts/dev-smoke/steps.ts";
+import { described, Steps, stepLine, until, writeResults } from "../scripts/dev-smoke/steps.ts";
 import { parseLook, watchWindows } from "../scripts/dev-smoke/windows.ts";
 import { Checks } from "../scripts/smoke/kit.ts";
 
@@ -147,6 +147,30 @@ describe("the dev smoke's steps", () => {
     const file = writeResults(folder, { smoke: "dev", steps: [] });
     expect(file).toBe(join(folder, "results.json"));
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ smoke: "dev", steps: [] });
+  });
+});
+
+describe("a step's wait", () => {
+  test("gives the first value a read gives, past nulls and errors", async () => {
+    let reads = 0;
+    const read = () => {
+      reads++;
+      if (reads === 1) throw new Error("not yet");
+      return reads < 3 ? null : reads;
+    };
+    expect(await until("a value", read, 1000, 1)).toBe(3);
+  });
+
+  test("names what it waited for at the timeout, with the last error a read threw", async () => {
+    const read = () => {
+      throw new Error("page.evaluate: Target page, context or browser has been closed");
+    };
+    await expect(until("the page's status", read, 100, 10)).rejects.toThrow(
+      "no the page's status within 0.1 s; the last error a read threw: page.evaluate: Target page, context or browser has been closed",
+    );
+    await expect(until("a value", () => null, 100, 10)).rejects.toThrow(
+      /^no a value within 0\.1 s$/,
+    );
   });
 });
 

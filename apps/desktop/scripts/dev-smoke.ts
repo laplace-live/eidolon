@@ -19,7 +19,7 @@ import type { ElectronApplication, Locator, Page } from "playwright-core";
 import { STRINGS } from "../src/main/strings.ts";
 import { buildApp, missingBuilds } from "./dev-smoke/build.ts";
 import { type Microphone, microphoneWav } from "./dev-smoke/speech.ts";
-import { described, type Step, Steps, writeResults } from "./dev-smoke/steps.ts";
+import { described, type Step, Steps, until, writeResults } from "./dev-smoke/steps.ts";
 import { type WindowReport, watchWindows } from "./dev-smoke/windows.ts";
 import {
   CHAT_MESSAGE,
@@ -94,27 +94,6 @@ function seconds(ms: number): string {
 
 function after(line: string): string {
   return line.replace(/^.*?Eidolon: /, "");
-}
-
-/** Polls `read` until it gives a value, or throws `what` at the timeout. */
-async function until<T>(
-  what: string,
-  read: () => Promise<T | null | undefined> | T | null | undefined,
-  timeoutMs = 30_000,
-  everyMs = 200,
-): Promise<T> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    let value: T | null | undefined = null;
-    try {
-      value = await read();
-    } catch {
-      value = null;
-    }
-    if (value !== null && value !== undefined && value !== false) return value;
-    if (Date.now() >= deadline) throw new Error(`no ${what} within ${seconds(timeoutMs)}`);
-    await sleep(everyMs);
-  }
 }
 
 interface PersonaNames {

@@ -1,8 +1,9 @@
-// The dev smoke's steps: each prints one line, PASS or FAIL with what decided it, made of the
-// checks inside it, and its record (every check, how long it took, its screenshots) goes into the
-// run's results.json.
+// The dev smoke's steps, and the wait they poll with: each prints one line, PASS or FAIL with what
+// decided it, made of the checks inside it, and its record (every check, how long it took, its
+// screenshots) goes into the run's results.json.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Page } from "playwright-core";
 import type { Check, Checks } from "../smoke/kit.ts";
 
@@ -57,6 +58,34 @@ export function described(error: unknown): string {
   const lines = (error instanceof Error ? error.message : String(error)).split("\n");
   const waiting = lines.find((line) => /^\s*- waiting for /.test(line));
   return waiting === undefined ? lines[0] : `${lines[0]} (${waiting.trim().replace(/^- /, "")})`;
+}
+
+/**
+ * Polls `read` until it gives a value, or throws `what` at the timeout, with the last error a read
+ * threw.
+ */
+export async function until<T>(
+  what: string,
+  read: () => Promise<T | null | undefined> | T | null | undefined,
+  timeoutMs = 30_000,
+  everyMs = 200,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let failure: string | null = null;
+  for (;;) {
+    let value: T | null | undefined = null;
+    try {
+      value = await read();
+    } catch (error) {
+      failure = described(error);
+    }
+    if (value !== null && value !== undefined && value !== false) return value;
+    if (Date.now() >= deadline) {
+      const last = failure === null ? "" : `; the last error a read threw: ${failure}`;
+      throw new Error(`no ${what} within ${(timeoutMs / 1000).toFixed(1)} s${last}`);
+    }
+    await sleep(everyMs);
+  }
 }
 
 export class Steps {
