@@ -276,8 +276,13 @@
   padding-inline-start: revert-layer;
 }
 
-/* A press on a row never reaches the page, so while a menu, a dialog or a sheet is open the rows
-   stop dragging, and a press on one closes it as a press anywhere else does. */
-[data-shell] body:has(> :not(#root) [data-state="open"]) [data-window-drag] {
+/* A press on a row never reaches the page, so while a menu, a dialog, a sheet or a tooltip is open
+   the rows stop dragging, and a press on one closes it as a press anywhere else does. Radix marks an
+   open tooltip delayed-open or instant-open, never open. */
+[data-shell]
+  body:has(
+    > :not(#root) :is([data-state="open"], [data-state="delayed-open"], [data-state="instant-open"])
+  )
+  [data-window-drag] {
   -webkit-app-region: no-drag;
 }
