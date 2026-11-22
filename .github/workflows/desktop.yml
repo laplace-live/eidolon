@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       sign:
-        description: Sign and notarize the build, on master or electron only. Its installers are kept a day, for the update test
+        description: Sign and notarize the build, on master or electron only. Its installers are kept a day
         type: boolean
         default: false
       version:
@@ -36,13 +36,17 @@ on:
         description: Only rebuild eidolon/releases.json from R2's listing, on master or electron only
         type: boolean
         default: false
+      update_test:
+        description: Only build 0.0.1 and 0.0.2 signed and update one to the other through the real updater, on master or electron only
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 # A push to a pull request cancels the run it supersedes. A tag's run is the release and is never
-# cancelled. A dispatch neither waits nor cancels, so the update test's two signed builds from one
-# branch both finish.
+# cancelled. A dispatch neither waits nor cancels, so two signed dispatches from one branch both
+# finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
@@ -50,8 +54,8 @@ concurrency:
 jobs:
   build:
     name: ${{ matrix.target }}
-    # A dispatch that only probes R2 or rebuilds its index builds nothing.
-    if: github.event_name != 'workflow_dispatch' || !(inputs.r2_probe || inputs.release_index)
+    # A dispatch that only probes R2, rebuilds its index or runs the update test builds nothing here.
+    if: github.event_name != 'workflow_dispatch' || !(inputs.r2_probe || inputs.release_index || inputs.update_test)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
@@ -511,3 +515,144 @@ jobs:
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           R2_BUCKET: downloads
           R2_PREFIX: eidolon
+
+  # 0.0.1 and 0.0.2, each signed as a release is and reading a feed on loopback, then 0.0.1 installed
+  # and updated to 0.0.2 through its real updater, in background mode, where each box takes its
+  # default button (scripts/update-test.ts). Neither can be an unsigned build: Squirrel.Mac installs
+  # only an update that meets the running app's designated requirement, and the NSIS updater only a
+  # setup signed by a name in app-update.yml's publisherName.
+  update-test:
+    name: Update test on ${{ matrix.target }}
+    if: github.event_name == 'workflow_dispatch' && inputs.update_test
+    runs-on: ${{ matrix.os }}
+    # Two signed builds, and on macOS two notarizations.
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: darwin-arm64
+          - os: windows-latest
+            target: win32-x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Before any secret is read: any signed-in user can download a run's artifacts here, so only
+      # master and electron build signed.
+      - name: Check the ref and the inputs
+        timeout-minutes: 1
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          if [[ $GITHUB_REF != refs/heads/master && $GITHUB_REF != refs/heads/electron ]]; then
+            fail "update_test runs only on master or electron, not $GITHUB_REF"
+          fi
+          if [[ $SIGN == true || $VERSION != "" || $FEED_URL != "" ]]; then
+            fail "update_test builds its own 0.0.1 and 0.0.2 on its own feed: dispatch it without sign, version or feed_url"
+          fi
+        env:
+          SIGN: ${{ inputs.sign }}
+          VERSION: ${{ inputs.version }}
+          FEED_URL: ${{ inputs.feed_url }}
+
+      - uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        timeout-minutes: 5
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-node@v7
+        timeout-minutes: 5
+        with:
+          node-version: 24
+
+      # As the build job installs: no package's install script runs before the signing step.
+      - timeout-minutes: 10
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - timeout-minutes: 20
+        run: bun run build:desktop
+
+      - name: Materialize the App Store Connect key
+        if: runner.os == 'macOS'
+        timeout-minutes: 1
+        run: printf '%s' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/apple-api-key.p8"
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+
+      # The release overlay, as the build job's signed step runs it, with this leg's secrets alone.
+      # 0.0.1's outputs move out of .out, where signed-check reads 0.0.2's.
+      - id: signed
+        name: Package and sign 0.0.1, then 0.0.2
+        timeout-minutes: 100
+        working-directory: apps/desktop
+        run: |
+          package() {
+            node node_modules/electron-builder/cli.js --publish never --config electron-builder.release.mjs \
+              "-c.extraMetadata.version=$1" "-c.publish.url=$FEED_URL"
+          }
+          package 0.0.1
+          mv .out "$RUNNER_TEMP/eidolon-update-0.0.1"
+          package 0.0.2
+        env:
+          FEED_URL: http://127.0.0.1:8765/
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && format('{0}/apple-api-key.p8', runner.temp) || '' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          AZURE_TENANT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_TENANT_ID || '' }}
+          AZURE_CLIENT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_ID || '' }}
+          AZURE_CLIENT_SECRET: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_SECRET || '' }}
+          AZURE_SIGNING_ACCOUNT_NAME: ${{ runner.os == 'Windows' && secrets.AZURE_SIGNING_ACCOUNT_NAME || '' }}
+          AZURE_CERTIFICATE_PROFILE_NAME: ${{ runner.os == 'Windows' && secrets.AZURE_CERTIFICATE_PROFILE_NAME || '' }}
+
+      # Before any later step runs the app or its natives.
+      - name: Remove the App Store Connect key
+        if: always() && runner.os == 'macOS'
+        timeout-minutes: 1
+        run: rm -f "$RUNNER_TEMP/apple-api-key.p8"
+
+      - name: The signatures of 0.0.2
+        if: ${{ !cancelled() && steps.signed.outcome == 'success' }}
+        timeout-minutes: 15
+        run: node apps/desktop/scripts/signed-check.ts
+
+      - id: update
+        name: The update from 0.0.1 to 0.0.2
+        if: ${{ !cancelled() && steps.signed.outcome == 'success' }}
+        timeout-minutes: 45
+        run: node apps/desktop/scripts/update-test.ts "$RUNNER_TEMP/eidolon-update-0.0.1" apps/desktop/.out
+
+      # Its profile's logs, the launch's output, the feed's requests, and the logs of the default
+      # profile the update starts the app on again, with ShipIt's on macOS. Not its home, which
+      # holds local-token.
+      - name: Upload the failed update test's logs
+        if: ${{ failure() && steps.update.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 5
+        with:
+          name: ${{ runner.os }}-update-test
+          path: |
+            ${{ runner.temp }}/eidolon-update-test-*/profile/logs
+            ${{ runner.temp }}/eidolon-update-test-*/scratch
+          retention-days: 7
+
+      # Whatever a failed or cancelled run left installed: on Windows through its own uninstaller,
+      # on macOS the copy the test updated.
+      - name: Clean up
+        if: always()
+        timeout-minutes: 5
+        run: |
+          if [[ $RUNNER_OS == Windows ]]; then
+            uninstaller="$(cygpath -u "$LOCALAPPDATA")/Programs/eidolon/Uninstall Eidolon.exe"
+            # Git Bash would hand a native program /S as a path.
+            if [[ -f $uninstaller ]]; then MSYS_NO_PATHCONV=1 "$uninstaller" /S /currentuser; fi
+          else
+            rm -rf "$RUNNER_TEMP"/eidolon-update-test-*/Applications
+          fi
