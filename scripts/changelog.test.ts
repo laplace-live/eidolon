@@ -5,13 +5,14 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { devNull, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, onTestFinished, test } from "vitest";
 import {
   DESKTOP_PACKAGE,
   parseReleaseNotes,
@@ -59,8 +60,11 @@ const CHANGELOG_MD = `# laplace-eidolon
 - Publish \`@laplace.live/eidolon-sdk\` for WebRTC calls and stateless chats
 `;
 
+/** A temporary folder, removed when the test that made it finishes. */
 function tempDir(): string {
-  return mkdtempSync(join(tmpdir(), "eidolon-changelog-"));
+  const dir = mkdtempSync(join(tmpdir(), "eidolon-changelog-"));
+  onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
 }
 
 function write(dir: string, path: string, text: string): void {
