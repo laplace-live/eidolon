@@ -381,14 +381,16 @@ describe("the NSIS setup's uninstall", () => {
     expect(namesUninstaller({}, WIN_FOLDER)).toBe(false);
   });
 
-  test("runs silently: the entry's command with /S, else the folder's uninstaller for this user", () => {
-    expect(silentUninstall(entry, WIN_FOLDER)).toEqual({
+  test("runs silently only the entry naming the folder's uninstaller, with /S; else nothing", () => {
+    const other = {
+      DisplayName: "Eidolon Notes 2.1.0",
+      UninstallString: `"C:\\Users\\runneradmin\\AppData\\Local\\Programs\\eidolon-notes\\Uninstall Eidolon Notes.exe" /currentuser`,
+    };
+    expect(silentUninstall([other, entry], WIN_FOLDER)).toEqual({
       command: WIN_UNINSTALLER,
       args: ["/currentuser", "/S"],
     });
-    expect(silentUninstall(undefined, WIN_FOLDER)).toEqual({
-      command: WIN_UNINSTALLER,
-      args: ["/currentuser", "/S"],
-    });
+    expect(silentUninstall([other], WIN_FOLDER)).toBeNull();
+    expect(silentUninstall([], WIN_FOLDER)).toBeNull();
   });
 });

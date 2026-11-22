@@ -33,15 +33,15 @@ export function namesUninstaller(entry: UninstallEntry, folder: string): boolean
 }
 
 /**
- * The silent uninstall: the entry's UninstallString with /S, or without an entry the install
- * folder's uninstaller, for this user.
+ * The silent uninstall of the app in `folder`: the UninstallString, with /S, of the entry that names
+ * its uninstaller; null when none of `entries` does, where another app's must not run.
  */
 export function silentUninstall(
-  entry: UninstallEntry | undefined,
+  entries: readonly UninstallEntry[],
   folder: string,
-): { readonly command: string; readonly args: readonly string[] } {
-  const args = windowsArgs(entry?.UninstallString ?? "");
-  return args.length > 0
-    ? { command: args[0] as string, args: [...args.slice(1), "/S"] }
-    : { command: win32.join(folder, UNINSTALLER), args: ["/currentuser", "/S"] };
+): { readonly command: string; readonly args: readonly string[] } | null {
+  const entry = entries.find((candidate) => namesUninstaller(candidate, folder));
+  if (entry === undefined) return null;
+  const [command, ...args] = windowsArgs(entry.UninstallString ?? "");
+  return { command: command as string, args: [...args, "/S"] };
 }

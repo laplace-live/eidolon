@@ -680,7 +680,20 @@ async function uninstall(
     // After a walk that failed midway: the uninstaller would end the app with no stop of its own.
     if ((await smoke.processes.running()).length > 0) await smoke.processes.stopAll();
     const before = fileHashes(smoke.run.home);
-    const { command, args } = silentUninstall((await uninstallEntries())[0], folder);
+    const listed = await uninstallEntries();
+    const silent = silentUninstall(listed, folder);
+    if (silent === null) {
+      const seen = listed.map((entry) => entry.UninstallString ?? entry.DisplayName ?? "?");
+      smoke.checks.add(
+        UNINSTALL,
+        false,
+        `no uninstall entry of this user's names ${join(folder, UNINSTALLER)} /currentuser, so nothing ran and the app is still in ${folder}; Eidolon's entries: ${seen.join("; ") || "none"}`,
+      );
+      return;
+    }
+    const { command, args } = silent;
+    const ourEntries = async () =>
+      (await uninstallEntries()).filter((entry) => namesUninstaller(entry, folder));
     const left = budget(UNINSTALL_MS);
     const at = Date.now();
     const running = smoke.processes.spawn("uninstaller", command, args, { stdio: "ignore" });
@@ -692,12 +705,7 @@ async function uninstall(
       left(),
       500,
     );
-    const entries = await until(
-      () => uninstallEntries(),
-      (found) => found.length === 0,
-      left(),
-      1000,
-    );
+    const entries = await until(ourEntries, (found) => found.length === 0, left(), 1000);
     numbers.uninstallSeconds = Math.round((Date.now() - at) / 100) / 10;
     const changed = changedFiles(before, fileHashes(smoke.run.home));
     const files = Object.keys(before ?? {}).length;
