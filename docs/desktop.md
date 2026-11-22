@@ -30,6 +30,7 @@ apps/desktop/
   resources/             build resources: entitlements, installer.nsh, the icon, and the designated
                          requirement release builds will carry
   assets/                what main loads at run time through process.resourcesPath: the tray icon
+  dev-app-update.yml     the release feed for EIDOLON_DESKTOP_DEV_UPDATE, read only unpackaged
   scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
                          zip.ts and natives.ts; vite-common.ts, electron-env.ts;
                          test-on-electron.ts, the Electron lane; system-ca.ts, CI's system CA
@@ -38,10 +39,10 @@ apps/desktop/
                          smoke's packaged.ts and nsis.ts
   src/main/              main: the Electron-free modules that decide (controller, attach, forwarder,
                          backend, environment, login-shell, pages, policy, menus, window-options,
-                         quit-check, quit-flow, strings, shell-pages, log-filter, log-files,
-                         background), and thin Electron layers over them (index, instance,
-                         protocol, window, chrome, menu, tray, permissions, navigation, native,
-                         quit, log)
+                         quit-check, quit-flow, update-flow, strings, shell-pages, log-filter,
+                         log-files, background), and thin Electron layers over them (index,
+                         instance, protocol, window, chrome, menu, tray, permissions, navigation,
+                         native, quit, updater, log)
   src/preload/           the sandboxed CommonJS preload: the page's marks and its bridge
   src/shared/bridge.ts   the IPC channels and who may send on each; it imports nothing
   src/shell/             the loading, failure and waiting pages
@@ -327,15 +328,17 @@ window's top, and a window saved maximized is maximized only once it has painted
   publishes no `env(titlebar-area-*)` for the page's insets. On Windows, a hidden title bar under a
   transparent 56 px overlay, whose caption glyphs main recolours on each theme change.
 - **Menus and the tray.** macOS's menu bar is declared in full, since a custom menu replaces
-  Electron's: Eidolon (About, Settings…, Services, Hide, Hide Others, Show All, Quit), Edit (its
-  roles, without which copy and paste break), View (zoom, full screen, and Toggle Developer Tools
-  only unpackaged), Window (⌘W hides) and Help (Show Logs, Open Data Folder, Licenses). Windows has
-  no menu bar: main sets a menu of View's zoom roles alone, since Electron would otherwise install
-  its default one, whose accelerators act even under a hidden title bar, and a notification-area
-  icon holds the rest for the whole run (Open Eidolon, Settings…, Show Logs, Open Data Folder,
-  Licenses, About Eidolon, Quit Eidolon); a click on it opens the window. Both get a context menu,
-  since Electron has none: cut, copy, paste and select all in a field, copy over selected text. The
-  About panel names the app's version and the server's.
+  Electron's: Eidolon (About, Check for Updates…, Settings…, Services, Hide, Hide Others, Show All,
+  Quit), Edit (its roles, without which copy and paste break), View (zoom, full screen, and Toggle
+  Developer Tools only unpackaged), Window (⌘W hides) and Help (Show Logs, Open Data Folder,
+  Licenses). Windows has no menu bar: main sets a menu of View's zoom roles alone, since Electron
+  would otherwise install its default one, whose accelerators act even under a hidden title bar,
+  and a notification-area icon holds the rest for the whole run (Open Eidolon, Settings…, Check for
+  Updates…, Show Logs, Open Data Folder, Licenses, About Eidolon, Quit Eidolon); a click on it
+  opens the window. Check for Updates… is there only when the app [updates itself](#updates), and
+  disabled while a check, a download or the restart runs. Both get a context menu, since Electron
+  has none: cut, copy, paste and select all in a field, copy over selected text. The About panel
+  names the app's version and the server's.
 - **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, dialogs and the shell
   pages) come in English and Simplified Chinese, following the language the page reports and the
   system's until it has. Menus and the tray are rebuilt when it changes. Labels are Title Case,
@@ -371,7 +374,8 @@ window's top, and a window saved maximized is maximized only once it has painted
   default and Esc cancelling; it has no owner window, so a hidden window stays hidden, and a quit
   while it is open joins it. An attached server is never asked or stopped. On macOS a power-off
   skips the box until the window has attention again. Once the quit is approved, main hides the
-  window, removes the tray icon, stops its backend, and quits.
+  window, removes the tray icon, stops its backend, and quits. The restart that installs an update
+  goes the same way, with its own box ([Updates](#updates)).
 
 ## The environment
 
@@ -549,7 +553,68 @@ onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
   <url>`; `Eidolon: the window is shown`, `… is hidden` and `… is closed` as main's own record of
   the window changes, which counts it as shown once it has painted, in background mode too; and at
   a quit `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`. Background mode also
-  logs each thing it keeps off the screen ([below](#background-mode)).
+  logs each thing it keeps off the screen ([below](#background-mode)), and the updater each of its
+  steps ([Updates](#updates)).
+
+## Updates
+
+electron-updater checks the release feed, `https://downloads.vrp.moe/eidolon`, which
+electron-builder writes into the packaged app's `app-update.yml` from `publish` in
+`electron-builder.yml`. `src/main/update-flow.ts` makes every decision without Electron, as
+laplace-persona's updater does but in native boxes, and `test/update-flow.test.ts` covers them;
+`src/main/updater.ts` runs it on electron-updater's `autoUpdater`.
+
+- **When it runs:** in a packaged install: on macOS anywhere, and on Windows only NSIS's per-user
+  install in `%LOCALAPPDATA%\Programs\eidolon` (`isUpdatableInstall`). Its installer installs
+  there whatever runs it, so updating a copy anywhere else, such as `win-unpacked`, would leave a
+  second install beside it. Not unpackaged, and not in background mode, unless a hook below says
+  otherwise. main.log's `Eidolon: updates are …` line says which, and why.
+- **Checking:** once, quietly, 10 s after the backend is first ready, and from Check for Updates…
+  (in macOS's app menu after About, in Windows' tray menu after Settings…), which is disabled while
+  a check, a download or the restart runs. The quiet check only logs that the app is up to date or
+  that the check failed; Check for Updates… also says so in a box. A check asked while one runs
+  joins it.
+- **Downloading:** nothing downloads unasked (`autoDownload` is off). "Eidolon X.Y.Z is available"
+  offers Download, the default, Later and Release Notes, which opens the GitHub Release of
+  `laplace-eidolon-desktop@X.Y.Z` in the default browser, through the link policy. After Later or
+  Release Notes, Check for Updates… shows the box again without checking. The download's progress
+  shows on the Dock or the taskbar, cleared when it ends or fails; a failure offers Try Again, the
+  default, and Later. On macOS it is done only once Squirrel.Mac has fetched the zip from
+  electron-updater's local proxy, after `update-downloaded`.
+- **Installing:** "Restart to finish updating" offers Restart, the default, and Later, which leaves
+  the update to `autoInstallOnAppQuit` at the next quit, with no relaunch. Restart moves the state
+  to installing first, so a second Restart does nothing: `quitAndInstall` twice asks Squirrel to
+  relaunch twice, which leaves two copies running. Then it goes the way a [quit](#the-window) goes:
+  the quit check, whose box names what a restart stops (on Windows the installer kills any
+  `Eidolon.exe` still running from the install folder, a CLI job's included); the latch, after
+  which a close no longer hides the window; the backend's graceful stop; and only then
+  `quitAndInstall(true, true)`, once. A Cancel there hands the state back to downloaded. None of it
+  runs inside `before-quit`: on macOS `quitAndInstall` closes every window before `before-quit`
+  fires, so a latch set there would let the hide-on-close window veto the relaunch, as persona's
+  did from 0.32.0 to 0.63.2.
+- **An error after the download,** such as Squirrel.Mac refusing the update, takes Restart away:
+  the update is in error, and the box offers Try Again. One that comes once the restart has
+  stopped the backend, or from inside `quitAndInstall`, which then never quits, starts the app
+  again as it was (`app.relaunch()`) rather than leave it hidden with its backend stopped.
+- **main.log** has a line for each step: `Eidolon: checking for updates`; then `Eidolon: update
+  available: X.Y.Z`, `Eidolon: up to date: X.Y.Z is the latest` or `Eidolon: the update check
+  failed: <reason>`; `Eidolon: downloading X.Y.Z`; `Eidolon: update downloaded: X.Y.Z` or
+  `Eidolon: the download of X.Y.Z failed: <reason>`; `Eidolon: restarting to install X.Y.Z`,
+  `Eidolon: quitting to install the update` and `Eidolon: installing X.Y.Z`, or `Eidolon: X.Y.Z
+  stays downloaded, to install at the next restart or quit`. A reason is the error's first line.
+  electron-updater's own lines go there too, and every URL in either has no query or fragment
+  (`loggedText()` in `policy.ts`).
+
+The QA hooks are read from the environment the app starts with, as `.env.example` lists them:
+
+| Variable | What it does |
+| --- | --- |
+| `EIDOLON_DESKTOP_DEV_UPDATE=1` | An unpackaged build checks the release feed through `apps/desktop/dev-app-update.yml` (`forceDevUpdateConfig`), which electron-updater reads only unpackaged, with a cache of its own, `eidolon-dev-updater`. A download and Restart act on the real release. Not in background mode |
+| `EIDOLON_DESKTOP_MOCK_UPDATE=1` | Fakes the whole flow, as persona's `PERSONA_MOCK_UPDATE` does, packaged or not and in background mode too, and reaches no network: the check finds 9.9.9 after 0.6 s, the first download fails at 60 %, Try Again completes it, and Restart only logs, the update back to downloaded after 1.5 s so the run repeats. Nothing is checked, stopped or quit |
+| `EIDOLON_DESKTOP_UPDATE_TEST=1` | The one way the real updater runs in background mode, for CI's update test: a packaged install checks the feed its `app-update.yml` names, background mode answers Download, Restart and the quit check's box with their defaults, and the app stops its backend and installs, each step in main.log |
+
+A packaged build reads only its own `resources/app-update.yml`, so a test of an update builds its
+older version with the feed it will serve (`-c.publish.url`, which electron-builder writes there).
 
 ## Background mode
 
@@ -588,6 +653,9 @@ that could show something through it.
   and their `bun run app` with it.
 - **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
   Developer Tools, which opens a window, isn't offered unpackaged either.
+- **No updates:** no check runs and there is no Check for Updates…, unless
+  `EIDOLON_DESKTOP_MOCK_UPDATE` fakes the flow or `EIDOLON_DESKTOP_UPDATE_TEST` runs the real one
+  ([Updates](#updates)), whose boxes take their defaults, Download and Restart.
 - **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
   is granted only when the app runs with Chromium's `--use-fake-device-for-media-stream`, on any
   platform, and otherwise denied, since a grant would record the owner; main.log says which.
@@ -609,7 +677,8 @@ it, with its test, and the Electron code stays a thin layer over it. It covers t
 states, races and port fallbacks against fake children and real processes (`test/fake-server.ts`
 answers as the local server does); the forwarder's headers, gating, holding, connection proofs and
 errors against real local servers and the real local server booted in the test; the login-shell
-read and the merge, Windows' case-blind names included; the quit check and flow; links,
+read and the merge, Windows' case-blind names included; the quit check and flow; the updater's
+mode, flow, boxes and mock, with the restart on the real quit flow; links,
 navigation, permissions and the debugging switches; the bounds, chrome, menus and pages;
 background mode's decisions; both languages' strings; the shell pages' escaping and CSP; the
 bridges' sender rule; the logs' rotation and link filter; stage-backend's parts on made-up

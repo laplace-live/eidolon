@@ -490,6 +490,12 @@ the layout's one line.
   `laplace-eidolon-desktop`, since one naming it beside a released package fails.
 - **Installing, updating and uninstalling the app never touch the data home,** which it shares with
   npx and `bun run app`; its uninstaller removes the install folder alone.
+- **An update installs only through Restart's way out, never from `before-quit`:** the quit check,
+  whose box names what a restart stops, the quit latch and the backend's graceful stop, then
+  `quitAndInstall(true, true)` once, behind the `installing` state. On macOS `quitAndInstall`
+  closes every window before `before-quit` fires, so a latch set there lets the hide-on-close
+  window veto the relaunch. Background mode runs no real updater but under
+  `EIDOLON_DESKTOP_UPDATE_TEST` ([desktop.md](docs/desktop.md#updates)).
 - **Every local test run of the app is in background mode** (`EIDOLON_DESKTOP_BACKGROUND=1`,
   packaged or not), on a temporary `EIDOLON_HOME` and profile (`--user-data-dir`), with
   `EIDOLON_DESKTOP_LOGIN_SHELL=0` and no credential, as `appEnv()` in
