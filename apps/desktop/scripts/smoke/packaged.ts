@@ -111,7 +111,8 @@ export function inside(
     return platform === "win32" ? resolved.toLowerCase() : resolved;
   };
   const relative = paths.relative(plain(folder), plain(path));
-  return relative !== "" && !relative.startsWith("..") && !paths.isAbsolute(relative);
+  const up = relative === ".." || relative.startsWith(`..${paths.sep}`);
+  return relative !== "" && !up && !paths.isAbsolute(relative);
 }
 
 /** The natives and the runtime libraries they import, by file name. */

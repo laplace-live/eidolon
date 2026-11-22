@@ -130,6 +130,15 @@ describe("where a library was mapped from", () => {
     expect(inside("/usr/lib/libc++.dylib", MAC_PAYLOAD, "darwin")).toBe(false);
   });
 
+  test("by whole path segments: a name starting with .. is inside, the parent folder isn't", () => {
+    expect(inside(`${MAC_PAYLOAD}/..cache/x.node`, MAC_PAYLOAD, "darwin")).toBe(true);
+    expect(inside(`${MAC_PAYLOAD}/../x.node`, MAC_PAYLOAD, "darwin")).toBe(false);
+    expect(inside(`${MAC_PAYLOAD}/..`, MAC_PAYLOAD, "darwin")).toBe(false);
+    expect(inside(`${WIN_PAYLOAD}\\..cache\\x.dll`, WIN_PAYLOAD, "win32")).toBe(true);
+    expect(inside(`${WIN_PAYLOAD}\\..\\x.dll`, WIN_PAYLOAD, "win32")).toBe(false);
+    expect(inside("D:\\eidolon\\x.dll", WIN_PAYLOAD, "win32")).toBe(false);
+  });
+
   test("on Windows without case, and without process.report's \\\\?\\ prefix", () => {
     const dll = `\\\\?\\${WIN_PAYLOAD.toUpperCase()}\\node_modules\\onnxruntime-node\\bin\\napi-v6\\win32\\x64\\vcruntime140.dll`;
     expect(inside(dll, WIN_PAYLOAD, "win32")).toBe(true);
