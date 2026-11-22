@@ -16,6 +16,7 @@ import {
   LAUNCH_CHECK_DELAY_MS,
   MOCK_VERSION,
   mockUpdates,
+  readOnlyFolder,
   releaseNotesUrl,
   type UpdateDriver,
   UpdateFlow,
@@ -30,6 +31,22 @@ const DESKTOP = join(import.meta.dirname, "..");
 const en = STRINGS.en;
 const LOCAL = "C:\\Users\\t\\AppData\\Local";
 const INSTALLED = `${LOCAL}\\Programs\\eidolon\\Eidolon.exe`;
+const MAC_EXE = "Eidolon.app/Contents/MacOS/Eidolon";
+/** Where Gatekeeper runs a quarantined app it hasn't seen moved: a read-only mount of its folder. */
+const TRANSLOCATED =
+  "/private/var/folders/q1/x7k2m9p40c1b0000gn/T/AppTranslocation/3F2A1C6E-8B9D-4E0F-A1B2-C3D4E5F60718/d";
+
+/** fs.accessSync(folder, W_OK) where it throws `code` for `folders`, each folder it's asked recorded. */
+function access(code: "EROFS" | "EACCES", ...folders: string[]) {
+  const asked: string[] = [];
+  const check = (folder: string) => {
+    asked.push(folder);
+    if (folders.includes(folder)) {
+      throw Object.assign(new Error(`${code}: access '${folder}'`), { code });
+    }
+  };
+  return { check, asked };
+}
 
 /** Lets promise callbacks run, with real or fake timers. */
 async function settle(): Promise<void> {
@@ -82,19 +99,68 @@ describe("isUpdatableInstall", () => {
   });
 });
 
+describe("readOnlyFolder", () => {
+  test("a copy run from its mounted DMG: the bundle's folder is the image's read-only volume", () => {
+    const { check, asked } = access("EROFS", "/Volumes/Eidolon");
+    expect(readOnlyFolder(`/Volumes/Eidolon/${MAC_EXE}`, check)).toBe("/Volumes/Eidolon");
+    expect(asked).toEqual(["/Volumes/Eidolon"]);
+  });
+
+  test("a copy Gatekeeper translocated: its randomized folder is a read-only mount", () => {
+    const { check, asked } = access("EROFS", TRANSLOCATED);
+    expect(readOnlyFolder(`${TRANSLOCATED}/${MAC_EXE}`, check)).toBe(TRANSLOCATED);
+    expect(asked).toEqual([TRANSLOCATED]);
+  });
+
+  test("none for /Applications, writable or not: Squirrel.Mac asks a standard account for an administrator's password", () => {
+    const writable = access("EROFS");
+    expect(readOnlyFolder(`/Applications/${MAC_EXE}`, writable.check)).toBeNull();
+    expect(writable.asked).toEqual(["/Applications"]);
+    const standard = access("EACCES", "/Applications");
+    expect(readOnlyFolder(`/Applications/${MAC_EXE}`, standard.check)).toBeNull();
+    expect(standard.asked).toEqual(["/Applications"]);
+  });
+});
+
 describe("updaterMode", () => {
   const packaged: UpdaterRun = {
     packaged: true,
     background: false,
     platform: "darwin",
-    exePath: "/Applications/Eidolon.app/Contents/MacOS/Eidolon",
+    exePath: `/Applications/${MAC_EXE}`,
     env: {},
+    checkWritable: () => {},
   };
   const mode = (run: Partial<UpdaterRun>) => updaterMode({ ...packaged, ...run });
 
   test("a packaged install checks the release feed its app-update.yml names", () => {
     expect(mode({})).toEqual({ mode: "feed", line: "Eidolon: updates are on" });
     expect(mode({ platform: "win32", exePath: INSTALLED, localAppData: LOCAL }).mode).toBe("feed");
+  });
+
+  test("on macOS, a copy on a read-only volume is read-only, and main.log says where it runs", () => {
+    const dmg = access("EROFS", "/Volumes/Eidolon");
+    expect(mode({ exePath: `/Volumes/Eidolon/${MAC_EXE}`, checkWritable: dmg.check })).toEqual({
+      mode: "read-only",
+      line: "Eidolon: updates are off: this copy runs from a read-only volume, /Volumes/Eidolon, such as a disk image or the copy Gatekeeper translocates",
+    });
+    const translocated = access("EROFS", TRANSLOCATED);
+    expect(
+      mode({ exePath: `${TRANSLOCATED}/${MAC_EXE}`, checkWritable: translocated.check }).mode,
+    ).toBe("read-only");
+    expect(mode({ checkWritable: access("EACCES", "/Applications").check }).mode).toBe("feed");
+  });
+
+  test("background mode, an unpackaged build and Windows never ask whether the bundle's folder is writable", () => {
+    const { check, asked } = access("EROFS", "/Volumes/Eidolon");
+    const dmg = `/Volumes/Eidolon/${MAC_EXE}`;
+    expect(mode({ exePath: dmg, checkWritable: check, background: true }).mode).toBe("off");
+    expect(mode({ exePath: dmg, checkWritable: check, packaged: false }).mode).toBe("off");
+    expect(
+      mode({ platform: "win32", exePath: INSTALLED, localAppData: LOCAL, checkWritable: check })
+        .mode,
+    ).toBe("feed");
+    expect(asked).toEqual([]);
   });
 
   test("a copy on Windows that isn't the per-user install stays off, and says why", () => {
@@ -193,7 +259,15 @@ describe("updaterMode", () => {
           ["win32", INSTALLED],
           ["win32", "C:\\Program Files\\Eidolon\\Eidolon.exe"],
         ] as const) {
-          runs.push({ packaged, background: true, platform, exePath, localAppData: LOCAL, env });
+          runs.push({
+            packaged,
+            background: true,
+            platform,
+            exePath,
+            localAppData: LOCAL,
+            env,
+            checkWritable: () => {},
+          });
         }
       }
     }
@@ -303,6 +377,24 @@ describe("updateBox", () => {
       buttons: ["下载", "稍后", "发行说明"],
     });
   });
+
+  test("read-only: why this copy can't update itself and where to move it, with OK alone, in both languages", () => {
+    expect(updateBox({ kind: "read-only" }, en, "darwin")).toEqual({
+      type: "info",
+      title: "Eidolon",
+      message: "Eidolon can't update itself here",
+      detail:
+        "Eidolon updates itself only from a folder it can write to. Move it to the Applications folder, then open it again.",
+      buttons: ["OK"],
+      defaultId: 0,
+      noLink: true,
+    });
+    expect(updateBox({ kind: "read-only" }, STRINGS["zh-Hans"], "darwin")).toMatchObject({
+      message: "Eidolon 无法在当前位置更新",
+      detail: "Eidolon 只能从可写入的文件夹更新自己。请把它移到「应用程序」文件夹，然后重新打开。",
+      buttons: ["确定"],
+    });
+  });
 });
 
 /** A newer version's manifest, as electron-updater parses latest*.yml, with any key it adds. */
@@ -404,6 +496,20 @@ describe("UpdateFlow", () => {
     await vi.advanceTimersByTimeAsync(LAUNCH_CHECK_DELAY_MS * 2);
     expect(f.flow.state).toEqual({ phase: "unsupported" });
     expect([...f.shown, ...f.states, ...f.lines]).toEqual([]);
+  });
+
+  test("read-only: nothing is checked, and Check for Updates… says to move the app to the Applications folder", async () => {
+    const f = harness(null, { readOnly: true });
+    expect(f.flow.state).toEqual({ phase: "read-only" });
+    f.flow.backendReady();
+    await vi.advanceTimersByTimeAsync(LAUNCH_CHECK_DELAY_MS * 2);
+    expect(await f.flow.check(true)).toEqual({ outcome: "none" });
+    expect(f.shown).toEqual([]);
+    f.flow.checkByHand();
+    await settle();
+    expect(f.shown).toEqual([updateBox({ kind: "read-only" }, en, "darwin")]);
+    expect(f.flow.state).toEqual({ phase: "read-only" });
+    expect([...f.states, ...f.lines]).toEqual([]);
   });
 
   test("the backend's first ready starts one quiet check 10 s later; later readies start none", async () => {

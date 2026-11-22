@@ -343,10 +343,10 @@ window's top, and a window saved maximized is maximized only once it has painted
   would otherwise install its default one, whose accelerators act even under a hidden title bar,
   and a notification-area icon holds the rest for the whole run (Open Eidolon, Settings…, Check for
   Updates…, Show Logs, Open Data Folder, Licenses, About Eidolon, Quit Eidolon); a click on it
-  opens the window. Check for Updates… is there only when the app [updates itself](#updates), and
-  disabled while a check, a download or the restart runs. Both get a context menu, since Electron
-  has none: cut, copy, paste and select all in a field, copy over selected text. The About panel
-  names the app's version and the server's.
+  opens the window. Check for Updates… is there only when the app [updates itself](#updates) or
+  runs from a read-only volume, and disabled while a check, a download or the restart runs. Both
+  get a context menu, since Electron has none: cut, copy, paste and select all in a field, copy
+  over selected text. The About panel names the app's version and the server's.
 - **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, dialogs and the shell
   pages) come in English and Simplified Chinese, following the language the page reports and the
   system's until it has. Menus and the tray are rebuilt when it changes. Labels are Title Case,
@@ -729,11 +729,19 @@ electron-builder writes into the packaged app's `app-update.yml` from `publish` 
 laplace-persona's updater does but in native boxes, and `test/update-flow.test.ts` covers them;
 `src/main/updater.ts` runs it on electron-updater's `autoUpdater`.
 
-- **When it runs:** in a packaged install: on macOS anywhere, and on Windows only NSIS's per-user
-  install in `%LOCALAPPDATA%\Programs\eidolon` (`isUpdatableInstall`). Its installer installs
-  there whatever runs it, so updating a copy anywhere else, such as `win-unpacked`, would leave a
-  second install beside it. Not unpackaged, and not in background mode, unless a hook below says
-  otherwise. main.log's `Eidolon: updates are …` line says which, and why.
+- **When it runs:** in a packaged install: on macOS anywhere but a read-only volume, and on
+  Windows only NSIS's per-user install in `%LOCALAPPDATA%\Programs\eidolon`
+  (`isUpdatableInstall`). Its installer installs there whatever runs it, so updating a copy
+  anywhere else, such as `win-unpacked`, would leave a second install beside it. Not unpackaged,
+  and not in background mode, unless a hook below says otherwise. main.log's `Eidolon: updates
+  are …` line says which, and why.
+- **A read-only copy on macOS:** run from its mounted DMG, or from the randomized read-only mount
+  Gatekeeper translocates a quarantined app to, Squirrel.Mac refuses an update, but only once the
+  whole zip has downloaded. So when `fs.accessSync` on the bundle's folder fails with `EROFS`
+  (`readOnlyFolder`), nothing is checked, and Check for Updates… stays, to say in a box that Eidolon
+  updates itself only from a folder it can write to: move it to the Applications folder, then open
+  it again. A folder that is only not the user's to write, `/Applications` for a standard account,
+  still updates: Squirrel.Mac asks for an administrator's password there.
 - **Checking:** once, quietly, 10 s after the backend is first ready, and from Check for Updates…
   (in macOS's app menu after About, in Windows' tray menu after Settings…), which is disabled while
   a check, a download or the restart runs. The quiet check only logs that the app is up to date or

@@ -60,6 +60,7 @@ describe("STRINGS", () => {
       en.text.upToDateTitle,
       en.text.checkFailedTitle,
       en.text.downloadFailedTitle,
+      en.text.readOnlyTitle,
     ];
     expect(titles.filter((title) => titleCase(title) === title)).toEqual([]);
   });

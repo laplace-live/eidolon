@@ -2,6 +2,7 @@
 // whether this run updates itself and from what, the flow from a check to the restart that
 // installs, its boxes, and EIDOLON_DESKTOP_MOCK_UPDATE's fakes. updater.ts runs it on
 // electron-updater.
+import { posix } from "node:path";
 import type { MessageBoxOptions } from "electron";
 import type { UpdateInfo } from "electron-updater";
 import { launchFlag } from "./environment.ts";
@@ -11,6 +12,8 @@ import type { Strings } from "./strings.ts";
 /** Where the flow is. A check's failure is its outcome's, never a state. */
 export type UpdateState =
   | { readonly phase: "unsupported" }
+  /** macOS, on a read-only volume: nothing is checked, and Check for Updates… says to move it. */
+  | { readonly phase: "read-only" }
   | { readonly phase: "idle" }
   | { readonly phase: "checking" }
   | { readonly phase: "available"; readonly version: string }
@@ -45,10 +48,10 @@ const DEV_UPDATE = "EIDOLON_DESKTOP_DEV_UPDATE";
 const UPDATE_TEST = "EIDOLON_DESKTOP_UPDATE_TEST";
 
 /**
- * Whether electron-updater can update this install: always outside Windows, and on Windows only
- * NSIS's per-user install. Its installer installs there whatever runs it, so updating a copy
- * anywhere else, Program Files or win-unpacked, would leave a second install beside it. Compared
- * as strings, whatever the case and the separators.
+ * Whether electron-updater can update this install where it is on Windows: only NSIS's per-user
+ * install. Its installer installs there whatever runs it, so updating a copy anywhere else,
+ * Program Files or win-unpacked, would leave a second install beside it. Compared as strings,
+ * whatever the case and the separators. Always elsewhere; macOS has readOnlyFolder.
  */
 export function isUpdatableInstall(
   platform: string,
@@ -62,10 +65,31 @@ export function isUpdatableInstall(
 }
 
 /**
- * What updates this run: nothing; the feed a packaged install's app-update.yml names; the feed
+ * The folder holding a macOS app's bundle, from its executable, when it is on a read-only volume,
+ * as a mounted DMG and the copy Gatekeeper translocates are; else null. Squirrel.Mac refuses an
+ * update there, "Cannot update while running on a read-only volume", but only once the whole zip
+ * has downloaded (https://github.com/Squirrel/Squirrel.Mac/issues/182). A folder this user can't
+ * write isn't one: Squirrel.Mac installs there with an administrator's password.
+ */
+export function readOnlyFolder(
+  exePath: string,
+  checkWritable: (folder: string) => void,
+): string | null {
+  const folder = posix.resolve(exePath, "../../../..");
+  try {
+    checkWritable(folder);
+    return null;
+  } catch (error) {
+    return (error as { code?: unknown } | null)?.code === "EROFS" ? folder : null;
+  }
+}
+
+/**
+ * What updates this run: nothing; nothing, from a read-only volume on macOS, whose Check for
+ * Updates… says to move the app; the feed a packaged install's app-update.yml names; the feed
  * through dev-app-update.yml, unpackaged (`dev`); or the mock.
  */
-export type UpdaterMode = "off" | "feed" | "dev" | "mock";
+export type UpdaterMode = "off" | "read-only" | "feed" | "dev" | "mock";
 
 export interface UpdaterRun {
   readonly packaged: boolean;
@@ -76,6 +100,8 @@ export interface UpdaterRun {
   readonly localAppData?: string;
   /** The launch environment, whose QA flags decide. */
   readonly env: NodeJS.ProcessEnv;
+  /** fs.accessSync(folder, W_OK), which throws its error when this user can't write there. */
+  readonly checkWritable: (folder: string) => void;
 }
 
 /**
@@ -90,6 +116,7 @@ export function updaterMode({
   exePath,
   localAppData,
   env,
+  checkWritable,
 }: UpdaterRun): { readonly mode: UpdaterMode; readonly line: string } {
   const flag = (name: string) => launchFlag(env, name, false, platform);
   if (flag(MOCK_UPDATE)) {
@@ -113,6 +140,13 @@ export function updaterMode({
     return {
       mode: "off",
       line: `Eidolon: updates are off: this copy isn't the one installed in %LOCALAPPDATA%\\Programs\\${INSTALL_FOLDER}`,
+    };
+  }
+  const readOnly = platform === "darwin" ? readOnlyFolder(exePath, checkWritable) : null;
+  if (readOnly !== null) {
+    return {
+      mode: "read-only",
+      line: `Eidolon: updates are off: this copy runs from a read-only volume, ${readOnly}, such as a disk image or the copy Gatekeeper translocates`,
     };
   }
   return {
@@ -140,7 +174,8 @@ export type UpdateBox =
   | { readonly kind: "downloaded"; readonly version: string }
   | { readonly kind: "up-to-date"; readonly current: string }
   | { readonly kind: "check-failed" }
-  | { readonly kind: "download-failed" };
+  | { readonly kind: "download-failed" }
+  | { readonly kind: "read-only" };
 
 /** Each box's first button, its default: Download, Restart, Try Again or OK. */
 const GO = 0;
@@ -193,6 +228,8 @@ export function updateBox(
         label.tryAgain,
         label.later,
       ]);
+    case "read-only":
+      return ask("info", text.readOnlyTitle, text.readOnly, [label.ok]);
   }
 }
 
@@ -210,8 +247,10 @@ export interface UpdateDriver {
 }
 
 export interface UpdateFlowOptions {
-  /** Null when this run doesn't update itself: the flow stays unsupported. */
+  /** Null when this run doesn't update itself: the flow stays unsupported, or read-only. */
   readonly driver: UpdateDriver | null;
+  /** With no driver: updaterMode's read-only, whose Check for Updates… says to move the app. */
+  readonly readOnly?: boolean;
   /**
    * The restart that installs: the quit check and its box, the latch and the backend's stop, then
    * `install`. False when it didn't go ahead, which hands the state back to downloaded.
@@ -266,7 +305,12 @@ export class UpdateFlow {
   constructor(options: UpdateFlowOptions) {
     this.#options = options;
     this.#driver = options.driver;
-    this.#state = options.driver === null ? { phase: "unsupported" } : { phase: "idle" };
+    this.#state =
+      options.driver !== null
+        ? { phase: "idle" }
+        : options.readOnly
+          ? { phase: "read-only" }
+          : { phase: "unsupported" };
   }
 
   get state(): UpdateState {
@@ -280,12 +324,18 @@ export class UpdateFlow {
     setTimeout(() => void this.check(false), LAUNCH_CHECK_DELAY_MS);
   }
 
-  /** Check for Updates…: a check, or the box of the update already found, downloaded or failed. */
+  /**
+   * Check for Updates…: a check, or the box of the update already found, downloaded or failed, or
+   * the one that says to move a read-only copy.
+   */
   checkByHand(): void {
     switch (this.#state.phase) {
       case "idle":
       case "checking":
         void this.check(true);
+        return;
+      case "read-only":
+        void this.#ask({ kind: "read-only" });
         return;
       case "available":
         void this.#offer();
