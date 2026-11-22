@@ -15,11 +15,11 @@ test("every devDependency is an exact pin or a workspace package", () => {
   expect(ranged).toEqual([]);
 });
 
-test("it is private, and unversioned until it has releases, so no publish tags it", () => {
+test("it is private and versioned, so its releases are tags and never npm packages", () => {
   expect(manifest).toMatchObject({
     name: "laplace-eidolon-desktop",
     productName: "Eidolon",
     private: true,
   });
-  expect("version" in manifest).toBe(false);
+  expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
 });
