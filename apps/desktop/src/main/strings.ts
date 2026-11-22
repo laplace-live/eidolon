@@ -268,8 +268,8 @@ const en: Strings = {
       },
       more: (count) =>
         count === 1
-          ? "1 more change is in the release notes."
-          : `${count} more changes are in the release notes.`,
+          ? "1 more change isn't listed here."
+          : `${count} more changes aren't listed here.`,
     },
     updateDownloadedTitle: "Restart to finish updating",
     updateDownloaded: (version) =>
@@ -392,7 +392,7 @@ const zhHans: Strings = {
         fix: "修复",
         other: "其他",
       },
-      more: (count) => `另有 ${count} 项改动，详见发行说明。`,
+      more: (count) => `另有 ${count} 项改动未在此列出。`,
     },
     updateDownloadedTitle: "重启以完成更新",
     updateDownloaded: (version) =>

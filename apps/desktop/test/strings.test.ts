@@ -89,6 +89,13 @@ describe("STRINGS", () => {
     expect(zh.text.updateFailed).toContain(`「${zh.label.showLogs}」`);
   });
 
+  test("counts the notes past the box's list as not listed here, naming no page that has them", () => {
+    // Release Notes opens the offered version's Release alone, and they can be earlier versions'.
+    expect(en.text.notes.more(1)).toBe("1 more change isn't listed here.");
+    expect(en.text.notes.more(3)).toBe("3 more changes aren't listed here.");
+    expect(zh.text.notes.more(3)).toBe("另有 3 项改动未在此列出。");
+  });
+
   test("names the Help menu, Show Logs and the tray icon as the web app's desktop copy does", () => {
     const help = "Eidolon hit an internal error. Show Logs in the Help menu has the details.";
     const tray =

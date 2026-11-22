@@ -37,7 +37,7 @@ const LABELS: NotesLabels = {
     fix: "Fixed",
     other: "Other",
   } satisfies Record<ChangeKind, string>,
-  more: (count) => `${count} more on the Release Notes page.`,
+  more: (count) => `${count} more not listed here.`,
 };
 
 describe("compareVersions", () => {
@@ -205,7 +205,7 @@ describe("notesText", () => {
     expect(lines.filter((line) => line.startsWith("New: "))).toHaveLength(MAX_NOTE_ITEMS);
     expect(lines.at(-3)).toBe("New: 0.2.0 #1");
     expect(lines.at(-2)).toBe("");
-    expect(lines.at(-1)).toBe("2 more on the Release Notes page.");
+    expect(lines.at(-1)).toBe("2 more not listed here.");
   });
 
   test("counts a release the list has no room for, and gives it no heading", () => {
@@ -214,7 +214,7 @@ describe("notesText", () => {
     });
     const text = notesText([full, entry("0.2.0")], LABELS);
     expect(text).not.toContain("0.2.0");
-    expect(text.endsWith("\n\n1 more on the Release Notes page.")).toBe(true);
+    expect(text.endsWith("\n\n1 more not listed here.")).toBe(true);
   });
 
   test("writes nothing for no notes", () => {
