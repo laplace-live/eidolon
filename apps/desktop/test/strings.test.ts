@@ -135,6 +135,15 @@ describe("STRINGS", () => {
     expect(en.text.aboutServer("0.13.0")).toBe("Server 0.13.0");
     expect(zh.text.aboutServer("0.13.0")).toBe("服务器 0.13.0");
   });
+
+  test("names what the restart that installs an update stops, as the quit box does", () => {
+    const stopping = { calls: 1, tasks: 2, jobs: 1 };
+    expect(en.text.restartDetail(stopping)).toBe("Restarting stops the call, 2 tasks and a job.");
+    expect(en.text.quitDetail(stopping)).toBe("Quitting stops the call, 2 tasks and a job.");
+    expect(zh.text.restartDetail(stopping)).toBe("通话、2 个任务和 1 个作业会在重启时中断。");
+    expect(en.text.restartUnknown).toContain("Restarting stops any call, task or job");
+    expect(webChinese("Restart")).toBe(zh.label.restart);
+  });
 });
 
 describe("shellLanguage", () => {

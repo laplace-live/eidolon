@@ -72,6 +72,8 @@ export interface Strings {
     readonly tryAgain: string;
     /** Over the failure page's last lines of the server's stderr. */
     readonly details: string;
+    /** Restarts into a downloaded update. */
+    readonly restart: string;
   };
   /** Sentences, titles phrased as one, and statuses: sentence case. */
   readonly text: {
@@ -94,6 +96,10 @@ export interface Strings {
     readonly quitDetail: (stopping: Stopping) => string;
     /** The quit box's text when the backend didn't say in time what runs. */
     readonly quitUnknown: string;
+    /** The same box before the restart that installs an update. */
+    readonly restartTitle: string;
+    readonly restartDetail: (stopping: Stopping) => string;
+    readonly restartUnknown: string;
     /** Windows' one-time notice when closing first hides the window. */
     readonly hideNoticeTitle: string;
     readonly hideNotice: string;
@@ -115,6 +121,28 @@ function listZh(items: readonly string[]): string {
   const last = items.at(-1);
   if (last === undefined || items.length === 1) return last ?? "";
   return `${items.slice(0, -1).join("、")}和${/^[0-9A-Za-z]/.test(last) ? " " : ""}${last}`;
+}
+
+/** "the call, 2 tasks and a job". */
+function stoppingEn({ calls, tasks, jobs }: Stopping): string {
+  return listEn(
+    [
+      calls === 1 ? "the call" : calls > 1 ? `${calls} calls` : null,
+      tasks === 1 ? "a task" : tasks > 1 ? `${tasks} tasks` : null,
+      jobs === 1 ? "a job" : jobs > 1 ? `${jobs} jobs` : null,
+    ].filter((part) => part !== null),
+  );
+}
+
+/** "通话、2 个任务和 1 个作业". */
+function stoppingZh({ calls, tasks, jobs }: Stopping): string {
+  return listZh(
+    [
+      calls === 1 ? "通话" : calls > 1 ? `${calls} 个通话` : null,
+      tasks > 0 ? `${tasks} 个任务` : null,
+      jobs > 0 ? `${jobs} 个作业` : null,
+    ].filter((part) => part !== null),
+  );
 }
 
 const en: Strings = {
@@ -157,6 +185,7 @@ const en: Strings = {
     ok: "OK",
     tryAgain: "Try Again",
     details: "Details",
+    restart: "Restart",
   },
   text: {
     loading: "Starting Eidolon…",
@@ -192,16 +221,13 @@ const en: Strings = {
       return `${known}This window can't connect to it. Quit it, then try again.`;
     },
     quitTitle: "Quit Eidolon?",
-    quitDetail: ({ calls, tasks, jobs }) => {
-      const parts = [
-        calls === 1 ? "the call" : calls > 1 ? `${calls} calls` : null,
-        tasks === 1 ? "a task" : tasks > 1 ? `${tasks} tasks` : null,
-        jobs === 1 ? "a job" : jobs > 1 ? `${jobs} jobs` : null,
-      ].filter((part) => part !== null);
-      return `Quitting stops ${listEn(parts)}.`;
-    },
+    quitDetail: (stopping) => `Quitting stops ${stoppingEn(stopping)}.`,
     quitUnknown:
       "Eidolon couldn't check what's running. Quitting stops any call, task or job in progress.",
+    restartTitle: "Restart Eidolon?",
+    restartDetail: (stopping) => `Restarting stops ${stoppingEn(stopping)}.`,
+    restartUnknown:
+      "Eidolon couldn't check what's running. Restarting stops any call, task or job in progress.",
     hideNoticeTitle: "Eidolon is still running",
     hideNotice:
       "Calls, tasks and jobs keep going while the window is closed. Click the tray icon to open it " +
@@ -254,6 +280,7 @@ const zhHans: Strings = {
     ok: "确定",
     tryAgain: "重试",
     details: "详情",
+    restart: "重启",
   },
   text: {
     loading: "正在启动 Eidolon…",
@@ -289,15 +316,11 @@ const zhHans: Strings = {
       return `${known}这个窗口无法连接到它。请先退出它，然后重试。`;
     },
     quitTitle: "退出 Eidolon？",
-    quitDetail: ({ calls, tasks, jobs }) => {
-      const parts = [
-        calls === 1 ? "通话" : calls > 1 ? `${calls} 个通话` : null,
-        tasks > 0 ? `${tasks} 个任务` : null,
-        jobs > 0 ? `${jobs} 个作业` : null,
-      ].filter((part) => part !== null);
-      return `${listZh(parts)}会在退出时中断。`;
-    },
+    quitDetail: (stopping) => `${stoppingZh(stopping)}会在退出时中断。`,
     quitUnknown: "Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在退出时中断。",
+    restartTitle: "重启 Eidolon？",
+    restartDetail: (stopping) => `${stoppingZh(stopping)}会在重启时中断。`,
+    restartUnknown: "Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在重启时中断。",
     hideNoticeTitle: "Eidolon 仍在运行",
     hideNotice:
       "关闭窗口后，通话、任务和作业会继续进行。点击托盘图标即可重新打开窗口，也可以在托盘图标的菜单中退出 Eidolon。",
