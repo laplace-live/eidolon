@@ -120,7 +120,8 @@ export interface Homes {
 
 export interface AppEnvOptions {
   readonly homes: Homes;
-  readonly fakes: FakeAccount;
+  /** None gives the app no account at all, as the update test runs it. */
+  readonly fakes?: FakeAccount;
   /** EIDOLON_DESKTOP_BACKGROUND, off only for --headful. */
   readonly background: boolean;
   /** The smoke's own environment, which only the OS's variables come from. */
@@ -142,7 +143,7 @@ export function appEnv({
 }: AppEnvOptions): Record<string, string> {
   return {
     ...osVariables(from, platform),
-    ...fakeAccounts(fakes),
+    ...(fakes === undefined ? {} : fakeAccounts(fakes)),
     EIDOLON_HOME: homes.home,
     EIDOLON_REAL_HOME: homes.realHome,
     EIDOLON_SHARED_SKILLS: homes.sharedSkills,

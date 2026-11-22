@@ -33,6 +33,7 @@ import { parseFind, parseFront, parseType, unproven } from "../scripts/smoke/foc
 import {
   errorLines,
   fakeMicrophoneArgs,
+  installer,
   localToken,
   parseSmokeArgs,
   runsFolder,
@@ -129,6 +130,20 @@ describe("the app's environment", () => {
     expect(env.EIDOLON_DESKTOP_LOGIN_SHELL).toBe("0");
   });
 
+  test("with no fakes, no account: the OS's variables, the homes and the switches alone", () => {
+    const from = { HOME: "/Users/owner", PATH: "/usr/bin", OPENROUTER_API_KEY: "canary" };
+    expect(appEnv({ homes, background: true, from, platform: "darwin" })).toEqual({
+      HOME: "/Users/owner",
+      PATH: "/usr/bin",
+      EIDOLON_HOME: homes.home,
+      EIDOLON_REAL_HOME: homes.realHome,
+      EIDOLON_SHARED_SKILLS: homes.sharedSkills,
+      EIDOLON_NO_DOTENV: "1",
+      EIDOLON_DESKTOP_LOGIN_SHELL: "0",
+      EIDOLON_DESKTOP_BACKGROUND: "1",
+    });
+  });
+
   test("on Windows finds the OS's names without case, under the spelling given, once", () => {
     const from: NodeJS.ProcessEnv = {
       Path: "C:\\Windows\\system32",
@@ -165,6 +180,23 @@ describe("the smoke's arguments", () => {
       rest: ["--app", "/x/Eidolon.exe", "--keep"],
     });
     expect(parseSmokeArgs(["--headfull"])).toEqual({ headful: false, rest: ["--headfull"] });
+  });
+
+  test("an outputs folder's installer: its one NSIS setup or DMG, or an error naming the count", () => {
+    const out = mkdtempSync(join(tmpdir(), "eidolon-kit-out-"));
+    try {
+      writeFileSync(join(out, "Eidolon-0.0.1-arm64.dmg"), "");
+      writeFileSync(join(out, "Eidolon-0.0.1-arm64-mac.zip"), "");
+      writeFileSync(join(out, "Eidolon Setup 0.0.1.exe"), "");
+      writeFileSync(join(out, "Eidolon Setup 0.0.1.exe.blockmap"), "");
+      expect(installer("darwin", out)).toBe(join(out, "Eidolon-0.0.1-arm64.dmg"));
+      expect(installer("win32", out)).toBe(join(out, "Eidolon Setup 0.0.1.exe"));
+      writeFileSync(join(out, "Eidolon Setup 0.0.2.exe"), "");
+      expect(() => installer("win32", out)).toThrow(`${out} holds 2 .exe files, not one`);
+      expect(() => installer("darwin", join(out, "missing"))).toThrow("holds 0 .dmg files");
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
   });
 
   test("runs go under RUNNER_TEMP on a runner, else the OS's temporary folder", () => {
