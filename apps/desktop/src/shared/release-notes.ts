@@ -24,13 +24,6 @@ export interface ReleaseNoteEntry {
 
 export const DESKTOP_PACKAGE = "laplace-eidolon-desktop";
 
-/** The packages whose changes reach the desktop app's users: the app, and the backend it ships. */
-const APP_PACKAGES: readonly string[] = [
-  DESKTOP_PACKAGE,
-  "@laplace.live/eidolon",
-  "laplace-eidolon",
-];
-
 /** The most items an update's box lists, since a native box grows to fit its text. */
 export const MAX_NOTE_ITEMS = 8;
 
@@ -88,7 +81,9 @@ export function parseReleaseNotes(raw: unknown): ReleaseNoteEntry[] {
 
 /**
  * What an update from `running` to `offered` brings, newest first: the batches that released the
- * desktop app after `running` and up to `offered`, with their items about the app.
+ * desktop app after `running` and up to `offered`, with the items whose changesets named it. A
+ * change desktop users get names the app (AGENTS.md's changeset rule), so the rest are production's
+ * or the npm launcher's alone, as the app's GitHub Release lists them too.
  */
 export function notesBetween(
   entries: readonly ReleaseNoteEntry[],
@@ -107,7 +102,7 @@ export function notesBetween(
     })
     .map((entry) => ({
       ...entry,
-      items: entry.items.filter((item) => item.packages.some((p) => APP_PACKAGES.includes(p))),
+      items: entry.items.filter((item) => item.packages.includes(DESKTOP_PACKAGE)),
     }))
     .filter((entry) => entry.items.length > 0)
     .sort((a, b) => compareVersions(released(b), released(a)));
@@ -142,4 +137,17 @@ export function notesText(entries: readonly ReleaseNoteEntry[], labels: NotesLab
   }
   if (left > 0) blocks.push(labels.more(left));
   return blocks.join("\n\n");
+}
+
+/**
+ * The notes for the box offering an update: `eidolonNotes` in its manifest, which electron-updater
+ * passes through on the update's info, from what runs to what it offers.
+ */
+export function manifestNotes(
+  info: { readonly version: string },
+  running: string,
+  labels: NotesLabels,
+): string {
+  const raw = (info as { readonly eidolonNotes?: unknown }).eidolonNotes;
+  return notesText(notesBetween(parseReleaseNotes(raw), running, info.version), labels);
 }

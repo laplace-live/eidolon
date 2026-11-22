@@ -4,6 +4,7 @@ import {
   compareVersions,
   DESKTOP_PACKAGE,
   MAX_NOTE_ITEMS,
+  manifestNotes,
   type NotesLabels,
   notesBetween,
   notesText,
@@ -144,14 +145,15 @@ describe("notesBetween", () => {
     expect(notesBetween([backendOnly, entry("0.2.0")], "0.1.0", "0.2.0")).toEqual([entry("0.2.0")]);
   });
 
-  test("keeps the items about the app or the backend it ships, and only those", () => {
+  test("keeps the items whose changesets named the desktop app, and only those", () => {
     const sdk = item("An SDK fix", { kind: "fix", packages: ["@laplace.live/eidolon-sdk"] });
-    const backend = item("A backend fix", {
+    // A change desktop users get names the app too; the fixed pair alone is production's or npx's.
+    const backend = item("A production fix", {
       kind: "fix",
       packages: ["@laplace.live/eidolon", "laplace-eidolon"],
     });
     const shared = item("Images in chats", {
-      packages: ["@laplace.live/eidolon", "@laplace.live/eidolon-sdk", "laplace-eidolon"],
+      packages: ["@laplace.live/eidolon", DESKTOP_PACKAGE, "laplace-eidolon"],
     });
     const notes = notesBetween(
       [
@@ -161,7 +163,7 @@ describe("notesBetween", () => {
       "0.1.0",
       "0.3.0",
     );
-    expect(notes).toEqual([entry("0.2.0", { items: [item("Updates"), backend, shared] })]);
+    expect(notes).toEqual([entry("0.2.0", { items: [item("Updates"), shared] })]);
   });
 });
 
@@ -216,5 +218,22 @@ describe("notesText", () => {
 
   test("writes nothing for no notes", () => {
     expect(notesText([], LABELS)).toBe("");
+  });
+});
+
+describe("manifestNotes", () => {
+  test("renders the manifest's eidolonNotes between the version that runs and the one offered", () => {
+    const info = {
+      version: "0.3.0",
+      eidolonNotes: [entry("0.3.0"), entry("0.2.0"), entry("0.1.0")],
+    };
+    expect(manifestNotes(info, "0.1.0", LABELS)).toBe(
+      notesText([entry("0.3.0"), entry("0.2.0")], LABELS),
+    );
+  });
+
+  test("gives no notes for a manifest without them, or with ones it can't read", () => {
+    expect(manifestNotes({ version: "0.2.0" }, "0.1.0", LABELS)).toBe("");
+    expect(manifestNotes({ version: "0.2.0", eidolonNotes: "a page" }, "0.1.0", LABELS)).toBe("");
   });
 });

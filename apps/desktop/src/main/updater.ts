@@ -3,6 +3,7 @@
 // or the taskbar.
 import { app, type NativeImage } from "electron";
 import { autoUpdater, type ProgressInfo } from "electron-updater";
+import { manifestNotes } from "../shared/release-notes.ts";
 import { background } from "./instance.ts";
 import { mainLog } from "./log.ts";
 import { native } from "./native.ts";
@@ -105,6 +106,7 @@ export function installUpdater(options: UpdaterOptions): UpdateFlow {
     version: options.version,
     log: mainLog,
     changed: options.changed,
+    notes: (info, current) => manifestNotes(info, current, options.strings().text.notes),
   });
   // A check's and a download's errors reach their promises too; the flow takes only the others.
   if (feed !== null) autoUpdater.on("error", (error) => flow.failed(error));

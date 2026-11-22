@@ -2,6 +2,7 @@
 // pages main serves while the web app can't show. They follow the language the page reports, and
 // the system's before it has.
 import type { Language } from "../shared/bridge.ts";
+import type { NotesLabels } from "../shared/release-notes.ts";
 
 /** What a quit would stop. */
 export interface Stopping {
@@ -108,6 +109,8 @@ export interface Strings {
     readonly updateAvailableTitle: (version: string) => string;
     /** Under it, with the version that runs now. */
     readonly updateAvailable: (current: string) => string;
+    /** The release notes under it: each kind's label, and the line counting what didn't fit. */
+    readonly notes: NotesLabels;
     readonly updateDownloadedTitle: string;
     readonly updateDownloaded: (version: string) => string;
     /** Check for Updates… alone says so; the check after launch only logs it. */
@@ -252,6 +255,19 @@ const en: Strings = {
     updateAvailableTitle: (version) => `Eidolon ${version} is available`,
     updateAvailable: (current) =>
       `You have ${current}. Eidolon downloads the update in the background, then asks before restarting.`,
+    notes: {
+      kinds: {
+        feature: "New",
+        performance: "Faster",
+        improvement: "Improved",
+        fix: "Fixed",
+        other: "Other",
+      },
+      more: (count) =>
+        count === 1
+          ? "1 more change is in the release notes."
+          : `${count} more changes are in the release notes.`,
+    },
     updateDownloadedTitle: "Restart to finish updating",
     updateDownloaded: (version) =>
       `Eidolon ${version} is downloaded. Restart now to install it, or it installs the next time you quit Eidolon.`,
@@ -361,6 +377,16 @@ const zhHans: Strings = {
     updateAvailableTitle: (version) => `Eidolon ${version} 已发布`,
     updateAvailable: (current) =>
       `当前版本为 ${current}。Eidolon 会在后台下载更新，下载完成后会先询问再重启。`,
+    notes: {
+      kinds: {
+        feature: "新增",
+        performance: "更快",
+        improvement: "改进",
+        fix: "修复",
+        other: "其他",
+      },
+      more: (count) => `另有 ${count} 项改动，详见发行说明。`,
+    },
     updateDownloadedTitle: "重启以完成更新",
     updateDownloaded: (version) =>
       `Eidolon ${version} 已下载完成。现在重启即可安装，否则会在下次退出 Eidolon 时安装。`,

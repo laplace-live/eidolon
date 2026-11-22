@@ -5,8 +5,10 @@ local app in a window that starts its own backend, on macOS (Apple silicon) and 
 terminal, no Node or Bun to install, and no link to sign in with. The window shows `apps/web` as it
 is, served by the same local server `bun run app` and `npx @laplace.live/eidolon` run, in local
 mode only, so production never sees it. Electron's own binary runs that server as Node, so the app
-ships no other runtime. It has no release yet: `bun run package:desktop` builds it unsigned, and
-signing, updates and releases come later.
+ships no other runtime. A release is signed and notarized in CI from its
+`laplace-eidolon-desktop@<version>` tag and served from `https://downloads.vrp.moe/eidolon`, where
+the app's updater finds the next one ([Releasing](#releasing), [Updates](#updates));
+`bun run package:desktop` builds it locally, unsigned.
 
 ```text
 Eidolon (main process)
@@ -27,12 +29,15 @@ Eidolon (main process)
 ```text
 apps/desktop/
   electron-builder.yml   the packaging config: fuses, targets, the payload as an extra resource
+  electron-builder.release.mjs
+                         the release overlay: notarization, the requirement, Windows' Azure signing
   resources/             build resources: entitlements, installer.nsh, the icon, and the designated
-                         requirement release builds will carry
+                         requirement release builds carry (designated-requirement.mac)
   assets/                what main loads at run time through process.resourcesPath: the tray icon
   dev-app-update.yml     the release feed for EIDOLON_DESKTOP_DEV_UPDATE, read only unpackaged
   scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
-                         zip.ts and natives.ts; vite-common.ts, electron-env.ts;
+                         zip.ts and natives.ts; signed-check.ts, the signed build's checks;
+                         vite-common.ts, electron-env.ts;
                          test-on-electron.ts, the Electron lane; system-ca.ts, CI's system CA
                          proof; dev-smoke.ts with dev-smoke/, the dev smoke; smoke.ts, the
                          packaged smoke; and smoke/, the kit both share, with the packaged
@@ -45,6 +50,9 @@ apps/desktop/
                          native, quit, updater, log)
   src/preload/           the sandboxed CommonJS preload: the page's marks and its bridge
   src/shared/bridge.ts   the IPC channels and who may send on each; it imports nothing
+  src/shared/release-notes.ts
+                         changelog.json's types, the manifest's eidolonNotes, and what an update's box
+                         shows of them; scripts/changelog.ts writes the notes with them
   src/shell/             the loading, failure and waiting pages
   test/                  Vitest, for the Electron-free modules
 ```
@@ -517,7 +525,7 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   `appId`. `resources/installer.nsh` carries a workaround for electron-builder#6865; its uninstall
   removes the install folder alone. Installing, updating and uninstalling never touch the data home.
 - **`publish`** names the update feed, which electron-builder writes into the app's
-  `app-update.yml` for the updater to come; nothing is uploaded.
+  `app-update.yml` for the [updater](#updates); electron-builder uploads nothing (`--publish never`).
 
 `electron-builder.release.mjs`, the release overlay, extends it with the signing; only
 `desktop.yml`'s signed builds load it, and `test/release-config.test.ts` checks what it computes and
@@ -839,7 +847,9 @@ mode, flow, boxes and mock, with the restart on the real quit flow; links,
 navigation, permissions and the debugging switches; the bounds, chrome, menus and pages;
 background mode's decisions; both languages' strings; the shell pages' escaping and CSP; the
 bridges' sender rule; the logs' rotation and link filter; stage-backend's parts on made-up
-lockfiles, PE files and zips; the smokes' kit and parts, the fakes over real loopback requests
+lockfiles, PE files and zips; the release overlay through electron-builder's own loader, and
+signed-check's reading of codesign, Gatekeeper, stapler and Authenticode output; the release notes'
+parsing, slice and text; the smokes' kit and parts, the fakes over real loopback requests
 included; the manifest; and the import boundary.
 
 ### The stage test
