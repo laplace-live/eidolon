@@ -190,6 +190,26 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((done) => setTimeout(done, ms));
 }
 
+/** `promise`'s value, or null once `ms` have passed. */
+export function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([promise, sleep(ms).then(() => null)]);
+}
+
+/** `read()`'s value once `done` holds for it, or its last one at the timeout. */
+export async function until<T>(
+  read: () => T | Promise<T>,
+  done: (value: T) => boolean,
+  timeoutMs: number,
+  everyMs = 250,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await read();
+    if (done(value) || Date.now() >= deadline) return value;
+    await sleep(everyMs);
+  }
+}
+
 export interface WaitOptions {
   /** 60 s by default. */
   readonly timeoutMs?: number;
