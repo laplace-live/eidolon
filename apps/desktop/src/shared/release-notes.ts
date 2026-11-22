@@ -144,10 +144,9 @@ export function notesText(entries: readonly ReleaseNoteEntry[], labels: NotesLab
  * passes through on the update's info, from what runs to what it offers.
  */
 export function manifestNotes(
-  info: { readonly version: string },
+  info: { readonly version: string; readonly eidolonNotes?: unknown },
   running: string,
   labels: NotesLabels,
 ): string {
-  const raw = (info as { readonly eidolonNotes?: unknown }).eidolonNotes;
-  return notesText(notesBetween(parseReleaseNotes(raw), running, info.version), labels);
+  return notesText(notesBetween(parseReleaseNotes(info.eidolonNotes), running, info.version), labels);
 }
