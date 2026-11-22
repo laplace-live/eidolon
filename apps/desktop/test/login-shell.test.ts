@@ -174,27 +174,30 @@ describe.skipIf(process.platform === "win32")("readLoginShell on POSIX", () => {
       probe,
       [
         'import { closeSync, openSync } from "node:fs";',
-        "const { readLoginShell } = await import(process.argv[2]);",
+        "const { readLoginShell } = await import(process.env.MODULE);",
+        "const shells = JSON.parse(process.env.SHELLS);",
         "const held = [];",
         'try { for (;;) held.push(openSync("/dev/null", "r")); } catch {}',
-        "const read = await readLoginShell({}, { shells: process.argv.slice(3), timeoutMs: 5000 });",
+        "const read = await readLoginShell({}, { shells, timeoutMs: 5000 });",
         "for (const fd of held) closeSync(fd);",
         "process.stdout.write(JSON.stringify(read));",
       ].join("\n"),
     );
     const candidates = [shell("first", "export FROM=first"), shell("second", "export FROM=second")];
+    // The paths reach the shell as variables: CodeQL reads its arguments as part of its command.
     const { stdout } = await promisify(execFile)(
       "/bin/sh",
-      [
-        "-c",
-        'ulimit -n 256 && exec "$@"',
-        "sh",
-        process.execPath,
-        probe,
-        pathToFileURL(MODULE).href,
-        ...candidates,
-      ],
-      { env: { PATH: "/usr/bin:/bin", HOME: directory } },
+      ["-c", 'ulimit -n 256 && exec "$NODE" "$PROBE"'],
+      {
+        env: {
+          PATH: "/usr/bin:/bin",
+          HOME: directory,
+          NODE: process.execPath,
+          PROBE: probe,
+          MODULE: pathToFileURL(MODULE).href,
+          SHELLS: JSON.stringify(candidates),
+        },
+      },
     );
     expect(JSON.parse(stdout)).toEqual({
       variables: null,
