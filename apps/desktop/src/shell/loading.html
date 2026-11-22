@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- biome-ignore lint/a11y/useValidLang: main fills in the language -->
+<html lang="{{lang}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eidolon</title>
+    <style>
+      @import "./shell.css";
+    </style>
+  </head>
+  <body>
+    <div class="drag" aria-hidden="true"></div>
+    <main>
+      <div class="spinner">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle
+            cx="12"
+            cy="12"
+            r="9"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-dasharray="45 12"
+          />
+        </svg>
+        <p class="status" role="status">{{starting}}</p>
+      </div>
+    </main>
+  </body>
+</html>

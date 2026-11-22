@@ -42,7 +42,7 @@ export function eidolonScript(options: EidolonScript): string {
     "#!/bin/sh",
     "# Eidolon's CLI for a task's commands. Eidolon writes this file again each time it starts.",
     ...variables.map(([name, value]) => `${name}=${sh(value)}; export ${name}`),
-    `exec ${sh(runtime.command)} ${sh(options.entry)} "$@"`,
+    `exec ${[runtime.command, ...runtime.args, options.entry].map(sh).join(" ")} "$@"`,
     "",
   ].join("\n");
 }

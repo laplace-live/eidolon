@@ -34,8 +34,10 @@ since 2026-11-04. The offline chain is TypeScript too: `packages/ingest`, run
 through the `laplace-*` commands in `apps/cli`. The local web app and the
 offline commands run on Node 24, and also ship as the npm package
 `@laplace.live/eidolon` (`apps/eidolon`), which runs them, bundled, on the
-user's Node. The original Python runtime is in the repo too, for human readers
-only; agents never touch it ([The Python](#the-python)).
+user's Node. The desktop app, Eidolon (`apps/desktop`, unreleased), shows the
+local app in a window and runs its server on Electron's own binary as Node
+([desktop.md](docs/desktop.md)). The original Python runtime is in the repo
+too, for human readers only; agents never touch it ([The Python](#the-python)).
 
 ## Repository layout
 
@@ -47,6 +49,8 @@ apps/web/             the local web app's pages (Vite, React, shadcn), served by
 apps/cli/             every laplace-* command, the offline chain's included
 apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, and a build that
                       bundles the local app and the CLI with the web app, templates and jieba
+apps/desktop/         the desktop app, Eidolon (Electron, unreleased): apps/web in a window, on a
+                      backend staged from the npm build and run on Electron's binary as Node
 packages/             subsystems, one Bun workspace package each (docs/typescript.md);
                       packages/ingest is the offline chain, packages/assistant the tools,
                       folder policy and files of the assistant's tasks, and in its skills/ the
@@ -79,6 +83,7 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
+| the desktop app (`apps/desktop`): its main process, the backend it stages and spawns, the `eidolon-app:` forwarder, attaching to a running server, its window, environment, logs or packaging, background mode, its tests and smokes, `desktop.yml`, or an Electron bump | [desktop.md](docs/desktop.md) |
 | chats, the chat log format, the turn engine, group chats' director, voice messages, or the images and text files the viewer sends (`packages/chat`, `packages/engine`, `packages/engine/src/seen.ts`, `apps/bot/src/images.ts`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
 | the voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime`), its models, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
@@ -117,6 +122,18 @@ bun run dev:local                      # its server alone, under --watch; --no-o
 bun run dev:web                        # Vite on 127.0.0.1:5173, proxying to :7860; open /#<code>
 bun run build:web                      # apps/web/dist
 bun run i18n                           # extract the app's strings into apps/web/src/locales/*.po
+```
+
+The desktop app, Eidolon ([desktop.md](docs/desktop.md)); a test run of it is always in background
+mode, on a temporary data home and profile ([Rules](#the-desktop-app)):
+
+```bash
+bun run dev:desktop                    # the unpackaged app: pages from Vite on :5173, its backend from source
+bun run build:desktop                  # stages this machine's backend in apps/desktop/.stage, then builds dist/
+bun run package:desktop                # electron-builder into apps/desktop/.out: unsigned, ad hoc on macOS
+bun run smoke:desktop:dev              # the dev smoke, on macOS: builds, then walks the unpackaged app under Playwright on fakes
+bun run smoke:desktop                  # the packaged smoke: the app package:desktop made, on fakes, through its backend's API
+node apps/desktop/scripts/test-on-electron.ts [paths]   # the Electron lane: the backend's tests on Electron's Node
 ```
 
 The offline chain, each command taking `--persona <id>` and working in that
@@ -170,6 +187,8 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`; a task that needs a lookup and a run, which names its kind, asks on its card before the command and searches. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64 and Windows x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, loads its native modules, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
+| `apps/desktop`, or what its payload takes from `apps/eidolon`'s stage | `bun run typecheck`, `bun run lint` and `bun run test apps/desktop`, whose tests never load `electron`; then `bun run build:desktop`, `bun run package:desktop` and `EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts`, which also holds the packaged payload to the stage; then both [smokes](docs/desktop.md#the-smokes), which bill nothing and show nothing: `bun run smoke:desktop` (the packaged app's natives, its backend's API, a restart and `--quit`) and, on macOS, `bun run smoke:desktop:dev`, which builds and walks the unpackaged app (Home, a chat, a call, Restart, attaching and quitting). `desktop.yml` runs the packaged smoke on Windows too. An Electron bump follows [desktop.md's procedure](docs/desktop.md#bumping-electron) |
+| `jsRuntime()` (`packages/config/src/runtime.ts`), or a test that spawns `process.execPath` with an environment of its own | the gates above, then the backend suite on Electron's Node, `node apps/desktop/scripts/test-on-electron.ts` ([the Electron lane](docs/desktop.md#the-electron-lane)): there `process.execPath` is Electron's binary, which starts as an app, not as Node, unless the child's environment carries `jsRuntime().env` |
 
 ## Rules
 
@@ -238,7 +257,9 @@ the layout's one line.
   `bunfig.toml` sets `env = false` for what runs on Bun, and `vitest.config.ts`
   loads none into a test. No module reads env at import but
   `apps/bot/src/local/environ.ts`, which the local entries import before
-  `load-env.ts` so the server and jobs they spawn start without its keys. It walks
+  `load-env.ts` so the server and jobs they spawn start without its keys, and the
+  desktop's `apps/desktop/src/main/instance.ts`, whose process loads no `.env` and
+  must settle background mode before Electron's `ready`. `load-env.ts` walks
   up to the first `.env`, and a git worktree without one, wherever it lives,
   reads its main checkout's, real keys included; `EIDOLON_NO_DOTENV=1` skips it.
 - **Production never runs local mode.** `main.ts` and the code it loads never
@@ -329,6 +350,8 @@ the layout's one line.
   module's folder is `dist/`. A file the code ships with (a template, the web build, jieba's
   data, an entry to spawn) resolves through `shippedPath` in `@eidolon/config`, under the
   launcher's `EIDOLON_APP_ROOT` or else the checkout, and `apps/eidolon`'s build copies it in.
+  The one exception is the desktop app's main process, which may not import `@eidolon/config`: it
+  finds its payload through `process.resourcesPath` when packaged, or the checkout when not.
 - **Windows has no process groups and no SIGTERM: every kill there is TerminateProcess.** Spawn
   through `spawnProcess` (or cross-spawn, for a `.cmd` such as `npx`), which hides the child's
   console window; end a process with what it started through `killTree` (`@eidolon/config`, taskkill
@@ -424,6 +447,61 @@ the layout's one line.
 - **pi-mono-derived code carries its MIT header,** then `Ported from pi-mono <path>@ac78a60`
   (`, its Windows parts @cb1205e` where those came later); `packages/assistant` keeps `LICENSE-pi`
   and `THIRD_PARTY.md`, and `NOTICE` names the holder (`build.test.ts` checks it).
+
+### The desktop app
+
+- **Production never sees the desktop app.** `docker.yml` skips `apps/desktop/**` and
+  `.github/workflows/desktop.yml`, the image copies only `apps/desktop/package.json`, for the frozen
+  install, and production's import graph reaches nothing in `apps/desktop` (`boundaries.test.ts`).
+- **No backend code runs in Electron's main process or its pages.** Main spawns the backend as a
+  Node child; `apps/desktop/src` loads at run time only `electron`, `electron-updater`,
+  `electron-log`, `undici`, `node:*` and its own modules, and `@eidolon/*` or `apps/bot` as
+  `import type` alone (`apps/desktop/test/boundary.test.ts`). The preload stays CommonJS and
+  sandboxed.
+- **Only main holds `local-token`.** It never reaches the page, a URL, argv, a log, the preload or
+  any process's environment. The forwarder adds the Bearer only to requests for `eidolon-app://app`
+  whose `initiatorOrigin` is that origin or absent, never judged by `Origin`, and only over a
+  connection the server proved itself on; requests to Vite in dev never carry it. The default
+  session loads only `eidolon-app://` pages: anything else ever embedded gets a partition of its
+  own ([desktop.md](docs/desktop.md#the-forwarder)).
+- **The window never leaves `eidolon-app://`:** `window.open` is denied, a navigation or redirect
+  anywhere else is cancelled and a landing elsewhere put back, web links open in the default
+  browser, there is no `<webview>`, and a packaged app started with `--remote-debugging-port` or
+  `--remote-debugging-pipe` exits.
+- **Main logs the backend's output but never a line that holds a link code:** `log-filter.ts` drops
+  `Eidolon is ready:` and `Eidolon is already running:` after the controller has read them.
+- **Our own JS starts only through `jsRuntime()`, and Electron's GUI never with
+  `ELECTRON_RUN_AS_NODE`:** `electronEnv()` deletes it from a copy (`dev:desktop`), and the smokes'
+  `appEnv()` builds one without any `ELECTRON_*` name. Inside Electron `jsRuntime()` adds
+  `ELECTRON_RUN_AS_NODE=1`, at whose every non-empty value, `0` included, an Electron binary runs as
+  Node: no spawn that can start a program the owner chose (a task's command, an MCP server) may
+  carry it, or VS Code's `code` would run as Node.
+- **Every node-mode process the app starts carries `--disable-sigusr1 --use-system-ca`** before its
+  script (yt-dlp's JS runtime, which yt-dlp starts, aside): `jsRuntime().args`, which main mirrors
+  as `BACKEND_RUNTIME_ARGS`, a test holding the two equal. The inspect fuse doesn't reach node mode,
+  where SIGUSR1 opens an inspector, and the nodeOptions fuse drops `NODE_EXTRA_CA_CERTS`.
+- **Only the app's own page gets the microphone, audio alone, and clipboard writes:** its main frame
+  in the app window, matched by origin (`securityOrigin`, `requestingOrigin`), never by URL, since
+  a sandboxed document the backend serves has an app URL and an opaque origin. Every other
+  permission, the camera included, is denied.
+- **The shell and its backend are one release.** Nothing updates the backend alone: the app runs
+  only its own payload, or a server on its data home that proves it holds `local-token`. Releases,
+  signed, come later; until `apps/desktop/package.json` has a version, no changeset names
+  `laplace-eidolon-desktop`, since one naming it beside a released package fails.
+- **Installing, updating and uninstalling the app never touch the data home,** which it shares with
+  npx and `bun run app`; its uninstaller removes the install folder alone.
+- **Every local test run of the app is in background mode** (`EIDOLON_DESKTOP_BACKGROUND=1`,
+  packaged or not), on a temporary `EIDOLON_HOME` and profile (`--user-data-dir`), with
+  `EIDOLON_DESKTOP_LOGIN_SHELL=0` and no credential, as `appEnv()` in
+  `apps/desktop/scripts/smoke/env.ts` builds it: local runs share the machine the owner works on, so
+  no test may put a window, a dialog or a prompt in front of them, take the focus or play a sound,
+  and without its own home a run, `dev:desktop` included, uses the owner's data home, or attaches to
+  their running server, and bills their keys. A driver passes Chromium's fake microphone alone,
+  never `--use-fake-ui-for-media-stream`, and uploads through `setInputFiles`, never a click on a
+  file input ([desktop.md](docs/desktop.md#driving-it-in-background-mode)).
+- **deepseek-harness-derived code carries its MIT header,** then
+  `Ported from deepseek-harness <path>@2e39e70496`; `apps/desktop` keeps `LICENSE-deepseek` and
+  `THIRD_PARTY.md`, and `NOTICE` names the holder (`build.test.ts` checks it).
 
 ### Identity and quotas
 
@@ -524,9 +602,13 @@ the layout's one line.
   Watchtower on the production host restarts the bot from it, dropping live
   calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`,
   the offline chain (`apps/cli`, `packages/ingest`), the local web app
-  (`apps/web`, `apps/bot/src/local`), or the npm packages (`apps/eidolon`,
-  `packages/sdk`) skip the image build (`paths-ignore` in `docker.yml`);
-  anything else, `personas/` included, ships.
+  (`apps/web`, `apps/bot/src/local`), the assistant (`packages/assistant`), the npm
+  packages (`apps/eidolon`, `packages/sdk`), the desktop app (`apps/desktop`,
+  `.github/workflows/desktop.yml`), `.env.example`, or the rest of `docker.yml`'s
+  `paths-ignore` (`README.md`, `CLAUDE.md`, the `ts.yml` and `release.yml` workflows,
+  `vitest.config.ts`, `tsconfig.scripts.json`, `tsconfig.no-bun.d.ts`) skip the image
+  build; anything else, `personas/` included, ships, and so does a bump of the
+  desktop's Electron or electron-builder, which changes `bun.lock`.
 - **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
   publish to npm.** Merging the Release workflow's version PR bumps
   `apps/bot/package.json`, `apps/eidolon/package.json`, and/or

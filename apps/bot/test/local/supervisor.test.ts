@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { asElectron } from "../../../../packages/config/test/electron.ts";
 import { type ForwardedSignal, supervise } from "../../src/local/supervisor.ts";
 
 const FAKE_SERVER = `
@@ -32,6 +33,7 @@ appendFileSync(
   JSON.stringify(process.env.EIDOLON_ENV_PROBE ?? null) + "\\n",
 );
 appendFileSync(join(import.meta.dirname, "pids.txt"), process.pid + "\\n");
+appendFileSync(join(import.meta.dirname, "flags.ndjson"), JSON.stringify(process.execArgv) + "\\n");
 appendFileSync(runs, JSON.stringify(process.argv.slice(2)) + "\\n");
 if (step.exit !== undefined) process.exit(step.exit);
 setInterval(() => {}, 1000);
@@ -171,5 +173,20 @@ describe("supervise", () => {
     await started(1);
     fire?.("SIGTERM");
     expect(await done).toBe(143);
+  });
+
+  test("starts the server, and each restart, with the runtime's flags before its entry", async () => {
+    plan([{ port: 41234, exit: 75 }, { exit: 0 }]);
+    const restore = asElectron();
+    try {
+      expect(await run([])).toBe(0);
+    } finally {
+      restore();
+    }
+    const flags = readFileSync(join(dir, "flags.ndjson"), "utf8").trim().split("\n");
+    expect(flags.map((line) => JSON.parse(line))).toEqual(
+      Array(2).fill(["--disable-sigusr1", "--use-system-ca"]),
+    );
+    expect(runs()).toHaveLength(2);
   });
 });

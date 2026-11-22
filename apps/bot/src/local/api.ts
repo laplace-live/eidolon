@@ -155,7 +155,7 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 
 /**
  * The body of every 4xx and 5xx the local API sends. A 5xx's message is fixed: what went wrong is
- * in the terminal's log line that `id` names.
+ * in the server log's line that `id` names.
  */
 export interface ErrorBody {
   readonly error: {

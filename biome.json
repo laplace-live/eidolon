@@ -9,6 +9,9 @@
       "!**/node_modules",
       "!packages/retrieval/data",
       "!apps/web/dist",
+      "!apps/desktop/dist",
+      "!apps/desktop/.stage",
+      "!apps/desktop/.out",
       "!apps/eidolon/pack",
       "!packages/sdk/pack"
     ]
@@ -403,6 +406,7 @@
       "includes": [
         "apps/bot/src/**",
         "apps/cli/src/**",
+        "apps/desktop/src/**",
         "apps/eidolon/src/**",
         "packages/*/src/**"
       ],

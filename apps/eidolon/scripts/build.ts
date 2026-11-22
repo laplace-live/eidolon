@@ -329,20 +329,26 @@ export function inlinedPackages(inlined: ReadonlyMap<string, string>): Bundled[]
   });
 }
 
+/** SPDX's text of the license `identifier` names, or null when spdx/ has none. */
+export function spdxText(identifier: string): string | null {
+  const known = readdirSync(SPDX_DIR).map((file) => basename(file, ".txt"));
+  if (!known.includes(identifier)) return null;
+  return readFileSync(join(SPDX_DIR, `${identifier}.txt`), "utf8").trim();
+}
+
 /**
  * A package's license text: its own file's, else SPDX's text of the license it declares. One with
  * neither fails the build, so no notice ships without its text.
  */
 export function licenseText(pkg: Bundled): string {
   if (pkg.text) return pkg.text;
-  const known = readdirSync(SPDX_DIR).map((file) => basename(file, ".txt"));
-  if (pkg.identifier === undefined || !known.includes(pkg.identifier)) {
+  const spdx = pkg.identifier === undefined ? null : spdxText(pkg.identifier);
+  if (spdx === null) {
     throw new Error(
       `${pkg.name} ships no license file, and ${relative(ROOT, SPDX_DIR)}/ has no text for ` +
         `${pkg.identifier === undefined ? "its license, which it doesn't name" : pkg.identifier}`,
     );
   }
-  const spdx = readFileSync(join(SPDX_DIR, `${pkg.identifier}.txt`), "utf8").trim();
   return (
     `The package ships no license file; this is SPDX's text of ${pkg.identifier}, the license ` +
     `its package.json declares.\n\n${spdx}`
@@ -389,26 +395,31 @@ export function copyTracked(from: string, to: string): void {
   }
 }
 
-/** Writes the package into PACK_DIR, replacing what was there. */
-async function stage(): Promise<Manifest> {
+/**
+ * Writes the package into `root`, replacing what was there: PACK_DIR for npm, a payload folder for
+ * the desktop app.
+ */
+export async function stage(root: string): Promise<Manifest> {
+  // The sources are this checkout's, whatever the shell exports.
+  delete process.env.EIDOLON_APP_ROOT;
   const manifest = packageManifest();
-  rmSync(PACK_DIR, { recursive: true, force: true });
-  mkdirSync(PACK_DIR);
-  const bundles = await bundle(PACK_DIR);
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+  const bundles = await bundle(root);
   checkImports(bundles.imports, manifest);
-  const web = await buildWeb(inPackage(PACK_DIR, webDist));
-  copyTracked(templatesDir(), inPackage(PACK_DIR, templatesDir));
-  copyTracked(builtinSkillsDir(), inPackage(PACK_DIR, builtinSkillsDir));
-  copyTracked(jiebaDir(), inPackage(PACK_DIR, jiebaDir));
-  copyTracked(resamplerDir(), inPackage(PACK_DIR, resamplerDir));
-  copyTracked(voiceModelsDir(), inPackage(PACK_DIR, voiceModelsDir));
+  const web = await buildWeb(inPackage(root, webDist));
+  copyTracked(templatesDir(), inPackage(root, templatesDir));
+  copyTracked(builtinSkillsDir(), inPackage(root, builtinSkillsDir));
+  copyTracked(jiebaDir(), inPackage(root, jiebaDir));
+  copyTracked(resamplerDir(), inPackage(root, resamplerDir));
+  copyTracked(voiceModelsDir(), inPackage(root, voiceModelsDir));
   writeFileSync(
-    join(PACK_DIR, "THIRD_PARTY_NOTICES.md"),
+    join(root, "THIRD_PARTY_NOTICES.md"),
     notices(inlinedPackages(bundles.inlined), web),
   );
-  cpSync(join(HERE, "README.md"), join(PACK_DIR, "README.md"));
-  for (const file of ["LICENSE", "NOTICE"]) cpSync(join(ROOT, file), join(PACK_DIR, file));
-  writeFileSync(join(PACK_DIR, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  cpSync(join(HERE, "README.md"), join(root, "README.md"));
+  for (const file of ["LICENSE", "NOTICE"]) cpSync(join(ROOT, file), join(root, file));
+  writeFileSync(join(root, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }
 
@@ -426,9 +437,7 @@ function pack(): string {
 }
 
 if (import.meta.main) {
-  // The sources are this checkout's, whatever the shell exports.
-  delete process.env.EIDOLON_APP_ROOT;
-  const manifest = await stage();
+  const manifest = await stage(PACK_DIR);
   console.log(`${manifest.name}@${manifest.version} staged in ${relative(ROOT, PACK_DIR)}`);
   if (process.argv.includes("--pack")) console.log(pack());
 }

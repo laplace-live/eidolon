@@ -5,7 +5,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "@eidolon/cli";
 import { jobArgv } from "@eidolon/cli/job";
-import { cliEntry, dataHome } from "@eidolon/config";
+import { cliEntry, dataHome, jsRuntime } from "@eidolon/config";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { BUILD_STREAM_CATALOG_PARSER } from "../../../cli/src/build_stream_catalog.ts";
 import { DOWNLOAD_PARSER } from "../../../cli/src/download.ts";
@@ -34,7 +34,7 @@ const PERSONA = ["--persona", "milky-green"];
 const URL = "https://space.bilibili.com/1/lists/2?type=series";
 
 function argv(spec: JobSpec): string[] {
-  return jobArgv(cliEntry(), spec.cli, spec.args);
+  return jobArgv(jsRuntime(), cliEntry(), spec.cli, spec.args);
 }
 
 describe("each command spawns a fixed argv", () => {
@@ -164,7 +164,14 @@ describe("each command spawns a fixed argv", () => {
         arg === "<batch>" ? batch : arg === "<audio>" ? audio : arg,
       );
       const [cli, ...args] = expected as [string, ...string[]];
-      expect(argv(spec)).toEqual([process.execPath, cliEntry(), cli, "--json", ...args]);
+      expect(argv(spec)).toEqual([
+        process.execPath,
+        ...jsRuntime().args,
+        cliEntry(),
+        cli,
+        "--json",
+        ...args,
+      ]);
       expect(spec.options).toEqual(options);
       expect(spec.persona).toBe((body as { persona: string }).persona);
     });

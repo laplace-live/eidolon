@@ -87,7 +87,8 @@ export class JobRunner {
    * started before this machine booted is gone, whatever process its pid names now.
    */
   constructor(options: JobRunnerOptions = {}) {
-    this.argv = options.argv ?? ((command, args) => jobArgv(cliEntry(), command, args));
+    this.argv =
+      options.argv ?? ((command, args) => jobArgv(jsRuntime(), cliEntry(), command, args));
     this.pollMs = options.pollMs ?? 250;
     this.keep = options.keep ?? 50;
     const bootedAt = Date.now() - uptime() * 1000;

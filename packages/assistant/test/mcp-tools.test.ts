@@ -4,6 +4,7 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { jsRuntime } from "@eidolon/config";
 import type { TaskToolResult } from "@eidolon/engine";
 import { afterEach, describe, expect, test } from "vitest";
 import { buildTaskPrompt } from "../src/index.ts";
@@ -30,9 +31,10 @@ const SECRET = "EIDOLON_MCP_TEST_SECRET";
 /** `${NAME}`, as mcp.json refers to a secret. */
 const ref = (name: string) => `\${${name}}`;
 
-/** An mcp.json entry that runs the fake server with `flags`. */
+/** An mcp.json entry that runs the fake server with `flags`, on this runtime. */
 function fake(flags: string[] = [], entry: Record<string, unknown> = {}): Record<string, unknown> {
-  return { command: process.execPath, args: [FIXTURE, ...flags], ...entry };
+  const env = { ...jsRuntime().env, ...(entry.env as Record<string, string> | undefined) };
+  return { command: process.execPath, args: [FIXTURE, ...flags], ...entry, env };
 }
 
 const sessions: McpSession[] = [];
@@ -553,6 +555,7 @@ describe("the servers' processes", () => {
         held: {
           command: process.execPath,
           args: [DAEMON, "--hang", "--pidfile", pidfile],
+          env: jsRuntime().env,
         },
       },
       { signal: controller.signal },
@@ -616,6 +619,7 @@ describe("the servers' processes", () => {
       dies: {
         command: process.execPath,
         args: ["-e", "console.error('no config found'); process.exit(2)"],
+        env: jsRuntime().env,
       },
       fake: fake(),
     });

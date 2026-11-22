@@ -41,6 +41,15 @@ export default defineConfig({
       },
       {
         extends: true,
+        // The desktop's Electron-free modules: nothing a test imports loads `electron`.
+        test: {
+          name: "desktop",
+          include: ["apps/desktop/test/**/*.test.ts"],
+          setupFiles,
+        },
+      },
+      {
+        extends: true,
         // The tests stub Lingui's macros themselves, so the plugin that compiles them stays out.
         resolve: { alias: { "@": resolve(root, "apps/web/src") } },
         test: {

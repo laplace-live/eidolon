@@ -6,6 +6,7 @@ import { ErrorAlert } from "@/components/error-alert";
 import { SectionCardSkeleton } from "@/components/section-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
+import { desktop } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
 import { useLang } from "@/locales/i18n";
 import { Hero } from "./hero";
@@ -52,6 +53,8 @@ export function Component() {
 
   const { persona } = status.data;
   const live = status.data.activeCalls > 0;
+  // The desktop app releases on its own versions, apart from the server it ships.
+  const app = desktop();
   return (
     <div className="flex flex-col gap-12">
       <Hero persona={persona} verdict={verdict(items)} />
@@ -77,7 +80,9 @@ export function Component() {
       <MemoryPanel key={persona.id} persona={persona} memory={status.data.memory} />
 
       <p className="text-muted-foreground text-xs">
-        {t`Eidolon ${ph({ version: status.data.version })}`}
+        {app === null
+          ? t`Eidolon ${ph({ version: status.data.version })}`
+          : t`Eidolon ${ph({ version: app.version })} · server ${ph({ server: status.data.version })}`}
       </p>
 
       <VoiceDialog

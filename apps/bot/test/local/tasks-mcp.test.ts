@@ -28,7 +28,7 @@ import {
   tasksDir,
 } from "@eidolon/assistant";
 import type { PermissionLevel } from "@eidolon/chat";
-import { type AssistantSettings, dataHome } from "@eidolon/config";
+import { type AssistantSettings, dataHome, jsRuntime } from "@eidolon/config";
 import type { createMind, MindChunk, MindRequest, MindToolCall, TaskEntry } from "@eidolon/engine";
 import { reportUsage } from "@eidolon/providers";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
@@ -235,9 +235,10 @@ async function booted(): Promise<TaskManager> {
   return tasks;
 }
 
-/** The fake server's entry: its flags, then mcp.json's own fields. */
+/** The fake server's entry, on this runtime: its flags, then mcp.json's own fields. */
 function fake(flags: readonly string[] = [], fields: Record<string, unknown> = {}) {
-  return { command: process.execPath, args: [FIXTURE, ...flags], ...fields };
+  const env = { ...jsRuntime().env, ...(fields.env as Record<string, string> | undefined) };
+  return { command: process.execPath, args: [FIXTURE, ...flags], ...fields, env };
 }
 
 const MCP_JSON = () => join(dataHome(), "mcp.json");

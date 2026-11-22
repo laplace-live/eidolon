@@ -21,6 +21,19 @@ export interface SectionLayoutProps {
   readonly children: ReactNode;
 }
 
+/**
+ * Whether `box`'s top is above where `scrollIntoView` puts it, its scroll margin below the top of
+ * the box it scrolls in: the frame in a browser, a page's own below MobileBar in the desktop app.
+ */
+export function scrolledPast(box: Element): boolean {
+  let port = box.parentElement;
+  while (port !== null && ["visible", "clip"].includes(getComputedStyle(port).overflowY)) {
+    port = port.parentElement;
+  }
+  const top = box.getBoundingClientRect().top - (port?.getBoundingClientRect().top ?? 0);
+  return top < Number.parseFloat(getComputedStyle(box).scrollMarginTop);
+}
+
 export function SectionLayout({ nav, active, label, children }: SectionLayoutProps) {
   const root = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLElement>(null);
@@ -38,16 +51,12 @@ export function SectionLayout({ nav, active, label, children }: SectionLayoutPro
     shown.current = active;
     // A section picked from the sticky nav far down a long one starts at its own top.
     const box = root.current;
-    if (
-      box &&
-      box.getBoundingClientRect().top < Number.parseFloat(getComputedStyle(box).scrollMarginTop)
-    ) {
-      box.scrollIntoView({ block: "start" });
-    }
+    if (box && scrolledPast(box)) box.scrollIntoView({ block: "start" });
   }, [active]);
 
   return (
-    <div ref={root} className="@container scroll-mt-20 md:scroll-mt-6">
+    // Below md a browser scrolls the page under MobileBar's h-14; the desktop app scrolls it below.
+    <div ref={root} className="@container scroll-mt-20 md:scroll-mt-6 shell:scroll-mt-6">
       <div className="flex flex-col gap-8 @3xl:grid @3xl:grid-cols-[13rem_minmax(0,1fr)] @3xl:items-start @3xl:gap-10">
         <nav
           ref={scroller}

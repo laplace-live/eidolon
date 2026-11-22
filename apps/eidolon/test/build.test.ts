@@ -26,6 +26,7 @@ import {
   type Manifest,
   notices,
   packageManifest,
+  stage,
 } from "../scripts/build.ts";
 import { ENTRIES, NODE_MAJOR, PLATFORMS } from "../src/launcher.ts";
 
@@ -109,6 +110,33 @@ describe("the bundles", () => {
   });
 });
 
+describe("the stage", () => {
+  // The desktop app stages its backend the same way, into a folder of its own.
+  test("writes the whole package into the folder it is given", async () => {
+    const at = join(root, "staged", "eidolon");
+    const staged = await stage(at);
+    expect(staged).toEqual(manifest);
+    expect(JSON.parse(readFileSync(join(at, "package.json"), "utf8"))).toEqual(manifest);
+    for (const file of [
+      ...Object.values(ENTRIES),
+      "dist/server.js",
+      LAUNCHER,
+      "web/index.html",
+      "personas/milky-green/persona.yaml",
+      "skills/persona-update/SKILL.md",
+      "data/jieba/dict.txt",
+      "data/resampler/resampler.wasm",
+      "data/models/silero_vad.onnx",
+      "README.md",
+      "LICENSE",
+      "NOTICE",
+      "THIRD_PARTY_NOTICES.md",
+    ]) {
+      expect([file, existsSync(join(at, file))]).toEqual([file, true]);
+    }
+  }, 120_000);
+});
+
 describe("the voice models", () => {
   test("ship byte for byte in data/models, with their licenses", () => {
     const dir = inPackage(root, voiceModelsDir);
@@ -175,12 +203,12 @@ describe("the third-party notices", () => {
 
   test("NOTICE, which the package ships, names every copyright a ported file's header does", () => {
     const notice = readFileSync(join(ROOT, "NOTICE"), "utf8");
-    // pipedog's ports are BSD-2, pi-mono's MIT.
+    // pipedog's ports are BSD-2, pi-mono's and deepseek-harness's MIT.
     const holders = new Map<string, Set<string>>([
       ["BSD-2-Clause", new Set()],
       ["MIT", new Set()],
     ]);
-    for (const file of globSync("packages/*/src/**/*.ts", { cwd: ROOT })) {
+    for (const file of globSync("{apps,packages}/*/src/**/*.ts", { cwd: ROOT })) {
       const source = readFileSync(join(ROOT, file), "utf8");
       const license = /^\/\/ SPDX-License-Identifier: (BSD-2-Clause|MIT)$/m.exec(source)?.[1];
       if (license === undefined) continue;

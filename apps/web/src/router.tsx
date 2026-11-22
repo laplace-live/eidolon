@@ -6,6 +6,7 @@ import { createBrowserRouter, data, type LoaderFunctionArgs, redirect } from "re
 import { AppShell, FrameLayout, PageLayout } from "@/components/app-shell";
 import { RouteError } from "@/components/route-error";
 import { Spinner } from "@/components/ui/spinner";
+import { WindowDragStrip } from "@/components/window-drag-strip";
 import { firstRunRedirect } from "@/features/setup/first-run";
 import { ApiError, call, type Status } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
@@ -19,6 +20,7 @@ export interface RouterDeps {
 function Loading() {
   return (
     <div className="flex min-h-svh items-center justify-center">
+      <WindowDragStrip className="fixed inset-x-0 top-0" />
       <Spinner className="size-6 text-muted-foreground" />
     </div>
   );

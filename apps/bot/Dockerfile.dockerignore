@@ -32,3 +32,7 @@ apps/web/*
 # checkout. Its manifest stays for --frozen-lockfile.
 apps/eidolon/*
 !apps/eidolon/package.json
+
+# The desktop app never ships: production never runs it. Its manifest stays for --frozen-lockfile.
+apps/desktop/*
+!apps/desktop/package.json

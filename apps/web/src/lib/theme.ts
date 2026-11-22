@@ -57,6 +57,19 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/** The setting as chosen: System stays "system" whichever theme it resolves to. */
+export function themeSetting(): Theme {
+  return state.theme;
+}
+
+/**
+ * Calls `listener` with the setting whenever the theme is applied, as it is again when the OS's
+ * theme changes under System.
+ */
+export function onThemeChange(listener: (theme: Theme) => void): () => void {
+  return subscribe(() => listener(state.theme));
+}
+
 export function useTheme(): ThemeState & { setTheme: typeof setTheme } {
   return { ...useSyncExternalStore(subscribe, () => state), setTheme };
 }

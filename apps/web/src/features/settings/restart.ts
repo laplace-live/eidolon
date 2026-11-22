@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { call } from "@/lib/api";
+import { desktop } from "@/lib/desktop";
 import { toastError } from "@/lib/feedback";
 
 const WAIT_MS = 60_000;
@@ -42,7 +43,11 @@ export function useRestart() {
         await queryClient.invalidateQueries();
         toast.success(t`Eidolon restarted.`);
       } else {
-        toast.error(t`Eidolon didn't come back. Start it again from the terminal.`);
+        toast.error(
+          desktop()
+            ? t`Eidolon's server didn't come back. Quit Eidolon and open it again.`
+            : t`Eidolon didn't come back. Start it again from the terminal.`,
+        );
       }
     } catch (error) {
       toastError(error);

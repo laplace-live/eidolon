@@ -26,19 +26,23 @@ on:
       - "vitest.config.ts"
       - "tsconfig.scripts.json"
       - "tsconfig.no-bun.d.ts"
-      # The bot never runs these. The image copies nothing from apps/cli, apps/web or apps/eidolon
-      # but their manifests, whose dependency changes also reach bun.lock, and leaves
-      # apps/bot/src/local out. packages/ingest, packages/assistant and packages/sdk hold only while
-      # nothing the bot image loads imports @eidolon/ingest, @eidolon/assistant or
-      # @laplace.live/eidolon-sdk, which Biome rules enforce.
+      # The bot never runs these. The image copies nothing from apps/cli, apps/web, apps/eidolon or
+      # apps/desktop but their manifests, whose dependency changes also reach bun.lock, nor
+      # .env.example, and leaves apps/bot/src/local out. packages/ingest, packages/assistant and
+      # packages/sdk hold only while nothing the bot image loads imports @eidolon/ingest,
+      # @eidolon/assistant or @laplace.live/eidolon-sdk, which Biome rules enforce, and apps/desktop
+      # while production's import graph reaches none of it (boundaries.test.ts).
       - "apps/cli/**"
       - "apps/web/**"
       - "apps/eidolon/**"
+      - "apps/desktop/**"
       - "apps/bot/src/local/**"
       - "packages/ingest/**"
       - "packages/assistant/**"
       - "packages/sdk/**"
       - ".agents/**"
+      - ".github/workflows/desktop.yml"
+      - ".env.example"
   pull_request:
     branches:
       - "master"
@@ -59,11 +63,14 @@ on:
       - "apps/cli/**"
       - "apps/web/**"
       - "apps/eidolon/**"
+      - "apps/desktop/**"
       - "apps/bot/src/local/**"
       - "packages/ingest/**"
       - "packages/assistant/**"
       - "packages/sdk/**"
       - ".agents/**"
+      - ".github/workflows/desktop.yml"
+      - ".env.example"
   repository_dispatch:
     types:
       - webhook

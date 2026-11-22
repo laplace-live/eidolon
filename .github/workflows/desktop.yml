@@ -1,0 +1,146 @@
+name: Desktop
+
+# The desktop app (apps/desktop) built, packaged unsigned and checked on each target it ships for.
+# Its payload comes from bun.lock and the backend's packages, so a change to either runs this too.
+
+on:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A push to a pull request cancels the run it supersedes; a dispatch neither waits nor cancels.
+concurrency:
+  group: desktop-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: darwin-arm64
+          - os: windows-latest
+            target: win32-x64
+    # Bash on Windows too: PowerShell splits -c.compression=store into -c and a config path.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        timeout-minutes: 5
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-node@v7
+        timeout-minutes: 5
+        with:
+          node-version: 24
+
+      # As release.yml installs: no build step needs a package's install script, and a signing
+      # step must follow none.
+      - id: install
+        timeout-minutes: 10
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # Stages this target's backend in apps/desktop/.stage, then builds main, the preload and the
+      # shell pages.
+      - id: build
+        timeout-minutes: 20
+        run: bun run build:desktop
+
+      # Unsigned, at 0.0.0-dev: ad hoc on macOS and never with a keychain identity
+      # (scripts/package.ts), NSIS on Windows.
+      - id: package
+        timeout-minutes: 20
+        run: bun run package:desktop -c.compression=store
+
+      # What the payload holds, pinned to bun.lock; its natives loading from it; on Windows the VC++
+      # runtime beside them and every DLL signed by Microsoft or listed to sign; and, packaged after
+      # it, the app holding it file for file.
+      - name: The staged payload
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 15
+        run: bun run test apps/desktop/test/stage.test.ts
+        env:
+          EIDOLON_REQUIRE_STAGE: "1"
+
+      - name: The backend's tests on Electron's Node
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'macOS' }}
+        timeout-minutes: 30
+        run: node apps/desktop/scripts/test-on-electron.ts
+
+      # The whole suite doesn't run on Windows: these are the tests ts.yml's windows job runs there.
+      - name: Windows' own tests on Electron's Node
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Windows' }}
+        timeout-minutes: 20
+        run: |
+          node apps/desktop/scripts/test-on-electron.ts packages/config/test/which.test.ts \
+            packages/config/test/process.test.ts packages/config/test/pypath.test.ts \
+            apps/eidolon/test/launcher.test.ts apps/bot/test/local/jobs-runner.test.ts
+          node apps/desktop/scripts/test-on-electron.ts packages/assistant/test/shell.test.ts \
+            packages/assistant/test/mcp-stdio.test.ts packages/assistant/test/eidolon-command.test.ts \
+            packages/assistant/test/path.test.ts packages/assistant/test/bash-windows.test.ts \
+            packages/ingest/test/limit.test.ts \
+            -t "Windows|its children, when the host exits without closing it"
+          node apps/desktop/scripts/test-on-electron.ts apps/cli/test/cli.test.ts -t relayStopMessages
+
+      # The packaged app in apps/desktop/.out on a temporary data home and profile, driven through
+      # its backend's API, with no window shown. On Windows it installs the NSIS setup silently
+      # first and uninstalls it after.
+      - id: smoke
+        name: The packaged smoke
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        timeout-minutes: 15
+        run: bun run smoke:desktop
+        env:
+          EIDOLON_DESKTOP_BACKGROUND: "1"
+
+      # A failed run keeps its folder: its results, the app's logs and its launches' output. Not
+      # its home, which holds local-token, nor the rest of its profile.
+      - name: Upload the failed smoke's logs
+        if: ${{ failure() && steps.smoke.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 5
+        with:
+          name: ${{ runner.os }}-smoke-desktop
+          path: |
+            ${{ runner.temp }}/eidolon-smoke-desktop-*/results.json
+            ${{ runner.temp }}/eidolon-smoke-desktop-*/profile/logs
+            ${{ runner.temp }}/eidolon-smoke-desktop-*/scratch
+          retention-days: 7
+
+      # Adds a throwaway CA to this runner's trust store, and deletes the certificate after.
+      - name: "--use-system-ca on the packaged binary"
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        timeout-minutes: 10
+        run: node apps/desktop/scripts/system-ca.ts
+
+      # Not the macOS zip, which only updates read: a dev build takes none. upload-artifact skips a
+      # hidden folder such as .out unless told.
+      - name: Upload the installers
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 15
+        with:
+          name: ${{ runner.os }}-installers-dev
+          path: |
+            apps/desktop/.out/*.dmg
+            apps/desktop/.out/*.exe
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

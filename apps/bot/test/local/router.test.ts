@@ -39,7 +39,7 @@ test("a handler that throws is a 500 with a fixed message, and an id that names 
   expect(response.status).toBe(500);
   expect(error).toEqual({
     code: "internal",
-    message: "Eidolon hit an error; the terminal has the details",
+    message: "Eidolon hit an error; its log has the details",
     id: expect.stringMatching(/^[0-9a-f]{8}$/),
   });
   for (const leak of [thrown.message, "credentials.json", "router.test.ts", "    at "]) {

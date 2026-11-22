@@ -13,6 +13,7 @@ import { Link } from "react-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { Status } from "@/lib/api";
+import { desktop } from "@/lib/desktop";
 import { studioPath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 import type { MicProblem } from "./media";
@@ -89,7 +90,9 @@ function endingOf(end: CallEnd, sessionError: string | null): Ending | null {
   if (end.status === 401) {
     return {
       title: t`Couldn't connect the call.`,
-      detail: t`This page isn't signed in. Open the link from the terminal.`,
+      detail: desktop()
+        ? t`This window isn't signed in. Quit Eidolon and open it again.`
+        : t`This page isn't signed in. Open the link from the terminal.`,
       error: true,
     };
   }

@@ -277,9 +277,11 @@ export function FactSheet({
   if (target !== null && target !== shown) setShown(target);
   return (
     <Sheet open={target !== null} onOpenChange={(open) => !open && onClose()}>
+      {/* Full width in a narrow window, it stops short of the macOS traffic lights in the desktop
+          app: they end at env(titlebar-area-x), which is 0 on Windows. */}
       <SheetContent
         showCloseButton={false}
-        className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
+        className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl shell:data-[side=right]:w-[calc(100%-env(titlebar-area-x,0px))]"
       >
         <SheetHeader className="relative gap-1.5 border-b p-6 pr-14">
           <SheetTitle className="break-all font-semibold text-xl tracking-tight">

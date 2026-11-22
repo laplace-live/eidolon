@@ -2,6 +2,7 @@
 import type { MessageDescriptor } from "@lingui/core";
 import { msg, t } from "@lingui/core/macro";
 import { ApiError, type ClientErrorCode, type ErrorCode } from "@/lib/api";
+import { desktop } from "@/lib/desktop";
 import type { Category, RoleId } from "@/lib/providers";
 
 export const ROLE_LABELS: Readonly<Record<RoleId, MessageDescriptor>> = {
@@ -109,9 +110,31 @@ const ERRORS: Readonly<Record<ErrorCode | ClientErrorCode | "unknown", MessageDe
   "skill-exists": msg`Eidolon's skills folder already has a skill by that name.`,
 };
 
+/** The desktop app's own, for the sentences that send the viewer to a terminal it doesn't have. */
+const DESKTOP_ERRORS: Partial<Record<ErrorCode | ClientErrorCode, MessageDescriptor>> = {
+  unreachable: msg`Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and open it again.`,
+  unauthorized: msg`This window isn't signed in. Quit Eidolon and open it again.`,
+  "proof-missing": msg`This window isn't signed in. Quit Eidolon and open it again.`,
+};
+
+/** Where its logs are: Show Logs is in macOS's Help menu, and elsewhere in the tray icon's menu. */
+const DESKTOP_INTERNAL = {
+  help: msg`Eidolon hit an internal error. Show Logs in the Help menu has the details.`,
+  tray: msg`Eidolon hit an internal error. Show Logs in the tray icon's menu has the details.`,
+};
+
 /** What an error says to the viewer: its code's sentence, else a general one. */
 export function errorMessage(error: unknown): MessageDescriptor {
-  return error instanceof ApiError ? (ERRORS[error.code] ?? ERRORS.unknown) : ERRORS.unknown;
+  if (!(error instanceof ApiError)) return ERRORS.unknown;
+  const app = desktop();
+  if (app !== null) {
+    if (error.code === "internal") {
+      return app.platform === "darwin" ? DESKTOP_INTERNAL.help : DESKTOP_INTERNAL.tray;
+    }
+    const own = DESKTOP_ERRORS[error.code];
+    if (own !== undefined) return own;
+  }
+  return ERRORS[error.code] ?? ERRORS.unknown;
 }
 
 /** `items` as one list in the active language: "a, b" or "a、b". */

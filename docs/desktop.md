@@ -1,0 +1,964 @@
+# The desktop app
+
+Eidolon, the desktop app (`apps/desktop`, the private package `laplace-eidolon-desktop`), is the
+local app in a window that starts its own backend, on macOS (Apple silicon) and Windows (x64): no
+terminal, no Node or Bun to install, and no link to sign in with. The window shows `apps/web` as it
+is, served by the same local server `bun run app` and `npx @laplace.live/eidolon` run, in local
+mode only, so production never sees it. Electron's own binary runs that server as Node, so the app
+ships no other runtime. It has no release yet: `bun run package:desktop` builds it unsigned, and
+signing, updates and releases come later.
+
+```text
+Eidolon (main process)
+ ├─ the single-instance lock: a second launch shows the window, or quits the app with --quit
+ ├─ the environment: the login shell's on macOS, the launch's on Windows
+ ├─ the data home: EIDOLON_HOME, else ~/.laplace/eidolon
+ ├─ the backend controller, one attempt at a time
+ │    ├─ attach: locks/4273f434b594.info names a live server that proves it holds local-token
+ │    └─ spawn:  <app binary> --disable-sigusr1 --use-system-ca <payload>/dist/server.js
+ │                 --host 127.0.0.1 --port 7860 --no-open      (--port 0 when 7860 is taken,
+ │                                                             and in background mode)
+ ├─ the eidolon-app: scheme
+ │    ├─ shell/  the loading and failure pages
+ │    └─ app/    forwarded to the backend, with the Bearer only main holds
+ └─ the window at eidolon-app://app/: sandboxed, with the preload's bridge
+```
+
+```text
+apps/desktop/
+  electron-builder.yml   the packaging config: fuses, targets, the payload as an extra resource
+  resources/             build resources: entitlements, installer.nsh, the icon, and the designated
+                         requirement release builds will carry
+  assets/                what main loads at run time through process.resourcesPath: the tray icon
+  scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
+                         zip.ts and natives.ts; vite-common.ts, electron-env.ts;
+                         test-on-electron.ts, the Electron lane; system-ca.ts, CI's system CA
+                         proof; dev-smoke.ts with dev-smoke/, the dev smoke; smoke.ts, the
+                         packaged smoke; and smoke/, the kit both share, with the packaged
+                         smoke's packaged.ts and nsis.ts
+  src/main/              main: the Electron-free modules that decide (controller, attach, forwarder,
+                         backend, environment, login-shell, pages, policy, menus, window-options,
+                         quit-check, quit-flow, strings, shell-pages, log-filter, log-files,
+                         background), and thin Electron layers over them (index, instance,
+                         protocol, window, chrome, menu, tray, permissions, navigation, native,
+                         quit, log)
+  src/preload/           the sandboxed CommonJS preload: the page's marks and its bridge
+  src/shared/bridge.ts   the IPC channels and who may send on each; it imports nothing
+  src/shell/             the loading, failure and waiting pages
+  test/                  Vitest, for the Electron-free modules
+```
+
+## Running it
+
+| Command | What it runs |
+| --- | --- |
+| `bun run dev:desktop` | `scripts/dev.ts`: watch-builds main, the preload and the shell pages, serves `apps/web` from Vite on `127.0.0.1:5173`, and runs the unpackaged app with `--eidolon-dev-server`, its backend from source. It builds `apps/web/dist` first when there is none, since that backend won't start without one. Arguments after it go to Electron, such as `--user-data-dir=<folder>` |
+| `bun run build:desktop` | `scripts/build.ts`: stages this machine's backend in `apps/desktop/.stage/<target>/eidolon` ([The payload](#the-payload)), then Vite-builds `apps/desktop/dist`: main as one ES module with every dependency but `electron` inlined, the preload as CommonJS (a sandboxed preload can't be a module), and the shell pages |
+| `bun run package:desktop` | `scripts/package.ts`: electron-builder on `dist/` and this machine's stage, into `apps/desktop/.out`, unsigned, at version `0.0.0-dev` ([Packaging](#packaging)). Arguments after it go to electron-builder, such as `-c.compression=store` |
+| `bun run smoke:desktop:dev` | `scripts/dev-smoke.ts`, the dev smoke, on macOS: builds `apps/web/dist` and `apps/desktop/dist` (`--no-build` runs on what is there), then walks the unpackaged app under Playwright on a temporary home and profile with its providers faked, in background mode unless `--headful`, a line per step ([The dev smoke](#the-dev-smoke)). `--keep` keeps its screenshots and results after a pass |
+| `bun run smoke:desktop` | `scripts/smoke.ts`, the packaged smoke: the app `package:desktop` left in `apps/desktop/.out`, on a temporary home and profile with its providers faked, in background mode unless `--headful`, driven through its backend's API; on Windows it installs the NSIS setup first and uninstalls it after ([The packaged smoke](#the-packaged-smoke)). It never builds or packages |
+
+Closing the window only hides it. Quit from the menus, ⌘Q, the tray, or a second launch with
+`--quit` (and the run's `--user-data-dir`, if it had one), which `dev:desktop` follows by closing
+Vite and exiting:
+
+```bash
+"$(cd apps/desktop && node -p 'require("electron")' | tail -n 1)" apps/desktop --quit
+```
+
+`require("electron")` from `apps/desktop` gives the path to Electron's binary, which its package
+downloads on first use, after printing a line of its own to stdout: hence the `tail`. Unpackaged,
+the profile is `Eidolon Dev`, never the installed app's, and the dev backend uses the normal data
+home: a `bun run app` or `dev:local` already serving it is
+[attached to](#attaching-to-a-server-already-on-the-data-home), not replaced. Every test run of
+the app is in [background mode](#background-mode).
+
+## The processes
+
+- **Main** (`src/main`, built to `dist/main/index.js`) holds the profile, the single-instance lock,
+  the environment and the data home, the backend controller, the `eidolon-app:` scheme and its
+  forwarder, the window, the menus, the tray and the logs. No backend code runs in it or in the
+  window: `apps/desktop/src` loads at run time only `electron`, `electron-updater`, `electron-log`,
+  `undici`, `node:*` and its own modules, and takes `@eidolon/*` and `apps/bot` as types alone
+  (`test/boundary.test.ts`). So main imports no `@eidolon/config` either: it finds the payload
+  through `process.resourcesPath` when packaged, or the checkout when not, and mirrors the few
+  things it needs (`jsRuntime().args`, `dataHome()`), each held equal to the original by a test.
+- **The backend** is the local server, run by the app's own binary as Node
+  (`ELECTRON_RUN_AS_NODE=1`): packaged, the payload's `dist/server.js`; unpackaged, the checkout's
+  `apps/bot/src/local/server.ts`, whose types the dev Electron's Node strips. Its jobs, grep's
+  matcher and the `eidolon` command its tasks run start the same binary through `jsRuntime()`.
+- **The window** is one BrowserWindow: a sandboxed renderer with context isolation, no Node
+  integration and no `<webview>`, and the preload, `dist/preload/index.cjs`.
+
+### Startup
+
+`instance.ts` runs first, before any other module can touch the profile or start a log:
+
+1. [Background mode](#background-mode) is read first of all: on macOS it makes the app an
+   accessory from main's first line, though macOS has shown the launch's Dock icon for its first
+   50–150 ms by then.
+2. A packaged launch with `--remote-debugging-port` or `--remote-debugging-pipe`, which no fuse
+   covers, exits 1 before the profile, the logs and the lock exist.
+3. Unpackaged, the profile (userData) becomes `<appData>/Eidolon Dev`, unless the launch passes
+   `--user-data-dir`, as a test run does. Whenever the profile isn't the default, the logs move
+   into `<profile>/logs`: on macOS `app.getPath("logs")` is `~/Library/Logs/Eidolon` whatever the
+   profile, so a test would append to the installed app's logs.
+4. The single-instance lock, scoped to the profile. A second launch shows and focuses the window,
+   from hidden or minimized, or makes it again if the page closed it; with `--quit` it quits the
+   running app through the normal quit, and with no app running it exits 0 and starts nothing.
+
+Then main registers the scheme and, on Windows, sets the AppUserModelID `live.laplace.eidolon`,
+which the installer's shortcut carries, before any window. Once Electron is ready it installs the
+session's permission handlers, the scheme's handler, the bridges' handlers, the menus and, on
+Windows outside background mode, the tray, opens the window on the loading page, and only then
+reads the environment, resolves the data home and starts the controller. The window moves to
+`eidolon-app://app/` once the backend is ready. The data home is `EIDOLON_HOME` from that
+environment, else `~/.laplace/eidolon` (`%USERPROFILE%\.laplace\eidolon`), the one npx and
+`bun run app` use; the backend gets it as its `EIDOLON_HOME`, so the two never read different
+homes.
+
+### The backend
+
+Main spawns its own backend as the diagram shows, with [its environment](#the-environment), stdio
+`ignore`, `pipe`, `pipe` and `ipc`, the home folder as its working folder (so it holds no handle on
+the install folder), its console hidden, and not detached.
+
+- **Ready** is the IPC message `{kind: "listening", port}`; any other message is logged and
+  ignored. Main reads `local-token` after every listening, since a first start writes it and
+  deleting it makes the next start write another.
+- **The port** is 7860 first. Main test-binds `127.0.0.1:7860` and, when that fails with
+  `EADDRINUSE` or `EACCES` (a Hyper-V or WinNAT excluded range on Windows), spawns with `--port 0`
+  at once: the server would meet the error only after loading everything. A race lost anyway, an
+  exit 1 on `port … is taken by another program` or `listen EACCES`, respawns on `--port 0`. The
+  server never falls back by itself. In [background mode](#background-mode) the first spawn asks
+  for `--port 0` straight away.
+- **Its exits:** 0, stopped, or before any listening, this home's server already serves the port
+  asked for; 75, a restart; 1, an unusable token, a port another program holds, or a crash at boot;
+  2, a usage error, a missing web build, or a home another server holds on another port. The two
+  refusals are [attaching's](#attaching-to-a-server-already-on-the-data-home).
+- **A restart** (exit 75, as Settings' Restart asks) respawns on the same port. From a forwarded
+  `POST /api/local/restart` answering 2xx, or the exit itself, until the new listening, the
+  forwarder holds requests and sends no Bearer, so whatever binds the freed port in the gap gets
+  nothing.
+- **A failure** shows the failure page: a spawn that fails, any other exit, an exit 75 before any
+  listening, no listening within 60 s, no `local-token` to read once it listens, or 60 s without an
+  answer after a connection to it was refused. Main stops a backend that failed while it ran.
+- **The stop:** `child.disconnect()`, which the server takes as its stop on every platform: main
+  keeps the IPC channel open for the backend's whole life, so its closing is the trigger. After
+  10 s main sends `kill()` (SIGTERM on macOS, TerminateProcess on Windows), after 5 s more, off
+  Windows, SIGKILL, and after 5 s more it logs and gives up. It never kills a tree: the server's
+  own stop asks its jobs to stop and ends its commands' and MCP servers' trees, and a detached job
+  outlives a forced stop, as under npx. No request carries the Bearer once the stop begins, and
+  main never stops a server it attached to.
+- **If main dies** on macOS, its IPC channel closes and the server stops itself, even one still
+  booting; on Windows the backend sits in main's job object and ends with it, without its own
+  stop, as under npx's launcher.
+- **Windows' session end** never reaches `before-quit`: Electron emits `session-end` to each window
+  and then ends the process. So the stop starts on the window's `query-session-end`, whose handler
+  only disconnects and returns (Node closes the channel on the next tick, which a handler that
+  blocked would never reach), and `session-end` waits, blocking, up to about 4 s for every stop
+  under way: that one, or a quit's or a failure's begun before the owner signed out, since Electron
+  ends main, and the backend in its job object with it, once `session-end` returns. If another app
+  vetoes the shutdown, the backend starts again 10 s later.
+- **Its waits** (the 60 s after a refused spawn, an attached server's grace, the hold on our own
+  backend after a refused connection, and the forwarder's 15 s hold) count the timers' time
+  (`performance.now()`), not the wall clock's. A Mac's sleep stops the first and moves the second
+  on, so a wait spanning a sleep would end at its first probe after waking, and stop a healthy
+  backend as unanswered.
+
+## The forwarder
+
+The window loads `eidolon-app://app/`, and main answers every request to that host by forwarding it
+to the server it proved ([Attaching](#attaching-to-a-server-already-on-the-data-home)), adding
+`Authorization: Bearer <local-token>`. The page never holds a credential: no link code, cookie or
+proof, nor the token.
+
+- **The scheme,** `eidolon-app`, is registered once, before Electron is ready, as `standard` (a
+  tuple origin, with localStorage and IndexedDB), `secure` (the secure context `getUserMedia`
+  needs), `supportFetchAPI`, `corsEnabled`, `stream` (so `<audio>` plays a streamed answer: voice
+  bubbles, the voice picker) and `codeCache`; with no `bypassCSP` and no service worker. Its
+  handler, on the default session, serves the shell host's pages, forwards the app host, and
+  answers any other host 404. The default session loads only `eidolon-app://` pages; anything
+  embedded from elsewhere would need a partition of its own. Electron turns Chromium's Local Network
+  Access checks off, so the page's loopback traffic (WebRTC to werift, Vite's HMR in dev) asks for
+  no permission.
+- **Who gets the Bearer:** only a request whose `initiatorOrigin` is `eidolon-app://app`, or is
+  absent, as main's own loads and downloads are. Electron fills it in from the frame that made the
+  request, which the page can't change. Any other initiator, another host of the scheme or an
+  opaque origin (`null`) such as a sandboxed attachment, gets 403 and is never forwarded. The
+  `Origin` header can't decide this: Electron hands the scheme's handler none for a fetch, and
+  Chromium applies no CORS to the scheme, so an Origin check would make any document in the session
+  a full API client. Origins compare by protocol and host, since Node's `URL` gives a custom
+  scheme's origin as `null`.
+- **The proof on every new connection.** A server restarted elsewhere while no connection was open
+  gives no sign at all, and whatever binds its port next, another local account included, would
+  get the next connection. So each new connection the forwarder opens to the backend first carries
+  the probe ([below](#attaching-to-a-server-already-on-the-data-home)) over that same socket, and
+  only one that proves itself carries a request; for an attached server, its lock's `.info` must
+  also still name that address and the pid main attached to, alive: a relay on the old port can't
+  pass the probe on to a server that moved, and a server restarted at that address, which holds
+  the same token, is attached to afresh through a grace period, as the new process it is, whose
+  version main reads. A connection that doesn't prove itself is destroyed and handled as a refused
+  one. The cost is one loopback round trip per new connection, under the probe's 2 s deadline.
+- **Holding.** From a forwarded `POST /api/local/restart` that answers 2xx, our own backend's exit
+  75, a refused or unproven connection, or an [attached server's grace
+  period](#attaching-to-a-server-already-on-the-data-home), requests wait, with no Bearer, until a
+  server is ready again: our new child's listening, or a fresh proof. A request still held after
+  15 s gets the no-backend answer below and is never forwarded; apps/web's restart poll, which
+  waits 60 s, rides that out. A refused request without a body is sent again once a server is
+  ready; one with a body gets the no-backend answer at once, since undici has already taken its
+  body and the forwarder never buffers one.
+- **No backend,** at startup, after a failure, or when a fetch fails otherwise: a document request
+  (a GET or HEAD whose `Accept` names `text/html`: a navigation through the scheme carries no
+  `Sec-Fetch-*`) gets the waiting page, served in place at the app's address; every other request
+  gets 503 `{"error":{"code":"unreachable","message":"Eidolon's server isn't running"}}`, which
+  apps/web reads as its `unreachable` error while its restart poll keeps polling. The waiting page
+  is passive, and main reloads the window once a server answers. It is a 200, because Chromium logs
+  a document answered with a 5xx as a console error, which a walk such as local-smoke's counts as a
+  failure.
+- **Requests** go through undici's `fetch` with `redirect: "manual"`, so no redirect is followed
+  with the Bearer, and an `Agent` whose `bodyTimeout` and `headersTimeout` are 0: undici's 300 s
+  defaults would cut an NDJSON stream that idles, such as a task card waiting on the owner.
+  `host`, `origin`, `cookie`, `sec-fetch-site`, `x-eidolon-proof` and the page's own
+  `authorization` are dropped: the server's guard answers 421 to a Host that isn't its loopback
+  address and 403 to a foreign `Origin` or `Sec-Fetch-Site`, and the page's cookie, proof and
+  `Authorization` are no credentials here. The rest passes, and a body goes on as the stream it
+  came as.
+- **Answers** pass through with their status and streaming body, without `set-cookie`, which would
+  fill the page's cookie jar, `content-encoding` and `content-length`, since undici decodes the
+  body, and the hop-by-hop headers. The scheme's request has no signal: when the page aborts,
+  Electron cancels the body it relays, which is the upstream body itself, never a copy, and that
+  ends the upstream request.
+- **What goes through it:** chat and job NDJSON streams and their cancellation, uploads, range
+  requests, `/api/ice-servers` and the WebRTC offer. A call's media flows peer to peer, to werift on
+  loopback, outside it.
+- **Three connection pools:** the page's, whose closing connections tell the controller an attached
+  server may have changed; main's own, for its quit check and version reads, whose idle closes tell
+  it nothing, or an attached app would re-prove the server every few seconds; and in dev Vite's,
+  which carries no Bearer and needs no proof.
+- **In dev** (`--eidolon-dev-server`, which `dev:desktop` passes and main honours only unpackaged),
+  every path but `/api` and `/mcp` goes to Vite on `127.0.0.1:5173`, or gets 502 when Vite doesn't
+  answer. Vite's HMR socket names that address, since the page is at `eidolon-app://app`. Without
+  the switch, an unpackaged backend serves the checkout's `apps/web/dist`.
+
+## Attaching to a server already on the data home
+
+A data home runs one server, whichever started it: the desktop app, `bun run app` or npx
+([web-app.md](web-app.md#running-it)). The app uses a server that already holds its data home,
+and leaves it running when it quits.
+
+- **The hint.** `<home>/locks/4273f434b594.info` is JSON with the holder's `pid`, and once it
+  listens its `port` and `host`, the first loopback address it bound (`127.0.0.1`, `[::1]`). It is
+  only a hint, written in place and left behind by a crash: one that doesn't parse is no hint, and
+  main never opens the `.lock` itself. A server whose `.info` records no `host`, one from before the
+  hint carried it, is never probed: the probe proves only what answers on one address, and with the
+  server on `::1`, another local account could bind `127.0.0.1` and relay it.
+- **The probe.** When the hint names a pid that is alive, a port and a host, and `local-token`
+  holds a token, main sends `GET http://<host>:<port>/api/local/session?probe=<nonce>` over a
+  connection of its own, with a 2 s deadline, and compares the answer's `proof` with
+  HMAC-SHA256(local-token, `"probe:" + nonce`) in constant time; neither side sends the token. A
+  match attaches: the forwarder targets exactly that address with that token, and main spawns
+  nothing.
+- **A refused spawn.** A server can start between the probe and main's spawn, which then refuses:
+  exit 0 after printing `Eidolon is already running:` (the holder serves the port asked for), or
+  exit 2 naming the holder's pid and port, or its pid alone while it hasn't recorded its port. After
+  a refusal main never spawns again on its own: it re-reads the hint and probes every 500 ms for up
+  to 60 s, attaches to the first server that proves itself, and otherwise shows the failure page
+  naming the holder, with Try Again. A holder can keep the lock without answering (a server whose
+  listener closed while its jobs stop, or one whose `local-token` was deleted under it), and
+  respawning in a loop would boot a whole backend each round, or take the lock from a terminal
+  supervisor's next child, which would then exit 2 and end `bun run app`.
+- **While attached,** quitting leaves the server running and asks nothing. A refused or unproven
+  connection, a forwarded restart answering 2xx, or one of the page's connections to it closing
+  starts a grace period, never a takeover: requests wait without the Bearer while main re-reads the
+  hint and probes every 500 ms for up to 60 s, and a fresh proof resumes forwarding, which after an
+  ordinary idle close costs one round trip. Only after 60 s with no server on the data home does
+  main spawn its own, on that port, under the refusal rule above; spawning sooner would race the
+  terminal supervisor's new child for the lock, and replace the owner's server if it won.
+- **The page matches the server.** It comes from whichever server answers, so its UI and API match
+  even when a terminal's server runs another version; only the desktop's chrome can be missing
+  then. Main reads each server's version from `GET /api/local/status` once, before the window
+  follows it, for the bridge and the About panel. Main reloads the app's page when a server other
+  than the one it loaded the page from is ready next at another version, or at one its 2 s read
+  missed: after a grace that ends on our own backend, or a terminal's server restarted onto another
+  version. A restart onto the same version keeps the page, which apps/web's restart flow recovers
+  without a reload, and so does the page's own server when its version reads only later.
+
+## The window
+
+One window, 1280×820 at first and at least 520×600, never larger than the work area of the display
+it opens on (the primary one, centred, when it has no position, as at first), hidden until its first
+page is ready to paint, at the bounds it had last: `window-bounds.json` in the profile, written
+through a temporary file. A saved position is dropped when no display shows 100×40 px of the
+window's top, and a window saved maximized is maximized only once it has painted, since
+`maximize()` shows a hidden window. Main owns its title.
+
+- **Its pages.** The window shows `eidolon-app://shell/loading` until the backend is ready, then
+  `eidolon-app://app/`. The failure page, `eidolon-app://shell/failed`, says why in the shell's
+  language, shows the backend's last stderr lines under Details (those since it listened, if it
+  did), and offers Try Again, Show Logs and Quit. It shows when the backend fails or the window's
+  own page does: a main frame's load failing other than by an abort, the preload erroring, or the
+  renderer gone. Try Again starts the backend again only when it failed; after the page's own
+  failure it goes back to the app, or to the loading page until the backend is ready. Shell pages
+  navigate nowhere: main moves the window, and never loads the failure page again from its own
+  failure.
+- **The shell pages** are Vite's build of `src/shell`, filled in when main serves them, each under a
+  CSP that allows its own inline style by hash and, on the failure page alone, its script from the
+  shell host: no `'unsafe-inline'`, and `frame-ancestors 'none'`. The waiting page is served at the
+  app's address, so its style must stay inline and it has no script: a path there reaches the
+  backend. Each has a drag strip at the top as tall as the web app's header row, or the title-bar
+  area if that's taller.
+- **The bridges.** The preload marks `<html>` (`data-shell`, and on macOS `data-fullscreen`) for
+  apps/web's chrome ([web-app.md](web-app.md#in-the-desktop-app)), and gives each page its own
+  bridge, in its main frame alone. The app's page gets `window.eidolonDesktop`: `platform`,
+  `version` and `serverVersion`, read before the page's first script over a synchronous message
+  main answers from what it already knows (`version` is `0.0.0-dev` unpackaged), and `setTheme`,
+  `setLanguage` and `onCommand`. A shell page gets `window.eidolonShell`: `retry`, `showLogs` and
+  `quit`. Main takes each message only from the window's own webContents and main frame, on the
+  channel's own page, judged by the frame's origin, never its URL: a sandboxed document the backend
+  serves has an app URL and an opaque origin (`accepts()` in `src/shared/bridge.ts`).
+- **The theme** the page reports goes to `nativeTheme.themeSource` as it is, `system` included: a
+  resolved theme would pin `prefers-color-scheme` and stop the page's System from following the OS.
+  Native menus, dialogs and Windows' caption buttons follow it.
+- **A menu's command,** Settings… (⌘, on macOS, the tray's on Windows), goes to the app's page
+  once its script says it listens, so it reaches the page from the loading page or a new window too.
+- **Chrome.** No system title bar. On macOS, `hiddenInset`, the traffic lights at `{x: 16, y: 20}`,
+  centred on the web app's 56 px first row, and `titleBarOverlay: true`, without which macOS
+  publishes no `env(titlebar-area-*)` for the page's insets. On Windows, a hidden title bar under a
+  transparent 56 px overlay, whose caption glyphs main recolours on each theme change.
+- **Menus and the tray.** macOS's menu bar is declared in full, since a custom menu replaces
+  Electron's: Eidolon (About, Settings…, Services, Hide, Hide Others, Show All, Quit), Edit (its
+  roles, without which copy and paste break), View (zoom, full screen, and Toggle Developer Tools
+  only unpackaged), Window (⌘W hides) and Help (Show Logs, Open Data Folder, Licenses). Windows has
+  no menu bar: main sets a menu of View's zoom roles alone, since Electron would otherwise install
+  its default one, whose accelerators act even under a hidden title bar, and a notification-area
+  icon holds the rest for the whole run (Open Eidolon, Settings…, Show Logs, Open Data Folder,
+  Licenses, About Eidolon, Quit Eidolon); a click on it opens the window. Both get a context menu,
+  since Electron has none: cut, copy, paste and select all in a field, copy over selected text. The
+  About panel names the app's version and the server's.
+- **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, dialogs and the shell
+  pages) come in English and Simplified Chinese, following the language the page reports and the
+  system's until it has. Menus and the tray are rebuilt when it changes. Labels are Title Case,
+  which `strings.test.ts` checks with apps/web's own rule.
+- **Links and navigation.** The window never leaves `eidolon-app://`. A link the page opens in a new
+  window goes to the default browser when it is `https:` or `http:`; one to the app's own address,
+  such as an attachment, saves through Electron's Save dialog (`downloadURL`: the window has no
+  tabs); anything else, `file:` and other apps' schemes included, goes nowhere, and no window ever
+  opens. A navigation off the app's address is cancelled, and opened in the browser if it is to the
+  web; a redirect off it is cancelled. `about:blank` raises no `will-navigate` (Chromium runs no
+  navigation throttle for it), so a main frame that lands anywhere off `eidolon-app://` is put back
+  on main's page. A `<webview>` is never attached.
+- **Permissions.** Both of the session's handlers are set before the first load; with none,
+  Electron grants every request and passes every check. The microphone goes only to the app
+  window's main frame whose `securityOrigin` is `eidolon-app://app`, asking for audio alone, and the
+  check handler answers the same by `requestingOrigin`. On macOS main then asks the OS when it
+  hasn't been asked, and once the owner has denied it, which macOS never asks again, says where to
+  turn it on; macOS ties a grant to the app's signature, so each ad-hoc build asks again. Clipboard
+  writes go to that frame too. Everything else, the camera included, is denied. Windows has no
+  per-app prompt: with its privacy setting off, `getUserMedia` fails and apps/web shows its
+  microphone error.
+- **Close.** Closing hides the window, and calls, tasks and jobs run on. On macOS it leaves
+  fullscreen first, since a hidden fullscreen window leaves a black Space behind; on Windows the
+  first hide says once that Eidolon is in the tray (`tray-notice-shown` in the profile). Electron
+  reports an occluded window as hidden and fires show and hide events as fullscreen comes and goes,
+  so main keeps its own record of whether the window shows, which only its own calls change. A
+  page's own `window.close()` destroys the window with no `close` event; the app stays, and a
+  second launch, the Dock or the tray makes a new window.
+- **Quit.** Every quit, ⌘Q, a menu, the Dock, the tray or a second launch's `--quit`, goes through
+  `before-quit`. While our own backend is ready, main first asks it what would stop
+  (`GET /api/local/status` and `GET /api/local/jobs`, with the Bearer, 2 s for both). When a call, a
+  task or a job runs, or it couldn't tell, a "Quit Eidolon?" box names what stops, Quit being the
+  default and Esc cancelling; it has no owner window, so a hidden window stays hidden, and a quit
+  while it is open joins it. An attached server is never asked or stopped. On macOS a power-off
+  skips the box until the window has attention again. Once the quit is approved, main hides the
+  window, removes the tray icon, stops its backend, and quits.
+
+## The environment
+
+The backend runs on the environment main reads, plus four variables of its own, and never a `.env`.
+
+- **macOS.** An app started from Finder or the Dock inherits only launchd's environment, without the
+  `PATH` and variables a terminal has, so main reads the owner's login shell (`login-shell.ts`,
+  ported from deepseek-harness): the account's shell (`os.userInfo().shell`), then zsh, bash and sh,
+  each run as `-ilc` with delimiters around `env -0`, 10 s apiece, its process group killed on a
+  timeout or a quit. When every one fails, the launch environment stands, and main.log names why.
+- **The merge.** The shell's values win, except `PWD`, `OLDPWD`, `SHLVL`, `_` and the probe's own
+  variables; `ELECTRON_*`, which never come from the shell; and an `EIDOLON_*` the launch
+  environment sets to a non-blank value, so a test's or a terminal launch's `EIDOLON_HOME` holds.
+- **When.** Once at startup, which names the data home. The first spawn within 10 s takes that read,
+  so a cold start runs the owner's rc files once; every later spawn reads afresh, so a Restart sees
+  a changed `PATH`.
+- **`EIDOLON_DESKTOP_LOGIN_SHELL=0`** (or `false`, `no`, `off`, in any case) in the launch
+  environment skips the read, and the launch environment is used as it is. A test run of the app
+  sets it, and starts the app with no credential, setting or provider variable, as
+  `local-smoke.ts` starts its server: otherwise a key the developer's shell exports would reach the
+  backend, win over the test's fake accounts (a non-empty variable beats `credentials.json`) and
+  bill.
+- **Windows** takes the launch environment as it is; an Explorer launch carries the registry's user
+  and system variables. Git for Windows installed later is found after a Restart, because
+  `windowsBash()` checks its install folders first, but a tool found only on a newer `PATH` needs
+  the app relaunched. Its names have no case, but a copy of the environment does, and spawn keeps
+  only the first of two spellings, so main reads and writes names without case, one key each: a
+  `Path` stays one key.
+- **The backend's own variables,** set last: `EIDOLON_HOME`, the data home main resolved, so a
+  respawn never serves another; `EIDOLON_APP_ROOT`, the payload, unset unpackaged so files resolve
+  from the checkout; `EIDOLON_NO_DOTENV=1`, so no `.env` is read, unpackaged included; and
+  `ELECTRON_RUN_AS_NODE=1`.
+- **`ELECTRON_RUN_AS_NODE`** makes an Electron binary run as Node at any non-empty value, `0`
+  included, so nothing sets it to mean off. Our own JS starts through `jsRuntime()`, which adds it
+  inside Electron. A task's commands and MCP servers never get it, since `shellEnv()` passes listed
+  names alone, and neither may any spawn that can start a program the owner chose, or an Electron
+  app such as VS Code's `code` would run as Node. yt-dlp keeps it on purpose: its JS runtime is the
+  app binary. Electron's GUI starts without it: `dev:desktop` through `electronEnv()`
+  (`scripts/electron-env.ts`), which deletes it from a copy of the environment, and the smokes on
+  the environment `appEnv()` builds, which takes no `ELECTRON_*` name.
+- **Node mode's flags.** Every node-mode process the app starts carries `--disable-sigusr1
+  --use-system-ca` before its script: `jsRuntime().args` for the jobs, grep's matcher and the
+  `eidolon` command, and main's own copy, `BACKEND_RUNTIME_ARGS`, for the backend. With the
+  packaged app's nodeOptions fuse off, node mode ignores `NODE_OPTIONS` and drops
+  `NODE_EXTRA_CA_CERTS`, so a CA file npx honours never reaches the backend; `--use-system-ca`
+  trusts the OS store instead, a corporate CA included. The inspect fuse doesn't reach node mode,
+  where SIGUSR1 would open an inspector; `--disable-sigusr1` closes it. yt-dlp, which starts its JS
+  runtime itself, can't pass them on.
+
+## The payload
+
+`scripts/stage-backend.ts` stages the backend in `apps/desktop/.stage/<target>/eidolon`, for
+`darwin-arm64` or `win32-x64`: `bun run build:desktop` stages this machine's, and
+`node apps/desktop/scripts/stage-backend.ts --target <target>` names one. A failed stage leaves
+none, and `win32-x64` stages only on Windows, whose Visual Studio redistributable supplies its
+VC++ copies.
+
+- **What it holds:** what the npm package stages, through `apps/eidolon/scripts/build.ts`'s
+  `stage()` (`dist/{server,cli,app}.js`, `web/`, `personas/`, `data/`, the built-in skills,
+  `bin/eidolon.mjs`, the README, LICENSE, NOTICE and THIRD_PARTY_NOTICES.md), plus its runtime
+  dependencies in `node_modules`: onnxruntime-node, werift, libopus-wasm, apache-arrow, sharp and
+  the target's LanceDB binary, whose JS is inlined in `dist/`. Main runs `dist/server.js` with
+  `EIDOLON_APP_ROOT` set to the payload, so `shippedPath` finds everything in it.
+- **Pinned to bun.lock.** The payload's `package.json` is the npm package's manifest plus
+  `overrides` for every package its dependencies reach in `bun.lock`, nested where bun.lock nests a
+  second version. `npm install --omit=dev --ignore-scripts --no-audit --no-fund --no-package-lock
+  --os=<os> --cpu=<cpu>` installs it for the target, and the stage fails unless `npm ls --all
+  --json` shows exactly bun.lock's tree, the target's LanceDB binary included: npm skips an
+  optional dependency it fails to fetch and still exits 0. An npx install resolves afresh, and
+  drifts from what the tests ran. `--ignore-scripts` loses nothing on macOS or Windows.
+- **Pruned:** npm's `.bin` links and its record of the install, and onnxruntime-node down to the
+  target's binding and the one library it loads: on darwin-arm64 `libonnxruntime.1.dylib`, without
+  a second, identical copy; on win32-x64 `onnxruntime.dll`, without DirectML's DLLs, which CPU
+  sessions never load. Type-only packages stay, or `npm ls` would call them missing.
+- **The VC++ runtime on Windows.** LanceDB, which loads at boot, and onnxruntime import it, so a
+  machine without the redistributable couldn't start the backend. Each folder holding a native addon
+  gets the runtime DLLs its natives import (their import and delay-import tables, and what those
+  DLLs import in turn): onnxruntime's folder five, LanceDB's `vcruntime140.dll`. All come from the
+  newest `Microsoft.VC14*.CRT` folder vswhere finds, since whichever copy loads first serves the
+  whole process. Node loads an addon with `LOAD_WITH_ALTERED_SEARCH_PATH`, which looks in its own
+  folder first, so an older System32 copy can't win. The copies shadow System32's, and Windows
+  Update never services them: each release refreshes them. The stage test checks their file
+  version is at least the natives' linker version.
+- **The unsigned-PE list.** `.stage/win32-x64/unsigned-pe.json` names, by basename, each `.node` and
+  `.dll` with an empty certificate table, in the payload and in the Electron zip electron-builder
+  packs (`electron_wer.dll` under its packaged name, `Eidolon_wer.dll`), for a signed release to
+  sign: electron-builder signs only `.exe` unless told, and a whole extension would re-sign
+  Microsoft's files. On a Windows stage, the stage test fails on a `.node` or `.dll` that is neither
+  listed nor signed by Microsoft (`MICROSOFT_SIGNERS`). The list matches by basename, and Electron's
+  unsigned `dxcompiler.dll` shares its name with onnxruntime's signed one, which is safe only while
+  the prune drops onnxruntime's.
+- **Licenses.** `THIRD_PARTY_LICENSES.txt` in the payload, which Licenses opens (the Help menu on
+  macOS, the tray on Windows), holds every license the payload carries: each `node_modules`
+  package's, SPDX's text where one ships none, with libvips's LGPL-3.0-or-later text and where its
+  source is for each package that ships libvips (on Windows, sharp's own platform package); the
+  VC++ runtime's terms on Windows; then the payload's NOTICE, THIRD_PARTY_NOTICES.md (what its
+  bundles and web app include) and the license files under `data/`. Main's build writes the
+  licenses of what it inlines to `dist/main/THIRD_PARTY_LICENSES.md`, and `apps/desktop`'s
+  `LICENSE-deepseek` and `THIRD_PARTY.md` cover the code ported from deepseek-harness.
+
+## Packaging
+
+`bun run package:desktop` runs electron-builder with `--publish never`, `-c.mac.identity=-` and
+`-c.extraMetadata.version=0.0.0-dev`, and with `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never
+signs with an identity from the keychain or asks for one. It needs `dist/` and warns when there is
+no stage. On macOS it writes `.out/mac-arm64/Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
+and `.out/win-unpacked`. The flags stay on the command line, never in `electron-builder.yml`, which
+a release config will extend: an identity there would replace the release's. Builds are unsigned
+(ad hoc on macOS, where that signs every Mach-O, the payload's natives included, with the hardened
+runtime): signing, notarization, the updater and releases come later.
+
+`electron-builder.yml`:
+
+- **Names.** `appId` `live.laplace.eidolon`, `productName` `Eidolon`, which names the profile
+  (`~/Library/Application Support/Eidolon`, `%APPDATA%\Eidolon`) and scopes the single-instance
+  lock, and `extraMetadata.name` `eidolon`, which names the per-user install folder,
+  `%LOCALAPPDATA%\Programs\eidolon`. Upgrades keep the first install's folder, so the name is fixed.
+- **The asar** holds `dist/` and `package.json`, without source maps; `npmRebuild` is off, since
+  main and the preload are bundles and the app has no dependencies. The output is `.out`, and build
+  resources are in `resources/`, since the root `.gitignore` ignores `build/` at any depth.
+- **The payload** is an extra resource, outside the asar so onnxruntime and LanceDB open real files:
+  `Eidolon.app/Contents/Resources/eidolon`, or `resources\eidolon` beside `Eidolon.exe`. Its source
+  is the folder above the payload, `.stage/<target>` with the filter `eidolon/**/*`, because
+  electron-builder skips a source folder's own top-level `node_modules` whatever the filter. Asar
+  integrity doesn't cover it. `assets/`, with the tray icon, ships the same way.
+- **The fuses,** each one listed, since an unlisted fuse keeps Electron's default: `runAsNode` on,
+  for the backend, its jobs and the `eidolon` command; the nodeOptions and CLI inspect fuses off;
+  asar integrity and loading the app only from the asar on; `grantFileProtocolExtraPrivileges` off,
+  since no page loads over `file:`; cookie encryption and the browser-process V8 snapshot off, their
+  defaults. `wasmTrapHandlers` keeps its default, on, as electron-builder has no key for it.
+  `resetAdHocDarwinSignature`, beside them, re-signs an unsigned build ad hoc after the fuses
+  change, so it launches on Apple silicon.
+- **macOS:** arm64 DMG and zip, the hardened runtime, the entitlements (`allow-jit`,
+  `allow-unsigned-executable-memory`, `disable-library-validation`, which ad-hoc signing with the
+  hardened runtime needs, and `audio-input`; no camera), and the microphone's usage string. The DMG
+  writes no update info: updates will take the zip.
+- **Windows:** a per-user, one-click NSIS setup for x64, whose shortcut's AppUserModelID is the
+  `appId`. `resources/installer.nsh` carries a workaround for electron-builder#6865; its uninstall
+  removes the install folder alone. Installing, updating and uninstalling never touch the data home.
+- **`publish`** names the update feed, which electron-builder writes into the app's
+  `app-update.yml` for the updater to come; nothing is uploaded.
+
+The app needs macOS 13 or Windows 10 (x64), Electron's minimums. Intel Macs have no LanceDB or
+onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
+
+## Logs
+
+- **Where:** `app.getPath("logs")`: `~/Library/Logs/Eidolon` on macOS, `%APPDATA%\Eidolon\logs` on
+  Windows, or `<profile>/logs` for a profile that isn't the default (unpackaged, or a
+  `--user-data-dir`). Show Logs, in the Help menu on macOS and the tray on Windows, opens it.
+- **`main.log`:** main's own lines at info and up, `console` included; uncaught errors in main,
+  with no dialog; renderers and Electron's helpers going away. Each run starts with a line naming
+  the app's version, Electron's, Chromium's and Node's, and the OS. The window's page, a failed
+  load, a renderer gone, a landing off the app and background mode's lines give a URL without its
+  user name, password, query or fragment (`loggedUrl()` in `policy.ts`), and the forwarder's
+  failures only its path.
+- **`backend.log`:** the backend's stdout and stderr, each line timestamped, since it carries its
+  own level, and echoed to the terminal unpackaged. Main never logs a line that holds a link code:
+  `log-filter.ts` drops `Eidolon is ready:` and `Eidolon is already running:` (and any other line
+  holding one) after the controller has read them.
+- **Rotation:** each file moves aside at 2 MB, to `main.1.log` through `main.5.log` and the like.
+  The log moves first, to `main.0.log`, and only then do the archives move along, the oldest
+  dropped. A log Windows won't rename, because another program holds it open without delete
+  sharing (a tail such as `Get-Content -Wait`, or an antivirus scan), is copied there and emptied
+  instead. Nothing in the rotation throws: electron-log would lose the line and, its size count
+  still over 2 MB, rotate again at every later line. An archive held open stops the rotation where
+  it is, the log left at `main.0.log` until the next rotation replaces it.
+- There is no `log.initialize()`, which would inject electron-log's own preload into every session,
+  and its IPC transport is off.
+- **Lines a test can wait on,** in main.log: `Eidolon: background mode: nothing shows on screen or
+  takes the focus, and nothing is heard (--mute-audio)`, right after the first line when it's on;
+  `Eidolon: the data home is …`;
+  `Eidolon: started the backend (pid N) on port P` or `Eidolon: using the server already on this
+  data home, <origin>`; `Eidolon: the backend listens on <origin>`; `Eidolon: the window shows
+  <url>`; `Eidolon: the window is shown`, `… is hidden` and `… is closed` as main's own record of
+  the window changes, which counts it as shown once it has painted, in background mode too; and at
+  a quit `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`. Background mode also
+  logs each thing it keeps off the screen ([below](#background-mode)).
+
+## Background mode
+
+`EIDOLON_DESKTOP_BACKGROUND` in the environment the app starts with, packaged or not, makes it a
+background app: on for `1`, `true`, `yes` or `on` in any case, as the repo reads any flag, and off
+otherwise. Local test runs use the machine the owner is working on, so a test must never put a
+window, a dialog or a prompt in front of them, nor take the focus: every local test run of the app
+sets it, an agent's Playwright walk included. `background.ts` makes each decision without
+Electron, and `test/background.test.ts` covers them; `native.ts` puts each of Electron's calls
+that could show something through it.
+
+- **macOS:** the app is an accessory from its first module (`app.setActivationPolicy("accessory")`
+  in `instance.ts`): no Dock icon past the launch's first 50–150 ms (the limits below), and it
+  never becomes the active app.
+- **Windows:** no tray icon, so no notice at the first hide either, and no taskbar button for the
+  window (`skipTaskbar`).
+- **No window is shown.** Main keeps and logs its own record of whether the window shows, as
+  always, but calls no `show`, `focus`, `restore` or `maximize` (which shows a hidden window), and
+  never `app.focus()`. Measured with Electron 45.4.1 on macOS, a window that is never shown still
+  paints (`ready-to-show` fires), runs `requestAnimationFrame` at the display's rate and its timers
+  on time, and takes Playwright's screenshots and clicks, with no Chromium switch and no
+  `backgroundThrottling` change.
+- **Nothing native appears, and main.log names each thing kept off the screen.** A message box is
+  answered with its default button, so a quit that stops a call, a task or a job goes ahead. A web
+  link, Show Logs, Open Data Folder, Licenses, the About panel and a context menu open nothing. A
+  download saves, with no Save dialog, into the profile's `downloads` folder under the name
+  Chromium suggests, numbered ` (1)` on while that name is taken.
+- **Nothing is heard:** Chromium's `--mute-audio` is set before `ready`, so no page plays through
+  the speakers, a call's reply included. WebRTC still receives that reply, so a test can check it
+  arrived. Measured with Electron 45.4.1 on macOS, Chromium hands the switch to its audio service
+  (not to the renderer), and a tone the app page plays is never `isCurrentlyAudible()`, where the
+  same tone in a window muted only by `setAudioMuted(true)` is.
+- **Never port 7860:** the backend's first spawn asks for a free port (`--port 0`), and a restart
+  keeps it. The owner's own Eidolon serves on 7860, and while it restarts the port is free for a
+  moment: a test run that took it then would leave the owner's next server exiting on a taken port,
+  and their `bun run app` with it.
+- **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
+  Developer Tools, which opens a window, isn't offered unpackaged either.
+- **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
+  is granted only when the app runs with Chromium's `--use-fake-device-for-media-stream`, on any
+  platform, and otherwise denied, since a grant would record the owner; main.log says which.
+- **Its limits:** macOS registers each launch, a second launch and a `--quit` included, as a
+  regular app, Dock icon and all, for about 50–150 ms before main's first line can make it an
+  accessory; only `LSUIElement` in the Info.plist would avoid that, and the shipped app needs its
+  Dock icon. Chromium opens a file input's chooser, a date field's picker and a datalist's
+  suggestions from the page, with no hook in main. A test keeps to [the rules for a
+  driver](#driving-it-in-background-mode).
+
+## Testing
+
+### The Vitest project
+
+`bun run test apps/desktop` runs the `desktop` project (`vitest.config.ts`): main's Electron-free
+modules, the preload's bridges and the scripts' parts. Nothing it runs loads `electron`, whose
+package gives Node the binary's path, not its API: a decision lives in a module that doesn't import
+it, with its test, and the Electron code stays a thin layer over it. It covers the controller's
+states, races and port fallbacks against fake children and real processes (`test/fake-server.ts`
+answers as the local server does); the forwarder's headers, gating, holding, connection proofs and
+errors against real local servers and the real local server booted in the test; the login-shell
+read and the merge, Windows' case-blind names included; the quit check and flow; links,
+navigation, permissions and the debugging switches; the bounds, chrome, menus and pages;
+background mode's decisions; both languages' strings; the shell pages' escaping and CSP; the
+bridges' sender rule; the logs' rotation and link filter; stage-backend's parts on made-up
+lockfiles, PE files and zips; the smokes' kit and parts, the fakes over real loopback requests
+included; the manifest; and the import boundary.
+
+### The stage test
+
+`test/stage.test.ts`, in the same project, checks a real stage: its files and manifest, its tree
+against `bun.lock`, the pruning, its natives loading from it (a LanceDB table, an onnxruntime
+session and sharp, through `scripts/natives.ts`, with every native library and VC++ DLL the
+process mapped coming from the payload: `payloadLibraries()` picks them by file name, so Windows'
+own `msvcp_win.dll`, mapped in every process with a window, isn't one), on a Windows stage the
+VC++ copies and the signers, and, once the app was packaged after the stage, that the packaged
+payload holds the same files. A target with no stage skips, and so does one staged from another
+version or `bun.lock`, whose title then says to run `bun run build:desktop`.
+`EIDOLON_REQUIRE_STAGE=1` requires this machine's stage, current, and fails with that hint when it
+isn't:
+
+```bash
+bun run build:desktop && EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts
+```
+
+### The Electron lane
+
+The backend runs on Electron's Node, not the Node `bun run test` uses, so after an Electron bump,
+a change to `jsRuntime()`, or a test that spawns `process.execPath` with an environment of its
+own, the backend suite runs there too. From the repository root:
+
+```bash
+node apps/desktop/scripts/test-on-electron.ts [paths] [vitest flags]
+```
+
+It runs Vitest's `node` project, or the paths given in it, on the binary `require("electron")`
+names from `apps/desktop` (downloaded on the first run), as Node (`ELECTRON_RUN_AS_NODE=1`), and
+exits with Vitest's code. `desktop.yml` runs the whole project there on macOS, and on Windows the
+tests `ts.yml`'s Windows job runs ([In CI](#in-ci)). Two things differ on that Node.
+`process.execPath` is the Electron binary, which starts its GUI unless the child's environment
+carries `ELECTRON_RUN_AS_NODE`: a test that spawns `process.execPath` with an environment of its
+own merges `jsRuntime().env` into it, as the app's own spawns do. And a `Date` keeps its local hours
+when `TZ` changes at run time, so a test of another time zone runs in a child process started in
+it.
+
+### The smokes
+
+Two smokes run the app end to end on a temporary data home and profile, every provider it reaches
+faked on loopback, so they bill nothing. `bun run smoke:desktop:dev` (`scripts/dev-smoke.ts`, [the
+dev smoke](#the-dev-smoke)) walks the unpackaged app as its owner would, under Playwright;
+`bun run smoke:desktop` (`scripts/smoke.ts`, [the packaged smoke](#the-packaged-smoke)) checks what
+packaging made of the fused app, through its backend's API. Each runs on Node from the repository
+root, prints a `PASS` or `FAIL` line for each check with what decided it, and exits 0 only when
+every check passed.
+
+- **Background mode.** Each runs the app in [background mode](#background-mode), under the focus
+  watch below, and keeps to the [rules for a driver](#driving-it-in-background-mode). `--headful`
+  turns background mode and the watches off, for a developer watching on their own screen: the
+  window shows, and a call is heard.
+- **The run's folder,** printed at the start: `eidolon-smoke-desktop-dev-*` or
+  `eidolon-smoke-desktop-*`, under `RUNNER_TEMP` in CI and the OS's temporary folder elsewhere. It
+  holds the app's data home (`home`), its `real-home` and `shared-skills`, its profile (`profile`:
+  `logs/main.log`, `logs/backend.log` and background mode's `downloads`), and `scratch`, the
+  launches' output and the files the smoke sends. A passing run removes it, all but the packaged
+  smoke's `results.json`, and a failing one keeps it; Ctrl-C stops whatever the smoke started,
+  keeps it and exits 130 (143 on SIGTERM).
+- **The kit's last checks,** after the smoke's own: nothing the smoke started is left running
+  (anything that is gets stopped by pid), the focus watch saw nothing wrong, and every request to
+  the fakes carried their key to a route they serve; after a packaged run on macOS, also that
+  `live.laplace.eidolon`'s preferences are as they were.
+
+Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers without Electron:
+
+- **`fakes.ts`:** loopback stand-ins on `node:http` for every provider the app reaches, ported from
+  `local-smoke.ts`'s: her mind's streamed chat completions, with a hold between and after a
+  reply's parts; the retrieval gate's and the director's decisions; embeddings, with a hold;
+  OpenAI's speech, transcriptions and realtime transcription sessions, for a voice message and a
+  call; OpenRouter's images, for a selfie; and the model listings. They answer one key, and count
+  what they answer by route.
+- **`env.ts`:** the app's environment, which takes only the OS's own variables from the smoke's,
+  never a credential, setting or provider URL (`local-smoke.ts`'s drop list), then adds the fakes'
+  accounts, the run's homes and the test switches: no `.env`, no login shell, background mode
+  unless `--headful`.
+- **`kit.ts`:** `startSmoke()`, which makes the run's folder, starts the fakes and the focus watch
+  and catches Ctrl-C, and `finish()`, which adds the last checks and removes or keeps the folder
+  (`runSmoke()` wraps the two around a body). It launches the app as its binary or under
+  Playwright's `_electron`, reads main.log, backend.log, the server lock's `.info` and
+  `local-token`, calls the backend as main's forwarder does, and on macOS puts back the
+  `live.laplace.eidolon` preferences a packaged run writes. `checkCanary()` checks that a key the
+  smoke puts in its own environment never reaches the backend: only the fakes' accounts take a key
+  from the environment, and on macOS `ps` shows the backend's environment without it.
+- **`processes.ts`:** what the smoke started and everything under it, from the process table (`ps`,
+  or PowerShell's `Win32_Process` on Windows), recorded as it goes so a child that outlives its
+  parent is still known, and stopped by pid at the end (`killTree` on Windows).
+- **`focus.ts`, the focus watch,** on macOS outside `--headful`: `lsappinfo front` every 50 ms. The
+  app in front, by name (Electron or Eidolon) or as a process the smoke started or one under it,
+  fails the run, and so does a system prompt in front (SecurityAgent, UserNotificationCenter,
+  CoreServicesUIAgent, universalAccessAuthWarn, the Open and Save panel), whoever raised it: one the
+  owner opens during a run fails it too. The owner switching between their own apps is no failure.
+  Every 500 ms it reads each main process's `ApplicationType`, which must be `UIElement` (an
+  accessory) within 10 s of its launch, stay so, and be seen so at least once; and a watch that
+  sampled nothing fails.
+
+#### The dev smoke
+
+`bun run smoke:desktop:dev [--no-build] [--keep] [--headful]` runs on macOS: its call speaks through
+`say` and `afconvert`, and its window watch reads macOS's window server. It first builds
+`apps/web/dist` and `apps/desktop/dist`'s main, preload and shell pages with Vite, in about half a
+second, so it never walks a stale build (`--no-build` runs on what is there, and refuses when a
+build is missing; the backend runs from source, so the stage isn't one of them). It renders the
+call's speech before the app starts: Tingting's Mandarin from `say -v Tingting -o <file>`, never
+aloud, converted by `afconvert` to a 48 kHz mono 16-bit WAV and turned down 12 dB, between 1 s and
+3 s of silence. Then it drives the unpackaged app with Playwright's `_electron`, with
+`--lang=en-US`, so the page's labels are English on any machine, and Chromium's fake microphone
+playing that WAV, under the focus watch and a window watch of its own (`dev-smoke/windows.ts`).
+The window watch reads the window server's list of on-screen windows every 50 ms through
+`osascript`: a window of the app's on screen fails the run, even one never in front or focused,
+which the focus watch can't see, and the owner's own windows in the list show that it sees any.
+
+Each step prints one line, made of the checks inside it:
+
+1. **Cold start:** Home at `eidolon-app://app/`, with no sign-in and no console error, its footer
+   naming both versions; the backend on a free port, with no try at 7860; main off screen (an
+   accessory, its window neither visible nor focused). The kit's canary check follows it, on a line
+   of its own: the key the smoke puts in its own environment never reaches the backend.
+2. **A chat:** her reply streams through the forwarder, its first part shown about 2 s before the
+   rest, as the fake holds it. A picture and a text file sent with a line (set on the composer's
+   input, never a click, which opens the file chooser) reach her mind; the picture opens in the
+   in-page viewer, whose Save saves it, and the text file saves through `<a download>` under the
+   name it was sent with, each whole into the profile's `downloads` folder. Her selfie, from
+   `take_selfie` on the fakes' image model, which the chat must offer while the persona has an
+   outfit to draw, opens and saves the same way. Each link must be an `<a download>`: main's
+   `downloadURL` fallback would save a `target="_blank"` one too, with the same lines in main.log.
+3. **Theme and language:** the page's theme setting reaches `nativeTheme.themeSource` as it is, its
+   language rebuilds the menus in it, and its `[data-shell]` rows drag while their controls don't,
+   the sidebar's clear of the traffic lights on macOS.
+4. **Settings' Restart,** from the banner a setting read at boot puts up: main holds requests, the
+   backend exits 75 and comes back on the same port, and the page says it's back.
+5. **A call** on Chromium's fake microphone: her hearing gets the speech, her answer is in the
+   chat's log, her voice arrives over WebRTC and plays in the page, and the window is never audible
+   while the audio service runs with `--mute-audio`.
+6. **Close and reopen:** closing hides the window while the backend serves on, and a second launch
+   shows it again, never on screen or in front, and exits within 30 s; one that doesn't is killed
+   and fails the step.
+7. **Attach:** after `--quit` ends that launch and its backend, a server started first on the same
+   home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced: Settings'
+   Restart there waits for the supervisor's next server, a restart from outside the app is
+   survived, and quitting leaves the server running until the smoke stops it.
+8. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
+   with exit 0, leaving nothing running and no error line in either log.
+
+After the steps come the window watch's line and the kit's. The run's folder keeps
+`results/results.json`, with every check and each step's time, and `results/screenshots`; a pass
+removes them with the rest of the folder, unless `--keep` first copies them to
+`<run's folder>-results`. A run takes about 30 s. With `--headful`, the checks that only background
+mode makes true (off screen, never audible, main.log's background lines) are skipped, and a hook
+the smoke adds in main saves downloads into the same folder instead of asking.
+
+#### The packaged smoke
+
+`bun run smoke:desktop [--headful]` smokes the fused app `bun run package:desktop` left in
+`apps/desktop/.out`: on macOS `mac-arm64/Eidolon.app`, on Windows the NSIS setup, the only `.exe`
+there. It never builds or packages: with no build it says how to make one (`bun run build:web &&
+bun run build:desktop && bun run package:desktop`) and exits 1 before starting anything.
+Playwright and CDP can't drive a fused build, so it calls the backend's API with the Bearer, as
+main's forwarder does, and runs the app's binary in node mode beside it, as main runs the backend:
+
+- **The payload's natives,** before the app starts: `scripts/natives.ts` on the binary writes and
+  opens a LanceDB table, runs Silero on an onnxruntime CPU session and makes a JPEG with sharp,
+  every library mapped from the payload. The tray icon's file is in the app's resources, since
+  background mode shows no tray.
+- **The app:** it starts on the run's home and profile; its backend is the binary in node mode on
+  the payload's `server.js`, under main, with no key from the smoke's own environment; main.log
+  names a packaged build on the pinned Electron, and the server reports the payload's version; the
+  Bearer gets a session, a wrong one or none a 401, and main's probe proves the token; the status
+  answers and `/` is the web app.
+- **Its natives in use:** a photo with EXIF orientation 6 comes back from a chat upright and bare,
+  through the backend's sharp; the backend maps LanceDB from its start and sharp with the photo,
+  from the payload (`lsof` on macOS, the process's modules on Windows); an `ingest-facts` job, the
+  binary in node mode under the backend, writes her facts through the fakes' embeddings, and a
+  search on the binary reads them back.
+- **A restart** through Settings' route keeps the port and changes the backend's pid.
+- **`--quit`:** the second launch and main exit 0, the backend stops on its stop trigger rather
+  than being killed, nothing the app started is left running, and neither log holds an error line,
+  a link code or the token. What runs under the app is tracked at each step, and on macOS so is
+  any process whose environment names the run's folder, wherever it was reparented: `ps` shows
+  the environment of any but Apple's own binaries. The backend's error lines include a JavaScript
+  error printed past its logger.
+
+On Windows it first installs the NSIS setup silently for the user (`/S`), and smokes the
+installed `%LOCALAPPDATA%\Programs\eidolon\Eidolon.exe`. After the quit it runs, with `/S`, the
+HKCU uninstall command that names the install folder's uninstaller, and none at all when no entry
+does, which fails the check, so another app's entry named Eidolon never runs. It then checks that
+the install folder and its entry are gone and the data homes are as they were, file for file by
+hash: the run's, and on a CI runner (`CI=true`) the default one, `%USERPROFILE%\.laplace\eidolon`,
+where it puts a marker before the install. The uninstaller never learns the run's home, so only the
+default one would show it touching a data home; the smoke writes there on a CI runner alone, and
+removes the marker and the folders it made after. Where Eidolon is installed for the user already,
+it refuses to run rather than replace and remove that install. Each step has a time limit of its
+own, so a hung run still ends in failed checks, its uninstall and results included, well inside
+`desktop.yml`'s 15 minutes. After `finish()` it writes `results.json`, every check with the timings,
+into the run's folder, which a pass leaves holding that file alone. A run takes about 6–8 s on
+macOS.
+
+### In CI
+
+`ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips.
+`.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
+request that changes more than docs, and on a dispatch: the payload comes from `bun.lock` and the
+backend's packages, so a filter on `apps/desktop` would miss the changes it checks. Its one job runs
+on `macos-latest` (macOS arm64) and `windows-latest` (Windows x64), neither cancelling the other,
+in bash on both, with Bun from `package.json` and Node 24:
+
+1. **Install:** `bun install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
+   build step needs a package's install script, and a signing step must follow none.
+2. **Build:** `bun run build:desktop` stages the runner's backend and builds `dist/`.
+3. **Package:** `bun run package:desktop -c.compression=store`, unsigned at `0.0.0-dev`, ad hoc on
+   macOS and never with a keychain identity, an NSIS setup on Windows; stored uncompressed, which
+   packs faster.
+4. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
+   instead of skipping; run after packaging, it also holds the app's payload to the stage.
+5. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
+   Windows the tests `ts.yml`'s Windows job runs, with its filters.
+6. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
+   NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
+   output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds
+   `local-token`.
+7. **`--use-system-ca` on the packaged binary:** `scripts/system-ca.ts` puts a throwaway CA in the
+   runner's machine trust store (the System keychain through `sudo -n security` on macOS,
+   LocalMachine's Root through `certutil` on Windows), serves https on loopback with a certificate
+   it signed, and checks that the packaged binary in node mode reaches it with `--use-system-ca`
+   and not without, from the backend and from a job the backend runs. Then it deletes the CA, while
+   macOS keeps its admin trust entry, orphaned: removing that waits on a dialog no runner answers.
+   It runs only where `CI=true`, and refuses anywhere else: it changes the machine's trust store.
+8. **The installers,** the DMG and the NSIS setup, uploaded as `<OS>-installers-dev` and kept 14
+   days; not the macOS zip, which only updates read.
+
+Each check runs once the step it needs succeeded, so one that fails hides none of the others. A
+push to a pull request cancels the run it replaces; a dispatch neither waits nor cancels. No
+identity signs anything, and nothing goes anywhere but the run's own artifacts.
+
+### Driving it in background mode
+
+Anything that drives the app on a machine someone is working on, the smokes and an agent's walk
+alike, runs it in background mode on a temporary home and profile ([below](#running-it-by-hand)),
+and keeps to these rules:
+
+- **The microphone:** only Chromium's `--use-fake-device-for-media-stream`, with
+  `--use-file-for-fake-audio-capture=<wav>` and `--disable-features=AudioServiceSandbox` to feed a
+  call a file (without the last it captures silence). Never `--use-fake-ui-for-media-stream`, which
+  answers a request past main's permission handler, the camera included: the kit refuses it.
+- **Files** go up through Playwright's `setInputFiles` or its `filechooser` event, never a click on a
+  file input, and nothing opens a date field's picker or types into a datalist's field: Chromium
+  opens those from the page, with no hook in main to keep them off the screen.
+- **After a navigation main cancelled,** such as a link to the web, Playwright's locator clicks wait
+  forever: use `page.mouse` or `page.evaluate`.
+- **Off screen** is checked by main's pid: `lsappinfo` gives its `ApplicationType` as `UIElement`,
+  and every window's `isVisible()` and `isFocused()` are false. `app.dock.isVisible()` can read true
+  while a second launch's process exists, and `isVisible()` reads false for a window behind
+  another's, which is why the dev smoke also watches the window server's list.
+- **Nothing is heard:** background mode mutes Chromium, and a call's reply still arrives over
+  WebRTC for a check to find. Speech for a call comes from `say -o <file>`, never aloud, and nothing
+  runs `afplay`.
+- **macOS's preferences:** a packaged run writes `~/Library/Preferences/live.laplace.eidolon.plist`
+  whatever its profile, so put it back as it was: `defaults export live.laplace.eidolon <file>`
+  before, then `defaults import` it after, or where there was none, `defaults delete
+  live.laplace.eidolon` and delete the file, which cfprefsd leaves behind empty. The packaged smoke
+  does this itself. An unpackaged run writes `com.github.Electron.plist`, which predates these
+  runs: leave it.
+- **The one thing on screen:** a watch from outside sees the Dock flicker of each launch,
+  [background mode's limit](#background-mode), as a regular app for 50–150 ms that never comes to
+  the front. The focus watch gives main 10 s to become an accessory.
+
+### Running it by hand
+
+A test run of the app gets a temporary `EIDOLON_HOME`, a profile of its own
+(`--user-data-dir=<profile>`, which keeps the logs inside it) and `EIDOLON_DESKTOP_BACKGROUND=1`.
+It also gets `EIDOLON_DESKTOP_LOGIN_SHELL=0` and an environment with no credential, setting,
+provider or other `EIDOLON_*` variable, with an `EIDOLON_SHARED_SKILLS` of its own so the owner's
+shared skills stay out too ([The environment](#the-environment)): `appEnv()` in
+`scripts/smoke/env.ts` builds one, from `local-smoke.ts`'s drop list. Leave `local-smoke.ts`
+itself alone: it isn't paths-ignored, so a change to it deploys production. A call needs Chromium's
+fake microphone, or background mode denies it ([above](#driving-it-in-background-mode)).
+
+- **Unpackaged,** after `bun run build:desktop` (or only its Vite builds) and `bun run build:web`,
+  `"$(cd apps/desktop && node -p 'require("electron")' | tail -n 1)" apps/desktop --user-data-dir=<profile>`
+  runs it with its backend from source serving `apps/web/dist`; the `tail` drops the line the first
+  `require` prints as it downloads the binary, which neither build fetches on macOS. Playwright's
+  `_electron` drives it the same way.
+- **Packaged,** run `apps/desktop/.out/mac-arm64/Eidolon.app/Contents/MacOS/Eidolon
+  --user-data-dir=<profile>` (`.out\win-unpacked\Eidolon.exe` on Windows), and drive its backend
+  once main.log says the window shows `eidolon-app://app/`:
+
+  ```bash
+  curl -H "authorization: Bearer $(cat "$EIDOLON_HOME/local-token")" \
+    "http://127.0.0.1:$(jq .port "$EIDOLON_HOME/locks/4273f434b594.info")/api/local/status"
+  ```
+
+- **Stop** either with the same command and `--quit`, then put macOS's preferences back after a
+  packaged run ([above](#driving-it-in-background-mode)).
+
+## Bumping Electron
+
+A bump moves the backend's Node and V8 as well as the shell, so it is a backend change too.
+
+1. Change `electron` in `apps/desktop/package.json`, an exact pin, and `electronVersion` in
+   `electron-builder.yml` together: a Windows stage refuses Electron's zip when they differ.
+   `packages/config/test/electron.ts` names the version `asElectron()` reports.
+2. `bunfig.toml`'s `minimumReleaseAge` holds back any release younger than 14 days: give the new one
+   an exact `minimumReleaseAgeExcludes` entry (`electron@<version>`), and drop it, and any old one,
+   once the gate passes it. Add no `trustedDependencies`: Electron's package has no install script
+   (the binary downloads on the first `require("electron")`, or through electron-builder when
+   packaging), and the field would replace Bun's default list.
+3. `bun install` rewrites `bun.lock`, which `docker.yml` doesn't skip, so merging any Electron or
+   electron-builder bump restarts production: merge it at a quiet time.
+4. Recheck what Electron decides for the app:
+   - its Local Network Access exemption: a call still connects, and Vite's HMR still reaches the
+     page in dev, with no permission asked;
+   - node mode's flags: its Node still takes `--disable-sigusr1` and `--use-system-ca`, SIGUSR1 to
+     the backend opens no inspector, and an https fetch from the backend and from a job trusts a CA
+     only the OS store holds, which `desktop.yml`'s `--use-system-ca` step proves on both
+     platforms ([In CI](#in-ci));
+   - the fuses: a new one keeps Electron's default unless `electron-builder.yml` lists it, so read
+     the packaged binary's fuse wire with a current `@electron/fuses`;
+   - its Node's major, which Vite's `node24` target (`scripts/vite-common.ts`) and the repo's Node
+     24 assume, and its system minimums, which this doc restates;
+   - on Windows, the unsigned-PE list, which takes Electron's own DLLs from its zip.
+5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `bun run test
+   apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test) and both
+   [smokes](#the-smokes), `bun run smoke:desktop` and, on macOS, `bun run smoke:desktop:dev`.
+   Then let `desktop.yml` run on the pull request: the system CA proof runs only there, and so does
+   the packaged smoke on Windows, with its install and uninstall.
+
+## Measured
+
+On an Apple silicon Mac (macOS 27), 2026-11-21, every run of the app with the login-shell read
+off:
+
+- **The stage** (darwin-arm64): 4,515 files and 372 MiB, of which LanceDB 250, onnxruntime 43, sharp
+  and libvips 19, `dist/` 7.5 and the web app 2; about 11 s with npm's cache warm. A win32-x64
+  payload, installed for that target from a Mac, is about 447 MiB before its VC++ copies.
+- **Packaging** takes 61–64 s: Eidolon.app is 628 MiB, the DMG 261 MB and the zip 255 MB.
+- **Starting:** the packaged app shows its page about 1.1 s after launch, and the unpackaged app
+  paints Home in 1.3–1.8 s. The first run after packaging is slower: the packaged binary's backend
+  listened 3.6–4.2 s after it started, against 0.55 s warm.
+- **Streaming** through the forwarder: a chat reply's first chunk 25–28 ms after sending, the rest
+  as the fake sent it, nothing buffered. Inside Electron, an aborted stream's socket to the backend
+  closed within 2 ms.
+
+A prototype measured on 2026-11-20 and 21, whose main forwarded through Node's global fetch, adds
+what this app hasn't measured yet: with the login-shell read on, Home painted at 1.5 s, about
+0.6 s of it the read (fish); a restart was back on its port in about 0.5 s; memory with Home open
+was about 760 MB, the backend 277 MB of it; and a freshly signed app's first launch on a CI runner
+listened at 5.5 s.

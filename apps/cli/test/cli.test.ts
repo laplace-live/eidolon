@@ -307,9 +307,12 @@ test("@eidolon/cli/job and @eidolon/ingest/progress are import-free leaves the w
   expect(dynamicImports('await import("a");\nrequire("b");')).toHaveLength(2);
 });
 
-test("a job runs the CLI on this runtime and reports NDJSON", () => {
-  expect(jobArgv(cliEntry(), "refine", ["--persona", "milky-green"])).toEqual([
-    process.execPath,
+test("a job runs the CLI on the runtime given, its flags first, and reports NDJSON", () => {
+  const runtime = { command: "/opt/Eidolon", args: ["--disable-sigusr1", "--use-system-ca"] };
+  expect(jobArgv(runtime, cliEntry(), "refine", ["--persona", "milky-green"])).toEqual([
+    "/opt/Eidolon",
+    "--disable-sigusr1",
+    "--use-system-ca",
     cliEntry(),
     "refine",
     "--json",

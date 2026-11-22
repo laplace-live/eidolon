@@ -1,11 +1,11 @@
 // What keeps the local app out of production: main.ts reaches none of it, nor the store it keeps
-// chats in, nor the assistant, nothing outside apps/bot/src/local names it, apps/bot gains no
-// dependency unlisted here, and the SPA's leaves import nothing but @eidolon/chat's types.
+// chats in, nor the assistant, nor the desktop app, nothing outside apps/bot/src/local names it,
+// apps/bot gains no dependency unlisted here, and the SPA's leaves import nothing but
+// @eidolon/chat's types.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
-import { parseAst } from "vitest/node";
 import {
   ERROR_CODES,
   JOB_COMMANDS,
@@ -19,6 +19,7 @@ import { chatRunner } from "../../src/local/routes/chats.ts";
 import { sessionRoutes } from "../../src/local/session.ts";
 import { TaskManager } from "../../src/local/tasks/manager.ts";
 import { LocalToken } from "../../src/local/token.ts";
+import { scan } from "./scan.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../..");
 const BOT_SRC = join(ROOT, "apps", "bot", "src");
@@ -44,78 +45,6 @@ function workspaces(): Map<string, Workspace> {
       found.set(pkg.name, { dir: join(ROOT, group, name), exports: pkg.exports ?? {} });
     }
   }
-  return found;
-}
-
-interface AstNode {
-  readonly type: string;
-  readonly [field: string]: unknown;
-}
-
-interface Specifier {
-  readonly importKind?: string;
-  readonly exportKind?: string;
-}
-
-/** Erased by TypeScript: `import type`, or only `type` names between the braces. */
-function typeOnly(kind: unknown, specifiers: readonly Specifier[]): boolean {
-  return (
-    kind === "type" ||
-    (specifiers.length > 0 && specifiers.every((s) => (s.importKind ?? s.exportKind) === "type"))
-  );
-}
-
-function literal(node: unknown): string | null {
-  const value = (node as AstNode | null)?.value;
-  return (node as AstNode | null)?.type === "Literal" && typeof value === "string" ? value : null;
-}
-
-/**
- * Every specifier `file` loads once its types are erased, in source order: imports, re-exports,
- * `import()` and `require()`, never a type's `import("…")`.
- */
-function scan(file: string): string[] {
-  const found: string[] = [];
-  const visit = (node: unknown): void => {
-    if (Array.isArray(node)) {
-      for (const child of node) visit(child);
-      return;
-    }
-    if (node === null || typeof node !== "object") return;
-    const ast = node as AstNode;
-    switch (ast.type) {
-      case "ImportDeclaration":
-        if (!typeOnly(ast.importKind, ast.specifiers as Specifier[])) {
-          found.push(literal(ast.source) as string);
-        }
-        return;
-      case "ExportNamedDeclaration":
-        if (ast.source !== null && !typeOnly(ast.exportKind, ast.specifiers as Specifier[])) {
-          found.push(literal(ast.source) as string);
-        }
-        break;
-      case "ExportAllDeclaration":
-        if (ast.exportKind !== "type") found.push(literal(ast.source) as string);
-        return;
-      case "ImportExpression": {
-        const source = literal(ast.source);
-        if (source !== null) found.push(source);
-        break;
-      }
-      case "CallExpression": {
-        const callee = ast.callee as AstNode;
-        const source = literal((ast.arguments as unknown[])[0]);
-        if (callee.type === "Identifier" && callee.name === "require" && source !== null) {
-          found.push(source);
-        }
-        break;
-      }
-      case "TSImportType":
-        return;
-    }
-    for (const [field, value] of Object.entries(ast)) if (field !== "type") visit(value);
-  };
-  visit(parseAst(readFileSync(file, "utf8"), { lang: "ts", sourceType: "module" }).body);
   return found;
 }
 
@@ -155,7 +84,7 @@ function sources(dir: string): string[] {
 }
 
 describe("production never loads the local app", () => {
-  test("main.ts reaches the engine and the chat format, but none of local/, ingest, the assistant, cli, apps/web or the chat store", () => {
+  test("main.ts reaches the engine and the chat format, but none of local/, ingest, the assistant, cli, apps/web, apps/desktop or the chat store", () => {
     const { files, specifiers } = importGraph(join(BOT_SRC, "main.ts"));
     const reached = [...files].map((file) => relative(ROOT, file));
     expect(reached).toContain("apps/bot/src/server.ts");
@@ -169,6 +98,7 @@ describe("production never loads the local app", () => {
       (file) =>
         file.startsWith("apps/bot/src/local/") ||
         file.startsWith("apps/web/") ||
+        file.startsWith("apps/desktop/") ||
         file.startsWith("apps/cli/") ||
         file.startsWith("packages/ingest/") ||
         file.startsWith("packages/assistant/") ||

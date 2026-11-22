@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dataHome, findDotenv, spawnProcess } from "@eidolon/config";
+import { dataHome, findDotenv, jsRuntime, spawnProcess } from "@eidolon/config";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 let app = "";
@@ -66,7 +66,7 @@ async function run(
   expect(findDotenv(join(app, "src"))).toBe(join(app, ".env"));
   const child = spawnProcess([process.execPath, join(app, "src", script), ...args], {
     cwd: app,
-    env: { PATH: process.env.PATH ?? "", EIDOLON_HOME: dataHome(), ...env },
+    env: { ...jsRuntime().env, PATH: process.env.PATH ?? "", EIDOLON_HOME: dataHome(), ...env },
     stdout: "pipe",
     stderr: "pipe",
   });

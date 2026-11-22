@@ -330,7 +330,7 @@ export function ChatView({ id }: { readonly id: string }) {
 
   return (
     <>
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+      <header data-window-drag className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
         <SidebarTrigger className="-ml-1.5 md:hidden" />
         <ParticipantsMenu chatId={id} participants={participants} personaOf={personaOf} />
         <div className="min-w-0 flex-1">

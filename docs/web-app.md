@@ -23,6 +23,9 @@ bun run app        # builds apps/web/dist when it has no index.html, then `local
 | `bun run dev:web` | Vite on `http://127.0.0.1:5173`, proxying `/api` and `/mcp` to the server on `localhost:7860` |
 | `bun run build:web` | `apps/web/dist` |
 
+The desktop app (`apps/desktop`) runs this server too, as its own backend, and shows the app in
+its window with no link to open ([desktop.md](desktop.md)).
+
 The server's flags: `--host` (default `localhost`; loopback addresses only), `--port` (default
 7860; `0` picks a free one), `-v` (DEBUG; `-vv` TRACE; INFO without), and `--open`/`--no-open`
 (default open, except over SSH, where `SSH_CONNECTION` is set). Its last boot line, written to
@@ -41,7 +44,16 @@ closing, and a `kill()` there is TerminateProcess, which would end the server in
 own stop. A data home runs one server,
 which holds a lock in its `locks/`: starting again on the port it serves prints a fresh link to it
 and exits 0, and on any other port exits 2, naming its pid and port. A port another program holds
-exits 1.
+exits 1. Once it listens, the server adds its `port`, `host` and `linkHost` to the lock's
+`.info` (`locks/4273f434b594.info`, JSON beside its `pid`): `host` is the first loopback address
+it bound, as a URL names it (`127.0.0.1`, `[::1]`), and `linkHost` the host its own links name,
+`localhost` where it bound every address that name has. A second start asked for that port, and
+the desktop app attaching to a server it finds there, reach it at `host` alone, since another
+local account could hold the port on another loopback address. The second start proves there that
+the server holds the token, and prints the link that server would print, never one on its own
+`--host`: beside a server bound to `127.0.0.1` alone, a `localhost` link could take a browser to
+`[::1]` first. Beside a server that records no `host`, from an older version, it exits 2 as on
+another port.
 
 `bun run dev:local` has no supervisor, so Restart stops it, and every reload `--watch` makes
 opens another tab unless you pass `--no-open` (`bun run dev:local --no-open`). To work on the
@@ -193,7 +205,7 @@ Under `/api/local`, JSON in and out; the wire types are `apps/bot/src/local/api.
 imports type-only. An error is `{"error": {"code": "…", "message": "…"}}`: the app shows its own
 string for `code`, in English or 简体中文, and the English `message` only as detail. A 5xx's
 message is fixed and never carries an exception's text or stack; it adds `"id"`, which names the
-terminal's log line that holds what went wrong, and the app shows it beside the detail.
+server log's line that holds what went wrong, and the app shows it beside the detail.
 
 | Area | Routes | What |
 | --- | --- | --- |
@@ -243,7 +255,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `unsupported-media-type` | 415 | An upload that isn't one of the image or text types its route takes, by its bytes |
 | `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
 | `upstream-failed` | 502 | Mem0 or Fish Audio failed |
-| `internal` | 500 | A bug; the terminal's line with the answer's `id` has the details |
+| `internal` | 500 | A bug; the server log's line with the answer's `id` has the details |
 | `invalid-persona-id` | 400 | A persona id that isn't a slug |
 | `unknown-persona` | 404, 400 | No persona has that id; 400 in a job's body |
 | `persona-exists` | 409 | Creating a persona with an id in use |
@@ -353,6 +365,69 @@ and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
   headers; every other page scrolls in a column there, and the window itself never scrolls. A
   layout that sits side by side when wide, such as the studio's and Settings' sections, goes by the
   width it is given, through a container query, not the window's, which the sidebar shares.
+
+## In the desktop app
+
+The desktop app (`apps/desktop`) shows this same app in its own window, at `eidolon-app://app/`,
+and its main process adds the Bearer to every request, so the page never signs in
+([desktop.md](desktop.md) has the app itself). Its preload gives the page two things; a browser
+has neither, and without them nothing below happens.
+
+- **The bridge**, `window.eidolonDesktop` (`lib/desktop.ts`): `{platform, version, serverVersion,
+  setTheme(setting), setLanguage(language), onCommand(callback)}`, `platform` being Node's name for
+  the OS (`darwin`, `win32`). The page reports the theme *setting* (`light`, `dark` or `system`,
+  never the theme System resolves to) and the active language (`en`, `zh-Hans`) once at start and
+  on every change. `onCommand` hands it the menus' commands: `settings` opens `/settings`, and one
+  it doesn't know is ignored (`COMMANDS` in `lib/desktop.ts`).
+- **The marks** on `<html>`: `data-shell`, `mac` or `win`, and on macOS `data-fullscreen` while the
+  window is fullscreen. The preload sets `data-shell` as `<html>` is created, before the page's
+  script runs and before its first paint, and `data-fullscreen` as the window enters and leaves
+  fullscreen; nothing in the page depends on when a mark lands. The chrome they turn on is in
+  `index.css`, at its end, and the `shell:` variant there styles a component only in the desktop
+  app.
+
+**The chrome.** The window has no title bar. A row marked `data-window-drag` stands in for it: the
+window drags by the row, while its links, buttons and fields keep their clicks. The rows are the
+sidebar's first row (the logo), each page's header (a chat's, the call's, setup's), and the bar
+above a page without one, `MobileBar`. A browser shows that bar only below `md`, with the sidebar's
+button and the logo; the desktop app keeps it from `md` up too, empty, 3.5rem tall: the height of a
+chat's header, and the height the window's caption buttons on Windows should take. The page
+scrolls in a box of its own below it, not in the frame (`PageLayout` in
+`components/app-shell.tsx`), as setup's page does below its header, so no row is in what scrolls;
+the skip link focuses that box, which the keys then scroll. An error, the sign-in screen and the
+loading spinner get a strip of their own (`WindowDragStrip`). The rows keep clear of the window's
+buttons, whose place the Window Controls Overlay gives as `env(titlebar-area-*)`:
+
+- **macOS:** the traffic lights sit at the top left. A page's row starts after them, measured from
+  the window's edge: at the edge while the sidebar is a sheet, beside the 3rem rail when collapsed.
+  The sidebar's first row starts below them, open or collapsed, so the lights sit in an empty strip
+  above it. The facts editor's sheet, as wide as a narrow window, stops short of them, and the skip
+  link shows below them. Fullscreen hides them, and drops every inset.
+- **Windows:** the caption buttons sit at the top right, where every page row ends before them.
+  They take every press over them, so a page's scrollbar, with its box, starts below them; a sheet
+  at the right edge starts below them, and a dialog centres below them.
+- Menus, popovers, dialogs, sheets and tooltips portal out of `#root` and never drag. A press on a
+  drag row never reaches the page, so while one of them is open no row drags, and a press there
+  closes it.
+
+**What else differs:**
+
+- **Home's footer** names both versions, as in `Eidolon 0.1.0 · server 0.13.0`: the desktop app's
+  own, from the bridge, and the server's, from status, which may be a terminal's server it attached
+  to.
+- **Pictures and files open in place.** The window has no tabs: a picture in a chat or a call, the
+  owner's or hers, opens in a viewer over the page with **Save** (`components/picture-viewer.tsx`),
+  and a text file saves through `<a download>` (`features/chats/attachments.tsx`), which the desktop
+  app turns into a Save dialog.
+- **No terminal.** Where the browser's text sends you to the terminal, the desktop app's says to
+  quit and reopen Eidolon, or where its logs are: **Show Logs**, in the Help menu on macOS and in
+  the tray icon's menu on Windows (`DESKTOP_ERRORS` in `lib/labels.ts`, the restart's toast, a
+  call refused for its session). Without a session, the sign-in screen asks for no link: it says
+  the window isn't signed in, to quit and reopen Eidolon, and offers **Try Again**.
+- **Nothing depends on an http(s) origin.** API calls are root-relative; the proof's key is
+  `eidolon_proof_` there, with no port, and nothing writes it, since the window never trades a link
+  code; and `eidolon-app:` is a secure scheme, so the notice that the microphone needs a secure
+  page never shows.
 
 ## Chats
 

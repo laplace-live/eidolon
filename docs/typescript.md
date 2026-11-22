@@ -3,8 +3,9 @@
 The bot, and the offline chain that builds its indexes, in TypeScript, on eidolon's own voice engine
 ([voice-engine.md](voice-engine.md)), parts of it ported from
 [pipedog](https://github.com/polvallverdu/pipedog) (a TypeScript port of Pipecat). The bot has run
-production on Bun since 2026-11-04; the local app, the CLI and the npm package run on Node 24. The
-code and its own tests are the only source of truth for how it behaves.
+production on Bun since 2026-11-04; the local app, the CLI and the npm package run on Node 24, and
+the desktop app runs the local app on Electron's own Node 24 ([desktop.md](desktop.md)). The code
+and its own tests are the only source of truth for how it behaves.
 
 ## Layout
 
@@ -34,8 +35,8 @@ nothing.
 | `apps/cli` | every `laplace-*` command and the gate benchmark: argparse specs, the persona, locks, printing, exit codes |
 
 A new context tier implements `ContextProvider`; a new LLM tool implements `LlmTool`; the turn
-engine runs both, in a chat and a call alike. Clients (the `/ai` page today; Electron or Expo
-later) talk to `apps/bot` over HTTP and RTVI.
+engine runs both, in a chat and a call alike. Clients (the `/ai` page, and the local app's pages in
+a browser or the desktop app's window; Expo later) talk to `apps/bot` over HTTP and RTVI.
 
 The bot reads each persona's index from the data home ([personas.md](personas.md)) and viewers'
 memories from Qdrant. The compose `bot-ts` service keeps Mem0's `history.db` on a volume of its
@@ -179,10 +180,12 @@ that provider's key, credit or reach:
 | `cancelled` | the run was cancelled |
 
 yt-dlp's codes are read off its stderr, so they are a best guess. A job runs
-`jobArgv(entry, command, args)` from `@eidolon/cli/job`, also import-free, with
-`@eidolon/config`'s `cliEntry()` as the entry: `<entry> <command> --json …` on the server's own
-`process.execPath`, started in the data home. A cancel sends it `STOP_MESSAGE` over its IPC
-channel, which the CLI's `relayStopMessages` turns into SIGTERM, as Windows has none to send.
+`jobArgv(runtime, entry, command, args)` from `@eidolon/cli/job`, also import-free, with
+`@eidolon/config`'s `jsRuntime()` as the runtime and `cliEntry()` as the entry:
+`<entry> <command> --json …` on the server's own `process.execPath`, after the runtime's flags
+(`--disable-sigusr1 --use-system-ca` inside Electron, none on Node), started in the data home.
+A cancel sends it `STOP_MESSAGE` over its IPC channel, which the CLI's `relayStopMessages` turns
+into SIGTERM, as Windows has none to send.
 Nothing kills it on a timer: only a forced second cancel (`DELETE jobs/:id?force=1`) of a job
 this server spawned kills it, with what it started (`killTree`) ([web-app.md](web-app.md#jobs)).
 
@@ -202,7 +205,8 @@ original) or one code path against another (the pipeline's dry run against the p
 - **pipedog-derived code carries its BSD-2 header**, then `Ported from pipedog <path>@ce8f8bc`.
   pipedog is never followed past that commit; `NOTICE` names every copyright holder a ported
   file's header does, and `apps/eidolon/test/build.test.ts` holds it to that. Code ported from
-  pi-mono carries its MIT header the same way, at `ac78a60` ([assistant.md](assistant.md)).
+  pi-mono carries its MIT header the same way, at `ac78a60` ([assistant.md](assistant.md)), and so
+  does code ported from deepseek-harness, at `2e39e70496` ([desktop.md](desktop.md)).
 - **Only `packages/runtime` imports `@eidolon/voice` and `@eidolon/webrtc`.** Biome's
   `noRestrictedImports` enforces it, so every other package is testable without a call.
 - **`@eidolon/ingest` stays out of the bot image.** Biome forbids importing it under `apps/bot/**`
@@ -219,8 +223,10 @@ original) or one code path against another (the pipeline's dry run against the p
   loader off for what still runs on Bun, which would expand bare `$VAR` and read `.env.local`;
   `vitest.config.ts` loads none into a test.
 - **No module reads env at import.** Everything reads at call time, so the order of imports
-  against the `.env` load cannot pin a fallback. The one exception is
-  `apps/bot/src/local/environ.ts`, below.
+  against the `.env` load cannot pin a fallback. The exceptions are
+  `apps/bot/src/local/environ.ts`, below, and the desktop's `apps/desktop/src/main/instance.ts`,
+  whose process loads no `.env` and must settle background mode before Electron's `ready`
+  ([desktop.md](desktop.md#startup)).
 - **A child inherits what `.env` set, unless it reads `.env` itself.** `spawnProcess` without
   `env` passes `process.env` as it is now, and `which` reads its `PATH` at call time, so yt-dlp
   gets a proxy the `.env` sets. A child that runs a `load-env.ts` of its own, a job's CLI or the

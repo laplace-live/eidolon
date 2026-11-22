@@ -10,6 +10,7 @@ const ROOT = resolve(import.meta.dirname, "../../..");
 const RUNTIME_DIRS = [
   "apps/bot/src",
   "apps/cli/src",
+  "apps/desktop/src",
   "apps/eidolon/src",
   ...readdirSync(join(ROOT, "packages")).map((name) => `packages/${name}/src`),
 ];
@@ -84,7 +85,7 @@ describe("no runtime code needs Bun", () => {
     }
   });
 
-  test("apps/{bot,cli,eidolon}/src and packages/*/src use no Bun module, global or field", () => {
+  test("apps/{bot,cli,desktop,eidolon}/src and packages/*/src use no Bun module, global or field", () => {
     const files = RUNTIME_DIRS.flatMap((dir) => sourceFiles(join(ROOT, dir)));
     expect(files.length).toBeGreaterThan(300);
     const offenders = files.flatMap((file) =>

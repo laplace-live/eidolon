@@ -37,9 +37,13 @@ export function Component() {
   const voiceTarget = target ?? activeTarget;
 
   return (
-    <div className="flex min-h-svh flex-col">
+    // In the desktop app the page scrolls below the header, as PageLayout's does below its bar.
+    <div className="flex min-h-svh flex-col shell:h-svh">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2.5 px-4 sm:px-6">
+        <div
+          data-window-drag
+          className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2.5 px-4 sm:px-6 shell:max-w-none"
+        >
           <span className="flex shrink-0 items-center gap-1.5 font-semibold">
             <AppMark />
             <span className="sr-only font-logo text-xl sm:not-sr-only">LAPLACE Eidolon</span>
@@ -61,45 +65,47 @@ export function Component() {
           </div>
         </div>
       </header>
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6">
-        <PageHeader
-          title={t`Set Up Eidolon`}
-          description={t`Four short steps: your keys, who you'll talk to, her voice, and memory.`}
-        />
-        <div className="grid items-start gap-8 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-10">
-          <Stepper step={step} />
-          <div className="min-w-0">
-            {step === "keys" && <KeysStep onDone={forward} />}
-            {step === "persona" && (
-              <PersonaStep
-                initial={target}
-                onBack={back}
-                onDone={(next) => {
-                  setTarget(next);
-                  forward();
-                }}
-              />
-            )}
-            {step === "voice" && voiceTarget && (
-              <VoiceStep
-                target={voiceTarget}
-                onBack={back}
-                onDone={(done) => {
-                  // She exists now: going back to this step must not create her a second time.
-                  if (voiceTarget.kind === "create") {
-                    setCreated(true);
-                    setTarget({ kind: "existing", persona: done });
-                  }
-                  setPersona(done);
-                  forward();
-                }}
-              />
-            )}
-            {step === "memory" && <MemoryStep onBack={back} onDone={forward} />}
-            {step === "done" && <DoneStep persona={persona} created={created} onBack={back} />}
+      <div className="flex flex-1 flex-col shell:min-h-0 shell:overflow-y-auto">
+        <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6">
+          <PageHeader
+            title={t`Set Up Eidolon`}
+            description={t`Four short steps: your keys, who you'll talk to, her voice, and memory.`}
+          />
+          <div className="grid items-start gap-8 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-10">
+            <Stepper step={step} />
+            <div className="min-w-0">
+              {step === "keys" && <KeysStep onDone={forward} />}
+              {step === "persona" && (
+                <PersonaStep
+                  initial={target}
+                  onBack={back}
+                  onDone={(next) => {
+                    setTarget(next);
+                    forward();
+                  }}
+                />
+              )}
+              {step === "voice" && voiceTarget && (
+                <VoiceStep
+                  target={voiceTarget}
+                  onBack={back}
+                  onDone={(done) => {
+                    // She exists now: going back to this step must not create her a second time.
+                    if (voiceTarget.kind === "create") {
+                      setCreated(true);
+                      setTarget({ kind: "existing", persona: done });
+                    }
+                    setPersona(done);
+                    forward();
+                  }}
+                />
+              )}
+              {step === "memory" && <MemoryStep onBack={back} onDone={forward} />}
+              {step === "done" && <DoneStep persona={persona} created={created} onBack={back} />}
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

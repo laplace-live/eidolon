@@ -3,7 +3,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { cliEntry } from "@eidolon/config";
 import { afterEach, describe, expect, test } from "vitest";
+import { asElectron } from "../../config/test/electron.ts";
 import { eidolonScript, writeEidolonCommand } from "../src/eidolon-command.ts";
 import { bashOffered } from "../src/tools/shell.ts";
 import { removeTempFolders, tempFolder } from "./tool-folder.ts";
@@ -11,7 +13,7 @@ import { removeTempFolders, tempFolder } from "./tool-folder.ts";
 afterEach(removeTempFolders);
 
 const PLACES = {
-  runtime: { command: "/opt/node/bin/node", env: {} },
+  runtime: { command: "/opt/node/bin/node", args: [], env: {} },
   entry: "/opt/eidolon/dist/cli.js",
   dataHome: "/home/o'neil/.laplace/eidolon",
 };
@@ -42,21 +44,22 @@ describe("eidolonScript", () => {
     expect(script).not.toContain("EIDOLON_NO_DOTENV");
   });
 
-  test("Electron's: its binary runs the CLI as Node", () => {
+  test("Electron's: its binary runs the CLI as Node, with its flags before the CLI", () => {
     const runtime = {
       command: "/Applications/Eidolon.app/Eidolon",
+      args: ["--disable-sigusr1", "--use-system-ca"],
       env: { ELECTRON_RUN_AS_NODE: "1" },
     };
     const script = eidolonScript({ ...PLACES, runtime, env: {} });
     expect(script).toContain("ELECTRON_RUN_AS_NODE='1'; export ELECTRON_RUN_AS_NODE\n");
     expect(script).toContain(
-      `exec '/Applications/Eidolon.app/Eidolon' '/opt/eidolon/dist/cli.js' "$@"`,
+      `exec '/Applications/Eidolon.app/Eidolon' '--disable-sigusr1' '--use-system-ca' '/opt/eidolon/dist/cli.js' "$@"`,
     );
   });
 
   test("on Windows its paths take forward slashes, which Git Bash and Node both read", () => {
     const script = eidolonScript({
-      runtime: { command: "C:\\Program Files\\nodejs\\node.exe", env: {} },
+      runtime: { command: "C:\\Program Files\\nodejs\\node.exe", args: [], env: {} },
       entry: "C:\\npx\\node_modules\\@laplace.live\\eidolon\\dist\\cli.js",
       dataHome: "C:\\Users\\o'neil\\.laplace\\eidolon",
       env: { EIDOLON_APP_ROOT: "C:\\npx\\node_modules\\@laplace.live\\eidolon" },
@@ -92,5 +95,25 @@ describe.skipIf(!bashOffered())("writeEidolonCommand", () => {
     ]);
     // Written again over the last.
     expect(await writeEidolonCommand(dataHome)).toBe(path);
+  });
+
+  test("inside Electron, it runs the CLI with the runtime's flags before it", async () => {
+    const dataHome = await tempFolder();
+    const restore = asElectron();
+    let path: string;
+    try {
+      path = await writeEidolonCommand(dataHome);
+    } finally {
+      restore();
+    }
+    expect(readFileSync(path, "utf8")).toContain(
+      `'--disable-sigusr1' '--use-system-ca' '${cliEntry()}' "$@"\n`,
+    );
+    const run = spawnSync(path, ["prepare-batch", "--help"], {
+      cwd: dataHome,
+      env: { PATH: "/usr/bin:/bin", HOME: dataHome },
+      encoding: "utf8",
+    });
+    expect([run.status, run.stderr]).toEqual([0, ""]);
   });
 });

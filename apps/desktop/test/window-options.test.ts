@@ -1,0 +1,144 @@
+// The window's options: its bounds file in userData, where it opens on today's displays, and its
+// chrome on each platform.
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import {
+  backgroundColor,
+  chromeOptions,
+  DEFAULT_SIZE,
+  HEADER_ROW_PX,
+  MIN_SIZE,
+  placement,
+  readBounds,
+  type SavedBounds,
+  symbolColor,
+  titleBarOverlay,
+  workAreas,
+  writeBounds,
+} from "../src/main/window-options.ts";
+
+let folder: string;
+beforeEach(() => {
+  folder = mkdtempSync(join(tmpdir(), "eidolon-window-options-"));
+});
+afterEach(() => {
+  rmSync(folder, { recursive: true, force: true });
+});
+
+describe("the bounds file", () => {
+  test("keeps the bounds and whether the window was maximized, across a write and a read", () => {
+    const file = join(folder, "profile", "window-bounds.json");
+    const bounds: SavedBounds = { x: 120, y: 80, width: 1100, height: 760, maximized: true };
+    writeBounds(file, bounds);
+    expect(readBounds(file)).toEqual(bounds);
+    expect(existsSync(`${file}.tmp`)).toBe(false);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(bounds);
+  });
+
+  test("is no bounds when missing, unreadable or not a window's", () => {
+    const file = join(folder, "window-bounds.json");
+    expect(readBounds(file)).toBeNull();
+    for (const text of [
+      "",
+      "{",
+      "null",
+      "[]",
+      '"x"',
+      '{"x":1,"y":2,"width":3}',
+      '{"x":"1","y":2,"width":3,"height":4}',
+      '{"x":1,"y":2,"width":0,"height":4}',
+      '{"x":1,"y":2,"width":-3,"height":4}',
+      '{"x":1e999,"y":2,"width":3,"height":4}',
+    ]) {
+      writeFileSync(file, text);
+      expect([text, readBounds(file)]).toEqual([text, null]);
+    }
+    writeFileSync(file, '{"x":1,"y":2,"width":3,"height":4,"maximized":"yes"}');
+    expect(readBounds(file)).toEqual({ x: 1, y: 2, width: 3, height: 4, maximized: false });
+  });
+});
+
+describe("where the window opens", () => {
+  const laptop = { x: 0, y: 25, width: 1512, height: 920 };
+  const external = { x: 1512, y: -200, width: 2560, height: 1415 };
+
+  test("the first time, centred at the default size, as much of it as the first work area holds", () => {
+    expect(placement(null, [laptop])).toEqual({ ...DEFAULT_SIZE, maximized: false });
+    // A 1366×768 laptop under Windows' taskbar, beside a larger display.
+    const small = { x: 0, y: 0, width: 1366, height: 728 };
+    expect(placement(null, [small, external])).toEqual({
+      width: 1280,
+      height: 728,
+      maximized: false,
+    });
+    const tiny = { x: 0, y: 0, width: 480, height: 360 };
+    expect(placement(null, [tiny])).toEqual({ ...MIN_SIZE, maximized: false });
+    expect(placement(null, [])).toEqual({ ...DEFAULT_SIZE, maximized: false });
+  });
+
+  test("looks at the primary display's work area first, where a window with no position is centred", () => {
+    const primary = { id: 2, workArea: laptop };
+    expect(workAreas(primary, [{ id: 1, workArea: external }, primary])).toEqual([
+      laptop,
+      external,
+    ]);
+    expect(workAreas(primary, [primary])).toEqual([laptop]);
+  });
+
+  test("where it was, on whichever display still shows its top", () => {
+    const saved = { x: 1700, y: 0, width: 1400, height: 900, maximized: false };
+    expect(placement(saved, [laptop, external])).toEqual(saved);
+    expect(placement({ ...saved, maximized: true }, [laptop, external]).maximized).toBe(true);
+  });
+
+  test("centred at its size once no display shows enough of its top to drag it by", () => {
+    const saved = { x: 1700, y: 0, width: 1400, height: 900, maximized: false };
+    expect(placement(saved, [laptop])).toEqual({ width: 1400, height: 900, maximized: false });
+    // Only 60 px of its top on the laptop's right edge.
+    const edge = { x: 1452, y: 100, width: 1000, height: 700, maximized: false };
+    expect(placement(edge, [laptop])).toEqual({ width: 1000, height: 700, maximized: false });
+    // Its top above the display, the rest below.
+    const above = { x: 100, y: -500, width: 1000, height: 700, maximized: false };
+    expect(placement(above, [laptop]).x).toBeUndefined();
+  });
+
+  test("never bigger than the display it lands on, nor smaller than the minimum", () => {
+    const huge = { x: 0, y: 25, width: 4000, height: 3000, maximized: false };
+    expect(placement(huge, [laptop])).toMatchObject({ width: 1512, height: 920 });
+    const tiny = { x: 10, y: 30, width: 200, height: 100, maximized: false };
+    expect(placement(tiny, [laptop])).toMatchObject({ x: 10, y: 30, ...MIN_SIZE });
+    expect(placement(huge, [])).toMatchObject({ width: 4000, height: 3000 });
+  });
+});
+
+describe("the chrome", () => {
+  test("macOS: the traffic lights inset and centred on the page's 56 px first row, with the overlay on", () => {
+    expect(HEADER_ROW_PX).toBe(56);
+    expect(chromeOptions("darwin", false)).toEqual({
+      titleBarStyle: "hiddenInset",
+      trafficLightPosition: { x: 16, y: 20 },
+      titleBarOverlay: true,
+    });
+    expect(chromeOptions("darwin", true)).toEqual(chromeOptions("darwin", false));
+  });
+
+  test("Windows: no title bar, the caption buttons over a transparent 56 px overlay in the theme's glyphs", () => {
+    expect(chromeOptions("win32", false)).toEqual({
+      titleBarStyle: "hidden",
+      titleBarOverlay: { color: "#00000000", symbolColor: "#1f1f1f", height: 56 },
+    });
+    expect(titleBarOverlay(true)).toEqual({
+      color: "#00000000",
+      symbolColor: "#ffffff",
+      height: 56,
+    });
+    expect(symbolColor(false)).not.toBe(symbolColor(true));
+  });
+
+  test("the window's own colour is apps/web's background, so nothing flashes behind the page", () => {
+    expect(backgroundColor(false)).toBe("#ffffff");
+    expect(backgroundColor(true)).toBe("#0a0a0a");
+  });
+});

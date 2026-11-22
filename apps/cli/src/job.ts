@@ -2,15 +2,16 @@
 // module import-free: the web app imports it (`@eidolon/cli/job`) without Node's modules.
 
 /**
- * The argv of a job running `command` through the CLI at `entry` (@eidolon/config's cliEntry), with
- * progress events on stdout.
+ * The argv of a job running `command` through the CLI at `entry` (@eidolon/config's cliEntry) on
+ * `runtime` (its jsRuntime), with progress events on stdout.
  */
 export function jobArgv(
+  runtime: { readonly command: string; readonly args: readonly string[] },
   entry: string,
   command: string,
   args: readonly string[],
 ): [string, ...string[]] {
-  return [process.execPath, entry, command, "--json", ...args];
+  return [runtime.command, ...runtime.args, entry, command, "--json", ...args];
 }
 
 /** What the web app sends a job over its IPC channel to stop it, as SIGTERM would: Windows has none. */
