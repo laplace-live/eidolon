@@ -35,6 +35,7 @@ export default defineConfig({
             "apps/{bot,cli,eidolon}/test/**/*.test.ts",
             "packages/*/test/**/*.test.ts",
             "docs/benchmarks/**/*.test.ts",
+            "scripts/**/*.test.ts",
           ],
           setupFiles,
         },
