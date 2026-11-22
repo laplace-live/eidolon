@@ -83,10 +83,12 @@ export function leftTheApp(url: string): boolean {
   return pageAt(url) === null;
 }
 
-/** `url` for main.log: without the query or fragment, which the page fills. */
+/** `url` for main.log: no user name, password, query or fragment, which can hold secrets. */
 export function loggedUrl(url: string): string {
   const parsed = parse(url);
   if (parsed === null) return "an unreadable URL";
+  parsed.username = "";
+  parsed.password = "";
   parsed.search = "";
   parsed.hash = "";
   return parsed.href;

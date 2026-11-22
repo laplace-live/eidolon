@@ -113,11 +113,14 @@ describe("navigations", () => {
   });
 });
 
-test("main.log names an address without the query or fragment the page put on it", () => {
+test("main.log names an address without its user name, password, query or fragment", () => {
   expect(loggedUrl("eidolon-app://app/chats/c1?tab=files#end")).toBe("eidolon-app://app/chats/c1");
   expect(loggedUrl("eidolon-app://shell/loading")).toBe("eidolon-app://shell/loading");
   expect(loggedUrl("about:blank#x")).toBe("about:blank");
   expect(loggedUrl("about:blank?y")).toBe("about:blank");
+  expect(loggedUrl("https://owner:hunter2@example.com/a?b#c")).toBe("https://example.com/a");
+  expect(loggedUrl("https://owner@example.com/")).toBe("https://example.com/");
+  expect(loggedUrl("eidolon-app://owner:hunter2@app/chats")).toBe("eidolon-app://app/chats");
   expect(loggedUrl("not a url")).toBe("an unreadable URL");
 });
 

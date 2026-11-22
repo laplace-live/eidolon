@@ -526,7 +526,8 @@ onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
   with no dialog; renderers and Electron's helpers going away. Each run starts with a line naming
   the app's version, Electron's, Chromium's and Node's, and the OS. The window's page, a failed
   load, a renderer gone, a landing off the app and background mode's lines give a URL without its
-  query or fragment (`loggedUrl()` in `policy.ts`), and the forwarder's failures only its path.
+  user name, password, query or fragment (`loggedUrl()` in `policy.ts`), and the forwarder's
+  failures only its path.
 - **`backend.log`:** the backend's stdout and stderr, each line timestamped, since it carries its
   own level, and echoed to the terminal unpackaged. Main never logs a line that holds a link code:
   `log-filter.ts` drops `Eidolon is ready:` and `Eidolon is already running:` (and any other line
