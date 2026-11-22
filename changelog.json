@@ -1,0 +1,797 @@
+{
+  "schema": 1,
+  "releases": [
+    {
+      "date": "2026-11-22T19:41:36.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.14.0",
+        "laplace-eidolon": "0.14.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Pick any supported provider for hearing, chat, voice, embeddings and decisions in setup"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Estimate refinement costs at each provider's current prices, not outdated ones"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Starting Eidolon again links to the running one at the address it listens on"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Say Eidolon's log, not just the terminal, has an internal error's details"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Stop a cancelled ingest at once, even while it waits out an embedding quota error"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Estimate memory's embedding spend when the provider reports none, as knowledge search does"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-20T20:33:30.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.13.0",
+        "@laplace.live/eidolon-sdk": "0.2.0",
+        "laplace-eidolon": "0.13.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Run on Windows x64, where tasks run their commands in Git Bash"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "@laplace.live/eidolon-sdk",
+            "laplace-eidolon"
+          ],
+          "text": "Send her images and text files in chats, in the app and through the SDK"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A floating message box in chats, its buttons and permission picker inside it"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-20T09:36:15.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.12.0",
+        "laplace-eidolon": "0.12.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Run on Node 24 with no Bun to download"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A built-in persona-update skill finds a persona's new streams to transcribe"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Update undici to 7.30.2 and minimatch to 11.0.5 for their security fixes"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-19T22:44:48.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.11.0",
+        "laplace-eidolon": "0.11.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Choose per chat how much her tasks ask you, from Ask for Approval to Full Access"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Find the app's pages and your chats in a sidebar on the left, as in a chat app"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Type / in a chat to pick a command, or one of your skills for her task"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Manage skills in Settings, use ~/.agents/skills, and name a skill to her"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "The local app is now LAPLACE Eidolon, with a new logo and tab icon"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A blue theme for the local app"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Hear and transcribe with Soniox's v6 models by default"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-19T10:04:27.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.10.0",
+        "@laplace.live/eidolon-sdk": "0.1.2",
+        "laplace-eidolon": "0.10.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Let her tasks use the MCP servers you add, asking you before each call"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Let you pick a model for each kind of task: quick, coding or research"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Let her tasks run commands on your computer once you allow them"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Let her tasks use Agent Skills from your data home and the task's folder"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Let her tasks search the web through an OpenRouter account you pick"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Ask her in a chat to work in your folders and read the web, with your approval"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Pick /focus, /normal or /verbose for a chat's tasks, and stop one with /stop"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Keep what she says before a tool call in its place; a voice reply speaks the rest"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Run an assistant task in a folder from the command line with laplace-task"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Let her use up to 8 tool rounds a reply (chat.maxRounds), then still answer"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Ask her how a task is going, change or stop it, and give her tasks on a call"
+        },
+        {
+          "kind": "improvement",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Run on Bun 1.4.5, which fixes security issues in TLS, HTTP/3 and DNS"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Her reply on a thinking Claude model no longer fails after several tool rounds"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A reply OpenRouter ends with an error no longer counts as finished"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Tool results no longer push her older lines out of production chats"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Answer instead of staying silent when Gemini sends back a malformed reply"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Show her words before a tool call, and give tool events their own window share"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-16T19:52:58.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.9.1",
+        "laplace-eidolon": "0.9.1"
+      },
+      "items": [
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Muting your mic on a call in the local app stops sending your voice"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A cough or noise on a call no longer leaves the thinking dots up with no reply coming"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-14T08:51:13.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.9.0",
+        "@laplace.live/eidolon-sdk": "0.1.1",
+        "laplace-eidolon": "0.9.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Let sites listed in EIDOLON_LOCAL_ALLOWED_ORIGINS call the local app's bot API"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Show /api/memories refusals as the server's own message"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Keep every mic toggle in step, with a new micEnabledUpdated event"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Cap a voice message's claimed length at two minutes so the server accepts it"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Keep a redialed call up when the attempt it replaced resumes late"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Show a live mic swap's error only for the mic the viewer last picked"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Render EidolonClientProvider and EidolonClientAudio in production React builds"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Open the mic picked while a call is still starting"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Reject connect() when a call drops before the bot is ready instead of hanging"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Finalize short replies in realtime calls"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Resolve the SDK's types under TypeScript's node module resolution"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Mark the React entry as a client module so Next.js server components can import it"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Keep the chosen mic when a picker remounts or a preference is applied mid-call"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Keep her reply in one piece when a typed line interrupts it"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Report a chat reply cut off mid-stream as a network ChatRequestError"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Reject connect on AudioWorklet setup failure, serialize mic swaps with hangup, reject truncated chat streams, and guard hook state across resets"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Keep a realtime caller's late transcript with the turn she is answering"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-13T09:33:05.000Z",
+      "versions": {
+        "@laplace.live/eidolon-sdk": "0.1.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Publish `@laplace.live/eidolon-sdk` for WebRTC calls and stateless chats"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-12T12:36:51.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.8.0",
+        "laplace-eidolon": "0.8.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Set up a persona's voice styles in the studio, each with its trigger words"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A group call no longer sits waiting for a greeting no one gives"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A call inside a chat shows what is said as it is said, not once she has finished"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-11T20:04:13.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.7.0",
+        "laplace-eidolon": "0.7.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Call a persona from inside a chat, with the conversation carried over"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A chat endpoint for the web client, off until a secret is set"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Group chats where personas answer you and each other"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A new voice engine for calls: replies end on time and keep only what you heard"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Call everyone in a group chat at once"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Voice messages in chats: she can answer with her voice, and you can talk back"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Chat with a persona in text, and keep many chats"
+        },
+        {
+          "kind": "improvement",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Remove the old voice engine"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Saving memory or reranker settings in the local app no longer needs a restart"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Messages sent mid-reply no longer cut off whoever is typing or go unanswered"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Turn off onnxruntime's telemetry to Microsoft, which could crash Eidolon on exit"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-08T18:34:03.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.6.0",
+        "laplace-eidolon": "0.6.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Talk through an OpenAI or xAI realtime voice model (experimental)"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Add several accounts of one provider, and pick each role's account per persona"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "List the models each provider offers now, in a searchable picker"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Choose any supported provider for each persona's hearing, chat and voice"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "See what each provider costs on the new Usage page, for one persona or all"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Answer when she last or first streamed something, and how often"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-07T20:08:54.000Z",
+      "versions": {
+        "@laplace.live/eidolon": "0.5.0",
+        "laplace-eidolon": "0.5.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Persona settings now override environment variables, which become her defaults"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Install and run Eidolon with npx @laplace.live/eidolon"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "A new look for the local app: settings by persona in her studio, and avatars"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon"
+          ],
+          "text": "A local web app to set up Eidolon, build personas from their videos, and call them"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon"
+          ],
+          "text": "Build a persona's knowledge from videos and fact files with the new TypeScript tools"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Offline commands stop gracefully when one Ctrl-C or SIGTERM reaches them twice"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-05T09:37:39.000Z",
+      "versions": {
+        "laplace-eidolon": "0.4.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon"
+          ],
+          "text": "Configure personas and settings in YAML files, with keys kept apart"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-04T20:48:54.000Z",
+      "versions": {
+        "laplace-eidolon": "0.3.1"
+      },
+      "items": [
+        {
+          "kind": "fix",
+          "packages": [
+            "laplace-eidolon"
+          ],
+          "text": "Save viewers' memories reliably when the model thinks at length"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-04T19:24:21.000Z",
+      "versions": {
+        "laplace-eidolon": "0.3.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon"
+          ],
+          "text": "Add a TypeScript runtime on Bun that runs beside the Python bot"
+        }
+      ]
+    }
+  ]
+}

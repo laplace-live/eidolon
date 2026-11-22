@@ -454,6 +454,21 @@ describe("manifestLine", () => {
   });
 });
 
+describe("changelog.json", () => {
+  test("holds releases newest first, each one as the update's box reads it", () => {
+    const { schema, releases } = readChangelog(ROOT);
+    expect(schema).toBe(1);
+    expect(releases.length).toBeGreaterThan(0);
+    expect(parseReleaseNotes(releases)).toEqual(releases);
+    const dates = releases.map((release) => Date.parse(release.date));
+    expect(dates.every((date) => !Number.isNaN(date))).toBe(true);
+    expect(dates).toEqual(dates.toSorted((a, b) => b - a));
+    for (const release of releases) {
+      for (const item of release.items) expect(item.packages.length).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe("bun run version", () => {
   /**
    * A one-package workspace in its own git repository, with this repository's changesets plugin,
