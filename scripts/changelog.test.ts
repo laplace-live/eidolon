@@ -1,6 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
@@ -442,5 +451,108 @@ describe("manifestLine", () => {
     );
     expect(manifest.version).toBe("0.2.0");
     expect(parseReleaseNotes(manifest.eidolonNotes)).toEqual(changelog.releases);
+  });
+});
+
+describe("bun run version", () => {
+  /**
+   * A one-package workspace in its own git repository, with this repository's changesets plugin,
+   * the script and its types, and two changesets.
+   */
+  function fixtureRepo(): string {
+    const repo = tempDir();
+    write(
+      repo,
+      "package.json",
+      JSON.stringify({ private: true, type: "module", workspaces: ["packages/*"] }),
+    );
+    // manypkg takes a Bun workspace's root by its lockfile.
+    write(repo, "bun.lock", "");
+    for (const [name, version] of [
+      ["fixture-app", "1.0.0"],
+      ["fixture-lib", "2.0.0"],
+    ]) {
+      write(
+        repo,
+        `packages/${name}/package.json`,
+        JSON.stringify({ name, version, private: true }),
+      );
+    }
+    write(
+      repo,
+      ".changeset/config.json",
+      JSON.stringify({
+        changelog: "./changelog.mjs",
+        commit: false,
+        fixed: [],
+        linked: [],
+        access: "restricted",
+        baseBranch: "master",
+        updateInternalDependencies: "patch",
+        ignore: [],
+        privatePackages: { version: true, tag: true },
+      }),
+    );
+    for (const file of [
+      ".changeset/changelog.mjs",
+      "scripts/changelog.ts",
+      "apps/desktop/src/shared/release-notes.ts",
+    ]) {
+      mkdirSync(dirname(join(repo, file)), { recursive: true });
+      cpSync(join(ROOT, file), join(repo, file));
+    }
+    symlinkSync(join(ROOT, "node_modules"), join(repo, "node_modules"), "junction");
+    write(
+      repo,
+      ".changeset/brave-cats-sing.md",
+      '---\n"fixture-app": minor\n"fixture-lib": patch\n---\n\nfeat: Sing along\n',
+    );
+    write(repo, ".changeset/calm-dogs-rest.md", '---\n"fixture-lib": patch\n---\n\nfix: Rest\n');
+    git(repo, "init", "--quiet", "--initial-branch=master");
+    git(repo, "add", "--all");
+    git(repo, "commit", "--quiet", "--message=fixture");
+    return repo;
+  }
+
+  /** git with none of this machine's configuration, so no signing or hook runs in the fixture. */
+  const ENV = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: devNull,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_AUTHOR_NAME: "Fixture",
+    GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+    GIT_COMMITTER_NAME: "Fixture",
+    GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+  };
+
+  function git(repo: string, ...args: string[]): string {
+    return execFileSync("git", args, { cwd: repo, env: ENV, encoding: "utf8" });
+  }
+
+  test("records the batch it versions, with each changeset's kind and packages", () => {
+    const repo = fixtureRepo();
+    const changeset = join(ROOT, "node_modules/@changesets/cli/bin.js");
+    const script = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts
+      .version as string;
+    for (const step of script.split(" && ")) {
+      const [command, ...args] = step.split(" ");
+      // The fixture has no bot whose version to copy.
+      if (step === "bun apps/bot/scripts/sync-version.ts") continue;
+      if (command === "changeset") args.unshift(changeset);
+      else if (command !== "node") throw new Error(`unknown step in the version script: ${step}`);
+      execFileSync(process.execPath, args, { cwd: repo, env: ENV, stdio: "pipe" });
+    }
+
+    const lib = readFileSync(join(repo, "packages/fixture-lib/CHANGELOG.md"), "utf8");
+    expect(lib).toMatch(/^- [0-9a-f]{7}: Sing along$/m);
+    expect(lib).toMatch(/^- [0-9a-f]{7}: Rest$/m);
+    const { releases } = readChangelog(repo);
+    expect(releases).toHaveLength(1);
+    expect(releases[0]?.versions).toEqual({ "fixture-app": "1.1.0", "fixture-lib": "2.0.1" });
+    expect(releases[0]?.items).toEqual([
+      { kind: "feature", packages: ["fixture-app", "fixture-lib"], text: "Sing along" },
+      { kind: "fix", packages: ["fixture-lib"], text: "Rest" },
+    ]);
+    expect(existsSync(join(repo, ".changeset/.status.json"))).toBe(false);
   });
 });

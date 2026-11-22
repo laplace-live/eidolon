@@ -46,7 +46,8 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
-    "version": "changeset version && bun apps/bot/scripts/sync-version.ts",
+    "version": "changeset status --output=.changeset/.status.json && changeset version && bun apps/bot/scripts/sync-version.ts && node scripts/changelog.ts sync",
+    "changelog:backfill": "node scripts/changelog.ts backfill",
     "release": "bun run build:npm && bun run build:sdk && changeset publish"
   },
   "devDependencies": {
