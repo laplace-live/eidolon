@@ -790,7 +790,7 @@ The QA hooks are read from the environment the app starts with, as `.env.example
 | --- | --- |
 | `EIDOLON_DESKTOP_DEV_UPDATE=1` | An unpackaged build checks the release feed through `apps/desktop/dev-app-update.yml` (`forceDevUpdateConfig`), which electron-updater reads only unpackaged, with a cache of its own, `eidolon-dev-updater`. A download and Restart act on the real release. Not in background mode |
 | `EIDOLON_DESKTOP_MOCK_UPDATE=1` | Fakes the whole flow, as persona's `PERSONA_MOCK_UPDATE` does, packaged or not and in background mode too, and reaches no network: the check finds 9.9.9 after 0.6 s, the first download fails at 60 %, Try Again completes it, and Restart only logs, the update back to downloaded after 1.5 s so the run repeats. Nothing is checked, stopped or quit |
-| `EIDOLON_DESKTOP_UPDATE_TEST=1` | The one way the real updater runs in background mode, for CI's update test: a packaged install checks the feed its `app-update.yml` names, background mode answers Download, Restart and the quit check's box with their defaults, and the app stops its backend and installs, each step in main.log |
+| `EIDOLON_DESKTOP_UPDATE_TEST=1` | For CI runners only: the one way the real updater runs in background mode, for the CI update test, a `desktop.yml` dispatch. A packaged install checks the feed its `app-update.yml` names, background mode answers Download, Restart and the quit check's box with their defaults, and the app stops its backend and installs, each step in main.log. Squirrel.Mac or the NSIS installer then starts the updated version outside background mode, on the default profile and the real data home, so a local run would end with a visible Eidolon |
 
 A packaged build reads only its own `resources/app-update.yml`, so a test of an update builds its
 older version with the feed it will serve (`-c.publish.url`, which electron-builder writes there).
@@ -833,8 +833,9 @@ that could show something through it.
 - **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
   Developer Tools, which opens a window, isn't offered unpackaged either.
 - **No updates:** no check runs and there is no Check for Updates…, unless
-  `EIDOLON_DESKTOP_MOCK_UPDATE` fakes the flow or `EIDOLON_DESKTOP_UPDATE_TEST` runs the real one
-  ([Updates](#updates)), whose boxes take their defaults, Download and Restart.
+  `EIDOLON_DESKTOP_MOCK_UPDATE` fakes the flow or, on a CI runner only,
+  `EIDOLON_DESKTOP_UPDATE_TEST` runs the real one ([Updates](#updates)), whose boxes take their
+  defaults, Download and Restart.
 - **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
   is granted only when the app runs with Chromium's `--use-fake-device-for-media-stream`, on any
   platform, and otherwise denied, since a grant would record the owner; main.log says which.
