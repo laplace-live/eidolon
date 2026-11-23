@@ -143,7 +143,7 @@ describe("pnpm's arguments", () => {
       "--config.dangerously-allow-all-builds=true",
       "--config.minimum-release-age=0",
       "--config.block-exotic-subdeps=false",
-      "--config.enable-global-virtual-store=false",
+      "--config.node-linker=hoisted",
     ]);
   });
 

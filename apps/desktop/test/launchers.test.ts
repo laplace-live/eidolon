@@ -259,13 +259,17 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
             bin: { "eidolon-test-app": "cli.mjs" },
             dependencies: { "eidolon-test-dep": dep },
           }),
-          // eidolon-test-leaf is its dependency's, which npm hoists beside it.
+          // eidolon-test-leaf is its dependency's, which npm's flat node_modules puts beside it.
           "cli.mjs": [
             "#!/usr/bin/env node",
             'import dep from "eidolon-test-dep";',
+            'import { readFileSync } from "node:fs";',
             'import leaf from "eidolon-test-leaf";',
+            'const url = new URL("../eidolon-test-leaf/package.json", import.meta.url);',
+            'const beside = JSON.parse(readFileSync(url, "utf8")).name;',
             `const version = "${version}";`,
-            "console.log(JSON.stringify({ version, dep, leaf, args: process.argv.slice(2) }));",
+            "const args = process.argv.slice(2);",
+            "console.log(JSON.stringify({ version, dep, leaf, beside, args }));",
             "",
           ].join("\n"),
         }),
@@ -296,9 +300,10 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       const status = await new Promise((resolve) => child.on("close", resolve));
       return { status, stdout, stderr };
     };
+    const imported = { version: "1.1.0", dep: "dep", leaf: "leaf" };
     expect(await npx(["-y", "eidolon-test-app", "x"])).toEqual({
       status: 0,
-      stdout: `${JSON.stringify({ version: "1.1.0", dep: "dep", leaf: "leaf", args: ["x"] })}\n`,
+      stdout: `${JSON.stringify({ ...imported, beside: "eidolon-test-leaf", args: ["x"] })}\n`,
       stderr: "",
     });
     expect(existsSync(join(markers, "dep"))).toBe(true);

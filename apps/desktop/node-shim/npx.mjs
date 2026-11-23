@@ -29,11 +29,11 @@ export const NPX_SETTINGS = [
   "--config.minimum-release-age=0",
   // npm installs a dependency's own git and tarball-URL dependencies; pnpm refuses them.
   "--config.block-exotic-subdeps=false",
-  // In pnpm's global virtual store an ES module finds what its package uses without declaring it
-  // only through a loader pnpm puts in NODE_OPTIONS for what it runs itself, which the packaged
-  // app's Electron ignores anyway (its nodeOptions fuse is off). A project's own store hoists it
-  // where Node looks up the folders, as npm's flat node_modules does.
-  "--config.enable-global-virtual-store=false",
+  // npm installs a flat node_modules, where a package finds what it uses without declaring it up
+  // the folders, and the packages beside it at ../name. pnpm's isolated layout puts each package
+  // among its own dependencies alone, and in its global virtual store an ES module finds the rest
+  // only through a loader in NODE_OPTIONS, which the packaged app's Electron ignores.
+  "--config.node-linker=hoisted",
 ];
 
 /**
