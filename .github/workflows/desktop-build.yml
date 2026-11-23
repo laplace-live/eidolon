@@ -169,7 +169,8 @@ jobs:
         timeout-minutes: 30
         run: node apps/desktop/scripts/test-on-electron.ts
 
-      # The whole suite doesn't run on Windows: these are the tests ts.yml's windows job runs there.
+      # The whole suite doesn't run on Windows: these are the node-project tests ts.yml's windows job
+      # runs there.
       - name: Windows' own tests on Electron's Node
         if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Windows' }}
         timeout-minutes: 20
