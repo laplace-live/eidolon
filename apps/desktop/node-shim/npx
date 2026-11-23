@@ -1,0 +1,8 @@
+#!/bin/sh
+# npx for an MCP server where the computer has none: npx.mjs runs it as the bundled pnpm's dlx.
+if [ -z "$EIDOLON_NODE" ]; then
+  echo "npx: EIDOLON_NODE isn't set: Eidolon sets it for the MCP servers it starts" >&2
+  exit 1
+fi
+export ELECTRON_RUN_AS_NODE=1
+exec "$EIDOLON_NODE" --disable-sigusr1 --use-system-ca "${0%/*}/npx.mjs" "$@"
