@@ -1,8 +1,9 @@
 // Stages the backend the desktop app ships for one target, in apps/desktop/.stage/<target>/eidolon
 // (`node apps/desktop/scripts/stage-backend.ts [--target darwin-arm64|win32-x64]`, this machine's by
 // default): what the npm package stages, plus its dependencies installed by npm for the target,
-// pinned to bun.lock and pruned. On Windows the natives also get the VC++ runtime beside them, and
-// .stage/win32-x64/unsigned-pe.json lists the PE files the release signs.
+// pinned to bun.lock and pruned, and the node shim (node-shim.ts). On Windows the natives also get
+// the VC++ runtime beside them, and .stage/win32-x64/unsigned-pe.json lists the PE files the release
+// signs.
 import { type SpawnSyncOptionsWithStringEncoding, spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -25,6 +26,7 @@ import {
 } from "../../eidolon/scripts/build.ts";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { type LsNode, lockDrift, lockedTree, pinOverrides, readBunLock } from "./lockfile.ts";
+import { NODE_SHIM, stageNodeShim } from "./node-shim.ts";
 import { compareVersions, type Pe, readPe } from "./pe.ts";
 import { readZip } from "./zip.ts";
 
@@ -377,14 +379,22 @@ function packageLicense(pkg: Bundled, dir: string): string {
 
 /**
  * THIRD_PARTY_LICENSES.txt, the one file the Licenses item opens, so it holds every license the
- * payload carries: each node_modules package's, on Windows the VC++ runtime's copied from
- * `vcRuntime`, then the payload's own NOTICE, THIRD_PARTY_NOTICES.md and its data's licenses.
+ * payload carries: each package's in npm's node_modules, the node shim's and the dist/ of its pnpm,
+ * on Windows the VC++ runtime's copied from `vcRuntime`, then the payload's own NOTICE,
+ * THIRD_PARTY_NOTICES.md and its data's licenses.
  */
 export function thirdPartyLicenses(payload: string, vcRuntime: VcRedist | null): string {
   const packages = new Map<string, { pkg: Bundled; dir: string }>();
-  for (const [name, dir] of installedPackages(join(payload, "node_modules"))) {
-    for (const pkg of inlinedPackages(new Map([[name, dir]]))) {
-      packages.set(`${pkg.name}@${pkg.version}`, { pkg, dir });
+  const shim = join(payload, NODE_SHIM, "node_modules");
+  for (const modules of [
+    join(payload, "node_modules"),
+    shim,
+    join(shim, "pnpm", "dist", "node_modules"),
+  ]) {
+    for (const [name, dir] of installedPackages(modules)) {
+      for (const pkg of inlinedPackages(new Map([[name, dir]]))) {
+        packages.set(`${pkg.name}@${pkg.version}`, { pkg, dir });
+      }
     }
   }
   const sections = [...packages.values()]
@@ -422,9 +432,10 @@ export function thirdPartyLicenses(payload: string, vcRuntime: VcRedist | null):
   return [
     "Third-party licenses\n",
     "Eidolon's backend includes the third-party code and data below, each with its license: first",
-    "what its node_modules folder holds, then NOTICE, which covers the code Eidolon ports from other",
-    "projects and the data and the font it ships, then THIRD_PARTY_NOTICES.md, for the packages its",
-    "bundles in dist/ and its web app in web/ include, and last the license files of its data.\n",
+    "the packages its node_modules folders hold, the pnpm its node shim runs and the packages pnpm",
+    "bundles among them, then NOTICE, which covers the code Eidolon ports from other projects and",
+    "the data and the font it ships, then THIRD_PARTY_NOTICES.md, for the packages its bundles in",
+    "dist/ and its web app in web/ include, and last the license files of its data.\n",
     ...sections,
     ...runtime,
     ...notices,
@@ -495,6 +506,7 @@ export async function stageBackend(
     for (const entry of links) rmSync(join(entry.parentPath, entry.name), { recursive: true });
     rmSync(join(modules, ".package-lock.json"), { force: true });
     pruneOnnxruntime(modules, target);
+    stageNodeShim(payload, { os, cpu });
     let vcRuntime: VcRedist | null = null;
     if (target === "win32-x64") {
       vcRuntime = newestVcRedist();
@@ -527,6 +539,7 @@ export async function stageBackend(
       sharp: bytesUnder(join(modules, "sharp")) + bytesUnder(join(modules, "@img")),
       web: bytesUnder(join(payload, "web")),
       dist: bytesUnder(join(payload, "dist")),
+      "node shim": bytesUnder(join(payload, NODE_SHIM)),
     },
     seconds: (performance.now() - started) / 1000,
   };
