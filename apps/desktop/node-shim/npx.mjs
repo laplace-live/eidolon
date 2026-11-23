@@ -627,12 +627,12 @@ export function npmSpec(arg, where, home, platform = process.platform) {
 
 /**
  * The folder or tarball file `spec` names, as npm-package-arg tells them from a git repo, a URL or
- * a registry package, with the name it gives it, if any; undefined for anything else.
+ * a registry package; undefined for anything else.
  */
 export function localSpec(spec, cwd, home, platform = process.platform) {
   const parsed = npmSpec(spec, cwd, home, platform);
   if (parsed?.type !== "file" && parsed?.type !== "directory") return undefined;
-  return { name: parsed.name, path: parsed.path, tarball: parsed.type === "file" };
+  return { path: parsed.path, tarball: parsed.type === "file" };
 }
 
 const ALLOWS = {
@@ -665,7 +665,9 @@ export function refusal(specs, sources, cwd, home, platform = process.platform) 
  * pnpm's arguments to install `packages` into its dlx cache as npx would, with npxSettings'
  * `settings`: npm links a folder it is given rather than installing it and its dependencies, as
  * pnpm does with link:. pnpm reads a relative path from its dlx folder, so each local one goes
- * absolute.
+ * absolute, and without the name a spec gives it: npm runs the package's own bins whatever the
+ * name, where pnpm's dlx makes a named one's path relative to the folder it runs in, which from
+ * the cache folder it installs in points nowhere.
  * @param {readonly string[]} packages
  * @param {readonly string[]} settings
  * @returns {string[]}
@@ -673,9 +675,7 @@ export function refusal(specs, sources, cwd, home, platform = process.platform) 
 export function npxToPnpm(packages, settings, cwd, home, platform = process.platform) {
   const specs = packages.map((spec) => {
     const local = localSpec(spec, cwd, home, platform);
-    if (local === undefined) return spec;
-    const name = local.name === undefined ? "" : `${local.name}@`;
-    return `${name}${local.tarball ? "file" : "link"}:${local.path}`;
+    return local === undefined ? spec : `${local.tarball ? "file" : "link"}:${local.path}`;
   });
   // pnpm keys a dlx install by its packages and --allow-build, never by these settings, so for a
   // day pnpx's or pnpm dlx's install of a package would serve npx, and npx's them, and one npx's

@@ -860,4 +860,21 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     );
     expect(allowed).toEqual(kinds.map(() => ({ status: 0, stdout: 'hello ["x"]\n' })));
   }, 120_000);
+
+  test("runs a folder or tarball a spec names, whatever name it gives it, as npm", async () => {
+    const folder = mkdtempSync(join(scratch, "named-"));
+    pack(hello, join(folder, "hello.tgz"));
+    const specs = [
+      "eidolon-test-hello@../hello",
+      "other@file:../hello",
+      "eidolon-test-hello@./hello.tgz",
+      "@eidolon/other@./hello.tgz",
+    ];
+    const ran = [];
+    for (const spec of specs) {
+      const { status, stdout } = await launch("npx", ["-y", spec, "x"], { cwd: folder });
+      ran.push({ spec, status, stdout });
+    }
+    expect(ran).toEqual(specs.map((spec) => ({ spec, status: 0, stdout: 'hello ["x"]\n' })));
+  }, 60_000);
 });

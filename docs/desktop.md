@@ -707,7 +707,8 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   a package with install scripts `allow-scripts` doesn't name, while pnpm's dlx runs the scripts of
   the packages it is asked for unasked and skips a dependency's without failing. A folder is
   linked, as npm links one, and runs as it is; a relative path resolves from the folder npx runs
-  in. pnpm runs in a folder of its own with no pnpm workspace around it, whose `.npmrc` npx writes
+  in; and a folder or tarball runs its own bins whatever name the spec gives it, as under npm.
+  pnpm runs in a folder of its own with no pnpm workspace around it, whose `.npmrc` npx writes
   with the registries, credentials and certificates of the `.npmrc` npm reads at its local prefix,
   as npm reads them, files resolved as npm finds them, and over them the registries
   `npm_config_registry` and `npm_config_@scope:registry` name, as npm ranks them, never on pnpm's

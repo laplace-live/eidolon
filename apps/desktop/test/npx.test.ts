@@ -54,7 +54,7 @@ interface Npx {
     cwd: string,
     home: string,
     platform?: string,
-  ): { name?: string; path: string; tarball: boolean } | undefined;
+  ): { path: string; tarball: boolean } | undefined;
   binsOf(manifest: object, dir: string): Record<string, string>;
   binOf(manifest: object, dir: string): string | undefined;
   npmPrefix(cwd: string): { prefix: string; workspace?: string };
@@ -191,10 +191,11 @@ describe("pnpm's arguments", () => {
     expect(npx.npxToPnpm(specs, DEFAULTS, "/work", "/home/me")).toEqual(dlx(...specs));
   });
 
-  test("give a folder as pnpm's link:, absolute, which npm links too", () => {
+  // A name a spec gives either, npm runs the package's own bins under.
+  test("give a folder as pnpm's link:, absolute and unnamed, which npm links too", () => {
     expect(
       npx.npxToPnpm(
-        ["./server", "file:../other", "named@./third", "~/fourth"],
+        ["./server", "file:../other", "named@./third", "~/fourth", "@s/n@file:../fifth"],
         DEFAULTS,
         "/work/here",
         "/home/me",
@@ -203,13 +204,14 @@ describe("pnpm's arguments", () => {
       dlx(
         "link:/work/here/server",
         "link:/work/other",
-        "named@link:/work/here/third",
+        "link:/work/here/third",
         "link:/home/me/fourth",
+        "link:/work/fifth",
       ),
     );
   });
 
-  test("give a tarball file absolute, which pnpm would look for in its dlx folder", () => {
+  test("give a tarball file absolute and unnamed, which pnpm would look for in its dlx folder", () => {
     expect(
       npx.npxToPnpm(
         ["./server-1.0.0.tgz", "file:../server.tar.gz", "x.tgz", "named@./y.tar", "~/z.tgz"],
@@ -222,7 +224,7 @@ describe("pnpm's arguments", () => {
         "file:/work/here/server-1.0.0.tgz",
         "file:/work/server.tar.gz",
         "file:/work/here/x.tgz",
-        "named@file:/work/here/y.tar",
+        "file:/work/here/y.tar",
         "file:/home/me/z.tgz",
       ),
     );
@@ -621,20 +623,17 @@ describe("a folder or tarball spec, as npm-package-arg reads it", () => {
     ["./a%20b", "/cwd/here/a%20b"],
   ])("%s is the folder %s", (spec, folder) => {
     expect(npx.localSpec(spec, "/cwd/here", "/home/me", "linux")).toEqual({
-      name: undefined,
       path: folder,
       tarball: false,
     });
   });
 
-  test("keeps the name a named folder spec gives", () => {
+  test("reads a named folder spec's folder", () => {
     expect(npx.localSpec("foo@./x", "/cwd", "/home", "linux")).toEqual({
-      name: "foo",
       path: "/cwd/x",
       tarball: false,
     });
     expect(npx.localSpec("@s/n@file:../y", "/cwd/here", "/home", "linux")).toEqual({
-      name: "@s/n",
       path: "/cwd/y",
       tarball: false,
     });
@@ -648,7 +647,6 @@ describe("a folder or tarball spec, as npm-package-arg reads it", () => {
     ["~/x.tgz", "/home/me/x.tgz"],
   ])("%s is the tarball %s", (spec, file) => {
     expect(npx.localSpec(spec, "/cwd/here", "/home/me", "linux")).toEqual({
-      name: undefined,
       path: file,
       tarball: true,
     });
