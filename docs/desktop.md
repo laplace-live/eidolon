@@ -581,7 +581,8 @@ The backend runs on the environment main reads, plus four variables of its own, 
   `shellEnv()` passes listed names alone, and neither may any spawn that can start a program the
   owner chose, or an Electron app such as VS Code's `code` would run as Node. A [node
   shim](#the-node-shim) launcher sets it itself, for the process it runs on Eidolon's binary, and
-  that process's children inherit it. yt-dlp keeps it on purpose: its JS runtime is the app binary.
+  that process's children inherit it, all but the command the shim's npx runs, which starts without
+  it, as npm starts it. yt-dlp keeps it on purpose: its JS runtime is the app binary.
   Electron's GUI starts without it: `dev:desktop` through `electronEnv()`
   (`scripts/electron-env.ts`), which deletes it from a copy of the environment, and the smokes on
   the environment `appEnv()` builds, which takes no `ELECTRON_*` name.
@@ -656,14 +657,16 @@ on a computer with no Node: the payload holds launchers that run each on the app
 Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs wins.
 
 - **Its files,** in the payload's `node-shim/`: in `bin/`, `node`, `npx`, `pnpm` and `pnpx` (sh,
-  0755), their `.cmd` twins (CRLF, each under `setlocal`) and `npx.mjs`; in `node_modules/pnpm`,
+  0755), their `.cmd` twins (CRLF, each under `setlocal`), `npx.mjs` and `cross-spawn.mjs`; in
+  `node_modules/pnpm`,
   the pnpm `apps/desktop` pins as an exact dev dependency, so `bun.lock` pins it as it pins the
   rest. `scripts/node-shim.ts`, ported from deepseek-harness, stages them from
   `apps/desktop/node-shim` and a copy of the installed pnpm, pruned of the natives its `dist/`
   bundles for other platforms (`prunePnpmForeignNativePackages`), its bundled packages' `.bin`
   links, and `dist/vendor`'s fastlist executables, which nothing runs and the Windows release would
   sign as Eidolon's. [The stage test](#the-stage-test) holds them to their sources, the pin and the
-  target's natives, with no `.exe`. In a checkout, under `dev:desktop` and in the Electron lane,
+  target's natives, with no `.exe`, and pnpm's `dist/` to the semver and `node-gyp-bin` that
+  `npx.mjs` uses. In a checkout, under `dev:desktop` and in the Electron lane,
   the launchers' folder is `apps/desktop/node-shim` itself, whose `../node_modules/pnpm` is the
   installed one.
 - **A server gets it** from `serverEnv` (`packages/assistant/src/mcp/session.ts`) when the backend
@@ -677,16 +680,27 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   and `pnpx` run the bundled pnpm's own. The server inherits the variable, so one that starts Node
   as `process.execPath` runs Eidolon's binary as Node too. On Windows the launchers are `.cmd`
   files, which a shell or cross-spawn runs.
-- **npx** runs `npx.mjs`, which turns npx's arguments into `pnpm --loglevel=error dlx …` and runs
-  the bundled pnpm in that same process (`npxToPnpm`): `-y`, `--yes`, `-q` and `--quiet` dropped,
-  each `-p X`, `-p=X`, `--package X` or `--package=X` as `--package=X`, then `--` and the first
-  other word, with every word after it. pnpm reports dlx on stderr, so stdout, which the MCP
-  protocol owns, holds only the server's output. An option it doesn't map exits 1, naming it.
-- **pnpm's defaults hold,** not npx's: dlx runs the install scripts of the packages it is given,
-  never their dependencies'; it picks no version younger than a day; it always fetches from the
-  registry, never a project's own `node_modules/.bin`; and its store and caches are where pnpm
-  keeps them, under the owner's home. One `--config.dangerously-allow-all-builds=true` in
-  `npxToPnpm` would run every install script.
+- **npx** runs `npx.mjs`, which decides as npm's npx does on npm's default config (`plan`). With
+  no `--package`, the project's own bin, a bin in a `node_modules/.bin` from npm's local prefix up,
+  or a package npm's local tree holds at a version the spec allows, by npm's semver, which pnpm's
+  `dist/` carries, runs as it is, from the workspace's folder in an npm workspace. Anything else the
+  bundled pnpm installs into its dlx cache, `NPX_SETTINGS` making it install as npm does: every
+  dependency's install scripts run, the newest version is taken, git and tarball-URL dependencies
+  install, and `node_modules` is flat, so a package finds what it uses and the packages beside it
+  as under npm. A folder is linked, as npm links one, and runs as it is; a relative path resolves
+  from the folder npx runs in. pnpm reads its registry and auth from `.npmrc` and `pnpm_config_*`
+  variables, keeps its store and caches under the owner's home, and installs a dlx package afresh
+  after a day.
+- **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
+  `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
+  On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on
+  Windows an `.exe` starts directly and anything else through cmd.exe, a batch file's words escaped
+  twice, as npm escapes them (`cross-spawn.mjs`, ported from cross-spawn). It starts without
+  `ELECTRON_RUN_AS_NODE`, as npm starts it: a Node script among them runs on `node`, which, where
+  it is the shim's, sets it again for itself. On macOS npx passes SIGINT and SIGTERM on to it; on
+  Windows, where `kill()` is TerminateProcess, it only waits. npx ends with the command's exit code,
+  or on macOS its signal. pnpm writes only to stderr, so stdout, which the MCP protocol owns, holds
+  only the server's output.
 - **On Electron's Node,** a server's N-API native modules load, while one whose prebuilds are for
   Node's ABI alone looks for an Electron build; and macOS shows a shim-run server's permission
   prompts in Eidolon's name.
@@ -1120,8 +1134,9 @@ Open at Login and the terminal command, and the login item's reads and writes; t
 command's states, link, password prompt and `Path` script on temporary folders and fake runners,
 and its macOS launcher run through links against a stand-in bundle; the task watch's polls,
 baselines and notices, their text in both languages and a click's command, on fake answers and a
-fake clock; the node shim's npx translation, its launchers run on this Node with the checkout's
-pnpm, and the shim the stage writes; the logs' rotation and link filter; stage-backend's parts on
+fake clock; the node shim's npx decisions, against npm's on made-up trees (`npx.test.ts`), its
+launchers run on this Node with the checkout's pnpm and a fake registry, and the shim the stage
+writes; the logs' rotation and link filter; stage-backend's parts on
 made-up lockfiles, PE files and zips; the release overlay through electron-builder's own loader,
 and signed-check's reading of codesign, Gatekeeper, stapler and Authenticode output; the release
 notes' parsing, slice and text; the smokes' kit and parts, the fakes over real loopback requests
@@ -1375,8 +1390,9 @@ macOS.
 `ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips, and
 its Windows job the project's Windows-only tests: `terminal-command-windows.test.ts` (the PATH
 script on a scratch key under HKCU, and the eidolon command's `.cmd`),
-`registry-environment-windows.test.ts` (the registry read, on scratch keys) and
-`node-shim-windows.test.ts` (the node shim's `.cmd` launchers, on Node).
+`registry-environment-windows.test.ts` (the registry read, on scratch keys),
+`node-shim-windows.test.ts` (the node shim's `.cmd` launchers, on Node) and `npx-windows.test.ts`
+(its npx through `npx.cmd` and cmd.exe, with the words cmd.exe treats specially).
 `.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
 request that changes more than docs, on a dispatch, and from a release's tag
 ([Releasing](#releasing)): the payload comes from `bun.lock` and the backend's packages, so a filter

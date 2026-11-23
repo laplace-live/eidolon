@@ -483,7 +483,8 @@ the layout's one line.
   Node: no spawn that can start a program the owner chose (a task's command, an MCP server) may
   carry it, or VS Code's `code` would run as Node. The node shim keeps to that: the backend starts
   an MCP server without it, and a shim launcher sets it only for the process it runs on Eidolon's
-  binary, whose children inherit it.
+  binary, whose children inherit it, all but the command the shim's npx runs, which starts without
+  it.
 - **Every node-mode process the app starts carries `--disable-sigusr1 --use-system-ca`** before its
   script (yt-dlp's JS runtime, which yt-dlp starts, aside): `jsRuntime().args`, which main mirrors
   as `BACKEND_RUNTIME_ARGS`, a test holding the two equal. The inspect fuse doesn't reach node mode,
@@ -541,6 +542,9 @@ the layout's one line.
 - **deepseek-harness-derived code carries its MIT header,** then
   `Ported from deepseek-harness <path>@2e39e70496`; `apps/desktop` keeps `LICENSE-deepseek` and
   `THIRD_PARTY.md`, and `NOTICE` names the holder (`build.test.ts` checks it).
+- **cross-spawn-derived code carries its MIT header,** then `Ported from cross-spawn <path>@77cd97f`;
+  `apps/desktop` keeps `LICENSE-cross-spawn` and `THIRD_PARTY.md`, and `NOTICE` names the holder
+  (`build.test.ts` checks it).
 
 ### Identity and quotas
 
