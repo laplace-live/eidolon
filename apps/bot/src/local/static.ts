@@ -8,13 +8,14 @@ import { webDist } from "@eidolon/config";
 import { isInside } from "./write.ts";
 
 /**
- * `blob:` lets the WebRTC client load its AudioWorklets, and `https:` lets voice covers and
- * samples load from Fish. same-origin, not no-referrer: under no-referrer a page's own POSTs send
- * `Origin: null`, which the API refuses.
+ * `blob:` lets the WebRTC client load its AudioWorklets, `'wasm-unsafe-eval'` lets PSD2Live's
+ * runtime compile and allows no eval, and `https:` lets voice covers and samples load from Fish.
+ * same-origin, not no-referrer: under no-referrer a page's own POSTs send `Origin: null`, which the
+ * API refuses.
  */
 export const STATIC_HEADERS: Readonly<Record<string, string>> = Object.freeze({
   "content-security-policy":
-    "default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; " +
+    "default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; " +
     "style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; " +
     "media-src 'self' blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; " +
     "frame-ancestors 'none'; form-action 'self'",
@@ -34,6 +35,7 @@ const TYPES: Readonly<Record<string, string>> = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".woff2": "font/woff2",
+  ".wasm": "application/wasm",
 };
 
 export class MissingDist extends Error {
