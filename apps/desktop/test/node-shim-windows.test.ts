@@ -59,8 +59,10 @@ describe.runIf(WINDOWS)("the node shim's .cmd launchers, on this Node", () => {
         LOCALAPPDATA: join(home, "AppData", "Local"),
         APPDATA: join(home, "AppData", "Roaming"),
         EIDOLON_NODE: process.execPath,
-        // A file: package needs no registry; one pnpm tried anyway would fail at once.
+        // A file: package needs no registry; one pnpm tried anyway would fail at once, not after
+        // the 70 s its retries take.
         pnpm_config_registry: `http://127.0.0.1:${await closedPort()}/`,
+        pnpm_config_fetch_retries: "0",
       },
       "win32",
     );

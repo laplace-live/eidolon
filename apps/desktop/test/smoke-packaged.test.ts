@@ -1,6 +1,6 @@
 // The packaged smoke's own helpers, without Electron or Windows: a packaged app's layout, a launcher
 // run as a terminal would, the PATH and variables it gets, the stand-in that tells whether it sets
-// ELECTRON_RUN_AS_NODE, command lines as ps and Windows give
+// ELECTRON_RUN_AS_NODE and a failed run's cause, command lines as ps and Windows give
 // them, the natives lsof and PowerShell list, the photo and icon it
 // reads, the logs' errors and leaks, the processes naming a run's folder, a folder's hashes, the
 // marker it leaves in a data home, and the NSIS setup's uninstall entry and silent uninstall.
@@ -28,6 +28,7 @@ import {
 } from "../scripts/smoke/nsis.ts";
 import {
   appLayout,
+  cause,
   changedFiles,
   closedPort,
   fileHashes,
@@ -200,6 +201,34 @@ describe("a launcher, run as a terminal would", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("a failed run's cause: its error's own line, not Node's version after it", () => {
+    const uncaught = [
+      "node:internal/modules/cjs/loader:1568",
+      "  throw err;",
+      "  ^",
+      "",
+      "Error: Cannot find module '/app/eidolon/dist/cli.js'",
+      "    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15) {",
+      "  code: 'MODULE_NOT_FOUND',",
+      "  requireStack: []",
+      "}",
+      "",
+      "Node.js v24.22.1",
+      "",
+    ].join("\n");
+    expect(cause(uncaught)).toBe("Error: Cannot find module '/app/eidolon/dist/cli.js'");
+    expect(cause("[ERROR] ENOENT: lstat 'C:\\home'\r\nFor help, run: pnpm help dlx\r\n")).toBe(
+      "[ERROR] ENOENT: lstat 'C:\\home'",
+    );
+    expect(cause(" ERR_PNPM_FETCH_404  GET http://127.0.0.1:9/x: Not Found\n")).toBe(
+      "ERR_PNPM_FETCH_404  GET http://127.0.0.1:9/x: Not Found",
+    );
+    expect(cause("The system cannot find the path specified.\r\n")).toBe(
+      "The system cannot find the path specified.",
+    );
+    expect(cause("")).toBe("");
   });
 });
 

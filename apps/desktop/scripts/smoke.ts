@@ -41,6 +41,7 @@ import { namesUninstaller, silentUninstall, UNINSTALLER, uninstallEntries } from
 import {
   type AppLayout,
   appLayout,
+  cause,
   changedFiles,
   closedPort,
   fileHashes,
@@ -309,7 +310,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
     checks.add(
       TERMINAL,
       ran.code === 0 && usage && wrote.length > 0,
-      `${short(layout.terminalCommand)} search --help exited ${ran.code}${usage ? ", laplace-search's usage on stdout" : `; stdout: ${lastLine(ran.stdout) || "nothing"}; stderr: ${lastLine(ran.stderr) || "nothing"}`}; the terminal's home holds ${wrote.join(", ") || "nothing"}`,
+      `${short(layout.terminalCommand)} search --help exited ${ran.code}${usage ? ", laplace-search's usage on stdout" : `; stdout: ${lastLine(ran.stdout) || "nothing"}; stderr: ${cause(ran.stderr) || "nothing"}`}; the terminal's home holds ${wrote.join(", ") || "nothing"}`,
     );
   });
 
@@ -340,8 +341,10 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
       HOME: home,
       ...homes,
       EIDOLON_NODE: layout.binary,
-      // A file: package needs no registry; one pnpm tried anyway would fail at once.
+      // A file: package needs no registry; one pnpm tried anyway would fail at once, not after the
+      // 70 s its retries take.
       pnpm_config_registry: `http://127.0.0.1:${await closedPort()}/`,
+      pnpm_config_fetch_retries: "0",
     });
     const named = (name: string) =>
       join(layout.nodeShim, process.platform === "win32" ? `${name}.cmd` : name);
@@ -419,7 +422,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
     const said = (output: Output) =>
       output.code === 0
         ? lines(output.stdout).join(" / ")
-        : `exit ${output.code}: ${lastLine(output.stderr)}`;
+        : `exit ${output.code}: ${cause(output.stderr)}`;
     checks.add(
       SHIM,
       node.code === 0 &&
