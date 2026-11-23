@@ -44,6 +44,8 @@ on:
       - "packages/sdk/**"
       - ".agents/**"
       - ".github/workflows/desktop.yml"
+      - ".github/workflows/desktop-build.yml"
+      - ".github/workflows/desktop-update-test.yml"
       - ".env.example"
   pull_request:
     branches:
@@ -74,6 +76,8 @@ on:
       - "packages/sdk/**"
       - ".agents/**"
       - ".github/workflows/desktop.yml"
+      - ".github/workflows/desktop-build.yml"
+      - ".github/workflows/desktop-update-test.yml"
       - ".env.example"
   repository_dispatch:
     types:

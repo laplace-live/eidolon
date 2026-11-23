@@ -1,0 +1,262 @@
+name: Desktop build
+
+# One target of the desktop app built, packaged and checked, for desktop.yml: unsigned for a pull
+# request or a dispatch, signed for a tag or a sign dispatch. Its own workflow so that a run gets
+# only the secrets its caller passes: none unsigned, and one platform's when signed. A step's `if`
+# runs on the runner, so a secret any step names reaches every runner of its job.
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        type: string
+        required: true
+      target:
+        type: string
+        required: true
+      signed:
+        type: boolean
+        default: false
+      # A signed dispatch's: the version to build, else 0.0.0-dev, and the feed it reads.
+      version:
+        type: string
+        default: ""
+      feed_url:
+        type: string
+        default: ""
+    secrets:
+      APPLE_CERTIFICATE:
+        required: false
+      APPLE_CERTIFICATE_PASSWORD:
+        required: false
+      APPLE_API_KEY:
+        required: false
+      APPLE_API_KEY_ID:
+        required: false
+      APPLE_API_ISSUER:
+        required: false
+      AZURE_TENANT_ID:
+        required: false
+      AZURE_CLIENT_ID:
+        required: false
+      AZURE_CLIENT_SECRET:
+        required: false
+      AZURE_SIGNING_ACCOUNT_NAME:
+        required: false
+      AZURE_CERTIFICATE_PROFILE_NAME:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ inputs.target }}
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 90
+    # Bash on Windows too: PowerShell splits -c.compression=store into -c and a config path.
+    defaults:
+      run:
+        shell: bash
+    env:
+      SIGNED: ${{ inputs.signed }}
+    steps:
+      # A tag's run fetches the history, so the tag check finds origin/master.
+      - uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+          fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
+
+      # Without it, any token that can push a tag could ship a signed release from any commit.
+      - name: Check the tag
+        if: github.event_name == 'push'
+        timeout-minutes: 5
+        run: |
+          version="${GITHUB_REF_NAME#laplace-eidolon-desktop@}"
+          manifest=$(node -p 'require("./apps/desktop/package.json").version')
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::$GITHUB_REF_NAME is on $GITHUB_SHA, which isn't on master"
+            exit 1
+          fi
+          if [[ $version != "$manifest" ]]; then
+            echo "::error::$GITHUB_REF_NAME names $version, but apps/desktop/package.json is at $manifest"
+            exit 1
+          fi
+
+      - uses: oven-sh/setup-bun@v2
+        timeout-minutes: 5
+        with:
+          bun-version-file: package.json
+
+      - uses: actions/setup-node@v7
+        timeout-minutes: 5
+        with:
+          node-version: 24
+
+      # As release.yml installs: no build step needs a package's install script, and one could
+      # rewrite the electron-builder the signing step runs with the secrets.
+      - id: install
+        timeout-minutes: 10
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # Stages this target's backend in apps/desktop/.stage, then builds main, the preload and the
+      # shell pages.
+      - id: build
+        timeout-minutes: 20
+        run: bun run build:desktop
+
+      # Unsigned, at 0.0.0-dev: ad hoc on macOS and never with a keychain identity
+      # (scripts/package.ts), NSIS on Windows.
+      - id: package
+        if: env.SIGNED != 'true'
+        timeout-minutes: 20
+        run: bun run package:desktop -c.compression=store
+
+      # electron-builder's notarization reads the App Store Connect key from a file.
+      - name: Materialize the App Store Connect key
+        if: env.SIGNED == 'true' && runner.os == 'macOS'
+        timeout-minutes: 1
+        run: printf '%s' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/apple-api-key.p8"
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+
+      # The release overlay over the base config: a tag builds the manifest's version, a dispatch the
+      # one it names, else 0.0.0-dev. Each leg gets its own platform's secrets alone.
+      - id: signed
+        name: Package (signed)
+        if: env.SIGNED == 'true'
+        timeout-minutes: 45
+        working-directory: apps/desktop
+        run: |
+          args=(--publish never --config electron-builder.release.mjs)
+          if [[ $GITHUB_EVENT_NAME == workflow_dispatch ]]; then
+            args+=("-c.extraMetadata.version=${VERSION:-0.0.0-dev}")
+            if [[ -n $FEED_URL ]]; then args+=("-c.publish.url=$FEED_URL"); fi
+          fi
+          node node_modules/electron-builder/cli.js "${args[@]}"
+        env:
+          VERSION: ${{ inputs.version }}
+          FEED_URL: ${{ inputs.feed_url }}
+          # macOS: electron-builder imports the certificate into a temporary keychain itself. CSC_* is
+          # macOS-only because Windows falls back to it for signtool.
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && format('{0}/apple-api-key.p8', runner.temp) || '' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          # Windows: Azure Trusted Signing (electron-builder.release.mjs).
+          AZURE_TENANT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_TENANT_ID || '' }}
+          AZURE_CLIENT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_ID || '' }}
+          AZURE_CLIENT_SECRET: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_SECRET || '' }}
+          AZURE_SIGNING_ACCOUNT_NAME: ${{ runner.os == 'Windows' && secrets.AZURE_SIGNING_ACCOUNT_NAME || '' }}
+          AZURE_CERTIFICATE_PROFILE_NAME: ${{ runner.os == 'Windows' && secrets.AZURE_CERTIFICATE_PROFILE_NAME || '' }}
+
+      # Before any later step runs the app or its natives.
+      - name: Remove the App Store Connect key
+        if: always() && env.SIGNED == 'true' && runner.os == 'macOS'
+        timeout-minutes: 1
+        run: rm -f "$RUNNER_TEMP/apple-api-key.p8"
+
+      # macOS: codesign, Gatekeeper, the stapled ticket, the natives' hardened runtime and timestamp
+      # and each bundle's designated requirement. Windows: the setup installed, Authenticode on every
+      # PE file of the install and on the setup, then uninstalled.
+      - name: The signatures
+        if: ${{ !cancelled() && steps.signed.outcome == 'success' }}
+        timeout-minutes: 15
+        run: node apps/desktop/scripts/signed-check.ts
+
+      # What the payload holds, pinned to bun.lock; its natives loading from it; on Windows the VC++
+      # runtime beside them and every DLL signed by Microsoft or listed to sign; and, packaged after
+      # it, the app holding it file for file.
+      - name: The staged payload
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 15
+        run: bun run test apps/desktop/test/stage.test.ts
+        env:
+          EIDOLON_REQUIRE_STAGE: "1"
+
+      - name: The backend's tests on Electron's Node
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'macOS' }}
+        timeout-minutes: 30
+        run: node apps/desktop/scripts/test-on-electron.ts
+
+      # The whole suite doesn't run on Windows: these are the tests ts.yml's windows job runs there.
+      - name: Windows' own tests on Electron's Node
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Windows' }}
+        timeout-minutes: 20
+        run: |
+          node apps/desktop/scripts/test-on-electron.ts packages/config/test/which.test.ts \
+            packages/config/test/process.test.ts packages/config/test/pypath.test.ts \
+            apps/eidolon/test/launcher.test.ts apps/bot/test/local/jobs-runner.test.ts
+          node apps/desktop/scripts/test-on-electron.ts packages/assistant/test/shell.test.ts \
+            packages/assistant/test/mcp-stdio.test.ts packages/assistant/test/eidolon-command.test.ts \
+            packages/assistant/test/path.test.ts packages/assistant/test/bash-windows.test.ts \
+            packages/ingest/test/limit.test.ts \
+            -t "Windows|its children, when the host exits without closing it"
+          node apps/desktop/scripts/test-on-electron.ts apps/cli/test/cli.test.ts -t relayStopMessages
+
+      # The packaged app in apps/desktop/.out on a temporary data home and profile, driven through
+      # its backend's API, with no window shown. On Windows it installs the NSIS setup silently
+      # first and uninstalls it after.
+      - id: smoke
+        name: The packaged smoke
+        if: ${{ !cancelled() && (steps.package.outcome == 'success' || steps.signed.outcome == 'success') }}
+        timeout-minutes: 15
+        run: bun run smoke:desktop
+        env:
+          EIDOLON_DESKTOP_BACKGROUND: "1"
+
+      # A failed run keeps its folder: its results, the app's logs and its launches' output. Not
+      # its home, which holds local-token, nor the rest of its profile.
+      - name: Upload the failed smoke's logs
+        if: ${{ failure() && steps.smoke.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 5
+        with:
+          name: ${{ runner.os }}-smoke-desktop
+          path: |
+            ${{ runner.temp }}/eidolon-smoke-desktop-*/results.json
+            ${{ runner.temp }}/eidolon-smoke-desktop-*/profile/logs
+            ${{ runner.temp }}/eidolon-smoke-desktop-*/scratch
+          retention-days: 7
+
+      # Adds a throwaway CA to this runner's trust store, and deletes the certificate after.
+      - name: "--use-system-ca on the packaged binary"
+        if: ${{ !cancelled() && (steps.package.outcome == 'success' || steps.signed.outcome == 'success') }}
+        timeout-minutes: 10
+        run: node apps/desktop/scripts/system-ca.ts
+
+      # Not the macOS zip, which only updates read: a dev build takes none. upload-artifact skips a
+      # hidden folder such as .out unless told.
+      - name: Upload the installers
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 15
+        with:
+          name: ${{ runner.os }}-installers-dev
+          path: |
+            apps/desktop/.out/*.dmg
+            apps/desktop/.out/*.exe
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+      # Only once every check passed: a tag's, which the upload job sends to R2, or a signed
+      # dispatch's, for the update test and never to R2.
+      - name: Upload the signed installers
+        if: env.SIGNED == 'true'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 15
+        with:
+          name: ${{ runner.os }}-installers${{ github.event_name != 'push' && '-signed-unreleased' || '' }}
+          path: |
+            apps/desktop/.out/*.dmg
+            apps/desktop/.out/*.zip
+            apps/desktop/.out/*.exe
+            apps/desktop/.out/*.blockmap
+            apps/desktop/.out/latest*.yml
+            apps/desktop/.out/dev*.yml
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'push' && 90 || 1 }}

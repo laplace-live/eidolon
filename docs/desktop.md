@@ -686,7 +686,13 @@ one failed. `test/signed-check.test.ts` holds its verdicts to the tools' own out
 
 ### Secrets
 
-Each leg gets its own platform's alone, in the signed package step:
+Each leg gets its own platform's alone. `desktop.yml`'s jobs call `desktop-build.yml` (and the update
+test's, `desktop-update-test.yml`), which hold the steps: the unsigned `build` passes no secret,
+and `signed-mac` and `signed-win`, whose own `if` admits only a tag or a `sign` dispatch on
+`master` or `electron`, pass their platform's alone. That `if` is GitHub's, read before a runner is
+given; a step's `if` runs on the runner, so a secret any step of a job names reaches every runner
+of that job, a pull request's included. A dispatch's inputs are checked first, by the `inputs` job.
+In the signed package step:
 
 - **macOS:** `APPLE_CERTIFICATE` and `APPLE_CERTIFICATE_PASSWORD`, as `CSC_LINK` and
   `CSC_KEY_PASSWORD`, which on Windows would send electron-builder to signtool (it imports the
@@ -1093,12 +1099,14 @@ macOS.
 `.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
 request that changes more than docs, on a dispatch, and from a release's tag
 ([Releasing](#releasing)): the payload comes from `bun.lock` and the backend's packages, so a filter
-on `apps/desktop` would miss the changes it checks. Its build job runs on `macos-latest` (macOS
+on `apps/desktop` would miss the changes it checks. Its build runs on `macos-latest` (macOS
 arm64) and `windows-latest` (Windows x64), neither cancelling the other, in bash on both, with Bun
-from `package.json` and Node 24:
+from `package.json` and Node 24. The steps are `desktop-build.yml`'s, which `desktop.yml` calls
+unsigned for a pull request or a dispatch and signed for a tag or a `sign` dispatch, one job per
+platform with its secrets alone ([Secrets](#secrets)):
 
 1. **The checks before anything installs:** a tag's ([Releasing](#releasing)), or a dispatch's
-   inputs ([Dispatches](#dispatches)).
+   inputs ([Dispatches](#dispatches)), the latter in `desktop.yml`'s `inputs` job.
 2. **Install:** `bun install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
    build step needs a package's install script, and the signing step must follow none.
 3. **Build:** `bun run build:desktop` stages the runner's backend and builds `dist/`.
@@ -1139,8 +1147,9 @@ through its real updater: electron-updater against a feed, then Squirrel.Mac on 
 setup on Windows. Its own job runs on `macos-latest` and `windows-latest`, neither cancelling the
 other, in bash, within three hours:
 
-1. **The ref check,** before any secret is read: `master` or `electron` only, and no `sign`,
-   `version` or `feed_url` beside it.
+1. **The ref check,** in `desktop.yml`'s `inputs` job and the update-test jobs' own `if`, before
+   any secret is read: `master` or `electron` only, and no `sign`, `version` or `feed_url` beside
+   it. Each platform's job calls `desktop-update-test.yml` with its own secrets alone.
 2. **Install and build,** as the build job does: no package's install script runs before signing.
 3. **0.0.1 and 0.0.2, signed:** the release overlay with that leg's secrets alone, twice, both
    builds reading the feed `http://127.0.0.1:8765/` (`-c.publish.url`, which goes into

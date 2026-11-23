@@ -454,7 +454,8 @@ the layout's one line.
 ### The desktop app
 
 - **Production never sees the desktop app.** `docker.yml` skips `apps/desktop/**` and
-  `.github/workflows/desktop.yml`, the image copies only `apps/desktop/package.json`, for the frozen
+  `desktop.yml` with the workflows it calls (`desktop-build.yml`, `desktop-update-test.yml`), the
+  image copies only `apps/desktop/package.json`, for the frozen
   install, and production's import graph reaches nothing in `apps/desktop` (`boundaries.test.ts`).
 - **No backend code runs in Electron's main process or its pages.** Main spawns the backend as a
   Node child; `apps/desktop/src` loads at run time only `electron`, `electron-updater`,
@@ -499,8 +500,11 @@ the layout's one line.
   `resources/designated-requirement.mac` names, so a new name or team first ships in a release the
   old one signed ([desktop.md](docs/desktop.md#signing-identities)). The requirement stays
   team-only: electron-builder stamps it on every helper.
-- **The signing secrets reach their own platform's leg alone,** in `desktop.yml`'s signed package
-  step, which runs only for a tag or a `sign` dispatch on `master` or `electron`. Before it nothing
+- **The signing secrets reach their own platform's leg alone,** passed by `desktop.yml`'s signed
+  and update-test jobs to `desktop-build.yml` or `desktop-update-test.yml`, one platform's per job,
+  and only from a job whose own `if` admits a tag, or a `sign` or `update_test` dispatch on `master`
+  or `electron`: a step's `if` runs on the runner, so a secret any step names reaches every runner
+  of its job, a pull request's included. Before the signing step nothing
   runs that the run fetched but the toolchain and what `bun.lock` pins, and no package's install
   script (`--ignore-scripts`): one could rewrite the electron-builder that step runs.
 - **Installing, updating and uninstalling the app never touch the data home,** which it shares with
@@ -633,8 +637,8 @@ the layout's one line.
   calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`,
   the offline chain (`apps/cli`, `packages/ingest`), the local web app
   (`apps/web`, `apps/bot/src/local`), the assistant (`packages/assistant`), the npm
-  packages (`apps/eidolon`, `packages/sdk`), the desktop app (`apps/desktop`,
-  `.github/workflows/desktop.yml`), `.env.example`, or the rest of `docker.yml`'s
+  packages (`apps/eidolon`, `packages/sdk`), the desktop app (`apps/desktop`, `desktop.yml`,
+  `desktop-build.yml`, `desktop-update-test.yml`), `.env.example`, or the rest of `docker.yml`'s
   `paths-ignore` (`README.md`, `CLAUDE.md`, the `ts.yml` and `release.yml` workflows,
   `vitest.config.ts`, `tsconfig.scripts.json`, `tsconfig.no-bun.d.ts`) skip the image
   build; anything else, `personas/` included, ships, and so does a bump of the
