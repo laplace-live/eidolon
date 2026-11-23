@@ -4,7 +4,8 @@
 // Ported from deepseek-harness scripts/primary-runtime/prepare.spec.ts@2e39e70496
 //
 // pnpm's prune, on deepseek's made-up bundled packages, then the shim the stage writes from the
-// checkout's launchers and pnpm, for each target. The staged payload's is stage.test.ts's.
+// checkout's launchers and pnpm, for each target, its .cmd launchers where cross-spawn escapes their
+// words for the cmd.exe that reads them again. The staged payload's is stage.test.ts's.
 import {
   mkdirSync,
   mkdtempSync,
@@ -14,6 +15,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -23,8 +25,11 @@ import {
   NODE_SHIM,
   POSIX_LAUNCHERS,
   prunePnpmForeignNativePackages,
+  shimLaunchers,
+  shimPnpm,
   stageNodeShim,
 } from "../scripts/node-shim.ts";
+import { appLayout } from "../scripts/smoke/packaged.ts";
 
 const temps: string[] = [];
 function temp(): string {
@@ -70,11 +75,16 @@ describe("the shim the stage writes", () => {
     ["darwin", "arm64", "@reflink/reflink-darwin-arm64"],
     ["win32", "x64", "@reflink/reflink-win32-x64-msvc"],
   ] as const)(
-    "for %s/%s: the checkout's launchers, sh's executable, and pnpm pruned, with no .bin or .exe",
+    "for %s/%s: the checkout's launchers in a node_modules/.bin, sh's executable, and pnpm at their ../node_modules/pnpm, pruned, without its bundled packages' .bin or any .exe",
     (os, cpu, native) => {
       const payload = temp();
       stageNodeShim(payload, { os, cpu });
-      const bin = join(payload, NODE_SHIM, "bin");
+      expect(readdirSync(join(payload, NODE_SHIM))).toEqual(["node_modules"]);
+      expect(readdirSync(join(payload, NODE_SHIM, "node_modules")).sort()).toEqual([
+        ".bin",
+        "node_modules",
+      ]);
+      const bin = shimLaunchers(payload);
       expect(readdirSync(bin).sort()).toEqual([...LAUNCHER_FILES].sort());
       for (const file of LAUNCHER_FILES) {
         expect([file, readFileSync(join(bin, file), "utf8")]).toEqual([
@@ -87,7 +97,8 @@ describe("the shim the stage writes", () => {
           expect([name, statSync(join(bin, name)).mode & 0o777]).toEqual([name, 0o755]);
         }
       }
-      const pnpm = join(payload, NODE_SHIM, "node_modules", "pnpm");
+      const pnpm = shimPnpm(payload);
+      expect(pnpm).toBe(join(bin, "..", "node_modules", "pnpm"));
       const { devDependencies } = JSON.parse(
         readFileSync(join(LAUNCHER_SOURCES, "..", "package.json"), "utf8"),
       );
@@ -106,4 +117,35 @@ describe("the shim the stage writes", () => {
       expect(exes).toEqual([]);
     },
   );
+});
+
+describe("cross-spawn, which starts an MCP server", () => {
+  /** The installed cross-spawn's own test for a cmd-shim, whose words it escapes twice. */
+  function isCmdShim(): RegExp {
+    const backend = createRequire(
+      join(import.meta.dirname, "../../../packages/assistant/package.json"),
+    );
+    const parse = readFileSync(backend.resolve("cross-spawn/lib/parse.js"), "utf8");
+    const literal = /^const isCmdShimRegExp = \/(.+)\/([a-z]*);\r?$/m.exec(parse);
+    if (literal === null) throw new Error("cross-spawn's parse.js names no isCmdShimRegExp");
+    return new RegExp(literal[1] as string, literal[2]);
+  }
+
+  test("takes each .cmd launcher, as staged and in a packaged app on Windows, for a cmd-shim", () => {
+    const shim = isCmdShim();
+    const payload = temp();
+    stageNodeShim(payload, { os: "win32", cpu: "x64" });
+    const packaged = appLayout(
+      "C:\\Users\\me\\AppData\\Local\\Programs\\eidolon\\Eidolon.exe",
+      "win32",
+    );
+    for (const name of POSIX_LAUNCHERS) {
+      for (const file of [
+        join(shimLaunchers(payload), `${name}.cmd`),
+        `${packaged.nodeShim}\\${name}.cmd`,
+      ]) {
+        expect([file, shim.test(file)]).toEqual([file, true]);
+      }
+    }
+  });
 });

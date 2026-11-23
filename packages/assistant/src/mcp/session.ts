@@ -108,23 +108,29 @@ export interface NodeShim {
  */
 export function nodeShim(): NodeShim | null {
   if (process.versions.electron === undefined) return null;
-  const folder = shippedPath("node-shim/bin", "apps/desktop/node-shim");
+  const folder = shippedPath("node-shim/node_modules/.bin", "apps/desktop/node-shim");
   return existsSync(folder) ? { folder, node: jsRuntime().command } : null;
 }
 
 /**
  * What every server's environment starts from: the task's cut one, and with `shim` its folder last
- * on PATH, left out like any other folder the task may write, so a node the computer has comes
- * first, and EIDOLON_NODE, which the launchers run. A task's commands never get the shim.
+ * on PATH, unless the task may write it, so a node the computer has comes first, and EIDOLON_NODE,
+ * which the launchers run. A task's commands never get the shim.
  */
 export async function serverEnv(
   guard: PathGuard,
   shim: NodeShim | null = nodeShim(),
   from: NodeJS.ProcessEnv = process.env,
 ): Promise<Record<string, string>> {
-  if (shim === null) return shellEnv(guard, from);
-  const path = [from.PATH, shim.folder].filter(Boolean).join(delimiter);
-  return { ...(await shellEnv(guard, { ...from, PATH: path })), EIDOLON_NODE: shim.node };
+  const env = await shellEnv(guard, from);
+  if (shim === null) return env;
+  // After the cut, which drops every node_modules/.bin, the payload's shim folder among them.
+  const writable = await guard.resolve(shim.folder, "write").then(
+    () => true,
+    () => false,
+  );
+  const path = writable ? env.PATH : [env.PATH, shim.folder].join(delimiter);
+  return { ...env, PATH: path, EIDOLON_NODE: shim.node };
 }
 
 /** Connects to one server within its timeout, or says why it couldn't. */

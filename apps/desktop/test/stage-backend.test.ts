@@ -592,13 +592,13 @@ describe("what electron-builder never packs", () => {
       "node_modules/a/.gitattributes",
       "node_modules/a/.npmignore",
       "node_modules/a/index.js",
-      "node-shim/node_modules/pnpm/dist/node_modules/undici/lib/llhttp/constants.js",
+      "node-shim/node_modules/node_modules/pnpm/dist/node_modules/undici/lib/llhttp/constants.js",
     ];
     for (const path of [
       ...kept,
       ".DS_Store",
       "node_modules/a/.gitkeep",
-      "node-shim/node_modules/pnpm/dist/node_modules/undici/lib/llhttp/.gitkeep",
+      "node-shim/node_modules/node_modules/pnpm/dist/node_modules/undici/lib/llhttp/.gitkeep",
     ]) {
       put(join(payload, path));
     }
@@ -770,8 +770,9 @@ describe("THIRD_PARTY_LICENSES.txt", () => {
 
   test("gives the node shim's pnpm and each package its dist/ bundles theirs, SPDX's where they ship none", () => {
     const root = payload();
-    const pnpm = join(root, "node-shim", "node_modules", "pnpm");
+    const pnpm = join(root, "node-shim", "node_modules", "node_modules", "pnpm");
     manifest(pnpm, { name: "pnpm", version: "11.0.0", license: "MIT" });
+    put(join(root, "node-shim", "node_modules", ".bin", "npx.mjs"));
     put(join(pnpm, "LICENSE"), "Copyright (c) pnpm contributors\n");
     const bundled = join(pnpm, "dist", "node_modules");
     manifest(join(bundled, "tar"), { name: "tar", version: "7.0.0", license: "BlueOak-1.0.0" });

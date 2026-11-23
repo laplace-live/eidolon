@@ -434,8 +434,8 @@ the layout's one line.
   entry names it. A command's `PATH` starts with `<data home>/bin`, where the app writes the
   `eidolon` command at each start beside the managed yt-dlp, and it gets `EIDOLON_TASK_PERSONA`,
   its chat's persona; `eidolon` sets its own data home and runs on the app's own Node. Inside the
-  desktop app an MCP server's `PATH` ends with `<app root>/node-shim/bin` and it gets
-  `EIDOLON_NODE`: servers only, never a task's commands.
+  desktop app an MCP server's `PATH` ends with `<app root>/node-shim/node_modules/.bin` and it
+  gets `EIDOLON_NODE`: servers only, never a task's commands.
 - **Of the file tools, only `skill` reads in the data home or the app's folder,** and only a listed
   or named skill's own files, never a dot-file; `bash_output` reads only its task's logs there, and
   commands and MCP servers run outside `FolderPolicy`. Of a skill only its name reaches her, and

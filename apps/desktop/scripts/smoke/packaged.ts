@@ -49,7 +49,7 @@ export function appLayout(binary: string, platform: NodeJS.Platform = process.pl
     payload,
     trayIcon: path.join(resources, "assets", "tray-icon.ico"),
     terminalCommand: path.join(resources, "bin", platform === "win32" ? "eidolon.cmd" : "eidolon"),
-    nodeShim: path.join(payload, "node-shim", "bin"),
+    nodeShim: path.join(payload, "node-shim", "node_modules", ".bin"),
   };
 }
 

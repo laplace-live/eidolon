@@ -21,7 +21,7 @@ import { PLATFORMS } from "../../eidolon/src/launcher.ts";
 import { dataHome, isAlive, probe, readToken } from "../src/main/attach.ts";
 import { BACKEND_RUNTIME_ARGS, backendEnv, RESTART_EXIT_CODE } from "../src/main/controller.ts";
 import { checkNatives, type NativesReport } from "./natives.ts";
-import { POSIX_LAUNCHERS } from "./node-shim.ts";
+import { POSIX_LAUNCHERS, shimPnpm } from "./node-shim.ts";
 import {
   DESKTOP,
   errorLines,
@@ -413,10 +413,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
     };
     const electron = manifest.devDependencies.electron;
     const bundled = JSON.parse(
-      readFileSync(
-        join(layout.payload, "node-shim", "node_modules", "pnpm", "package.json"),
-        "utf8",
-      ),
+      readFileSync(join(shimPnpm(layout.payload), "package.json"), "utf8"),
     ) as { version: string };
     const printed = JSON.stringify({ args: ["one", "two words"], electron });
     const said = (output: Output) =>
