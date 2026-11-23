@@ -40,6 +40,12 @@ interface SdkExportEntry {
   readonly default: string;
 }
 
+/** An entry with one bundle for every runtime. */
+interface SdkBrowserEntry {
+  readonly types: string;
+  readonly default: string;
+}
+
 export interface SdkManifest {
   readonly name: string;
   readonly version: string;
@@ -53,10 +59,13 @@ export interface SdkManifest {
   readonly type: "module";
   readonly sideEffects: false;
   readonly types: string;
-  readonly typesVersions: { readonly "*": { readonly react: readonly string[] } };
+  readonly typesVersions: {
+    readonly "*": { readonly react: readonly string[]; readonly avatar: readonly string[] };
+  };
   readonly exports: {
     readonly ".": SdkExportEntry;
     readonly "./react": SdkExportEntry;
+    readonly "./avatar": SdkBrowserEntry;
   };
   readonly dependencies: Readonly<Record<string, string>>;
   readonly peerDependencies: Readonly<Record<string, string>>;
@@ -104,7 +113,7 @@ export function packageManifest(): SdkManifest {
     name: own.name,
     version: own.version,
     description:
-      "TypeScript and React client SDK for LAPLACE Eidolon WebRTC voice calls and stateless chats",
+      "TypeScript and React client SDK for LAPLACE Eidolon WebRTC voice calls, stateless chats and PSD2Live avatars",
     license: own.license,
     repository: {
       type: "git",
@@ -115,7 +124,9 @@ export function packageManifest(): SdkManifest {
     sideEffects: false,
     // TypeScript's `moduleResolution: "node"` (the default under `module: "commonjs"`) ignores exports.
     types: "./dist/index.d.ts",
-    typesVersions: { "*": { react: ["./dist/react/index.d.ts"] } },
+    typesVersions: {
+      "*": { react: ["./dist/react/index.d.ts"], avatar: ["./dist/avatar/index.d.ts"] },
+    },
     exports: {
       ".": {
         types: "./dist/index.d.ts",
@@ -128,6 +139,11 @@ export function packageManifest(): SdkManifest {
         browser: "./dist/react/index.js",
         node: "./dist/react/index.node.js",
         default: "./dist/react/index.js",
+      },
+      // It imports no pipecat, so the browser bundle runs on Node as it is.
+      "./avatar": {
+        types: "./dist/avatar/index.d.ts",
+        default: "./dist/avatar/index.js",
       },
     },
     dependencies: Object.fromEntries(
@@ -146,7 +162,10 @@ interface BundleTarget {
   readonly react: boolean;
 }
 
-/** Bundles `.` and `./react` for browsers and Node ESM, rejecting any third-party package inlined by mistake. */
+/**
+ * Bundles `.` and `./react` for browsers and Node ESM, and `./avatar` once for both, rejecting any
+ * third-party package inlined by mistake.
+ */
 async function bundle(root: string): Promise<void> {
   const targets: readonly BundleTarget[] = [
     {
@@ -172,6 +191,12 @@ async function bundle(root: string): Promise<void> {
       output: join(root, "dist/react/index.node.js"),
       node: true,
       react: true,
+    },
+    {
+      entry: join(HERE, "src/avatar/index.ts"),
+      output: join(root, "dist/avatar/index.js"),
+      node: false,
+      react: false,
     },
   ];
   await Promise.all(
@@ -278,14 +303,42 @@ export function checkDistImports(root: string, manifest: SdkManifest): void {
   }
 }
 
+// Bun.build keeps `new URL("./…", import.meta.url)` as written and copies nothing it names: the
+// stage copies each file there, beside the bundle that names it.
+const ASSET_URL = /new\s+URL\(\s*(["'`])(\.{1,2}\/[^"'`]+)\1\s*,\s*import\.meta\.url\s*\)/g;
+
+/** Verifies every file a bundle in `${root}/dist` names by `new URL("./…", import.meta.url)` is there. */
+export function checkAssetUrls(root: string): void {
+  const dist = join(root, "dist");
+  const missing: string[] = [];
+  for (const file of walkFiles(dist, ".js")) {
+    for (const [, , path] of readFileSync(file, "utf8").matchAll(ASSET_URL)) {
+      if (path !== undefined && !existsSync(resolve(dirname(file), path))) {
+        missing.push(`${relative(dist, file).replaceAll("\\", "/")}: ${path}`);
+      }
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(`Missing assets in ${relative(ROOT, dist)}:\n${missing.join("\n")}`);
+  }
+}
+
 export async function stage(outDir: string = PACK_DIR): Promise<SdkManifest> {
   const manifest = packageManifest();
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
   await Promise.all([bundle(outDir), emitTypes(outDir)]);
+  cpSync(join(HERE, "src/avatar/psd2live/wasm"), join(outDir, "dist/avatar/wasm"), {
+    recursive: true,
+    filter: (source) => !basename(source).startsWith("."),
+  });
   checkDistImports(outDir, manifest);
+  checkAssetUrls(outDir);
   cpSync(join(HERE, "README.md"), join(outDir, "README.md"));
   cpSync(join(ROOT, "LICENSE"), join(outDir, "LICENSE"));
+  // The avatar bundle carries PSD2Live's MIT code without its header, which Bun drops.
+  cpSync(join(HERE, "LICENSE-psd2live"), join(outDir, "LICENSE-psd2live"));
+  cpSync(join(HERE, "THIRD_PARTY.md"), join(outDir, "THIRD_PARTY.md"));
   if (existsSync(join(HERE, "CHANGELOG.md"))) {
     cpSync(join(HERE, "CHANGELOG.md"), join(outDir, "CHANGELOG.md"));
   }
