@@ -2,7 +2,15 @@ import { SETTINGS } from "@eidolon/config";
 import { describe, expect, test } from "vitest";
 import { cardSections, visibleRows } from "@/components/settings-form/controls";
 import type { SettingRow } from "@/lib/api";
-import { CARDS, NAMED, resolveSection } from "./sections";
+import type { EidolonDesktop } from "@/lib/desktop";
+import {
+  CARDS,
+  NAMED,
+  offersSystemOptions,
+  resolveSection,
+  SECTIONS,
+  shownSections,
+} from "./sections";
 
 const rows: SettingRow[] = SETTINGS.map((setting) => ({
   ...setting,
@@ -85,7 +93,8 @@ describe("the cards", () => {
 });
 
 describe("?tab=", () => {
-  const resolve = (query: string) => resolveSection(new URLSearchParams(query), "milky-green");
+  const resolve = (query: string) =>
+    resolveSection(new URLSearchParams(query), "milky-green", shownSections(null));
 
   test("names a section, and Providers without one", () => {
     expect(resolve("")).toEqual({ section: "providers" });
@@ -108,5 +117,68 @@ describe("?tab=", () => {
     expect(resolve("tab=persona")).toEqual({ redirect: "/personas/milky-green/advanced" });
     expect(resolve("tab=persona&persona=")).toEqual({ redirect: "/personas/milky-green/advanced" });
     expect(resolve("tab=persona&persona=a%20b")).toEqual({ redirect: "/personas/a%20b/advanced" });
+  });
+});
+
+describe("the Desktop section", () => {
+  const ignore = () => {};
+  const bridge: EidolonDesktop = {
+    platform: "darwin",
+    version: "0.2.0",
+    serverVersion: "0.14.0",
+    setTheme: ignore,
+    setLanguage: ignore,
+    onCommand: ignore,
+  };
+  const off = { state: "off" } as const;
+  const absent = { state: "absent", path: "/usr/local/bin/eidolon" } as const;
+  const options = {
+    loginItem: async () => off,
+    setLoginItem: async () => off,
+    terminalCommand: async () => absent,
+    setTerminalCommand: async () => ({ command: absent }),
+  };
+  const desktopApp: EidolonDesktop = { ...bridge, ...options };
+
+  test("shows in a desktop app that offers Open at Login and the terminal command, last before Advanced", () => {
+    expect(offersSystemOptions(desktopApp)).toBe(true);
+    expect(shownSections(desktopApp)).toEqual([
+      "providers",
+      "general",
+      "memory",
+      "downloads",
+      "assistant",
+      "skills",
+      "desktop",
+      "advanced",
+    ]);
+  });
+
+  test("a browser, or an app whose bridge predates the options, shows every other section", () => {
+    const others = SECTIONS.filter((id) => id !== "desktop");
+    expect(shownSections(null)).toEqual(others);
+    expect(shownSections(bridge)).toEqual(others);
+    expect(shownSections({ ...bridge, chooseFolder: async () => null })).toEqual(others);
+    for (const member of Object.keys(options) as (keyof typeof options)[]) {
+      const { [member]: _, ...withoutOne } = options;
+      expect(offersSystemOptions({ ...bridge, ...withoutOne }), member).toBe(false);
+    }
+  });
+
+  test("?tab=desktop opens it where it shows, and the default section anywhere else", () => {
+    const params = new URLSearchParams("tab=desktop");
+    expect(resolveSection(params, "milky-green", shownSections(desktopApp))).toEqual({
+      section: "desktop",
+    });
+    expect(resolveSection(params, "milky-green", shownSections(null))).toEqual({
+      redirect: "?tab=providers",
+    });
+    expect(resolveSection(params, "milky-green", shownSections(bridge))).toEqual({
+      redirect: "?tab=providers",
+    });
+  });
+
+  test("has no rows of its own, so Advanced still shows every app row no card names", () => {
+    expect(CARDS.desktop).toEqual([]);
   });
 });

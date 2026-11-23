@@ -140,7 +140,7 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "assistant.search.provider": msg`The account tasks search the web with. Off, they can still read the pages you allow, but can't search.`,
   "assistant.search.model": msg`Which index the account searches. Each search costs under a cent.`,
   "assistant.folders": msg`Folders every task may read and write besides its own, one per line.`,
-  "assistant.bash": msg`On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. macOS and Linux only.`,
+  "assistant.bash": msg`On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. On Windows, commands need Git Bash.`,
   "assistant.permissions": msg`How much her tasks ask you, until a chat picks its own level beside its message box. Ask for Approval asks about every folder outside yours, site, command and MCP call you haven't allowed. Approve for Me has the task's own model review each of those first, billed to the task, and asks only about the risky ones. Full Access asks about none, so commands run as you unasked. At every level your Denies, spend pauses and No Web hold, and tasks never touch Eidolon's data, your keys or a .git folder with their file tools. Default Ask for Approval.`,
   "assistant.spendPauseUsd": msg`A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1.`,
   "assistant.contextTokens": msg`The most context a task's requests carry, in tokens. Default 128000.`,

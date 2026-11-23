@@ -9,6 +9,7 @@ import {
   BriefcaseIcon,
   DatabaseIcon,
   DownloadIcon,
+  MonitorIcon,
   PlugIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
@@ -20,14 +21,23 @@ import { PersonaAvatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { SectionLayout } from "@/components/section-layout";
 import { SettingsCard } from "@/components/settings-form/settings-card";
+import { desktop } from "@/lib/desktop";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { AccountsCard } from "./accounts-card";
 import { AssistantCard, KindsCard } from "./assistant";
 import { AllowedCommandsCard } from "./commands-card";
+import { DesktopCard } from "./desktop-card";
 import { McpServersCard } from "./mcp-card";
 import { Notices } from "./notices";
-import { CARDS, type CardId, NAMED, resolveSection, SECTIONS, type SectionId } from "./sections";
+import {
+  CARDS,
+  type CardId,
+  NAMED,
+  resolveSection,
+  type SectionId,
+  shownSections,
+} from "./sections";
 import { SkillsCard } from "./skills-card";
 import { YtDlpBadge, YtDlpProblem } from "./yt-dlp-state";
 
@@ -38,6 +48,7 @@ const ICONS: Readonly<Record<SectionId, ReactNode>> = {
   downloads: <DownloadIcon />,
   assistant: <BriefcaseIcon />,
   skills: <WandSparklesIcon />,
+  desktop: <MonitorIcon />,
   advanced: <SlidersHorizontalIcon />,
 };
 
@@ -48,6 +59,7 @@ const SECTION_LABELS: Readonly<Record<SectionId, MessageDescriptor>> = {
   downloads: msg`Downloads`,
   assistant: msg`Assistant Mode`,
   skills: msg`Skills`,
+  desktop: msg`Desktop`,
   advanced: msg`Advanced`,
 };
 
@@ -128,6 +140,7 @@ function Section({ section }: { readonly section: SectionId }) {
             </>
           )}
           {section === "skills" && <SkillsCard />}
+          {section === "desktop" && <DesktopCard />}
         </>
       );
   }
@@ -140,7 +153,8 @@ export function Component() {
   const persona = useQuery(statusQuery).data?.persona;
   if (!persona) return null;
 
-  const resolved = resolveSection(params, persona.id);
+  const sections = shownSections(desktop());
+  const resolved = resolveSection(params, persona.id, sections);
   if ("redirect" in resolved) return <Navigate to={resolved.redirect} replace />;
   const { section } = resolved;
   const name = persona.name;
@@ -164,7 +178,7 @@ export function Component() {
       <SectionLayout
         label={t`Settings Sections`}
         active={section}
-        nav={SECTIONS.map((id) => ({
+        nav={sections.map((id) => ({
           id,
           label: t(SECTION_LABELS[id]),
           href: `?tab=${id}`,

@@ -736,6 +736,10 @@ msgstr "添加视频"
 msgid "Add your API keys first"
 msgstr "请先添加 API 密钥"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Added to your PATH: {path}. Open a new terminal to use it."
+msgstr "已加入你的 PATH：{path}。打开一个新的终端就能使用。"
+
 #: src/features/chats/why-answered.tsx
 msgid "Addressed"
 msgstr "被点名"
@@ -900,6 +904,10 @@ msgstr "其他应用正在使用麦克风。请先关闭它，然后再次呼叫
 #: src/features/chats/labels.ts
 msgid "Another app is using your microphone. Close it, then try again."
 msgstr "另一个应用正在使用麦克风。关闭它后再试一次。"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Another eidolon is at {path}."
+msgstr "{path} 已经有另一个 eidolon。"
 
 #: src/features/jobs/labels.ts
 msgid "Another run is already working on this persona."
@@ -1071,6 +1079,10 @@ msgctxt "reply mode"
 msgid "Auto"
 msgstr "自动"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Available in the installed app only."
+msgstr "仅在安装好的应用中可用。"
+
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Avatar"
@@ -1096,6 +1108,10 @@ msgstr "上一步"
 #: src/features/studio/route.tsx
 msgid "Back to Home"
 msgstr "返回首页"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Background mode leaves this computer as it is."
+msgstr "后台模式不会改动这台电脑。"
 
 #: src/features/studio/videos-section.tsx
 msgid "Billed"
@@ -1418,6 +1434,10 @@ msgstr "中文"
 msgid "Choose"
 msgstr "选择"
 
+#: src/components/settings-form/field.tsx
+msgid "Choose Folder"
+msgstr "选择文件夹"
+
 #: src/features/settings/assistant.tsx
 msgid "Choose the account and model tasks run on here, and add a key for that account in Providers."
 msgstr "请在这里选择任务使用的账号和模型，并在「服务商」中为该账号添加密钥。"
@@ -1559,6 +1579,10 @@ msgstr "无法接通通话。"
 msgid "Couldn't get the connection settings for the call."
 msgstr "无法获取通话的连接设置。"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Couldn't install the eidolon command."
+msgstr "无法安装 eidolon 命令。"
+
 #: src/components/settings-form/model-picker.tsx
 msgid "Couldn't list the models ({reason}): type the model id."
 msgstr "无法获取模型列表（{reason}）：请直接填写模型 ID。"
@@ -1579,6 +1603,10 @@ msgstr "加载失败"
 #: src/components/settings-form/check-labels.ts
 msgid "Couldn't reach the provider."
 msgstr "无法连接到服务商。"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Couldn't remove the eidolon command."
+msgstr "无法移除 eidolon 命令。"
 
 #: src/features/setup/new-persona.tsx
 msgid "Create"
@@ -1685,6 +1713,14 @@ msgstr "拒绝"
 #: src/features/settings/new-skill-dialog.tsx
 msgid "Description"
 msgstr "描述"
+
+#: src/features/settings/route.tsx
+msgid "Desktop"
+msgstr "桌面应用"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Desktop App"
+msgstr "桌面应用"
 
 #: src/features/jobs/parts.tsx
 #: src/features/studio/add-videos.tsx
@@ -2599,17 +2635,37 @@ msgstr "继承自环境变量 <0>{env}</0>。在这里选一个声音，就只�
 msgid "Inherited from the environment, and works with Fish Audio."
 msgstr "继承自环境变量，可以在 Fish Audio 上使用。"
 
+#: src/features/settings/desktop-card.tsx
+msgid "Install"
+msgstr "安装"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Install adds {path} to your PATH."
+msgstr "安装会把 {path} 加入你的 PATH。"
+
 #: src/features/setup/memory-step.tsx
 msgid "Install Docker Desktop, or Docker Engine on Linux, and start it."
 msgstr "安装并启动 Docker Desktop（Linux 上为 Docker Engine）。"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Install Eidolon with its installer to use this."
+msgstr "用安装程序安装 Eidolon 后才能使用。"
 
 #: src/features/studio/videos-section.tsx
 msgid "Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH."
 msgstr "可以自己用 brew install yt-dlp 或 pip install yt-dlp 安装，Eidolon 会使用 PATH 中的那个。"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Install puts it at {path}, and may ask for your password."
+msgstr "安装会把它放在 {path}，可能需要输入你的密码。"
+
 #: src/features/settings/yt-dlp-state.tsx
 msgid "Installed"
 msgstr "已安装"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Installed at {path}."
+msgstr "已安装在 {path}。"
 
 #: src/features/home/readiness-labels.ts
 msgid "Installed."
@@ -3200,6 +3256,10 @@ msgstr "按类型选模型"
 msgid "Month"
 msgstr "月份"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Move Eidolon to the Applications folder to use this."
+msgstr "把 Eidolon 移到「应用程序」文件夹后才能使用。"
+
 #: src/features/call/call-controls.tsx
 msgid "Mute your mic"
 msgstr "关闭麦克风"
@@ -3583,8 +3643,8 @@ msgid "On"
 msgstr "开"
 
 #: src/components/settings-form/labels.ts
-msgid "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. macOS and Linux only."
-msgstr "开启后，任务可以请求在这台电脑上运行命令，每条都要你在任务卡片上同意，除非你在它的文件夹里始终允许过这条命令。关闭后，任务不会再开始运行命令。仅限 macOS 和 Linux。"
+msgid "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. On Windows, commands need Git Bash."
+msgstr "开启后，任务可以请求在这台电脑上运行命令，每条都要你在任务卡片上同意，除非你在它的文件夹里始终允许过这条命令。关闭后，任务不会再开始运行命令。在 Windows 上，运行命令需要 Git Bash。"
 
 #: src/features/home/readiness-labels.ts
 msgid "On: she remembers you from one call to the next."
@@ -3638,6 +3698,10 @@ msgstr "点名才用"
 #: src/components/locked-screen.tsx
 msgid "Open"
 msgstr "打开"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Open at Login"
+msgstr "登录时打开"
 
 #: src/components/locked-screen.tsx
 msgid "Open Eidolon from Your Terminal"
@@ -4133,6 +4197,7 @@ msgid "Relative to her folder. Default prompt.md."
 msgstr "相对于她的文件夹。默认 prompt.md。"
 
 #: src/features/settings/commands-card.tsx
+#: src/features/settings/desktop-card.tsx
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -4355,6 +4420,10 @@ msgstr "行数"
 #: src/features/studio/videos-section.tsx
 msgid "Run"
 msgstr "运行"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Run <0>{usage}</0> in a terminal, such as <1>{example}</1>. With no arguments, it opens Eidolon."
+msgstr "在终端里运行 <0>{usage}</0>，例如 <1>{example}</1>。不带参数时，它会打开 Eidolon。"
 
 #: src/features/tasks/cards.tsx
 msgid "Run Once"
@@ -4785,6 +4854,14 @@ msgstr "显示已完成的"
 msgid "Show Less"
 msgstr "收起"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Show Logs in the Help menu has the details."
+msgstr "详情请在「帮助」菜单的「显示日志」中查看。"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Show Logs in the tray icon's menu has the details."
+msgstr "详情请在托盘图标菜单的「显示日志」中查看。"
+
 #: src/components/voice-picker/parts.tsx
 msgid "Show More"
 msgstr "显示更多"
@@ -4955,6 +5032,10 @@ msgstr "开始聊天"
 #: src/features/home/hero.tsx
 msgid "Start Chatting"
 msgstr "开始聊天"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Start Eidolon in the background when you log in to this computer."
+msgstr "登录这台电脑时在后台启动 Eidolon。"
 
 #: src/features/chats/chat-list.tsx
 msgid "Start Group Chat"
@@ -5223,6 +5304,10 @@ msgstr "任务的技能列表已满，没列进它，只有你跟她点名时任
 #: src/features/jobs/detail.tsx
 msgid "Technical Log"
 msgstr "技术日志"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Terminal Command"
+msgstr "终端命令"
 
 #: src/features/studio/glossary-section.tsx
 msgid "terms = [\"奶绿\", \"奶糖花\"]"
@@ -6229,6 +6314,10 @@ msgstr "等你处理"
 msgid "Waiting for you to continue it"
 msgstr "等你让它继续"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Waiting for your OK in System Settings: turn Eidolon on under General → Login Items."
+msgstr "等你在「系统设置」中同意：请在「通用 → 登录项」里打开 Eidolon。"
+
 #: src/features/tasks/cards.tsx
 msgid "Waiting for your OK to fetch from {host}"
 msgstr "等你同意它从 {host} 获取内容"
@@ -6320,6 +6409,10 @@ msgstr "换用 {provider} 后的变化"
 #: src/features/usage/route.tsx
 msgid "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
 msgstr "各服务商的花费，由这台电脑上的通话、视频作业和 MCP 检索记录。"
+
+#: src/features/settings/desktop-card.tsx
+msgid "What Eidolon can add to this computer, each only when you choose it here."
+msgstr "Eidolon 能为这台电脑添加的功能，每一项都只在你在这里选择后才会添加。"
 
 #: src/features/settings/route.tsx
 msgid "What every persona knows about you."

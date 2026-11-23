@@ -1,5 +1,6 @@
 // Settings' Assistant Mode section beyond its rows: what keeps a kind or web search from running,
-// the commands allowed for good, and the MCP servers. Rendered to markup, with the macros stubbed.
+// the desktop app's folder dialog, the commands allowed for good, and the MCP servers. Rendered to
+// markup, with the macros stubbed.
 import { SETTINGS } from "@eidolon/config";
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
@@ -7,8 +8,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { AssistantStatus, SettingRow } from "@/lib/api";
+import type { EidolonDesktop } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
@@ -19,6 +21,7 @@ const { AllowedCommandsCard, allowedCommandsQuery } = await import("./commands-c
 const { McpServersCard, mcpServersQuery, commandLine } = await import("./mcp-card");
 const { settingsQuery } = await import("@/components/settings-form/queries");
 const { PROVIDER_OFF_LABELS } = await import("@/components/settings-form/labels");
+const { SettingField } = await import("@/components/settings-form/field");
 const { CARDS } = await import("./sections");
 
 const READY: AssistantStatus = {
@@ -133,6 +136,74 @@ describe("the Assistant Mode card", () => {
       ]),
     );
     expect(unset).not.toContain("Web search is off");
+  });
+});
+
+describe("Assistant Folders in the desktop app", () => {
+  const ignore = () => {};
+  const older: EidolonDesktop = {
+    platform: "darwin",
+    version: "0.1.0",
+    serverVersion: "0.14.0",
+    setTheme: ignore,
+    setLanguage: ignore,
+    onCommand: ignore,
+  };
+  const status = [statusQuery.queryKey, { assistant: READY }] as const;
+
+  /** The opening tag of the Choose Folder button, or "" when there is none. */
+  function chooseFolder(data: ReadonlyArray<readonly [readonly unknown[], unknown]>): string {
+    const markup = render(createElement(AssistantCard, card("assistant")), data);
+    const at = markup.indexOf("Choose Folder</button>");
+    if (at < 0) return "";
+    const start = markup.lastIndexOf("<button", at);
+    return markup.slice(start, markup.indexOf(">", start) + 1);
+  }
+
+  afterEach(() => {
+    globalThis.eidolonDesktop = undefined;
+  });
+
+  test("a folder dialog's button adds to the folders, and never submits the card", () => {
+    globalThis.eidolonDesktop = { ...older, chooseFolder: async () => "/Users/me/site" };
+    const tag = chooseFolder([settings, status]);
+    expect(tag).toContain('type="button"');
+    expect(tag).not.toContain('disabled=""');
+  });
+
+  test("a browser, or an app whose bridge predates the dialog, has no button", () => {
+    expect(chooseFolder([settings, status])).toBe("");
+    globalThis.eidolonDesktop = older;
+    expect(chooseFolder([settings, status])).toBe("");
+  });
+
+  test("folders the environment sets can't be added to here either", () => {
+    globalThis.eidolonDesktop = { ...older, chooseFolder: async () => "/Users/me/site" };
+    const locked = rows.map((row) =>
+      row.path === "assistant.folders"
+        ? { ...row, envValue: "/Users/me/work", envName: "ASSISTANT_FOLDERS", envOverride: true }
+        : row,
+    );
+    const lockedSettings = [settings[0], { ...settings[1], settings: locked }] as const;
+    expect(chooseFolder([lockedSettings, status])).toContain('disabled=""');
+  });
+
+  test("no other list of paths gets it: a persona's selfie references live in her folder", () => {
+    globalThis.eidolonDesktop = { ...older, chooseFolder: async () => "/Users/me/site" };
+    const references = rows.find((row) => row.path === "selfie.references");
+    if (references === undefined) throw new Error("no selfie.references row");
+    const markup = render(
+      createElement(SettingField, {
+        row: references,
+        draft: "outfits/a.png",
+        error: null,
+        onDraft: () => {},
+        personaName: "奶绿",
+      }),
+      [settings],
+    );
+    expect(markup).toContain("outfits/a.png</textarea>");
+    expect(markup).not.toContain("Choose Folder");
   });
 });
 

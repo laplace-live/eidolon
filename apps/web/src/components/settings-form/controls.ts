@@ -250,6 +250,7 @@ export function orphanedByProvider(
 /** Python's `str.isspace()` set, which the readers strip from each item. */
 export const SPACE_CLASS = String.raw`\t\n\v\f\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000`;
 const EDGES = new RegExp(`^[${SPACE_CLASS}]+|[${SPACE_CLASS}]+$`, "g");
+const TRAILING = new RegExp(`[${SPACE_CLASS}]+$`);
 
 export function strip(text: string): string {
   return text.replace(EDGES, "");
@@ -260,6 +261,16 @@ function items(text: string, separator: string | RegExp): string[] {
     .split(separator)
     .map(strip)
     .filter((item) => item !== "");
+}
+
+/**
+ * A paths draft with `path` on a line of its own after the rest, as the folder dialog adds one; the
+ * draft as it is when one of its lines already holds `path`.
+ */
+export function appendPath(draft: string, path: string): string {
+  if (items(draft, /\r?\n/).includes(path)) return draft;
+  const kept = draft.replace(TRAILING, "");
+  return kept === "" ? path : `${kept}\n${path}`;
 }
 
 const FLAG_ON = new Set(["true", "1", "yes", "on"]);
