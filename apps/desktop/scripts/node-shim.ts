@@ -25,6 +25,7 @@ export const LAUNCHER_FILES: readonly string[] = [
   ...POSIX_LAUNCHERS,
   ...POSIX_LAUNCHERS.map((name) => `${name}.cmd`),
   "npx.mjs",
+  "cross-spawn.mjs",
 ];
 
 /** The folder of the pnpm package apps/desktop pins, as bun installed it. */

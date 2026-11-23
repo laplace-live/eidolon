@@ -245,7 +245,14 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       const { devDependencies } = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8"));
       expect(version).toBe(devDependencies.pnpm);
       expect(resolveFrom(readBunLock(join(ROOT, "bun.lock")), [], "pnpm")?.version).toBe(version);
-      for (const file of ["bin/pnpm.mjs", "bin/pnpx.mjs", "dist/pnpm.mjs"]) {
+      // With what npx.mjs takes from pnpm's dist: npm's semver, and node-gyp's bin for npm's PATH.
+      for (const file of [
+        "bin/pnpm.mjs",
+        "bin/pnpx.mjs",
+        "dist/pnpm.mjs",
+        "dist/node_modules/semver/index.js",
+        "dist/node-gyp-bin/node-gyp",
+      ]) {
         expect([file, existsSync(join(pnpm, file))]).toEqual([file, true]);
       }
       // The Windows release signs every .exe it packs.
