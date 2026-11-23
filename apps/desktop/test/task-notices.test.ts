@@ -446,6 +446,28 @@ describe("TaskWatch", () => {
     watch.stop();
   });
 
+  test("a pause after a Continue the polls missed is told anew", async () => {
+    const { time, backend, shown, watch } = watching();
+    const spent = (detail: string): Partial<TaskSnapshot> => ({
+      status: "paused",
+      pause: { reason: "spend", detail },
+    });
+    backend.tasks = [snapshot(TASK)];
+    watch.ready();
+    await time.advance(0);
+    backend.tasks = [snapshot(TASK, spent("Spent $1.02; it pauses at 1."))];
+    await time.advance(3_000);
+    backend.tasks = [snapshot(TASK, spent("Spent $2.01; it pauses at 1."))];
+    await time.advance(30_000);
+    expect(told(shown)).toEqual(["A spend closed", "A spend"]);
+    backend.tasks = [
+      snapshot(TASK, { status: "paused", pause: { reason: "stall", detail: "The same calls" } }),
+    ];
+    await time.advance(30_000);
+    expect(told(shown)).toEqual(["A spend closed", "A spend closed", "A stall"]);
+    watch.stop();
+  });
+
   test("an end replaces the task's notice and stays open, and one ended before it was seen is told", async () => {
     const { time, backend, shown, watch } = watching();
     backend.tasks = [snapshot(TASK), snapshot(TASK_C, { status: "cancelled" })];
