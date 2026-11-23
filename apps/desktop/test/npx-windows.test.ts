@@ -1,9 +1,9 @@
 // npx.cmd on Windows, for real, with this Node as EIDOLON_NODE: a local bin in a node_modules/.bin
 // above the working folder, as a cmd-shim like npm's and as an .exe (a copy of this Node), and a
 // folder pnpm links and gives a .cmd of its own, each given words cmd.exe treats specially, under
-// a path with a space in it; then a folder's bin where only the shim offers node. Windows only, but
-// for how many times cmd.exe reads the words npx starts a batch file with, which made-up shims and
-// folders show on any OS.
+// a path with a space in it; then, where only the shim offers node, a folder's bin and a cmd-shim
+// named by its path with a node.exe beside it. Windows only, but for how many times cmd.exe reads
+// the words npx starts a batch file with, which made-up shims and folders show on any OS.
 import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -229,6 +229,7 @@ describe("how many times cmd.exe reads the words npx starts a batch file with", 
   const plain = put("bin/plain.cmd", '@echo off\r\n"%~dp0\\tool.exe" %*\r\n');
   const script = put("bin/tool.js");
   const beside = put("beside/tool.cmd", pnpmShim(TARGET));
+  const besideNpm = put("beside/npm-tool.cmd", npmShim(TARGET));
   put("beside/node.exe");
   put("other/node.exe");
   put("js/node.js");
@@ -263,7 +264,8 @@ describe("how many times cmd.exe reads the words npx starts a batch file with", 
   });
 
   test("two where cmd.exe runs another node: the node.exe beside it, or one before the shim's on PATH or in the working folder", () => {
-    expect(reads(beside, ["beside", "shim"])).toBe(2);
+    // npx runs a cmd-shim named by its path, whose folder needn't be on PATH.
+    expect([reads(beside, ["bin", "shim"]), reads(besideNpm, ["bin", "shim"])]).toEqual([2, 2]);
     expect(reads(pnpm, ["other", "shim"])).toBe(2);
     const here = join(base, "here");
     expect(reads(pnpm, ["bin", "shim"], here)).toBe(2);
@@ -396,6 +398,9 @@ describe.runIf(WINDOWS)("npx.cmd where only the shim offers node", () => {
       }),
     );
     writeFileSync(join(root, "words", "bin", "cli.js"), `#!/usr/bin/env node\n${PRINT}`);
+    mkdirSync(join(root, "beside"));
+    writeFileSync(join(root, "beside", "eidolon-beside.cmd"), pnpmShim("..\\words\\bin\\cli.js"));
+    copyFileSync(process.execPath, join(root, "beside", "node.exe"));
     cwd = join(root, "sub");
     mkdirSync(cwd);
     // A folder needs no registry; one pnpm tried anyway would fail at once, not after its retries.
@@ -422,20 +427,15 @@ describe.runIf(WINDOWS)("npx.cmd where only the shim offers node", () => {
     rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   });
 
-  test("the PATH it runs on offers no node but the shim's", () => {
-    expect(nodesIn(systemFolders("win32", process.env), "win32")).toEqual([]);
-  });
-
-  // cmd.exe reads the words three times: npx's line, the cmd-shim's %* and node.cmd's.
-  test("runs a folder's bin through pnpm's cmd-shim and the shim's node.cmd, every word as it was given, none run", () => {
-    const words = [...AWKWARD, ...ACTIVE];
+  /** npx.cmd with `args` through cmd.exe, escaped twice as cross-spawn escapes a cmd-shim's. */
+  function run(args: readonly string[]) {
     const line = cmdLine(
       process.env.ComSpec ?? "cmd.exe",
       join(LAUNCHER_SOURCES, "npx.cmd"),
-      ["-y", "-p", join(root, "words"), "eidolon-words", ...words],
+      args,
       1,
     );
-    const ran = spawnSync(line.command, line.args, {
+    return spawnSync(line.command, line.args, {
       cwd,
       encoding: "utf8",
       timeout: 120_000,
@@ -443,6 +443,25 @@ describe.runIf(WINDOWS)("npx.cmd where only the shim offers node", () => {
       windowsVerbatimArguments: true,
       env,
     });
+  }
+
+  test("the PATH it runs on offers no node but the shim's", () => {
+    expect(nodesIn(systemFolders("win32", process.env), "win32")).toEqual([]);
+  });
+
+  // cmd.exe reads the words three times: npx's line, the cmd-shim's %* and node.cmd's.
+  test("runs a folder's bin through pnpm's cmd-shim and the shim's node.cmd, every word as it was given, none run", () => {
+    const words = [...AWKWARD, ...ACTIVE];
+    const ran = run(["-y", "-p", join(root, "words"), "eidolon-words", ...words]);
+    expect([ran.status, existsSync(join(cwd, "marker.txt"))], ran.stderr).toEqual([0, false]);
+    expect(printed(ran.stdout)).toEqual({ argv: words, cwd: realpathSync.native(cwd) });
+  }, 120_000);
+
+  // cmd.exe reads the words twice, though node on PATH is the shim's node.cmd: npx's line and the
+  // cmd-shim's %*, which hands them to the node.exe beside it.
+  test("runs a cmd-shim named by its path on the node.exe beside it, every word as it was given, none run", () => {
+    const words = [...AWKWARD, ...ACTIVE];
+    const ran = run([join(root, "beside", "eidolon-beside.cmd"), ...words]);
     expect([ran.status, existsSync(join(cwd, "marker.txt"))], ran.stderr).toEqual([0, false]);
     expect(printed(ran.stdout)).toEqual({ argv: words, cwd: realpathSync.native(cwd) });
   }, 120_000);
