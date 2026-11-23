@@ -1130,12 +1130,12 @@ included; the update test's feed over real loopback requests and against the URL
 derives from a manifest, its steps against the lines the real updater logs, and its readings of an
 install; the manifest; and the import boundary.
 
-Two files run only on Windows, where `ts.yml`'s Windows job runs them, each on scratch keys under
-`HKCU\Software\Eidolon Test` that it deletes after, never the real `Environment`:
-`test/terminal-command-windows.test.ts` drives the real `Path` script there and runs the `.cmd`
-launcher against a stand-in install whose `Eidolon.exe` is a copy of Node, about 80 MB; and
-`test/registry-environment-windows.test.ts` reads `REG_SZ`, `REG_EXPAND_SZ` and non-ASCII values
-there through the real registry read.
+Some files run only on Windows, where `ts.yml`'s Windows job runs them ([In CI](#in-ci)). The two
+that touch the registry do it on scratch keys under `HKCU\Software\Eidolon Test`, which each
+deletes after, never the real `Environment`: `test/terminal-command-windows.test.ts` drives the
+real `Path` script there and runs the `.cmd` launcher against a stand-in install whose
+`Eidolon.exe` is a copy of Node, about 80 MB; and `test/registry-environment-windows.test.ts`
+reads `REG_SZ`, `REG_EXPAND_SZ` and non-ASCII values there through the real registry read.
 
 ### The stage test
 
