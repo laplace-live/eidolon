@@ -25,6 +25,8 @@ const DESKTOP = resolve(import.meta.dirname, "..");
 const MAC_LAUNCHER = join(DESKTOP, "launchers", "mac", "eidolon");
 const WIN_LAUNCHER = join(DESKTOP, "launchers", "win", "eidolon.cmd");
 const POSIX = process.platform !== "win32";
+/** A launcher that never stops resolving its links fails rather than hangs the run. */
+const RUN_TIMEOUT_MS = 10_000;
 
 const scratch = mkdtempSync(join(tmpdir(), "eidolon-terminal-launchers-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -115,11 +117,14 @@ describe.skipIf(!POSIX)("the macOS launcher, through links to a stand-in bundle"
 
   test("with arguments, runs the bundle's binary as Node on the CLI, with them, exiting as it does", () => {
     const { root, bundle, launcher } = standIn();
+    // The fake open too: a launcher that opened anyway would hand the stand-in to LaunchServices.
+    const PATH = `${join(root, "fake-bin")}:/usr/bin:/bin`;
     const args = ["search", "--help", "two words", "it's $HOME"];
     for (const command of [join(root, "elsewhere", "eidolon"), launcher]) {
       const run = spawnSync(command, args, {
         encoding: "utf8",
-        env: { PATH: "/usr/bin:/bin", EIDOLON_HOME: "/tmp/a home" },
+        env: { PATH, EIDOLON_HOME: "/tmp/a home" },
+        timeout: RUN_TIMEOUT_MS,
       });
       expect([command, run.status, run.stderr]).toEqual([command, 0, ""]);
       expect(lines(run.stdout)).toEqual({
@@ -139,7 +144,8 @@ describe.skipIf(!POSIX)("the macOS launcher, through links to a stand-in bundle"
     }
     const failed = spawnSync(join(root, "elsewhere", "eidolon"), ["search", "exit-7"], {
       encoding: "utf8",
-      env: { PATH: "/usr/bin:/bin" },
+      env: { PATH },
+      timeout: RUN_TIMEOUT_MS,
     });
     expect(failed.status).toBe(7);
   });
@@ -149,6 +155,7 @@ describe.skipIf(!POSIX)("the macOS launcher, through links to a stand-in bundle"
     const run = spawnSync(join(root, "elsewhere", "eidolon"), [], {
       encoding: "utf8",
       env: { PATH: `${join(root, "fake-bin")}:/usr/bin:/bin`, ELECTRON_RUN_AS_NODE: "1" },
+      timeout: RUN_TIMEOUT_MS,
     });
     expect([run.status, run.stderr, run.stdout]).toEqual([0, "", `open=${bundle}\n`]);
   });
