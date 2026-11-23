@@ -76,8 +76,12 @@ jobs:
               fi
             done
           fi
-          if [[ $UPDATE_TEST == true && $SIGN == true ]]; then
-            fail "update_test builds its own 0.0.1 and 0.0.2 on its own feed: dispatch it without sign, version or feed_url"
+          modes=0
+          for input in SIGN UPDATE_TEST R2_PROBE RELEASE_INDEX; do
+            if [[ ${!input} == true ]]; then modes=$((modes + 1)); fi
+          done
+          if (( modes > 1 )); then
+            fail "sign, update_test, r2_probe and release_index each run alone: dispatch one at a time"
           fi
           if [[ $VERSION != "" && ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             fail "version must be X.Y.Z, not $VERSION"
@@ -151,11 +155,15 @@ jobs:
       AZURE_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
 
   # Its own job, after both legs: a re-run sends the very bytes the build signed, where a re-run of a
-  # leg would sign new ones.
+  # leg would sign new ones. One release's at a time, queued: two at once could both find R2 serving
+  # neither, and the older write the flat files last.
   upload:
     name: Upload to R2
     needs: [signed-mac, signed-win]
     if: github.event_name == 'push' && github.ref_type == 'tag'
+    concurrency:
+      group: desktop-r2-upload
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -280,11 +288,14 @@ jobs:
 
   # eidolon/releases.json, the website's version history, rebuilt from a bucket listing rather than
   # appended to, so nothing ever needs a backfill. always(): after a failed leg or upload it lists
-  # what R2 holds.
+  # what R2 holds. One at a time, queued, so an earlier listing never lands last.
   release-index:
     name: releases.json
     needs: upload
     if: always() && ((github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.release_index))
+    concurrency:
+      group: desktop-r2-index
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:

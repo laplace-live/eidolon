@@ -592,13 +592,18 @@ changelog. The tag runs `desktop.yml` in the tagged commit:
    None of the flat files is written when the flat manifests R2 serves already name a newer
    version: an older release's late upload, a re-run of its failed job or a slower notarization,
    would point the feed, the links and the website back at it. Its `v<version>/` files still go up.
+   Uploads run one at a time across releases, queued in the `desktop-r2-upload` concurrency group,
+   since two at once could both find R2 serving neither and the older write last; index rebuilds
+   queue the same way in `desktop-r2-index`.
 4. **The index:** `eidolon/releases.json`, the website's version history at
    `https://downloads.vrp.moe/eidolon/releases.json`, rebuilt from a listing of `eidolon/v*`: each
    version with the date of its first file, and its files but the blockmaps and manifests, each by
    its URL from `eidolon/` and its size. It runs after the upload whatever became of it, so it
    always lists what R2 holds.
 
-Nothing under `eidolon/v<version>/` is ever deleted or overwritten: installs download from there.
+Nothing under `eidolon/v<version>/` is ever deleted or changed: installs download from there. A
+re-run sends the same bytes: the installers and blockmaps pass the check of the SHA-256 stored with
+each, and the manifests are made again from those and the tag's `changelog.json`.
 Every check of an object goes through the S3 API, never `https://downloads.vrp.moe`, whose zone
 answers curl and scripts with a challenge; electron-updater, whose user agent is `electron-builder`,
 gets through.
@@ -620,11 +625,12 @@ A dispatch of `desktop.yml` builds unsigned, at `0.0.0-dev`, unless an input say
   does, deletes it, and fails on any step: the proof the R2 token writes, before a release needs it.
 - **`release_index`** rebuilds `releases.json`.
 
-The last three run alone, and the build job doesn't run for them. All four run only on `master` and
-`electron`, and a run elsewhere fails before any secret is read. `electron` stays a signing ref
-after the release work merged: it is where a signed build, the update test or the probe runs before
-a change reaches master. A `sign` dispatch without `version` builds `0.0.0-dev`, channel `dev`,
-whose manifests are `dev-mac.yml` and `dev.yml`; its artifact keeps those too.
+A dispatch takes one of the four at most, and the build job runs only without them. All four run
+only on `master` and `electron`, and a run elsewhere fails before any secret is read. `electron`
+stays a signing ref after the release work merged: it is where a signed build, the update test or
+the probe runs before a change reaches master. A `sign` dispatch without `version` builds
+`0.0.0-dev`, channel `dev`, whose manifests are `dev-mac.yml` and `dev.yml`; its artifact keeps
+those too.
 
 ### Recovery
 
