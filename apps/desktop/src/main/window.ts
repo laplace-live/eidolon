@@ -112,7 +112,7 @@ export function createWindow(hooks: WindowHooks, hidden = false): BrowserWindow 
     },
   });
   window = win;
-  // It shows once its first page paints, unless a quit hides it first.
+  // It shows once its first page paints, unless it starts hidden or a quit hides it first.
   shown = !hidden;
   painted = false;
   maximizeAtFirstShow = saved.maximized;
