@@ -19,7 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { LAUNCHER_SOURCES } from "../scripts/node-shim.ts";
+import { LAUNCHER_SOURCES, POSIX_LAUNCHERS } from "../scripts/node-shim.ts";
 import {
   ENTRIES_SCRIPT,
   namesUninstaller,
@@ -168,22 +168,25 @@ describe("a launcher, run as a terminal would", () => {
     expect(refused).toBe("ECONNREFUSED");
   });
 
+  // On Node, which ignores the variable, the launchers' other tests pass without it.
   test.skipIf(process.platform === "win32")(
-    "a stand-in for EIDOLON_NODE tells a launcher that sets ELECTRON_RUN_AS_NODE from one that doesn't",
+    "a stand-in for EIDOLON_NODE: each of the shim's launchers sets ELECTRON_RUN_AS_NODE for it, and one without the line doesn't",
     () => {
       const root = mkdtempSync(join(tmpdir(), "eidolon-run-as-node-"));
       try {
         const probe = runAsNodeProbe(root, "darwin");
-        const launcher = join(LAUNCHER_SOURCES, "node");
         const unset = join(root, "node");
-        const text = readFileSync(launcher, "utf8");
+        const text = readFileSync(join(LAUNCHER_SOURCES, "node"), "utf8");
         writeFileSync(unset, text.replace("export ELECTRON_RUN_AS_NODE=1\n", ""), { mode: 0o755 });
         const printed = (file: string) =>
           spawnSync(file, ["--version"], {
             encoding: "utf8",
             env: { PATH: "/usr/bin:/bin", EIDOLON_NODE: probe },
           }).stdout;
-        expect([printed(launcher), printed(unset)]).toEqual(["1\n", "\n"]);
+        expect(
+          POSIX_LAUNCHERS.map((name) => [name, printed(join(LAUNCHER_SOURCES, name))]),
+        ).toEqual(POSIX_LAUNCHERS.map((name) => [name, "1\n"]));
+        expect(printed(unset)).toBe("\n");
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
