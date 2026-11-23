@@ -664,14 +664,15 @@ function install(packages) {
   });
 }
 
-/** The command npm picks from the package npx installed with no command named: see binOf. */
-function installedCommand(bin) {
+/** The packages npx installed in the dlx folder whose node_modules/.bin is `bin`, in order. */
+function installed(bin) {
   const dir = path.dirname(path.dirname(bin));
-  const [name] = Object.keys(readJson(path.join(dir, "package.json"))?.dependencies ?? {});
-  if (name === undefined) return undefined;
-  const packageDir = path.join(dir, "node_modules", name);
-  const manifest = readJson(path.join(packageDir, "package.json"));
-  return manifest === undefined ? undefined : binOf(manifest, packageDir);
+  const names = Object.keys(readJson(path.join(dir, "package.json"))?.dependencies ?? {});
+  return names.flatMap((name) => {
+    const packageDir = path.join(dir, "node_modules", name);
+    const manifest = readJson(path.join(packageDir, "package.json"));
+    return manifest === undefined ? [] : [{ dir: packageDir, manifest }];
+  });
 }
 
 if (import.meta.main) {
@@ -681,8 +682,18 @@ if (import.meta.main) {
   if (decided.install !== undefined) {
     const bin = await install(decided.install);
     bins = [bin];
-    command ??= installedCommand(bin);
+    const packages = installed(bin);
+    // With no command named, npm picks the bin of the package installed: see binOf.
+    command ??= packages[0] && binOf(packages[0].manifest, packages[0].dir);
     if (command === undefined) fail("could not determine executable to run");
+    // pnpm links no bin whose name or path it won't take, which npm names and links as binsOf
+    // does: a program of that name further down PATH would run in its place.
+    const theirs = packages.some(({ manifest, dir }) =>
+      Object.hasOwn(binsOf(manifest, dir), command),
+    );
+    if (theirs && !isFile(path.join(bin, command))) {
+      fail(`${command}: pnpm doesn't link a bin by this name`, 127);
+    }
   }
   const nodeGyp = fileURLToPath(new URL("../node_modules/pnpm/dist/node-gyp-bin", import.meta.url));
   const env = commandEnv(process.env, npmPath(bins, decided.runPath, nodeGyp, pathOf(process.env)));

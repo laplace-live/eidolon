@@ -401,6 +401,19 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       }),
       old,
     );
+    // Bins npm links and runs, whose path and name pnpm doesn't take.
+    for (const [name, bin] of [
+      ["eidolon-test-abs", "/cli.js"],
+      ["eidolon-test-plus", { "eidolon-test+plus": "cli.js" }],
+    ] as const) {
+      publish(
+        write(join(scratch, name), {
+          "package.json": JSON.stringify({ name, version: "1.0.0", bin }),
+          "cli.js": "#!/usr/bin/env node\nconsole.log('own');\n",
+        }),
+        old,
+      );
+    }
   });
   afterAll(() => {
     server.close();
@@ -501,6 +514,26 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     const pnpmFirst = newHome();
     expect((await launch("pnpx", ["eidolon-test-pair"], { home: pnpmFirst })).status).toBe(0);
     expect(await launch("npx", ["-y", "eidolon-test-pair"], { home: pnpmFirst })).toEqual(asNpm);
+  }, 60_000);
+
+  test("runs nothing else for a bin pnpm doesn't link, where npm runs the package's", async () => {
+    // Programs of the bins' names further down PATH, which npm never reaches.
+    const other = write(join(scratch, "other"), {
+      "eidolon-test-abs": "#!/bin/sh\necho other\n",
+      "eidolon-test+plus": "#!/bin/sh\necho other\n",
+    });
+    const env = { PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}:${other}` };
+    for (const [args, command] of [
+      [["-y", "eidolon-test-abs"], "eidolon-test-abs"],
+      [["-y", "-p", "eidolon-test-plus", "eidolon-test+plus"], "eidolon-test+plus"],
+    ] as const) {
+      expect(await launch("npx", args, { env })).toEqual({
+        status: 127,
+        stdout: "",
+        stderr: `npx: ${command}: pnpm doesn't link a bin by this name\n`,
+        marks: [],
+      });
+    }
   }, 60_000);
 
   test("installs as the owner's npm config has npm install", async () => {
