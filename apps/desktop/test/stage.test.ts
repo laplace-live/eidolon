@@ -248,6 +248,9 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       for (const file of ["bin/pnpm.mjs", "bin/pnpx.mjs", "dist/pnpm.mjs"]) {
         expect([file, existsSync(join(pnpm, file))]).toEqual([file, true]);
       }
+      // The Windows release signs every .exe it packs.
+      const { files } = listing(join(payload, NODE_SHIM));
+      expect(files.filter((file) => file.endsWith(".exe"))).toEqual([]);
     });
 
     test("keeps only the target's natives among the packages pnpm bundles", () => {

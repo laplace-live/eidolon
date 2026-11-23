@@ -66,4 +66,7 @@ export function stageNodeShim(payload: string, platform: Platform): void {
   prunePnpmForeignNativePackages(pnpm, platform.os, platform.cpu);
   // The bundled packages' commands, which pnpm never runs: node-gyp's is in dist/node-gyp-bin.
   rmSync(join(pnpm, "dist", "node_modules", ".bin"), { recursive: true, force: true });
+  // ps-list's fastlist executables, which pnpm's build copies in and nothing runs: electron-builder
+  // signs every .exe it packs, so the Windows release would sign them as Eidolon's.
+  rmSync(join(pnpm, "dist", "vendor"), { recursive: true, force: true });
 }

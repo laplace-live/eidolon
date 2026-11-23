@@ -70,7 +70,7 @@ describe("the shim the stage writes", () => {
     ["darwin", "arm64", "@reflink/reflink-darwin-arm64"],
     ["win32", "x64", "@reflink/reflink-win32-x64-msvc"],
   ] as const)(
-    "for %s/%s: the checkout's launchers, sh's executable, and pnpm pruned, with no .bin",
+    "for %s/%s: the checkout's launchers, sh's executable, and pnpm pruned, with no .bin or .exe",
     (os, cpu, native) => {
       const payload = temp();
       stageNodeShim(payload, { os, cpu });
@@ -100,6 +100,10 @@ describe("the shim the stage writes", () => {
         "reflink",
         native.slice("@reflink/".length),
       ]);
+      const exes = readdirSync(join(payload, NODE_SHIM), { recursive: true }).filter((file) =>
+        String(file).endsWith(".exe"),
+      );
+      expect(exes).toEqual([]);
     },
   );
 });
