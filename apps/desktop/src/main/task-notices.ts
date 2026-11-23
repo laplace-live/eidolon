@@ -264,7 +264,8 @@ export class TaskWatch {
     this.#seen = seen;
     if (due.length === 0 || this.#options.focused()) return;
     const names = await this.#personaNames(run, due);
-    if (this.#run !== run) return;
+    // The read can take its whole timeout, in which the owner may bring the window forward.
+    if (this.#run !== run || this.#options.focused()) return;
     for (const { task, kind } of due) {
       const persona = task.chat?.persona;
       const handle = this.#options.show({

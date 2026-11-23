@@ -508,6 +508,26 @@ describe("TaskWatch", () => {
     watch.stop();
   });
 
+  test("shows nothing once the window is focused while her name is read, and never tells it later", async () => {
+    const { time, backend, shown, app, watch } = watching();
+    backend.tasks = [snapshot(TASK)];
+    watch.ready();
+    await time.advance(0);
+    backend.fails.set(PERSONAS, "never");
+    backend.tasks = [snapshot(TASK, RUN_TESTS)];
+    await time.advance(3_000);
+    expect(backend.paths()).toEqual([TASKS, TASKS, PERSONAS]);
+    app.focused = true;
+    await time.advance(10_000);
+    expect(shown).toEqual([]);
+    app.focused = false;
+    backend.fails.delete(PERSONAS);
+    await time.advance(30_000);
+    expect(backend.polls()).toBe(3);
+    expect(shown).toEqual([]);
+    watch.stop();
+  });
+
   test("reads her name once a baseline, and again for a persona it doesn't know", async () => {
     const { time, backend, shown, watch } = watching();
     const rins = { chat: { id: CHAT, persona: RIN.id, call: "call-rin" } };

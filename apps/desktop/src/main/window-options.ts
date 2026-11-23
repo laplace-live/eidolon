@@ -63,6 +63,18 @@ export function writeBounds(file: string, bounds: SavedBounds): void {
   renameSync(temporary, file);
 }
 
+/**
+ * Whether the file keeps the window maximized: as it was read while the saved maximize waits for
+ * the window's first showing, which a hidden start puts off, and in background mode, which never
+ * maximizes the window; else as the window is.
+ */
+export function keptMaximized(
+  background: boolean,
+  window: { readonly saved: boolean; readonly waiting: boolean; readonly maximized: boolean },
+): boolean {
+  return background || window.waiting ? window.saved : window.maximized;
+}
+
 function overlap(a: Rectangle, b: Rectangle): { width: number; height: number } {
   return {
     width: Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x),

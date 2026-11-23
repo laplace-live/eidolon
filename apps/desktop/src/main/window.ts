@@ -12,6 +12,7 @@ import {
   BOUNDS_FILE,
   backgroundColor,
   chromeOptions,
+  keptMaximized,
   MIN_SIZE,
   placement,
   readBounds,
@@ -111,7 +112,7 @@ export function createWindow(hooks: WindowHooks, hidden = false): BrowserWindow 
     },
   });
   window = win;
-  // It shows once its first page paints, unless a quit hides it first.
+  // It shows once its first page paints, unless it starts hidden or a quit hides it first.
   shown = !hidden;
   painted = false;
   maximizeAtFirstShow = saved.maximized;
@@ -123,8 +124,12 @@ export function createWindow(hooks: WindowHooks, hidden = false): BrowserWindow 
   // Main owns the title: the page's <title> would name the window after each page.
   win.on("page-title-updated", (event) => event.preventDefault());
 
-  // Background mode never maximizes the window, so it keeps the flag as it was read.
-  const maximized = (): boolean => (background ? saved.maximized : win.isMaximized());
+  const maximized = (): boolean =>
+    keptMaximized(background, {
+      saved: saved.maximized,
+      waiting: maximizeAtFirstShow,
+      maximized: win.isMaximized(),
+    });
   let timer: ReturnType<typeof setTimeout> | null = null;
   const later = (): void => {
     if (timer !== null) clearTimeout(timer);

@@ -309,7 +309,9 @@ it opens on (the primary one, centred, when it has no position, as at first), hi
 page is ready to paint, at the bounds it had last: `window-bounds.json` in the profile, written
 through a temporary file. A saved position is dropped when no display shows 100×40 px of the
 window's top, and a window saved maximized is maximized only at its first showing once it has
-painted, since `maximize()` shows a hidden window. Main owns its title.
+painted, since `maximize()` shows a hidden window; until that showing, which a
+[hidden start](#open-at-login) puts off, the file keeps it maximized, so a quit before it loses
+nothing. Main owns its title.
 
 - **Its pages.** The window shows `eidolon-app://shell/loading` until the backend is ready, then
   `eidolon-app://app/`. The failure page, `eidolon-app://shell/failed`, says why in the shell's
@@ -433,8 +435,8 @@ through Electron's `Notification`.
   site, a command, an MCP call, a spend, stall or unpriced pause, an interruption, or anything else
   it waits on. A new wait replaces the task's notice, a wait that's over closes it, and an end
   replaces it and stays.
-- **Only while the window isn't focused** at the poll that sees the change: one seen while it is
-  focused is recorded, and never told later.
+- **Only while the window isn't focused** at the poll that sees the change, both as its answer comes
+  and once her name is read: one seen while it is focused is recorded, and never told later.
 - **What one says:** her name as its title, the task's chat's persona as `GET /api/local/personas`
   names her (read once a baseline, and again for a persona it doesn't know), else `Eidolon`; a fixed
   phrase for its kind in the shell's language; and her goal on a second line, made one line,
