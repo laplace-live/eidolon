@@ -70,13 +70,14 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
       "#!/bin/sh",
       `printf '%s\\n' "$(pwd)" "\${PATH%%:*}" "\${ELECTRON_RUN_AS_NODE-unset}"`,
       'for a in "$@"; do printf "[%s]\\n" "$a"; done',
-      'if [ -n "$KILL" ]; then kill -TERM $$; fi',
+      'if [ -n "$KILL" ]; then kill -"$KILL" $$; fi',
       "exit $((EXIT + 0))",
       "",
     ].join("\n"),
     // A script with no #! line, which only sh runs.
     "node_modules/.bin/eidolon-shim-plain": `printf 'plain %s\\n' "$@"\nexit 4\n`,
     "node_modules/.bin/eidolon-shim-locked": "#!/bin/sh\necho locked\n",
+    "node_modules/.bin/eidolon-shim-lost": "#!/nonexistent/interpreter -x\necho lost\n",
     "node_modules/.bin/eidolon-shim-trap": [
       "#!/bin/sh",
       "trap 'echo got-TERM; exit 7' TERM",
@@ -146,10 +147,18 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
     const killed = run(
       "npx",
       ["eidolon-shim-local"],
-      { EIDOLON_NODE: process.execPath, KILL: "1" },
+      { EIDOLON_NODE: process.execPath, KILL: "TERM" },
       below,
     );
     expect([killed.status, killed.signal]).toEqual([null, "SIGTERM"]);
+    // A signal Node ignores, which npx can't end on itself: 1, as npm's.
+    const piped = run(
+      "npx",
+      ["eidolon-shim-local"],
+      { EIDOLON_NODE: process.execPath, KILL: "PIPE" },
+      below,
+    );
+    expect([piped.status, piped.signal]).toEqual([1, null]);
   });
 
   test("npx runs a bin with no #! line through sh, and ends 126 on one it can't execute", () => {
@@ -158,6 +167,22 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
     const locked = run("npx", ["eidolon-shim-locked"], undefined, below);
     expect([locked.status, locked.stdout]).toEqual([126, ""]);
     expect(locked.stderr).toContain("EACCES");
+    // As sh says of it, where spawn reports the bin itself missing.
+    const lost = run("npx", ["eidolon-shim-lost"], undefined, below);
+    expect([lost.status, lost.stdout, lost.stderr]).toEqual([
+      126,
+      "",
+      "npx: eidolon-shim-lost: /nonexistent/interpreter: bad interpreter: No such file or directory\n",
+    ]);
+  });
+
+  test("npx ends 127 on a command nothing it installed or found has, as sh does", () => {
+    const ran = run("npx", ["-y", "-p", pkg, "eidolon-shim-missing"]);
+    expect([ran.status, ran.stdout, ran.stderr]).toEqual([
+      127,
+      "",
+      "npx: eidolon-shim-missing: command not found\n",
+    ]);
   });
 
   test("npx passes SIGTERM and SIGINT on to the command, and ends as it then does", async () => {

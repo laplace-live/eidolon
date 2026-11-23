@@ -620,6 +620,15 @@ function fail(message, code = 1) {
   process.exit(code);
 }
 
+/** The interpreter the #! line `file` starts with names, if it has one. */
+function interpreterOf(file) {
+  try {
+    return /^#!\s*(\S+)/.exec(readFileSync(file, "latin1"))?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
 // The no-op pnpm runs once installed, which leaves its dlx folder's bins, first on its PATH.
 const REPORT =
   'require("node:fs").writeFileSync(process.env.EIDOLON_NPX_REPORT, process.env.PATH ?? "")';
@@ -727,9 +736,16 @@ if (import.meta.main) {
     child = spawn("/bin/sh", [file, ...decided.args], options);
   }
   const undo = relay(child);
-  child.on("error", (error) =>
-    fail(`${command}: ${error.message}`, error.code === "EACCES" ? 126 : 127),
-  );
+  child.on("error", (error) => {
+    // spawn reports a script whose #! interpreter isn't there as the script missing; sh names the
+    // interpreter and ends 126.
+    const interpreter =
+      error.code === "ENOENT" && process.platform !== "win32" ? interpreterOf(file) : undefined;
+    if (interpreter !== undefined) {
+      fail(`${command}: ${interpreter}: bad interpreter: No such file or directory`, 126);
+    }
+    fail(`${command}: ${error.message}`, error.code === "EACCES" ? 126 : 127);
+  });
   child.on("exit", (code, signal) => {
     undo();
     end(code, signal);
