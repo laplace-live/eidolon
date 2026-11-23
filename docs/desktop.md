@@ -630,6 +630,9 @@ runs before a change reaches master.
 - **A failed upload:** "Re-run failed jobs". It sends the same bytes again, which the SHA-256 check
   lets through, then the manifests, the links, `changelog.json` and the index. Never "Re-run all
   jobs" once an upload began: the legs would sign new bytes, which the upload refuses.
+- **An upload that fails on its own fault** fails again on a re-run, which runs the workflow as the
+  tag has it: the fix reaches only the next release. The failed one keeps what went up under
+  `v<version>/`, which `releases.json` lists, and the flat feed and links wait for the next.
 - **A failed leg** uploaded nothing: "Re-run failed jobs" builds and signs it again, then uploads
   both legs.
 - **A missing tag,** when the Release workflow failed before it pushed one: re-running that workflow

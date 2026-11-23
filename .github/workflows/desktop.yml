@@ -197,14 +197,15 @@ jobs:
               return 1
             fi
           }
-          # The version a flat manifest in R2 names, or nothing when there is none yet.
+          # The version a flat manifest in R2 names, or nothing when there is none yet. A missing key
+          # fails GetObject with NoSuchKey; only head-object's has no body and gets a bare 404.
           served_version() {
             local found
             if found=$(aws s3 cp "s3://$R2_BUCKET/$R2_PREFIX/$1" - --endpoint-url "$R2_ENDPOINT" 2>&1); then
               sed -n 's/^version: *//p' <<< "$found" | head -n 1
               return 0
             fi
-            [[ $found == *"(404)"* ]] && return 0
+            [[ $found == *"(NoSuchKey)"* ]] && return 0
             echo "::error::reading $R2_PREFIX/$1 from R2: $found" >&2
             return 1
           }
