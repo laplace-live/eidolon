@@ -200,6 +200,24 @@ describe("mergeRegistryEnvironment", () => {
     expect(launch.temp).toBe("C:\\Users\\owner\\AppData\\Local\\Temp");
   });
 
+  test("expands the user's values with the owner's USERNAME, which Windows sets after the system key's SYSTEM", () => {
+    const merged = mergeRegistryEnvironment({ SystemRoot: "C:\\Windows", USERNAME: "owner" }, [
+      [sz("USERNAME", "SYSTEM"), expandSz("Path", "%SystemRoot%\\system32;C:\\%USERNAME%")],
+      [
+        expandSz("Path", "C:\\Users\\%USERNAME%\\bin"),
+        expandSz("GOPATH", "C:\\Users\\%username%\\go"),
+      ],
+      [sz("USERNAME", "owner")],
+    ]);
+    expect(merged).toEqual({
+      SystemRoot: "C:\\Windows",
+      USERNAME: "owner",
+      // A system value's is SYSTEM, as Windows expands it.
+      Path: "C:\\Windows\\system32;C:\\SYSTEM;C:\\Users\\owner\\bin",
+      GOPATH: "C:\\Users\\owner\\go",
+    });
+  });
+
   test("makes Path the system's then the user's, under the launch's one key", () => {
     const launch = { PATH: "C:\\Stale;C:\\Users\\owner\\Stale", SystemRoot: "C:\\Windows" };
     const merged = mergeRegistryEnvironment(launch, [

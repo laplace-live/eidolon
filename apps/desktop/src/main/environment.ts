@@ -164,8 +164,9 @@ export function mergeRegistryEnvironment(
   keys: readonly (readonly RegistryValue[])[],
 ): NodeJS.ProcessEnv {
   const merged = { ...launch };
+  const owner = read(launch, "USERNAME", "win32");
   let path: string | undefined;
-  for (const values of keys) {
+  for (const [index, values] of keys.entries()) {
     for (const kind of ["String", "ExpandString"]) {
       for (const { name, kind: stored, value } of values) {
         if (stored !== kind || launchKeeps(launch, name, "win32")) continue;
@@ -177,6 +178,9 @@ export function mergeRegistryEnvironment(
         write(merged, name, text, "win32");
       }
     }
+    // Windows sets the account's USERNAME between the system key, whose own is SYSTEM, and the
+    // user's, whose values expand with it.
+    if (index === 0 && owner) write(merged, "USERNAME", owner, "win32");
   }
   return merged;
 }

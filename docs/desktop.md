@@ -547,19 +547,20 @@ The backend runs on the environment main reads, plus four variables of its own, 
   for a bare name in the current folder first, and `eidolon` starts the app in the terminal's), its
   script encoded (`powershellArgs`) and its output UTF-8, prints the raw values and kinds of
   `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, `HKCU\Environment` and
-  `HKCU\Volatile Environment`, in Windows' own order, whose last key names the owner over the
-  system key's `USERNAME`, SYSTEM. Not reg.exe, whose redirected output follows the OEM code page
-  and garbles a path that isn't ASCII. A failure, or no answer in 10 s, leaves the launch
-  environment, and main.log says why (`Eidolon: couldn't read the registry's variables, so the
-  backend runs on the launch's: …`); a quit kills the run.
+  `HKCU\Volatile Environment`, in Windows' own order. Not reg.exe, whose redirected output follows
+  the OEM code page and garbles a path that isn't ASCII. A failure, or no answer in 10 s, leaves
+  the launch environment, and main.log says why (`Eidolon: couldn't read the registry's
+  variables, so the backend runs on the launch's: …`); a quit kills the run.
 - **The merge.** The shell's values win, except `PWD`, `OLDPWD`, `SHLVL`, `_` and the probe's own
   variables; `ELECTRON_*`, which never come from the shell; and an `EIDOLON_*` the launch
   environment sets to a non-blank value, so a test's or a terminal launch's `EIDOLON_HOME` holds.
   The registry's go over the launch environment as Windows builds a new process's, but for the
   same names: key by key, each key's `REG_SZ` values before its `REG_EXPAND_SZ` ones, which expand
   against the variables so far (`%NAME%` without case, an unknown one left as written), and no
-  other kind; `Path` is the system's, then the user's, joined by `;` as Windows joins them. A
-  variable deleted from the registry since the launch stays as the launch had it.
+  other kind; `Path` is the system's, then the user's, joined by `;` as Windows joins them. The
+  system key's `USERNAME` is SYSTEM, and Windows sets the account's before the user's key, so the
+  launch's goes back there, and a user value's `%USERNAME%` names the owner. A variable deleted
+  from the registry since the launch stays as the launch had it.
 - **Windows' names have no case,** but a copy of the environment does, and spawn keeps only the
   first of two spellings, so main reads and writes names without case, one key each: a `Path`
   stays one key.

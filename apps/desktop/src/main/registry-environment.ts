@@ -10,7 +10,7 @@ const TIMEOUT_MS = 10_000;
 export const ENVIRONMENT_KEYS: readonly string[] = [
   "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
   "HKCU:\\Environment",
-  // The owner's name and folders, after the system key's USERNAME, which is SYSTEM.
+  // The owner's name and folders, as the session set them at sign-in.
   "HKCU:\\Volatile Environment",
 ];
 
