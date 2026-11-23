@@ -23,9 +23,19 @@ type Plan =
   | { error: string; code?: number }
   | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string };
 interface Npx {
-  NPX_SETTINGS: readonly string[];
+  npmConfig(env: Env, prefix: string, home: string): Record<string, string>[];
+  npxSettings(
+    sources: readonly Record<string, string>[],
+    now?: number,
+  ): string[] | { error: string };
   readNpx(args: readonly string[]): { packages: string[]; command: string[] } | { error: string };
-  npxToPnpm(packages: readonly string[], cwd: string, home: string, platform?: string): string[];
+  npxToPnpm(
+    packages: readonly string[],
+    settings: readonly string[],
+    cwd: string,
+    home: string,
+    platform?: string,
+  ): string[];
   localSpec(
     spec: string,
     cwd: string,
@@ -61,6 +71,8 @@ const npx: Npx = await import(pathToFileURL(join(LAUNCHER_SOURCES, "npx.mjs")).h
 const cross: CrossSpawn = await import(
   pathToFileURL(join(LAUNCHER_SOURCES, "cross-spawn.mjs")).href
 );
+/** pnpm's settings under npm's default config. */
+const DEFAULTS = npx.npxSettings([]) as string[];
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "eidolon-npx-")));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -136,17 +148,19 @@ describe("npx's arguments", () => {
 describe("pnpm's arguments", () => {
   const dlx = (...packages: string[]) => [
     "--loglevel=error",
-    ...npx.NPX_SETTINGS,
+    ...DEFAULTS,
     "dlx",
+    expect.stringMatching(/^--allow-build=\.npx-[0-9a-f]{16}$/),
     ...packages.map((spec) => `--package=${spec}`),
   ];
 
   test("set pnpm to install as npm does: all builds, no release age, git and URL deps", () => {
-    expect(npx.NPX_SETTINGS).toEqual([
+    expect(DEFAULTS).toEqual([
       "--config.dangerously-allow-all-builds=true",
       "--config.minimum-release-age=0",
       "--config.block-exotic-subdeps=false",
       "--config.node-linker=hoisted",
+      "--config.ignore-pnpmfile=true",
     ]);
   });
 
@@ -161,13 +175,14 @@ describe("pnpm's arguments", () => {
       "git@github.com:user/repo.git",
       "https://example.test/server.tgz",
     ];
-    expect(npx.npxToPnpm(specs, "/work", "/home/me")).toEqual(dlx(...specs));
+    expect(npx.npxToPnpm(specs, DEFAULTS, "/work", "/home/me")).toEqual(dlx(...specs));
   });
 
   test("give a folder as pnpm's link:, absolute, which npm links too", () => {
     expect(
       npx.npxToPnpm(
         ["./server", "file:../other", "named@./third", "~/fourth"],
+        DEFAULTS,
         "/work/here",
         "/home/me",
       ),
@@ -185,6 +200,7 @@ describe("pnpm's arguments", () => {
     expect(
       npx.npxToPnpm(
         ["./server-1.0.0.tgz", "file:../server.tar.gz", "x.tgz", "named@./y.tar", "~/z.tgz"],
+        DEFAULTS,
         "/work/here",
         "/home/me",
       ),
@@ -197,6 +213,137 @@ describe("pnpm's arguments", () => {
         "file:/home/me/z.tgz",
       ),
     );
+  });
+
+  test("key each set of settings' installs apart in pnpm's dlx cache", () => {
+    const keyOf = (settings: readonly string[]) =>
+      npx
+        .npxToPnpm(["server"], settings, "/work", "/home/me")
+        .find((arg) => arg.startsWith("--allow-build="));
+    const ignoring = npx.npxSettings([{ "ignore-scripts": "true" }]) as string[];
+    expect(keyOf(DEFAULTS)).toBe(keyOf([...DEFAULTS]));
+    expect(keyOf(ignoring)).not.toBe(keyOf(DEFAULTS));
+  });
+});
+
+describe("npm's config, which npx installs by", () => {
+  const NOW = Date.parse("2026-11-23T12:00:00Z");
+  const settingsOf = (...sources: Record<string, string>[]) => npx.npxSettings(sources, NOW);
+
+  test("runs no install script under ignore-scripts, read as npm reads a boolean", () => {
+    for (const value of ["true", "1", "yes"]) {
+      expect([value, settingsOf({ "ignore-scripts": value })]).toEqual([
+        value,
+        ["--config.ignore-scripts=true", ...DEFAULTS.slice(1)],
+      ]);
+    }
+    for (const value of ["false", "0", "null", ""]) {
+      expect([value, settingsOf({ "ignore-scripts": value })]).toEqual([value, DEFAULTS]);
+    }
+  });
+
+  test("holds a version back by min-release-age or before, from the highest source", () => {
+    const age = (...sources: Record<string, string>[]) =>
+      (settingsOf(...sources) as string[]).find((setting) => setting.includes("release-age"));
+    expect(age({ "min-release-age": "7" })).toBe("--config.minimum-release-age=10080");
+    expect(age({ "min-release-age": "0.5" })).toBe("--config.minimum-release-age=720");
+    expect(age({ before: "2026-11-20T12:00:00Z" })).toBe("--config.minimum-release-age=4320");
+    expect(age({ before: "2026-11-30" })).toBe("--config.minimum-release-age=0");
+    // before wins within a source, and a higher source over a lower one, either way.
+    expect(age({ "min-release-age": "7", before: "2026-11-22T12:00:00Z" })).toBe(
+      "--config.minimum-release-age=1440",
+    );
+    expect(age({ "min-release-age": "0" }, { "min-release-age": "7" })).toBe(
+      "--config.minimum-release-age=0",
+    );
+    expect(age({}, { "min-release-age": "1" }, { before: "2020-01-01" })).toBe(
+      "--config.minimum-release-age=1440",
+    );
+    expect(age({ "min-release-age": "soon" })).toBe("--config.minimum-release-age=0");
+  });
+
+  test("blocks a dependency's git and URL dependencies under allow-git or allow-remote", () => {
+    const blocks = (source: Record<string, string>) =>
+      (settingsOf(source) as string[]).includes("--config.block-exotic-subdeps=true");
+    const blocking: Record<string, string>[] = [
+      { "allow-git": "root" },
+      { "allow-git": "none" },
+      { "allow-remote": "root" },
+      { "allow-remote": "none" },
+    ];
+    for (const source of blocking) {
+      expect([source, blocks(source)]).toEqual([source, true]);
+    }
+    expect(blocks({ "allow-git": "all", "allow-remote": "all" })).toBe(false);
+  });
+
+  test("takes a registry from npm_config_* variables, which pnpm doesn't read", () => {
+    const env = {
+      NPM_CONFIG_REGISTRY: "https://npm.corp.test/",
+      "npm_config_@Corp:registry": "https://corp.test/npm/",
+      "npm_config_//npm.corp.test/:_authToken": "secret",
+      npm_config_registry_x: "https://x.test/",
+    };
+    const [variables = {}] = npx.npmConfig(env, root, root);
+    expect(settingsOf(variables, { registry: "https://user.test/" })).toEqual([
+      ...DEFAULTS,
+      "--config.registry=https://npm.corp.test/",
+      "--config.@corp:registry=https://corp.test/npm/",
+    ]);
+    // pnpm reads the .npmrc files' itself.
+    expect(settingsOf({}, { registry: "https://project.test/" })).toEqual(DEFAULTS);
+  });
+
+  test("installs nothing under strict-allow-scripts, but with every script or none", () => {
+    expect(settingsOf({ "strict-allow-scripts": "true" })).toEqual({
+      error: "strict-allow-scripts is set, and Eidolon's npx can't hold an install to it",
+    });
+    expect(
+      settingsOf({ "strict-allow-scripts": "true", "dangerously-allow-all-scripts": "true" }),
+    ).toEqual(DEFAULTS);
+    expect(settingsOf({ "strict-allow-scripts": "true" }, { "ignore-scripts": "true" })).toEqual([
+      "--config.ignore-scripts=true",
+      ...DEFAULTS.slice(1),
+    ]);
+  });
+
+  test("comes from npm_config_* variables, the .npmrc at npm's local prefix, then the user's", () => {
+    const base = tree({
+      "project/.npmrc": [
+        "; a comment",
+        "ignore-scripts = true ; and another",
+        "allow-git='root'",
+        "strict-allow-scripts",
+        "[section]",
+        "before=2020-01-01",
+        "",
+      ].join("\r\n"),
+      "home/.npmrc": "min-release-age=7\nallow-remote=none\n",
+      "other/.npmrc": "allow-remote=root\n",
+    });
+    const project = join(base, "project");
+    const home = join(base, "home");
+    const env = {
+      NPM_CONFIG_MIN_RELEASE_AGE: "3",
+      npm_config_Strict_Allow_Scripts: "false",
+      npm_config_allow_git: "",
+      PATH: "/bin",
+    };
+    expect(npx.npmConfig(env, project, home)).toEqual([
+      { "min-release-age": "3", "strict-allow-scripts": "false" },
+      { "ignore-scripts": "true", "allow-git": "root", "strict-allow-scripts": "true" },
+      { "min-release-age": "7", "allow-remote": "none" },
+    ]);
+    const userconfig = join(base, "other", ".npmrc");
+    expect(npx.npmConfig({ npm_config_userconfig: userconfig }, project, home)[2]).toEqual({
+      "allow-remote": "root",
+    });
+    // In the home, the project's .npmrc is the user's, which npm reads once.
+    expect(npx.npmConfig({}, home, home)).toEqual([
+      {},
+      {},
+      { "min-release-age": "7", "allow-remote": "none" },
+    ]);
   });
 });
 
@@ -297,6 +444,16 @@ describe("the bins npm reads from a package.json", () => {
     });
     expect(npx.binsOf({ name: "x", bin: "c.js", directories: { bin: "scripts" } }, dir)).toEqual({
       x: "c.js",
+    });
+  });
+
+  test("never follow a link in directories.bin, as npm's glob doesn't", () => {
+    const dir = tree({ "scripts/a": "", "scripts/sub/b": "" });
+    // One link back into it: a second would make a walk that follows links run without end.
+    symlinkSync("..", join(dir, "scripts", "sub", "up"));
+    expect(npx.binsOf({ name: "x", directories: { bin: "scripts" } }, dir)).toEqual({
+      a: "scripts/a",
+      b: "scripts/sub/b",
     });
   });
 
@@ -741,11 +898,13 @@ describe("starting a command", () => {
     });
   });
 
-  test("escapes a word for cmd.exe as cross-spawn does", () => {
+  test("escapes a word for cmd.exe as cross-spawn does, a run of backslashes doubled whole", () => {
     expect(cross.escapeArgument("", false)).toBe('^"^"');
     expect(cross.escapeArgument('q"x', false)).toBe('^"q\\^"x^"');
     expect(cross.escapeArgument("C:\\dir\\", false)).toBe('^"C:\\dir\\\\^"');
     expect(cross.escapeArgument('a\\"b', false)).toBe('^"a\\\\\\^"b^"');
+    expect(cross.escapeArgument("C:\\dir\\\\", false)).toBe('^"C:\\dir\\\\\\\\^"');
+    expect(cross.escapeArgument('a\\\\"b\\\\\\', false)).toBe('^"a\\\\\\\\\\^"b\\\\\\\\\\\\^"');
     expect(cross.escapeArgument("100%!^<>|", false)).toBe('^"100^%^!^^^<^>^|^"');
     expect(cross.escapeArgument("&", true)).toBe('^^^"^^^&^^^"');
     expect(cross.escapeCommand("C:\\Program Files (x86)\\x.cmd")).toBe(

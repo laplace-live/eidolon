@@ -5,6 +5,7 @@
 // ends as it did. pnpm reports on stderr, so the server's stdout, which the MCP protocol owns,
 // holds only what the server prints.
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   accessSync,
   constants,
@@ -24,20 +25,105 @@ import { cmdLine } from "./cross-spawn.mjs";
 
 const DROPPED = new Set(["-y", "--yes", "-q", "--quiet"]);
 
-/** pnpm's settings that make its dlx install what npm's npx would, as npx would. */
-export const NPX_SETTINGS = [
-  // npm runs every dependency's install scripts; pnpm only those of the packages asked for.
-  "--config.dangerously-allow-all-builds=true",
-  // npm takes the newest version; pnpm one at least a day old.
-  "--config.minimum-release-age=0",
-  // npm installs a dependency's own git and tarball-URL dependencies; pnpm refuses them.
-  "--config.block-exotic-subdeps=false",
-  // npm installs a flat node_modules, where a package finds what it uses without declaring it up
-  // the folders, and the packages beside it at ../name. pnpm's isolated layout puts each package
-  // among its own dependencies alone, and in its global virtual store an ES module finds the rest
-  // only through a loader in NODE_OPTIONS, which the packaged app's Electron ignores.
-  "--config.node-linker=hoisted",
-];
+/** The settings an .npmrc gives before any [section], as npm's ini parser reads their values. */
+function readNpmrc(file) {
+  let text = "";
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {}
+  const settings = {};
+  for (const line of text.split(/\r?\n/)) {
+    if (/^\s*\[/.test(line)) break;
+    const match = /^\s*([^;#\s=][^=]*?)\s*(?:=(.*))?$/.exec(line);
+    if (match === null) continue;
+    const value = (match[2] ?? "true").trim();
+    settings[match[1]] = /^(["']).*\1$/.test(value)
+      ? value.slice(1, -1)
+      : value.replace(/\s*[;#].*$/, "");
+  }
+  return settings;
+}
+
+/**
+ * npm's config sources npx reads, highest first, each as `{ key: value }`: the npm_config_*
+ * variables in `env`, the .npmrc at npm's local `prefix`, then the user's.
+ */
+export function npmConfig(env, prefix, home) {
+  const variables = {};
+  for (const [name, value] of Object.entries(env)) {
+    const key = /^npm_config_(.+)$/i.exec(name)?.[1];
+    if (key === undefined || !value) continue;
+    variables[key.startsWith("//") ? key : key.replace(/(?!^)_/g, "-").toLowerCase()] = value;
+  }
+  const user = path.resolve(variables.userconfig ?? path.join(home, ".npmrc"));
+  const project = path.join(prefix, ".npmrc");
+  return [variables, project === user ? {} : readNpmrc(project), readNpmrc(user)];
+}
+
+/** A boolean setting as npm reads one: a number unless 0, any other word unless false or null. */
+function flag(value) {
+  if (value === undefined) return false;
+  const number = Number(value);
+  return Number.isNaN(number) ? value !== "false" && value !== "null" : number !== 0;
+}
+
+/**
+ * The minutes npm's `before` or `min-release-age` holds a version back, from the highest source
+ * that gives either, `before` first within one.
+ */
+function releaseAge(sources, now) {
+  for (const source of sources) {
+    const before = Date.parse(source.before ?? "");
+    if (!Number.isNaN(before)) return Math.max(0, Math.ceil((now - before) / 60_000));
+    const days = Number(source["min-release-age"] ?? Number.NaN);
+    if (!Number.isNaN(days)) return Math.max(0, Math.ceil(days * 1440));
+  }
+  return 0;
+}
+
+/**
+ * pnpm's settings that make its dlx install what npm's npx would, as npx would, under npm's config
+ * `sources` as npmConfig reads them, its variables first; or why it can't.
+ * @returns {string[] | { error: string }}
+ */
+export function npxSettings(sources, now = Date.now()) {
+  const setting = (key) => sources.find((source) => Object.hasOwn(source, key))?.[key];
+  const ignoreScripts = flag(setting("ignore-scripts"));
+  // npm then fails an install with any script allow-scripts doesn't name, which pnpm can't tell
+  // before it installs.
+  if (
+    !ignoreScripts &&
+    flag(setting("strict-allow-scripts")) &&
+    !flag(setting("dangerously-allow-all-scripts"))
+  ) {
+    return { error: "strict-allow-scripts is set, and Eidolon's npx can't hold an install to it" };
+  }
+  const exotic = [setting("allow-git"), setting("allow-remote")];
+  return [
+    // npm runs every dependency's install scripts, or none under ignore-scripts; pnpm only those of
+    // the packages asked for.
+    ignoreScripts ? "--config.ignore-scripts=true" : "--config.dangerously-allow-all-builds=true",
+    // npm takes the newest version that before or min-release-age allows; pnpm one at least a day
+    // old.
+    `--config.minimum-release-age=${releaseAge(sources, now)}`,
+    // npm installs a dependency's own git and tarball-URL dependencies unless allow-git or
+    // allow-remote is root or none; pnpm refuses them.
+    `--config.block-exotic-subdeps=${exotic.some((allow) => allow === "root" || allow === "none")}`,
+    // npm installs a flat node_modules, where a package finds what it uses without declaring it up
+    // the folders, and the packages beside it at ../name. pnpm's isolated layout puts each package
+    // among its own dependencies alone, and in its global virtual store an ES module finds the rest
+    // only through a loader in NODE_OPTIONS, which the packaged app's Electron ignores.
+    "--config.node-linker=hoisted",
+    // npm reads no pnpmfile; pnpm runs the one of the workspace around the folder, or the home's,
+    // whose hooks can rewrite what installs.
+    "--config.ignore-pnpmfile=true",
+    // npm takes registries from its variables, which pnpm never reads: a private package's name
+    // would resolve on the registry pnpm falls back on. The .npmrc files' pnpm reads itself.
+    ...Object.entries(sources[0] ?? {})
+      .filter(([key]) => key === "registry" || /^@[^:/]+:registry$/.test(key))
+      .map(([key, value]) => `--config.${key}=${value}`),
+  ];
+}
 
 /**
  * npx's arguments: the packages its -p and --package options name, then the command and the words
@@ -116,20 +202,32 @@ export function localSpec(spec, cwd, home, platform = process.platform) {
 }
 
 /**
- * pnpm's arguments to install `packages` into its dlx cache as npx would: npm links a folder it is
- * given rather than installing it and its dependencies, as pnpm does with link:. pnpm reads a
- * relative path from its dlx folder, so each local one goes absolute.
+ * pnpm's arguments to install `packages` into its dlx cache as npx would, with npxSettings'
+ * `settings`: npm links a folder it is given rather than installing it and its dependencies, as
+ * pnpm does with link:. pnpm reads a relative path from its dlx folder, so each local one goes
+ * absolute.
  * @param {readonly string[]} packages
+ * @param {readonly string[]} settings
  * @returns {string[]}
  */
-export function npxToPnpm(packages, cwd, home, platform = process.platform) {
+export function npxToPnpm(packages, settings, cwd, home, platform = process.platform) {
   const specs = packages.map((spec) => {
     const local = localSpec(spec, cwd, home, platform);
     if (local === undefined) return spec;
     const name = local.name === undefined ? "" : `${local.name}@`;
     return `${name}${local.tarball ? "file" : "link"}:${local.path}`;
   });
-  return ["--loglevel=error", ...NPX_SETTINGS, "dlx", ...specs.map((spec) => `--package=${spec}`)];
+  // pnpm keys a dlx install by its packages and --allow-build, never by these settings, so for a
+  // day pnpx's or pnpm dlx's install of a package would serve npx, and npx's them, and one npx's
+  // another's under other settings. A name no package can have, made from them, keys each apart.
+  const key = createHash("sha256").update(settings.join("\n")).digest("hex").slice(0, 16);
+  return [
+    "--loglevel=error",
+    ...settings,
+    "dlx",
+    `--allow-build=.npx-${key}`,
+    ...specs.map((spec) => `--package=${spec}`),
+  ];
 }
 
 function stat(file) {
@@ -157,8 +255,10 @@ export function binsOf(manifest, dir) {
     const folder = path.posix.join("/", manifest.directories.bin.replace(/\\/g, "/")).slice(1);
     const root = path.resolve(dir, folder);
     let entries = [];
+    // npm's glob enters no link. A recursive readdir follows one to a folder, and two links back
+    // into it never end.
     try {
-      entries = readdirSync(root, { recursive: true, withFileTypes: true });
+      entries = globSync("**", { cwd: root, withFileTypes: true });
     } catch {}
     bin = {};
     for (const entry of entries) {
@@ -520,19 +620,31 @@ function fail(message, code = 1) {
   process.exit(code);
 }
 
+/** The interpreter the #! line `file` starts with names, if it has one. */
+function interpreterOf(file) {
+  try {
+    return /^#!\s*(\S+)/.exec(readFileSync(file, "latin1"))?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
 // The no-op pnpm runs once installed, which leaves its dlx folder's bins, first on its PATH.
 const REPORT =
   'require("node:fs").writeFileSync(process.env.EIDOLON_NPX_REPORT, process.env.PATH ?? "")';
 
 /** Installs `packages` in pnpm's dlx cache, resolving to its node_modules/.bin, or ends as pnpm. */
 function install(packages) {
+  const sources = npmConfig(process.env, npmPrefix(process.cwd()).prefix, homedir());
+  const settings = npxSettings(sources);
+  if ("error" in settings) fail(settings.error);
   const scratch = mkdtempSync(path.join(tmpdir(), "eidolon-npx-"));
   const report = path.join(scratch, "path");
   const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", import.meta.url));
   const args = [
     ...process.execArgv,
     pnpm,
-    ...npxToPnpm(packages, process.cwd(), homedir()),
+    ...npxToPnpm(packages, settings, process.cwd(), homedir()),
     "--",
     process.execPath,
     ...process.execArgv,
@@ -561,14 +673,15 @@ function install(packages) {
   });
 }
 
-/** The command npm picks from the package npx installed with no command named: see binOf. */
-function installedCommand(bin) {
+/** The packages npx installed in the dlx folder whose node_modules/.bin is `bin`, in order. */
+function installed(bin) {
   const dir = path.dirname(path.dirname(bin));
-  const [name] = Object.keys(readJson(path.join(dir, "package.json"))?.dependencies ?? {});
-  if (name === undefined) return undefined;
-  const packageDir = path.join(dir, "node_modules", name);
-  const manifest = readJson(path.join(packageDir, "package.json"));
-  return manifest === undefined ? undefined : binOf(manifest, packageDir);
+  const names = Object.keys(readJson(path.join(dir, "package.json"))?.dependencies ?? {});
+  return names.flatMap((name) => {
+    const packageDir = path.join(dir, "node_modules", name);
+    const manifest = readJson(path.join(packageDir, "package.json"));
+    return manifest === undefined ? [] : [{ dir: packageDir, manifest }];
+  });
 }
 
 if (import.meta.main) {
@@ -578,8 +691,18 @@ if (import.meta.main) {
   if (decided.install !== undefined) {
     const bin = await install(decided.install);
     bins = [bin];
-    command ??= installedCommand(bin);
+    const packages = installed(bin);
+    // With no command named, npm picks the bin of the package installed: see binOf.
+    command ??= packages[0] && binOf(packages[0].manifest, packages[0].dir);
     if (command === undefined) fail("could not determine executable to run");
+    // pnpm links no bin whose name or path it won't take, which npm names and links as binsOf
+    // does: a program of that name further down PATH would run in its place.
+    const theirs = packages.some(({ manifest, dir }) =>
+      Object.hasOwn(binsOf(manifest, dir), command),
+    );
+    if (theirs && !isFile(path.join(bin, command))) {
+      fail(`${command}: pnpm doesn't link a bin by this name`, 127);
+    }
   }
   const nodeGyp = fileURLToPath(new URL("../node_modules/pnpm/dist/node-gyp-bin", import.meta.url));
   const env = commandEnv(process.env, npmPath(bins, decided.runPath, nodeGyp, pathOf(process.env)));
@@ -613,9 +736,16 @@ if (import.meta.main) {
     child = spawn("/bin/sh", [file, ...decided.args], options);
   }
   const undo = relay(child);
-  child.on("error", (error) =>
-    fail(`${command}: ${error.message}`, error.code === "EACCES" ? 126 : 127),
-  );
+  child.on("error", (error) => {
+    // spawn reports a script whose #! interpreter isn't there as the script missing; sh names the
+    // interpreter and ends 126.
+    const interpreter =
+      error.code === "ENOENT" && process.platform !== "win32" ? interpreterOf(file) : undefined;
+    if (interpreter !== undefined) {
+      fail(`${command}: ${interpreter}: bad interpreter: No such file or directory`, 126);
+    }
+    fail(`${command}: ${error.message}`, error.code === "EACCES" ? 126 : 127);
+  });
   child.on("exit", (code, signal) => {
     undo();
     end(code, signal);

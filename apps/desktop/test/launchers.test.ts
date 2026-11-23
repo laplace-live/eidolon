@@ -6,9 +6,9 @@ import { type SpawnSyncReturns, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -18,7 +18,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { LAUNCHER_SOURCES, POSIX_LAUNCHERS } from "../scripts/node-shim.ts";
 import { BACKEND_RUNTIME_ARGS } from "../src/main/controller.ts";
 
@@ -70,13 +70,14 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
       "#!/bin/sh",
       `printf '%s\\n' "$(pwd)" "\${PATH%%:*}" "\${ELECTRON_RUN_AS_NODE-unset}"`,
       'for a in "$@"; do printf "[%s]\\n" "$a"; done',
-      'if [ -n "$KILL" ]; then kill -TERM $$; fi',
+      'if [ -n "$KILL" ]; then kill -"$KILL" $$; fi',
       "exit $((EXIT + 0))",
       "",
     ].join("\n"),
     // A script with no #! line, which only sh runs.
     "node_modules/.bin/eidolon-shim-plain": `printf 'plain %s\\n' "$@"\nexit 4\n`,
     "node_modules/.bin/eidolon-shim-locked": "#!/bin/sh\necho locked\n",
+    "node_modules/.bin/eidolon-shim-lost": "#!/nonexistent/interpreter -x\necho lost\n",
     "node_modules/.bin/eidolon-shim-trap": [
       "#!/bin/sh",
       "trap 'echo got-TERM; exit 7' TERM",
@@ -146,10 +147,18 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
     const killed = run(
       "npx",
       ["eidolon-shim-local"],
-      { EIDOLON_NODE: process.execPath, KILL: "1" },
+      { EIDOLON_NODE: process.execPath, KILL: "TERM" },
       below,
     );
     expect([killed.status, killed.signal]).toEqual([null, "SIGTERM"]);
+    // A signal Node ignores, which npx can't end on itself: 1, as npm's.
+    const piped = run(
+      "npx",
+      ["eidolon-shim-local"],
+      { EIDOLON_NODE: process.execPath, KILL: "PIPE" },
+      below,
+    );
+    expect([piped.status, piped.signal]).toEqual([1, null]);
   });
 
   test("npx runs a bin with no #! line through sh, and ends 126 on one it can't execute", () => {
@@ -158,6 +167,22 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
     const locked = run("npx", ["eidolon-shim-locked"], undefined, below);
     expect([locked.status, locked.stdout]).toEqual([126, ""]);
     expect(locked.stderr).toContain("EACCES");
+    // As sh says of it, where spawn reports the bin itself missing.
+    const lost = run("npx", ["eidolon-shim-lost"], undefined, below);
+    expect([lost.status, lost.stdout, lost.stderr]).toEqual([
+      126,
+      "",
+      "npx: eidolon-shim-lost: /nonexistent/interpreter: bad interpreter: No such file or directory\n",
+    ]);
+  });
+
+  test("npx ends 127 on a command nothing it installed or found has, as sh does", () => {
+    const ran = run("npx", ["-y", "-p", pkg, "eidolon-shim-missing"]);
+    expect([ran.status, ran.stdout, ran.stderr]).toEqual([
+      127,
+      "",
+      "npx: eidolon-shim-missing: command not found\n",
+    ]);
   });
 
   test("npx passes SIGTERM and SIGINT on to the command, and ends as it then does", async () => {
@@ -254,16 +279,14 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     response.writeHead(file || packument ? 200 : 404);
     response.end(file ? readFileSync(file) : JSON.stringify(packument ?? { error: "Not found" }));
   });
-  afterAll(() => {
-    server.close();
-    rmSync(scratch, { recursive: true, force: true });
-  });
+  let registry = "";
+  const old = "2020-01-01T00:00:00.000Z";
 
   /**
    * Publishes the package in `dir` at `time`, or with `time` undefined serves it at a URL pnpm
    * doesn't take for its registry's, which it would ask for the package's metadata.
    */
-  function publish(registry: string, dir: string, time?: string): string {
+  function publish(dir: string, time?: string): string {
     const { name, version, ...rest } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     const urlPath =
       time === undefined ? `/plain/${name}-${version}.tgz` : `/${name}/-/${name}-${version}.tgz`;
@@ -291,14 +314,10 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     return `${registry}${urlPath}`;
   }
 
-  test("installs the newest, a dependency by URL with its postinstall, and runs it", async () => {
+  beforeAll(async () => {
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const registry = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    const old = "2020-01-01T00:00:00.000Z";
-    const markers = join(scratch, "markers");
-    mkdirSync(markers);
+    registry = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     publish(
-      registry,
       write(join(scratch, "leaf"), {
         "package.json": JSON.stringify({ name: "eidolon-test-leaf", version: "1.0.0" }),
         "index.js": 'module.exports = "leaf";\n',
@@ -307,7 +326,6 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     );
     // Its postinstall prints, and npx's stdout must not show it.
     const dep = publish(
-      registry,
       write(join(scratch, "dep"), {
         "package.json": JSON.stringify({
           name: "eidolon-test-dep",
@@ -317,7 +335,8 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         }),
         "post.js": [
           'console.log("postinstall");',
-          `require("fs").writeFileSync(${JSON.stringify(join(markers, "dep"))}, "");`,
+          'const { join } = require("path");',
+          'require("fs").writeFileSync(join(process.env.EIDOLON_TEST_MARKS, "dep"), "");',
           "",
         ].join("\n"),
         "index.js": 'module.exports = "dep";\n',
@@ -328,7 +347,6 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       ["1.1.0", new Date().toISOString()],
     ] as const) {
       publish(
-        registry,
         write(join(scratch, `app-${version}`), {
           "package.json": JSON.stringify({
             name: "eidolon-test-app",
@@ -354,39 +372,238 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         time,
       );
     }
-    const home = join(scratch, "home");
-    mkdirSync(home);
-    /** npx, with pnpm's store and caches in `home`; spawnSync would hold the registry up. */
-    const npx = async (args: readonly string[]) => {
-      const child = spawn(join(LAUNCHER_SOURCES, "npx"), args, {
-        cwd: scratch,
-        env: {
-          HOME: home,
-          PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}`,
-          EIDOLON_NODE: process.execPath,
-          pnpm_config_registry: `${registry}/`,
-        },
-      });
-      let stdout = "";
-      let stderr = "";
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk;
-      });
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk;
-      });
-      const status = await new Promise((resolve) => child.on("close", resolve));
-      return { status, stdout, stderr };
-    };
-    const imported = { version: "1.1.0", dep: "dep", leaf: "leaf" };
-    expect(await npx(["-y", "eidolon-test-app", "x"])).toEqual({
-      status: 0,
-      stdout: `${JSON.stringify({ ...imported, beside: "eidolon-test-leaf", args: ["x"] })}\n`,
-      stderr: "",
+    publish(
+      write(join(scratch, "built"), {
+        "package.json": JSON.stringify({
+          name: "eidolon-test-built",
+          version: "1.0.0",
+          dependencies: { "eidolon-test-leaf": "1.0.0" },
+          scripts: { postinstall: "node post.js" },
+        }),
+        "post.js": [
+          'const { join } = require("path");',
+          'require("fs").writeFileSync(join(process.env.EIDOLON_TEST_MARKS, "built"), "");',
+          "",
+        ].join("\n"),
+      }),
+      old,
+    );
+    for (const [version, time] of [
+      ["1.0.0", old],
+      ["1.1.0", new Date().toISOString()],
+    ] as const) {
+      publish(
+        write(join(scratch, `fresh-${version}`), {
+          "package.json": JSON.stringify({ name: "eidolon-test-fresh", version }),
+        }),
+        time,
+      );
+    }
+    // Its only version is old, so pnpm resolves it alike with its day of release age and without,
+    // all but its dependency eidolon-test-fresh, whose newest is new.
+    publish(
+      write(join(scratch, "pair"), {
+        "package.json": JSON.stringify({
+          name: "eidolon-test-pair",
+          version: "1.0.0",
+          type: "module",
+          bin: { "eidolon-test-pair": "cli.mjs" },
+          dependencies: { "eidolon-test-built": "1.0.0", "eidolon-test-fresh": "^1.0.0" },
+        }),
+        "cli.mjs": [
+          "#!/usr/bin/env node",
+          'import { createRequire } from "node:module";',
+          'const fresh = createRequire(import.meta.url)("eidolon-test-fresh/package.json").version;',
+          "let leaf;",
+          "try {",
+          '  leaf = (await import("eidolon-test-leaf")).default;',
+          "} catch (error) {",
+          "  leaf = error.code;",
+          "}",
+          "console.log(JSON.stringify({ fresh, leaf }));",
+          "",
+        ].join("\n"),
+      }),
+      old,
+    );
+    // Bins npm links and runs, whose path and name pnpm doesn't take.
+    for (const [name, bin] of [
+      ["eidolon-test-abs", "/cli.js"],
+      ["eidolon-test-plus", { "eidolon-test+plus": "cli.js" }],
+    ] as const) {
+      publish(
+        write(join(scratch, name), {
+          "package.json": JSON.stringify({ name, version: "1.0.0", bin }),
+          "cli.js": "#!/usr/bin/env node\nconsole.log('own');\n",
+        }),
+        old,
+      );
+    }
+  });
+  afterAll(() => {
+    server.close();
+    rmSync(scratch, { recursive: true, force: true });
+  });
+
+  /** A home whose .npmrc names the registry served here, then `lines`. */
+  function newHome(...lines: string[]): string {
+    const home = mkdtempSync(join(scratch, "home-"));
+    writeFileSync(join(home, ".npmrc"), [`registry=${registry}/`, ...lines, ""].join("\n"));
+    return home;
+  }
+
+  /**
+   * A launcher run from `cwd` with pnpm's store and caches in `home`, and the markers its
+   * postinstalls left; spawnSync would hold the registry up.
+   */
+  async function launch(
+    name: string,
+    args: readonly string[],
+    {
+      home = newHome(),
+      cwd = scratch,
+      env = {},
+    }: { home?: string; cwd?: string; env?: Record<string, string> } = {},
+  ) {
+    const marks = mkdtempSync(join(scratch, "marks-"));
+    const child = spawn(join(LAUNCHER_SOURCES, name), args, {
+      cwd,
+      env: {
+        HOME: home,
+        PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}`,
+        EIDOLON_NODE: process.execPath,
+        EIDOLON_TEST_MARKS: marks,
+        ...env,
+      },
     });
-    expect(existsSync(join(markers, "dep"))).toBe(true);
-    const missing = await npx(["-y", "eidolon-test-missing"]);
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    const status = await new Promise((resolve) => child.on("close", resolve));
+    return { status, stdout, stderr, marks: readdirSync(marks) };
+  }
+
+  test("installs the newest, a dependency by URL with its postinstall, and runs it", async () => {
+    const printed = { version: "1.1.0", dep: "dep", leaf: "leaf", beside: "eidolon-test-leaf" };
+    expect(await launch("npx", ["-y", "eidolon-test-app", "x"])).toEqual({
+      status: 0,
+      stdout: `${JSON.stringify({ ...printed, args: ["x"] })}\n`,
+      stderr: "",
+      marks: ["dep"],
+    });
+    const missing = await launch("npx", ["-y", "eidolon-test-missing"]);
     expect([missing.status, missing.stdout]).toEqual([1, ""]);
     expect(missing.stderr).toContain("ERR_PNPM_FETCH_404");
+  }, 60_000);
+
+  test("reads no pnpmfile, as npm reads none", async () => {
+    // A pnpm workspace around the folder npx runs in, whose pnpmfile would drop the app's dependency.
+    const workspace = write(join(scratch, "workspace"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-workspace", private: true }),
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      "packages/x/package.json": JSON.stringify({ name: "x", version: "1.0.0" }),
+      ".pnpmfile.cjs": [
+        'const { join } = require("path");',
+        'require("fs").writeFileSync(join(process.env.EIDOLON_TEST_MARKS, "pnpmfile"), "");',
+        "const readPackage = (pkg) =>",
+        '  pkg.name === "eidolon-test-app" ? { ...pkg, dependencies: {} } : pkg;',
+        "module.exports = { hooks: { readPackage } };",
+        "",
+      ].join("\n"),
+    });
+    const cwd = join(workspace, "packages", "x");
+    const ran = await launch("npx", ["-y", "eidolon-test-app"], { cwd });
+    expect([ran.status, ran.marks, ran.stderr]).toEqual([0, ["dep"], ""]);
+  }, 60_000);
+
+  test("never shares an install with pnpx or pnpm dlx, which install as pnpm does", async () => {
+    const asNpm = {
+      status: 0,
+      stdout: `${JSON.stringify({ fresh: "1.1.0", leaf: "leaf" })}\n`,
+      stderr: "",
+      marks: ["built"],
+    };
+    /** What eidolon-test-pair printed last. */
+    const printed = (stdout: string) => JSON.parse(stdout.trimEnd().split("\n").at(-1) ?? "");
+    const home = newHome();
+    expect(await launch("npx", ["-y", "eidolon-test-pair"], { home })).toEqual(asNpm);
+    // pnpm's own day of release age.
+    expect(printed((await launch("pnpx", ["eidolon-test-pair"], { home })).stdout)).toMatchObject({
+      fresh: "1.0.0",
+    });
+    const pnpmFirst = newHome();
+    expect((await launch("pnpx", ["eidolon-test-pair"], { home: pnpmFirst })).status).toBe(0);
+    expect(await launch("npx", ["-y", "eidolon-test-pair"], { home: pnpmFirst })).toEqual(asNpm);
+  }, 60_000);
+
+  test("runs nothing else for a bin pnpm doesn't link, where npm runs the package's", async () => {
+    // Programs of the bins' names further down PATH, which npm never reaches.
+    const other = write(join(scratch, "other"), {
+      "eidolon-test-abs": "#!/bin/sh\necho other\n",
+      "eidolon-test+plus": "#!/bin/sh\necho other\n",
+    });
+    const env = { PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}:${other}` };
+    for (const [args, command] of [
+      [["-y", "eidolon-test-abs"], "eidolon-test-abs"],
+      [["-y", "-p", "eidolon-test-plus", "eidolon-test+plus"], "eidolon-test+plus"],
+    ] as const) {
+      expect(await launch("npx", args, { env })).toEqual({
+        status: 127,
+        stdout: "",
+        stderr: `npx: ${command}: pnpm doesn't link a bin by this name\n`,
+        marks: [],
+      });
+    }
+  }, 60_000);
+
+  test("installs as the owner's npm config has npm install", async () => {
+    // ignore-scripts, in the user's .npmrc: the app runs, its dependency's postinstall never.
+    const home = newHome("ignore-scripts=true");
+    const ignoring = await launch("npx", ["-y", "eidolon-test-app"], { home });
+    expect([ignoring.status, ignoring.marks, ignoring.stderr]).toEqual([0, [], ""]);
+    // min-release-age, in an npm_config_* variable: an older dependency, though the home holds
+    // npx's install of the newest.
+    const pair = ["-y", "eidolon-test-pair"];
+    const fresh = newHome();
+    expect(JSON.parse((await launch("npx", pair, { home: fresh })).stdout).fresh).toBe("1.1.0");
+    const aged = await launch("npx", pair, {
+      home: fresh,
+      env: { npm_config_min_release_age: "1" },
+    });
+    expect([aged.status, aged.stdout]).toEqual([
+      0,
+      `${JSON.stringify({ fresh: "1.0.0", leaf: "leaf" })}\n`,
+    ]);
+    // allow-remote, in the .npmrc at npm's local prefix: no dependency by URL.
+    const project = write(join(scratch, "project"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project" }),
+      ".npmrc": "allow-remote=root\n",
+      "sub/.keep": "",
+    });
+    const cwd = join(project, "sub");
+    const remote = await launch("npx", ["-y", "eidolon-test-app"], { cwd });
+    expect([remote.status, remote.stdout, remote.marks]).toEqual([1, "", []]);
+    expect(remote.stderr).toContain("ERR_PNPM_EXOTIC_SUBDEP");
+    // registry, in an npm_config_* variable, over the user's .npmrc, whose registry holds nothing.
+    const nowhere = mkdtempSync(join(scratch, "home-"));
+    writeFileSync(join(nowhere, ".npmrc"), `registry=${registry}/nothing/\n`);
+    const named = await launch("npx", ["-y", "eidolon-test-app"], {
+      home: nowhere,
+      env: { npm_config_registry: `${registry}/` },
+    });
+    expect([named.status, named.marks, named.stderr]).toEqual([0, ["dep"], ""]);
+    // strict-allow-scripts: nothing installed, and why.
+    const strict = newHome("strict-allow-scripts=true");
+    expect(await launch("npx", ["-y", "eidolon-test-app"], { home: strict })).toEqual({
+      status: 1,
+      stdout: "",
+      stderr: "npx: strict-allow-scripts is set, and Eidolon's npx can't hold an install to it\n",
+      marks: [],
+    });
   }, 60_000);
 });

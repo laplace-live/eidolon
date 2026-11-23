@@ -19,23 +19,21 @@ export function escapeCommand(command) {
  * a batch file hands its arguments on through `%*`, which cmd.exe reads a second time.
  */
 export function escapeArgument(arg, doubleEscape) {
-  // Algorithm below is based on https://qntm.org/cmd
-  // It's slightly altered to disable JS backtracking to avoid hanging on specially crafted input
-  // Please see https://github.com/moxystudio/node-cross-spawn/pull/160 for more information
-
-  // Sequence of backslashes followed by a double quote:
-  // double up all the backslashes and escape the double quote
-  let escaped = arg.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"');
-
-  // Sequence of backslashes followed by the end of the string
-  // (which will become a double quote later):
-  // double up all the backslashes
-  escaped = escaped.replace(/(?=(\\+?)?)\1$/, "$1$1");
-
-  // All other backslashes occur literally
-
-  // Quote the whole thing:
-  escaped = `"${escaped}"`;
+  // Algorithm below is based on https://qntm.org/cmd: a run of backslashes doubles before a double
+  // quote, which one more escapes, and before the end, which the closing quote follows, and stays
+  // as it is elsewhere. A scan, since cross-spawn's backtracking-free regexes double only one
+  // backslash of a run (https://github.com/moxystudio/node-cross-spawn/issues/188).
+  let escaped = "";
+  let backslashes = 0;
+  for (const char of arg) {
+    if (char === "\\") {
+      backslashes++;
+      continue;
+    }
+    escaped += "\\".repeat(char === '"' ? backslashes * 2 + 1 : backslashes) + char;
+    backslashes = 0;
+  }
+  escaped = `"${escaped}${"\\".repeat(backslashes * 2)}"`;
 
   // Escape meta chars
   escaped = escaped.replace(metaCharsRegExp, "^$1");
