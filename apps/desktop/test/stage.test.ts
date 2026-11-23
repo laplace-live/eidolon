@@ -1,8 +1,8 @@
 // The payloads staged in apps/desktop/.stage (`bun run build:desktop` stages this machine's): what
-// each holds, pinned to bun.lock and pruned, its natives loading from it, on Windows the VC++
-// runtime and the signatures, and the packaged app holding it file for file. A target with no
-// stage, or one staged from another version or bun.lock, skips, unless EIDOLON_REQUIRE_STAGE=1 and
-// it is this machine's.
+// each holds, pinned to bun.lock and pruned, its natives loading from it, its node shim, on Windows
+// the VC++ runtime and the signatures, and the packaged app holding it file for file. A target with
+// no stage, or one staged from another version or bun.lock, skips, unless EIDOLON_REQUIRE_STAGE=1
+// and it is this machine's.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
@@ -10,8 +10,21 @@ import { isDeepStrictEqual } from "node:util";
 import { describe, expect, test } from "vitest";
 import { packageManifest } from "../../eidolon/scripts/build.ts";
 import { PLATFORMS, VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
-import { lockDrift, lockedTree, pinOverrides, readBunLock } from "../scripts/lockfile.ts";
+import {
+  lockDrift,
+  lockedTree,
+  pinOverrides,
+  readBunLock,
+  resolveFrom,
+  supports,
+} from "../scripts/lockfile.ts";
 import { checkNatives } from "../scripts/natives.ts";
+import {
+  LAUNCHER_FILES,
+  LAUNCHER_SOURCES,
+  NODE_SHIM,
+  POSIX_LAUNCHERS,
+} from "../scripts/node-shim.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
   electronZip,
@@ -90,6 +103,25 @@ function packageOf(path: string): string {
   return [...parts.slice(0, at + 1), ...name].join("/");
 }
 
+/** Each package folder directly under `modules`, a scope's included. */
+function packageDirs(modules: string): string[] {
+  const dirs = (parent: string) =>
+    readdirSync(parent, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => join(parent, entry.name));
+  return dirs(modules).flatMap((dir) => (basename(dir).startsWith("@") ? dirs(dir) : [dir]));
+}
+
+function manifestOf(dir: string): {
+  name: string;
+  version: string;
+  license?: string;
+  os?: string[];
+  cpu?: string[];
+} {
+  return JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+}
+
 /** THIRD_PARTY_LICENSES.txt's sections, by title. */
 function licenseSections(text: string): Map<string, string> {
   const parts = text.split(/^={78}\n(.+)\n={78}\n/m);
@@ -106,6 +138,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
   const current = staged && isCurrent(payload);
   const { os, cpu, onnxruntime } = TARGETS[target];
   const modules = join(payload, "node_modules");
+  const pnpm = join(payload, NODE_SHIM, "node_modules", "pnpm");
   const title = `the ${target} payload${staged && !current ? ` (${STALE})` : ""}`;
 
   describe.skipIf(!current && !(REQUIRED && target === HOST))(title, () => {
@@ -183,6 +216,48 @@ for (const target of Object.keys(TARGETS) as Target[]) {
         ]) {
           expect([prefix, line, text.includes(line)]).toEqual([prefix, line, true]);
         }
+      }
+      // The node shim's pnpm, and each package its dist/ bundles.
+      for (const dir of [pnpm, ...packageDirs(join(pnpm, "dist", "node_modules"))]) {
+        const { name, version, license } = manifestOf(dir);
+        const section = `${name} ${version} (${license})`;
+        expect([section, licenses.has(section)]).toEqual([section, true]);
+      }
+      expect(licenses.get(`pnpm ${manifestOf(pnpm).version} (MIT)`)).toBe(
+        readFileSync(join(pnpm, "LICENSE"), "utf8").trim(),
+      );
+    });
+
+    test("holds the node shim: the checkout's launchers, sh's executable, and the pnpm bun.lock pins", () => {
+      const bin = join(payload, NODE_SHIM, "bin");
+      for (const file of LAUNCHER_FILES) {
+        expect([file, readFileSync(join(bin, file), "utf8")], STALE).toEqual([
+          file,
+          readFileSync(join(LAUNCHER_SOURCES, file), "utf8"),
+        ]);
+      }
+      if (process.platform !== "win32") {
+        for (const name of POSIX_LAUNCHERS) {
+          expect([name, statSync(join(bin, name)).mode & 0o777]).toEqual([name, 0o755]);
+        }
+      }
+      const { version } = manifestOf(pnpm);
+      const { devDependencies } = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8"));
+      expect(version).toBe(devDependencies.pnpm);
+      expect(resolveFrom(readBunLock(join(ROOT, "bun.lock")), [], "pnpm")?.version).toBe(version);
+      for (const file of ["bin/pnpm.mjs", "bin/pnpx.mjs", "dist/pnpm.mjs"]) {
+        expect([file, existsSync(join(pnpm, file))]).toEqual([file, true]);
+      }
+    });
+
+    test("keeps only the target's natives among the packages pnpm bundles", () => {
+      const natives = packageDirs(join(pnpm, "dist", "node_modules"))
+        .map(manifestOf)
+        .filter((fields) => fields.os !== undefined || fields.cpu !== undefined);
+      expect(natives.length).toBeGreaterThan(0);
+      for (const fields of natives) {
+        const admitted = supports(fields.os, os) && supports(fields.cpu, cpu);
+        expect([fields.name, admitted]).toEqual([fields.name, true]);
       }
     });
 
@@ -288,6 +363,12 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       staged && existsSync(packaged) && statSync(packaged).mtimeMs >= statSync(payload).mtimeMs;
     test.skipIf(!repackaged)("is what the app packaged after it holds, file for file", () => {
       expect(listing(packaged).files).toEqual(listing(payload).files);
+      if (process.platform !== "win32") {
+        for (const name of POSIX_LAUNCHERS) {
+          const mode = statSync(join(packaged, NODE_SHIM, "bin", name)).mode & 0o777;
+          expect([name, mode]).toEqual([name, 0o755]);
+        }
+      }
     });
   });
 }

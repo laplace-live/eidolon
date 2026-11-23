@@ -733,6 +733,30 @@ describe("THIRD_PARTY_LICENSES.txt", () => {
     expect(text).not.toContain("Visual C++");
   });
 
+  test("gives the node shim's pnpm and each package its dist/ bundles theirs, SPDX's where they ship none", () => {
+    const root = payload();
+    const pnpm = join(root, "node-shim", "node_modules", "pnpm");
+    manifest(pnpm, { name: "pnpm", version: "11.0.0", license: "MIT" });
+    put(join(pnpm, "LICENSE"), "Copyright (c) pnpm contributors\n");
+    const bundled = join(pnpm, "dist", "node_modules");
+    manifest(join(bundled, "tar"), { name: "tar", version: "7.0.0", license: "BlueOak-1.0.0" });
+    manifest(join(bundled, "@reflink", "reflink"), {
+      name: "@reflink/reflink",
+      version: "0.1.0",
+      license: "MIT",
+    });
+    put(join(bundled, ".bin", "tar"));
+    const found = sections(thirdPartyLicenses(root, null));
+    expect([...found.keys()].slice(0, 3)).toEqual([
+      "@reflink/reflink 0.1.0 (MIT)",
+      "pnpm 11.0.0 (MIT)",
+      "tar 7.0.0 (BlueOak-1.0.0)",
+    ]);
+    expect(found.get("pnpm 11.0.0 (MIT)")).toBe("Copyright (c) pnpm contributors");
+    expect(found.get("tar 7.0.0 (BlueOak-1.0.0)")).toContain("Blue Oak Model License");
+    expect(found.get("@reflink/reflink 0.1.0 (MIT)")).toContain("Permission is hereby granted");
+  });
+
   test("says where libvips's source is and gives the LGPL, from its own package or sharp's", () => {
     const root = payload();
     const modules = join(root, "node_modules");
