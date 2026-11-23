@@ -1568,7 +1568,7 @@ off:
 
 - **The stage** (darwin-arm64): 4,967 files and 392 MiB, of which LanceDB 250, onnxruntime 43, the
   node shim 20, sharp and libvips 19, `dist/` 7.5 and the web app 2; about 11 s with npm's cache
-  warm. The node shim, added on 2026-11-23, is 451 of those files, about 4.9 MiB as a tar.gz. A
+  warm. The node shim, added on 2026-11-23, is 451 of those files, about 4.9 MB as a tar.gz. A
   win32-x64 payload, installed for that target from a Mac, is about 447 MiB before its VC++ copies
   and its node shim.
 - **Packaging** takes 61–64 s: Eidolon.app is 628 MiB, the DMG 261 MB and the zip 255 MB, before
