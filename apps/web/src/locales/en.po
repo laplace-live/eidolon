@@ -736,6 +736,10 @@ msgstr "Add Videos"
 msgid "Add your API keys first"
 msgstr "Add your API keys first"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Added to your PATH: {path}. Open a new terminal to use it."
+msgstr "Added to your PATH: {path}. Open a new terminal to use it."
+
 #: src/features/chats/why-answered.tsx
 msgid "Addressed"
 msgstr "Addressed"
@@ -900,6 +904,10 @@ msgstr "Another app is using your microphone. Close it, then call again."
 #: src/features/chats/labels.ts
 msgid "Another app is using your microphone. Close it, then try again."
 msgstr "Another app is using your microphone. Close it, then try again."
+
+#: src/features/settings/desktop-notes.ts
+msgid "Another eidolon is at {path}."
+msgstr "Another eidolon is at {path}."
 
 #: src/features/jobs/labels.ts
 msgid "Another run is already working on this persona."
@@ -1071,6 +1079,10 @@ msgctxt "reply mode"
 msgid "Auto"
 msgstr "Auto"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Available in the installed app only."
+msgstr "Available in the installed app only."
+
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 msgid "Avatar"
@@ -1096,6 +1108,10 @@ msgstr "Back"
 #: src/features/studio/route.tsx
 msgid "Back to Home"
 msgstr "Back to Home"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Background mode leaves this computer as it is."
+msgstr "Background mode leaves this computer as it is."
 
 #: src/features/studio/videos-section.tsx
 msgid "Billed"
@@ -1563,6 +1579,10 @@ msgstr "Couldn't connect the call."
 msgid "Couldn't get the connection settings for the call."
 msgstr "Couldn't get the connection settings for the call."
 
+#: src/features/settings/desktop-notes.ts
+msgid "Couldn't install the eidolon command."
+msgstr "Couldn't install the eidolon command."
+
 #: src/components/settings-form/model-picker.tsx
 msgid "Couldn't list the models ({reason}): type the model id."
 msgstr "Couldn't list the models ({reason}): type the model id."
@@ -1583,6 +1603,10 @@ msgstr "Couldn't load this"
 #: src/components/settings-form/check-labels.ts
 msgid "Couldn't reach the provider."
 msgstr "Couldn't reach the provider."
+
+#: src/features/settings/desktop-notes.ts
+msgid "Couldn't remove the eidolon command."
+msgstr "Couldn't remove the eidolon command."
 
 #: src/features/setup/new-persona.tsx
 msgid "Create"
@@ -1689,6 +1713,14 @@ msgstr "Deny"
 #: src/features/settings/new-skill-dialog.tsx
 msgid "Description"
 msgstr "Description"
+
+#: src/features/settings/route.tsx
+msgid "Desktop"
+msgstr "Desktop"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Desktop App"
+msgstr "Desktop App"
 
 #: src/features/jobs/parts.tsx
 #: src/features/studio/add-videos.tsx
@@ -2603,17 +2635,37 @@ msgstr "Inherited from <0>{env}</0> in the environment. Picking a voice here ove
 msgid "Inherited from the environment, and works with Fish Audio."
 msgstr "Inherited from the environment, and works with Fish Audio."
 
+#: src/features/settings/desktop-card.tsx
+msgid "Install"
+msgstr "Install"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Install adds {path} to your PATH."
+msgstr "Install adds {path} to your PATH."
+
 #: src/features/setup/memory-step.tsx
 msgid "Install Docker Desktop, or Docker Engine on Linux, and start it."
 msgstr "Install Docker Desktop, or Docker Engine on Linux, and start it."
+
+#: src/features/settings/desktop-notes.ts
+msgid "Install Eidolon with its installer to use this."
+msgstr "Install Eidolon with its installer to use this."
 
 #: src/features/studio/videos-section.tsx
 msgid "Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH."
 msgstr "Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH."
 
+#: src/features/settings/desktop-notes.ts
+msgid "Install puts it at {path}, and may ask for your password."
+msgstr "Install puts it at {path}, and may ask for your password."
+
 #: src/features/settings/yt-dlp-state.tsx
 msgid "Installed"
 msgstr "Installed"
+
+#: src/features/settings/desktop-notes.ts
+msgid "Installed at {path}."
+msgstr "Installed at {path}."
 
 #: src/features/home/readiness-labels.ts
 msgid "Installed."
@@ -3204,6 +3256,10 @@ msgstr "Models by Kind"
 msgid "Month"
 msgstr "Month"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Move Eidolon to the Applications folder to use this."
+msgstr "Move Eidolon to the Applications folder to use this."
+
 #: src/features/call/call-controls.tsx
 msgid "Mute your mic"
 msgstr "Mute your mic"
@@ -3642,6 +3698,10 @@ msgstr "Only When Named"
 #: src/components/locked-screen.tsx
 msgid "Open"
 msgstr "Open"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Open at Login"
+msgstr "Open at Login"
 
 #: src/components/locked-screen.tsx
 msgid "Open Eidolon from Your Terminal"
@@ -4137,6 +4197,7 @@ msgid "Relative to her folder. Default prompt.md."
 msgstr "Relative to her folder. Default prompt.md."
 
 #: src/features/settings/commands-card.tsx
+#: src/features/settings/desktop-card.tsx
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -4359,6 +4420,10 @@ msgstr "Rows"
 #: src/features/studio/videos-section.tsx
 msgid "Run"
 msgstr "Run"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Run <0>{usage}</0> in a terminal, such as <1>{example}</1>. With no arguments, it opens Eidolon."
+msgstr "Run <0>{usage}</0> in a terminal, such as <1>{example}</1>. With no arguments, it opens Eidolon."
 
 #: src/features/tasks/cards.tsx
 msgid "Run Once"
@@ -4789,6 +4854,14 @@ msgstr "Show Finished"
 msgid "Show Less"
 msgstr "Show Less"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Show Logs in the Help menu has the details."
+msgstr "Show Logs in the Help menu has the details."
+
+#: src/features/settings/desktop-notes.ts
+msgid "Show Logs in the tray icon's menu has the details."
+msgstr "Show Logs in the tray icon's menu has the details."
+
 #: src/components/voice-picker/parts.tsx
 msgid "Show More"
 msgstr "Show More"
@@ -4959,6 +5032,10 @@ msgstr "Start Chat"
 #: src/features/home/hero.tsx
 msgid "Start Chatting"
 msgstr "Start Chatting"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Start Eidolon in the background when you log in to this computer."
+msgstr "Start Eidolon in the background when you log in to this computer."
 
 #: src/features/chats/chat-list.tsx
 msgid "Start Group Chat"
@@ -5227,6 +5304,10 @@ msgstr "Tasks' list of skills is full without it, so only naming it to her reach
 #: src/features/jobs/detail.tsx
 msgid "Technical Log"
 msgstr "Technical Log"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Terminal Command"
+msgstr "Terminal Command"
 
 #: src/features/studio/glossary-section.tsx
 msgid "terms = [\"奶绿\", \"奶糖花\"]"
@@ -6233,6 +6314,10 @@ msgstr "Waiting for You"
 msgid "Waiting for you to continue it"
 msgstr "Waiting for you to continue it"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Waiting for your OK in System Settings: turn Eidolon on under General → Login Items."
+msgstr "Waiting for your OK in System Settings: turn Eidolon on under General → Login Items."
+
 #: src/features/tasks/cards.tsx
 msgid "Waiting for your OK to fetch from {host}"
 msgstr "Waiting for your OK to fetch from {host}"
@@ -6324,6 +6409,10 @@ msgstr "What changes with {provider}"
 #: src/features/usage/route.tsx
 msgid "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
 msgstr "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
+
+#: src/features/settings/desktop-card.tsx
+msgid "What Eidolon can add to this computer, each only when you choose it here."
+msgstr "What Eidolon can add to this computer, each only when you choose it here."
 
 #: src/features/settings/route.tsx
 msgid "What every persona knows about you."
