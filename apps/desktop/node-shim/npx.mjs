@@ -37,6 +37,9 @@ export const NPX_SETTINGS = [
   // among its own dependencies alone, and in its global virtual store an ES module finds the rest
   // only through a loader in NODE_OPTIONS, which the packaged app's Electron ignores.
   "--config.node-linker=hoisted",
+  // npm reads no pnpmfile; pnpm runs the one of the workspace around the folder, or the home's,
+  // whose hooks can rewrite what installs.
+  "--config.ignore-pnpmfile=true",
 ];
 
 /**

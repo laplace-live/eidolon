@@ -6,9 +6,9 @@ import { type SpawnSyncReturns, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -18,7 +18,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { LAUNCHER_SOURCES, POSIX_LAUNCHERS } from "../scripts/node-shim.ts";
 import { BACKEND_RUNTIME_ARGS } from "../src/main/controller.ts";
 
@@ -254,16 +254,14 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     response.writeHead(file || packument ? 200 : 404);
     response.end(file ? readFileSync(file) : JSON.stringify(packument ?? { error: "Not found" }));
   });
-  afterAll(() => {
-    server.close();
-    rmSync(scratch, { recursive: true, force: true });
-  });
+  let registry = "";
+  const old = "2020-01-01T00:00:00.000Z";
 
   /**
    * Publishes the package in `dir` at `time`, or with `time` undefined serves it at a URL pnpm
    * doesn't take for its registry's, which it would ask for the package's metadata.
    */
-  function publish(registry: string, dir: string, time?: string): string {
+  function publish(dir: string, time?: string): string {
     const { name, version, ...rest } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     const urlPath =
       time === undefined ? `/plain/${name}-${version}.tgz` : `/${name}/-/${name}-${version}.tgz`;
@@ -291,14 +289,10 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     return `${registry}${urlPath}`;
   }
 
-  test("installs the newest, a dependency by URL with its postinstall, and runs it", async () => {
+  beforeAll(async () => {
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const registry = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    const old = "2020-01-01T00:00:00.000Z";
-    const markers = join(scratch, "markers");
-    mkdirSync(markers);
+    registry = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     publish(
-      registry,
       write(join(scratch, "leaf"), {
         "package.json": JSON.stringify({ name: "eidolon-test-leaf", version: "1.0.0" }),
         "index.js": 'module.exports = "leaf";\n',
@@ -307,7 +301,6 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     );
     // Its postinstall prints, and npx's stdout must not show it.
     const dep = publish(
-      registry,
       write(join(scratch, "dep"), {
         "package.json": JSON.stringify({
           name: "eidolon-test-dep",
@@ -317,7 +310,8 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         }),
         "post.js": [
           'console.log("postinstall");',
-          `require("fs").writeFileSync(${JSON.stringify(join(markers, "dep"))}, "");`,
+          'const { join } = require("path");',
+          'require("fs").writeFileSync(join(process.env.EIDOLON_TEST_MARKS, "dep"), "");',
           "",
         ].join("\n"),
         "index.js": 'module.exports = "dep";\n',
@@ -328,7 +322,6 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       ["1.1.0", new Date().toISOString()],
     ] as const) {
       publish(
-        registry,
         write(join(scratch, `app-${version}`), {
           "package.json": JSON.stringify({
             name: "eidolon-test-app",
@@ -354,39 +347,80 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         time,
       );
     }
-    const home = join(scratch, "home");
-    mkdirSync(home);
-    /** npx, with pnpm's store and caches in `home`; spawnSync would hold the registry up. */
-    const npx = async (args: readonly string[]) => {
-      const child = spawn(join(LAUNCHER_SOURCES, "npx"), args, {
-        cwd: scratch,
-        env: {
-          HOME: home,
-          PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}`,
-          EIDOLON_NODE: process.execPath,
-          pnpm_config_registry: `${registry}/`,
-        },
-      });
-      let stdout = "";
-      let stderr = "";
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk;
-      });
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk;
-      });
-      const status = await new Promise((resolve) => child.on("close", resolve));
-      return { status, stdout, stderr };
-    };
-    const imported = { version: "1.1.0", dep: "dep", leaf: "leaf" };
-    expect(await npx(["-y", "eidolon-test-app", "x"])).toEqual({
-      status: 0,
-      stdout: `${JSON.stringify({ ...imported, beside: "eidolon-test-leaf", args: ["x"] })}\n`,
-      stderr: "",
+  });
+  afterAll(() => {
+    server.close();
+    rmSync(scratch, { recursive: true, force: true });
+  });
+
+  /** A home whose .npmrc names the registry served here, then `lines`. */
+  function newHome(...lines: string[]): string {
+    const home = mkdtempSync(join(scratch, "home-"));
+    writeFileSync(join(home, ".npmrc"), [`registry=${registry}/`, ...lines, ""].join("\n"));
+    return home;
+  }
+
+  /**
+   * A launcher run from `cwd` with pnpm's store and caches in `home`, and the markers its
+   * postinstalls left; spawnSync would hold the registry up.
+   */
+  async function launch(
+    name: string,
+    args: readonly string[],
+    { home = newHome(), cwd = scratch }: { home?: string; cwd?: string } = {},
+  ) {
+    const marks = mkdtempSync(join(scratch, "marks-"));
+    const child = spawn(join(LAUNCHER_SOURCES, name), args, {
+      cwd,
+      env: {
+        HOME: home,
+        PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}`,
+        EIDOLON_NODE: process.execPath,
+        EIDOLON_TEST_MARKS: marks,
+      },
     });
-    expect(existsSync(join(markers, "dep"))).toBe(true);
-    const missing = await npx(["-y", "eidolon-test-missing"]);
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    const status = await new Promise((resolve) => child.on("close", resolve));
+    return { status, stdout, stderr, marks: readdirSync(marks) };
+  }
+
+  test("installs the newest, a dependency by URL with its postinstall, and runs it", async () => {
+    const printed = { version: "1.1.0", dep: "dep", leaf: "leaf", beside: "eidolon-test-leaf" };
+    expect(await launch("npx", ["-y", "eidolon-test-app", "x"])).toEqual({
+      status: 0,
+      stdout: `${JSON.stringify({ ...printed, args: ["x"] })}\n`,
+      stderr: "",
+      marks: ["dep"],
+    });
+    const missing = await launch("npx", ["-y", "eidolon-test-missing"]);
     expect([missing.status, missing.stdout]).toEqual([1, ""]);
     expect(missing.stderr).toContain("ERR_PNPM_FETCH_404");
+  }, 60_000);
+
+  test("reads no pnpmfile, as npm reads none", async () => {
+    // A pnpm workspace around the folder npx runs in, whose pnpmfile would drop the app's dependency.
+    const workspace = write(join(scratch, "workspace"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-workspace", private: true }),
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      "packages/x/package.json": JSON.stringify({ name: "x", version: "1.0.0" }),
+      ".pnpmfile.cjs": [
+        'const { join } = require("path");',
+        'require("fs").writeFileSync(join(process.env.EIDOLON_TEST_MARKS, "pnpmfile"), "");',
+        "const readPackage = (pkg) =>",
+        '  pkg.name === "eidolon-test-app" ? { ...pkg, dependencies: {} } : pkg;',
+        "module.exports = { hooks: { readPackage } };",
+        "",
+      ].join("\n"),
+    });
+    const cwd = join(workspace, "packages", "x");
+    const ran = await launch("npx", ["-y", "eidolon-test-app"], { cwd });
+    expect([ran.status, ran.marks, ran.stderr]).toEqual([0, ["dep"], ""]);
   }, 60_000);
 });

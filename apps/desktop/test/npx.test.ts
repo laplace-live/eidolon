@@ -147,6 +147,7 @@ describe("pnpm's arguments", () => {
       "--config.minimum-release-age=0",
       "--config.block-exotic-subdeps=false",
       "--config.node-linker=hoisted",
+      "--config.ignore-pnpmfile=true",
     ]);
   });
 
