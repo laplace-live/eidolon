@@ -620,9 +620,10 @@ the layout's one line.
   `--minor` for features and substantial behavior changes, `--patch` for fixes
   and small changes. Start with `feat:`/`fix:`/`perf:`/`chore:`, then one
   capitalized plain sentence under ~80 chars, written for users; the prefix is
-  the change's kind (New, Fixed…) in `changelog.json`, and the rest ships as the
-  GitHub Release notes and the desktop's update notes. No changeset for CI,
-  docs, tests, dev-only tooling, or refactors nobody notices. `laplace-eidolon`
+  the change's kind in `changelog.json` (`feature`, `fix`…, shown as New,
+  Fixed…), and the rest ships as the GitHub Release notes and the desktop's
+  update notes. No changeset for CI, docs, tests, dev-only tooling, or
+  refactors nobody notices. `laplace-eidolon`
   (`apps/bot`) and the npm package `@laplace.live/eidolon` (`apps/eidolon`) are
   released together at one version, so name both: each changelog lists only the
   changesets naming it. `@laplace.live/eidolon-sdk` (`packages/sdk`) is versioned
@@ -637,8 +638,8 @@ the layout's one line.
   calls. Pushes that only touch docs, tests, changesets, `AGENTS.md`, `.agents/`,
   the offline chain (`apps/cli`, `packages/ingest`), the local web app
   (`apps/web`, `apps/bot/src/local`), the assistant (`packages/assistant`), the npm
-  packages (`apps/eidolon`, `packages/sdk`), the desktop app (`apps/desktop`, `desktop.yml`,
-  `desktop-build.yml`, `desktop-update-test.yml`), `.env.example`, or the rest of `docker.yml`'s
+  packages (`apps/eidolon`, `packages/sdk`), the desktop app (`apps/desktop` and the `desktop.yml`,
+  `desktop-build.yml` and `desktop-update-test.yml` workflows), `.env.example`, or the rest of `docker.yml`'s
   `paths-ignore` (`README.md`, `CLAUDE.md`, the `ts.yml` and `release.yml` workflows,
   `vitest.config.ts`, `tsconfig.scripts.json`, `tsconfig.no-bun.d.ts`) skip the image
   build; anything else, `personas/` included, ships, and so does a bump of the
