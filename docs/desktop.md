@@ -612,25 +612,18 @@ gets through.
 
 A dispatch of `desktop.yml` builds unsigned, at `0.0.0-dev`, unless an input says otherwise:
 
-- **`sign`** builds signed, as a tag does, and keeps the installers, zip, blockmaps and manifests a
-  day as `<OS>-installers-signed-unreleased`, never on R2: in this public repository any signed-in
-  user can download a run's artifacts. With it go `version`, a plain `X.Y.Z`, since electron-builder
-  takes a prerelease id for the update channel, and `feed_url`, the feed the build reads instead of
-  R2's, such as a local server, to update one by hand.
+- **`sign`** builds signed, as a tag does, at `0.0.0-dev` on the `dev` channel, whose manifests are
+  `dev-mac.yml` and `dev.yml`. It keeps the installers, zip, blockmaps and manifests a day as
+  `<OS>-installers-signed-unreleased`, never on R2: in this public repository any signed-in user can
+  download a run's artifacts.
 - **`update_test`** builds 0.0.1 and 0.0.2 signed and updates the one to the other through the real
-  updater, on both platforms ([The update test](#the-update-test)). It refuses `sign`, `version`
-  and `feed_url`: it picks its own.
-- **`r2_probe`** puts `eidolon/.probe-<run id>`, 9 MiB, which the AWS CLI sends in parts as it does
-  an installer, with its SHA-256; reads that back with `head-object`, lists the key as the index
-  does, deletes it, and fails on any step: the proof the R2 token writes, before a release needs it.
+  updater, on both platforms, on a feed of its own ([The update test](#the-update-test)).
 - **`release_index`** rebuilds `releases.json`.
 
-A dispatch takes one of the four at most, and the build job runs only without them. All four run
+A dispatch takes one of the three at most, and the build job runs only without them. All three run
 only on `master` and `electron`, and a run elsewhere fails before any secret is read. `electron`
-stays a signing ref after the release work merged: it is where a signed build, the update test or
-the probe runs before a change reaches master. A `sign` dispatch without `version` builds
-`0.0.0-dev`, channel `dev`, whose manifests are `dev-mac.yml` and `dev.yml`; its artifact keeps
-those too.
+stays a signing ref after the release work merged: it is where a signed build or the update test
+runs before a change reaches master.
 
 ### Recovery
 
@@ -709,7 +702,7 @@ In the signed package step:
 - **Windows:** `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   `AZURE_SIGNING_ACCOUNT_NAME` and `AZURE_CERTIFICATE_PROFILE_NAME`.
 
-Those are the org's secrets. The upload, the index and the probe take the repository's own:
+Those are the org's secrets. The upload and the index take the repository's own:
 `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, and `CLOUDFLARE_ACCOUNT_ID` for the endpoint. Before
 the signed package step nothing runs that the run fetched, but the toolchain and what `bun.lock`
 pins, and no package's install script, which could rewrite the electron-builder the step runs with
@@ -718,7 +711,7 @@ PowerShell Gallery, at its newest version, to sign with.
 
 Only a run proves the release: the overlay and the checks' verdicts have their tests, but signing
 needs a `sign` dispatch from `master` or `electron` that passes both legs, the update an
-`update_test` dispatch, the R2 credentials an `r2_probe` dispatch, and the upload a release's tag.
+`update_test` dispatch, and the upload, with the R2 credentials, a release's tag.
 
 ## Logs
 
@@ -1155,8 +1148,8 @@ setup on Windows. Its own job runs on `macos-latest` and `windows-latest`, neith
 other, in bash, within three hours:
 
 1. **The ref check,** in `desktop.yml`'s `inputs` job and the update-test jobs' own `if`, before
-   any secret is read: `master` or `electron` only, and no `sign`, `version` or `feed_url` beside
-   it. Each platform's job calls `desktop-update-test.yml` with its own secrets alone.
+   any secret is read: `master` or `electron` only, and no other dispatch input beside it. Each
+   platform's job calls `desktop-update-test.yml` with its own secrets alone.
 2. **Install and build,** as the build job does: no package's install script runs before signing.
 3. **0.0.1 and 0.0.2, signed:** the release overlay with that leg's secrets alone, twice, both
    builds reading the feed `http://127.0.0.1:8765/` (`-c.publish.url`, which goes into

@@ -58,7 +58,7 @@ import { follow, startedVersion, tail, updateSteps } from "./update-test/steps.t
 
 const LABEL = "update-test";
 const TARGET = `${process.platform}-${process.arch}`;
-/** desktop.yml's feed_url for both builds. */
+/** The feed both builds read, which desktop-update-test.yml names. */
 const FEED_PORT = 8765;
 // Each wait's limit. The NSIS setup alone took 58 s on windows-latest, and an update also runs the
 // old version's uninstaller.

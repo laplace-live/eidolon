@@ -17,19 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       sign:
-        description: Sign and notarize the build, on master or electron only. Its installers are kept a day
-        type: boolean
-        default: false
-      version:
-        description: With sign, the version to build, as X.Y.Z (else 0.0.0-dev)
-        type: string
-        default: ""
-      feed_url:
-        description: With sign, the update feed the build reads instead of R2's, such as http://127.0.0.1:8765/
-        type: string
-        default: ""
-      r2_probe:
-        description: Only put, head and delete a probe object in R2 with the upload's credentials, on master or electron only
+        description: Sign and notarize the build at 0.0.0-dev, on master or electron only. Its installers are kept a day
         type: boolean
         default: false
       release_index:
@@ -58,50 +46,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # A plain X.Y.Z, since electron-builder takes a prerelease id for the update channel, and the
-      # update test's feed serves latest*.yml. Signing, the update test and R2 run only on master
-      # and electron: in this public repository any signed-in user can download a run's artifacts.
+      # Signing, the update test and R2 run only on master and electron: in this public repository
+      # any signed-in user can download a run's artifacts.
       - name: Check the dispatch's inputs
         if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           fail() { echo "::error::$1"; exit 1; }
-          if [[ ($VERSION != "" || $FEED_URL != "") && $SIGN != true ]]; then
-            fail "version and feed_url are for a signed build: dispatch with sign"
-          fi
-          if [[ $GITHUB_REF != refs/heads/master && $GITHUB_REF != refs/heads/electron ]]; then
-            for input in SIGN UPDATE_TEST R2_PROBE RELEASE_INDEX; do
-              if [[ ${!input} == true ]]; then
-                fail "${input,,} runs only on master or electron, not $GITHUB_REF"
-              fi
-            done
-          fi
           modes=0
-          for input in SIGN UPDATE_TEST R2_PROBE RELEASE_INDEX; do
-            if [[ ${!input} == true ]]; then modes=$((modes + 1)); fi
+          for input in SIGN UPDATE_TEST RELEASE_INDEX; do
+            if [[ ${!input} != true ]]; then continue; fi
+            if [[ $GITHUB_REF != refs/heads/master && $GITHUB_REF != refs/heads/electron ]]; then
+              fail "${input,,} runs only on master or electron, not $GITHUB_REF"
+            fi
+            modes=$((modes + 1))
           done
           if (( modes > 1 )); then
-            fail "sign, update_test, r2_probe and release_index each run alone: dispatch one at a time"
-          fi
-          if [[ $VERSION != "" && ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            fail "version must be X.Y.Z, not $VERSION"
-          fi
-          if [[ $FEED_URL != "" && ! $FEED_URL =~ ^https?:// ]]; then
-            fail "feed_url must be an http or https URL, not $FEED_URL"
+            fail "sign, update_test and release_index each run alone: dispatch one at a time"
           fi
         env:
           SIGN: ${{ inputs.sign }}
-          VERSION: ${{ inputs.version }}
-          FEED_URL: ${{ inputs.feed_url }}
           UPDATE_TEST: ${{ inputs.update_test }}
-          R2_PROBE: ${{ inputs.r2_probe }}
           RELEASE_INDEX: ${{ inputs.release_index }}
 
   # Unsigned: a pull request, or a dispatch that only builds. No secret reaches these runners.
   build:
     name: ${{ matrix.target }}
     needs: inputs
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !(inputs.sign || inputs.r2_probe || inputs.release_index || inputs.update_test))
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !(inputs.sign || inputs.release_index || inputs.update_test))
     strategy:
       fail-fast: false
       matrix:
@@ -127,8 +99,6 @@ jobs:
       os: macos-latest
       target: darwin-arm64
       signed: true
-      version: ${{ inputs.version }}
-      feed_url: ${{ inputs.feed_url }}
     secrets:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -145,8 +115,6 @@ jobs:
       os: windows-latest
       target: win32-x64
       signed: true
-      version: ${{ inputs.version }}
-      feed_url: ${{ inputs.feed_url }}
     secrets:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -333,74 +301,6 @@ jobs:
               }' > releases.json
           aws s3 cp releases.json "s3://$R2_BUCKET/$R2_PREFIX/releases.json" --endpoint-url "$R2_ENDPOINT" \
             --cache-control no-cache --content-type application/json
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
-          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
-          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          R2_BUCKET: downloads
-          R2_PREFIX: eidolon
-
-  # The upload's credentials and calls on one object, before a release first needs them: a put over
-  # 8 MiB, which the AWS CLI sends in parts as it does an installer, with its SHA-256; the head that
-  # guards an installer; the listing releases.json is built from; and a delete.
-  r2-probe:
-    name: R2 probe
-    needs: inputs
-    if: github.event_name == 'workflow_dispatch' && inputs.r2_probe
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Check the ref
-        run: |
-          if [[ $GITHUB_REF != refs/heads/master && $GITHUB_REF != refs/heads/electron ]]; then
-            echo "::error::r2_probe runs only on master or electron, not $GITHUB_REF"
-            exit 1
-          fi
-
-      - name: Put, head, list and delete eidolon/.probe-<run id>
-        timeout-minutes: 5
-        run: |
-          key="$R2_PREFIX/.probe-$GITHUB_RUN_ID"
-          stored() {
-            aws s3api head-object --bucket "$R2_BUCKET" --key "$key" --endpoint-url "$R2_ENDPOINT" \
-              --query Metadata.sha256 --output text 2>&1
-          }
-          remove() {
-            aws s3api delete-object --bucket "$R2_BUCKET" --key "$key" --endpoint-url "$R2_ENDPOINT" > /dev/null
-          }
-          head -c 9437184 /dev/urandom > probe.bin
-          sum=$(sha256sum probe.bin | cut -d ' ' -f 1)
-          aws s3 cp probe.bin "s3://$R2_BUCKET/$key" --endpoint-url "$R2_ENDPOINT" --cache-control no-cache \
-            --only-show-errors --metadata "sha256=$sum"
-          # A failed head leaves no probe behind in the public bucket.
-          trap 'remove || true' EXIT
-          found=$(stored)
-          if [[ $found != "$sum" ]]; then
-            echo "::error::head-object read sha256 $found back, not $sum"
-            exit 1
-          fi
-          listed=$(aws s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix "$key" --endpoint-url "$R2_ENDPOINT" \
-            --query 'Contents[].Key' --output text)
-          if [[ $listed != "$key" ]]; then
-            echo "::error::list-objects-v2 listed $listed, not $key"
-            exit 1
-          fi
-          remove
-          if found=$(stored); then
-            echo "::error::$key is still there after the delete"
-            exit 1
-          fi
-          if [[ $found != *"(404)"* ]]; then
-            echo "::error::$found"
-            exit 1
-          fi
-          echo "R2: a multipart put, head, list and delete passed on $key"
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

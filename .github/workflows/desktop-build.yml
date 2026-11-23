@@ -17,13 +17,6 @@ on:
       signed:
         type: boolean
         default: false
-      # A signed dispatch's: the version to build, else 0.0.0-dev, and the feed it reads.
-      version:
-        type: string
-        default: ""
-      feed_url:
-        type: string
-        default: ""
     secrets:
       APPLE_CERTIFICATE:
         required: false
@@ -121,8 +114,8 @@ jobs:
         env:
           APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
 
-      # The release overlay over the base config: a tag builds the manifest's version, a dispatch the
-      # one it names, else 0.0.0-dev. Each leg gets its own platform's secrets alone.
+      # The release overlay over the base config: a tag builds the manifest's version, a dispatch
+      # 0.0.0-dev. Each leg gets its own platform's secrets alone.
       - id: signed
         name: Package (signed)
         if: env.SIGNED == 'true'
@@ -130,14 +123,9 @@ jobs:
         working-directory: apps/desktop
         run: |
           args=(--publish never --config electron-builder.release.mjs)
-          if [[ $GITHUB_EVENT_NAME == workflow_dispatch ]]; then
-            args+=("-c.extraMetadata.version=${VERSION:-0.0.0-dev}")
-            if [[ -n $FEED_URL ]]; then args+=("-c.publish.url=$FEED_URL"); fi
-          fi
+          if [[ $GITHUB_EVENT_NAME == workflow_dispatch ]]; then args+=(-c.extraMetadata.version=0.0.0-dev); fi
           node node_modules/electron-builder/cli.js "${args[@]}"
         env:
-          VERSION: ${{ inputs.version }}
-          FEED_URL: ${{ inputs.feed_url }}
           # macOS: electron-builder imports the certificate into a temporary keychain itself. CSC_* is
           # macOS-only because Windows falls back to it for signtool.
           CSC_LINK: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
