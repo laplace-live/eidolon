@@ -1206,7 +1206,8 @@ Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers
 
 - **`fakes.ts`:** loopback stand-ins on `node:http` for every provider the app reaches, ported from
   `local-smoke.ts`'s: her mind's streamed chat completions, with a hold between and after a
-  reply's parts; the retrieval gate's and the director's decisions; embeddings, with a hold;
+  reply's parts, and her tool calls for a selfie and for a task (`start_task`, in a folder the smoke
+  names); the retrieval gate's and the director's decisions; embeddings, with a hold;
   OpenAI's speech, transcriptions and realtime transcription sessions, for a voice message and a
   call; OpenRouter's images, for a selfie; and the model listings. They answer one key, and count
   what they answer by route.

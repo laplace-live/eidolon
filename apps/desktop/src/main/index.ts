@@ -1,6 +1,6 @@
 // The desktop app's main process, in this order: the profile, the logs and the single-instance
 // lock first (instance.ts), then the scheme; once Electron is ready, the session's guards and the
-// scheme's handler, the window on the loading page (none at a launch at login), and then the
+// scheme's handler, the window on the loading page (hidden at a launch at login), and then the
 // environment and the backend, which the window and the task notifications follow.
 import "./instance.ts";
 import { join } from "node:path";
