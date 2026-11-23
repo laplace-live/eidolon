@@ -433,8 +433,8 @@ through Electron's `Notification`.
   site, a command, an MCP call, a spend, stall or unpriced pause, an interruption, or anything else
   it waits on. A new wait replaces the task's notice, a wait that's over closes it, and an end
   replaces it and stays.
-- **Only while the window isn't focused** at the poll that sees the change: one seen while it is
-  focused is recorded, and never told later.
+- **Only while the window isn't focused** at the poll that sees the change, both as its answer comes
+  and once her name is read: one seen while it is focused is recorded, and never told later.
 - **What one says:** her name as its title, the task's chat's persona as `GET /api/local/personas`
   names her (read once a baseline, and again for a persona it doesn't know), else `Eidolon`; a fixed
   phrase for its kind in the shell's language; and her goal on a second line, made one line,
