@@ -1,7 +1,7 @@
 // Windows: the variables the registry holds for a new process, which the launch environment lacks
 // once an installer has changed them. Electron-free: environment.ts merges them over it.
 import { type ExecFileException, execFile } from "node:child_process";
-import { powershellArgs } from "./update-signature.ts";
+import { powershellArgs, powershellExe } from "./update-signature.ts";
 
 /** How long PowerShell may take before the launch environment stands. */
 const TIMEOUT_MS = 10_000;
@@ -34,6 +34,8 @@ export type RegistryRead =
 export interface RegistryOptions {
   /** The environment PowerShell runs on. */
   readonly env?: NodeJS.ProcessEnv;
+  /** The powershell.exe to run: the system's, under `env`'s SystemRoot, unless a test's. */
+  readonly powershell?: string;
   readonly timeoutMs?: number;
   /** Aborting kills PowerShell. */
   readonly signal?: AbortSignal;
@@ -109,7 +111,12 @@ function failureOf(error: ExecFileException, stderr: string): string {
  */
 export function readRegistry(
   keys: readonly string[],
-  { env = process.env, timeoutMs = TIMEOUT_MS, signal }: RegistryOptions = {},
+  {
+    env = process.env,
+    powershell = powershellExe(env),
+    timeoutMs = TIMEOUT_MS,
+    signal,
+  }: RegistryOptions = {},
 ): Promise<RegistryRead> {
   return new Promise((resolve) => {
     if (signal?.aborted) {
@@ -123,7 +130,7 @@ export function readRegistry(
     }
     try {
       execFile(
-        "powershell.exe",
+        powershell,
         powershellArgs(registryScript(keys)),
         { encoding: "utf8", env: childEnv, timeout: timeoutMs, windowsHide: true, signal },
         (error, stdout, stderr) => {

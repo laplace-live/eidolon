@@ -4,6 +4,7 @@
 // (electron-updater/out/windowsExecutableCodeSignatureVerifier.js handleError): on a CI runner its
 // cold start took that long. This one waits longer, and a check that can't run refuses the update.
 // Electron-free: updater.ts runs the script.
+import { win32 } from "node:path";
 
 /** How long PowerShell may take, its cold start under an antivirus scan included. */
 export const SIGNATURE_TIMEOUT_MS = 120_000;
@@ -17,6 +18,15 @@ export function signatureScript(file: string): string {
     `$s = Get-AuthenticodeSignature -LiteralPath '${literal}'`,
     "[pscustomobject]@{ Status = [string]$s.Status; Path = [string]$s.Path; Subject = [string]$s.SignerCertificate.Subject } | ConvertTo-Json -Compress",
   ].join("\n");
+}
+
+/**
+ * Windows PowerShell's full path, under `env`'s SystemRoot. Never its bare name, which libuv looks
+ * for in the current folder before PATH: main's is the folder of the terminal that started it.
+ */
+export function powershellExe(env: NodeJS.ProcessEnv = process.env): string {
+  const root = env.SystemRoot || "C:\\Windows";
+  return win32.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
 
 /** powershell.exe's arguments for `script`, encoded so no quoting reaches a shell. */

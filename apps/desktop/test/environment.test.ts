@@ -6,15 +6,7 @@
 // deepseek's merge, with Eidolon's own rules: the launch environment's EIDOLON_* names win, Windows
 // reads and writes names in any case and merges the registry's variables, and a respawn stays on
 // main's data home.
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -47,15 +39,14 @@ function shell(name: string, body: string): string {
 }
 
 /**
- * A stand-in powershell.exe for the launch's PATH: it checks it was given an encoded script, keeps
- * the script, then runs `body`.
+ * A stand-in powershell.exe, for the read's `powershell`, which runs on the launch environment, so
+ * on its PATH's tools: it checks it was given an encoded script, keeps the script, then runs `body`.
  */
-function powershell(body: string): { readonly path: string; readonly script: () => string } {
-  const bin = join(directory, "bin");
+function powershell(body: string): { readonly powershell: string; readonly script: () => string } {
+  const path = join(directory, "powershell.exe");
   const kept = join(directory, "script");
-  mkdirSync(bin, { recursive: true });
   writeFileSync(
-    join(bin, "powershell.exe"),
+    path,
     [
       "#!/bin/sh",
       '[ "$1 $2 $3 $4 $5" = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand" ] || exit 64',
@@ -63,9 +54,9 @@ function powershell(body: string): { readonly path: string; readonly script: () 
       body,
     ].join("\n"),
   );
-  chmodSync(join(bin, "powershell.exe"), 0o755);
+  chmodSync(path, 0o755);
   return {
-    path: `${bin}:/usr/bin:/bin`,
+    powershell: path,
     script: () => Buffer.from(readFileSync(kept, "utf8"), "base64").toString("utf16le"),
   };
 }
@@ -347,8 +338,12 @@ describe("readEnvironment", () => {
           { Key: 2, Name: "USERNAME", Kind: "String", Value: "owner" },
         ]),
       );
-      const launch = { PATH: stand.path, SystemRoot: "C:\\Windows", USERNAME: "owner" };
-      const read = await readEnvironment(launch, { platform: "win32", shells: [unused] });
+      const launch = { PATH: "/usr/bin:/bin", SystemRoot: "C:\\Windows", USERNAME: "owner" };
+      const read = await readEnvironment(launch, {
+        platform: "win32",
+        shells: [unused],
+        powershell: stand.powershell,
+      });
       expect(read).toEqual({
         env: {
           PATH: "C:\\Windows\\system32;C:\\Users\\owner\\bin",
@@ -357,7 +352,7 @@ describe("readEnvironment", () => {
         },
         failures: [],
       });
-      expect(launch.PATH).toBe(stand.path);
+      expect(launch.PATH).toBe("/usr/bin:/bin");
       expect(stand.script()).toBe(
         registryScript([
           "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
@@ -373,9 +368,15 @@ describe("readEnvironment", () => {
     "on Windows, keeps the launch environment when the read fails, and logs why",
     async () => {
       const stand = powershell("printf 'Access is denied.\\r\\nAt line:1 char:1\\n' >&2; exit 1");
+      const missing = join(directory, "missing.exe");
       const warn = vi.fn<(message: string) => void>();
-      for (const launch of [{ PATH: stand.path }, { PATH: "/usr/bin:/bin" }]) {
-        const read = await readEnvironment(launch, { platform: "win32", log: { warn } });
+      for (const program of [stand.powershell, missing]) {
+        const launch = { PATH: "/usr/bin:/bin" };
+        const read = await readEnvironment(launch, {
+          platform: "win32",
+          powershell: program,
+          log: { warn },
+        });
         expect(read).toEqual({ env: launch, failures: [] });
         expect(read.env).not.toBe(launch);
       }
@@ -383,7 +384,7 @@ describe("readEnvironment", () => {
         "Eidolon: couldn't read the registry's variables, so the backend runs on the launch's";
       expect(warn.mock.calls).toEqual([
         [`${why}: exit 1: Access is denied.`],
-        [`${why}: spawn powershell.exe ENOENT`],
+        [`${why}: spawn ${missing} ENOENT`],
       ]);
     },
   );
@@ -395,9 +396,10 @@ describe("readEnvironment", () => {
       const stand = powershell(`echo $$ > '${pid}'\nexec sleep 30`);
       const warn = vi.fn<(message: string) => void>();
       const controller = new AbortController();
-      const launch = { PATH: stand.path };
+      const launch = { PATH: "/usr/bin:/bin" };
       const read = readEnvironment(launch, {
         platform: "win32",
+        powershell: stand.powershell,
         signal: controller.signal,
         log: { warn },
       });
@@ -422,11 +424,10 @@ describe("readEnvironment", () => {
     async () => {
       const marker = join(directory, "ran");
       const stand = powershell(`touch '${marker}'`);
-      const launch = { PATH: stand.path, eidolon_desktop_login_shell: "off" };
-      await expect(readEnvironment(launch, { platform: "win32" })).resolves.toEqual({
-        env: launch,
-        failures: [],
-      });
+      const launch = { PATH: "/usr/bin:/bin", eidolon_desktop_login_shell: "off" };
+      await expect(
+        readEnvironment(launch, { platform: "win32", powershell: stand.powershell }),
+      ).resolves.toEqual({ env: launch, failures: [] });
       expect(existsSync(marker)).toBe(false);
     },
   );
@@ -559,7 +560,10 @@ describe.skipIf(process.platform === "win32")("startupEnvironment", () => {
     const path = (folder: string) =>
       prints([{ Key: 0, Name: "Path", Kind: "String", Value: folder }]);
     const stand = powershell(`echo x >> '${runs}'\n${path("C:\\First")}`);
-    const startup = await startupEnvironment({ PATH: stand.path }, { platform: "win32" });
+    const startup = await startupEnvironment(
+      { PATH: "/usr/bin:/bin" },
+      { platform: "win32", powershell: stand.powershell },
+    );
     expect(startup.env.PATH).toBe("C:\\First");
     await expect(startup.forSpawn()).resolves.toBe(startup.env);
     path("C:\\Second");

@@ -542,7 +542,9 @@ The backend runs on the environment main reads, plus four variables of its own, 
   timeout or a quit. When every one fails, the launch environment stands, and main.log names why.
 - **Windows.** The launch environment holds the registry's variables as they were when Eidolon
   started, and a `PATH` folder a tool's installer adds later would reach no spawn until a
-  relaunch, so main reads the registry (`registry-environment.ts`): one `powershell.exe` run, its
+  relaunch, so main reads the registry (`registry-environment.ts`). One `powershell.exe` run, by
+  its full path under `SystemRoot` as main runs every PowerShell (`powershellExe`: Windows looks
+  for a bare name in the current folder first, and `eidolon` starts the app in the terminal's), its
   script encoded (`powershellArgs`) and its output UTF-8, prints the raw values and kinds of
   `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, `HKCU\Environment` and
   `HKCU\Volatile Environment`, in Windows' own order, whose last key names the owner over the
