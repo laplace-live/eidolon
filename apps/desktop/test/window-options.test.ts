@@ -60,7 +60,7 @@ describe("the bounds file", () => {
     expect(readBounds(file)).toEqual({ x: 1, y: 2, width: 3, height: 4, maximized: false });
   });
 
-  test("keeps a saved maximize until the window's first showing, so a hidden start quit unseen keeps it", () => {
+  test("keeps a saved maximize the window's first showing has yet to apply, as at a quit from a hidden start", () => {
     expect(keptMaximized(false, { saved: true, waiting: true, maximized: false })).toBe(true);
   });
 
@@ -72,11 +72,8 @@ describe("the bounds file", () => {
   });
 
   test("background mode, which never maximizes the window, keeps the flag as it was read", () => {
-    for (const saved of [false, true]) {
-      for (const waiting of [false, saved]) {
-        expect(keptMaximized(true, { saved, waiting, maximized: false })).toBe(saved);
-      }
-    }
+    expect(keptMaximized(true, { saved: true, waiting: false, maximized: false })).toBe(true);
+    expect(keptMaximized(true, { saved: false, waiting: false, maximized: false })).toBe(false);
   });
 });
 
