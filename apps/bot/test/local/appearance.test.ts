@@ -578,4 +578,37 @@ describe("model ids that try to leave their folder", () => {
     expect(sentinels.map((path) => readFileSync(path))).toEqual(before);
     expect(readdirSync(join(personaHomeDir(MILKY), "models"))).toEqual(["tml"]);
   });
+
+  test("never by an id written into model.json: the folder's name is the id", async () => {
+    await upload("tml.p2lrt");
+    const other = withoutMeta(RIG);
+    await upload("other.p2lrt", other);
+    const sentinel = join(dataHome(), "keep.txt");
+    writeFileSync(sentinel, "SENTINEL");
+    const claim = (id: string) =>
+      writeFileSync(
+        join(folderOf("tml"), "model.json"),
+        JSON.stringify({ ...manifestOf("tml"), id, extra: true }),
+      );
+
+    claim("other");
+    const listed = (await call("GET", `/personas/${MILKY}/models`)).body.models;
+    expect(listed.map((model: CharacterModel) => model.id)).toEqual(["other", "tml"]);
+    expect(listed[1]).not.toHaveProperty("extra");
+    const file = await api("GET", `/personas/${MILKY}/models/tml/file?sha256=${SHA256}`);
+    expect(Buffer.from(await file.arrayBuffer())).toEqual(RIG);
+    const renamed = await call("PATCH", `/personas/${MILKY}/models/tml`, { name: "Renamed" });
+    expect([renamed.body.id, manifestOf("tml").name, manifestOf("other").name]).toEqual([
+      "tml",
+      "Renamed",
+      "other",
+    ]);
+    const manifest = manifestOf("tml");
+    expect(["id" in manifest, "extra" in manifest]).toEqual([false, false]);
+
+    claim("../../..");
+    expect((await call("DELETE", `/personas/${MILKY}/models/tml`)).body).toEqual({ ok: true });
+    expect(readdirSync(join(personaHomeDir(MILKY), "models"))).toEqual(["other"]);
+    expect(readFileSync(sentinel, "utf8")).toBe("SENTINEL");
+  });
 });

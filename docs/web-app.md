@@ -201,12 +201,12 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
   only a picture whose bytes are one of the three is served. A persona's path settings must stay
   inside her folder, and `sources.ytDlp` can't be set through the API.
 - **Character models.** A model's id is a slug the server makes from the uploaded file's name,
-  never a path the request gives, and every route checks one it is sent before looking it up. An
-  upload is recognized by the `.p2lrt` header, capped at 200 MiB counted as it streams, and loaded
-  by the copy of PSD2Live's runtime the app ships, every chunk's CRC checked and every texture a
-  PNG inside the file, before anything is written; the runtime's wasm imports nothing, so it
-  touches only its own memory. Models are kept only in the data home, and `appearance.model`
-  takes only the id of one she has.
+  and then its folder's name, never a path the request gives or a value its `model.json` holds;
+  every route checks one it is sent before looking it up. An upload is recognized by the `.p2lrt`
+  header, capped at 200 MiB counted as it streams, and loaded by the copy of PSD2Live's runtime
+  the app ships, every chunk's CRC checked and every texture a PNG inside the file, before
+  anything is written; the runtime's wasm imports nothing, so it touches only its own memory.
+  Models are kept only in the data home, and `appearance.model` takes only the id of one she has.
 - **Secrets at rest.** `credentials.json` is written 0600 from creation; no answer returns a key
   or quotes what a request sent; the data home, `jobs/`, `locks/` and `chats/` are created
   0700, and a chat's files 0600.

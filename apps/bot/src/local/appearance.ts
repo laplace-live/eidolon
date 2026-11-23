@@ -130,7 +130,25 @@ export function readModel(persona: string, model: string): CharacterModel | null
   if (!isPlainObject(parsed)) return null;
   const { format, file, ...fields } = parsed;
   if (format !== 1 || file !== RIG_FILE || !isModelFields(fields)) return null;
-  return existsSync(join(folder, RIG_FILE)) ? { id: model, ...(fields as ModelFields) } : null;
+  if (!existsSync(join(folder, RIG_FILE))) return null;
+  // Picked, never spread: an id written into the file would stand for another folder.
+  const { name, kind, size, sha256, importedAt, updatedAt } = fields as ModelFields;
+  const { inventory, framing, moods, gestures, outfits, outfit } = fields as ModelFields;
+  return {
+    id: model,
+    name,
+    kind,
+    size,
+    sha256,
+    importedAt,
+    updatedAt,
+    inventory,
+    framing,
+    moods,
+    gestures,
+    outfits,
+    outfit,
+  };
 }
 
 /** Her models, by id. */
