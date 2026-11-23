@@ -2850,6 +2850,10 @@ msgstr "Its length is unknown until it downloads."
 msgid "Its messages and photos are deleted from this computer. What she remembers about you stays."
 msgstr "Its messages and photos are deleted from this computer. What she remembers about you stays."
 
+#: src/components/settings-form/field.tsx
+msgid "Its path has a comma, a line break or a space at an end. Rename the folder, or use Allow Once when a task asks for it."
+msgstr "Its path has a comma, a line break or a space at an end. Rename the folder, or use Allow Once when a task asks for it."
+
 #: src/features/tasks/labels.ts
 msgid "Its spend couldn't be counted."
 msgstr "Its spend couldn't be counted."
@@ -5795,6 +5799,10 @@ msgstr "This checked the key from the environment, which wins over the one saved
 #: src/lib/labels.ts
 msgid "This file ships with Eidolon and can't be changed or deleted."
 msgstr "This file ships with Eidolon and can't be changed or deleted."
+
+#: src/components/settings-form/field.tsx
+msgid "This folder can't be added."
+msgstr "This folder can't be added."
 
 #: src/features/studio/glossary-section.tsx
 msgid "This glossary doesn't parse"

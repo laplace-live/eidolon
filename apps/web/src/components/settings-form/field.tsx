@@ -3,6 +3,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { FolderPlusIcon } from "lucide-react";
 import { type ReactNode, useId, useMemo } from "react";
+import { toast } from "sonner";
 import { QuietBadge } from "@/components/quiet-badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
@@ -490,7 +491,14 @@ function ControlInput({
             // The dialog is modal to the window, so the draft can't change while it's open.
             onClick={() =>
               choose().then((folder) => {
-                if (folder !== null) onDraft(appendPath(draft, folder));
+                if (folder === null) return;
+                const next = appendPath(draft, folder);
+                if (next !== null) onDraft(next);
+                else {
+                  toast.error(t`This folder can't be added.`, {
+                    description: t`Its path has a comma, a line break or a space at an end. Rename the folder, or use Allow Once when a task asks for it.`,
+                  });
+                }
               }, toastError)
             }
           >

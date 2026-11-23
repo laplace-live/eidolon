@@ -355,7 +355,8 @@ painted, since `maximize()` shows a hidden window. Main owns its title.
   shell's language, and opening at the home folder, since Electron opens Downloads otherwise.
   macOS's can make a folder and says what the folders are for, and Windows' keeps the pick off its
   recent list. One shows at a time: an ask while it's open gets its answer (`joinPending`). The
-  page adds the pick to the folders' draft; saving decides, and `FolderPolicy` after it.
+  page adds the pick to the folders' draft, or says why the list can't hold it; saving decides, and
+  `FolderPolicy` after it.
 - **Chrome.** No system title bar. On macOS, `hiddenInset`, the traffic lights at `{x: 16, y: 20}`,
   centred on the web app's 56 px first row, and `titleBarOverlay: true`, without which macOS
   publishes no `env(titlebar-area-*)` for the page's insets. On Windows, a hidden title bar under a
