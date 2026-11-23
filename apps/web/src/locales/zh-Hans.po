@@ -1842,6 +1842,10 @@ msgstr "Eidolon 用你自己的密钥调用付费服务。可以保留推荐的�
 msgid "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
 msgstr "Eidolon 无法计算这个任务的模型花了多少钱，所以花费暂停无法生效。继续会关闭它的花费暂停。"
 
+#: src/lib/labels.ts
+msgid "Eidolon can't use that model file."
+msgstr "Eidolon 无法使用这个模型文件。"
+
 #: src/features/usage/route.tsx
 msgid "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
 msgstr "Eidolon 无法写入用量记录文件 <0>{path}</0>。请把 <1>EIDOLON_USAGE_DB</1> 设为可写入的文件，然后重启。"
@@ -5256,10 +5260,6 @@ msgstr "内容已发生变化，请刷新后重试。"
 #: src/lib/labels.ts
 msgid "That doesn't exist."
 msgstr "内容不存在。"
-
-#: src/lib/labels.ts
-msgid "That file isn't a PSD2Live model, or it's damaged."
-msgstr "该文件不是 PSD2Live 模型，或者已经损坏。"
 
 #: src/lib/labels.ts
 msgid "That file name isn't allowed."

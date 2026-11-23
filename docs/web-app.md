@@ -303,7 +303,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `unknown-mcp-server` | 404 | Changing a server `mcp.json` doesn't hold; the message never names what was sent |
 | `invalid-mcp-config` | 409 | Changing `mcp.json` from Settings, or answering Always on an MCP call's card, while it doesn't parse |
 | `linked-mcp-config` | 409 | The same, while `mcp.json` is a symbolic or hard link to another file, which a write would replace with a copy |
-| `invalid-model` | 400 | A `.p2lrt` PSD2Live's runtime refuses, such as a cut-off file, a chunk that fails its CRC, or a texture that isn't a PNG inside the file; the message is the runtime's reason, without control characters, at most 200 characters |
+| `invalid-model` | 400 | A `.p2lrt` PSD2Live's runtime refuses, such as a cut-off file or a chunk that fails its CRC, or one whose textures aren't PNGs inside the file; the message says why (the runtime's reason when it refused), without control characters, at most 200 characters |
 | `unknown-model` | 404 | No character model of hers has that id |
 
 ## The setup wizard

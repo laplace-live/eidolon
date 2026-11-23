@@ -1842,6 +1842,10 @@ msgstr "Eidolon calls paid services with your own keys. Keep the recommended pro
 msgid "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
 msgstr "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
 
+#: src/lib/labels.ts
+msgid "Eidolon can't use that model file."
+msgstr "Eidolon can't use that model file."
+
 #: src/features/usage/route.tsx
 msgid "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
 msgstr "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
@@ -5256,10 +5260,6 @@ msgstr "That conflicts with what changed meanwhile. Reload and try again."
 #: src/lib/labels.ts
 msgid "That doesn't exist."
 msgstr "That doesn't exist."
-
-#: src/lib/labels.ts
-msgid "That file isn't a PSD2Live model, or it's damaged."
-msgstr "That file isn't a PSD2Live model, or it's damaged."
 
 #: src/lib/labels.ts
 msgid "That file name isn't allowed."
