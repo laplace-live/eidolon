@@ -46,6 +46,8 @@ describe.runIf(process.platform === "win32")("the registry read on Windows", () 
       `[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree('${ROOT}', $false)`,
       // Only while no other test's keys are under it: DeleteSubKey refuses a key with subkeys.
       "try { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKey('Software\\Eidolon Test', $false) } catch {}",
+      // Windows PowerShell exits 1 when its last statement failed, a caught exception included.
+      "exit 0",
     );
   }, TIMEOUT_MS);
 

@@ -101,15 +101,15 @@ describe.runIf(WINDOWS)("the node shim's .cmd launchers, on this Node", () => {
   test(
     "node runs EIDOLON_NODE as Node, with the backend's runtime flags",
     () => {
-      const ran = run("node", [
-        "-p",
-        "JSON.stringify([process.execPath, process.execArgv, process.env.ELECTRON_RUN_AS_NODE])",
-      ]);
+      const script =
+        "JSON.stringify([process.execPath, process.execArgv, process.env.ELECTRON_RUN_AS_NODE])";
+      const ran = run("node", ["-p", script]);
       expect([ran.status, ran.stderr]).toEqual([0, ""]);
       const [execPath, execArgv, runAsNode] = JSON.parse(ran.stdout);
+      // Node counts -p and its script among execArgv.
       expect([execPath.toLowerCase(), execArgv, runAsNode]).toEqual([
         process.execPath.toLowerCase(),
-        [...BACKEND_RUNTIME_ARGS],
+        [...BACKEND_RUNTIME_ARGS, "-p", script],
         "1",
       ]);
     },
