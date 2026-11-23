@@ -275,6 +275,13 @@ describe.runIf(WINDOWS)("the .cmd launcher against a stand-in install", () => {
     });
     expect(same(got.env.EIDOLON_APP_ROOT)).toBe(same(join(install, "resources", "eidolon")));
     expect(cmd(install, " search exit-7", env).status).toBe(7);
+    // The terminal keeps none of the launcher's variables, or its next `code` would run as Node.
+    const after = cmd(
+      install,
+      " search & if defined ELECTRON_RUN_AS_NODE (echo leaked) else (echo kept)",
+      env,
+    );
+    expect(after.stdout).toMatch(/\}kept\r\n$/);
   }, 60_000);
 
   test("with none, starts the install's binary with nothing to run and ELECTRON_RUN_AS_NODE cleared", async () => {
