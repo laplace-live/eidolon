@@ -439,8 +439,9 @@ const envValue = (env, name) =>
   Object.entries(env).find(([key]) => key.toUpperCase() === name.toUpperCase())?.[1];
 
 /**
- * The file `command` names, searched for from `cwd` on `pathEnv` as sh does, or on Windows as
- * cmd.exe does through PATHEXT, but never in the working folder first.
+ * The file `command` names, searched for from `cwd` on `pathEnv` as sh does: the first executable
+ * one, or with none the first there, which sh then fails to run. On Windows as cmd.exe does
+ * through PATHEXT, but never in the working folder first.
  */
 export function which(command, { pathEnv, cwd, platform = process.platform, pathext }) {
   const windows = platform === "win32";
@@ -454,8 +455,8 @@ export function which(command, { pathEnv, cwd, platform = process.platform, path
     ? [path.resolve(cwd, command)]
     : dirs.map((dir) => path.resolve(cwd, dir, command));
   if (!windows) {
-    return bases.find((file) => {
-      if (!isFile(file)) return false;
+    const files = bases.filter(isFile);
+    const executable = files.find((file) => {
       try {
         accessSync(file, constants.X_OK);
         return true;
@@ -463,6 +464,7 @@ export function which(command, { pathEnv, cwd, platform = process.platform, path
         return false;
       }
     });
+    return executable ?? files[0];
   }
   const extensions = (pathext || ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC")
     .split(";")
@@ -588,13 +590,24 @@ if (import.meta.main) {
     fail(`${command}: command not found`, 127);
   }
   const start = spawnArgs(file, decided.args, { env });
-  const child = spawn(start.command, start.args, {
+  const options = {
     cwd: decided.runPath,
     env,
     stdio: "inherit",
     windowsHide: true,
     windowsVerbatimArguments: start.verbatim,
-  });
+  };
+  let child;
+  try {
+    child = spawn(start.command, start.args, options);
+  } catch (error) {
+    // Node throws ENOEXEC rather than emit it. sh runs a file the system can't, one without a #!
+    // line, as a script of its own.
+    if (error.code !== "ENOEXEC" || process.platform === "win32") {
+      fail(`${command}: ${error.message}`, 126);
+    }
+    child = spawn("/bin/sh", [file, ...decided.args], options);
+  }
   const undo = relay(child);
   child.on("error", (error) =>
     fail(`${command}: ${error.message}`, error.code === "EACCES" ? 126 : 127),

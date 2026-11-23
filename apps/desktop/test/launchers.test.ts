@@ -59,7 +59,11 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
       "exit $((EXIT + 0))",
       "",
     ].join("\n"),
+    // A script with no #! line, which only sh runs.
+    "node_modules/.bin/eidolon-shim-plain": `printf 'plain %s\\n' "$@"\nexit 4\n`,
+    "node_modules/.bin/eidolon-shim-locked": "#!/bin/sh\necho locked\n",
   });
+  chmodSync(join(project, "node_modules", ".bin", "eidolon-shim-locked"), 0o644);
   const below = join(project, "sub", "dir");
   mkdirSync(below, { recursive: true });
 
@@ -123,6 +127,14 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
       below,
     );
     expect([killed.status, killed.signal]).toEqual([null, "SIGTERM"]);
+  });
+
+  test("npx runs a bin with no #! line through sh, and ends 126 on one it can't execute", () => {
+    const plain = run("npx", ["eidolon-shim-plain", "a b", "$HOME"], undefined, below);
+    expect([plain.status, plain.stdout, plain.stderr]).toEqual([4, "plain a b\nplain $HOME\n", ""]);
+    const locked = run("npx", ["eidolon-shim-locked"], undefined, below);
+    expect([locked.status, locked.stdout]).toEqual([126, ""]);
+    expect(locked.stderr).toContain("EACCES");
   });
 
   test("an npx that fails says why on stderr, and prints nothing on stdout", () => {

@@ -632,10 +632,12 @@ describe("finding a command", () => {
       "a/tool": "",
       "b/tool": "",
       "c/tool": "",
+      "c/locked": "",
       "d/tool": null,
+      "d/locked": "",
       "here/rel/tool": "",
     });
-    chmodSync(join(base, "a", "tool"), 0o644);
+    for (const file of ["a/tool", "c/locked", "d/locked"]) chmodSync(join(base, file), 0o644);
     const pathEnv = ["a", "d", "b", "c"].map((dir) => join(base, dir)).join(":");
     expect(npx.which("tool", { pathEnv, cwd: base, platform: "linux" })).toBe(
       join(base, "b", "tool"),
@@ -644,6 +646,10 @@ describe("finding a command", () => {
       join(base, "here", "rel", "tool"),
     );
     expect(npx.which("nothing", { pathEnv, cwd: base, platform: "linux" })).toBeUndefined();
+    // With none executable, the first there, which sh fails to run: Permission denied.
+    expect(npx.which("locked", { pathEnv, cwd: base, platform: "linux" })).toBe(
+      join(base, "d", "locked"),
+    );
   });
 
   test("as cmd.exe does: each folder through PATHEXT, but not the working folder first", () => {
