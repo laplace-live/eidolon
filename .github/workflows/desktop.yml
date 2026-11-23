@@ -1,28 +1,79 @@
 name: Desktop
 
-# The desktop app (apps/desktop) built, packaged unsigned and checked on each target it ships for.
-# Its payload comes from bun.lock and the backend's packages, so a change to either runs this too.
+# The desktop app (apps/desktop) built, packaged and checked on each target it ships for; from a
+# laplace-eidolon-desktop@<version> tag, signed, notarized and uploaded to R2 (docs/desktop.md,
+# Releasing). Its payload comes from bun.lock and the backend's packages, so a change to either runs
+# this too.
 
 on:
   pull_request:
     paths-ignore:
       - "docs/**"
       - "**/*.md"
+  # Pushed by release.yml (changesets) with the release bot's token, so this trigger fires.
+  push:
+    tags:
+      - "laplace-eidolon-desktop@*"
   workflow_dispatch:
+    inputs:
+      sign:
+        description: Sign and notarize the build at 0.0.0-dev, on master or electron only. Its installers are kept a day
+        type: boolean
+        default: false
+      release_index:
+        description: Only rebuild eidolon/releases.json from R2's listing, on master or electron only
+        type: boolean
+        default: false
+      update_test:
+        description: Only build 0.0.1 and 0.0.2 signed and update one to the other through the real updater, on master or electron only
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
-# A push to a pull request cancels the run it supersedes; a dispatch neither waits nor cancels.
+# A push to a pull request cancels the run it supersedes. A tag's run is the release and is never
+# cancelled. A dispatch neither waits nor cancels, so two signed dispatches from one branch both
+# finish.
 concurrency:
-  group: desktop-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
+  # Every run's: a dispatch's inputs checked before any job that signs or writes is started.
+  inputs:
+    name: Inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Signing, the update test and R2 run only on master and electron: in this public repository
+      # any signed-in user can download a run's artifacts.
+      - name: Check the dispatch's inputs
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          modes=0
+          for input in SIGN UPDATE_TEST RELEASE_INDEX; do
+            if [[ ${!input} != true ]]; then continue; fi
+            if [[ $GITHUB_REF != refs/heads/master && $GITHUB_REF != refs/heads/electron ]]; then
+              fail "${input,,} runs only on master or electron, not $GITHUB_REF"
+            fi
+            modes=$((modes + 1))
+          done
+          if (( modes > 1 )); then
+            fail "sign, update_test and release_index each run alone: dispatch one at a time"
+          fi
+        env:
+          SIGN: ${{ inputs.sign }}
+          UPDATE_TEST: ${{ inputs.update_test }}
+          RELEASE_INDEX: ${{ inputs.release_index }}
+
+  # Unsigned: a pull request, or a dispatch that only builds. No secret reaches these runners.
   build:
     name: ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    needs: inputs
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !(inputs.sign || inputs.release_index || inputs.update_test))
     strategy:
       fail-fast: false
       matrix:
@@ -31,116 +82,262 @@ jobs:
             target: darwin-arm64
           - os: windows-latest
             target: win32-x64
-    # Bash on Windows too: PowerShell splits -c.compression=store into -c and a config path.
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      os: ${{ matrix.os }}
+      target: ${{ matrix.target }}
+
+  # Signed: a tag, or a sign dispatch on master or electron. The job's own `if`, which GitHub reads
+  # before a runner is given, is what keeps the secrets off every other run, and each platform's
+  # job gets its own platform's alone.
+  signed-mac:
+    name: darwin-arm64, signed
+    needs: inputs
+    if: (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.sign && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/electron'))
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      os: macos-latest
+      target: darwin-arm64
+      signed: true
+    secrets:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+  signed-win:
+    name: win32-x64, signed
+    needs: inputs
+    if: (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.sign && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/electron'))
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      os: windows-latest
+      target: win32-x64
+      signed: true
+    secrets:
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_SIGNING_ACCOUNT_NAME }}
+      AZURE_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}
+
+  # Its own job, after both legs: a re-run sends the very bytes the build signed, where a re-run of a
+  # leg would sign new ones. One release's at a time, queued: two at once could both find R2 serving
+  # neither, and the older write the flat files last.
+  upload:
+    name: Upload to R2
+    needs: [signed-mac, signed-win]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    concurrency:
+      group: desktop-r2-upload
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
     steps:
+      # The tagged commit's changelog.json, and the script that takes the update dialog's notes
+      # from it.
       - uses: actions/checkout@v7
         timeout-minutes: 5
         with:
           persist-credentials: false
-
-      - uses: oven-sh/setup-bun@v2
-        timeout-minutes: 5
-        with:
-          bun-version-file: package.json
 
       - uses: actions/setup-node@v7
         timeout-minutes: 5
         with:
           node-version: 24
 
-      # As release.yml installs: no build step needs a package's install script, and a signing
-      # step must follow none.
-      - id: install
+      - uses: actions/download-artifact@v8
         timeout-minutes: 10
-        run: bun install --frozen-lockfile --ignore-scripts
+        with:
+          name: macOS-installers
+          path: release
 
-      # Stages this target's backend in apps/desktop/.stage, then builds main, the preload and the
-      # shell pages.
-      - id: build
-        timeout-minutes: 20
-        run: bun run build:desktop
+      - uses: actions/download-artifact@v8
+        timeout-minutes: 10
+        with:
+          name: Windows-installers
+          path: release
 
-      # Unsigned, at 0.0.0-dev: ad hoc on macOS and never with a keychain identity
-      # (scripts/package.ts), NSIS on Windows.
-      - id: package
-        timeout-minutes: 20
-        run: bun run package:desktop -c.compression=store
-
-      # What the payload holds, pinned to bun.lock; its natives loading from it; on Windows the VC++
-      # runtime beside them and every DLL signed by Microsoft or listed to sign; and, packaged after
-      # it, the app holding it file for file.
-      - name: The staged payload
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 15
-        run: bun run test apps/desktop/test/stage.test.ts
-        env:
-          EIDOLON_REQUIRE_STAGE: "1"
-
-      - name: The backend's tests on Electron's Node
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'macOS' }}
-        timeout-minutes: 30
-        run: node apps/desktop/scripts/test-on-electron.ts
-
-      # The whole suite doesn't run on Windows: these are the tests ts.yml's windows job runs there.
-      - name: Windows' own tests on Electron's Node
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Windows' }}
-        timeout-minutes: 20
+      # Every installer and blockmap once, under eidolon/v<version>/, which is never deleted or
+      # overwritten: clients download from there, Cloudflare would keep serving a first copy, and
+      # electron-updater rejects other bytes on their checksum. Then the manifests, url: and path:
+      # pointed into v<version>/ (electron-updater resolves both, and the old blockmap it derives
+      # from them, against the manifest's URL) and the notes appended: v<version>/'s copies, then
+      # flat eidolon/'s, which installs read. Then the download links, and changelog.json; none of
+      # the flat files when R2 already serves a newer release, which an older one's late upload (a
+      # re-run, or a slower notarization) would otherwise roll back.
+      - name: Upload to R2
+        timeout-minutes: 25
         run: |
-          node apps/desktop/scripts/test-on-electron.ts packages/config/test/which.test.ts \
-            packages/config/test/process.test.ts packages/config/test/pypath.test.ts \
-            apps/eidolon/test/launcher.test.ts apps/bot/test/local/jobs-runner.test.ts
-          node apps/desktop/scripts/test-on-electron.ts packages/assistant/test/shell.test.ts \
-            packages/assistant/test/mcp-stdio.test.ts packages/assistant/test/eidolon-command.test.ts \
-            packages/assistant/test/path.test.ts packages/assistant/test/bash-windows.test.ts \
-            packages/ingest/test/limit.test.ts \
-            -t "Windows|its children, when the host exits without closing it"
-          node apps/desktop/scripts/test-on-electron.ts apps/cli/test/cli.test.ts -t relayStopMessages
-
-      # The packaged app in apps/desktop/.out on a temporary data home and profile, driven through
-      # its backend's API, with no window shown. On Windows it installs the NSIS setup silently
-      # first and uninstalls it after.
-      - id: smoke
-        name: The packaged smoke
-        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
-        timeout-minutes: 15
-        run: bun run smoke:desktop
+          version="${GITHUB_REF_NAME#laplace-eidolon-desktop@}"
+          notes=$(node scripts/changelog.ts manifest)
+          s3() {
+            aws s3 cp "$1" "s3://$R2_BUCKET/$2" --endpoint-url "$R2_ENDPOINT" --cache-control "$3" \
+              --only-show-errors "${@:4}"
+          }
+          # A re-run finds its own bytes there by the SHA-256 the first run stored with them.
+          put_once() {
+            local sum found
+            sum=$(sha256sum "$1" | cut -d ' ' -f 1)
+            if found=$(aws s3api head-object --bucket "$R2_BUCKET" --key "$2" \
+              --endpoint-url "$R2_ENDPOINT" --query Metadata.sha256 --output text 2>&1); then
+              if [[ $found != "$sum" ]]; then
+                echo "::error::$2 is already in R2 with other bytes (sha256 $found, not $sum)"
+                return 1
+              fi
+              echo "$2 is already in R2, the same bytes"
+            elif [[ $found == *"(404)"* ]]; then
+              s3 "$1" "$2" 'public, max-age=31536000, immutable' --metadata "sha256=$sum"
+            else
+              echo "$found"
+              return 1
+            fi
+          }
+          # The version a flat manifest in R2 names, or nothing when there is none yet.
+          served_version() {
+            local found
+            if found=$(aws s3 cp "s3://$R2_BUCKET/$R2_PREFIX/$1" - --endpoint-url "$R2_ENDPOINT" 2>&1); then
+              sed -n 's/^version: *//p' <<< "$found" | head -n 1
+              return 0
+            fi
+            [[ $found == *"(404)"* ]] && return 0
+            echo "::error::reading $R2_PREFIX/$1 from R2: $found" >&2
+            return 1
+          }
+          cd release
+          # nullglob makes a pattern that matches nothing an empty list, which the counts below fail.
+          shopt -s nullglob
+          installers=(*.dmg *.zip *.exe *.blockmap)
+          dmg=(*.dmg)
+          zip=(*.zip)
+          setup=(*.exe)
+          blockmaps=(*.zip.blockmap *.exe.blockmap)
+          manifests=(latest-mac.yml latest.yml)
+          for name in "${manifests[@]}"; do
+            [[ -f $name ]] || { echo "::error::no $name among: ${installers[*]}"; exit 1; }
+          done
+          if (( ${#dmg[@]} != 1 || ${#zip[@]} != 1 || ${#setup[@]} != 1 || ${#blockmaps[@]} != 2 )); then
+            echo "::error::expected one DMG, one zip, one setup and their two blockmaps, found: ${installers[*]}"
+            exit 1
+          fi
+          for file in "${installers[@]}"; do put_once "$file" "$R2_PREFIX/v$version/$file"; done
+          mkdir -p feed
+          for name in "${manifests[@]}"; do
+            { sed -E "s#^([[:space:]]*(- )?(url|path): )#\1v$version/#" "$name"; printf '%s\n' "$notes"; } \
+              > "feed/$name"
+            s3 "feed/$name" "$R2_PREFIX/v$version/$name" no-cache
+          done
+          for name in "${manifests[@]}"; do
+            served=$(served_version "$name") || exit 1
+            if [[ -n $served && $served != "$version" \
+              && $(printf '%s\n' "$served" "$version" | sort -V | tail -n 1) == "$served" ]]; then
+              echo "R2 already serves $served, newer than $version: v$version/ is up, and the feed, the links and changelog.json stay $served's"
+              exit 0
+            fi
+          done
+          for name in "${manifests[@]}"; do s3 "feed/$name" "$R2_PREFIX/$name" no-cache; done
+          s3 "${dmg[0]}" "$R2_PREFIX/Eidolon-mac-arm64.dmg" no-cache
+          s3 "${setup[0]}" "$R2_PREFIX/Eidolon-win-x64.exe" no-cache
+          s3 ../changelog.json "$R2_PREFIX/changelog.json" no-cache --content-type application/json
         env:
-          EIDOLON_DESKTOP_BACKGROUND: "1"
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # R2 rejects the AWS CLI's default streaming checksums.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: downloads
+          R2_PREFIX: eidolon
 
-      # A failed run keeps its folder: its results, the app's logs and its launches' output. Not
-      # its home, which holds local-token, nor the rest of its profile.
-      - name: Upload the failed smoke's logs
-        if: ${{ failure() && steps.smoke.outcome == 'failure' }}
-        uses: actions/upload-artifact@v7
+  # eidolon/releases.json, the website's version history, rebuilt from a bucket listing rather than
+  # appended to, so nothing ever needs a backfill. always(): after a failed leg or upload it lists
+  # what R2 holds, but a dispatch whose inputs failed writes nothing. One at a time, queued, so an
+  # earlier listing never lands last.
+  release-index:
+    name: releases.json
+    needs: [inputs, upload]
+    if: always() && ((github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.release_index && needs.inputs.result == 'success'))
+    concurrency:
+      group: desktop-r2-index
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check the ref
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ $GITHUB_REF != refs/heads/master && $GITHUB_REF != refs/heads/electron ]]; then
+            echo "::error::release_index runs only on master or electron, not $GITHUB_REF"
+            exit 1
+          fi
+
+      # Installers are everything under v<version>/ but blockmaps and manifests; their url fields
+      # match the manifests', relative to eidolon/.
+      - name: Publish releases.json
         timeout-minutes: 5
-        with:
-          name: ${{ runner.os }}-smoke-desktop
-          path: |
-            ${{ runner.temp }}/eidolon-smoke-desktop-*/results.json
-            ${{ runner.temp }}/eidolon-smoke-desktop-*/profile/logs
-            ${{ runner.temp }}/eidolon-smoke-desktop-*/scratch
-          retention-days: 7
+        run: |
+          aws s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix "$R2_PREFIX/v" --endpoint-url "$R2_ENDPOINT" --output json \
+            | jq -c --arg prefix "$R2_PREFIX/" '{
+                schema: 1,
+                releases: [
+                  (.Contents // [])[]
+                  | (.Key | ltrimstr($prefix)) as $url
+                  | select($url | test("\\.(blockmap|yml)$") | not)
+                  | { version: ($url | split("/")[0] | ltrimstr("v")), url: $url, size: .Size,
+                      date: (.LastModified[:19] + "Z") }
+                ]
+                | group_by(.version)
+                | map({ version: .[0].version, releaseDate: (map(.date) | min), files: map({ url, size }) })
+                | sort_by(.version | split(".") | map(tonumber))
+                | reverse
+              }' > releases.json
+          aws s3 cp releases.json "s3://$R2_BUCKET/$R2_PREFIX/releases.json" --endpoint-url "$R2_ENDPOINT" \
+            --cache-control no-cache --content-type application/json
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: downloads
+          R2_PREFIX: eidolon
 
-      # Adds a throwaway CA to this runner's trust store, and deletes the certificate after.
-      - name: "--use-system-ca on the packaged binary"
-        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
-        timeout-minutes: 10
-        run: node apps/desktop/scripts/system-ca.ts
+  # The update test (desktop-update-test.yml), one job per platform with its secrets alone.
+  update-test-mac:
+    name: Update test, darwin-arm64
+    needs: inputs
+    if: github.event_name == 'workflow_dispatch' && inputs.update_test && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/electron')
+    uses: ./.github/workflows/desktop-update-test.yml
+    with:
+      os: macos-latest
+      target: darwin-arm64
+    secrets:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
-      # Not the macOS zip, which only updates read: a dev build takes none. upload-artifact skips a
-      # hidden folder such as .out unless told.
-      - name: Upload the installers
-        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        timeout-minutes: 15
-        with:
-          name: ${{ runner.os }}-installers-dev
-          path: |
-            apps/desktop/.out/*.dmg
-            apps/desktop/.out/*.exe
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 14
+  update-test-win:
+    name: Update test, win32-x64
+    needs: inputs
+    if: github.event_name == 'workflow_dispatch' && inputs.update_test && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/electron')
+    uses: ./.github/workflows/desktop-update-test.yml
+    with:
+      os: windows-latest
+      target: win32-x64
+    secrets:
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_SIGNING_ACCOUNT_NAME }}
+      AZURE_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_CERTIFICATE_PROFILE_NAME }}

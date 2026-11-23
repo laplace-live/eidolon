@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import type { AccountsResponse } from "../../../bot/src/local/api.ts";
 import { hintFrom, originOf, readServerInfo, readToken } from "../../src/main/attach.ts";
 import { BACKGROUND_LINE, FAKE_MEDIA_DEVICE } from "../../src/main/background.ts";
@@ -114,13 +114,19 @@ export function packagedBinary(platform: NodeJS.Platform = process.platform): st
     : join(DESKTOP, ".out", "mac-arm64", "Eidolon.app", "Contents", "MacOS", "Eidolon");
 }
 
-/** apps/desktop/.out's installer: the NSIS setup on Windows, its only .exe; the DMG on macOS. */
-export function installer(platform: NodeJS.Platform = process.platform): string {
-  const out = join(DESKTOP, ".out");
+/**
+ * An outputs folder's installer, apps/desktop/.out's by default: the NSIS setup on Windows, its only
+ * .exe; the DMG on macOS.
+ */
+export function installer(
+  platform: NodeJS.Platform = process.platform,
+  out: string = join(DESKTOP, ".out"),
+): string {
   const extension = platform === "win32" ? ".exe" : ".dmg";
   const found = existsSync(out) ? readdirSync(out).filter((name) => name.endsWith(extension)) : [];
   if (found.length !== 1) {
-    throw new Error(`apps/desktop/.out holds ${found.length} ${extension} files, not one`);
+    const named = relative(ROOT, out).startsWith("..") ? out : relative(ROOT, out);
+    throw new Error(`${named} holds ${found.length} ${extension} files, not one`);
   }
   return join(out, found[0]);
 }
@@ -182,6 +188,26 @@ export function readLog(run: Run, name: LogName): string {
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((done) => setTimeout(done, ms));
+}
+
+/** `promise`'s value, or null once `ms` have passed. */
+export function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([promise, sleep(ms).then(() => null)]);
+}
+
+/** `read()`'s value once `done` holds for it, or its last one at the timeout. */
+export async function until<T>(
+  read: () => T | Promise<T>,
+  done: (value: T) => boolean,
+  timeoutMs: number,
+  everyMs = 250,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await read();
+    if (done(value) || Date.now() >= deadline) return value;
+    await sleep(everyMs);
+  }
 }
 
 export interface WaitOptions {

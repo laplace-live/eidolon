@@ -1,13 +1,15 @@
 // Closing and quitting: a close hides the window, and every quit, from ⌘Q, a menu, the
 // Dock, the tray or a second launch's --quit, goes through one flow: ask when work would be cut,
-// hide, stop our own backend, then let the quit through. Electron-free: quit.ts wires it to the
-// app's events, and the confirmation (quit-check.ts) decides whether to ask.
+// hide, stop our own backend, then let the quit through. The restart that installs an update goes
+// the same way. Electron-free: quit.ts wires it to the app's events, and the confirmation
+// (quit-check.ts) decides whether to ask.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import type { QuitPurpose } from "./quit-check.ts";
 
 export interface QuitEffects {
-  /** The quit check and its box; true to quit. Asked again while open, it joins the open box. */
-  readonly confirm: () => Promise<boolean>;
+  /** The quit check and its box; true to go ahead. Asked again while open, it joins the open box. */
+  readonly confirm: (purpose: QuitPurpose) => Promise<boolean>;
   readonly hideWindows: () => void;
   /** The stop of our own backend; nothing for an attached server. */
   readonly stopBackend: () => Promise<void>;
@@ -42,9 +44,24 @@ export class QuitFlow {
    */
   beforeQuit(): boolean {
     if (this.#phase === "done") return true;
-    if (this.#phase === "asking") void this.#effects.confirm();
-    if (this.#phase === "running") void this.#run();
+    if (this.#phase === "asking") void this.#effects.confirm("quit");
+    if (this.#phase === "running") void this.#run("quit", () => this.#effects.quit());
     return false;
+  }
+
+  /**
+   * The restart that installs an update, `install` being quitAndInstall: the quit's check, with a
+   * box naming what a restart stops, its latch and its stop, then `install` in place of the quit.
+   * `installable` is asked once the check lets it through, before the latch: the update can fail
+   * while the box is open. Never from before-quit: on macOS quitAndInstall closes every window
+   * before before-quit fires, so a latch set there lets the hide-on-close window veto the
+   * relaunch. False when it didn't go ahead: cancelled, no longer installable, or a quit was
+   * already under way, whose box comes forward.
+   */
+  restart(install: () => void, installable: () => boolean): Promise<boolean> {
+    if (this.#phase === "asking") void this.#effects.confirm("quit");
+    if (this.#phase !== "running") return Promise.resolve(false);
+    return this.#run("restart", install, installable);
   }
 
   /** macOS's powerMonitor shutdown: the system powers off, so the quit that follows doesn't ask. */
@@ -62,22 +79,29 @@ export class QuitFlow {
     this.#phase = "done";
   }
 
-  async #run(): Promise<void> {
+  /** True once `finish` ran: the quit, or the update's install. */
+  async #run(
+    purpose: QuitPurpose,
+    finish: () => void,
+    proceed: () => boolean = () => true,
+  ): Promise<boolean> {
     this.#phase = "asking";
     let approved: boolean;
     try {
-      approved = this.#poweringOff || (await this.#effects.confirm());
+      approved = this.#poweringOff || (await this.#effects.confirm(purpose));
     } catch (error) {
       this.#effects.log.error(`Eidolon: the quit check failed, quitting anyway: ${String(error)}`);
       approved = true;
     }
-    if (this.#phase !== "asking") return;
-    if (!approved) {
+    if (this.#phase !== "asking") return false;
+    if (!approved || !proceed()) {
       this.#phase = "running";
-      return;
+      return false;
     }
     this.#phase = "stopping";
-    this.#effects.log.info("Eidolon: quitting");
+    this.#effects.log.info(
+      purpose === "restart" ? "Eidolon: quitting to install the update" : "Eidolon: quitting",
+    );
     this.#effects.hideWindows();
     try {
       await this.#effects.stopBackend();
@@ -85,7 +109,8 @@ export class QuitFlow {
       this.#effects.log.error(`Eidolon: stopping the backend failed: ${String(error)}`);
     }
     this.#phase = "done";
-    this.#effects.quit();
+    finish();
+    return true;
   }
 }
 

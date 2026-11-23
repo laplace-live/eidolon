@@ -1,5 +1,6 @@
 // The quit flow's choices: a close hides, every quit asks once when work would be cut, then hides,
-// stops our own backend and quits; power-off and the session's end don't ask. And Windows' one-time
+// stops our own backend and quits; power-off and the session's end don't ask. The restart that
+// installs an update takes the same way, with install in place of the quit. And Windows' one-time
 // tray notice.
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,10 +19,10 @@ function flow() {
   let stopped: () => void = () => {};
   let asked = 0;
   const quitFlow = new QuitFlow({
-    confirm: () => {
+    confirm: (purpose) => {
       asked++;
       if (open !== null) return open;
-      steps.push("confirm");
+      steps.push(purpose === "restart" ? "confirm restart" : "confirm");
       open = new Promise<boolean>((done) => {
         answer = done;
       }).finally(() => {
@@ -49,6 +50,8 @@ function flow() {
 }
 
 const settle = () => new Promise((done) => setTimeout(done, 0));
+/** A restart whose update stays installable. */
+const installable = () => true;
 
 describe("closing", () => {
   test("hides the window until a quit is approved, then lets it close", async () => {
@@ -144,6 +147,101 @@ describe("quitting", () => {
       "stop",
       "quit",
     ]);
+  });
+
+  test("a restart asks in its own words, then latches, hides and stops the backend, and installs in place of the quit", async () => {
+    const quit = flow();
+    const restarted = quit.flow.restart(() => {
+      // quitAndInstall closes every window, then quits: both must go through by now.
+      quit.steps.push(
+        `install (a close hides: ${quit.flow.closeHides()}; before-quit lets by: ${quit.flow.beforeQuit()})`,
+      );
+    }, installable);
+    await settle();
+    expect(quit.steps).toEqual(["confirm restart"]);
+    // The box is open: nothing is latched yet.
+    expect(quit.flow.closeHides()).toBe(true);
+    quit.answer(true);
+    await settle();
+    expect(quit.steps).toEqual(["confirm restart", "hide", "stop"]);
+    expect(quit.flow.closeHides()).toBe(false);
+    quit.stopped();
+    expect(await restarted).toBe(true);
+    expect(quit.steps).toEqual([
+      "confirm restart",
+      "hide",
+      "stop",
+      "install (a close hides: false; before-quit lets by: true)",
+    ]);
+  });
+
+  test("a restart whose update can't install once the box is answered goes no further: no latch, no hide, no stop", async () => {
+    const quit = flow();
+    let failed = false;
+    const asked: boolean[] = [];
+    const restarted = quit.flow.restart(
+      () => quit.steps.push("install"),
+      () => {
+        asked.push(!failed);
+        return !failed;
+      },
+    );
+    await settle();
+    // Not while the box is open.
+    expect(asked).toEqual([]);
+    failed = true;
+    quit.answer(true);
+    await settle();
+    expect(asked).toEqual([false]);
+    expect(quit.steps).toEqual(["confirm restart"]);
+    expect([quit.flow.quitting, quit.flow.closeHides()]).toEqual([false, true]);
+    expect(await restarted).toBe(false);
+    expect(quit.flow.beforeQuit()).toBe(false);
+    await settle();
+    expect(quit.steps).toEqual(["confirm restart", "confirm"]);
+  });
+
+  test("a cancelled restart resolves false and leaves everything running; the next quit asks as a quit", async () => {
+    const quit = flow();
+    const restarted = quit.flow.restart(
+      () => quit.steps.push("install"),
+      () => quit.steps.push("installable?") > 0,
+    );
+    await settle();
+    quit.answer(false);
+    expect(await restarted).toBe(false);
+    expect(quit.steps).toEqual(["confirm restart"]);
+    expect(quit.flow.closeHides()).toBe(true);
+    expect(quit.flow.beforeQuit()).toBe(false);
+    await settle();
+    expect(quit.steps).toEqual(["confirm restart", "confirm"]);
+  });
+
+  test("a quit while the restart's box is open joins it, and the restart goes on as answered", async () => {
+    const quit = flow();
+    const restarted = quit.flow.restart(() => quit.steps.push("install"), installable);
+    await settle();
+    expect(quit.flow.beforeQuit()).toBe(false);
+    expect(quit.asked()).toBe(2);
+    quit.answer(true);
+    await settle();
+    quit.stopped();
+    expect(await restarted).toBe(true);
+    expect(quit.steps).toEqual(["confirm restart", "hide", "stop", "install"]);
+  });
+
+  test("a restart while a quit asks or stops goes nowhere: the quit's box comes forward, and the quit goes on", async () => {
+    const quit = flow();
+    quit.flow.beforeQuit();
+    await settle();
+    expect(await quit.flow.restart(() => quit.steps.push("install"), installable)).toBe(false);
+    expect(quit.asked()).toBe(2);
+    quit.answer(true);
+    await settle();
+    expect(await quit.flow.restart(() => quit.steps.push("install"), installable)).toBe(false);
+    quit.stopped();
+    await settle();
+    expect(quit.steps).toEqual(["confirm", "hide", "stop", "quit"]);
   });
 
   test("Windows' session end lets every quit through, a box still open included", async () => {

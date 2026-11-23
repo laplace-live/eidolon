@@ -246,3 +246,6 @@ node_modules/
 # The web app's build, which `bun run local` serves. Python's dist/ above matches it too; this line
 # keeps it ignored if that one is ever anchored like /lib/.
 apps/web/dist/
+
+# The status `bun run version` hands scripts/changelog.ts, which deletes it once read.
+.changeset/.status.json

@@ -4,15 +4,46 @@
 import type { AboutPanelOptionsOptions, MenuItemConstructorOptions } from "electron";
 import type { DesktopVersions } from "../shared/bridge.ts";
 import type { Strings } from "./strings.ts";
+import type { UpdateState } from "./update-flow.ts";
 
 /** What the menus' own items do; the rest are Electron's roles. */
 export interface MenuActions {
   /** Brings the window forward and opens the page's Settings. */
   readonly settings: () => void;
+  readonly checkForUpdates: () => void;
   readonly showLogs: () => void;
   readonly openDataFolder: () => void;
   readonly licenses: () => void;
   readonly about: () => void;
+}
+
+/** Check for Updates… as the updater stands. */
+export type UpdatesItem = "enabled" | "disabled" | "hidden";
+
+/**
+ * Absent while this run doesn't update itself, unless it runs from a read-only volume, whose box
+ * says to move it; disabled while a check, a download or the restart runs.
+ */
+export function updatesItem(phase: UpdateState["phase"]): UpdatesItem {
+  if (phase === "unsupported") return "hidden";
+  return phase === "checking" || phase === "downloading" || phase === "installing"
+    ? "disabled"
+    : "enabled";
+}
+
+function checkForUpdates(
+  { label }: Strings,
+  actions: MenuActions,
+  updates: UpdatesItem,
+): MenuItemConstructorOptions[] {
+  if (updates === "hidden") return [];
+  return [
+    {
+      label: label.checkForUpdates,
+      enabled: updates === "enabled",
+      click: () => actions.checkForUpdates(),
+    },
+  ];
 }
 
 /** The tray's items, beside the menus'. */
@@ -41,10 +72,15 @@ const separator = (): MenuItemConstructorOptions => ({ type: "separator" });
  * is the app's own action, which logs the panel, and the developer tools, a window, aren't offered.
  */
 export function macMenu(
-  { label }: Strings,
+  strings: Strings,
   actions: MenuActions,
-  { packaged, background }: { readonly packaged: boolean; readonly background: boolean },
+  {
+    packaged,
+    background,
+    updates,
+  }: { readonly packaged: boolean; readonly background: boolean; readonly updates: UpdatesItem },
 ): MenuItemConstructorOptions[] {
+  const { label } = strings;
   return [
     {
       label: "Eidolon",
@@ -52,6 +88,7 @@ export function macMenu(
         background
           ? { label: label.aboutEidolon, click: () => actions.about() }
           : { role: "about", label: label.aboutEidolon },
+        ...checkForUpdates(strings, actions, updates),
         separator(),
         { label: label.settings, accelerator: "Command+,", click: () => actions.settings() },
         separator(),
@@ -133,10 +170,16 @@ export function windowsMenu({ label }: Strings): MenuItemConstructorOptions[] {
 }
 
 /** The tray's menu on Windows, which holds what macOS's menu bar does. */
-export function trayMenu({ label }: Strings, actions: TrayActions): MenuItemConstructorOptions[] {
+export function trayMenu(
+  strings: Strings,
+  actions: TrayActions,
+  updates: UpdatesItem,
+): MenuItemConstructorOptions[] {
+  const { label } = strings;
   return [
     { label: label.openEidolon, click: () => actions.open() },
     { label: label.settings, click: () => actions.settings() },
+    ...checkForUpdates(strings, actions, updates),
     separator(),
     { label: label.showLogs, click: () => actions.showLogs() },
     { label: label.openDataFolder, click: () => actions.openDataFolder() },

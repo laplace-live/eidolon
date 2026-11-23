@@ -5,8 +5,10 @@ local app in a window that starts its own backend, on macOS (Apple silicon) and 
 terminal, no Node or Bun to install, and no link to sign in with. The window shows `apps/web` as it
 is, served by the same local server `bun run app` and `npx @laplace.live/eidolon` run, in local
 mode only, so production never sees it. Electron's own binary runs that server as Node, so the app
-ships no other runtime. It has no release yet: `bun run package:desktop` builds it unsigned, and
-signing, updates and releases come later.
+ships no other runtime. A release is signed and notarized in CI from its
+`laplace-eidolon-desktop@<version>` tag and served from `https://downloads.vrp.moe/eidolon`, where
+the app's updater finds the next one ([Releasing](#releasing), [Updates](#updates));
+`bun run package:desktop` builds it locally, unsigned.
 
 ```text
 Eidolon (main process)
@@ -27,23 +29,31 @@ Eidolon (main process)
 ```text
 apps/desktop/
   electron-builder.yml   the packaging config: fuses, targets, the payload as an extra resource
+  electron-builder.release.mjs
+                         the release overlay: notarization, the requirement, Windows' Azure signing
   resources/             build resources: entitlements, installer.nsh, the icon, and the designated
-                         requirement release builds will carry
+                         requirement release builds carry (designated-requirement.mac)
   assets/                what main loads at run time through process.resourcesPath: the tray icon
+  dev-app-update.yml     the release feed for EIDOLON_DESKTOP_DEV_UPDATE, read only unpackaged
   scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
-                         zip.ts and natives.ts; vite-common.ts, electron-env.ts;
+                         zip.ts and natives.ts; signed-check.ts, the signed build's checks;
+                         vite-common.ts, electron-env.ts;
                          test-on-electron.ts, the Electron lane; system-ca.ts, CI's system CA
                          proof; dev-smoke.ts with dev-smoke/, the dev smoke; smoke.ts, the
-                         packaged smoke; and smoke/, the kit both share, with the packaged
-                         smoke's packaged.ts and nsis.ts
+                         packaged smoke; smoke/, the kit both share, with the packaged
+                         smoke's packaged.ts and nsis.ts; and update-test.ts with update-test/,
+                         CI's update test
   src/main/              main: the Electron-free modules that decide (controller, attach, forwarder,
                          backend, environment, login-shell, pages, policy, menus, window-options,
-                         quit-check, quit-flow, strings, shell-pages, log-filter, log-files,
-                         background), and thin Electron layers over them (index, instance,
-                         protocol, window, chrome, menu, tray, permissions, navigation, native,
-                         quit, log)
+                         quit-check, quit-flow, update-flow, strings, shell-pages, log-filter,
+                         log-files, background), and thin Electron layers over them (index,
+                         instance, protocol, window, chrome, menu, tray, permissions, navigation,
+                         native, quit, updater, log)
   src/preload/           the sandboxed CommonJS preload: the page's marks and its bridge
   src/shared/bridge.ts   the IPC channels and who may send on each; it imports nothing
+  src/shared/release-notes.ts
+                         changelog.json's types, the manifest's eidolonNotes, and what an update's box
+                         shows of them; scripts/changelog.ts writes the notes with them
   src/shell/             the loading, failure and waiting pages
   test/                  Vitest, for the Electron-free modules
 ```
@@ -327,15 +337,17 @@ window's top, and a window saved maximized is maximized only once it has painted
   publishes no `env(titlebar-area-*)` for the page's insets. On Windows, a hidden title bar under a
   transparent 56 px overlay, whose caption glyphs main recolours on each theme change.
 - **Menus and the tray.** macOS's menu bar is declared in full, since a custom menu replaces
-  Electron's: Eidolon (About, Settings…, Services, Hide, Hide Others, Show All, Quit), Edit (its
-  roles, without which copy and paste break), View (zoom, full screen, and Toggle Developer Tools
-  only unpackaged), Window (⌘W hides) and Help (Show Logs, Open Data Folder, Licenses). Windows has
-  no menu bar: main sets a menu of View's zoom roles alone, since Electron would otherwise install
-  its default one, whose accelerators act even under a hidden title bar, and a notification-area
-  icon holds the rest for the whole run (Open Eidolon, Settings…, Show Logs, Open Data Folder,
-  Licenses, About Eidolon, Quit Eidolon); a click on it opens the window. Both get a context menu,
-  since Electron has none: cut, copy, paste and select all in a field, copy over selected text. The
-  About panel names the app's version and the server's.
+  Electron's: Eidolon (About, Check for Updates…, Settings…, Services, Hide, Hide Others, Show All,
+  Quit), Edit (its roles, without which copy and paste break), View (zoom, full screen, and Toggle
+  Developer Tools only unpackaged), Window (⌘W hides) and Help (Show Logs, Open Data Folder,
+  Licenses). Windows has no menu bar: main sets a menu of View's zoom roles alone, since Electron
+  would otherwise install its default one, whose accelerators act even under a hidden title bar,
+  and a notification-area icon holds the rest for the whole run (Open Eidolon, Settings…, Check for
+  Updates…, Show Logs, Open Data Folder, Licenses, About Eidolon, Quit Eidolon); a click on it
+  opens the window. Check for Updates… is there only when the app [updates itself](#updates) or
+  runs from a read-only volume, and disabled while a check, a download or the restart runs. Both
+  get a context menu, since Electron has none: cut, copy, paste and select all in a field, copy
+  over selected text. The About panel names the app's version and the server's.
 - **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, dialogs and the shell
   pages) come in English and Simplified Chinese, following the language the page reports and the
   system's until it has. Menus and the tray are rebuilt when it changes. Labels are Title Case,
@@ -371,7 +383,8 @@ window's top, and a window saved maximized is maximized only once it has painted
   default and Esc cancelling; it has no owner window, so a hidden window stays hidden, and a quit
   while it is open joins it. An attached server is never asked or stopped. On macOS a power-off
   skips the box until the window has attention again. Once the quit is approved, main hides the
-  window, removes the tray icon, stops its backend, and quits.
+  window, removes the tray icon, stops its backend, and quits. The restart that installs an update
+  goes the same way, with its own box ([Updates](#updates)).
 
 ## The environment
 
@@ -478,10 +491,11 @@ VC++ copies.
 `-c.extraMetadata.version=0.0.0-dev`, and with `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never
 signs with an identity from the keychain or asks for one. It needs `dist/` and warns when there is
 no stage. On macOS it writes `.out/mac-arm64/Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
-and `.out/win-unpacked`. The flags stay on the command line, never in `electron-builder.yml`, which
-a release config will extend: an identity there would replace the release's. Builds are unsigned
-(ad hoc on macOS, where that signs every Mach-O, the payload's natives included, with the hardened
-runtime): signing, notarization, the updater and releases come later.
+and `.out/win-unpacked`. Its builds are unsigned: ad hoc on macOS, where that signs every Mach-O,
+the payload's natives included, with the hardened runtime. The flags stay on the command line,
+never in `electron-builder.yml`, which the release overlay extends: an identity there would replace
+the release's Developer ID, and `test/release-config.test.ts` fails on one. Only `desktop.yml`
+builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing)).
 
 `electron-builder.yml`:
 
@@ -512,10 +526,193 @@ runtime): signing, notarization, the updater and releases come later.
   `appId`. `resources/installer.nsh` carries a workaround for electron-builder#6865; its uninstall
   removes the install folder alone. Installing, updating and uninstalling never touch the data home.
 - **`publish`** names the update feed, which electron-builder writes into the app's
-  `app-update.yml` for the updater to come; nothing is uploaded.
+  `app-update.yml` for the [updater](#updates); electron-builder uploads nothing (`--publish never`).
+
+`electron-builder.release.mjs`, the release overlay, extends it with the signing; only
+`desktop.yml`'s signed builds load it, and `test/release-config.test.ts` checks what it computes and
+what electron-builder's own loader and schema make of it:
+
+- **`publish.publisherName`:** `Sparanoid, Inc.` and `LAPLACE Live LLC`, the signer names a Windows
+  install accepts updates from ([Signing identities](#signing-identities)).
+- **macOS:** `notarize`, with the App Store Connect key from `APPLE_API_KEY`, `APPLE_API_KEY_ID` and
+  `APPLE_API_ISSUER` (notarizing staples the app); `forceCodeSigning`, so a build that finds no
+  Developer ID fails rather than ships ad hoc; and `requirements`, the designated requirement in
+  `resources/designated-requirement.mac`, whose name has no `.txt`: GitHub's dependency graph read
+  `requirements.mac.txt` as a package list and failed on it. The DMG stays unsigned and
+  unnotarized: electron-builder notarizes and staples only the app inside it, and updates take the
+  zip.
+- **Windows,** added only when it runs on Windows, since electron-builder's schema requires the
+  Azure names only that leg's environment has: `azureSignOptions` (Azure Trusted Signing at
+  `https://eus.codesigning.azure.net`, the account and profile from `AZURE_SIGNING_ACCOUNT_NAME` and
+  `AZURE_CERTIFICATE_PROFILE_NAME`), `forceCodeSigning`, and `signExts`, the names in
+  `.stage/win32-x64/unsigned-pe.json` ([The payload](#the-payload)), without which it throws.
+  electron-builder signs only `.exe` files unless told, and signs every file whose path ends with a
+  listed entry: an extension would re-sign Microsoft's DLLs over their signatures. Signing made the
+  Windows packaging 43–57 s longer on CI's runner, 2–4 s a file.
 
 The app needs macOS 13 or Windows 10 (x64), Electron's minimums. Intel Macs have no LanceDB or
 onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
+
+## Releasing
+
+A desktop release is a `laplace-eidolon-desktop@X.Y.Z` tag, and only the Release workflow makes one
+([releasing.md](releasing.md)): a changeset that names `laplace-eidolon-desktop` puts it in the
+version PR, which bumps `apps/desktop/package.json` and writes `apps/desktop/CHANGELOG.md`, and
+merging that PR pushes the tag with the release bot's token and creates its GitHub Release from the
+changelog. The tag runs `desktop.yml` in the tagged commit:
+
+1. **The tag check,** on each leg: it fails unless the commit is on master and the tag names
+   `apps/desktop/package.json`'s version. No ruleset guards the tags, so this is what keeps a token
+   that can push one from shipping a signed release of any other commit.
+2. **The signed build,** on each leg ([In CI](#in-ci)): the release overlay with that leg's own
+   secrets alone, then [the signed build's checks](#the-signed-builds-checks), then every check an
+   unsigned build gets, the packaged smoke of the signed app included. Once all of them passed, the
+   leg keeps its installers, the macOS zip, the blockmaps and `latest*.yml` as `<OS>-installers`,
+   for 90 days.
+3. **The upload,** a job of its own after both legs, so that a re-run sends the very bytes the legs
+   signed, where re-running a leg would sign new ones. Through the S3 API, to the `downloads`
+   bucket that `https://downloads.vrp.moe` serves:
+   - each installer and blockmap once, to `eidolon/v<version>/`, cached for a year as immutable. It
+     reads the SHA-256 the first upload stored with the key, and fails when another object is
+     there: Cloudflare would keep serving the first, and electron-updater rejects other bytes on
+     their checksum. It fails unless the legs left one DMG, one zip, one setup, the zip's and the
+     setup's blockmaps and both manifests, rather than upload less;
+   - `latest-mac.yml` and `latest.yml`, uncached, with `url:` and `path:` pointed into
+     `v<version>/` (electron-updater resolves both, and the previous version's blockmap it derives
+     from them, against the manifest's own URL) and the update dialog's notes appended, the one
+     `eidolonNotes:` line `node scripts/changelog.ts manifest` prints: first to `v<version>/`, then
+     to flat `eidolon/`, where installs look;
+   - the download links, uncached: `eidolon/Eidolon-mac-arm64.dmg` and
+     `eidolon/Eidolon-win-x64.exe`, the version's DMG and NSIS setup;
+   - `eidolon/changelog.json`, uncached: the repository's `changelog.json`, every release's notes,
+     for the website, at `https://downloads.vrp.moe/eidolon/changelog.json`. It changes only with a
+     desktop release, so a release of the npm package or the SDK alone reaches the website's copy
+     with the next desktop one.
+
+   None of the flat files is written when the flat manifests R2 serves already name a newer
+   version: an older release's late upload, a re-run of its failed job or a slower notarization,
+   would point the feed, the links and the website back at it. Its `v<version>/` files still go up.
+   Uploads run one at a time across releases, queued in the `desktop-r2-upload` concurrency group,
+   since two at once could both find R2 serving neither and the older write last; index rebuilds
+   queue the same way in `desktop-r2-index`.
+4. **The index:** `eidolon/releases.json`, the website's version history at
+   `https://downloads.vrp.moe/eidolon/releases.json`, rebuilt from a listing of `eidolon/v*`: each
+   version with the date of its first file, and its files but the blockmaps and manifests, each by
+   its URL from `eidolon/` and its size. It runs after the upload whatever became of it, so it
+   always lists what R2 holds.
+
+Nothing under `eidolon/v<version>/` is ever deleted or changed: installs download from there. A
+re-run sends the same bytes: the installers and blockmaps pass the check of the SHA-256 stored with
+each, and the manifests are made again from those and the tag's `changelog.json`.
+Every check of an object goes through the S3 API, never `https://downloads.vrp.moe`, whose zone
+answers curl and scripts with a challenge; electron-updater, whose user agent is `electron-builder`,
+gets through.
+
+### Dispatches
+
+A dispatch of `desktop.yml` builds unsigned, at `0.0.0-dev`, unless an input says otherwise:
+
+- **`sign`** builds signed, as a tag does, at `0.0.0-dev` on the `dev` channel, whose manifests are
+  `dev-mac.yml` and `dev.yml`. It keeps the installers, zip, blockmaps and manifests a day as
+  `<OS>-installers-signed-unreleased`, never on R2: in this public repository any signed-in user can
+  download a run's artifacts.
+- **`update_test`** builds 0.0.1 and 0.0.2 signed and updates the one to the other through the real
+  updater, on both platforms, on a feed of its own ([The update test](#the-update-test)).
+- **`release_index`** rebuilds `releases.json`.
+
+A dispatch takes one of the three at most, and the build job runs only without them. All three run
+only on `master` and `electron`, and a run elsewhere fails before any secret is read. `electron`
+stays a signing ref after the release work merged: it is where a signed build or the update test
+runs before a change reaches master.
+
+### Recovery
+
+- **A failed upload:** "Re-run failed jobs". It sends the same bytes again, which the SHA-256 check
+  lets through, then the manifests, the links, `changelog.json` and the index. Never "Re-run all
+  jobs" once an upload began: the legs would sign new bytes, which the upload refuses.
+- **A failed leg** uploaded nothing: "Re-run failed jobs" builds and signs it again, then uploads
+  both legs.
+- **A missing tag,** when the Release workflow failed before it pushed one: re-running that workflow
+  tags it ([releasing.md](releasing.md)).
+- **A bad release** is withdrawn by shipping a higher version, since electron-updater never offers a
+  lower one. Copying an older version's manifests and the download links back to flat `eidolon/`
+  only stops new installs of the bad one.
+
+### Signing identities
+
+- **A Windows install takes updates signed only by a name it already trusts.** Each setup it
+  downloads is checked against the signer names frozen into the install's `app-update.yml`, the
+  overlay's `publish.publisherName`, and refused otherwise; nothing on the feed widens an installed
+  list. The check is the app's own (`update-signature.ts`, electron-updater's
+  `verifyUpdateCodeSignature`): `Get-AuthenticodeSignature` must call the setup Valid and its
+  signer's CN one of the names. electron-updater's own check takes a PowerShell that fails or
+  doesn't answer within 20 s, then a 10 s probe, for an old one, and installs the setup
+  unchecked; on a CI runner PowerShell's cold start took that long. The app's waits 120 s and
+  refuses the update when the check can't run, and main.log says which: `Eidolon: the update's
+  signature is valid`, or why it doesn't check out. Every
+  release lists both of the org's names. Signing as a third takes an overlap: add it to
+  `PUBLISHER_NAMES`, keep signing as a listed name until installs have moved onto a release that
+  lists the new one, then switch the Azure profile secrets. An install that sits the overlap out
+  needs a reinstall.
+- **macOS pins the Apple team the same way.** Squirrel.Mac, under electron-updater, installs an
+  update only when it satisfies the running app's designated requirement, and the microphone grant
+  is tied to it too. `resources/designated-requirement.mac` accepts either of the org's teams,
+  `B5483RCL5H` or `9H3CCD4YMM`; electron-builder stamps it on every file it signs, helpers included,
+  so it names no bundle identifier, which would fail the helpers. Another team takes the same
+  overlap: ship a requirement that names it, signed by a team the old one accepts, then switch
+  `APPLE_CERTIFICATE` and `APPLE_API_*`.
+
+### The signed build's checks
+
+`scripts/signed-check.ts` (`node apps/desktop/scripts/signed-check.ts`, on what a signed package
+step left in `.out`) prints a `PASS` or `FAIL` line per check, as the smokes do, and exits 1 when
+one failed. `test/signed-check.test.ts` holds its verdicts to the tools' own output.
+
+- **macOS,** on `.out/mac-arm64/Eidolon.app`: `codesign --verify --deep --strict` passes; `spctl
+  --assess` accepts it as a notarized Developer ID; `stapler validate` finds the ticket; every
+  `.node` and `.dylib` in the payload has the hardened runtime and a secure timestamp from Apple's
+  server, which neither an ad-hoc signature nor `Signed Time` alone gives; and the designated
+  requirement of the app and of each helper app and framework is the requirement file's, as `csreq
+  -t` prints it.
+- **Windows:** it installs the setup silently for the user, refusing where Eidolon is installed
+  already, then reads `Get-AuthenticodeSignature` on the setup and on every PE file of the install,
+  found by its headers whatever its name. Each must be Valid and timestamped, since a Trusted
+  Signing certificate lasts three days and an untimestamped signature lapses with it. The setup,
+  every `.exe` in the install (`Eidolon.exe`, the uninstaller, `elevate.exe`) and every name the
+  stage listed must be signed by one of `publish.publisherName`'s names; every other file must keep
+  the Microsoft signature it came with (`MICROSOFT_SIGNERS`): onnxruntime's, the VC++ runtime and
+  Electron's `d3dcompiler_47.dll`. The install must hold each of those and every listed file, so no
+  check passes on nothing. Then it uninstalls.
+
+### Secrets
+
+Each leg gets its own platform's alone. `desktop.yml`'s jobs call `desktop-build.yml` (and the update
+test's, `desktop-update-test.yml`), which hold the steps: the unsigned `build` passes no secret,
+and `signed-mac` and `signed-win`, whose own `if` admits only a tag or a `sign` dispatch on
+`master` or `electron`, pass their platform's alone. That `if` is GitHub's, read before a runner is
+given; a step's `if` runs on the runner, so a secret any step of a job names reaches every runner
+of that job, a pull request's included. A dispatch's inputs are checked first, by the `inputs` job.
+In the signed package step:
+
+- **macOS:** `APPLE_CERTIFICATE` and `APPLE_CERTIFICATE_PASSWORD`, as `CSC_LINK` and
+  `CSC_KEY_PASSWORD`, which on Windows would send electron-builder to signtool (it imports the
+  Developer ID certificate into a temporary keychain itself); `APPLE_API_KEY`, written to
+  `$RUNNER_TEMP/apple-api-key.p8` by the step before and removed by one after, whatever happened;
+  `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`.
+- **Windows:** `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
+  `AZURE_SIGNING_ACCOUNT_NAME` and `AZURE_CERTIFICATE_PROFILE_NAME`.
+
+Those are the org's secrets. The upload and the index take the repository's own:
+`R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, and `CLOUDFLARE_ACCOUNT_ID` for the endpoint. Before
+the signed package step nothing runs that the run fetched, but the toolchain and what `bun.lock`
+pins, and no package's install script, which could rewrite the electron-builder the step runs with
+the secrets. In that step electron-builder installs Azure's TrustedSigning module from the
+PowerShell Gallery, at its newest version, to sign with.
+
+Only a run proves the release: the overlay and the checks' verdicts have their tests, but signing
+needs a `sign` dispatch from `master` or `electron` that passes both legs, the update an
+`update_test` dispatch, the index a `release_index` dispatch, which rewrites the live
+`releases.json` from R2's listing, and the upload, with the R2 credentials, a release's tag.
 
 ## Logs
 
@@ -549,7 +746,83 @@ onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
   <url>`; `Eidolon: the window is shown`, `… is hidden` and `… is closed` as main's own record of
   the window changes, which counts it as shown once it has painted, in background mode too; and at
   a quit `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`. Background mode also
-  logs each thing it keeps off the screen ([below](#background-mode)).
+  logs each thing it keeps off the screen ([below](#background-mode)), and the updater each of its
+  steps ([Updates](#updates)).
+
+## Updates
+
+electron-updater checks the release feed, `https://downloads.vrp.moe/eidolon`, which
+electron-builder writes into the packaged app's `app-update.yml` from `publish` in
+`electron-builder.yml`. `src/main/update-flow.ts` makes every decision without Electron, as
+laplace-persona's updater does but in native boxes, and `test/update-flow.test.ts` covers them;
+`src/main/updater.ts` runs it on electron-updater's `autoUpdater`.
+
+- **When it runs:** in a packaged install: on macOS anywhere but a read-only volume, and on
+  Windows only NSIS's per-user install in `%LOCALAPPDATA%\Programs\eidolon`
+  (`isUpdatableInstall`). Its installer installs there whatever runs it, so updating a copy
+  anywhere else, such as `win-unpacked`, would leave a second install beside it. Not unpackaged,
+  and not in background mode, unless a hook below says otherwise. main.log's `Eidolon: updates
+  are …` line says which, and why.
+- **A read-only copy on macOS:** run from its mounted DMG, or from the randomized read-only mount
+  Gatekeeper translocates a quarantined app to, Squirrel.Mac refuses an update, but only once the
+  whole zip has downloaded. So when `fs.accessSync` on the bundle's folder fails with `EROFS`
+  (`readOnlyFolder`), nothing is checked, and Check for Updates… stays, to say in a box that Eidolon
+  updates itself only from a folder it can write to: move it to the Applications folder, then open
+  it again. A folder that is only not the user's to write, `/Applications` for a standard account,
+  still updates: Squirrel.Mac asks for an administrator's password there.
+- **Checking:** once, quietly, 10 s after the backend is first ready, and from Check for Updates…
+  (in macOS's app menu after About, in Windows' tray menu after Settings…), which is disabled while
+  a check, a download or the restart runs. The quiet check only logs that the app is up to date or
+  that the check failed; Check for Updates… also says so in a box. A check asked while one runs
+  joins it.
+- **Downloading:** nothing downloads unasked (`autoDownload` is off). "Eidolon X.Y.Z is available"
+  offers Download, the default, Later and Release Notes, which opens the GitHub Release of
+  `laplace-eidolon-desktop@X.Y.Z` in the default browser, through the link policy. After Later or
+  Release Notes, Check for Updates… shows the box again without checking. The download's progress
+  shows on the Dock or the taskbar, cleared when it ends or fails; a failure offers Try Again, the
+  default, and Later. On macOS it is done only once Squirrel.Mac has fetched the zip from
+  electron-updater's local proxy, after `update-downloaded`.
+- **No box during a quit:** once a quit is under way, the window hidden and the backend stopping,
+  a check that lands or a download that ends shows no box, only main.log's `Eidolon: no update box
+  while quitting (available X.Y.Z)` or the like.
+- **Installing:** "Restart to finish updating" offers Restart, the default, and Later, which leaves
+  the update to `autoInstallOnAppQuit` at the next quit, with no relaunch. Restart moves the state
+  to installing first, so a second Restart does nothing: `quitAndInstall` twice asks Squirrel to
+  relaunch twice, which leaves two copies running. Then it goes the way a [quit](#the-window) goes:
+  the quit check, whose box names what a restart stops (on Windows the installer kills any
+  `Eidolon.exe` still running from the install folder, a CLI job's included); the latch, after
+  which a close no longer hides the window; the backend's graceful stop; and only then
+  `quitAndInstall(true, true)`, once. A Cancel there hands the state back to downloaded. None of it
+  runs inside `before-quit`: on macOS `quitAndInstall` closes every window before `before-quit`
+  fires, so a latch set there would let the hide-on-close window veto the relaunch, as persona's
+  did from 0.32.0 to 0.63.2.
+- **An error after the download,** such as Squirrel.Mac refusing the update, takes Restart away:
+  the update is in error, and the box offers Try Again. One that comes while the restart's quit
+  check asks calls the restart off once it's answered, before the latch: nothing is hidden or
+  stopped, main.log says `Eidolon: not restarting, since X.Y.Z can't be installed`, and the
+  failure's box offers Try Again. One that comes once the restart has stopped the backend, or from
+  inside `quitAndInstall`, which then never quits, starts the app again as it was
+  (`app.relaunch()`) rather than leave it hidden with its backend stopped.
+- **main.log** has a line for each step: `Eidolon: checking for updates`; then `Eidolon: update
+  available: X.Y.Z`, `Eidolon: up to date: X.Y.Z is the latest` or `Eidolon: the update check
+  failed: <reason>`; `Eidolon: downloading X.Y.Z`; `Eidolon: update downloaded: X.Y.Z` or
+  `Eidolon: the download of X.Y.Z failed: <reason>`; `Eidolon: restarting to install X.Y.Z`,
+  `Eidolon: quitting to install the update` and `Eidolon: installing X.Y.Z`, or `Eidolon: X.Y.Z
+  stays downloaded, to install at the next restart or quit`. A reason is the error's first line.
+  electron-updater's own lines go there too, and every URL in either has no query or fragment
+  (`loggedText()` in `policy.ts`).
+
+The QA hooks are read from the environment the app starts with, as `.env.example` lists them:
+
+| Variable | What it does |
+| --- | --- |
+| `EIDOLON_DESKTOP_DEV_UPDATE=1` | An unpackaged build checks the release feed through `apps/desktop/dev-app-update.yml` (`forceDevUpdateConfig`), which electron-updater reads only unpackaged, with a cache of its own, `eidolon-dev-updater`. A download and Restart act on the real release. Not in background mode |
+| `EIDOLON_DESKTOP_MOCK_UPDATE=1` | Fakes the whole flow, as persona's `PERSONA_MOCK_UPDATE` does, packaged or not and in background mode too, and reaches no network: the check finds 9.9.9 after 0.6 s, the first download fails at 60 %, Try Again completes it, and Restart only logs, the update back to downloaded after 1.5 s so the run repeats. Nothing is checked, stopped or quit |
+| `EIDOLON_DESKTOP_UPDATE_TEST=1` | For CI runners only: the one way the real updater runs in background mode, for [CI's update test](#the-update-test). A packaged install checks the feed its `app-update.yml` names, background mode answers Download, Restart and the quit check's box with their defaults, and the app stops its backend and installs, each step in main.log. Squirrel.Mac or the NSIS installer then starts the updated version outside background mode, on the default profile and the real data home, so a local run would end with a visible Eidolon |
+
+A packaged build reads only its own `resources/app-update.yml`, so a test of an update builds its
+older version with the feed it will serve (`-c.publish.url`, which electron-builder writes there),
+as [the update test](#the-update-test) builds both.
 
 ## Background mode
 
@@ -588,6 +861,10 @@ that could show something through it.
   and their `bun run app` with it.
 - **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
   Developer Tools, which opens a window, isn't offered unpackaged either.
+- **No updates:** no check runs and there is no Check for Updates…, unless
+  `EIDOLON_DESKTOP_MOCK_UPDATE` fakes the flow or, on a CI runner only,
+  `EIDOLON_DESKTOP_UPDATE_TEST` runs the real one ([Updates](#updates)), whose boxes take their
+  defaults, Download and Restart.
 - **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
   is granted only when the app runs with Chromium's `--use-fake-device-for-media-stream`, on any
   platform, and otherwise denied, since a grant would record the owner; main.log says which.
@@ -609,12 +886,17 @@ it, with its test, and the Electron code stays a thin layer over it. It covers t
 states, races and port fallbacks against fake children and real processes (`test/fake-server.ts`
 answers as the local server does); the forwarder's headers, gating, holding, connection proofs and
 errors against real local servers and the real local server booted in the test; the login-shell
-read and the merge, Windows' case-blind names included; the quit check and flow; links,
+read and the merge, Windows' case-blind names included; the quit check and flow; the updater's
+mode, flow, boxes and mock, with the restart on the real quit flow; links,
 navigation, permissions and the debugging switches; the bounds, chrome, menus and pages;
 background mode's decisions; both languages' strings; the shell pages' escaping and CSP; the
 bridges' sender rule; the logs' rotation and link filter; stage-backend's parts on made-up
-lockfiles, PE files and zips; the smokes' kit and parts, the fakes over real loopback requests
-included; the manifest; and the import boundary.
+lockfiles, PE files and zips; the release overlay through electron-builder's own loader, and
+signed-check's reading of codesign, Gatekeeper, stapler and Authenticode output; the release notes'
+parsing, slice and text; the smokes' kit and parts, the fakes over real loopback requests
+included; the update test's feed over real loopback requests and against the URLs electron-updater
+derives from a manifest, its steps against the lines the real updater logs, and its readings of an
+install; the manifest; and the import boundary.
 
 ### The stage test
 
@@ -816,38 +1098,135 @@ macOS.
 
 `ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips.
 `.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
-request that changes more than docs, and on a dispatch: the payload comes from `bun.lock` and the
-backend's packages, so a filter on `apps/desktop` would miss the changes it checks. Its one job runs
-on `macos-latest` (macOS arm64) and `windows-latest` (Windows x64), neither cancelling the other,
-in bash on both, with Bun from `package.json` and Node 24:
+request that changes more than docs, on a dispatch, and from a release's tag
+([Releasing](#releasing)): the payload comes from `bun.lock` and the backend's packages, so a filter
+on `apps/desktop` would miss the changes it checks. Its build runs on `macos-latest` (macOS
+arm64) and `windows-latest` (Windows x64), neither cancelling the other, in bash on both, with Bun
+from `package.json` and Node 24. The steps are `desktop-build.yml`'s, which `desktop.yml` calls
+unsigned for a pull request or a dispatch and signed for a tag or a `sign` dispatch, one job per
+platform with its secrets alone ([Secrets](#secrets)):
 
-1. **Install:** `bun install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
-   build step needs a package's install script, and a signing step must follow none.
-2. **Build:** `bun run build:desktop` stages the runner's backend and builds `dist/`.
-3. **Package:** `bun run package:desktop -c.compression=store`, unsigned at `0.0.0-dev`, ad hoc on
-   macOS and never with a keychain identity, an NSIS setup on Windows; stored uncompressed, which
-   packs faster.
-4. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
+1. **The checks before anything installs:** a tag's ([Releasing](#releasing)), or a dispatch's
+   inputs ([Dispatches](#dispatches)), the latter in `desktop.yml`'s `inputs` job.
+2. **Install:** `bun install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
+   build step needs a package's install script, and the signing step must follow none.
+3. **Build:** `bun run build:desktop` stages the runner's backend and builds `dist/`.
+4. **Package:** unsigned, `bun run package:desktop -c.compression=store`, at `0.0.0-dev`, ad hoc on
+   macOS and never with a keychain identity, an NSIS setup on Windows, stored uncompressed, which
+   packs faster. From a tag or a `sign` dispatch, signed instead: electron-builder with the release
+   overlay and that leg's secrets ([Secrets](#secrets)), then [the signed build's
+   checks](#the-signed-builds-checks).
+5. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
    instead of skipping; run after packaging, it also holds the app's payload to the stage.
-5. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
+6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
    Windows the tests `ts.yml`'s Windows job runs, with its filters.
-6. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
+7. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
    NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
    output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds
    `local-token`.
-7. **`--use-system-ca` on the packaged binary:** `scripts/system-ca.ts` puts a throwaway CA in the
+8. **`--use-system-ca` on the packaged binary:** `scripts/system-ca.ts` puts a throwaway CA in the
    runner's machine trust store (the System keychain through `sudo -n security` on macOS,
    LocalMachine's Root through `certutil` on Windows), serves https on loopback with a certificate
    it signed, and checks that the packaged binary in node mode reaches it with `--use-system-ca`
    and not without, from the backend and from a job the backend runs. Then it deletes the CA, while
    macOS keeps its admin trust entry, orphaned: removing that waits on a dialog no runner answers.
    It runs only where `CI=true`, and refuses anywhere else: it changes the machine's trust store.
-8. **The installers,** the DMG and the NSIS setup, uploaded as `<OS>-installers-dev` and kept 14
-   days; not the macOS zip, which only updates read.
+9. **The installers:** unsigned, the DMG and the NSIS setup, uploaded as `<OS>-installers-dev` and
+   kept 14 days; not the macOS zip, which only updates read. Signed, once every check passed, the
+   installers, the zip, the blockmaps and `latest*.yml`: a tag's as `<OS>-installers` for the
+   upload, a `sign` dispatch's as `<OS>-installers-signed-unreleased`.
 
 Each check runs once the step it needs succeeded, so one that fails hides none of the others. A
-push to a pull request cancels the run it replaces; a dispatch neither waits nor cancels. No
-identity signs anything, and nothing goes anywhere but the run's own artifacts.
+push to a pull request cancels the run it replaces, a tag's run is never cancelled, and a dispatch
+neither waits nor cancels. A pull request's run and an unsigned dispatch sign nothing, and send
+nothing anywhere but the run's own artifacts.
+
+#### The update test
+
+The `update_test` dispatch proves, with no one at a screen, that a signed install updates itself
+through its real updater: electron-updater against a feed, then Squirrel.Mac on macOS and the NSIS
+setup on Windows. Its own job runs on `macos-latest` and `windows-latest`, neither cancelling the
+other, in bash, within three hours:
+
+1. **The ref check,** in `desktop.yml`'s `inputs` job and the update-test jobs' own `if`, before
+   any secret is read: `master` or `electron` only, and no other dispatch input beside it. Each
+   platform's job calls `desktop-update-test.yml` with its own secrets alone.
+2. **Install and build,** as the build job does: no package's install script runs before signing.
+3. **0.0.1 and 0.0.2, signed:** the release overlay with that leg's secrets alone, twice, both
+   builds reading the feed `http://127.0.0.1:8765/` (`-c.publish.url`, which goes into
+   `app-update.yml`). 0.0.1's outputs move to `$RUNNER_TEMP/eidolon-update-0.0.1`, and the App Store
+   Connect key goes before anything runs the app. Neither can be an unsigned build: Squirrel.Mac
+   installs only an update that meets the running app's designated requirement, and
+   electron-updater on Windows only a setup signed by a name in `publish.publisherName`.
+4. **[The signed build's checks](#the-signed-builds-checks)** on 0.0.2.
+5. **`node apps/desktop/scripts/update-test.ts <0.0.1's outputs> apps/desktop/.out`,** which refuses
+   to run where `CI` isn't `true`: it installs the app for the user, and the app the update starts
+   again runs on the default profile and data home.
+   - **The feed:** a `node:http` server on `127.0.0.1:8765` with 0.0.2's `latest*.yml`, zip or setup
+     and blockmaps, and 0.0.1's blockmap, for the differential download electron-updater tries on
+     Windows against the setup the install cached. It answers whole or one range a request
+     (`useMultipleRangeRequest` is off), and refuses any other range with a 416 rather than send
+     the whole file where electron-updater writes the part. It starts only once it holds every file
+     electron-updater will ask for: those the manifest names, the update's blockmap, and the old
+     one's, named by putting the old version where the new one is.
+   - **0.0.1 installed:** on macOS the DMG attached read-only and its app copied into the run's
+     folder, since Squirrel.Mac replaces the bundle in place; on Windows the NSIS setup with `/S`
+     for the user, refusing where Eidolon is installed already. Its version is read back: the
+     bundle's `CFBundleShortVersionString` through `plutil`, or the uninstall entry's
+     `DisplayVersion` and `Eidolon.exe`'s `FileVersion`.
+   - **The update:** 0.0.1 starts in background mode with `EIDOLON_DESKTOP_UPDATE_TEST=1`, on a
+     temporary home and profile and with no account (`appEnv()`), and main.log must show each
+     [step's line](#updates) in order, from `updates are on in background mode` to `installing`,
+     each within its own limit of the one before: 10 minutes for the download, a few for the rest.
+     On Windows the steps include the setup's [signature check](#signing-identities), `the
+     update's signature is valid`, which a refusal stops.
+     A line after which the update can't go on without a person, such as `up to date`, a failed
+     check or download, or an update that can't be installed, fails it at once, as does main
+     exiting first; the failure names the last step's line and prints main.log's tail, with
+     ShipIt's on macOS. Then the feed must have served the manifest and the update, and main must
+     exit 0. On Windows that is both blockmaps and the setup in ranges alone: electron-updater
+     downloads the whole setup when its differential download fails, which the test would
+     otherwise pass. A Mac's first update downloads the zip whole, having none of its own to diff
+     against.
+   - **0.0.2 installed:** on Windows the setup electron-updater started, from
+     `%LOCALAPPDATA%\eidolon-updater\pending`, must end first, uninstalling 0.0.1 and installing
+     0.0.2. Then the same readings must say 0.0.2 within 10 minutes, a reading that fails while the
+     setup writes or PowerShell is slow only counting as no answer. A failure prints the install
+     folder's and the pending folder's files and `reg query`'s uninstall entries.
+   - **The app the update starts again,** if one starts: Squirrel.Mac and the NSIS setup start the
+     new version themselves, outside the test's environment, so on the default profile and, on
+     macOS, outside background mode. Found by its executable in the install, it must name 0.0.2 in
+     the start line it writes to the default profile's main.log; then a `--quit` through that
+     profile's lock stops it, and its processes by pid after.
+   - **Then** the uninstall entry's own command with `/S` on Windows or the copy deleted on macOS,
+     and nothing the test started left running.
+6. **On a failure,** the run's folder (`eidolon-update-test-*`) uploaded as `<OS>-update-test` for 7
+   days: the profile's logs, the launch's output, `feed.log` with every request the feed answered,
+   and copies of the default profile's logs and ShipIt's. Never the run's home, which holds
+   `local-token`.
+7. **Always,** whatever a failed or cancelled run left installed removed: through its uninstaller on
+   Windows, the copy on macOS.
+
+Dispatch it from `electron`, or from `master` once it is merged:
+
+```bash
+gh workflow run desktop.yml --ref electron -f update_test=true
+```
+
+What it can't see:
+
+- **The boxes.** Background mode answers each with its default button, so how they look and read,
+  the release's notes in the first, Later, Release Notes, Check for Updates…, and the progress on
+  the Dock or the taskbar go unchecked.
+- **The release's own feed.** It serves electron-builder's manifests as built, flat, without the
+  upload's `v<version>/` paths or `eidolonNotes` line, and with no R2 or Cloudflare in between.
+- **What a person's machine adds:** the microphone grant kept across the update on macOS, an install
+  in `/Applications` opened from Finder, SmartScreen and Smart App Control on Windows, and a call,
+  task or job running when Restart's quit check asks.
+- **A later update on macOS,** which downloads only the zip's changed blocks against the one the
+  last update cached: the first update has none, so it downloads the whole zip.
+- **The app it starts again on its own terms,** which runs outside background mode and on the
+  default profile, so it is only checked for its version and stopped.
 
 ### Driving it in background mode
 

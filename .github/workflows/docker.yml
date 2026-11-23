@@ -18,6 +18,8 @@ on:
       - "apps/*/test/**"
       - "packages/*/test/**"
       - ".changeset/**"
+      - "scripts/**"
+      - "changelog.json"
       - "README.md"
       - "AGENTS.md"
       - "CLAUDE.md"
@@ -42,6 +44,8 @@ on:
       - "packages/sdk/**"
       - ".agents/**"
       - ".github/workflows/desktop.yml"
+      - ".github/workflows/desktop-build.yml"
+      - ".github/workflows/desktop-update-test.yml"
       - ".env.example"
   pull_request:
     branches:
@@ -52,6 +56,8 @@ on:
       - "apps/*/test/**"
       - "packages/*/test/**"
       - ".changeset/**"
+      - "scripts/**"
+      - "changelog.json"
       - "README.md"
       - "AGENTS.md"
       - "CLAUDE.md"
@@ -70,6 +76,8 @@ on:
       - "packages/sdk/**"
       - ".agents/**"
       - ".github/workflows/desktop.yml"
+      - ".github/workflows/desktop-build.yml"
+      - ".github/workflows/desktop-update-test.yml"
       - ".env.example"
   repository_dispatch:
     types:

@@ -32,7 +32,7 @@ export function installQuit(options: QuitOptions): QuitFlow {
     log: mainLog,
   });
   const flow = new QuitFlow({
-    confirm: () => confirmation.confirm(),
+    confirm: (purpose) => confirmation.confirm(purpose),
     hideWindows: () => {
       hideWindow();
       options.approved();

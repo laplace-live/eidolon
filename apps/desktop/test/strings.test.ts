@@ -55,8 +55,47 @@ describe("STRINGS", () => {
       en.text.held,
       en.text.hideNoticeTitle,
       en.text.microphoneTitle,
+      en.text.updateAvailableTitle("0.2.0"),
+      en.text.updateDownloadedTitle,
+      en.text.upToDateTitle,
+      en.text.checkFailedTitle,
+      en.text.downloadFailedTitle,
+      en.text.readOnlyTitle,
     ];
     expect(titles.filter((title) => titleCase(title) === title)).toEqual([]);
+  });
+
+  test("the update's labels are Title Case, and the Chinese ones the web app's where it has them", () => {
+    expect([
+      en.label.checkForUpdates,
+      en.label.download,
+      en.label.later,
+      en.label.releaseNotes,
+      en.label.restart,
+    ]).toEqual(["Check for Updates…", "Download", "Later", "Release Notes", "Restart"]);
+    expect(webChinese("Download")).toBe(zh.label.download);
+    expect(zh.label.checkForUpdates).toBe("检查更新…");
+  });
+
+  test("the update's boxes name both versions, in both languages", () => {
+    expect(en.text.updateAvailableTitle("0.2.0")).toBe("Eidolon 0.2.0 is available");
+    expect(en.text.updateAvailable("0.1.0")).toContain("You have 0.1.0.");
+    expect(en.text.updateDownloaded("0.2.0")).toContain("Eidolon 0.2.0 is downloaded.");
+    expect(en.text.updateDownloaded("0.2.0")).toContain("installs the next time you quit Eidolon");
+    expect(en.text.upToDate("0.1.0")).toBe("Eidolon 0.1.0 is the latest version.");
+    expect(en.text.updateFailed).toContain(`${en.label.showLogs} has the details`);
+    expect(zh.text.updateAvailableTitle("0.2.0")).toBe("Eidolon 0.2.0 已发布");
+    expect(zh.text.updateAvailable("0.1.0")).toContain("当前版本为 0.1.0");
+    expect(zh.text.updateDownloaded("0.2.0")).toContain("0.2.0");
+    expect(zh.text.updateDownloaded("0.2.0")).toContain("下次退出 Eidolon 时安装");
+    expect(zh.text.updateFailed).toContain(`「${zh.label.showLogs}」`);
+  });
+
+  test("counts the notes past the box's list as not listed here, naming no page that has them", () => {
+    // Release Notes opens the offered version's Release alone, and they can be earlier versions'.
+    expect(en.text.notes.more(1)).toBe("1 more change isn't listed here.");
+    expect(en.text.notes.more(3)).toBe("3 more changes aren't listed here.");
+    expect(zh.text.notes.more(3)).toBe("另有 3 项改动未在此列出。");
   });
 
   test("names the Help menu, Show Logs and the tray icon as the web app's desktop copy does", () => {
@@ -134,6 +173,15 @@ describe("STRINGS", () => {
     expect(zh.text.quitDetail({ calls: 0, tasks: 3, jobs: 0 })).toBe("3 个任务会在退出时中断。");
     expect(en.text.aboutServer("0.13.0")).toBe("Server 0.13.0");
     expect(zh.text.aboutServer("0.13.0")).toBe("服务器 0.13.0");
+  });
+
+  test("names what the restart that installs an update stops, as the quit box does", () => {
+    const stopping = { calls: 1, tasks: 2, jobs: 1 };
+    expect(en.text.restartDetail(stopping)).toBe("Restarting stops the call, 2 tasks and a job.");
+    expect(en.text.quitDetail(stopping)).toBe("Quitting stops the call, 2 tasks and a job.");
+    expect(zh.text.restartDetail(stopping)).toBe("通话、2 个任务和 1 个作业会在重启时中断。");
+    expect(en.text.restartUnknown).toContain("Restarting stops any call, task or job");
+    expect(webChinese("Restart")).toBe(zh.label.restart);
   });
 });
 

@@ -30,8 +30,9 @@ import {
   packagedApp,
   packagedBinary,
   type Smoke,
-  sleep,
   startSmoke,
+  until,
+  within,
 } from "./smoke/kit.ts";
 import { namesUninstaller, silentUninstall, UNINSTALLER, uninstallEntries } from "./smoke/nsis.ts";
 import {
@@ -77,30 +78,10 @@ const UNINSTALL_MS = 120_000;
 /** Timings the results keep, in ms unless named otherwise. */
 type Numbers = Record<string, number>;
 
-/** `promise`'s value, or null once `ms` have passed. */
-function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([promise, sleep(ms).then(() => null)]);
-}
-
 /** The ms left of a step's `ms`, for each of its waits in turn: at least 1, a last look. */
 function budget(ms: number): () => number {
   const end = Date.now() + ms;
   return () => Math.max(end - Date.now(), 1);
-}
-
-/** `read()`'s value once `done` holds for it, or its last one at the timeout. */
-async function until<T>(
-  read: () => T | Promise<T>,
-  done: (value: T) => boolean,
-  timeoutMs: number,
-  everyMs = 250,
-): Promise<T> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const value = await read();
-    if (done(value) || Date.now() >= deadline) return value;
-    await sleep(everyMs);
-  }
 }
 
 /** The first line after `from` that holds `pattern`; at the timeout, an error naming the log's last. */
