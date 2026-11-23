@@ -442,7 +442,7 @@ through Electron's `Notification`.
 - **It answers nothing.** A notification has no action and no reply: only the task's card and the
   waiting bar answer a task. A click shows the window and, while the server's status counts no live
   call (a page that leaves a call hangs it up), opens the task in its chat
-  (`open-task:<chat>:<task>`), or the Tasks page for a task without one.
+  (`open-task:<chat>:<task>`), or the Tasks page for a task without one (`noticeCommand`).
 - **Its handle** is kept by task until the task's next notice replaces it or its wait ends: Electron
   drops a notification nothing holds, and its click with it.
 - **Which copies:** the packaged app, on Windows only its installed copy (`isUpdatableInstall`),
@@ -657,7 +657,7 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   0755), their `.cmd` twins (CRLF, each under `setlocal`) and `npx.mjs`; in `node_modules/pnpm`,
   the pnpm `apps/desktop` pins as an exact dev dependency, so `bun.lock` pins it as it pins the
   rest. `scripts/node-shim.ts`, ported from deepseek-harness, stages them from
-  `apps/desktop/node-shim` and the installed pnpm, which it prunes of the natives its `dist/`
+  `apps/desktop/node-shim` and a copy of the installed pnpm, pruned of the natives its `dist/`
   bundles for other platforms (`prunePnpmForeignNativePackages`), its bundled packages' `.bin`
   links, and `dist/vendor`'s fastlist executables, which nothing runs and the Windows release would
   sign as Eidolon's. [The stage test](#the-stage-test) holds them to their sources, the pin and the
