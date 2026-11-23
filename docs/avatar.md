@@ -82,8 +82,9 @@ parameters; the clips `Idle`, `Blink`, `Nod`, `Shake` and `Talk`; the hit areas 
 
 Importing one:
 
-- **Only a `.p2lrt`**, recognized by its bytes (`P2LRT` and three NULs), whatever its name;
-  anything else is 415 `unsupported-media-type`.
+- **Only a `.p2lrt`**, recognized by its bytes (`P2LRT` and three NULs), whatever its name: an
+  empty file is 400 `bad-request`, and anything else that doesn't start so is 415
+  `unsupported-media-type`.
 - **At most 200 MiB** (`MAX_MODEL_BYTES`, 209,715,200 bytes), counted as it streams: past that it is
   413 `payload-too-large`, and nothing is kept.
 - **Loaded before it is kept.** The server runs the wasm the SDK ships (`psd2liveDir()`,
@@ -124,8 +125,8 @@ The studio's **Appearance** section (形象), after Voice, holds one card, **How
   - **Framing** edits the call framing, a box of the rig's canvas, with the pointer and the wheel.
   - **Moods** sets the expressions each mood shows, and **Outfits** her outfits and the one she
     wears.
-- **Under reduced motion** the preview leaves out her talking and gesture clips, while a clip played
-  from the Test tab still plays.
+- **Under reduced motion** the preview plays no clip by itself, her idle included, while a clip
+  played from the Test tab still plays.
 
 ## The SDK's avatar entry
 
@@ -134,7 +135,8 @@ with no server half. Its API is in [client-sdk.md](client-sdk.md#avatars-eidolon
 is how the pieces fit:
 
 ```text
-a call's events               → direct()       → Direction      → stage.direct(direction)
+a call's events               → direct()       → DirectionState
+the DirectionState            → directionOf()  → Direction      → stage.direct(direction)
 an audio track                → MouthMeter                      → stage.mouth(meter)
 the model and its model.json  → resolveSetup() → ResolvedSetup  → stage.show(model, setup)
 each frame the stage applies what it was given to the model, then updates and draws it
@@ -148,8 +150,9 @@ each frame the stage applies what it was given to the model, then updates and dr
   three layers, the mouth, gaze, an outfit, bounds, hit tests, an alpha read, and update, draw and
   dispose. `loadPsd2liveModel` gives the PSD2Live one, on a runtime instance of its own, and
   `inspectPsd2liveRig` reads a file's inventory without WebGL.
-- **`direct()`** is a pure reducer from a call's events to her direction. Its state and its output
-  are plain data, so it can run where the call runs and cross a `MessagePort` to where she is drawn.
+- **`direct()`** is a pure reducer from a call's events to a `DirectionState`, from which
+  `directionOf()` reads her `Direction`. Both are plain data, so the reducer can run where the call
+  runs and what it gives cross a `MessagePort` to where she is drawn.
 - **The moods:** `moodTags` reads a direction into mood tags, `soundCueEffect` a cue into a lent
   mood and a gesture, and `resolveSetup` turns a model's `moods` and `gestures` into what the stage
   plays.
@@ -158,13 +161,14 @@ each frame the stage applies what it was given to the model, then updates and dr
 
 ## Direction and behaviors
 
-`direct(state, event)` turns a call's events into a `Direction`: her mood and a cue's lent mood,
+`direct(state, event)` folds each of a call's events into a `DirectionState`, and
+`directionOf(state, persona?)` reads her `Direction` from it: her mood and a cue's lent mood,
 whether she speaks, listens or thinks, where she looks, and the latest gesture. Each event carries
 `at`, milliseconds on any steady clock, and a `tick` every 100 ms or so lands the cues due by then
 and ends lent moods. The stage applies the direction each frame:
 
-- **Idle:** her `Idle` clip loops on clip layer 0 from the moment she is shown, while PSD2Live's
-  runtime blinks and breathes on its own.
+- **Idle:** unless reduced motion is on, her `Idle` clip loops on clip layer 0 from the moment she
+  is shown; PSD2Live's runtime blinks and breathes on its own either way.
 - **Listening:** while the viewer speaks she looks at them. When they stop and their words have
   come in, she nods; words that arrive after they stopped earn the nod as they arrive, and a stop
   with no words earns none.
@@ -191,15 +195,18 @@ and ends lent moods. The stage applies the direction each frame:
 - **A chat reply**, which no voice says (`reply`), sets her mood from its direction, and its cues
   land at her pace.
 - **Group calls:** a `speaker` event sends the bot events after it to that persona, while the
-  viewer's events reach everyone, so everyone nods.
+  viewer's events reach everyone, so everyone nods. `directionOf(state, persona)` gives each
+  persona's direction; without a persona it gives the speaking one's, or hers on a call with her
+  alone.
 - **Skipped:** word, token, backchannel and expression outputs, which repeat her sentences or sit
   outside her reply.
 - **Gaze:** at the viewer, (0, 0), while she listens; up and to the side, (0.35, 0.45), drifting
   slowly, while she thinks; otherwise around the viewer, within 0.15 on each axis, moving every 2 to
   5 s (each axis -1..1, x right, y up). A page can instead have her follow the pointer or hold a
   point (`gaze()`).
-- **Reduced motion** keeps her face, her mouth and her idle clip, and leaves out the talking and
-  gesture clips, the drift and the wandering eyes.
+- **Reduced motion** keeps her face, her mouth and where she looks, and the blinking and breathing
+  the runtime does by itself, and leaves out every clip (idle, talking and gestures), the drift and
+  the wandering eyes. A clip a page plays through `stage.model` still plays.
 
 ## Moods
 
@@ -338,9 +345,10 @@ no imports, so it reaches nothing but its own memory; at that commit its ABI is 
 `THIRD_PARTY_LICENSES.md` holds the licenses of the crates compiled into it (miniz_oxide, adler2,
 ruzstd, twox-hash).
 
-- **The ABI check:** the page and the server alike run it only at ABI 1.x, 1.2 or later
-  (`PSD2LIVE_ABI`): 1.2 brought clip layers with priorities, several expressions at once and lip
-  sync. The page refuses another as `AvatarError` `runtime`.
+- **The ABI check:** the page and the server alike run it only at ABI 1.x, 1.2 or later: 1.2
+  brought clip layers with priorities, several expressions at once and lip sync. The page checks
+  `PSD2LIVE_ABI` and refuses another as `AvatarError` `runtime`; the server's upload check holds
+  its own copy of that minimum, in `apps/bot/src/local/psd2live.ts`.
 - **The player** is ported, not vendored: `rig.ts` holds the half of PSD2Live's `p2l.js` that runs
   without WebGL and `renderer.ts` the half that draws, keeping upstream's method order so a refresh
   diffs cleanly.
@@ -352,7 +360,8 @@ ruzstd, twox-hash).
 - **Refreshing** follows [its README](../packages/sdk/src/avatar/psd2live/README.md): copy the
   newer commit's wasm and update every test that pins its SHA-256 (`git grep d8bbff52`), port
   upstream's `p2l.js` diff into `rig.ts` and `renderer.ts` with the headers' commit, copy the
-  licenses, and check `PSD2LIVE_ABI` against `runtime/include/p2l_runtime.h`.
+  licenses, and check `PSD2LIVE_ABI`, and the server's minimum in `apps/bot/src/local/psd2live.ts`,
+  against `runtime/include/p2l_runtime.h`.
 
 PSD2Live's spec for `.p2lrt` 2 adds features only as new chunks: the runtime skips an optional
 chunk it doesn't know and refuses a required one by its tag. A model that needs a newer runtime is
@@ -379,21 +388,17 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   the test rig, on PNG and zip bytes, on a cut-off file, a flipped byte inside a chunk and a changed
   version, and on a texture page that isn't a PNG inside the file; `appearance.test.ts` the ids, the
   folder an import makes, the 200 MiB limit declared and streamed, the call refusal, the active
-  model, every route, and ids that try to leave their folder. `static.test.ts` pins the CSP and the
-  wasm's type.
-- **The browser smoke**, `bun apps/bot/scripts/local-smoke.ts`
-  ([web-app.md](web-app.md#the-browser-smoke-test)), imports the test rig in the studio's
-  Appearance and checks its preview draws under the app's CSP. Its page health fails on any CSP
-  refusal, so a policy without `'wasm-unsafe-eval'` fails it.
+  model, every route, and ids that try to leave their folder. `static.test.ts` pins the CSP, its
+  `'wasm-unsafe-eval'` included, and the wasm's type.
 - **The npm package:** `ci-install-check.ts` imports the test rig into the packed server on Linux
   and Windows CI, which proves the upload check finds its runtime under `EIDOLON_APP_ROOT`, and the
   package's and the desktop stage's tests hold `data/psd2live/` in place.
 - **The test rig**, `apps/bot/test/local/fixtures/psd2live/tml.p2lrt`, is the CC0 `tml` character
   from psd2live-examples as PSD2Live 3.8.4's editor exports it: 3,471,396 bytes, six 1024² texture
-  pages, zstd-compressed chunks, clip ids `modifier:m32:…` under the names and groups `Idle`,
-  `Blink`, `Nod`, `Shake` and `Talk`, the seven standard expressions, `HitAreaHead` and
-  `HitAreaBody`, and a 2048² canvas. Its README says where it came from. The production image
-  leaves its folder out, and the SDK's tests read it by path.
+  pages, zstd-compressed chunks, the clips `Idle`, `Blink`, `Nod`, `Shake` and `Talk` (each its
+  name and its group, with the ids `modifier:m32:…` to `modifier:m36:…`), the seven standard
+  expressions, `HitAreaHead` and `HitAreaBody`, and a 2048² canvas. Its README says where it came
+  from. The production image leaves its folder out, and the SDK's tests read it by path.
 
 ## Measured
 
