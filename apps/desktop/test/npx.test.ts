@@ -751,11 +751,13 @@ describe("starting a command", () => {
     });
   });
 
-  test("escapes a word for cmd.exe as cross-spawn does", () => {
+  test("escapes a word for cmd.exe as cross-spawn does, a run of backslashes doubled whole", () => {
     expect(cross.escapeArgument("", false)).toBe('^"^"');
     expect(cross.escapeArgument('q"x', false)).toBe('^"q\\^"x^"');
     expect(cross.escapeArgument("C:\\dir\\", false)).toBe('^"C:\\dir\\\\^"');
     expect(cross.escapeArgument('a\\"b', false)).toBe('^"a\\\\\\^"b^"');
+    expect(cross.escapeArgument("C:\\dir\\\\", false)).toBe('^"C:\\dir\\\\\\\\^"');
+    expect(cross.escapeArgument('a\\\\"b\\\\\\', false)).toBe('^"a\\\\\\\\\\^"b\\\\\\\\\\\\^"');
     expect(cross.escapeArgument("100%!^<>|", false)).toBe('^"100^%^!^^^<^>^|^"');
     expect(cross.escapeArgument("&", true)).toBe('^^^"^^^&^^^"');
     expect(cross.escapeCommand("C:\\Program Files (x86)\\x.cmd")).toBe(
