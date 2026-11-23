@@ -9,7 +9,7 @@ import type { ModelClip, ModelInventory, ModelNamed, ModelParameter } from "./ap
 const MAGIC = [0x50, 0x32, 0x4c, 0x52, 0x54, 0, 0, 0];
 /** P2L_LOAD_VERIFY_CRC. */
 const VERIFY_CRC = 1;
-/** p2l_texture_info's kind for a PNG inside the file; a page drawn from anything else won't load. */
+/** p2l_texture_info's kind for a PNG inside the file, the only kind the web player draws. */
 const EMBEDDED_PNG = 0;
 // The runtime writes at most capacity - 1 bytes of its reason, so a reason is ≤ 200 characters.
 const ERROR_CAPACITY = 201;
