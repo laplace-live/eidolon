@@ -339,9 +339,9 @@ files in `~/.laplace/eidolon/sources/<id>/facts/` and re-run
 ## License
 
 Eidolon is licensed under version 3 of the GNU Affero General Public License
-([`LICENSE`](LICENSE)). The third-party code and data it includes, the code ported from pipedog,
-jieba's dictionary, the Silero VAD and Smart Turn models and the Geist font, keep their own
-licenses, in [`NOTICE`](NOTICE).
+([`LICENSE`](LICENSE)). The third-party code and data it includes keep their own licenses, in
+[`NOTICE`](NOTICE): the code ported from pipedog and from PSD2Live's web player, PSD2Live's
+runtime, jieba's dictionary, the Silero VAD and Smart Turn models, and the Geist font.
 
 ## References
 
