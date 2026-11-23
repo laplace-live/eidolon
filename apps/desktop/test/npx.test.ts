@@ -300,6 +300,16 @@ describe("the bins npm reads from a package.json", () => {
     });
   });
 
+  test("never follow a link in directories.bin, as npm's glob doesn't", () => {
+    const dir = tree({ "scripts/a": "", "scripts/sub/b": "" });
+    // One link back into it: a second would make a walk that follows links run without end.
+    symlinkSync("..", join(dir, "scripts", "sub", "up"));
+    expect(npx.binsOf({ name: "x", directories: { bin: "scripts" } }, dir)).toEqual({
+      a: "scripts/a",
+      b: "scripts/sub/b",
+    });
+  });
+
   test("pick the one bin, or one file's several names, or the package's own name", () => {
     expect(npx.binOf({ name: "x", bin: { a: "cli.js" } }, root)).toBe("a");
     expect(npx.binOf({ name: "x", bin: { a: "cli.js", b: "./cli.js" } }, root)).toBe("a");

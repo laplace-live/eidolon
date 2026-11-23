@@ -157,8 +157,10 @@ export function binsOf(manifest, dir) {
     const folder = path.posix.join("/", manifest.directories.bin.replace(/\\/g, "/")).slice(1);
     const root = path.resolve(dir, folder);
     let entries = [];
+    // npm's glob enters no link. A recursive readdir follows one to a folder, and two links back
+    // into it never end.
     try {
-      entries = readdirSync(root, { recursive: true, withFileTypes: true });
+      entries = globSync("**", { cwd: root, withFileTypes: true });
     } catch {}
     bin = {};
     for (const entry of entries) {
