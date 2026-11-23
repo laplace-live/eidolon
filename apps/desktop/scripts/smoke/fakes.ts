@@ -22,7 +22,7 @@ export const HEARD_REPLY = "听得到呀，声音很清楚。";
 export const SELFIE_REQUEST = "给我发张自拍吧";
 /** What she says beside that call. */
 export const SELFIE_SAID = "等我一下哦～";
-/** Her answer to a tool's result, start_task's aside. */
+/** Her answer to any tool's result but start_task's. */
 export const SELFIE_REPLY = "拍好啦，喜欢吗？";
 /** A line she answers with a start_task call, when the request offers it and a folder is set. */
 export const TASK_LINE = "帮我把截图按日期整理一下";
