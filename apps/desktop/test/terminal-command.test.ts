@@ -413,10 +413,9 @@ describe("on Windows", () => {
         args: script("query"),
         timeout: 60_000,
       });
-      expect(
-        Object.keys(runs[0]?.env ?? {}).filter((name) => /^psmodulepath$/i.test(name)),
-      ).toEqual([]);
-      expect(runs[0]?.env?.PATH).toBe(process.env.PATH);
+      // Compared whole: on Windows the PATH variable's name is usually Path.
+      const kept = Object.entries(process.env).filter(([name]) => !/^psmodulepath$/i.test(name));
+      expect(runs[0]?.env).toEqual(Object.fromEntries(kept));
     }
   });
 
