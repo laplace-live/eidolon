@@ -27,8 +27,12 @@ import {
   windowOf,
 } from "../../../apps/bot/src/chat/window.ts";
 import { fittedSize as serverFittedSize } from "../../../apps/bot/src/images.ts";
+import type { ModelInventory as ServerModelInventory } from "../../../apps/bot/src/local/api.ts";
+import { checkRig } from "../../../apps/bot/src/local/psd2live.ts";
 import { AUDIO_QUALITIES as SERVER_AUDIO_QUALITIES } from "../../access/src/audio-quality.ts";
 import { BOT_ABOUT } from "../../runtime/src/rtvi.ts";
+import { inspectPsd2liveRig, type ModelInventory } from "../src/avatar/index.ts";
+import { psd2liveRuntimeUrl } from "../src/avatar/psd2live/runtime.ts";
 import { fittedSize } from "../src/chat/files.ts";
 import {
   AUDIO_QUALITIES,
@@ -288,5 +292,23 @@ describe("one window rule for the SDK and the server", () => {
       if (!opened.ok) throw new Error(opened.message);
       expect([seed, (await opened.store.read(CHAT)).events]).toEqual([seed, sent.events]);
     }
+  });
+});
+
+describe("a model's inventory, read by the SDK and by the server", () => {
+  test("inspectPsd2liveRig reads the test rig as the server's upload check does", async () => {
+    const bytes = new Uint8Array(
+      readFileSync(join(ROOT, "apps/bot/test/local/fixtures/psd2live/tml.p2lrt")),
+    );
+    const server = checkRig(bytes);
+    if (!server.ok) throw new Error(server.message);
+    const sdk = await inspectPsd2liveRig(bytes, {
+      runtime: new Uint8Array(readFileSync(psd2liveRuntimeUrl())),
+    });
+    expect(sdk).toEqual(server.inventory);
+    // Each side's type takes the other's, so a field only one has fails the typecheck here.
+    const asServer: ServerModelInventory = sdk;
+    const asSdk: ModelInventory = server.inventory;
+    expect(asServer).toEqual(asSdk);
   });
 });
