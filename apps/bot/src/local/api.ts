@@ -29,6 +29,7 @@ export const LOCAL_ROUTES = [
   "PUT /api/local/accounts/:id",
   "DELETE /api/local/accounts/:id",
   "GET /api/local/accounts/:id/models",
+  "GET /api/local/accounts/:id/voices",
   "GET /api/local/personas",
   "POST /api/local/personas",
   "PUT /api/local/personas/active",
@@ -727,7 +728,12 @@ export interface VoiceSample {
   readonly audioUrl: string;
 }
 
-/** A Fish public voice, with absolute https URLs. */
+export const VOICE_VISIBILITIES = ["public", "unlist", "private"] as const;
+
+/** Who finds a Fish voice: everyone, whoever has its link, or its owner alone. */
+export type VoiceVisibility = (typeof VOICE_VISIBILITIES)[number];
+
+/** A Fish voice, with absolute https URLs. */
 export interface Voice {
   readonly id: string;
   readonly title: string;
@@ -739,6 +745,9 @@ export interface Voice {
   readonly author: string;
   readonly likeCount: number;
   readonly taskCount: number;
+  readonly visibility: VoiceVisibility;
+  /** ISO 8601; null where Fish gives none. */
+  readonly createdAt: string | null;
 }
 
 export interface VoiceSearchQuery {
@@ -754,6 +763,19 @@ export interface VoiceSearchResponse {
   readonly totalIsExact: boolean;
   readonly hasMore: boolean;
   readonly items: readonly Voice[];
+}
+
+/** GET accounts/:id/voices: a Fish account's own voices, newest first; `q` matches titles only. */
+export interface AccountVoicesQuery {
+  readonly q?: string;
+  /** Unset lists every one. */
+  readonly visibility?: VoiceVisibility;
+  readonly page?: number;
+}
+
+export interface AccountVoicesResponse extends VoiceSearchResponse {
+  /** `ok` with its voices; `no-key` while the account has no key; `refused` when Fish refused it. */
+  readonly status: "ok" | "no-key" | "refused";
 }
 
 /** POST personas/:id/batches: video URLs, as an `expand` job's entries name them. */
@@ -982,6 +1004,11 @@ export interface LocalApi {
   "PUT /api/local/accounts/:id": Endpoint<AccountUpdate, AccountView>;
   "DELETE /api/local/accounts/:id": Endpoint<undefined, Ok>;
   "GET /api/local/accounts/:id/models": Endpoint<undefined, ModelsResponse, ModelsQuery>;
+  "GET /api/local/accounts/:id/voices": Endpoint<
+    undefined,
+    AccountVoicesResponse,
+    AccountVoicesQuery
+  >;
   "GET /api/local/personas": Endpoint<undefined, PersonasResponse>;
   "POST /api/local/personas": Endpoint<CreatePersonaRequest, PersonaSummary>;
   "PUT /api/local/personas/active": Endpoint<ActivePersonaRequest, PersonasResponse>;

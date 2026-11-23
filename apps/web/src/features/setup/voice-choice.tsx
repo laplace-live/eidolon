@@ -1,5 +1,5 @@
-// Her voice from the provider she speaks through: Fish Audio's public library, one of a provider's
-// fixed set, or the id of a voice in its library.
+// Her voice from the provider she speaks through: her Fish account's voices or Fish Audio's public
+// library, one of a provider's fixed set, or the id of a voice in its library.
 import { ph } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useId } from "react";
@@ -17,6 +17,7 @@ import { providerById, providerName } from "@/lib/providers";
 
 export function VoiceChoice({
   provider,
+  account,
   value,
   fallback,
   onChange,
@@ -24,6 +25,7 @@ export function VoiceChoice({
 }: {
   /** The voice provider's catalog id. */
   readonly provider: string;
+  readonly account: string | null;
   /** The voice chosen here, or null before one is. */
   readonly value: string | null;
   /** What she speaks with while none is chosen: hers, the environment's, or the provider's own. */
@@ -41,6 +43,7 @@ export function VoiceChoice({
       <VoicePicker
         value={value ?? fallback}
         onChange={(voice) => onChange(voice.id)}
+        account={account}
         disabled={disabled}
       />
     );

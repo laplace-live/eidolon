@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 /** A Fish voice's id, as its page on fish.audio shows it. */
 const VOICE_ID = /^[0-9a-f]{32}$/;
 
-/** A voice the public search can't find, such as a private one of her own account, by its id. */
+/** A voice neither list shows, such as another account's unlisted one, by its id. */
 export function VoiceById({
   disabled,
   onUse,
@@ -64,7 +64,7 @@ export function VoiceById({
       >
         {invalid
           ? t`A Fish voice ID is 32 characters of 0–9 and a–f.`
-          : t`For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio.`}
+          : t`For a voice neither list shows, such as one shared with you by link: copy its ID from its page on fish.audio.`}
       </p>
     </form>
   );

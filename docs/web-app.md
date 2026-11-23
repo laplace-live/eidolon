@@ -220,7 +220,7 @@ server log's line that holds what went wrong, and the app shows it beside the de
 | Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar` | Outfits and friends under `references/`, and the avatar, `avatar.*` at the root of her folder, where selfies never take it for an outfit; a template's pictures can't be deleted |
 | Knowledge | `personas/:id/facts[/:file]`, `GET personas/:id/index` | Fact files with whether the patterns pick them and whether they changed since the last index; the index from its build records |
 | Videos | `POST personas/:id/batches` | `{urls}` → a new batch of the URLs her lists don't have yet |
-| Voices | `GET voices/search?q=&language=&page=` | Fish Audio's public voices, searched without your key |
+| Voices | `GET voices/search?q=&language=&page=`, `GET accounts/:id/voices?q=&visibility=&page=` | Fish Audio's public voices, searched without your key; a Fish account's own, private and unlisted ones included, newest first, listed with its key, and `status` saying when it has no key or Fish refuses it |
 | Jobs | `POST jobs`, `GET jobs`, `GET jobs/:id`, `…/events?after=`, `…/log`, `DELETE jobs/:id`, `POST jobs/:id/resume` | [Jobs](#jobs) |
 | Memories | `GET`, `DELETE memories?persona=` | One persona's memories of you |
 | Usage | `GET usage?from=&to=&persona=` | The usage ledger's spend summed by day, persona, provider, task and model, every persona and provider it knows, and whether it records at all ([providers.md](providers.md#usage-and-cost)) |
@@ -311,8 +311,9 @@ calls need is missing, every page but Settings sends you to its first.
   then saves and checks every key. A persona on a realtime model is asked for its account's key in
   place of the three.
 - **Persona** keeps the active persona, takes the demo, or creates one.
-- **Voice** offers the voices of the provider she speaks through: Fish Audio's public library, one
-  of OpenAI's fixed set, or for another provider the id of a voice in its library. A new persona
+- **Voice** offers the voices of the provider she speaks through: on Fish Audio, the voices of her
+  account, private ones included, beside the public library, opening on hers once there are any;
+  one of OpenAI's fixed set; or for another provider the id of a voice in its library. A new persona
   starts on the active persona's providers, so hers is that persona's voice provider, as it is in
   **New Persona** outside the wizard.
 

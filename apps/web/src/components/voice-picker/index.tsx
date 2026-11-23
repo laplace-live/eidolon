@@ -1,98 +1,55 @@
-// Searches Fish Audio's public voices (GET voices/search) and previews their samples: the wizard's
-// voice step, persona creation and the studio's voice tab use it. Search goes out without the key,
-// so it never takes a TTS slot from a live call; samples play only through <audio src>.
+// Fish Audio voices to pick from, with their samples: the account's own, private ones included
+// (GET accounts/:id/voices), and the public library (GET voices/search), which goes out without the
+// key, so it never takes a TTS slot from a live call. The wizard's voice step, persona creation,
+// home's voice dialog and the studio's voice tab use it; samples play only through <audio src>.
 
-import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { CheckIcon, HeartIcon, SearchIcon } from "lucide-react";
-import { type SyntheticEvent, useEffect, useId, useRef, useState } from "react";
-import { EmptyState } from "@/components/empty-state";
-import { ErrorAlert } from "@/components/error-alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
-import { call, type Voice } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import {
-  DEFAULT_SEARCH_LANGUAGE,
-  httpsOnly,
-  nextPage,
-  SEARCH_LANGUAGES,
-  type SearchLanguage,
-  voiceCount,
-} from "./voices";
+import { useInfiniteQuery, usePrefetchInfiniteQuery } from "@tanstack/react-query";
+import { type SyntheticEvent, useRef, useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { Voice } from "@/lib/api";
+import { formatCount } from "@/lib/format";
+import { useLang } from "@/locales/i18n";
+import { type LibraryFilter, LibraryPanel } from "./library";
+import { MinePanel, type OwnFilter } from "./mine";
+import { type ListProps, ResultsSkeleton } from "./parts";
+import { libraryQuery, ownVoicesQuery } from "./queries";
+import { DEFAULT_SEARCH_LANGUAGE, openingSource, type VoiceSource } from "./voices";
 
 export interface VoicePickerProps {
   /** The chosen voice's id (FISH_VOICE_ID), or null before one is picked. */
   readonly value: string | null;
   readonly onChange: (voice: Voice) => void;
+  /** The Fish account she speaks through, whose own voices it lists; null for the library alone. */
+  readonly account: string | null;
   readonly disabled?: boolean;
   /** Leaves out the line naming a chosen voice the results don't show, for a page that names it. */
   readonly hideCurrent?: boolean;
 }
 
-const DEBOUNCE_MS = 350;
-const ANY = "any";
-const LANGUAGE_NAMES = {
-  zh: msg`Chinese`,
-  en: msg({ message: "English", context: "voice language" }),
-  ja: msg`Japanese`,
-  "": msg`Any Language`,
-} satisfies Record<SearchLanguage, unknown>;
-
-function useDebounced(value: string): string {
-  const [settled, setSettled] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [value]);
-  return settled;
-}
-
 export function VoicePicker({
   value,
   onChange,
+  account,
   disabled = false,
   hideCurrent = false,
 }: VoicePickerProps) {
   const { t } = useLingui();
-  const searchId = useId();
-  const [text, setText] = useState("");
-  const [language, setLanguage] = useState<SearchLanguage>(DEFAULT_SEARCH_LANGUAGE);
-  const q = useDebounced(text.trim());
-  const playing = useRef<HTMLAudioElement | null>(null);
-
-  const search = useInfiniteQuery({
-    queryKey: ["voices", q, language],
-    queryFn: ({ pageParam, signal }) =>
-      call("GET /api/local/voices/search", {
-        query: { q: q || undefined, language: language || undefined, page: pageParam },
-        signal,
-      }),
-    initialPageParam: 1,
-    getNextPageParam: (last, pages) => nextPage(last, pages.length),
-    placeholderData: keepPreviousData,
-    staleTime: 5 * 60_000,
+  const lang = useLang();
+  const [library, setLibrary] = useState<LibraryFilter>({
+    text: "",
+    language: DEFAULT_SEARCH_LANGUAGE,
   });
-
-  const voices = [
-    ...new Map(
-      (search.data?.pages ?? []).flatMap((page) => page.items).map((voice) => [voice.id, voice]),
-    ).values(),
-  ];
-  const first = search.data?.pages[0];
-  const chosenShown = value !== null && voices.some((voice) => voice.id === value);
+  const [mine, setMine] = useState<OwnFilter>({ text: "", visibility: "" });
+  const [picked, setPicked] = useState<VoiceSource | null>(null);
+  const playing = useRef<HTMLAudioElement | null>(null);
+  // Every voice of the account, whatever the search: whether it has any picks the opening list.
+  const own = useInfiniteQuery({
+    ...ownVoicesQuery(account ?? "", "", ""),
+    enabled: account !== null,
+  });
+  // So the library is ready if it turns out to be where the picker opens.
+  usePrefetchInfiniteQuery(libraryQuery("", DEFAULT_SEARCH_LANGUAGE));
 
   // One sample at a time: starting another pauses the one playing.
   function onPlay(event: SyntheticEvent<HTMLAudioElement>) {
@@ -100,178 +57,47 @@ export function VoicePicker({
     playing.current = event.currentTarget;
   }
 
+  const shared: ListProps = { value, hideCurrent, disabled, onChoose: onChange, onPlay };
+  const libraryPanel = <LibraryPanel filter={library} onFilter={setLibrary} {...shared} />;
+  if (account === null) return libraryPanel;
+
+  const first = own.data?.pages[0];
+  const source = picked ?? openingSource(first, own.isError);
+  const count =
+    first?.status === "ok" && first.total > 0
+      ? `${formatCount(first.total, lang)}${first.totalIsExact ? "" : "+"}`
+      : null;
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor={searchId}>{t`Search Voices`}</Label>
-          <InputGroup>
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              id={searchId}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder={t`A name or a style, e.g. 温柔`}
-              disabled={disabled}
-              autoComplete="off"
-            />
-            {search.isFetching && (
-              <InputGroupAddon align="inline-end">
-                <Spinner />
-              </InputGroupAddon>
-            )}
-          </InputGroup>
-        </div>
-        <Select
-          value={language || ANY}
-          onValueChange={(next) => setLanguage(next === ANY ? "" : (next as SearchLanguage))}
-          disabled={disabled}
-        >
-          <SelectTrigger className="w-full sm:w-40" aria-label={t`Voice Language`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SEARCH_LANGUAGES.map((code) => (
-              <SelectItem key={code || ANY} value={code || ANY}>
-                {t(LANGUAGE_NAMES[code])}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <p className="text-muted-foreground text-xs">{t`She speaks Mandarin, so the search starts among Chinese voices.`}</p>
-
-      {value !== null && !chosenShown && !hideCurrent && (
-        <p className="text-sm">
-          {t`Current voice:`} <code className="font-mono text-xs">{value}</code>
-        </p>
-      )}
-
-      {search.isError && <ErrorAlert error={search.error} />}
-
-      {search.isPending ? (
-        <div className="flex flex-col divide-y rounded-xl border bg-card">
-          {["a", "b", "c"].map((key) => (
-            <div key={key} className="flex items-center gap-3 px-4 py-3">
-              <Skeleton className="size-12 rounded-md" />
-              <div className="flex flex-1 flex-col gap-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-full max-w-sm" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : voices.length === 0 && !search.isError ? (
-        <EmptyState icon={<SearchIcon />} title={t`No voices match.`} />
-      ) : (
-        <>
-          {first && <p className="text-muted-foreground text-xs">{voiceCount(first)}</p>}
-          <ul className="flex max-h-[28rem] flex-col divide-y overflow-y-auto rounded-xl border bg-card">
-            {voices.map((voice) => (
-              <VoiceRow
-                key={voice.id}
-                voice={voice}
-                chosen={voice.id === value}
-                disabled={disabled}
-                onChoose={() => onChange(voice)}
-                onPlay={onPlay}
-              />
-            ))}
-          </ul>
-          {search.hasNextPage && (
-            <Button
-              variant="outline"
-              onClick={() => void search.fetchNextPage()}
-              disabled={search.isFetchingNextPage}
-            >
-              {search.isFetchingNextPage && <Spinner />}
-              {t`Show More`}
-            </Button>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-interface VoiceRowProps {
-  readonly voice: Voice;
-  readonly chosen: boolean;
-  readonly disabled: boolean;
-  readonly onChoose: () => void;
-  readonly onPlay: (event: SyntheticEvent<HTMLAudioElement>) => void;
-}
-
-function VoiceRow({ voice, chosen, disabled, onChoose, onPlay }: VoiceRowProps) {
-  const { t } = useLingui();
-  const cover = httpsOnly(voice.coverUrl);
-  const sample = voice.samples.map((s) => httpsOnly(s.audioUrl)).find((src) => src !== null);
-  return (
-    <li
-      className={cn(
-        "flex flex-col gap-3 px-4 py-3 transition-colors sm:flex-row sm:items-center",
-        chosen && "bg-muted/60",
-      )}
+    <Tabs
+      value={source ?? ""}
+      onValueChange={(next) => setPicked(next === "mine" ? "mine" : "library")}
+      className="gap-3"
     >
-      <div className="flex min-w-0 flex-1 items-start gap-3">
-        {cover ? (
-          <img
-            src={cover}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className="size-12 shrink-0 rounded-md bg-muted object-cover"
-          />
-        ) : (
-          <div className="size-12 shrink-0 rounded-md bg-muted" />
-        )}
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="truncate font-medium">{voice.title}</span>
-            {voice.languages.slice(0, 3).map((code) => (
-              <Badge key={code} variant="secondary">
-                {code}
-              </Badge>
-            ))}
-          </div>
-          {voice.description && (
-            <p className="line-clamp-2 text-muted-foreground text-xs">{voice.description}</p>
+      <TabsList>
+        <TabsTrigger value="mine" className="px-3">
+          {t`My Voices`}
+          {count !== null && (
+            <span className="text-muted-foreground text-xs tabular-nums">{count}</span>
           )}
-          <p className="flex items-center gap-2 text-muted-foreground text-xs">
-            <span className="truncate">{voice.author}</span>
-            <span className="flex items-center gap-0.5">
-              <HeartIcon className="size-3" />
-              {voice.likeCount}
-            </span>
-          </p>
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {sample ? (
-          // biome-ignore lint/a11y/useMediaCaption: a voice sample is speech the viewer listens to; Fish ships no captions for it.
-          <audio
-            controls
-            preload="none"
-            src={sample}
-            onPlay={onPlay}
-            className="h-8 w-56 max-w-full"
-          />
-        ) : (
-          <span className="text-muted-foreground text-xs">{t`No sample`}</span>
-        )}
-        <Button
-          size="sm"
-          variant={chosen ? "default" : "outline"}
-          aria-pressed={chosen}
-          disabled={disabled}
-          onClick={onChoose}
-        >
-          {chosen && <CheckIcon />}
-          {chosen ? t`Chosen` : t`Choose`}
-        </Button>
-      </div>
-    </li>
+        </TabsTrigger>
+        <TabsTrigger value="library" className="px-3">
+          {t`Public Library`}
+        </TabsTrigger>
+      </TabsList>
+      {source === null && <ResultsSkeleton />}
+      {/* A tab panel is text-sm; the lists keep the size their page gives them. */}
+      <TabsContent value="mine" className="min-w-0 text-[length:inherit]">
+        <MinePanel
+          account={account}
+          overview={first}
+          filter={mine}
+          onFilter={setMine}
+          {...shared}
+        />
+      </TabsContent>
+      <TabsContent value="library" className="min-w-0 text-[length:inherit]">
+        {libraryPanel}
+      </TabsContent>
+    </Tabs>
   );
 }

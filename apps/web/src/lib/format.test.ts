@@ -3,6 +3,7 @@ import {
   elapsedSeconds,
   formatBytes,
   formatClock,
+  formatDate,
   formatDuration,
   formatSpend,
   formatUsd,
@@ -84,4 +85,12 @@ test("elapsed time runs to the end, or to now while there is none", () => {
   expect(elapsedSeconds(start, "2026-11-05T10:01:30Z", 0)).toBe(90);
   expect(elapsedSeconds(start, null, Date.parse("2026-11-05T10:00:10Z"))).toBe(10);
   expect(elapsedSeconds("not a date", null, 0)).toBe(0);
+});
+
+test("a date reads in the viewer's language, and one that doesn't parse as it came", () => {
+  // Local noon: May 15 in every time zone a test runs in, as no single UTC instant is.
+  const noon = new Date(2026, 4, 15, 12).toISOString();
+  expect(formatDate(noon, "en")).toBe("May 15, 2026");
+  expect(formatDate(noon, "zh-Hans")).toBe("2026年5月15日");
+  expect(formatDate("not a date", "en")).toBe("not a date");
 });

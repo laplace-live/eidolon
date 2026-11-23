@@ -88,6 +88,7 @@ export function Component() {
       <VoiceDialog
         persona={persona}
         current={persona.voice.id}
+        account={persona.voice.provider === "fish" ? persona.voice.account : null}
         open={pickingVoice}
         onOpenChange={setPickingVoice}
       />

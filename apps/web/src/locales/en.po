@@ -541,7 +541,7 @@ msgstr "A link works for 10 minutes."
 msgid "A message holds up to {count} files"
 msgstr "A message holds up to {count} files"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "A name or a style, e.g. 温柔"
 msgstr "A name or a style, e.g. 温柔"
 
@@ -676,6 +676,10 @@ msgstr "Add every key above to continue."
 msgid "Add Facts"
 msgstr "Add Facts"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Add its key in <0>Settings → Providers</0> to see the voices you made on Fish Audio."
+msgstr "Add its key in <0>Settings → Providers</0> to see the voices you made on Fish Audio."
+
 #: src/features/call/call-page.tsx
 #: src/features/chats/chat-view.tsx
 #: src/features/home/readiness-labels.ts
@@ -762,6 +766,10 @@ msgstr "All Skills"
 #: src/features/usage/route.tsx
 msgid "All Time"
 msgstr "All Time"
+
+#: src/components/voice-picker/parts.tsx
+msgid "All Voices"
+msgstr "All Voices"
 
 #: src/features/tasks/cards.tsx
 msgid "Allow Any Site"
@@ -897,7 +905,7 @@ msgstr "Another app is using your microphone. Close it, then try again."
 msgid "Another run is already working on this persona."
 msgstr "Another run is already working on this persona."
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Any Language"
 msgstr "Any Language"
 
@@ -1374,6 +1382,10 @@ msgstr "Check failed"
 msgid "Check it below. Already running Qdrant here? Just check its address."
 msgstr "Check it below. Already running Qdrant here? Just check its address."
 
+#: src/components/voice-picker/mine.tsx
+msgid "Check it in <0>Settings → Providers</0>."
+msgstr "Check it in <0>Settings → Providers</0>."
+
 #: src/features/studio/add-videos.tsx
 msgid "Check Links"
 msgstr "Check Links"
@@ -1398,11 +1410,11 @@ msgstr "Check your microphone, then try again."
 msgid "Checking on the task…"
 msgstr "Checking on the task…"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Chinese"
 msgstr "Chinese"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "Choose"
 msgstr "Choose"
 
@@ -1418,7 +1430,7 @@ msgstr "Choose the account and model tasks run on in Settings, and add a key for
 msgid "Choosing a voice saves it for {name}."
 msgstr "Choosing a voice saves it for {name}."
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "Chosen"
 msgstr "Chosen"
 
@@ -1572,6 +1584,10 @@ msgstr "Couldn't reach the provider."
 msgid "Create"
 msgstr "Create"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Create a Voice on Fish Audio"
+msgstr "Create a Voice on Fish Audio"
+
 #: src/features/setup/voice-step.tsx
 msgid "Create Her"
 msgstr "Create Her"
@@ -1580,11 +1596,15 @@ msgstr "Create Her"
 msgid "Create Your Own"
 msgstr "Create Your Own"
 
+#: src/components/voice-picker/parts.tsx
+msgid "Created {date}"
+msgstr "Created {date}"
+
 #: src/components/settings-form/check-result.tsx
 msgid "Credit left: {amount}"
 msgstr "Credit left: {amount}"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "Current voice:"
 msgstr "Current voice:"
 
@@ -1956,7 +1976,7 @@ msgstr "Enabled"
 msgid "Ended with an error ({when})."
 msgstr "Ended with an error ({when})."
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgctxt "voice language"
 msgid "English"
 msgstr "English"
@@ -2138,6 +2158,10 @@ msgstr "Fish Audio can't use the voice {name} inherits from the environment, so 
 msgid "Fish Audio can't use the voice she inherits from <0>{env}</0>. Pick her own below."
 msgstr "Fish Audio can't use the voice she inherits from <0>{env}</0>. Pick her own below."
 
+#: src/components/voice-picker/mine.tsx
+msgid "Fish Audio refused this account's key"
+msgstr "Fish Audio refused this account's key"
+
 #: src/components/settings-form/labels.ts
 msgid "Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken."
 msgstr "Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken."
@@ -2178,8 +2202,8 @@ msgid "Folders every task may read and write besides its own, one per line."
 msgstr "Folders every task may read and write besides its own, one per line."
 
 #: src/features/studio/voice-by-id.tsx
-msgid "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
-msgstr "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
+msgid "For a voice neither list shows, such as one shared with you by link: copy its ID from its page on fish.audio."
+msgstr "For a voice neither list shows, such as one shared with you by link: copy its ID from its page on fish.audio."
 
 #: src/features/jobs/parts.tsx
 msgid "Force Stop"
@@ -2401,8 +2425,8 @@ msgstr "How {name} sounds."
 
 #: src/features/home/voice-dialog.tsx
 #: src/features/setup/voice-step.tsx
-msgid "How {name} sounds. Search Fish Audio's public voices and play a sample before you pick one."
-msgstr "How {name} sounds. Search Fish Audio's public voices and play a sample before you pick one."
+msgid "How {name} sounds. Choose from your own Fish Audio voices or the public library, and play a sample before you pick one."
+msgstr "How {name} sounds. Choose from your own Fish Audio voices or the public library, and play a sample before you pick one."
 
 #: src/features/studio/knowledge-section.tsx
 msgid "How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her."
@@ -2782,7 +2806,7 @@ msgstr "Its spend pauses are off."
 msgid "Its Voice"
 msgstr "Its Voice"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Japanese"
 msgstr "Japanese"
 
@@ -3180,6 +3204,10 @@ msgstr "Month"
 msgid "Mute your mic"
 msgstr "Mute your mic"
 
+#: src/components/voice-picker/index.tsx
+msgid "My Voices"
+msgstr "My Voices"
+
 #: src/features/settings/account-dialog.tsx
 #: src/features/settings/new-skill-dialog.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -3341,7 +3369,7 @@ msgstr "No Qdrant address is set."
 msgid "No result"
 msgstr "No result"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "No sample"
 msgstr "No sample"
 
@@ -3409,9 +3437,13 @@ msgstr "No voice styles yet"
 msgid "No voice yet"
 msgstr "No voice yet"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "No voices match."
 msgstr "No voices match."
+
+#: src/components/voice-picker/mine.tsx
+msgid "No voices of your own yet"
+msgstr "No voices of your own yet"
 
 #: src/features/tasks/labels.ts
 msgid "No Web"
@@ -3881,6 +3913,10 @@ msgstr "Play Voice Message"
 msgid "Playback Position"
 msgstr "Playback Position"
 
+#: src/components/voice-picker/parts.tsx
+msgid "Private"
+msgstr "Private"
+
 #: src/features/studio/route.tsx
 msgid "Profile"
 msgstr "Profile"
@@ -3915,6 +3951,10 @@ msgstr "Provider Accounts"
 msgid "Providers"
 msgstr "Providers"
 
+#: src/components/voice-picker/parts.tsx
+msgid "Public"
+msgstr "Public"
+
 #: src/components/settings-form/labels.ts
 msgid "Public Chat Personas"
 msgstr "Public Chat Personas"
@@ -3922,6 +3962,10 @@ msgstr "Public Chat Personas"
 #: src/components/settings-form/labels.ts
 msgid "Public Deployment"
 msgstr "Public Deployment"
+
+#: src/components/voice-picker/index.tsx
+msgid "Public Library"
+msgstr "Public Library"
 
 #: src/components/settings-form/labels.ts
 msgid "Qdrant Collection"
@@ -4434,6 +4478,10 @@ msgstr "Scene Types Left Out of the Index"
 msgid "Search"
 msgstr "Search"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Search by name"
+msgstr "Search by name"
+
 #: src/components/settings-form/model-picker.tsx
 msgid "Search models"
 msgstr "Search models"
@@ -4450,9 +4498,13 @@ msgstr "Search skills"
 msgid "Search Skills"
 msgstr "Search Skills"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Search Voices"
 msgstr "Search Voices"
+
+#: src/components/voice-picker/mine.tsx
+msgid "Search Your Voices"
+msgstr "Search Your Voices"
 
 #: src/components/settings-form/labels.ts
 msgid "Selfie Aspect Ratio"
@@ -4675,7 +4727,7 @@ msgstr "She speaks in one of the realtime model's own voices, not the voice pick
 msgid "She speaks Mandarin, so add Mandarin streams. For audio in another language, set it under Transcription below."
 msgstr "She speaks Mandarin, so add Mandarin streams. For audio in another language, set it under Transcription below."
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "She speaks Mandarin, so the search starts among Chinese voices."
 msgstr "She speaks Mandarin, so the search starts among Chinese voices."
 
@@ -4733,7 +4785,7 @@ msgstr "Show Finished"
 msgid "Show Less"
 msgstr "Show Less"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "Show More"
 msgstr "Show More"
 
@@ -5362,8 +5414,8 @@ msgid "The file is too large."
 msgstr "The file is too large."
 
 #: src/features/studio/voice-section.tsx
-msgid "The Fish Audio voice she speaks with. Search the public voices, listen to a sample, and pick one."
-msgstr "The Fish Audio voice she speaks with. Search the public voices, listen to a sample, and pick one."
+msgid "The Fish Audio voice she speaks with. Choose from your own voices or the public library, listen to a sample, and pick one."
+msgstr "The Fish Audio voice she speaks with. Choose from your own voices or the public library, listen to a sample, and pick one."
 
 #: src/features/studio/videos-section.tsx
 msgid "The free space on the data home's disk is unknown."
@@ -5630,6 +5682,10 @@ msgstr "Thinks and writes her replies."
 #: src/features/setup/keys-step.tsx
 msgid "This account has no default model, so name the one to use."
 msgstr "This account has no default model, so name the one to use."
+
+#: src/components/voice-picker/mine.tsx
+msgid "This account has no key yet"
+msgstr "This account has no key yet"
 
 #: src/features/studio/videos-section.tsx
 msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
@@ -5919,6 +5975,10 @@ msgstr "Unavailable"
 msgid "Unavailable, so videos can't be downloaded. Install it with brew install yt-dlp or pip install yt-dlp: Eidolon then uses the one on your PATH."
 msgstr "Unavailable, so videos can't be downloaded. Install it with brew install yt-dlp or pip install yt-dlp: Eidolon then uses the one on your PATH."
 
+#: src/components/voice-picker/parts.tsx
+msgid "Unlisted"
+msgstr "Unlisted"
+
 #: src/features/call/call-controls.tsx
 msgid "Unmute your mic"
 msgstr "Unmute your mic"
@@ -6074,6 +6134,10 @@ msgstr "Videos Found ({count})"
 msgid "View"
 msgstr "View"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Visibility"
+msgstr "Visibility"
+
 #: src/components/settings-form/labels.ts
 #: src/features/home/readiness-labels.ts
 #: src/features/setup/stepper.tsx
@@ -6095,7 +6159,7 @@ msgstr "Voice"
 msgid "Voice ID"
 msgstr "Voice ID"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Voice Language"
 msgstr "Voice Language"
 
@@ -6136,6 +6200,14 @@ msgstr "Voice Styles"
 #: src/features/studio/voice-styles-card.tsx
 msgid "Voices she switches to when you ask for one, as in “声音温柔一点” or “换回原来的”. Her voice above stays her default."
 msgstr "Voices she switches to when you ask for one, as in “声音温柔一点” or “换回原来的”. Her voice above stays her default."
+
+#: src/components/voice-picker/mine.tsx
+msgid "Voices you made on Fish Audio, private ones included, newest first."
+msgstr "Voices you made on Fish Audio, private ones included, newest first."
+
+#: src/components/voice-picker/mine.tsx
+msgid "Voices you make on Fish Audio show up here, private ones included."
+msgstr "Voices you make on Fish Audio show up here, private ones included."
 
 #: src/features/tasks/labels.ts
 msgid "Waiting"

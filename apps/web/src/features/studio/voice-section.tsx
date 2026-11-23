@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoicePicker } from "@/components/voice-picker";
 import { saveVoice } from "@/features/setup/personas";
-import { ownValue } from "@/features/setup/wizard";
+import { fishVoiceAccount, ownValue } from "@/features/setup/wizard";
 import { accountsQuery } from "@/lib/accounts";
 import type { PersonaSummary, SettingRow, Voice } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
@@ -175,7 +175,14 @@ function UseEnvVoice({
   );
 }
 
-function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
+function VoiceCard({
+  persona,
+  account,
+}: {
+  readonly persona: PersonaSummary;
+  /** The Fish account she speaks through; undefined while it loads. */
+  readonly account: string | null | undefined;
+}) {
   const { t } = useLingui();
   const queryClient = useQueryClient();
   const query = settingsQuery(persona.id);
@@ -214,7 +221,7 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
   return (
     <SectionCard
       title={t`Voice`}
-      description={t`The Fish Audio voice she speaks with. Search the public voices, listen to a sample, and pick one.`}
+      description={t`The Fish Audio voice she speaks with. Choose from your own voices or the public library, listen to a sample, and pick one.`}
       note={t`Choosing a voice saves it for ${ph({ name: persona.shortName || persona.name })}.`}
       actions={
         row !== undefined && own !== null && row.envValue !== null ? (
@@ -230,12 +237,17 @@ function VoiceCard({ persona }: { readonly persona: PersonaSummary }) {
       {settings.isPending && <Skeleton className="h-[4.5rem] rounded-xl" />}
       {settings.isError && <LoadError error={settings.error} />}
       {row !== undefined && <CurrentVoice persona={persona} row={row} />}
-      <VoicePicker
-        value={own}
-        onChange={(voice) => pick.mutate(voice)}
-        disabled={busy || settings.data === undefined}
-        hideCurrent
-      />
+      {account === undefined ? (
+        <Skeleton className="h-64 rounded-xl" />
+      ) : (
+        <VoicePicker
+          value={own}
+          onChange={(voice) => pick.mutate(voice)}
+          account={account}
+          disabled={busy || settings.data === undefined}
+          hideCurrent
+        />
+      )}
       <VoiceById disabled={busy || settings.data === undefined} onUse={(id) => byId.mutate(id)} />
     </SectionCard>
   );
@@ -295,12 +307,16 @@ export function VoiceSection({ persona }: { readonly persona: PersonaSummary }) 
   const { t } = useLingui();
   const settings = useQuery(settingsQuery(persona.id));
   const prompt = useQuery(personaQueries(persona.id).prompt);
-  const accounts = useQuery(accountsQuery).data?.accounts;
+  const accountList = useQuery(accountsQuery);
+  const accounts = accountList.data?.accounts;
   const rows = settings.data?.settings;
   const clash = cueClash(rows, prompt.data?.text, accounts);
   const provider =
     (rows ? effectiveProviderType(roleById("voice"), rows, {}, accounts) : null) ?? "fish";
   const realtime = rows ? effectiveProviderType(roleById("realtime"), rows, {}, accounts) : null;
+  // Undefined until both load, so her picker doesn't open on the library alone and then grow tabs.
+  const loading = settings.isPending || accountList.isPending;
+  const account = loading ? undefined : rows ? fishVoiceAccount(rows, accounts) : null;
   return (
     <>
       {realtime !== null && (
@@ -327,11 +343,11 @@ export function VoiceSection({ persona }: { readonly persona: PersonaSummary }) 
         {clash && <CueAlert clash={clash} />}
       </SettingsCard>
       {provider === "fish" ? (
-        <VoiceCard persona={persona} />
+        <VoiceCard persona={persona} account={account} />
       ) : (
         <ProviderVoiceCard persona={persona} provider={provider} />
       )}
-      <VoiceStylesCard persona={persona} provider={provider} />
+      <VoiceStylesCard persona={persona} provider={provider} account={account ?? null} />
     </>
   );
 }
