@@ -36,6 +36,8 @@ describe.runIf(WINDOWS)("the node shim's .cmd launchers, on this Node", () => {
   beforeAll(async () => {
     scratch = mkdtempSync(join(tmpdir(), "eidolon-node-shim-cmd-"));
     const home = join(scratch, "home");
+    // pnpm dlx takes the realpath of os.homedir(), USERPROFILE here, and fails on one that's missing.
+    mkdirSync(home);
     pkg = join(scratch, "hello");
     mkdirSync(join(pkg, "bin"), { recursive: true });
     writeFileSync(
