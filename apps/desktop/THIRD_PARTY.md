@@ -1,10 +1,11 @@
 # Third-party notices
 
 The desktop app ports parts of DeepSeek Harness's desktop shell, under the MIT License in
-`LICENSE-deepseek`. Each file whose header names deepseek-harness is ported from it, at the commit
-the header names. Main's build inlines the packages main runs and writes their licenses beside it,
-in `dist/main/THIRD_PARTY_LICENSES.md`. The app runs on Electron (MIT), which ships its own
-notices and Chromium's.
+`LICENSE-deepseek`, and its node shim's npx starts a Windows batch file as cross-spawn does, under
+the MIT License in `LICENSE-cross-spawn`. Each file whose header names one of them is ported from
+it, at the commit the header names. Main's build inlines the packages main runs and writes their
+licenses beside it, in `dist/main/THIRD_PARTY_LICENSES.md`. The app runs on Electron (MIT), which
+ships its own notices and Chromium's.
 
 ## DeepSeek Harness
 
@@ -33,4 +34,33 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+## cross-spawn
+
+License: `MIT`  
+Source: https://github.com/moxystudio/node-cross-spawn, commit `77cd97f`
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 2018 Made With MOXY Lda <hello@moxy.studio>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 ```
