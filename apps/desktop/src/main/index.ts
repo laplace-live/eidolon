@@ -97,14 +97,6 @@ function run(): void {
     process.execPath,
     process.env.LOCALAPPDATA,
   );
-  /** Why this copy can't offer Open at Login and the terminal command, or null when it can. */
-  const unavailable = optionsUnavailable({
-    background,
-    packaged: app.isPackaged,
-    platform: process.platform,
-    inApplications: process.platform === "darwin" && app.isInApplicationsFolder(),
-    installedCopy,
-  });
   // Background mode only logs each notice. On Windows any copy but the installed one would point the
   // installed app's Start menu shortcut and its COM key at itself.
   const notifies =
@@ -164,13 +156,6 @@ function run(): void {
         log: mainLog,
       })
     : null;
-  const commandHost: CommandHost = {
-    platform: process.platform,
-    resourcesPath: process.resourcesPath,
-    unavailable,
-    strings,
-    log: mainLog,
-  };
   const chooseFolder = joinPending(() =>
     native.chooseFolder(mainWindow(), folderDialogOptions(strings(), app.getPath("home"))),
   );
@@ -328,6 +313,21 @@ function run(): void {
         showLogs: actions.showLogs,
         quit: actions.quit,
       });
+      /** Why this copy can't offer Open at Login and the terminal command, or null when it can. */
+      const unavailable = optionsUnavailable({
+        background,
+        packaged: app.isPackaged,
+        platform: process.platform,
+        inApplications: process.platform === "darwin" && app.isInApplicationsFolder(),
+        installedCopy,
+      });
+      const commandHost: CommandHost = {
+        platform: process.platform,
+        resourcesPath: process.resourcesPath,
+        unavailable,
+        strings,
+        log: mainLog,
+      };
       handleAppBridge({
         versions: () => ({ version, serverVersion: backend.serverVersion }),
         language: languageChanged,
