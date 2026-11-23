@@ -481,9 +481,9 @@ the layout's one line.
   `appEnv()` builds one without any `ELECTRON_*` name. Inside Electron `jsRuntime()` adds
   `ELECTRON_RUN_AS_NODE=1`, at whose every non-empty value, `0` included, an Electron binary runs as
   Node: no spawn that can start a program the owner chose (a task's command, an MCP server) may
-  carry it, or VS Code's `code` would run as Node. The backend's spawns still never carry it: the
-  node shim's launchers alone set it, for the process they run on Eidolon's binary, whose children
-  inherit it.
+  carry it, or VS Code's `code` would run as Node. The node shim keeps to that: the backend starts
+  an MCP server without it, and a shim launcher sets it only for the process it runs on Eidolon's
+  binary, whose children inherit it.
 - **Every node-mode process the app starts carries `--disable-sigusr1 --use-system-ca`** before its
   script (yt-dlp's JS runtime, which yt-dlp starts, aside): `jsRuntime().args`, which main mirrors
   as `BACKEND_RUNTIME_ARGS`, a test holding the two equal. The inspect fuse doesn't reach node mode,
