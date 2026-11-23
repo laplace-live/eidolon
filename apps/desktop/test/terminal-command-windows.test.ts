@@ -96,6 +96,22 @@ function same(path: string): string {
   return realpathSync.native(path).toLowerCase();
 }
 
+/**
+ * Copies this Node to `to` marked a GUI program in its PE header, as Eidolon.exe is, so `start`
+ * opens no console window for it.
+ */
+function guiCopy(to: string): void {
+  const exe = readFileSync(process.execPath);
+  const pe = exe.readUInt32LE(0x3c);
+  // The optional header's Subsystem, at the same offset in PE32 and PE32+: 3 console, 2 GUI.
+  const subsystem = pe + 24 + 68;
+  if (exe.readUInt32LE(pe) !== 0x4550 || exe.readUInt16LE(subsystem) !== 3) {
+    throw new Error(`${process.execPath} isn't a console program's PE`);
+  }
+  exe.writeUInt16LE(2, subsystem);
+  writeFileSync(to, exe);
+}
+
 // A skipped suite's body still runs to collect its tests: what touches the disk waits for beforeAll.
 describe.runIf(WINDOWS)("the PATH script on a scratch key", () => {
   const key = `${TEST_KEY}\\${randomUUID()}`;
@@ -186,8 +202,10 @@ describe.runIf(WINDOWS)("the PATH script on a scratch key", () => {
 
 describe.runIf(WINDOWS)("the .cmd launcher against a stand-in install", () => {
   let root = "";
+  /** A stand-in install whose Eidolon.exe is this Node. */
   let install = "";
-  let launcher = "";
+  /** One whose Eidolon.exe is a GUI copy of it. */
+  let gui = "";
   /** Where the stand-in CLI writes what it got. */
   const CLI = [
     "process.stdout.write(JSON.stringify({",
@@ -204,23 +222,30 @@ describe.runIf(WINDOWS)("the .cmd launcher against a stand-in install", () => {
     "",
   ].join("\n");
 
+  /** The install at `dir`, its Eidolon.exe written by `binary`. */
+  function standIn(dir: string, binary: (to: string) => void): void {
+    mkdirSync(join(dir, "resources", "bin"), { recursive: true });
+    mkdirSync(join(dir, "resources", "eidolon", "dist"), { recursive: true });
+    binary(join(dir, "Eidolon.exe"));
+    copyFileSync(LAUNCHER, join(dir, "resources", "bin", "eidolon.cmd"));
+    writeFileSync(join(dir, "resources", "eidolon", "dist", "cli.js"), CLI);
+  }
+
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), "eidolon-cmd-"));
     install = join(root, AWKWARD);
-    mkdirSync(join(install, "resources", "bin"), { recursive: true });
-    mkdirSync(join(install, "resources", "eidolon", "dist"), { recursive: true });
-    copyFileSync(process.execPath, join(install, "Eidolon.exe"));
-    launcher = join(install, "resources", "bin", "eidolon.cmd");
-    copyFileSync(LAUNCHER, launcher);
-    writeFileSync(join(install, "resources", "eidolon", "dist", "cli.js"), CLI);
-  }, 60_000);
+    gui = join(root, "gui", AWKWARD);
+    standIn(install, (to) => copyFileSync(process.execPath, to));
+    standIn(gui, guiCopy);
+  }, 120_000);
 
   afterAll(() => {
     rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   });
 
-  /** cmd.exe running the launcher with `args` as typed, the way a terminal does. */
-  function cmd(args: string, env: NodeJS.ProcessEnv) {
+  /** cmd.exe running the launcher of the install at `dir` with `args` as typed, as a terminal does. */
+  function cmd(dir: string, args: string, env: NodeJS.ProcessEnv) {
+    const launcher = join(dir, "resources", "bin", "eidolon.cmd");
     return spawnSync("cmd.exe", ["/d", "/s", "/c", `""${launcher}"${args}"`], {
       encoding: "utf8",
       env,
@@ -236,7 +261,7 @@ describe.runIf(WINDOWS)("the .cmd launcher against a stand-in install", () => {
       ELECTRON_RUN_AS_NODE: undefined,
       EIDOLON_HOME: "C:\\an eidolon home",
     };
-    const run = cmd(' search --help "two words" "a & b"', env);
+    const run = cmd(install, ' search --help "two words" "a & b"', env);
     expect([run.status, run.stderr]).toEqual([0, ""]);
     const got = JSON.parse(run.stdout);
     expect(same(got.execPath)).toBe(same(join(install, "Eidolon.exe")));
@@ -249,19 +274,19 @@ describe.runIf(WINDOWS)("the .cmd launcher against a stand-in install", () => {
       EIDOLON_HOME: "C:\\an eidolon home",
     });
     expect(same(got.env.EIDOLON_APP_ROOT)).toBe(same(join(install, "resources", "eidolon")));
-    expect(cmd(" search exit-7", env).status).toBe(7);
+    expect(cmd(install, " search exit-7", env).status).toBe(7);
   }, 60_000);
 
   test("with none, starts the install's binary with nothing to run and ELECTRON_RUN_AS_NODE cleared", async () => {
     // The stand-in is Node, so a preload stands in for the app: it records how it started, then
-    // exits before Node's REPL would. Forward slashes: NODE_OPTIONS takes a backslash as an escape.
+    // exits before Node reads a script. Forward slashes: NODE_OPTIONS takes a backslash as an escape.
     const opened = join(root, "opened.json");
     const preload = join(root, "opened.cjs");
     writeFileSync(
       preload,
       `require("node:fs").writeFileSync(${JSON.stringify(opened)}, JSON.stringify({ argv: process.argv, runAsNode: process.env.ELECTRON_RUN_AS_NODE ?? null })); process.exit(0);\n`,
     );
-    const run = cmd("", {
+    const run = cmd(gui, "", {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
       NODE_OPTIONS: `--require "${preload.replaceAll("\\", "/")}"`,
@@ -274,6 +299,6 @@ describe.runIf(WINDOWS)("the .cmd launcher against a stand-in install", () => {
     const started = JSON.parse(readFileSync(opened, "utf8"));
     expect(started.runAsNode).toBeNull();
     expect(started.argv).toHaveLength(1);
-    expect(same(started.argv[0])).toBe(same(join(install, "Eidolon.exe")));
+    expect(same(started.argv[0])).toBe(same(join(gui, "Eidolon.exe")));
   }, 60_000);
 });
