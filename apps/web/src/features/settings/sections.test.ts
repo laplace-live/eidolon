@@ -159,8 +159,10 @@ describe("the Desktop section", () => {
     expect(shownSections(null)).toEqual(others);
     expect(shownSections(bridge)).toEqual(others);
     expect(shownSections({ ...bridge, chooseFolder: async () => null })).toEqual(others);
-    const { setTerminalCommand: _, ...withoutOne } = options;
-    expect(offersSystemOptions({ ...bridge, ...withoutOne })).toBe(false);
+    for (const member of Object.keys(options) as (keyof typeof options)[]) {
+      const { [member]: _, ...withoutOne } = options;
+      expect(offersSystemOptions({ ...bridge, ...withoutOne }), member).toBe(false);
+    }
   });
 
   test("?tab=desktop opens it where it shows, and the default section anywhere else", () => {
