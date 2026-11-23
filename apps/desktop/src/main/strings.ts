@@ -1,8 +1,9 @@
-// The shell's own words, in the web app's two languages: its menus, the tray, its dialogs, and the
-// pages main serves while the web app can't show. They follow the language the page reports, and
-// the system's before it has.
+// The shell's own words, in the web app's two languages: its menus, the tray, its dialogs, its
+// notifications, and the pages main serves while the web app can't show. They follow the language
+// the page reports, and the system's before it has.
 import type { Language } from "../shared/bridge.ts";
 import type { NotesLabels } from "../shared/release-notes.ts";
+import type { NoticeKind } from "./task-notices.ts";
 
 /** What a quit would stop. */
 export interface Stopping {
@@ -80,6 +81,9 @@ export interface Strings {
     readonly releaseNotes: string;
     /** Restarts into a downloaded update. */
     readonly restart: string;
+    /** The folder dialog's title, where the OS shows one, and its button. */
+    readonly chooseFolderTitle: string;
+    readonly chooseFolderButton: string;
   };
   /** Sentences, titles phrased as one, and statuses: sentence case. */
   readonly text: {
@@ -131,7 +135,14 @@ export interface Strings {
     readonly microphone: string;
     /** The About panel's line for the server the app ships, beside the app's own version. */
     readonly aboutServer: (version: string) => string;
+    /** The folder dialog's message, on macOS. */
+    readonly chooseFolder: string;
+    /** macOS's administrator prompt, when /usr/local/bin takes one to change the terminal command. */
+    readonly installCommandPrompt: string;
+    readonly removeCommandPrompt: string;
   };
+  /** A task notification's line under her name, by its kind: sentence case. */
+  readonly notice: Readonly<Record<NoticeKind, string>>;
 }
 
 /** "a", "a and b", "a, b and c". */
@@ -213,6 +224,8 @@ const en: Strings = {
     later: "Later",
     releaseNotes: "Release Notes",
     restart: "Restart",
+    chooseFolderTitle: "Choose a Folder",
+    chooseFolderButton: "Choose",
   },
   text: {
     loading: "Starting Eidolon…",
@@ -293,6 +306,25 @@ const en: Strings = {
       "Turn on Eidolon under Privacy & Security → Microphone in System Settings, then quit Eidolon " +
       "and open it again.",
     aboutServer: (version) => `Server ${version}`,
+    chooseFolder: "Her tasks can read and write in the folders you choose.",
+    installCommandPrompt: "Eidolon wants to install the eidolon command in /usr/local/bin.",
+    removeCommandPrompt: "Eidolon wants to remove the eidolon command from /usr/local/bin.",
+  },
+  notice: {
+    start: "Waiting for your OK to start a task",
+    read: "Waiting for your OK to read outside the task's folders",
+    write: "Waiting for your OK to read and write outside the task's folders",
+    fetch: "Waiting for your OK to fetch from a site",
+    command: "Waiting for your OK to run a command",
+    mcp: "Waiting for your OK to run a tool on an MCP server",
+    spend: "The task reached its spend pause",
+    stall: "The task paused after repeating itself",
+    unpriced: "The task paused: its spend can't be counted",
+    interrupted: "The task was interrupted",
+    waiting: "Waiting for your OK to go on",
+    succeeded: "Finished the task",
+    failed: "The task failed",
+    cancelled: "The task was stopped",
   },
 };
 
@@ -341,6 +373,8 @@ const zhHans: Strings = {
     later: "稍后",
     releaseNotes: "发行说明",
     restart: "重启",
+    chooseFolderTitle: "选择文件夹",
+    chooseFolderButton: "选择",
   },
   text: {
     loading: "正在启动 Eidolon…",
@@ -411,6 +445,25 @@ const zhHans: Strings = {
     microphone:
       "请在「系统设置」→「隐私与安全性」→「麦克风」中打开 Eidolon，然后退出 Eidolon 再重新打开。",
     aboutServer: (version) => `服务器 ${version}`,
+    chooseFolder: "她的任务可以读写你选择的文件夹。",
+    installCommandPrompt: "Eidolon 想在 /usr/local/bin 安装 eidolon 命令。",
+    removeCommandPrompt: "Eidolon 想从 /usr/local/bin 移除 eidolon 命令。",
+  },
+  notice: {
+    start: "等你同意开始一个任务",
+    read: "等你同意读取任务文件夹以外的内容",
+    write: "等你同意读写任务文件夹以外的内容",
+    fetch: "等你同意从一个网站获取内容",
+    command: "等你同意运行一条命令",
+    mcp: "等你同意运行 MCP 服务器的一个工具",
+    spend: "任务达到了花费暂停金额",
+    stall: "任务在重复相同的步骤，已暂停",
+    unpriced: "任务的花费无法计算，已暂停",
+    interrupted: "任务被中断了",
+    waiting: "等你同意继续",
+    succeeded: "任务完成了",
+    failed: "任务失败了",
+    cancelled: "任务已停止",
   },
 };
 
