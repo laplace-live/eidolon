@@ -25,12 +25,12 @@ interface Npx {
   NPX_SETTINGS: readonly string[];
   readNpx(args: readonly string[]): { packages: string[]; command: string[] } | { error: string };
   npxToPnpm(packages: readonly string[], cwd: string, home: string, platform?: string): string[];
-  folderOf(
+  localSpec(
     spec: string,
     cwd: string,
     home: string,
     platform?: string,
-  ): { name?: string; folder: string } | undefined;
+  ): { name?: string; path: string; tarball: boolean } | undefined;
   binsOf(manifest: object, dir: string): Record<string, string>;
   binOf(manifest: object, dir: string): string | undefined;
   npmPrefix(cwd: string): { prefix: string; workspace?: string };
@@ -147,13 +147,11 @@ describe("pnpm's arguments", () => {
     ]);
   });
 
-  test("pass registry, tarball, git and URL specs on as they are", () => {
+  test("pass registry, git and URL specs on as they are", () => {
     const specs = [
       "server",
       "@scope/server@1.2.3",
       "server@^2",
-      "./server-1.0.0.tgz",
-      "file:../server.tar.gz",
       "user/repo",
       "github:user/repo#main",
       "git+https://example.test/server.git",
@@ -179,9 +177,27 @@ describe("pnpm's arguments", () => {
       ),
     );
   });
+
+  test("give a tarball file absolute, which pnpm would look for in its dlx folder", () => {
+    expect(
+      npx.npxToPnpm(
+        ["./server-1.0.0.tgz", "file:../server.tar.gz", "x.tgz", "named@./y.tar", "~/z.tgz"],
+        "/work/here",
+        "/home/me",
+      ),
+    ).toEqual(
+      dlx(
+        "file:/work/here/server-1.0.0.tgz",
+        "file:/work/server.tar.gz",
+        "file:/work/here/x.tgz",
+        "named@file:/work/here/y.tar",
+        "file:/home/me/z.tgz",
+      ),
+    );
+  });
 });
 
-describe("a folder spec, as npm-package-arg reads it", () => {
+describe("a folder or tarball spec, as npm-package-arg reads it", () => {
   test.each([
     [".", "/cwd/here"],
     ["./x", "/cwd/here/x"],
@@ -198,17 +214,37 @@ describe("a folder spec, as npm-package-arg reads it", () => {
     ["a/b/c", "/cwd/here/a/b/c"],
     ["./a%20b", "/cwd/here/a%20b"],
   ])("%s is the folder %s", (spec, folder) => {
-    expect(npx.folderOf(spec, "/cwd/here", "/home/me", "linux")?.folder).toBe(folder);
+    expect(npx.localSpec(spec, "/cwd/here", "/home/me", "linux")).toEqual({
+      name: undefined,
+      path: folder,
+      tarball: false,
+    });
   });
 
   test("keeps the name a named folder spec gives", () => {
-    expect(npx.folderOf("foo@./x", "/cwd", "/home", "linux")).toEqual({
+    expect(npx.localSpec("foo@./x", "/cwd", "/home", "linux")).toEqual({
       name: "foo",
-      folder: "/cwd/x",
+      path: "/cwd/x",
+      tarball: false,
     });
-    expect(npx.folderOf("@s/n@file:../y", "/cwd/here", "/home", "linux")).toEqual({
+    expect(npx.localSpec("@s/n@file:../y", "/cwd/here", "/home", "linux")).toEqual({
       name: "@s/n",
-      folder: "/cwd/y",
+      path: "/cwd/y",
+      tarball: false,
+    });
+  });
+
+  test.each([
+    ["x.tgz", "/cwd/here/x.tgz"],
+    ["./x.tgz", "/cwd/here/x.tgz"],
+    ["file:x.tar", "/cwd/here/x.tar"],
+    ["../x.tar.gz", "/cwd/x.tar.gz"],
+    ["~/x.tgz", "/home/me/x.tgz"],
+  ])("%s is the tarball %s", (spec, file) => {
+    expect(npx.localSpec(spec, "/cwd/here", "/home/me", "linux")).toEqual({
+      name: undefined,
+      path: file,
+      tarball: true,
     });
   });
 
@@ -218,20 +254,19 @@ describe("a folder spec, as npm-package-arg reads it", () => {
     "server@1.2.3",
     "foo@npm:bar",
     "user/repo",
-    "x.tgz",
-    "./x.tgz",
-    "file:x.tar",
+    "user/repo.tgz",
     "git+file:///repo",
     "git@github.com:user/repo.git",
     "https://example.test/x",
-  ])("%s isn't a folder", (spec) => {
-    expect(npx.folderOf(spec, "/cwd", "/home", "linux")).toBeUndefined();
+    "https://example.test/x.tgz",
+  ])("%s isn't a folder or a tarball file", (spec) => {
+    expect(npx.localSpec(spec, "/cwd", "/home", "linux")).toBeUndefined();
   });
 
   test("on Windows, a backslash or a drive makes a path", () => {
-    expect(npx.folderOf("a\\b\\c", "/cwd", "/home", "win32")).toBeDefined();
-    expect(npx.folderOf("C:\\server", "/cwd", "/home", "win32")).toBeDefined();
-    expect(npx.folderOf("a\\b\\c", "/cwd", "/home", "linux")).toBeUndefined();
+    expect(npx.localSpec("a\\b\\c", "/cwd", "/home", "win32")).toBeDefined();
+    expect(npx.localSpec("C:\\server", "/cwd", "/home", "win32")).toBeDefined();
+    expect(npx.localSpec("a\\b\\c", "/cwd", "/home", "linux")).toBeUndefined();
   });
 });
 
@@ -464,11 +499,14 @@ describe("what npx does, as npm decides it", () => {
     });
   });
 
-  test("ends as npm does on a folder with no package.json to read", () => {
+  test("ends as npm does on a folder with no package.json, or a tarball, to read", () => {
     const base = tree({ empty: null });
     const missing = npx.plan(["-y", `file:${join(base, "empty")}`], base);
     expect(missing).toMatchObject({ code: -2 });
     expect("error" in missing && missing.error).toMatch(/^could not read package\.json: ENOENT/);
+    const tarball = npx.plan(["-y", "-p", "./missing.tgz", "x"], base);
+    expect(tarball).toMatchObject({ code: -2 });
+    expect("error" in tarball && tarball.error).toMatch(/^could not read the tarball: ENOENT/);
   });
 });
 

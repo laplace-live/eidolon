@@ -84,6 +84,17 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
     expect(JSON.parse(ran.stdout)).toEqual(["--flag", "value"]);
   });
 
+  test("npx runs a tarball a relative path names, from the folder it names it from", () => {
+    const folder = join(scratch, "tarball");
+    mkdirSync(folder);
+    pack(pkg, join(folder, "hello.tgz"));
+    for (const spec of ["./hello.tgz", "file:hello.tgz"]) {
+      const ran = run("npx", ["-y", spec, "x"], undefined, folder);
+      expect([spec, ran.status, ran.stderr]).toEqual([spec, 0, ""]);
+      expect(JSON.parse(ran.stdout)).toEqual(["x"]);
+    }
+  });
+
   test("npx runs a bin in a node_modules/.bin above the folder, never a registry's", () => {
     const args = ["a b", "", 'q"x', "$HOME", "*", "-y"];
     const ran = run("npx", ["eidolon-shim-local", ...args], undefined, below);

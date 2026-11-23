@@ -71,10 +71,10 @@ const GITHUB_SHORTCUT = /^[^:@%/\s.-][^:@%/\s]*\/[^:@\s/%]+(?:#.*)?$/;
 const PACKAGE_NAME = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/i;
 
 /**
- * The folder `spec` names, as npm-package-arg tells a folder from a tarball, a git repo, a URL or
- * a registry package, with the name it gives it, if any; undefined for anything but a folder.
+ * The folder or tarball file `spec` names, as npm-package-arg tells them from a git repo, a URL or
+ * a registry package, with the name it gives it, if any; undefined for anything else.
  */
-export function folderOf(spec, cwd, home, platform = process.platform) {
+export function localSpec(spec, cwd, home, platform = process.platform) {
   const windows = platform === "win32";
   const slashes = windows ? /[\\/]/ : /\//;
   const at = spec.indexOf("@", 1);
@@ -101,28 +101,30 @@ export function folderOf(spec, cwd, home, platform = process.platform) {
     !GITHUB_SHORTCUT.test(where) &&
     !URL_SPEC.test(where) &&
     (slashes.test(where) || TARBALL.test(where));
-  if ((!fileLike && !pathLike) || TARBALL.test(where)) return undefined;
+  if (!fileLike && !pathLike) return undefined;
   let file = where.replace(/^file:/i, "");
   // file:/../x is relative; file://x and file:///x are /x.
   if (/^\/{1,3}\.\.?(?:\/|$)/.test(file)) file = file.replace(/^\/+/, "");
   else file = file.replace(/^\/{2,3}(?=[^/])/, "/");
   if (windows) file = file.replace(/^\/+([a-z]:[/\\])/i, "$1");
-  const folder =
+  const resolved =
     file === "~" || /^~[/\\]/.test(file) ? path.join(home, file.slice(2)) : path.resolve(cwd, file);
-  return { name, folder };
+  return { name, path: resolved, tarball: TARBALL.test(where) };
 }
 
 /**
  * pnpm's arguments to install `packages` into its dlx cache as npx would: npm links a folder it is
- * given rather than installing it and its dependencies, as pnpm does with link:.
+ * given rather than installing it and its dependencies, as pnpm does with link:. pnpm reads a
+ * relative path from its dlx folder, so each local one goes absolute.
  * @param {readonly string[]} packages
  * @returns {string[]}
  */
 export function npxToPnpm(packages, cwd, home, platform = process.platform) {
   const specs = packages.map((spec) => {
-    const folder = folderOf(spec, cwd, home, platform);
-    if (folder === undefined) return spec;
-    return `${folder.name === undefined ? "" : `${folder.name}@`}link:${folder.folder}`;
+    const local = localSpec(spec, cwd, home, platform);
+    if (local === undefined) return spec;
+    const name = local.name === undefined ? "" : `${local.name}@`;
+    return `${name}${local.tarball ? "file" : "link"}:${local.path}`;
   });
   return ["--loglevel=error", ...NPX_SETTINGS, "dlx", ...specs.map((spec) => `--package=${spec}`)];
 }
@@ -308,12 +310,13 @@ export function plan(args, cwd, home = homedir()) {
   }
   const install = packages.filter((spec) => installedPackage(trees, spec) === undefined);
   for (const spec of install) {
-    const folder = folderOf(spec, cwd, home)?.folder;
-    if (folder === undefined) continue;
+    const local = localSpec(spec, cwd, home);
+    if (local === undefined) continue;
     try {
-      readFileSync(path.join(folder, "package.json"));
+      readFileSync(local.tarball ? local.path : path.join(local.path, "package.json"));
     } catch (error) {
-      return { error: `could not read package.json: ${error.message}`, code: error.errno ?? 1 };
+      const what = local.tarball ? "the tarball" : "package.json";
+      return { error: `could not read ${what}: ${error.message}`, code: error.errno ?? 1 };
     }
   }
   return { ...(install.length > 0 ? { install } : {}), command, args: rest, bins: [], runPath };
