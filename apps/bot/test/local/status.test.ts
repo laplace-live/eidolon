@@ -391,12 +391,14 @@ describe("GET status", () => {
     const checked = checkRig(rig);
     if (!checked.ok) throw new Error(checked.message);
     const { sha256, updatedAt } = importModel("milky-green", "tml.p2lrt", rig, checked.inventory);
-    const path = write("personas/milky-green/persona.yaml", "appearance:\n  model: tml\n");
-    reinstallSettings(app);
     const { deps } = fakeDeps({});
+    // Written by hand, never installed: a poll reads no settings file, so she shows none yet.
+    const path = write("personas/milky-green/persona.yaml", "appearance:\n  model: tml\n");
+    expect(buildStatus(app, deps).persona.appearance).toEqual({ model: null });
+    reinstallSettings(app);
     const active = { id: "tml", name: "tml", kind: "psd2live", sha256, updatedAt };
     expect(buildStatus(app, deps).persona.appearance).toEqual({ model: active });
-    // Edited by hand since: a poll reads no settings file, so the installed setting stands.
+    // Edited by hand since: the installed setting stands.
     writeFileSync(path, "{}\n");
     expect(buildStatus(app, deps).persona.appearance).toEqual({ model: active });
     rmSync(join(personaHomeDir("milky-green"), "models"), { recursive: true });

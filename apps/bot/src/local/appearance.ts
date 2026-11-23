@@ -14,7 +14,6 @@ import {
   type ModelInventory,
   type ModelOutfit,
 } from "./api.ts";
-import { personaSetting } from "./personas.ts";
 import { PERSONA_ID, userFolder, writeDataFile } from "./write.ts";
 
 export const MODELS_DIR = "models";
@@ -157,12 +156,12 @@ export function listModels(persona: string): CharacterModel[] {
 }
 
 /**
- * The model `setting` names, her appearance.model as the bot reads it, while she has it; else
- * null, whatever the setting holds.
+ * The model `setting` names, her appearance.model as the caller reads it, while she has that
+ * model; else null, whatever the setting holds.
  */
 export function activeModel(
   persona: string,
-  setting = personaSetting(persona, "APPEARANCE_MODEL"),
+  setting: string | undefined,
 ): ActiveCharacterModel | null {
   const model = setting ? readModel(persona, setting) : null;
   if (model === null) return null;

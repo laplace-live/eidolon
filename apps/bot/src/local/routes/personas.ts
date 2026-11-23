@@ -42,6 +42,7 @@ import {
   listFacts,
   listReferences,
   personaRefusal,
+  personaSetting,
   promptFile,
   readIdentityFields,
   renamedFor,
@@ -185,7 +186,7 @@ function summaryOf(id: string): PersonaSummary {
     template: existsSync(personaTemplateDir(id)),
     own: existsSync(personaHomeDir(id)),
     avatar: findAvatar(id) !== null,
-    appearance: { model: activeModel(id) },
+    appearance: { model: activeModel(id, personaSetting(id, "APPEARANCE_MODEL")) },
   };
 }
 

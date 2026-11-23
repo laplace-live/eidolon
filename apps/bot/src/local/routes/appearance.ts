@@ -16,7 +16,13 @@ import {
   replaceRig,
   rigPath,
 } from "../appearance.ts";
-import { editPersonaYaml, personaRefusal, setDotted, writeFailure } from "../personas.ts";
+import {
+  editPersonaYaml,
+  personaRefusal,
+  personaSetting,
+  setDotted,
+  writeFailure,
+} from "../personas.ts";
 import { checkRig } from "../psd2live.ts";
 import { fileResponse } from "../ranges.ts";
 import { imageHeaders, localError, localJson, readJson } from "../responses.ts";
@@ -84,9 +90,10 @@ export function appearanceRoutes(app: LocalApp): LocalRouteSpec[] {
   return [
     {
       route: "GET /api/local/personas/:id/models",
-      handler: forPersona((_request, _context, id) =>
-        localJson(200, { active: activeModel(id)?.id ?? null, models: listModels(id) }),
-      ),
+      handler: forPersona((_request, _context, id) => {
+        const active = activeModel(id, personaSetting(id, "APPEARANCE_MODEL"));
+        return localJson(200, { active: active?.id ?? null, models: listModels(id) });
+      }),
     },
     {
       route: "POST /api/local/personas/:id/models",
