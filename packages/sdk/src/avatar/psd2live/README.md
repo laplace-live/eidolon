@@ -18,7 +18,7 @@ PSD2Live. The editor itself is GPL-3.0 and none of it is here.
 To refresh at a newer commit:
 
 1. Copy `targets/web/src/main/resources/io/github/psd2live/targets/web/p2l_runtime.wasm` to
-   `wasm/`, and note its sha256 here and in `packages/sdk/test/avatar-psd2live.test.ts`.
+   `wasm/`, and note its sha256 here and wherever a test pins it (`git grep d8bbff52`).
 2. Diff upstream's `p2l.js` between the two commits and port the change into `rig.ts` and
    `renderer.ts`; update the header's commit.
 3. Copy `runtime/LICENSE`, and refresh `wasm/THIRD_PARTY_LICENSES.md` from `runtime/Cargo.lock`.
