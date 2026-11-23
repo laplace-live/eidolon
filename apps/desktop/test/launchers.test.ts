@@ -317,7 +317,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   let registry = "";
   const old = "2020-01-01T00:00:00.000Z";
   // A package that prints, published, and taken from its folder, a tarball, a git repo and a URL.
-  const hello = join(scratch, "hello");
+  let hello = "";
 
   /**
    * Publishes the package in `dir` at `time` on the registry at the path `at`, or with `time`
@@ -370,6 +370,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
 
   beforeAll(async () => {
     scratch = realpathSync(mkdtempSync(join(tmpdir(), "eidolon-npx-registry-")));
+    hello = join(scratch, "hello");
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     registry = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     publish(
