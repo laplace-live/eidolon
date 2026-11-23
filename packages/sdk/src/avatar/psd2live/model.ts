@@ -36,9 +36,11 @@ export async function loadPsd2liveModel(
   }
 }
 
-interface Loop {
+/** A clip played on a layer that the model must end or replay itself. */
+interface Playing {
   readonly clip: string;
   readonly priority: number;
+  readonly loop: boolean;
 }
 
 export class Psd2liveModel implements AvatarModel {
@@ -47,7 +49,7 @@ export class Psd2liveModel implements AvatarModel {
   /** The rig itself, for what the stage doesn't do: poses, parameters, part opacity. */
   readonly rig: Psd2liveRig;
   readonly #renderer: Psd2liveRenderer;
-  readonly #loops = new Map<number, Loop>();
+  readonly #playing = new Map<number, Playing>();
   /** Each pose group's entry as loaded, which taking an outfit off shows again. */
   readonly #poses: readonly number[];
   #worn: ModelOutfitLike | null = null;
@@ -71,14 +73,15 @@ export class Psd2liveModel implements AvatarModel {
   ): void {
     this.#run(() => {
       if (clip === null) {
-        this.#loops.delete(layer);
+        this.#playing.delete(layer);
         this.rig.playLayer(null, layer, 0);
         return;
       }
       const priority = o.priority ?? 1;
       if (!this.rig.playLayer(clip, layer, priority)) return;
-      if (o.loop) this.#loops.set(layer, { clip, priority });
-      else this.#loops.delete(layer);
+      const loop = o.loop ?? false;
+      if (loop || layer > 0) this.#playing.set(layer, { clip, priority, loop });
+      else this.#playing.delete(layer);
     });
   }
 
@@ -118,11 +121,19 @@ export class Psd2liveModel implements AvatarModel {
     if (this.#disposed) return;
     this.#run(() => {
       this.rig.update(dt);
-      // The runtime plays a one-shot clip once; a looped one starts again as it ends.
-      for (const [layer, loop] of this.#loops) {
+      // The runtime holds a finished one-shot at its last frame over the layers below (p2l_runtime.h,
+      // p2l_clip_time), which would freeze her idle under a nod: a looped clip starts again as it
+      // ends, and one played once stops.
+      for (const [layer, playing] of this.#playing) {
         const state = this.rig.layerState(layer);
-        if (state === null || state.clip !== loop.clip) this.#loops.delete(layer);
-        else if (state.finished) this.rig.playLayer(loop.clip, layer, loop.priority);
+        if (state === null || state.clip !== playing.clip) {
+          this.#playing.delete(layer);
+        } else if (state.finished && playing.loop) {
+          this.rig.playLayer(playing.clip, layer, playing.priority);
+        } else if (state.finished) {
+          this.rig.playLayer(null, layer, 0);
+          this.#playing.delete(layer);
+        }
       }
     });
   }

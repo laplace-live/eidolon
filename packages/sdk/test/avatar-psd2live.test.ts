@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { AvatarError, resolveSetup } from "../src/avatar/model.ts";
+import { Psd2liveModel } from "../src/avatar/psd2live/model.ts";
+import type { Psd2liveRenderer } from "../src/avatar/psd2live/renderer.ts";
 import { inspectPsd2liveRig, Psd2liveRig } from "../src/avatar/psd2live/rig.ts";
 import {
   compilePsd2liveRuntime,
@@ -288,5 +290,49 @@ describe("the rig", () => {
     rig.dispose();
     expect(rig.hitTest(1000, 300)).toBeNull();
     expect(rig.bounds("HitAreaHead")).toBeNull();
+  });
+});
+
+describe("the model", () => {
+  test("a gesture plays once over her idle, which shows through again as it ends", () => {
+    const rig = load();
+    const idleOnly = load();
+    const model = new Psd2liveModel(rig, { dispose() {} } as unknown as Psd2liveRenderer);
+    const clipOf = (group: string) => rig.clips.find((clip) => clip.group === group)?.id ?? null;
+    const nod = clipOf("Nod");
+    const head = (of: Psd2liveRig) =>
+      ["ParamAngleX", "ParamAngleY", "ParamAngleZ"].map(
+        (id) => of.parameterValues()[of.parameters.indexOf(id)] ?? Number.NaN,
+      );
+    model.play(clipOf("Idle"), 0, { loop: true });
+    idleOnly.playLayer(clipOf("Idle"), 0, 1);
+
+    // At 60 fps: the Nod starts at frame 30, lasts 1.58 s and fades out over 1 s once it stops.
+    const start = 30;
+    const ended = start + 100;
+    const faded = ended + 70;
+    let nodding = 0;
+    let after = 0;
+    for (let frame = 1; frame <= 8 * 60; frame++) {
+      if (frame === start) model.play(nod, 2, { priority: 2 });
+      model.update(1 / 60);
+      idleOnly.update(1 / 60);
+      const idle = head(idleOnly);
+      const apart = Math.max(...head(rig).map((v, i) => Math.abs(v - (idle[i] ?? Number.NaN))));
+      const gesture = rig.layerState(2);
+      if (frame < start) {
+        expect(gesture?.clip).toBeNull();
+      } else if (frame < start + 90) {
+        expect(gesture?.clip).toBe(nod);
+        nodding = Math.max(nodding, apart);
+      } else if (frame >= ended) {
+        expect(gesture).toMatchObject({ clip: null, priority: 0 });
+      }
+      if (frame >= faded) after = Math.max(after, apart);
+    }
+    expect(nodding).toBeGreaterThan(5);
+    expect(after).toBeLessThan(1e-3);
+    model.dispose();
+    idleOnly.dispose();
   });
 });
