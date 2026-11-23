@@ -312,25 +312,32 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       "has the VC++ runtime from one redist beside the natives that import it, as new as their linker",
       () => {
         const copies = new Map<string, string[]>();
-        for (const file of listing(modules).files) {
+        for (const file of listing(payload).files) {
           if (VC_RUNTIME_DLLS.includes(basename(file).toLowerCase())) {
             copies.set(dirname(file), [...(copies.get(dirname(file)) ?? []), basename(file)]);
           }
         }
-        expect(copies.get("onnxruntime-node/bin/napi-v6/win32/x64")?.sort()).toEqual(
+        expect(copies.get("node_modules/onnxruntime-node/bin/napi-v6/win32/x64")?.sort()).toEqual(
           [...VC_RUNTIME_DLLS].sort(),
         );
-        expect(copies.get("@lancedb/lancedb-win32-x64-msvc")).toEqual(["vcruntime140.dll"]);
+        expect(copies.get("node_modules/@lancedb/lancedb-win32-x64-msvc")).toEqual([
+          "vcruntime140.dll",
+        ]);
+        // pnpm's reflink addon, wherever the shim keeps pnpm.
+        const shim = [...copies].filter(([folder]) => folder.startsWith(`${NODE_SHIM}/`));
+        expect(shim.map(([folder, dlls]) => [basename(folder), dlls])).toEqual([
+          ["reflink-win32-x64-msvc", ["vcruntime140.dll"]],
+        ]);
         const hashes = new Map<string, Set<string>>();
         for (const [folder, dlls] of copies) {
-          const natives = readdirSync(join(modules, folder)).filter(
+          const natives = readdirSync(join(payload, folder)).filter(
             (name) => /\.(node|dll)$/i.test(name) && !dlls.includes(name),
           );
           for (const dll of dlls) {
-            const file = join(modules, folder, dll);
+            const file = join(payload, folder, dll);
             const version = readPe(file)?.fileVersion ?? "0";
             for (const native of natives) {
-              const linker = readPe(join(modules, folder, native))?.linker ?? "99";
+              const linker = readPe(join(payload, folder, native))?.linker ?? "99";
               expect([dll, version, native, linker, compareVersions(version, linker) >= 0]).toEqual(
                 [dll, version, native, linker, true],
               );

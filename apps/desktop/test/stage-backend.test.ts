@@ -27,6 +27,7 @@ import {
   resolveFrom,
   supports,
 } from "../scripts/lockfile.ts";
+import { NODE_SHIM } from "../scripts/node-shim.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
   dropUnpacked,
@@ -638,7 +639,7 @@ describe("the VC++ runtime", () => {
     expect(() => newestVcRedist([temp()])).toThrow("No Visual Studio redist with vcruntime140.dll");
   });
 
-  test("goes beside each native that imports it, with what its DLLs import in turn", () => {
+  test("goes beside each native in the payload that imports it, with what its DLLs import in turn", () => {
     const redist = temp();
     const runtimeImports: Record<string, string[]> = {
       "vcruntime140_1.dll": ["VCRUNTIME140.dll"],
@@ -646,7 +647,8 @@ describe("the VC++ runtime", () => {
       "msvcp140_1.dll": ["MSVCP140.dll"],
     };
     for (const name of VC) put(join(redist, name), pe({ imports: runtimeImports[name] ?? [] }));
-    const modules = temp();
+    const payload = temp();
+    const modules = join(payload, "node_modules");
     const ort = join(modules, "onnxruntime-node", "bin", "napi-v6", "win32", "x64");
     put(join(ort, "onnxruntime_binding.node"), pe({ imports: ["MSVCP140.dll"] }));
     put(
@@ -658,10 +660,26 @@ describe("the VC++ runtime", () => {
     const sharp = join(modules, "@img", "sharp-win32-x64", "lib");
     put(join(sharp, "sharp-win32-x64.node"), pe({ imports: ["KERNEL32.dll"] }));
     put(join(sharp, "libvips-42.dll"), pe());
-    expect(vcRuntimeNeeds(modules, redist)).toEqual(
+    // The node shim's pnpm's, which pnpm loads to clone a package into place; the UCRT is Windows'.
+    const reflink = join(
+      payload,
+      NODE_SHIM,
+      "node_modules",
+      "pnpm",
+      "dist",
+      "node_modules",
+      "@reflink",
+      "reflink-win32-x64-msvc",
+    );
+    put(
+      join(reflink, "reflink.win32-x64-msvc.node"),
+      pe({ imports: ["VCRUNTIME140.dll", "api-ms-win-crt-heap-l1-1-0.dll"] }),
+    );
+    expect(vcRuntimeNeeds(payload, redist)).toEqual(
       new Map([
         [lancedb, ["vcruntime140.dll"]],
         [ort, [...VC].sort()],
+        [reflink, ["vcruntime140.dll"]],
       ]),
     );
   });

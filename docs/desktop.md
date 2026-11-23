@@ -627,10 +627,11 @@ VC++ copies.
   a second, identical copy; on win32-x64 `onnxruntime.dll`, without DirectML's DLLs, which CPU
   sessions never load. Type-only packages stay, or `npm ls` would call them missing.
 - **The VC++ runtime on Windows.** LanceDB, which loads at boot, and onnxruntime import it, so a
-  machine without the redistributable couldn't start the backend. Each folder in the payload's
-  `node_modules` (not the node shim's) holding a native addon gets the runtime DLLs its natives
-  import (their import and delay-import tables, and what those DLLs import in turn): onnxruntime's
-  folder five, LanceDB's `vcruntime140.dll`. All come from the newest `Microsoft.VC14*.CRT` folder
+  machine without the redistributable couldn't start the backend, and so does the reflink addon
+  the node shim's pnpm loads to clone a package into place. Each folder in the payload holding a
+  native addon, the node shim's included, gets the runtime DLLs its natives import (their import
+  and delay-import tables, and what those DLLs import in turn): onnxruntime's folder five,
+  LanceDB's and reflink's `vcruntime140.dll`. All come from the newest `Microsoft.VC14*.CRT` folder
   vswhere finds, since whichever copy loads first serves the whole process. Node loads an addon
   with `LOAD_WITH_ALTERED_SEARCH_PATH`, which looks in its own folder first, so an older System32
   copy can't win. The copies shadow System32's, and Windows Update never services them: each

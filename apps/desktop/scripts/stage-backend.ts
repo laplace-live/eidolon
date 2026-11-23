@@ -219,14 +219,14 @@ function vcImports(file: string): string[] {
 }
 
 /**
- * Each folder under `modules` holding a native addon, with the VC++ runtime DLLs its own natives
- * import and the ones those import in turn: Node loads an addon with LOAD_WITH_ALTERED_SEARCH_PATH,
- * which looks in the addon's folder first.
+ * Each folder in `payload` holding a native addon, the node shim's included, with the VC++ runtime
+ * DLLs its own natives import and the ones those import in turn: Node loads an addon with
+ * LOAD_WITH_ALTERED_SEARCH_PATH, which looks in the addon's folder first.
  */
-export function vcRuntimeNeeds(modules: string, redist: string): Map<string, string[]> {
+export function vcRuntimeNeeds(payload: string, redist: string): Map<string, string[]> {
   const runtime = new Map(VC_RUNTIME_DLLS.map((dll) => [dll, vcImports(join(redist, dll))]));
   const folders = new Set(
-    files(modules)
+    files(payload)
       .filter((file) => file.endsWith(".node"))
       .map((file) => dirname(file)),
   );
@@ -523,7 +523,7 @@ export async function stageBackend(
     let vcRuntime: VcRedist | null = null;
     if (target === "win32-x64") {
       vcRuntime = newestVcRedist();
-      for (const [folder, dlls] of vcRuntimeNeeds(modules, vcRuntime.dir)) {
+      for (const [folder, dlls] of vcRuntimeNeeds(payload, vcRuntime.dir)) {
         for (const dll of dlls) copyFileSync(join(vcRuntime.dir, dll), join(folder, dll));
       }
       const unsigned = unsignedNames([
