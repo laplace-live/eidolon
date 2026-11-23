@@ -62,6 +62,14 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
     // A script with no #! line, which only sh runs.
     "node_modules/.bin/eidolon-shim-plain": `printf 'plain %s\\n' "$@"\nexit 4\n`,
     "node_modules/.bin/eidolon-shim-locked": "#!/bin/sh\necho locked\n",
+    "node_modules/.bin/eidolon-shim-trap": [
+      "#!/bin/sh",
+      "trap 'echo got-TERM; exit 7' TERM",
+      "trap 'echo got-INT; exit 8' INT",
+      "echo ready",
+      "while :; do sleep 0.1; done",
+      "",
+    ].join("\n"),
   });
   chmodSync(join(project, "node_modules", ".bin", "eidolon-shim-locked"), 0o644);
   const below = join(project, "sub", "dir");
@@ -136,6 +144,38 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
     expect([locked.status, locked.stdout]).toEqual([126, ""]);
     expect(locked.stderr).toContain("EACCES");
   });
+
+  test("npx passes SIGTERM and SIGINT on to the command, and ends as it then does", async () => {
+    for (const [signal, ending] of [
+      ["SIGTERM", "got-TERM\n"],
+      ["SIGINT", "got-INT\n"],
+    ] as const) {
+      // In a process group of its own, killed should the signal never reach the command.
+      const child = spawn(join(LAUNCHER_SOURCES, "npx"), ["eidolon-shim-trap"], {
+        cwd: below,
+        detached: true,
+        env: {
+          HOME: home,
+          PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}`,
+          EIDOLON_NODE: process.execPath,
+        },
+      });
+      let stdout = "";
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk;
+        if (stdout === "ready\n") child.kill(signal);
+      });
+      const group = -(child.pid as number);
+      const killer = setTimeout(() => process.kill(group, "SIGKILL"), 15_000);
+      const status = await new Promise((resolve) => child.on("close", resolve));
+      clearTimeout(killer);
+      expect([signal, status, stdout]).toEqual([
+        signal,
+        signal === "SIGTERM" ? 7 : 8,
+        `ready\n${ending}`,
+      ]);
+    }
+  }, 40_000);
 
   test("an npx that fails says why on stderr, and prints nothing on stdout", () => {
     const ran = run("npx", ["-y", `file:${join(scratch, "missing")}`]);
