@@ -248,14 +248,14 @@ describe("her direction", () => {
     expect(model.play).toHaveBeenCalledWith("shake-id", 2, { priority: 2 });
   });
 
-  test("under reduced motion, keeps her face, mouth and idle but neither talks nor gestures", () => {
+  test("under reduced motion, keeps her face and mouth but plays no clip, idle included", () => {
     const stage = stageOf({ reducedMotion: true });
     const model = fakeModel();
     stage.show(model, SETUP);
     stage.direct(direction({ mood: ["sad"], speaking: true, gesture: { name: "nod", seq: 1 } }));
     stage.mouth({ read: () => 0.6 });
     clock.frame(0);
-    expect(model.play.mock.calls).toEqual([["idle-id", 0, { loop: true }]]);
+    expect(model.play).not.toHaveBeenCalled();
     expect(model.setExpressions).toHaveBeenLastCalledWith(["sad"]);
     expect(model.mouth).toHaveBeenLastCalledWith(0.6);
     expect(model.lookAt).toHaveBeenLastCalledWith(0, 0);

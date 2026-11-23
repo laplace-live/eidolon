@@ -25,7 +25,7 @@ export interface AvatarStageOptions {
   readonly maxPixelRatio?: number;
   /** Frames a second at most; 0 (the default) draws every animation frame. */
   readonly fps?: number;
-  /** Leaves out talking and gesture clips and the eyes' saccades. */
+  /** Plays no clip, idle included, and leaves out the eyes' saccades; her face and mouth still move. */
   readonly reducedMotion?: boolean;
   /** Called once a model fails, after the stage disposed it. */
   readonly onError?: (error: AvatarError) => void;
@@ -296,7 +296,9 @@ export class AvatarStage {
       applied.outfit = true;
     }
     if (!applied.idle) {
-      if (setup.gestures.idle !== null) model.play(setup.gestures.idle, IDLE, { loop: true });
+      if (!this.#reducedMotion && setup.gestures.idle !== null) {
+        model.play(setup.gestures.idle, IDLE, { loop: true });
+      }
       applied.idle = true;
     }
     // A lent mood shows over the reply's when the two can't both.

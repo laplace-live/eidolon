@@ -294,8 +294,8 @@ loop; the model has none of its own.
   pointer; a pair `[x, y]` holds a point.
 - **`mouth(source)`** reads a `MouthSource` once a frame; `wear(outfit)` shows an outfit's pose
   entries, holds its parameters and hides its parts.
-- **`reducedMotion`** keeps her face, mouth and idle clip, and leaves out the talking and gesture
-  clips and the wandering eyes.
+- **`reducedMotion`** keeps her face and mouth, and the blinking and breathing the runtime does by
+  itself, and leaves out every clip (idle, talking and gestures) and the wandering eyes.
 - **Errors:** a model that throws, or a lost WebGL context, is disposed and reported to `onError`
   once, so the page can show her picture instead. `alphaAt(x, y)` resolves with the drawn alpha
   under a page point after the next draw, read before the page composites the frame.
