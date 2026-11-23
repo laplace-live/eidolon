@@ -108,6 +108,9 @@ describe("before the environment is read", () => {
     const status = await backend.handle(app("/api/local/status"));
     expect([status.status, await status.json()]).toEqual([503, UNREACHABLE]);
     expect(backend.quitCheck()).toBeNull();
+    await expect(backend.get("/api/local/tasks", AbortSignal.timeout(1000))).rejects.toThrow(
+      "no server is ready",
+    );
     expect(told).toEqual([]);
   });
 
@@ -135,6 +138,21 @@ describe("attached to a terminal's server", () => {
     expect(told).toEqual(["ready attached"]);
     expect(statusReads()).toEqual([server.pid]);
     expect(backend.quitCheck()).toBeNull();
+  });
+
+  test("main's own GET reaches it with the Bearer, and its connections closing start no grace period", async () => {
+    const server = await terminal({ version: "0.13.0" });
+    const { backend, told } = follow();
+    await backend.start();
+    await vi.waitFor(() => expect(told).toEqual(["ready attached"]));
+    const tasks = await backend.get("/api/local/tasks", AbortSignal.timeout(2000));
+    expect([tasks.status, await tasks.json()]).toEqual([200, { pid: server.pid }]);
+    await sleep(10 * KEEP_ALIVE_MS);
+    expect(told).toEqual(["ready attached"]);
+    expect(requests(home).map(({ path }) => path)).toEqual([
+      "/api/local/status",
+      "/api/local/tasks",
+    ]);
   });
 
   test("a page's connection closing proves the same server again, without reading its version again", async () => {
