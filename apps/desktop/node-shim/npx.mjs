@@ -1,6 +1,6 @@
 // npx for an MCP server where the computer has none: npx's arguments as pnpm dlx's, run by the pnpm
-// Eidolon bundles in this process. pnpm 11 reports dlx on stderr, so the server's stdout, which the
-// MCP protocol owns, holds only what the server prints.
+// Eidolon bundles in this process. pnpm reports dlx on stderr, so the server's stdout, which the MCP
+// protocol owns, holds only what the server prints.
 import { fileURLToPath } from "node:url";
 
 const DROPPED = new Set(["-y", "--yes", "-q", "--quiet"]);

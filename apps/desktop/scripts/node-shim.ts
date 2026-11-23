@@ -36,8 +36,8 @@ export function pnpmPackage(): string {
 /**
  * Remove packages bundled directly under pnpm's dist/node_modules whose npm `os`/`cpu` fields
  * exclude the target. The pnpm tarball carries every platform's optional native packages, such as
- * `@reflink/reflink-darwin-x64`. Nested node_modules and the `libc` field are not inspected; pnpm 11
- * bundles neither nested native packages nor Linux variants.
+ * `@reflink/reflink-darwin-x64`. Nested node_modules and the `libc` field are not inspected; the
+ * pinned pnpm bundles neither nested native packages nor Linux variants.
  */
 export function prunePnpmForeignNativePackages(pnpm: string, platform: string, arch: string): void {
   const modules = join(pnpm, "dist", "node_modules");
