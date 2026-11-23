@@ -38,6 +38,17 @@ test("each launcher, sh and .cmd, runs EIDOLON_NODE with the backend's runtime f
   }
 });
 
+test("each .cmd launcher has CRLF line ends, which cmd.exe reads safely", () => {
+  for (const file of POSIX_LAUNCHERS.map((name) => `${name}.cmd`)) {
+    const text = readFileSync(join(LAUNCHER_SOURCES, file), "utf8");
+    expect([file, text.endsWith("\r\n"), /[\r\n]/.test(text.replaceAll("\r\n", ""))]).toEqual([
+      file,
+      true,
+      false,
+    ]);
+  }
+});
+
 /** Writes `files` under `base`, executable. */
 function write(base: string, files: Record<string, string>): string {
   for (const [name, text] of Object.entries(files)) {

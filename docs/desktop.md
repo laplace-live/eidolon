@@ -746,7 +746,7 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   integrity doesn't cover it. `assets/`, with the tray icon, ships the same way.
 - **The [terminal command](#the-terminal-command)'s launchers** ship as each platform's extra
   resource too, `launchers/mac` or `launchers/win` as `bin`: `Eidolon.app/Contents/Resources/bin`,
-  or `resources\bin`. `launchers/.gitattributes` keeps the `.cmd` CRLF.
+  or `resources\bin`. `apps/desktop/.gitattributes` keeps every `.cmd`, the node shim's too, CRLF.
 - **The fuses,** each one listed, since an unlisted fuse keeps Electron's default: `runAsNode` on,
   for the backend, its jobs, the `eidolon` command and the node shim; the nodeOptions and CLI
   inspect fuses off; asar integrity and loading the app only from the asar on;
