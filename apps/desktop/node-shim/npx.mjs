@@ -725,6 +725,10 @@ if (import.meta.main) {
     windowsVerbatimArguments: start.verbatim,
   };
   let child;
+  // Listening before the command starts: a signal npx gets once it runs would otherwise end npx
+  // alone, as nothing listened yet, and leave the command running. Node calls the listener only
+  // after this block, when child is set.
+  const undo = relay({ kill: (signal) => child.kill(signal) });
   try {
     child = spawn(start.command, start.args, options);
   } catch (error) {
@@ -735,7 +739,6 @@ if (import.meta.main) {
     }
     child = spawn("/bin/sh", [file, ...decided.args], options);
   }
-  const undo = relay(child);
   child.on("error", (error) => {
     // spawn reports a script whose #! interpreter isn't there as the script missing; sh names the
     // interpreter and ends 126.

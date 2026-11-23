@@ -207,11 +207,14 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
       });
       const group = -(child.pid as number);
       const killer = setTimeout(() => process.kill(group, "SIGKILL"), 15_000);
-      const status = await new Promise((resolve) => child.on("close", resolve));
+      // With the signal npx ended on, if any: its own (it ended before passing it on) or the kill's.
+      const ended = await new Promise((resolve) =>
+        child.on("close", (code, killed) => resolve([code, killed])),
+      );
       clearTimeout(killer);
-      expect([signal, status, stdout]).toEqual([
+      expect([signal, ended, stdout]).toEqual([
         signal,
-        signal === "SIGTERM" ? 7 : 8,
+        [signal === "SIGTERM" ? 7 : 8, null],
         `ready\n${ending}`,
       ]);
     }
