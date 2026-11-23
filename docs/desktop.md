@@ -678,8 +678,9 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   runs on Electron's Node and the launchers' folder is there (`shippedPath`): that folder last on
   the server's `PATH`, added before `shellEnv()`'s filter, which drops it as any other folder the
   task may write, and `EIDOLON_NODE`, the backend's own binary (`jsRuntime().command`). A `node`,
-  `npx` or `pnpm` on the owner's `PATH` comes first. A task's commands never get it, and under Node,
-  npx's or a checkout's, nothing changes.
+  `npx` or `pnpm` on the owner's `PATH` comes first, and a `PATH` or `EIDOLON_NODE` in the server's
+  `mcp.json` entry replaces these. A task's commands never get it, and under Node, npx's or a
+  checkout's, nothing changes.
 - **The launchers** refuse to run without `EIDOLON_NODE`, then set `ELECTRON_RUN_AS_NODE=1` and run
   that binary with `--disable-sigusr1 --use-system-ca`: `node` passes its arguments on, and `pnpm`
   and `pnpx` run the bundled pnpm's own. The server inherits the variable, so one that starts Node
