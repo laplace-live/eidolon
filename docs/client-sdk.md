@@ -340,8 +340,9 @@ together show sleepy and smile. `soundCueEffect(name)` decides every cue in `CUE
 
 - **`mouthCurve(dbFrames, o?)`** turns loudness into a mouth opening: a loudness map from -40 to
   -10 dBFS, weighed against the last 0.25 s's peak and 0.12 s's dip so the mouth shuts between
-  syllables, then an attack and release envelope (`MOUTH_CURVE`). Tuned on her Fish voice, it shut
-  the mouth on 25% of voiced frames, 1.6 times a second, where the loudness map alone gave 0.46.
+  syllables, then an attack and release envelope (`MOUTH_CURVE`). Tuned on her Fish voice, it shuts
+  the mouth on 25% of voiced frames, 1.5 times a second, where the loudness map alone gave 0.46
+  ([its benchmark](benchmarks/2026-11-23-mouth-curve/README.md)).
 - **`new MouthMeter(trackOrStream, {context?, curve?})`** reads a track through an AnalyserNode
   that reaches no speaker, as float samples; the stage reads it each frame. An AudioContext made
   outside a click starts suspended, so make it in the click that starts the call.

@@ -21,7 +21,7 @@ export interface MouthCurveOptions {
 }
 
 /**
- * Tuned on her 12 Fish voice messages: it shut the mouth on 25% of voiced frames, 1.6 closures a
+ * Tuned on her 12 Fish voice messages: it shuts the mouth on 25% of voiced frames, 1.5 closures a
  * second, where the loudness map alone gave 0.46.
  */
 export const MOUTH_CURVE: MouthCurveOptions = {

@@ -281,10 +281,13 @@ Each frame's target is `loud × (base + (1 − base) × local)`: `loud` is the f
 map, and `local` where it sits between the last 0.12 s's dip and the last 0.25 s's peak, over a
 swing of at least 10 dB. The envelope then moves the mouth toward the target.
 
-It was tuned on her own voice, never on synthetic speech alone. Her 12 Fish voice messages span
-p10 -35, p50 -19 and p90 -9.4 dB, and on them the curve shut the mouth on 25% of voiced frames, 1.6
-times a second, where the loudness map alone gave 0.46. The tests check its shape on synthetic
-voices: bursts with gaps, a tone whose loudness swings like syllables, a steady vowel and silence.
+It was tuned on her own voice, never on synthetic speech alone. On her 12 Fish voice messages,
+whose voiced frames span p10 -35, p50 -19 and p90 -9.4 dBFS, it shuts her mouth on 25% of voiced
+frames and 1.5 times a second, where the loudness map alone closed it 0.46 times a second.
+[Its benchmark](benchmarks/2026-11-23-mouth-curve/README.md) says what counts as voiced, shut and
+a closure, and scores a change on her voice messages through the SDK's own `mouthCurve`. The tests
+check its shape on synthetic voices: bursts with gaps, a tone whose loudness swings like syllables,
+a steady vowel and silence.
 
 ## Framing and outfits
 
@@ -375,7 +378,8 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
     and group calls.
   - `avatar-moods.test.ts` reads `prompt.md`'s published directions and lines written in their
     style, never lines from the owner's chats, and decides every cue in `CUE_EMOJI`.
-  - `avatar-mouth.test.ts` pins `MOUTH_CURVE` and checks it on synthetic voices.
+  - `avatar-mouth.test.ts` pins `MOUTH_CURVE` and checks it on synthetic voices;
+    [its benchmark](benchmarks/2026-11-23-mouth-curve/README.md) scores it on her voice messages.
   - `avatar-framing.test.ts`, and `avatar-stage.test.ts`, which drives the stage with a fake model
     and a clock the test moves.
   - `avatar-psd2live.test.ts` runs the vendored runtime on the test rig: its SHA-256, exports and
