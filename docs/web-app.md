@@ -1,9 +1,9 @@
 # The local web app
 
 Eidolon on your own computer, with a web app to set it up, build personas, and call or text them: a
-setup wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call
-page, text chats, the tasks she runs on this computer when asked in a chat or on a call in one,
-settings, and the offline chain's commands run as jobs. It is a second entry
+setup wizard, a persona studio (identity, prompt, voice, appearance, facts, videos, glossary,
+pictures), a call page, text chats, the tasks she runs on this computer when asked in a chat or on a
+call in one, settings, and the offline chain's commands run as jobs. It is a second entry
 point beside the bot, `apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React,
 shadcn, Tailwind) on loopback only. The bot that `bun run start` and the Docker image run never
 loads it.
@@ -379,8 +379,9 @@ and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
   a chat's or the call's header, and following a link in it closes it.
 - **The page:** a chat, `/chats` and the call page fill the window beside it under their own
   headers; every other page scrolls in a column there, and the window itself never scrolls. A
-  layout that sits side by side when wide, such as the studio's and Settings' sections, goes by the
-  width it is given, through a container query, not the window's, which the sidebar shares.
+  layout that sits side by side when wide, such as the studio's and Settings' sections, or a model
+  beside its tabs in the studio's Appearance, goes by the width it is given, through a container
+  query, not the window's, which the sidebar shares.
 
 ## In the desktop app
 
@@ -908,6 +909,14 @@ context `task kind`), **Run Once** 运行一次, **Always in This Folder** 在�
 {time}" reads "{time} 自动停止". The task card's copy of the bot's `STEER_PREFIX`
 (`features/tasks/state.ts`) is typed by the bot's constant, so changing one fails typecheck until
 the other follows.
+
+Her looks have words of their own, kept apart from her picture and her AI models: **Appearance** is
+形象, its card **How She Looks** 她的形象, and a model's kind **2D Model · PSD2Live** 2D 模型 ·
+PSD2Live. **Import a Model** is 导入模型, and a model's **Make Active** carries the context `model`
+(设为当前形象), apart from a persona's (设为当前人设); the setting it writes, `appearance.model`, is
+**Character Model** (当前形象). 头像 stays her picture, and 模型 alone (Mind's **Models**) her AI
+models. Her moods' labels carry the context `mood` and her gestures' `gesture`
+(`features/studio/appearance-labels.ts`).
 
 The English capitalizes as laplace-chat's does. A short label is Title Case, with articles,
 conjunctions and prepositions lowercased whatever their length and a phrasal verb's particle
