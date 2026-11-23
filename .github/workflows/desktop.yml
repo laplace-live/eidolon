@@ -294,6 +294,7 @@ jobs:
             apps/desktop/.out/*.exe
             apps/desktop/.out/*.blockmap
             apps/desktop/.out/latest*.yml
+            apps/desktop/.out/dev*.yml
           include-hidden-files: true
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'push' && 90 || 1 }}
@@ -339,7 +340,9 @@ jobs:
       # electron-updater rejects other bytes on their checksum. Then the manifests, url: and path:
       # pointed into v<version>/ (electron-updater resolves both, and the old blockmap it derives
       # from them, against the manifest's URL) and the notes appended: v<version>/'s copies, then
-      # flat eidolon/'s, which installs read. Then the download links, and changelog.json.
+      # flat eidolon/'s, which installs read. Then the download links, and changelog.json; none of
+      # the flat files when R2 already serves a newer release, which an older one's late upload (a
+      # re-run, or a slower notarization) would otherwise roll back.
       - name: Upload to R2
         timeout-minutes: 25
         run: |
@@ -367,18 +370,31 @@ jobs:
               return 1
             fi
           }
+          # The version a flat manifest in R2 names, or nothing when there is none yet.
+          served_version() {
+            local found
+            if found=$(aws s3 cp "s3://$R2_BUCKET/$R2_PREFIX/$1" - --endpoint-url "$R2_ENDPOINT" 2>&1); then
+              sed -n 's/^version: *//p' <<< "$found" | head -n 1
+              return 0
+            fi
+            [[ $found == *"(404)"* ]] && return 0
+            echo "::error::reading $R2_PREFIX/$1 from R2: $found" >&2
+            return 1
+          }
           cd release
-          # A pattern that matches nothing would otherwise upload nothing and pass.
+          # nullglob makes a pattern that matches nothing an empty list, which the counts below fail.
           shopt -s nullglob
           installers=(*.dmg *.zip *.exe *.blockmap)
           dmg=(*.dmg)
+          zip=(*.zip)
           setup=(*.exe)
+          blockmaps=(*.zip.blockmap *.exe.blockmap)
           manifests=(latest-mac.yml latest.yml)
           for name in "${manifests[@]}"; do
             [[ -f $name ]] || { echo "::error::no $name among: ${installers[*]}"; exit 1; }
           done
-          if (( ${#dmg[@]} != 1 || ${#setup[@]} != 1 )); then
-            echo "::error::expected one DMG and one setup, found: ${installers[*]}"
+          if (( ${#dmg[@]} != 1 || ${#zip[@]} != 1 || ${#setup[@]} != 1 || ${#blockmaps[@]} != 2 )); then
+            echo "::error::expected one DMG, one zip, one setup and their two blockmaps, found: ${installers[*]}"
             exit 1
           fi
           for file in "${installers[@]}"; do put_once "$file" "$R2_PREFIX/v$version/$file"; done
@@ -387,6 +403,14 @@ jobs:
             { sed -E "s#^([[:space:]]*(- )?(url|path): )#\1v$version/#" "$name"; printf '%s\n' "$notes"; } \
               > "feed/$name"
             s3 "feed/$name" "$R2_PREFIX/v$version/$name" no-cache
+          done
+          for name in "${manifests[@]}"; do
+            served=$(served_version "$name") || exit 1
+            if [[ -n $served && $served != "$version" \
+              && $(printf '%s\n' "$served" "$version" | sort -V | tail -n 1) == "$served" ]]; then
+              echo "R2 already serves $served, newer than $version: v$version/ is up, and the feed, the links and changelog.json stay $served's"
+              exit 0
+            fi
           done
           for name in "${manifests[@]}"; do s3 "feed/$name" "$R2_PREFIX/$name" no-cache; done
           s3 "${dmg[0]}" "$R2_PREFIX/Eidolon-mac-arm64.dmg" no-cache
@@ -456,8 +480,9 @@ jobs:
           R2_BUCKET: downloads
           R2_PREFIX: eidolon
 
-  # The upload's credentials and calls on one object, before a release first needs them: the put with
-  # its SHA-256, the head that guards an installer, and a delete.
+  # The upload's credentials and calls on one object, before a release first needs them: a put over
+  # 8 MiB, which the AWS CLI sends in parts as it does an installer, with its SHA-256; the head that
+  # guards an installer; the listing releases.json is built from; and a delete.
   r2-probe:
     name: R2 probe
     if: github.event_name == 'workflow_dispatch' && inputs.r2_probe
@@ -474,7 +499,7 @@ jobs:
             exit 1
           fi
 
-      - name: Put, head and delete eidolon/.probe-<run id>
+      - name: Put, head, list and delete eidolon/.probe-<run id>
         timeout-minutes: 5
         run: |
           key="$R2_PREFIX/.probe-$GITHUB_RUN_ID"
@@ -485,15 +510,21 @@ jobs:
           remove() {
             aws s3api delete-object --bucket "$R2_BUCKET" --key "$key" --endpoint-url "$R2_ENDPOINT" > /dev/null
           }
-          printf 'probe %s\n' "$GITHUB_RUN_ID" > probe.txt
-          sum=$(sha256sum probe.txt | cut -d ' ' -f 1)
-          aws s3 cp probe.txt "s3://$R2_BUCKET/$key" --endpoint-url "$R2_ENDPOINT" --cache-control no-cache \
+          head -c 9437184 /dev/urandom > probe.bin
+          sum=$(sha256sum probe.bin | cut -d ' ' -f 1)
+          aws s3 cp probe.bin "s3://$R2_BUCKET/$key" --endpoint-url "$R2_ENDPOINT" --cache-control no-cache \
             --only-show-errors --metadata "sha256=$sum"
           # A failed head leaves no probe behind in the public bucket.
           trap 'remove || true' EXIT
           found=$(stored)
           if [[ $found != "$sum" ]]; then
             echo "::error::head-object read sha256 $found back, not $sum"
+            exit 1
+          fi
+          listed=$(aws s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix "$key" --endpoint-url "$R2_ENDPOINT" \
+            --query 'Contents[].Key' --output text)
+          if [[ $listed != "$key" ]]; then
+            echo "::error::list-objects-v2 listed $listed, not $key"
             exit 1
           fi
           remove
@@ -505,7 +536,7 @@ jobs:
             echo "::error::$found"
             exit 1
           fi
-          echo "R2: put, head and delete passed on $key"
+          echo "R2: a multipart put, head, list and delete passed on $key"
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

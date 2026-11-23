@@ -575,7 +575,8 @@ changelog. The tag runs `desktop.yml` in the tagged commit:
    - each installer and blockmap once, to `eidolon/v<version>/`, cached for a year as immutable. It
      reads the SHA-256 the first upload stored with the key, and fails when another object is
      there: Cloudflare would keep serving the first, and electron-updater rejects other bytes on
-     their checksum. A pattern that matches nothing fails it too, rather than upload nothing;
+     their checksum. It fails unless the legs left one DMG, one zip, one setup, the zip's and the
+     setup's blockmaps and both manifests, rather than upload less;
    - `latest-mac.yml` and `latest.yml`, uncached, with `url:` and `path:` pointed into
      `v<version>/` (electron-updater resolves both, and the previous version's blockmap it derives
      from them, against the manifest's own URL) and the update dialog's notes appended, the one
@@ -584,7 +585,13 @@ changelog. The tag runs `desktop.yml` in the tagged commit:
    - the download links, uncached: `eidolon/Eidolon-mac-arm64.dmg` and
      `eidolon/Eidolon-win-x64.exe`, the version's DMG and NSIS setup;
    - `eidolon/changelog.json`, uncached: the repository's `changelog.json`, every release's notes,
-     for the website, at `https://downloads.vrp.moe/eidolon/changelog.json`.
+     for the website, at `https://downloads.vrp.moe/eidolon/changelog.json`. It changes only with a
+     desktop release, so a release of the npm package or the SDK alone reaches the website's copy
+     with the next desktop one.
+
+   None of the flat files is written when the flat manifests R2 serves already name a newer
+   version: an older release's late upload, a re-run of its failed job or a slower notarization,
+   would point the feed, the links and the website back at it. Its `v<version>/` files still go up.
 4. **The index:** `eidolon/releases.json`, the website's version history at
    `https://downloads.vrp.moe/eidolon/releases.json`, rebuilt from a listing of `eidolon/v*`: each
    version with the date of its first file, and its files but the blockmaps and manifests, each by
@@ -608,12 +615,16 @@ A dispatch of `desktop.yml` builds unsigned, at `0.0.0-dev`, unless an input say
 - **`update_test`** builds 0.0.1 and 0.0.2 signed and updates the one to the other through the real
   updater, on both platforms ([The update test](#the-update-test)). It refuses `sign`, `version`
   and `feed_url`: it picks its own.
-- **`r2_probe`** puts, heads and deletes `eidolon/.probe-<run id>` with the upload's credentials and
-  calls, and fails on any step: the proof the R2 token writes, before a release needs it.
+- **`r2_probe`** puts `eidolon/.probe-<run id>`, 9 MiB, which the AWS CLI sends in parts as it does
+  an installer, with its SHA-256; reads that back with `head-object`, lists the key as the index
+  does, deletes it, and fails on any step: the proof the R2 token writes, before a release needs it.
 - **`release_index`** rebuilds `releases.json`.
 
 The last three run alone, and the build job doesn't run for them. All four run only on `master` and
-`electron`, and a run elsewhere fails before any secret is read.
+`electron`, and a run elsewhere fails before any secret is read. `electron` stays a signing ref
+after the release work merged: it is where a signed build, the update test or the probe runs before
+a change reaches master. A `sign` dispatch without `version` builds `0.0.0-dev`, channel `dev`,
+whose manifests are `dev-mac.yml` and `dev.yml`; its artifact keeps those too.
 
 ### Recovery
 

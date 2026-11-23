@@ -103,8 +103,9 @@ laplace-persona's, so the website reads both apps' files alike.
   the history gets one from its opening verb and its bump, which only the SDK's 0.1.0, published
   by hand, needs. That version has no tag either, so its release is dated by the commit that
   wrote its section. A re-run rewrites the whole file, `sync`'s dates with the tags'.
-- **The website reads it** at `https://downloads.vrp.moe/eidolon/changelog.json`, where the
-  desktop's release uploads it.
+- **The website reads it** at `https://downloads.vrp.moe/eidolon/changelog.json`, where each
+  desktop release uploads it: a release of the npm package or the SDK alone reaches that copy
+  with the next desktop one. The repository's file is always current.
 - **The update manifest carries the desktop's slice.** `node scripts/changelog.ts manifest`
   prints one line, `eidolonNotes: [...]`: the desktop app's 10 newest releases (`MANIFEST_LIMIT`)
   as JSON, which is YAML, for desktop.yml to append to `latest-mac.yml` and `latest.yml`.
