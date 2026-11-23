@@ -80,11 +80,13 @@ describe("STRINGS", () => {
   test("the update's boxes name both versions, in both languages", () => {
     expect(en.text.updateAvailableTitle("0.2.0")).toBe("Eidolon 0.2.0 is available");
     expect(en.text.updateAvailable("0.1.0")).toContain("You have 0.1.0.");
+    expect(en.text.updateDownloaded("0.2.0")).toContain("Eidolon 0.2.0 is downloaded.");
     expect(en.text.updateDownloaded("0.2.0")).toContain("installs the next time you quit Eidolon");
     expect(en.text.upToDate("0.1.0")).toBe("Eidolon 0.1.0 is the latest version.");
     expect(en.text.updateFailed).toContain(`${en.label.showLogs} has the details`);
     expect(zh.text.updateAvailableTitle("0.2.0")).toBe("Eidolon 0.2.0 已发布");
     expect(zh.text.updateAvailable("0.1.0")).toContain("当前版本为 0.1.0");
+    expect(zh.text.updateDownloaded("0.2.0")).toContain("0.2.0");
     expect(zh.text.updateDownloaded("0.2.0")).toContain("下次退出 Eidolon 时安装");
     expect(zh.text.updateFailed).toContain(`「${zh.label.showLogs}」`);
   });
