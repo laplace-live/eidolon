@@ -2,8 +2,8 @@
 // which desktop.yml runs after its signed package step. On macOS: the app's signature, Gatekeeper's
 // verdict, the stapled ticket, the hardened runtime and a secure timestamp on each of the payload's
 // natives, and the designated requirement of the app and every helper. On Windows: the NSIS setup
-// installed for this user, Authenticode on every PE file of the install, the setup and the
-// uninstaller included, each signed by the org where the release signs it and by Microsoft
+// installed for this user, a timestamped Authenticode signature on every PE file of the install,
+// the setup and the uninstaller included, each the org's where the release signs it and Microsoft's
 // elsewhere, then the uninstall. A PASS or FAIL line per check, and exit 1 when one failed.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -188,9 +188,9 @@ export function parseAuthenticode(stdout: string): Authenticode[] {
 }
 
 /**
- * Each of `files` Valid, and signed by one of `publishers` where the release signs it, which is
- * every .exe and each name the stage listed unsigned; by Microsoft elsewhere, the signature it came
- * with. A file inside `root` is named by its path from there.
+ * Each of `files` Valid and timestamped, and signed by one of `publishers` where the release signs
+ * it, which is every .exe and each name the stage listed unsigned; by Microsoft elsewhere, the
+ * signature it came with. A file inside `root` is named by its path from there.
  */
 export function signatureChecks(
   files: readonly string[],
@@ -215,8 +215,12 @@ export function signatureChecks(
       };
     }
     const signers = org ? options.publishers : MICROSOFT_SIGNERS;
-    const pass = entry.Status === "Valid" && signers.includes(entry.Signer ?? "");
-    const stamped = entry.TimeStamper === null ? "" : `, timestamped by ${entry.TimeStamper}`;
+    const pass =
+      entry.Status === "Valid" &&
+      signers.includes(entry.Signer ?? "") &&
+      entry.TimeStamper !== null;
+    const stamped =
+      entry.TimeStamper === null ? ", not timestamped" : `, timestamped by ${entry.TimeStamper}`;
     const why = entry.Status === "Valid" ? "" : `: ${entry.StatusMessage ?? ""}`;
     return {
       name: check,

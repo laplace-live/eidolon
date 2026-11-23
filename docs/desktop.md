@@ -677,12 +677,13 @@ one failed. `test/signed-check.test.ts` holds its verdicts to the tools' own out
   -t` prints it.
 - **Windows:** it installs the setup silently for the user, refusing where Eidolon is installed
   already, then reads `Get-AuthenticodeSignature` on the setup and on every PE file of the install,
-  found by its headers whatever its name. Each must be Valid. The setup, every `.exe` in the install
-  (`Eidolon.exe`, the uninstaller, `elevate.exe`) and every name the stage listed must be signed by
-  one of `publish.publisherName`'s names; every other file must keep the Microsoft signature it
-  came with (`MICROSOFT_SIGNERS`): onnxruntime's, the VC++ runtime and Electron's
-  `d3dcompiler_47.dll`. The install must hold each of those and every listed file, so no check
-  passes on nothing. Then it uninstalls.
+  found by its headers whatever its name. Each must be Valid and timestamped, since a Trusted
+  Signing certificate lasts three days and an untimestamped signature lapses with it. The setup,
+  every `.exe` in the install (`Eidolon.exe`, the uninstaller, `elevate.exe`) and every name the
+  stage listed must be signed by one of `publish.publisherName`'s names; every other file must keep
+  the Microsoft signature it came with (`MICROSOFT_SIGNERS`): onnxruntime's, the VC++ runtime and
+  Electron's `d3dcompiler_47.dll`. The install must hold each of those and every listed file, so no
+  check passes on nothing. Then it uninstalls.
 
 ### Secrets
 

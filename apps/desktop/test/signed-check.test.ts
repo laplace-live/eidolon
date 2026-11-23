@@ -359,6 +359,23 @@ describe("Windows", () => {
     ).toEqual(["Eidolon Setup 0.1.0.exe is signed by the org"]);
   });
 
+  // Trusted Signing's certificates last three days: a signature without a timestamp lapses with one.
+  test("fails a valid signature without a timestamp, the org's or Microsoft's", () => {
+    const unstamped = (path: string, signer: string): Authenticode => ({
+      ...signature(path, signer),
+      TimeStamper: null,
+    });
+    const org = replacing("ffmpeg.dll", (path) => unstamped(path, "LAPLACE Live LLC"));
+    expect(
+      signatureChecks(FILES, org, OPTIONS)
+        .filter((check) => !check.pass)
+        .map((check) => [check.name, check.detail]),
+    ).toEqual([["ffmpeg.dll is signed by the org", "Valid, LAPLACE Live LLC, not timestamped"]]);
+    expect(
+      failures(replacing("d3dcompiler_47.dll", (path) => unstamped(path, "Microsoft Windows"))),
+    ).toEqual(["d3dcompiler_47.dll keeps Microsoft's signature"]);
+  });
+
   // signExts matches the end of a path, so a listed name that ends another file's name signs both.
   test("fails a Microsoft file whose name ends with a listed one, which the release signed too", () => {
     const listed = [...LISTED, "140.dll"];
