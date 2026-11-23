@@ -739,6 +739,18 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     ]);
   }, 60_000);
 
+  test("reads no .npmrc of a pnpm workspace around the folder pnpm runs in", async () => {
+    // That folder is in TMPDIR, here inside a pnpm workspace whose registry holds nothing.
+    const around = write(join(scratch, "pnpm-workspace-tmp"), {
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      ".npmrc": `registry=${registry}/nowhere/\n`,
+      "tmp/.keep": "",
+    });
+    const env = { TMPDIR: join(around, "tmp") };
+    const ran = await launch("npx", ["-y", "eidolon-test-hello", "x"], { env });
+    expect(ran).toEqual({ status: 0, stdout: 'hello ["x"]\n', stderr: "", marks: [] });
+  }, 60_000);
+
   test("keeps the installs from one registry apart from another's", async () => {
     const home = newHome();
     // Named by a project's .npmrc through a variable, which pnpm doesn't expand there.
