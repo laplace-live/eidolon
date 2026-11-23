@@ -83,7 +83,7 @@ function releaseAge(sources, now) {
 
 /**
  * pnpm's settings that make its dlx install what npm's npx would, as npx would, under npm's config
- * `sources` as npmConfig reads them; or why it can't.
+ * `sources` as npmConfig reads them, its variables first; or why it can't.
  * @returns {string[] | { error: string }}
  */
 export function npxSettings(sources, now = Date.now()) {
@@ -117,6 +117,11 @@ export function npxSettings(sources, now = Date.now()) {
     // npm reads no pnpmfile; pnpm runs the one of the workspace around the folder, or the home's,
     // whose hooks can rewrite what installs.
     "--config.ignore-pnpmfile=true",
+    // npm takes registries from its variables, which pnpm never reads: a private package's name
+    // would resolve on the registry pnpm falls back on. The .npmrc files' pnpm reads itself.
+    ...Object.entries(sources[0] ?? {})
+      .filter(([key]) => key === "registry" || /^@[^:/]+:registry$/.test(key))
+      .map(([key, value]) => `--config.${key}=${value}`),
   ];
 }
 

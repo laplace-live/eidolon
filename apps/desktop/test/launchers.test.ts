@@ -531,6 +531,14 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     const remote = await launch("npx", ["-y", "eidolon-test-app"], { cwd });
     expect([remote.status, remote.stdout, remote.marks]).toEqual([1, "", []]);
     expect(remote.stderr).toContain("ERR_PNPM_EXOTIC_SUBDEP");
+    // registry, in an npm_config_* variable, over the user's .npmrc, whose registry holds nothing.
+    const nowhere = mkdtempSync(join(scratch, "home-"));
+    writeFileSync(join(nowhere, ".npmrc"), `registry=${registry}/nothing/\n`);
+    const named = await launch("npx", ["-y", "eidolon-test-app"], {
+      home: nowhere,
+      env: { npm_config_registry: `${registry}/` },
+    });
+    expect([named.status, named.marks, named.stderr]).toEqual([0, ["dep"], ""]);
     // strict-allow-scripts: nothing installed, and why.
     const strict = newHome("strict-allow-scripts=true");
     expect(await launch("npx", ["-y", "eidolon-test-app"], { home: strict })).toEqual({

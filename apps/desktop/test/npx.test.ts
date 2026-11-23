@@ -277,6 +277,23 @@ describe("npm's config, which npx installs by", () => {
     expect(blocks({ "allow-git": "all", "allow-remote": "all" })).toBe(false);
   });
 
+  test("takes a registry from npm_config_* variables, which pnpm doesn't read", () => {
+    const env = {
+      NPM_CONFIG_REGISTRY: "https://npm.corp.test/",
+      "npm_config_@Corp:registry": "https://corp.test/npm/",
+      "npm_config_//npm.corp.test/:_authToken": "secret",
+      npm_config_registry_x: "https://x.test/",
+    };
+    const [variables = {}] = npx.npmConfig(env, root, root);
+    expect(settingsOf(variables, { registry: "https://user.test/" })).toEqual([
+      ...DEFAULTS,
+      "--config.registry=https://npm.corp.test/",
+      "--config.@corp:registry=https://corp.test/npm/",
+    ]);
+    // pnpm reads the .npmrc files' itself.
+    expect(settingsOf({}, { registry: "https://project.test/" })).toEqual(DEFAULTS);
+  });
+
   test("installs nothing under strict-allow-scripts, but with every script or none", () => {
     expect(settingsOf({ "strict-allow-scripts": "true" })).toEqual({
       error: "strict-allow-scripts is set, and Eidolon's npx can't hold an install to it",
