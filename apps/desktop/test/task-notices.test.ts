@@ -1,18 +1,26 @@
 // Task notifications: what each says, under her name, in both languages, what its click asks of
 // the page, and when the watch shows one.
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import type { PersonaSummary, TaskPending, TaskSnapshot } from "../../bot/src/local/api.ts";
+import type {
+  PersonaSummary,
+  TaskPending,
+  TaskSnapshot,
+  TaskStatus,
+} from "../../bot/src/local/api.ts";
 import type { NoticeHandle } from "../src/main/background.ts";
 import type { BackendState, ReadyState } from "../src/main/controller.ts";
 import type { BackendFetch, BackendResponse } from "../src/main/quit-check.ts";
 import { STRINGS } from "../src/main/strings.ts";
 import {
+  ENDED,
   followBackend,
   type Notice,
   type NoticeKind,
   noticeCommand,
   noticeText,
   TaskWatch,
+  WAITING,
 } from "../src/main/task-notices.ts";
 
 const en = STRINGS.en;
@@ -670,4 +678,33 @@ describe("TaskWatch", () => {
     expect(lines).toEqual([]);
     watch.stop();
   });
+});
+
+/** Every status a task has. */
+const STATUSES = Object.keys({
+  "awaiting-approval": null,
+  running: null,
+  paused: null,
+  interrupted: null,
+  succeeded: null,
+  failed: null,
+  cancelled: null,
+} satisfies Record<TaskStatus, null>) as TaskStatus[];
+
+// A computed path, so the typecheck doesn't follow it into apps/web, whose "@/" imports it can't
+// resolve.
+const WEB_TASK_STATE = join(import.meta.dirname, "../../web/src/features/tasks/state.ts");
+
+test("the watch takes the statuses the web app's cards wait and end on", async () => {
+  const web = (await import(WEB_TASK_STATE)) as {
+    ended(status: TaskStatus): boolean;
+    waitsOnOwner(task: { status: TaskStatus }): boolean;
+  };
+  for (const status of STATUSES) {
+    expect([status, WAITING.has(status), ENDED.has(status)]).toEqual([
+      status,
+      web.waitsOnOwner({ status }),
+      web.ended(status),
+    ]);
+  }
 });
