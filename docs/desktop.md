@@ -1088,13 +1088,15 @@ main's forwarder does, and runs the app's binary in node mode beside it, as main
   resources (`bin\eidolon.cmd` on Windows), with `search --help`, exits 0 with laplace-search's
   usage on stdout, its CLI writing to the `EIDOLON_HOME` it was given, a folder of the run's; never
   with no arguments, which opens the app outside background mode. The node shim's launchers, in
-  the payload's `node-shim/bin`, run with `EIDOLON_NODE` naming the app's binary, a home of the
-  run's, and a `PATH` of the OS's own folders, which must hold no node, then the shim's: `node -p
-  process.versions.electron` prints the pinned Electron, `pnpm --version` the payload's pnpm, and
-  `npx -y file:<a package of the run's>` its command's line alone on stdout, that command run on
-  the app's Electron through the shim's node; `npx` without `EIDOLON_NODE` exits 1 with its reason.
-  They stay offline: a `file:` package needs no registry, and `pnpm_config_registry` names a
-  closed port.
+  the payload's `node-shim/bin`, first run a stand-in as `EIDOLON_NODE` that prints the
+  `ELECTRON_RUN_AS_NODE` it got, which must be 1 from each: one that left it unset would start
+  Eidolon itself on the installed app's profile, so none runs on the app's binary then. After it,
+  they run with `EIDOLON_NODE` naming the app's binary, a home of the run's, and a `PATH` of the
+  OS's own folders, which must hold no node, then the shim's: `node -p process.versions.electron`
+  prints the pinned Electron, `pnpm --version` the payload's pnpm, and `npx -y file:<a package of
+  the run's>` its command's line alone on stdout, that command run on the app's Electron through
+  the shim's node; `npx` without `EIDOLON_NODE` exits 1 with its reason. They stay offline: a
+  `file:` package needs no registry, and `pnpm_config_registry` names a closed port.
 - **The app:** it starts on the run's home and profile; its backend is the binary in node mode on
   the payload's `server.js`, under main, with no key from the smoke's own environment; main.log
   names a packaged build on the pinned Electron, and the server reports the payload's version; the

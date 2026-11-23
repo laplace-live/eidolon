@@ -21,6 +21,7 @@ import { PLATFORMS } from "../../eidolon/src/launcher.ts";
 import { dataHome, isAlive, probe, readToken } from "../src/main/attach.ts";
 import { BACKEND_RUNTIME_ARGS, backendEnv, RESTART_EXIT_CODE } from "../src/main/controller.ts";
 import { checkNatives, type NativesReport } from "./natives.ts";
+import { POSIX_LAUNCHERS } from "./node-shim.ts";
 import {
   DESKTOP,
   errorLines,
@@ -54,6 +55,7 @@ import {
   placeMarker,
   processesNaming,
   ROTATED_PHOTO,
+  runAsNodeProbe,
   runsOnBinary,
   scriptRun,
   strayErrorLines,
@@ -343,6 +345,29 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
     });
     const named = (name: string) =>
       join(layout.nodeShim, process.platform === "win32" ? `${name}.cmd` : name);
+    // On the stand-in first: a launcher that leaves ELECTRON_RUN_AS_NODE unset never reaches the
+    // app's binary.
+    const probe = runAsNodeProbe(run.scratch);
+    const unset: string[] = [];
+    for (const name of POSIX_LAUNCHERS) {
+      const probed = await onLauncher(
+        smoke,
+        `the shim's ${name} on a stand-in`,
+        named(name),
+        ["--version"],
+        { env: { ...env, EIDOLON_NODE: probe }, cwd },
+        left(),
+      );
+      if (probed.stdout.trim() !== "1") unset.push(name);
+    }
+    if (unset.length > 0) {
+      checks.add(
+        SHIM,
+        false,
+        `${unset.join(", ")} ran EIDOLON_NODE without ELECTRON_RUN_AS_NODE=1, which would start Eidolon itself, so none ran on the app's binary`,
+      );
+      return;
+    }
     const node = await onLauncher(
       smoke,
       "the shim's node",
@@ -407,7 +432,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
         refused.stdout === "" &&
         JSON.stringify(lines(refused.stderr).map((line) => line.trim())) ===
           JSON.stringify([NO_NODE]),
-      `node -p process.versions.electron: ${said(node)} (pinned ${electron}); pnpm --version: ${said(pnpm)} (the payload's ${bundled.version}); npx -y file:<fixture>: ${said(npx)}; without EIDOLON_NODE, npx exited ${refused.code}${refused.stdout === "" ? "" : " with stdout"}: ${lastLine(refused.stderr).trim() || "nothing on stderr"}`,
+      `each set ELECTRON_RUN_AS_NODE=1 for a stand-in first; node -p process.versions.electron: ${said(node)} (pinned ${electron}); pnpm --version: ${said(pnpm)} (the payload's ${bundled.version}); npx -y file:<fixture>: ${said(npx)}; without EIDOLON_NODE, npx exited ${refused.code}${refused.stdout === "" ? "" : " with stdout"}: ${lastLine(refused.stderr).trim() || "nothing on stderr"}`,
     );
   });
 

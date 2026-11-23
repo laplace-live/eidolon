@@ -1,9 +1,10 @@
 // The packaged smoke's own helpers, without Electron or Windows: a packaged app's layout, a launcher
-// run as a terminal would and the PATH and variables it gets, command lines as ps and Windows give
+// run as a terminal would, the PATH and variables it gets, the stand-in that tells whether it sets
+// ELECTRON_RUN_AS_NODE, command lines as ps and Windows give
 // them, the natives lsof and PowerShell list, the photo and icon it
 // reads, the logs' errors and leaks, the processes naming a run's folder, a folder's hashes, the
 // marker it leaves in a data home, and the NSIS setup's uninstall entry and silent uninstall.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import {
   existsSync,
@@ -16,8 +17,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { LAUNCHER_SOURCES } from "../scripts/node-shim.ts";
 import {
   ENTRIES_SCRIPT,
   namesUninstaller,
@@ -42,6 +44,7 @@ import {
   powershellCommand,
   processesNaming,
   ROTATED_PHOTO,
+  runAsNodeProbe,
   runsOnBinary,
   scriptRun,
   strayErrorLines,
@@ -162,6 +165,41 @@ describe("a launcher, run as a terminal would", () => {
       (error: Error) => (error.cause as NodeJS.ErrnoException | undefined)?.code ?? error.message,
     );
     expect(refused).toBe("ECONNREFUSED");
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "a stand-in for EIDOLON_NODE tells a launcher that sets ELECTRON_RUN_AS_NODE from one that doesn't",
+    () => {
+      const root = mkdtempSync(join(tmpdir(), "eidolon-run-as-node-"));
+      try {
+        const probe = runAsNodeProbe(root, "darwin");
+        const launcher = join(LAUNCHER_SOURCES, "node");
+        const unset = join(root, "node");
+        const text = readFileSync(launcher, "utf8");
+        writeFileSync(unset, text.replace("export ELECTRON_RUN_AS_NODE=1\n", ""), { mode: 0o755 });
+        const printed = (file: string) =>
+          spawnSync(file, ["--version"], {
+            encoding: "utf8",
+            env: { PATH: "/usr/bin:/bin", EIDOLON_NODE: probe },
+          }).stdout;
+        expect([printed(launcher), printed(unset)]).toEqual(["1\n", "\n"]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test("the stand-in on Windows is a .cmd, which a .cmd launcher runs as EIDOLON_NODE", () => {
+    const root = mkdtempSync(join(tmpdir(), "eidolon-run-as-node-"));
+    try {
+      const probe = runAsNodeProbe(root, "win32");
+      expect([basename(probe), readFileSync(probe, "utf8")]).toEqual([
+        "run-as-node.cmd",
+        "@echo off\r\necho %ELECTRON_RUN_AS_NODE%\r\n",
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

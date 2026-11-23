@@ -133,6 +133,25 @@ export async function closedPort(): Promise<number> {
   return port;
 }
 
+/**
+ * A stand-in for EIDOLON_NODE in `folder` that prints the ELECTRON_RUN_AS_NODE it got. A launcher
+ * that ran the app's binary without it would start Eidolon itself on the installed app's profile,
+ * where an Eidolon already running would come forward.
+ */
+export function runAsNodeProbe(
+  folder: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (platform === "win32") {
+    const probe = join(folder, "run-as-node.cmd");
+    writeFileSync(probe, "@echo off\r\necho %ELECTRON_RUN_AS_NODE%\r\n");
+    return probe;
+  }
+  const probe = join(folder, "run-as-node");
+  writeFileSync(probe, '#!/bin/sh\nprintf "%s\\n" "$ELECTRON_RUN_AS_NODE"\n', { mode: 0o755 });
+  return probe;
+}
+
 /** A Windows command line's arguments, split as the C runtime splits them. */
 export function windowsArgs(line: string): string[] {
   const args: string[] = [];
