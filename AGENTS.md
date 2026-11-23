@@ -84,7 +84,7 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
-| the desktop app (`apps/desktop`): its main process, the backend it stages and spawns, the `eidolon-app:` forwarder, attaching to a running server, its window, environment, logs or packaging, background mode, its tests and smokes, `desktop.yml`, its updater (`update-flow.ts`, `updater.ts`), its releases (the signing overlay, the signed build's checks, the R2 upload, `changelog.json` and `releases.json`), or an Electron bump | [desktop.md](docs/desktop.md) |
+| the desktop app (`apps/desktop`): its main process, the backend it stages and spawns, the `eidolon-app:` forwarder, attaching to a running server, its window and bridge, task notifications, the folder dialog, Open at Login, the terminal command and its launchers, its environment (the Windows registry's included), the node shim, logs or packaging, background mode, its tests and smokes, `desktop.yml`, its updater (`update-flow.ts`, `updater.ts`), its releases (the signing overlay, the signed build's checks, the R2 upload, `changelog.json` and `releases.json`), or an Electron bump | [desktop.md](docs/desktop.md) |
 | chats, the chat log format, the turn engine, group chats' director, voice messages, or the images and text files the viewer sends (`packages/chat`, `packages/engine`, `packages/engine/src/seen.ts`, `apps/bot/src/images.ts`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
 | the voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime`), its models, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
@@ -433,7 +433,9 @@ the layout's one line.
   server's as the task's first run found it), so no `.env` key reaches one unless an `mcp.json`
   entry names it. A command's `PATH` starts with `<data home>/bin`, where the app writes the
   `eidolon` command at each start beside the managed yt-dlp, and it gets `EIDOLON_TASK_PERSONA`,
-  its chat's persona; `eidolon` sets its own data home and runs on the app's own Node.
+  its chat's persona; `eidolon` sets its own data home and runs on the app's own Node. Inside the
+  desktop app an MCP server's `PATH` ends with `<app root>/node-shim/bin` and it gets
+  `EIDOLON_NODE`: servers only, never a task's commands.
 - **Of the file tools, only `skill` reads in the data home or the app's folder,** and only a listed
   or named skill's own files, never a dot-file; `bash_output` reads only its task's logs there, and
   commands and MCP servers run outside `FolderPolicy`. Of a skill only its name reaches her, and
@@ -479,7 +481,9 @@ the layout's one line.
   `appEnv()` builds one without any `ELECTRON_*` name. Inside Electron `jsRuntime()` adds
   `ELECTRON_RUN_AS_NODE=1`, at whose every non-empty value, `0` included, an Electron binary runs as
   Node: no spawn that can start a program the owner chose (a task's command, an MCP server) may
-  carry it, or VS Code's `code` would run as Node.
+  carry it, or VS Code's `code` would run as Node. The backend's spawns still never carry it: the
+  node shim's launchers alone set it, for the process they run on Eidolon's binary, whose children
+  inherit it.
 - **Every node-mode process the app starts carries `--disable-sigusr1 --use-system-ca`** before its
   script (yt-dlp's JS runtime, which yt-dlp starts, aside): `jsRuntime().args`, which main mirrors
   as `BACKEND_RUNTIME_ARGS`, a test holding the two equal. The inspect fuse doesn't reach node mode,
@@ -509,6 +513,12 @@ the layout's one line.
   script (`--ignore-scripts`): one could rewrite the electron-builder that step runs.
 - **Installing, updating and uninstalling the app never touch the data home,** which it shares with
   npx and `bun run app`; its uninstaller removes the install folder alone.
+- **The terminal command and Open at Login change the owner's system only on their click in
+  Settings,** never at install, launch or update, and never in background mode, which reads neither
+  (`system-options.ts`, `terminal-command.ts`).
+- **Notifications never answer a task and carry only runtime facts, the persona's name and her
+  goal:** no action or reply, since only its card and the waiting bar answer it, and nothing a
+  worker wrote or a page it read could have (`task-notices.ts`).
 - **An update installs only after the quit sequence, never from inside `before-quit`:** Restart's
   (the quit check, whose box names what a restart stops, the quit latch and the backend's graceful
   stop, then `quitAndInstall(true, true)` once, behind the `installing` state), or any approved
@@ -643,7 +653,7 @@ the layout's one line.
   `paths-ignore` (`README.md`, `CLAUDE.md`, the `ts.yml` and `release.yml` workflows,
   `vitest.config.ts`, `tsconfig.scripts.json`, `tsconfig.no-bun.d.ts`) skip the image
   build; anything else, `personas/` included, ships, and so does a bump of the
-  desktop's Electron or electron-builder, which changes `bun.lock`.
+  desktop's Electron, electron-builder or the node shim's pnpm, which changes `bun.lock`.
 - **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
   publish to npm.** Merging the Release workflow's version PR bumps
   `apps/bot/package.json`, `apps/eidolon/package.json`, `packages/sdk/package.json`
