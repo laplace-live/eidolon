@@ -48,11 +48,12 @@ apps/desktop/
                          CI's update test
   src/main/              main: the Electron-free modules that decide (controller, attach, forwarder,
                          backend, environment, login-shell, registry-environment, pages, policy,
-                         menus, window-options, quit-check, quit-flow, update-flow, strings,
-                         shell-pages, log-filter, log-files, background, app-invokes,
-                         folder-dialog, system-options, terminal-command, task-notices), and thin
-                         Electron layers over them (index, instance, protocol, window, chrome,
-                         menu, tray, permissions, navigation, native, quit, updater, log)
+                         menus, window-options, quit-check, quit-flow, update-flow,
+                         update-signature, strings, shell-pages, log-filter, log-files,
+                         background, app-invokes, folder-dialog, system-options, terminal-command,
+                         task-notices), and thin Electron layers over them (index, instance,
+                         protocol, window, chrome, menu, tray, permissions, navigation, native,
+                         quit, updater, log)
   src/preload/           the sandboxed CommonJS preload: the page's marks and its bridge
   src/shared/bridge.ts   the IPC channels and who may send on each; it imports nothing
   src/shared/release-notes.ts
@@ -474,8 +475,8 @@ never an install, a launch or an update; a launch reads only whether it was the 
   owner has it off under System Settings → General → Login Items, where Settings sends them, and
   `unavailable` when SMAppService can't find the app.
 - **Windows** writes its HKCU Run entry with `--opened-at-login`, which a read must name to match
-  it. It reads `on` only while the entry is there and Startup apps leaves it on, and Turn On enables
-  one turned off there again.
+  it. It reads `on` only while the entry is there and Startup apps leaves it on, and turning the
+  switch on enables one turned off there again.
 - **A change** is logged (`Eidolon: Open at Login was turned on`, or `off`), then read back:
   Electron's write answers nothing and only logs a failure.
 - **The hidden start.** A launch at login, told by the switch on Windows and by
@@ -621,14 +622,15 @@ VC++ copies.
   a second, identical copy; on win32-x64 `onnxruntime.dll`, without DirectML's DLLs, which CPU
   sessions never load. Type-only packages stay, or `npm ls` would call them missing.
 - **The VC++ runtime on Windows.** LanceDB, which loads at boot, and onnxruntime import it, so a
-  machine without the redistributable couldn't start the backend. Each folder holding a native addon
-  gets the runtime DLLs its natives import (their import and delay-import tables, and what those
-  DLLs import in turn): onnxruntime's folder five, LanceDB's `vcruntime140.dll`. All come from the
-  newest `Microsoft.VC14*.CRT` folder vswhere finds, since whichever copy loads first serves the
-  whole process. Node loads an addon with `LOAD_WITH_ALTERED_SEARCH_PATH`, which looks in its own
-  folder first, so an older System32 copy can't win. The copies shadow System32's, and Windows
-  Update never services them: each release refreshes them. The stage test checks their file
-  version is at least the natives' linker version.
+  machine without the redistributable couldn't start the backend. Each folder in the payload's
+  `node_modules` (not the node shim's) holding a native addon gets the runtime DLLs its natives
+  import (their import and delay-import tables, and what those DLLs import in turn): onnxruntime's
+  folder five, LanceDB's `vcruntime140.dll`. All come from the newest `Microsoft.VC14*.CRT` folder
+  vswhere finds, since whichever copy loads first serves the whole process. Node loads an addon
+  with `LOAD_WITH_ALTERED_SEARCH_PATH`, which looks in its own folder first, so an older System32
+  copy can't win. The copies shadow System32's, and Windows Update never services them: each
+  release refreshes them. The stage test checks their file version is at least the natives' linker
+  version.
 - **The unsigned-PE list.** `.stage/win32-x64/unsigned-pe.json` names, by basename, each `.node` and
   `.dll` with an empty certificate table, in the payload and in the Electron zip electron-builder
   packs (`electron_wer.dll` under its packaged name, `Eidolon_wer.dll`), for a signed release to
