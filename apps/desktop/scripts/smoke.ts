@@ -4,6 +4,7 @@
 // build. On Windows it installs the NSIS setup silently, smokes the installed app and uninstalls it.
 // It never builds or packages. Each check prints a line, and results.json in the run's folder keeps
 // them all, a passing run's folder included.
+import type { SpawnOptions } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -13,7 +14,8 @@ import {
   realpathSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
+import { killTree } from "@eidolon/config";
 import type { JobRecord, Status } from "../../bot/src/local/api.ts";
 import { PLATFORMS } from "../../eidolon/src/launcher.ts";
 import { dataHome, isAlive, probe, readToken } from "../src/main/attach.ts";
@@ -39,6 +41,7 @@ import {
   type AppLayout,
   appLayout,
   changedFiles,
+  closedPort,
   fileHashes,
   icoImages,
   inside,
@@ -47,11 +50,15 @@ import {
   lineTime,
   type Marker,
   mappedNatives,
+  nodesIn,
   placeMarker,
   processesNaming,
   ROTATED_PHOTO,
   runsOnBinary,
+  scriptRun,
   strayErrorLines,
+  systemFolders,
+  withVariables,
 } from "./smoke/packaged.ts";
 import { processTable } from "./smoke/processes.ts";
 
@@ -75,6 +82,11 @@ const SEARCH_MS = 60_000;
 const RESTART_MS = 60_000;
 const QUIT_MS = 60_000;
 const UNINSTALL_MS = 120_000;
+const TERMINAL_MS = 60_000;
+/** The shim's four runs, pnpm dlx's first install of a package among them. */
+const SHIM_MS = 180_000;
+/** The node shim's npx, run without the binary the backend names. */
+const NO_NODE = "npx: EIDOLON_NODE isn't set: Eidolon sets it for the MCP servers it starts";
 /** Timings the results keep, in ms unless named otherwise. */
 type Numbers = Record<string, number>;
 
@@ -106,17 +118,23 @@ function exitOf(pid: number): RegExp {
   return new RegExp(`Eidolon: the backend \\(pid ${pid}\\) exited \\((\\w+)\\)`);
 }
 
-/** Runs the app's binary in node mode, tracked, and collects what it prints. */
-async function onBinary(
+interface Output {
+  readonly code: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+/** Runs `command`, tracked, and collects what it prints; at the timeout it and its tree are killed. */
+async function collect(
   smoke: Smoke,
   what: string,
-  layout: AppLayout,
+  command: string,
   args: readonly string[],
-  env: NodeJS.ProcessEnv,
+  options: SpawnOptions,
   timeoutMs: number,
-): Promise<{ readonly code: number | null; readonly stdout: string; readonly stderr: string }> {
-  const { child } = smoke.processes.spawn(what, layout.binary, [...BACKEND_RUNTIME_ARGS, ...args], {
-    env,
+): Promise<Output> {
+  const { child } = smoke.processes.spawn(what, command, args, {
+    ...options,
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stdout = "";
@@ -127,10 +145,74 @@ async function onBinary(
   child.stderr?.setEncoding("utf8").on("data", (data: string) => {
     stderr += data;
   });
-  const timer = setTimeout(() => child.kill(), timeoutMs);
+  const timer = setTimeout(() => {
+    if (child.pid !== undefined) killTree(child.pid);
+  }, timeoutMs);
   const code = await new Promise<number | null>((done) => child.once("close", done));
   clearTimeout(timer);
   return { code, stdout, stderr };
+}
+
+/** Runs the app's binary in node mode, tracked, and collects what it prints. */
+function onBinary(
+  smoke: Smoke,
+  what: string,
+  layout: AppLayout,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): Promise<Output> {
+  return collect(
+    smoke,
+    what,
+    layout.binary,
+    [...BACKEND_RUNTIME_ARGS, ...args],
+    { env },
+    timeoutMs,
+  );
+}
+
+/** Runs a launcher of the app's as a terminal would, tracked, and collects what it prints. */
+function onLauncher(
+  smoke: Smoke,
+  what: string,
+  script: string,
+  args: readonly string[],
+  options: { readonly env: NodeJS.ProcessEnv; readonly cwd?: string },
+  timeoutMs: number,
+): Promise<Output> {
+  const run = scriptRun(script, args, process.platform, process.env.ComSpec);
+  return collect(
+    smoke,
+    what,
+    run.command,
+    run.args,
+    { ...options, windowsVerbatimArguments: run.windowsVerbatimArguments },
+    timeoutMs,
+  );
+}
+
+/** Output's last line, for a detail. */
+function lastLine(text: string): string {
+  return text.trimEnd().split(/\r?\n/).at(-1) ?? "";
+}
+
+/**
+ * A package with a command, which npx gets as a file: spec: it prints what it was given and the
+ * Electron it runs on, as JSON on one line.
+ */
+function shimFixture(folder: string): string {
+  mkdirSync(join(folder, "bin"), { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(folder, "package.json"),
+    JSON.stringify({ name: "eidolon-smoke-shim", version: "1.0.0", bin: "bin/hello.js" }),
+  );
+  writeFileSync(
+    join(folder, "bin", "hello.js"),
+    "#!/usr/bin/env node\nconsole.log(JSON.stringify({ args: process.argv.slice(2), electron: process.versions.electron ?? null }));\n",
+    { mode: 0o755 },
+  );
+  return folder;
 }
 
 function described(facts: ReturnType<typeof jpegFacts>): string {
@@ -200,6 +282,132 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
       TRAY,
       images > 0 && same,
       `${short(layout.trayIcon)}: ${shipped.byteLength} bytes, ${images} image(s), ${same ? "the same as" : "not"} apps/desktop/assets/tray-icon.ico`,
+    );
+  });
+
+  const TERMINAL =
+    "the eidolon command runs the CLI on the app's binary, on the home the terminal names";
+  await checks.step(TERMINAL, async () => {
+    // A home of its own, where the CLI keeps its usage ledger.
+    const home = join(run.scratch, "terminal-home");
+    mkdirSync(home, { mode: 0o700 });
+    const at = Date.now();
+    // Never with no arguments, which opens the app outside background mode.
+    const ran = await onLauncher(
+      smoke,
+      "the eidolon command",
+      layout.terminalCommand,
+      ["search", "--help"],
+      { env: withVariables(smoke.env, { EIDOLON_HOME: home }) },
+      TERMINAL_MS,
+    );
+    numbers.terminalCommandMs = Date.now() - at;
+    const usage = ran.stdout.startsWith("usage: laplace-search ");
+    const wrote = readdirSync(home);
+    checks.add(
+      TERMINAL,
+      ran.code === 0 && usage && wrote.length > 0,
+      `${short(layout.terminalCommand)} search --help exited ${ran.code}${usage ? ", laplace-search's usage on stdout" : `; stdout: ${lastLine(ran.stdout) || "nothing"}; stderr: ${lastLine(ran.stderr) || "nothing"}`}; the terminal's home holds ${wrote.join(", ") || "nothing"}`,
+    );
+  });
+
+  const SHIM =
+    "the node shim runs node, pnpm and npx on the app's binary, on a PATH with no other node";
+  await checks.step(SHIM, async () => {
+    const folders = systemFolders(process.platform, smoke.env);
+    const others = nodesIn(folders);
+    if (others.length > 0) {
+      checks.add(SHIM, false, `the OS's own folders hold a node: ${others.join(", ")}`);
+      return;
+    }
+    const left = budget(SHIM_MS);
+    // pnpm's store and caches go under the home: on Windows under LOCALAPPDATA.
+    const home = join(run.scratch, "shim-home");
+    const cwd = join(run.scratch, "shim-cwd");
+    for (const folder of [home, cwd]) mkdirSync(folder, { mode: 0o700 });
+    const homes: Record<string, string> =
+      process.platform === "win32"
+        ? {
+            USERPROFILE: home,
+            LOCALAPPDATA: join(home, "AppData", "Local"),
+            APPDATA: join(home, "AppData", "Roaming"),
+          }
+        : {};
+    const env = withVariables(smoke.env, {
+      PATH: [...folders, layout.nodeShim].join(delimiter),
+      HOME: home,
+      ...homes,
+      EIDOLON_NODE: layout.binary,
+      // A file: package needs no registry; one pnpm tried anyway would fail at once.
+      pnpm_config_registry: `http://127.0.0.1:${await closedPort()}/`,
+    });
+    const named = (name: string) =>
+      join(layout.nodeShim, process.platform === "win32" ? `${name}.cmd` : name);
+    const node = await onLauncher(
+      smoke,
+      "the shim's node",
+      named("node"),
+      ["-p", "process.versions.electron"],
+      { env, cwd },
+      left(),
+    );
+    const pnpm = await onLauncher(
+      smoke,
+      "the shim's pnpm",
+      named("pnpm"),
+      ["--version"],
+      { env, cwd },
+      left(),
+    );
+    const fixture = shimFixture(join(run.scratch, "shim-fixture"));
+    const at = Date.now();
+    const npx = await onLauncher(
+      smoke,
+      "the shim's npx",
+      named("npx"),
+      ["-y", `file:${fixture}`, "one", "two words"],
+      { env, cwd },
+      left(),
+    );
+    numbers.npxMs = Date.now() - at;
+    const { EIDOLON_NODE: _, ...unnamed } = env;
+    const refused = await onLauncher(
+      smoke,
+      "the shim's npx without EIDOLON_NODE",
+      named("npx"),
+      ["-y", `file:${fixture}`],
+      { env: unnamed, cwd },
+      left(),
+    );
+    const lines = (text: string) => text.split(/\r?\n/).filter((line) => line !== "");
+    const manifest = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
+    const electron = manifest.devDependencies.electron;
+    const bundled = JSON.parse(
+      readFileSync(
+        join(layout.payload, "node-shim", "node_modules", "pnpm", "package.json"),
+        "utf8",
+      ),
+    ) as { version: string };
+    const printed = JSON.stringify({ args: ["one", "two words"], electron });
+    const said = (output: Output) =>
+      output.code === 0
+        ? lines(output.stdout).join(" / ")
+        : `exit ${output.code}: ${lastLine(output.stderr)}`;
+    checks.add(
+      SHIM,
+      node.code === 0 &&
+        JSON.stringify(lines(node.stdout)) === JSON.stringify([electron]) &&
+        pnpm.code === 0 &&
+        JSON.stringify(lines(pnpm.stdout)) === JSON.stringify([bundled.version]) &&
+        npx.code === 0 &&
+        JSON.stringify(lines(npx.stdout)) === JSON.stringify([printed]) &&
+        refused.code === 1 &&
+        refused.stdout === "" &&
+        JSON.stringify(lines(refused.stderr).map((line) => line.trim())) ===
+          JSON.stringify([NO_NODE]),
+      `node -p process.versions.electron: ${said(node)} (pinned ${electron}); pnpm --version: ${said(pnpm)} (the payload's ${bundled.version}); npx -y file:<fixture>: ${said(npx)}; without EIDOLON_NODE, npx exited ${refused.code}${refused.stdout === "" ? "" : " with stdout"}: ${lastLine(refused.stderr).trim() || "nothing on stderr"}`,
     );
   });
 
