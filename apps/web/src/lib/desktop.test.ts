@@ -80,6 +80,7 @@ test("a task's command opens nothing unless both are the server's ids, whole", (
 test("an app whose bridge predates the folder dialog and the system options is still a bridge", () => {
   const bridge: EidolonDesktop = fakeBridge();
   globalThis.eidolonDesktop = bridge;
+  expect(desktop()).toBe(bridge);
   expect(desktop()?.chooseFolder).toBeUndefined();
   expect(desktop()?.loginItem).toBeUndefined();
   expect(desktop()?.setLoginItem).toBeUndefined();
