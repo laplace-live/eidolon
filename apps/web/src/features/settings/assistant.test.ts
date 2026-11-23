@@ -21,6 +21,7 @@ const { AllowedCommandsCard, allowedCommandsQuery } = await import("./commands-c
 const { McpServersCard, mcpServersQuery, commandLine } = await import("./mcp-card");
 const { settingsQuery } = await import("@/components/settings-form/queries");
 const { PROVIDER_OFF_LABELS } = await import("@/components/settings-form/labels");
+const { SettingField } = await import("@/components/settings-form/field");
 const { CARDS } = await import("./sections");
 
 const READY: AssistantStatus = {
@@ -185,6 +186,24 @@ describe("Assistant Folders in the desktop app", () => {
     );
     const lockedSettings = [settings[0], { ...settings[1], settings: locked }] as const;
     expect(chooseFolder([lockedSettings, status])).toContain('disabled=""');
+  });
+
+  test("no other list of paths gets it: a persona's selfie references live in her folder", () => {
+    globalThis.eidolonDesktop = { ...older, chooseFolder: async () => "/Users/me/site" };
+    const references = rows.find((row) => row.path === "selfie.references");
+    if (references === undefined) throw new Error("no selfie.references row");
+    const markup = render(
+      createElement(SettingField, {
+        row: references,
+        draft: "outfits/a.png",
+        error: null,
+        onDraft: () => {},
+        personaName: "奶绿",
+      }),
+      [settings],
+    );
+    expect(markup).toContain("outfits/a.png</textarea>");
+    expect(markup).not.toContain("Choose Folder");
   });
 });
 
