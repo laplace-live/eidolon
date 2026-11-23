@@ -18,6 +18,7 @@ import { afterAll, describe, expect, test } from "vitest";
 import { LAUNCHER_SOURCES } from "../scripts/node-shim.ts";
 
 type Env = Record<string, string | undefined>;
+type Installed = { dir: string; manifest: { name: string; version?: string } };
 type Plan =
   | { error: string; code?: number }
   | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string };
@@ -35,7 +36,8 @@ interface Npx {
   binOf(manifest: object, dir: string): string | undefined;
   npmPrefix(cwd: string): { prefix: string; workspace?: string };
   localBin(start: string, name: string): string | undefined;
-  installedPackage(trees: readonly string[], spec: string): { dir: string } | undefined;
+  treePackages(prefix: string): Installed[];
+  inTree(packages: readonly Installed[], spec: string): Installed | undefined;
   plan(args: readonly string[], cwd: string, home?: string): Plan;
   pathOf(env: Env, delimiter?: string): string;
   npmPath(bins: readonly string[], runPath: string, nodeGyp: string, rest: string): string;
@@ -382,37 +384,93 @@ describe("a local bin, as libnpmexec finds one", () => {
   });
 });
 
-describe("an installed package, which npm runs rather than install", () => {
+describe("npm's local tree, whose packages npm runs rather than install", () => {
   const base = tree({
-    "node_modules/eidolon-installed/package.json": manifest({ name: "eidolon-installed" }),
-    "node_modules/eidolon-renamed/package.json": manifest({ name: "other" }),
+    "package.json": manifest({ name: "eidolon-root", workspaces: ["packages/*"] }),
+    "packages/a/package.json": manifest({ name: "eidolon-ws-a" }),
+    "packages/a/node_modules/eidolon-in-ws/package.json": manifest({ name: "eidolon-in-ws" }),
+    "node_modules/eidolon-top/package.json": manifest({ name: "eidolon-top", version: "1.2.0" }),
+    "node_modules/eidolon-top/node_modules/eidolon-deep/package.json": manifest({
+      name: "eidolon-deep",
+    }),
+    "node_modules/@s/eidolon-scoped/package.json": manifest({ name: "@s/eidolon-scoped" }),
+    // As npm installs eidolon-alias@npm:eidolon-aliased.
+    "node_modules/eidolon-alias/package.json": manifest({ name: "eidolon-aliased" }),
+    "node_modules/eidolon-pre/package.json": manifest({
+      name: "eidolon-pre",
+      version: "1.0.0-beta.1",
+    }),
+    "node_modules/.hidden/package.json": manifest({ name: "eidolon-hidden" }),
+  });
+  const outside = tree({
+    "package.json": manifest({ name: "eidolon-linked" }),
+    "node_modules/eidolon-under-link/package.json": manifest({ name: "eidolon-under-link" }),
+  });
+  symlinkSync(outside, join(base, "node_modules", "eidolon-link"));
+  symlinkSync(base, join(base, "node_modules", "eidolon-loop"));
+  const packages = npx.treePackages(base);
+  const found = (spec: string) => npx.inTree(packages, spec)?.manifest.name;
+
+  test("holds the project, its workspaces and every package below them, a link's too, once", () => {
+    const names = packages.map(({ manifest }) => manifest.name);
+    expect(names[0]).toBe("eidolon-root");
+    expect(names.toSorted()).toEqual([
+      "@s/eidolon-scoped",
+      "eidolon-aliased",
+      "eidolon-deep",
+      "eidolon-in-ws",
+      "eidolon-linked",
+      "eidolon-pre",
+      "eidolon-root",
+      "eidolon-top",
+      "eidolon-under-link",
+      "eidolon-ws-a",
+    ]);
+    expect(names.indexOf("eidolon-top")).toBeLessThan(names.indexOf("eidolon-deep"));
   });
 
-  test("is one named alone, or at its exact version, in a node_modules of the trees", () => {
+  test("finds a package by its package.json's name, at any depth, the project's own too", () => {
     for (const spec of [
-      "eidolon-installed",
-      "eidolon-installed@",
-      "eidolon-installed@*",
-      "eidolon-installed@1.0.0",
+      "eidolon-root",
+      "eidolon-ws-a",
+      "eidolon-in-ws",
+      "eidolon-deep",
+      "eidolon-aliased",
+      "@s/eidolon-scoped",
+      "eidolon-under-link",
     ]) {
-      expect([spec, npx.installedPackage([join(base, "x"), base], spec)?.dir]).toEqual([
-        spec,
-        join(base, "node_modules", "eidolon-installed"),
-      ]);
+      expect([spec, found(spec)]).toEqual([spec, spec]);
+    }
+    expect(found("eidolon-alias")).toBeUndefined();
+    expect(found("eidolon-missing")).toBeUndefined();
+  });
+
+  test("finds one at any version for a name alone, or at one the version or range allows", () => {
+    for (const spec of [
+      "eidolon-top",
+      "eidolon-top@",
+      "eidolon-top@*",
+      "eidolon-top@1.2.0",
+      "eidolon-top@^1.0.0",
+      "eidolon-top@1.x",
+      "eidolon-top@~1.2",
+      "eidolon-top@>=1 <2",
+      "eidolon-pre",
+      "eidolon-pre@1.0.0-beta.1",
+    ]) {
+      expect([spec, found(spec)]).toEqual([spec, spec.replace(/(?<=.)@.*$/, "")]);
     }
   });
 
-  test("never at another version, a range, a tag, an alias, or a folder of another", () => {
+  test("never at a version or range it misses, for a tag, or for an alias", () => {
     for (const spec of [
-      "eidolon-installed@2.0.0",
-      "eidolon-installed@^1.0.0",
-      "eidolon-installed@latest",
-      "eidolon-installed@npm:other@1.0.0",
-      "eidolon-renamed",
-      "./node_modules/eidolon-installed",
-      "eidolon-missing",
+      "eidolon-top@2.0.0",
+      "eidolon-top@^2",
+      "eidolon-top@latest",
+      "eidolon-top@npm:eidolon-top@1.2.0",
+      "eidolon-pre@^1.0.0",
     ]) {
-      expect([spec, npx.installedPackage([base], spec)]).toEqual([spec, undefined]);
+      expect([spec, found(spec)]).toEqual([spec, undefined]);
     }
   });
 });
@@ -486,6 +544,33 @@ describe("what npx does, as npm decides it", () => {
     expect(npx.plan(["eidolon-nobin"], base)).toEqual({
       error: "could not determine executable to run",
     });
+  });
+
+  test("installs nothing npm's tree holds: the project's own name, a nested package, a range", () => {
+    const base = tree({
+      "package.json": manifest({ name: "eidolon-self", bin: { "self-cli": "cli.js" } }),
+      "node_modules/eidolon-top/package.json": manifest({
+        name: "eidolon-top",
+        version: "1.2.0",
+        bin: { "top-cli": "cli.js" },
+      }),
+      "node_modules/eidolon-top/node_modules/eidolon-deep/package.json": manifest({
+        name: "eidolon-deep",
+        bin: { "deep-cli": "cli.js" },
+      }),
+    });
+    for (const [args, command] of [
+      [["-y", "eidolon-self"], "self-cli"],
+      [["-y", "eidolon-deep"], "deep-cli"],
+      [["-y", "eidolon-top@^1"], "top-cli"],
+    ] as const) {
+      expect([args, npx.plan(args, base)]).toEqual([
+        args,
+        { command, args: [], bins: [], runPath: base },
+      ]);
+    }
+    const both = ["-y", "-p", "eidolon-top@~1.2", "-p", "eidolon-deep", "top-cli"];
+    expect(npx.plan(both, base)).not.toHaveProperty("install");
   });
 
   test("installs anything else, its bin picked once it's there", () => {

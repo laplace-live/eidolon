@@ -8,12 +8,15 @@ import { spawn } from "node:child_process";
 import {
   accessSync,
   constants,
+  globSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -253,25 +256,97 @@ export function localBin(start, name) {
   }
 }
 
-const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?(?:\+[0-9a-z.-]+)?$/i;
+/** The workspaces the package.json in `root` declares, as npm maps them. */
+function workspacesOf(root) {
+  const declared = readJson(path.join(root, "package.json"))?.workspaces;
+  const list = Array.isArray(declared?.packages) ? declared.packages : declared;
+  if (!Array.isArray(list)) return [];
+  const found = new Set();
+  for (const entry of list) {
+    if (typeof entry !== "string" || (/^!+/.exec(entry)?.[0].length ?? 0) % 2 === 1) continue;
+    const pattern = entry
+      .replace(/^!+/, "")
+      .replace(/^\.?\/+/, "")
+      .replace(/\\/g, "/")
+      .replace(/\/+$/, "");
+    let dirs = [];
+    try {
+      dirs = globSync(pattern, {
+        cwd: root,
+        exclude: (name) => path.basename(name) === "node_modules",
+      });
+    } catch {}
+    for (const dir of dirs)
+      if (isWorkspace(root, path.join(root, dir))) found.add(path.join(root, dir));
+  }
+  return [...found];
+}
+
+/** The package folders in the node_modules `dir`, scoped ones too, as Arborist reads them. */
+function packagesIn(dir) {
+  const names = (folder) => {
+    try {
+      return readdirSync(folder).filter((name) => !name.startsWith("."));
+    } catch {
+      return [];
+    }
+  };
+  return names(dir).flatMap((name) =>
+    name.startsWith("@")
+      ? names(path.join(dir, name)).map((inner) => path.join(dir, name, inner))
+      : [path.join(dir, name)],
+  );
+}
 
 /**
- * The installed package `spec` names, by name alone or at its exact version, in a node_modules
- * of `trees`, where npm would run it from rather than install it: its folder and manifest.
+ * npm's local tree at `prefix`, as Arborist loads it: the project, its workspaces, and every
+ * package in a node_modules below them, a link's target too, nearest first.
  */
-export function installedPackage(trees, spec) {
+export function treePackages(prefix) {
+  const packages = [];
+  const seen = new Set();
+  const queue = [prefix, ...workspacesOf(prefix)];
+  for (const dir of queue) {
+    let real;
+    try {
+      real = realpathSync(dir);
+    } catch {
+      continue;
+    }
+    if (seen.has(real)) continue;
+    seen.add(real);
+    const manifest = readJson(path.join(real, "package.json"));
+    if (typeof manifest?.name === "string") packages.push({ dir: real, manifest });
+    queue.push(...packagesIn(path.join(real, "node_modules")));
+  }
+  return packages;
+}
+
+let loadedSemver;
+/** npm's semver, which the pnpm here carries for node-gyp. */
+function semver() {
+  loadedSemver ??= createRequire(import.meta.url)("../node_modules/pnpm/dist/node_modules/semver");
+  return loadedSemver;
+}
+
+/**
+ * The package of `packages` that `spec` names, as libnpmexec's missingFromTree finds one in the
+ * local tree, which npm then runs rather than install: by its package.json's name, at any version
+ * for a name alone, or one the version or range allows. A tag, an alias, or a spec that isn't a
+ * registry's, it never finds there.
+ */
+export function inTree(packages, spec) {
   const at = spec.indexOf("@", 1);
   const name = at > 0 ? spec.slice(0, at) : spec;
-  const version = at > 0 ? spec.slice(at + 1) || "*" : "*";
-  if (!PACKAGE_NAME.test(name) || (version !== "*" && !EXACT_VERSION.test(version)))
-    return undefined;
-  for (const tree of trees) {
-    const dir = path.join(tree, "node_modules", name);
-    const manifest = readJson(path.join(dir, "package.json"));
-    if (manifest?.name !== name) continue;
-    if (version === "*" || `${name}@${manifest.version}` === spec) return { dir, manifest };
-  }
-  return undefined;
+  const wanted = at > 0 ? spec.slice(at + 1) || "*" : "*";
+  if (!PACKAGE_NAME.test(name) || TARBALL.test(name)) return undefined;
+  const named = packages.filter(({ manifest }) => manifest.name === name);
+  if (wanted === "*") return named[0];
+  if (named.length === 0 || semver().validRange(wanted.trim(), true) === null) return undefined;
+  return named.find(
+    ({ manifest }) =>
+      `${name}@${manifest.version}` === spec || semver().satisfies(manifest.version, wanted),
+  );
 }
 
 /**
@@ -285,6 +360,11 @@ export function plan(args, cwd, home = homedir()) {
   const { prefix, workspace } = npmPrefix(cwd);
   const runPath = workspace ?? cwd;
   const trees = workspace === undefined ? [prefix] : [workspace, prefix];
+  let tree;
+  const inLocalTree = (spec) => {
+    tree ??= treePackages(prefix);
+    return inTree(tree, spec);
+  };
   let [command, ...rest] = read.command;
   let packages = read.packages;
   if (packages.length === 0) {
@@ -298,7 +378,7 @@ export function plan(args, cwd, home = homedir()) {
     } else {
       const bin = localBin(trees[0], command);
       if (bin !== undefined) return { command, args: rest, bins: [bin], runPath };
-      const found = installedPackage(trees, command);
+      const found = inLocalTree(command);
       if (found !== undefined) {
         const name = binOf(found.manifest, found.dir);
         if (name === undefined) return { error: "could not determine executable to run" };
@@ -308,7 +388,7 @@ export function plan(args, cwd, home = homedir()) {
       command = undefined;
     }
   }
-  const install = packages.filter((spec) => installedPackage(trees, spec) === undefined);
+  const install = packages.filter((spec) => inLocalTree(spec) === undefined);
   for (const spec of install) {
     const local = localSpec(spec, cwd, home);
     if (local === undefined) continue;
