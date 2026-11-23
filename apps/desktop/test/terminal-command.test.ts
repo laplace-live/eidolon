@@ -31,15 +31,15 @@ import type { Unavailable } from "../src/shared/bridge.ts";
 const POSIX = process.platform !== "win32";
 
 const scratch = mkdtempSync(join(tmpdir(), "eidolon-terminal-command-"));
+/** Folders a test made read-only, which would keep rmSync from emptying them. */
+const locked: string[] = [];
 afterAll(() => {
-  // A folder a test made read-only would keep rmSync from emptying it.
   for (const dir of locked) chmodSync(dir, 0o755);
   rmSync(scratch, { recursive: true, force: true });
 });
 afterEach(() => {
   vi.unstubAllEnvs();
 });
-const locked: string[] = [];
 
 function folder(name: string): string {
   return mkdtempSync(join(scratch, `${name}-`));
@@ -109,6 +109,14 @@ describe("a copy that can't offer the command", () => {
       expect(existsSync(link)).toBe(false);
     },
   );
+
+  test("on another platform, answers as an unpackaged copy and runs nothing", async () => {
+    const { host, runs } = hostOn("linux");
+    const command = { state: "unavailable", reason: "unpackaged" };
+    expect(await commandState(host)).toEqual(command);
+    expect(await changeCommand(host, "install")).toEqual({ command, error: "failed" });
+    expect(runs).toEqual([]);
+  });
 });
 
 // Real links in temporary folders: Windows makes a link only with Developer Mode on.
