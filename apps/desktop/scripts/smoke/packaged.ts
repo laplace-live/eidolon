@@ -152,14 +152,20 @@ export function runAsNodeProbe(
   return probe;
 }
 
-/** What a failed run's stderr says went wrong: its first error line, else its last line. */
+/**
+ * What a failed run's stderr says went wrong: the line Node gives an uncaught error, else its first
+ * error line, else its last line.
+ */
 export function cause(stderr: string): string {
   const lines = stderr
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line !== "");
-  // Node ends an uncaught error's output with its own version, which says nothing.
-  return lines.find((line) => /error\b|\bERR_/i.test(line)) ?? lines.at(-1) ?? "";
+  // Node prints an uncaught error below the line that threw it, which can name an error too, and a
+  // caret under that, and ends with its own version, which says nothing.
+  const caret = lines.findIndex((line) => /^\^+$/.test(line));
+  const thrown = caret === -1 ? undefined : lines[caret + 1];
+  return thrown ?? lines.find((line) => /error\b|\bERR_/i.test(line)) ?? lines.at(-1) ?? "";
 }
 
 /** A Windows command line's arguments, split as the C runtime splits them. */

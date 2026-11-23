@@ -206,7 +206,34 @@ describe("a launcher, run as a terminal would", () => {
     }
   });
 
-  test("a failed run's cause: its error's own line, not Node's version after it", () => {
+  test("a failed run's cause: its error's own line, not the line that threw it or Node's version", () => {
+    // As Electron's Node prints an error a script throws: the line that threw it first.
+    const thrown = [
+      "file:///app/eidolon/dist/cli.js:2",
+      "  if (!process.env.EIDOLON_HOME) throw new TypeError(`EIDOLON_HOME is not set`);",
+      "                                       ^",
+      "",
+      "TypeError: EIDOLON_HOME is not set",
+      "    at run (file:///app/eidolon/dist/cli.js:2:40)",
+      "    at file:///app/eidolon/dist/cli.js:4:1",
+      "",
+      "Node.js v24.22.3",
+      "",
+    ].join("\n");
+    expect(cause(thrown)).toBe("TypeError: EIDOLON_HOME is not set");
+    // A thrown value that isn't an error, whose own line names none.
+    const value = [
+      "",
+      "/app/eidolon/dist/cli.js:1",
+      'throw "no home";',
+      "^",
+      "no home",
+      "(Use `Eidolon --trace-uncaught ...` to show where the exception was thrown)",
+      "",
+      "Node.js v24.22.3",
+      "",
+    ].join("\n");
+    expect(cause(value)).toBe("no home");
     const uncaught = [
       "node:internal/modules/cjs/loader:1568",
       "  throw err;",
