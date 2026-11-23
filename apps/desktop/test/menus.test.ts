@@ -233,7 +233,8 @@ test("updatesItem: hidden while unsupported, disabled while a check, a download 
   for (const phase of ["checking", "downloading", "installing"] as const) {
     expect([phase, updatesItem(phase)]).toEqual([phase, "disabled"]);
   }
-  for (const phase of ["idle", "available", "downloaded", "error"] as const) {
+  // Read-only: its box says to move the app.
+  for (const phase of ["idle", "available", "downloaded", "error", "read-only"] as const) {
     expect([phase, updatesItem(phase)]).toEqual([phase, "enabled"]);
   }
 });

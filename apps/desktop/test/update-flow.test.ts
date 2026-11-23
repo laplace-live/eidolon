@@ -16,6 +16,7 @@ import {
   LAUNCH_CHECK_DELAY_MS,
   MOCK_VERSION,
   mockUpdates,
+  readOnlyFolder,
   releaseNotesUrl,
   type UpdateDriver,
   UpdateFlow,
@@ -30,6 +31,22 @@ const DESKTOP = join(import.meta.dirname, "..");
 const en = STRINGS.en;
 const LOCAL = "C:\\Users\\t\\AppData\\Local";
 const INSTALLED = `${LOCAL}\\Programs\\eidolon\\Eidolon.exe`;
+const MAC_EXE = "Eidolon.app/Contents/MacOS/Eidolon";
+/** Where Gatekeeper runs a quarantined app it hasn't seen moved: a read-only mount of its folder. */
+const TRANSLOCATED =
+  "/private/var/folders/q1/x7k2m9p40c1b0000gn/T/AppTranslocation/3F2A1C6E-8B9D-4E0F-A1B2-C3D4E5F60718/d";
+
+/** fs.accessSync(folder, W_OK) where it throws `code` for `folders`, each folder it's asked recorded. */
+function access(code: "EROFS" | "EACCES", ...folders: string[]) {
+  const asked: string[] = [];
+  const check = (folder: string) => {
+    asked.push(folder);
+    if (folders.includes(folder)) {
+      throw Object.assign(new Error(`${code}: access '${folder}'`), { code });
+    }
+  };
+  return { check, asked };
+}
 
 /** Lets promise callbacks run, with real or fake timers. */
 async function settle(): Promise<void> {
@@ -82,19 +99,68 @@ describe("isUpdatableInstall", () => {
   });
 });
 
+describe("readOnlyFolder", () => {
+  test("a copy run from its mounted DMG: the bundle's folder is the image's read-only volume", () => {
+    const { check, asked } = access("EROFS", "/Volumes/Eidolon");
+    expect(readOnlyFolder(`/Volumes/Eidolon/${MAC_EXE}`, check)).toBe("/Volumes/Eidolon");
+    expect(asked).toEqual(["/Volumes/Eidolon"]);
+  });
+
+  test("a copy Gatekeeper translocated: its randomized folder is a read-only mount", () => {
+    const { check, asked } = access("EROFS", TRANSLOCATED);
+    expect(readOnlyFolder(`${TRANSLOCATED}/${MAC_EXE}`, check)).toBe(TRANSLOCATED);
+    expect(asked).toEqual([TRANSLOCATED]);
+  });
+
+  test("none for /Applications, writable or not: Squirrel.Mac asks a standard account for an administrator's password", () => {
+    const writable = access("EROFS");
+    expect(readOnlyFolder(`/Applications/${MAC_EXE}`, writable.check)).toBeNull();
+    expect(writable.asked).toEqual(["/Applications"]);
+    const standard = access("EACCES", "/Applications");
+    expect(readOnlyFolder(`/Applications/${MAC_EXE}`, standard.check)).toBeNull();
+    expect(standard.asked).toEqual(["/Applications"]);
+  });
+});
+
 describe("updaterMode", () => {
   const packaged: UpdaterRun = {
     packaged: true,
     background: false,
     platform: "darwin",
-    exePath: "/Applications/Eidolon.app/Contents/MacOS/Eidolon",
+    exePath: `/Applications/${MAC_EXE}`,
     env: {},
+    checkWritable: () => {},
   };
   const mode = (run: Partial<UpdaterRun>) => updaterMode({ ...packaged, ...run });
 
   test("a packaged install checks the release feed its app-update.yml names", () => {
     expect(mode({})).toEqual({ mode: "feed", line: "Eidolon: updates are on" });
     expect(mode({ platform: "win32", exePath: INSTALLED, localAppData: LOCAL }).mode).toBe("feed");
+  });
+
+  test("on macOS, a copy on a read-only volume is read-only, and main.log says where it runs", () => {
+    const dmg = access("EROFS", "/Volumes/Eidolon");
+    expect(mode({ exePath: `/Volumes/Eidolon/${MAC_EXE}`, checkWritable: dmg.check })).toEqual({
+      mode: "read-only",
+      line: "Eidolon: updates are off: this copy runs from a read-only volume, /Volumes/Eidolon, such as a disk image or the copy Gatekeeper translocates",
+    });
+    const translocated = access("EROFS", TRANSLOCATED);
+    expect(
+      mode({ exePath: `${TRANSLOCATED}/${MAC_EXE}`, checkWritable: translocated.check }).mode,
+    ).toBe("read-only");
+    expect(mode({ checkWritable: access("EACCES", "/Applications").check }).mode).toBe("feed");
+  });
+
+  test("background mode, an unpackaged build and Windows never ask whether the bundle's folder is writable", () => {
+    const { check, asked } = access("EROFS", "/Volumes/Eidolon");
+    const dmg = `/Volumes/Eidolon/${MAC_EXE}`;
+    expect(mode({ exePath: dmg, checkWritable: check, background: true }).mode).toBe("off");
+    expect(mode({ exePath: dmg, checkWritable: check, packaged: false }).mode).toBe("off");
+    expect(
+      mode({ platform: "win32", exePath: INSTALLED, localAppData: LOCAL, checkWritable: check })
+        .mode,
+    ).toBe("feed");
+    expect(asked).toEqual([]);
   });
 
   test("a copy on Windows that isn't the per-user install stays off, and says why", () => {
@@ -193,7 +259,15 @@ describe("updaterMode", () => {
           ["win32", INSTALLED],
           ["win32", "C:\\Program Files\\Eidolon\\Eidolon.exe"],
         ] as const) {
-          runs.push({ packaged, background: true, platform, exePath, localAppData: LOCAL, env });
+          runs.push({
+            packaged,
+            background: true,
+            platform,
+            exePath,
+            localAppData: LOCAL,
+            env,
+            checkWritable: () => {},
+          });
         }
       }
     }
@@ -303,6 +377,24 @@ describe("updateBox", () => {
       buttons: ["下载", "稍后", "发行说明"],
     });
   });
+
+  test("read-only: why this copy can't update itself and where to move it, with OK alone, in both languages", () => {
+    expect(updateBox({ kind: "read-only" }, en, "darwin")).toEqual({
+      type: "info",
+      title: "Eidolon",
+      message: "Eidolon can't update itself here",
+      detail:
+        "Eidolon updates itself only from a folder it can write to. Move it to the Applications folder, then open it again.",
+      buttons: ["OK"],
+      defaultId: 0,
+      noLink: true,
+    });
+    expect(updateBox({ kind: "read-only" }, STRINGS["zh-Hans"], "darwin")).toMatchObject({
+      message: "Eidolon 无法在当前位置更新",
+      detail: "Eidolon 只能从可写入的文件夹更新自己。请把它移到「应用程序」文件夹，然后重新打开。",
+      buttons: ["确定"],
+    });
+  });
 });
 
 /** A newer version's manifest, as electron-updater parses latest*.yml, with any key it adds. */
@@ -404,6 +496,20 @@ describe("UpdateFlow", () => {
     await vi.advanceTimersByTimeAsync(LAUNCH_CHECK_DELAY_MS * 2);
     expect(f.flow.state).toEqual({ phase: "unsupported" });
     expect([...f.shown, ...f.states, ...f.lines]).toEqual([]);
+  });
+
+  test("read-only: nothing is checked, and Check for Updates… says to move the app to the Applications folder", async () => {
+    const f = harness(null, { readOnly: true });
+    expect(f.flow.state).toEqual({ phase: "read-only" });
+    f.flow.backendReady();
+    await vi.advanceTimersByTimeAsync(LAUNCH_CHECK_DELAY_MS * 2);
+    expect(await f.flow.check(true)).toEqual({ outcome: "none" });
+    expect(f.shown).toEqual([]);
+    f.flow.checkByHand();
+    await settle();
+    expect(f.shown).toEqual([updateBox({ kind: "read-only" }, en, "darwin")]);
+    expect(f.flow.state).toEqual({ phase: "read-only" });
+    expect([...f.states, ...f.lines]).toEqual([]);
   });
 
   test("the backend's first ready starts one quiet check 10 s later; later readies start none", async () => {
@@ -560,6 +666,50 @@ describe("UpdateFlow", () => {
     expect(f.flow.state).toEqual({ phase: "downloading", version: "0.2.0", percent: 0 });
   });
 
+  test("no box on an app that is quitting: the quiet check landing during the owner's quit only logs", async () => {
+    const steps: string[] = [];
+    const quit = new QuitFlow({
+      confirm: async () => true,
+      hideWindows: () => steps.push("hide"),
+      // Still stopping.
+      stopBackend: () => new Promise<void>(() => {}),
+      quit: () => steps.push("quit"),
+      log: { info: () => {}, error: () => {} },
+    });
+    const s = scripted();
+    const f = harness(s.driver, { quitting: () => quit.quitting });
+    f.flow.backendReady();
+    await vi.advanceTimersByTimeAsync(LAUNCH_CHECK_DELAY_MS);
+    expect(s.checks).toHaveLength(1);
+    expect(quit.beforeQuit()).toBe(false);
+    await settle();
+    expect(steps).toEqual(["hide"]);
+    s.checks[0]?.resolve(release("0.2.0"));
+    await settle();
+    expect(f.shown).toEqual([]);
+    expect(s.downloads).toHaveLength(0);
+    expect(f.lines.slice(-2)).toEqual([
+      "Eidolon: update available: 0.2.0",
+      "Eidolon: no update box while quitting (available 0.2.0)",
+    ]);
+  });
+
+  test("nor the box that asks to restart, for a download that ends during a quit", async () => {
+    const s = scripted();
+    let quitting = false;
+    const f = harness(s.driver, { quitting: () => quitting });
+    void f.flow.check(false);
+    s.checks[0]?.resolve(release("0.2.0"));
+    await settle();
+    quitting = true;
+    s.downloads[0]?.done.resolve();
+    await settle();
+    expect(messages(f.shown)).toEqual(["Eidolon 0.2.0 is available"]);
+    expect(f.flow.state).toEqual({ phase: "downloaded", version: "0.2.0" });
+    expect(f.restarts).toEqual([]);
+    expect(f.lines.at(-1)).toBe("Eidolon: no update box while quitting (downloaded 0.2.0)");
+  });
+
   test("one update box at a time: Check for Updates… while one is open shows no second", async () => {
     const s = scripted();
     const open = Promise.withResolvers<{ response: number }>();
@@ -584,8 +734,12 @@ describe("UpdateFlow", () => {
   });
 });
 
-/** A flow that has downloaded 0.2.0, its restart box answered Later. */
-async function downloaded(overrides: Partial<UpdateFlowOptions> = {}) {
+/** A flow that has downloaded 0.2.0, its restart box answered Later unless `answer` says. */
+async function downloaded(
+  overrides: Partial<UpdateFlowOptions> & {
+    readonly answer?: (box: MessageBoxOptions) => number;
+  } = {},
+) {
   const s = scripted();
   const f = harness(s.driver, {
     answer: (box) => (box.buttons?.[0] === "Restart" ? LATER : 0),
@@ -678,7 +832,7 @@ describe("Restart", () => {
         },
       },
       {
-        restart: (install) => quit.restart(install),
+        restart: (install, installable) => quit.restart(install, installable),
         answer: (box) => (box.buttons?.[0] === "Restart" ? LATER : 0),
       },
     );
@@ -712,16 +866,57 @@ describe("Restart", () => {
     expect(f.installs).toEqual([]);
   });
 
-  test("an error while the restart asks or stops brings the app back without the update, never a quitAndInstall", async () => {
+  test("an error while the restart asks calls it off once it's answered: no latch, no stop, and the failure's box", async () => {
+    const steps: string[] = [];
+    const answered = Promise.withResolvers<boolean>();
+    const quit = new QuitFlow({
+      confirm: (purpose) => {
+        steps.push(`confirm ${purpose}`);
+        return answered.promise;
+      },
+      hideWindows: () => steps.push("hide"),
+      stopBackend: async () => {
+        steps.push("stop");
+      },
+      quit: () => steps.push("quit"),
+      log: { info: () => {}, error: () => {} },
+    });
+    const f = await downloaded({
+      restart: (install, installable) => quit.restart(install, installable),
+      quitting: () => quit.quitting,
+      answer: (box) => (box.buttons?.[0] === "Download" ? 0 : LATER),
+    });
+    f.flow.install();
+    await settle();
+    expect(steps).toEqual(["confirm restart"]);
+    f.flow.failed(new Error("Cannot update while running on a read-only volume"));
+    answered.resolve(true);
+    await settle();
+    expect(steps).toEqual(["confirm restart"]);
+    expect([quit.quitting, quit.closeHides()]).toEqual([false, true]);
+    expect(f.installs).toEqual([]);
+    expect(f.flow.state).toMatchObject({ phase: "error", version: "0.2.0" });
+    expect(messages(f.shown).at(-1)).toBe("Eidolon couldn't download the update");
+    expect(f.lines.slice(-2)).toEqual([
+      "Eidolon: 0.2.0 can't be installed: Cannot update while running on a read-only volume",
+      "Eidolon: not restarting, since 0.2.0 can't be installed",
+    ]);
+  });
+
+  test("an error once the quit check has let the restart through brings the app back without the update, never a quitAndInstall", async () => {
     const restart = Promise.withResolvers<boolean>();
     let install: () => void = () => {};
+    let installable: () => boolean = () => false;
     const f = await downloaded({
-      restart: (next) => {
+      restart: (next, check) => {
         install = next;
+        installable = check;
         return restart.promise;
       },
     });
     f.flow.install();
+    // The check's answer: the latch and the backend's stop come next.
+    expect(installable()).toBe(true);
     f.flow.failed(new Error("Squirrel.Mac: update failed"));
     install();
     restart.resolve(true);
@@ -908,9 +1103,10 @@ describe("background mode's answers", () => {
     };
     const flow = new UpdateFlow({
       driver,
-      restart: (install) => quit.restart(install),
+      restart: (install, installable) => quit.restart(install, installable),
       relaunch: () => steps.push("relaunch"),
       show: (box) => native.messageBox(box),
+      quitting: () => quit.quitting,
       open: (url) => void native.openExternal(url),
       progress: () => {},
       strings: () => en,

@@ -1,6 +1,7 @@
 // Updates on Electron: update-flow.ts's flow on electron-updater's autoUpdater, or on the mock, with
 // native.ts's boxes, Release Notes through the link policy, and the download's progress on the Dock
 // or the taskbar.
+import { accessSync, constants } from "node:fs";
 import { app, type NativeImage } from "electron";
 import { autoUpdater, type ProgressInfo } from "electron-updater";
 import { manifestNotes } from "../shared/release-notes.ts";
@@ -81,18 +82,22 @@ export function installUpdater(options: UpdaterOptions): UpdateFlow {
     exePath: app.getPath("exe"),
     localAppData: process.env.LOCALAPPDATA,
     env: process.env,
+    checkWritable: (folder) => accessSync(folder, constants.W_OK),
   });
   mainLog.info(line);
   const mock = mode === "mock" ? mockUpdates(mainLog) : null;
   const feed = mode === "feed" || mode === "dev" ? releaseFeed(mode === "dev") : null;
   const flow = new UpdateFlow({
     driver: mock?.driver ?? feed,
-    restart: mock?.restart ?? ((install) => options.quit.restart(install)),
+    readOnly: mode === "read-only",
+    restart:
+      mock?.restart ?? ((install, installable) => options.quit.restart(install, installable)),
     relaunch: () => {
       app.relaunch();
       app.quit();
     },
     show: (box) => native.messageBox(options.icon ? { ...box, icon: options.icon } : box),
+    quitting: () => options.quit.quitting,
     open: (url) => {
       if (openAction(url) !== "browser") return;
       native.openExternal(url).catch((error: unknown) => {

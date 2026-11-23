@@ -344,10 +344,10 @@ window's top, and a window saved maximized is maximized only once it has painted
   would otherwise install its default one, whose accelerators act even under a hidden title bar,
   and a notification-area icon holds the rest for the whole run (Open Eidolon, Settings…, Check for
   Updates…, Show Logs, Open Data Folder, Licenses, About Eidolon, Quit Eidolon); a click on it
-  opens the window. Check for Updates… is there only when the app [updates itself](#updates), and
-  disabled while a check, a download or the restart runs. Both get a context menu, since Electron
-  has none: cut, copy, paste and select all in a field, copy over selected text. The About panel
-  names the app's version and the server's.
+  opens the window. Check for Updates… is there only when the app [updates itself](#updates) or
+  runs from a read-only volume, and disabled while a check, a download or the restart runs. Both
+  get a context menu, since Electron has none: cut, copy, paste and select all in a field, copy
+  over selected text. The About panel names the app's version and the server's.
 - **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, dialogs and the shell
   pages) come in English and Simplified Chinese, following the language the page reports and the
   system's until it has. Menus and the tray are rebuilt when it changes. Labels are Title Case,
@@ -733,11 +733,19 @@ electron-builder writes into the packaged app's `app-update.yml` from `publish` 
 laplace-persona's updater does but in native boxes, and `test/update-flow.test.ts` covers them;
 `src/main/updater.ts` runs it on electron-updater's `autoUpdater`.
 
-- **When it runs:** in a packaged install: on macOS anywhere, and on Windows only NSIS's per-user
-  install in `%LOCALAPPDATA%\Programs\eidolon` (`isUpdatableInstall`). Its installer installs
-  there whatever runs it, so updating a copy anywhere else, such as `win-unpacked`, would leave a
-  second install beside it. Not unpackaged, and not in background mode, unless a hook below says
-  otherwise. main.log's `Eidolon: updates are …` line says which, and why.
+- **When it runs:** in a packaged install: on macOS anywhere but a read-only volume, and on
+  Windows only NSIS's per-user install in `%LOCALAPPDATA%\Programs\eidolon`
+  (`isUpdatableInstall`). Its installer installs there whatever runs it, so updating a copy
+  anywhere else, such as `win-unpacked`, would leave a second install beside it. Not unpackaged,
+  and not in background mode, unless a hook below says otherwise. main.log's `Eidolon: updates
+  are …` line says which, and why.
+- **A read-only copy on macOS:** run from its mounted DMG, or from the randomized read-only mount
+  Gatekeeper translocates a quarantined app to, Squirrel.Mac refuses an update, but only once the
+  whole zip has downloaded. So when `fs.accessSync` on the bundle's folder fails with `EROFS`
+  (`readOnlyFolder`), nothing is checked, and Check for Updates… stays, to say in a box that Eidolon
+  updates itself only from a folder it can write to: move it to the Applications folder, then open
+  it again. A folder that is only not the user's to write, `/Applications` for a standard account,
+  still updates: Squirrel.Mac asks for an administrator's password there.
 - **Checking:** once, quietly, 10 s after the backend is first ready, and from Check for Updates…
   (in macOS's app menu after About, in Windows' tray menu after Settings…), which is disabled while
   a check, a download or the restart runs. The quiet check only logs that the app is up to date or
@@ -750,6 +758,9 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
   shows on the Dock or the taskbar, cleared when it ends or fails; a failure offers Try Again, the
   default, and Later. On macOS it is done only once Squirrel.Mac has fetched the zip from
   electron-updater's local proxy, after `update-downloaded`.
+- **No box during a quit:** once a quit is under way, the window hidden and the backend stopping,
+  a check that lands or a download that ends shows no box, only main.log's `Eidolon: no update box
+  while quitting (available X.Y.Z)` or the like.
 - **Installing:** "Restart to finish updating" offers Restart, the default, and Later, which leaves
   the update to `autoInstallOnAppQuit` at the next quit, with no relaunch. Restart moves the state
   to installing first, so a second Restart does nothing: `quitAndInstall` twice asks Squirrel to
@@ -762,9 +773,12 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
   fires, so a latch set there would let the hide-on-close window veto the relaunch, as persona's
   did from 0.32.0 to 0.63.2.
 - **An error after the download,** such as Squirrel.Mac refusing the update, takes Restart away:
-  the update is in error, and the box offers Try Again. One that comes once the restart has
-  stopped the backend, or from inside `quitAndInstall`, which then never quits, starts the app
-  again as it was (`app.relaunch()`) rather than leave it hidden with its backend stopped.
+  the update is in error, and the box offers Try Again. One that comes while the restart's quit
+  check asks calls the restart off once it's answered, before the latch: nothing is hidden or
+  stopped, main.log says `Eidolon: not restarting, since X.Y.Z can't be installed`, and the
+  failure's box offers Try Again. One that comes once the restart has stopped the backend, or from
+  inside `quitAndInstall`, which then never quits, starts the app again as it was
+  (`app.relaunch()`) rather than leave it hidden with its backend stopped.
 - **main.log** has a line for each step: `Eidolon: checking for updates`; then `Eidolon: update
   available: X.Y.Z`, `Eidolon: up to date: X.Y.Z is the latest` or `Eidolon: the update check
   failed: <reason>`; `Eidolon: downloading X.Y.Z`; `Eidolon: update downloaded: X.Y.Z` or
@@ -780,7 +794,7 @@ The QA hooks are read from the environment the app starts with, as `.env.example
 | --- | --- |
 | `EIDOLON_DESKTOP_DEV_UPDATE=1` | An unpackaged build checks the release feed through `apps/desktop/dev-app-update.yml` (`forceDevUpdateConfig`), which electron-updater reads only unpackaged, with a cache of its own, `eidolon-dev-updater`. A download and Restart act on the real release. Not in background mode |
 | `EIDOLON_DESKTOP_MOCK_UPDATE=1` | Fakes the whole flow, as persona's `PERSONA_MOCK_UPDATE` does, packaged or not and in background mode too, and reaches no network: the check finds 9.9.9 after 0.6 s, the first download fails at 60 %, Try Again completes it, and Restart only logs, the update back to downloaded after 1.5 s so the run repeats. Nothing is checked, stopped or quit |
-| `EIDOLON_DESKTOP_UPDATE_TEST=1` | The one way the real updater runs in background mode, for [CI's update test](#the-update-test): a packaged install checks the feed its `app-update.yml` names, background mode answers Download, Restart and the quit check's box with their defaults, and the app stops its backend and installs, each step in main.log |
+| `EIDOLON_DESKTOP_UPDATE_TEST=1` | For CI runners only: the one way the real updater runs in background mode, for [CI's update test](#the-update-test). A packaged install checks the feed its `app-update.yml` names, background mode answers Download, Restart and the quit check's box with their defaults, and the app stops its backend and installs, each step in main.log. Squirrel.Mac or the NSIS installer then starts the updated version outside background mode, on the default profile and the real data home, so a local run would end with a visible Eidolon |
 
 A packaged build reads only its own `resources/app-update.yml`, so a test of an update builds its
 older version with the feed it will serve (`-c.publish.url`, which electron-builder writes there),
@@ -824,8 +838,9 @@ that could show something through it.
 - **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
   Developer Tools, which opens a window, isn't offered unpackaged either.
 - **No updates:** no check runs and there is no Check for Updates…, unless
-  `EIDOLON_DESKTOP_MOCK_UPDATE` fakes the flow or `EIDOLON_DESKTOP_UPDATE_TEST` runs the real one
-  ([Updates](#updates)), whose boxes take their defaults, Download and Restart.
+  `EIDOLON_DESKTOP_MOCK_UPDATE` fakes the flow or, on a CI runner only,
+  `EIDOLON_DESKTOP_UPDATE_TEST` runs the real one ([Updates](#updates)), whose boxes take their
+  defaults, Download and Restart.
 - **The microphone:** macOS is never asked. A request the [usual rules](#the-window) let through
   is granted only when the app runs with Chromium's `--use-fake-device-for-media-stream`, on any
   platform, and otherwise denied, since a grant would record the owner; main.log says which.

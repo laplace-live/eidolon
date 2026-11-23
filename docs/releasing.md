@@ -111,9 +111,10 @@ laplace-persona's, so the website reads both apps' files alike.
   electron-updater parses the whole manifest, so the notes arrive with the version check's own
   request, frozen as they were when the release uploaded it.
   `apps/desktop/src/shared/release-notes.ts` reads them as remote input, keeps the releases of
-  the desktop app after the running version and up to the offered one, with their items about the
-  app or the backend it ships (none about the SDK alone), and writes them as the box's text: a
-  line per item after its kind's label, at most 8, and a line that counts the rest.
+  the desktop app after the running version and up to the offered one, with only the items whose
+  changesets named `laplace-eidolon-desktop` (`notesBetween`), and writes them as the box's text:
+  a line per item after its kind's label, at most 8, and a line that counts the rest, each line
+  and version heading cut at 200 characters.
 
 `scripts/changelog.test.ts` covers the script, with `bun run version`'s own steps in a fixture
 repository, and `apps/desktop/test/release-notes.test.ts` the desktop's side.

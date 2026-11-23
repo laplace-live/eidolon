@@ -20,7 +20,10 @@ export interface MenuActions {
 /** Check for Updates… as the updater stands. */
 export type UpdatesItem = "enabled" | "disabled" | "hidden";
 
-/** Absent while this run can't update itself; disabled while a check, a download or the restart runs. */
+/**
+ * Absent while this run doesn't update itself, unless it runs from a read-only volume, whose box
+ * says to move it; disabled while a check, a download or the restart runs.
+ */
 export function updatesItem(phase: UpdateState["phase"]): UpdatesItem {
   if (phase === "unsupported") return "hidden";
   return phase === "checking" || phase === "downloading" || phase === "installing"

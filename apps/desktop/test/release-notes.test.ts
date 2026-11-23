@@ -4,6 +4,7 @@ import {
   compareVersions,
   DESKTOP_PACKAGE,
   MAX_NOTE_ITEMS,
+  MAX_NOTE_LINE,
   manifestNotes,
   type NotesLabels,
   notesBetween,
@@ -36,7 +37,7 @@ const LABELS: NotesLabels = {
     fix: "Fixed",
     other: "Other",
   } satisfies Record<ChangeKind, string>,
-  more: (count) => `${count} more on the Release Notes page.`,
+  more: (count) => `${count} more not listed here.`,
 };
 
 describe("compareVersions", () => {
@@ -204,7 +205,7 @@ describe("notesText", () => {
     expect(lines.filter((line) => line.startsWith("New: "))).toHaveLength(MAX_NOTE_ITEMS);
     expect(lines.at(-3)).toBe("New: 0.2.0 #1");
     expect(lines.at(-2)).toBe("");
-    expect(lines.at(-1)).toBe("2 more on the Release Notes page.");
+    expect(lines.at(-1)).toBe("2 more not listed here.");
   });
 
   test("counts a release the list has no room for, and gives it no heading", () => {
@@ -213,11 +214,32 @@ describe("notesText", () => {
     });
     const text = notesText([full, entry("0.2.0")], LABELS);
     expect(text).not.toContain("0.2.0");
-    expect(text.endsWith("\n\n1 more on the Release Notes page.")).toBe(true);
+    expect(text.endsWith("\n\n1 more not listed here.")).toBe(true);
   });
 
   test("writes nothing for no notes", () => {
     expect(notesText([], LABELS)).toBe("");
+  });
+
+  test(`cuts a line or a version heading past ${MAX_NOTE_LINE} characters, a 200 KB one too, to end in "…"`, () => {
+    const huge = "x".repeat(200_000);
+    const text = notesText([entry(huge, { items: [item(huge)] }), entry("0.2.0")], LABELS);
+    expect(text.split("\n")).toEqual([
+      `${"x".repeat(MAX_NOTE_LINE - 1)}…`,
+      `New: ${"x".repeat(MAX_NOTE_LINE - 6)}…`,
+      "",
+      "0.2.0",
+      "New: In 0.2.0",
+    ]);
+    const fits = "y".repeat(MAX_NOTE_LINE - "New: ".length);
+    expect(notesText([entry("0.2.0", { items: [item(fits)] })], LABELS)).toBe(`New: ${fits}`);
+  });
+
+  test("never cuts a character in two", () => {
+    // The emoji's two UTF-16 units straddle the cut.
+    const before = "a".repeat(MAX_NOTE_LINE - "New: ".length - 2);
+    const text = notesText([entry("0.2.0", { items: [item(`${before}😀 and more`)] })], LABELS);
+    expect(text).toBe(`New: ${before}…`);
   });
 });
 

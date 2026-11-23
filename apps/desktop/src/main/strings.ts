@@ -120,6 +120,9 @@ export interface Strings {
     readonly downloadFailedTitle: string;
     /** Under either failure. */
     readonly updateFailed: string;
+    /** Check for Updates… on macOS, from a read-only volume: a disk image or a translocated copy. */
+    readonly readOnlyTitle: string;
+    readonly readOnly: string;
     /** Windows' one-time notice when closing first hides the window. */
     readonly hideNoticeTitle: string;
     readonly hideNotice: string;
@@ -265,8 +268,8 @@ const en: Strings = {
       },
       more: (count) =>
         count === 1
-          ? "1 more change is in the release notes."
-          : `${count} more changes are in the release notes.`,
+          ? "1 more change isn't listed here."
+          : `${count} more changes aren't listed here.`,
     },
     updateDownloadedTitle: "Restart to finish updating",
     updateDownloaded: (version) =>
@@ -277,6 +280,10 @@ const en: Strings = {
     downloadFailedTitle: "Eidolon couldn't download the update",
     updateFailed:
       "Check your internet connection, then try again. If it happens again, Show Logs has the details.",
+    readOnlyTitle: "Eidolon can't update itself here",
+    readOnly:
+      "Eidolon updates itself only from a folder it can write to. Move it to the Applications " +
+      "folder, then open it again.",
     hideNoticeTitle: "Eidolon is still running",
     hideNotice:
       "Calls, tasks and jobs keep going while the window is closed. Click the tray icon to open it " +
@@ -385,7 +392,7 @@ const zhHans: Strings = {
         fix: "修复",
         other: "其他",
       },
-      more: (count) => `另有 ${count} 项改动，详见发行说明。`,
+      more: (count) => `另有 ${count} 项改动未在此列出。`,
     },
     updateDownloadedTitle: "重启以完成更新",
     updateDownloaded: (version) =>
@@ -395,6 +402,8 @@ const zhHans: Strings = {
     checkFailedTitle: "Eidolon 无法检查更新",
     downloadFailedTitle: "Eidolon 无法下载更新",
     updateFailed: "请检查网络连接，然后重试。如果再次出现，详情请在「显示日志」中查看。",
+    readOnlyTitle: "Eidolon 无法在当前位置更新",
+    readOnly: "Eidolon 只能从可写入的文件夹更新自己。请把它移到「应用程序」文件夹，然后重新打开。",
     hideNoticeTitle: "Eidolon 仍在运行",
     hideNotice:
       "关闭窗口后，通话、任务和作业会继续进行。点击托盘图标即可重新打开窗口，也可以在托盘图标的菜单中退出 Eidolon。",
