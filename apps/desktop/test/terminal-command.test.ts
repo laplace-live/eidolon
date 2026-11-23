@@ -142,6 +142,10 @@ describe.skipIf(!POSIX)("on macOS", () => {
     symlinkSync("/Applications/Old Place/Eidolon.app/Contents/Resources/bin/eidolon", link);
     expect(await state()).toEqual({ state: "absent", path: link });
     unlinkSync(link);
+    // macOS's disks ignore case, so the moved copy's link may differ in it.
+    symlinkSync("/Applications/old place/eidolon.app/Contents/resources/BIN/eidolon", link);
+    expect(await state()).toEqual({ state: "absent", path: link });
+    unlinkSync(link);
     symlinkSync("/opt/homebrew/bin/eidolon", link);
     expect(await state()).toEqual({ state: "taken", path: link });
     unlinkSync(link);
@@ -210,6 +214,30 @@ describe.skipIf(!POSIX)("on macOS", () => {
       unlinkSync(link);
     }
   });
+
+  test.skipIf(process.getuid?.() === 0)(
+    "a link it can't read is taken, and Install and Remove leave it alone",
+    async () => {
+      const { resourcesPath, launcher } = setup("unreadable");
+      const sealed = folder("sealed");
+      const link = join(sealed, "eidolon");
+      symlinkSync(launcher, link);
+      chmodSync(sealed, 0o000);
+      locked.push(sealed);
+      const { host, warn, runs } = hostOn("darwin", { resourcesPath, link });
+      expect(await commandState(host)).toEqual({ state: "taken", path: link });
+      for (const action of ["install", "remove"] as const) {
+        expect(await changeCommand(host, action)).toEqual({
+          command: { state: "taken", path: link },
+          error: "failed",
+        });
+      }
+      expect(warn).toHaveLength(2);
+      expect(runs).toEqual([]);
+      chmodSync(sealed, 0o755);
+      expect(readlinkSync(link)).toBe(launcher);
+    },
+  );
 
   test("Remove takes away only Eidolon's links, ours or another copy's", async () => {
     const { resourcesPath, launcher, link } = setup("remove");
