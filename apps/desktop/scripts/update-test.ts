@@ -17,7 +17,7 @@ import {
   rmSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, win32 } from "node:path";
 import { appEnv } from "./smoke/env.ts";
 import {
   Checks,
@@ -30,7 +30,7 @@ import {
   within,
 } from "./smoke/kit.ts";
 import { namesUninstaller, silentUninstall, UNINSTALLER, uninstallEntries } from "./smoke/nsis.ts";
-import { lineTime } from "./smoke/packaged.ts";
+import { inside, lineTime, windowsArgs } from "./smoke/packaged.ts";
 import { Processes, processTable, type Started } from "./smoke/processes.ts";
 import {
   type Feed,
@@ -233,6 +233,50 @@ async function fromInstall() {
 const currentVersions = (): Promise<Versions> =>
   platform === "darwin" ? Promise.resolve(macVersions(install)) : readWindowsVersions(install);
 
+/** Windows: where electron-updater keeps the setup it downloaded, which runs from there. */
+const pendingSetups = win32.join(
+  process.env.LOCALAPPDATA || win32.join(homedir(), "AppData", "Local"),
+  "eidolon-updater",
+  "pending",
+);
+
+/** Windows: the processes of the setup electron-updater started. */
+async function runningSetups(): Promise<string[]> {
+  const table = await processTable();
+  return table
+    .filter((row) => inside(windowsArgs(row.command)[0] ?? "", pendingSetups, "win32"))
+    .map((row) => `pid ${row.pid}`);
+}
+
+/** Windows: what an update that didn't land leaves to read: the folders, and HKCU's entries. */
+function installState(): Record<string, string> {
+  if (platform !== "win32") return {};
+  const listing = (dir: string): string => {
+    try {
+      const names = readdirSync(dir);
+      return `${dir}: ${names.length} entries: ${names.slice(0, 40).join(", ")}`;
+    } catch (error) {
+      return `${dir}: ${(error as NodeJS.ErrnoException).code ?? String(error)}`;
+    }
+  };
+  const reg = spawnSync(
+    "reg.exe",
+    [
+      "query",
+      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+      "/s",
+      "/f",
+      "Eidolon",
+    ],
+    { encoding: "utf8", timeout: 60_000, windowsHide: true },
+  );
+  return {
+    "the install folder": listing(install),
+    "the pending setups' folder": listing(pendingSetups),
+    "reg query of HKCU's uninstall entries": `${reg.stdout ?? ""}${reg.stderr ?? ""}${reg.error === undefined ? "" : String(reg.error)}`,
+  };
+}
+
 /** The feed, each request it answers logged in the run's folder; null when it can't serve. */
 async function serve(): Promise<Feed | null> {
   const name = `the feed serves ${newVersion}'s manifest, ${platform === "darwin" ? "zip" : "setup"} and blockmap, and ${oldVersion}'s blockmap, on 127.0.0.1:${FEED_PORT}`;
@@ -325,7 +369,7 @@ function launch(): Started {
 
 /** main.log from the updater's start to the install, each step within its time of the last. */
 async function followUpdate(main: Started): Promise<boolean> {
-  const steps = updateSteps(newVersion);
+  const steps = updateSteps(newVersion, platform);
   let since = Date.now();
   let seen = 0;
   let snapshotAt = 0;
@@ -403,18 +447,74 @@ function quitsToInstall(main: Started): Promise<boolean> {
   });
 }
 
+/**
+ * Windows: the setup electron-updater started runs to its end, the old version's uninstall and the
+ * new one's install, before anything reads which version is installed.
+ */
+function setupRuns(): Promise<boolean> {
+  const name = `${newVersion}'s setup runs to its end`;
+  return check(name, async () => {
+    const at = Date.now();
+    let seen = false;
+    let lastError: string | null = null;
+    const still = await until(
+      async () => {
+        try {
+          const rows = await runningSetups();
+          if (rows.length > 0) seen = true;
+          lastError = null;
+          return rows;
+        } catch (error) {
+          lastError = String(error).split("\n")[0] ?? "";
+          return ["unknown"];
+        }
+      },
+      (rows) => rows.length === 0,
+      UPDATED_MS,
+      2000,
+    );
+    if (still.length > 0) {
+      return failed(
+        name,
+        `still running after ${UPDATED_MS / 1000} s: ${still.join(", ")}${lastError === null ? "" : `; the process list failed: ${lastError}`}`,
+        { ...updateLogs(), ...installState() },
+      );
+    }
+    return checks.add(
+      name,
+      true,
+      `${seen ? "it ran and ended" : "it had ended before the first look"}, ${seconds(Date.now() - at)} s after ${oldVersion} quit`,
+    );
+  });
+}
+
 function updated(): Promise<boolean> {
   const name = `the installed app is ${newVersion}`;
   return check(name, async () => {
     const at = Date.now();
+    // A read can fail while the setup still writes, or on a slow PowerShell: the next one counts.
+    let lastError: string | null = null;
     const versions = await until(
-      currentVersions,
+      async (): Promise<Versions> => {
+        try {
+          const read = await currentVersions();
+          lastError = null;
+          return read;
+        } catch (error) {
+          lastError = String(error).split("\n")[0] ?? "";
+          return {};
+        }
+      },
       (now) => atVersion(now, newVersion),
       UPDATED_MS,
       platform === "win32" ? 2000 : 500,
     );
     if (!atVersion(versions, newVersion)) {
-      return failed(name, `${versionsText(versions)} after ${UPDATED_MS / 1000} s`, updateLogs());
+      return failed(
+        name,
+        `${versionsText(versions)} after ${UPDATED_MS / 1000} s${lastError === null ? "" : `; the last read failed: ${lastError}`}`,
+        { ...updateLogs(), ...installState() },
+      );
     }
     return checks.add(
       name,
@@ -564,7 +664,9 @@ try {
     if (await followUpdate(main)) {
       checkServed(feed);
       await quitsToInstall(main);
-      if (await updated()) await relaunched(logFrom);
+      if ((platform !== "win32" || (await setupRuns())) && (await updated())) {
+        await relaunched(logFrom);
+      }
     }
   }
 } catch (error) {

@@ -12,8 +12,21 @@ export interface UpdateStep {
   readonly ms: number;
 }
 
-/** The update to `version`, from the updater's mode line to the install. */
-export function updateSteps(version: string): readonly UpdateStep[] {
+/**
+ * The update to `version`, from the updater's mode line to the install; on Windows with the setup's
+ * signature check, which electron-updater runs once the setup has downloaded.
+ */
+export function updateSteps(version: string, platform: NodeJS.Platform): readonly UpdateStep[] {
+  const signature: UpdateStep[] =
+    platform === "win32"
+      ? [
+          {
+            name: "its setup's signature checks out: valid, by a name the install accepts",
+            line: "Eidolon: the update's signature is valid",
+            ms: 600_000,
+          },
+        ]
+      : [];
   return [
     {
       name: "its updater runs in background mode, under EIDOLON_DESKTOP_UPDATE_TEST",
@@ -35,6 +48,7 @@ export function updateSteps(version: string): readonly UpdateStep[] {
       line: `Eidolon: downloading ${version}`,
       ms: 30_000,
     },
+    ...signature,
     {
       // On macOS this includes Squirrel.Mac's own fetch and its check of the update's signature.
       name: `it downloads ${version}`,
@@ -67,6 +81,7 @@ const STOPS = [
   /^Eidolon: an update box didn't show: /,
   // Background mode would answer its Try Again over and over.
   /^Eidolon: the download of \S+ failed: /,
+  /^Eidolon: the update's signature doesn't check out: /,
   /^Eidolon: \S+ can't be installed: /,
   /^Eidolon: \S+ stays downloaded\b/,
   /^Eidolon: the restart failed: /,

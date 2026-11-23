@@ -430,6 +430,7 @@ describe("main.log's steps", () => {
         platform: "darwin",
         exePath: "/t/Applications/Eidolon.app/Contents/MacOS/Eidolon",
         env: { EIDOLON_DESKTOP_UPDATE_TEST: "1" },
+        checkWritable: () => {},
       }).line,
     );
     const electron = new Proxy({} as NativeUi, {
@@ -465,7 +466,7 @@ describe("main.log's steps", () => {
         download: async (progress) => progress(100),
         install: () => installs++,
       },
-      restart: (install) => quit.restart(install),
+      restart: (install, installable) => quit.restart(install, installable),
       relaunch: () => {},
       show: (box) => native.messageBox(box),
       open: () => {},
@@ -479,7 +480,7 @@ describe("main.log's steps", () => {
     await vi.advanceTimersByTimeAsync(LAUNCH_CHECK_DELAY_MS);
     for (let i = 0; i < 10; i++) await Promise.resolve();
     expect(installs).toBe(1);
-    const steps = updateSteps("0.0.2");
+    const steps = updateSteps("0.0.2", "darwin");
     const progress = follow(logged(lines), steps);
     expect(progress.stopped).toBeNull();
     expect(progress.lines).toHaveLength(steps.length);
@@ -487,7 +488,7 @@ describe("main.log's steps", () => {
   });
 
   test("each step has a name, a line and a deadline", () => {
-    const steps = updateSteps("0.0.2");
+    const steps = updateSteps("0.0.2", "darwin");
     expect(steps.map((step) => step.line)).toEqual([
       "Eidolon: updates are on in background mode (EIDOLON_DESKTOP_UPDATE_TEST)",
       "Eidolon: checking for updates",
@@ -505,7 +506,7 @@ describe("main.log's steps", () => {
   });
 
   test("are followed in order only, whatever the line endings", () => {
-    const steps = updateSteps("0.0.2");
+    const steps = updateSteps("0.0.2", "darwin");
     // Downloading before the update was found doesn't count until it comes again after.
     const text = logged(
       [
@@ -529,7 +530,7 @@ describe("main.log's steps", () => {
   });
 
   test("count a line only as its own message, not quoted inside another's", () => {
-    const steps = updateSteps("0.0.2");
+    const steps = updateSteps("0.0.2", "darwin");
     const text = logged([
       'Eidolon: background mode answered "OK" to a message box: Eidolon: updates are on in background mode (EIDOLON_DESKTOP_UPDATE_TEST)',
       "Error: Eidolon: up to date: 0.0.2 is the latest",
@@ -542,7 +543,7 @@ describe("main.log's steps", () => {
   });
 
   test("stop at a line after which the update can't go on without a person", () => {
-    const steps = updateSteps("0.0.2");
+    const steps = updateSteps("0.0.2", "darwin");
     const on = "Eidolon: updates are on in background mode (EIDOLON_DESKTOP_UPDATE_TEST)";
     for (const [before, stop] of [
       [[], "Eidolon: updates are off in background mode"],
@@ -576,6 +577,23 @@ describe("main.log's steps", () => {
       const progress = follow(logged([...before, stop, "Eidolon: installing 0.0.2"]), steps);
       expect(progress.stopped).toBe(`[2026-11-22 12:00:00.000] [info]  ${stop}`);
     }
+  });
+
+  test("on Windows include the setup's signature check, after the download starts, and stop on its refusal", () => {
+    const steps = updateSteps("0.0.2", "win32");
+    expect(steps.map((step) => step.line).slice(3, 6)).toEqual([
+      "Eidolon: downloading 0.0.2",
+      "Eidolon: the update's signature is valid",
+      "Eidolon: update downloaded: 0.0.2",
+    ]);
+    expect(updateSteps("0.0.2", "darwin").map((step) => step.line)).not.toContain(
+      "Eidolon: the update's signature is valid",
+    );
+    const refused =
+      "Eidolon: the update's signature doesn't check out: couldn't check the update's signature: Error: spawn powershell.exe ETIMEDOUT";
+    expect(follow(logged([refused]), steps).stopped).toBe(
+      `[2026-11-22 12:00:00.000] [info]  ${refused}`,
+    );
   });
 
   test("the version a log's last start line names, and its tail", () => {

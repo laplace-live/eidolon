@@ -630,10 +630,16 @@ The last three run alone, and the build job doesn't run for them. All four run o
 
 ### Signing identities
 
-- **A Windows install takes updates signed only by a name it already trusts.** electron-updater
-  checks each setup it downloads against the signer names frozen into the install's
-  `app-update.yml`, the overlay's `publish.publisherName`, and fails with
-  `ERR_UPDATER_INVALID_SIGNATURE` otherwise; nothing on the feed widens an installed list. Every
+- **A Windows install takes updates signed only by a name it already trusts.** Each setup it
+  downloads is checked against the signer names frozen into the install's `app-update.yml`, the
+  overlay's `publish.publisherName`, and refused otherwise; nothing on the feed widens an installed
+  list. The check is the app's own (`update-signature.ts`, electron-updater's
+  `verifyUpdateCodeSignature`): `Get-AuthenticodeSignature` must call the setup Valid and its
+  signer's CN one of the names. electron-updater's own check takes a PowerShell that fails or
+  doesn't answer within 20 s, then a 10 s probe, for an old one, and installs the setup
+  unchecked; on a CI runner PowerShell's cold start took that long. The app's waits 120 s and
+  refuses the update when the check can't run, and main.log says which: `Eidolon: the update's
+  signature is valid`, or why it doesn't check out. Every
   release lists both of the org's names. Signing as a third takes an overlap: add it to
   `PUBLISHER_NAMES`, keep signing as a listed name until installs have moved onto a release that
   lists the new one, then switch the Azure profile secrets. An install that sits the overlap out
@@ -1151,12 +1157,18 @@ other, in bash, within three hours:
      temporary home and profile and with no account (`appEnv()`), and main.log must show each
      [step's line](#updates) in order, from `updates are on in background mode` to `installing`,
      each within its own limit of the one before: 10 minutes for the download, a few for the rest.
+     On Windows the steps include the setup's [signature check](#signing-identities), `the
+     update's signature is valid`, which a refusal stops.
      A line after which the update can't go on without a person, such as `up to date`, a failed
      check or download, or an update that can't be installed, fails it at once, as does main
      exiting first; the failure names the last step's line and prints main.log's tail, with
      ShipIt's on macOS. Then the feed must have served the manifest and the update, and main must
      exit 0.
-   - **0.0.2 installed:** the same readings must say 0.0.2 within 10 minutes.
+   - **0.0.2 installed:** on Windows the setup electron-updater started, from
+     `%LOCALAPPDATA%\eidolon-updater\pending`, must end first, uninstalling 0.0.1 and installing
+     0.0.2. Then the same readings must say 0.0.2 within 10 minutes, a reading that fails while the
+     setup writes or PowerShell is slow only counting as no answer. A failure prints the install
+     folder's and the pending folder's files and `reg query`'s uninstall entries.
    - **The app the update starts again,** if one starts: Squirrel.Mac and the NSIS setup start the
      new version themselves, outside the test's environment, so on the default profile and, on
      macOS, outside background mode. Found by its executable in the install, it must name 0.0.2 in
