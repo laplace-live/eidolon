@@ -49,6 +49,11 @@ export function resamplerDir(): string {
   return shippedPath("data/resampler", "packages/voice/src/dsp/resampler/wasm");
 }
 
+/** PSD2Live's runtime, p2l_runtime.wasm with its licenses, which the SDK's avatar entry ships too. */
+export function psd2liveDir(): string {
+  return shippedPath("data/psd2live", "packages/sdk/src/avatar/psd2live/wasm");
+}
+
 /** @eidolon/voice's ONNX models, Silero VAD's and Smart Turn's, with their licenses. */
 export function voiceModelsDir(): string {
   return shippedPath("data/models", "packages/voice/models");

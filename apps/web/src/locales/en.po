@@ -1317,6 +1317,10 @@ msgstr "Changing it means building every persona's index again and a new memory 
 msgid "Changing it means building every persona's knowledge index again."
 msgstr "Changing it means building every persona's knowledge index again."
 
+#: src/components/settings-form/labels.ts
+msgid "Character Model"
+msgstr "Character Model"
+
 #: src/features/usage/route.tsx
 msgid "Chart"
 msgstr "Chart"

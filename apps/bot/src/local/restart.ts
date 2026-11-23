@@ -167,6 +167,7 @@ export const LIVE_READ: readonly string[] = [
   "CHAT_TALKATIVENESS",
   "CHAT_REPLY_MODE",
   "CHAT_MAX_ROUNDS",
+  "APPEARANCE_MODEL",
   "REFINE_API_KEY",
   ...LIVE_PROVIDER_KEYS,
 ];

@@ -24,6 +24,7 @@ export function isSection(value: string | undefined): value is SectionId {
 /** Each card's rows in order; an inner array puts its rows side by side. */
 export const CARD_PATHS = {
   timezone: ["identity.timezone"],
+  appearance: ["appearance.model"],
   // Fish's voice card's picker, or another provider's voice field.
   voice: ["voice.voiceId"],
   voiceProvider: [["voice.provider", "voice.model"]],

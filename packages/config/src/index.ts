@@ -87,6 +87,7 @@ export {
   expandUser,
   jiebaDir,
   PROJECT_ROOT,
+  psd2liveDir,
   resamplerDir,
   resolveProjectPath,
   serverEntry,

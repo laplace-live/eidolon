@@ -401,6 +401,7 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "chat.talkativeness", "CHAT_TALKATIVENESS", "float", "Chat talkativeness"),
   field("persona", "chat.replyMode", "CHAT_REPLY_MODE", "string", "Chat reply mode"),
   field("persona", "chat.maxRounds", "CHAT_MAX_ROUNDS", "int", "Chat reply rounds"),
+  field("persona", "appearance.model", "APPEARANCE_MODEL", "string", "Character model"),
 ];
 
 /** `voice.styles.<name>`, a voice id or `{voiceId, hint}`, sets `TTS_VOICE_ID_<NAME>`. */

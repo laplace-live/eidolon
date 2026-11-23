@@ -1317,6 +1317,10 @@ msgstr "更换后需要重新构建每个人设的索引，并使用新的记忆
 msgid "Changing it means building every persona's knowledge index again."
 msgstr "更换后需要重新构建每个人设的知识索引。"
 
+#: src/components/settings-form/labels.ts
+msgid "Character Model"
+msgstr "当前形象"
+
 #: src/features/usage/route.tsx
 msgid "Chart"
 msgstr "图表"
