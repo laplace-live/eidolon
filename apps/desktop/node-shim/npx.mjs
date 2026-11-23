@@ -1,18 +1,49 @@
-// npx for an MCP server where the computer has none: npx's arguments as pnpm dlx's, run by the pnpm
-// Eidolon bundles in this process. pnpm reports dlx on stderr, so the server's stdout, which the MCP
-// protocol owns, holds only what the server prints.
+// npx for an MCP server where the computer has none, deciding as npm's npx does: a bin of the
+// project's own or in a node_modules/.bin from npm's local prefix up, or a package the project has
+// installed, runs as it is; anything else the pnpm Eidolon bundles installs into its dlx cache, set
+// to install as npm does. The command then runs here, on npm's PATH and in npm's folder, and npx
+// ends as it did. pnpm reports on stderr, so the server's stdout, which the MCP protocol owns,
+// holds only what the server prints.
+import { spawn } from "node:child_process";
+import {
+  accessSync,
+  constants,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cmdLine } from "./cross-spawn.mjs";
 
 const DROPPED = new Set(["-y", "--yes", "-q", "--quiet"]);
 
+/** pnpm's settings that make its dlx install what npm's npx would, as npx would. */
+export const NPX_SETTINGS = [
+  // npm runs every dependency's install scripts; pnpm only those of the packages asked for.
+  "--config.dangerously-allow-all-builds=true",
+  // npm takes the newest version; pnpm one at least a day old.
+  "--config.minimum-release-age=0",
+  // npm installs a dependency's own git and tarball-URL dependencies; pnpm refuses them.
+  "--config.block-exotic-subdeps=false",
+  // In pnpm's global virtual store an ES module finds what its package uses without declaring it
+  // only through a loader pnpm puts in NODE_OPTIONS for what it runs itself, which the packaged
+  // app's Electron ignores anyway (its nodeOptions fuse is off). A project's own store hoists it
+  // where Node looks up the folders, as npm's flat node_modules does.
+  "--config.enable-global-virtual-store=false",
+];
+
 /**
- * npx's arguments as pnpm's: `--loglevel=error dlx`, each package npx was given as `--package=X`,
- * then `--` and the first other word, the package or with `--package` the command, with every word
- * after it as it came. An option this doesn't map is an error, named without its value.
+ * npx's arguments: the packages its -p and --package options name, then the command and the words
+ * after it, which are the command's. An option this npx doesn't take is an error, named without
+ * its value.
  * @param {readonly string[]} args
- * @returns {{ args: string[] } | { error: string }}
+ * @returns {{ packages: string[], command: string[] } | { error: string }}
  */
-export function npxToPnpm(args) {
+export function readNpx(args) {
   const packages = [];
   for (let at = 0; at < args.length; at++) {
     const arg = args[at];
@@ -21,26 +52,472 @@ export function npxToPnpm(args) {
     if (option === "-p" || option === "--package") {
       const name = option === arg ? args[++at] : arg.slice(option.length + 1);
       if (!name) return { error: `${option} needs a package` };
-      packages.push(`--package=${name}`);
+      packages.push(name);
       continue;
     }
-    if (arg !== "--" && arg.startsWith("-")) {
-      return { error: `${option} can't be passed on to pnpm dlx` };
-    }
+    if (arg !== "--" && arg.startsWith("-"))
+      return { error: `Eidolon's npx doesn't take ${option}` };
     const command = args.slice(arg === "--" ? at + 1 : at);
     if (command.length === 0) break;
-    return { args: ["--loglevel=error", "dlx", ...packages, "--", ...command] };
+    return { packages, command };
   }
   return { error: "nothing to run" };
 }
 
-if (import.meta.main) {
-  const translated = npxToPnpm(process.argv.slice(2));
-  if ("error" in translated) {
-    console.error(`npx: ${translated.error}`);
-    process.exit(1);
+const URL_SPEC = /^(?:git\+)?[a-z]+:/i;
+const SCP_GIT_SPEC = /^[^@]+@[^:.]+\.[^:]+:.+$/i;
+const TARBALL = /[.](?:tgz|tar\.gz|tar)$/i;
+const GITHUB_SHORTCUT = /^[^:@%/\s.-][^:@%/\s]*\/[^:@\s/%]+(?:#.*)?$/;
+const PACKAGE_NAME = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/i;
+
+/**
+ * The folder `spec` names, as npm-package-arg tells a folder from a tarball, a git repo, a URL or
+ * a registry package, with the name it gives it, if any; undefined for anything but a folder.
+ */
+export function folderOf(spec, cwd, home, platform = process.platform) {
+  const windows = platform === "win32";
+  const slashes = windows ? /[\\/]/ : /\//;
+  const at = spec.indexOf("@", 1);
+  const namePart = at > 0 ? spec.slice(0, at) : spec;
+  let name;
+  let where = spec;
+  if (URL_SPEC.test(spec)) {
+    // A URL, or a Windows path.
+  } else if (SCP_GIT_SPEC.test(spec)) {
+    return undefined;
+  } else if (!namePart.startsWith("@") && (slashes.test(namePart) || TARBALL.test(namePart))) {
+    // A path, @ and all.
+  } else if (at > 0) {
+    name = namePart;
+    where = spec.slice(at + 1);
+  } else if (PACKAGE_NAME.test(spec)) {
+    return undefined;
   }
-  const pnpm = new URL("../node_modules/pnpm/bin/pnpm.mjs", import.meta.url);
-  process.argv = [process.execPath, fileURLToPath(pnpm), ...translated.args];
-  await import(pnpm.href);
+  const fileLike =
+    /^file:/i.test(where) ||
+    (windows ? /^(?:[.]|~[/\\]|[/\\]|[a-zA-Z]:)/ : /^(?:[.]|~\/|\/|[a-zA-Z]:)/).test(where);
+  const pathLike =
+    !/^npm:/i.test(where) &&
+    !GITHUB_SHORTCUT.test(where) &&
+    !URL_SPEC.test(where) &&
+    (slashes.test(where) || TARBALL.test(where));
+  if ((!fileLike && !pathLike) || TARBALL.test(where)) return undefined;
+  let file = where.replace(/^file:/i, "");
+  // file:/../x is relative; file://x and file:///x are /x.
+  if (/^\/{1,3}\.\.?(?:\/|$)/.test(file)) file = file.replace(/^\/+/, "");
+  else file = file.replace(/^\/{2,3}(?=[^/])/, "/");
+  if (windows) file = file.replace(/^\/+([a-z]:[/\\])/i, "$1");
+  const folder =
+    file === "~" || /^~[/\\]/.test(file) ? path.join(home, file.slice(2)) : path.resolve(cwd, file);
+  return { name, folder };
+}
+
+/**
+ * pnpm's arguments to install `packages` into its dlx cache as npx would: npm links a folder it is
+ * given rather than installing it and its dependencies, as pnpm does with link:.
+ * @param {readonly string[]} packages
+ * @returns {string[]}
+ */
+export function npxToPnpm(packages, cwd, home, platform = process.platform) {
+  const specs = packages.map((spec) => {
+    const folder = folderOf(spec, cwd, home, platform);
+    if (folder === undefined) return spec;
+    return `${folder.name === undefined ? "" : `${folder.name}@`}link:${folder.folder}`;
+  });
+  return ["--loglevel=error", ...NPX_SETTINGS, "dlx", ...specs.map((spec) => `--package=${spec}`)];
+}
+
+function stat(file) {
+  try {
+    return statSync(file, { throwIfNoEntry: false });
+  } catch {
+    return undefined;
+  }
+}
+
+const isFile = (file) => stat(file)?.isFile() === true;
+
+function readJson(file) {
+  try {
+    return JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
+  } catch {
+    return undefined;
+  }
+}
+
+/** A manifest's bins, named and pointing inside the package `dir` as npm normalizes them. */
+export function binsOf(manifest, dir) {
+  let { bin } = manifest;
+  if (!bin && typeof manifest.directories?.bin === "string" && manifest.directories.bin) {
+    const folder = path.posix.join("/", manifest.directories.bin.replace(/\\/g, "/")).slice(1);
+    const root = path.resolve(dir, folder);
+    let entries = [];
+    try {
+      entries = readdirSync(root, { recursive: true, withFileTypes: true });
+    } catch {}
+    bin = {};
+    for (const entry of entries) {
+      const file = path
+        .relative(root, path.join(entry.parentPath, entry.name))
+        .split(path.sep)
+        .join("/");
+      if (entry.isFile() && !file.startsWith(".")) bin[entry.name] = `${folder}/${file}`;
+    }
+  } else if (typeof bin === "string") {
+    bin = typeof manifest.name === "string" ? { [manifest.name]: bin } : undefined;
+  } else if (Array.isArray(bin)) {
+    bin = Object.fromEntries(
+      bin.filter((file) => typeof file === "string").map((file) => [path.basename(file), file]),
+    );
+  }
+  const clean = {};
+  if (bin === null || typeof bin !== "object") return clean;
+  for (const [key, value] of Object.entries(bin)) {
+    const name = path.posix.join("/", path.posix.basename(key.replace(/\\|:/g, "/"))).slice(1);
+    if (typeof value !== "string" || !name) continue;
+    const file = path.posix.join("/", value.replace(/\\/g, "/")).slice(1);
+    if (file) clean[name] = file;
+  }
+  return clean;
+}
+
+/** The bin npm runs from a package given no command, or undefined where npm can't tell which. */
+export function binOf(manifest, dir) {
+  const bins = binsOf(manifest, dir);
+  if (new Set(Object.values(bins)).size === 1) return Object.keys(bins)[0];
+  const own = String(manifest.name ?? "").replace(/^@[^/]+\//, "");
+  return Object.hasOwn(bins, own) ? own : undefined;
+}
+
+/** npm's reading of `pattern` as a glob, for workspaces' paths. */
+const matches = (relative, pattern) =>
+  path.posix.matchesGlob(relative, pattern.replace(/\/+$/, ""));
+
+/** Whether `dir` is one of the workspaces the package.json in `root` declares, as npm maps them. */
+function isWorkspace(root, dir) {
+  const declared = readJson(path.join(root, "package.json"))?.workspaces;
+  const list = Array.isArray(declared?.packages) ? declared.packages : declared;
+  if (!Array.isArray(list) || !isFile(path.join(dir, "package.json"))) return false;
+  const relative = path.relative(root, dir).split(path.sep).join("/");
+  if (relative.split("/").includes("node_modules")) return false;
+  const patterns = [];
+  let negated = [];
+  for (const entry of list) {
+    if (typeof entry !== "string") continue;
+    const bangs = /^!+/.exec(entry)?.[0].length ?? 0;
+    const pattern = entry
+      .slice(bangs)
+      .replace(/^\.?\/+/, "")
+      .replace(/\\/g, "/");
+    if (bangs % 2 === 1) {
+      negated.push(pattern);
+    } else {
+      // A pattern brings back what a negation before it left out.
+      negated = negated.filter((left) => !matches(pattern, left));
+      patterns.push(pattern);
+    }
+  }
+  return (
+    patterns.some(
+      (pattern) => !negated.some((left) => matches(pattern, left)) && matches(relative, pattern),
+    ) && !negated.some((left) => matches(relative, left))
+  );
+}
+
+/**
+ * npm's local prefix from `cwd`: the first folder up with a package.json or a node_modules, or
+ * the root of the workspaces it is one of, with `workspace` then that first folder.
+ */
+export function npmPrefix(cwd) {
+  let found;
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    const hasManifest = isFile(path.join(dir, "package.json"));
+    if (found === undefined) {
+      if (hasManifest || stat(path.join(dir, "node_modules"))?.isDirectory()) found = dir;
+    } else if (hasManifest && isWorkspace(dir, found)) {
+      return { prefix: dir, workspace: found };
+    }
+    if (path.dirname(dir) === dir)
+      return { prefix: found ?? path.resolve(cwd), workspace: undefined };
+  }
+}
+
+/** The node_modules/.bin from `start` up that holds `name`, as libnpmexec's localFileExists. */
+export function localBin(start, name) {
+  for (let dir = path.resolve(start); ; dir = path.dirname(dir)) {
+    const bin = path.join(dir, "node_modules", ".bin");
+    if (isFile(path.resolve(bin, name))) return bin;
+    if (path.dirname(dir) === dir) return undefined;
+  }
+}
+
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?(?:\+[0-9a-z.-]+)?$/i;
+
+/**
+ * The installed package `spec` names, by name alone or at its exact version, in a node_modules
+ * of `trees`, where npm would run it from rather than install it: its folder and manifest.
+ */
+export function installedPackage(trees, spec) {
+  const at = spec.indexOf("@", 1);
+  const name = at > 0 ? spec.slice(0, at) : spec;
+  const version = at > 0 ? spec.slice(at + 1) || "*" : "*";
+  if (!PACKAGE_NAME.test(name) || (version !== "*" && !EXACT_VERSION.test(version)))
+    return undefined;
+  for (const tree of trees) {
+    const dir = path.join(tree, "node_modules", name);
+    const manifest = readJson(path.join(dir, "package.json"));
+    if (manifest?.name !== name) continue;
+    if (version === "*" || `${name}@${manifest.version}` === spec) return { dir, manifest };
+  }
+  return undefined;
+}
+
+/**
+ * What npx does with `args` from `cwd`, as libnpmexec decides it: the command, `undefined` for
+ * the bin of the one package `install` names, the folders whose bins come first on its PATH, and
+ * the folder it runs in; `install` lists what isn't here yet. An error carries npm's exit code.
+ */
+export function plan(args, cwd, home = homedir()) {
+  const read = readNpx(args);
+  if ("error" in read) return read;
+  const { prefix, workspace } = npmPrefix(cwd);
+  const runPath = workspace ?? cwd;
+  const trees = workspace === undefined ? [prefix] : [workspace, prefix];
+  let [command, ...rest] = read.command;
+  let packages = read.packages;
+  if (packages.length === 0) {
+    const own = trees.find((dir) => {
+      const manifest = readJson(path.join(dir, "package.json"));
+      return manifest !== undefined && Object.hasOwn(binsOf(manifest, dir), command);
+    });
+    if (own !== undefined) {
+      // npm installs the project as a link and runs its bin.
+      packages = [own];
+    } else {
+      const bin = localBin(trees[0], command);
+      if (bin !== undefined) return { command, args: rest, bins: [bin], runPath };
+      const found = installedPackage(trees, command);
+      if (found !== undefined) {
+        const name = binOf(found.manifest, found.dir);
+        if (name === undefined) return { error: "could not determine executable to run" };
+        return { command: name, args: rest, bins: [], runPath };
+      }
+      packages = [command];
+      command = undefined;
+    }
+  }
+  const install = packages.filter((spec) => installedPackage(trees, spec) === undefined);
+  for (const spec of install) {
+    const folder = folderOf(spec, cwd, home)?.folder;
+    if (folder === undefined) continue;
+    try {
+      readFileSync(path.join(folder, "package.json"));
+    } catch (error) {
+      return { error: `could not read package.json: ${error.message}`, code: error.errno ?? 1 };
+    }
+  }
+  return { ...(install.length > 0 ? { install } : {}), command, args: rest, bins: [], runPath };
+}
+
+/** The env's PATH as npm reads it: each key Windows may spell it with, joined in order. */
+export function pathOf(env, delimiter = path.delimiter) {
+  return Object.keys(env)
+    .filter((key) => /^path$/i.test(key) && env[key])
+    .map((key) => env[key].split(delimiter))
+    .reduce((dirs, more) => dirs.concat(more.filter((dir) => !dirs.includes(dir))), [])
+    .join(delimiter);
+}
+
+/** npm's PATH: `bins`, each node_modules/.bin from `runPath` up, then node-gyp's and `rest`. */
+export function npmPath(bins, runPath, nodeGyp, rest, delimiter = path.delimiter) {
+  const dirs = [...bins];
+  for (let dir = runPath; ; dir = path.dirname(dir)) {
+    dirs.push(path.resolve(dir, "node_modules", ".bin"));
+    if (path.dirname(dir) === dir) break;
+  }
+  return [...dirs, nodeGyp, rest].join(delimiter);
+}
+
+/**
+ * The command's environment: `env` with every key that spells PATH set to `value`, and without
+ * ELECTRON_RUN_AS_NODE, which npm doesn't set: the launchers set it again for what they run on
+ * Eidolon's binary, and anything else, VS Code's `code` say, would run as Node with it.
+ */
+export function commandEnv(env, value) {
+  const kept = Object.entries(env).filter(([key]) => key.toUpperCase() !== "ELECTRON_RUN_AS_NODE");
+  const keys = kept.map(([key]) => key).filter((key) => /^path$/i.test(key));
+  return {
+    ...Object.fromEntries(kept),
+    ...Object.fromEntries((keys.length > 0 ? keys : ["PATH"]).map((key) => [key, value])),
+  };
+}
+
+const envValue = (env, name) =>
+  Object.entries(env).find(([key]) => key.toUpperCase() === name.toUpperCase())?.[1];
+
+/**
+ * The file `command` names, searched for from `cwd` on `pathEnv` as sh does, or on Windows as
+ * cmd.exe does through PATHEXT, but never in the working folder first.
+ */
+export function which(command, { pathEnv, cwd, platform = process.platform, pathext }) {
+  const windows = platform === "win32";
+  const dirs = windows
+    ? pathEnv
+        .split(";")
+        .filter(Boolean)
+        .map((dir) => dir.replace(/^"(.*)"$/, "$1"))
+    : pathEnv.split(":");
+  const bases = (windows ? /[\\/]/ : /\//).test(command)
+    ? [path.resolve(cwd, command)]
+    : dirs.map((dir) => path.resolve(cwd, dir, command));
+  if (!windows) {
+    return bases.find((file) => {
+      if (!isFile(file)) return false;
+      try {
+        accessSync(file, constants.X_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }
+  const extensions = (pathext || ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC")
+    .split(";")
+    .filter(Boolean);
+  const tries = path.extname(command) === "" ? extensions : ["", ...extensions];
+  for (const base of bases) {
+    for (const extension of tries) {
+      if (isFile(base + extension)) return base + extension;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * How to start `file` without a shell: on Windows a .exe or .com directly, anything else through
+ * cmd.exe, with a batch file's arguments escaped twice, as npm's npx escapes them.
+ */
+export function spawnArgs(file, args, { platform = process.platform, env = process.env } = {}) {
+  if (platform !== "win32" || /\.(?:exe|com)$/i.test(file)) {
+    return { command: file, args, verbatim: false };
+  }
+  const batch = /\.(?:cmd|bat)$/i.test(file);
+  return { ...cmdLine(envValue(env, "ComSpec") ?? "cmd.exe", file, args, batch), verbatim: true };
+}
+
+/** Passes SIGINT and SIGTERM on to `child`, as npm does to what it runs; returns the undo. */
+function relay(child) {
+  const forward = (signal) => child.kill(signal);
+  process.on("SIGINT", forward);
+  process.on("SIGTERM", forward);
+  return () => {
+    process.off("SIGINT", forward);
+    process.off("SIGTERM", forward);
+  };
+}
+
+/** Ends as the child did: npm raises its signal again on itself, or exits with its code. */
+function end(code, signal) {
+  if (signal !== null && process.platform !== "win32") {
+    process.kill(process.pid, signal);
+    setTimeout(() => process.exit(1), 500);
+    return;
+  }
+  process.exit(code ?? 1);
+}
+
+function fail(message, code = 1) {
+  console.error(`npx: ${message}`);
+  process.exit(code);
+}
+
+// The no-op pnpm runs once installed, which leaves its dlx folder's bins, first on its PATH.
+const REPORT =
+  'require("node:fs").writeFileSync(process.env.EIDOLON_NPX_REPORT, process.env.PATH ?? "")';
+
+/** Installs `packages` in pnpm's dlx cache, resolving to its node_modules/.bin, or ends as pnpm. */
+function install(packages) {
+  const scratch = mkdtempSync(path.join(tmpdir(), "eidolon-npx-"));
+  const report = path.join(scratch, "path");
+  const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", import.meta.url));
+  const args = [
+    ...process.execArgv,
+    pnpm,
+    ...npxToPnpm(packages, process.cwd(), homedir()),
+    "--",
+    process.execPath,
+    ...process.execArgv,
+    "-e",
+    REPORT,
+  ];
+  // pnpm's stdout goes to stderr with its own, and it never reads the server's stdin.
+  const child = spawn(process.execPath, args, {
+    stdio: ["ignore", 2, 2],
+    env: { ...process.env, EIDOLON_NPX_REPORT: report },
+    windowsHide: true,
+  });
+  const undo = relay(child);
+  return new Promise((resolve) => {
+    child.on("error", (error) => fail(`couldn't start pnpm: ${error.message}`));
+    child.on("exit", (code, signal) => {
+      undo();
+      let bin;
+      try {
+        bin = readFileSync(report, "utf8").split(path.delimiter)[0];
+      } catch {}
+      rmSync(scratch, { recursive: true, force: true });
+      if (code === 0 && bin) resolve(bin);
+      else end(code || 1, signal);
+    });
+  });
+}
+
+/** The command npm picks from the package npx installed with no command named: see binOf. */
+function installedCommand(bin) {
+  const dir = path.dirname(path.dirname(bin));
+  const [name] = Object.keys(readJson(path.join(dir, "package.json"))?.dependencies ?? {});
+  if (name === undefined) return undefined;
+  const packageDir = path.join(dir, "node_modules", name);
+  const manifest = readJson(path.join(packageDir, "package.json"));
+  return manifest === undefined ? undefined : binOf(manifest, packageDir);
+}
+
+if (import.meta.main) {
+  const decided = plan(process.argv.slice(2), process.cwd());
+  if ("error" in decided) fail(decided.error, decided.code);
+  let { command, bins } = decided;
+  if (decided.install !== undefined) {
+    const bin = await install(decided.install);
+    bins = [bin];
+    command ??= installedCommand(bin);
+    if (command === undefined) fail("could not determine executable to run");
+  }
+  const nodeGyp = fileURLToPath(new URL("../node_modules/pnpm/dist/node-gyp-bin", import.meta.url));
+  const env = commandEnv(process.env, npmPath(bins, decided.runPath, nodeGyp, pathOf(process.env)));
+  const file = which(command, {
+    pathEnv: pathOf(env),
+    cwd: decided.runPath,
+    pathext: envValue(env, "PATHEXT"),
+  });
+  if (file === undefined) {
+    // As cmd.exe or sh would end.
+    if (process.platform === "win32") fail(`'${command}' is not recognized as a command`);
+    fail(`${command}: command not found`, 127);
+  }
+  const start = spawnArgs(file, decided.args, { env });
+  const child = spawn(start.command, start.args, {
+    cwd: decided.runPath,
+    env,
+    stdio: "inherit",
+    windowsHide: true,
+    windowsVerbatimArguments: start.verbatim,
+  });
+  const undo = relay(child);
+  child.on("error", (error) =>
+    fail(`${command}: ${error.message}`, error.code === "EACCES" ? 126 : 127),
+  );
+  child.on("exit", (code, signal) => {
+    undo();
+    end(code, signal);
+  });
 }
