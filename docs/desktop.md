@@ -711,7 +711,8 @@ PowerShell Gallery, at its newest version, to sign with.
 
 Only a run proves the release: the overlay and the checks' verdicts have their tests, but signing
 needs a `sign` dispatch from `master` or `electron` that passes both legs, the update an
-`update_test` dispatch, and the upload, with the R2 credentials, a release's tag.
+`update_test` dispatch, the index a `release_index` dispatch, which rewrites the live
+`releases.json` from R2's listing, and the upload, with the R2 credentials, a release's tag.
 
 ## Logs
 
