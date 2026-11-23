@@ -318,6 +318,7 @@ export class TaskWatch {
       ]);
     } finally {
       this.#timers.clearTimeout(timer);
+      // undici holds a connection until its body is read or cancelled, and a refusal's never is.
       request.abort();
       if (this.#request === request) this.#request = null;
     }

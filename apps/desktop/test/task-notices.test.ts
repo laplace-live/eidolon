@@ -724,6 +724,31 @@ describe("TaskWatch", () => {
     expect(told(shown)).toEqual(["A command closed", "B start closed", "C succeeded", "A command"]);
     watch.stop();
   });
+
+  test("another server's first failure is logged, though the last one's streak went on", async () => {
+    const { time, backend, lines, watch } = watching();
+    const failed =
+      "warn Eidolon: notifications couldn't read the tasks: GET /api/local/tasks answered 503";
+    backend.fails.set(TASKS, 503);
+    watch.ready();
+    await time.advance(0);
+    watch.ready();
+    await time.advance(0);
+    backend.fails.delete(TASKS);
+    watch.ready();
+    await time.advance(0);
+    expect(lines).toEqual([failed, failed]);
+    watch.stop();
+  });
+
+  test("ends each request once it is answered, so a refusal's unread body holds no connection", async () => {
+    const { time, backend, watch } = watching();
+    backend.fails.set(TASKS, 503);
+    watch.ready();
+    await time.advance(0);
+    expect(backend.requests.map(({ signal }) => signal.aborted)).toEqual([true]);
+    watch.stop();
+  });
 });
 
 /** Every status a task has. */
