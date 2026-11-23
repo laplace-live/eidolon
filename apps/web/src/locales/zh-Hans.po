@@ -5258,6 +5258,10 @@ msgid "That doesn't exist."
 msgstr "内容不存在。"
 
 #: src/lib/labels.ts
+msgid "That file isn't a PSD2Live model, or it's damaged."
+msgstr "该文件不是 PSD2Live 模型，或者已经损坏。"
+
+#: src/lib/labels.ts
 msgid "That file name isn't allowed."
 msgstr "不允许使用该文件名。"
 
@@ -5288,6 +5292,10 @@ msgstr "链接已过期或无效。链接在 10 分钟内有效，再运行一�
 #: src/lib/labels.ts
 msgid "That link has expired. Run the same command again for a fresh one."
 msgstr "链接已过期，再运行一次相同的命令即可获取新链接。"
+
+#: src/lib/labels.ts
+msgid "That model was removed. Reload to see her models."
+msgstr "该形象模型已被移除，请刷新后查看她的形象模型。"
 
 #: src/lib/labels.ts
 msgid "That part of the file doesn't exist."

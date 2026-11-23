@@ -171,8 +171,10 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
   digests in constant time; the cookie alone is 401 `proof-missing`, and the page shows the
   sign-in screen, which asks for the link. The two pictures the page shows as `<img>`, which can't
   send a header, take the cookie alone: a persona's avatar and her reference images, and only to
-  read them. A Bearer token needs neither, and `/api/selfie/:id` stays gated by its own unguessable
-  id.
+  read them. A character model's file is not one of them: the page fetches it with the proof, so
+  a service on another port that holds the cookie can't read a model the owner may not
+  redistribute. A Bearer token needs neither, and `/api/selfie/:id` stays gated by its own
+  unguessable id.
 - **Bearer.** A CLI or a test that can read `local-token` sends it as `Authorization: Bearer
   <secret>`; a header can't ride along on a cross-site request, so it needs no `Origin`:
 
@@ -186,7 +188,10 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
 - **The app's own files** are read into memory from `apps/web/dist` once at boot. A request path
   is looked up in that map, never joined to a filesystem path; an unknown one gets `index.html`.
   Every page carries a strict `Content-Security-Policy` (`frame-ancestors 'none'`),
-  `X-Frame-Options: DENY`, `nosniff` and `Referrer-Policy: same-origin`.
+  `X-Frame-Options: DENY`, `nosniff` and `Referrer-Policy: same-origin`. Its `script-src` adds
+  `'wasm-unsafe-eval'` for PSD2Live's runtime, which lets a page compile WebAssembly and nothing
+  more: no `eval`, and no script from anywhere but the app. The page runs no JavaScript that came
+  with a model, only the runtime the app ships.
 - **What a request may name on disk.** Persona ids are slugs, `^[a-z0-9][a-z0-9_-]{0,63}$`; job
   ids are minted by the server and only looked up; a fact or picture name is one plain path
   segment with an allowed extension: `.txt` for a fact, `.png`, `.jpg`, `.jpeg` or `.webp` for an
@@ -195,6 +200,13 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
   and a rename. Uploads are recognized by their bytes (PNG, JPEG, WebP) and capped at 20 MiB, and
   only a picture whose bytes are one of the three is served. A persona's path settings must stay
   inside her folder, and `sources.ytDlp` can't be set through the API.
+- **Character models.** A model's id is a slug the server makes from the uploaded file's name,
+  never a path the request gives, and every route checks one it is sent before looking it up. An
+  upload is recognized by the `.p2lrt` header, capped at 200 MiB counted as it streams, and loaded
+  by the copy of PSD2Live's runtime the app ships, every chunk's CRC checked and every texture a
+  PNG inside the file, before anything is written; the runtime's wasm imports nothing, so it
+  touches only its own memory. Models are kept only in the data home, and `appearance.model`
+  takes only the id of one she has.
 - **Secrets at rest.** `credentials.json` is written 0600 from creation; no answer returns a key
   or quotes what a request sent; the data home, `jobs/`, `locks/` and `chats/` are created
   0700, and a chat's files 0600.
@@ -211,13 +223,14 @@ server log's line that holds what went wrong, and the app shows it beside the de
 | --- | --- | --- |
 | Session | `POST session`, `GET session` | Trades a link code for the cookie and the proof; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
 | Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe: the keys her call roles need, each role's provider and model or what is wrong with them, her voice, and `assistant: { enabled, ready, problem, running, search, kinds }`, Assistant Mode's state, why it isn't ready, how many tasks run, whether tasks can search the web (`{ on, problem }`), and why each kind of task runs on Assistant Mode's own model, if it does; restart is refused during a call, or while one is connecting |
-| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); and her voice styles, with each one the environment sets and whether she inherits it, replaces it with one of hers, or ignores it while her voice isn't the environment's; PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml`; one that turns Assistant Mode off, as the environment and the file decide it, answers once every live task is cancelled |
+| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); and her voice styles, with each one the environment sets and whether she inherits it, replaces it with one of hers, or ignores it while her voice isn't the environment's; PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, `appearance.model` against her character models, and written to `settings.yaml` or her `persona.yaml`; one that turns Assistant Mode off, as the environment and the file decide it, answers once every live task is cancelled |
 | Accounts | `GET`, `POST accounts`, `PUT`, `DELETE accounts/:id`, `POST accounts/check`, `GET accounts/:id/models?category=` | Every provider account: `credentials.json`'s, and each provider's default that the environment configures or her calls need, with where its key comes from and never the key, its API base and settings, and which settings name it; a new one takes its provider's id while that is free, else `<provider>-2` and on; an API base is refused for a provider without a base variable; DELETE is refused while a settings file names it; the check asks the provider about a typed or the saved key, where the catalog says how: a free listing, never a model call; models lists what the provider's API offers now ([providers.md](providers.md#model-lists)) |
 | Credentials | `GET`, `PUT credentials`, `POST credentials/check` | The secrets `credentials.json` keeps under variable names, `{NAME: {set, source}}`, never a value; the check is Qdrant's for the memory step and home |
 | Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice, the providers and models the active persona's `persona.yaml` sets for `hearing`, `mind`, `voice` and `knowledge.gate`, and a starter `prompt.md`), switch (refused during a call, or while one is connecting). A new persona's voice is her voice provider's: a Fish Audio voice id, or for another provider one line of text |
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
 | Voice styles | `PUT personas/:id/voice-styles` | `{styles}`: all of hers, in order, each with a name of its own, a voice and a hint, replacing her `persona.yaml`'s `voice.styles`; answers as `GET settings` does. Any name her file can hold passes, since a save sends back those a hand-written file gave her; the studio names a new style with a lowercase letter, then letters, digits or `_`, never `default` |
 | Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar` | Outfits and friends under `references/`, and the avatar, `avatar.*` at the root of her folder, where selfies never take it for an outfit; a template's pictures can't be deleted |
+| Character models | `GET`, `POST personas/:id/models?filename=`, `PUT personas/:id/models/:model/file`, `PATCH`, `DELETE personas/:id/models/:model`, `GET personas/:id/models/:model/file?sha256=` | Her PSD2Live models, each in `models/<model>/` of her folder in the data home, never a template's ([avatar.md](avatar.md)): POST takes a `.p2lrt`'s bytes, which PSD2Live's runtime loads before they are kept, under an id made from `filename`, and never makes it the one she shows, which is `appearance.model`, set through `PUT settings`; GET's `active` is that model, while she has it. PUT puts a new file in place, keeping the model's settings that still name what it holds; PATCH replaces its name, framing, moods, gestures, outfits or outfit, each checked against what the file holds; DELETE also clears her `appearance.model` when it names the model. The file is served under its sha256, which the browser keeps for good. An import or a new file waits while a call is on. A persona's summary and status' `persona` carry `appearance.model`: the active model's id, name, kind, sha256 and `updatedAt`, or null |
 | Knowledge | `personas/:id/facts[/:file]`, `GET personas/:id/index` | Fact files with whether the patterns pick them and whether they changed since the last index; the index from its build records |
 | Videos | `POST personas/:id/batches` | `{urls}` → a new batch of the URLs her lists don't have yet |
 | Voices | `GET voices/search?q=&language=&page=`, `GET accounts/:id/voices?q=&visibility=&page=` | Fish Audio's public voices, searched without your key; a Fish account's own, private and unlisted ones included, newest first, listed with its key, and `status` saying when it has no key or Fish refuses it |
@@ -252,14 +265,14 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `method-not-allowed` | 405 | Another method, any `OPTIONS`, HEAD on a GET route; `Allow` names the right one |
 | `conflict` | 409 | A file that doesn't read as it should (`credentials.json`, a `persona.yaml`, a hand-made URL list, a `settings.yaml` an Always answer would write), a persona `EIDOLON_PERSONA` pins, a job an earlier server started |
 | `payload-too-large` | 413 | A body or upload over its cap |
-| `unsupported-media-type` | 415 | An upload that isn't one of the image or text types its route takes, by its bytes |
+| `unsupported-media-type` | 415 | An upload that isn't one of the image or text types its route takes, or a model that doesn't start as a `.p2lrt` does, by its bytes |
 | `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
 | `upstream-failed` | 502 | Mem0 or Fish Audio failed |
 | `internal` | 500 | A bug; the server log's line with the answer's `id` has the details |
 | `invalid-persona-id` | 400 | A persona id that isn't a slug |
 | `unknown-persona` | 404, 400 | No persona has that id; 400 in a job's body |
 | `persona-exists` | 409 | Creating a persona with an id in use |
-| `call-active` | 409 | Switching persona or restarting during a call, or while one is connecting |
+| `call-active` | 409 | Switching persona, restarting, or importing or replacing a character model during a call, or while one is connecting |
 | `unknown-setting` | 400 | A path no setting of that scope has |
 | `invalid-setting` | 400 | A value its setting's kind refuses, or a voice style without a name of its own or a voice |
 | `read-only-setting` | 400 | `sources.ytDlp` |
@@ -290,6 +303,8 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `unknown-mcp-server` | 404 | Changing a server `mcp.json` doesn't hold; the message never names what was sent |
 | `invalid-mcp-config` | 409 | Changing `mcp.json` from Settings, or answering Always on an MCP call's card, while it doesn't parse |
 | `linked-mcp-config` | 409 | The same, while `mcp.json` is a symbolic or hard link to another file, which a write would replace with a copy |
+| `invalid-model` | 400 | A `.p2lrt` PSD2Live's runtime refuses, such as a cut-off file, a chunk that fails its CRC, or a texture that isn't a PNG inside the file; the message is the runtime's reason, without control characters, at most 200 characters |
+| `unknown-model` | 404 | No character model of hers has that id |
 
 ## The setup wizard
 

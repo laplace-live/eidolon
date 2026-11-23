@@ -108,6 +108,8 @@ const ERRORS: Readonly<Record<ErrorCode | ClientErrorCode | "unknown", MessageDe
   "linked-mcp-config": msg`mcp.json links to another file, which Eidolon doesn't change. Change that file instead.`,
   "unknown-skill": msg`No skill of yours has that name anymore.`,
   "skill-exists": msg`Eidolon's skills folder already has a skill by that name.`,
+  "invalid-model": msg`That file isn't a PSD2Live model, or it's damaged.`,
+  "unknown-model": msg`That model was removed. Reload to see her models.`,
 };
 
 /** The desktop app's own, for the sentences that send the viewer to a terminal it doesn't have. */

@@ -39,6 +39,7 @@ import type {
   VoiceStatus,
   YtDlpStatus,
 } from "./api.ts";
+import { activeModel } from "./appearance.ts";
 import { checkFishVoice, checkQdrant, configuredQdrant, voiceOk } from "./checks.ts";
 import { findAvatar, indexStatus } from "./personas.ts";
 import { restartTracker } from "./restart.ts";
@@ -404,6 +405,7 @@ export function buildStatus(
       name: persona.identity.name,
       shortName: persona.identity.shortName,
       avatar: findAvatar(persona.id) !== null,
+      appearance: { model: activeModel(persona.id, envOptional("APPEARANCE_MODEL")) },
       voice: {
         id: voiceId,
         source: voiceSource(voiceId),

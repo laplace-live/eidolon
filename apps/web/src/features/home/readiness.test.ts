@@ -37,6 +37,7 @@ const healthy: Status = {
     name: "明前奶绿",
     shortName: "奶绿",
     avatar: false,
+    appearance: { model: null },
     voice: { id: "a".repeat(32), source: "persona", ok: true, provider: "fish", account: "fish" },
   },
   index: {

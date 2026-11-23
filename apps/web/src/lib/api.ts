@@ -80,7 +80,7 @@ export type Input<R extends Route> = ([ParamName<R>] extends [never]
   (Spec<R>["body"] extends undefined
     ? { readonly body?: undefined }
     : {
-        readonly body: Spec<R>["body"] extends Raw<"image" | "audio" | "text">
+        readonly body: Spec<R>["body"] extends Raw<"image" | "audio" | "text" | "model">
           ? Blob
           : Spec<R>["body"];
       }) & {
@@ -92,7 +92,9 @@ type Args<R extends Route> =
 
 /** Routes that answer with bytes or lines rather than JSON. */
 export type RawRoute = {
-  [R in Route]: Spec<R>["response"] extends Raw<"image" | "audio" | "ndjson" | "text"> ? R : never;
+  [R in Route]: Spec<R>["response"] extends Raw<"image" | "audio" | "ndjson" | "text" | "model">
+    ? R
+    : never;
 }[Route];
 export type JsonRoute = Exclude<Route, RawRoute>;
 

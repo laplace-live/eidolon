@@ -19,6 +19,7 @@ import {
   localRoute,
 } from "./router.ts";
 import { accountsRoutes } from "./routes/accounts.ts";
+import { appearanceRoutes } from "./routes/appearance.ts";
 import { chatRunner, chatsRoutes } from "./routes/chats.ts";
 import { credentialsRoutes } from "./routes/credentials.ts";
 import { jobsRoutes } from "./routes/jobs.ts";
@@ -49,6 +50,7 @@ export function localRouteModules(
     ...credentialsRoutes(app),
     ...accountsRoutes(app),
     ...personasRoutes(app),
+    ...appearanceRoutes(app),
     ...voicesRoutes(app),
     ...jobsRoutes(app),
     ...memoriesRoutes(app),
