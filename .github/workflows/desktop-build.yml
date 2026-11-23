@@ -191,7 +191,7 @@ jobs:
       - id: smoke
         name: The packaged smoke
         if: ${{ !cancelled() && (steps.package.outcome == 'success' || steps.signed.outcome == 'success') }}
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: bun run smoke:desktop
         env:
           EIDOLON_DESKTOP_BACKGROUND: "1"

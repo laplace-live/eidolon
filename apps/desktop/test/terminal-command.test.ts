@@ -399,8 +399,9 @@ describe("on Windows", () => {
   const script = (action: "query" | "add" | "remove", key?: string) =>
     powershellArgs(userPathScript(action, path, key));
 
-  test("reads the user Path through PowerShell, encoded, without PowerShell 7's module path", async () => {
+  test("reads the user Path through the system's PowerShell, encoded, without PowerShell 7's module path", async () => {
     vi.stubEnv("PSModulePath", "C:\\Program Files\\PowerShell\\7\\Modules");
+    vi.stubEnv("SystemRoot", "D:\\Windows");
     for (const [stdout, state] of [
       ["present", "installed"],
       ["absent\r\n", "absent"],
@@ -409,7 +410,7 @@ describe("on Windows", () => {
       expect(await commandState(host)).toEqual({ state, path });
       expect(runs).toHaveLength(1);
       expect(runs[0]).toMatchObject({
-        file: "powershell.exe",
+        file: "D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
         args: script("query"),
         timeout: 60_000,
       });

@@ -76,8 +76,8 @@ const QUERY = "她的猫叫什么名字";
 const EVERY_NATIVE = ["lancedb", "onnxruntime_binding", "sharp-", "vips"];
 const JSON_TYPE = { "content-type": "application/json" };
 // Each step's limit. Together they end a hung run in failed checks, its uninstall and results.json
-// included, well inside desktop.yml's 15 minutes; a run takes about 12 s on macOS, and the NSIS
-// setup alone took 58 s on windows-latest.
+// included, well inside desktop-build.yml's 20 minutes; a run takes about 12 s on macOS, and the
+// NSIS setup alone took 58 s on windows-latest.
 const INSTALL_MS = 180_000;
 const START_MS = 90_000;
 const JOB_MS = 90_000;

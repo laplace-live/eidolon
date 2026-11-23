@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   parseRegistryOutput,
+  type RegistryOptions,
   readRegistry,
   registryScript,
 } from "../src/main/registry-environment.ts";
@@ -19,11 +20,11 @@ afterEach(() => {
 });
 
 /**
- * A stand-in powershell.exe on the PATH of `env`: it checks it was given an encoded script, keeps
- * the script, then runs `body`.
+ * A stand-in powershell.exe, which the options name and their environment's PATH holds too: it
+ * checks it was given an encoded script, keeps the script, then runs `body`.
  */
 function powershell(body: string): {
-  readonly env: NodeJS.ProcessEnv;
+  readonly options: RegistryOptions & { readonly env: NodeJS.ProcessEnv };
   readonly script: () => string;
 } {
   const kept = join(directory, "script");
@@ -39,7 +40,7 @@ function powershell(body: string): {
   );
   chmodSync(path, 0o755);
   return {
-    env: { PATH: `${directory}:/usr/bin:/bin` },
+    options: { env: { PATH: `${directory}:/usr/bin:/bin` }, powershell: path },
     script: () => Buffer.from(readFileSync(kept, "utf8"), "base64").toString("utf16le"),
   };
 }
@@ -110,8 +111,13 @@ describe.skipIf(process.platform === "win32")("readRegistry", () => {
       JSON.stringify([{ Key: 1, Name: "Path", Kind: "ExpandString", Value: "C:\\工具;%TOOLS%" }]),
     );
     const stand = powershell(`env > '${seen}'\ncat '${records}'`);
-    const env = { ...stand.env, PSModulePath: "C:\\pwsh\\Modules", psmodulepath: "x", KEPT: "1" };
-    await expect(readRegistry(KEYS, { env })).resolves.toEqual({
+    const env = {
+      ...stand.options.env,
+      PSModulePath: "C:\\pwsh\\Modules",
+      psmodulepath: "x",
+      KEPT: "1",
+    };
+    await expect(readRegistry(KEYS, { ...stand.options, env })).resolves.toEqual({
       values: [[], [{ name: "Path", kind: "ExpandString", value: "C:\\工具;%TOOLS%" }]],
     });
     expect(stand.script()).toBe(registryScript(KEYS));
@@ -120,26 +126,39 @@ describe.skipIf(process.platform === "win32")("readRegistry", () => {
     expect(given).not.toMatch(/^psmodulepath=/im);
   });
 
+  test("runs the system's PowerShell by its full path, never a powershell.exe that PATH holds", async () => {
+    const marker = join(directory, "ran");
+    const { env } = powershell(`touch '${marker}'`).options;
+    await expect(readRegistry(KEYS, { env })).resolves.toEqual({
+      failure: "spawn C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe ENOENT",
+    });
+    await expect(
+      readRegistry(KEYS, { env: { ...env, SystemRoot: "D:\\Windows" } }),
+    ).resolves.toEqual({
+      failure: "spawn D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe ENOENT",
+    });
+    expect(existsSync(marker)).toBe(false);
+  });
+
   test("reports PowerShell's exit with the first line it printed on stderr, output it can't read, and a spawn that fails", async () => {
     const said = powershell("printf 'Access is denied.\\r\\nAt line:1 char:1\\n' >&2; exit 1");
-    await expect(readRegistry(KEYS, { env: said.env })).resolves.toEqual({
+    await expect(readRegistry(KEYS, said.options)).resolves.toEqual({
       failure: "exit 1: Access is denied.",
     });
     const quiet = powershell("exit 3");
-    await expect(readRegistry(KEYS, { env: quiet.env })).resolves.toEqual({ failure: "exit 3" });
+    await expect(readRegistry(KEYS, quiet.options)).resolves.toEqual({ failure: "exit 3" });
     const garbled = powershell("echo 'not JSON'");
-    await expect(readRegistry(KEYS, { env: garbled.env })).resolves.toEqual({
-      failure: "unparsed",
-    });
-    await expect(readRegistry(KEYS, { env: { PATH: "/usr/bin:/bin" } })).resolves.toEqual({
-      failure: "spawn powershell.exe ENOENT",
+    await expect(readRegistry(KEYS, garbled.options)).resolves.toEqual({ failure: "unparsed" });
+    const missing = join(directory, "missing.exe");
+    await expect(readRegistry(KEYS, { powershell: missing })).resolves.toEqual({
+      failure: `spawn ${missing} ENOENT`,
     });
   });
 
   test("kills PowerShell past its deadline", async () => {
     const pid = join(directory, "pid");
     const stand = powershell(`echo $$ > '${pid}'\nexec sleep 30`);
-    await expect(readRegistry(KEYS, { env: stand.env, timeoutMs: 1_000 })).resolves.toEqual({
+    await expect(readRegistry(KEYS, { ...stand.options, timeoutMs: 1_000 })).resolves.toEqual({
       failure: "timeout",
     });
     const child = Number(readFileSync(pid, "utf8"));
@@ -150,7 +169,7 @@ describe.skipIf(process.platform === "win32")("readRegistry", () => {
     const pid = join(directory, "pid");
     const stand = powershell(`echo $$ > '${pid}'\nexec sleep 30`);
     const controller = new AbortController();
-    const read = readRegistry(KEYS, { env: stand.env, signal: controller.signal });
+    const read = readRegistry(KEYS, { ...stand.options, signal: controller.signal });
     const child = await vi.waitFor(() => {
       const value = Number(readFileSync(pid, "utf8"));
       expect(value).toBeGreaterThan(0);
@@ -161,7 +180,7 @@ describe.skipIf(process.platform === "win32")("readRegistry", () => {
     await vi.waitFor(() => expect(running(child)).toBe(false));
     rmSync(pid);
     await expect(
-      readRegistry(KEYS, { env: stand.env, signal: AbortSignal.abort() }),
+      readRegistry(KEYS, { ...stand.options, signal: AbortSignal.abort() }),
     ).resolves.toEqual({ failure: "aborted" });
     expect(existsSync(pid)).toBe(false);
   });

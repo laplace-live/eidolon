@@ -2850,6 +2850,10 @@ msgstr "下载之前不知道它的时长。"
 msgid "Its messages and photos are deleted from this computer. What she remembers about you stays."
 msgstr "这个聊天的消息和照片会从这台电脑上删除。她对你的记忆会保留。"
 
+#: src/components/settings-form/field.tsx
+msgid "Its path has a comma, a line break or a space at an end. Rename the folder, or use Allow Once when a task asks for it."
+msgstr "它的路径含有逗号、换行，或首尾有空格。请重命名这个文件夹，或在任务询问时使用「允许一次」。"
+
 #: src/features/tasks/labels.ts
 msgid "Its spend couldn't be counted."
 msgstr "它的花费无法计算。"
@@ -5795,6 +5799,10 @@ msgstr "检查的是环境变量中的密钥，它优先于这里保存的密钥
 #: src/lib/labels.ts
 msgid "This file ships with Eidolon and can't be changed or deleted."
 msgstr "该文件随 Eidolon 提供，无法修改或删除。"
+
+#: src/components/settings-form/field.tsx
+msgid "This folder can't be added."
+msgstr "无法添加这个文件夹。"
 
 #: src/features/studio/glossary-section.tsx
 msgid "This glossary doesn't parse"

@@ -13,7 +13,7 @@ import { access, lstat, readlink, symlink, unlink } from "node:fs/promises";
 import { posix, win32 } from "node:path";
 import type { CommandAction, CommandChange, CommandState, Unavailable } from "../shared/bridge.ts";
 import type { Strings } from "./strings.ts";
-import { powershellArgs } from "./update-signature.ts";
+import { powershellArgs, powershellExe } from "./update-signature.ts";
 
 /** How a program exited, and what it printed. */
 export interface RunResult {
@@ -243,7 +243,7 @@ async function userPath(host: CommandHost, action: "query" | "add" | "remove"): 
   const env = { ...process.env };
   for (const name of Object.keys(env)) if (/^psmodulepath$/i.test(name)) delete env[name];
   const script = userPathScript(action, folderOf(host), host.userKey ?? USER_ENVIRONMENT);
-  const result = await (host.run ?? runProgram)("powershell.exe", powershellArgs(script), {
+  const result = await (host.run ?? runProgram)(powershellExe(), powershellArgs(script), {
     env,
     timeout: POWERSHELL_TIMEOUT_MS,
   });

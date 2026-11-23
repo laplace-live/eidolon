@@ -355,7 +355,8 @@ painted, since `maximize()` shows a hidden window. Main owns its title.
   shell's language, and opening at the home folder, since Electron opens Downloads otherwise.
   macOS's can make a folder and says what the folders are for, and Windows' keeps the pick off its
   recent list. One shows at a time: an ask while it's open gets its answer (`joinPending`). The
-  page adds the pick to the folders' draft; saving decides, and `FolderPolicy` after it.
+  page adds the pick to the folders' draft, or says why the list can't hold it; saving decides, and
+  `FolderPolicy` after it.
 - **Chrome.** No system title bar. On macOS, `hiddenInset`, the traffic lights at `{x: 16, y: 20}`,
   centred on the web app's 56 px first row, and `titleBarOverlay: true`, without which macOS
   publishes no `env(titlebar-area-*)` for the page's insets. On Windows, a hidden title bar under a
@@ -542,22 +543,25 @@ The backend runs on the environment main reads, plus four variables of its own, 
   timeout or a quit. When every one fails, the launch environment stands, and main.log names why.
 - **Windows.** The launch environment holds the registry's variables as they were when Eidolon
   started, and a `PATH` folder a tool's installer adds later would reach no spawn until a
-  relaunch, so main reads the registry (`registry-environment.ts`): one `powershell.exe` run, its
+  relaunch, so main reads the registry (`registry-environment.ts`). One `powershell.exe` run, by
+  its full path under `SystemRoot` as main runs every PowerShell (`powershellExe`: Windows looks
+  for a bare name in the current folder first, and `eidolon` starts the app in the terminal's), its
   script encoded (`powershellArgs`) and its output UTF-8, prints the raw values and kinds of
   `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, `HKCU\Environment` and
-  `HKCU\Volatile Environment`, in Windows' own order, whose last key names the owner over the
-  system key's `USERNAME`, SYSTEM. Not reg.exe, whose redirected output follows the OEM code page
-  and garbles a path that isn't ASCII. A failure, or no answer in 10 s, leaves the launch
-  environment, and main.log says why (`Eidolon: couldn't read the registry's variables, so the
-  backend runs on the launch's: …`); a quit kills the run.
+  `HKCU\Volatile Environment`, in Windows' own order. Not reg.exe, whose redirected output follows
+  the OEM code page and garbles a path that isn't ASCII. A failure, or no answer in 10 s, leaves
+  the launch environment, and main.log says why (`Eidolon: couldn't read the registry's
+  variables, so the backend runs on the launch's: …`); a quit kills the run.
 - **The merge.** The shell's values win, except `PWD`, `OLDPWD`, `SHLVL`, `_` and the probe's own
   variables; `ELECTRON_*`, which never come from the shell; and an `EIDOLON_*` the launch
   environment sets to a non-blank value, so a test's or a terminal launch's `EIDOLON_HOME` holds.
   The registry's go over the launch environment as Windows builds a new process's, but for the
   same names: key by key, each key's `REG_SZ` values before its `REG_EXPAND_SZ` ones, which expand
   against the variables so far (`%NAME%` without case, an unknown one left as written), and no
-  other kind; `Path` is the system's, then the user's, joined by `;` as Windows joins them. A
-  variable deleted from the registry since the launch stays as the launch had it.
+  other kind; `Path` is the system's, then the user's, joined by `;` as Windows joins them. The
+  system key's `USERNAME` is SYSTEM, and Windows sets the account's before the user's key, so the
+  launch's goes back there, and a user value's `%USERNAME%` names the owner. A variable deleted
+  from the registry since the launch stays as the launch had it.
 - **Windows' names have no case,** but a copy of the environment does, and spawn keeps only the
   first of two spellings, so main reads and writes names without case, one key each: a `Path`
   stays one key.
@@ -1381,9 +1385,9 @@ default one would show it touching a data home; the smoke writes there on a CI r
 removes the marker and the folders it made after. Where Eidolon is installed for the user already,
 it refuses to run rather than replace and remove that install. Each step has a time limit of its
 own, so a hung run still ends in failed checks, its uninstall and results included, well inside
-`desktop.yml`'s 15 minutes. After `finish()` it writes `results.json`, every check with the timings,
-into the run's folder, which a pass leaves holding that file alone. A run takes about 12 s on
-macOS.
+`desktop-build.yml`'s 20 minutes. After `finish()` it writes `results.json`, every check with the
+timings, into the run's folder, which a pass leaves holding that file alone. A run takes about 12 s
+on macOS.
 
 ### In CI
 
@@ -1416,7 +1420,7 @@ platform with its secrets alone ([Secrets](#secrets)):
    instead of skipping; run after packaging, it also holds the app's payload to the stage.
 6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
    Windows the `node`-project tests of `ts.yml`'s Windows job, with its filters.
-7. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
+7. **The packaged smoke,** in background mode, within 20 minutes, installing and uninstalling the
    NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
    output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds
    `local-token`.

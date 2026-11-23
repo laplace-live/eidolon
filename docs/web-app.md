@@ -435,7 +435,9 @@ buttons, whose place the Window Controls Overlay gives as `env(titlebar-area-*)`
   ([desktop.md](desktop.md#open-at-login), [the terminal command](desktop.md#the-terminal-command)).
 - **Choose Folder,** under Settings → Assistant Mode's folders while the bridge has
   `chooseFolder`: the native folder dialog, whose pick joins the draft on a line of its own unless
-  a line already holds it (`appendPath`); saving decides, as for a typed one.
+  a line already holds it (`appendPath`); saving decides, as for a typed one. A pick the list
+  can't hold as it is, its path with a comma, a control character such as a line break, or
+  whitespace at an end, joins nothing, and a toast says why.
 - **Pictures and files open in place.** The window has no tabs: a picture in a chat or a call, the
   owner's or hers, opens in a viewer over the page with **Save** (`components/picture-viewer.tsx`),
   and a text file saves through `<a download>` (`features/chats/attachments.tsx`), which the desktop
