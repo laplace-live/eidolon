@@ -66,6 +66,9 @@ mac:
     - from: .stage/darwin-arm64
       to: .
       filter: ["eidolon/**/*"]
+    # The eidolon command, which Settings links into /usr/local/bin.
+    - from: launchers/mac
+      to: bin
 dmg:
   # Updates take the zip, so the DMG needs no blockmap.
   writeUpdateInfo: false
@@ -78,6 +81,9 @@ win:
     - from: .stage/win32-x64
       to: .
       filter: ["eidolon/**/*"]
+    # The eidolon command, whose folder Settings adds to the PATH.
+    - from: launchers/win
+      to: bin
 # electron-builder's defaults, oneClick and perMachine false, install per user under
 # %LOCALAPPDATA%\Programs, which updates need. The shortcut's AppUserModelID is appId.
 nsis:
