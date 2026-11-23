@@ -20,8 +20,23 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
 import { LAUNCHER_SOURCES, POSIX_LAUNCHERS } from "../scripts/node-shim.ts";
+import { BACKEND_RUNTIME_ARGS } from "../src/main/controller.ts";
 
 const POSIX = process.platform !== "win32";
+
+test("each launcher, sh and .cmd, runs EIDOLON_NODE with the backend's runtime flags first", () => {
+  for (const file of [...POSIX_LAUNCHERS, ...POSIX_LAUNCHERS.map((name) => `${name}.cmd`)]) {
+    const text = readFileSync(join(LAUNCHER_SOURCES, file), "utf8");
+    const words = (/^(?:exec )?"(?:\$EIDOLON_NODE|%EIDOLON_NODE%)" (.*)$/m.exec(text)?.[1] ?? "")
+      .trimEnd()
+      .split(" ");
+    const end = words.findIndex((word) => !word.startsWith("-"));
+    expect([file, end === -1 ? words : words.slice(0, end)]).toEqual([
+      file,
+      [...BACKEND_RUNTIME_ARGS],
+    ]);
+  }
+});
 
 /** Writes `files` under `base`, executable. */
 function write(base: string, files: Record<string, string>): string {
