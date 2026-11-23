@@ -142,19 +142,29 @@ const REGISTRY_SETTING = new RegExp(
  */
 export function projectNpmrc(project, cwd, home, platform = process.platform) {
   const lines = [];
-  // npm takes an empty value as none, and one whose ${VAR} it left, VAR being unset, as written,
-  // which pnpm refuses or expands again. Of these settings only ca is a list.
-  const usable = (text) => text !== "" && !/\$\{[^}]+\}/.test(text);
+  // npm takes a ${VAR} it left, VAR being unset, as written. pnpm ignores a registry or
+  // credential holding one in a project's .npmrc, so the user's would serve in its place, and
+  // expands any other again: percent-encoded, it reaches pnpm as npm has it, an invalid URL or a
+  // wrong token. A key holding one names no registry. npm takes an empty value as none. Of these
+  // settings only ca is a list.
+  const placeholder = /\$\{[^}]+\}/;
+  const asWritten = (text) =>
+    placeholder.test(text) ? text.replace(/[${}]/g, (char) => encodeURIComponent(char)) : text;
   for (const [key, value] of Object.entries(project)) {
-    if (!REGISTRY_SETTING.test(key) || /[=\r\n]/.test(key) || !usable(key)) continue;
+    if (!REGISTRY_SETTING.test(key) || /[=\r\n]/.test(key) || placeholder.test(key)) continue;
     if (Array.isArray(value) && key !== "ca") continue;
     const client = /^(.*):(?:certfile|keyfile)$/.exec(key)?.[1];
     // npm presents a client certificate only with both files there; pnpm ends on a missing one.
     const pair = [project[`${client}:certfile`], project[`${client}:keyfile`]];
     const there = (file) =>
-      typeof file === "string" && usable(file) && stat(path.resolve(cwd, file)) !== undefined;
+      typeof file === "string" &&
+      file !== "" &&
+      stat(path.resolve(cwd, asWritten(file))) !== undefined;
     if (client !== undefined && !pair.every(there)) continue;
-    for (const text of [value].flat().filter(usable)) {
+    for (const text of [value]
+      .flat()
+      .filter((text) => text !== "")
+      .map(asWritten)) {
       let file = text;
       if (key === "cafile") {
         const fromHome = (platform === "win32" ? /^~[/\\]/ : /^~\//).test(text);

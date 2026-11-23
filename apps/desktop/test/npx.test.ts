@@ -434,7 +434,6 @@ describe("npm's config, which npx installs by", () => {
       "ignore-scripts": "true",
       "@other:registry": "",
       "@list:registry": ["https://a.test/", "https://b.test/"],
-      "//left.test/:_authToken": `\${UNSET}`,
       // A client certificate whose key isn't there, which npm presents none of.
       "//half.test/:certfile": "certs/client.pem",
       "//half.test/:keyfile": "certs/missing.key",
@@ -453,6 +452,25 @@ describe("npm's config, which npx installs by", () => {
       '"cafile"="/work/ca.pem"',
     );
     expect(npx.projectNpmrc({ "ignore-scripts": "true" }, "/work", "/home")).toBe("");
+  });
+
+  test("keeps a value whose variable is unset as npm has it, which pnpm would ignore", () => {
+    // npm then fails on an invalid URL or a wrong token; pnpm would take the user's registry.
+    const host = `\${HOST}`;
+    const project: Source = {
+      "@corp:registry": `\${CORP_REGISTRY}`,
+      registry: `http://${host}/npm/`,
+      "//corp.test/:_authToken": `a\${TOKEN}{b}$c`,
+      cafile: `\${CA}.pem`,
+      // A key naming no registry.
+      [`//${host}/:_authToken`]: "unused",
+    };
+    expect(npx.projectNpmrc(project, "/work", "/home").split("\n")).toEqual([
+      '"@corp:registry"="%24%7BCORP_REGISTRY%7D"',
+      '"registry"="http://%24%7BHOST%7D/npm/"',
+      '"//corp.test/:_authToken"="a%24%7BTOKEN%7D%7Bb%7D%24c"',
+      '"cafile"="/work/%24%7BCA%7D.pem"',
+    ]);
   });
 });
 

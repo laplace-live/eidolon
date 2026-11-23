@@ -675,6 +675,18 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     expect(ran).toEqual([corp, corp]);
   }, 60_000);
 
+  test("fails as npm does on a registry an unset variable names, never taking the user's", async () => {
+    // npm takes the ${VAR} as written, for an invalid URL.
+    const project = write(join(scratch, "npm-project-unset"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": privateNpmrc(TOKEN).replace(`${registry}${PRIVATE}/`, `\${EIDOLON_TEST_UNSET}`),
+    });
+    const asked = requests.length;
+    const ran = await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd: project });
+    expect([ran.status, ran.stdout, requests.slice(asked)]).toEqual([1, "", []]);
+    expect(ran.stderr).toContain("Invalid URL");
+  }, 60_000);
+
   test("reads no .npmrc npm leaves unread: a workspace's own, or a pnpm workspace's", async () => {
     const nowhere = `registry=${registry}/nowhere/\n@eidolon-corp:registry=${registry}/nowhere/\n`;
     const workspace = write(join(scratch, "npm-workspace-own"), {

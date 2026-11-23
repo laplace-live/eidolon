@@ -706,14 +706,15 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   linked, as npm links one, and runs as it is; a relative path resolves from the folder npx runs
   in. pnpm runs in a folder of its own with no pnpm workspace around it, whose `.npmrc` npx writes
   with the registries, credentials and certificates of the `.npmrc` npm reads at its local prefix,
-  as npm reads them, files resolved as npm finds them, and a value whose `${VAR}` names an unset
-  variable left out (pnpm expands no `${VAR}` in a project's `.npmrc`), so no other project's
-  `.npmrc`, `pnpm-workspace.yaml` or `packageManager` reaches it. That folder is the owner's alone
-  and goes when pnpm ends. pnpm reads the user's `.npmrc` and `pnpm_config_*` variables itself, npx
-  passing it the registries `npm_config_registry` and `npm_config_@scope:registry` name, as npm
-  takes them, and keeps its store and caches under the owner's home, where its dlx cache holds
-  npx's installs apart from those of pnpx and `pnpm dlx`, which install as pnpm does, and from
-  npx's under other settings or registries, each for a day.
+  as npm reads them, files resolved as npm finds them, so no other project's `.npmrc`,
+  `pnpm-workspace.yaml` or `packageManager` reaches it. A `${VAR}` naming an unset variable stays
+  as npm leaves it, percent-encoded, where pnpm would drop the registry or credential holding it
+  for the user's: a registry so named fails as an invalid URL, as under npm. That folder is the
+  owner's alone and goes when pnpm ends. pnpm reads the user's `.npmrc` and `pnpm_config_*`
+  variables itself, npx passing it the registries `npm_config_registry` and
+  `npm_config_@scope:registry` name, as npm takes them, and keeps its store and caches under the
+  owner's home, where its dlx cache holds npx's installs apart from those of pnpx and `pnpm dlx`,
+  which install as pnpm does, and from npx's under other settings or registries, each for a day.
 - **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
   `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
   On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on
