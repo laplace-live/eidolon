@@ -488,13 +488,14 @@ the task's card unless the owner always allows that tool ([Approvals](#approvals
 - **Where it runs:** in `<data home>/mcp/`, 0700 and denied to every task, unless its `cwd` is
   absolute or starts with `~/`; a relative one is refused. Its environment is `shellEnv()`, with
   the PATH a command of the task got when the task's first run started the server (a folder
-  granted later stays on it), plus the entry's own `env`; its roots are the task's folder. The
-  manager passes nothing of its own environment. In the desktop app, whose backend runs on
+  granted later stays on it), then the entry's own `env` over it; its roots are the task's folder.
+  The manager passes nothing of its own environment. In the desktop app, whose backend runs on
   Electron's Node, that `PATH` also ends with the app's [node shim](desktop.md#the-node-shim) and
   the server gets `EIDOLON_NODE`, so an entry that runs `npx`, `node`, `pnpm`, `pnpx` or `pnpm dlx`
   starts on a computer with no Node, on the app's own binary, `npx` deciding and installing as npm's
   npx does, through the pnpm the app bundles; the owner's own Node, where they have one, comes
-  first.
+  first. A `PATH` in the entry's `env` replaces all of that `PATH`, the shim's folder included, as
+  an `EIDOLON_NODE` there replaces the app's.
 - **One session per task** (`McpSession`), opened at its first run, every server at once within
   its `timeout` (in seconds, default 60, at most 2,147,483, `setTimeout`'s limit; it also bounds
   each call and a server's progress renews). The run's Stop and the server's stop abort an open,

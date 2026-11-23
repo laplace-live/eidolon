@@ -629,10 +629,11 @@ VC++ copies.
   a second, identical copy; on win32-x64 `onnxruntime.dll`, without DirectML's DLLs, which CPU
   sessions never load. Type-only packages stay, or `npm ls` would call them missing.
 - **The VC++ runtime on Windows.** LanceDB, which loads at boot, and onnxruntime import it, so a
-  machine without the redistributable couldn't start the backend. Each folder in the payload's
-  `node_modules` (not the node shim's) holding a native addon gets the runtime DLLs its natives
-  import (their import and delay-import tables, and what those DLLs import in turn): onnxruntime's
-  folder five, LanceDB's `vcruntime140.dll`. All come from the newest `Microsoft.VC14*.CRT` folder
+  machine without the redistributable couldn't start the backend, and so does the reflink addon
+  the node shim's pnpm loads to clone a package into place. Each folder in the payload holding a
+  native addon, the node shim's included, gets the runtime DLLs its natives import (their import
+  and delay-import tables, and what those DLLs import in turn): onnxruntime's folder five,
+  LanceDB's and reflink's `vcruntime140.dll`. All come from the newest `Microsoft.VC14*.CRT` folder
   vswhere finds, since whichever copy loads first serves the whole process. Node loads an addon
   with `LOAD_WITH_ALTERED_SEARCH_PATH`, which looks in its own folder first, so an older System32
   copy can't win. The copies shadow System32's, and Windows Update never services them: each
@@ -679,8 +680,9 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   runs on Electron's Node and the launchers' folder is there (`shippedPath`): that folder last on
   the server's `PATH`, added before `shellEnv()`'s filter, which drops it as any other folder the
   task may write, and `EIDOLON_NODE`, the backend's own binary (`jsRuntime().command`). A `node`,
-  `npx` or `pnpm` on the owner's `PATH` comes first. A task's commands never get it, and under Node,
-  npx's or a checkout's, nothing changes.
+  `npx` or `pnpm` on the owner's `PATH` comes first, and a `PATH` or `EIDOLON_NODE` in the server's
+  `mcp.json` entry replaces these. A task's commands never get it, and under Node, npx's or a
+  checkout's, nothing changes.
 - **The launchers** refuse to run without `EIDOLON_NODE`, then set `ELECTRON_RUN_AS_NODE=1` and run
   that binary with `--disable-sigusr1 --use-system-ca`: `node` passes its arguments on, and `pnpm`
   and `pnpx` run the bundled pnpm's own. The server inherits the variable, so one that starts Node
@@ -748,7 +750,7 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   integrity doesn't cover it. `assets/`, with the tray icon, ships the same way.
 - **The [terminal command](#the-terminal-command)'s launchers** ship as each platform's extra
   resource too, `launchers/mac` or `launchers/win` as `bin`: `Eidolon.app/Contents/Resources/bin`,
-  or `resources\bin`. `launchers/.gitattributes` keeps the `.cmd` CRLF.
+  or `resources\bin`. `apps/desktop/.gitattributes` keeps every `.cmd`, the node shim's too, CRLF.
 - **The fuses,** each one listed, since an unlisted fuse keeps Electron's default: `runAsNode` on,
   for the backend, its jobs, the `eidolon` command and the node shim; the nodeOptions and CLI
   inspect fuses off; asar integrity and loading the app only from the asar on;

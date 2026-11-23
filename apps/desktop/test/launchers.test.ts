@@ -38,6 +38,17 @@ test("each launcher, sh and .cmd, runs EIDOLON_NODE with the backend's runtime f
   }
 });
 
+test("each .cmd launcher has CRLF line ends, which cmd.exe reads safely", () => {
+  for (const file of POSIX_LAUNCHERS.map((name) => `${name}.cmd`)) {
+    const text = readFileSync(join(LAUNCHER_SOURCES, file), "utf8");
+    expect([file, text.endsWith("\r\n"), /[\r\n]/.test(text.replaceAll("\r\n", ""))]).toEqual([
+      file,
+      true,
+      false,
+    ]);
+  }
+});
+
 /** Writes `files` under `base`, executable. */
 function write(base: string, files: Record<string, string>): string {
   for (const [name, text] of Object.entries(files)) {
@@ -49,47 +60,55 @@ function write(base: string, files: Record<string, string>): string {
   return base;
 }
 
+// A skipped suite's body still runs to collect its tests: what touches the disk waits for beforeAll.
 describe.skipIf(!POSIX)("the launchers, on this Node", () => {
-  const scratch = realpathSync(mkdtempSync(join(tmpdir(), "eidolon-node-shim-")));
+  let scratch = "";
+  let home = "";
+  let pkg = "";
+  let project = "";
+  let below = "";
+  beforeAll(() => {
+    scratch = realpathSync(mkdtempSync(join(tmpdir(), "eidolon-node-shim-")));
+    home = join(scratch, "home");
+    mkdirSync(home);
+    // A package whose command prints what it was given.
+    pkg = write(join(scratch, "hello"), {
+      "package.json": JSON.stringify({
+        name: "eidolon-shim-hello",
+        version: "1.0.0",
+        bin: "bin/hello.js",
+      }),
+      "bin/hello.js": "#!/usr/bin/env node\nconsole.log(JSON.stringify(process.argv.slice(2)));\n",
+    });
+    // A project with a bin of its own in node_modules/.bin, run from a folder below it.
+    project = write(join(scratch, "project"), {
+      "package.json": JSON.stringify({ name: "eidolon-shim-project", version: "1.0.0" }),
+      "node_modules/.bin/eidolon-shim-local": [
+        "#!/bin/sh",
+        `printf '%s\\n' "$(pwd)" "\${PATH%%:*}" "\${ELECTRON_RUN_AS_NODE-unset}"`,
+        'for a in "$@"; do printf "[%s]\\n" "$a"; done',
+        'if [ -n "$KILL" ]; then kill -"$KILL" $$; fi',
+        "exit $((EXIT + 0))",
+        "",
+      ].join("\n"),
+      // A script with no #! line, which only sh runs.
+      "node_modules/.bin/eidolon-shim-plain": `printf 'plain %s\\n' "$@"\nexit 4\n`,
+      "node_modules/.bin/eidolon-shim-locked": "#!/bin/sh\necho locked\n",
+      "node_modules/.bin/eidolon-shim-lost": "#!/nonexistent/interpreter -x\necho lost\n",
+      "node_modules/.bin/eidolon-shim-trap": [
+        "#!/bin/sh",
+        "trap 'echo got-TERM; exit 7' TERM",
+        "trap 'echo got-INT; exit 8' INT",
+        "echo ready",
+        "while :; do sleep 0.1; done",
+        "",
+      ].join("\n"),
+    });
+    chmodSync(join(project, "node_modules", ".bin", "eidolon-shim-locked"), 0o644);
+    below = join(project, "sub", "dir");
+    mkdirSync(below, { recursive: true });
+  });
   afterAll(() => rmSync(scratch, { recursive: true, force: true }));
-  const home = join(scratch, "home");
-  mkdirSync(home);
-  // A package whose command prints what it was given.
-  const pkg = write(join(scratch, "hello"), {
-    "package.json": JSON.stringify({
-      name: "eidolon-shim-hello",
-      version: "1.0.0",
-      bin: "bin/hello.js",
-    }),
-    "bin/hello.js": "#!/usr/bin/env node\nconsole.log(JSON.stringify(process.argv.slice(2)));\n",
-  });
-  // A project with a bin of its own in node_modules/.bin, run from a folder below it.
-  const project = write(join(scratch, "project"), {
-    "package.json": JSON.stringify({ name: "eidolon-shim-project", version: "1.0.0" }),
-    "node_modules/.bin/eidolon-shim-local": [
-      "#!/bin/sh",
-      `printf '%s\\n' "$(pwd)" "\${PATH%%:*}" "\${ELECTRON_RUN_AS_NODE-unset}"`,
-      'for a in "$@"; do printf "[%s]\\n" "$a"; done',
-      'if [ -n "$KILL" ]; then kill -"$KILL" $$; fi',
-      "exit $((EXIT + 0))",
-      "",
-    ].join("\n"),
-    // A script with no #! line, which only sh runs.
-    "node_modules/.bin/eidolon-shim-plain": `printf 'plain %s\\n' "$@"\nexit 4\n`,
-    "node_modules/.bin/eidolon-shim-locked": "#!/bin/sh\necho locked\n",
-    "node_modules/.bin/eidolon-shim-lost": "#!/nonexistent/interpreter -x\necho lost\n",
-    "node_modules/.bin/eidolon-shim-trap": [
-      "#!/bin/sh",
-      "trap 'echo got-TERM; exit 7' TERM",
-      "trap 'echo got-INT; exit 8' INT",
-      "echo ready",
-      "while :; do sleep 0.1; done",
-      "",
-    ].join("\n"),
-  });
-  chmodSync(join(project, "node_modules", ".bin", "eidolon-shim-locked"), 0o644);
-  const below = join(project, "sub", "dir");
-  mkdirSync(below, { recursive: true });
 
   /** A launcher, run from `cwd` with pnpm's store and caches in `scratch`. */
   function run(
@@ -272,7 +291,7 @@ function pack(dir: string, out: string): { file: string; integrity: string; shas
 }
 
 describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
-  const scratch = realpathSync(mkdtempSync(join(tmpdir(), "eidolon-npx-registry-")));
+  let scratch = "";
   const files = new Map<string, string>();
   const packuments = new Map<string, object>();
   const server = createServer((request, response) => {
@@ -318,6 +337,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   }
 
   beforeAll(async () => {
+    scratch = realpathSync(mkdtempSync(join(tmpdir(), "eidolon-npx-registry-")));
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     registry = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     publish(

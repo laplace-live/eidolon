@@ -219,19 +219,18 @@ function vcImports(file: string): string[] {
 }
 
 /**
- * Each folder under `modules` holding a native addon, with the VC++ runtime DLLs its own natives
- * import and the ones those import in turn: Node loads an addon with LOAD_WITH_ALTERED_SEARCH_PATH,
- * which looks in the addon's folder first.
+ * Beside each native addon in `payload`, the node shim's included, copies from `redist` the VC++
+ * runtime DLLs its folder's natives import and the ones those import in turn: Node loads an addon
+ * with LOAD_WITH_ALTERED_SEARCH_PATH, which looks in the addon's folder first.
  */
-export function vcRuntimeNeeds(modules: string, redist: string): Map<string, string[]> {
+export function copyVcRuntime(payload: string, redist: string): void {
   const runtime = new Map(VC_RUNTIME_DLLS.map((dll) => [dll, vcImports(join(redist, dll))]));
   const folders = new Set(
-    files(modules)
+    files(payload)
       .filter((file) => file.endsWith(".node"))
       .map((file) => dirname(file)),
   );
-  const needs = new Map<string, string[]>();
-  for (const folder of [...folders].sort()) {
+  for (const folder of folders) {
     const needed = new Set(
       readdirSync(folder)
         .filter(
@@ -240,9 +239,8 @@ export function vcRuntimeNeeds(modules: string, redist: string): Map<string, str
         .flatMap((name) => vcImports(join(folder, name))),
     );
     for (const dll of needed) for (const more of runtime.get(dll) ?? []) needed.add(more);
-    if (needed.size > 0) needs.set(folder, [...needed].sort());
+    for (const dll of needed) copyFileSync(join(redist, dll), join(folder, dll));
   }
-  return needs;
 }
 
 /** A `.node` or `.dll` file, by the basename signExts matches it by, and what its headers say. */
@@ -523,9 +521,7 @@ export async function stageBackend(
     let vcRuntime: VcRedist | null = null;
     if (target === "win32-x64") {
       vcRuntime = newestVcRedist();
-      for (const [folder, dlls] of vcRuntimeNeeds(modules, vcRuntime.dir)) {
-        for (const dll of dlls) copyFileSync(join(vcRuntime.dir, dll), join(folder, dll));
-      }
+      copyVcRuntime(payload, vcRuntime.dir);
       const unsigned = unsignedNames([
         ...peFilesIn(payload),
         ...peFilesInZip(await electronZip(), "Eidolon"),
