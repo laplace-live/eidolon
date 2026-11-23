@@ -80,7 +80,10 @@ describe.runIf(WINDOWS)("npx.cmd", () => {
     return { argv, cwd: realpathSync.native(folder) };
   }
 
-  /** npx.cmd with `args`, through cmd.exe as cross-spawn starts a .cmd, pnpm's caches in `home`. */
+  /**
+   * npx.cmd with `args` through cmd.exe, escaped twice as cross-spawn escapes a cmd-shim's, so each
+   * word reaches npx whole; the backend's cross-spawn escapes npx.cmd's once. pnpm's caches in `home`.
+   */
   function npx(args: readonly string[]) {
     const line = cmdLine(
       process.env.ComSpec ?? "cmd.exe",
