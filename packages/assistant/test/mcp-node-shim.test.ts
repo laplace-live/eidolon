@@ -22,14 +22,20 @@ afterEach(async () => {
 });
 
 describe("a server's environment", () => {
-  const from = { PATH: ["/usr/bin", "/bin"].join(delimiter), HOME: "/home/owner", KEY: "secret" };
+  // The desktop app's backend runs with ELECTRON_RUN_AS_NODE, which only a launcher may pass on.
+  const from = {
+    PATH: ["/usr/bin", "/bin"].join(delimiter),
+    HOME: "/home/owner",
+    KEY: "secret",
+    ELECTRON_RUN_AS_NODE: "1",
+  };
 
   test("is the task's cut one when there's no shim", async () => {
     const guard = folderGuard(await tempFolder());
     expect(await serverEnv(guard, null, from)).toEqual(await shellEnv(guard, from));
   });
 
-  test("has the shim's folder last on PATH, and EIDOLON_NODE, the binary its launchers run", async () => {
+  test("has the shim's folder last on PATH and EIDOLON_NODE, the binary its launchers run, but not the backend's ELECTRON_RUN_AS_NODE", async () => {
     const guard = folderGuard(await tempFolder());
     const shim = { folder: "/Applications/Eidolon.app/shim", node: "/Applications/Eidolon.app/x" };
     expect(await serverEnv(guard, shim, from)).toEqual({
