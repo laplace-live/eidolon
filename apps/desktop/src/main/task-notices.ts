@@ -221,8 +221,8 @@ export class TaskWatch {
   async #poll(run: object): Promise<void> {
     let delay = IDLE_POLL_MS;
     try {
+      // stop() aborts the request in flight, so an answer that arrives is this run's.
       const tasks = tasksOf(await this.#get(TASKS));
-      if (this.#run !== run) return;
       if (this.#failing) {
         this.#failing = false;
         this.#options.log.info("Eidolon: notifications read the tasks again");
@@ -283,19 +283,16 @@ export class TaskWatch {
     const known = this.#names;
     const ids = due.flatMap(({ task }) => task.chat?.persona ?? []);
     if (ids.every((id) => known?.has(id) === true)) return known;
-    let names: ReadonlyMap<string, string>;
     try {
-      names = namesOf(await this.#get(PERSONAS));
+      this.#names = namesOf(await this.#get(PERSONAS));
     } catch (error) {
       if (this.#run === run) {
         this.#options.log.warn(
           `Eidolon: notifications couldn't read the personas' names: ${explain(error)}`,
         );
       }
-      return known;
     }
-    if (this.#run === run) this.#names = names;
-    return names;
+    return this.#names;
   }
 
   #close(task: string): void {

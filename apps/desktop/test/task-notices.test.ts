@@ -654,6 +654,24 @@ describe("TaskWatch", () => {
     expect(told(shown)).toEqual(["A command"]);
   });
 
+  test("stop() while her name is read shows nothing, logs nothing and asks nothing more", async () => {
+    const { time, backend, shown, lines, watch } = watching();
+    backend.tasks = [snapshot(TASK)];
+    watch.ready();
+    await time.advance(0);
+    backend.fails.set(PERSONAS, "never");
+    backend.tasks = [snapshot(TASK, RUN_TESTS)];
+    await time.advance(3_000);
+    expect(backend.paths()).toEqual([TASKS, TASKS, PERSONAS]);
+    watch.stop();
+    await time.advance(60_000);
+    expect(backend.requests.at(-1)?.signal.aborted).toBe(true);
+    expect(backend.paths()).toEqual([TASKS, TASKS, PERSONAS]);
+    expect(shown).toEqual([]);
+    expect(lines).toEqual([]);
+    expect(time.pending()).toEqual([]);
+  });
+
   test("ready() again drops the poll in flight and starts on a new baseline", async () => {
     const { time, backend, shown, lines, watch } = watching();
     backend.tasks = [snapshot(TASK)];
