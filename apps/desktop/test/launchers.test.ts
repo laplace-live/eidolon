@@ -712,4 +712,70 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       expect([at, ran.status, ran.stdout]).toEqual([at, 0, `${at} []\n`]);
     }
   }, 60_000);
+
+  /** A bare git repo of the package in `dir`, made without the developer's git config. */
+  function gitRepo(dir: string): string {
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+    const work = mkdtempSync(join(scratch, "git-work-"));
+    const bare = `${work}.git`;
+    const git = (cwd: string, ...args: string[]) => {
+      const ran = spawnSync("git", args, { cwd, env, encoding: "utf8" });
+      expect([args, ran.status, ran.stderr]).toEqual([args, 0, ""]);
+    };
+    spawnSync("cp", ["-R", `${dir}/.`, work]);
+    git(work, "-c", "init.defaultBranch=main", "init", "-q");
+    git(work, "add", "-A");
+    git(
+      work,
+      "-c",
+      "user.name=Eidolon",
+      "-c",
+      "user.email=eidolon@example.test",
+      "commit",
+      "-qm",
+      "x",
+    );
+    git(scratch, "clone", "-q", "--bare", work, bare);
+    return bare;
+  }
+
+  test("refuses a git, URL, tarball or folder package allow-* is none for, as npm", async () => {
+    const folder = mkdtempSync(join(scratch, "kinds-"));
+    pack(hello, join(folder, "hello.tgz"));
+    const repo = gitRepo(hello);
+    const kinds = [
+      ["git", `git+file://${repo}`, `Refusing to fetch "git+file://${repo}"`],
+      ["remote", `${registry}/eidolon-test-hello/-/eidolon-test-hello-1.0.0.tgz`],
+      ["file", "./hello.tgz"],
+      ["directory", hello],
+    ] as const;
+    const refused = [];
+    const allowed = [];
+    for (const [kind, spec] of kinds) {
+      const asked = requests.length;
+      const env = { [`npm_config_allow_${kind}`]: "none" };
+      const ran = await launch("npx", ["-y", spec, "x"], { cwd: folder, env });
+      refused.push({ ...ran, asked: requests.length - asked });
+      // npx's own packages are the root's, which root lets through.
+      const root = { [`npm_config_allow_${kind}`]: "root" };
+      const { status, stdout } = await launch("npx", ["-y", spec, "x"], { cwd: folder, env: root });
+      allowed.push({ status, stdout });
+    }
+    expect(refused).toEqual(
+      kinds.map(([kind, , ...more]) => ({
+        status: 1,
+        stdout: "",
+        stderr: [
+          `code EALLOW${kind.toUpperCase()}`,
+          `Fetching packages of type "${kind}" have been disabled`,
+          ...more,
+        ]
+          .map((line) => `npx: ${line}\n`)
+          .join(""),
+        marks: [],
+        asked: 0,
+      })),
+    );
+    expect(allowed).toEqual(kinds.map(() => ({ status: 0, stdout: 'hello ["x"]\n' })));
+  }, 120_000);
 });

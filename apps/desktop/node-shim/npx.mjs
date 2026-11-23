@@ -200,8 +200,9 @@ function releaseAge(sources, now) {
 export function npxSettings(sources, now = Date.now()) {
   const setting = (key) => settingOf(sources, key);
   const ignoreScripts = flag(setting("ignore-scripts"));
-  // npm then fails an install with any script allow-scripts doesn't name, which pnpm can't tell
-  // before it installs.
+  // npm then fails an install holding a package with install scripts allow-scripts doesn't name,
+  // before it runs any. pnpm's dlx runs the scripts of the packages it was asked for unasked, and
+  // never fails on a dependency's.
   if (
     !ignoreScripts &&
     flag(setting("strict-allow-scripts")) &&
@@ -268,49 +269,342 @@ export function readNpx(args) {
 const URL_SPEC = /^(?:git\+)?[a-z]+:/i;
 const SCP_GIT_SPEC = /^[^@]+@[^:.]+\.[^:]+:.+$/i;
 const TARBALL = /[.](?:tgz|tar\.gz|tar)$/i;
-const GITHUB_SHORTCUT = /^[^:@%/\s.-][^:@%/\s]*\/[^:@\s/%]+(?:#.*)?$/;
 const PACKAGE_NAME = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/i;
+
+/** Whether npm takes `name` for a package's, as validate-npm-package-name's validForOldPackages. */
+function validName(name) {
+  if (/^[.\-_]/.test(name) || name.trim() !== name || name === "") return false;
+  if (["node_modules", "favicon.ico"].includes(name.toLowerCase())) return false;
+  if (encodeURIComponent(name) === name) return true;
+  const [, scope, base] = /^(?:@([^/]+?)[/])?([^/]+?)$/.exec(name) ?? [];
+  return (
+    base !== undefined &&
+    !base.startsWith(".") &&
+    scope !== undefined &&
+    encodeURIComponent(scope) === scope &&
+    encodeURIComponent(base) === base
+  );
+}
+
+// The git hosts hosted-git-info knows, each with the protocols it takes for one and how it reads a
+// URL's path.
+const GIT_HOSTS = {
+  github: {
+    domain: "github.com",
+    protocols: ["git:", "http:", "git+ssh:", "git+https:", "ssh:", "https:"],
+    extract(url) {
+      let [, user, project, type, committish] = url.pathname.split("/", 5);
+      if (type && type !== "tree") return undefined;
+      if (!type) committish = url.hash.slice(1);
+      if (project?.endsWith(".git")) project = project.slice(0, -4);
+      return user && project ? { user, project, committish } : undefined;
+    },
+  },
+  bitbucket: {
+    domain: "bitbucket.org",
+    protocols: ["git+ssh:", "git+https:", "ssh:", "https:"],
+    extract(url) {
+      let [, user, project, aux] = url.pathname.split("/", 4);
+      if (aux === "get") return undefined;
+      if (project?.endsWith(".git")) project = project.slice(0, -4);
+      return user && project ? { user, project, committish: url.hash.slice(1) } : undefined;
+    },
+  },
+  gitlab: {
+    domain: "gitlab.com",
+    protocols: ["git+ssh:", "git+https:", "ssh:", "https:"],
+    extract(url) {
+      const whole = url.pathname.slice(1);
+      if (whole.includes("/-/") || whole.includes("/archive.tar.gz")) return undefined;
+      const segments = whole.split("/");
+      let project = segments.pop();
+      if (project.endsWith(".git")) project = project.slice(0, -4);
+      const user = segments.join("/");
+      return user && project ? { user, project, committish: url.hash.slice(1) } : undefined;
+    },
+  },
+  gist: {
+    domain: "gist.github.com",
+    protocols: ["git:", "git+ssh:", "git+https:", "ssh:", "https:"],
+    extract(url) {
+      let [, user, project, aux] = url.pathname.split("/", 4);
+      if (aux === "raw") return undefined;
+      if (!project) {
+        if (!user) return undefined;
+        project = user;
+        user = null;
+      }
+      if (project.endsWith(".git")) project = project.slice(0, -4);
+      return { user, project, committish: url.hash.slice(1) };
+    },
+  },
+  sourcehut: {
+    domain: "git.sr.ht",
+    protocols: ["git+ssh:", "https:"],
+    extract(url) {
+      let [, user, project, aux] = url.pathname.split("/", 4);
+      if (aux === "archive") return undefined;
+      if (project?.endsWith(".git")) project = project.slice(0, -4);
+      return user && project ? { user, project, committish: url.hash.slice(1) } : undefined;
+    },
+  },
+};
+const GIT_PROTOCOLS = {
+  "git+ssh:": { name: "sshurl" },
+  "ssh:": { name: "sshurl" },
+  "git+https:": { name: "https", auth: true },
+  "git:": { auth: true },
+  "http:": { auth: true },
+  "https:": { auth: true },
+  "git+http:": { auth: true },
+  ...Object.fromEntries(Object.keys(GIT_HOSTS).map((type) => [`${type}:`, { name: type }])),
+};
+
+const parseUrl = (text) => {
+  try {
+    return new URL(text);
+  } catch {
+    return undefined;
+  }
+};
+
+/** The last `char` in `text` before the first `before`, as hosted-git-info looks for one. */
+const lastBefore = (text, char, before) => {
+  const end = text.indexOf(before);
+  return text.lastIndexOf(char, end > -1 ? end : Number.POSITIVE_INFINITY);
+};
+
+/** A git URL as hosted-git-info parses one, an scp-like `host:path` turned into a URL's path. */
+function parseGitUrl(giturl) {
+  let withProtocol = giturl;
+  const colon = giturl.indexOf(":");
+  const at = giturl.indexOf("@");
+  if (Object.hasOwn(GIT_PROTOCOLS, giturl.slice(0, colon + 1))) {
+    // A protocol it knows.
+  } else if (colon > -1 && giturl.slice(colon, colon + 3) === "://") {
+    // A URL already.
+  } else if (at > -1) {
+    if (at > colon) withProtocol = `git+ssh://${giturl}`;
+  } else {
+    withProtocol = `${giturl.slice(0, colon + 1)}//${giturl.slice(colon + 1)}`;
+  }
+  let corrected = withProtocol;
+  const lastColon = lastBefore(corrected, ":", "#");
+  if (lastColon > lastBefore(corrected, "@", "#")) {
+    corrected = `${corrected.slice(0, lastColon)}/${corrected.slice(lastColon + 1)}`;
+  }
+  if (lastBefore(corrected, ":", "#") === -1 && !corrected.includes("//")) {
+    corrected = `git+ssh://${corrected}`;
+  }
+  return parseUrl(withProtocol) ?? parseUrl(corrected);
+}
+
+/** Whether `arg` is GitHub's user/repo shorthand, as hosted-git-info tells it from a path. */
+function isGitHubShorthand(arg) {
+  const hash = arg.indexOf("#");
+  const slash = arg.indexOf("/");
+  const second = arg.indexOf("/", slash + 1);
+  const afterHash = (at) => at === -1 || (hash > -1 && at > hash);
+  return (
+    afterHash(/\s/.exec(arg)?.index ?? -1) &&
+    slash > 0 &&
+    (hash > -1 ? arg[hash - 1] !== "/" : !arg.endsWith("/")) &&
+    !arg.startsWith(".") &&
+    afterHash(arg.indexOf("@")) &&
+    afterHash(arg.indexOf(":")) &&
+    afterHash(second)
+  );
+}
+
+/**
+ * The spec npm-package-arg saves for the repo `giturl` names on a host hosted-git-info knows, in
+ * the form it was given in; undefined for anything else.
+ */
+function hostedGit(giturl) {
+  const parsed = parseGitUrl(isGitHubShorthand(giturl) ? `github:${giturl}` : giturl);
+  if (parsed === undefined) return undefined;
+  const hostname = parsed.hostname.replace(/^www\./, "");
+  const shortcut = parsed.protocol.slice(0, -1);
+  const type = Object.hasOwn(GIT_HOSTS, shortcut)
+    ? shortcut
+    : Object.keys(GIT_HOSTS).find((name) => GIT_HOSTS[name].domain === hostname);
+  if (type === undefined) return undefined;
+  const { domain, protocols, extract } = GIT_HOSTS[type];
+  const auth =
+    GIT_PROTOCOLS[parsed.protocol]?.auth && (parsed.username || parsed.password)
+      ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ""}`
+      : null;
+  let repo;
+  try {
+    if (type === shortcut) {
+      let pathname = parsed.pathname.replace(/^\//, "");
+      pathname = pathname.slice(pathname.indexOf("@") + 1);
+      const slash = pathname.lastIndexOf("/");
+      const project = decodeURIComponent(pathname.slice(slash + 1)).replace(/\.git$/, "");
+      repo = {
+        user: slash > -1 ? decodeURIComponent(pathname.slice(0, slash)) || null : null,
+        project,
+        committish: parsed.hash ? decodeURIComponent(parsed.hash.slice(1)) : null,
+        form: "shortcut",
+      };
+    } else {
+      const segments = protocols.includes(parsed.protocol) ? extract(parsed) : undefined;
+      if (segments === undefined) return undefined;
+      repo = {
+        user: segments.user && decodeURIComponent(segments.user),
+        project: decodeURIComponent(segments.project),
+        committish: decodeURIComponent(segments.committish),
+        form: GIT_PROTOCOLS[parsed.protocol]?.name || parsed.protocol.slice(0, -1),
+      };
+    }
+  } catch (error) {
+    if (error instanceof URIError) return undefined;
+    throw error;
+  }
+  const { user, project, committish, form } = repo;
+  const hash = committish ? `#${committish}` : "";
+  const where = type === "gist" ? project : `${user}/${project}`;
+  const login = type === "gist" || !auth ? "" : `${auth}@`;
+  if (form === "shortcut") return `${type}:${where}${hash}`;
+  if (form === "https" && type === "sourcehut") return `https://${domain}/${where}${hash}`;
+  if (form === "https") return `git+https://${login}${domain}/${where}.git${hash}`;
+  if (form === "git") return `git://${login}${domain}/${where}.git${hash}`;
+  // hosted-git-info writes a form it has no template for as its git+ssh URL.
+  return `git+ssh://git@${domain}/${where}.git${hash}`;
+}
+
+/** The characters npm-package-arg encodes in a path it makes a file: URL of. */
+const FILE_URL_CHARS = {
+  "\0": "%00",
+  "\t": "%09",
+  "\n": "%0A",
+  "\r": "%0D",
+  " ": "%20",
+  '"': "%22",
+  "#": "%23",
+  "%": "%25",
+  "?": "%3F",
+  "[": "%5B",
+  "]": "%5D",
+  "^": "%5E",
+  "|": "%7C",
+  "~": "%7E",
+};
+
+/** `text` as a file: URL, as npm-package-arg makes one of a path. */
+function fileUrl(text, windows) {
+  let url = "";
+  for (let at = 0; at < text.length; at++) {
+    const char = text[at];
+    url += char === "\\" ? (windows ? "/" : "%5C") : (FILE_URL_CHARS[char] ?? char);
+  }
+  return url.startsWith("file:") ? url : `file:${url}`;
+}
+
+/**
+ * What npm-package-arg makes of `arg` from the folder `where`: its type (`git`, `remote`, `file`,
+ * `directory`, `alias` or `registry`), the name it gives, the spec npm saves for a git one, and the
+ * path of a file or folder; undefined where npm-package-arg throws.
+ */
+export function npmSpec(arg, where, home, platform = process.platform) {
+  const windows = platform === "win32";
+  const slashes = windows ? /\\|[/]/ : /[/]/;
+  const nameEndsAt = arg.indexOf("@", 1);
+  const namePart = nameEndsAt > 0 ? arg.slice(0, nameEndsAt) : arg;
+  let name;
+  let spec = arg;
+  if (URL_SPEC.test(arg)) {
+    // A URL, or a Windows path with its drive.
+  } else if (SCP_GIT_SPEC.test(arg)) {
+    spec = `git+ssh://${arg}`;
+  } else if (!namePart.startsWith("@") && (slashes.test(namePart) || TARBALL.test(namePart))) {
+    // A path, @ and all.
+  } else if (nameEndsAt > 0) {
+    name = namePart;
+    spec = arg.slice(nameEndsAt + 1) || "*";
+  } else if (validName(arg)) {
+    name = arg;
+    spec = "*";
+  }
+  if (name !== undefined && !validName(name)) return undefined;
+  const fileSpec =
+    /^file:/i.test(spec) ||
+    (windows ? /^(?:[.]|~[/]|[/\\]|[a-zA-Z]:)/ : /^(?:[.]|~[/]|[/]|[a-zA-Z]:)/).test(spec);
+  if (!fileSpec) {
+    if (/^npm:/i.test(spec)) return { type: "alias", name };
+    const hosted = hostedGit(spec);
+    if (hosted !== undefined) return { type: "git", name, saveSpec: hosted };
+    if (URL_SPEC.test(spec)) {
+      const scp = spec.startsWith("git+ssh:")
+        ? /^git\+ssh:\/\/([^:#]+:[^#]+(?:\.git)?)(?:#(.*))?$/i.exec(spec)
+        : null;
+      const url = parseUrl(spec.startsWith("git+file://") ? spec.replace(/\\/g, "/") : spec);
+      if (
+        (scp !== null && !/:[0-9]+(\/|$)/.test(scp[1])) ||
+        /^git(?:\+(?:https?|rsync|ftp|file|ssh))?:$/.test(url?.protocol ?? "")
+      ) {
+        return { type: "git", name, saveSpec: spec };
+      }
+      if (url?.protocol === "http:" || url?.protocol === "https:") return { type: "remote", name };
+      return undefined;
+    }
+    if (!slashes.test(spec) && !TARBALL.test(spec)) return { type: "registry", name };
+  }
+  const paths = windows ? path.win32 : path.posix;
+  let raw = fileUrl(spec, windows);
+  // file://x is file:/x, and file:/../x relative.
+  if (/^file:\/\/[^/]/.test(raw)) raw = `file:/${raw.slice(5)}`;
+  if (/^file:\/{1,3}\.\.?(\/|$)/.test(raw)) raw = raw.replace(/^file:\/{1,3}/, "file:");
+  try {
+    const own = decodeURIComponent(new URL(raw).pathname);
+    const base = `${fileUrl(paths.resolve(where), windows)}/`;
+    let resolved = decodeURIComponent(new URL(raw, base).pathname);
+    if (windows) resolved = resolved.replace(/^\/+([a-z]:\/)/i, "$1");
+    if (/^\/~(\/|$)/.test(own)) resolved = paths.resolve(home, own.slice(3));
+    return {
+      type: TARBALL.test(spec) ? "file" : "directory",
+      name,
+      path: paths.resolve(where, resolved),
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The folder or tarball file `spec` names, as npm-package-arg tells them from a git repo, a URL or
  * a registry package, with the name it gives it, if any; undefined for anything else.
  */
 export function localSpec(spec, cwd, home, platform = process.platform) {
-  const windows = platform === "win32";
-  const slashes = windows ? /[\\/]/ : /\//;
-  const at = spec.indexOf("@", 1);
-  const namePart = at > 0 ? spec.slice(0, at) : spec;
-  let name;
-  let where = spec;
-  if (URL_SPEC.test(spec)) {
-    // A URL, or a Windows path.
-  } else if (SCP_GIT_SPEC.test(spec)) {
-    return undefined;
-  } else if (!namePart.startsWith("@") && (slashes.test(namePart) || TARBALL.test(namePart))) {
-    // A path, @ and all.
-  } else if (at > 0) {
-    name = namePart;
-    where = spec.slice(at + 1);
-  } else if (PACKAGE_NAME.test(spec)) {
-    return undefined;
+  const parsed = npmSpec(spec, cwd, home, platform);
+  if (parsed?.type !== "file" && parsed?.type !== "directory") return undefined;
+  return { name: parsed.name, path: parsed.path, tarball: parsed.type === "file" };
+}
+
+const ALLOWS = {
+  git: "allow-git",
+  remote: "allow-remote",
+  file: "allow-file",
+  directory: "allow-directory",
+};
+
+/**
+ * npm's error, as it prints it, for the first of `specs` whose kind its allow-git, allow-remote,
+ * allow-file or allow-directory setting in `sources` is none, if any. Those npx asks for are the
+ * root's, which root lets through.
+ */
+export function refusal(specs, sources, cwd, home, platform = process.platform) {
+  for (const spec of specs) {
+    const { type, name, saveSpec } = npmSpec(spec, cwd, home, platform) ?? {};
+    if (!Object.hasOwn(ALLOWS, type) || settingOf(sources, ALLOWS[type]) !== "none") continue;
+    const lines = [
+      `code EALLOW${type.toUpperCase()}`,
+      `Fetching packages of type "${type}" have been disabled`,
+    ];
+    if (type === "git") lines.push(`Refusing to fetch "${name ? `${name}@` : ""}${saveSpec}"`);
+    return lines.join("\n");
   }
-  const fileLike =
-    /^file:/i.test(where) ||
-    (windows ? /^(?:[.]|~[/\\]|[/\\]|[a-zA-Z]:)/ : /^(?:[.]|~\/|\/|[a-zA-Z]:)/).test(where);
-  const pathLike =
-    !/^npm:/i.test(where) &&
-    !GITHUB_SHORTCUT.test(where) &&
-    !URL_SPEC.test(where) &&
-    (slashes.test(where) || TARBALL.test(where));
-  if (!fileLike && !pathLike) return undefined;
-  let file = where.replace(/^file:/i, "");
-  // file:/../x is relative; file://x and file:///x are /x.
-  if (/^\/{1,3}\.\.?(?:\/|$)/.test(file)) file = file.replace(/^\/+/, "");
-  else file = file.replace(/^\/{2,3}(?=[^/])/, "/");
-  if (windows) file = file.replace(/^\/+([a-z]:[/\\])/i, "$1");
-  const resolved =
-    file === "~" || /^~[/\\]/.test(file) ? path.join(home, file.slice(2)) : path.resolve(cwd, file);
-  return { name, path: resolved, tarball: TARBALL.test(where) };
+  return undefined;
 }
 
 /**
@@ -565,8 +859,9 @@ export function inTree(packages, spec) {
  * What npx does with `args` from `cwd`, as libnpmexec decides it: the command, `undefined` for
  * the bin of the one package `install` names, the folders whose bins come first on its PATH, and
  * the folder it runs in; `install` lists what isn't here yet. An error carries npm's exit code.
+ * `env` and `home` give npm's config.
  */
-export function plan(args, cwd, home = homedir()) {
+export function plan(args, cwd, home = homedir(), env = process.env) {
   const read = readNpx(args);
   if ("error" in read) return read;
   const { prefix, workspace } = npmPrefix(cwd);
@@ -579,13 +874,14 @@ export function plan(args, cwd, home = homedir()) {
   };
   let [command, ...rest] = read.command;
   let packages = read.packages;
+  let own;
   if (packages.length === 0) {
-    const own = trees.find((dir) => {
+    own = trees.find((dir) => {
       const manifest = readJson(path.join(dir, "package.json"));
       return manifest !== undefined && Object.hasOwn(binsOf(manifest, dir), command);
     });
     if (own !== undefined) {
-      // npm installs the project as a link and runs its bin.
+      // npm installs the project as a link and runs its bin, whatever allow-directory says.
       packages = [own];
     } else {
       const bin = localBin(trees[0], command);
@@ -599,6 +895,11 @@ export function plan(args, cwd, home = homedir()) {
       packages = [command];
       command = undefined;
     }
+  }
+  // npm refuses one before it looks for it in the local tree.
+  if (own === undefined) {
+    const refused = refusal(packages, npmConfig(env, prefix, home), cwd, home);
+    if (refused !== undefined) return { error: refused, code: 1 };
   }
   const install = packages.filter((spec) => inLocalTree(spec) === undefined);
   for (const spec of install) {
@@ -728,7 +1029,7 @@ function end(code, signal) {
 }
 
 function fail(message, code = 1) {
-  console.error(`npx: ${message}`);
+  console.error(message.replace(/^/gm, "npx: "));
   process.exit(code);
 }
 
