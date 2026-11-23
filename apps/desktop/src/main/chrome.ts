@@ -6,18 +6,13 @@ import { type BrowserWindow, ipcMain, nativeTheme } from "electron";
 import {
   accepts,
   BRIDGE,
-  type CommandAction,
-  type CommandChange,
-  type CommandState,
   type DesktopCommand,
   type DesktopVersions,
-  isCommandAction,
   isLanguage,
   isThemeSetting,
   type Language,
-  type LoginItemState,
-  type PageChannel,
 } from "../shared/bridge.ts";
+import { type AppInvokes, appInvokes } from "./app-invokes.ts";
 import { ipcSender, mainWindow } from "./window.ts";
 import { titleBarOverlay } from "./window-options.ts";
 
@@ -43,29 +38,12 @@ export function dressWindow(win: BrowserWindow): void {
   }
 }
 
-export interface AppBridge {
+export interface AppBridge extends AppInvokes {
   /** The desktop's version and the server's, as the backend last reported it. */
   readonly versions: () => DesktopVersions;
   readonly language: (language: Language) => void;
   /** The page listens for commands now. */
   readonly takesCommands: () => void;
-  /** The native folder dialog's pick, or null when cancelled. */
-  readonly chooseFolder: () => Promise<string | null>;
-  readonly loginItem: () => LoginItemState;
-  readonly setLoginItem: (on: boolean) => LoginItemState;
-  readonly terminalCommand: () => Promise<CommandState>;
-  readonly setTerminalCommand: (action: CommandAction) => Promise<CommandChange>;
-}
-
-/**
- * Answers the app page's invokes on `channel` through `respond`, given their argument. The sender
- * is checked before anything else: senderFrame turns null once the page navigates.
- */
-function answer(channel: PageChannel, respond: (argument: unknown) => unknown): void {
-  ipcMain.handle(channel, (event, argument: unknown) => {
-    if (!accepts(channel, ipcSender(event))) throw new Error("refused");
-    return respond(argument);
-  });
 }
 
 /**
@@ -91,17 +69,10 @@ export function handleAppBridge(bridge: AppBridge): void {
   ipcMain.on(BRIDGE.versions, (event) => {
     event.returnValue = accepts(BRIDGE.versions, ipcSender(event)) ? bridge.versions() : null;
   });
-  answer(BRIDGE.chooseFolder, () => bridge.chooseFolder());
-  answer(BRIDGE.loginItem, () => bridge.loginItem());
-  answer(BRIDGE.setLoginItem, (on) => {
-    if (typeof on !== "boolean") throw new Error("Open at Login takes true or false");
-    return bridge.setLoginItem(on);
-  });
-  answer(BRIDGE.terminalCommand, () => bridge.terminalCommand());
-  answer(BRIDGE.setTerminalCommand, (action) => {
-    if (!isCommandAction(action)) throw new Error("the terminal command takes install or remove");
-    return bridge.setTerminalCommand(action);
-  });
+  for (const [channel, answer] of appInvokes(bridge)) {
+    // The sender is read before anything awaits: senderFrame turns null once the page navigates.
+    ipcMain.handle(channel, (event, argument: unknown) => answer(ipcSender(event), argument));
+  }
 }
 
 /**
