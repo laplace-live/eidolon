@@ -6,7 +6,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { CommandState, EidolonDesktop, LoginItemState, Unavailable } from "@/lib/desktop";
+import type {
+  CommandChange,
+  CommandState,
+  EidolonDesktop,
+  LoginItemState,
+  Unavailable,
+} from "@/lib/desktop";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 vi.doMock("@lingui/core/macro", linguiMacro);
@@ -77,18 +83,28 @@ describe("what each state says", () => {
   });
 
   test("a failed change says what didn't happen, and where Show Logs is on each system", () => {
-    const said = (action: "install" | "remove", platform: string) => {
-      const { title, detail } = changeFailed(action, platform);
-      return [title.message, detail.message];
+    const said = (change: CommandChange, action: "install" | "remove", platform: string) => {
+      const toast = changeFailed(change, action, platform);
+      return toast === null ? null : [toast.title.message, toast.detail.message];
     };
-    expect(said("install", "darwin")).toEqual([
+    const absent = { state: "absent", path: MAC_LINK } as const;
+    const installed = { state: "installed", path: WINDOWS_FOLDER } as const;
+    expect(said({ command: absent, error: "failed" }, "install", "darwin")).toEqual([
       "Couldn't install the eidolon command.",
       "Show Logs in the Help menu has the details.",
     ]);
-    expect(said("remove", "win32")).toEqual([
+    expect(said({ command: installed, error: "failed" }, "remove", "win32")).toEqual([
       "Couldn't remove the eidolon command.",
       "Show Logs in the tray icon's menu has the details.",
     ]);
+  });
+
+  test("a change that went through, or one the owner cancelled at the password prompt, says nothing", () => {
+    const absent = { state: "absent", path: MAC_LINK } as const;
+    const installed = { state: "installed", path: MAC_LINK } as const;
+    expect(changeFailed({ command: installed }, "install", "darwin")).toBeNull();
+    expect(changeFailed({ command: absent, error: "cancelled" }, "install", "darwin")).toBeNull();
+    expect(changeFailed({ command: installed, error: "cancelled" }, "remove", "darwin")).toBeNull();
   });
 });
 

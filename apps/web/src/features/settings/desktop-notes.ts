@@ -2,7 +2,7 @@
 // desktop app reports for each, and what a failed change's toast says.
 import type { MessageDescriptor } from "@lingui/core";
 import { msg, ph } from "@lingui/core/macro";
-import type { CommandState, LoginItemState, Unavailable } from "@/lib/desktop";
+import type { CommandChange, CommandState, LoginItemState, Unavailable } from "@/lib/desktop";
 
 /** Why this copy of the app can't offer an option, said under either row. */
 const UNAVAILABLE_NOTES: Readonly<Record<Unavailable, MessageDescriptor>> = {
@@ -68,11 +68,16 @@ export function commandNote(command: CommandState, platform: string): Note {
   }
 }
 
-/** A failed install's or removal's toast: what didn't happen, then where the app's log says why. */
+/**
+ * A failed install's or removal's toast: what didn't happen, then where the app's log says why. Null
+ * when it went through, or when the owner cancelled macOS's password prompt themselves.
+ */
 export function changeFailed(
+  change: CommandChange,
   action: "install" | "remove",
   platform: string,
-): { readonly title: MessageDescriptor; readonly detail: MessageDescriptor } {
+): { readonly title: MessageDescriptor; readonly detail: MessageDescriptor } | null {
+  if (change.error !== "failed") return null;
   return {
     title:
       action === "install"

@@ -112,13 +112,10 @@ function CommandRow({ app }: { readonly app: SystemOptions }) {
   const command = useQuery(options);
   const change = useMutation({
     mutationFn: (action: "install" | "remove") => app.setTerminalCommand(action),
-    onSuccess: ({ command: now, error }, action) => {
-      queryClient.setQueryData(options.queryKey, now);
-      // A cancel is the owner's own, at macOS's password prompt.
-      if (error === "failed") {
-        const failed = changeFailed(action, app.platform);
-        toast.error(t(failed.title), { description: t(failed.detail) });
-      }
+    onSuccess: (result, action) => {
+      queryClient.setQueryData(options.queryKey, result.command);
+      const failed = changeFailed(result, action, app.platform);
+      if (failed !== null) toast.error(t(failed.title), { description: t(failed.detail) });
     },
     onError: (error) => {
       toastError(error);
