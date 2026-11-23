@@ -44,8 +44,8 @@ export function mainWindow(): BrowserWindow | null {
   return window !== null && !window.isDestroyed() ? window : null;
 }
 
-/** Who sent `event`, for the bridges' sender rule (bridge.ts's accepts). */
-export function ipcSender(event: IpcMainEvent): IpcSender {
+/** Who sent `event`, a message or an invoke, for the bridges' sender rule (bridge.ts's accepts). */
+export function ipcSender(event: Pick<IpcMainEvent, "sender" | "senderFrame">): IpcSender {
   const win = mainWindow();
   return {
     window: win !== null && event.sender === win.webContents,

@@ -1,15 +1,22 @@
 // The window's chrome and the app's bridge to main: the theme the page reports, which
 // native menus, dialogs and the caption buttons follow; the fullscreen mark on macOS; the page's
-// language; and the versions its bridge carries.
+// language; the versions its bridge carries; and the folder dialog and the system options it asks
+// main for.
 import { type BrowserWindow, ipcMain, nativeTheme } from "electron";
 import {
   accepts,
   BRIDGE,
+  type CommandAction,
+  type CommandChange,
+  type CommandState,
   type DesktopCommand,
   type DesktopVersions,
+  isCommandAction,
   isLanguage,
   isThemeSetting,
   type Language,
+  type LoginItemState,
+  type PageChannel,
 } from "../shared/bridge.ts";
 import { ipcSender, mainWindow } from "./window.ts";
 import { titleBarOverlay } from "./window-options.ts";
@@ -42,12 +49,29 @@ export interface AppBridge {
   readonly language: (language: Language) => void;
   /** The page listens for commands now. */
   readonly takesCommands: () => void;
+  /** The native folder dialog's pick, or null when cancelled. */
+  readonly chooseFolder: () => Promise<string | null>;
+  readonly loginItem: () => LoginItemState;
+  readonly setLoginItem: (on: boolean) => LoginItemState;
+  readonly terminalCommand: () => Promise<CommandState>;
+  readonly setTerminalCommand: (action: CommandAction) => Promise<CommandChange>;
 }
 
 /**
- * The app page's messages, each taken only from the window's main frame at eidolon-app://app. The
- * theme setting goes to `themeSource` as it is: a resolved theme would pin prefers-color-scheme and
- * stop the page's System from following the OS.
+ * Answers the app page's invokes on `channel` through `respond`, given their argument. The sender
+ * is checked before anything else: senderFrame turns null once the page navigates.
+ */
+function answer(channel: PageChannel, respond: (argument: unknown) => unknown): void {
+  ipcMain.handle(channel, (event, argument: unknown) => {
+    if (!accepts(channel, ipcSender(event))) throw new Error("refused");
+    return respond(argument);
+  });
+}
+
+/**
+ * The app page's messages and invokes, each taken only from the window's main frame at
+ * eidolon-app://app. The theme setting goes to `themeSource` as it is: a resolved theme would pin
+ * prefers-color-scheme and stop the page's System from following the OS.
  */
 export function handleAppBridge(bridge: AppBridge): void {
   ipcMain.on(BRIDGE.theme, (event, setting: unknown) => {
@@ -67,9 +91,23 @@ export function handleAppBridge(bridge: AppBridge): void {
   ipcMain.on(BRIDGE.versions, (event) => {
     event.returnValue = accepts(BRIDGE.versions, ipcSender(event)) ? bridge.versions() : null;
   });
+  answer(BRIDGE.chooseFolder, () => bridge.chooseFolder());
+  answer(BRIDGE.loginItem, () => bridge.loginItem());
+  answer(BRIDGE.setLoginItem, (on) => {
+    if (typeof on !== "boolean") throw new Error("Open at Login takes true or false");
+    return bridge.setLoginItem(on);
+  });
+  answer(BRIDGE.terminalCommand, () => bridge.terminalCommand());
+  answer(BRIDGE.setTerminalCommand, (action) => {
+    if (!isCommandAction(action)) throw new Error("the terminal command takes install or remove");
+    return bridge.setTerminalCommand(action);
+  });
 }
 
-/** Hands the app's page a menu's command, such as opening Settings; a shell page has no listener. */
+/**
+ * Hands the app's page a menu's or a notification's command, such as opening Settings; a shell page
+ * has no listener.
+ */
 export function sendCommand(command: DesktopCommand): void {
   mainWindow()?.webContents.send(BRIDGE.command, command);
 }

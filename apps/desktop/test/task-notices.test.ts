@@ -1,9 +1,10 @@
 // Task notifications: what each says, under her name, in both languages, and what its click asks
 // of the page.
 import { describe, expect, test } from "vitest";
+import type { BackendState, ReadyState } from "../src/main/controller.ts";
 import type { BackendFetch, BackendResponse } from "../src/main/quit-check.ts";
 import { STRINGS } from "../src/main/strings.ts";
-import { type Notice, noticeCommand, noticeText } from "../src/main/task-notices.ts";
+import { followBackend, type Notice, noticeCommand, noticeText } from "../src/main/task-notices.ts";
 
 const en = STRINGS.en;
 const zh = STRINGS["zh-Hans"];
@@ -98,5 +99,65 @@ describe("noticeCommand", () => {
     await expect(
       noticeCommand({ ...notice, task: "../settings" }, server({ activeCalls: 0 }).fetch),
     ).rejects.toThrow();
+  });
+});
+
+describe("followBackend", () => {
+  const ready = (pid: number, owned = false): ReadyState => ({
+    phase: "ready",
+    origin: "http://127.0.0.1:7860",
+    token: {} as ReadyState["token"],
+    owned,
+    pid,
+  });
+
+  /** What the watch is told across `states`. */
+  function told(states: readonly BackendState[]): string[] {
+    const calls: string[] = [];
+    const follow = followBackend({
+      ready: () => calls.push("ready"),
+      stop: () => calls.push("stop"),
+    });
+    for (const state of states) follow(state);
+    return calls;
+  }
+
+  test("a server's first ready starts the watch, and an attached server's idle hold leaves it be", () => {
+    expect(
+      told([
+        { phase: "starting" },
+        ready(41),
+        { phase: "holding", owned: false },
+        ready(41),
+        { phase: "holding", owned: false },
+        ready(41),
+      ]),
+    ).toEqual(["stop", "ready"]);
+  });
+
+  test("another server after a hold, a restart's included, starts it on a new baseline", () => {
+    expect(told([ready(41), { phase: "holding", owned: false }, ready(42)])).toEqual([
+      "ready",
+      "ready",
+    ]);
+    expect(told([ready(41, true), { phase: "holding", owned: true }, ready(43, true)])).toEqual([
+      "ready",
+      "ready",
+    ]);
+    // Our own server at the attached one's address and process isn't the one followed.
+    expect(told([ready(41), ready(41, true)])).toEqual(["ready", "ready"]);
+  });
+
+  test("no server stops it, and the same server after that starts it again", () => {
+    const failed: BackendState = {
+      phase: "failed",
+      failure: { reason: "exited", code: 1, signal: null, stderr: [] },
+    };
+    expect(told([ready(41), failed, ready(41), { phase: "stopped" }])).toEqual([
+      "ready",
+      "stop",
+      "ready",
+      "stop",
+    ]);
   });
 });

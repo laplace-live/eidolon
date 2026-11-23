@@ -1,7 +1,7 @@
 // The desktop app's main process, in this order: the profile, the logs and the single-instance
 // lock first (instance.ts), then the scheme; once Electron is ready, the session's guards and the
-// scheme's handler, the window on the loading page, and then the environment and the backend, which
-// the window follows.
+// scheme's handler, the window on the loading page (none at a launch at login), and then the
+// environment and the backend, which the window and the task notifications follow.
 import "./instance.ts";
 import { join } from "node:path";
 import { type AboutPanelOptionsOptions, app, nativeImage, session } from "electron";
@@ -11,6 +11,7 @@ import { Backend, licensesFile } from "./backend.ts";
 import { BACKGROUND_LINE, backendPort, hasTray } from "./background.ts";
 import { dressWindow, handleAppBridge, sendCommand } from "./chrome.ts";
 import type { AppPaths } from "./controller.ts";
+import { folderDialogOptions, joinPending } from "./folder-dialog.ts";
 import { APP_ORIGIN, DEV_SERVER } from "./forwarder.ts";
 import { background, isLaunchRequest, primary, refused, request } from "./instance.ts";
 import { backendLog, logStart, logsFolder, mainLog } from "./log.ts";
@@ -35,15 +36,36 @@ import {
   waitingPage,
 } from "./protocol.ts";
 import { installQuit, watchSession } from "./quit.ts";
+import type { BackendFetch } from "./quit-check.ts";
 import { HideNotice } from "./quit-flow.ts";
 import { STRINGS, shellLanguage } from "./strings.ts";
+import {
+  loginItemQuery,
+  loginItemState,
+  loginItemWrite,
+  openedAtLogin,
+  optionsUnavailable,
+} from "./system-options.ts";
+import {
+  followBackend,
+  type Notice,
+  noticeCommand,
+  noticeText,
+  TaskWatch,
+} from "./task-notices.ts";
+import { type CommandHost, changeCommand, commandState } from "./terminal-command.ts";
 import { AppTray, trayIconPath } from "./tray.ts";
-import type { UpdateFlow } from "./update-flow.ts";
+import { isUpdatableInstall, type UpdateFlow } from "./update-flow.ts";
 import { installUpdater } from "./updater.ts";
 import { createWindow, mainWindow, showWindow } from "./window.ts";
 
 /** NSIS gives the Start menu shortcut appId as its AppUserModelID. */
 const APP_USER_MODEL_ID = "live.laplace.eidolon";
+/**
+ * Windows' toast activator, pinned: Electron otherwise makes one up whenever the Start menu shortcut
+ * has none, as after each update rewrites it, and registers each under HKCU for good.
+ */
+const TOAST_ACTIVATOR_CLSID = "{75F1E873-F478-41C1-9698-DBCAB1E2A111}";
 /** dev.ts's switch: Vite serves every path but the backend's. Unpackaged runs only. */
 const DEV_SWITCH = "eidolon-dev-server";
 /** In userData: the Windows tray notice has shown. */
@@ -70,6 +92,26 @@ function run(): void {
   let reported: Language | null = null;
   const language = () => shellLanguage(reported, app.getPreferredSystemLanguages());
   const strings = () => STRINGS[language()];
+  const installedCopy = isUpdatableInstall(
+    process.platform,
+    process.execPath,
+    process.env.LOCALAPPDATA,
+  );
+  /** Why this copy can't offer Open at Login and the terminal command, or null when it can. */
+  const unavailable = optionsUnavailable({
+    background,
+    packaged: app.isPackaged,
+    platform: process.platform,
+    inApplications: process.platform === "darwin" && app.isInApplicationsFolder(),
+    installedCopy,
+  });
+  // Background mode only logs each notice. On Windows any copy but the installed one would point the
+  // installed app's Start menu shortcut and its COM key at itself.
+  const notifies =
+    background || (app.isPackaged && (process.platform !== "win32" || installedCopy));
+  if (notifies && !background && process.platform === "win32") {
+    app.setToastActivatorCLSID(TOAST_ACTIVATOR_CLSID);
+  }
   let tray: AppTray | null = null;
   let hideNotice: HideNotice | null = null;
   let updates: UpdateFlow | null = null;
@@ -99,6 +141,40 @@ function run(): void {
       return waitingPage(shellPageStrings(language(), strings()));
     },
   });
+  const backendFetch: BackendFetch = (path, { signal }) => backend.get(path, signal);
+  let noticeFailed = false;
+  const watch = notifies
+    ? new TaskWatch({
+        fetch: backendFetch,
+        focused: () => mainWindow()?.isFocused() === true,
+        show: (notice) => {
+          const { title, body } = noticeText(notice, strings());
+          return native.notify(
+            { title, body },
+            {
+              click: () => openNotice(notice),
+              failed: (error) => {
+                if (noticeFailed) return;
+                noticeFailed = true;
+                mainLog.warn(`Eidolon: a notification failed: ${error}`);
+              },
+            },
+          );
+        },
+        log: mainLog,
+      })
+    : null;
+  const commandHost: CommandHost = {
+    platform: process.platform,
+    resourcesPath: process.resourcesPath,
+    unavailable,
+    strings,
+    log: mainLog,
+  };
+  const chooseFolder = joinPending(() =>
+    native.chooseFolder(mainWindow(), folderDialogOptions(strings(), app.getPath("home"))),
+  );
+  const readLoginItem = () => app.getLoginItemSettings(loginItemQuery(process.platform));
   const icon =
     process.platform === "win32" ? nativeImage.createFromPath(trayIconPath()) : undefined;
   const flow = installQuit({
@@ -106,6 +182,7 @@ function run(): void {
     strings,
     icon,
     approved: () => {
+      watch?.stop();
       tray?.destroy();
       tray = null;
     },
@@ -193,6 +270,19 @@ function run(): void {
     showWindow();
   }
 
+  /** A notification's click: the window, then its task, as noticeCommand decides. */
+  function openNotice(notice: Notice): void {
+    openWindow();
+    noticeCommand(notice, backendFetch).then(
+      (command) => {
+        if (command !== null) commands.send(command);
+      },
+      (error: unknown) => {
+        mainLog.warn(`Eidolon: couldn't open the task a notification named: ${String(error)}`);
+      },
+    );
+  }
+
   app.on("second-instance", (_event, _argv, _cwd, data) => {
     if (isLaunchRequest(data) && data.command === "quit") app.quit();
     else openWindow();
@@ -207,6 +297,7 @@ function run(): void {
     .then(async () => {
       logStart(version);
       if (background) mainLog.info(BACKGROUND_LINE);
+      if (watch === null) mainLog.info("Eidolon: notifications are off in this copy of the app");
       updates = installUpdater({
         quit: flow,
         strings,
@@ -241,6 +332,17 @@ function run(): void {
         versions: () => ({ version, serverVersion: backend.serverVersion }),
         language: languageChanged,
         takesCommands: () => commands.listening(),
+        chooseFolder,
+        loginItem: () => loginItemState(process.platform, unavailable, readLoginItem),
+        // The write returns nothing and only logs a failure, so the state is read again after it.
+        setLoginItem: (on) =>
+          loginItemState(process.platform, unavailable, () => {
+            app.setLoginItemSettings(loginItemWrite(process.platform, on));
+            mainLog.info(`Eidolon: Open at Login was turned ${on ? "on" : "off"}`);
+            return readLoginItem();
+          }),
+        terminalCommand: () => commandState(commandHost),
+        setTerminalCommand: (action) => changeCommand(commandHost, action),
       });
       setMenus();
       setAbout();
@@ -263,14 +365,26 @@ function run(): void {
           log: mainLog,
         });
       }
+      const watchFollows = watch === null ? null : followBackend(watch);
       backend.subscribe((state) => {
         pages.backend(state);
+        watchFollows?.(state);
         if (state.phase !== "ready") return;
         setAbout();
         updates?.backendReady();
       });
       started = true;
-      newWindow();
+      // Background mode reads no login item.
+      const atLogin =
+        !background &&
+        openedAtLogin(
+          process.platform,
+          process.argv,
+          app.getLoginItemSettings().wasOpenedAtLogin === true,
+        );
+      // The Dock, the tray, a second launch, a menu item or a notification's click makes one.
+      if (atLogin) mainLog.info("Eidolon: opened at login, so no window until one is asked for");
+      else newWindow();
       await backend.start();
     })
     .catch((error: unknown) => {

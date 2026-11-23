@@ -4,6 +4,7 @@
 // opens the task. Electron-free: index.ts shows them through native.ts.
 import { type DesktopCommand, openTaskCommand } from "../shared/bridge.ts";
 import type { NoticeHandle } from "./background.ts";
+import { type BackendState, type ReadyState, sameServer } from "./controller.ts";
 import type { BackendFetch } from "./quit-check.ts";
 import type { Strings } from "./strings.ts";
 
@@ -55,6 +56,27 @@ export class TaskWatch {
 
   /** No server is ready, or Eidolon quits: stops polling. */
   stop(): void {}
+}
+
+/**
+ * The watch following the backend's states: a ready server it doesn't follow yet starts it on a new
+ * baseline, and a state with no server stops it. Holding leaves it be: an attached server holds at
+ * each close of the page's idle connection and is nearly always the same server after, and a new
+ * baseline then would swallow whatever changed since the last poll.
+ */
+export function followBackend(
+  watch: Pick<TaskWatch, "ready" | "stop">,
+): (state: BackendState) => void {
+  let followed: ReadyState | null = null;
+  return (state) => {
+    if (state.phase === "ready") {
+      if (followed === null || !sameServer(followed, state)) watch.ready();
+      followed = state;
+    } else if (state.phase !== "holding") {
+      followed = null;
+      watch.stop();
+    }
+  };
 }
 
 /** The notice's title (the persona, else "Eidolon") and body (the phrase, then the goal on a second line when there is one). */
