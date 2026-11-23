@@ -178,8 +178,10 @@ export class TaskWatch {
   #run: object | null = null;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #request: AbortController | null = null;
-  /** Each task as the last answer had it; null until this run's baseline. */
+  /** Each task as the last answer had it, this run's or an earlier one's; null until the first. */
   #seen: Map<string, Seen> | null = null;
+  /** The next answer is ready()'s baseline: it closes the notices it outdates, and shows none. */
+  #baseline = false;
   /** The personas' names by id, read once a run and again for an id they lack. */
   #names: ReadonlyMap<string, string> | null = null;
   /** Each task's last notice: Electron drops a notification nothing holds, and its click with it. */
@@ -196,7 +198,7 @@ export class TaskWatch {
     this.stop();
     const run = {};
     this.#run = run;
-    this.#seen = null;
+    this.#baseline = true;
     this.#names = null;
     this.#failing = false;
     this.#schedule(run, 0);
@@ -242,21 +244,22 @@ export class TaskWatch {
   /** Records `tasks`, closes the notices they outdate, and shows the new ones while unfocused. */
   async #take(run: object, tasks: readonly Watched[]): Promise<void> {
     const before = this.#seen;
+    const baseline = this.#baseline;
+    this.#baseline = false;
     const seen = new Map<string, Seen>();
     const due: Due[] = [];
     for (const task of tasks) {
       const now: Seen = { ended: isEnded(task.status), key: attentionKey(task) };
       seen.set(task.id, now);
-      if (before === null) continue;
-      const was = before.get(task.id) ?? UNSEEN;
+      const was = before?.get(task.id) ?? UNSEEN;
       let kind: NoticeKind | null;
       if (isEnded(task.status) && !was.ended) kind = task.status;
       else if (now.key !== null && now.key !== was.key) kind = waitKind(task);
       else if (now.key === null && was.key !== null) kind = null;
       else continue;
-      // Focused or not: a notice left open would name a wait that's over.
+      // Focused or not, at a baseline too: a notice left open would name a wait that's over.
       this.#close(task.id);
-      if (kind !== null) due.push({ task, kind });
+      if (kind !== null && !baseline) due.push({ task, kind });
     }
     this.#seen = seen;
     if (due.length === 0 || this.#options.focused()) return;

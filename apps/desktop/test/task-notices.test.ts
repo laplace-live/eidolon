@@ -696,6 +696,34 @@ describe("TaskWatch", () => {
     expect(lines).toEqual([]);
     watch.stop();
   });
+
+  test("a new baseline closes the waits that ended while no server was followed, and shows nothing", async () => {
+    const { time, backend, shown, watch } = watching();
+    backend.tasks = [snapshot(TASK), snapshot(TASK_C)];
+    watch.ready();
+    await time.advance(0);
+    backend.tasks = [
+      snapshot(TASK, RUN_TESTS),
+      snapshot(TASK_B, START),
+      snapshot(TASK_C, { status: "succeeded" }),
+    ];
+    await time.advance(3_000);
+    expect(told(shown)).toEqual(["A command", "B start", "C succeeded"]);
+    // Allowed and denied on their cards before the next poll, then Settings' Restart.
+    watch.stop();
+    backend.tasks = [
+      snapshot(TASK),
+      snapshot(TASK_B, { status: "cancelled" }),
+      snapshot(TASK_C, { status: "succeeded" }),
+    ];
+    watch.ready();
+    await time.advance(0);
+    expect(told(shown)).toEqual(["A command closed", "B start closed", "C succeeded"]);
+    backend.tasks = [snapshot(TASK, BUILD), ...backend.tasks.slice(1)];
+    await time.advance(3_000);
+    expect(told(shown)).toEqual(["A command closed", "B start closed", "C succeeded", "A command"]);
+    watch.stop();
+  });
 });
 
 /** Every status a task has. */
