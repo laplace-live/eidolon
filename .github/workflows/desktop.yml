@@ -288,11 +288,12 @@ jobs:
 
   # eidolon/releases.json, the website's version history, rebuilt from a bucket listing rather than
   # appended to, so nothing ever needs a backfill. always(): after a failed leg or upload it lists
-  # what R2 holds. One at a time, queued, so an earlier listing never lands last.
+  # what R2 holds, but a dispatch whose inputs failed writes nothing. One at a time, queued, so an
+  # earlier listing never lands last.
   release-index:
     name: releases.json
-    needs: upload
-    if: always() && ((github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.release_index))
+    needs: [inputs, upload]
+    if: always() && ((github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.release_index && needs.inputs.result == 'success'))
     concurrency:
       group: desktop-r2-index
       queue: max
@@ -347,6 +348,7 @@ jobs:
   # guards an installer; the listing releases.json is built from; and a delete.
   r2-probe:
     name: R2 probe
+    needs: inputs
     if: github.event_name == 'workflow_dispatch' && inputs.r2_probe
     runs-on: ubuntu-latest
     timeout-minutes: 10
