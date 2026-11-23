@@ -27,11 +27,7 @@ import {
   readEnvironment,
   startupEnvironment,
 } from "../src/main/environment.ts";
-import {
-  ENVIRONMENT_KEYS,
-  type RegistryValue,
-  registryScript,
-} from "../src/main/registry-environment.ts";
+import { type RegistryValue, registryScript } from "../src/main/registry-environment.ts";
 
 let directory: string;
 
@@ -72,6 +68,15 @@ function powershell(body: string): { readonly path: string; readonly script: () 
     path: `${bin}:/usr/bin:/bin`,
     script: () => Buffer.from(readFileSync(kept, "utf8"), "base64").toString("utf16le"),
   };
+}
+
+function running(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** One value as the registry script prints it. */
@@ -251,16 +256,17 @@ describe("mergeRegistryEnvironment", () => {
     const merged = mergeRegistryEnvironment({ Eidolon_Home: "C:\\smoke", EIDOLON_PERSONA: "" }, [
       [
         sz("EIDOLON_HOME", "C:\\registry"),
-        sz("EIDOLON_PERSONA", "from-registry"),
+        sz("EIDOLON_PERSONA", "from-system"),
         expandSz("EIDOLON_SHARED_SKILLS", "%EIDOLON_HOME%\\skills"),
         sz("electron_run_as_node", "1"),
         sz("PWD", "C:\\"),
         sz("_", "C:\\Windows\\system32\\cmd.exe"),
       ],
+      [sz("EIDOLON_PERSONA", "from-user")],
     ]);
     expect(merged).toEqual({
       Eidolon_Home: "C:\\smoke",
-      EIDOLON_PERSONA: "from-registry",
+      EIDOLON_PERSONA: "from-user",
       EIDOLON_SHARED_SKILLS: "C:\\smoke\\skills",
     });
   });
@@ -343,7 +349,13 @@ describe("readEnvironment", () => {
         failures: [],
       });
       expect(launch.PATH).toBe(stand.path);
-      expect(stand.script()).toBe(registryScript(ENVIRONMENT_KEYS));
+      expect(stand.script()).toBe(
+        registryScript([
+          "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+          "HKCU:\\Environment",
+          "HKCU:\\Volatile Environment",
+        ]),
+      );
       expect(existsSync(marker)).toBe(false);
     },
   );
@@ -364,6 +376,35 @@ describe("readEnvironment", () => {
         [`${why}: exit 1: Access is denied.`],
         [`${why}: spawn powershell.exe ENOENT`],
       ]);
+    },
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "on Windows, an abort, as at a quit, kills PowerShell and keeps the launch environment",
+    async () => {
+      const pid = join(directory, "pid");
+      const stand = powershell(`echo $$ > '${pid}'\nexec sleep 30`);
+      const warn = vi.fn<(message: string) => void>();
+      const controller = new AbortController();
+      const launch = { PATH: stand.path };
+      const read = readEnvironment(launch, {
+        platform: "win32",
+        signal: controller.signal,
+        log: { warn },
+      });
+      const child = await vi.waitFor(() => {
+        const value = Number(readFileSync(pid, "utf8"));
+        expect(value).toBeGreaterThan(0);
+        return value;
+      });
+      controller.abort();
+      await expect(read).resolves.toEqual({ env: launch, failures: [] });
+      expect(warn.mock.calls).toEqual([
+        [
+          "Eidolon: couldn't read the registry's variables, so the backend runs on the launch's: aborted",
+        ],
+      ]);
+      await vi.waitFor(() => expect(running(child)).toBe(false));
     },
   );
 
