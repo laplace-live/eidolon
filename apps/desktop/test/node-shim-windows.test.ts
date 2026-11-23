@@ -203,8 +203,9 @@ describe.runIf(WINDOWS)("the node shim's .cmd launchers, on this Node", () => {
 describe.runIf(WINDOWS)("the staged launchers, started by the backend's cross-spawn", () => {
   let scratch = "";
   let cwd = "";
-  /** A script printing what it was given. */
+  /** A script, and a package whose command is one, printing what they were given. */
   let printer = "";
+  let pkg = "";
   let env: Record<string, string> = {};
 
   beforeAll(async () => {
@@ -218,7 +219,18 @@ describe.runIf(WINDOWS)("the staged launchers, started by the backend's cross-sp
     const print = "console.log(JSON.stringify(process.argv.slice(2)));\n";
     printer = join(scratch, "print.js");
     writeFileSync(printer, print);
-    // Nothing here needs a registry; one pnpm tried anyway would fail at once, not after its retries.
+    pkg = join(scratch, "words");
+    mkdirSync(join(pkg, "bin"), { recursive: true });
+    writeFileSync(
+      join(pkg, "package.json"),
+      JSON.stringify({
+        name: "eidolon-shim-words",
+        version: "1.0.0",
+        bin: { "eidolon-words": "bin/words.js" },
+      }),
+    );
+    writeFileSync(join(pkg, "bin", "words.js"), `#!/usr/bin/env node\n${print}`);
+    // A folder needs no registry; one pnpm tried anyway would fail at once, not after its retries.
     const registry = `http://127.0.0.1:${await closedPort()}/`;
     writeFileSync(join(home, ".npmrc"), `registry=${registry}\n`);
     env = withVariables(
@@ -257,6 +269,19 @@ describe.runIf(WINDOWS)("the staged launchers, started by the backend's cross-sp
     "node gets every word as it was given, and cmd.exe runs none",
     () => {
       const ran = start("node", [printer, ...WORDS]);
+      expect(
+        [ran.status, lines(ran.stdout), existsSync(join(cwd, "marker.txt"))],
+        ran.stderr,
+      ).toEqual([0, [JSON.stringify(WORDS)], false]);
+    },
+    TIMEOUT_MS,
+  );
+
+  // npx's command, pnpm's cmd-shim, runs the bare node that is node.cmd: three reads of its words.
+  test(
+    "npx -y -p <folder> <bin> runs it through pnpm's cmd-shim and node.cmd, with the same words",
+    () => {
+      const ran = start("npx", ["-y", "-p", pkg, "eidolon-words", ...WORDS]);
       expect(
         [ran.status, lines(ran.stdout), existsSync(join(cwd, "marker.txt"))],
         ran.stderr,

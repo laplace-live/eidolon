@@ -709,8 +709,14 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
 - **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
   `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
   On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on
-  Windows an `.exe` starts directly and anything else through cmd.exe, a batch file's words escaped
-  twice, as npm escapes them (`cross-spawn.mjs`, ported from cross-spawn). It starts without
+  Windows an `.exe` starts directly and anything else through cmd.exe, each word escaped once for
+  each time cmd.exe will read it (`rereads`, with `cross-spawn.mjs`, ported from cross-spawn): one
+  escape fewer lets cmd.exe act on a word, one more leaves carets in it. A batch file's words are
+  escaped twice, as npm escapes them, and three times for a cmd-shim, npm's or pnpm's, with no
+  `node.exe` beside it, whose bare `node` cmd.exe would find to be the shim's own `node.cmd`
+  (looking in the folder the command runs in first, unless `NoDefaultCurrentDirectoryInExePath` is
+  set, then on its `PATH`, with `.JS` out of `PATHEXT` for pnpm's), since that `node.cmd`'s `%*`
+  reads them a third time. It starts without
   `ELECTRON_RUN_AS_NODE`, as npm starts it: a Node script among them runs on `node`, which, where
   it is the shim's, sets it again for itself. On macOS npx passes SIGINT and SIGTERM on to it; on
   Windows, where `kill()` is TerminateProcess, it only waits. npx ends with the command's exit code,
@@ -1150,8 +1156,9 @@ command's states, link, password prompt and `Path` script on temporary folders a
 and its macOS launcher run through links against a stand-in bundle; the task watch's polls,
 baselines and notices, their text in both languages and a click's command, on fake answers and a
 fake clock; the node shim's npx decisions, against npm's on made-up trees (`npx.test.ts`), its
-launchers run on this Node with the checkout's pnpm and a fake registry, and the shim the stage
-writes, its `.cmd` launchers where cross-spawn's own test takes them for cmd-shims; the logs'
+launchers run on this Node with the checkout's pnpm and a fake registry, the shim the stage writes,
+its `.cmd` launchers where cross-spawn's own test takes them for cmd-shims, and how many times
+cmd.exe reads the words npx starts a batch file with, on made-up cmd-shims and folders; the logs'
 rotation and link filter; stage-backend's parts on
 made-up lockfiles, PE files and zips; the release overlay through electron-builder's own loader,
 and signed-check's reading of codesign, Gatekeeper, stapler and Authenticode output; the release
@@ -1409,10 +1416,11 @@ its Windows job the project's Windows-only tests: `terminal-command-windows.test
 script on a scratch key under HKCU, and the eidolon command's `.cmd`),
 `registry-environment-windows.test.ts` (the registry read, on scratch keys),
 `node-shim-windows.test.ts` (the node shim's `.cmd` launchers, on Node, then staged as the
-payload holds them, its `node` started by the backend's own cross-spawn on a `PATH` where only it
-offers node, with words cmd.exe acts on when it reads one more time than they were escaped for) and
-`npx-windows.test.ts` (its npx through `npx.cmd` and cmd.exe, with the words cmd.exe treats
-specially).
+payload holds them and started by the backend's own cross-spawn, `node` and `npx -y -p <folder>
+<bin>`, on a `PATH` where only they offer node, with words cmd.exe acts on when it reads one more
+time than they were escaped for) and `npx-windows.test.ts` (its npx through `npx.cmd` and cmd.exe,
+with the words cmd.exe treats specially, and a folder's bin through pnpm's cmd-shim and the shim's
+`node.cmd`).
 `.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
 request that changes more than docs, on a dispatch, and from a release's tag
 ([Releasing](#releasing)): the payload comes from `bun.lock` and the backend's packages, so a filter
