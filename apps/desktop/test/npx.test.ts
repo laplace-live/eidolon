@@ -51,6 +51,7 @@ interface Npx {
     args: readonly string[],
     options?: { platform?: string; env?: Env },
   ): { command: string; args: string[]; verbatim: boolean };
+  relay(child: { kill(signal: string): void }, platform?: string): () => void;
 }
 interface CrossSpawn {
   escapeCommand(command: string): string;
@@ -677,6 +678,32 @@ describe("finding a command", () => {
     );
     expect(npx.which("only", { ...options, pathext: ".cmd" })).toBeUndefined();
     expect(npx.which("tool", { ...options, pathext: ".bat" })).toBeUndefined();
+  });
+});
+
+describe("passing signals on", () => {
+  const SIGNALS = ["SIGINT", "SIGTERM"] as const;
+
+  /** The listeners `relay` adds for each signal, and what calling them passes on to the child. */
+  function relayed(platform: string) {
+    const kills: string[] = [];
+    const before = SIGNALS.map((signal) => process.listeners(signal).length);
+    const undo = npx.relay({ kill: (signal) => kills.push(signal) }, platform);
+    const added = SIGNALS.map((signal, at) => process.listeners(signal).slice(before[at]));
+    SIGNALS.forEach((signal, at) => {
+      for (const listener of added[at] ?? []) (listener as (signal: string) => void)(signal);
+    });
+    undo();
+    expect(SIGNALS.map((signal) => process.listeners(signal).length)).toEqual(before);
+    return { listeners: added.map((listeners) => listeners.length), kills };
+  }
+
+  test("passes SIGINT and SIGTERM on to the command, as npm does", () => {
+    expect(relayed("darwin")).toEqual({ listeners: [1, 1], kills: ["SIGINT", "SIGTERM"] });
+  });
+
+  test("on Windows, where kill() is TerminateProcess, passes nothing on, but still waits", () => {
+    expect(relayed("win32")).toEqual({ listeners: [1, 1], kills: [] });
   });
 });
 

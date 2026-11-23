@@ -490,9 +490,13 @@ export function spawnArgs(file, args, { platform = process.platform, env = proce
   return { ...cmdLine(envValue(env, "ComSpec") ?? "cmd.exe", file, args, batch), verbatim: true };
 }
 
-/** Passes SIGINT and SIGTERM on to `child`, as npm does to what it runs; returns the undo. */
-function relay(child) {
-  const forward = (signal) => child.kill(signal);
+/**
+ * Passes SIGINT and SIGTERM on to `child`, as npm does to what it runs; returns the undo. On
+ * Windows only waits for it: kill() there is TerminateProcess, and a console's Ctrl-C reaches the
+ * child itself.
+ */
+export function relay(child, platform = process.platform) {
+  const forward = platform === "win32" ? () => {} : (signal) => child.kill(signal);
   process.on("SIGINT", forward);
   process.on("SIGTERM", forward);
   return () => {
