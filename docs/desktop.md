@@ -702,10 +702,14 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   run whatever they say. Under a credential the user's or the project's `.npmrc` gives no registry
   (`_authToken`, `_auth`, `username`, `_password`), or a `registry` that isn't a URL, npx runs
   nothing at all, local bins included, and ends with npm's error (`ERR_INVALID_AUTH`,
-  `ERR_INVALID_URL`). Under `strict-allow-scripts` npx installs nothing and says why, unless
-  `ignore-scripts` or `dangerously-allow-all-scripts` is set too: npm fails only an install holding
-  a package with install scripts `allow-scripts` doesn't name, while pnpm's dlx runs the scripts of
-  the packages it is asked for unasked and skips a dependency's without failing. A folder is
+  `ERR_INVALID_URL`). So too where the `devEngines` of the `package.json` at npm's local prefix
+  doesn't match, which npm 11.19.1 checks before any command, npx taking itself for that npm and
+  Eidolon's binary for the Node: it ends with npm's `EBADDEVENGINES`, or only warns where the
+  engine's last choice says `warn` or `force` is set. Under `strict-allow-scripts` npx installs
+  nothing and says why, unless `ignore-scripts` or `dangerously-allow-all-scripts` is set too: npm
+  fails only an install holding a package with install scripts `allow-scripts` doesn't name, while
+  pnpm's dlx runs the scripts of the packages it is asked for unasked and skips a dependency's
+  without failing. A folder is
   linked, as npm links one, and runs as it is; a relative path resolves from the folder npx runs
   in; and a folder or tarball runs its own bins whatever name the spec gives it, as under npm.
   pnpm runs in a folder of its own with no pnpm workspace around it, whose `.npmrc` npx writes

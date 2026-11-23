@@ -20,15 +20,22 @@ import { LAUNCHER_SOURCES } from "../scripts/node-shim.ts";
 type Env = Record<string, string | undefined>;
 type Source = Record<string, string | string[]>;
 type Installed = { dir: string; manifest: { name: string; version?: string } };
-type Plan =
+type Plan = (
   | { error: string; code?: number }
-  | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string };
+  | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string }
+) & { warnings?: string[] };
+type Current = Record<string, { name?: string; version?: string }>;
 interface Npx {
   envReplace(text: string, env: Env): string;
   npmConfig(env: Env, prefix: string, home: string): Source[];
   pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
   npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
   invalidConfig(sources: readonly Source[]): string | undefined;
+  devEngines(
+    manifest: unknown,
+    force: boolean,
+    current: Current,
+  ): { warnings: string[]; error?: string };
   npmSpec(
     spec: string,
     where: string,
@@ -61,7 +68,7 @@ interface Npx {
   localBin(start: string, name: string): string | undefined;
   treePackages(prefix: string): Installed[];
   inTree(packages: readonly Installed[], spec: string): Installed | undefined;
-  plan(args: readonly string[], cwd: string, home?: string, env?: Env): Plan;
+  plan(args: readonly string[], cwd: string, home?: string, env?: Env, current?: Current): Plan;
   pathOf(env: Env, delimiter?: string): string;
   npmPath(bins: readonly string[], runPath: string, nodeGyp: string, rest: string): string;
   commandEnv(env: Env, value: string): Env;
@@ -525,6 +532,101 @@ describe("npm's config it runs no command under", () => {
       ]);
     }
     expect(npx.invalidConfig([{ "@s:registry": "not a url" }, {}, {}])).toBeUndefined();
+  });
+});
+
+describe("a project's devEngines, as npm checks it before any command", () => {
+  const current: Current = {
+    cpu: { name: "arm64" },
+    libc: { name: undefined },
+    os: { name: "darwin", version: "27.2.0" },
+    packageManager: { name: "npm", version: "11.19.1" },
+    runtime: { name: "node", version: "v24.22.1" },
+  };
+  const check = (devEngines: unknown, force = false) =>
+    npx.devEngines({ name: "p", devEngines }, force, current);
+  const header = "The developer of this package has specified the following through devEngines";
+  /** Lines as npm prints them under the title `EBADDEVENGINES`. */
+  const titled = (...lines: string[]) =>
+    lines.map((line) => (line ? `EBADDEVENGINES ${line}` : "EBADDEVENGINES"));
+  const pnpm = [
+    "Invalid devEngines.packageManager",
+    'Invalid name "pnpm" does not match "npm" for "packageManager"',
+    "{",
+    "  current: { name: 'npm', version: '11.19.1' },",
+    "  required: { name: 'pnpm', onFail: 'download' }",
+    "}",
+  ];
+
+  // Each as npm 11.19.1 printed it.
+  test("ends on the first engine none of whose choices match", () => {
+    expect(check({ packageManager: { name: "pnpm", onFail: "download" } })).toEqual({
+      warnings: [],
+      error: ["code EBADDEVENGINES", ...titled(header, ...pnpm)].join("\n"),
+    });
+    const cpu = { cpu: { name: "x64" }, os: { name: "darwin", version: ">=99" } };
+    expect(check(cpu).error?.split("\n")).toEqual([
+      "code EBADDEVENGINES",
+      ...titled(
+        header,
+        "Invalid devEngines.cpu",
+        'Invalid name "x64" does not match "arm64" for "cpu"',
+        "{ current: { name: 'arm64' }, required: { name: 'x64' } }",
+      ),
+    ]);
+    expect(check({ runtime: { name: "node", version: "latest" } }).error).toContain(
+      'Invalid version "latest" does not match "v24.22.1" for "runtime"',
+    );
+  });
+
+  test("warns of an engine whose last choice says warn, or of any under force, and goes on", () => {
+    const authored = {
+      cpu: { name: "x64", onFail: "warn" },
+      packageManager: { name: "pnpm", onFail: "download" },
+      runtime: { name: "bun", onFail: "ignore" },
+    };
+    const cpu = [
+      "Invalid devEngines.cpu",
+      'Invalid name "x64" does not match "arm64" for "cpu"',
+      "{",
+      "  current: { name: 'arm64' },",
+      "  required: { name: 'x64', onFail: 'warn' }",
+      "}",
+    ];
+    const warned = (...lines: string[]) => titled(...lines).map((line) => `warn ${line}`);
+    expect(check(authored)).toEqual({
+      warnings: warned(header, ...cpu),
+      error: ["code EBADDEVENGINES", ...titled(header, ...pnpm)].join("\n"),
+    });
+    expect(check(authored, true)).toEqual({ warnings: warned(header, ...cpu, ...pnpm) });
+  });
+
+  test("lets through engines one of whose choices matches, and none listed", () => {
+    for (const authored of [
+      { packageManager: { name: "npm", version: "^11.19" }, runtime: { name: "node" } },
+      { runtime: [{ name: "bun" }, { name: "node", version: "v24.22.1" }] },
+      { runtime: [], os: { name: "darwin", version: ">=27" } },
+    ]) {
+      expect([authored, check(authored)]).toEqual([authored, { warnings: [] }]);
+    }
+    expect(npx.devEngines({ name: "p" }, false, current)).toEqual({ warnings: [] });
+    expect(npx.devEngines(undefined, false, current)).toEqual({ warnings: [] });
+  });
+
+  test("ends on devEngines it can't read, with npm's words alone", () => {
+    for (const [authored, error] of [
+      [null, 'Invalid non-object value for "devEngines"'],
+      [["x"], 'Invalid non-object value for "devEngines"'],
+      [{ foo: {} }, 'Invalid property "devEngines.foo"'],
+      [{ runtime: { name: 1 } }, 'Invalid non-string value for "name" within "runtime"'],
+      [{ runtime: {} }, 'Missing "name" property for "runtime"'],
+      [{ runtime: { name: "node", at: 1 } }, 'Invalid property "at" for "runtime"'],
+      [{ libc: { name: "glibc" } }, 'Unable to determine "name" for "libc"'],
+      [{ runtime: { name: "node", onFail: "nope" } }, 'Invalid onFail value "nope" for "runtime"'],
+      [{ runtime: [[{ name: "node" }]] }, 'Invalid non-object value for "runtime"'],
+    ] as const) {
+      expect([authored, check(authored)]).toEqual([authored, { warnings: [], error }]);
+    }
   });
 });
 
@@ -1077,6 +1179,38 @@ describe("what npx does, as npm decides it", () => {
       error: "code ERR_INVALID_URL\nInvalid URL",
       code: 1,
     });
+  });
+
+  test("runs nothing where npm's local prefix has devEngines npm misses, but warns under force", () => {
+    const pnpm = { devEngines: { packageManager: { name: "pnpm" } } };
+    const base = tree({
+      "package.json": JSON.stringify({ workspaces: ["packages/*"], ...pnpm }),
+      "packages/a/package.json": manifest({ name: "a" }),
+      [`node_modules/.bin/${TOOL}`]: "",
+    });
+    const refused = { error: expect.stringMatching(/^code EBADDEVENGINES\n/), code: 1 };
+    // From a workspace, the root's.
+    for (const args of [[TOOL], ["-y", "foo"], []]) {
+      expect([args, plan(args, join(base, "packages", "a"))]).toEqual([args, refused]);
+    }
+    expect(plan([TOOL], base, { npm_config_force: "true" })).toEqual({
+      command: TOOL,
+      args: [],
+      bins: [join(base, "node_modules", ".bin")],
+      runPath: base,
+      warnings: expect.arrayContaining(["warn EBADDEVENGINES Invalid devEngines.packageManager"]),
+    });
+    // A workspace's own, npm leaves be, and its config it checks first.
+    const own = tree({
+      "package.json": manifest({ workspaces: ["packages/*"] }),
+      "packages/a/package.json": JSON.stringify({ name: "a", ...pnpm }),
+      ".npmrc": "_auth=a\n",
+    });
+    expect(plan(["-y", "foo"], join(own, "packages", "a"))).toMatchObject({
+      error: expect.stringMatching(/^code ERR_INVALID_AUTH\n/),
+    });
+    rmSync(join(own, ".npmrc"));
+    expect(plan(["-y", "foo"], join(own, "packages", "a"))).toMatchObject({ install: ["foo"] });
   });
 });
 

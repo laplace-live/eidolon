@@ -19,9 +19,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { homedir, tmpdir } from "node:os";
+import { homedir, release, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { formatWithOptions } from "node:util";
 import { cmdLine } from "./cross-spawn.mjs";
 
 const DROPPED = new Set(["-y", "--yes", "-q", "--quiet"]);
@@ -909,18 +910,163 @@ export function inTree(packages, spec) {
   );
 }
 
+// The npm whose npx this one behaves as, the package manager a project's devEngines checks.
+const NPM_VERSION = "11.19.1";
+
+/** The libc family npm-install-checks reads on Linux, null where it can't tell, else none. */
+function libc() {
+  if (process.platform !== "linux") return undefined;
+  try {
+    const ldd = readFileSync("/usr/bin/ldd", "utf8");
+    if (ldd.includes("musl")) return "musl";
+    return ldd.includes("GNU C Library") ? "glibc" : null;
+  } catch {}
+  const excluded = process.report.excludeNetwork;
+  process.report.excludeNetwork = true;
+  const report = process.report.getReport();
+  process.report.excludeNetwork = excluded;
+  if (report.header?.glibcVersionRuntime) return "glibc";
+  const musl = (file) => file.includes("libc.musl-") || file.includes("ld-musl-");
+  return Array.isArray(report.sharedObjects) && report.sharedObjects.some(musl) ? "musl" : null;
+}
+
+/** This computer as npm checks a project's devEngines against it. */
+function currentEnv() {
+  return {
+    cpu: { name: process.arch },
+    libc: { name: libc() },
+    os: { name: process.platform, version: release() },
+    packageManager: { name: "npm", version: NPM_VERSION },
+    runtime: { name: "node", version: process.version },
+  };
+}
+
+/**
+ * npm-install-checks' mismatch between one `wanted` dependency of a devEngines `engine` and its
+ * `current` one, or its throw where `wanted` is malformed.
+ */
+function devEngineMismatch(wanted, current, engine) {
+  if (typeof wanted !== "object" || wanted === null || Array.isArray(wanted)) {
+    throw new Error(`Invalid non-object value for "${engine}"`);
+  }
+  const properties = Object.keys(wanted);
+  const unknown = properties.find((key) => !["name", "version", "onFail"].includes(key));
+  if (unknown !== undefined) throw new Error(`Invalid property "${unknown}" for "${engine}"`);
+  if (!properties.includes("name")) throw new Error(`Missing "name" property for "${engine}"`);
+  if (typeof wanted.name !== "string") {
+    throw new Error(`Invalid non-string value for "name" within "${engine}"`);
+  }
+  if (typeof current.name !== "string" || current.name === "") {
+    throw new Error(`Unable to determine "name" for "${engine}"`);
+  }
+  if (properties.includes("onFail")) {
+    if (typeof wanted.onFail !== "string") {
+      throw new Error(`Invalid non-string value for "onFail" within "${engine}"`);
+    }
+    if (!["ignore", "warn", "error", "download"].includes(wanted.onFail)) {
+      throw new Error(`Invalid onFail value "${wanted.onFail}" for "${engine}"`);
+    }
+  }
+  if (wanted.name !== current.name) {
+    return `Invalid name "${wanted.name}" does not match "${current.name}" for "${engine}"`;
+  }
+  if (!properties.includes("version")) return undefined;
+  if (typeof wanted.version !== "string") {
+    throw new Error(`Invalid non-string value for "version" within "${engine}"`);
+  }
+  if (typeof current.version !== "string" || current.version === "") {
+    throw new Error(`Unable to determine "version" for "${engine}" "${wanted.name}"`);
+  }
+  const { version } = current;
+  if (semver().validRange(wanted.version)) {
+    if (semver().satisfies(version, wanted.version)) return undefined;
+    return `Invalid semver version "${wanted.version}" does not match "${version}" for "${engine}"`;
+  }
+  if (wanted.version === version) return undefined;
+  return `Invalid version "${wanted.version}" does not match "${version}" for "${engine}"`;
+}
+
+/**
+ * What npm makes of the devEngines in the package.json `manifest` at its local prefix, against
+ * `current`, before any command: the lines it warns with, and those it ends on, each as it prints
+ * them; under `force`, every failure only warns.
+ * @returns {{ warnings: string[], error?: string }}
+ */
+export function devEngines(manifest, force, current) {
+  const wanted = manifest?.devEngines;
+  if (wanted === undefined) return { warnings: [] };
+  const failures = [];
+  try {
+    if (typeof wanted !== "object" || wanted === null || Array.isArray(wanted)) {
+      throw new Error('Invalid non-object value for "devEngines"');
+    }
+    for (const [engine, authored] of Object.entries(wanted)) {
+      if (!["packageManager", "runtime", "cpu", "libc", "os"].includes(engine)) {
+        throw new Error(`Invalid property "devEngines.${engine}"`);
+      }
+      // Any one of several will do.
+      const dependencies = [authored].flat();
+      const now = current[engine] ?? {};
+      const errors = dependencies
+        .map((dependency) => devEngineMismatch(dependency, now, engine))
+        .filter((error) => error !== undefined);
+      if (dependencies.length === 0 || errors.length < dependencies.length) continue;
+      const onFail = dependencies.at(-1).onFail || "error";
+      const failure = { engine, errors, current: now, required: authored };
+      failures.push({ ...failure, onFail: onFail === "download" ? "error" : onFail });
+    }
+  } catch (error) {
+    return { warnings: [], error: error.message };
+  }
+  const lines = (value) =>
+    formatWithOptions({ colors: false }, value)
+      .split(/\r?\n/)
+      .map((line) => (line ? `EBADDEVENGINES ${line}` : "EBADDEVENGINES"));
+  const header = "The developer of this package has specified the following through devEngines";
+  const shown = ({ engine, errors, current, required }, first) => [
+    ...lines(
+      [...new Set([first ? header : "", `Invalid devEngines.${engine}`, errors.join("\n")])]
+        .filter(Boolean)
+        .join("\n"),
+    ),
+    ...lines({ current, required }),
+  ];
+  const errors = failures.filter(({ onFail }) => onFail === "error");
+  const warned = [...failures.filter(({ onFail }) => onFail === "warn"), ...(force ? errors : [])];
+  const warnings = warned.flatMap((failure, at) =>
+    shown(failure, at === 0).map((line) => `warn ${line}`),
+  );
+  if (force || errors.length === 0) return { warnings };
+  return { warnings, error: ["code EBADDEVENGINES", ...shown(errors[0], true)].join("\n") };
+}
+
 /**
  * What npx does with `args` from `cwd`, as libnpmexec decides it: the command, `undefined` for
  * the bin of the one package `install` names, the folders whose bins come first on its PATH, and
- * the folder it runs in; `install` lists what isn't here yet. An error carries npm's exit code.
- * `env` and `home` give npm's config.
+ * the folder it runs in; `install` lists what isn't here yet. An error carries npm's exit code,
+ * and `warnings` what npm warns of first. `env` and `home` give npm's config, and `current` the
+ * computer a project's devEngines is checked against.
  */
-export function plan(args, cwd, home = homedir(), env = process.env) {
+export function plan(args, cwd, home = homedir(), env = process.env, current = currentEnv()) {
   const { prefix, workspace } = npmPrefix(cwd);
   const sources = npmConfig(env, prefix, home);
-  // npm refuses such config before it looks at what to run.
+  // npm refuses such config, then a project whose devEngines this computer misses, before it
+  // looks at what to run.
   const invalid = invalidConfig(sources);
   if (invalid !== undefined) return { error: invalid, code: 1 };
+  const force = flag(settingOf(sources, "force"));
+  const { warnings, error } = devEngines(
+    readJson(path.join(prefix, "package.json")),
+    force,
+    current,
+  );
+  const decided =
+    error === undefined ? decide(args, cwd, home, sources, prefix, workspace) : { error, code: 1 };
+  return warnings.length > 0 ? { ...decided, warnings } : decided;
+}
+
+/** plan's decision once npm's config lets npx run. */
+function decide(args, cwd, home, sources, prefix, workspace) {
   const read = readNpx(args);
   if ("error" in read) return read;
   const runPath = workspace ?? cwd;
@@ -1167,6 +1313,7 @@ function installed(bin) {
 
 if (import.meta.main) {
   const decided = plan(process.argv.slice(2), process.cwd());
+  for (const line of decided.warnings ?? []) console.error(`npx: ${line}`);
   if ("error" in decided) fail(decided.error, decided.code);
   let { command, bins } = decided;
   if (decided.install !== undefined) {

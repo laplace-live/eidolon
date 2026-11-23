@@ -762,6 +762,35 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     });
   }, 60_000);
 
+  test("runs nothing, as npm, where the project's devEngines names another package manager", async () => {
+    const project = write(join(scratch, "npm-project-engines"), {
+      "package.json": JSON.stringify({
+        name: "eidolon-test-project",
+        devEngines: { packageManager: { name: "pnpm" } },
+      }),
+    });
+    const asked = requests.length;
+    const ran = await launch("npx", ["-y", "eidolon-test-hello", "x"], { cwd: project });
+    expect({ ...ran, asked: requests.slice(asked) }).toEqual({
+      status: 1,
+      stdout: "",
+      stderr: [
+        "code EBADDEVENGINES",
+        "EBADDEVENGINES The developer of this package has specified the following through devEngines",
+        "EBADDEVENGINES Invalid devEngines.packageManager",
+        'EBADDEVENGINES Invalid name "pnpm" does not match "npm" for "packageManager"',
+        "EBADDEVENGINES {",
+        "EBADDEVENGINES   current: { name: 'npm', version: '11.19.1' },",
+        "EBADDEVENGINES   required: { name: 'pnpm' }",
+        "EBADDEVENGINES }",
+      ]
+        .map((line) => `npx: ${line}\n`)
+        .join(""),
+      marks: [],
+      asked: [],
+    });
+  }, 60_000);
+
   test("reads no .npmrc of a pnpm workspace around the folder pnpm runs in", async () => {
     // That folder is in TMPDIR, here inside a pnpm workspace whose registry holds nothing.
     const around = write(join(scratch, "pnpm-workspace-tmp"), {
