@@ -2,6 +2,25 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-23T14:20:57.486Z",
+      "versions": {
+        "laplace-eidolon": "0.15.0",
+        "@laplace.live/eidolon": "0.15.0",
+        "laplace-eidolon-desktop": "0.2.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Pick her voice from your own Fish Audio voices, private ones included"
+        }
+      ]
+    },
+    {
       "date": "2026-11-23T10:09:19.113Z",
       "versions": {
         "laplace-eidolon-desktop": "0.1.0"

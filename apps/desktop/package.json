@@ -1,6 +1,6 @@
 {
   "name": "laplace-eidolon-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "productName": "Eidolon",
   "description": "Eidolon, the local app in a window that starts its own backend",
   "author": "LAPLACE Live!",

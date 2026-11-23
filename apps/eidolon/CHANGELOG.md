@@ -1,5 +1,11 @@
 # @laplace.live/eidolon
 
+## 0.15.0
+
+### Minor Changes
+
+- 68a3136: Pick her voice from your own Fish Audio voices, private ones included
+
 ## 0.14.0
 
 ### Minor Changes
