@@ -2,7 +2,7 @@
 // (background.ts): with EIDOLON_DESKTOP_BACKGROUND on, each is logged and nothing shows.
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { app, dialog, Menu, type Session, shell } from "electron";
+import { app, dialog, Menu, Notification, type Session, shell } from "electron";
 import { DOWNLOADS_FOLDER, DownloadPaths, nativeUi } from "./background.ts";
 import { background } from "./instance.ts";
 import { mainLog } from "./log.ts";
@@ -20,6 +20,20 @@ export const native = nativeUi(
     },
     stealFocus: () => app.focus({ steal: true }),
     popup: (menu, options) => Menu.buildFromTemplate([...menu]).popup(options),
+    chooseFolder: async (window, options) => {
+      // A window makes it a sheet on macOS.
+      const { canceled, filePaths } = await (window === null
+        ? dialog.showOpenDialog(options)
+        : dialog.showOpenDialog(window, options));
+      return canceled ? null : (filePaths[0] ?? null);
+    },
+    notify: (options, events) => {
+      const notification = new Notification(options);
+      notification.on("click", () => events.click());
+      notification.on("failed", (_event, error) => events.failed(error));
+      notification.show();
+      return { close: () => notification.close() };
+    },
   },
   mainLog,
 );
