@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { PROOF_HEADER } from "../../../bot/src/local/api.ts";
-import { ApiError, call, errorDetail, errorFrom, stream, url } from "./api";
+import { ApiError, bytes, call, errorDetail, errorFrom, stream, url } from "./api";
 import { keepProof } from "./proof";
 
 afterEach(() => {
@@ -142,6 +142,65 @@ describe("the session's proof", () => {
   });
 });
 
+describe("bytes", () => {
+  test("reads a raw route's body whole, sending the proof", async () => {
+    keepProof("proof-from-the-session");
+    const fetch = answer(new Response(Uint8Array.of(0x50, 0x32, 0x4c)));
+    const body = await bytes("GET /api/local/personas/:id/models/:model/file", {
+      params: { id: "mine", model: "tml" },
+      query: { sha256: "ab12" },
+    });
+    expect(body).toBeInstanceOf(ArrayBuffer);
+    expect([...new Uint8Array(body)]).toEqual([0x50, 0x32, 0x4c]);
+    const [to, init] = fetch.mock.calls[0] ?? [];
+    expect(to).toBe("/api/local/personas/mine/models/tml/file?sha256=ab12");
+    expect(new Headers(init?.headers).get(PROOF_HEADER)).toBe("proof-from-the-session");
+  });
+
+  test("a failure carries the API's code, and no answer is unreachable", async () => {
+    answer(
+      Response.json({ error: { code: "not-found", message: "No such file" } }, { status: 404 }),
+    );
+    const route = "GET /api/local/personas/:id/models/:model/file" as const;
+    const input = { params: { id: "mine", model: "tml" }, query: { sha256: "ab12" } };
+    expect(await bytes(route, input).catch((error: unknown) => error)).toMatchObject({
+      status: 404,
+      code: "not-found",
+    });
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    expect(await bytes(route, input).catch((error: unknown) => error)).toMatchObject({
+      status: 0,
+      code: "unreachable",
+    });
+  });
+
+  test("a body that stops short is bad-response, and an abort stays an abort", async () => {
+    const broken = () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new TypeError("network error"));
+          },
+        }),
+      );
+    const route = "GET /api/local/personas/:id/models/:model/file" as const;
+    const input = { params: { id: "mine", model: "tml" }, query: { sha256: "ab12" } };
+    answer(broken());
+    expect(await bytes(route, input).catch((error: unknown) => error)).toMatchObject({
+      code: "bad-response",
+    });
+    const controller = new AbortController();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      controller.abort();
+      return broken();
+    });
+    const failure = await bytes(route, { ...input, signal: controller.signal }).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).not.toBeInstanceOf(ApiError);
+  });
+});
+
 test("stream hands over a raw route's body", async () => {
   const fetch = answer(new Response('{"type":"entry"}\n'));
   const body = await stream("GET /api/local/jobs/:id/events", {
@@ -165,6 +224,8 @@ export function typeChecks() {
   void call("GET /api/local/jobs/:id/events", { params: { id: "x" } });
   // @ts-expect-error a JSON route isn't streamed
   void stream("GET /api/local/status");
+  // @ts-expect-error a JSON route isn't read as bytes
+  void bytes("GET /api/local/status");
   // @ts-expect-error not a route
   void call("GET /api/local/nope");
 }
