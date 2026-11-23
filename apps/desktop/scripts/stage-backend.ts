@@ -26,7 +26,7 @@ import {
 } from "../../eidolon/scripts/build.ts";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { type LsNode, lockDrift, lockedTree, pinOverrides, readBunLock } from "./lockfile.ts";
-import { NODE_SHIM, stageNodeShim } from "./node-shim.ts";
+import { NODE_SHIM, shimPnpm, stageNodeShim } from "./node-shim.ts";
 import { compareVersions, type Pe, readPe } from "./pe.ts";
 import { readZip } from "./zip.ts";
 
@@ -395,11 +395,11 @@ function packageLicense(pkg: Bundled, dir: string): string {
  */
 export function thirdPartyLicenses(payload: string, vcRuntime: VcRedist | null): string {
   const packages = new Map<string, { pkg: Bundled; dir: string }>();
-  const shim = join(payload, NODE_SHIM, "node_modules");
+  const pnpm = shimPnpm(payload);
   for (const modules of [
     join(payload, "node_modules"),
-    shim,
-    join(shim, "pnpm", "dist", "node_modules"),
+    dirname(pnpm),
+    join(pnpm, "dist", "node_modules"),
   ]) {
     for (const [name, dir] of installedPackages(modules)) {
       for (const pkg of inlinedPackages(new Map([[name, dir]]))) {

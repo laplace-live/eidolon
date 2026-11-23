@@ -15,10 +15,11 @@ export function escapeCommand(command) {
 }
 
 /**
- * `arg` quoted for the program's own parser and escaped for cmd.exe, twice with `doubleEscape`:
- * a batch file hands its arguments on through `%*`, which cmd.exe reads a second time.
+ * `arg` quoted for the program's own parser and escaped for cmd.exe, then once more for each of the
+ * `rereads` times cmd.exe reads it again: a batch file hands its arguments on through `%*`, which
+ * cmd.exe reads a second time (cross-spawn's doubleEscape, `true` here too).
  */
-export function escapeArgument(arg, doubleEscape) {
+export function escapeArgument(arg, rereads) {
   // Algorithm below is based on https://qntm.org/cmd: a run of backslashes doubles before a double
   // quote, which one more escapes, and before the end, which the closing quote follows, and stays
   // as it is elsewhere. A scan, since cross-spawn's backtracking-free regexes double only one
@@ -38,8 +39,9 @@ export function escapeArgument(arg, doubleEscape) {
   // Escape meta chars
   escaped = escaped.replace(metaCharsRegExp, "^$1");
 
-  // Double escape meta chars if necessary
-  if (doubleEscape) {
+  // Escape them again for each time cmd.exe reads them again: one escape fewer than its reads lets
+  // it act on them, one more leaves carets in them.
+  for (let read = 0; read < Number(rereads); read++) {
     escaped = escaped.replace(metaCharsRegExp, "^$1");
   }
 
@@ -48,9 +50,10 @@ export function escapeArgument(arg, doubleEscape) {
 
 /**
  * How cmd.exe (`comspec`) runs `file` with `args`, for spawn with windowsVerbatimArguments: /s
- * strips the quotes around the whole line, which keep cmd.exe's own parsing off it.
+ * strips the quotes around the whole line, which keep cmd.exe's own parsing off it, each word
+ * escaped for `rereads` as escapeArgument escapes it.
  */
-export function cmdLine(comspec, file, args, doubleEscape) {
-  const line = [escapeCommand(file), ...args.map((arg) => escapeArgument(arg, doubleEscape))];
+export function cmdLine(comspec, file, args, rereads) {
+  const line = [escapeCommand(file), ...args.map((arg) => escapeArgument(arg, rereads))];
   return { command: comspec, args: ["/d", "/s", "/c", `"${line.join(" ")}"`] };
 }

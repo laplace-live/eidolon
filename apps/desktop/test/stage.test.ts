@@ -24,6 +24,8 @@ import {
   LAUNCHER_SOURCES,
   NODE_SHIM,
   POSIX_LAUNCHERS,
+  shimLaunchers,
+  shimPnpm,
 } from "../scripts/node-shim.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
@@ -138,7 +140,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
   const current = staged && isCurrent(payload);
   const { os, cpu, onnxruntime } = TARGETS[target];
   const modules = join(payload, "node_modules");
-  const pnpm = join(payload, NODE_SHIM, "node_modules", "pnpm");
+  const pnpm = shimPnpm(payload);
   const title = `the ${target} payload${staged && !current ? ` (${STALE})` : ""}`;
 
   describe.skipIf(!current && !(REQUIRED && target === HOST))(title, () => {
@@ -167,8 +169,10 @@ for (const target of Object.keys(TARGETS) as Target[]) {
         expect([file, files.includes(file)]).toEqual([file, true]);
       }
       expect(links).toEqual([]);
+      // The node shim's launchers are the one .bin.
+      const launchers = relative(payload, shimLaunchers(payload)).split("\\").join("/");
       expect(files.filter((file) => /(^|\/)(\.bin\/|\.?package-lock\.json$)/.test(file))).toEqual(
-        [],
+        LAUNCHER_FILES.map((file) => `${launchers}/${file}`).sort(),
       );
     });
 
@@ -229,7 +233,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
     });
 
     test("holds the node shim: the checkout's launchers, sh's executable, and the pnpm bun.lock pins", () => {
-      const bin = join(payload, NODE_SHIM, "bin");
+      const bin = shimLaunchers(payload);
       for (const file of LAUNCHER_FILES) {
         expect([file, readFileSync(join(bin, file), "utf8")], STALE).toEqual([
           file,
@@ -382,7 +386,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       expect(listing(packaged).files).toEqual(listing(payload).files);
       if (process.platform !== "win32") {
         for (const name of POSIX_LAUNCHERS) {
-          const mode = statSync(join(packaged, NODE_SHIM, "bin", name)).mode & 0o777;
+          const mode = statSync(join(shimLaunchers(packaged), name)).mode & 0o777;
           expect([name, mode]).toEqual([name, 0o755]);
         }
       }

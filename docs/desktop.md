@@ -663,31 +663,35 @@ An `mcp.json` entry that runs `npx`, `node`, `pnpm`, `pnpx` or `pnpm dlx` starts
 on a computer with no Node: the payload holds launchers that run each on the app's own binary as
 Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs wins.
 
-- **Its files,** in the payload's `node-shim/`: in `bin/`, `node`, `npx`, `pnpm` and `pnpx` (sh,
-  0755), their `.cmd` twins (CRLF, each under `setlocal`), `npx.mjs` and `cross-spawn.mjs`; in
-  `node_modules/pnpm`,
+- **Its files,** in the payload's `node-shim/`: in `node_modules/.bin/`, `node`, `npx`, `pnpm` and
+  `pnpx` (sh, 0755), their `.cmd` twins (CRLF, each under `setlocal`), `npx.mjs` and
+  `cross-spawn.mjs`; in `node_modules/node_modules/pnpm`, the launchers' `../node_modules/pnpm`,
   the pnpm `apps/desktop` pins as an exact dev dependency, so `bun.lock` pins it as it pins the
-  rest. `scripts/node-shim.ts`, ported from deepseek-harness, stages them from
+  rest. The launchers sit in a `node_modules/.bin` because cross-spawn, which starts an MCP server,
+  escapes the words of a `.cmd` there twice: it takes one for a cmd-shim, whose `%*` cmd.exe reads
+  a second time, and a launcher's `%*` is read again the same way. A `.cmd` anywhere else gets its
+  words escaped once, so cmd.exe acts on a word holding a quote and one of `&`, `|`, `<`, `>` or
+  `^` when it reads it the second time: the word arrives cut, and what follows an `&` runs as a
+  command. `scripts/node-shim.ts`, ported from deepseek-harness, stages them from
   `apps/desktop/node-shim` and a copy of the installed pnpm, pruned of the natives its `dist/`
   bundles for other platforms (`prunePnpmForeignNativePackages`), its bundled packages' `.bin`
   links, and `dist/vendor`'s fastlist executables, which nothing runs and the Windows release would
   sign as Eidolon's. [The stage test](#the-stage-test) holds them to their sources, the pin and the
   target's natives, with no `.exe`, and pnpm's `dist/` to the semver and `node-gyp-bin` that
-  `npx.mjs` uses. In a checkout, under `dev:desktop` and in the Electron lane,
-  the launchers' folder is `apps/desktop/node-shim` itself, whose `../node_modules/pnpm` is the
-  installed one.
+  `npx.mjs` uses. In a checkout, under `dev:desktop` and in the Electron lane, the launchers'
+  folder is `apps/desktop/node-shim` itself, whose `../node_modules/pnpm` is the installed one.
 - **A server gets it** from `serverEnv` (`packages/assistant/src/mcp/session.ts`) when the backend
   runs on Electron's Node and the launchers' folder is there (`shippedPath`): that folder last on
-  the server's `PATH`, added before `shellEnv()`'s filter, which drops it as any other folder the
-  task may write, and `EIDOLON_NODE`, the backend's own binary (`jsRuntime().command`). A `node`,
-  `npx` or `pnpm` on the owner's `PATH` comes first, and a `PATH` or `EIDOLON_NODE` in the server's
-  `mcp.json` entry replaces these. A task's commands never get it, and under Node, npx's or a
-  checkout's, nothing changes.
+  the server's `PATH`, added after `shellEnv()`'s filter, which drops every `node_modules/.bin`,
+  and left off, as the filter would leave it, where the task may write it; and `EIDOLON_NODE`, the
+  backend's own binary (`jsRuntime().command`). A `node`, `npx` or `pnpm` on the owner's `PATH`
+  comes first, and a `PATH` or `EIDOLON_NODE` in the server's `mcp.json` entry replaces these. A
+  task's commands never get it, and under Node, npx's or a checkout's, nothing changes.
 - **The launchers** refuse to run without `EIDOLON_NODE`, then set `ELECTRON_RUN_AS_NODE=1` and run
   that binary with `--disable-sigusr1 --use-system-ca`: `node` passes its arguments on, and `pnpm`
   and `pnpx` run the bundled pnpm's own. The server inherits the variable, so one that starts Node
   as `process.execPath` runs Eidolon's binary as Node too. On Windows the launchers are `.cmd`
-  files, which a shell or cross-spawn runs.
+  files, which a shell or cross-spawn runs, cross-spawn escaping the payload's words twice.
 - **npx** runs `npx.mjs`, which decides as npm's npx does on npm's default config (`plan`). With
   no `--package`, the project's own bin, a bin in a `node_modules/.bin` from npm's local prefix up,
   or a package npm's local tree holds at a version the spec allows, by npm's semver, which pnpm's
@@ -708,8 +712,14 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
 - **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
   `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
   On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on
-  Windows an `.exe` starts directly and anything else through cmd.exe, a batch file's words escaped
-  twice, as npm escapes them (`cross-spawn.mjs`, ported from cross-spawn). It starts without
+  Windows an `.exe` starts directly and anything else through cmd.exe, each word escaped once for
+  each time cmd.exe will read it (`rereads`, with `cross-spawn.mjs`, ported from cross-spawn): one
+  escape fewer lets cmd.exe act on a word, one more leaves carets in it. A batch file's words are
+  escaped twice, as npm escapes them, and three times for a cmd-shim, npm's or pnpm's, with no
+  `node.exe` beside it, whose bare `node` cmd.exe would find to be the shim's own `node.cmd`
+  (looking in the folder the command runs in first, unless `NoDefaultCurrentDirectoryInExePath` is
+  set, then on its `PATH`, with `.JS` out of `PATHEXT` for pnpm's), since that `node.cmd`'s `%*`
+  reads them a third time. It starts without
   `ELECTRON_RUN_AS_NODE`, as npm starts it: a Node script among them runs on `node`, which, where
   it is the shim's, sets it again for itself. On macOS npx passes SIGINT and SIGTERM on to it; on
   Windows, where `kill()` is TerminateProcess, it only waits. npx ends with the command's exit code,
@@ -1149,8 +1159,10 @@ command's states, link, password prompt and `Path` script on temporary folders a
 and its macOS launcher run through links against a stand-in bundle; the task watch's polls,
 baselines and notices, their text in both languages and a click's command, on fake answers and a
 fake clock; the node shim's npx decisions, against npm's on made-up trees (`npx.test.ts`), its
-launchers run on this Node with the checkout's pnpm and a fake registry, and the shim the stage
-writes; the logs' rotation and link filter; stage-backend's parts on
+launchers run on this Node with the checkout's pnpm and a fake registry, the shim the stage writes,
+its `.cmd` launchers where cross-spawn's own test takes them for cmd-shims, and how many times
+cmd.exe reads the words npx starts a batch file with, on made-up cmd-shims and folders; the logs'
+rotation and link filter; stage-backend's parts on
 made-up lockfiles, PE files and zips; the release overlay through electron-builder's own loader,
 and signed-check's reading of codesign, Gatekeeper, stapler and Authenticode output; the release
 notes' parsing, slice and text; the smokes' kit and parts, the fakes over real loopback requests
@@ -1172,8 +1184,9 @@ against `bun.lock`, the pruning, its natives loading from it (a LanceDB table, a
 session and sharp, through `scripts/natives.ts`, with every native library and VC++ DLL the
 process mapped coming from the payload: `payloadLibraries()` picks them by file name, so Windows'
 own `msvcp_win.dll`, mapped in every process with a window, isn't one), the node shim (its
-launchers as their sources, the sh ones executable, and its pnpm at `bun.lock`'s pin, licensed,
-pruned to the target's natives and with no `.exe`), on a Windows stage the VC++ copies and the
+launchers as their sources in `node-shim/node_modules/.bin`, the payload's one `.bin`, the sh ones
+executable, and its pnpm at `bun.lock`'s pin, licensed, pruned to the target's natives and with no
+`.exe`), on a Windows stage the VC++ copies and the
 signers, and, once the app was packaged after the stage, that the packaged payload holds the same
 files. A target with no stage skips, and so does one staged from another
 version or `bun.lock`, whose title then says to run `bun run build:desktop`.
@@ -1356,7 +1369,7 @@ main's forwarder does, and runs the app's binary in node mode beside it, as main
   resources (`bin\eidolon.cmd` on Windows), with `search --help`, exits 0 with laplace-search's
   usage on stdout, its CLI writing to the `EIDOLON_HOME` it was given, a folder of the run's; never
   with no arguments, which opens the app outside background mode. The node shim's launchers, in
-  the payload's `node-shim/bin`, first run a stand-in as `EIDOLON_NODE` that prints the
+  the payload's `node-shim/node_modules/.bin`, first run a stand-in as `EIDOLON_NODE` that prints the
   `ELECTRON_RUN_AS_NODE` it got, which must be 1 from each: one that left it unset would start
   Eidolon itself on the installed app's profile, so none runs on the app's binary then. After it,
   they run with `EIDOLON_NODE` naming the app's binary, a home of the run's, and a `PATH` of the
@@ -1405,8 +1418,12 @@ on macOS.
 its Windows job the project's Windows-only tests: `terminal-command-windows.test.ts` (the PATH
 script on a scratch key under HKCU, and the eidolon command's `.cmd`),
 `registry-environment-windows.test.ts` (the registry read, on scratch keys),
-`node-shim-windows.test.ts` (the node shim's `.cmd` launchers, on Node) and `npx-windows.test.ts`
-(its npx through `npx.cmd` and cmd.exe, with the words cmd.exe treats specially).
+`node-shim-windows.test.ts` (the node shim's `.cmd` launchers, on Node, then staged as the
+payload holds them and started by the backend's own cross-spawn, `node` and `npx -y -p <folder>
+<bin>`, on a `PATH` where only they offer node, with words cmd.exe acts on when it reads one more
+time than they were escaped for) and `npx-windows.test.ts` (its npx through `npx.cmd` and cmd.exe,
+with the words cmd.exe treats specially, and a folder's bin through pnpm's cmd-shim and the shim's
+`node.cmd`).
 `.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
 request that changes more than docs, on a dispatch, and from a release's tag
 ([Releasing](#releasing)): the payload comes from `bun.lock` and the backend's packages, so a filter

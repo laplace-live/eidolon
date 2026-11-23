@@ -70,7 +70,7 @@ describe("a packaged app's layout", () => {
       payload: MAC_PAYLOAD,
       trayIcon: `${MAC_APP}/Contents/Resources/assets/tray-icon.ico`,
       terminalCommand: `${MAC_APP}/Contents/Resources/bin/eidolon`,
-      nodeShim: `${MAC_PAYLOAD}/node-shim/bin`,
+      nodeShim: `${MAC_PAYLOAD}/node-shim/node_modules/.bin`,
     });
   });
 
@@ -81,7 +81,7 @@ describe("a packaged app's layout", () => {
       payload: WIN_PAYLOAD,
       trayIcon: `${WIN_FOLDER}\\resources\\assets\\tray-icon.ico`,
       terminalCommand: `${WIN_FOLDER}\\resources\\bin\\eidolon.cmd`,
-      nodeShim: `${WIN_PAYLOAD}\\node-shim\\bin`,
+      nodeShim: `${WIN_PAYLOAD}\\node-shim\\node_modules\\.bin`,
     });
   });
 });
@@ -97,7 +97,7 @@ describe("a launcher, run as a terminal would", () => {
   });
 
   test("on Windows through cmd.exe, the line quoted as /s reads it, which splits back as given", () => {
-    const script = "C:\\Users\\John Doe\\eidolon\\node-shim\\bin\\npx.cmd";
+    const script = "C:\\Users\\John Doe\\eidolon\\node-shim\\node_modules\\.bin\\npx.cmd";
     const run = scriptRun(
       script,
       ["-y", "file:C:\\a b\\hello", "two words"],

@@ -35,21 +35,45 @@ describe("a server's environment", () => {
     expect(await serverEnv(guard, null, from)).toEqual(await shellEnv(guard, from));
   });
 
+  // The payload's launchers are in a node_modules/.bin, which the cut drops from any PATH.
+  const PAYLOAD = "/Applications/Eidolon.app/Contents/Resources/eidolon";
+  const shim = {
+    folder: `${PAYLOAD}/node-shim/node_modules/.bin`,
+    node: "/Applications/Eidolon.app/x",
+  };
+
   test("has the shim's folder last on PATH and EIDOLON_NODE, the binary its launchers run, but not the backend's ELECTRON_RUN_AS_NODE", async () => {
     const guard = folderGuard(await tempFolder());
-    const shim = { folder: "/Applications/Eidolon.app/shim", node: "/Applications/Eidolon.app/x" };
     expect(await serverEnv(guard, shim, from)).toEqual({
       HOME: "/home/owner",
       PATH: ["/usr/bin", "/bin", shim.folder].join(delimiter),
       TERM: "dumb",
       EIDOLON_NODE: shim.node,
     });
+    // On PATH already, it is still cut where it was and comes last.
+    const listed = { ...from, PATH: [shim.folder, from.PATH].join(delimiter) };
+    expect((await serverEnv(guard, shim, listed)).PATH).toBe(
+      ["/usr/bin", "/bin", shim.folder].join(delimiter),
+    );
   });
 
   test("leaves the shim off PATH where the task may write it, as any other folder", async () => {
     const folder = await tempFolder();
-    const shim = { folder: join(folder, "node-shim"), node: "/eidolon" };
-    expect((await serverEnv(folderGuard(folder), shim, from)).PATH).toBe(from.PATH);
+    const writable = {
+      folder: join(folder, "node-shim", "node_modules", ".bin"),
+      node: "/eidolon",
+    };
+    expect((await serverEnv(folderGuard(folder), writable, from)).PATH).toBe(from.PATH);
+  });
+
+  test("never reaches a task's commands, which run on the cut environment alone", async () => {
+    const guard = folderGuard(await tempFolder());
+    const listed = { ...from, PATH: [from.PATH, shim.folder].join(delimiter) };
+    expect(await shellEnv(guard, listed)).toEqual({
+      HOME: "/home/owner",
+      PATH: from.PATH,
+      TERM: "dumb",
+    });
   });
 });
 
@@ -57,7 +81,7 @@ describe("the node shim", () => {
   /** An EIDOLON_APP_ROOT, with the shim's folder or without it. */
   async function appRoot(withShim: boolean): Promise<string> {
     const root = await tempFolder();
-    if (withShim) await mkdir(join(root, "node-shim", "bin"), { recursive: true });
+    if (withShim) await mkdir(join(root, "node-shim", "node_modules", ".bin"), { recursive: true });
     return root;
   }
 
@@ -74,7 +98,7 @@ describe("the node shim", () => {
       const root = await appRoot(true);
       process.env.EIDOLON_APP_ROOT = root;
       expect(nodeShim()).toEqual({
-        folder: join(root, "node-shim", "bin"),
+        folder: join(root, "node-shim", "node_modules", ".bin"),
         node: process.execPath,
       });
       process.env.EIDOLON_APP_ROOT = await appRoot(false);

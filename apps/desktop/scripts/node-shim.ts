@@ -4,9 +4,9 @@
 // Ported from deepseek-harness scripts/primary-runtime/prepare.ts@2e39e70496
 //
 // The node shim in the desktop payload, which npm users never get: launchers that run node, npx,
-// pnpm and pnpx on the app's own binary as Node, in node-shim/bin, and the pnpm apps/desktop pins
-// in node-shim/node_modules, so the launchers' ../node_modules/pnpm is the same path as from their
-// sources in apps/desktop/node-shim.
+// pnpm and pnpx on the app's own binary as Node, in node-shim/node_modules/.bin, and the pnpm
+// apps/desktop pins in node-shim/node_modules/node_modules, so the launchers' ../node_modules/pnpm
+// is the same path as from their sources in apps/desktop/node-shim.
 import { chmodSync, cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
@@ -27,6 +27,20 @@ export const LAUNCHER_FILES: readonly string[] = [
   "npx.mjs",
   "cross-spawn.mjs",
 ];
+
+/**
+ * The launchers' folder in `payload`: a node_modules/.bin, since cross-spawn, which starts an MCP
+ * server, escapes the words of a .cmd there twice, as a cmd-shim's, whose `%*` cmd.exe reads
+ * again; a launcher's is read again the same way, and anywhere else it escapes them once.
+ */
+export function shimLaunchers(payload: string): string {
+  return join(payload, NODE_SHIM, "node_modules", ".bin");
+}
+
+/** The pnpm the launchers run in `payload`, at their ../node_modules/pnpm. */
+export function shimPnpm(payload: string): string {
+  return join(payload, NODE_SHIM, "node_modules", "node_modules", "pnpm");
+}
 
 /** The folder of the pnpm package apps/desktop pins, as bun installed it. */
 export function pnpmPackage(): string {
@@ -57,12 +71,12 @@ export function prunePnpmForeignNativePackages(pnpm: string, platform: string, a
 
 /** Writes the shim into `payload`, its pnpm pruned to `platform`'s natives. */
 export function stageNodeShim(payload: string, platform: Platform): void {
-  const bin = join(payload, NODE_SHIM, "bin");
+  const bin = shimLaunchers(payload);
   mkdirSync(bin, { recursive: true });
   for (const file of LAUNCHER_FILES) cpSync(join(LAUNCHER_SOURCES, file), join(bin, file));
   // A checkout's modes follow the umask it was made under.
   for (const name of POSIX_LAUNCHERS) chmodSync(join(bin, name), 0o755);
-  const pnpm = join(payload, NODE_SHIM, "node_modules", "pnpm");
+  const pnpm = shimPnpm(payload);
   cpSync(pnpmPackage(), pnpm, { recursive: true, dereference: true });
   prunePnpmForeignNativePackages(pnpm, platform.os, platform.cpu);
   // The bundled packages' commands, which pnpm never runs: node-gyp's is in dist/node-gyp-bin.

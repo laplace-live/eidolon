@@ -541,9 +541,10 @@ const envValue = (env, name) =>
 /**
  * The file `command` names, searched for from `cwd` on `pathEnv` as sh does: the first executable
  * one, or with none the first there, which sh then fails to run. On Windows as cmd.exe does
- * through PATHEXT, but never in the working folder first.
+ * through PATHEXT, but in the working folder first only with `cwdFirst`, as cmd.exe looks up a
+ * name a batch file runs.
  */
-export function which(command, { pathEnv, cwd, platform = process.platform, pathext }) {
+export function which(command, { pathEnv, cwd, platform = process.platform, pathext, cwdFirst }) {
   const windows = platform === "win32";
   const dirs = windows
     ? pathEnv
@@ -553,7 +554,7 @@ export function which(command, { pathEnv, cwd, platform = process.platform, path
     : pathEnv.split(":");
   const bases = (windows ? /[\\/]/ : /\//).test(command)
     ? [path.resolve(cwd, command)]
-    : dirs.map((dir) => path.resolve(cwd, dir, command));
+    : [...(cwdFirst ? [cwd] : []), ...dirs].map((dir) => path.resolve(cwd, dir, command));
   if (!windows) {
     const files = bases.filter(isFile);
     const executable = files.find((file) => {
@@ -578,16 +579,82 @@ export function which(command, { pathEnv, cwd, platform = process.platform, path
   return undefined;
 }
 
+// pnpm's cmd-shim, and npm's before it set _prog: the node.exe beside it, else a bare node, looked up
+// with .JS out of PATHEXT.
+const PNPM_CMD_SHIM =
+  /^@IF EXIST "%~dp0\\node\.exe" \(\r?\n[ \t]*"%~dp0\\node\.exe" [^\r\n]*%\*\r?\n\) ELSE \(\r?\n(?:[ \t]*@SETLOCAL\r?\n)?[ \t]*@SET PATHEXT=%PATHEXT:;\.JS;=;%\r?\n[ \t]*node [^\r\n]*%\*\r?\n\)/im;
+// npm's: _prog is the node.exe beside it, else a bare node; the endLocal that leads the line running
+// it in npm's later shims has put PATHEXT back by then.
+const NPM_CMD_SHIM =
+  /^IF EXIST "%dp0%\\node\.exe" \(\r?\n[ \t]*SET "_prog=%dp0%\\node\.exe"\r?\n\) ELSE \(\r?\n[ \t]*SET "_prog=node"\r?\n[ \t]*SET PATHEXT=%PATHEXT:;\.JS;=;%\r?\n\)\r?\n(?:[ \t]*\r?\n)*(endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & )?"%_prog%" [^\r\n]*%\*\r?$/im;
+
 /**
- * How to start `file` without a shell: on Windows a .exe or .com directly, anything else through
- * cmd.exe, with a batch file's arguments escaped twice, as npm's npx escapes them.
+ * Whether the batch file `text` is a cmd-shim, pnpm's or npm's, that runs its bin on the node.exe
+ * beside it, else on a bare `node`, with `lessJs` when cmd.exe looks that up with .JS out of
+ * PATHEXT; undefined for any other.
  */
-export function spawnArgs(file, args, { platform = process.platform, env = process.env } = {}) {
+export function nodeCmdShim(text) {
+  if (PNPM_CMD_SHIM.test(text)) return { lessJs: true };
+  const npm = NPM_CMD_SHIM.exec(text);
+  return npm === null ? undefined : { lessJs: npm[1] === undefined };
+}
+
+/** Whether `a` and `b` name one file as Windows compares them: links followed, without case. */
+function sameFile(a, b) {
+  const real = (file) => {
+    try {
+      return realpathSync.native(file);
+    } catch {
+      return path.resolve(file);
+    }
+  };
+  return real(a).toLowerCase() === real(b).toLowerCase();
+}
+
+/** This shim's node.cmd, which hands its words on through `%*`. */
+const NODE_CMD = fileURLToPath(new URL("node.cmd", import.meta.url));
+
+/**
+ * How many times more than once cmd.exe reads the words npx starts the Windows `file` with: none
+ * for a file it runs as it is; once for a batch file, whose `%*` hands them on, as npm's npx counts;
+ * twice for a cmd-shim with no node.exe beside it whose bare `node` cmd.exe would find to be
+ * `nodeCmd`, the shim's own, which hands them on again. cmd.exe looks `node` up in `cwd` first,
+ * unless NoDefaultCurrentDirectoryInExePath is set, then on `env`'s PATH.
+ */
+export function rereads(file, { env, cwd, nodeCmd = NODE_CMD }) {
+  if (!/\.(?:cmd|bat)$/i.test(file)) return 0;
+  let text = "";
+  try {
+    text = readFileSync(file, "latin1");
+  } catch {}
+  const shim = nodeCmdShim(text);
+  // IF EXIST, which a folder answers too.
+  if (shim === undefined || stat(path.join(path.dirname(file), "node.exe")) !== undefined) return 1;
+  const pathext = envValue(env, "PATHEXT");
+  const node = which("node", {
+    pathEnv: pathOf(env, ";"),
+    cwd,
+    platform: "win32",
+    pathext: shim.lessJs ? pathext?.replace(/;\.JS;/gi, ";") : pathext,
+    cwdFirst: !envValue(env, "NoDefaultCurrentDirectoryInExePath"),
+  });
+  return node !== undefined && sameFile(node, nodeCmd) ? 2 : 1;
+}
+
+/**
+ * How to start `file` from `cwd` without a shell: on Windows a .exe or .com directly, anything
+ * else through cmd.exe, each word escaped once for each time cmd.exe reads it (rereads).
+ */
+export function spawnArgs(
+  file,
+  args,
+  { platform = process.platform, env = process.env, cwd = process.cwd(), nodeCmd } = {},
+) {
   if (platform !== "win32" || /\.(?:exe|com)$/i.test(file)) {
     return { command: file, args, verbatim: false };
   }
-  const batch = /\.(?:cmd|bat)$/i.test(file);
-  return { ...cmdLine(envValue(env, "ComSpec") ?? "cmd.exe", file, args, batch), verbatim: true };
+  const comspec = envValue(env, "ComSpec") ?? "cmd.exe";
+  return { ...cmdLine(comspec, file, args, rereads(file, { env, cwd, nodeCmd })), verbatim: true };
 }
 
 /**
@@ -716,7 +783,7 @@ if (import.meta.main) {
     if (process.platform === "win32") fail(`'${command}' is not recognized as a command`);
     fail(`${command}: command not found`, 127);
   }
-  const start = spawnArgs(file, decided.args, { env });
+  const start = spawnArgs(file, decided.args, { env, cwd: decided.runPath });
   const options = {
     cwd: decided.runPath,
     env,
