@@ -18,6 +18,7 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   LAUNCHER_FILES,
@@ -117,6 +118,13 @@ describe("the shim the stage writes", () => {
       expect(exes).toEqual([]);
     },
   );
+
+  test("holds each module npx.mjs imports, so the staged one loads", async () => {
+    const payload = temp();
+    stageNodeShim(payload, { os: process.platform, cpu: process.arch });
+    const npx = await import(pathToFileURL(join(shimLaunchers(payload), "npx.mjs")).href);
+    expect(npx.plan).toBeTypeOf("function");
+  });
 });
 
 describe("cross-spawn, which starts an MCP server", () => {

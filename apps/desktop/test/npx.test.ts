@@ -25,23 +25,27 @@ type Plan = (
   | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string }
 ) & { warnings?: string[] };
 type Current = Record<string, { name?: string; version?: string }>;
-interface Npx {
+interface NpmConfig {
   envReplace(text: string, env: Env): string;
   npmConfig(env: Env, prefix: string, home: string): Source[];
-  pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
-  npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
   invalidConfig(sources: readonly Source[]): string | undefined;
-  devEngines(
-    manifest: unknown,
-    force: boolean,
-    current: Current,
-  ): { warnings: string[]; error?: string };
+}
+interface NpmSpec {
   npmSpec(
     spec: string,
     where: string,
     home: string,
     platform?: string,
   ): { type: string; name?: string; saveSpec?: string; path?: string } | undefined;
+}
+interface Npx {
+  pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
+  npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
+  devEngines(
+    manifest: unknown,
+    force: boolean,
+    current: Current,
+  ): { warnings: string[]; error?: string };
   refusal(
     specs: readonly string[],
     sources: readonly Source[],
@@ -88,6 +92,12 @@ interface CrossSpawn {
   escapeArgument(arg: string, doubleEscape: boolean): string;
 }
 const npx: Npx = await import(pathToFileURL(join(LAUNCHER_SOURCES, "npx.mjs")).href);
+const { envReplace, invalidConfig, npmConfig }: NpmConfig = await import(
+  pathToFileURL(join(LAUNCHER_SOURCES, "npm-config.mjs")).href
+);
+const { npmSpec }: NpmSpec = await import(
+  pathToFileURL(join(LAUNCHER_SOURCES, "npm-spec.mjs")).href
+);
 const cross: CrossSpawn = await import(
   pathToFileURL(join(LAUNCHER_SOURCES, "cross-spawn.mjs")).href
 );
@@ -306,7 +316,7 @@ describe("npm's config, which npx installs by", () => {
       "npm_config_//npm.corp.test/:_authToken": "secret",
       npm_config_registry_x: "https://x.test/",
     };
-    const [variables = {}] = npx.npmConfig(env, root, root);
+    const [variables = {}] = npmConfig(env, root, root);
     // Any process can read pnpm's arguments, and a registry's URL can hold its token.
     expect(settingsOf(variables, { registry: "https://user.test/" })).toEqual(DEFAULTS);
     const project = { registry: "https://project.test/", "@other:registry": "https://other.test/" };
@@ -353,17 +363,17 @@ describe("npm's config, which npx installs by", () => {
       npm_config_allow_git: "",
       PATH: "/bin",
     };
-    expect(npx.npmConfig(env, project, home)).toEqual([
+    expect(npmConfig(env, project, home)).toEqual([
       { "min-release-age": "3", "strict-allow-scripts": "false" },
       { "ignore-scripts": "true", "allow-git": "root", "strict-allow-scripts": "true" },
       { "min-release-age": "7", "allow-remote": "none" },
     ]);
     const userconfig = join(base, "other", ".npmrc");
-    expect(npx.npmConfig({ npm_config_userconfig: userconfig }, project, home)[2]).toEqual({
+    expect(npmConfig({ npm_config_userconfig: userconfig }, project, home)[2]).toEqual({
       "allow-remote": "root",
     });
     // In the home, the project's .npmrc is the user's, which npm reads once.
-    expect(npx.npmConfig({}, home, home)).toEqual([
+    expect(npmConfig({}, home, home)).toEqual([
       {},
       {},
       { "min-release-age": "7", "allow-remote": "none" },
@@ -391,7 +401,7 @@ describe("npm's config, which npx installs by", () => {
         "after=unread",
       ].join("\n"),
     });
-    expect(npx.npmConfig({}, base, root)[1]).toEqual({
+    expect(npmConfig({}, base, root)[1]).toEqual({
       plain: "a b",
       hash: "a",
       escaped: String.raw`a;b#c\d\x`,
@@ -408,7 +418,7 @@ describe("npm's config, which npx installs by", () => {
     const env = { HOST: "npm.corp.test", TOKEN: "t0k", EMPTY: "" };
     // An escaped \${ stays, and each pair of backslashes before one is one.
     expect(
-      npx.envReplace(`\${TOKEN}-\${UNSET}-\${UNSET?}-\${EMPTY}-\\\${TOKEN}-\\\\\${TOKEN}`, env),
+      envReplace(`\${TOKEN}-\${UNSET}-\${UNSET?}-\${EMPTY}-\\\${TOKEN}-\\\\\${TOKEN}`, env),
     ).toBe(`t0k-\${UNSET}---\${TOKEN}-\\t0k`);
     // Keys once the file is read: of two that expand alike, the one that first comes later wins.
     const base = tree({
@@ -420,13 +430,13 @@ describe("npm's config, which npx installs by", () => {
       ].join("\n"),
     });
     const before = ` \${EMPTY}2020-01-01 `;
-    expect(npx.npmConfig({ ...env, npm_config_before: before }, base, root).slice(0, 2)).toEqual([
+    expect(npmConfig({ ...env, npm_config_before: before }, base, root).slice(0, 2)).toEqual([
       { before: "2020-01-01" },
       { "//npm.corp.test/:_authToken": "literal", registry: "https://npm.corp.test/" },
     ]);
-    expect(
-      npx.npmConfig(env, tree({ ".npmrc": `//\${HOST}/:_authToken=\${TOKEN}` }), root)[1],
-    ).toEqual({ "//npm.corp.test/:_authToken": "t0k" });
+    expect(npmConfig(env, tree({ ".npmrc": `//\${HOST}/:_authToken=\${TOKEN}` }), root)[1]).toEqual(
+      { "//npm.corp.test/:_authToken": "t0k" },
+    );
   });
 
   test("gives pnpm the project's registries, their credentials and certificates, as npm", () => {
@@ -502,7 +512,7 @@ describe("npm's config it runs no command under", () => {
   test("is a credential the user's or the project's .npmrc gives no registry", () => {
     const project = { _authToken: "t", "//r.test/:_authToken": "scoped" };
     const user = { _authtoken: "t", username: "u", _password: "cA==", "-authtoken": "x" };
-    expect(npx.invalidConfig([{ registry: "https://r.test/npm/x" }, project, user])).toBe(
+    expect(invalidConfig([{ registry: "https://r.test/npm/x" }, project, user])).toBe(
       authError(
         "`_authtoken` is not allowed in user config",
         "`-authtoken` is not allowed in user config",
@@ -512,7 +522,7 @@ describe("npm's config it runs no command under", () => {
       ),
     );
     // A username or a password alone.
-    expect(npx.invalidConfig([{}, { username: "u" }, { _password: "p", _auth: "a" }])).toBe(
+    expect(invalidConfig([{}, { username: "u" }, { _password: "p", _auth: "a" }])).toBe(
       authError(
         "`_auth` must be renamed to `//registry.npmjs.org/:_auth` in user config",
         "`_password` is not allowed in user config",
@@ -521,17 +531,17 @@ describe("npm's config it runs no command under", () => {
     );
     // Values npm takes as none, and a variable's, which it doesn't check.
     const none = { _authToken: "false", username: "null", _auth: "" };
-    expect(npx.invalidConfig([{ _authtoken: "t" }, none, {}])).toBeUndefined();
+    expect(invalidConfig([{ _authtoken: "t" }, none, {}])).toBeUndefined();
   });
 
   test("is a registry that isn't a URL, a scope's aside", () => {
     for (const registry of ["", "true", "not a url"]) {
-      expect([registry, npx.invalidConfig([{}, { registry }, { _auth: "a" }])]).toEqual([
+      expect([registry, invalidConfig([{}, { registry }, { _auth: "a" }])]).toEqual([
         registry,
         "code ERR_INVALID_URL\nInvalid URL",
       ]);
     }
-    expect(npx.invalidConfig([{ "@s:registry": "not a url" }, {}, {}])).toBeUndefined();
+    expect(invalidConfig([{ "@s:registry": "not a url" }, {}, {}])).toBeUndefined();
   });
 });
 
@@ -694,12 +704,12 @@ describe("a spec's kind, as npm-package-arg reads it, and allow-git and the rest
   });
 
   test("gives the folder or tarball a path names, as npm resolves it", () => {
-    expect(npx.npmSpec("./a#b/../c d", "/work/x y", "/home/me", "linux")).toEqual({
+    expect(npmSpec("./a#b/../c d", "/work/x y", "/home/me", "linux")).toEqual({
       type: "directory",
       name: undefined,
       path: "/work/x y/c d",
     });
-    expect(npx.npmSpec("@s/n@file:../t.tgz", "/work/x", "/home/me", "linux")).toEqual({
+    expect(npmSpec("@s/n@file:../t.tgz", "/work/x", "/home/me", "linux")).toEqual({
       type: "file",
       name: "@s/n",
       path: "/work/t.tgz",

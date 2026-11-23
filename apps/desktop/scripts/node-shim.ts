@@ -26,6 +26,9 @@ export const LAUNCHER_FILES: readonly string[] = [
   ...POSIX_LAUNCHERS.map((name) => `${name}.cmd`),
   "npx.mjs",
   "cross-spawn.mjs",
+  "npm-checks.mjs",
+  "npm-config.mjs",
+  "npm-spec.mjs",
 ];
 
 /**
