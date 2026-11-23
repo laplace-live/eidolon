@@ -153,8 +153,9 @@ function expand(value: string, env: NodeJS.ProcessEnv): string {
 /**
  * Windows: `launch` with the registry's variables over it, as Windows builds a new process's: key
  * by key, its REG_SZ values before its REG_EXPAND_SZ ones, which expand against the variables so
- * far, and no other kind. `Path` is each key's own joined by `;`, the system's first. A name
- * `launchKeeps` stays as `launch` has it, and so does a variable deleted from the registry since.
+ * far, and no other kind. `Path` is each key's own, the system's first, with a `;` between where
+ * the one before doesn't end with one. A name `launchKeeps` stays as `launch` has it, and so does
+ * a variable deleted from the registry since.
  */
 export function mergeRegistryEnvironment(
   launch: NodeJS.ProcessEnv,
@@ -168,7 +169,7 @@ export function mergeRegistryEnvironment(
         if (stored !== kind || launchKeeps(launch, name, "win32")) continue;
         let text = kind === "String" ? value : expand(value, merged);
         if (name.toUpperCase() === "PATH") {
-          path = path === undefined ? text : `${path};${text}`;
+          path = !path || path.endsWith(";") ? `${path ?? ""}${text}` : `${path};${text}`;
           text = path;
         }
         write(merged, name, text, "win32");

@@ -225,6 +225,15 @@ describe("mergeRegistryEnvironment", () => {
       PATH: "C:\\Users\\owner\\bin",
       SystemRoot: "C:\\Windows",
     });
+    // Windows adds no `;` after a Path that ends with one, nor after an empty one.
+    for (const system of ["C:\\Windows\\system32;", ""]) {
+      expect(
+        mergeRegistryEnvironment(launch, [
+          [sz("Path", system)],
+          [sz("Path", "C:\\Users\\owner\\bin")],
+        ]).PATH,
+      ).toBe(`${system}C:\\Users\\owner\\bin`);
+    }
   });
 
   test("expands REG_EXPAND_SZ against the variables so far, after the key's REG_SZ, and takes no other kind", () => {
