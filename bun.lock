@@ -15,7 +15,7 @@
     },
     "apps/bot": {
       "name": "laplace-eidolon",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "dependencies": {
         "@eidolon/access": "workspace:*",
         "@eidolon/chat": "workspace:*",
@@ -63,7 +63,7 @@
     },
     "apps/desktop": {
       "name": "laplace-eidolon-desktop",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "devDependencies": {
         "@eidolon/config": "workspace:*",
         "electron": "45.4.1",
@@ -78,7 +78,7 @@
     },
     "apps/eidolon": {
       "name": "@laplace.live/eidolon",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "devDependencies": {
         "@eidolon/cli": "workspace:*",
         "@eidolon/config": "workspace:*",
