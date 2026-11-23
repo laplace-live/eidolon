@@ -16,6 +16,7 @@ import {
   realpathSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
@@ -25,39 +26,149 @@ import { cmdLine } from "./cross-spawn.mjs";
 
 const DROPPED = new Set(["-y", "--yes", "-q", "--quiet"]);
 
-/** The settings an .npmrc gives before any [section], as npm's ini parser reads their values. */
-function readNpmrc(file) {
+/** `text` with each ${VAR} npm's config expands from `env`: none when unset, `${VAR?}` empty. */
+export function envReplace(text, env) {
+  return text.replace(/(?<!\\)(\\*)\$\{([^${}?]+)(\?)?\}/g, (whole, escapes, name, optional) => {
+    // An odd run of backslashes escapes the ${, and each pair before it is one backslash.
+    if (escapes.length % 2 === 1) return whole.slice((escapes.length + 1) / 2);
+    const value = env[name] ?? (optional === "?" ? "" : `\${${name}}`);
+    return escapes.slice(escapes.length / 2) + value;
+  });
+}
+
+/** A key or value of an .npmrc line as npm's ini parser reads it: quoted, it is JSON's. */
+function iniWord(raw) {
+  const word = raw.trim();
+  const quote = word[0];
+  if ((quote === '"' || quote === "'") && word.endsWith(quote)) {
+    const inner = word.startsWith("'") ? word.slice(1, -1) : word;
+    try {
+      return JSON.parse(inner);
+    } catch {
+      return inner;
+    }
+  }
+  // Unquoted, it ends at a ; or # comment, and \; \# \\ stand for the character.
+  let out = "";
+  for (let at = 0; at < word.length; at++) {
+    const char = word[at];
+    if (char === ";" || char === "#") break;
+    if (char !== "\\") out += char;
+    else if (at + 1 === word.length) out += "\\";
+    else out += "\\;#".includes(word[at + 1]) ? word[++at] : `\\${word[++at]}`;
+  }
+  return out.trim();
+}
+
+/** The settings an .npmrc gives before any [section], decoded as npm's ini parser does. */
+function iniDecode(text) {
+  const settings = {};
+  for (const line of text.split(/[\r\n]+/)) {
+    if (/^\s*(?:[;#]|$)/.test(line)) continue;
+    const match = /^\[[^\]]*\]\s*$|^([^=]+)(=(.*))?$/.exec(line);
+    if (match === null) continue;
+    if (match[1] === undefined) break;
+    const raw = String(iniWord(match[1]));
+    const list = raw.length > 2 && raw.endsWith("[]");
+    const key = list ? raw.slice(0, -2) : raw;
+    if (key === "__proto__") continue;
+    const word = match[2] ? iniWord(match[3]) : true;
+    const value = word === "true" || word === "false" || word === "null" ? JSON.parse(word) : word;
+    if (list && !Object.hasOwn(settings, key)) settings[key] = [];
+    else if (list && !Array.isArray(settings[key])) settings[key] = [settings[key]];
+    if (Array.isArray(settings[key])) settings[key].push(value);
+    else settings[key] = value;
+  }
+  return settings;
+}
+
+/**
+ * The settings an .npmrc gives before any [section], as npm reads them: `key[]` lines as a list,
+ * and each ${VAR} in a key or value expanded from `env`.
+ */
+function readNpmrc(file, env) {
   let text = "";
   try {
     text = readFileSync(file, "utf8");
   } catch {}
+  // npm expands the keys of the file as decoded, so of two that expand alike, the one the file
+  // first names later wins.
+  const asRead = (value) =>
+    typeof value === "string" ? envReplace(value.trim(), env) : JSON.stringify(value);
   const settings = {};
-  for (const line of text.split(/\r?\n/)) {
-    if (/^\s*\[/.test(line)) break;
-    const match = /^\s*([^;#\s=][^=]*?)\s*(?:=(.*))?$/.exec(line);
-    if (match === null) continue;
-    const value = (match[2] ?? "true").trim();
-    settings[match[1]] = /^(["']).*\1$/.test(value)
-      ? value.slice(1, -1)
-      : value.replace(/\s*[;#].*$/, "");
+  for (const [raw, value] of Object.entries(iniDecode(text))) {
+    const key = envReplace(raw, env);
+    if (key !== "__proto__") {
+      settings[key] = Array.isArray(value) ? value.map(asRead) : asRead(value);
+    }
   }
   return settings;
 }
 
 /**
  * npm's config sources npx reads, highest first, each as `{ key: value }`: the npm_config_*
- * variables in `env`, the .npmrc at npm's local `prefix`, then the user's.
+ * variables in `env`, the .npmrc at npm's local `prefix`, then the user's, ${VAR} expanded as npm
+ * expands them.
  */
 export function npmConfig(env, prefix, home) {
   const variables = {};
   for (const [name, value] of Object.entries(env)) {
     const key = /^npm_config_(.+)$/i.exec(name)?.[1];
     if (key === undefined || !value) continue;
-    variables[key.startsWith("//") ? key : key.replace(/(?!^)_/g, "-").toLowerCase()] = value;
+    const setting = envReplace(
+      key.startsWith("//") ? key : key.replace(/(?!^)_/g, "-").toLowerCase(),
+      env,
+    );
+    if (setting !== "__proto__") variables[setting] = envReplace(value.trim(), env);
   }
   const user = path.resolve(variables.userconfig ?? path.join(home, ".npmrc"));
   const project = path.join(prefix, ".npmrc");
-  return [variables, project === user ? {} : readNpmrc(project), readNpmrc(user)];
+  return [variables, project === user ? {} : readNpmrc(project, env), readNpmrc(user, env)];
+}
+
+/** A setting from the highest of npm's config `sources` that gives it. */
+const settingOf = (sources, key) => sources.find((source) => Object.hasOwn(source, key))?.[key];
+
+// The settings of npm's project config that pnpm reads from an .npmrc and npm installs by: the
+// registries, their credentials (npm's nerf-darted keys) and certificates.
+const NERF_DARTS = ["_auth", "_authToken", "_password", "certfile", "email", "keyfile", "username"];
+const REGISTRY_SETTING = new RegExp(
+  `^(?:registry|ca|cafile|cert|key|@[^:/]+:registry|//.*:(?:${NERF_DARTS.join("|")}))$`,
+);
+
+/**
+ * An .npmrc for pnpm holding the registries, credentials and certificates of npm's `project`
+ * config as npm reads them, each file they name as npm finds it from `cwd`; empty with none.
+ */
+export function projectNpmrc(project, cwd, home, platform = process.platform) {
+  const lines = [];
+  // npm takes an empty value as none, and one whose ${VAR} it left, VAR being unset, as written,
+  // which pnpm refuses or expands again. Of these settings only ca is a list.
+  const usable = (text) => text !== "" && !/\$\{[^}]+\}/.test(text);
+  for (const [key, value] of Object.entries(project)) {
+    if (!REGISTRY_SETTING.test(key) || /[=\r\n]/.test(key) || !usable(key)) continue;
+    if (Array.isArray(value) && key !== "ca") continue;
+    const client = /^(.*):(?:certfile|keyfile)$/.exec(key)?.[1];
+    // npm presents a client certificate only with both files there; pnpm ends on a missing one.
+    const pair = [project[`${client}:certfile`], project[`${client}:keyfile`]];
+    const there = (file) =>
+      typeof file === "string" && usable(file) && stat(path.resolve(cwd, file)) !== undefined;
+    if (client !== undefined && !pair.every(there)) continue;
+    for (const text of [value].flat().filter(usable)) {
+      let file = text;
+      if (key === "cafile") {
+        const fromHome = (platform === "win32" ? /^~[/\\]/ : /^~\//).test(text);
+        file = fromHome ? path.resolve(home, text.slice(2)) : path.resolve(cwd, text);
+      } else if (client !== undefined) {
+        file = path.resolve(cwd, text);
+      }
+      // Quoted, pnpm's ini parser reads each back as it is.
+      lines.push(
+        `${JSON.stringify(Array.isArray(value) ? `${key}[]` : key)}=${JSON.stringify(file)}`,
+      );
+    }
+  }
+  return lines.join("\n");
 }
 
 /** A boolean setting as npm reads one: a number unless 0, any other word unless false or null. */
@@ -87,7 +198,7 @@ function releaseAge(sources, now) {
  * @returns {string[] | { error: string }}
  */
 export function npxSettings(sources, now = Date.now()) {
-  const setting = (key) => sources.find((source) => Object.hasOwn(source, key))?.[key];
+  const setting = (key) => settingOf(sources, key);
   const ignoreScripts = flag(setting("ignore-scripts"));
   // npm then fails an install with any script allow-scripts doesn't name, which pnpm can't tell
   // before it installs.
@@ -118,7 +229,8 @@ export function npxSettings(sources, now = Date.now()) {
     // whose hooks can rewrite what installs.
     "--config.ignore-pnpmfile=true",
     // npm takes registries from its variables, which pnpm never reads: a private package's name
-    // would resolve on the registry pnpm falls back on. The .npmrc files' pnpm reads itself.
+    // would resolve on the registry pnpm falls back on. The user's .npmrc pnpm reads itself, and
+    // the project's install writes for it.
     ...Object.entries(sources[0] ?? {})
       .filter(([key]) => key === "registry" || /^@[^:/]+:registry$/.test(key))
       .map(([key, value]) => `--config.${key}=${value}`),
@@ -639,11 +751,19 @@ function install(packages) {
   const settings = npxSettings(sources);
   if ("error" in settings) fail(settings.error);
   const scratch = mkdtempSync(path.join(tmpdir(), "eidolon-npx-"));
+  // pnpm reads the .npmrc of the project it finds itself in, not the one npm reads at its local
+  // prefix, and expands no ${VAR} in one's registries or credentials. So it runs in a folder of
+  // its own, with that .npmrc written there as npm reads it, and no pnpm workspace around it. The
+  // folder is the user's alone, and goes once pnpm ends.
+  const npmrc = projectNpmrc(sources[1] ?? {}, process.cwd(), homedir());
+  if (npmrc) writeFileSync(path.join(scratch, ".npmrc"), `${npmrc}\n`, { mode: 0o600 });
   const report = path.join(scratch, "path");
   const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", import.meta.url));
   const args = [
     ...process.execArgv,
     pnpm,
+    `--dir=${scratch}`,
+    "--ignore-workspace",
     ...npxToPnpm(packages, settings, process.cwd(), homedir()),
     "--",
     process.execPath,
@@ -653,6 +773,7 @@ function install(packages) {
   ];
   // pnpm's stdout goes to stderr with its own, and it never reads the server's stdin.
   const child = spawn(process.execPath, args, {
+    cwd: scratch,
     stdio: ["ignore", 2, 2],
     env: { ...process.env, EIDOLON_NPX_REPORT: report },
     windowsHide: true,

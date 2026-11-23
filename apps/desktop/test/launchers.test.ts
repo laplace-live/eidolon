@@ -272,8 +272,18 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), "eidolon-npx-registry-")));
   const files = new Map<string, string>();
   const packuments = new Map<string, object>();
+  // A private registry's path, served only with its token, and every request with its credential.
+  const PRIVATE = "/corp";
+  const TOKEN = "eidolon-test-token";
+  const requests: { url: string; auth?: string }[] = [];
   const server = createServer((request, response) => {
     const url = decodeURIComponent(request.url ?? "/");
+    requests.push({ url, auth: request.headers.authorization });
+    if (url.startsWith(`${PRIVATE}/`) && request.headers.authorization !== `Bearer ${TOKEN}`) {
+      response.writeHead(401);
+      response.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
     const file = files.get(url);
     const packument = packuments.get(url.slice(1));
     response.writeHead(file || packument ? 200 : 404);
@@ -281,19 +291,25 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   });
   let registry = "";
   const old = "2020-01-01T00:00:00.000Z";
+  // A package that prints, published, and taken from its folder, a tarball, a git repo and a URL.
+  const hello = join(scratch, "hello");
 
   /**
-   * Publishes the package in `dir` at `time`, or with `time` undefined serves it at a URL pnpm
-   * doesn't take for its registry's, which it would ask for the package's metadata.
+   * Publishes the package in `dir` at `time` on the registry at the path `at`, or with `time`
+   * undefined serves it at a URL pnpm doesn't take for its registry's, which it would ask for the
+   * package's metadata.
    */
-  function publish(dir: string, time?: string): string {
+  function publish(dir: string, time?: string, at = ""): string {
     const { name, version, ...rest } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     const urlPath =
-      time === undefined ? `/plain/${name}-${version}.tgz` : `/${name}/-/${name}-${version}.tgz`;
-    const packed = pack(dir, join(scratch, `${name}-${version}.tgz`));
+      time === undefined
+        ? `/plain/${name}-${version}.tgz`
+        : `${at}/${name}/-/${name}-${version}.tgz`;
+    const packed = pack(dir, join(scratch, `${at}${name}-${version}.tgz`.replace(/\//g, "+")));
     files.set(urlPath, packed.file);
     if (time === undefined) return `${registry}${urlPath}`;
-    const packument = (packuments.get(name) ?? { name, versions: {}, time: {} }) as {
+    const key = `${at}/${name}`.slice(1);
+    const packument = (packuments.get(key) ?? { name, versions: {}, time: {} }) as {
       versions: Record<string, object>;
       time: Record<string, string>;
       "dist-tags"?: object;
@@ -310,8 +326,21 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     };
     packument.time[version] = time;
     packument["dist-tags"] = { latest: version };
-    packuments.set(name, packument);
+    packuments.set(key, packument);
     return `${registry}${urlPath}`;
+  }
+
+  /** A package whose command, its unscoped name, prints `says` and the words it was given. */
+  function printer(dir: string, name: string, version: string, says: string): string {
+    const bin = { [name.replace(/^@[^/]+\//, "")]: "cli.js" };
+    return write(dir, {
+      "package.json": JSON.stringify({ name, version, bin }),
+      "cli.js": [
+        "#!/usr/bin/env node",
+        `console.log(${JSON.stringify(says)}, JSON.stringify(process.argv.slice(2)));`,
+        "",
+      ].join("\n"),
+    });
   }
 
   beforeAll(async () => {
@@ -439,6 +468,14 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         old,
       );
     }
+    // A private package, and one of its name on the registry the user's .npmrc names, which a
+    // project whose own .npmrc pnpm misses would get in its place.
+    publish(printer(join(scratch, "corp"), "@eidolon-corp/tool", "1.0.0", "corp"), old, PRIVATE);
+    publish(printer(join(scratch, "impostor"), "@eidolon-corp/tool", "9.0.0", "impostor"), old);
+    // One name on two registries, at two versions.
+    publish(printer(join(scratch, "mirror-a"), "eidolon-test-mirror", "1.0.0", "a"), old, "/a");
+    publish(printer(join(scratch, "mirror-b"), "eidolon-test-mirror", "2.0.0", "b"), old, "/b");
+    publish(printer(hello, "eidolon-test-hello", "1.0.0", "hello"), old);
   });
   afterAll(() => {
     server.close();
@@ -605,5 +642,74 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       stderr: "npx: strict-allow-scripts is set, and Eidolon's npx can't hold an install to it\n",
       marks: [],
     });
+  }, 60_000);
+
+  /** The private registry's settings for an .npmrc, its token as `token` gives it. */
+  const privateNpmrc = (token: string) =>
+    [
+      `@eidolon-corp:registry=${registry}${PRIVATE}/`,
+      `${registry.slice("http:".length)}${PRIVATE}/:_authToken=${token}`,
+      "",
+    ].join("\n");
+
+  test("installs from the registries, with the credentials, of the .npmrc npm reads", async () => {
+    // At npm's local prefix, an npm workspace's root, with ${VAR} expanded as npm does, which pnpm
+    // refuses in a project's .npmrc.
+    const npmrc = privateNpmrc(`\${EIDOLON_TEST_TOKEN}`);
+    const workspace = write(join(scratch, "npm-workspace"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-root", workspaces: ["packages/*"] }),
+      ".npmrc": npmrc,
+      "packages/a/package.json": JSON.stringify({ name: "eidolon-test-a", version: "1.0.0" }),
+    });
+    const project = write(join(scratch, "npm-project"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": npmrc,
+      "sub/.keep": "",
+    });
+    const ran = [];
+    for (const cwd of [join(workspace, "packages", "a"), join(project, "sub")]) {
+      const env = { EIDOLON_TEST_TOKEN: TOKEN };
+      ran.push(await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd, env }));
+    }
+    const corp = { status: 0, stdout: 'corp ["x"]\n', stderr: "", marks: [] };
+    expect(ran).toEqual([corp, corp]);
+  }, 60_000);
+
+  test("reads no .npmrc npm leaves unread: a workspace's own, or a pnpm workspace's", async () => {
+    const nowhere = `registry=${registry}/nowhere/\n@eidolon-corp:registry=${registry}/nowhere/\n`;
+    const workspace = write(join(scratch, "npm-workspace-own"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-root", workspaces: ["packages/*"] }),
+      "packages/a/package.json": JSON.stringify({ name: "eidolon-test-a", version: "1.0.0" }),
+      "packages/a/.npmrc": nowhere,
+    });
+    const pnpmWorkspace = write(join(scratch, "pnpm-workspace-around"), {
+      "pnpm-workspace.yaml": 'packages:\n  - "sub"\n',
+      ".npmrc": nowhere,
+      "sub/package.json": JSON.stringify({ name: "eidolon-test-sub", version: "1.0.0" }),
+      "sub/.npmrc": privateNpmrc(TOKEN),
+    });
+    const ran = [
+      await launch("npx", ["-y", "eidolon-test-hello", "x"], {
+        cwd: join(workspace, "packages", "a"),
+      }),
+      await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd: join(pnpmWorkspace, "sub") }),
+    ];
+    expect(ran).toEqual([
+      { status: 0, stdout: 'hello ["x"]\n', stderr: "", marks: [] },
+      { status: 0, stdout: 'corp ["x"]\n', stderr: "", marks: [] },
+    ]);
+  }, 60_000);
+
+  test("keeps the installs from one project's registry apart from another's", async () => {
+    const home = newHome();
+    const projectOf = (at: string) =>
+      write(join(scratch, `mirror-project-${at}`), {
+        "package.json": JSON.stringify({ name: `eidolon-test-mirror-${at}`, version: "1.0.0" }),
+        ".npmrc": `registry=${registry}/${at}/\n`,
+      });
+    for (const at of ["a", "b", "a"]) {
+      const ran = await launch("npx", ["-y", "eidolon-test-mirror"], { home, cwd: projectOf(at) });
+      expect([at, ran.status, ran.stdout]).toEqual([at, 0, `${at} []\n`]);
+    }
   }, 60_000);
 });

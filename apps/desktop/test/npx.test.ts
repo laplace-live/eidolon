@@ -18,16 +18,16 @@ import { afterAll, describe, expect, test } from "vitest";
 import { LAUNCHER_SOURCES } from "../scripts/node-shim.ts";
 
 type Env = Record<string, string | undefined>;
+type Source = Record<string, string | string[]>;
 type Installed = { dir: string; manifest: { name: string; version?: string } };
 type Plan =
   | { error: string; code?: number }
   | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string };
 interface Npx {
-  npmConfig(env: Env, prefix: string, home: string): Record<string, string>[];
-  npxSettings(
-    sources: readonly Record<string, string>[],
-    now?: number,
-  ): string[] | { error: string };
+  envReplace(text: string, env: Env): string;
+  npmConfig(env: Env, prefix: string, home: string): Source[];
+  projectNpmrc(project: Source, cwd: string, home: string): string;
+  npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
   readNpx(args: readonly string[]): { packages: string[]; command: string[] } | { error: string };
   npxToPnpm(
     packages: readonly string[],
@@ -48,7 +48,7 @@ interface Npx {
   localBin(start: string, name: string): string | undefined;
   treePackages(prefix: string): Installed[];
   inTree(packages: readonly Installed[], spec: string): Installed | undefined;
-  plan(args: readonly string[], cwd: string, home?: string): Plan;
+  plan(args: readonly string[], cwd: string, home?: string, env?: Env): Plan;
   pathOf(env: Env, delimiter?: string): string;
   npmPath(bins: readonly string[], runPath: string, nodeGyp: string, rest: string): string;
   commandEnv(env: Env, value: string): Env;
@@ -228,7 +228,7 @@ describe("pnpm's arguments", () => {
 
 describe("npm's config, which npx installs by", () => {
   const NOW = Date.parse("2026-11-23T12:00:00Z");
-  const settingsOf = (...sources: Record<string, string>[]) => npx.npxSettings(sources, NOW);
+  const settingsOf = (...sources: Source[]) => npx.npxSettings(sources, NOW);
 
   test("runs no install script under ignore-scripts, read as npm reads a boolean", () => {
     for (const value of ["true", "1", "yes"]) {
@@ -344,6 +344,103 @@ describe("npm's config, which npx installs by", () => {
       {},
       { "min-release-age": "7", "allow-remote": "none" },
     ]);
+  });
+
+  test("reads an .npmrc's values as npm's ini parser does, quotes, escapes and lists", () => {
+    const base = tree({
+      ".npmrc": [
+        "plain = a b ; a comment",
+        "hash=a#b",
+        String.raw`escaped=a\;b\#c\\d\x`,
+        String.raw`json="a;b#c\"d"`,
+        "single='x;y'",
+        "number='12'",
+        "bare",
+        "dup=1",
+        "dup=2",
+        "ca[]=one",
+        "ca[]=two",
+        "  # a comment",
+        "=no key",
+        "__proto__=x",
+        "[section]",
+        "after=unread",
+      ].join("\n"),
+    });
+    expect(npx.npmConfig({}, base, root)[1]).toEqual({
+      plain: "a b",
+      hash: "a",
+      escaped: String.raw`a;b#c\d\x`,
+      json: 'a;b#c"d',
+      single: "x;y",
+      number: "12",
+      bare: "true",
+      dup: "2",
+      ca: ["one", "two"],
+    });
+  });
+
+  test("expands the variables every source's keys and values name, as npm does", () => {
+    const env = { HOST: "npm.corp.test", TOKEN: "t0k", EMPTY: "" };
+    // An escaped \${ stays, and each pair of backslashes before one is one.
+    expect(
+      npx.envReplace(`\${TOKEN}-\${UNSET}-\${UNSET?}-\${EMPTY}-\\\${TOKEN}-\\\\\${TOKEN}`, env),
+    ).toBe(`t0k-\${UNSET}---\${TOKEN}-\\t0k`);
+    // Keys once the file is read: of two that expand alike, the one that first comes later wins.
+    const base = tree({
+      ".npmrc": [
+        `//\${HOST}/:_authToken=first`,
+        "//npm.corp.test/:_authToken=literal",
+        `//\${HOST}/:_authToken=\${TOKEN}`,
+        `registry=https://\${HOST}/`,
+      ].join("\n"),
+    });
+    const before = ` \${EMPTY}2020-01-01 `;
+    expect(npx.npmConfig({ ...env, npm_config_before: before }, base, root).slice(0, 2)).toEqual([
+      { before: "2020-01-01" },
+      { "//npm.corp.test/:_authToken": "literal", registry: "https://npm.corp.test/" },
+    ]);
+    expect(
+      npx.npmConfig(env, tree({ ".npmrc": `//\${HOST}/:_authToken=\${TOKEN}` }), root)[1],
+    ).toEqual({ "//npm.corp.test/:_authToken": "t0k" });
+  });
+
+  test("gives pnpm the project's registries, their credentials and certificates, as npm", () => {
+    const cwd = tree({ "certs/client.pem": "cert", "certs/client.key": "key" });
+    const project: Source = {
+      registry: "https://npm.corp.test/",
+      "@corp:registry": "https://corp.test/npm/",
+      "//corp.test/npm/:_authToken": 'to"k;en=',
+      "//corp.test/npm/:certfile": "certs/client.pem",
+      "//corp.test/npm/:keyfile": join(cwd, "certs", "client.key"),
+      cafile: "~/ca.pem",
+      ca: ["one", "two"],
+      // Settings npm doesn't install by or doesn't have, and values it takes as none.
+      "//corp.test/npm/:tokenHelper": "/bin/helper",
+      "//corp.test/npm/:ca": "pem",
+      _authToken: "unscoped",
+      "ignore-scripts": "true",
+      "@other:registry": "",
+      "@list:registry": ["https://a.test/", "https://b.test/"],
+      "//left.test/:_authToken": `\${UNSET}`,
+      // A client certificate whose key isn't there, which npm presents none of.
+      "//half.test/:certfile": "certs/client.pem",
+      "//half.test/:keyfile": "certs/missing.key",
+    };
+    expect(npx.projectNpmrc(project, cwd, "/home/me").split("\n")).toEqual([
+      '"registry"="https://npm.corp.test/"',
+      '"@corp:registry"="https://corp.test/npm/"',
+      String.raw`"//corp.test/npm/:_authToken"="to\"k;en="`,
+      `"//corp.test/npm/:certfile"=${JSON.stringify(join(cwd, "certs", "client.pem"))}`,
+      `"//corp.test/npm/:keyfile"=${JSON.stringify(join(cwd, "certs", "client.key"))}`,
+      '"cafile"="/home/me/ca.pem"',
+      '"ca[]"="one"',
+      '"ca[]"="two"',
+    ]);
+    expect(npx.projectNpmrc({ cafile: "ca.pem" }, "/work", "/home")).toBe(
+      '"cafile"="/work/ca.pem"',
+    );
+    expect(npx.projectNpmrc({ "ignore-scripts": "true" }, "/work", "/home")).toBe("");
   });
 });
 
