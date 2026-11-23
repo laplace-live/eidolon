@@ -111,6 +111,8 @@ function run(): void {
   let menuUpdates: UpdatesItem = "hidden";
   /** The scheme and the session's guards are in place, so a window may load. */
   let started = false;
+  /** A login launch holds the updater's launch check, and the box it may open, until the window shows. */
+  let updatesHeld = false;
 
   const pages = new WindowPages({
     load: (page) => load(page),
@@ -222,28 +224,31 @@ function run(): void {
     setAbout();
   }
 
-  function newWindow(): void {
-    createWindow({
-      created: (win) => {
-        guardNavigation(win.webContents, {
-          log: mainLog,
-          openExternal: (url) => native.openExternal(url),
-          strayed: () => pages.strayed(),
-        });
-        // At the commit of a new document, before its script can say it listens.
-        win.webContents.on("did-navigate", () => commands.replaced());
-        attachContextMenu(win.webContents, strings);
-        dressWindow(win);
-        watchSession(win, flow, backend);
+  function newWindow(hidden = false): void {
+    createWindow(
+      {
+        created: (win) => {
+          guardNavigation(win.webContents, {
+            log: mainLog,
+            openExternal: (url) => native.openExternal(url),
+            strayed: () => pages.strayed(),
+          });
+          // At the commit of a new document, before its script can say it listens.
+          win.webContents.on("did-navigate", () => commands.replaced());
+          attachContextMenu(win.webContents, strings);
+          dressWindow(win);
+          watchSession(win, flow, backend);
+        },
+        hidesOnClose: () => flow.closeHides(),
+        hidOnClose: () => hideNotice?.hidden(),
+        failed: (detail) => {
+          if (flow.quitting) return;
+          mainLog.error(`Eidolon: ${detail}`);
+          pages.window(detail);
+        },
       },
-      hidesOnClose: () => flow.closeHides(),
-      hidOnClose: () => hideNotice?.hidden(),
-      failed: (detail) => {
-        if (flow.quitting) return;
-        mainLog.error(`Eidolon: ${detail}`);
-        pages.window(detail);
-      },
-    });
+      hidden,
+    );
     commands.replaced();
     pages.opened(backend.state);
   }
@@ -253,6 +258,10 @@ function run(): void {
     if (!started || flow.quitting) return;
     if (mainWindow() === null) newWindow();
     showWindow();
+    if (updatesHeld) {
+      updatesHeld = false;
+      if (backend.state.phase === "ready") updates?.backendReady();
+    }
   }
 
   /** A notification's click: the window, then its task, as noticeCommand decides. */
@@ -365,15 +374,6 @@ function run(): void {
           log: mainLog,
         });
       }
-      const watchFollows = watch === null ? null : followBackend(watch);
-      backend.subscribe((state) => {
-        pages.backend(state);
-        watchFollows?.(state);
-        if (state.phase !== "ready") return;
-        setAbout();
-        updates?.backendReady();
-      });
-      started = true;
       // Background mode reads no login item.
       const atLogin =
         !background &&
@@ -382,9 +382,20 @@ function run(): void {
           process.argv,
           app.getLoginItemSettings().wasOpenedAtLogin === true,
         );
-      // The Dock, the tray, a second launch, a menu item or a notification's click makes one.
-      if (atLogin) mainLog.info("Eidolon: opened at login, so no window until one is asked for");
-      else newWindow();
+      updatesHeld = atLogin;
+      const watchFollows = watch === null ? null : followBackend(watch);
+      backend.subscribe((state) => {
+        pages.backend(state);
+        watchFollows?.(state);
+        if (state.phase !== "ready") return;
+        setAbout();
+        if (!updatesHeld) updates?.backendReady();
+      });
+      started = true;
+      // The Dock, the tray, a second launch, a menu item or a notification's click shows it.
+      if (atLogin)
+        mainLog.info("Eidolon: opened at login, so the window stays hidden until it's asked for");
+      newWindow(atLogin);
       await backend.start();
     })
     .catch((error: unknown) => {
