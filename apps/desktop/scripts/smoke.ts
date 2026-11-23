@@ -76,7 +76,7 @@ const QUERY = "她的猫叫什么名字";
 const EVERY_NATIVE = ["lancedb", "onnxruntime_binding", "sharp-", "vips"];
 const JSON_TYPE = { "content-type": "application/json" };
 // Each step's limit. Together they end a hung run in failed checks, its uninstall and results.json
-// included, well inside desktop.yml's 15 minutes; a run takes about 6 s on macOS, and the NSIS
+// included, well inside desktop.yml's 15 minutes; a run takes about 12 s on macOS, and the NSIS
 // setup alone took 58 s on windows-latest.
 const INSTALL_MS = 180_000;
 const START_MS = 90_000;
@@ -86,7 +86,7 @@ const RESTART_MS = 60_000;
 const QUIT_MS = 60_000;
 const UNINSTALL_MS = 120_000;
 const TERMINAL_MS = 60_000;
-/** The shim's four runs, pnpm dlx's first install of a package among them. */
+/** The shim's runs, on the stand-in and then for real, pnpm dlx's first install among them. */
 const SHIM_MS = 180_000;
 /** The node shim's npx, run without the binary the backend names. */
 const NO_NODE = "npx: EIDOLON_NODE isn't set: Eidolon sets it for the MCP servers it starts";
