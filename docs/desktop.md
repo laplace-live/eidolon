@@ -681,13 +681,12 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   the bundled pnpm in that same process (`npxToPnpm`): `-y`, `--yes`, `-q` and `--quiet` dropped,
   each `-p X`, `-p=X`, `--package X` or `--package=X` as `--package=X`, then `--` and the first
   other word, with every word after it. pnpm reports dlx on stderr, so stdout, which the MCP
-  protocol owns, holds only the server's output. An option it doesn't map (`-c`, `--call`, …) exits
-  1, naming it.
+  protocol owns, holds only the server's output. An option it doesn't map exits 1, naming it.
 - **pnpm's defaults hold,** not npx's: dlx runs the install scripts of the packages it is given,
-  never their dependencies'; it picks no version younger than a day; a dependency from a URL or git
-  fails (`ERR_PNPM_EXOTIC_SUBDEP`); it always fetches from the registry, never a project's own
-  `node_modules/.bin`; and its store and caches are where pnpm keeps them, under the owner's home.
-  One `--config.dangerously-allow-all-builds=true` in `npxToPnpm` would run every install script.
+  never their dependencies'; it picks no version younger than a day; it always fetches from the
+  registry, never a project's own `node_modules/.bin`; and its store and caches are where pnpm
+  keeps them, under the owner's home. One `--config.dangerously-allow-all-builds=true` in
+  `npxToPnpm` would run every install script.
 - **On Electron's Node,** a server's N-API native modules load, while one whose prebuilds are for
   Node's ABI alone looks for an Electron build; and macOS shows a shim-run server's permission
   prompts in Eidolon's name.
