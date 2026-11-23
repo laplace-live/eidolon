@@ -931,7 +931,7 @@ node apps/desktop/scripts/test-on-electron.ts [paths] [vitest flags]
 It runs Vitest's `node` project, or the paths given in it, on the binary `require("electron")`
 names from `apps/desktop` (downloaded on the first run), as Node (`ELECTRON_RUN_AS_NODE=1`), and
 exits with Vitest's code. `desktop.yml` runs the whole project there on macOS, and on Windows the
-tests `ts.yml`'s Windows job runs ([In CI](#in-ci)). Two things differ on that Node.
+`node`-project tests of `ts.yml`'s Windows job ([In CI](#in-ci)). Two things differ on that Node.
 `process.execPath` is the Electron binary, which starts its GUI unless the child's environment
 carries `ELECTRON_RUN_AS_NODE`: a test that spawns `process.execPath` with an environment of its
 own merges `jsRuntime().env` into it, as the app's own spawns do. And a `Date` keeps its local hours
@@ -1037,19 +1037,38 @@ Each step prints one line, made of the checks inside it:
 6. **Close and reopen:** closing hides the window while the backend serves on, and a second launch
    shows it again, never on screen or in front, and exits within 30 s; one that doesn't is killed
    and fails the step.
-7. **Attach:** after `--quit` ends that launch and its backend, a server started first on the same
-   home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced: Settings'
-   Restart there waits for the supervisor's next server, a restart from outside the app is
-   survived, and quitting leaves the server running until the smoke stops it.
-8. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
-   with exit 0, leaving nothing running and no error line in either log.
+7. **Choose Folder,** in Settings → Assistant Mode, beside a line typed into Assistant Folders:
+   main's own handler opens no dialog in background mode, as main.log says, and the draft stays as
+   typed; then the smoke replaces the handler through Playwright's `app.evaluate`
+   (`ipcMain.removeHandler`, then `ipcMain.handle` answering a folder of the run's), and the folder
+   it answers joins the draft as a line of its own, which nothing saves.
+8. **Settings → Desktop:** Open at Login and the terminal command each say "Background mode leaves
+   this computer as it is.", their switch and button disabled.
+9. **A task that waits:** the smoke sets Assistant Mode on the fakes' OpenRouter account (a `PUT`
+   of `assistant.provider` and `assistant.model`) and gives the fakes a folder of the run's,
+   outside `assistant.folders`, where her answer to the task line in a new chat starts a task with
+   `start_task`: its card asks "Start this task?". Within 60 s main.log must read `background mode
+   didn't show a notification: <her name>: <the start's words> / <its goal>`, in the words
+   `strings.ts` has in English: the watch polls every 30 s while no task runs, and never tells of a
+   task already there at its first answer, so the task starts once the server is ready. Deny on
+   the card stops it, and within 45 s the watch's notice of that follows, with the stopped task's
+   words: two notices in all.
+10. **Attach:** after `--quit` ends that launch and its backend, a server started first on the
+    same home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced:
+    Settings' Restart there waits for the supervisor's next server, a restart from outside the app
+    is survived, and quitting leaves the server running until the smoke stops it.
+11. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
+    with exit 0, leaving nothing running and no error line in either log.
 
 After the steps come the window watch's line and the kit's. The run's folder keeps
 `results/results.json`, with every check and each step's time, and `results/screenshots`; a pass
 removes them with the rest of the folder, unless `--keep` first copies them to
-`<run's folder>-results`. A run takes about 30 s. With `--headful`, the checks that only background
-mode makes true (off screen, never audible, main.log's background lines) are skipped, and a hook
-the smoke adds in main saves downloads into the same folder instead of asking.
+`<run's folder>-results`. A run takes about 80 s, 50 of them the wait for the task's notices. With
+`--headful`, the checks that only background mode makes true (off screen, never audible, main.log's
+background lines, the folder dialog's line and the notices: the unpackaged app shows none) are
+skipped, Choose Folder gets the replaced handler alone, Settings → Desktop says the options are for
+the installed app only, and a hook the smoke adds in main saves downloads into the same folder
+instead of asking.
 
 #### The packaged smoke
 
@@ -1064,6 +1083,21 @@ main's forwarder does, and runs the app's binary in node mode beside it, as main
   opens a LanceDB table, runs Silero on an onnxruntime CPU session and makes a JPEG with sharp,
   every library mapped from the payload. The tray icon's file is in the app's resources, since
   background mode shows no tray.
+- **The launchers,** run as a terminal runs them (on Windows the `.cmd` files through
+  `cmd /d /s /c`), before the app starts. The eidolon command, `bin/eidolon` in the app's
+  resources (`bin\eidolon.cmd` on Windows), with `search --help`, exits 0 with laplace-search's
+  usage on stdout, its CLI writing to the `EIDOLON_HOME` it was given, a folder of the run's; never
+  with no arguments, which opens the app outside background mode. The node shim's launchers, in
+  the payload's `node-shim/bin`, first run a stand-in as `EIDOLON_NODE` that prints the
+  `ELECTRON_RUN_AS_NODE` it got, which must be 1 from each: one that left it unset would start
+  Eidolon itself on the installed app's profile, so none runs on the app's binary then. After it,
+  they run with `EIDOLON_NODE` naming the app's binary, a home of the run's, and a `PATH` of the
+  OS's own folders, which must hold no node, then the shim's: `node -p process.versions.electron`
+  prints the pinned Electron, `pnpm --version` the payload's pnpm, and `npx -y file:<a package of
+  the run's>` its command's line alone on stdout, that command run on the app's Electron through
+  the shim's node; `npx` without `EIDOLON_NODE` exits 1 with its reason. They stay offline: a
+  `file:` package needs no registry, and `pnpm_config_registry` names a closed port, with pnpm's
+  fetch retries off so a request fails at once.
 - **The app:** it starts on the run's home and profile; its backend is the binary in node mode on
   the payload's `server.js`, under main, with no key from the smoke's own environment; main.log
   names a packaged build on the pinned Electron, and the server reports the payload's version; the
@@ -1094,12 +1128,16 @@ removes the marker and the folders it made after. Where Eidolon is installed for
 it refuses to run rather than replace and remove that install. Each step has a time limit of its
 own, so a hung run still ends in failed checks, its uninstall and results included, well inside
 `desktop.yml`'s 15 minutes. After `finish()` it writes `results.json`, every check with the timings,
-into the run's folder, which a pass leaves holding that file alone. A run takes about 6–8 s on
+into the run's folder, which a pass leaves holding that file alone. A run takes about 12 s on
 macOS.
 
 ### In CI
 
-`ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips.
+`ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips, and
+its Windows job the project's Windows-only tests: `terminal-command-windows.test.ts` (the PATH
+script on a scratch key under HKCU, and the eidolon command's `.cmd`),
+`registry-environment-windows.test.ts` (the registry read, on scratch keys) and
+`node-shim-windows.test.ts` (the node shim's `.cmd` launchers, on Node).
 `.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
 request that changes more than docs, on a dispatch, and from a release's tag
 ([Releasing](#releasing)): the payload comes from `bun.lock` and the backend's packages, so a filter
@@ -1122,7 +1160,7 @@ platform with its secrets alone ([Secrets](#secrets)):
 5. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
    instead of skipping; run after packaging, it also holds the app's payload to the stage.
 6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
-   Windows the tests `ts.yml`'s Windows job runs, with its filters.
+   Windows the `node`-project tests of `ts.yml`'s Windows job, with its filters.
 7. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
    NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
    output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds

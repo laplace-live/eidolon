@@ -8,6 +8,7 @@ import {
   closeSync,
   cpSync,
   existsSync,
+  mkdirSync,
   openSync,
   readFileSync,
   realpathSync,
@@ -16,7 +17,9 @@ import {
 import { basename, dirname, join, sep } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import type { ElectronApplication, Locator, Page } from "playwright-core";
+import type { Status, TaskSnapshot } from "../../bot/src/local/api.ts";
 import { STRINGS } from "../src/main/strings.ts";
+import { BRIDGE } from "../src/shared/bridge.ts";
 import { buildApp, missingBuilds } from "./dev-smoke/build.ts";
 import { type Microphone, microphoneWav } from "./dev-smoke/speech.ts";
 import { described, type Step, Steps, until, writeResults } from "./dev-smoke/steps.ts";
@@ -29,6 +32,10 @@ import {
   REPLY,
   SELFIE_REPLY,
   SELFIE_REQUEST,
+  TASK_ACK,
+  TASK_GOAL,
+  TASK_LINE,
+  TASK_MODEL,
   VOICE_TRANSCRIPT,
 } from "./smoke/fakes.ts";
 import { applicationType } from "./smoke/focus.ts";
@@ -65,6 +72,15 @@ const ATTACHED_LINE = "看看这张图和这个故事";
 /** main.log's line once background mode saved a download: where, and how it ended. */
 const DOWNLOADED = /background mode's download to (.+): (\w+)$/;
 const SIGN_IN = /This Window Isn't Signed In|Open Eidolon from Your Terminal/;
+/** main.log's line for a Choose Folder that background mode answered with no folder. */
+const NO_FOLDER_DIALOG = "Eidolon: background mode didn't open the folder dialog";
+/** How main.log's line for a notification background mode kept off screen starts. */
+const NOTICE = "Eidolon: background mode didn't show a notification: ";
+/** What Settings' Desktop App says under each option this copy can't offer, by why. */
+const DESKTOP_NOTES = {
+  background: "Background mode leaves this computer as it is.",
+  unpackaged: "Available in the installed app only.",
+} as const;
 
 const { rest } = parseSmokeArgs(process.argv.slice(2));
 const unknown = rest.filter((arg) => !OWN_ARGS.includes(arg));
@@ -107,6 +123,16 @@ interface ChatEvent {
   readonly text?: string;
   readonly modality?: string;
   readonly attachments?: readonly { readonly name: string; readonly kind: string }[];
+  /** A tool result's: `started` once her start_task call made its task, named in `result`. */
+  readonly stage?: string;
+  readonly result?: { readonly task?: unknown };
+}
+
+/** A chat of hers the page has open. */
+interface OpenChat {
+  readonly id: string;
+  readonly log: Locator;
+  readonly box: Locator;
 }
 
 /** One launch of the app under Playwright, with what its page logged. */
@@ -244,6 +270,16 @@ async function walkApp(walk: Walk): Promise<void> {
   );
   await steps.run("close and reopen: hidden, shown again, never in front", (step) =>
     closeAndReopen(walk, first, step),
+  );
+  await steps.run(
+    "Choose Folder: no dialog in background mode, and main's pick in the draft",
+    (step) => chooseFolder(walk, first, step),
+  );
+  await steps.run("Settings' Desktop App: both options left as they are", (step) =>
+    desktopOptions(walk, first, step),
+  );
+  await steps.run("a task that waits: the watch's notices of its start and its end", (step) =>
+    waitingTask(walk, first, step),
   );
   await steps.run(
     "attach: after a quit, a server started first is used, restarted and left running",
@@ -589,6 +625,19 @@ async function coldStart(walk: Walk, driven: Driven, launchedAt: number, step: S
   await step.shot(page, "home");
 }
 
+/** A new chat of hers alone, from the sidebar's New Chat, once her greeting shows. */
+async function startChat(page: Page, persona: PersonaNames): Promise<OpenChat> {
+  await page.getByRole("button", { name: "New Chat" }).first().click();
+  await page.getByRole("menuitemcheckbox", { name: persona.name }).click();
+  await page.getByRole("menuitem", { name: "Start Chat" }).click();
+  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/, { timeout: 15_000 });
+  const id = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+  const log = page.getByRole("log", { name: "Conversation" });
+  await log.getByText(GREETING).waitFor({ timeout: 30_000 });
+  const box = page.getByRole("textbox", { name: `Message ${persona.shortName}` });
+  return { id, log, box };
+}
+
 async function chat(walk: Walk, driven: Driven, step: Step) {
   const { smoke } = walk;
   const { fakes } = smoke;
@@ -596,15 +645,8 @@ async function chat(walk: Walk, driven: Driven, step: Step) {
   const persona = await personaNames(page);
   walk.persona = persona;
 
-  await page.getByRole("button", { name: "New Chat" }).first().click();
-  await page.getByRole("menuitemcheckbox", { name: persona.name }).click();
-  await page.getByRole("menuitem", { name: "Start Chat" }).click();
-  await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/, { timeout: 15_000 });
-  const id = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+  const { id, log, box } = await startChat(page, persona);
   walk.chatId = id;
-  const log = page.getByRole("log", { name: "Conversation" });
-  await log.getByText(GREETING).waitFor({ timeout: 30_000 });
-  const box = page.getByRole("textbox", { name: `Message ${persona.shortName}` });
 
   // Her reply: its first part shows long before the rest, which the fake holds back.
   await page.evaluate(
@@ -1179,6 +1221,255 @@ async function closeAndReopen(walk: Walk, driven: Driven, step: Step) {
   const status = await pageFetch(driven.page, "/api/local/status");
   step.check("the page still works", status.status === 200, `status ${status.status}`);
   await step.shot(driven.page, "reopened");
+}
+
+/** Settings at the section its nav names `label`, from the sidebar's link. */
+async function settingsSection(page: Page, label: string, tab: string): Promise<void> {
+  await page.getByRole("link", { name: "Settings" }).first().click();
+  await page.waitForURL(/^eidolon-app:\/\/app\/settings/, { timeout: 10_000 });
+  await page
+    .getByRole("navigation", { name: "Settings Sections" })
+    .getByRole("link", { name: label, exact: true })
+    .click();
+  await page.waitForURL(`eidolon-app://app/settings?tab=${tab}`, { timeout: 10_000 });
+}
+
+/** Whether the app's settings.yaml names `text` anywhere. */
+function savedSettingsName(walk: Walk, text: string): boolean {
+  const file = join(walk.smoke.run.home, "settings.yaml");
+  return existsSync(file) && readFileSync(file, "utf8").includes(text);
+}
+
+/**
+ * Assistant Mode's Choose Folder, beside a line typed into its folders: main's own handler, whose
+ * dialog background mode answers with none; then main's handler replaced by one that answers a
+ * folder, as the dialog would, which the page adds to the draft and leaves unsaved. The replacement
+ * stays for the rest of this launch, which saves no folder.
+ */
+async function chooseFolder(walk: Walk, driven: Driven, step: Step) {
+  const { smoke } = walk;
+  const { page, app } = driven;
+  await settingsSection(page, "Assistant Mode", "assistant");
+  const box = page.getByLabel("Assistant Folders", { exact: true });
+  const button = page.getByRole("button", { name: "Choose Folder", exact: true });
+  await button.waitFor({ timeout: 15_000 });
+  const typed = join(smoke.run.scratch, "notes");
+  await box.fill(typed);
+  // Headful, main's own handler would open the dialog.
+  if (walk.background) {
+    const from = smoke.log("main").length;
+    await button.click();
+    const line = await smoke
+      .waitForLine("main", NO_FOLDER_DIALOG, { from, timeoutMs: 10_000 })
+      .catch(() => null);
+    // The page's answer follows main's line: a moment for a draft it would change.
+    await sleep(500);
+    const kept = await box.inputValue();
+    step.check(
+      "background mode opens no folder dialog, and the draft stays as typed",
+      line !== null && kept === typed,
+      `${line === null ? "main.log says nothing of the dialog" : after(line)}; the draft ${kept === typed ? "stays as typed" : `reads ${JSON.stringify(kept)}`}`,
+    );
+  }
+  const picked = join(smoke.run.scratch, "Picked Folder");
+  mkdirSync(picked);
+  await app.evaluate(
+    ({ ipcMain }, { channel, folder }) => {
+      ipcMain.removeHandler(channel);
+      ipcMain.handle(channel, () => folder);
+    },
+    { channel: BRIDGE.chooseFolder, folder: picked },
+  );
+  await button.click();
+  const drafted = await until(
+    "the picked folder in the draft",
+    async () => {
+      const value = await box.inputValue();
+      return value === typed ? null : value;
+    },
+    10_000,
+  );
+  await step.shot(page, "choose-folder");
+  const saved = savedSettingsName(walk, picked);
+  step.check(
+    "a folder main answers joins the draft as a line of its own, unsaved",
+    drafted === `${typed}\n${picked}` && !saved,
+    `main's handler, replaced, answered ${picked}: the draft reads ${JSON.stringify(drafted)}; settings.yaml ${saved ? "names it" : "doesn't name it"}`,
+  );
+}
+
+/**
+ * Settings' Desktop App: Open at Login and the terminal command each say why this copy leaves the
+ * computer as it is, background mode before the unpackaged app, and offer nothing to click.
+ */
+async function desktopOptions(walk: Walk, driven: Driven, step: Step) {
+  const { page } = driven;
+  await settingsSection(page, "Desktop", "desktop");
+  const note = walk.background ? DESKTOP_NOTES.background : DESKTOP_NOTES.unpackaged;
+  const options = [
+    ["login-item", (row: Locator) => row.getByRole("switch")],
+    ["terminal-command", (row: Locator) => row.getByRole("button")],
+  ] as const;
+  const found: string[] = [];
+  let pass = true;
+  for (const [option, controlOf] of options) {
+    const row = page.locator(`[data-desktop-option="${option}"]`);
+    const says = await row
+      .getByText(note, { exact: true })
+      .waitFor({ timeout: 15_000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    const controls = controlOf(row);
+    const count = await controls.count();
+    const disabled = await controls.evaluateAll((elements) =>
+      elements.every((element) => (element as HTMLButtonElement).disabled),
+    );
+    pass &&= says && count === 1 && disabled;
+    found.push(
+      `${option}: ${says ? "says so" : `doesn't say "${note}"`}, ${count} control(s) ${disabled ? "disabled" : "enabled"}`,
+    );
+  }
+  await step.shot(page, "desktop-options");
+  step.check(`both say "${note}", their controls disabled`, pass, found.join("; "));
+}
+
+/** The task her start_task call made in chat `id`, once its `started` result is in the log. */
+async function startedTask(walk: Walk, id: string): Promise<string | null> {
+  const started = (await chatEvents(walk, id)).find(
+    (event) => event.type === "tool-result" && event.stage === "started",
+  );
+  const task = started?.result?.task;
+  return typeof task === "string" ? task : null;
+}
+
+async function taskSnapshot(walk: Walk, id: string): Promise<TaskSnapshot | null> {
+  const response = await walk.smoke.api(`/api/local/tasks/${id}`);
+  return response.ok ? ((await response.json()) as TaskSnapshot) : null;
+}
+
+/** main.log's line from "Eidolon: " on, for a notice of the task: her name, `phrase`, its goal. */
+function noticeLine(name: string, phrase: string): string {
+  return `${NOTICE}${name}: ${phrase} / ${TASK_GOAL}`;
+}
+
+/** A line of main.log from "Eidolon: " on, its time and level left out. */
+function fromEidolon(line: string): string {
+  return line.slice(line.indexOf("Eidolon: "));
+}
+
+/**
+ * Her start_task call in a folder outside assistant.folders, once Assistant Mode runs on the fakes:
+ * the task waits on its card, and main's watch, which polls every 30 s while no task runs, logs its
+ * notice; Deny on the card stops it, and the watch logs that notice too. Headful, the unpackaged app
+ * has no notifications.
+ */
+async function waitingTask(walk: Walk, driven: Driven, step: Step) {
+  const { smoke } = walk;
+  const { fakes } = smoke;
+  const { page } = driven;
+  const persona = walk.persona;
+  if (persona === null) throw new Error("it needs the chat step's persona");
+  const put = await pageFetch(page, "/api/local/settings", {
+    method: "PUT",
+    body: {
+      scope: "app",
+      values: { "assistant.provider": "openrouter", "assistant.model": TASK_MODEL },
+    },
+  });
+  if (put.status !== 200) throw new Error(`PUT settings: ${put.status}`);
+  await until(
+    "Assistant Mode ready on the fakes' account",
+    async () =>
+      ((await pageFetch(page, "/api/local/status")).body as Partial<Status>).assistant?.ready,
+    15_000,
+  );
+  // assistant.folders holds none, so a task anywhere asks to start.
+  const folder = join(smoke.run.scratch, "screenshots");
+  fakes.taskFolder = folder;
+  const chat = await startChat(page, persona);
+  const from = smoke.log("main").length;
+  const asked = fakes.chats.length;
+  await chat.box.fill(TASK_LINE);
+  await chat.box.press("Enter");
+  const task = await until(
+    "her start_task's task in the chat's log",
+    () => startedTask(walk, chat.id),
+    30_000,
+    500,
+  ).catch(() => null);
+  if (task === null) {
+    const line = fakes.chats
+      .slice(asked)
+      .find((request) => request.messages?.at(-1)?.content === TASK_LINE);
+    const offered = (line?.tools ?? []).some((tool) => tool.function?.name === "start_task");
+    throw new Error(
+      `no task started: her answer to the line ${line === undefined ? "never reached her mind" : offered ? "was offered start_task" : "wasn't offered start_task"}`,
+    );
+  }
+  const card = chat.log.locator(`article[data-task="${task}"]`);
+  const asks = await card
+    .getByText("Start this task?", { exact: true })
+    .waitFor({ timeout: 20_000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  await chat.log.getByText(TASK_ACK, { exact: true }).waitFor({ timeout: 20_000 });
+  const waiting = await taskSnapshot(walk, task);
+  step.check(
+    "her start_task outside assistant.folders waits on its card",
+    asks && waiting?.status === "awaiting-approval" && waiting.pending?.kind === "start",
+    `task ${task} ${waiting?.status ?? "unread"}, waiting for ${waiting?.pending?.kind ?? "nothing"}; its card ${asks ? "asks" : "doesn't ask"} "Start this task?"`,
+  );
+  await step.shot(page, "task-waits");
+  // Main's words follow the page's language, English here.
+  const { notice } = STRINGS.en;
+  if (walk.background) {
+    const shown = await smoke
+      .waitForLine("main", NOTICE, { from, timeoutMs: 60_000 })
+      .catch(() => null);
+    step.check(
+      "the watch tells of the wait: her name, the start's words and her goal",
+      shown !== null && fromEidolon(shown) === noticeLine(persona.name, notice.start),
+      shown === null ? "main.log has no notice within 60 s" : after(shown),
+    );
+  }
+
+  const denied = smoke.log("main").length;
+  await card.locator('[data-answer="deny"]').click();
+  const ended = await until(
+    "the task stopped by Deny",
+    async () => {
+      const now = await taskSnapshot(walk, task);
+      return now?.status === "cancelled" ? now : null;
+    },
+    15_000,
+    300,
+  ).catch(() => null);
+  step.check(
+    "Deny on its card stops it",
+    ended?.denied === true,
+    ended === null ? "the task didn't stop within 15 s" : `task ${task} cancelled by Deny`,
+  );
+  if (walk.background) {
+    const shown = await smoke
+      .waitForLine("main", NOTICE, { from: denied, timeoutMs: 45_000 })
+      .catch(() => null);
+    const notices = smoke
+      .log("main")
+      .slice(from)
+      .split(/\r?\n/)
+      .filter((line) => line.includes(NOTICE)).length;
+    step.check(
+      "the watch tells of its end, and of each once",
+      shown !== null &&
+        fromEidolon(shown) === noticeLine(persona.name, notice.cancelled) &&
+        notices === 2,
+      `${shown === null ? "main.log has no notice within 45 s of Deny" : after(shown)}; ${notices} notice(s) since the line`,
+    );
+  }
 }
 
 function runs(started: Started): boolean {

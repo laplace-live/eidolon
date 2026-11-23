@@ -1,8 +1,10 @@
-// The packaged smoke's own helpers, without Electron or Windows: a packaged app's layout, command
-// lines as ps and Windows give them, the natives lsof and PowerShell list, the photo and icon it
+// The packaged smoke's own helpers, without Electron or Windows: a packaged app's layout, a launcher
+// run as a terminal would, the PATH and variables it gets, the stand-in that tells whether it sets
+// ELECTRON_RUN_AS_NODE and a failed run's cause, command lines as ps and Windows give
+// them, the natives lsof and PowerShell list, the photo and icon it
 // reads, the logs' errors and leaks, the processes naming a run's folder, a folder's hashes, the
 // marker it leaves in a data home, and the NSIS setup's uninstall entry and silent uninstall.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import {
   existsSync,
@@ -15,8 +17,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { LAUNCHER_SOURCES, POSIX_LAUNCHERS } from "../scripts/node-shim.ts";
 import {
   ENTRIES_SCRIPT,
   namesUninstaller,
@@ -25,7 +28,9 @@ import {
 } from "../scripts/smoke/nsis.ts";
 import {
   appLayout,
+  cause,
   changedFiles,
+  closedPort,
   fileHashes,
   icoImages,
   inside,
@@ -35,13 +40,18 @@ import {
   lineTime,
   lsofLibraries,
   modulesScript,
+  nodesIn,
   placeMarker,
   powershellCommand,
   processesNaming,
   ROTATED_PHOTO,
+  runAsNodeProbe,
   runsOnBinary,
+  scriptRun,
   strayErrorLines,
+  systemFolders,
   windowsArgs,
+  withVariables,
 } from "../scripts/smoke/packaged.ts";
 
 const MAC_APP = "/Users/runner/work/eidolon/apps/desktop/.out/mac-arm64/Eidolon.app";
@@ -53,12 +63,14 @@ const WIN_PAYLOAD = `${WIN_FOLDER}\\resources\\eidolon`;
 const WIN_UNINSTALLER = `${WIN_FOLDER}\\Uninstall Eidolon.exe`;
 
 describe("a packaged app's layout", () => {
-  test("on macOS: the bundle's Resources hold the payload and the tray icon", () => {
+  test("on macOS: the bundle's Resources hold the payload, the tray icon and the launchers", () => {
     expect(appLayout(MAC_BINARY, "darwin")).toEqual({
       binary: MAC_BINARY,
       resources: `${MAC_APP}/Contents/Resources`,
       payload: MAC_PAYLOAD,
       trayIcon: `${MAC_APP}/Contents/Resources/assets/tray-icon.ico`,
+      terminalCommand: `${MAC_APP}/Contents/Resources/bin/eidolon`,
+      nodeShim: `${MAC_PAYLOAD}/node-shim/bin`,
     });
   });
 
@@ -68,7 +80,158 @@ describe("a packaged app's layout", () => {
       resources: `${WIN_FOLDER}\\resources`,
       payload: WIN_PAYLOAD,
       trayIcon: `${WIN_FOLDER}\\resources\\assets\\tray-icon.ico`,
+      terminalCommand: `${WIN_FOLDER}\\resources\\bin\\eidolon.cmd`,
+      nodeShim: `${WIN_PAYLOAD}\\node-shim\\bin`,
     });
+  });
+});
+
+describe("a launcher, run as a terminal would", () => {
+  test("on macOS by its own #! line, its arguments as they are", () => {
+    const script = `${MAC_APP}/Contents/Resources/bin/eidolon`;
+    expect(scriptRun(script, ["search", "--help"], "darwin")).toEqual({
+      command: script,
+      args: ["search", "--help"],
+      windowsVerbatimArguments: false,
+    });
+  });
+
+  test("on Windows through cmd.exe, the line quoted as /s reads it, which splits back as given", () => {
+    const script = "C:\\Users\\John Doe\\eidolon\\node-shim\\bin\\npx.cmd";
+    const run = scriptRun(
+      script,
+      ["-y", "file:C:\\a b\\hello", "two words"],
+      "win32",
+      "C:\\cmd.exe",
+    );
+    expect(run).toEqual({
+      command: "C:\\cmd.exe",
+      args: ["/d", "/s", "/c", `""${script}" "-y" "file:C:\\a b\\hello" "two words""`],
+      windowsVerbatimArguments: true,
+    });
+    // What cmd.exe hands the .cmd once /s took the outer quotes off, as the C runtime splits it.
+    expect(windowsArgs(run.args[3].slice(1, -1))).toEqual([
+      script,
+      "-y",
+      "file:C:\\a b\\hello",
+      "two words",
+    ]);
+  });
+
+  test("a PATH with no node of the computer's: the OS's own folders", () => {
+    expect(systemFolders("darwin", {})).toEqual(["/usr/bin", "/bin", "/usr/sbin", "/sbin"]);
+    expect(systemFolders("win32", { SystemRoot: "D:\\Windows" })).toEqual([
+      "D:\\Windows\\System32",
+      "D:\\Windows",
+      "D:\\Windows\\System32\\Wbem",
+      "D:\\Windows\\System32\\WindowsPowerShell\\v1.0",
+    ]);
+  });
+
+  test("its variables replace the environment's, on Windows whatever their case", () => {
+    const env = { Path: "C:\\old", HOME: "C:\\home", Keep: "1" };
+    expect(withVariables(env, { PATH: "C:\\new", HOME: "C:\\temp" }, "win32")).toEqual({
+      Keep: "1",
+      PATH: "C:\\new",
+      HOME: "C:\\temp",
+    });
+    expect(withVariables({ Path: "/a", PATH: "/b" }, { PATH: "/new" }, "darwin")).toEqual({
+      Path: "/a",
+      PATH: "/new",
+    });
+  });
+
+  test("finds a node in a folder, and none in one without", () => {
+    const root = mkdtempSync(join(tmpdir(), "eidolon-nodes-in-"));
+    try {
+      const name = process.platform === "win32" ? "node.exe" : "node";
+      mkdirSync(join(root, "with"));
+      mkdirSync(join(root, "without"));
+      writeFileSync(join(root, "with", name), "");
+      writeFileSync(join(root, "without", "nodejs"), "");
+      expect(nodesIn([join(root, "without"), join(root, "with")])).toEqual([
+        join(root, "with", name),
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a closed port refuses a connection", async () => {
+    const port = await closedPort();
+    const refused = await fetch(`http://127.0.0.1:${port}/`, {
+      signal: AbortSignal.timeout(5000),
+    }).then(
+      () => null,
+      (error: Error) => (error.cause as NodeJS.ErrnoException | undefined)?.code ?? error.message,
+    );
+    expect(refused).toBe("ECONNREFUSED");
+  });
+
+  // On Node, which ignores the variable, the launchers' other tests pass without it.
+  test.skipIf(process.platform === "win32")(
+    "a stand-in for EIDOLON_NODE: each of the shim's launchers sets ELECTRON_RUN_AS_NODE for it, and one without the line doesn't",
+    () => {
+      const root = mkdtempSync(join(tmpdir(), "eidolon-run-as-node-"));
+      try {
+        const probe = runAsNodeProbe(root, "darwin");
+        const unset = join(root, "node");
+        const text = readFileSync(join(LAUNCHER_SOURCES, "node"), "utf8");
+        writeFileSync(unset, text.replace("export ELECTRON_RUN_AS_NODE=1\n", ""), { mode: 0o755 });
+        const printed = (file: string) =>
+          spawnSync(file, ["--version"], {
+            encoding: "utf8",
+            env: { PATH: "/usr/bin:/bin", EIDOLON_NODE: probe },
+          }).stdout;
+        expect(
+          POSIX_LAUNCHERS.map((name) => [name, printed(join(LAUNCHER_SOURCES, name))]),
+        ).toEqual(POSIX_LAUNCHERS.map((name) => [name, "1\n"]));
+        expect(printed(unset)).toBe("\n");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test("the stand-in on Windows is a .cmd, which a .cmd launcher runs as EIDOLON_NODE", () => {
+    const root = mkdtempSync(join(tmpdir(), "eidolon-run-as-node-"));
+    try {
+      const probe = runAsNodeProbe(root, "win32");
+      expect([basename(probe), readFileSync(probe, "utf8")]).toEqual([
+        "run-as-node.cmd",
+        "@echo off\r\necho %ELECTRON_RUN_AS_NODE%\r\n",
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a failed run's cause: its error's own line, not Node's version after it", () => {
+    const uncaught = [
+      "node:internal/modules/cjs/loader:1568",
+      "  throw err;",
+      "  ^",
+      "",
+      "Error: Cannot find module '/app/eidolon/dist/cli.js'",
+      "    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15) {",
+      "  code: 'MODULE_NOT_FOUND',",
+      "  requireStack: []",
+      "}",
+      "",
+      "Node.js v24.22.1",
+      "",
+    ].join("\n");
+    expect(cause(uncaught)).toBe("Error: Cannot find module '/app/eidolon/dist/cli.js'");
+    expect(cause("[ERROR] ENOENT: lstat 'C:\\home'\r\nFor help, run: pnpm help dlx\r\n")).toBe(
+      "[ERROR] ENOENT: lstat 'C:\\home'",
+    );
+    expect(cause(" ERR_PNPM_FETCH_404  GET http://127.0.0.1:9/x: Not Found\n")).toBe(
+      "ERR_PNPM_FETCH_404  GET http://127.0.0.1:9/x: Not Found",
+    );
+    expect(cause("The system cannot find the path specified.\r\n")).toBe(
+      "The system cannot find the path specified.",
+    );
+    expect(cause("")).toBe("");
   });
 });
 
