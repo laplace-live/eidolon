@@ -136,11 +136,13 @@ describe("HistoryStore", () => {
   test("waits for another connection's write lock like Python's 5 s default", async () => {
     const path = tempPath("history.db");
     const store = new HistoryStore(path);
+    // The holder waits too, as Python's would: its COMMIT fails at once if it lands while one of the
+    // store's retries holds the shared lock.
     const holder = spawnProcess([
       process.execPath,
       "-e",
       `const { DatabaseSync } = require("node:sqlite");
-       const db = new DatabaseSync(${JSON.stringify(path)});
+       const db = new DatabaseSync(${JSON.stringify(path)}, { timeout: 5000 });
        db.exec("BEGIN IMMEDIATE");
        db.exec("INSERT INTO messages (id, session_scope) VALUES ('held', 'x')");
        console.log("locked");
