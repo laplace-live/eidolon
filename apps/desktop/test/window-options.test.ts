@@ -9,6 +9,7 @@ import {
   chromeOptions,
   DEFAULT_SIZE,
   HEADER_ROW_PX,
+  keptMaximized,
   MIN_SIZE,
   placement,
   readBounds,
@@ -57,6 +58,25 @@ describe("the bounds file", () => {
     }
     writeFileSync(file, '{"x":1,"y":2,"width":3,"height":4,"maximized":"yes"}');
     expect(readBounds(file)).toEqual({ x: 1, y: 2, width: 3, height: 4, maximized: false });
+  });
+
+  test("keeps a saved maximize until the window's first showing, so a hidden start quit unseen keeps it", () => {
+    expect(keptMaximized(false, { saved: true, waiting: true, maximized: false })).toBe(true);
+  });
+
+  test("after that showing, keeps whether the window is maximized", () => {
+    expect(keptMaximized(false, { saved: true, waiting: false, maximized: false })).toBe(false);
+    expect(keptMaximized(false, { saved: true, waiting: false, maximized: true })).toBe(true);
+    expect(keptMaximized(false, { saved: false, waiting: false, maximized: true })).toBe(true);
+    expect(keptMaximized(false, { saved: false, waiting: false, maximized: false })).toBe(false);
+  });
+
+  test("background mode, which never maximizes the window, keeps the flag as it was read", () => {
+    for (const saved of [false, true]) {
+      for (const waiting of [false, saved]) {
+        expect(keptMaximized(true, { saved, waiting, maximized: false })).toBe(saved);
+      }
+    }
   });
 });
 
