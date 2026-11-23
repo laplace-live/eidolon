@@ -1,5 +1,6 @@
-// Settings' Desktop App card: what each state of Open at Login and the terminal command says, and the
-// controls it leaves usable. Rendered to markup, with the macros stubbed.
+// Settings' Desktop App card: what each state of Open at Login and the terminal command says, the
+// controls it leaves usable, and when it reads Open at Login again. Rendered to markup, with the
+// macros stubbed.
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -105,6 +106,27 @@ describe("what each state says", () => {
     expect(changeFailed({ command: installed }, "install", "darwin")).toBeNull();
     expect(changeFailed({ command: absent, error: "cancelled" }, "install", "darwin")).toBeNull();
     expect(changeFailed({ command: installed, error: "cancelled" }, "remove", "darwin")).toBeNull();
+  });
+});
+
+describe("reading Open at Login", () => {
+  test("again every 3 s while macOS waits for the owner's OK, which System Settings gives, and not otherwise", () => {
+    const app = bridge("darwin");
+    if (!offersSystemOptions(app)) throw new Error("the fake bridge offers the options");
+    const { refetchInterval } = loginItemQuery(app);
+    const every = (data: LoginItemState | undefined) =>
+      typeof refetchInterval === "function"
+        ? refetchInterval({ state: { data } } as Parameters<typeof refetchInterval>[0])
+        : refetchInterval;
+    expect(every({ state: "needs-approval" })).toBe(3000);
+    for (const data of [
+      { state: "on" },
+      { state: "off" },
+      { state: "unavailable", reason: "background" },
+      undefined,
+    ] as const) {
+      expect(every(data)).toBe(false);
+    }
   });
 });
 
