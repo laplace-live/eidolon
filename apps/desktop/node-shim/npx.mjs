@@ -137,10 +137,18 @@ const REGISTRY_SETTING = new RegExp(
 );
 
 /**
- * An .npmrc for pnpm holding the registries, credentials and certificates of npm's `project`
- * config as npm reads them, each file they name as npm finds it from `cwd`; empty with none.
+ * An .npmrc for pnpm holding what npm installs by from its config `sources`, as npmConfig reads
+ * them, that pnpm reads from neither: the registries its variables name, over the registries,
+ * credentials and certificates of its project config, each file they name as npm finds it from
+ * `cwd`; empty with none.
  */
-export function projectNpmrc(project, cwd, home, platform = process.platform) {
+export function pnpmNpmrc([variables = {}, project = {}], cwd, home, platform = process.platform) {
+  // npm ranks its variables over its project config. pnpm would take their registries only on
+  // its command line, which any process can read, and a registry's URL can hold its token.
+  const settings = { ...project };
+  for (const [key, value] of Object.entries(variables)) {
+    if (key === "registry" || /^@[^:/]+:registry$/.test(key)) settings[key] = value;
+  }
   const lines = [];
   // npm takes a ${VAR} it left, VAR being unset, as written. pnpm ignores a registry or
   // credential holding one in a project's .npmrc, so the user's would serve in its place, and
@@ -150,12 +158,12 @@ export function projectNpmrc(project, cwd, home, platform = process.platform) {
   const placeholder = /\$\{[^}]+\}/;
   const asWritten = (text) =>
     placeholder.test(text) ? text.replace(/[${}]/g, (char) => encodeURIComponent(char)) : text;
-  for (const [key, value] of Object.entries(project)) {
+  for (const [key, value] of Object.entries(settings)) {
     if (!REGISTRY_SETTING.test(key) || /[=\r\n]/.test(key) || placeholder.test(key)) continue;
     if (Array.isArray(value) && key !== "ca") continue;
     const client = /^(.*):(?:certfile|keyfile)$/.exec(key)?.[1];
     // npm presents a client certificate only with both files there; pnpm ends on a missing one.
-    const pair = [project[`${client}:certfile`], project[`${client}:keyfile`]];
+    const pair = [settings[`${client}:certfile`], settings[`${client}:keyfile`]];
     const there = (file) =>
       typeof file === "string" &&
       file !== "" &&
@@ -239,12 +247,6 @@ export function npxSettings(sources, now = Date.now()) {
     // npm reads no pnpmfile; pnpm runs the one of the workspace around the folder, or the home's,
     // whose hooks can rewrite what installs.
     "--config.ignore-pnpmfile=true",
-    // npm takes registries from its variables, which pnpm never reads: a private package's name
-    // would resolve on the registry pnpm falls back on. The user's .npmrc pnpm reads itself, and
-    // the project's install writes for it.
-    ...Object.entries(sources[0] ?? {})
-      .filter(([key]) => key === "registry" || /^@[^:/]+:registry$/.test(key))
-      .map(([key, value]) => `--config.${key}=${value}`),
   ];
 }
 
@@ -1064,9 +1066,10 @@ function install(packages) {
   const scratch = mkdtempSync(path.join(tmpdir(), "eidolon-npx-"));
   // pnpm reads the .npmrc of the project it finds itself in, not the one npm reads at its local
   // prefix, and expands no ${VAR} in one's registries or credentials. So it runs in a folder of
-  // its own, with that .npmrc written there as npm reads it, and no pnpm workspace around it. The
-  // folder is the user's alone, and goes once pnpm ends.
-  const npmrc = projectNpmrc(sources[1] ?? {}, process.cwd(), homedir());
+  // its own, with that .npmrc written there as npm reads it, the registries npm's variables name
+  // over its own, and no pnpm workspace around it. The folder is the user's alone, and goes once
+  // pnpm ends.
+  const npmrc = pnpmNpmrc(sources, process.cwd(), homedir());
   if (npmrc) writeFileSync(path.join(scratch, ".npmrc"), `${npmrc}\n`, { mode: 0o600 });
   const report = path.join(scratch, "path");
   const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", import.meta.url));

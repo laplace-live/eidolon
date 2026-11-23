@@ -276,9 +276,12 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   const PRIVATE = "/corp";
   const TOKEN = "eidolon-test-token";
   const requests: { url: string; auth?: string }[] = [];
+  /** Called with each request's path, while a test sets it. */
+  let watch: ((url: string) => void) | undefined;
   const server = createServer((request, response) => {
     const url = decodeURIComponent(request.url ?? "/");
     requests.push({ url, auth: request.headers.authorization });
+    watch?.(url);
     if (url.startsWith(`${PRIVATE}/`) && request.headers.authorization !== `Bearer ${TOKEN}`) {
       response.writeHead(401);
       response.end(JSON.stringify({ error: "Unauthorized" }));
@@ -685,6 +688,30 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     const ran = await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd: project });
     expect([ran.status, ran.stdout, requests.slice(asked)]).toEqual([1, "", []]);
     expect(ran.stderr).toContain("Invalid URL");
+  }, 60_000);
+
+  test("gives pnpm no registry a variable names in its arguments, which any process reads", async () => {
+    // A registry whose path holds its token, as some do.
+    const token = "/eidolon-test-path-token";
+    publish(printer(join(scratch, "pathed"), "eidolon-test-pathed", "1.0.0", "pathed"), old, token);
+    // What ps shows, at each request for it, of the processes running.
+    const shown: string[][] = [];
+    watch = (url) => {
+      if (!url.startsWith(`${token}/`)) return;
+      const ps = spawnSync("ps", ["-A", "-ww", "-o", "args="], { encoding: "utf8" });
+      shown.push(
+        ps.status === 0 ? ps.stdout.split("\n").filter((line) => line.includes(token)) : ["ps"],
+      );
+    };
+    try {
+      const env = { npm_config_registry: `${registry}${token}/` };
+      const ran = await launch("npx", ["-y", "eidolon-test-pathed", "x"], { env });
+      expect([ran.status, ran.stdout, ran.stderr]).toEqual([0, 'pathed ["x"]\n', ""]);
+    } finally {
+      watch = undefined;
+    }
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.flat()).toEqual([]);
   }, 60_000);
 
   test("reads no .npmrc npm leaves unread: a workspace's own, or a pnpm workspace's", async () => {

@@ -26,7 +26,7 @@ type Plan =
 interface Npx {
   envReplace(text: string, env: Env): string;
   npmConfig(env: Env, prefix: string, home: string): Source[];
-  projectNpmrc(project: Source, cwd: string, home: string): string;
+  pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
   npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
   npmSpec(
     spec: string,
@@ -289,7 +289,7 @@ describe("npm's config, which npx installs by", () => {
     expect(blocks({ "allow-git": "all", "allow-remote": "all" })).toBe(false);
   });
 
-  test("takes a registry from npm_config_* variables, which pnpm doesn't read", () => {
+  test("takes a registry from npm_config_* variables, over the project's, off pnpm's arguments", () => {
     const env = {
       NPM_CONFIG_REGISTRY: "https://npm.corp.test/",
       "npm_config_@Corp:registry": "https://corp.test/npm/",
@@ -297,13 +297,15 @@ describe("npm's config, which npx installs by", () => {
       npm_config_registry_x: "https://x.test/",
     };
     const [variables = {}] = npx.npmConfig(env, root, root);
-    expect(settingsOf(variables, { registry: "https://user.test/" })).toEqual([
-      ...DEFAULTS,
-      "--config.registry=https://npm.corp.test/",
-      "--config.@corp:registry=https://corp.test/npm/",
+    // Any process can read pnpm's arguments, and a registry's URL can hold its token.
+    expect(settingsOf(variables, { registry: "https://user.test/" })).toEqual(DEFAULTS);
+    const project = { registry: "https://project.test/", "@other:registry": "https://other.test/" };
+    // pnpm reads the user's .npmrc, and npm_config_//… credentials, itself.
+    expect(npx.pnpmNpmrc([variables, project], "/work", "/home").split("\n")).toEqual([
+      '"registry"="https://npm.corp.test/"',
+      '"@other:registry"="https://other.test/"',
+      '"@corp:registry"="https://corp.test/npm/"',
     ]);
-    // pnpm reads the .npmrc files' itself.
-    expect(settingsOf({}, { registry: "https://project.test/" })).toEqual(DEFAULTS);
   });
 
   test("installs nothing under strict-allow-scripts, but with every script or none", () => {
@@ -438,7 +440,7 @@ describe("npm's config, which npx installs by", () => {
       "//half.test/:certfile": "certs/client.pem",
       "//half.test/:keyfile": "certs/missing.key",
     };
-    expect(npx.projectNpmrc(project, cwd, "/home/me").split("\n")).toEqual([
+    expect(npx.pnpmNpmrc([{}, project], cwd, "/home/me").split("\n")).toEqual([
       '"registry"="https://npm.corp.test/"',
       '"@corp:registry"="https://corp.test/npm/"',
       String.raw`"//corp.test/npm/:_authToken"="to\"k;en="`,
@@ -448,10 +450,10 @@ describe("npm's config, which npx installs by", () => {
       '"ca[]"="one"',
       '"ca[]"="two"',
     ]);
-    expect(npx.projectNpmrc({ cafile: "ca.pem" }, "/work", "/home")).toBe(
+    expect(npx.pnpmNpmrc([{}, { cafile: "ca.pem" }], "/work", "/home")).toBe(
       '"cafile"="/work/ca.pem"',
     );
-    expect(npx.projectNpmrc({ "ignore-scripts": "true" }, "/work", "/home")).toBe("");
+    expect(npx.pnpmNpmrc([{}, { "ignore-scripts": "true" }], "/work", "/home")).toBe("");
   });
 
   test("keeps a value whose variable is unset as npm has it, which pnpm would ignore", () => {
@@ -465,12 +467,16 @@ describe("npm's config, which npx installs by", () => {
       // A key naming no registry.
       [`//${host}/:_authToken`]: "unused",
     };
-    expect(npx.projectNpmrc(project, "/work", "/home").split("\n")).toEqual([
+    expect(npx.pnpmNpmrc([{}, project], "/work", "/home").split("\n")).toEqual([
       '"@corp:registry"="%24%7BCORP_REGISTRY%7D"',
       '"registry"="http://%24%7BHOST%7D/npm/"',
       '"//corp.test/:_authToken"="a%24%7BTOKEN%7D%7Bb%7D%24c"',
       '"cafile"="/work/%24%7BCA%7D.pem"',
     ]);
+    // A variable's too.
+    expect(npx.pnpmNpmrc([{ "@v:registry": `\${V}` }, {}], "/work", "/home")).toBe(
+      '"@v:registry"="%24%7BV%7D"',
+    );
   });
 });
 
