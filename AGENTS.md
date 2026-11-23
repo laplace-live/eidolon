@@ -59,9 +59,9 @@ packages/             subsystems, one Bun workspace package each (docs/typescrip
 laplace_eidolon/      the Python, with tests/: for human readers only ("The Python" under Rules)
 personas/<id>/        a persona's template: persona.yaml, prompt.md (the system
                       prompt), glossary.toml, references/outfits/ (what take_selfie
-                      redraws, one used per render). Her index, friends/ and
-                      sources live in the data home, ~/.laplace/eidolon
-                      (docs/personas.md)
+                      redraws, one used per render). Her index, friends/,
+                      models/ and sources live in the data home,
+                      ~/.laplace/eidolon (docs/personas.md)
 data/                 local only, never committed: generated/ (laplace-generate-image)
 streams/, vods/       empty and unused; a persona's sources are in
                       ~/.laplace/eidolon/sources/<id>/
@@ -91,6 +91,7 @@ a row here and writing the prose there — not a new section in this file.**
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
 | changesets, the version PR, `changelog.json` (`scripts/changelog.ts`), tags (the desktop app's included), or publishing the npm packages (`apps/eidolon`, `packages/sdk`) | [releasing.md](docs/releasing.md) |
 | the browser client SDK (`@laplace.live/eidolon-sdk`, `packages/sdk`) | [client-sdk.md](docs/client-sdk.md) |
+| avatars: a persona's PSD2Live models (`/api/local/personas/:id/models`, `apps/bot/src/local/appearance.ts` and `psd2live.ts`, `appearance.model`), the studio's Appearance, the SDK's avatar entry (`packages/sdk/src/avatar`) and its vendored runtime, her moods from her cues, lip sync, framing or outfits | [avatar.md](docs/avatar.md) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
 | broadcast overviews, date-scoped recall, the archive lookup tool, or when she last did something | [stream-recall.md](docs/stream-recall.md) |
@@ -184,7 +185,8 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`, and for what production loads `bun apps/bot/scripts/bun-check.ts`; for retrieval, the gate or the voice loop, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
-| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun run test apps/bot/test/local`, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat, voice messages and a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
+| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun run test apps/bot/test/local`, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a chat, a group chat, voice messages, the studio's Appearance importing the test rig and drawing its preview under the app's CSP, and a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
+| the SDK's avatar entry (`packages/sdk/src/avatar`) or its vendored runtime, the mood table or the mouth curve, a persona's models (`apps/bot/src/local/appearance.ts`, `psd2live.ts`, `routes/appearance.ts`) or the studio's Appearance | the `packages/sdk`, `apps/web` and local mode rows: their tests hold the SDK's model inventory to the server's upload check (`packages/sdk/test/parity.test.ts`), and the smoke imports the test rig and checks its preview draws under the app's CSP. A new runtime also takes the `apps/eidolon` and desktop rows, since the npm package and the desktop payload ship it in `data/psd2live/` for the upload check, which `ci-install-check.ts` runs on the test rig. The mood table's tests (`packages/sdk/test/avatar-moods.test.ts`) hold `prompt.md`'s published directions and lines written in their style, never lines from the owner's chats; a `MOUTH_CURVE` change is tuned on her own voice messages, not on synthetic audio alone, against the numbers in [avatar.md](docs/avatar.md#lip-sync) |
 | her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`; a task that needs a lookup and a run, which names its kind, asks on its card before the command and searches. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64 and Windows x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, loads its native modules, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
@@ -353,8 +355,11 @@ the layout's one line.
   module's folder is `dist/`. A file the code ships with (a template, the web build, jieba's
   data, an entry to spawn) resolves through `shippedPath` in `@eidolon/config`, under the
   launcher's `EIDOLON_APP_ROOT` or else the checkout, and `apps/eidolon`'s build copies it in.
-  The one exception is the desktop app's main process, which may not import `@eidolon/config`: it
-  finds its payload through `process.resourcesPath` when packaged, or the checkout when not.
+  Two exceptions: the desktop app's main process, which may not import `@eidolon/config`, finds
+  its payload through `process.resourcesPath` when packaged, or the checkout when not; and the
+  SDK's avatar entry, browser code, names PSD2Live's runtime in `psd2liveRuntimeUrl()` as
+  `new URL("./wasm/p2l_runtime.wasm", import.meta.url)`, which bundlers rewrite and the SDK's pack
+  ships beside its bundle, while the server reads that file through `psd2liveDir()`.
 - **Windows has no process groups and no SIGTERM: every kill there is TerminateProcess.** Spawn
   through `spawnProcess` (or cross-spawn, for a `.cmd` such as `npx`), which hides the child's
   console window; end a process with what it started through `killTree` (`@eidolon/config`, taskkill
@@ -609,8 +614,36 @@ the layout's one line.
   and to [personas.md](docs/personas.md), with the variable that configures it;
   a test holds the two in step.
 - **A template under `personas/` is published.** Never add an index, a source
-  file, a friend image, or anything a viewer said to one; those belong in the
-  data home.
+  file, a friend image, a character model, or anything a viewer said to one;
+  those belong in the data home.
+
+### Avatars
+
+- **PSD2Live-derived code carries its MIT header,** then `Ported from psd2live <path>@f66ba461`;
+  `packages/sdk` keeps `LICENSE-psd2live` and `THIRD_PARTY.md`, its pack ships both, and `NOTICE`
+  names the holder (`build.test.ts` checks it).
+- **PSD2Live's runtime is vendored byte for byte.** `packages/sdk/src/avatar/psd2live/README.md`
+  names the commit and SHA-256 of `wasm/p2l_runtime.wasm`, PSD2Live's committed build, which is
+  never edited or rebuilt here; it changes only through that README's refresh steps, which move the
+  ported player, its licenses and every test that pins the SHA-256 with it.
+- **The page runs no JavaScript that came with a model.** A model is its `.p2lrt` alone, drawn by
+  the runtime and player the app ships; a PSD2Live `web` export's `p2l.js` and wasm are never kept,
+  served or run.
+- **`'wasm-unsafe-eval'` is all the CSP adds for avatars.** It lets the local app's pages compile
+  WebAssembly and allows no eval; never add `'unsafe-eval'` or another script source for a model
+  (`static.test.ts` pins the header).
+- **Never bundle or run PSD2Live's editor (GPL-3.0) or Cubism Core.** Eidolon runs only PSD2Live's
+  MIT runtime and its ported web player; the owner makes models in their own copy of PSD2Live.
+- **Never call a PSD2Live model Live2D.** Its kind is `psd2live`, its plain name "2D model", and the
+  UI says "2D Model · PSD2Live": Live2D is Live2D Inc.'s trademark for Cubism models, which a
+  `.p2lrt` isn't.
+- **A persona's models live only in her data-home folder,** `<data home>/personas/<id>/models/`,
+  written only by the server once PSD2Live's runtime has loaded the file. The app never reads a
+  template's, and the one rig in the repository is the CC0 test fixture in
+  `apps/bot/test/local/fixtures/psd2live/`, which the production image leaves out.
+- **A clip is found by group, then name, then id, and an id a rig lacks changes nothing.**
+  PSD2Live's editor names clip ids `modifier:m32:…` under the name and group `Idle`, and the
+  upstream player's `-1` for an unknown id stopped the clip playing or faded every expression out.
 
 ### Shipping a change
 
