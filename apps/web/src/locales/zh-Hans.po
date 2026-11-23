@@ -3647,8 +3647,8 @@ msgid "On"
 msgstr "开"
 
 #: src/components/settings-form/labels.ts
-msgid "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. On Windows, commands need Git Bash."
-msgstr "开启后，任务可以请求在这台电脑上运行命令，每条都要你在任务卡片上同意，除非你在它的文件夹里始终允许过这条命令。关闭后，任务不会再开始运行命令。在 Windows 上，运行命令需要 Git Bash。"
+msgid "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. On Windows, commands need Git Bash, or Cygwin's or MSYS2's bash on your PATH."
+msgstr "开启后，任务可以请求在这台电脑上运行命令，每条都要你在任务卡片上同意，除非你在它的文件夹里始终允许过这条命令。关闭后，任务不会再开始运行命令。在 Windows 上，运行命令需要 Git Bash，或者 PATH 中有 Cygwin 或 MSYS2 的 bash。"
 
 #: src/features/home/readiness-labels.ts
 msgid "On: she remembers you from one call to the next."
