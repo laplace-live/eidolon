@@ -103,6 +103,17 @@ export function formatCount(count: number, lang: Lang): string {
   return cached(`count:${lang}`, () => new Intl.NumberFormat(lang)).format(count);
 }
 
+/** A date in the viewer's locale and time zone. */
+export function formatDate(iso: string, lang: Lang): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const format = cached(
+    `date:${lang}`,
+    () => new Intl.DateTimeFormat(lang, { dateStyle: "medium" }),
+  );
+  return format.format(date);
+}
+
 /** A date and time in the viewer's locale and time zone. */
 export function formatDateTime(iso: string, lang: Lang): string {
   const date = new Date(iso);

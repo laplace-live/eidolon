@@ -2,11 +2,12 @@
 import {
   type AccountList,
   draftOf,
+  effectiveProvider,
   effectiveProviderType,
   isTimeZone,
 } from "@/components/settings-form/controls";
 import type { AccountView, CreatePersonaRequest, SettingRow, Status } from "@/lib/api";
-import { roleById } from "@/lib/providers";
+import { providerOfAccount, roleById } from "@/lib/providers";
 
 export const STEPS = ["keys", "persona", "voice", "memory", "done"] as const;
 export type Step = (typeof STEPS)[number];
@@ -101,6 +102,18 @@ export function voiceProvider(
     effectiveProviderType(roleById("voice"), rows, {}, accounts) ??
     (accounts === undefined ? null : "fish")
   );
+}
+
+/**
+ * The Fish account a persona speaks through, whose own voices the picker lists beside the library;
+ * null while she speaks through another provider, or an account Eidolon doesn't know.
+ */
+export function fishVoiceAccount(
+  rows: readonly SettingRow[],
+  accounts: AccountList | undefined,
+): string | null {
+  const account = effectiveProvider(roleById("voice"), rows, {});
+  return providerOfAccount(account, accounts) === "fish" ? account : null;
 }
 
 /** A voice picked from one provider's voices. */

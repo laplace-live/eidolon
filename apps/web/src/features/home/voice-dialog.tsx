@@ -10,15 +10,17 @@ import { refreshPersonas, saveVoice } from "@/features/setup/personas";
 import type { Voice } from "@/lib/api";
 import { changeVoiceDialog } from "./voice";
 
-/** Picks a public Fish voice for a persona and saves it in her persona.yaml. */
+/** Picks one of the account's own Fish voices or a public one, and saves it in her persona.yaml. */
 export function VoiceDialog({
   persona,
   current,
+  account,
   open,
   onOpenChange,
 }: {
   readonly persona: { readonly id: string; readonly name: string };
   readonly current: string | null;
+  readonly account: string | null;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }) {
@@ -41,11 +43,12 @@ export function VoiceDialog({
     >
       <LargeDialogContent
         title={t`Pick a Voice`}
-        description={t`How ${ph({ name: persona.name })} sounds. Search Fish Audio's public voices and play a sample before you pick one.`}
+        description={t`How ${ph({ name: persona.name })} sounds. Choose from your own Fish Audio voices or the public library, and play a sample before you pick one.`}
       >
         <VoicePicker
           value={save.variables?.id ?? current}
           onChange={(voice) => save.mutate(voice)}
+          account={account}
           disabled={save.isPending}
         />
         {save.isError && <ErrorAlert error={save.error} />}

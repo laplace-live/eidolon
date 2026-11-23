@@ -156,14 +156,16 @@ function StyleRow({
   );
 }
 
-/** Her style's voice: Fish's search or an id, a provider's fixed set, or an id typed in. */
+/** Her style's voice: Fish's lists or an id, a provider's fixed set, or an id typed in. */
 function StyleVoice({
   provider,
+  account,
   value,
   onChange,
   disabled,
 }: {
   readonly provider: string;
+  readonly account: string | null;
   readonly value: string;
   readonly onChange: (voiceId: string) => void;
   readonly disabled: boolean;
@@ -224,6 +226,7 @@ function StyleVoice({
       <VoicePicker
         value={value === "" ? null : value}
         onChange={(voice) => onChange(voice.id)}
+        account={account}
         disabled={disabled}
       />
       <VoiceById disabled={disabled} onUse={onChange} />
@@ -240,6 +243,7 @@ interface Draft {
 
 function StyleForm({
   provider,
+  account,
   styles,
   draft,
   saving,
@@ -248,6 +252,7 @@ function StyleForm({
   onCancel,
 }: {
   readonly provider: string;
+  readonly account: string | null;
   readonly styles: VoiceStyles;
   readonly draft: Draft;
   readonly saving: boolean;
@@ -350,7 +355,13 @@ function StyleForm({
         {/* A fieldset grows to fit the voice list's rows unless held to the dialog's width. */}
         <FieldSet className="min-w-0">
           <FieldLegend>{t`Its Voice`}</FieldLegend>
-          <StyleVoice provider={provider} value={voiceId} onChange={setVoiceId} disabled={saving} />
+          <StyleVoice
+            provider={provider}
+            account={account}
+            value={voiceId}
+            onChange={setVoiceId}
+            disabled={saving}
+          />
           {showErrors && noVoice && <FieldError>{t`Pick a voice for this style.`}</FieldError>}
         </FieldSet>
       </div>
@@ -362,10 +373,13 @@ function StyleForm({
 export function VoiceStylesCard({
   persona,
   provider,
+  account,
 }: {
   readonly persona: PersonaSummary;
   /** Her voice's provider, whose voices her styles are. */
   readonly provider: string;
+  /** Her voice's account while it is Fish's, whose own voices her styles can take. */
+  readonly account: string | null;
 }) {
   const { t } = useLingui();
   const queryClient = useQueryClient();
@@ -502,6 +516,7 @@ export function VoiceStylesCard({
           <StyleForm
             key={opened}
             provider={provider}
+            account={account}
             styles={styles}
             draft={draft}
             saving={save.isPending}

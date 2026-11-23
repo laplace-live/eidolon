@@ -30,6 +30,7 @@ import { activatePersona, createPersona, refreshPersonas } from "./personas";
 import { VoiceChoice } from "./voice-choice";
 import {
   EMPTY_PERSONA,
+  fishVoiceAccount,
   type PersonaDraft,
   personaErrors,
   pickedVoice,
@@ -63,8 +64,9 @@ export function NewPersonaDialog({
   const [activate, setActivate] = useState(true);
   const [showErrors, setShowErrors] = useState(false);
   const taken = personas.data?.personas.map((persona) => persona.id) ?? [];
-  const provider =
-    active.data === undefined ? null : voiceProvider(active.data.settings, accounts.data?.accounts);
+  const rows = active.data?.settings;
+  const provider = rows ? voiceProvider(rows, accounts.data?.accounts) : null;
+  const account = rows ? fishVoiceAccount(rows, accounts.data?.accounts) : null;
   // A failed request leaves no provider to offer voices from.
   const unavailable = provider === null ? (active.error ?? accounts.error) : null;
   const voice = pickedVoice(pick, provider);
@@ -163,6 +165,7 @@ export function NewPersonaDialog({
             {provider !== null && (
               <VoiceChoice
                 provider={provider}
+                account={account}
                 value={voice}
                 fallback={fallback}
                 onChange={(next) => setPick({ provider, voice: next })}

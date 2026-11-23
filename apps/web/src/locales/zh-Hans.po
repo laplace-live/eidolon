@@ -541,7 +541,7 @@ msgstr "链接在 10 分钟内有效。"
 msgid "A message holds up to {count} files"
 msgstr "一条消息最多附带 {count} 个文件"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "A name or a style, e.g. 温柔"
 msgstr "名字或风格，例如 温柔"
 
@@ -676,6 +676,10 @@ msgstr "请填写上面的全部密钥后再继续。"
 msgid "Add Facts"
 msgstr "添加资料"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Add its key in <0>Settings → Providers</0> to see the voices you made on Fish Audio."
+msgstr "到<0>「设置 → 服务商」</0>添加它的密钥，就能看到你在 Fish Audio 上创建的声音。"
+
 #: src/features/call/call-page.tsx
 #: src/features/chats/chat-view.tsx
 #: src/features/home/readiness-labels.ts
@@ -762,6 +766,10 @@ msgstr "全部技能"
 #: src/features/usage/route.tsx
 msgid "All Time"
 msgstr "全部"
+
+#: src/components/voice-picker/parts.tsx
+msgid "All Voices"
+msgstr "全部声音"
 
 #: src/features/tasks/cards.tsx
 msgid "Allow Any Site"
@@ -897,7 +905,7 @@ msgstr "另一个应用正在使用麦克风。关闭它后再试一次。"
 msgid "Another run is already working on this persona."
 msgstr "另一次运行正在处理这个人设。"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Any Language"
 msgstr "所有语言"
 
@@ -1374,6 +1382,10 @@ msgstr "检查未通过"
 msgid "Check it below. Already running Qdrant here? Just check its address."
 msgstr "然后在下面检查。如果本机已经在运行 Qdrant，直接检查它的地址即可。"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Check it in <0>Settings → Providers</0>."
+msgstr "请到<0>「设置 → 服务商」</0>检查。"
+
 #: src/features/studio/add-videos.tsx
 msgid "Check Links"
 msgstr "检查链接"
@@ -1398,11 +1410,11 @@ msgstr "请检查麦克风，然后再试一次。"
 msgid "Checking on the task…"
 msgstr "正在查看任务…"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Chinese"
 msgstr "中文"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "Choose"
 msgstr "选择"
 
@@ -1418,7 +1430,7 @@ msgstr "请在设置中选择任务使用的账号和模型，并为该账号添
 msgid "Choosing a voice saves it for {name}."
 msgstr "选中的声音会立即保存到{name}的设置中。"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "Chosen"
 msgstr "已选择"
 
@@ -1572,6 +1584,10 @@ msgstr "无法连接到服务商。"
 msgid "Create"
 msgstr "创建"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Create a Voice on Fish Audio"
+msgstr "在 Fish Audio 上创建声音"
+
 #: src/features/setup/voice-step.tsx
 msgid "Create Her"
 msgstr "创建人设"
@@ -1580,11 +1596,15 @@ msgstr "创建人设"
 msgid "Create Your Own"
 msgstr "创建自己的人设"
 
+#: src/components/voice-picker/parts.tsx
+msgid "Created {date}"
+msgstr "创建于 {date}"
+
 #: src/components/settings-form/check-result.tsx
 msgid "Credit left: {amount}"
 msgstr "剩余余额：{amount}"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "Current voice:"
 msgstr "当前声音："
 
@@ -1956,7 +1976,7 @@ msgstr "启用"
 msgid "Ended with an error ({when})."
 msgstr "因错误结束（{when}）。"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgctxt "voice language"
 msgid "English"
 msgstr "英文"
@@ -2138,6 +2158,10 @@ msgstr "Fish Audio 无法使用{name}从环境变量继承的声音，通话可�
 msgid "Fish Audio can't use the voice she inherits from <0>{env}</0>. Pick her own below."
 msgstr "Fish Audio 用不了她从 <0>{env}</0> 继承的声音。请在下面为她选一个。"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Fish Audio refused this account's key"
+msgstr "Fish Audio 拒绝了这个账号的密钥"
+
 #: src/components/settings-form/labels.ts
 msgid "Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken."
 msgstr "Fish Audio 的 drama-3 会演绎提示词里的所有表演提示。换用其他模型时，Eidolon 会在朗读前删掉它读不懂的提示。"
@@ -2178,8 +2202,8 @@ msgid "Folders every task may read and write besides its own, one per line."
 msgstr "除了任务自己的文件夹，每个任务都能读写的文件夹，每行一个。"
 
 #: src/features/studio/voice-by-id.tsx
-msgid "For a voice the search can't find, such as a private one of your Fish account: copy its ID from its page on fish.audio."
-msgstr "用于搜索不到的声音，比如你 Fish 账号里的私有声音：在 fish.audio 上该声音的页面复制它的 ID。"
+msgid "For a voice neither list shows, such as one shared with you by link: copy its ID from its page on fish.audio."
+msgstr "用于两个列表里都没有的声音，比如别人通过链接分享给你的声音：在 fish.audio 上该声音的页面复制它的 ID。"
 
 #: src/features/jobs/parts.tsx
 msgid "Force Stop"
@@ -2401,8 +2425,8 @@ msgstr "{name}的声音。"
 
 #: src/features/home/voice-dialog.tsx
 #: src/features/setup/voice-step.tsx
-msgid "How {name} sounds. Search Fish Audio's public voices and play a sample before you pick one."
-msgstr "{name}的声音。搜索 Fish Audio 的公开声音，试听样本后再选择。"
+msgid "How {name} sounds. Choose from your own Fish Audio voices or the public library, and play a sample before you pick one."
+msgstr "{name}的声音。从你自己的 Fish Audio 声音或公开声音库里挑选，试听样本后再选择。"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her."
@@ -2782,7 +2806,7 @@ msgstr "它的花费暂停已关闭。"
 msgid "Its Voice"
 msgstr "它的声音"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Japanese"
 msgstr "日文"
 
@@ -3180,6 +3204,10 @@ msgstr "月份"
 msgid "Mute your mic"
 msgstr "关闭麦克风"
 
+#: src/components/voice-picker/index.tsx
+msgid "My Voices"
+msgstr "我的声音"
+
 #: src/features/settings/account-dialog.tsx
 #: src/features/settings/new-skill-dialog.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -3341,7 +3369,7 @@ msgstr "尚未设置 Qdrant 地址。"
 msgid "No result"
 msgstr "没有结果"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "No sample"
 msgstr "无样本"
 
@@ -3409,9 +3437,13 @@ msgstr "还没有声线风格"
 msgid "No voice yet"
 msgstr "还没有声音"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "No voices match."
 msgstr "没有匹配的声音。"
+
+#: src/components/voice-picker/mine.tsx
+msgid "No voices of your own yet"
+msgstr "还没有你自己的声音"
 
 #: src/features/tasks/labels.ts
 msgid "No Web"
@@ -3881,6 +3913,10 @@ msgstr "播放语音消息"
 msgid "Playback Position"
 msgstr "播放进度"
 
+#: src/components/voice-picker/parts.tsx
+msgid "Private"
+msgstr "私有"
+
 #: src/features/studio/route.tsx
 msgid "Profile"
 msgstr "基本信息"
@@ -3915,6 +3951,10 @@ msgstr "服务商账号"
 msgid "Providers"
 msgstr "服务商"
 
+#: src/components/voice-picker/parts.tsx
+msgid "Public"
+msgstr "公开"
+
 #: src/components/settings-form/labels.ts
 msgid "Public Chat Personas"
 msgstr "公开聊天的人设"
@@ -3922,6 +3962,10 @@ msgstr "公开聊天的人设"
 #: src/components/settings-form/labels.ts
 msgid "Public Deployment"
 msgstr "公开部署"
+
+#: src/components/voice-picker/index.tsx
+msgid "Public Library"
+msgstr "公开声音库"
 
 #: src/components/settings-form/labels.ts
 msgid "Qdrant Collection"
@@ -4434,6 +4478,10 @@ msgstr "不纳入索引的场景类型"
 msgid "Search"
 msgstr "检索"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Search by name"
+msgstr "按名字搜索"
+
 #: src/components/settings-form/model-picker.tsx
 msgid "Search models"
 msgstr "搜索模型"
@@ -4450,9 +4498,13 @@ msgstr "搜索技能"
 msgid "Search Skills"
 msgstr "搜索技能"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Search Voices"
 msgstr "搜索声音"
+
+#: src/components/voice-picker/mine.tsx
+msgid "Search Your Voices"
+msgstr "搜索你的声音"
 
 #: src/components/settings-form/labels.ts
 msgid "Selfie Aspect Ratio"
@@ -4675,7 +4727,7 @@ msgstr "她会使用实时语音模型自带的声音，而不是为她选的声
 msgid "She speaks Mandarin, so add Mandarin streams. For audio in another language, set it under Transcription below."
 msgstr "她说普通话，所以请添加普通话直播。如果音频是其他语言，请在下方的转写里设置。"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "She speaks Mandarin, so the search starts among Chinese voices."
 msgstr "她说普通话，所以默认搜索中文声音。"
 
@@ -4733,7 +4785,7 @@ msgstr "显示已完成的"
 msgid "Show Less"
 msgstr "收起"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/parts.tsx
 msgid "Show More"
 msgstr "显示更多"
 
@@ -5362,8 +5414,8 @@ msgid "The file is too large."
 msgstr "文件太大。"
 
 #: src/features/studio/voice-section.tsx
-msgid "The Fish Audio voice she speaks with. Search the public voices, listen to a sample, and pick one."
-msgstr "她说话用的 Fish Audio 声音。搜索公开声音，试听样本，然后选一个。"
+msgid "The Fish Audio voice she speaks with. Choose from your own voices or the public library, listen to a sample, and pick one."
+msgstr "她说话用的 Fish Audio 声音。从你自己的声音或公开声音库里挑选，试听样本，然后选一个。"
 
 #: src/features/studio/videos-section.tsx
 msgid "The free space on the data home's disk is unknown."
@@ -5630,6 +5682,10 @@ msgstr "思考并写出她的回复。"
 #: src/features/setup/keys-step.tsx
 msgid "This account has no default model, so name the one to use."
 msgstr "这个账号没有默认模型，请填写要用的模型。"
+
+#: src/components/voice-picker/mine.tsx
+msgid "This account has no key yet"
+msgstr "这个账号还没有密钥"
 
 #: src/features/studio/videos-section.tsx
 msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
@@ -5919,6 +5975,10 @@ msgstr "不可用"
 msgid "Unavailable, so videos can't be downloaded. Install it with brew install yt-dlp or pip install yt-dlp: Eidolon then uses the one on your PATH."
 msgstr "不可用，无法下载视频。可以用 brew install yt-dlp 或 pip install yt-dlp 安装，Eidolon 会使用 PATH 中的版本。"
 
+#: src/components/voice-picker/parts.tsx
+msgid "Unlisted"
+msgstr "仅链接可见"
+
 #: src/features/call/call-controls.tsx
 msgid "Unmute your mic"
 msgstr "打开麦克风"
@@ -6074,6 +6134,10 @@ msgstr "找到的视频（{count}）"
 msgid "View"
 msgstr "视图"
 
+#: src/components/voice-picker/mine.tsx
+msgid "Visibility"
+msgstr "可见范围"
+
 #: src/components/settings-form/labels.ts
 #: src/features/home/readiness-labels.ts
 #: src/features/setup/stepper.tsx
@@ -6095,7 +6159,7 @@ msgstr "语音"
 msgid "Voice ID"
 msgstr "声音 ID"
 
-#: src/components/voice-picker/index.tsx
+#: src/components/voice-picker/library.tsx
 msgid "Voice Language"
 msgstr "声音语言"
 
@@ -6136,6 +6200,14 @@ msgstr "声线风格"
 #: src/features/studio/voice-styles-card.tsx
 msgid "Voices she switches to when you ask for one, as in “声音温柔一点” or “换回原来的”. Her voice above stays her default."
 msgstr "你要求时她会切换到的声音，比如“声音温柔一点”或“换回原来的”。上面的声音仍是她的默认声音。"
+
+#: src/components/voice-picker/mine.tsx
+msgid "Voices you made on Fish Audio, private ones included, newest first."
+msgstr "你在 Fish Audio 上创建的声音，包括私有声音，最新的排在前面。"
+
+#: src/components/voice-picker/mine.tsx
+msgid "Voices you make on Fish Audio show up here, private ones included."
+msgstr "你在 Fish Audio 上创建的声音会显示在这里，包括私有声音。"
 
 #: src/features/tasks/labels.ts
 msgid "Waiting"

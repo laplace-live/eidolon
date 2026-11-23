@@ -21,7 +21,14 @@ import {
 } from "./personas";
 import { StepCard } from "./step-card";
 import { VoiceChoice } from "./voice-choice";
-import { inheritedValue, ownValue, pickedVoice, type VoicePick, voiceProvider } from "./wizard";
+import {
+  fishVoiceAccount,
+  inheritedValue,
+  ownValue,
+  pickedVoice,
+  type VoicePick,
+  voiceProvider,
+} from "./wizard";
 
 const VOICE = "voice.voiceId";
 
@@ -60,10 +67,9 @@ export function VoiceStep({
   const inherited = existing ? inheritedValue(row) : null;
   const name = existing ? existing.name : target.kind === "create" ? target.draft.name : "";
   const env = row?.env ?? "";
-  const provider =
-    settings.data === undefined
-      ? null
-      : voiceProvider(settings.data.settings, accounts.data?.accounts);
+  const rows = settings.data?.settings;
+  const provider = rows ? voiceProvider(rows, accounts.data?.accounts) : null;
+  const account = rows ? fishVoiceAccount(rows, accounts.data?.accounts) : null;
   // A failed request leaves no provider to offer voices from.
   const unavailable = provider === null ? (settings.error ?? accounts.error) : null;
   const chosen = pickedVoice(pick, provider);
@@ -103,7 +109,7 @@ export function VoiceStep({
       title={t`Pick a Voice`}
       description={
         provider === "fish"
-          ? t`How ${name} sounds. Search Fish Audio's public voices and play a sample before you pick one.`
+          ? t`How ${name} sounds. Choose from your own Fish Audio voices or the public library, and play a sample before you pick one.`
           : t`How ${name} sounds.`
       }
       onBack={onBack}
@@ -129,6 +135,7 @@ export function VoiceStep({
       {provider !== null && (
         <VoiceChoice
           provider={provider}
+          account={account}
           value={chosen}
           fallback={fallback}
           onChange={(voice) => setPick({ provider, voice })}

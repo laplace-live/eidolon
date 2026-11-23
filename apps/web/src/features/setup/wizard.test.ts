@@ -11,6 +11,7 @@ import {
   DEMO_PERSONA,
   EMPTY_PERSONA,
   firstStep,
+  fishVoiceAccount,
   flagOn,
   inheritedValue,
   isNewInstall,
@@ -119,9 +120,10 @@ test("a persona inherits the environment's value only while her file leaves it u
   expect(inheritedValue(undefined)).toBeNull();
 });
 
+const provider = (patch: Partial<SettingRow>) =>
+  setting("voice.provider", { env: "TTS_PROVIDER", scope: "persona", ...patch });
+
 test("the voice step offers the voices of the provider she speaks through", () => {
-  const provider = (patch: Partial<SettingRow>) =>
-    setting("voice.provider", { env: "TTS_PROVIDER", scope: "persona", ...patch });
   const accounts = [{ id: "speech", provider: "openai" }];
   expect(voiceProvider([], undefined)).toBe("fish");
   expect(voiceProvider([provider({ value: "fish", source: "persona" })], [])).toBe("fish");
@@ -134,6 +136,24 @@ test("the voice step offers the voices of the provider she speaks through", () =
   expect(voiceProvider([provider({ value: "nobody", source: "persona" })], [])).toBe("fish");
   // Until the accounts load, an account's provider is unknown, not Fish's.
   expect(voiceProvider([provider({ value: "speech", source: "persona" })], undefined)).toBeNull();
+});
+
+test("the picker lists the own voices of the Fish account she speaks through, and no other's", () => {
+  const accounts = [
+    { id: "fish-2", provider: "fish" },
+    { id: "speech", provider: "openai" },
+  ];
+  expect(fishVoiceAccount([], undefined)).toBe("fish");
+  expect(fishVoiceAccount([provider({ value: "fish-2", source: "persona" })], accounts)).toBe(
+    "fish-2",
+  );
+  expect(fishVoiceAccount([provider({ envValue: "FISH-2" })], accounts)).toBe("fish-2");
+  expect(fishVoiceAccount([provider({ value: "speech", source: "persona" })], accounts)).toBeNull();
+  expect(fishVoiceAccount([provider({ value: "nobody", source: "persona" })], [])).toBeNull();
+  // Until the accounts load, only a provider's own account is known to be one of its.
+  expect(
+    fishVoiceAccount([provider({ value: "fish-2", source: "persona" })], undefined),
+  ).toBeNull();
 });
 
 test("a voice picked from one provider is dropped once she speaks through another", () => {
