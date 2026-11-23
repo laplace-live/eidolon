@@ -30,6 +30,8 @@ describe("npx's arguments, as pnpm dlx's", () => {
     expect(npxToPnpm(["-p", "a", "--package", "b@2", "--package=@c/d", "-y", "run", "-x"])).toEqual(
       dlx("--package=a", "--package=b@2", "--package=@c/d", "--", "run", "-x"),
     );
+    // npx takes -p=X as --package=X.
+    expect(npxToPnpm(["-p=@e/f@^1", "run"])).toEqual(dlx("--package=@e/f@^1", "--", "run"));
   });
 
   test("after --, take the next word as the package, whatever it starts with", () => {
@@ -43,6 +45,7 @@ describe("npx's arguments, as pnpm dlx's", () => {
       [["-yq", "server"], "-yq can't be passed on to pnpm dlx"],
       [["--registry=https://example.test", "server"], "--registry can't be passed on to pnpm dlx"],
       [["-y", "-p"], "-p needs a package"],
+      [["-p=", "server"], "-p needs a package"],
       [["--package=", "server"], "--package needs a package"],
       [[], "nothing to run"],
       [["-y", "--"], "nothing to run"],

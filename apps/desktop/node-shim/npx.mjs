@@ -17,15 +17,15 @@ export function npxToPnpm(args) {
   for (let at = 0; at < args.length; at++) {
     const arg = args[at];
     if (DROPPED.has(arg)) continue;
-    const named = arg === "-p" || arg === "--package";
-    if (named || arg.startsWith("--package=")) {
-      const name = named ? args[++at] : arg.slice("--package=".length);
-      if (!name) return { error: `${named ? arg : "--package"} needs a package` };
+    const option = arg.split("=", 1)[0];
+    if (option === "-p" || option === "--package") {
+      const name = option === arg ? args[++at] : arg.slice(option.length + 1);
+      if (!name) return { error: `${option} needs a package` };
       packages.push(`--package=${name}`);
       continue;
     }
     if (arg !== "--" && arg.startsWith("-")) {
-      return { error: `${arg.split("=", 1)[0]} can't be passed on to pnpm dlx` };
+      return { error: `${option} can't be passed on to pnpm dlx` };
     }
     const command = args.slice(arg === "--" ? at + 1 : at);
     if (command.length === 0) break;
