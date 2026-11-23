@@ -42,8 +42,8 @@ export function loginItemQuery(platform: NodeJS.Platform): LoginItemSettingsOpti
 }
 
 /**
- * setLoginItemSettings's settings. macOS registers the app itself through SMAppService: Electron 44
- * dropped the hidden-launch flag, so a launch at login tells itself apart by wasOpenedAtLogin.
+ * setLoginItemSettings's settings. macOS registers the app itself through SMAppService, which has
+ * no hidden launch, so a launch at login tells itself apart by wasOpenedAtLogin.
  */
 export function loginItemWrite(platform: NodeJS.Platform, on: boolean): Settings {
   return platform === "win32" ? { openAtLogin: on, args: [LOGIN_SWITCH] } : { openAtLogin: on };
