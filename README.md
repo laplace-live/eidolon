@@ -52,8 +52,10 @@ bun install
 bun run app        # builds the web app when it isn't built, then opens it
 ```
 
-The desktop app, which isn't released yet, runs it in a window of its own: `bun run dev:desktop`
-([`docs/desktop.md`](docs/desktop.md)).
+The desktop app, Eidolon, runs it in a window of its own, with no Node to install, and updates
+itself: download it for [macOS on Apple silicon](https://downloads.vrp.moe/eidolon/Eidolon-mac-arm64.dmg)
+or [Windows x64](https://downloads.vrp.moe/eidolon/Eidolon-win-x64.exe). From a checkout,
+`bun run dev:desktop` runs it ([`docs/desktop.md`](docs/desktop.md)).
 
 ### Supported platforms
 

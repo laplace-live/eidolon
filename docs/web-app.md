@@ -378,8 +378,13 @@ has neither, and without them nothing below happens.
   setTheme(setting), setLanguage(language), onCommand(callback)}`, `platform` being Node's name for
   the OS (`darwin`, `win32`). The page reports the theme *setting* (`light`, `dark` or `system`,
   never the theme System resolves to) and the active language (`en`, `zh-Hans`) once at start and
-  on every change. `onCommand` hands it the menus' commands: `settings` opens `/settings`, and one
-  it doesn't know is ignored (`COMMANDS` in `lib/desktop.ts`).
+  on every change. `onCommand` hands it the menus' and the notifications' commands: `settings`
+  opens `/settings`, `tasks` `/tasks`, and `open-task:<chat>:<task>` `/chats/<chat>?task=<task>`
+  when both are ids; one it doesn't know is ignored (`runCommand` in `lib/desktop.ts`). The members
+  added since the first desktop release are optional, since a terminal's server can serve this
+  page to an older app, and the page looks for each before it uses it: `chooseFolder()`,
+  `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and `setTerminalCommand(action)`, each a
+  promise of main's answer ([desktop.md](desktop.md#the-window)).
 - **The marks** on `<html>`: `data-shell`, `mac` or `win`, and on macOS `data-fullscreen` while the
   window is fullscreen. The preload sets `data-shell` as `<html>` is created, before the page's
   script runs and before its first paint, and `data-fullscreen` as the window enters and leaves
@@ -416,6 +421,21 @@ buttons, whose place the Window Controls Overlay gives as `env(titlebar-area-*)`
 - **Home's footer** names both versions, as in `Eidolon 0.1.0 · server 0.13.0`: the desktop app's
   own, from the bridge, and the server's, from status, which may be a terminal's server it attached
   to.
+- **Settings → Desktop** (`features/settings/desktop-card.tsx`), last before Advanced, shows only
+  when the bridge has all four of `loginItem`, `setLoginItem`, `terminalCommand` and
+  `setTerminalCommand`; elsewhere `?tab=desktop` leads to the default section. Its Desktop App card
+  asks the bridge, never the server, and acts at once: **Open at Login**'s switch, with a note to
+  turn Eidolon on under System Settings → General → Login Items while macOS waits for that, read
+  again every 3 s until it does; and **Terminal Command**'s Install or Remove, with where it goes or
+  is (on Windows a folder on the PATH, which a new terminal sees; on macOS a link, whose Install may
+  ask for a password), or that another `eidolon` is there, which disables Install. A copy that
+  can't offer them says why under each, its control disabled (`desktop-notes.ts`): background
+  mode, a build that isn't the installed app, or a Mac copy outside the Applications folder. A
+  failed change toasts where Show Logs is, and a cancelled password prompt says nothing
+  ([desktop.md](desktop.md#open-at-login), [the terminal command](desktop.md#the-terminal-command)).
+- **Choose Folder,** under Settings → Assistant Mode's folders while the bridge has
+  `chooseFolder`: the native folder dialog, whose pick joins the draft on a line of its own unless
+  a line already holds it (`appendPath`); saving decides, as for a typed one.
 - **Pictures and files open in place.** The window has no tabs: a picture in a chat or a call, the
   owner's or hers, opens in a viewer over the page with **Save** (`components/picture-viewer.tsx`),
   and a text file saves through `<a download>` (`features/chats/attachments.tsx`), which the desktop
@@ -728,7 +748,8 @@ tools.
   account is picked, then `exa`, with "Web search is off: …" while the chosen one can't search),
   the folders (full paths, never `/` or `~`; PUT settings also refuses, 400 `invalid-setting` with
   `GrantRefused`'s reason, any folder that is or holds home on disk, such as `/Users/<you>`,
-  `/Users`, `~/.` or `~/..`), **Assistant Commands** (`assistant.bash`), the spend pause, the
+  `/Users`, `~/.` or `~/..`; in the desktop app **Choose Folder** adds one from its folder dialog,
+  [above](#in-the-desktop-app)), **Assistant Commands** (`assistant.bash`), the spend pause, the
   context and **Task Display**, the display each chat shows until it picks its own, says she starts
   tasks when asked in a chat, shows the problem while the mode isn't ready, and links to the Tasks
   list while it is on. Saving the switch off asks first while any task hasn't ended, counted from a
