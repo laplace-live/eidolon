@@ -294,8 +294,21 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   let scratch = "";
   const files = new Map<string, string>();
   const packuments = new Map<string, object>();
+  // A private registry's path, served only with its token, and every request with its credential.
+  const PRIVATE = "/corp";
+  const TOKEN = "eidolon-test-token";
+  const requests: { url: string; auth?: string }[] = [];
+  /** Called with each request's path, while a test sets it. */
+  let watch: ((url: string) => void) | undefined;
   const server = createServer((request, response) => {
     const url = decodeURIComponent(request.url ?? "/");
+    requests.push({ url, auth: request.headers.authorization });
+    watch?.(url);
+    if (url.startsWith(`${PRIVATE}/`) && request.headers.authorization !== `Bearer ${TOKEN}`) {
+      response.writeHead(401);
+      response.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
     const file = files.get(url);
     const packument = packuments.get(url.slice(1));
     response.writeHead(file || packument ? 200 : 404);
@@ -303,19 +316,25 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   });
   let registry = "";
   const old = "2020-01-01T00:00:00.000Z";
+  // A package that prints, published, and taken from its folder, a tarball, a git repo and a URL.
+  const hello = join(scratch, "hello");
 
   /**
-   * Publishes the package in `dir` at `time`, or with `time` undefined serves it at a URL pnpm
-   * doesn't take for its registry's, which it would ask for the package's metadata.
+   * Publishes the package in `dir` at `time` on the registry at the path `at`, or with `time`
+   * undefined serves it at a URL pnpm doesn't take for its registry's, which it would ask for the
+   * package's metadata.
    */
-  function publish(dir: string, time?: string): string {
+  function publish(dir: string, time?: string, at = ""): string {
     const { name, version, ...rest } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     const urlPath =
-      time === undefined ? `/plain/${name}-${version}.tgz` : `/${name}/-/${name}-${version}.tgz`;
-    const packed = pack(dir, join(scratch, `${name}-${version}.tgz`));
+      time === undefined
+        ? `/plain/${name}-${version}.tgz`
+        : `${at}/${name}/-/${name}-${version}.tgz`;
+    const packed = pack(dir, join(scratch, `${at}${name}-${version}.tgz`.replace(/\//g, "+")));
     files.set(urlPath, packed.file);
     if (time === undefined) return `${registry}${urlPath}`;
-    const packument = (packuments.get(name) ?? { name, versions: {}, time: {} }) as {
+    const key = `${at}/${name}`.slice(1);
+    const packument = (packuments.get(key) ?? { name, versions: {}, time: {} }) as {
       versions: Record<string, object>;
       time: Record<string, string>;
       "dist-tags"?: object;
@@ -332,8 +351,21 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     };
     packument.time[version] = time;
     packument["dist-tags"] = { latest: version };
-    packuments.set(name, packument);
+    packuments.set(key, packument);
     return `${registry}${urlPath}`;
+  }
+
+  /** A package whose command, its unscoped name, prints `says` and the words it was given. */
+  function printer(dir: string, name: string, version: string, says: string): string {
+    const bin = { [name.replace(/^@[^/]+\//, "")]: "cli.js" };
+    return write(dir, {
+      "package.json": JSON.stringify({ name, version, bin }),
+      "cli.js": [
+        "#!/usr/bin/env node",
+        `console.log(${JSON.stringify(says)}, JSON.stringify(process.argv.slice(2)));`,
+        "",
+      ].join("\n"),
+    });
   }
 
   beforeAll(async () => {
@@ -462,6 +494,14 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         old,
       );
     }
+    // A private package, and one of its name on the registry the user's .npmrc names, which a
+    // project whose own .npmrc pnpm misses would get in its place.
+    publish(printer(join(scratch, "corp"), "@eidolon-corp/tool", "1.0.0", "corp"), old, PRIVATE);
+    publish(printer(join(scratch, "impostor"), "@eidolon-corp/tool", "9.0.0", "impostor"), old);
+    // One name on two registries, at two versions.
+    publish(printer(join(scratch, "mirror-a"), "eidolon-test-mirror", "1.0.0", "a"), old, "/a");
+    publish(printer(join(scratch, "mirror-b"), "eidolon-test-mirror", "2.0.0", "b"), old, "/b");
+    publish(printer(hello, "eidolon-test-hello", "1.0.0", "hello"), old);
   });
   afterAll(() => {
     server.close();
@@ -628,5 +668,265 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       stderr: "npx: strict-allow-scripts is set, and Eidolon's npx can't hold an install to it\n",
       marks: [],
     });
+  }, 60_000);
+
+  /** The private registry's settings for an .npmrc, its token as `token` gives it. */
+  const privateNpmrc = (token: string) =>
+    [
+      `@eidolon-corp:registry=${registry}${PRIVATE}/`,
+      `${registry.slice("http:".length)}${PRIVATE}/:_authToken=${token}`,
+      "",
+    ].join("\n");
+
+  test("installs from the registries, with the credentials, of the .npmrc npm reads", async () => {
+    // At npm's local prefix, an npm workspace's root, with ${VAR} expanded as npm does, which pnpm
+    // refuses in a project's .npmrc.
+    const npmrc = privateNpmrc(`\${EIDOLON_TEST_TOKEN}`);
+    const workspace = write(join(scratch, "npm-workspace"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-root", workspaces: ["packages/*"] }),
+      ".npmrc": npmrc,
+      "packages/a/package.json": JSON.stringify({ name: "eidolon-test-a", version: "1.0.0" }),
+    });
+    const project = write(join(scratch, "npm-project"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": npmrc,
+      "sub/.keep": "",
+    });
+    const ran = [];
+    for (const cwd of [join(workspace, "packages", "a"), join(project, "sub")]) {
+      const env = { EIDOLON_TEST_TOKEN: TOKEN };
+      ran.push(await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd, env }));
+    }
+    const corp = { status: 0, stdout: 'corp ["x"]\n', stderr: "", marks: [] };
+    expect(ran).toEqual([corp, corp]);
+  }, 60_000);
+
+  test("fails as npm does on a registry an unset variable names, never taking the user's", async () => {
+    // npm takes the ${VAR} as written, for an invalid URL.
+    const project = write(join(scratch, "npm-project-unset"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": privateNpmrc(TOKEN).replace(`${registry}${PRIVATE}/`, `\${EIDOLON_TEST_UNSET}`),
+    });
+    const asked = requests.length;
+    const ran = await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd: project });
+    expect([ran.status, ran.stdout, requests.slice(asked)]).toEqual([1, "", []]);
+    expect(ran.stderr).toContain("Invalid URL");
+  }, 60_000);
+
+  test("gives pnpm no registry a variable names in its arguments, which any process reads", async () => {
+    // A registry whose path holds its token, as some do.
+    const token = "/eidolon-test-path-token";
+    publish(printer(join(scratch, "pathed"), "eidolon-test-pathed", "1.0.0", "pathed"), old, token);
+    // What ps shows, at each request for it, of the processes running.
+    const shown: string[][] = [];
+    watch = (url) => {
+      if (!url.startsWith(`${token}/`)) return;
+      const ps = spawnSync("ps", ["-A", "-ww", "-o", "args="], { encoding: "utf8" });
+      shown.push(
+        ps.status === 0 ? ps.stdout.split("\n").filter((line) => line.includes(token)) : ["ps"],
+      );
+    };
+    try {
+      const env = { npm_config_registry: `${registry}${token}/` };
+      const ran = await launch("npx", ["-y", "eidolon-test-pathed", "x"], { env });
+      expect([ran.status, ran.stdout, ran.stderr]).toEqual([0, 'pathed ["x"]\n', ""]);
+    } finally {
+      watch = undefined;
+    }
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.flat()).toEqual([]);
+  }, 60_000);
+
+  test("reads no .npmrc npm leaves unread: a workspace's own, or a pnpm workspace's", async () => {
+    const nowhere = `registry=${registry}/nowhere/\n@eidolon-corp:registry=${registry}/nowhere/\n`;
+    const workspace = write(join(scratch, "npm-workspace-own"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-root", workspaces: ["packages/*"] }),
+      "packages/a/package.json": JSON.stringify({ name: "eidolon-test-a", version: "1.0.0" }),
+      "packages/a/.npmrc": nowhere,
+    });
+    const pnpmWorkspace = write(join(scratch, "pnpm-workspace-around"), {
+      "pnpm-workspace.yaml": 'packages:\n  - "sub"\n',
+      ".npmrc": nowhere,
+      "sub/package.json": JSON.stringify({ name: "eidolon-test-sub", version: "1.0.0" }),
+      "sub/.npmrc": privateNpmrc(TOKEN),
+    });
+    const ran = [
+      await launch("npx", ["-y", "eidolon-test-hello", "x"], {
+        cwd: join(workspace, "packages", "a"),
+      }),
+      await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd: join(pnpmWorkspace, "sub") }),
+    ];
+    expect(ran).toEqual([
+      { status: 0, stdout: 'hello ["x"]\n', stderr: "", marks: [] },
+      { status: 0, stdout: 'corp ["x"]\n', stderr: "", marks: [] },
+    ]);
+  }, 60_000);
+
+  test("runs nothing, as npm, under a credential an .npmrc gives no registry", async () => {
+    const project = write(join(scratch, "npm-project-unscoped"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": `_authToken=${TOKEN}\n`,
+    });
+    const asked = requests.length;
+    const ran = await launch("npx", ["-y", "eidolon-test-hello", "x"], { cwd: project });
+    const nerfed = `${registry.slice("http:".length)}/`;
+    expect({ ...ran, asked: requests.slice(asked) }).toEqual({
+      status: 1,
+      stdout: "",
+      stderr: [
+        "code ERR_INVALID_AUTH",
+        `Invalid auth configuration found: \`_authToken\` must be renamed to \`${nerfed}:_authToken\` in project config`,
+        "Please run `npm config fix` to repair your configuration.`",
+      ]
+        .map((line) => `npx: ${line}\n`)
+        .join(""),
+      marks: [],
+      asked: [],
+    });
+  }, 60_000);
+
+  test("runs nothing, as npm, where the project's devEngines names another package manager", async () => {
+    const project = write(join(scratch, "npm-project-engines"), {
+      "package.json": JSON.stringify({
+        name: "eidolon-test-project",
+        devEngines: { packageManager: { name: "pnpm" } },
+      }),
+    });
+    const asked = requests.length;
+    const ran = await launch("npx", ["-y", "eidolon-test-hello", "x"], { cwd: project });
+    expect({ ...ran, asked: requests.slice(asked) }).toEqual({
+      status: 1,
+      stdout: "",
+      stderr: [
+        "code EBADDEVENGINES",
+        "EBADDEVENGINES The developer of this package has specified the following through devEngines",
+        "EBADDEVENGINES Invalid devEngines.packageManager",
+        'EBADDEVENGINES Invalid name "pnpm" does not match "npm" for "packageManager"',
+        "EBADDEVENGINES {",
+        "EBADDEVENGINES   current: { name: 'npm', version: '11.19.1' },",
+        "EBADDEVENGINES   required: { name: 'pnpm' }",
+        "EBADDEVENGINES }",
+      ]
+        .map((line) => `npx: ${line}\n`)
+        .join(""),
+      marks: [],
+      asked: [],
+    });
+  }, 60_000);
+
+  test("reads no .npmrc of a pnpm workspace around the folder pnpm runs in", async () => {
+    // That folder is in TMPDIR, here inside a pnpm workspace whose registry holds nothing.
+    const around = write(join(scratch, "pnpm-workspace-tmp"), {
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      ".npmrc": `registry=${registry}/nowhere/\n`,
+      "tmp/.keep": "",
+    });
+    const env = { TMPDIR: join(around, "tmp") };
+    const ran = await launch("npx", ["-y", "eidolon-test-hello", "x"], { env });
+    expect(ran).toEqual({ status: 0, stdout: 'hello ["x"]\n', stderr: "", marks: [] });
+  }, 60_000);
+
+  test("keeps the installs from one registry apart from another's", async () => {
+    const home = newHome();
+    // Named by a project's .npmrc through a variable, which pnpm doesn't expand there.
+    const project = write(join(scratch, "mirror-project"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-mirror-project", version: "1.0.0" }),
+      ".npmrc": `registry=\${EIDOLON_TEST_MIRROR}\n`,
+    });
+    const printed = [];
+    for (const at of ["a", "b", "a"]) {
+      const env = { EIDOLON_TEST_MIRROR: `${registry}/${at}/` };
+      const ran = await launch("npx", ["-y", "eidolon-test-mirror"], { home, cwd: project, env });
+      printed.push(ran.stdout);
+    }
+    // Named by an npm_config_* variable, which pnpm doesn't read.
+    for (const at of ["b", "a"]) {
+      const env = { npm_config_registry: `${registry}/${at}/` };
+      printed.push((await launch("npx", ["-y", "eidolon-test-mirror"], { home, env })).stdout);
+    }
+    expect(printed).toEqual(["a []\n", "b []\n", "a []\n", "b []\n", "a []\n"]);
+  }, 60_000);
+
+  /** A bare git repo of the package in `dir`, made without the developer's git config. */
+  function gitRepo(dir: string): string {
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+    const work = mkdtempSync(join(scratch, "git-work-"));
+    const bare = `${work}.git`;
+    const git = (cwd: string, ...args: string[]) => {
+      const ran = spawnSync("git", args, { cwd, env, encoding: "utf8" });
+      expect([args, ran.status, ran.stderr]).toEqual([args, 0, ""]);
+    };
+    spawnSync("cp", ["-R", `${dir}/.`, work]);
+    git(work, "-c", "init.defaultBranch=main", "init", "-q");
+    git(work, "add", "-A");
+    git(
+      work,
+      "-c",
+      "user.name=Eidolon",
+      "-c",
+      "user.email=eidolon@example.test",
+      "commit",
+      "-qm",
+      "x",
+    );
+    git(scratch, "clone", "-q", "--bare", work, bare);
+    return bare;
+  }
+
+  test("refuses a git, URL, tarball or folder package allow-* is none for, as npm", async () => {
+    const folder = mkdtempSync(join(scratch, "kinds-"));
+    pack(hello, join(folder, "hello.tgz"));
+    const repo = gitRepo(hello);
+    const kinds = [
+      ["git", `git+file://${repo}`, `Refusing to fetch "git+file://${repo}"`],
+      ["remote", `${registry}/eidolon-test-hello/-/eidolon-test-hello-1.0.0.tgz`],
+      ["file", "./hello.tgz"],
+      ["directory", hello],
+    ] as const;
+    const refused = [];
+    const allowed = [];
+    for (const [kind, spec] of kinds) {
+      const asked = requests.length;
+      const env = { [`npm_config_allow_${kind}`]: "none" };
+      const ran = await launch("npx", ["-y", spec, "x"], { cwd: folder, env });
+      refused.push({ ...ran, asked: requests.length - asked });
+      // npx's own packages are the root's, which root lets through.
+      const root = { [`npm_config_allow_${kind}`]: "root" };
+      const { status, stdout } = await launch("npx", ["-y", spec, "x"], { cwd: folder, env: root });
+      allowed.push({ status, stdout });
+    }
+    expect(refused).toEqual(
+      kinds.map(([kind, , ...more]) => ({
+        status: 1,
+        stdout: "",
+        stderr: [
+          `code EALLOW${kind.toUpperCase()}`,
+          `Fetching packages of type "${kind}" have been disabled`,
+          ...more,
+        ]
+          .map((line) => `npx: ${line}\n`)
+          .join(""),
+        marks: [],
+        asked: 0,
+      })),
+    );
+    expect(allowed).toEqual(kinds.map(() => ({ status: 0, stdout: 'hello ["x"]\n' })));
+  }, 120_000);
+
+  test("runs a folder or tarball a spec names, whatever name it gives it, as npm", async () => {
+    const folder = mkdtempSync(join(scratch, "named-"));
+    pack(hello, join(folder, "hello.tgz"));
+    const specs = [
+      "eidolon-test-hello@../hello",
+      "other@file:../hello",
+      "eidolon-test-hello@./hello.tgz",
+      "@eidolon/other@./hello.tgz",
+    ];
+    const ran = [];
+    for (const spec of specs) {
+      const { status, stdout } = await launch("npx", ["-y", spec, "x"], { cwd: folder });
+      ran.push({ spec, status, stdout });
+    }
+    expect(ran).toEqual(specs.map((spec) => ({ spec, status: 0, stdout: 'hello ["x"]\n' })));
   }, 60_000);
 });

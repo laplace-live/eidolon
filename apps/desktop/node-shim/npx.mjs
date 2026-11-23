@@ -16,48 +16,220 @@ import {
   realpathSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { homedir, tmpdir } from "node:os";
+import { homedir, release, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { formatWithOptions } from "node:util";
 import { cmdLine } from "./cross-spawn.mjs";
 
 const DROPPED = new Set(["-y", "--yes", "-q", "--quiet"]);
 
-/** The settings an .npmrc gives before any [section], as npm's ini parser reads their values. */
-function readNpmrc(file) {
+/** `text` with each ${VAR} npm's config expands from `env`: none when unset, `${VAR?}` empty. */
+export function envReplace(text, env) {
+  return text.replace(/(?<!\\)(\\*)\$\{([^${}?]+)(\?)?\}/g, (whole, escapes, name, optional) => {
+    // An odd run of backslashes escapes the ${, and each pair before it is one backslash.
+    if (escapes.length % 2 === 1) return whole.slice((escapes.length + 1) / 2);
+    const value = env[name] ?? (optional === "?" ? "" : `\${${name}}`);
+    return escapes.slice(escapes.length / 2) + value;
+  });
+}
+
+/** A key or value of an .npmrc line as npm's ini parser reads it: quoted, it is JSON's. */
+function iniWord(raw) {
+  const word = raw.trim();
+  const quote = word[0];
+  if ((quote === '"' || quote === "'") && word.endsWith(quote)) {
+    const inner = word.startsWith("'") ? word.slice(1, -1) : word;
+    try {
+      return JSON.parse(inner);
+    } catch {
+      return inner;
+    }
+  }
+  // Unquoted, it ends at a ; or # comment, and \; \# \\ stand for the character.
+  let out = "";
+  for (let at = 0; at < word.length; at++) {
+    const char = word[at];
+    if (char === ";" || char === "#") break;
+    if (char !== "\\") out += char;
+    else if (at + 1 === word.length) out += "\\";
+    else out += "\\;#".includes(word[at + 1]) ? word[++at] : `\\${word[++at]}`;
+  }
+  return out.trim();
+}
+
+/** The settings an .npmrc gives before any [section], decoded as npm's ini parser does. */
+function iniDecode(text) {
+  const settings = {};
+  for (const line of text.split(/[\r\n]+/)) {
+    if (/^\s*(?:[;#]|$)/.test(line)) continue;
+    const match = /^\[[^\]]*\]\s*$|^([^=]+)(=(.*))?$/.exec(line);
+    if (match === null) continue;
+    if (match[1] === undefined) break;
+    const raw = String(iniWord(match[1]));
+    const list = raw.length > 2 && raw.endsWith("[]");
+    const key = list ? raw.slice(0, -2) : raw;
+    if (key === "__proto__") continue;
+    const word = match[2] ? iniWord(match[3]) : true;
+    const value = word === "true" || word === "false" || word === "null" ? JSON.parse(word) : word;
+    if (list && !Object.hasOwn(settings, key)) settings[key] = [];
+    else if (list && !Array.isArray(settings[key])) settings[key] = [settings[key]];
+    if (Array.isArray(settings[key])) settings[key].push(value);
+    else settings[key] = value;
+  }
+  return settings;
+}
+
+/**
+ * The settings an .npmrc gives before any [section], as npm reads them: `key[]` lines as a list,
+ * and each ${VAR} in a key or value expanded from `env`.
+ */
+function readNpmrc(file, env) {
   let text = "";
   try {
     text = readFileSync(file, "utf8");
   } catch {}
+  // npm expands the keys of the file as decoded, so of two that expand alike, the one the file
+  // first names later wins.
+  const asRead = (value) =>
+    typeof value === "string" ? envReplace(value.trim(), env) : JSON.stringify(value);
   const settings = {};
-  for (const line of text.split(/\r?\n/)) {
-    if (/^\s*\[/.test(line)) break;
-    const match = /^\s*([^;#\s=][^=]*?)\s*(?:=(.*))?$/.exec(line);
-    if (match === null) continue;
-    const value = (match[2] ?? "true").trim();
-    settings[match[1]] = /^(["']).*\1$/.test(value)
-      ? value.slice(1, -1)
-      : value.replace(/\s*[;#].*$/, "");
+  for (const [raw, value] of Object.entries(iniDecode(text))) {
+    const key = envReplace(raw, env);
+    if (key !== "__proto__") {
+      settings[key] = Array.isArray(value) ? value.map(asRead) : asRead(value);
+    }
   }
   return settings;
 }
 
 /**
  * npm's config sources npx reads, highest first, each as `{ key: value }`: the npm_config_*
- * variables in `env`, the .npmrc at npm's local `prefix`, then the user's.
+ * variables in `env`, the .npmrc at npm's local `prefix`, then the user's, ${VAR} expanded as npm
+ * expands them.
  */
 export function npmConfig(env, prefix, home) {
   const variables = {};
   for (const [name, value] of Object.entries(env)) {
     const key = /^npm_config_(.+)$/i.exec(name)?.[1];
     if (key === undefined || !value) continue;
-    variables[key.startsWith("//") ? key : key.replace(/(?!^)_/g, "-").toLowerCase()] = value;
+    const setting = envReplace(
+      key.startsWith("//") ? key : key.replace(/(?!^)_/g, "-").toLowerCase(),
+      env,
+    );
+    if (setting !== "__proto__") variables[setting] = envReplace(value.trim(), env);
   }
   const user = path.resolve(variables.userconfig ?? path.join(home, ".npmrc"));
   const project = path.join(prefix, ".npmrc");
-  return [variables, project === user ? {} : readNpmrc(project), readNpmrc(user)];
+  return [variables, project === user ? {} : readNpmrc(project, env), readNpmrc(user, env)];
+}
+
+/** A setting from the highest of npm's config `sources` that gives it. */
+const settingOf = (sources, key) => sources.find((source) => Object.hasOwn(source, key))?.[key];
+
+/**
+ * npm's error, as it prints it, for the config `sources` npmConfig reads that npm runs no command
+ * under: a registry that isn't a URL, or credentials the user's or the project's .npmrc gives no
+ * registry; undefined for none.
+ */
+export function invalidConfig(sources) {
+  let nerfed;
+  try {
+    const registry = new URL(settingOf(sources, "registry") ?? "https://registry.npmjs.org/");
+    const dir = new URL(".", `${registry.protocol}//${registry.host}${registry.pathname}`);
+    nerfed = `//${dir.host}${dir.pathname}`;
+  } catch {
+    return "code ERR_INVALID_URL\nInvalid URL";
+  }
+  const problems = [];
+  for (const [where, source = {}] of [
+    ["user", sources[2]],
+    ["project", sources[1]],
+  ]) {
+    const given = (key) => !["", "false", "null", undefined].includes(source[key]);
+    const refused = (key) => `\`${key}\` is not allowed in ${where} config`;
+    for (const key of ["_authtoken", "-authtoken"]) if (given(key)) problems.push(refused(key));
+    for (const key of ["_auth", "_authToken", "username", "_password"]) {
+      if (!given(key)) continue;
+      // npm takes a username and a password only together.
+      const other = { username: "_password", _password: "username" }[key];
+      problems.push(
+        other !== undefined && !given(other)
+          ? refused(key)
+          : `\`${key}\` must be renamed to \`${nerfed}:${key}\` in ${where} config`,
+      );
+    }
+  }
+  if (problems.length === 0) return undefined;
+  return [
+    "code ERR_INVALID_AUTH",
+    `Invalid auth configuration found: ${problems.join(", ")}`,
+    // npm's line, its stray backtick too.
+    "Please run `npm config fix` to repair your configuration.`",
+  ].join("\n");
+}
+
+// The settings of npm's project config that pnpm reads from an .npmrc and npm installs by: the
+// registries, their credentials (npm's nerf-darted keys) and certificates.
+const NERF_DARTS = ["_auth", "_authToken", "_password", "certfile", "email", "keyfile", "username"];
+const REGISTRY_SETTING = new RegExp(
+  `^(?:registry|ca|cafile|cert|key|@[^:/]+:registry|//.*:(?:${NERF_DARTS.join("|")}))$`,
+);
+
+/**
+ * An .npmrc for pnpm holding what npm installs by from its config `sources`, as npmConfig reads
+ * them, that pnpm reads from neither: the registries its variables name, over the registries,
+ * credentials and certificates of its project config, each file they name as npm finds it from
+ * `cwd`; empty with none.
+ */
+export function pnpmNpmrc([variables = {}, project = {}], cwd, home, platform = process.platform) {
+  // npm ranks its variables over its project config. pnpm would take their registries only on
+  // its command line, which any process can read, and a registry's URL can hold its token.
+  const settings = { ...project };
+  for (const [key, value] of Object.entries(variables)) {
+    if (key === "registry" || /^@[^:/]+:registry$/.test(key)) settings[key] = value;
+  }
+  const lines = [];
+  // npm takes a ${VAR} it left, VAR being unset, as written. pnpm ignores a registry or
+  // credential holding one in a project's .npmrc, so the user's would serve in its place, and
+  // expands any other again: percent-encoded, it reaches pnpm as npm has it, an invalid URL or a
+  // wrong token. A key holding one names no registry. npm takes an empty value as none. Of these
+  // settings only ca is a list.
+  const placeholder = /\$\{[^}]+\}/;
+  const asWritten = (text) =>
+    placeholder.test(text) ? text.replace(/[${}]/g, (char) => encodeURIComponent(char)) : text;
+  for (const [key, value] of Object.entries(settings)) {
+    if (!REGISTRY_SETTING.test(key) || /[=\r\n]/.test(key) || placeholder.test(key)) continue;
+    if (Array.isArray(value) && key !== "ca") continue;
+    const client = /^(.*):(?:certfile|keyfile)$/.exec(key)?.[1];
+    // npm presents a client certificate only with both files there; pnpm ends on a missing one.
+    const pair = [settings[`${client}:certfile`], settings[`${client}:keyfile`]];
+    const there = (file) =>
+      typeof file === "string" &&
+      file !== "" &&
+      stat(path.resolve(cwd, asWritten(file))) !== undefined;
+    if (client !== undefined && !pair.every(there)) continue;
+    for (const text of [value]
+      .flat()
+      .filter((text) => text !== "")
+      .map(asWritten)) {
+      let file = text;
+      if (key === "cafile") {
+        const fromHome = (platform === "win32" ? /^~[/\\]/ : /^~\//).test(text);
+        file = fromHome ? path.resolve(home, text.slice(2)) : path.resolve(cwd, text);
+      } else if (client !== undefined) {
+        file = path.resolve(cwd, text);
+      }
+      // Quoted, pnpm's ini parser reads each back as it is.
+      lines.push(
+        `${JSON.stringify(Array.isArray(value) ? `${key}[]` : key)}=${JSON.stringify(file)}`,
+      );
+    }
+  }
+  return lines.join("\n");
 }
 
 /** A boolean setting as npm reads one: a number unless 0, any other word unless false or null. */
@@ -87,10 +259,11 @@ function releaseAge(sources, now) {
  * @returns {string[] | { error: string }}
  */
 export function npxSettings(sources, now = Date.now()) {
-  const setting = (key) => sources.find((source) => Object.hasOwn(source, key))?.[key];
+  const setting = (key) => settingOf(sources, key);
   const ignoreScripts = flag(setting("ignore-scripts"));
-  // npm then fails an install with any script allow-scripts doesn't name, which pnpm can't tell
-  // before it installs.
+  // npm then fails an install holding a package with install scripts allow-scripts doesn't name,
+  // before it runs any. pnpm's dlx runs the scripts of the packages it was asked for unasked, and
+  // never fails on a dependency's.
   if (
     !ignoreScripts &&
     flag(setting("strict-allow-scripts")) &&
@@ -117,11 +290,6 @@ export function npxSettings(sources, now = Date.now()) {
     // npm reads no pnpmfile; pnpm runs the one of the workspace around the folder, or the home's,
     // whose hooks can rewrite what installs.
     "--config.ignore-pnpmfile=true",
-    // npm takes registries from its variables, which pnpm never reads: a private package's name
-    // would resolve on the registry pnpm falls back on. The .npmrc files' pnpm reads itself.
-    ...Object.entries(sources[0] ?? {})
-      .filter(([key]) => key === "registry" || /^@[^:/]+:registry$/.test(key))
-      .map(([key, value]) => `--config.${key}=${value}`),
   ];
 }
 
@@ -156,56 +324,351 @@ export function readNpx(args) {
 const URL_SPEC = /^(?:git\+)?[a-z]+:/i;
 const SCP_GIT_SPEC = /^[^@]+@[^:.]+\.[^:]+:.+$/i;
 const TARBALL = /[.](?:tgz|tar\.gz|tar)$/i;
-const GITHUB_SHORTCUT = /^[^:@%/\s.-][^:@%/\s]*\/[^:@\s/%]+(?:#.*)?$/;
 const PACKAGE_NAME = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/i;
+
+/** Whether npm takes `name` for a package's, as validate-npm-package-name's validForOldPackages. */
+function validName(name) {
+  if (/^[.\-_]/.test(name) || name.trim() !== name || name === "") return false;
+  if (["node_modules", "favicon.ico"].includes(name.toLowerCase())) return false;
+  if (encodeURIComponent(name) === name) return true;
+  const [, scope, base] = /^(?:@([^/]+?)[/])?([^/]+?)$/.exec(name) ?? [];
+  return (
+    base !== undefined &&
+    !base.startsWith(".") &&
+    scope !== undefined &&
+    encodeURIComponent(scope) === scope &&
+    encodeURIComponent(base) === base
+  );
+}
+
+// The git hosts hosted-git-info knows, each with the protocols it takes for one and how it reads a
+// URL's path.
+const GIT_HOSTS = {
+  github: {
+    domain: "github.com",
+    protocols: ["git:", "http:", "git+ssh:", "git+https:", "ssh:", "https:"],
+    extract(url) {
+      let [, user, project, type, committish] = url.pathname.split("/", 5);
+      if (type && type !== "tree") return undefined;
+      if (!type) committish = url.hash.slice(1);
+      if (project?.endsWith(".git")) project = project.slice(0, -4);
+      return user && project ? { user, project, committish } : undefined;
+    },
+  },
+  bitbucket: {
+    domain: "bitbucket.org",
+    protocols: ["git+ssh:", "git+https:", "ssh:", "https:"],
+    extract(url) {
+      let [, user, project, aux] = url.pathname.split("/", 4);
+      if (aux === "get") return undefined;
+      if (project?.endsWith(".git")) project = project.slice(0, -4);
+      return user && project ? { user, project, committish: url.hash.slice(1) } : undefined;
+    },
+  },
+  gitlab: {
+    domain: "gitlab.com",
+    protocols: ["git+ssh:", "git+https:", "ssh:", "https:"],
+    extract(url) {
+      const whole = url.pathname.slice(1);
+      if (whole.includes("/-/") || whole.includes("/archive.tar.gz")) return undefined;
+      const segments = whole.split("/");
+      let project = segments.pop();
+      if (project.endsWith(".git")) project = project.slice(0, -4);
+      const user = segments.join("/");
+      return user && project ? { user, project, committish: url.hash.slice(1) } : undefined;
+    },
+  },
+  gist: {
+    domain: "gist.github.com",
+    protocols: ["git:", "git+ssh:", "git+https:", "ssh:", "https:"],
+    extract(url) {
+      let [, user, project, aux] = url.pathname.split("/", 4);
+      if (aux === "raw") return undefined;
+      if (!project) {
+        if (!user) return undefined;
+        project = user;
+        user = null;
+      }
+      if (project.endsWith(".git")) project = project.slice(0, -4);
+      return { user, project, committish: url.hash.slice(1) };
+    },
+  },
+  sourcehut: {
+    domain: "git.sr.ht",
+    protocols: ["git+ssh:", "https:"],
+    extract(url) {
+      let [, user, project, aux] = url.pathname.split("/", 4);
+      if (aux === "archive") return undefined;
+      if (project?.endsWith(".git")) project = project.slice(0, -4);
+      return user && project ? { user, project, committish: url.hash.slice(1) } : undefined;
+    },
+  },
+};
+const GIT_PROTOCOLS = {
+  "git+ssh:": { name: "sshurl" },
+  "ssh:": { name: "sshurl" },
+  "git+https:": { name: "https", auth: true },
+  "git:": { auth: true },
+  "http:": { auth: true },
+  "https:": { auth: true },
+  "git+http:": { auth: true },
+  ...Object.fromEntries(Object.keys(GIT_HOSTS).map((type) => [`${type}:`, { name: type }])),
+};
+
+const parseUrl = (text) => {
+  try {
+    return new URL(text);
+  } catch {
+    return undefined;
+  }
+};
+
+/** The last `char` in `text` before the first `before`, as hosted-git-info looks for one. */
+const lastBefore = (text, char, before) => {
+  const end = text.indexOf(before);
+  return text.lastIndexOf(char, end > -1 ? end : Number.POSITIVE_INFINITY);
+};
+
+/** A git URL as hosted-git-info parses one, an scp-like `host:path` turned into a URL's path. */
+function parseGitUrl(giturl) {
+  let withProtocol = giturl;
+  const colon = giturl.indexOf(":");
+  const at = giturl.indexOf("@");
+  if (Object.hasOwn(GIT_PROTOCOLS, giturl.slice(0, colon + 1))) {
+    // A protocol it knows.
+  } else if (colon > -1 && giturl.slice(colon, colon + 3) === "://") {
+    // A URL already.
+  } else if (at > -1) {
+    if (at > colon) withProtocol = `git+ssh://${giturl}`;
+  } else {
+    withProtocol = `${giturl.slice(0, colon + 1)}//${giturl.slice(colon + 1)}`;
+  }
+  let corrected = withProtocol;
+  const lastColon = lastBefore(corrected, ":", "#");
+  if (lastColon > lastBefore(corrected, "@", "#")) {
+    corrected = `${corrected.slice(0, lastColon)}/${corrected.slice(lastColon + 1)}`;
+  }
+  if (lastBefore(corrected, ":", "#") === -1 && !corrected.includes("//")) {
+    corrected = `git+ssh://${corrected}`;
+  }
+  return parseUrl(withProtocol) ?? parseUrl(corrected);
+}
+
+/** Whether `arg` is GitHub's user/repo shorthand, as hosted-git-info tells it from a path. */
+function isGitHubShorthand(arg) {
+  const hash = arg.indexOf("#");
+  const slash = arg.indexOf("/");
+  const second = arg.indexOf("/", slash + 1);
+  const afterHash = (at) => at === -1 || (hash > -1 && at > hash);
+  return (
+    afterHash(/\s/.exec(arg)?.index ?? -1) &&
+    slash > 0 &&
+    (hash > -1 ? arg[hash - 1] !== "/" : !arg.endsWith("/")) &&
+    !arg.startsWith(".") &&
+    afterHash(arg.indexOf("@")) &&
+    afterHash(arg.indexOf(":")) &&
+    afterHash(second)
+  );
+}
+
+/**
+ * The spec npm-package-arg saves for the repo `giturl` names on a host hosted-git-info knows, in
+ * the form it was given in; undefined for anything else.
+ */
+function hostedGit(giturl) {
+  const parsed = parseGitUrl(isGitHubShorthand(giturl) ? `github:${giturl}` : giturl);
+  if (parsed === undefined) return undefined;
+  const hostname = parsed.hostname.replace(/^www\./, "");
+  const shortcut = parsed.protocol.slice(0, -1);
+  const type = Object.hasOwn(GIT_HOSTS, shortcut)
+    ? shortcut
+    : Object.keys(GIT_HOSTS).find((name) => GIT_HOSTS[name].domain === hostname);
+  if (type === undefined) return undefined;
+  const { domain, protocols, extract } = GIT_HOSTS[type];
+  const auth =
+    GIT_PROTOCOLS[parsed.protocol]?.auth && (parsed.username || parsed.password)
+      ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ""}`
+      : null;
+  let repo;
+  try {
+    if (type === shortcut) {
+      let pathname = parsed.pathname.replace(/^\//, "");
+      pathname = pathname.slice(pathname.indexOf("@") + 1);
+      const slash = pathname.lastIndexOf("/");
+      const project = decodeURIComponent(pathname.slice(slash + 1)).replace(/\.git$/, "");
+      repo = {
+        user: slash > -1 ? decodeURIComponent(pathname.slice(0, slash)) || null : null,
+        project,
+        committish: parsed.hash ? decodeURIComponent(parsed.hash.slice(1)) : null,
+        form: "shortcut",
+      };
+    } else {
+      const segments = protocols.includes(parsed.protocol) ? extract(parsed) : undefined;
+      if (segments === undefined) return undefined;
+      repo = {
+        user: segments.user && decodeURIComponent(segments.user),
+        project: decodeURIComponent(segments.project),
+        committish: decodeURIComponent(segments.committish),
+        form: GIT_PROTOCOLS[parsed.protocol]?.name || parsed.protocol.slice(0, -1),
+      };
+    }
+  } catch (error) {
+    if (error instanceof URIError) return undefined;
+    throw error;
+  }
+  const { user, project, committish, form } = repo;
+  const hash = committish ? `#${committish}` : "";
+  const where = type === "gist" ? project : `${user}/${project}`;
+  const login = type === "gist" || !auth ? "" : `${auth}@`;
+  if (form === "shortcut") return `${type}:${where}${hash}`;
+  if (form === "https" && type === "sourcehut") return `https://${domain}/${where}${hash}`;
+  if (form === "https") return `git+https://${login}${domain}/${where}.git${hash}`;
+  if (form === "git") return `git://${login}${domain}/${where}.git${hash}`;
+  // hosted-git-info writes a form it has no template for as its git+ssh URL.
+  return `git+ssh://git@${domain}/${where}.git${hash}`;
+}
+
+/** The characters npm-package-arg encodes in a path it makes a file: URL of. */
+const FILE_URL_CHARS = {
+  "\0": "%00",
+  "\t": "%09",
+  "\n": "%0A",
+  "\r": "%0D",
+  " ": "%20",
+  '"': "%22",
+  "#": "%23",
+  "%": "%25",
+  "?": "%3F",
+  "[": "%5B",
+  "]": "%5D",
+  "^": "%5E",
+  "|": "%7C",
+  "~": "%7E",
+};
+
+/** `text` as a file: URL, as npm-package-arg makes one of a path. */
+function fileUrl(text, windows) {
+  let url = "";
+  for (let at = 0; at < text.length; at++) {
+    const char = text[at];
+    url += char === "\\" ? (windows ? "/" : "%5C") : (FILE_URL_CHARS[char] ?? char);
+  }
+  return url.startsWith("file:") ? url : `file:${url}`;
+}
+
+/**
+ * What npm-package-arg makes of `arg` from the folder `where`: its type (`git`, `remote`, `file`,
+ * `directory`, `alias` or `registry`), the name it gives, the spec npm saves for a git one, and the
+ * path of a file or folder; undefined where npm-package-arg throws.
+ */
+export function npmSpec(arg, where, home, platform = process.platform) {
+  const windows = platform === "win32";
+  const slashes = windows ? /\\|[/]/ : /[/]/;
+  const nameEndsAt = arg.indexOf("@", 1);
+  const namePart = nameEndsAt > 0 ? arg.slice(0, nameEndsAt) : arg;
+  let name;
+  let spec = arg;
+  if (URL_SPEC.test(arg)) {
+    // A URL, or a Windows path with its drive.
+  } else if (SCP_GIT_SPEC.test(arg)) {
+    spec = `git+ssh://${arg}`;
+  } else if (!namePart.startsWith("@") && (slashes.test(namePart) || TARBALL.test(namePart))) {
+    // A path, @ and all.
+  } else if (nameEndsAt > 0) {
+    name = namePart;
+    spec = arg.slice(nameEndsAt + 1) || "*";
+  } else if (validName(arg)) {
+    name = arg;
+    spec = "*";
+  }
+  if (name !== undefined && !validName(name)) return undefined;
+  const fileSpec =
+    /^file:/i.test(spec) ||
+    (windows ? /^(?:[.]|~[/]|[/\\]|[a-zA-Z]:)/ : /^(?:[.]|~[/]|[/]|[a-zA-Z]:)/).test(spec);
+  if (!fileSpec) {
+    if (/^npm:/i.test(spec)) return { type: "alias", name };
+    const hosted = hostedGit(spec);
+    if (hosted !== undefined) return { type: "git", name, saveSpec: hosted };
+    if (URL_SPEC.test(spec)) {
+      const scp = spec.startsWith("git+ssh:")
+        ? /^git\+ssh:\/\/([^:#]+:[^#]+(?:\.git)?)(?:#(.*))?$/i.exec(spec)
+        : null;
+      const url = parseUrl(spec.startsWith("git+file://") ? spec.replace(/\\/g, "/") : spec);
+      if (
+        (scp !== null && !/:[0-9]+(\/|$)/.test(scp[1])) ||
+        /^git(?:\+(?:https?|rsync|ftp|file|ssh))?:$/.test(url?.protocol ?? "")
+      ) {
+        return { type: "git", name, saveSpec: spec };
+      }
+      if (url?.protocol === "http:" || url?.protocol === "https:") return { type: "remote", name };
+      return undefined;
+    }
+    if (!slashes.test(spec) && !TARBALL.test(spec)) return { type: "registry", name };
+  }
+  const paths = windows ? path.win32 : path.posix;
+  let raw = fileUrl(spec, windows);
+  // file://x is file:/x, and file:/../x relative.
+  if (/^file:\/\/[^/]/.test(raw)) raw = `file:/${raw.slice(5)}`;
+  if (/^file:\/{1,3}\.\.?(\/|$)/.test(raw)) raw = raw.replace(/^file:\/{1,3}/, "file:");
+  try {
+    const own = decodeURIComponent(new URL(raw).pathname);
+    const base = `${fileUrl(paths.resolve(where), windows)}/`;
+    let resolved = decodeURIComponent(new URL(raw, base).pathname);
+    if (windows) resolved = resolved.replace(/^\/+([a-z]:\/)/i, "$1");
+    if (/^\/~(\/|$)/.test(own)) resolved = paths.resolve(home, own.slice(3));
+    return {
+      type: TARBALL.test(spec) ? "file" : "directory",
+      name,
+      path: paths.resolve(where, resolved),
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The folder or tarball file `spec` names, as npm-package-arg tells them from a git repo, a URL or
- * a registry package, with the name it gives it, if any; undefined for anything else.
+ * a registry package; undefined for anything else.
  */
 export function localSpec(spec, cwd, home, platform = process.platform) {
-  const windows = platform === "win32";
-  const slashes = windows ? /[\\/]/ : /\//;
-  const at = spec.indexOf("@", 1);
-  const namePart = at > 0 ? spec.slice(0, at) : spec;
-  let name;
-  let where = spec;
-  if (URL_SPEC.test(spec)) {
-    // A URL, or a Windows path.
-  } else if (SCP_GIT_SPEC.test(spec)) {
-    return undefined;
-  } else if (!namePart.startsWith("@") && (slashes.test(namePart) || TARBALL.test(namePart))) {
-    // A path, @ and all.
-  } else if (at > 0) {
-    name = namePart;
-    where = spec.slice(at + 1);
-  } else if (PACKAGE_NAME.test(spec)) {
-    return undefined;
+  const parsed = npmSpec(spec, cwd, home, platform);
+  if (parsed?.type !== "file" && parsed?.type !== "directory") return undefined;
+  return { path: parsed.path, tarball: parsed.type === "file" };
+}
+
+const ALLOWS = {
+  git: "allow-git",
+  remote: "allow-remote",
+  file: "allow-file",
+  directory: "allow-directory",
+};
+
+/**
+ * npm's error, as it prints it, for the first of `specs` whose kind its allow-git, allow-remote,
+ * allow-file or allow-directory setting in `sources` is none, if any. Those npx asks for are the
+ * root's, which root lets through.
+ */
+export function refusal(specs, sources, cwd, home, platform = process.platform) {
+  for (const spec of specs) {
+    const { type, name, saveSpec } = npmSpec(spec, cwd, home, platform) ?? {};
+    if (!Object.hasOwn(ALLOWS, type) || settingOf(sources, ALLOWS[type]) !== "none") continue;
+    const lines = [
+      `code EALLOW${type.toUpperCase()}`,
+      `Fetching packages of type "${type}" have been disabled`,
+    ];
+    if (type === "git") lines.push(`Refusing to fetch "${name ? `${name}@` : ""}${saveSpec}"`);
+    return lines.join("\n");
   }
-  const fileLike =
-    /^file:/i.test(where) ||
-    (windows ? /^(?:[.]|~[/\\]|[/\\]|[a-zA-Z]:)/ : /^(?:[.]|~\/|\/|[a-zA-Z]:)/).test(where);
-  const pathLike =
-    !/^npm:/i.test(where) &&
-    !GITHUB_SHORTCUT.test(where) &&
-    !URL_SPEC.test(where) &&
-    (slashes.test(where) || TARBALL.test(where));
-  if (!fileLike && !pathLike) return undefined;
-  let file = where.replace(/^file:/i, "");
-  // file:/../x is relative; file://x and file:///x are /x.
-  if (/^\/{1,3}\.\.?(?:\/|$)/.test(file)) file = file.replace(/^\/+/, "");
-  else file = file.replace(/^\/{2,3}(?=[^/])/, "/");
-  if (windows) file = file.replace(/^\/+([a-z]:[/\\])/i, "$1");
-  const resolved =
-    file === "~" || /^~[/\\]/.test(file) ? path.join(home, file.slice(2)) : path.resolve(cwd, file);
-  return { name, path: resolved, tarball: TARBALL.test(where) };
+  return undefined;
 }
 
 /**
  * pnpm's arguments to install `packages` into its dlx cache as npx would, with npxSettings'
  * `settings`: npm links a folder it is given rather than installing it and its dependencies, as
  * pnpm does with link:. pnpm reads a relative path from its dlx folder, so each local one goes
- * absolute.
+ * absolute, and without the name a spec gives it: npm runs the package's own bins whatever the
+ * name, where pnpm's dlx makes a named one's path relative to the folder it runs in, which from
+ * the cache folder it installs in points nowhere.
  * @param {readonly string[]} packages
  * @param {readonly string[]} settings
  * @returns {string[]}
@@ -213,9 +676,7 @@ export function localSpec(spec, cwd, home, platform = process.platform) {
 export function npxToPnpm(packages, settings, cwd, home, platform = process.platform) {
   const specs = packages.map((spec) => {
     const local = localSpec(spec, cwd, home, platform);
-    if (local === undefined) return spec;
-    const name = local.name === undefined ? "" : `${local.name}@`;
-    return `${name}${local.tarball ? "file" : "link"}:${local.path}`;
+    return local === undefined ? spec : `${local.tarball ? "file" : "link"}:${local.path}`;
   });
   // pnpm keys a dlx install by its packages and --allow-build, never by these settings, so for a
   // day pnpx's or pnpm dlx's install of a package would serve npx, and npx's them, and one npx's
@@ -449,15 +910,165 @@ export function inTree(packages, spec) {
   );
 }
 
+// The npm whose npx this one behaves as, the package manager a project's devEngines checks.
+const NPM_VERSION = "11.19.1";
+
+/** The libc family npm-install-checks reads on Linux, null where it can't tell, else none. */
+function libc() {
+  if (process.platform !== "linux") return undefined;
+  try {
+    const ldd = readFileSync("/usr/bin/ldd", "utf8");
+    if (ldd.includes("musl")) return "musl";
+    return ldd.includes("GNU C Library") ? "glibc" : null;
+  } catch {}
+  const excluded = process.report.excludeNetwork;
+  process.report.excludeNetwork = true;
+  const report = process.report.getReport();
+  process.report.excludeNetwork = excluded;
+  if (report.header?.glibcVersionRuntime) return "glibc";
+  const musl = (file) => file.includes("libc.musl-") || file.includes("ld-musl-");
+  return Array.isArray(report.sharedObjects) && report.sharedObjects.some(musl) ? "musl" : null;
+}
+
+/** This computer as npm checks a project's devEngines against it. */
+function currentEnv() {
+  return {
+    cpu: { name: process.arch },
+    libc: { name: libc() },
+    os: { name: process.platform, version: release() },
+    packageManager: { name: "npm", version: NPM_VERSION },
+    runtime: { name: "node", version: process.version },
+  };
+}
+
+/**
+ * npm-install-checks' mismatch between one `wanted` dependency of a devEngines `engine` and its
+ * `current` one, or its throw where `wanted` is malformed.
+ */
+function devEngineMismatch(wanted, current, engine) {
+  if (typeof wanted !== "object" || wanted === null || Array.isArray(wanted)) {
+    throw new Error(`Invalid non-object value for "${engine}"`);
+  }
+  const properties = Object.keys(wanted);
+  const unknown = properties.find((key) => !["name", "version", "onFail"].includes(key));
+  if (unknown !== undefined) throw new Error(`Invalid property "${unknown}" for "${engine}"`);
+  if (!properties.includes("name")) throw new Error(`Missing "name" property for "${engine}"`);
+  if (typeof wanted.name !== "string") {
+    throw new Error(`Invalid non-string value for "name" within "${engine}"`);
+  }
+  if (typeof current.name !== "string" || current.name === "") {
+    throw new Error(`Unable to determine "name" for "${engine}"`);
+  }
+  if (properties.includes("onFail")) {
+    if (typeof wanted.onFail !== "string") {
+      throw new Error(`Invalid non-string value for "onFail" within "${engine}"`);
+    }
+    if (!["ignore", "warn", "error", "download"].includes(wanted.onFail)) {
+      throw new Error(`Invalid onFail value "${wanted.onFail}" for "${engine}"`);
+    }
+  }
+  if (wanted.name !== current.name) {
+    return `Invalid name "${wanted.name}" does not match "${current.name}" for "${engine}"`;
+  }
+  if (!properties.includes("version")) return undefined;
+  if (typeof wanted.version !== "string") {
+    throw new Error(`Invalid non-string value for "version" within "${engine}"`);
+  }
+  if (typeof current.version !== "string" || current.version === "") {
+    throw new Error(`Unable to determine "version" for "${engine}" "${wanted.name}"`);
+  }
+  const { version } = current;
+  if (semver().validRange(wanted.version)) {
+    if (semver().satisfies(version, wanted.version)) return undefined;
+    return `Invalid semver version "${wanted.version}" does not match "${version}" for "${engine}"`;
+  }
+  if (wanted.version === version) return undefined;
+  return `Invalid version "${wanted.version}" does not match "${version}" for "${engine}"`;
+}
+
+/**
+ * What npm makes of the devEngines in the package.json `manifest` at its local prefix, against
+ * `current`, before any command: the lines it warns with, and those it ends on, each as it prints
+ * them; under `force`, every failure only warns.
+ * @returns {{ warnings: string[], error?: string }}
+ */
+export function devEngines(manifest, force, current) {
+  const wanted = manifest?.devEngines;
+  if (wanted === undefined) return { warnings: [] };
+  const failures = [];
+  try {
+    if (typeof wanted !== "object" || wanted === null || Array.isArray(wanted)) {
+      throw new Error('Invalid non-object value for "devEngines"');
+    }
+    for (const [engine, authored] of Object.entries(wanted)) {
+      if (!["packageManager", "runtime", "cpu", "libc", "os"].includes(engine)) {
+        throw new Error(`Invalid property "devEngines.${engine}"`);
+      }
+      // Any one of several will do.
+      const dependencies = [authored].flat();
+      const now = current[engine] ?? {};
+      const errors = dependencies
+        .map((dependency) => devEngineMismatch(dependency, now, engine))
+        .filter((error) => error !== undefined);
+      if (dependencies.length === 0 || errors.length < dependencies.length) continue;
+      const onFail = dependencies.at(-1).onFail || "error";
+      const failure = { engine, errors, current: now, required: authored };
+      failures.push({ ...failure, onFail: onFail === "download" ? "error" : onFail });
+    }
+  } catch (error) {
+    return { warnings: [], error: error.message };
+  }
+  const lines = (value) =>
+    formatWithOptions({ colors: false }, value)
+      .split(/\r?\n/)
+      .map((line) => (line ? `EBADDEVENGINES ${line}` : "EBADDEVENGINES"));
+  const header = "The developer of this package has specified the following through devEngines";
+  const shown = ({ engine, errors, current, required }, first) => [
+    ...lines(
+      [...new Set([first ? header : "", `Invalid devEngines.${engine}`, errors.join("\n")])]
+        .filter(Boolean)
+        .join("\n"),
+    ),
+    ...lines({ current, required }),
+  ];
+  const errors = failures.filter(({ onFail }) => onFail === "error");
+  const warned = [...failures.filter(({ onFail }) => onFail === "warn"), ...(force ? errors : [])];
+  const warnings = warned.flatMap((failure, at) =>
+    shown(failure, at === 0).map((line) => `warn ${line}`),
+  );
+  if (force || errors.length === 0) return { warnings };
+  return { warnings, error: ["code EBADDEVENGINES", ...shown(errors[0], true)].join("\n") };
+}
+
 /**
  * What npx does with `args` from `cwd`, as libnpmexec decides it: the command, `undefined` for
  * the bin of the one package `install` names, the folders whose bins come first on its PATH, and
- * the folder it runs in; `install` lists what isn't here yet. An error carries npm's exit code.
+ * the folder it runs in; `install` lists what isn't here yet. An error carries npm's exit code,
+ * and `warnings` what npm warns of first. `env` and `home` give npm's config, and `current` the
+ * computer a project's devEngines is checked against.
  */
-export function plan(args, cwd, home = homedir()) {
+export function plan(args, cwd, home = homedir(), env = process.env, current = currentEnv()) {
+  const { prefix, workspace } = npmPrefix(cwd);
+  const sources = npmConfig(env, prefix, home);
+  // npm refuses such config, then a project whose devEngines this computer misses, before it
+  // looks at what to run.
+  const invalid = invalidConfig(sources);
+  if (invalid !== undefined) return { error: invalid, code: 1 };
+  const force = flag(settingOf(sources, "force"));
+  const { warnings, error } = devEngines(
+    readJson(path.join(prefix, "package.json")),
+    force,
+    current,
+  );
+  const decided =
+    error === undefined ? decide(args, cwd, home, sources, prefix, workspace) : { error, code: 1 };
+  return warnings.length > 0 ? { ...decided, warnings } : decided;
+}
+
+/** plan's decision once npm's config lets npx run. */
+function decide(args, cwd, home, sources, prefix, workspace) {
   const read = readNpx(args);
   if ("error" in read) return read;
-  const { prefix, workspace } = npmPrefix(cwd);
   const runPath = workspace ?? cwd;
   const trees = workspace === undefined ? [prefix] : [workspace, prefix];
   let tree;
@@ -467,13 +1078,14 @@ export function plan(args, cwd, home = homedir()) {
   };
   let [command, ...rest] = read.command;
   let packages = read.packages;
+  let own;
   if (packages.length === 0) {
-    const own = trees.find((dir) => {
+    own = trees.find((dir) => {
       const manifest = readJson(path.join(dir, "package.json"));
       return manifest !== undefined && Object.hasOwn(binsOf(manifest, dir), command);
     });
     if (own !== undefined) {
-      // npm installs the project as a link and runs its bin.
+      // npm installs the project as a link and runs its bin, whatever allow-directory says.
       packages = [own];
     } else {
       const bin = localBin(trees[0], command);
@@ -487,6 +1099,11 @@ export function plan(args, cwd, home = homedir()) {
       packages = [command];
       command = undefined;
     }
+  }
+  // npm refuses one before it looks for it in the local tree.
+  if (own === undefined) {
+    const refused = refusal(packages, sources, cwd, home);
+    if (refused !== undefined) return { error: refused, code: 1 };
   }
   const install = packages.filter((spec) => inLocalTree(spec) === undefined);
   for (const spec of install) {
@@ -683,7 +1300,7 @@ function end(code, signal) {
 }
 
 function fail(message, code = 1) {
-  console.error(`npx: ${message}`);
+  console.error(message.replace(/^/gm, "npx: "));
   process.exit(code);
 }
 
@@ -706,11 +1323,20 @@ function install(packages) {
   const settings = npxSettings(sources);
   if ("error" in settings) fail(settings.error);
   const scratch = mkdtempSync(path.join(tmpdir(), "eidolon-npx-"));
+  // pnpm reads the .npmrc of the project it finds itself in, not the one npm reads at its local
+  // prefix, and expands no ${VAR} in one's registries or credentials. So it runs in a folder of
+  // its own, with that .npmrc written there as npm reads it, the registries npm's variables name
+  // over its own, and no pnpm workspace around it. The folder is the user's alone, and goes once
+  // pnpm ends.
+  const npmrc = pnpmNpmrc(sources, process.cwd(), homedir());
+  if (npmrc) writeFileSync(path.join(scratch, ".npmrc"), `${npmrc}\n`, { mode: 0o600 });
   const report = path.join(scratch, "path");
   const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", import.meta.url));
   const args = [
     ...process.execArgv,
     pnpm,
+    `--dir=${scratch}`,
+    "--ignore-workspace",
     ...npxToPnpm(packages, settings, process.cwd(), homedir()),
     "--",
     process.execPath,
@@ -720,6 +1346,7 @@ function install(packages) {
   ];
   // pnpm's stdout goes to stderr with its own, and it never reads the server's stdin.
   const child = spawn(process.execPath, args, {
+    cwd: scratch,
     stdio: ["ignore", 2, 2],
     env: { ...process.env, EIDOLON_NPX_REPORT: report },
     windowsHide: true,
@@ -753,6 +1380,7 @@ function installed(bin) {
 
 if (import.meta.main) {
   const decided = plan(process.argv.slice(2), process.cwd());
+  for (const line of decided.warnings ?? []) console.error(`npx: ${line}`);
   if ("error" in decided) fail(decided.error, decided.code);
   let { command, bins } = decided;
   if (decided.install !== undefined) {

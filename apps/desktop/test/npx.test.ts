@@ -18,16 +18,36 @@ import { afterAll, describe, expect, test } from "vitest";
 import { LAUNCHER_SOURCES } from "../scripts/node-shim.ts";
 
 type Env = Record<string, string | undefined>;
+type Source = Record<string, string | string[]>;
 type Installed = { dir: string; manifest: { name: string; version?: string } };
-type Plan =
+type Plan = (
   | { error: string; code?: number }
-  | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string };
+  | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string }
+) & { warnings?: string[] };
+type Current = Record<string, { name?: string; version?: string }>;
 interface Npx {
-  npmConfig(env: Env, prefix: string, home: string): Record<string, string>[];
-  npxSettings(
-    sources: readonly Record<string, string>[],
-    now?: number,
-  ): string[] | { error: string };
+  envReplace(text: string, env: Env): string;
+  npmConfig(env: Env, prefix: string, home: string): Source[];
+  pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
+  npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
+  invalidConfig(sources: readonly Source[]): string | undefined;
+  devEngines(
+    manifest: unknown,
+    force: boolean,
+    current: Current,
+  ): { warnings: string[]; error?: string };
+  npmSpec(
+    spec: string,
+    where: string,
+    home: string,
+    platform?: string,
+  ): { type: string; name?: string; saveSpec?: string; path?: string } | undefined;
+  refusal(
+    specs: readonly string[],
+    sources: readonly Source[],
+    cwd: string,
+    home: string,
+  ): string | undefined;
   readNpx(args: readonly string[]): { packages: string[]; command: string[] } | { error: string };
   npxToPnpm(
     packages: readonly string[],
@@ -41,14 +61,14 @@ interface Npx {
     cwd: string,
     home: string,
     platform?: string,
-  ): { name?: string; path: string; tarball: boolean } | undefined;
+  ): { path: string; tarball: boolean } | undefined;
   binsOf(manifest: object, dir: string): Record<string, string>;
   binOf(manifest: object, dir: string): string | undefined;
   npmPrefix(cwd: string): { prefix: string; workspace?: string };
   localBin(start: string, name: string): string | undefined;
   treePackages(prefix: string): Installed[];
   inTree(packages: readonly Installed[], spec: string): Installed | undefined;
-  plan(args: readonly string[], cwd: string, home?: string): Plan;
+  plan(args: readonly string[], cwd: string, home?: string, env?: Env, current?: Current): Plan;
   pathOf(env: Env, delimiter?: string): string;
   npmPath(bins: readonly string[], runPath: string, nodeGyp: string, rest: string): string;
   commandEnv(env: Env, value: string): Env;
@@ -178,10 +198,11 @@ describe("pnpm's arguments", () => {
     expect(npx.npxToPnpm(specs, DEFAULTS, "/work", "/home/me")).toEqual(dlx(...specs));
   });
 
-  test("give a folder as pnpm's link:, absolute, which npm links too", () => {
+  // A name a spec gives either, npm runs the package's own bins under.
+  test("give a folder as pnpm's link:, absolute and unnamed, which npm links too", () => {
     expect(
       npx.npxToPnpm(
-        ["./server", "file:../other", "named@./third", "~/fourth"],
+        ["./server", "file:../other", "named@./third", "~/fourth", "@s/n@file:../fifth"],
         DEFAULTS,
         "/work/here",
         "/home/me",
@@ -190,13 +211,14 @@ describe("pnpm's arguments", () => {
       dlx(
         "link:/work/here/server",
         "link:/work/other",
-        "named@link:/work/here/third",
+        "link:/work/here/third",
         "link:/home/me/fourth",
+        "link:/work/fifth",
       ),
     );
   });
 
-  test("give a tarball file absolute, which pnpm would look for in its dlx folder", () => {
+  test("give a tarball file absolute and unnamed, which pnpm would look for in its dlx folder", () => {
     expect(
       npx.npxToPnpm(
         ["./server-1.0.0.tgz", "file:../server.tar.gz", "x.tgz", "named@./y.tar", "~/z.tgz"],
@@ -209,7 +231,7 @@ describe("pnpm's arguments", () => {
         "file:/work/here/server-1.0.0.tgz",
         "file:/work/server.tar.gz",
         "file:/work/here/x.tgz",
-        "named@file:/work/here/y.tar",
+        "file:/work/here/y.tar",
         "file:/home/me/z.tgz",
       ),
     );
@@ -228,7 +250,7 @@ describe("pnpm's arguments", () => {
 
 describe("npm's config, which npx installs by", () => {
   const NOW = Date.parse("2026-11-23T12:00:00Z");
-  const settingsOf = (...sources: Record<string, string>[]) => npx.npxSettings(sources, NOW);
+  const settingsOf = (...sources: Source[]) => npx.npxSettings(sources, NOW);
 
   test("runs no install script under ignore-scripts, read as npm reads a boolean", () => {
     for (const value of ["true", "1", "yes"]) {
@@ -277,7 +299,7 @@ describe("npm's config, which npx installs by", () => {
     expect(blocks({ "allow-git": "all", "allow-remote": "all" })).toBe(false);
   });
 
-  test("takes a registry from npm_config_* variables, which pnpm doesn't read", () => {
+  test("takes a registry from npm_config_* variables, over the project's, off pnpm's arguments", () => {
     const env = {
       NPM_CONFIG_REGISTRY: "https://npm.corp.test/",
       "npm_config_@Corp:registry": "https://corp.test/npm/",
@@ -285,13 +307,15 @@ describe("npm's config, which npx installs by", () => {
       npm_config_registry_x: "https://x.test/",
     };
     const [variables = {}] = npx.npmConfig(env, root, root);
-    expect(settingsOf(variables, { registry: "https://user.test/" })).toEqual([
-      ...DEFAULTS,
-      "--config.registry=https://npm.corp.test/",
-      "--config.@corp:registry=https://corp.test/npm/",
+    // Any process can read pnpm's arguments, and a registry's URL can hold its token.
+    expect(settingsOf(variables, { registry: "https://user.test/" })).toEqual(DEFAULTS);
+    const project = { registry: "https://project.test/", "@other:registry": "https://other.test/" };
+    // pnpm reads the user's .npmrc, and npm_config_//… credentials, itself.
+    expect(npx.pnpmNpmrc([variables, project], "/work", "/home").split("\n")).toEqual([
+      '"registry"="https://npm.corp.test/"',
+      '"@other:registry"="https://other.test/"',
+      '"@corp:registry"="https://corp.test/npm/"',
     ]);
-    // pnpm reads the .npmrc files' itself.
-    expect(settingsOf({}, { registry: "https://project.test/" })).toEqual(DEFAULTS);
   });
 
   test("installs nothing under strict-allow-scripts, but with every script or none", () => {
@@ -345,6 +369,342 @@ describe("npm's config, which npx installs by", () => {
       { "min-release-age": "7", "allow-remote": "none" },
     ]);
   });
+
+  test("reads an .npmrc's values as npm's ini parser does, quotes, escapes and lists", () => {
+    const base = tree({
+      ".npmrc": [
+        "plain = a b ; a comment",
+        "hash=a#b",
+        String.raw`escaped=a\;b\#c\\d\x`,
+        String.raw`json="a;b#c\"d"`,
+        "single='x;y'",
+        "number='12'",
+        "bare",
+        "dup=1",
+        "dup=2",
+        "ca[]=one",
+        "ca[]=two",
+        "  # a comment",
+        "=no key",
+        "__proto__=x",
+        "[section]",
+        "after=unread",
+      ].join("\n"),
+    });
+    expect(npx.npmConfig({}, base, root)[1]).toEqual({
+      plain: "a b",
+      hash: "a",
+      escaped: String.raw`a;b#c\d\x`,
+      json: 'a;b#c"d',
+      single: "x;y",
+      number: "12",
+      bare: "true",
+      dup: "2",
+      ca: ["one", "two"],
+    });
+  });
+
+  test("expands the variables every source's keys and values name, as npm does", () => {
+    const env = { HOST: "npm.corp.test", TOKEN: "t0k", EMPTY: "" };
+    // An escaped \${ stays, and each pair of backslashes before one is one.
+    expect(
+      npx.envReplace(`\${TOKEN}-\${UNSET}-\${UNSET?}-\${EMPTY}-\\\${TOKEN}-\\\\\${TOKEN}`, env),
+    ).toBe(`t0k-\${UNSET}---\${TOKEN}-\\t0k`);
+    // Keys once the file is read: of two that expand alike, the one that first comes later wins.
+    const base = tree({
+      ".npmrc": [
+        `//\${HOST}/:_authToken=first`,
+        "//npm.corp.test/:_authToken=literal",
+        `//\${HOST}/:_authToken=\${TOKEN}`,
+        `registry=https://\${HOST}/`,
+      ].join("\n"),
+    });
+    const before = ` \${EMPTY}2020-01-01 `;
+    expect(npx.npmConfig({ ...env, npm_config_before: before }, base, root).slice(0, 2)).toEqual([
+      { before: "2020-01-01" },
+      { "//npm.corp.test/:_authToken": "literal", registry: "https://npm.corp.test/" },
+    ]);
+    expect(
+      npx.npmConfig(env, tree({ ".npmrc": `//\${HOST}/:_authToken=\${TOKEN}` }), root)[1],
+    ).toEqual({ "//npm.corp.test/:_authToken": "t0k" });
+  });
+
+  test("gives pnpm the project's registries, their credentials and certificates, as npm", () => {
+    const cwd = tree({ "certs/client.pem": "cert", "certs/client.key": "key" });
+    const project: Source = {
+      registry: "https://npm.corp.test/",
+      "@corp:registry": "https://corp.test/npm/",
+      "//corp.test/npm/:_authToken": 'to"k;en=',
+      "//corp.test/npm/:certfile": "certs/client.pem",
+      "//corp.test/npm/:keyfile": join(cwd, "certs", "client.key"),
+      cafile: "~/ca.pem",
+      ca: ["one", "two"],
+      // Settings npm doesn't install by or doesn't have, and values it takes as none.
+      "//corp.test/npm/:tokenHelper": "/bin/helper",
+      "//corp.test/npm/:ca": "pem",
+      _authToken: "unscoped",
+      "ignore-scripts": "true",
+      "@other:registry": "",
+      "@list:registry": ["https://a.test/", "https://b.test/"],
+      // A client certificate whose key isn't there, which npm presents none of.
+      "//half.test/:certfile": "certs/client.pem",
+      "//half.test/:keyfile": "certs/missing.key",
+    };
+    expect(npx.pnpmNpmrc([{}, project], cwd, "/home/me").split("\n")).toEqual([
+      '"registry"="https://npm.corp.test/"',
+      '"@corp:registry"="https://corp.test/npm/"',
+      String.raw`"//corp.test/npm/:_authToken"="to\"k;en="`,
+      `"//corp.test/npm/:certfile"=${JSON.stringify(join(cwd, "certs", "client.pem"))}`,
+      `"//corp.test/npm/:keyfile"=${JSON.stringify(join(cwd, "certs", "client.key"))}`,
+      '"cafile"="/home/me/ca.pem"',
+      '"ca[]"="one"',
+      '"ca[]"="two"',
+    ]);
+    expect(npx.pnpmNpmrc([{}, { cafile: "ca.pem" }], "/work", "/home")).toBe(
+      '"cafile"="/work/ca.pem"',
+    );
+    expect(npx.pnpmNpmrc([{}, { "ignore-scripts": "true" }], "/work", "/home")).toBe("");
+  });
+
+  test("keeps a value whose variable is unset as npm has it, which pnpm would ignore", () => {
+    // npm then fails on an invalid URL or a wrong token; pnpm would take the user's registry.
+    const host = `\${HOST}`;
+    const project: Source = {
+      "@corp:registry": `\${CORP_REGISTRY}`,
+      registry: `http://${host}/npm/`,
+      "//corp.test/:_authToken": `a\${TOKEN}{b}$c`,
+      cafile: `\${CA}.pem`,
+      // A key naming no registry.
+      [`//${host}/:_authToken`]: "unused",
+    };
+    expect(npx.pnpmNpmrc([{}, project], "/work", "/home").split("\n")).toEqual([
+      '"@corp:registry"="%24%7BCORP_REGISTRY%7D"',
+      '"registry"="http://%24%7BHOST%7D/npm/"',
+      '"//corp.test/:_authToken"="a%24%7BTOKEN%7D%7Bb%7D%24c"',
+      '"cafile"="/work/%24%7BCA%7D.pem"',
+    ]);
+    // A variable's too.
+    expect(npx.pnpmNpmrc([{ "@v:registry": `\${V}` }, {}], "/work", "/home")).toBe(
+      '"@v:registry"="%24%7BV%7D"',
+    );
+  });
+});
+
+describe("npm's config it runs no command under", () => {
+  const authError = (...problems: string[]) =>
+    [
+      "code ERR_INVALID_AUTH",
+      `Invalid auth configuration found: ${problems.join(", ")}`,
+      "Please run `npm config fix` to repair your configuration.`",
+    ].join("\n");
+
+  // Each as npm 11.19.1 printed it.
+  test("is a credential the user's or the project's .npmrc gives no registry", () => {
+    const project = { _authToken: "t", "//r.test/:_authToken": "scoped" };
+    const user = { _authtoken: "t", username: "u", _password: "cA==", "-authtoken": "x" };
+    expect(npx.invalidConfig([{ registry: "https://r.test/npm/x" }, project, user])).toBe(
+      authError(
+        "`_authtoken` is not allowed in user config",
+        "`-authtoken` is not allowed in user config",
+        "`username` must be renamed to `//r.test/npm/:username` in user config",
+        "`_password` must be renamed to `//r.test/npm/:_password` in user config",
+        "`_authToken` must be renamed to `//r.test/npm/:_authToken` in project config",
+      ),
+    );
+    // A username or a password alone.
+    expect(npx.invalidConfig([{}, { username: "u" }, { _password: "p", _auth: "a" }])).toBe(
+      authError(
+        "`_auth` must be renamed to `//registry.npmjs.org/:_auth` in user config",
+        "`_password` is not allowed in user config",
+        "`username` is not allowed in project config",
+      ),
+    );
+    // Values npm takes as none, and a variable's, which it doesn't check.
+    const none = { _authToken: "false", username: "null", _auth: "" };
+    expect(npx.invalidConfig([{ _authtoken: "t" }, none, {}])).toBeUndefined();
+  });
+
+  test("is a registry that isn't a URL, a scope's aside", () => {
+    for (const registry of ["", "true", "not a url"]) {
+      expect([registry, npx.invalidConfig([{}, { registry }, { _auth: "a" }])]).toEqual([
+        registry,
+        "code ERR_INVALID_URL\nInvalid URL",
+      ]);
+    }
+    expect(npx.invalidConfig([{ "@s:registry": "not a url" }, {}, {}])).toBeUndefined();
+  });
+});
+
+describe("a project's devEngines, as npm checks it before any command", () => {
+  const current: Current = {
+    cpu: { name: "arm64" },
+    libc: { name: undefined },
+    os: { name: "darwin", version: "27.2.0" },
+    packageManager: { name: "npm", version: "11.19.1" },
+    runtime: { name: "node", version: "v24.22.1" },
+  };
+  const check = (devEngines: unknown, force = false) =>
+    npx.devEngines({ name: "p", devEngines }, force, current);
+  const header = "The developer of this package has specified the following through devEngines";
+  /** Lines as npm prints them under the title `EBADDEVENGINES`. */
+  const titled = (...lines: string[]) =>
+    lines.map((line) => (line ? `EBADDEVENGINES ${line}` : "EBADDEVENGINES"));
+  const pnpm = [
+    "Invalid devEngines.packageManager",
+    'Invalid name "pnpm" does not match "npm" for "packageManager"',
+    "{",
+    "  current: { name: 'npm', version: '11.19.1' },",
+    "  required: { name: 'pnpm', onFail: 'download' }",
+    "}",
+  ];
+
+  // Each as npm 11.19.1 printed it.
+  test("ends on the first engine none of whose choices match", () => {
+    expect(check({ packageManager: { name: "pnpm", onFail: "download" } })).toEqual({
+      warnings: [],
+      error: ["code EBADDEVENGINES", ...titled(header, ...pnpm)].join("\n"),
+    });
+    const cpu = { cpu: { name: "x64" }, os: { name: "darwin", version: ">=99" } };
+    expect(check(cpu).error?.split("\n")).toEqual([
+      "code EBADDEVENGINES",
+      ...titled(
+        header,
+        "Invalid devEngines.cpu",
+        'Invalid name "x64" does not match "arm64" for "cpu"',
+        "{ current: { name: 'arm64' }, required: { name: 'x64' } }",
+      ),
+    ]);
+    expect(check({ runtime: { name: "node", version: "latest" } }).error).toContain(
+      'Invalid version "latest" does not match "v24.22.1" for "runtime"',
+    );
+  });
+
+  test("warns of an engine whose last choice says warn, or of any under force, and goes on", () => {
+    const authored = {
+      cpu: { name: "x64", onFail: "warn" },
+      packageManager: { name: "pnpm", onFail: "download" },
+      runtime: { name: "bun", onFail: "ignore" },
+    };
+    const cpu = [
+      "Invalid devEngines.cpu",
+      'Invalid name "x64" does not match "arm64" for "cpu"',
+      "{",
+      "  current: { name: 'arm64' },",
+      "  required: { name: 'x64', onFail: 'warn' }",
+      "}",
+    ];
+    const warned = (...lines: string[]) => titled(...lines).map((line) => `warn ${line}`);
+    expect(check(authored)).toEqual({
+      warnings: warned(header, ...cpu),
+      error: ["code EBADDEVENGINES", ...titled(header, ...pnpm)].join("\n"),
+    });
+    expect(check(authored, true)).toEqual({ warnings: warned(header, ...cpu, ...pnpm) });
+  });
+
+  test("lets through engines one of whose choices matches, and none listed", () => {
+    for (const authored of [
+      { packageManager: { name: "npm", version: "^11.19" }, runtime: { name: "node" } },
+      { runtime: [{ name: "bun" }, { name: "node", version: "v24.22.1" }] },
+      { runtime: [], os: { name: "darwin", version: ">=27" } },
+    ]) {
+      expect([authored, check(authored)]).toEqual([authored, { warnings: [] }]);
+    }
+    expect(npx.devEngines({ name: "p" }, false, current)).toEqual({ warnings: [] });
+    expect(npx.devEngines(undefined, false, current)).toEqual({ warnings: [] });
+  });
+
+  test("ends on devEngines it can't read, with npm's words alone", () => {
+    for (const [authored, error] of [
+      [null, 'Invalid non-object value for "devEngines"'],
+      [["x"], 'Invalid non-object value for "devEngines"'],
+      [{ foo: {} }, 'Invalid property "devEngines.foo"'],
+      [{ runtime: { name: 1 } }, 'Invalid non-string value for "name" within "runtime"'],
+      [{ runtime: {} }, 'Missing "name" property for "runtime"'],
+      [{ runtime: { name: "node", at: 1 } }, 'Invalid property "at" for "runtime"'],
+      [{ libc: { name: "glibc" } }, 'Unable to determine "name" for "libc"'],
+      [{ runtime: { name: "node", onFail: "nope" } }, 'Invalid onFail value "nope" for "runtime"'],
+      [{ runtime: [[{ name: "node" }]] }, 'Invalid non-object value for "runtime"'],
+    ] as const) {
+      expect([authored, check(authored)]).toEqual([authored, { warnings: [], error }]);
+    }
+  });
+});
+
+describe("a spec's kind, as npm-package-arg reads it, and allow-git and the rest", () => {
+  // Each as npm 11.19.1 named and refused it, under allow-git, allow-remote, allow-file and
+  // allow-directory set to none.
+  test.each<[string, string, string?]>([
+    ["user/repo", "git", "github:user/repo"],
+    ["user/repo#main", "git", "github:user/repo#main"],
+    ["gist:abc123", "git", "gist:abc123"],
+    ["sourcehut:~user/repo", "git", "sourcehut:~user/repo"],
+    ["git+https://github.com/user/repo.git", "git", "git+https://github.com/user/repo.git"],
+    ["git@github.com:user/repo.git", "git", "git+ssh://git@github.com/user/repo.git"],
+    ["git://github.com/user/repo.git", "git", "git://github.com/user/repo.git"],
+    ["https://github.com/user/repo", "git", "git+https://github.com/user/repo.git"],
+    ["http://github.com/user/repo", "git", "git+ssh://git@github.com/user/repo.git"],
+    ["https://gitlab.com/group/sub/repo", "git", "git+https://gitlab.com/group/sub/repo.git"],
+    ["ssh://git@github.com/user/repo.git", "git", "git+ssh://git@github.com/user/repo.git"],
+    ["git+file:///tmp/repo.git", "git", "git+file:///tmp/repo.git"],
+    ["git@example.test:x/y.git", "git", "git+ssh://git@example.test:x/y.git"],
+    ["name@user/repo", "git", "name@github:user/repo"],
+    ["https://example.test/x.tgz", "remote"],
+    ["https://github.com/user/repo/archive/main.tar.gz", "remote"],
+    ["name@https://example.test/x.tgz", "remote"],
+    ["x.tgz", "file"],
+    ["file:x.tgz", "file"],
+    ["name@./x.tgz", "file"],
+    [".", "directory"],
+    ["file:dir", "directory"],
+    ["~/dir", "directory"],
+    ["a/b/c", "directory"],
+    ["c:foo", "directory"],
+    [".foo", "directory"],
+  ])("%s is a %s spec", (spec, type, saved) => {
+    const lines = [`code EALLOW${type.toUpperCase()}`];
+    lines.push(`Fetching packages of type "${type}" have been disabled`);
+    if (saved !== undefined) lines.push(`Refusing to fetch "${saved}"`);
+    const none = { [`allow-${type}`]: "none" };
+    expect(npx.refusal([spec], [none], "/work", "/home/me")).toBe(lines.join("\n"));
+    expect(npx.refusal([spec], [{ [`allow-${type}`]: "root" }], "/work", "/home/me")).toBe(
+      undefined,
+    );
+    expect(npx.refusal([spec], [{}, { [`allow-${type}`]: "all" }, none], "/work", "/home/me")).toBe(
+      undefined,
+    );
+  });
+
+  test("never refuses a registry's package, an alias, or a spec npm can't read", () => {
+    const none = {
+      "allow-git": "none",
+      "allow-remote": "none",
+      "allow-file": "none",
+      "allow-directory": "none",
+    };
+    for (const spec of ["foo", "@s/foo", "foo@^1", "foo@npm:bar", "ftp://example.test/x.tgz"]) {
+      expect([spec, npx.refusal([spec], [none], "/work", "/home/me")]).toEqual([spec, undefined]);
+    }
+  });
+
+  test("names the first refused of several", () => {
+    const sources = [{ "allow-file": "none", "allow-remote": "none" }];
+    expect(npx.refusal(["foo", "./x", "https://a.test/b.tgz", "x.tgz"], sources, "/w", "/h")).toBe(
+      'code EALLOWREMOTE\nFetching packages of type "remote" have been disabled',
+    );
+  });
+
+  test("gives the folder or tarball a path names, as npm resolves it", () => {
+    expect(npx.npmSpec("./a#b/../c d", "/work/x y", "/home/me", "linux")).toEqual({
+      type: "directory",
+      name: undefined,
+      path: "/work/x y/c d",
+    });
+    expect(npx.npmSpec("@s/n@file:../t.tgz", "/work/x", "/home/me", "linux")).toEqual({
+      type: "file",
+      name: "@s/n",
+      path: "/work/t.tgz",
+    });
+  });
 });
 
 describe("a folder or tarball spec, as npm-package-arg reads it", () => {
@@ -365,20 +725,17 @@ describe("a folder or tarball spec, as npm-package-arg reads it", () => {
     ["./a%20b", "/cwd/here/a%20b"],
   ])("%s is the folder %s", (spec, folder) => {
     expect(npx.localSpec(spec, "/cwd/here", "/home/me", "linux")).toEqual({
-      name: undefined,
       path: folder,
       tarball: false,
     });
   });
 
-  test("keeps the name a named folder spec gives", () => {
+  test("reads a named folder spec's folder", () => {
     expect(npx.localSpec("foo@./x", "/cwd", "/home", "linux")).toEqual({
-      name: "foo",
       path: "/cwd/x",
       tarball: false,
     });
     expect(npx.localSpec("@s/n@file:../y", "/cwd/here", "/home", "linux")).toEqual({
-      name: "@s/n",
       path: "/cwd/y",
       tarball: false,
     });
@@ -392,7 +749,6 @@ describe("a folder or tarball spec, as npm-package-arg reads it", () => {
     ["~/x.tgz", "/home/me/x.tgz"],
   ])("%s is the tarball %s", (spec, file) => {
     expect(npx.localSpec(spec, "/cwd/here", "/home/me", "linux")).toEqual({
-      name: undefined,
       path: file,
       tarball: true,
     });
@@ -634,10 +990,15 @@ describe("npm's local tree, whose packages npm runs rather than install", () => 
 });
 
 describe("what npx does, as npm decides it", () => {
+  // npm's config from a home of its own and no variables, never the developer's.
+  const home = tree({});
+  const plan = (args: readonly string[], cwd: string, env: Env = {}) =>
+    npx.plan(args, cwd, home, env);
+
   test("runs a bin in a node_modules/.bin above the folder, from the folder", () => {
     const base = tree({ "package.json": "{}", [`node_modules/.bin/${TOOL}`]: "", "sub/dir": null });
     const cwd = join(base, "sub", "dir");
-    expect(npx.plan(["-y", TOOL, "a b"], cwd)).toEqual({
+    expect(plan(["-y", TOOL, "a b"], cwd)).toEqual({
       command: TOOL,
       args: ["a b"],
       bins: [join(base, "node_modules", ".bin")],
@@ -647,7 +1008,7 @@ describe("what npx does, as npm decides it", () => {
 
   test("runs the project's own bin, linking the project", () => {
     const base = tree({ "package.json": manifest({ name: "self", bin: { [TOOL]: "cli.js" } }) });
-    expect(npx.plan([TOOL, "x"], base)).toEqual({
+    expect(plan([TOOL, "x"], base)).toEqual({
       install: [base],
       command: TOOL,
       args: ["x"],
@@ -664,13 +1025,13 @@ describe("what npx does, as npm decides it", () => {
       [`node_modules/.bin/${TOOL}`]: "",
     });
     const workspace = join(base, "packages", "a");
-    expect(npx.plan([TOOL], join(workspace, "src"))).toEqual({
+    expect(plan([TOOL], join(workspace, "src"))).toEqual({
       command: TOOL,
       args: [],
       bins: [join(base, "node_modules", ".bin")],
       runPath: workspace,
     });
-    expect(npx.plan(["-y", "eidolon-elsewhere"], join(workspace, "src"))).toMatchObject({
+    expect(plan(["-y", "eidolon-elsewhere"], join(workspace, "src"))).toMatchObject({
       install: ["eidolon-elsewhere"],
       runPath: workspace,
     });
@@ -685,21 +1046,21 @@ describe("what npx does, as npm decides it", () => {
       }),
       "node_modules/eidolon-nobin/package.json": manifest({ name: "eidolon-nobin" }),
     });
-    expect(npx.plan(["eidolon-pkg", "x"], base)).toEqual({
+    expect(plan(["eidolon-pkg", "x"], base)).toEqual({
       command: "pkg-cli",
       args: ["x"],
       bins: [],
       runPath: base,
     });
-    expect(npx.plan(["-p", "eidolon-pkg@1.0.0", "-p", "other", "pkg-cli"], base)).toEqual({
+    expect(plan(["-p", "eidolon-pkg@1.0.0", "-p", "other", "pkg-cli"], base)).toEqual({
       install: ["other"],
       command: "pkg-cli",
       args: [],
       bins: [],
       runPath: base,
     });
-    expect(npx.plan(["-p", "eidolon-pkg", "pkg-cli"], base)).not.toHaveProperty("install");
-    expect(npx.plan(["eidolon-nobin"], base)).toEqual({
+    expect(plan(["-p", "eidolon-pkg", "pkg-cli"], base)).not.toHaveProperty("install");
+    expect(plan(["eidolon-nobin"], base)).toEqual({
       error: "could not determine executable to run",
     });
   });
@@ -722,18 +1083,18 @@ describe("what npx does, as npm decides it", () => {
       [["-y", "eidolon-deep"], "deep-cli"],
       [["-y", "eidolon-top@^1"], "top-cli"],
     ] as const) {
-      expect([args, npx.plan(args, base)]).toEqual([
+      expect([args, plan(args, base)]).toEqual([
         args,
         { command, args: [], bins: [], runPath: base },
       ]);
     }
     const both = ["-y", "-p", "eidolon-top@~1.2", "-p", "eidolon-deep", "top-cli"];
-    expect(npx.plan(both, base)).not.toHaveProperty("install");
+    expect(plan(both, base)).not.toHaveProperty("install");
   });
 
   test("installs anything else, its bin picked once it's there", () => {
     const base = tree({ "package.json": "{}" });
-    expect(npx.plan(["-y", "@scope/server@2", "--flag"], base)).toEqual({
+    expect(plan(["-y", "@scope/server@2", "--flag"], base)).toEqual({
       install: ["@scope/server@2"],
       command: undefined,
       args: ["--flag"],
@@ -744,12 +1105,112 @@ describe("what npx does, as npm decides it", () => {
 
   test("ends as npm does on a folder with no package.json, or a tarball, to read", () => {
     const base = tree({ empty: null });
-    const missing = npx.plan(["-y", `file:${join(base, "empty")}`], base);
+    const missing = plan(["-y", `file:${join(base, "empty")}`], base);
     expect(missing).toMatchObject({ code: -2 });
     expect("error" in missing && missing.error).toMatch(/^could not read package\.json: ENOENT/);
-    const tarball = npx.plan(["-y", "-p", "./missing.tgz", "x"], base);
+    const tarball = plan(["-y", "-p", "./missing.tgz", "x"], base);
     expect(tarball).toMatchObject({ code: -2 });
     expect("error" in tarball && tarball.error).toMatch(/^could not read the tarball: ENOENT/);
+  });
+
+  test("refuses a package of a kind allow-* is none for, in the local tree or not, as npm does", () => {
+    const pkg = manifest({ name: "eidolon-pkg", bin: { "pkg-cli": "cli.js" } });
+    const base = tree({
+      "package.json": "{}",
+      ".npmrc": "allow-directory=none\n",
+      "node_modules/eidolon-pkg/package.json": pkg,
+      "pkg/package.json": pkg,
+    });
+    const refused = (type: string, ...more: string[]) => ({
+      error: [
+        `code EALLOW${type.toUpperCase()}`,
+        `Fetching packages of type "${type}" have been disabled`,
+        ...more,
+      ].join("\n"),
+      code: 1,
+    });
+    // From the .npmrc at npm's local prefix, before the missing folder npm never reads.
+    expect(plan(["-y", "-p", "./pkg", "pkg-cli"], base)).toEqual(refused("directory"));
+    expect(plan(["-y", "-p", "./missing", "x"], base)).toEqual(refused("directory"));
+    expect(plan(["-y", "."], base)).toEqual(refused("directory"));
+    // A variable's root over it, which npx's own packages pass.
+    expect(plan(["-y", "./pkg"], base, { npm_config_allow_directory: "root" })).toMatchObject({
+      install: ["./pkg"],
+    });
+    expect(plan(["-y", "-p", "x.tgz", "x"], base, { npm_config_allow_file: "none" })).toEqual(
+      refused("file"),
+    );
+    const remote = { npm_config_allow_remote: "none" };
+    expect(plan(["-y", "https://example.test/x.tgz"], base, remote)).toEqual(refused("remote"));
+    const git = { npm_config_allow_git: "none" };
+    expect(plan(["-y", "-p", "eidolon-pkg", "-p", "user/repo", "x"], base, git)).toEqual(
+      refused("git", 'Refusing to fetch "github:user/repo"'),
+    );
+    expect(plan(["-y", "-p", "eidolon-pkg", "x"], base, git)).not.toHaveProperty("error");
+  });
+
+  test("never refuses the project's own bin or a local bin, which npm runs as they are", () => {
+    const base = tree({
+      "package.json": manifest({ name: "self", bin: { [TOOL]: "cli.js" } }),
+      ".npmrc": "allow-directory=none\nallow-file=none\n",
+      "node_modules/.bin/x.tgz": "",
+    });
+    expect(plan([TOOL], base)).toMatchObject({ install: [base], command: TOOL });
+    expect(plan(["x.tgz", "a"], base)).toEqual({
+      command: "x.tgz",
+      args: ["a"],
+      bins: [join(base, "node_modules", ".bin")],
+      runPath: base,
+    });
+  });
+
+  test("runs nothing under config npm runs no command under, whatever it's asked to run", () => {
+    const base = tree({
+      "package.json": "{}",
+      ".npmrc": "_authToken=t\n",
+      [`node_modules/.bin/${TOOL}`]: "",
+    });
+    const refused = { error: expect.stringMatching(/^code ERR_INVALID_AUTH\n/), code: 1 };
+    for (const args of [[TOOL], ["-y", "foo"], ["-c", "x"], []]) {
+      expect([args, plan(args, base)]).toEqual([args, refused]);
+    }
+    // A registry that isn't a URL first.
+    expect(plan([TOOL], base, { npm_config_registry: "not a url" })).toEqual({
+      error: "code ERR_INVALID_URL\nInvalid URL",
+      code: 1,
+    });
+  });
+
+  test("runs nothing where npm's local prefix has devEngines npm misses, but warns under force", () => {
+    const pnpm = { devEngines: { packageManager: { name: "pnpm" } } };
+    const base = tree({
+      "package.json": JSON.stringify({ workspaces: ["packages/*"], ...pnpm }),
+      "packages/a/package.json": manifest({ name: "a" }),
+      [`node_modules/.bin/${TOOL}`]: "",
+    });
+    const refused = { error: expect.stringMatching(/^code EBADDEVENGINES\n/), code: 1 };
+    // From a workspace, the root's.
+    for (const args of [[TOOL], ["-y", "foo"], []]) {
+      expect([args, plan(args, join(base, "packages", "a"))]).toEqual([args, refused]);
+    }
+    expect(plan([TOOL], base, { npm_config_force: "true" })).toEqual({
+      command: TOOL,
+      args: [],
+      bins: [join(base, "node_modules", ".bin")],
+      runPath: base,
+      warnings: expect.arrayContaining(["warn EBADDEVENGINES Invalid devEngines.packageManager"]),
+    });
+    // A workspace's own, npm leaves be, and its config it checks first.
+    const own = tree({
+      "package.json": manifest({ workspaces: ["packages/*"] }),
+      "packages/a/package.json": JSON.stringify({ name: "a", ...pnpm }),
+      ".npmrc": "_auth=a\n",
+    });
+    expect(plan(["-y", "foo"], join(own, "packages", "a"))).toMatchObject({
+      error: expect.stringMatching(/^code ERR_INVALID_AUTH\n/),
+    });
+    rmSync(join(own, ".npmrc"));
+    expect(plan(["-y", "foo"], join(own, "packages", "a"))).toMatchObject({ install: ["foo"] });
   });
 });
 
