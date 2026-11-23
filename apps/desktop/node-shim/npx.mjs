@@ -5,6 +5,7 @@
 // ends as it did. pnpm reports on stderr, so the server's stdout, which the MCP protocol owns,
 // holds only what the server prints.
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   accessSync,
   constants,
@@ -132,7 +133,17 @@ export function npxToPnpm(packages, cwd, home, platform = process.platform) {
     const name = local.name === undefined ? "" : `${local.name}@`;
     return `${name}${local.tarball ? "file" : "link"}:${local.path}`;
   });
-  return ["--loglevel=error", ...NPX_SETTINGS, "dlx", ...specs.map((spec) => `--package=${spec}`)];
+  // pnpm keys a dlx install by its packages and --allow-build, never by these settings, so for a
+  // day pnpx's or pnpm dlx's install of a package would serve npx, and npx's them. A name no
+  // package can have, made from the settings, keys npx's apart.
+  const key = createHash("sha256").update(NPX_SETTINGS.join("\n")).digest("hex").slice(0, 16);
+  return [
+    "--loglevel=error",
+    ...NPX_SETTINGS,
+    "dlx",
+    `--allow-build=.npx-${key}`,
+    ...specs.map((spec) => `--package=${spec}`),
+  ];
 }
 
 function stat(file) {

@@ -689,8 +689,9 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   install, `node_modules` is flat, so a package finds what it uses and the packages beside it as
   under npm, and no `.pnpmfile.cjs` rewrites what installs, as npm reads none. A folder is linked,
   as npm links one, and runs as it is; a relative path resolves from the folder npx runs in. pnpm
-  reads its registry and auth from `.npmrc` and `pnpm_config_*` variables, keeps its store and
-  caches under the owner's home, and installs a dlx package afresh after a day.
+  reads its registry and auth from `.npmrc` and `pnpm_config_*` variables, and keeps its store and
+  caches under the owner's home, where its dlx cache holds npx's installs apart from those of pnpx
+  and `pnpm dlx`, which install as pnpm does, each for a day.
 - **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
   `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
   On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on

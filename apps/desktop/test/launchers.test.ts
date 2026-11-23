@@ -347,6 +347,60 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         time,
       );
     }
+    publish(
+      write(join(scratch, "built"), {
+        "package.json": JSON.stringify({
+          name: "eidolon-test-built",
+          version: "1.0.0",
+          dependencies: { "eidolon-test-leaf": "1.0.0" },
+          scripts: { postinstall: "node post.js" },
+        }),
+        "post.js": [
+          'const { join } = require("path");',
+          'require("fs").writeFileSync(join(process.env.EIDOLON_TEST_MARKS, "built"), "");',
+          "",
+        ].join("\n"),
+      }),
+      old,
+    );
+    for (const [version, time] of [
+      ["1.0.0", old],
+      ["1.1.0", new Date().toISOString()],
+    ] as const) {
+      publish(
+        write(join(scratch, `fresh-${version}`), {
+          "package.json": JSON.stringify({ name: "eidolon-test-fresh", version }),
+        }),
+        time,
+      );
+    }
+    // Its only version is old, so pnpm resolves it alike with its day of release age and without,
+    // all but its dependency eidolon-test-fresh, whose newest is new.
+    publish(
+      write(join(scratch, "pair"), {
+        "package.json": JSON.stringify({
+          name: "eidolon-test-pair",
+          version: "1.0.0",
+          type: "module",
+          bin: { "eidolon-test-pair": "cli.mjs" },
+          dependencies: { "eidolon-test-built": "1.0.0", "eidolon-test-fresh": "^1.0.0" },
+        }),
+        "cli.mjs": [
+          "#!/usr/bin/env node",
+          'import { createRequire } from "node:module";',
+          'const fresh = createRequire(import.meta.url)("eidolon-test-fresh/package.json").version;',
+          "let leaf;",
+          "try {",
+          '  leaf = (await import("eidolon-test-leaf")).default;',
+          "} catch (error) {",
+          "  leaf = error.code;",
+          "}",
+          "console.log(JSON.stringify({ fresh, leaf }));",
+          "",
+        ].join("\n"),
+      }),
+      old,
+    );
   });
   afterAll(() => {
     server.close();
@@ -422,5 +476,25 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     const cwd = join(workspace, "packages", "x");
     const ran = await launch("npx", ["-y", "eidolon-test-app"], { cwd });
     expect([ran.status, ran.marks, ran.stderr]).toEqual([0, ["dep"], ""]);
+  }, 60_000);
+
+  test("never shares an install with pnpx or pnpm dlx, which install as pnpm does", async () => {
+    const asNpm = {
+      status: 0,
+      stdout: `${JSON.stringify({ fresh: "1.1.0", leaf: "leaf" })}\n`,
+      stderr: "",
+      marks: ["built"],
+    };
+    /** What eidolon-test-pair printed last. */
+    const printed = (stdout: string) => JSON.parse(stdout.trimEnd().split("\n").at(-1) ?? "");
+    const home = newHome();
+    expect(await launch("npx", ["-y", "eidolon-test-pair"], { home })).toEqual(asNpm);
+    // pnpm's own day of release age.
+    expect(printed((await launch("pnpx", ["eidolon-test-pair"], { home })).stdout)).toMatchObject({
+      fresh: "1.0.0",
+    });
+    const pnpmFirst = newHome();
+    expect((await launch("pnpx", ["eidolon-test-pair"], { home: pnpmFirst })).status).toBe(0);
+    expect(await launch("npx", ["-y", "eidolon-test-pair"], { home: pnpmFirst })).toEqual(asNpm);
   }, 60_000);
 });

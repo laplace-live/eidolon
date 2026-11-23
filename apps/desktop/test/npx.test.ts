@@ -138,6 +138,7 @@ describe("pnpm's arguments", () => {
     "--loglevel=error",
     ...npx.NPX_SETTINGS,
     "dlx",
+    expect.stringMatching(/^--allow-build=\.npx-[0-9a-f]{16}$/),
     ...packages.map((spec) => `--package=${spec}`),
   ];
 
