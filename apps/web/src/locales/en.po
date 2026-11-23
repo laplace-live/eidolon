@@ -1418,6 +1418,10 @@ msgstr "Chinese"
 msgid "Choose"
 msgstr "Choose"
 
+#: src/components/settings-form/field.tsx
+msgid "Choose Folder"
+msgstr "Choose Folder"
+
 #: src/features/settings/assistant.tsx
 msgid "Choose the account and model tasks run on here, and add a key for that account in Providers."
 msgstr "Choose the account and model tasks run on here, and add a key for that account in Providers."
