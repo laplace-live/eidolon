@@ -6,6 +6,7 @@ export const SECTIONS = [
   "identity",
   "prompt",
   "voice",
+  "appearance",
   "models",
   "chat",
   "knowledge",

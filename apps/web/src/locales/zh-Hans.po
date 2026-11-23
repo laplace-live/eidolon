@@ -30,6 +30,10 @@ msgstr "（通话中）"
 msgid "(optional)"
 msgstr "（可选）"
 
+#: src/features/studio/model-controls.tsx
+msgid "[sleepy, teasing] Oh, you're back. [chuckling]"
+msgstr "[懒洋洋的，带点笑意] 嗯…你回来啦。[chuckling]"
+
 #: src/features/usage/tables.tsx
 msgid "{amount} min of audio"
 msgstr "{amount} 分钟音频"
@@ -67,6 +71,10 @@ msgstr "{count, plural, other {有 # 个批次在等待；会先下载最早的�
 msgid "{count, plural, one {# character} other {# characters}}"
 msgstr "{count, plural, other {# 个字符}}"
 
+#: src/features/studio/model-list.tsx
+msgid "{count, plural, one {# clip} other {# clips}}"
+msgstr "{count, plural, other {# 个动画}}"
+
 #: src/features/studio/videos-section.tsx
 msgid "{count, plural, one {# downloaded video has no upload date, so it waits until you give one in the table below.} other {# downloaded videos have no upload date, so they wait until you give one in the table below.}}"
 msgstr "{count, plural, other {有 # 个已下载的视频没有上传日期，会一直等到你在下面的表格里填上日期。}}"
@@ -74,6 +82,10 @@ msgstr "{count, plural, other {有 # 个已下载的视频没有上传日期，�
 #: src/features/jobs/parts.tsx
 msgid "{count, plural, one {# earlier line isn't shown.} other {# earlier lines aren't shown.}}"
 msgstr "{count, plural, other {更早的 # 行未显示。}}"
+
+#: src/features/studio/model-list.tsx
+msgid "{count, plural, one {# expression} other {# expressions}}"
+msgstr "{count, plural, other {# 个表情}}"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "{count, plural, one {# file changed since the last index.} other {# files changed since the last index.}}"
@@ -283,9 +295,21 @@ msgstr "{name} 已经存在。"
 msgid "{name} forgot you."
 msgstr "{name}已经忘记你了。"
 
+#: src/features/studio/model-list.tsx
+msgid "{name} imported."
+msgstr "已导入 {name}。"
+
 #: src/features/setup/voice-step.tsx
 msgid "{name} inherits <0>{env}</0> from the environment. Continue to keep it, or pick a voice of her own: it applies to her alone."
 msgstr "{name}继承了环境变量 <0>{env}</0> 的声音。继续即可保留它；也可以为她选择自己的声音，只对她生效。"
+
+#: src/features/studio/model-list.tsx
+msgid "{name} is no longer her active model."
+msgstr "{name} 不再是她的当前形象。"
+
+#: src/features/studio/model-list.tsx
+msgid "{name} is now her active model."
+msgstr "{name} 现在是她的当前形象。"
 
 #: src/features/setup/personas.ts
 msgid "{name} is now the active persona."
@@ -308,6 +332,10 @@ msgstr "{name} 不能用作文件名。请重命名文件，不要包含 / \\ �
 msgid "{name} now speaks with the environment's voice."
 msgstr "{name}现在使用环境变量里的声音。"
 
+#: src/features/studio/model-list.tsx
+msgid "{name} now uses the new file."
+msgstr "{name} 已换上新文件。"
+
 #: src/features/call/call-notices.tsx
 msgid "{name} ran into an error"
 msgstr "{name}遇到了错误"
@@ -317,11 +345,13 @@ msgid "{name} remembers your conversations between calls."
 msgstr "{name}会在通话之间记住你们聊过的内容。"
 
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/model-list.tsx
 msgid "{name} removed."
 msgstr "已删除{name}。"
 
 #: src/features/settings/account-dialog.tsx
 #: src/features/studio/facts-editor.tsx
+#: src/features/studio/model-preview.tsx
 msgid "{name} saved."
 msgstr "{name} 已保存。"
 
@@ -465,6 +495,10 @@ msgstr "12 个月"
 msgid "2024-05-01 她说……"
 msgstr "2024-05-01 她说……"
 
+#: src/features/studio/appearance-labels.ts
+msgid "2D Model · PSD2Live"
+msgstr "2D 模型 · PSD2Live"
+
 #: src/features/usage/route.tsx
 msgid "30 Days"
 msgstr "30 天"
@@ -488,6 +522,10 @@ msgstr "一个 .txt 文件；不写扩展名时会自动加上 .txt。"
 #: src/components/settings-form/check-labels.ts
 msgid "A budget this key falls under is used up."
 msgstr "这个密钥所属的预算已用完。"
+
+#: src/features/studio/model-controls.tsx
+msgid "A call fills the screen it's on: try her on a wide one and on a phone's."
+msgstr "通话会铺满所在的屏幕：在宽屏和手机屏幕上都看看她。"
 
 #: src/features/home/route.tsx
 msgid "A call is in progress: switch personas after it ends."
@@ -540,6 +578,18 @@ msgstr "链接在 10 分钟内有效。"
 #: src/features/chats/use-draft-files.ts
 msgid "A message holds up to {count} files"
 msgstr "一条消息最多附带 {count} 个文件"
+
+#: src/features/studio/model-list.tsx
+msgid "A model can be up to {max}."
+msgstr "模型最大为 {max}。"
+
+#: src/features/studio/appearance-labels.ts
+msgid "A name can be up to {max} characters."
+msgstr "名称最多 {max} 个字符。"
+
+#: src/features/studio/appearance-labels.ts
+msgid "A name is one line."
+msgstr "名称只能有一行。"
 
 #: src/components/voice-picker/library.tsx
 msgid "A name or a style, e.g. 温柔"
@@ -624,6 +674,7 @@ msgid "Account"
 msgstr "账号"
 
 #: src/components/persona-badges.tsx
+#: src/features/studio/model-list.tsx
 msgid "Active"
 msgstr "当前"
 
@@ -647,6 +698,14 @@ msgstr "添加 {provider} 账号"
 #: src/features/studio/references-section.tsx
 msgid "Add a Friend"
 msgstr "添加朋友"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Add a Parameter"
+msgstr "添加参数"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Add a parameter…"
+msgstr "添加参数…"
 
 #: src/features/studio/references-section.tsx
 msgid "Add a picture of someone she can take a selfie with, or drop one here."
@@ -693,6 +752,10 @@ msgstr "在上面添加链接，每个视频都会列在这里，并显示它的
 #: src/features/studio/voice-styles-card.tsx
 msgid "Add one, then ask her for it in a call."
 msgstr "添加一个，然后在通话中让她切换。"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Add Outfit"
+msgstr "添加服装"
 
 #: src/features/home/readiness-labels.ts
 msgid "Add Outfits"
@@ -872,10 +935,23 @@ msgstr "图片最大 50 MB，文本文件最大 1 MB。"
 msgid "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again."
 msgstr "MCP 服务器是这台电脑上的程序。每当有任务开始，Eidolon 就用 mcp.json 里的命令启动它，它以你的权限运行，不受任务文件夹的限制。每次调用都会先问你，除非你为那个工具选了「始终允许这个工具」。每个任务都会读到它对自己工具的描述；和网页不同，读过这些描述不会让你始终允许的命令和工具重新询问。"
 
+#: src/features/studio/model-outfits.tsx
+msgid "An outfit hides parts of her, holds parameters at a value, or shows another pose. The one you edit shows on the preview."
+msgstr "服装可以隐藏她的部件、把参数固定在某个值，或换一个姿势。正在编辑的服装会显示在预览里。"
+
 #: src/features/jobs/parts.tsx
 #: src/features/tasks/parts.tsx
 msgid "and {count} more"
 msgstr "还有 {count} 项"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Angry"
+msgstr "生气"
+
+#: src/features/studio/model-list.tsx
+msgid "Animated 2D models of her, made in PSD2Live. The one you make active is how she looks."
+msgstr "她的 2D 动态模型，用 PSD2Live 制作。设为当前形象的那个，就是她的样子。"
 
 #: src/components/settings-form/labels.ts
 msgid "Anonymous Calls per Window"
@@ -937,6 +1013,10 @@ msgstr "API 密钥（服务器需要时填写）"
 msgid "API Keys"
 msgstr "API 密钥"
 
+#: src/features/studio/route.tsx
+msgid "Appearance"
+msgstr "形象"
+
 #: src/features/chats/labels.ts
 msgid "Approve for Me"
 msgstr "自动审批"
@@ -984,6 +1064,10 @@ msgstr "自动审批要你来定：这会运行从网上下载的代码。"
 #: src/features/usage/route.tsx
 msgid "As each provider reported it."
 msgstr "均为服务商报告的金额。"
+
+#: src/features/studio/model-outfits.tsx
+msgid "As Exported"
+msgstr "原样"
 
 #: src/features/chats/labels.ts
 msgid "Ask for Approval"
@@ -1239,6 +1323,10 @@ msgstr "还无法通话"
 msgid "Calls fail with a key the provider refuses. Fix the keys marked above, or continue and fix them later in Settings."
 msgstr "服务商拒绝的密钥会导致通话失败。请修正上面标出的密钥，或先继续，稍后在设置中修改。"
 
+#: src/features/studio/model-controls.tsx
+msgid "Calls frame her head and shoulders until you frame her yourself."
+msgstr "在你亲自取景之前，通话会取她的头和肩膀。"
+
 #: src/features/home/memory-panel.tsx
 msgid "Calls go on without memory meanwhile."
 msgstr "在此期间通话照常进行，只是没有记忆。"
@@ -1261,6 +1349,7 @@ msgstr "无法连接 Eidolon 的服务器。如果它一直没有恢复，请退
 #: src/features/settings/accounts-card.tsx
 #: src/features/settings/new-skill-dialog.tsx
 #: src/features/setup/new-persona.tsx
+#: src/features/studio/model-list.tsx
 #: src/features/studio/references-section.tsx
 #: src/features/studio/video-table.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -1449,6 +1538,10 @@ msgstr "清空"
 #: src/components/settings-form/labels.ts
 msgid "Client IP Header"
 msgstr "客户端 IP 请求头"
+
+#: src/features/studio/model-controls.tsx
+msgid "Clips"
+msgstr "动画"
 
 #: src/components/ui/dialog.tsx
 #: src/components/ui/sheet.tsx
@@ -1640,6 +1733,7 @@ msgstr "决策模型"
 #: src/components/settings-form/labels.ts
 #: src/components/settings-form/model-picker.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/studio/model-moods.tsx
 msgid "Default"
 msgstr "默认"
 
@@ -1717,6 +1811,7 @@ msgstr "完成"
 
 #: src/features/jobs/labels.ts
 #: src/features/setup/stepper.tsx
+#: src/features/studio/model-outfits.tsx
 #: src/features/tasks/labels.ts
 msgid "Done"
 msgstr "完成"
@@ -1762,6 +1857,10 @@ msgstr "下载时不使用 Cookie。"
 msgid "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
 msgstr "下载、转写、整理并索引她的视频。每一步都会跳过已经完成的部分。"
 
+#: src/features/studio/model-controls.tsx
+msgid "Drag her on the preview to move her, and scroll or pinch to zoom."
+msgstr "在预览里拖动她来移动，滚动滚轮或双指捏合来缩放。"
+
 #: src/features/chats/attachments.tsx
 msgid "Drop to Attach"
 msgstr "松开以添加附件"
@@ -1791,6 +1890,10 @@ msgstr "每个链接都必须是完整的 http 或 https 网址。"
 msgid "Each model, and the task it did for her."
 msgstr "每个模型，以及它为她承担的任务。"
 
+#: src/features/studio/model-controls.tsx
+msgid "Each plays once over her idle."
+msgstr "每个动画都在待机动作之上播放一次。"
+
 #: src/features/chats/why-answered.tsx
 msgid "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
 msgstr "每项分数都在 0 到 1 之间。被点名：这句话是对她说的。感兴趣：话题是她在意的。"
@@ -1804,6 +1907,7 @@ msgid "Earlier steps summarized, from {tokens} tokens"
 msgstr "较早的步骤已概括（原 {tokens} token）"
 
 #: src/features/studio/knowledge-section.tsx
+#: src/features/studio/model-outfits.tsx
 msgid "Edit"
 msgstr "编辑"
 
@@ -2005,6 +2109,10 @@ msgstr "请输入整数。"
 msgid "Enter an amount of 0 or more."
 msgstr "请输入 0 或更大的金额。"
 
+#: src/features/studio/model-outfits.tsx
+msgid "Entry {entry}"
+msgstr "第 {entry} 项"
+
 #: src/components/settings-form/field.tsx
 msgid "environment"
 msgstr "环境变量"
@@ -2064,6 +2172,10 @@ msgstr "展开侧边栏"
 #: src/features/studio/models-section.tsx
 msgid "Experimental, and not yet tried in a real call."
 msgstr "实验性功能，尚未在真实通话中验证。"
+
+#: src/features/studio/model-controls.tsx
+msgid "Expressions"
+msgstr "表情"
 
 #: src/components/settings-form/labels.ts
 msgid "Fact Candidates"
@@ -2209,6 +2321,10 @@ msgstr "文件夹"
 msgid "Folders every task may read and write besides its own, one per line."
 msgstr "除了任务自己的文件夹，每个任务都能读写的文件夹，每行一个。"
 
+#: src/features/studio/model-controls.tsx
+msgid "Follow Pointer"
+msgstr "视线跟随指针"
+
 #: src/features/studio/voice-by-id.tsx
 msgid "For a voice neither list shows, such as one shared with you by link: copy its ID from its page on fish.audio."
 msgstr "用于两个列表里都没有的声音，比如别人通过链接分享给你的声音：在 fish.audio 上该声音的页面复制它的 ID。"
@@ -2237,6 +2353,10 @@ msgstr "找到 {title}"
 msgid "Four short steps: your keys, who you'll talk to, her voice, and memory."
 msgstr "四个简单步骤：你的密钥、聊天对象、她的声音和记忆。"
 
+#: src/features/studio/model-preview.tsx
+msgid "Framing"
+msgstr "取景"
+
 #: src/features/studio/videos-section.tsx
 msgid "Free"
 msgstr "免费"
@@ -2253,6 +2373,14 @@ msgstr "朋友"
 msgid "From <0>{variable}</0> in the environment."
 msgstr "来自环境变量 <0>{variable}</0>。"
 
+#: src/features/studio/model-list.tsx
+msgid "From a File"
+msgstr "从文件导入"
+
+#: src/features/studio/model-list.tsx
+msgid "From a Folder"
+msgstr "从文件夹导入"
+
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/accounts-card.tsx
 msgid "From the environment"
@@ -2266,6 +2394,15 @@ msgstr "完全权限"
 msgid "General"
 msgstr "通用"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Gentle"
+msgstr "温柔"
+
+#: src/features/studio/model-moods.tsx
+msgid "Gestures"
+msgstr "动作"
+
 #: src/components/settings-form/account-key-field.tsx
 msgid "Get a key"
 msgstr "获取密钥"
@@ -2278,9 +2415,18 @@ msgstr "正在准备麦克风…"
 msgid "Give her facts, videos and outfits in the studio, so she knows who she is."
 msgstr "在工作室里为她添加资料、视频和服装，让她知道自己是谁。"
 
+#: src/features/studio/appearance-labels.ts
+msgid "Give it a name."
+msgstr "请起个名字。"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Give the style a name."
 msgstr "给这个风格起个名字。"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Gloomy"
+msgstr "阴沉"
 
 #: src/features/studio/glossary-section.tsx
 #: src/features/studio/route.tsx
@@ -2319,9 +2465,27 @@ msgstr "挂断"
 msgid "Hanging up…"
 msgstr "正在挂断…"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Happy"
+msgstr "开心"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "gesture"
+msgid "Head Shake"
+msgstr "摇头"
+
 #: src/features/setup/keys-step.tsx
 msgid "Hears you on calls and in voice messages."
 msgstr "在通话和语音消息里听你说话。"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Held at a value while she wears it."
+msgstr "穿着这套服装时，参数固定在这个值。"
+
+#: src/features/studio/model-controls.tsx
+msgid "Held on her until you take them off."
+msgstr "点上的表情会一直保持，直到你取消。"
 
 #: src/features/studio/identity-section.tsx
 msgid "Her avatar is built in. Upload one to use your own instead."
@@ -2346,6 +2510,18 @@ msgstr "她的全名，提示词里会这样称呼她。"
 #: src/features/studio/models-section.tsx
 msgid "Her knowledge, archive and memories reach the model from the transcript of what you said, so they can trail a quick reply."
 msgstr "她的知识、直播存档和记忆要根据你说话的转写才能提供给模型，可能赶不上很快的回复。"
+
+#: src/features/studio/model-preview.tsx
+msgid "Her model can't show here"
+msgstr "这里无法显示她的模型"
+
+#: src/features/studio/model-list.tsx
+msgid "Her Models"
+msgstr "她的模型"
+
+#: src/features/studio/model-controls.tsx
+msgid "Her mouth follows your voice, and her eyes follow your pointer. Nothing is recorded."
+msgstr "她的嘴会跟着你的声音动，眼睛会跟着你的指针看。不会录音。"
 
 #: src/features/setup/persona-fields.tsx
 msgid "Her Name"
@@ -2375,6 +2551,10 @@ msgstr "她自己的声音可以在 Fish Audio 使用。"
 msgid "Her providers take no key."
 msgstr "她用的服务商都不需要密钥。"
 
+#: src/features/studio/model-moods.tsx
+msgid "Her replies' cues give her a mood, which shows as up to two of these expressions."
+msgstr "她回复里的提示会带出一种情绪，用最多两个表情来表现。"
+
 #: src/features/studio/advanced-section.tsx
 msgid "Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools."
 msgstr "其他部分没有显示的设置：她的提示词和索引存放在哪里、Mem0 归档她的记忆所用的 id，以及一次回复里最多几轮可以调用工具。"
@@ -2398,6 +2578,10 @@ msgstr "她的声音（{id}）尚未经过 Fish Audio 检查。"
 #: src/features/settings/skills-card.tsx
 msgid "Hidden by the skill of the same name in {shadowedBy}."
 msgstr "被 {shadowedBy} 里的同名技能盖过了。"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Hidden Parts"
+msgstr "隐藏的部件"
 
 #: src/features/jobs/detail.tsx
 msgid "Hide"
@@ -2476,6 +2660,10 @@ msgstr "在设置和工作室中显示的名字，例如“OpenAI（工作）”
 msgid "How she answers in chats. In a chat with several personas, a director decides who answers each line, and weighs her by her interests and talkativeness."
 msgstr "她在聊天里怎么回复。在有多个人设的聊天里，调度器决定每句话由谁来接，并根据她的兴趣和健谈程度来权衡。"
 
+#: src/features/studio/model-list.tsx
+msgid "How She Looks"
+msgstr "她的形象"
+
 #: src/features/setup/stepper.tsx
 msgid "How she sounds"
 msgstr "她的声音"
@@ -2496,6 +2684,11 @@ msgstr "身份"
 msgid "Identity saved."
 msgstr "身份已保存。"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "gesture"
+msgid "Idle"
+msgstr "待机"
+
 #: src/components/locked-screen.tsx
 msgid "If it happens again, Show Logs in the Help menu has the details."
 msgstr "如果再次出现，详情请在「帮助」菜单的「显示日志」中查看。"
@@ -2511,6 +2704,14 @@ msgstr "图片"
 #: src/features/chats/attachments.tsx
 msgid "Images and text files go with your next message."
 msgstr "图片和文本文件会随下一条消息一起发送。"
+
+#: src/features/studio/model-list.tsx
+msgid "Import a .p2lrt from PSD2Live, or the folder or zip of its web export. You can drop one here too."
+msgstr "导入 PSD2Live 导出的 .p2lrt，或者它的网页导出文件夹或 zip，也可以直接拖到这里。"
+
+#: src/features/studio/model-list.tsx
+msgid "Import a Model"
+msgstr "导入模型"
 
 #: src/features/chats/composer.tsx
 msgid "In a call"
@@ -2693,6 +2894,10 @@ msgstr "下面还有内容：滚动这个框，读完全部。"
 msgid "It has spent {spent}, and pauses each time its spend crosses another {each}."
 msgstr "它已花费 {spent}，花费每再增加 {each} 就会暂停一次。"
 
+#: src/features/studio/model-list.tsx
+msgid "It holds more than one .p2lrt model. Import the one you want on its own."
+msgstr "里面不止一个 .p2lrt 模型。请单独导入你想要的那一个。"
+
 #: src/features/jobs/detail.tsx
 msgid "It keeps running when you close this page."
 msgstr "关闭这个页面，作业也会继续运行。"
@@ -2786,6 +2991,14 @@ msgstr "她那里现在是{time}。"
 msgid "Its arguments couldn't be read, so it never ran."
 msgstr "它的参数无法读取，所以没有运行。"
 
+#: src/features/studio/model-list.tsx
+msgid "Its file and settings are deleted from her folder."
+msgstr "它的文件和设置会从她的文件夹中删除。"
+
+#: src/features/studio/model-list.tsx
+msgid "Its file and settings are deleted from her folder. It's her active model, so she shows her picture until you make another one active."
+msgstr "它的文件和设置会从她的文件夹中删除。它是她的当前形象，删除后她会显示头像，直到你把另一个模型设为当前形象。"
+
 #: src/features/settings/accounts-card.tsx
 msgid "Its key and settings are deleted from credentials.json. A key the environment sets stays."
 msgstr "它的密钥和设置会从 credentials.json 中删除。环境变量设置的密钥不受影响。"
@@ -2837,6 +3050,7 @@ msgstr "保留她的"
 
 #: src/features/studio/facts-editor.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/studio/model-list.tsx
 #: src/features/tasks/task-card.tsx
 msgid "Keep It"
 msgstr "保留"
@@ -2919,6 +3133,11 @@ msgstr "上一次通话"
 #: src/features/tasks/task-card.tsx
 msgid "Latest Step"
 msgstr "最新步骤"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Lazy"
+msgstr "慵懒"
 
 #: src/features/settings/account-dialog.tsx
 msgid "Leave it empty for the provider's own API, or point it at a proxy or another region."
@@ -3044,6 +3263,11 @@ msgstr "让{name}忘记你？"
 #: src/features/studio/route.tsx
 msgid "Make Active"
 msgstr "设为当前人设"
+
+#: src/features/studio/model-list.tsx
+msgctxt "model"
+msgid "Make Active"
+msgstr "设为当前形象"
 
 #: src/features/home/persona-grid.tsx
 msgctxt "persona card"
@@ -3171,6 +3395,10 @@ msgstr "给{name}发消息"
 msgid "Message everyone"
 msgstr "给大家发消息"
 
+#: src/features/studio/model-controls.tsx
+msgid "Microphone and Pointer"
+msgstr "麦克风和指针"
+
 #: src/features/studio/route.tsx
 msgid "Mind"
 msgstr "思维"
@@ -3187,9 +3415,21 @@ msgstr "缺少：{names}。没有它们无法开始通话。"
 msgid "Model"
 msgstr "模型"
 
+#: src/features/studio/model-list.tsx
+msgid "Model File"
+msgstr "模型文件"
+
+#: src/features/studio/model-list.tsx
+msgid "Model Folder"
+msgstr "模型文件夹"
+
 #: src/features/setup/keys-step.tsx
 msgid "Model ID"
 msgstr "模型 ID"
+
+#: src/features/studio/model-list.tsx
+msgid "Model Options"
+msgstr "模型选项"
 
 #: src/features/setup/keys-step.tsx
 msgid "Model: <0>{model}</0>"
@@ -3208,6 +3448,31 @@ msgstr "按类型选模型"
 msgid "Month"
 msgstr "月份"
 
+#: src/features/studio/model-controls.tsx
+msgid "Mood: {moods}"
+msgstr "情绪：{moods}"
+
+#: src/features/studio/model-moods.tsx
+#: src/features/studio/model-preview.tsx
+msgid "Moods"
+msgstr "情绪"
+
+#: src/features/studio/model-controls.tsx
+msgid "Move Down"
+msgstr "下移"
+
+#: src/features/studio/model-controls.tsx
+msgid "Move Left"
+msgstr "左移"
+
+#: src/features/studio/model-controls.tsx
+msgid "Move Right"
+msgstr "右移"
+
+#: src/features/studio/model-controls.tsx
+msgid "Move Up"
+msgstr "上移"
+
 #: src/features/call/call-controls.tsx
 msgid "Mute your mic"
 msgstr "关闭麦克风"
@@ -3218,6 +3483,8 @@ msgstr "我的声音"
 
 #: src/features/settings/account-dialog.tsx
 #: src/features/settings/new-skill-dialog.tsx
+#: src/features/studio/model-list.tsx
+#: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Name"
 msgstr "名称"
@@ -3226,6 +3493,10 @@ msgstr "名称"
 msgctxt "persona's name"
 msgid "Name"
 msgstr "名字"
+
+#: src/features/studio/model-preview.tsx
+msgid "Name every outfit first."
+msgstr "请先给每套服装起好名字。"
 
 #: src/components/settings-form/labels.ts
 msgid "Name patterns for the files in her facts folder, comma-separated. Default *.txt."
@@ -3349,6 +3620,14 @@ msgstr "未找到麦克风"
 msgid "No model by that name."
 msgstr "没有这个名字的模型。"
 
+#: src/features/studio/model-list.tsx
+msgid "No models yet"
+msgstr "还没有模型"
+
+#: src/features/studio/model-controls.tsx
+msgid "No mood found, so her face stays neutral."
+msgstr "没有读出情绪，她保持平常的表情。"
+
 #: src/features/home/readiness-labels.ts
 msgid "No outfit references, so she can't take selfies."
 msgstr "没有服装参考图，她无法自拍。"
@@ -3356,6 +3635,10 @@ msgstr "没有服装参考图，她无法自拍。"
 #: src/features/studio/references-section.tsx
 msgid "No outfits yet"
 msgstr "还没有服装"
+
+#: src/features/studio/model-outfits.tsx
+msgid "No outfits yet: she wears the model as it was exported."
+msgstr "还没有服装：她保持模型导出时的样子。"
 
 #: src/features/tasks/transcript-view.tsx
 msgid "No output."
@@ -3461,9 +3744,19 @@ msgstr "不联网"
 msgid "No words could be heard in it."
 msgstr "没有听清说了什么。"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "gesture"
+msgid "Nod"
+msgstr "点头"
+
 #: src/components/settings-form/labels.ts
+#: src/features/studio/model-moods.tsx
 msgid "None"
 msgstr "不使用"
+
+#: src/features/studio/model-list.tsx
+msgid "None is active, so she shows her picture. Make one active to use it as her look."
+msgstr "还没有当前形象，所以她显示头像。把一个模型设为当前形象，就用它作为她的样子。"
 
 #: src/features/settings/commands-card.tsx
 msgid "None yet."
@@ -3643,6 +3936,10 @@ msgstr "只添加你信任的程序"
 msgid "Only When Named"
 msgstr "点名才用"
 
+#: src/features/studio/model-list.tsx
+msgid "Only you see this name, here in the studio."
+msgstr "这个名称只有你在工作室里看得到。"
+
 #: src/components/locked-screen.tsx
 msgid "Open"
 msgstr "打开"
@@ -3750,10 +4047,16 @@ msgstr "换个服务商"
 msgid "Our house style for web pages. Use when making or editing any HTML page."
 msgstr "我们网页的排版风格。做或改任何 HTML 页面时使用。"
 
+#: src/features/studio/model-outfits.tsx
+msgid "Outfit {count}"
+msgstr "服装 {count}"
+
 #: src/features/home/readiness-labels.ts
 msgid "Outfit references: {count}."
 msgstr "服装参考图：{count} 张。"
 
+#: src/features/studio/model-outfits.tsx
+#: src/features/studio/model-preview.tsx
 #: src/features/studio/references-section.tsx
 msgid "Outfits"
 msgstr "服装"
@@ -3766,6 +4069,10 @@ msgstr "你添加的服装只保存在这台电脑上：部署{name}时只会复
 #: src/features/studio/voice-section.tsx
 msgid "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
 msgstr "覆盖了环境变量 <0>{env}</0>，它设为 <1>{value}</1>。"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Parameters"
+msgstr "参数"
 
 #: src/features/jobs/detail.tsx
 msgid "Part of the cost couldn't be priced."
@@ -3783,6 +4090,10 @@ msgstr "正在转告任务…"
 #: src/features/settings/account-dialog.tsx
 msgid "Paste a new key to replace it"
 msgstr "粘贴新密钥即可替换"
+
+#: src/features/studio/model-controls.tsx
+msgid "Paste a reply of hers, with its cues: she plays it as she would on a call, with no voice and nothing billed."
+msgstr "粘贴一句她的回复，带上提示：她会像通话时那样演出来，没有声音，也不产生费用。"
 
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
@@ -3830,6 +4141,10 @@ msgstr "人设"
 #: src/features/setup/persona-fields.tsx
 msgid "Personas speak Mandarin, and the videos you build one from should be Mandarin streams."
 msgstr "人设使用普通话交流，用来构建人设的视频也应当是普通话直播。"
+
+#: src/features/studio/model-list.tsx
+msgid "Pick a .p2lrt file from PSD2Live, or the folder or zip of its web export."
+msgstr "请选择 PSD2Live 导出的 .p2lrt 文件，或者它的网页导出文件夹或 zip。"
 
 #: src/features/chats/route.tsx
 msgid "Pick a chat, or start a new one"
@@ -3910,6 +4225,8 @@ msgid "Plan Again"
 msgstr "重新规划"
 
 #: src/features/call/call-notices.tsx
+#: src/features/studio/model-controls.tsx
+#: src/features/studio/model-moods.tsx
 msgid "Play"
 msgstr "播放"
 
@@ -3920,6 +4237,23 @@ msgstr "播放语音消息"
 #: src/features/chats/voice-bubble.tsx
 msgid "Playback Position"
 msgstr "播放进度"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Pose Group {group}"
+msgstr "姿势组 {group}"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Poses"
+msgstr "姿势"
+
+#: src/features/studio/model-controls.tsx
+msgid "Position"
+msgstr "位置"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Pouting"
+msgstr "嘴硬"
 
 #: src/components/voice-picker/parts.tsx
 msgid "Private"
@@ -3958,6 +4292,18 @@ msgstr "服务商账号"
 #: src/features/settings/route.tsx
 msgid "Providers"
 msgstr "服务商"
+
+#: src/features/studio/appearance-labels.ts
+msgid "PSD2Live's runtime couldn't read this model's file."
+msgstr "PSD2Live 运行时读不了这个模型文件。"
+
+#: src/features/studio/appearance-labels.ts
+msgid "PSD2Live's runtime didn't start in this browser."
+msgstr "PSD2Live 运行时没能在这个浏览器里启动。"
+
+#: src/features/studio/appearance-labels.ts
+msgid "PSD2Live's runtime stopped while it drew her model."
+msgstr "PSD2Live 运行时在绘制她的模型时停止了。"
 
 #: src/components/voice-picker/parts.tsx
 msgid "Public"
@@ -4143,6 +4489,8 @@ msgstr "相对于她的文件夹。默认 prompt.md。"
 #: src/features/settings/commands-card.tsx
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/studio/model-list.tsx
+#: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove"
 msgstr "移除"
@@ -4153,6 +4501,7 @@ msgid "Remove"
 msgstr "删除"
 
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove {name}"
 msgstr "删除{name}"
@@ -4163,6 +4512,7 @@ msgid "Remove {name}"
 msgstr "移除 {name}"
 
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/model-list.tsx
 msgid "Remove {name}?"
 msgstr "删除{name}吗？"
 
@@ -4187,6 +4537,7 @@ msgid "Remove the {name} style?"
 msgstr "移除风格 {name}？"
 
 #: src/features/chats/chat-menu.tsx
+#: src/features/studio/model-list.tsx
 msgid "Rename"
 msgstr "重命名"
 
@@ -4194,9 +4545,21 @@ msgstr "重命名"
 msgid "Rename Chat"
 msgstr "重命名聊天"
 
+#: src/features/studio/model-list.tsx
+msgid "Rename the Model"
+msgstr "重命名模型"
+
+#: src/features/studio/model-list.tsx
+msgid "Renamed to {name}."
+msgstr "已重命名为 {name}。"
+
 #: src/features/setup/avatar-picker.tsx
 msgid "Replace"
 msgstr "更换"
+
+#: src/features/studio/model-list.tsx
+msgid "Replace File"
+msgstr "替换文件"
 
 #: src/features/studio/identity-section.tsx
 msgid "Replace Her Avatar"
@@ -4292,6 +4655,14 @@ msgstr "调研任务暂时使用助手模式的模型"
 #: src/components/settings-form/field.tsx
 msgid "Reset"
 msgstr "重置"
+
+#: src/features/studio/model-controls.tsx
+msgid "Reset Framing"
+msgstr "重置取景"
+
+#: src/features/studio/model-moods.tsx
+msgid "Reset to Default"
+msgstr "恢复默认"
 
 #: src/features/home/readiness-labels.ts
 #: src/features/settings/notices.tsx
@@ -4403,6 +4774,11 @@ msgstr "s1（2026-12-31 停用）"
 msgid "s2.1-pro-free (Free, under Fair Use)"
 msgstr "s2.1-pro-free（免费，限合理使用）"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Sad"
+msgstr "难过"
+
 #: src/components/settings-form/field.tsx
 msgid "Same as {role} ({value})"
 msgstr "与{role}相同（{value}）"
@@ -4415,6 +4791,7 @@ msgstr "与助手任务相同"
 #: src/components/settings-form/settings-card.tsx
 #: src/features/chats/chat-menu.tsx
 #: src/features/settings/account-dialog.tsx
+#: src/features/studio/model-list.tsx
 #: src/features/studio/text-editor.tsx
 msgid "Save"
 msgstr "保存"
@@ -4438,6 +4815,7 @@ msgstr "已保存"
 
 #: src/components/settings-form/settings-card.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/studio/model-preview.tsx
 msgid "Saved for {name}"
 msgstr "保存到{name}的设置中"
 
@@ -4481,6 +4859,10 @@ msgstr "写清它做什么、什么时候用。"
 #: src/components/settings-form/labels.ts
 msgid "Scene Types Left Out of the Index"
 msgstr "不纳入索引的场景类型"
+
+#: src/features/studio/model-controls.tsx
+msgid "Screen"
+msgstr "屏幕"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Search"
@@ -4755,6 +5137,10 @@ msgstr "没有它们她也能聊天，只是记得和回忆起来的会少一些
 msgid "She uses it in calls. Leave it empty and she won't use a name."
 msgstr "她会在通话中这样称呼你。留空则她不使用称呼。"
 
+#: src/features/studio/model-outfits.tsx
+msgid "She Wears"
+msgstr "她穿着"
+
 #: src/features/chats/labels.ts
 msgid "She's the only persona in this chat, so she answers every line."
 msgstr "这个聊天里只有她一个人设，所以每句话都由她回答。"
@@ -4816,6 +5202,11 @@ msgstr "显示文字"
 #: src/components/settings-form/field.tsx
 msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
 msgstr "仅供查看：请在 settings.yaml 中或用 <0>{env}</0> 设置。"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Shy"
+msgstr "害羞"
 
 #: src/components/ui/sidebar.tsx
 msgid "Sidebar"
@@ -5033,6 +5424,7 @@ msgstr "还在等{name}回应。如果一直没有回应，请再说一遍。"
 
 #: src/features/chats/composer.tsx
 #: src/features/studio/add-videos.tsx
+#: src/features/studio/model-controls.tsx
 #: src/features/tasks/stop-picker.tsx
 #: src/features/tasks/task-card.tsx
 msgid "Stop"
@@ -5054,6 +5446,10 @@ msgstr "停止任务"
 #: src/features/tasks/task-card.tsx
 msgid "Stop this task?"
 msgstr "停止这个任务？"
+
+#: src/features/studio/model-list.tsx
+msgid "Stop Using"
+msgstr "停用"
 
 #: src/features/tasks/stop-picker.tsx
 msgid "Stop which task?"
@@ -5139,6 +5535,11 @@ msgstr "比如 温柔/轻柔/柔一点"
 msgid "Summary"
 msgstr "简介"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Surprised"
+msgstr "惊讶"
+
 #: src/features/setup/new-persona.tsx
 msgid "Switch to Her Now"
 msgstr "立即切换到她"
@@ -5180,9 +5581,18 @@ msgstr "正在自拍…"
 msgid "Talkativeness"
 msgstr "健谈程度"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "gesture"
+msgid "Talking"
+msgstr "说话"
+
 #: src/features/home/hero.tsx
 msgid "Talking to"
 msgstr "正在和她聊天"
+
+#: src/features/studio/model-controls.tsx
+msgid "Tall"
+msgstr "竖屏"
 
 #: src/features/usage/tables.tsx
 msgid "Task"
@@ -5236,6 +5646,11 @@ msgstr "技术日志"
 msgid "terms = [\"奶绿\", \"奶糖花\"]"
 msgstr "terms = [\"奶绿\", \"奶糖花\"]"
 
+#: src/features/studio/model-preview.tsx
+msgctxt "model"
+msgid "Test"
+msgstr "测试"
+
 #: src/features/chats/labels.ts
 msgctxt "reply mode"
 msgid "Text"
@@ -5260,6 +5675,14 @@ msgstr "内容已发生变化，请刷新后重试。"
 #: src/lib/labels.ts
 msgid "That doesn't exist."
 msgstr "内容不存在。"
+
+#: src/features/studio/model-list.tsx
+msgid "That file couldn't be read. Pick it again."
+msgstr "读不了这个文件，请重新选择。"
+
+#: src/features/studio/model-list.tsx
+msgid "That file isn't a PSD2Live model."
+msgstr "这个文件不是 PSD2Live 模型。"
 
 #: src/lib/labels.ts
 msgid "That file name isn't allowed."
@@ -5325,6 +5748,10 @@ msgstr "该任务没有在等待答复。"
 msgid "That value isn't valid for this setting."
 msgstr "这项设置的值无效。"
 
+#: src/features/studio/model-list.tsx
+msgid "That zip can't be read here. Unzip it, then import the .p2lrt inside."
+msgstr "这里读不了这个 zip。请先解压，再导入里面的 .p2lrt。"
+
 #: src/features/tasks/cards.tsx
 msgid "That's the server's own claim."
 msgstr "这只是服务器自己的说法。"
@@ -5365,6 +5792,10 @@ msgstr "应用的导航。"
 msgid "The archive is built."
 msgstr "回放库已构建。"
 
+#: src/features/studio/appearance-labels.ts
+msgid "The browser stopped drawing her model to free up its graphics."
+msgstr "浏览器为了腾出显卡资源，停止了绘制她的模型。"
+
 #: src/components/settings-form/labels.ts
 msgid "The browser whose cookies yt-dlp uses for videos behind a login. Reading them may ask for your Keychain password."
 msgstr "yt-dlp 下载需要登录的视频时读取哪个浏览器的 Cookie。读取时可能会要求输入钥匙串密码。"
@@ -5381,9 +5812,17 @@ msgstr "Eidolon 这边出错，通话失败。"
 msgid "The check couldn't run."
 msgstr "无法执行检查。"
 
+#: src/features/studio/model-moods.tsx
+msgid "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then."
+msgstr "每种动作播放的动画：待机一直播放，说话时播放说话，点头和摇头偶尔出现。"
+
 #: src/features/call/call-notices.tsx
 msgid "The connection dropped."
 msgstr "连接已断开。"
+
+#: src/features/studio/model-controls.tsx
+msgid "The dashed outline is what any call shows of her; a wider or taller screen shows more around it."
+msgstr "虚线框里是任何通话都会显示的部分；更宽或更高的屏幕会显示框外更多的部分。"
 
 #: src/features/studio/models-section.tsx
 msgid "The delivery cues in her prompt aren't performed: she's told to put them in her voice instead."
@@ -5517,6 +5956,10 @@ msgstr "任务每次请求最多携带的上下文，以 token 计。默认 1280
 #: src/features/jobs/list.tsx
 msgid "The offline work that builds each persona's knowledge. A job keeps running when you close this page."
 msgstr "为各个人设构建知识的离线工作。关闭这个页面，作业也会继续运行。"
+
+#: src/features/studio/model-outfits.tsx
+msgid "The outfit she shows this model in."
+msgstr "她用这个模型时穿的服装。"
 
 #: src/features/studio/identity-section.tsx
 msgid "The picture is deleted from her folder, and her initials show in its place."
@@ -5667,6 +6110,10 @@ msgstr "没有这个任务。"
 msgid "There may not be enough free space for this audio. Free some space first, or add fewer videos."
 msgstr "可用空间可能不够存放这些音频。请先腾出空间，或者少添加一些视频。"
 
+#: src/features/studio/model-list.tsx
+msgid "There's no .p2lrt model in it."
+msgstr "里面没有 .p2lrt 模型。"
+
 #: src/features/chats/chat-settings.tsx
 msgid "These apply to this chat alone."
 msgstr "这些设置只对这个聊天生效。"
@@ -5687,6 +6134,11 @@ msgstr "在人设工作室里索引资料或添加视频后，作业会出现在
 msgid "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
 msgstr "这些文件已被删除，或不再符合规则。重新索引资料，她就会忘掉它们："
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Thinking"
+msgstr "思考"
+
 #: src/features/setup/keys-step.tsx
 msgid "Thinks and writes her replies."
 msgstr "思考并写出她的回复。"
@@ -5702,6 +6154,10 @@ msgstr "这个账号还没有密钥"
 #: src/features/studio/videos-section.tsx
 msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
 msgstr "这会向你的 Soniox、OpenRouter 和嵌入服务账户收费：按估价约 {usd}。"
+
+#: src/features/studio/appearance-labels.ts
+msgid "This browser can't draw her model: it needs WebGL."
+msgstr "这个浏览器画不了她的模型：需要 WebGL。"
 
 #: src/features/chats/voice-recorder.tsx
 msgid "This browser can't record audio here."
@@ -5750,6 +6206,14 @@ msgstr "这个作业没有报告进度。"
 #: src/features/jobs/detail.tsx
 msgid "This job stopped without finishing"
 msgstr "作业没有完成就停止了"
+
+#: src/features/studio/model-controls.tsx
+msgid "This model has no clips."
+msgstr "这个模型没有动画。"
+
+#: src/features/studio/model-controls.tsx
+msgid "This model has no expressions."
+msgstr "这个模型没有表情。"
 
 #: src/components/settings-form/check-labels.ts
 msgid "This OpenRouter account never bought credits, so paid models will fail."
@@ -5933,11 +6397,24 @@ msgstr "触发词"
 msgid "Trigger words: {words}"
 msgstr "触发词：{words}"
 
+#: src/features/studio/model-moods.tsx
+msgid "Try"
+msgstr "试试"
+
+#: src/features/studio/model-controls.tsx
+msgid "Try a Line"
+msgstr "试一句"
+
 #: src/components/locked-screen.tsx
 #: src/components/route-error.tsx
 #: src/features/home/memory-panel.tsx
+#: src/features/studio/model-preview.tsx
 msgid "Try Again"
 msgstr "重试"
+
+#: src/features/studio/model-preview.tsx
+msgid "Try her out, frame her for calls, and choose how she shows each mood and what she wears, then save."
+msgstr "试试她的表现，为通话取景，选好每种情绪的表情和她穿的服装，然后保存。"
 
 #: src/components/settings-form/labels.ts
 msgid "TURN Credential Lifetime"
@@ -5994,6 +6471,10 @@ msgstr "仅链接可见"
 #: src/features/call/call-controls.tsx
 msgid "Unmute your mic"
 msgstr "打开麦克风"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Unnamed"
+msgstr "未命名"
 
 #: src/features/studio/text-editor.tsx
 msgid "Unsaved changes"
@@ -6079,6 +6560,10 @@ msgstr "改用"
 #: src/features/settings/new-skill-dialog.tsx
 msgid "Use lowercase letters, digits and single hyphens, 64 at most."
 msgstr "只能用小写字母、数字和单个连字符，最多 64 个字符。"
+
+#: src/features/studio/model-controls.tsx
+msgid "Use Microphone"
+msgstr "使用麦克风"
 
 #: src/features/studio/voice-section.tsx
 msgid "Use the Environment's Voice"
@@ -6453,6 +6938,10 @@ msgstr "你的聊天对象"
 msgid "Why {name} Answered"
 msgstr "{name}为什么回答"
 
+#: src/features/studio/model-controls.tsx
+msgid "Wide"
+msgstr "横屏"
+
 #: src/features/setup/memory-step.tsx
 msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
 msgstr "开启记忆后，她会在多次通话之间记得你。这需要在本机用 Docker 运行 Qdrant 数据库。跳过也不影响其他功能。"
@@ -6473,6 +6962,10 @@ msgstr "工作中…"
 msgid "Works out what the video pipeline would do and what it would cost, without running it."
 msgstr "估算视频流水线会做什么、要花多少钱，但不会真正运行。"
 
+#: src/features/studio/model-outfits.tsx
+msgid "Worn"
+msgstr "穿着中"
+
 #: src/features/settings/skills-card.tsx
 msgid "Write one here, or put a skill's folder, with its SKILL.md, in Eidolon's skills folder, or in the shared folder for your other agents too."
 msgstr "在这里写一个，或者把带 SKILL.md 的技能文件夹放进 Eidolon 的技能文件夹；放进共享文件夹的话，你的其他智能体也能用。"
@@ -6480,6 +6973,11 @@ msgstr "在这里写一个，或者把带 SKILL.md 的技能文件夹放进 Eido
 #: src/features/settings/new-skill-dialog.tsx
 msgid "Written as a SKILL.md in Eidolon's skills folder, where you can edit it later. Tasks see its name and description, and read the rest when the work calls for it."
 msgstr "会写成 Eidolon 技能文件夹里的一个 SKILL.md，之后也可以在那里修改。任务会看到它的名称和描述，活需要时再读其余内容。"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Wry"
+msgstr "无奈"
 
 #: src/components/settings-form/labels.ts
 #: src/features/settings/route.tsx
@@ -6571,6 +7069,10 @@ msgstr "你的服务器的 OpenAI 兼容地址，例如 http://127.0.0.1:1234/v1
 msgid "Your switches can't be read"
 msgstr "读不了你的技能开关"
 
+#: src/features/studio/model-controls.tsx
+msgid "Your system asks for less motion, so she doesn't talk or gesture with her body by herself. A clip you play still plays."
+msgstr "系统要求减少动态效果，所以她不会自己做说话和身体动作。你手动播放的动画仍会播放。"
+
 #: src/features/studio/text-editor.tsx
 msgid "Your unsaved changes will be lost."
 msgstr "未保存的修改将会丢失。"
@@ -6609,6 +7111,14 @@ msgstr "yt-dlp 不可用：{reason}"
 #: src/features/jobs/labels.ts
 msgid "yt-dlp isn't installed and couldn't be installed."
 msgstr "找不到 yt-dlp，也无法自动安装。"
+
+#: src/features/studio/model-controls.tsx
+msgid "Zoom In"
+msgstr "放大"
+
+#: src/features/studio/model-controls.tsx
+msgid "Zoom Out"
+msgstr "缩小"
 
 #: src/features/studio/prompt-section.tsx
 msgid "你是……"
