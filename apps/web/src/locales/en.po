@@ -3643,8 +3643,8 @@ msgid "On"
 msgstr "On"
 
 #: src/components/settings-form/labels.ts
-msgid "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. macOS and Linux only."
-msgstr "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. macOS and Linux only."
+msgid "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. On Windows, commands need Git Bash."
+msgstr "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. On Windows, commands need Git Bash."
 
 #: src/features/home/readiness-labels.ts
 msgid "On: she remembers you from one call to the next."
