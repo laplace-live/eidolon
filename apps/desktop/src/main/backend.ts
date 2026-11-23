@@ -52,7 +52,10 @@ export interface BackendOptions {
 
 export class Backend {
   readonly #options: BackendOptions;
-  /** Ends a login shell's read still running at a quit: its process group outlives main. */
+  /**
+   * Ends the environment's read still running at a quit: a login shell's, whose process group
+   * outlives main, or PowerShell's.
+   */
   readonly #abort = new AbortController();
   readonly #listeners = new Set<(state: BackendState) => void>();
   #controller: BackendController | null = null;
@@ -91,8 +94,8 @@ export class Backend {
   }
 
   /**
-   * Reads the environment once (the login shell on macOS), resolves the data home from it, and
-   * starts the controller, whose first spawn takes that same read.
+   * Reads the environment once (the login shell on macOS, the registry on Windows), resolves the
+   * data home from it, and starts the controller, whose first spawn takes that same read.
    */
   async start(): Promise<void> {
     const { app, env, log } = this.#options;
