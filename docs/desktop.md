@@ -1184,7 +1184,10 @@ other, in bash, within three hours:
      check or download, or an update that can't be installed, fails it at once, as does main
      exiting first; the failure names the last step's line and prints main.log's tail, with
      ShipIt's on macOS. Then the feed must have served the manifest and the update, and main must
-     exit 0.
+     exit 0. On Windows that is both blockmaps and the setup in ranges alone: electron-updater
+     downloads the whole setup when its differential download fails, which the test would
+     otherwise pass. A Mac's first update downloads the zip whole, having none of its own to diff
+     against.
    - **0.0.2 installed:** on Windows the setup electron-updater started, from
      `%LOCALAPPDATA%\eidolon-updater\pending`, must end first, uninstalling 0.0.1 and installing
      0.0.2. Then the same readings must say 0.0.2 within 10 minutes, a reading that fails while the

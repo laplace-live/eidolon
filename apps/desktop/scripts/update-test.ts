@@ -39,6 +39,7 @@ import {
   readManifest,
   type Served,
   servedSummary,
+  servedUpdate,
   startFeed,
   updateFile,
   wantedNames,
@@ -416,13 +417,12 @@ async function followUpdate(main: Started): Promise<boolean> {
 
 function checkServed({ served }: Feed): void {
   const manifest = manifestName(platform);
-  const answered = (name: string, statuses: readonly number[]) =>
-    served.some(
-      (entry) => entry.name === name && statuses.includes(entry.status) && entry.complete,
-    );
+  const blockmaps = planned.wanted.filter((name) => name.endsWith(".blockmap"));
   checks.add(
-    `the feed served ${newVersion}: its manifest, then the ${platform === "darwin" ? "zip" : "setup"} whole or in ranges`,
-    answered(manifest, [200]) && answered(planned.update, [200, 206]),
+    platform === "darwin"
+      ? `the feed served ${newVersion}: its manifest, then the zip`
+      : `the feed served ${newVersion}: its manifest, both blockmaps, then the setup in ranges alone`,
+    servedUpdate(served, platform, { manifest, update: planned.update, blockmaps }),
     [manifest, ...planned.wanted].map((name) => servedSummary(served, name)).join("; "),
   );
 }

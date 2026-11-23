@@ -268,3 +268,38 @@ export function servedSummary(served: readonly Served[], name: string): string {
   if (said.length === 0) said.push([...new Set(asked.map((entry) => entry.status))].join(", "));
   return `${name} ${said.join(" and ")}`;
 }
+
+/**
+ * Whether the feed served `platform`'s first update as electron-updater should fetch it: the
+ * manifest, then on Windows both blockmaps and the setup in ranges alone, diffed against the setup
+ * the install cached; on macOS the zip, which a Mac has no copy of to diff against until it has
+ * updated once.
+ */
+export function servedUpdate(
+  served: readonly Served[],
+  platform: NodeJS.Platform,
+  files: {
+    readonly manifest: string;
+    readonly update: string;
+    readonly blockmaps: readonly string[];
+  },
+): boolean {
+  const answered = (name: string, statuses: readonly number[]) =>
+    served.some(
+      (entry) =>
+        entry.method === "GET" &&
+        entry.name === name &&
+        statuses.includes(entry.status) &&
+        entry.complete,
+    );
+  if (!answered(files.manifest, [200])) return false;
+  if (platform === "darwin") return answered(files.update, [200, 206]);
+  const whole = served.some(
+    (entry) => entry.method === "GET" && entry.name === files.update && entry.status === 200,
+  );
+  return (
+    files.blockmaps.every((name) => answered(name, [200])) &&
+    answered(files.update, [206]) &&
+    !whole
+  );
+}

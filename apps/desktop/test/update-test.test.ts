@@ -21,6 +21,7 @@ import {
   requestedName,
   type Served,
   servedSummary,
+  servedUpdate,
   startFeed,
   updateFile,
   wantedNames,
@@ -335,7 +336,8 @@ describe("the feed over loopback", () => {
     await (await get("/latest.yml?noCache=1")).text();
     await (await get("/Eidolon%20Setup%200.0.2.exe", { headers: { range: "bytes=0-9" } })).text();
     await (await get("/missing.zip")).text();
-    await new Promise((done) => setTimeout(done, 50));
+    // Each is recorded when its response closes, which can trail the body on a busy runner.
+    await vi.waitFor(() => expect(served).toHaveLength(3));
     expect(served).toEqual([
       {
         method: "GET",
@@ -403,6 +405,57 @@ test("what the feed served of a file: whole, in ranges, or not at all", () => {
   expect(servedSummary(served, "Eidolon-0.0.2-arm64-mac.zip")).toBe(
     "Eidolon-0.0.2-arm64-mac.zip never asked for",
   );
+});
+
+describe("whether the feed served the update as it should", () => {
+  const get = (name: string, status: number): Served => ({
+    method: "GET",
+    path: `/${encodeURIComponent(name)}`,
+    name,
+    range: status === 206 ? "bytes=0-1" : null,
+    status,
+    bytes: 2,
+    complete: true,
+  });
+  const WIN = {
+    manifest: "latest.yml",
+    update: "Eidolon Setup 0.0.2.exe",
+    blockmaps: ["Eidolon Setup 0.0.2.exe.blockmap", "Eidolon Setup 0.0.1.exe.blockmap"],
+  };
+  const DIFFERENTIAL = [
+    get("latest.yml", 200),
+    get("Eidolon Setup 0.0.1.exe.blockmap", 200),
+    get("Eidolon Setup 0.0.2.exe.blockmap", 200),
+    get("Eidolon Setup 0.0.2.exe", 206),
+    get("Eidolon Setup 0.0.2.exe", 206),
+  ];
+
+  test("Windows: the manifest, both blockmaps, then the setup in ranges alone", () => {
+    expect(servedUpdate(DIFFERENTIAL, "win32", WIN)).toBe(true);
+  });
+
+  // electron-updater downloads the whole setup when its differential download fails.
+  test("Windows: fails a whole setup, a blockmap not served, or no setup at all", () => {
+    expect(servedUpdate([...DIFFERENTIAL, get(WIN.update, 200)], "win32", WIN)).toBe(false);
+    expect(servedUpdate([get("latest.yml", 200), get(WIN.update, 200)], "win32", WIN)).toBe(false);
+    const withoutOld = DIFFERENTIAL.filter((entry) => entry.name !== WIN.blockmaps[1]);
+    expect(servedUpdate(withoutOld, "win32", WIN)).toBe(false);
+    expect(servedUpdate([...withoutOld, get(WIN.blockmaps[1] as string, 404)], "win32", WIN)).toBe(
+      false,
+    );
+    expect(servedUpdate(DIFFERENTIAL.slice(0, 3), "win32", WIN)).toBe(false);
+  });
+
+  test("macOS: the manifest, then the zip, whole on a first update", () => {
+    const MAC = {
+      manifest: "latest-mac.yml",
+      update: "Eidolon-0.0.2-arm64-mac.zip",
+      blockmaps: ["Eidolon-0.0.2-arm64-mac.zip.blockmap", "Eidolon-0.0.1-arm64-mac.zip.blockmap"],
+    };
+    expect(servedUpdate([get(MAC.manifest, 200), get(MAC.update, 200)], "darwin", MAC)).toBe(true);
+    expect(servedUpdate([get(MAC.manifest, 200)], "darwin", MAC)).toBe(false);
+    expect(servedUpdate([get(MAC.update, 200)], "darwin", MAC)).toBe(false);
+  });
 });
 
 describe("main.log's steps", () => {
