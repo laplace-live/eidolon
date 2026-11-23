@@ -143,6 +143,8 @@ class FakeContext {
   readonly analyser = new FakeAnalyser();
   source = new FakeNode();
   streams: unknown[] = [];
+  /** What createMediaStreamSource throws, as browsers do for a stream with no audio track. */
+  refusal: Error | null = null;
   resume() {
     this.resumed++;
     this.state = "running";
@@ -153,12 +155,26 @@ class FakeContext {
     return Promise.resolve();
   }
   createMediaStreamSource(stream: unknown) {
+    if (this.refusal !== null) throw this.refusal;
     this.streams.push(stream);
     return this.source;
   }
   createAnalyser() {
     return this.analyser;
   }
+}
+
+/** Makes `new AudioContext()` hand out `context`. */
+function stubAudioContext(context: FakeContext): void {
+  vi.stubGlobal(
+    "AudioContext",
+    class {
+      constructor() {
+        // biome-ignore lint/correctness/noConstructorReturn: hands the test's fake out as the context.
+        return context;
+      }
+    },
+  );
 }
 
 describe("MouthMeter", () => {
@@ -203,20 +219,29 @@ describe("MouthMeter", () => {
 
   test("closes the context it made, and takes a stream as it is", () => {
     const context = new FakeContext();
-    vi.stubGlobal(
-      "AudioContext",
-      class {
-        constructor() {
-          // biome-ignore lint/correctness/noConstructorReturn: hands the test's fake out as the context.
-          return context;
-        }
-      },
-    );
+    stubAudioContext(context);
     const stream = { getAudioTracks: () => [] };
     const meter = new MouthMeter(stream as unknown as MediaStream);
     expect(context.streams).toEqual([stream]);
     meter.close();
     meter.close();
     expect(context.closed).toBe(1);
+  });
+
+  test("closes the context it made when the stream has no audio to read, never the caller's", () => {
+    const noAudio = () => new DOMException("MediaStream has no audio track", "InvalidStateError");
+    const stream = { getAudioTracks: () => [] } as unknown as MediaStream;
+    const own = new FakeContext();
+    own.refusal = noAudio();
+    stubAudioContext(own);
+    expect(() => new MouthMeter(stream)).toThrow(own.refusal);
+    expect(own.closed).toBe(1);
+
+    const theirs = new FakeContext();
+    theirs.refusal = noAudio();
+    expect(() => new MouthMeter(stream, { context: theirs as unknown as AudioContext })).toThrow(
+      theirs.refusal,
+    );
+    expect(theirs.closed).toBe(0);
   });
 });

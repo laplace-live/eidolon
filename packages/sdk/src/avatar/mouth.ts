@@ -124,18 +124,24 @@ export class MouthMeter implements MouthSource {
     source: MediaStreamTrack | MediaStream,
     o: { readonly context?: AudioContext; readonly curve?: Partial<MouthCurveOptions> } = {},
   ) {
-    this.#ownContext = o.context === undefined;
-    this.#context = o.context ?? new AudioContext();
-    // An AudioContext made outside a click starts suspended, and a suspended one reads silence.
-    if (this.#context.state === "suspended") void this.#context.resume().catch(() => {});
     const stream =
       typeof (source as MediaStream).getAudioTracks === "function"
         ? (source as MediaStream)
         : new MediaStream([source as MediaStreamTrack]);
-    this.#source = this.#context.createMediaStreamSource(stream);
-    this.#analyser = this.#context.createAnalyser();
-    this.#analyser.fftSize = FFT_SIZE;
-    this.#source.connect(this.#analyser);
+    this.#ownContext = o.context === undefined;
+    this.#context = o.context ?? new AudioContext();
+    try {
+      // Browsers refuse a stream with no audio track.
+      this.#source = this.#context.createMediaStreamSource(stream);
+      this.#analyser = this.#context.createAnalyser();
+      this.#analyser.fftSize = FFT_SIZE;
+      this.#source.connect(this.#analyser);
+    } catch (error) {
+      if (this.#ownContext) void this.#context.close().catch(() => {});
+      throw error;
+    }
+    // An AudioContext made outside a click starts suspended, and a suspended one reads silence.
+    if (this.#context.state === "suspended") void this.#context.resume().catch(() => {});
     // 8-bit samples quantize near -42 dBFS, the curve's floor, so they are read as floats.
     this.#samples = new Float32Array(this.#analyser.fftSize);
     this.#follower = new MouthFollower(o.curve);
