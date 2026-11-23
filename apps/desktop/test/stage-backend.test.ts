@@ -30,6 +30,7 @@ import {
 import { NODE_SHIM } from "../scripts/node-shim.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
+  copyVcRuntime,
   dropUnpacked,
   newestVcRedist,
   parseTarget,
@@ -40,7 +41,6 @@ import {
   stageDir,
   thirdPartyLicenses,
   unsignedNames,
-  vcRuntimeNeeds,
 } from "../scripts/stage-backend.ts";
 
 const ROOT = join(import.meta.dirname, "../../..");
@@ -675,7 +675,13 @@ describe("the VC++ runtime", () => {
       join(reflink, "reflink.win32-x64-msvc.node"),
       pe({ imports: ["VCRUNTIME140.dll", "api-ms-win-crt-heap-l1-1-0.dll"] }),
     );
-    expect(vcRuntimeNeeds(payload, redist)).toEqual(
+    copyVcRuntime(payload, redist);
+    const copies = new Map<string, string[]>();
+    const entries = readdirSync(payload, { recursive: true, withFileTypes: true }) as Dirent[];
+    for (const entry of entries.filter((entry) => VC.includes(entry.name))) {
+      copies.set(entry.parentPath, [...(copies.get(entry.parentPath) ?? []), entry.name].sort());
+    }
+    expect(copies).toEqual(
       new Map([
         [lancedb, ["vcruntime140.dll"]],
         [ort, [...VC].sort()],
