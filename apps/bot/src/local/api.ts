@@ -804,6 +804,12 @@ export interface CharacterModels {
   readonly models: readonly CharacterModel[];
 }
 
+/**
+ * PATCH's fields, each checked against the model's inventory: a name of one line of 1 to 64
+ * characters; a mood or gesture key, and an outfit's id, a slug of up to 32 characters; up to 2
+ * expressions per mood; up to 32 outfits, each naming its pose groups' entries, parameters within
+ * their ranges and parts, each once; `outfit` one of the outfits, or null.
+ */
 export type CharacterModelPatch = Partial<
   Pick<CharacterModel, "name" | "framing" | "moods" | "gestures" | "outfits" | "outfit">
 >;
