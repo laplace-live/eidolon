@@ -1,9 +1,11 @@
 // Updates on Electron: update-flow.ts's flow on electron-updater's autoUpdater, or on the mock, with
 // native.ts's boxes, Release Notes through the link policy, and the download's progress on the Dock
 // or the taskbar.
+import { execFile } from "node:child_process";
 import { accessSync, constants } from "node:fs";
+import { promisify } from "node:util";
 import { app, type NativeImage } from "electron";
-import { autoUpdater, type ProgressInfo } from "electron-updater";
+import { autoUpdater, type NsisUpdater, type ProgressInfo } from "electron-updater";
 import { manifestNotes } from "../shared/release-notes.ts";
 import { background } from "./instance.ts";
 import { mainLog } from "./log.ts";
@@ -18,7 +20,15 @@ import {
   type UpdateState,
   updaterMode,
 } from "./update-flow.ts";
+import {
+  powershellArgs,
+  SIGNATURE_TIMEOUT_MS,
+  signatureScript,
+  signatureVerdict,
+} from "./update-signature.ts";
 import { mainWindow } from "./window.ts";
+
+const execFileAsync = promisify(execFile);
 
 export interface UpdaterOptions {
   /** The quit flow, whose restart installs. */
@@ -43,9 +53,44 @@ const updaterLog = {
   error: (message?: unknown) => mainLog.error(logged(message)),
 };
 
+/**
+ * Windows: the downloaded setup's Authenticode check, in place of electron-updater's
+ * (update-signature.ts): null to install it, else why not. A check that can't run refuses it.
+ */
+async function verifySetupSignature(
+  publisherNames: string[],
+  file: string,
+): Promise<string | null> {
+  // As electron-updater does (electron-builder#7127): PowerShell 7's module path breaks 5.1's.
+  const env = { ...process.env };
+  for (const name of Object.keys(env)) if (/^psmodulepath$/i.test(name)) delete env[name];
+  let verdict: string | null;
+  try {
+    const { stdout } = await execFileAsync(
+      "powershell.exe",
+      powershellArgs(signatureScript(file)),
+      {
+        encoding: "utf8",
+        env,
+        timeout: SIGNATURE_TIMEOUT_MS,
+        windowsHide: true,
+      },
+    );
+    verdict = signatureVerdict(stdout, file, publisherNames);
+  } catch (error) {
+    verdict = `couldn't check the update's signature: ${String(error)}`;
+  }
+  if (verdict === null) mainLog.info("Eidolon: the update's signature is valid");
+  else mainLog.warn(`Eidolon: the update's signature doesn't check out: ${verdict}`);
+  return verdict;
+}
+
 /** electron-updater's autoUpdater: the download waits for Download, the install for Restart or a quit. */
 function releaseFeed(dev: boolean): UpdateDriver {
   const updater = autoUpdater;
+  if (process.platform === "win32") {
+    (updater as NsisUpdater).verifyUpdateCodeSignature = verifySetupSignature;
+  }
   updater.logger = updaterLog;
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = true;
