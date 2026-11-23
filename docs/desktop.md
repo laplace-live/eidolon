@@ -1370,9 +1370,9 @@ default one would show it touching a data home; the smoke writes there on a CI r
 removes the marker and the folders it made after. Where Eidolon is installed for the user already,
 it refuses to run rather than replace and remove that install. Each step has a time limit of its
 own, so a hung run still ends in failed checks, its uninstall and results included, well inside
-`desktop.yml`'s 15 minutes. After `finish()` it writes `results.json`, every check with the timings,
-into the run's folder, which a pass leaves holding that file alone. A run takes about 12 s on
-macOS.
+`desktop-build.yml`'s 20 minutes. After `finish()` it writes `results.json`, every check with the
+timings, into the run's folder, which a pass leaves holding that file alone. A run takes about 12 s
+on macOS.
 
 ### In CI
 
@@ -1404,7 +1404,7 @@ platform with its secrets alone ([Secrets](#secrets)):
    instead of skipping; run after packaging, it also holds the app's payload to the stage.
 6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
    Windows the `node`-project tests of `ts.yml`'s Windows job, with its filters.
-7. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
+7. **The packaged smoke,** in background mode, within 20 minutes, installing and uninstalling the
    NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
    output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds
    `local-token`.
