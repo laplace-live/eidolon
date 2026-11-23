@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { AudioLinesIcon, ExternalLinkIcon, KeyRoundIcon } from "lucide-react";
 import { Link } from "react-router";
 import { EmptyState } from "@/components/empty-state";
@@ -71,13 +71,7 @@ export function MinePanel({
 }) {
   const { t } = useLingui();
   const q = useDebounced(filter.text.trim());
-  const own = useInfiniteQuery({
-    ...ownVoicesQuery(account, q, filter.visibility),
-    placeholderData: keepPreviousData,
-    // Each tab switch remounts this panel: coming back shows what it had rather than asking Fish
-    // again with the key, and focus still refreshes it.
-    refetchOnMount: false,
-  });
+  const own = useInfiniteQuery(ownVoicesQuery(account, q, filter.visibility));
 
   if (overview !== undefined && overview.status !== "ok") {
     return <KeyProblem status={overview.status} />;

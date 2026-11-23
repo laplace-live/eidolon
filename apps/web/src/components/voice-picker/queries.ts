@@ -29,8 +29,11 @@ export function ownVoicesQuery(account: string, q: string, visibility: Visibilit
       }),
     initialPageParam: 1,
     getNextPageParam: (last, pages) => nextPage(last, pages.length),
+    // While the next search loads, the rows it had, but never another account's: those private
+    // voices aren't this one's to speak with.
+    placeholderData: (previous, query) => (query?.queryKey[1] === account ? previous : undefined),
     staleTime: 30_000,
-    // A voice made on fish.audio meanwhile shows up when the viewer comes back.
-    refetchOnWindowFocus: true,
+    // A voice made on fish.audio meanwhile shows up when the viewer comes back, however soon.
+    refetchOnWindowFocus: "always",
   });
 }
