@@ -739,17 +739,25 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     ]);
   }, 60_000);
 
-  test("keeps the installs from one project's registry apart from another's", async () => {
+  test("keeps the installs from one registry apart from another's", async () => {
     const home = newHome();
-    const projectOf = (at: string) =>
-      write(join(scratch, `mirror-project-${at}`), {
-        "package.json": JSON.stringify({ name: `eidolon-test-mirror-${at}`, version: "1.0.0" }),
-        ".npmrc": `registry=${registry}/${at}/\n`,
-      });
+    // Named by a project's .npmrc through a variable, which pnpm doesn't expand there.
+    const project = write(join(scratch, "mirror-project"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-mirror-project", version: "1.0.0" }),
+      ".npmrc": `registry=\${EIDOLON_TEST_MIRROR}\n`,
+    });
+    const printed = [];
     for (const at of ["a", "b", "a"]) {
-      const ran = await launch("npx", ["-y", "eidolon-test-mirror"], { home, cwd: projectOf(at) });
-      expect([at, ran.status, ran.stdout]).toEqual([at, 0, `${at} []\n`]);
+      const env = { EIDOLON_TEST_MIRROR: `${registry}/${at}/` };
+      const ran = await launch("npx", ["-y", "eidolon-test-mirror"], { home, cwd: project, env });
+      printed.push(ran.stdout);
     }
+    // Named by an npm_config_* variable, which pnpm doesn't read.
+    for (const at of ["b", "a"]) {
+      const env = { npm_config_registry: `${registry}/${at}/` };
+      printed.push((await launch("npx", ["-y", "eidolon-test-mirror"], { home, env })).stdout);
+    }
+    expect(printed).toEqual(["a []\n", "b []\n", "a []\n", "b []\n", "a []\n"]);
   }, 60_000);
 
   /** A bare git repo of the package in `dir`, made without the developer's git config. */
