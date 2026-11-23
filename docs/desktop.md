@@ -684,14 +684,18 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   no `--package`, the project's own bin, a bin in a `node_modules/.bin` from npm's local prefix up,
   or a package npm's local tree holds at a version the spec allows, by npm's semver, which pnpm's
   `dist/` carries, runs as it is, from the workspace's folder in an npm workspace. Anything else the
-  bundled pnpm installs into its dlx cache, `NPX_SETTINGS` making it install as npm does: every
-  dependency's install scripts run, the newest version is taken, git and tarball-URL dependencies
-  install, `node_modules` is flat, so a package finds what it uses and the packages beside it as
-  under npm, and no `.pnpmfile.cjs` rewrites what installs, as npm reads none. A folder is linked,
-  as npm links one, and runs as it is; a relative path resolves from the folder npx runs in. pnpm
-  reads its registry and auth from `.npmrc` and `pnpm_config_*` variables, and keeps its store and
-  caches under the owner's home, where its dlx cache holds npx's installs apart from those of pnpx
-  and `pnpm dlx`, which install as pnpm does, each for a day.
+  bundled pnpm installs into its dlx cache, `npxSettings` making it install as npm does under the
+  owner's npm config, which `npmConfig` reads from `npm_config_*` variables, the `.npmrc` at npm's
+  local prefix and the user's: every dependency's install scripts run, or none under
+  `ignore-scripts`; the newest version is taken, or the newest `min-release-age` or `before`
+  allows; git and tarball-URL dependencies install, but a dependency's own not where `allow-git` or
+  `allow-remote` is `root` or `none`; `node_modules` is flat, so a package finds what it uses and
+  the packages beside it as under npm; and no `.pnpmfile.cjs` rewrites what installs, as npm reads
+  none. A folder is linked, as npm links one, and runs as it is; a relative path resolves from the
+  folder npx runs in. pnpm reads its registry and auth from `.npmrc` and `pnpm_config_*` variables,
+  and keeps its store and caches under the owner's home, where its dlx cache holds npx's installs
+  apart from those of pnpx and `pnpm dlx`, which install as pnpm does, and from npx's under other
+  settings, each for a day.
 - **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
   `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
   On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on

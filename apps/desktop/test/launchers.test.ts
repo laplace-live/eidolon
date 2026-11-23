@@ -421,7 +421,11 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   async function launch(
     name: string,
     args: readonly string[],
-    { home = newHome(), cwd = scratch }: { home?: string; cwd?: string } = {},
+    {
+      home = newHome(),
+      cwd = scratch,
+      env = {},
+    }: { home?: string; cwd?: string; env?: Record<string, string> } = {},
   ) {
     const marks = mkdtempSync(join(scratch, "marks-"));
     const child = spawn(join(LAUNCHER_SOURCES, name), args, {
@@ -431,6 +435,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}`,
         EIDOLON_NODE: process.execPath,
         EIDOLON_TEST_MARKS: marks,
+        ...env,
       },
     });
     let stdout = "";
@@ -496,5 +501,43 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     const pnpmFirst = newHome();
     expect((await launch("pnpx", ["eidolon-test-pair"], { home: pnpmFirst })).status).toBe(0);
     expect(await launch("npx", ["-y", "eidolon-test-pair"], { home: pnpmFirst })).toEqual(asNpm);
+  }, 60_000);
+
+  test("installs as the owner's npm config has npm install", async () => {
+    // ignore-scripts, in the user's .npmrc: the app runs, its dependency's postinstall never.
+    const home = newHome("ignore-scripts=true");
+    const ignoring = await launch("npx", ["-y", "eidolon-test-app"], { home });
+    expect([ignoring.status, ignoring.marks, ignoring.stderr]).toEqual([0, [], ""]);
+    // min-release-age, in an npm_config_* variable: an older dependency, though the home holds
+    // npx's install of the newest.
+    const pair = ["-y", "eidolon-test-pair"];
+    const fresh = newHome();
+    expect(JSON.parse((await launch("npx", pair, { home: fresh })).stdout).fresh).toBe("1.1.0");
+    const aged = await launch("npx", pair, {
+      home: fresh,
+      env: { npm_config_min_release_age: "1" },
+    });
+    expect([aged.status, aged.stdout]).toEqual([
+      0,
+      `${JSON.stringify({ fresh: "1.0.0", leaf: "leaf" })}\n`,
+    ]);
+    // allow-remote, in the .npmrc at npm's local prefix: no dependency by URL.
+    const project = write(join(scratch, "project"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project" }),
+      ".npmrc": "allow-remote=root\n",
+      "sub/.keep": "",
+    });
+    const cwd = join(project, "sub");
+    const remote = await launch("npx", ["-y", "eidolon-test-app"], { cwd });
+    expect([remote.status, remote.stdout, remote.marks]).toEqual([1, "", []]);
+    expect(remote.stderr).toContain("ERR_PNPM_EXOTIC_SUBDEP");
+    // strict-allow-scripts: nothing installed, and why.
+    const strict = newHome("strict-allow-scripts=true");
+    expect(await launch("npx", ["-y", "eidolon-test-app"], { home: strict })).toEqual({
+      status: 1,
+      stdout: "",
+      stderr: "npx: strict-allow-scripts is set, and Eidolon's npx can't hold an install to it\n",
+      marks: [],
+    });
   }, 60_000);
 });
