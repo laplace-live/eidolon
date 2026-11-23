@@ -1,0 +1,26 @@
+#!/bin/sh
+# Copyright (c) 2026 DeepSeek
+# SPDX-License-Identifier: MIT
+#
+# Ported from deepseek-harness apps/desktop/cli/dsh@2e39e70496
+#
+# The eidolon command, which Settings links into /usr/local/bin: with no arguments it opens Eidolon,
+# with any it runs the CLI on the app's own binary as Node.
+set -e
+launcher=$0
+while [ -L "$launcher" ]; do
+  directory=$(CDPATH= cd -- "$(dirname -- "$launcher")" && pwd -P)
+  target=$(readlink "$launcher")
+  case "$target" in
+    /*) launcher=$target ;;
+    *) launcher=$directory/$target ;;
+  esac
+done
+contents=$(CDPATH= cd -- "$(dirname -- "$launcher")/../.." && pwd -P)
+if [ "$#" -eq 0 ]; then
+  exec open "$(dirname -- "$contents")"
+fi
+ELECTRON_RUN_AS_NODE=1; export ELECTRON_RUN_AS_NODE
+EIDOLON_APP_ROOT=$contents/Resources/eidolon; export EIDOLON_APP_ROOT
+EIDOLON_NO_DOTENV=1; export EIDOLON_NO_DOTENV
+exec "$contents/MacOS/Eidolon" --disable-sigusr1 --use-system-ca "$contents/Resources/eidolon/dist/cli.js" "$@"
