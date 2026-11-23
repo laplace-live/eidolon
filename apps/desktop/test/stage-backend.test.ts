@@ -1,9 +1,17 @@
 // stage-backend's parts, on made-up lockfiles, folders, PE files and zips: the pinning to bun.lock,
 // what is pruned, where the VC++ runtime goes, the unsigned-PE list and the license texts. The
 // staged payload itself is stage.test.ts's.
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  type Dirent,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { crc32, deflateRawSync } from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
 import { packageManifest } from "../../eidolon/scripts/build.ts";
@@ -21,6 +29,7 @@ import {
 } from "../scripts/lockfile.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
+  dropUnpacked,
   newestVcRedist,
   parseTarget,
   peFilesIn,
@@ -573,6 +582,32 @@ describe("onnxruntime-node", () => {
     expect(() => pruneOnnxruntime(dir, "win32-x64")).toThrow(
       "onnxruntime-node has no onnxruntime.dll in win32/x64",
     );
+  });
+});
+
+describe("what electron-builder never packs", () => {
+  test("goes from the stage at any depth, and every other dotfile stays", () => {
+    const payload = temp();
+    const kept = [
+      "node_modules/a/.gitattributes",
+      "node_modules/a/.npmignore",
+      "node_modules/a/index.js",
+      "node-shim/node_modules/pnpm/dist/node_modules/undici/lib/llhttp/constants.js",
+    ];
+    for (const path of [
+      ...kept,
+      ".DS_Store",
+      "node_modules/a/.gitkeep",
+      "node-shim/node_modules/pnpm/dist/node_modules/undici/lib/llhttp/.gitkeep",
+    ]) {
+      put(join(payload, path));
+    }
+    dropUnpacked(payload);
+    const files = (readdirSync(payload, { recursive: true, withFileTypes: true }) as Dirent[])
+      .filter((entry) => entry.isFile())
+      .map((entry) => relative(payload, join(entry.parentPath, entry.name)).split("\\").join("/"))
+      .sort();
+    expect(files).toEqual([...kept].sort());
   });
 });
 

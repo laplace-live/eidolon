@@ -145,6 +145,18 @@ export function pruneOnnxruntime(modules: string, target: Target): void {
   }
 }
 
+/** What electron-builder never packs, whatever its filters: builder-util's walk skips these names. */
+export const UNPACKED_NAMES: ReadonlySet<string> = new Set([".DS_Store", ".gitkeep"]);
+
+/** Removes what electron-builder would leave out, at any depth, so the stage is what ships. */
+export function dropUnpacked(payload: string): void {
+  for (const entry of readdirSync(payload, { recursive: true, withFileTypes: true })) {
+    if (UNPACKED_NAMES.has(entry.name)) {
+      rmSync(join(entry.parentPath, entry.name), { recursive: true, force: true });
+    }
+  }
+}
+
 /** A Microsoft.VC14x.CRT folder of a Visual Studio install, with the redist version it's under. */
 export interface VcRedist {
   readonly version: string;
@@ -507,6 +519,7 @@ export async function stageBackend(
     rmSync(join(modules, ".package-lock.json"), { force: true });
     pruneOnnxruntime(modules, target);
     stageNodeShim(payload, { os, cpu });
+    dropUnpacked(payload);
     let vcRuntime: VcRedist | null = null;
     if (target === "win32-x64") {
       vcRuntime = newestVcRedist();
