@@ -27,6 +27,9 @@ import {
   SELFIE_REQUEST,
   SELFIE_SAID,
   startFakes,
+  TASK_ACK,
+  TASK_GOAL,
+  TASK_LINE,
   VOICE_TRANSCRIPT,
 } from "../scripts/smoke/fakes.ts";
 import { parseFind, parseFront, parseType, unproven } from "../scripts/smoke/focus.ts";
@@ -382,9 +385,14 @@ describe("the fakes", () => {
       body: JSON.stringify(body),
     });
 
-  /** The streamed reply's text deltas, and when each arrived. */
-  async function deltas(response: Response): Promise<{ text: string; at: number }[]> {
-    const out: { text: string; at: number }[] = [];
+  /**
+   * The streamed reply's text deltas and tool calls, and when each arrived; a call with its
+   * arguments, and whether its delta opened the message.
+   */
+  async function deltas(
+    response: Response,
+  ): Promise<{ text: string; at: number; args?: unknown; role?: unknown }[]> {
+    const out: { text: string; at: number; args?: unknown; role?: unknown }[] = [];
     const decoder = new TextDecoder();
     let buffer = "";
     for await (const bytes of response.body as unknown as AsyncIterable<Uint8Array>) {
@@ -395,8 +403,15 @@ describe("the fakes", () => {
         if (event === "[DONE]") continue;
         const delta = JSON.parse(event).choices?.[0]?.delta;
         if (typeof delta?.content === "string") out.push({ text: delta.content, at: Date.now() });
-        if (delta?.tool_calls)
-          out.push({ text: `call:${delta.tool_calls[0].function.name}`, at: Date.now() });
+        if (delta?.tool_calls) {
+          const { name, arguments: args } = delta.tool_calls[0].function;
+          out.push({
+            text: `call:${name}`,
+            at: Date.now(),
+            args: JSON.parse(args),
+            role: delta.role,
+          });
+        }
       }
     }
     return out;
@@ -474,6 +489,39 @@ describe("the fakes", () => {
     );
     expect(image.readUInt32BE(16)).toBe(64);
     expect(drawn.data[0].media_type).toBe("image/png");
+  });
+
+  test("call start_task when asked for a task, offered it and given a folder, then answer its result", async () => {
+    const tools = [{ type: "function", function: { name: "start_task" } }];
+    const asked = { stream: true, tools, messages: [{ role: "user", content: TASK_LINE }] };
+    // No folder yet, or no start_task offered: she just greets.
+    expect((await deltas(await post("/chat/completions", asked))).map((p) => p.text)).toEqual([
+      GREETING,
+    ]);
+    served.taskFolder = "/tmp/a task's folder";
+    const unoffered = { stream: true, messages: [{ role: "user", content: TASK_LINE }] };
+    expect((await deltas(await post("/chat/completions", unoffered))).map((p) => p.text)).toEqual([
+      GREETING,
+    ]);
+    const [call, ...rest] = await deltas(await post("/chat/completions", asked));
+    expect([call?.text, call?.args, call?.role, rest]).toEqual([
+      "call:start_task",
+      { goal: TASK_GOAL, folder: "/tmp/a task's folder" },
+      "assistant",
+      [],
+    ]);
+    const result = (id: string) => ({
+      stream: true,
+      messages: [{ role: "tool", tool_call_id: id, content: '{"status":"awaiting-approval"}' }],
+    });
+    for (const [id, answer] of [
+      ["call_smoke_task", TASK_ACK],
+      ["call_smoke_selfie", SELFIE_REPLY],
+    ]) {
+      expect(
+        (await deltas(await post("/chat/completions", result(id)))).map((p) => p.text),
+      ).toEqual([answer]);
+    }
   });
 
   test("hold a reply after its first part, and record a turn stopped there", async () => {

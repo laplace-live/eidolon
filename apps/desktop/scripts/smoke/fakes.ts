@@ -1,8 +1,9 @@
 // Loopback stand-ins for every provider the desktop smokes reach, ported from
-// apps/bot/scripts/local-smoke.ts's fake server to node:http: her mind's chat completions, streamed;
-// the retrieval gate's and the director's decisions; embeddings; OpenAI's speech, transcriptions
-// and realtime transcription sessions; OpenRouter's images, for a selfie; and the model listings.
-// They answer one key, refuse every other request, and count what they answer by route.
+// apps/bot/scripts/local-smoke.ts's fake server to node:http: her mind's chat completions, streamed,
+// a selfie's and a task's tool calls included; the retrieval gate's and the director's decisions;
+// embeddings; OpenAI's speech, transcriptions and realtime transcription sessions; OpenRouter's
+// images, for a selfie; and the model listings. They answer one key, refuse every other request,
+// and count what they answer by route.
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
@@ -21,11 +22,21 @@ export const HEARD_REPLY = "听得到呀，声音很清楚。";
 export const SELFIE_REQUEST = "给我发张自拍吧";
 /** What she says beside that call. */
 export const SELFIE_SAID = "等我一下哦～";
-/** Her answer to a tool's result. */
+/** Her answer to a tool's result, start_task's aside. */
 export const SELFIE_REPLY = "拍好啦，喜欢吗？";
+/** A line she answers with a start_task call, when the request offers it and a folder is set. */
+export const TASK_LINE = "帮我把截图按日期整理一下";
+/** The goal her start_task call gives the task. */
+export const TASK_GOAL = "把截图按拍摄日期分进不同的文件夹";
+/** Her answer to her start_task call's result. */
+export const TASK_ACK = "好，你在任务卡片上点一下允许我就开始。";
+/** The model the smokes' tasks name: any model the fakes list. */
+export const TASK_MODEL = "fake-worker";
 
 const SELFIE_TOOL = "take_selfie";
 const SELFIE_CALL_ID = "call_smoke_selfie";
+const TASK_TOOL = "start_task";
+const TASK_CALL_ID = "call_smoke_task";
 /** Every model the listings name; each kind's listing filters them as its provider does. */
 const MODELS = [
   "fake-chat",
@@ -67,6 +78,7 @@ export type Route = (typeof ROUTES)[number];
 interface Message {
   readonly role?: unknown;
   readonly content?: unknown;
+  readonly tool_call_id?: unknown;
 }
 
 /** One chat completion request, as the fakes read it. */
@@ -223,22 +235,39 @@ function offers(request: ChatRequest, name: string): boolean {
   return (request.tools ?? []).some((tool) => tool.function?.name === name);
 }
 
-/** What her mind says to `request`: a tool call for a selfie asked for, else lines of text. */
-function answerTo(request: ChatRequest): {
-  readonly texts: readonly string[];
-  readonly call: boolean;
-} {
+/** A tool call her mind makes, after whatever she says. */
+interface ToolCall {
+  readonly id: string;
+  readonly name: string;
+  readonly args: object;
+}
+
+/**
+ * What her mind says to `request`: a tool call for a selfie or a task asked for, else lines of
+ * text. A task needs `taskFolder`, the folder her start_task call names.
+ */
+function answerTo(
+  request: ChatRequest,
+  taskFolder: string | null,
+): { readonly texts: readonly string[]; readonly call: ToolCall | null } {
+  const say = (...texts: string[]) => ({ texts, call: null });
   const last = request.messages?.at(-1);
-  if (last?.role === "tool") return { texts: [SELFIE_REPLY], call: false };
-  if (last?.role !== "user") return { texts: [GREETING], call: false };
-  if (Array.isArray(last.content)) return { texts: [FILES_REPLY], call: false };
+  if (last?.role === "tool") {
+    return say(last.tool_call_id === TASK_CALL_ID ? TASK_ACK : SELFIE_REPLY);
+  }
+  if (last?.role !== "user") return say(GREETING);
+  if (Array.isArray(last.content)) return say(FILES_REPLY);
   const asked = textOf(last.content);
   if (asked.includes(SELFIE_REQUEST) && offers(request, SELFIE_TOOL)) {
-    return { texts: [SELFIE_SAID], call: true };
+    return { texts: [SELFIE_SAID], call: { id: SELFIE_CALL_ID, name: SELFIE_TOOL, args: {} } };
   }
-  if (asked === CHAT_MESSAGE) return { texts: REPLY, call: false };
-  if (asked.includes(VOICE_TRANSCRIPT)) return { texts: [HEARD_REPLY], call: false };
-  return { texts: [GREETING], call: false };
+  if (asked === TASK_LINE && offers(request, TASK_TOOL) && taskFolder !== null) {
+    const args = { goal: TASK_GOAL, folder: taskFolder };
+    return { texts: [], call: { id: TASK_CALL_ID, name: TASK_TOOL, args } };
+  }
+  if (asked === CHAT_MESSAGE) return say(...REPLY);
+  if (asked.includes(VOICE_TRANSCRIPT)) return say(HEARD_REPLY);
+  return say(GREETING);
 }
 
 const UNPRICED = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
@@ -380,6 +409,8 @@ export interface Fakes {
   readonly key: string;
   /** Between REPLY's two parts, in ms; a smoke may change it between turns. */
   replyHoldMs: number;
+  /** The folder her start_task call for TASK_LINE names; until a smoke sets one, she greets. */
+  taskFolder: string | null;
   /** How many requests `route` answered, with the key. */
   count(route: Route): number;
   /** Every route answered so far, with its count. */
@@ -443,7 +474,10 @@ export async function startFakes({ replyHoldMs = 2000 }: FakesOptions = {}): Pro
     return false;
   };
 
-  const knobs = { replyHoldMs };
+  const knobs: { replyHoldMs: number; taskFolder: string | null } = {
+    replyHoldMs,
+    taskFolder: null,
+  };
   let url = "";
 
   const server = createServer((request, response) => {
@@ -462,6 +496,12 @@ export async function startFakes({ replyHoldMs = 2000 }: FakesOptions = {}): Pro
     },
     set replyHoldMs(ms: number) {
       knobs.replyHoldMs = ms;
+    },
+    get taskFolder() {
+      return knobs.taskFolder;
+    },
+    set taskFolder(folder: string | null) {
+      knobs.taskFolder = folder;
     },
     count: (name) => answered.get(name) ?? 0,
     counts: () => Object.fromEntries(answered),
@@ -491,7 +531,7 @@ export async function startFakes({ replyHoldMs = 2000 }: FakesOptions = {}): Pro
 
   async function stream(response: ServerResponse, request: ChatRequest): Promise<void> {
     const model = typeof request.model === "string" ? request.model : "fake-chat";
-    const { texts, call } = answerTo(request);
+    const { texts, call } = answerTo(request, knobs.taskFolder);
     const record: StreamRecord = {
       model,
       texts,
@@ -521,16 +561,18 @@ export async function startFakes({ replyHoldMs = 2000 }: FakesOptions = {}): Pro
       }
     }
     if (!open) return;
-    if (call) {
+    if (call !== null) {
       const toolCall = {
         index: 0,
-        id: SELFIE_CALL_ID,
+        id: call.id,
         type: "function",
-        function: { name: SELFIE_TOOL, arguments: "{}" },
+        function: { name: call.name, arguments: JSON.stringify(call.args) },
       };
-      response.write(chunk(model, { tool_calls: [toolCall] }, null));
+      // A call said with no words opens her message itself.
+      const role = texts.length === 0 ? { role: "assistant" } : {};
+      response.write(chunk(model, { ...role, tool_calls: [toolCall] }, null));
     }
-    response.write(chunk(model, {}, call ? "tool_calls" : "stop"));
+    response.write(chunk(model, {}, call !== null ? "tool_calls" : "stop"));
     response.write(
       `data: ${JSON.stringify({ id: "chatcmpl-desktop-smoke", choices: [], usage: UNPRICED })}\n\n`,
     );
@@ -573,7 +615,7 @@ export async function startFakes({ replyHoldMs = 2000 }: FakesOptions = {}): Pro
           await stream(response, chat);
           return;
         }
-        const { texts } = answerTo(chat);
+        const { texts } = answerTo(chat, knobs.taskFolder);
         json(response, 200, {
           id: "chatcmpl-desktop-smoke",
           object: "chat.completion",
