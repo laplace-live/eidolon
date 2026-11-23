@@ -129,6 +129,48 @@ export function npmConfig(env, prefix, home) {
 /** A setting from the highest of npm's config `sources` that gives it. */
 const settingOf = (sources, key) => sources.find((source) => Object.hasOwn(source, key))?.[key];
 
+/**
+ * npm's error, as it prints it, for the config `sources` npmConfig reads that npm runs no command
+ * under: a registry that isn't a URL, or credentials the user's or the project's .npmrc gives no
+ * registry; undefined for none.
+ */
+export function invalidConfig(sources) {
+  let nerfed;
+  try {
+    const registry = new URL(settingOf(sources, "registry") ?? "https://registry.npmjs.org/");
+    const dir = new URL(".", `${registry.protocol}//${registry.host}${registry.pathname}`);
+    nerfed = `//${dir.host}${dir.pathname}`;
+  } catch {
+    return "code ERR_INVALID_URL\nInvalid URL";
+  }
+  const problems = [];
+  for (const [where, source = {}] of [
+    ["user", sources[2]],
+    ["project", sources[1]],
+  ]) {
+    const given = (key) => !["", "false", "null", undefined].includes(source[key]);
+    const refused = (key) => `\`${key}\` is not allowed in ${where} config`;
+    for (const key of ["_authtoken", "-authtoken"]) if (given(key)) problems.push(refused(key));
+    for (const key of ["_auth", "_authToken", "username", "_password"]) {
+      if (!given(key)) continue;
+      // npm takes a username and a password only together.
+      const other = { username: "_password", _password: "username" }[key];
+      problems.push(
+        other !== undefined && !given(other)
+          ? refused(key)
+          : `\`${key}\` must be renamed to \`${nerfed}:${key}\` in ${where} config`,
+      );
+    }
+  }
+  if (problems.length === 0) return undefined;
+  return [
+    "code ERR_INVALID_AUTH",
+    `Invalid auth configuration found: ${problems.join(", ")}`,
+    // npm's line, its stray backtick too.
+    "Please run `npm config fix` to repair your configuration.`",
+  ].join("\n");
+}
+
 // The settings of npm's project config that pnpm reads from an .npmrc and npm installs by: the
 // registries, their credentials (npm's nerf-darted keys) and certificates.
 const NERF_DARTS = ["_auth", "_authToken", "_password", "certfile", "email", "keyfile", "username"];
@@ -874,9 +916,13 @@ export function inTree(packages, spec) {
  * `env` and `home` give npm's config.
  */
 export function plan(args, cwd, home = homedir(), env = process.env) {
+  const { prefix, workspace } = npmPrefix(cwd);
+  const sources = npmConfig(env, prefix, home);
+  // npm refuses such config before it looks at what to run.
+  const invalid = invalidConfig(sources);
+  if (invalid !== undefined) return { error: invalid, code: 1 };
   const read = readNpx(args);
   if ("error" in read) return read;
-  const { prefix, workspace } = npmPrefix(cwd);
   const runPath = workspace ?? cwd;
   const trees = workspace === undefined ? [prefix] : [workspace, prefix];
   let tree;
@@ -910,7 +956,7 @@ export function plan(args, cwd, home = homedir(), env = process.env) {
   }
   // npm refuses one before it looks for it in the local tree.
   if (own === undefined) {
-    const refused = refusal(packages, npmConfig(env, prefix, home), cwd, home);
+    const refused = refusal(packages, sources, cwd, home);
     if (refused !== undefined) return { error: refused, code: 1 };
   }
   const install = packages.filter((spec) => inLocalTree(spec) === undefined);

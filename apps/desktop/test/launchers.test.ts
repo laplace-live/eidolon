@@ -739,6 +739,29 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     ]);
   }, 60_000);
 
+  test("runs nothing, as npm, under a credential an .npmrc gives no registry", async () => {
+    const project = write(join(scratch, "npm-project-unscoped"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": `_authToken=${TOKEN}\n`,
+    });
+    const asked = requests.length;
+    const ran = await launch("npx", ["-y", "eidolon-test-hello", "x"], { cwd: project });
+    const nerfed = `${registry.slice("http:".length)}/`;
+    expect({ ...ran, asked: requests.slice(asked) }).toEqual({
+      status: 1,
+      stdout: "",
+      stderr: [
+        "code ERR_INVALID_AUTH",
+        `Invalid auth configuration found: \`_authToken\` must be renamed to \`${nerfed}:_authToken\` in project config`,
+        "Please run `npm config fix` to repair your configuration.`",
+      ]
+        .map((line) => `npx: ${line}\n`)
+        .join(""),
+      marks: [],
+      asked: [],
+    });
+  }, 60_000);
+
   test("reads no .npmrc of a pnpm workspace around the folder pnpm runs in", async () => {
     // That folder is in TMPDIR, here inside a pnpm workspace whose registry holds nothing.
     const around = write(join(scratch, "pnpm-workspace-tmp"), {

@@ -699,7 +699,10 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   `allow-file` or `allow-directory` is `none`, a git, URL, tarball or folder package npx is asked
   for ends it with npm's error (`EALLOWGIT` and the rest) before pnpm starts; `root` lets one
   through, as npm takes npx's packages for the root's, and the project's own bin and a local bin
-  run whatever they say. Under `strict-allow-scripts` npx installs nothing and says why, unless
+  run whatever they say. Under a credential the user's or the project's `.npmrc` gives no registry
+  (`_authToken`, `_auth`, `username`, `_password`), or a `registry` that isn't a URL, npx runs
+  nothing at all, local bins included, and ends with npm's error (`ERR_INVALID_AUTH`,
+  `ERR_INVALID_URL`). Under `strict-allow-scripts` npx installs nothing and says why, unless
   `ignore-scripts` or `dangerously-allow-all-scripts` is set too: npm fails only an install holding
   a package with install scripts `allow-scripts` doesn't name, while pnpm's dlx runs the scripts of
   the packages it is asked for unasked and skips a dependency's without failing. A folder is

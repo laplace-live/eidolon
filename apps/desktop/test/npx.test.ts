@@ -28,6 +28,7 @@ interface Npx {
   npmConfig(env: Env, prefix: string, home: string): Source[];
   pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
   npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
+  invalidConfig(sources: readonly Source[]): string | undefined;
   npmSpec(
     spec: string,
     where: string,
@@ -477,6 +478,51 @@ describe("npm's config, which npx installs by", () => {
     expect(npx.pnpmNpmrc([{ "@v:registry": `\${V}` }, {}], "/work", "/home")).toBe(
       '"@v:registry"="%24%7BV%7D"',
     );
+  });
+});
+
+describe("npm's config it runs no command under", () => {
+  const authError = (...problems: string[]) =>
+    [
+      "code ERR_INVALID_AUTH",
+      `Invalid auth configuration found: ${problems.join(", ")}`,
+      "Please run `npm config fix` to repair your configuration.`",
+    ].join("\n");
+
+  // Each as npm 11.19.1 printed it.
+  test("is a credential the user's or the project's .npmrc gives no registry", () => {
+    const project = { _authToken: "t", "//r.test/:_authToken": "scoped" };
+    const user = { _authtoken: "t", username: "u", _password: "cA==", "-authtoken": "x" };
+    expect(npx.invalidConfig([{ registry: "https://r.test/npm/x" }, project, user])).toBe(
+      authError(
+        "`_authtoken` is not allowed in user config",
+        "`-authtoken` is not allowed in user config",
+        "`username` must be renamed to `//r.test/npm/:username` in user config",
+        "`_password` must be renamed to `//r.test/npm/:_password` in user config",
+        "`_authToken` must be renamed to `//r.test/npm/:_authToken` in project config",
+      ),
+    );
+    // A username or a password alone.
+    expect(npx.invalidConfig([{}, { username: "u" }, { _password: "p", _auth: "a" }])).toBe(
+      authError(
+        "`_auth` must be renamed to `//registry.npmjs.org/:_auth` in user config",
+        "`_password` is not allowed in user config",
+        "`username` is not allowed in project config",
+      ),
+    );
+    // Values npm takes as none, and a variable's, which it doesn't check.
+    const none = { _authToken: "false", username: "null", _auth: "" };
+    expect(npx.invalidConfig([{ _authtoken: "t" }, none, {}])).toBeUndefined();
+  });
+
+  test("is a registry that isn't a URL, a scope's aside", () => {
+    for (const registry of ["", "true", "not a url"]) {
+      expect([registry, npx.invalidConfig([{}, { registry }, { _auth: "a" }])]).toEqual([
+        registry,
+        "code ERR_INVALID_URL\nInvalid URL",
+      ]);
+    }
+    expect(npx.invalidConfig([{ "@s:registry": "not a url" }, {}, {}])).toBeUndefined();
   });
 });
 
@@ -1015,6 +1061,23 @@ describe("what npx does, as npm decides it", () => {
       args: ["a"],
       bins: [join(base, "node_modules", ".bin")],
       runPath: base,
+    });
+  });
+
+  test("runs nothing under config npm runs no command under, whatever it's asked to run", () => {
+    const base = tree({
+      "package.json": "{}",
+      ".npmrc": "_authToken=t\n",
+      [`node_modules/.bin/${TOOL}`]: "",
+    });
+    const refused = { error: expect.stringMatching(/^code ERR_INVALID_AUTH\n/), code: 1 };
+    for (const args of [[TOOL], ["-y", "foo"], ["-c", "x"], []]) {
+      expect([args, plan(args, base)]).toEqual([args, refused]);
+    }
+    // A registry that isn't a URL first.
+    expect(plan([TOOL], base, { npm_config_registry: "not a url" })).toEqual({
+      error: "code ERR_INVALID_URL\nInvalid URL",
+      code: 1,
     });
   });
 });
