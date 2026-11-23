@@ -223,24 +223,17 @@ describe("importing", () => {
       413,
       "payload-too-large",
     ]);
-    // Chunked and made as it is read, so only counting the bytes as they stream can stop it.
+    // Chunked and endless: a server that waited for the end would never answer.
     const zeros = new Uint8Array(MIB);
-    let sent = 0;
     const streamed = await upload(
       "big.p2lrt",
       new ReadableStream<Uint8Array>({
         pull(controller) {
-          if (sent > MAX_MODEL_BYTES) {
-            controller.close();
-            return;
-          }
           controller.enqueue(zeros);
-          sent += MIB;
         },
       }),
     );
     expect([streamed.status, streamed.body.error.code]).toEqual([413, "payload-too-large"]);
-    expect(sent).toBeLessThanOrEqual(MAX_MODEL_BYTES + MIB);
     expect(existsSync(join(personaHomeDir(MILKY), "models"))).toBe(false);
   }, 60_000);
 
