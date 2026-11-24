@@ -1,6 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import { MicIcon, MicOffIcon, PhoneIcon, PhoneOffIcon, SendHorizontalIcon } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -21,6 +21,19 @@ export function MessageInput({
 }) {
   const { t } = useLingui();
   const [text, setText] = useState("");
+  const box = useRef<HTMLInputElement>(null);
+  const opener = useRef<Element | null>(null);
+
+  // autoFocus can't focus a box opened before the call is live: it takes the focus once enabled,
+  // unless the viewer has moved it since.
+  useEffect(() => {
+    if (!autoFocus) return;
+    if (disabled) opener.current ??= document.activeElement;
+    else if (opener.current !== null) {
+      if (document.activeElement === opener.current) box.current?.focus();
+      opener.current = null;
+    }
+  }, [autoFocus, disabled]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -40,6 +53,7 @@ export function MessageInput({
   return (
     <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={submit}>
       <Input
+        ref={box}
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={keepComposing}
