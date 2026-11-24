@@ -5,6 +5,7 @@ import {
   type Bounds,
   type Box,
   bustBox,
+  companionBox,
   type ResolvedSetup,
   resolveSetup,
 } from "@laplace.live/eidolon-sdk/avatar";
@@ -53,10 +54,20 @@ export function headAreaOf(inventory: Pick<ModelInventory, "hitAreas">): string 
  * the pose the model was last updated to.
  */
 export function defaultCallBox(model: Pick<AvatarModel, "inventory" | "bounds">): Box {
-  const { width, height } = model.inventory.canvas;
-  const character: Bounds = model.bounds(null) ?? { x0: 0, y0: 0, x1: width, y1: height };
+  const character = characterOf(model);
   const head = headAreaOf(model.inventory);
   return bustBox(head === null ? null : model.bounds(head), character);
+}
+
+/** What her desktop companion frames of a loaded model while the owner framed none: all of her, at its last update's pose. */
+export function defaultCompanionBox(model: Pick<AvatarModel, "inventory" | "bounds">): Box {
+  return companionBox(characterOf(model));
+}
+
+/** Every mesh drawn at the last update; with none, the whole canvas stands for her. */
+function characterOf(model: Pick<AvatarModel, "inventory" | "bounds">): Bounds {
+  const { width, height } = model.inventory.canvas;
+  return model.bounds(null) ?? { x0: 0, y0: 0, x1: width, y1: height };
 }
 
 /** The outfit `model.outfit` names; null for none, or for one it no longer lists. */
