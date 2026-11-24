@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { holdUnsaved } from "@/lib/desktop";
 import { formatCount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/locales/i18n";
@@ -58,12 +59,16 @@ export function LeaveDialog({
   );
 }
 
-/** Asks before a navigation, or a reload, would drop unsaved edits. */
+/**
+ * Asks before a navigation, or a reload, would drop unsaved edits, and holds them for the desktop
+ * app's quit and restart boxes.
+ */
 function UnsavedGuard({ dirty }: { readonly dirty: boolean }) {
   const blocker = useBlocker(dirty);
   useBeforeUnload((event) => {
     if (dirty) event.preventDefault();
   });
+  useEffect(() => (dirty ? holdUnsaved() : undefined), [dirty]);
   return (
     <LeaveDialog
       open={blocker.state === "blocked"}
