@@ -17,7 +17,7 @@ import { onChatFact } from "./chat-facts";
 import { FeedLink, feedState, MOUTH_SEND_MS, mouthLevel } from "./feed-link";
 import { appearanceStamp } from "./protocol";
 
-/** A desktop app's bridge with the desktop companion's feed, which older apps lack. */
+/** A desktop app's bridge that offers the desktop companion's feed. */
 type FeedBridge = EidolonDesktop &
   Required<Pick<EidolonDesktop, "linkCompanion" | "feedingCompanion">>;
 
