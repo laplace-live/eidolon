@@ -6,6 +6,7 @@
 import type { Attachment, ChatEvent, ChatStreamLine } from "@eidolon/chat";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { saidFacts, tellCompanion } from "@/features/companion/chat-facts";
 import { asApiError } from "@/lib/api";
 import { followLive, sendMessage, sendVoice, stopChat } from "@/lib/chats";
 import { toastError } from "@/lib/feedback";
@@ -124,6 +125,7 @@ export function useChat(
           const reached = reaches(line, superseded);
           if (line.type === "events") {
             store(line.events);
+            for (const fact of saidFacts(id, line.events)) tellCompanion(fact);
             const replies = key === null || superseded ? [] : voiceReplies(line.events);
             if (replies.length > 0) {
               const state = { focused: document.hasFocus(), quiet: quietRef.current };

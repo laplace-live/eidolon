@@ -3,6 +3,8 @@ import { ChevronDownIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { type ReactNode, type SyntheticEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { tellCompanion } from "@/features/companion/chat-facts";
+import type { ChatFact } from "@/features/companion/protocol";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { claimPlayback, knownDuration, playsNextAfter, releasePlayback } from "./voice";
@@ -12,6 +14,21 @@ import { claimPlayback, knownDuration, playsNextAfter, releasePlayback } from ".
  * may play; not when it was paused or couldn't start.
  */
 export type AutoPlayEnd = (next: boolean) => void;
+
+type VoiceFact = Extract<ChatFact, { readonly type: "voice" }>;
+
+/** Her voice message, which the desktop companion's mouth follows. */
+export type VoiceBubbleFact = Omit<VoiceFact, "type" | "state" | "position">;
+
+/** Tells the desktop companion whether her voice message plays, and where in it `audio` is. */
+function tell(
+  fact: VoiceBubbleFact | undefined,
+  audio: HTMLAudioElement,
+  state: VoiceFact["state"],
+) {
+  if (fact === undefined) return;
+  tellCompanion({ type: "voice", ...fact, state, position: audio.currentTime });
+}
 
 /** A recording made here, as a URL the bubble can play; null until it is made. */
 export function useObjectUrl(blob: Blob): string | null {
@@ -36,6 +53,7 @@ export function VoiceBubble({
   transcript,
   autoPlay = false,
   onAutoPlayEnd,
+  fact,
 }: {
   readonly src: string | null;
   /** As stored or recorded; null reads it from the file. */
@@ -48,6 +66,8 @@ export function VoiceBubble({
   readonly transcript: ReactNode | null;
   readonly autoPlay?: boolean;
   readonly onAutoPlayEnd?: AutoPlayEnd;
+  /** Her voice message, which the desktop companion's mouth follows; absent for the viewer's own. */
+  readonly fact?: VoiceBubbleFact;
 }) {
   const { t } = useLingui();
   const ref = useRef<HTMLAudioElement>(null);
@@ -56,7 +76,12 @@ export function VoiceBubble({
   const [measured, setMeasured] = useState<number | null>(null);
   const auto = useRef(false);
   const scanning = useRef(false);
+  const facts = useRef(fact);
   const duration = durationMs ?? measured;
+
+  useEffect(() => {
+    facts.current = fact;
+  });
 
   useEffect(() => {
     const audio = ref.current;
@@ -74,6 +99,8 @@ export function VoiceBubble({
     const audio = ref.current;
     return () => {
       if (audio === null) return;
+      // The pause below reaches no handler once the bubble is gone.
+      if (!audio.paused) tell(facts.current, audio, "ended");
       audio.pause();
       releasePlayback(audio);
     };
@@ -88,6 +115,7 @@ export function VoiceBubble({
   /** It paused, played through, or broke off. */
   function onStopped(event: SyntheticEvent<HTMLAudioElement>) {
     const audio = event.currentTarget;
+    tell(fact, audio, event.type === "pause" && !audio.ended ? "paused" : "ended");
     setPlaying(false);
     releasePlayback(audio);
     if (event.type === "ended") {
@@ -200,6 +228,10 @@ export function VoiceBubble({
           onPlay={(event) => {
             claimPlayback(event.currentTarget);
             setPlaying(true);
+            tell(fact, event.currentTarget, "playing");
+          }}
+          onSeeked={(event) => {
+            if (!event.currentTarget.paused) tell(fact, event.currentTarget, "playing");
           }}
           onPause={onStopped}
           onEnded={onStopped}
