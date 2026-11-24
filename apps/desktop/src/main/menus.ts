@@ -1,7 +1,7 @@
 // The shell's menus as data: macOS's application menu, Windows' (zoom alone, under a
 // hidden title bar) and its tray icon's, the context menu Electron doesn't have, the desktop
-// companion's own menu, and the About panel they open. Electron-free: menu.ts, tray.ts and index.ts
-// hand them to Electron.
+// companion's own menu, and the About panel they open. Electron-free: menu.ts, tray.ts,
+// companion-flow.ts and index.ts hand them to Electron.
 import type { AboutPanelOptionsOptions, MenuItemConstructorOptions } from "electron";
 import {
   COMPANION_SIZES,
@@ -23,6 +23,8 @@ export interface MenuActions {
   readonly openDataFolder: () => void;
   readonly licenses: () => void;
   readonly about: () => void;
+  /** Turns the desktop companion on or off. */
+  readonly companion: (on: boolean) => void;
 }
 
 /** Check for Updates… as the updater stands. */
@@ -74,6 +76,20 @@ export interface ContextParams {
 
 const separator = (): MenuItemConstructorOptions => ({ type: "separator" });
 
+/** The desktop companion's checkbox, on as she is. */
+function companionItem(
+  { label }: Strings,
+  actions: MenuActions,
+  companion: boolean,
+): MenuItemConstructorOptions {
+  return {
+    type: "checkbox",
+    label: label.desktopCompanion,
+    checked: companion,
+    click: () => actions.companion(!companion),
+  };
+}
+
 /**
  * macOS's menu bar, declared in full since a custom menu replaces Electron's default: without the
  * Edit roles, copy and paste break. ⌘W's close hides the window (quit.ts). In background mode, About
@@ -86,7 +102,14 @@ export function macMenu(
     packaged,
     background,
     updates,
-  }: { readonly packaged: boolean; readonly background: boolean; readonly updates: UpdatesItem },
+    companion,
+  }: {
+    readonly packaged: boolean;
+    readonly background: boolean;
+    readonly updates: UpdatesItem;
+    /** The desktop companion is on. */
+    readonly companion: boolean;
+  },
 ): MenuItemConstructorOptions[] {
   const { label } = strings;
   return [
@@ -145,6 +168,8 @@ export function macMenu(
         separator(),
         { role: "close", label: label.closeWindow },
         separator(),
+        companionItem(strings, actions, companion),
+        separator(),
         { role: "front", label: label.bringAllToFront },
       ],
     },
@@ -182,10 +207,12 @@ export function trayMenu(
   strings: Strings,
   actions: TrayActions,
   updates: UpdatesItem,
+  companion: boolean,
 ): MenuItemConstructorOptions[] {
   const { label } = strings;
   return [
     { label: label.openEidolon, click: () => actions.open() },
+    companionItem(strings, actions, companion),
     { label: label.settings, click: () => actions.settings() },
     ...checkForUpdates(strings, actions, updates),
     separator(),

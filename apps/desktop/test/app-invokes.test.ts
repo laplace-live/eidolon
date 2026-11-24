@@ -27,6 +27,7 @@ const others: Readonly<Record<string, IpcSender>> = {
 };
 
 const INSTALLED = { state: "installed", path: "/usr/local/bin/eidolon" } as const;
+const STATE = { on: true, showAtLogin: true, background: false } as const;
 
 /** Finds `channel`'s answer in `list`. */
 function answerIn(
@@ -62,19 +63,34 @@ function invokes() {
       calls.push(["setTerminalCommand", action]);
       return { command: INSTALLED };
     },
+    companion: (...args: unknown[]) => {
+      calls.push(["companion", ...args]);
+      return STATE;
+    },
+    setCompanion: (change) => {
+      calls.push(["setCompanion", change]);
+      return STATE;
+    },
+    popOut: (...args: unknown[]) => {
+      calls.push(["popOut", ...args]);
+      return STATE;
+    },
   };
   const list = appInvokes(actions);
   return { list, answer: (channel: PageChannel) => answerIn(list, channel), calls };
 }
 
 describe("appInvokes", () => {
-  test("answers the folder dialog and the system options, one invoke each", () => {
+  test("answers the folder dialog, the system options and the desktop companion, one invoke each", () => {
     expect(invokes().list.map(([channel]) => channel)).toEqual([
       BRIDGE.chooseFolder,
       BRIDGE.loginItem,
       BRIDGE.setLoginItem,
       BRIDGE.terminalCommand,
       BRIDGE.setTerminalCommand,
+      BRIDGE.companion,
+      BRIDGE.setCompanion,
+      BRIDGE.popOut,
     ]);
   });
 
@@ -97,7 +113,15 @@ describe("appInvokes", () => {
     expect(await answer(BRIDGE.chooseFolder)(app, "/etc")).toBe("/Users/me/Projects");
     expect(answer(BRIDGE.loginItem)(app, true)).toEqual({ state: "off" });
     expect(await answer(BRIDGE.terminalCommand)(app, "remove")).toEqual(INSTALLED);
-    expect(calls).toEqual([["chooseFolder"], ["loginItem"], ["terminalCommand"]]);
+    expect(answer(BRIDGE.companion)(app, { on: false })).toEqual(STATE);
+    expect(answer(BRIDGE.popOut)(app, "x")).toEqual(STATE);
+    expect(calls).toEqual([
+      ["chooseFolder"],
+      ["loginItem"],
+      ["terminalCommand"],
+      ["companion"],
+      ["popOut"],
+    ]);
   });
 
   test("turns Open at Login on or off with a boolean alone", () => {
@@ -127,6 +151,20 @@ describe("appInvokes", () => {
     expect(calls).toEqual([
       ["setTerminalCommand", "install"],
       ["setTerminalCommand", "remove"],
+    ]);
+  });
+
+  test("changes the desktop companion with on or showAtLogin alone, each a boolean", () => {
+    const { answer, calls } = invokes();
+    const set = answer(BRIDGE.setCompanion);
+    expect(set(app, { on: true })).toEqual(STATE);
+    expect(set(app, { showAtLogin: false })).toEqual(STATE);
+    for (const change of [{}, { on: "yes" }, { on: true, x: 1 }, true, null, undefined]) {
+      expect(() => set(app, change), JSON.stringify(change)).toThrow("the desktop companion takes");
+    }
+    expect(calls).toEqual([
+      ["setCompanion", { on: true }],
+      ["setCompanion", { showAtLogin: false }],
     ]);
   });
 });

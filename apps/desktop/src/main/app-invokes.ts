@@ -1,6 +1,6 @@
-// The pages' invokes on main: the app page's (the folder dialog and the system options), each
-// answering only the main window's main frame at eidolon-app://app, and the desktop companion's,
-// each answering only her window's. Each takes only the argument its action does.
+// The pages' invokes on main: the app page's (the folder dialog, the system options and the desktop
+// companion), each answering only the main window's main frame at eidolon-app://app, and the
+// companion's, each answering only her window's. Each takes only the argument its action does.
 // Electron-free: chrome.ts and companion-window.ts hand each to ipcMain.handle.
 import {
   accepts,
@@ -8,13 +8,16 @@ import {
   type CommandAction,
   type CommandChange,
   type CommandState,
+  type CompanionChange,
   type CompanionMenuState,
   type CompanionPick,
   type CompanionShape,
+  type CompanionState,
   companionMenuStateOf,
   companionShapeOf,
   type IpcSender,
   isCommandAction,
+  isCompanionChange,
   type LoginItemState,
   type PageChannel,
   type WindowSize,
@@ -27,6 +30,9 @@ export interface AppInvokes {
   readonly setLoginItem: (on: boolean) => LoginItemState;
   readonly terminalCommand: () => Promise<CommandState>;
   readonly setTerminalCommand: (action: CommandAction) => Promise<CommandChange>;
+  readonly companion: () => CompanionState;
+  readonly setCompanion: (change: CompanionChange) => CompanionState;
+  readonly popOut: () => CompanionState;
 }
 
 /** An invoke's answer to who sent it and its argument; throws for another sender or argument. */
@@ -59,6 +65,14 @@ export function appInvokes(actions: AppInvokes): readonly (readonly [PageChannel
       if (!isCommandAction(action)) throw new Error("the terminal command takes install or remove");
       return actions.setTerminalCommand(action);
     }),
+    guarded(BRIDGE.companion, () => actions.companion()),
+    guarded(BRIDGE.setCompanion, (change) => {
+      if (!isCompanionChange(change)) {
+        throw new Error("the desktop companion takes on or showAtLogin, each true or false");
+      }
+      return actions.setCompanion(change);
+    }),
+    guarded(BRIDGE.popOut, () => actions.popOut()),
   ];
 }
 

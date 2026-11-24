@@ -18,18 +18,23 @@ export class AppTray {
   readonly #tray: Tray;
   readonly #actions: TrayActions;
 
-  constructor(strings: Strings, actions: TrayActions, updates: UpdatesItem) {
+  constructor(strings: Strings, actions: TrayActions, updates: UpdatesItem, companion: boolean) {
     this.#tray = new Tray(nativeImage.createFromPath(trayIconPath()));
     this.#actions = actions;
     this.#tray.on("click", () => actions.open());
-    this.relabel(strings, updates);
+    this.relabel(strings, updates, companion);
   }
 
-  /** Its tooltip and menu, in the shell's language, with Check for Updates… as the updater stands. */
-  relabel(strings: Strings, updates: UpdatesItem): void {
+  /**
+   * Its tooltip and menu, in the shell's language, with Check for Updates… as the updater stands
+   * and Desktop Companion as she is.
+   */
+  relabel(strings: Strings, updates: UpdatesItem, companion: boolean): void {
     if (this.#tray.isDestroyed()) return;
     this.#tray.setToolTip(strings.label.trayTooltip);
-    this.#tray.setContextMenu(Menu.buildFromTemplate(trayMenu(strings, this.#actions, updates)));
+    this.#tray.setContextMenu(
+      Menu.buildFromTemplate(trayMenu(strings, this.#actions, updates, companion)),
+    );
   }
 
   /** Once a quit is under way, so no dead icon outlives the process. */

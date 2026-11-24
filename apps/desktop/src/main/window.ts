@@ -31,6 +31,9 @@ let shown = false;
 let painted = false;
 /** The saved maximized state, for the window's first showing, which a hidden start puts off. */
 let maximizeAtFirstShow = false;
+/** onWindowShows' listener, and what it last heard. */
+let showsListener: ((shows: boolean) => void) | null = null;
+let reportedShows = false;
 
 /** Moves main's shown state; each change to what the window is goes to main.log, for the smokes. */
 function setShown(next: { readonly shown?: boolean; readonly painted?: boolean }): void {
@@ -39,11 +42,33 @@ function setShown(next: { readonly shown?: boolean; readonly painted?: boolean }
   painted = next.painted ?? painted;
   const after = shown && painted;
   if (after !== before) mainLog.info(`Eidolon: the window is ${after ? "shown" : "hidden"}`);
+  reportShows();
 }
 
 /** The window, while it exists: a page's window.close() destroys it, and a launch makes another. */
 export function mainWindow(): BrowserWindow | null {
   return window !== null && !window.isDestroyed() ? window : null;
+}
+
+/** Whether the window shows as main left it, painted and not minimized. */
+export function windowShows(): boolean {
+  const win = mainWindow();
+  return win !== null && shown && painted && !win.isMinimized();
+}
+
+/**
+ * Called with windowShows() at each change: setShown's, the window's minimize and restore, and its
+ * close. One listener, kept here.
+ */
+export function onWindowShows(listener: (shows: boolean) => void): void {
+  showsListener = listener;
+}
+
+function reportShows(): void {
+  const shows = windowShows();
+  if (shows === reportedShows) return;
+  reportedShows = shows;
+  showsListener?.(shows);
 }
 
 function boundsFile(): string {
@@ -129,6 +154,8 @@ export function createWindow(hooks: WindowHooks, hidden = false): BrowserWindow 
   };
   win.on("resize", later);
   win.on("move", later);
+  win.on("minimize", reportShows);
+  win.on("restore", reportShows);
   win.on("close", (event) => {
     if (timer !== null) clearTimeout(timer);
     saveBounds(win, maximized());
@@ -143,6 +170,7 @@ export function createWindow(hooks: WindowHooks, hidden = false): BrowserWindow 
     window = null;
     painted = false;
     mainLog.info("Eidolon: the window is closed");
+    reportShows();
   });
 
   const contents = win.webContents;
