@@ -1,7 +1,7 @@
 // The window's chrome and the app's bridge to main: the theme the page reports, which
 // native menus, dialogs and the caption buttons follow; the fullscreen mark on macOS; the page's
-// language; the versions its bridge carries; and the folder dialog and the system options it asks
-// main for.
+// language and its unsaved edits; the versions its bridge carries; and the folder dialog and the
+// system options it asks main for.
 import { type BrowserWindow, ipcMain, nativeTheme } from "electron";
 import {
   accepts,
@@ -44,6 +44,8 @@ export interface AppBridge extends AppInvokes {
   readonly language: (language: Language) => void;
   /** The page listens for commands now. */
   readonly takesCommands: () => void;
+  /** Whether the page holds unsaved edits now. */
+  readonly unsaved: (held: boolean) => void;
 }
 
 /**
@@ -64,6 +66,11 @@ export function handleAppBridge(bridge: AppBridge): void {
   });
   ipcMain.on(BRIDGE.takesCommands, (event) => {
     if (accepts(BRIDGE.takesCommands, ipcSender(event))) bridge.takesCommands();
+  });
+  ipcMain.on(BRIDGE.unsaved, (event, held: unknown) => {
+    if (accepts(BRIDGE.unsaved, ipcSender(event)) && typeof held === "boolean") {
+      bridge.unsaved(held);
+    }
   });
   // A synchronous message keeps the page waiting until it has an answer, so every path answers.
   ipcMain.on(BRIDGE.versions, (event) => {

@@ -14,6 +14,7 @@ import {
   checkQuit,
   type QuitCheck,
   QuitConfirmation,
+  type QuitPurpose,
   quitBox,
 } from "../src/main/quit-check.ts";
 import { STRINGS, type Stopping } from "../src/main/strings.ts";
@@ -69,6 +70,7 @@ async function logged(fetch: BackendFetch): Promise<string[]> {
   const shown: MessageBoxOptions[] = [];
   const confirmation = new QuitConfirmation({
     check: () => checkQuit(fetch),
+    unsaved: () => false,
     strings: () => STRINGS.en,
     show: async (box) => {
       shown.push(box);
@@ -268,15 +270,84 @@ describe("quitBox", () => {
       }),
     );
   });
+
+  const LOST = "Your unsaved changes will be lost.";
+
+  test("asks nothing with no backend of ours ready and no unsaved edits", () => {
+    expect(quitBox(null, en, "darwin")).toBeNull();
+    expect(quitBox(null, en, "darwin", "restart")).toBeNull();
+    expect(quitBox(null, en, "darwin", "quit", false)).toBeNull();
+  });
+
+  test("asks over unsaved edits alone, with no backend of ours ready or nothing running", () => {
+    for (const check of [null, { calls: 0, tasks: 0, jobs: 0 }]) {
+      expect(quitBox(check, en, "darwin", "quit", true)).toEqual({
+        type: "warning",
+        title: "Eidolon",
+        message: "Quit Eidolon?",
+        detail: LOST,
+        buttons: ["Quit", "Cancel"],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      });
+      expect(quitBox(check, en, "darwin", "restart", true)).toEqual(
+        expect.objectContaining({
+          message: "Restart Eidolon?",
+          detail: LOST,
+          buttons: ["Restart", "Cancel"],
+        }),
+      );
+    }
+  });
+
+  test("names unsaved edits after what else a quit or a restart stops, or after its unknown", () => {
+    const detail = (check: QuitCheck, purpose: QuitPurpose) =>
+      quitBox(check, en, "darwin", purpose, true)?.detail;
+    expect(detail({ calls: 1, tasks: 0, jobs: 2 }, "quit")).toBe(
+      `Quitting stops the call and 2 jobs. ${LOST}`,
+    );
+    expect(detail({ calls: 0, tasks: 1, jobs: 0 }, "restart")).toBe(
+      `Restarting stops a task. ${LOST}`,
+    );
+    expect(detail("unknown", "quit")).toBe(`${en.text.quitUnknown} ${LOST}`);
+    expect(detail("unknown", "restart")).toBe(`${en.text.restartUnknown} ${LOST}`);
+  });
+
+  test("in the shell's language, on Windows' plain task dialog", () => {
+    const zh = STRINGS["zh-Hans"];
+    expect(quitBox({ calls: 1, tasks: 0, jobs: 0 }, zh, "win32", "quit", true)).toEqual({
+      type: "none",
+      title: "Eidolon",
+      message: "退出 Eidolon？",
+      detail: "通话会在退出时中断。未保存的修改将会丢失。",
+      buttons: ["退出", "取消"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    expect(quitBox(null, zh, "win32", "restart", true)).toEqual(
+      expect.objectContaining({
+        message: "重启 Eidolon？",
+        detail: "未保存的修改将会丢失。",
+        buttons: ["重启", "取消"],
+      }),
+    );
+  });
 });
 
-function setup(check: () => Promise<Stopping> | null, platform: NodeJS.Platform = "darwin") {
+function setup(
+  check: () => Promise<Stopping> | null,
+  platform: NodeJS.Platform = "darwin",
+  unsaved: () => boolean = () => false,
+) {
   const shown: MessageBoxOptions[] = [];
   let response = 0;
   const focus = vi.fn();
   const warn = vi.fn<(message: string) => void>();
   const confirmation = new QuitConfirmation({
     check,
+    unsaved,
     strings: () => STRINGS.en,
     show: async (options) => {
       shown.push(options);
@@ -357,5 +428,59 @@ describe("QuitConfirmation", () => {
     expect(f.shown.map((box) => [box.message, box.detail])).toEqual([
       ["Restart Eidolon?", "Restarting stops the call."],
     ]);
+  });
+
+  test("asks over unsaved edits while no backend of ours is ready or the server is attached, a quit and a restart alike", async () => {
+    const f = setup(
+      () => null,
+      "darwin",
+      () => true,
+    );
+    expect(await f.confirmation.confirm()).toBe(true);
+    f.answer(1);
+    expect(await f.confirmation.confirm("restart")).toBe(false);
+    expect(f.shown.map((box) => [box.message, box.detail])).toEqual([
+      ["Quit Eidolon?", "Your unsaved changes will be lost."],
+      ["Restart Eidolon?", "Your unsaved changes will be lost."],
+    ]);
+    expect(f.warn.mock.calls).toEqual([]);
+  });
+
+  test("names unsaved edits beside what else stops, as the page tells of them once the check answers", async () => {
+    const checked = Promise.withResolvers<Stopping>();
+    let unsaved = false;
+    const f = setup(
+      () => checked.promise,
+      "darwin",
+      () => unsaved,
+    );
+    const quit = f.confirmation.confirm();
+    unsaved = true;
+    checked.resolve({ calls: 1, tasks: 0, jobs: 0 });
+    expect(await quit).toBe(true);
+    const idle = setup(
+      async () => ({ calls: 0, tasks: 0, jobs: 0 }),
+      "darwin",
+      () => true,
+    );
+    expect(await idle.confirmation.confirm()).toBe(true);
+    expect([...f.shown, ...idle.shown].map((box) => box.detail)).toEqual([
+      "Quitting stops the call. Your unsaved changes will be lost.",
+      "Your unsaved changes will be lost.",
+    ]);
+  });
+
+  test("asks as when the backend can't say, unsaved edits named after it, when the check fails", async () => {
+    const f = setup(
+      () => Promise.reject(new Error("no answer in 2 s")),
+      "darwin",
+      () => true,
+    );
+    f.answer(1);
+    expect(await f.confirmation.confirm()).toBe(false);
+    expect(f.shown.map((box) => box.detail)).toEqual([
+      `${STRINGS.en.text.quitUnknown} Your unsaved changes will be lost.`,
+    ]);
+    expect(f.warn.mock.calls).toEqual([[`${WHY} no answer in 2 s`]]);
   });
 });

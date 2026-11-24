@@ -60,6 +60,9 @@ export function desktopBridge(
       isCommandAction(action)
         ? ipc.invoke(BRIDGE.setTerminalCommand, action).then(commandChangeOf)
         : Promise.reject(new Error("the terminal command takes install or remove")),
+    unsaved: (held) => {
+      if (typeof held === "boolean") ipc.send(BRIDGE.unsaved, held);
+    },
   };
 }
 
