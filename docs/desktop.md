@@ -464,10 +464,10 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   Node integration, no `<webview>` and no spellcheck, and gets `--eidolon-window=companion`, by
   which the one preload knows her window. Main shows her with `showInactive()`, never `show()`, so
   showing her never takes the focus; floats her while Always on Top is on
-  (`setAlwaysOnTop(true, "floating")`); on macOS puts her on every Space, full-screen apps' included
-  (`setVisibleOnAllWorkspaces` with `skipTransformProcessType`, without which macOS turns the app
-  into a foreground one and back, and the Dock flickers); and lets clicks through her window,
-  forwarding the mouse's moves to her page. Nothing of hers vetoes a close: her window has no
+  (`setAlwaysOnTop(true, "floating")`); on macOS puts her on every Space
+  (`setVisibleOnAllWorkspaces` with `skipTransformProcessType`, without which Electron takes the
+  app's Dock icon and menu bar away while she is on); and lets clicks through her window, forwarding
+  the mouse's moves to her page. Nothing of hers vetoes a close: her window has no
   `close` handler.
 - **When she is made and shown.** While she is on, her window is made, hidden, as the main window
   shows the app page, and her page is loaded again whenever that page is, as for another server; a
@@ -484,8 +484,8 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   warning in main.log and nothing else. One that fails to load, whose preload fails or whose
   renderer goes logs why and is loaded once more 2 s later, and not again until she is drawn. A new
   document in her window, main's load or her guard's, takes her back to undrawn, hidden until it
-  draws her. Turning her off closes her window; one closed by anything else, as an update's restart
-  closes every window, is made again only at the app page's next load.
+  draws her. Turning her off closes her window; one closed by anything else is made again only at
+  the app page's next load.
 - **Her size:** Small, Medium or Large, 360, 480 or 640 DIP tall and as wide as her framing's
   aspect (0.42, a full-length figure's, until her page says), or for her picture 96, 128 or 160 DIP
   square; at most 90% of the work area each way, scaled as one.
@@ -493,7 +493,7 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   unrounded: a new size or shape, her model swapped for her picture included, keeps her standing
   there, growing from her feet, never moving her by the half DIP an odd width would. Her first
   place, and her place whenever no display holds her feet (a display unplugged), is the primary
-  display's work area, on its bottom, 24 DIP in from its right edge. Her window is then kept inside
+  display's work area, on its bottom, her window's right edge 24 DIP in from the area's. Her window is then kept inside
   the work area under it, so a Dock or a taskbar that grows under her pushes her up onto its edge; a
   display change that moves her window sets her feet where it put her.
 - **Click-through.** Her window lets clicks through, until her page finds her under the pointer
@@ -512,13 +512,13 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
 - **Her menu**, on a right-click on her, is main's own native menu at the cursor
   (`companionMenu` in `menus.ts`, in the shell's language), from the state her page gives it:
   **Call**, or **Hang Up** and **Mute Microphone** (**Unmute Microphone** while it is off) while a
-  call of hers is up, Hang Up working while the call still connects and the microphone's item only
-  once it is live; **Open Eidolon**; **Appearance**, her models as radio items, whenever she has
-  any, her picture's included; **Outfit**, the active model's outfits, **As Exported** first;
-  **Size**; **Always on Top**; and **Hide**, a separator between groups. A model's or an outfit's
-  name shows as one line of at most 40 characters, `&` doubled, which every platform's menu shows
-  as one. Main acts on each pick
-  100 ms after the menu closes, so a click Electron delivers after the close still counts: Open
+  call is up in the main window, hers or another persona's, Hang Up working while the call still
+  connects and the microphone's item only once it is live; **Open Eidolon**; **Appearance**, her
+  models as radio items, whenever she has any, her picture's included; **Outfit**, the active
+  model's outfits, **As Exported** first; **Size**; **Always on Top**; and **Hide**, a separator
+  between groups. A model's or an outfit's name shows as one line of at most 40 characters, `&`
+  doubled, which every platform's menu shows as one. Main acts on each pick 100 ms after the menu
+  closes, so a click Electron delivers after the close still counts: Open
   Eidolon brings the main window forward; Size reshapes her on her feet; Always on Top flips her
   floating; Hide turns her off, the same switch as Settings', and, turned off while a call of hers
   goes on in a window that doesn't show (after Pop Out), main brings that window back first, so a
@@ -566,10 +566,10 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   login she shows once drawn while the window stays hidden, or with it off only once the window
   first shows. Her showing releases nothing the window's first showing does, the held update check
   included.
-- **Quit and updates.** The approved quit closes her before the backend stops, and an update's
-  `quitAndInstall` closes her like any window. The quit box and an update's boxes are the main
-  window's. Hide Eidolon (⌘H) hides her with the app and Show All brings her back; ⌘W never reaches
-  her, since she is never the focused window.
+- **Quit and updates.** Every approved quit, an update's restart included, closes her before the
+  backend stops, and nothing makes her again. The quit box and an update's boxes are main's own,
+  with no owner window, never hers. Hide Eidolon (⌘H) hides her with the app and Show All brings her
+  back; ⌘W never reaches her, since she is never the focused window.
 - **In background mode** she is made and draws, but is never shown: main's record moves as always
   and logs that background mode keeps her off screen where it would show her; nothing sets her
   always on top or on every Space, no cursor poll runs, and her window lets clicks through without
@@ -592,7 +592,8 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   shows is the owner's to check, on the packaged app on each platform, before her changes merge:
   her transparency and click-through, that a tap, a drag and her menu leave the app in front as it
   was, Spaces and full-screen apps, displays at different scales, her menu at the cursor, Pop Out
-  and a minimized window with another app in front, Show at Login, and her renderer's cost. What it
+  and a minimized window with another app in front, Show at Login, the quit and update boxes above
+  her, and her renderer's cost. What it
   finds goes in this section, dated, with any fallback it applies to her window's options.
 
 ## Notifications
@@ -1927,19 +1928,24 @@ off:
   as the fake sent it, nothing buffered. Inside Electron, an aborted stream's socket to the backend
   closed within 2 ms.
 
-The [desktop companion](#the-desktop-companion), first in a spike on 2026-11-23 on the same Mac and
-Electron 45.4.1, before the port: a 30 fps companion page took 0.4% of a core (0.33 + 0.16 ms a
-frame) and 10.6 MB of wasm memory per model; a capture of her transparent window read alpha 0 in a
+The [desktop companion](#the-desktop-companion), first in a spike on 2026-11-23 on the same Mac (16
+cores) and Electron 45.4.1, before the port: a capture of her transparent window read alpha 0 in a
 corner and 255 at her head; showing her with `showInactive` left the app in front as it was; a
 1-pixel alpha read after the draw took 0.78 ms (p95 1.0); a message over a `MessagePort` between
 the two windows took 0.46 ms (p95 1.4) at 120 a second; and a hidden window's animation frames
-stopped until its throttling was turned off, after which it drew a call's stage at 0.8% renderer
-and 1.3% GPU, against 0.1% and 0.5% throttled. In the app, on 2026-11-24 in background
-mode on the test rig: her page drew her model 0.35–0.55 s after Settings' switch; the feed sent her
-mouth 29.9–30.3 times a second on a call, its widest reading on the fakes' -20 dBFS tone 0.51–0.57;
-and her `data-frames` counted the display's 120 animation frames a second while her stage drew at
-30 fps. Her renderer's cost with her on screen is the owner's hand check's to measure, with its
-other findings.
+stopped until its throttling was turned off, after which it drew a call's stage at 13% of a core in
+its renderer and 21% in the GPU process, against 1.6% and 8% throttled. CPU here is a share of one
+core, as Activity Monitor counts it: Electron's `percentCPUUsage` is a share of all of them, so
+the spike's readings are multiplied by 16, and the app's come from `cumulativeCPUUsage`. In the
+app, on 2026-11-24 in background mode on the test rig: her page drew her model 0.35–0.55 s after
+Settings' switch, at 30 fps of the display's 120 animation frames a second, each draw 0.27–0.29 ms
+of script; her renderer took 3.8–4.5% of a core, idle, dozing, under reduced motion and on a call
+alike, and the GPU process 3.9–4.1%, against 0.09% with her off; her picture took 0.12% and 0.01%;
+her model 11.6 MB of wasm memory, and her renderer's memory held at 184–196 MB over 5.5 minutes; a
+call's main window took 16–18% in its renderer and 27% in the GPU process, her on or off; and the
+feed sent her mouth 29.9–30.3 times a second on a call, its widest reading on the fakes' -20 dBFS
+tone 0.51–0.57. Her renderer's cost with her on screen is the owner's hand check's to measure, with
+its other findings.
 
 A prototype measured on 2026-11-20 and 21, whose main forwarded through Node's global fetch, adds
 what this app hasn't measured yet: with the login-shell read on, Home painted at 1.5 s, about
