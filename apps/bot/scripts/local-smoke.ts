@@ -3,14 +3,15 @@
 // prompt, a voice style added and removed, a PSD2Live model imported, drawn and made active in the
 // studio's Appearance, which refuses a picture and a rig cut short, a facts index built through the
 // studio, a text chat from greeting to delete, a group chat with a second persona, voice messages
-// both ways, a call inside a chat, a task she starts, checks, steers and reports in a chat, a second
-// she stops, a third shown in each of the chat's displays and stopped with /stop, a fourth she
-// starts by voice on a call there, a coding task on the kind's own model that reads the owner's
-// skill and runs commands its card allows once, denies and allows for good, one moving to the
-// background, and two whose workers call a fake MCP server's tool. The keys are fake, so the
-// providers refuse them for free, and the embeddings, the chats' replies, the director's decisions,
-// the voice messages' speech, the calls' hearing, mind and voice and the tasks' workers come from a
-// fake server, so nothing is billed. Online, one task's worker fetches example.com.
+// both ways, a call inside a chat that outlives its page, a task she starts, checks, steers and
+// reports in a chat, a second she stops, a third shown in each of the chat's displays and stopped
+// with /stop, a fourth she starts by voice on a call there, a coding task on the kind's own model
+// that reads the owner's skill and runs commands its card allows once, denies and allows for good,
+// one moving to the background, and two whose workers call a fake MCP server's tool. The keys are
+// fake, so the providers refuse them for free, and the embeddings, the chats' replies, the
+// director's decisions, the voice messages' speech, the calls' hearing, mind and voice and the
+// tasks' workers come from a fake server, so nothing is billed. Online, one task's worker fetches
+// example.com.
 // --call instead places a real call from the call page with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
@@ -2277,6 +2278,20 @@ async function chatLog(walk: Walk, id: string): Promise<readonly LoggedEvent[]> 
   return ((await response.json()) as { events: readonly LoggedEvent[] }).events;
 }
 
+/**
+ * Hangs up the call the page shows, if any, and waits for the server to end it: a call outlives
+ * in-app navigation.
+ */
+async function hangUpIfUp(walk: Walk): Promise<void> {
+  const button = walk.page.getByRole("button", { name: t("en", "Hang Up"), exact: true }).first();
+  if (await button.isVisible().catch(() => false)) await button.click().catch(() => undefined);
+  await poll(
+    async () => ((await (await walk.api("GET", "/api/local/status")).json()) as Status).activeCalls,
+    (calls) => calls === 0,
+    20_000,
+  );
+}
+
 function said(events: readonly LoggedEvent[], kind: "user" | "persona", text: string): boolean {
   return events.some((e) => e.type === "message" && e.speaker?.kind === kind && e.text === text);
 }
@@ -3088,8 +3103,10 @@ async function voiceChatWalk(walk: Walk): Promise<void> {
 /**
  * A call inside a chat, every role at the fake server: her hearing a realtime transcription session
  * that hears nothing, her mind, and her voice as PCM. The call opens on the chat's history, so her
- * greeting answers the line typed before it; her line lands in the chat while the composer waits,
- * and Hang Up stores the call's end.
+ * greeting answers the line typed before it; her line lands in the chat while the composer waits.
+ * Mid-call the tab leaves the chat for Home, the persona switcher, another chat of hers and /call:
+ * the call goes on in the call bar, and what it would end or the server refuses during it waits,
+ * until Return to Call brings the dock back. Hang Up stores the call's end.
  */
 async function chatCallWalk(walk: Walk): Promise<void> {
   const { page, checks, origin } = walk;
@@ -3100,6 +3117,20 @@ async function chatCallWalk(walk: Walk): Promise<void> {
   const persona = listed.personas.find((entry) => entry.id === PERSONA);
   if (persona === undefined) throw new Error(`GET personas has no ${PERSONA}`);
   const short = persona.shortName.trim() || persona.name;
+  // Another chat of hers, made before the page loads so its list holds it, for the tab to open
+  // mid-call.
+  const made = await walk.api(
+    "POST",
+    "/api/local/chats",
+    JSON.stringify({ participants: [PERSONA] }),
+  );
+  if (made.status !== 201) throw new Error(`POST chats answered ${made.status}`);
+  const other = ((await made.json()) as { id: string }).id;
+  await poll(
+    () => chatLog(walk, other),
+    (events) => said(events, "persona", GREETING),
+    30_000,
+  );
 
   await page.goto(`${origin}/chats`);
   await page
@@ -3142,161 +3173,285 @@ async function chatCallWalk(walk: Walk): Promise<void> {
 
   const [minded, spoke, listened] = [chats.length, speech.length, listening.length];
   const logged = walk.serverLog().length;
-  const offered = page.waitForResponse(
-    (response) =>
-      response.request().method() === "POST" && new URL(response.url()).pathname === "/api/offer",
-  );
-  await page.getByRole("button", { name: t("en", "Call"), exact: true }).click();
-  const offer = await offered;
-  const offerBody = offer.request().postDataJSON() as {
-    readonly requestData?: unknown;
-    readonly request_data?: unknown;
-  };
-  const offerData = (offerBody.requestData ?? offerBody.request_data) as
-    | { readonly chatId?: unknown; readonly persona?: unknown }
-    | undefined;
-  const dock = page.getByRole("region", {
-    name: t("en", "Call with {name}", { name: short }),
-    exact: true,
-  });
-  const docked = await shows(dock, 10_000);
-  const greeted = await shows(log.getByText(CALL_GREETING, { exact: true }), 60_000);
-  const waiting = page.getByRole("textbox", { name: t("en", "In a call"), exact: true });
-  const composerWaits = (await shows(waiting, 5_000)) && (await waiting.isDisabled());
-  const started = await shows(
-    log.getByText(t("en", "Call with {name}", { name: short }), { exact: true }),
-    5_000,
-  );
-  const marked = (await log.getByText(t("en", "(on the call)")).count()) === 1;
-  const during = (await (await walk.api("GET", `/api/local/chats/${id}`)).json()) as ChatContents;
-  const refused = await walk.api(
-    "POST",
-    `/api/local/chats/${id}/messages`,
-    JSON.stringify({ text: "在吗" }),
-  );
-  const refusal = ((await refused.json()) as { error?: { code?: string } }).error?.code;
-  const stored = await poll(
-    () => chatLog(walk, id),
-    (events) => events.some((e) => e.modality === "call"),
-    10_000,
-  );
-  const opened = stored.find((e) => e.type === "call-started");
-  const line = stored.find((e) => e.modality === "call");
-  const request = chats
-    .slice(minded)
-    .find((r) => heard(r, CALL_TOLD) && r.messages?.at(-1)?.content !== CALL_TOLD);
-  const history = (request?.messages ?? []).map((m) => `${String(m.role)}:${String(m.content)}`);
-  const at = (entry: string) => history.indexOf(entry);
-  const carried =
-    at(`assistant:${GREETING}`) >= 0 &&
-    at(`assistant:${GREETING}`) < at(`user:${CALL_TOLD}`) &&
-    at(`user:${CALL_TOLD}`) < at(`assistant:${CALL_TOLD_REPLY}`) &&
-    history.slice(at(`assistant:${CALL_TOLD_REPLY}`) + 1).some((m) => m.startsWith("user:"));
-  const voiced = speech.slice(spoke).filter((s) => s.response_format === "pcm");
-  const ear = listening.slice(listened);
-  checks.add(
-    "chat call",
-    offer.status() === 200 &&
-      offerData?.chatId === id &&
-      offerData.persona === PERSONA &&
-      docked &&
-      greeted &&
-      composerWaits &&
-      started &&
-      marked &&
-      during.call?.persona === PERSONA &&
-      opened?.persona === PERSONA &&
-      during.call.id === opened.call &&
-      refused.status === 409 &&
-      refusal === "chat-in-call" &&
-      line?.type === "message" &&
-      line.speaker?.kind === "persona" &&
-      line.speaker.id === PERSONA &&
-      line.text === CALL_GREETING &&
-      line.interrupted === undefined &&
-      carried &&
-      voiced.some((s) => String(s.input).trim() === CALL_GREETING) &&
-      ear.length === 1 &&
-      (ear[0]?.appended ?? 0) > 0,
-    `POST /api/offer ${offer.status()} for chat ${offerData?.chatId === id ? "this one" : String(offerData?.chatId)} ` +
-      `and ${String(offerData?.persona)}; the dock ${docked ? "showed" : "never showed"}, her ` +
-      `greeting ${greeted ? "landed" : "never landed"} in the log ${marked ? "with" : "without"} ` +
-      `its call mark, under ${started ? "its" : "no"} separator, while the composer ` +
-      `${composerWaits ? "waited" : "didn't wait"}; GET chats/:id said ` +
-      `${JSON.stringify(during.call)}; a send answered ${refused.status} ${String(refusal)}; ` +
-      `the log stores ${opened ? `call-started for ${String(opened.persona)}` : "no call-started"} ` +
-      `and ${line ? `a ${line.speaker?.kind} call line ${quote(line.text ?? "")}` : "no call line"}; ` +
-      `her call's first mind request ${request ? (carried ? "carried the chat's lines in order" : `held ${history.join(" | ")}`) : "was never made"}; ` +
-      `her voice spoke ${voiced.map((s) => quote(String(s.input))).join(", ") || "nothing"} as PCM; ` +
-      `her hearing opened ${ear.length} session(s), streamed ${ear[0]?.appended ?? 0} chunks`,
-  );
+  // To the walk's end, whose later checks read the call's: a throw mid-call must not leave it up.
+  try {
+    const offered = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" && new URL(response.url()).pathname === "/api/offer",
+    );
+    await page.getByRole("button", { name: t("en", "Call"), exact: true }).click();
+    const offer = await offered;
+    const offerBody = offer.request().postDataJSON() as {
+      readonly requestData?: unknown;
+      readonly request_data?: unknown;
+    };
+    const offerData = (offerBody.requestData ?? offerBody.request_data) as
+      | { readonly chatId?: unknown; readonly persona?: unknown }
+      | undefined;
+    const dock = page.getByRole("region", {
+      name: t("en", "Call with {name}", { name: short }),
+      exact: true,
+    });
+    const docked = await shows(dock, 10_000);
+    const greeted = await shows(log.getByText(CALL_GREETING, { exact: true }), 60_000);
+    const waiting = page.getByRole("textbox", { name: t("en", "In a call"), exact: true });
+    const composerWaits = (await shows(waiting, 5_000)) && (await waiting.isDisabled());
+    const started = await shows(
+      log.getByText(t("en", "Call with {name}", { name: short }), { exact: true }),
+      5_000,
+    );
+    const marked = (await log.getByText(t("en", "(on the call)")).count()) === 1;
+    const during = (await (await walk.api("GET", `/api/local/chats/${id}`)).json()) as ChatContents;
+    const refused = await walk.api(
+      "POST",
+      `/api/local/chats/${id}/messages`,
+      JSON.stringify({ text: "在吗" }),
+    );
+    const refusal = ((await refused.json()) as { error?: { code?: string } }).error?.code;
+    const stored = await poll(
+      () => chatLog(walk, id),
+      (events) => events.some((e) => e.modality === "call"),
+      10_000,
+    );
+    const opened = stored.find((e) => e.type === "call-started");
+    const line = stored.find((e) => e.modality === "call");
+    const request = chats
+      .slice(minded)
+      .find((r) => heard(r, CALL_TOLD) && r.messages?.at(-1)?.content !== CALL_TOLD);
+    const history = (request?.messages ?? []).map((m) => `${String(m.role)}:${String(m.content)}`);
+    const at = (entry: string) => history.indexOf(entry);
+    const carried =
+      at(`assistant:${GREETING}`) >= 0 &&
+      at(`assistant:${GREETING}`) < at(`user:${CALL_TOLD}`) &&
+      at(`user:${CALL_TOLD}`) < at(`assistant:${CALL_TOLD_REPLY}`) &&
+      history.slice(at(`assistant:${CALL_TOLD_REPLY}`) + 1).some((m) => m.startsWith("user:"));
+    const voiced = speech.slice(spoke).filter((s) => s.response_format === "pcm");
+    const ear = listening.slice(listened);
+    checks.add(
+      "chat call",
+      offer.status() === 200 &&
+        offerData?.chatId === id &&
+        offerData.persona === PERSONA &&
+        docked &&
+        greeted &&
+        composerWaits &&
+        started &&
+        marked &&
+        during.call?.persona === PERSONA &&
+        opened?.persona === PERSONA &&
+        during.call.id === opened.call &&
+        refused.status === 409 &&
+        refusal === "chat-in-call" &&
+        line?.type === "message" &&
+        line.speaker?.kind === "persona" &&
+        line.speaker.id === PERSONA &&
+        line.text === CALL_GREETING &&
+        line.interrupted === undefined &&
+        carried &&
+        voiced.some((s) => String(s.input).trim() === CALL_GREETING) &&
+        ear.length === 1 &&
+        (ear[0]?.appended ?? 0) > 0,
+      `POST /api/offer ${offer.status()} for chat ${offerData?.chatId === id ? "this one" : String(offerData?.chatId)} ` +
+        `and ${String(offerData?.persona)}; the dock ${docked ? "showed" : "never showed"}, her ` +
+        `greeting ${greeted ? "landed" : "never landed"} in the log ${marked ? "with" : "without"} ` +
+        `its call mark, under ${started ? "its" : "no"} separator, while the composer ` +
+        `${composerWaits ? "waited" : "didn't wait"}; GET chats/:id said ` +
+        `${JSON.stringify(during.call)}; a send answered ${refused.status} ${String(refusal)}; ` +
+        `the log stores ${opened ? `call-started for ${String(opened.persona)}` : "no call-started"} ` +
+        `and ${line ? `a ${line.speaker?.kind} call line ${quote(line.text ?? "")}` : "no call line"}; ` +
+        `her call's first mind request ${request ? (carried ? "carried the chat's lines in order" : `held ${history.join(" | ")}`) : "was never made"}; ` +
+        `her voice spoke ${voiced.map((s) => quote(String(s.input))).join(", ") || "nothing"} as PCM; ` +
+        `her hearing opened ${ear.length} session(s), streamed ${ear[0]?.appended ?? 0} chunks`,
+    );
 
-  await tabBox.fill("在吗");
-  await tabBox.press("Enter");
-  const tabWaiting = tab.getByRole("textbox", { name: t("en", "In a call"), exact: true });
-  const tabLearned = (await shows(tabWaiting, 10_000)) && (await tabWaiting.isDisabled());
+    await tabBox.fill("在吗");
+    await tabBox.press("Enter");
+    const tabWaiting = tab.getByRole("textbox", { name: t("en", "In a call"), exact: true });
+    const tabLearned = (await shows(tabWaiting, 10_000)) && (await tabWaiting.isDisabled());
 
-  await dock.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
-  const undocked = await dock
-    .waitFor({ state: "hidden", timeout: 10_000 })
-    .then(() => true)
-    .catch(() => false);
-  const after = await poll(
-    () => chatLog(walk, id),
-    (events) => events.some((e) => e.type === "call-ended"),
-    20_000,
-  );
-  const end = after.find((e) => e.type === "call-ended");
-  const back = (await shows(textBox, 10_000)) && (await textBox.isEnabled());
-  const closed = await shows(log.getByText(t("en", "Call ended"), { exact: true }), 10_000);
-  const lasted = new RegExp(
-    `^${escapeRegExp(t("en", "Call with {name} · {duration}", { name: short, duration: "\0" })).replace("\0", "\\d+:\\d{2}")}$`,
-  );
-  const timed = await shows(log.getByText(lasted), 10_000);
-  const tabBack = (await shows(tabBox, 10_000)) && (await tabBox.isEnabled());
-  const tabClosed = await shows(tabLog.getByText(t("en", "Call ended"), { exact: true }), 5_000);
-  await tab.close();
-  checks.add(
-    "chat call tab",
-    tabLearned && tabBack && tabClosed,
-    `a second tab open before the call ${tabLearned ? "learned of it" : "never learned of it"} ` +
-      `from a refused send; after the hang-up, without a reload, its composer ` +
-      `${tabBack ? "came back" : "stayed disabled"}, under ${tabClosed ? "a" : "no"} Call ended line`,
-  );
-  const sent = await walk.api(
-    "POST",
-    `/api/local/chats/${id}/messages`,
-    JSON.stringify({ text: CHAT_MESSAGE }),
-  );
-  const errors = walk
-    .serverLog()
-    .slice(logged)
-    .split("\n")
-    .filter((entry) => /\| (ERROR|CRITICAL) +\|/.test(entry));
-  await page.reload();
-  const kept =
-    (await shows(log.getByText(CALL_GREETING, { exact: true }), 15_000)) &&
-    (await shows(log.getByText(t("en", "Call ended"), { exact: true }), 5_000)) &&
-    (await shows(log.getByText(lasted), 5_000));
-  checks.add(
-    "chat call end",
-    undocked &&
-      end?.call === opened?.call &&
-      end?.reason === "hangup" &&
-      after.at(-1)?.type === "call-ended" &&
-      back &&
-      closed &&
-      timed &&
-      sent.status === 200 &&
-      errors.length === 0 &&
-      kept,
-    `Hang Up ${undocked ? "closed" : "left"} the dock; the log ` +
-      `${end ? `ends the call: ${String(end.reason)}` : "never stored its end"}; the composer ` +
-      `${back ? "came back" : "stayed disabled"}, under ${closed ? "a" : "no"} Call ended line and ` +
-      `${timed ? "the call's length" : "no length"}; a send afterwards answered ${sent.status}; ` +
-      `the server logged ${errors.length === 0 ? "no errors" : errors.slice(0, 2).join(" ")} during ` +
-      `the call; after a reload the call ${kept ? "stays in the log" : "is gone from the log"}`,
-  );
+    // The call outlives its page: the bar holds it on Home, and what it would end or the server
+    // refuses during it waits.
+    await page.locator('nav a[href="/"]').first().click();
+    await page.waitForURL(`${origin}/`);
+    const bar = page.getByRole("region", { name: t("en", "Ongoing Call"), exact: true });
+    const barShown = await shows(bar, 10_000);
+    const barHolds =
+      (await shows(bar.getByRole("button", { name: t("en", "Hang Up"), exact: true }), 5_000)) &&
+      (await shows(bar.getByRole("link", { name: t("en", "Return to Call"), exact: true }), 5_000));
+    const [barBox, viewport] = [await bar.boundingBox(), page.viewportSize()];
+    const atFoot =
+      barBox !== null &&
+      viewport !== null &&
+      Math.abs(barBox.y + barBox.height - viewport.height) <= 1;
+    const setupLinks = await page.locator('a[href^="/setup"]').count();
+    const memory = page.getByRole("button", { name: t("en", "Turn On Memory"), exact: true });
+    const memoryWaits =
+      (await shows(memory, 5_000)) && (await memory.getAttribute("aria-disabled")) === "true";
+    const held = (await (await walk.api("GET", `/api/local/chats/${id}`)).json()) as ChatContents;
+    const stillHeld =
+      held.call !== null &&
+      held.call.id === during.call?.id &&
+      !held.events.some((e) => e.type === "call-ended");
+    const { persona: active } = (await (
+      await walk.api("GET", "/api/local/status")
+    ).json()) as Status;
+    let switcher = "the switcher had no other persona to offer";
+    let switchWaits = true;
+    // The group walk's persona, when it made one, can't be switched to.
+    if (listed.personas.some((entry) => entry.id === SECOND.id)) {
+      await page
+        .getByRole("button", {
+          name: t("en", "Active Persona: {name}", { name: active.name }),
+          exact: true,
+        })
+        .click();
+      const item = page.getByRole("menuitemradio", { name: SECOND.name, exact: true });
+      switchWaits =
+        (await shows(item, 5_000)) && (await item.getAttribute("aria-disabled")) === "true";
+      await page.keyboard.press("Escape");
+      switcher = `the switcher ${switchWaits ? "held" : "did NOT hold"} ${SECOND.name} back`;
+    }
+    await page.locator(`nav a[href="/chats/${other}"]`).first().click();
+    await page.waitForURL(`${origin}/chats/${other}`);
+    // One on the page: the bar, the screen and the dock have none.
+    const otherCall = page.getByRole("button", { name: t("en", "Call"), exact: true });
+    const otherWaits =
+      (await shows(otherCall, 10_000)) &&
+      (await otherCall.getAttribute("aria-disabled")) === "true";
+    const otherBox = page.getByRole("textbox", {
+      name: t("en", "Message {name}", { name: short }),
+      exact: true,
+    });
+    const otherTypes = (await shows(otherBox, 5_000)) && (await otherBox.isEnabled());
+    const recorders = await page
+      .getByRole("button", { name: t("en", "Record Voice Message"), exact: true })
+      .count();
+    await page.locator('nav a[href="/call"]').first().click();
+    await page.waitForURL(`${origin}/call`);
+    const activeShort = active.shortName.trim() || active.name;
+    const inCallSaid = await shows(
+      page.getByText(t("en", "You're in a call"), { exact: true }),
+      10_000,
+    );
+    const callHere = page.getByRole("button", {
+      name: t("en", "Call {name}", { name: activeShort }),
+      exact: true,
+    });
+    const callWaits =
+      (await shows(callHere, 5_000)) && (await callHere.getAttribute("aria-disabled")) === "true";
+    await bar.getByRole("link", { name: t("en", "Return to Call"), exact: true }).click();
+    await page.waitForURL(`${origin}/chats/${id}`);
+    const redocked = await shows(dock, 10_000);
+    // The call's own transcript stands in for its stored line only while the shell kept its id.
+    const ownLine = await shows(
+      log.locator("[data-live-call]").getByText(CALL_GREETING, { exact: true }),
+      10_000,
+    );
+    const barGone = await bar
+      .waitFor({ state: "hidden", timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    const playing = await page.evaluate(() => {
+      const audio = document.querySelector<HTMLAudioElement>("audio[data-call]");
+      return audio !== null && audio.srcObject instanceof MediaStream && !audio.paused;
+    });
+    checks.add(
+      "chat call away",
+      barShown &&
+        barHolds &&
+        atFoot &&
+        setupLinks === 0 &&
+        memoryWaits &&
+        stillHeld &&
+        switchWaits &&
+        otherWaits &&
+        otherTypes &&
+        recorders === 0 &&
+        inCallSaid &&
+        callWaits &&
+        redocked &&
+        ownLine &&
+        barGone &&
+        playing,
+      `on Home the call bar ${barShown ? "showed" : "never showed"} ` +
+        `${barHolds ? "with" : "WITHOUT"} Hang Up and Return to Call, its foot ` +
+        `${atFoot ? "at" : `NOT at (${JSON.stringify(barBox)} in ${JSON.stringify(viewport)})`} ` +
+        `the window's; Home held ${setupLinks} link(s) into setup, and Turn On Memory ` +
+        `${memoryWaits ? "waited" : "didn't wait"}; GET chats/:id ` +
+        `${stillHeld ? "still held the call" : `said ${JSON.stringify(held.call)}`}; ${switcher}; ` +
+        `another chat's Call ${otherWaits ? "waited" : "didn't wait"}, its text box ` +
+        `${otherTypes ? "took text" : "didn't"}, beside ${recorders} voice-message button(s); ` +
+        `/call ${inCallSaid ? "said you're in a call" : "never said you're in a call"}, its Call ` +
+        `${callWaits ? "waiting" : "NOT waiting"}; Return to Call brought ` +
+        `${redocked ? "the dock" : "no dock"} back, ${ownLine ? "with" : "WITHOUT"} her greeting ` +
+        `as the call's own line, the bar ${barGone ? "gone" : "still there"} and the call's audio ` +
+        `${playing ? "playing" : "NOT playing"}`,
+    );
+
+    await dock.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
+    const undocked = await dock
+      .waitFor({ state: "hidden", timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    const after = await poll(
+      () => chatLog(walk, id),
+      (events) => events.some((e) => e.type === "call-ended"),
+      20_000,
+    );
+    const end = after.find((e) => e.type === "call-ended");
+    const back = (await shows(textBox, 10_000)) && (await textBox.isEnabled());
+    const closed = await shows(log.getByText(t("en", "Call ended"), { exact: true }), 10_000);
+    const lasted = new RegExp(
+      `^${escapeRegExp(t("en", "Call with {name} · {duration}", { name: short, duration: "\0" })).replace("\0", "\\d+:\\d{2}")}$`,
+    );
+    const timed = await shows(log.getByText(lasted), 10_000);
+    const tabBack = (await shows(tabBox, 10_000)) && (await tabBox.isEnabled());
+    const tabClosed = await shows(tabLog.getByText(t("en", "Call ended"), { exact: true }), 5_000);
+    await tab.close();
+    checks.add(
+      "chat call tab",
+      tabLearned && tabBack && tabClosed,
+      `a second tab open before the call ${tabLearned ? "learned of it" : "never learned of it"} ` +
+        `from a refused send; after the hang-up, without a reload, its composer ` +
+        `${tabBack ? "came back" : "stayed disabled"}, under ${tabClosed ? "a" : "no"} Call ended line`,
+    );
+    const sent = await walk.api(
+      "POST",
+      `/api/local/chats/${id}/messages`,
+      JSON.stringify({ text: CHAT_MESSAGE }),
+    );
+    const errors = walk
+      .serverLog()
+      .slice(logged)
+      .split("\n")
+      .filter((entry) => /\| (ERROR|CRITICAL) +\|/.test(entry));
+    await page.reload();
+    const kept =
+      (await shows(log.getByText(CALL_GREETING, { exact: true }), 15_000)) &&
+      (await shows(log.getByText(t("en", "Call ended"), { exact: true }), 5_000)) &&
+      (await shows(log.getByText(lasted), 5_000));
+    checks.add(
+      "chat call end",
+      undocked &&
+        end?.call === opened?.call &&
+        end?.reason === "hangup" &&
+        after.at(-1)?.type === "call-ended" &&
+        back &&
+        closed &&
+        timed &&
+        sent.status === 200 &&
+        errors.length === 0 &&
+        kept,
+      `Hang Up ${undocked ? "closed" : "left"} the dock; the log ` +
+        `${end ? `ends the call: ${String(end.reason)}` : "never stored its end"}; the composer ` +
+        `${back ? "came back" : "stayed disabled"}, under ${closed ? "a" : "no"} Call ended line and ` +
+        `${timed ? "the call's length" : "no length"}; a send afterwards answered ${sent.status}; ` +
+        `the server logged ${errors.length === 0 ? "no errors" : errors.slice(0, 2).join(" ")} during ` +
+        `the call; after a reload the call ${kept ? "stays in the log" : "is gone from the log"}`,
+    );
+  } finally {
+    await hangUpIfUp(walk);
+  }
 }
 
 /** settings.yaml's assistant.folders, as JSON to compare, or "absent". */
