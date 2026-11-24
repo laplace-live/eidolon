@@ -208,9 +208,9 @@ describe("calls", () => {
     director.callDirection(callDirection({ speaking: true, mood: ["gentle"] }));
     expect(director.direction(100)).toMatchObject({ speaking: true, mood: ["gentle"] });
 
-    director.callDirection(callDirection({ gesture: { name: "nod", seq: 4 } }));
+    director.callDirection(callDirection({ gesture: { name: "nod", seq: 1 } }));
     expect(director.direction(200).gesture).toEqual({ name: "nod", seq: 2 });
-    director.callDirection(callDirection({ gesture: { name: "nod", seq: 4 }, speaking: true }));
+    director.callDirection(callDirection({ gesture: { name: "nod", seq: 1 }, speaking: true }));
     expect(director.direction(300).gesture).toEqual({ name: "nod", seq: 2 });
 
     // Her own replies told during the call never come back as gestures once it ends.
@@ -221,9 +221,20 @@ describe("calls", () => {
     expect(after.gesture).toEqual({ name: "nod", seq: 2 });
     expect(director.follows(400)).toBe(true);
 
+    // A second call numbers its gestures from 1 again, as the first did.
     director.call(HERS, 500);
     director.callDirection(callDirection({ gesture: { name: "shake", seq: 1 } }));
     expect(director.direction(500).gesture).toEqual({ name: "shake", seq: 3 });
+  });
+
+  test("her own gestures wait out a call of hers, and none comes once it ends", () => {
+    const director = new CompanionDirector(0);
+    director.call(HERS, 0);
+    director.callDirection(callDirection({ speaking: true }));
+    director.said(message(13, "[chuckling] 嘿嘿"), 10);
+    expect(director.direction(10).gesture).toBeNull();
+    director.call(NO_COMPANION_CALL, 20);
+    expect(director.direction(20).gesture).toBeNull();
   });
 
   test("a call's direction is dropped once it ends, and one that comes after is ignored", () => {
