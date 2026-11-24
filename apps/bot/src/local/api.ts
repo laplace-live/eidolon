@@ -1166,8 +1166,8 @@ export interface LocalApi {
    * A .p2lrt, its bytes the body, kept under an id the server makes from `filename`; it never
    * becomes her active model. 400 bad-request when empty; 413 payload-too-large past
    * MAX_MODEL_BYTES; 415 unsupported-media-type for bytes that don't start as a .p2lrt does; 400
-   * invalid-model, with the reason, when PSD2Live's runtime refuses it or its textures aren't PNGs
-   * inside the file; 409 call-active during a call.
+   * invalid-model, with the reason, when PSD2Live's runtime refuses it, its textures aren't PNGs
+   * inside the file or its inventory passes 1 MiB; 409 call-active during a call.
    */
   "POST /api/local/personas/:id/models": Endpoint<
     Raw<"model">,

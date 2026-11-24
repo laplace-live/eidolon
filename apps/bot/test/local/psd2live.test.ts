@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { crc32 } from "node:zlib";
+import { crc32, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { psd2liveDir } from "@eidolon/config";
 import { describe, expect, test } from "vitest";
 import { checkRig, type RigCheck } from "../../src/local/psd2live.ts";
@@ -24,6 +24,63 @@ function chunk(bytes: Uint8Array, tag: string): { entry: number; at: number; len
     }
   }
   throw new Error(`no ${tag} chunk`);
+}
+
+/**
+ * `bytes` with the chunk `tag` holding what `edit` makes of its contents, stored as before, and the
+ * chunks after it moved to follow it, each table entry and CRC made again.
+ */
+function rewritten(bytes: Uint8Array, tag: string, edit: (contents: Buffer) => Buffer): Uint8Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const count = view.getUint32(16, true);
+  const table = view.getUint32(20, true);
+  const head = Uint8Array.from(bytes.subarray(0, table + count * 40));
+  const entries = new DataView(head.buffer);
+  const parts: Uint8Array[] = [head];
+  let offset = head.byteLength;
+  for (let index = 0; index < count; index++) {
+    const entry = table + index * 40;
+    const at = Number(view.getBigUint64(entry + 8, true));
+    let stored = bytes.subarray(at, at + Number(view.getBigUint64(entry + 16, true)));
+    if (Buffer.from(bytes.subarray(entry, entry + 4)).toString("latin1") === tag) {
+      const zstd = (view.getUint16(entry + 6, true) & 8) !== 0;
+      const contents = edit(zstd ? zstdDecompressSync(stored) : Buffer.from(stored));
+      stored = zstd ? zstdCompressSync(contents) : contents;
+      entries.setBigUint64(entry + 24, BigInt(contents.byteLength), true);
+      entries.setUint32(entry + 32, crc32(stored), true);
+    }
+    // Each chunk starts on 16 bytes, as an export's do, with nothing else between: the runtime
+    // refuses other bytes there.
+    const padding = (16 - (offset % 16)) % 16;
+    offset += padding;
+    entries.setBigUint64(entry + 8, BigInt(offset), true);
+    entries.setBigUint64(entry + 16, BigInt(stored.byteLength), true);
+    parts.push(new Uint8Array(padding), stored);
+    offset += stored.byteLength;
+  }
+  return Buffer.concat(parts);
+}
+
+/** The test rig with its first hit area named `name`. */
+function headNamed(name: string): Uint8Array {
+  let index = 0;
+  // STRS: a u32 count, count + 1 u32 offsets into the UTF-8 after them, then the UTF-8.
+  const strings = rewritten(RIG, "STRS", (strs) => {
+    index = strs.readUInt32LE(0);
+    const text = 4 + 4 * (index + 1);
+    const bytes = Buffer.from(name);
+    const offsets = Buffer.alloc(text + 4);
+    strs.copy(offsets, 0, 0, text);
+    offsets.writeUInt32LE(index + 1, 0);
+    offsets.writeUInt32LE(strs.readUInt32LE(text - 4) + bytes.byteLength, text);
+    return Buffer.concat([offsets, strs.subarray(text), bytes]);
+  });
+  // HITA: a u32 count, then each area's id, name, mesh count and meshes, as u32s.
+  return rewritten(strings, "HITA", (areas) => {
+    const renamed = Buffer.from(areas);
+    renamed.writeUInt32LE(index, 8);
+    return renamed;
+  });
 }
 
 function refusal(checked: RigCheck): [string, string] {
@@ -116,6 +173,26 @@ describe("checkRig", () => {
       "invalid-model",
       "Its textures must be PNGs inside the file; export it with PNG textures",
     ]);
+  });
+
+  test("a rig that holds far more than an export does is invalid-model", () => {
+    const oversized = [
+      "invalid-model",
+      "Its inventory passes 1 MiB, far more than any PSD2Live export holds",
+    ];
+    // 300,000 bytes of UTF-8, which is kept whole.
+    const long = checkRig(headNamed("头".repeat(100_000)));
+    if (!long.ok) throw new Error(long.message);
+    expect(long.inventory.hitAreas[0]).toEqual({ id: "HitAreaHead", name: "头".repeat(100_000) });
+    expect(refusal(checkRig(headNamed("头".repeat(400_000))))).toEqual(oversized);
+    const crowded = rewritten(RIG, "HITA", (areas) => {
+      const copies = Buffer.alloc(4 + 16 * 100_000);
+      copies.writeUInt32LE(100_000, 0);
+      // The head's id, name, mesh count (1) and mesh.
+      for (let copy = 0; copy < 100_000; copy++) areas.copy(copies, 4 + 16 * copy, 4, 20);
+      return copies;
+    });
+    expect(refusal(checkRig(crowded))).toEqual(oversized);
   });
 
   test("the runtime is PSD2Live's committed build, byte for byte", () => {

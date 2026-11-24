@@ -15,6 +15,17 @@ const EMBEDDED_PNG = 0;
 const ERROR_CAPACITY = 201;
 /** Room for the most any call here writes through its out-pointers. */
 const OUT_BYTES = 24;
+/**
+ * The most an inventory may hold, counting its text and ENTRY_BYTES an entry, since every list and
+ * status reads it back: the test rig's takes 10 KB. The runtime's load, before it, has no such
+ * bound: 20,000 hit areas sharing one 5,000-character name take it 0.5 s, and 40,000 take 2 s.
+ */
+const INVENTORY_BYTES = 1 << 20;
+/** Near what model.json spends on an entry besides its text. */
+const ENTRY_BYTES = 64;
+
+/** A rig whose inventory passes INVENTORY_BYTES. */
+class Oversized extends Error {}
 
 type Pointer = number;
 type Count = (rig: Pointer) => number;
@@ -134,15 +145,38 @@ function refused(message: string): RigCheck {
   };
 }
 
-/** What Studio and the pages read of the rig at `rig`, once every page is a PNG in the file. */
+/**
+ * What Studio and the pages read of the rig at `rig`, once every page is a PNG in the file; throws
+ * Oversized once it passes INVENTORY_BYTES, before reading the entry or string that would.
+ */
 function inventoryOf(runtime: P2lRuntime, rig: Pointer): RigCheck {
   const out = runtime.p2l_alloc(OUT_BYTES);
   // Fresh for every read: a call may grow the memory, which detaches the views made before it.
   const outs = () => new DataView(runtime.memory.buffer, out >>> 0, OUT_BYTES);
+  let left = INVENTORY_BYTES;
+  const spend = (bytes: number) => {
+    left -= bytes;
+    if (left < 0) throw new Oversized();
+  };
+  const entries = (count: number) => {
+    spend(count * ENTRY_BYTES);
+    return count;
+  };
+  /** text(), looking for its NUL only as far as what is left. */
+  const read = (at: Pointer): string => {
+    if (at === 0) return "";
+    const { buffer } = runtime.memory;
+    const start = at >>> 0;
+    const bytes = new Uint8Array(buffer, start, Math.min(left + 1, buffer.byteLength - start));
+    const end = bytes.indexOf(0);
+    if (end === -1) throw new Oversized();
+    spend(end);
+    return DECODER.decode(bytes.subarray(0, end));
+  };
   const named = (count: Count, id: Indexed, name: Indexed): ModelNamed[] =>
-    Array.from({ length: count(rig) }, (_, index) => ({
-      id: text(runtime, id(rig, index)),
-      name: text(runtime, name(rig, index)),
+    Array.from({ length: entries(count(rig)) }, (_, index) => ({
+      id: read(id(rig, index)),
+      name: read(name(rig, index)),
     }));
 
   const textures = runtime.p2l_texture_count(rig);
@@ -155,34 +189,37 @@ function inventoryOf(runtime: P2lRuntime, rig: Pointer): RigCheck {
 
   runtime.p2l_canvas(rig, out, out + 4);
   const canvas = { width: outs().getFloat32(0, true), height: outs().getFloat32(4, true) };
-  const clips = Array.from({ length: runtime.p2l_clip_count(rig) }, (_, index): ModelClip => {
-    runtime.p2l_clip_info(rig, index, out, out + 4, out + 8, out + 12, out + 16);
-    const info = outs();
-    const duration = info.getFloat32(0, true);
-    const looping = info.getUint8(8) !== 0;
-    return {
-      id: text(runtime, runtime.p2l_clip_id(rig, index)),
-      name: text(runtime, runtime.p2l_clip_name(rig, index)),
-      group: text(runtime, runtime.p2l_clip_group(rig, index)),
-      duration,
-      looping,
-    };
-  });
+  const clips = Array.from(
+    { length: entries(runtime.p2l_clip_count(rig)) },
+    (_, index): ModelClip => {
+      runtime.p2l_clip_info(rig, index, out, out + 4, out + 8, out + 12, out + 16);
+      const info = outs();
+      const duration = info.getFloat32(0, true);
+      const looping = info.getUint8(8) !== 0;
+      return {
+        id: read(runtime.p2l_clip_id(rig, index)),
+        name: read(runtime.p2l_clip_name(rig, index)),
+        group: read(runtime.p2l_clip_group(rig, index)),
+        duration,
+        looping,
+      };
+    },
+  );
   const parameters = Array.from(
-    { length: runtime.p2l_parameter_count(rig) },
+    { length: entries(runtime.p2l_parameter_count(rig)) },
     (_, index): ModelParameter => {
       runtime.p2l_parameter_range(rig, index, out, out + 4, out + 8);
       const range = outs();
       const min = range.getFloat32(0, true);
       const max = range.getFloat32(4, true);
       const value = range.getFloat32(8, true);
-      return { id: text(runtime, runtime.p2l_parameter_id(rig, index)), min, max, default: value };
+      return { id: read(runtime.p2l_parameter_id(rig, index)), min, max, default: value };
     },
   );
   const meta = new Map(
-    Array.from({ length: runtime.p2l_meta_count(rig) }, (_, index) => [
-      text(runtime, runtime.p2l_meta_key(rig, index)),
-      text(runtime, runtime.p2l_meta_value(rig, index)),
+    Array.from({ length: entries(runtime.p2l_meta_count(rig)) }, (_, index) => [
+      read(runtime.p2l_meta_key(rig, index)),
+      read(runtime.p2l_meta_value(rig, index)),
     ]),
   );
   const generator = meta.get("generator");
@@ -208,7 +245,7 @@ function inventoryOf(runtime: P2lRuntime, rig: Pointer): RigCheck {
       ),
       parameters,
       parts: named(runtime.p2l_part_count, runtime.p2l_part_id, runtime.p2l_part_name),
-      poseGroups: Array.from({ length: runtime.p2l_pose_group_count(rig) }, (_, group) =>
+      poseGroups: Array.from({ length: entries(runtime.p2l_pose_group_count(rig)) }, (_, group) =>
         runtime.p2l_pose_group_size(rig, group),
       ),
       lipSync: runtime.p2l_role_parameters(rig, lipSync, 0, 0) > 0,
@@ -218,9 +255,10 @@ function inventoryOf(runtime: P2lRuntime, rig: Pointer): RigCheck {
 }
 
 /**
- * Whether `bytes` are a rig PSD2Live's runtime loads, every chunk's CRC checked and every texture
- * a PNG in the file, and if so what it holds. Bytes that don't start as a .p2lrt does are
- * unsupported-media-type; anything the runtime refuses is invalid-model, with its reason.
+ * Whether `bytes` are a rig PSD2Live's runtime loads, every chunk's CRC checked, every texture a
+ * PNG in the file and its inventory within INVENTORY_BYTES, and if so what it holds. Bytes that
+ * don't start as a .p2lrt does are unsupported-media-type; anything else refused is invalid-model,
+ * with the runtime's reason when it refused.
  */
 export function checkRig(bytes: Uint8Array): RigCheck {
   if (!MAGIC.every((byte, index) => bytes[index] === byte)) {
@@ -242,6 +280,9 @@ export function checkRig(bytes: Uint8Array): RigCheck {
       runtime.p2l_rig_free(rig);
     }
   } catch (error) {
+    if (error instanceof Oversized) {
+      return refused("Its inventory passes 1 MiB, far more than any PSD2Live export holds");
+    }
     // A panic in the runtime traps, which ends this instance alone.
     if (!(error instanceof WebAssembly.RuntimeError)) throw error;
     logger.warning(`PSD2Live's runtime stopped on a model upload: ${error.message}`);
