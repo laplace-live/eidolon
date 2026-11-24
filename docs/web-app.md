@@ -420,7 +420,8 @@ has none of them, and without them nothing below happens.
   and at each change. `connectDesktop` passes each pick to whoever listens through
   `subscribeCompanionPick` at that moment, and drops one nobody does, and keeps the window's showing
   as a store (`windowShows()`, `subscribeWindowShows`), true in a browser, by which the call's
-  provider holds its stages while the window doesn't show.
+  provider and Studio's preview hold their stages while the window doesn't show, and `main.tsx` marks
+  `<html>` with `data-window-hidden`, under which `index.css` pauses every animation.
 - **The port** to her page, which isn't a bridge member, since the preload posts it: a window
   message from this window itself, tagged `{eidolon: "companion-port"}`, with one port, which
   `onCompanionPort` hands on. Main pairs the app page and hers once both have asked, and again

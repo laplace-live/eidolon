@@ -9,12 +9,13 @@ import {
   type ResolvedSetup,
 } from "@laplace.live/eidolon-sdk/avatar";
 import { useQuery } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PersonaAvatar, type PersonaAvatarProps } from "@/components/avatar";
 import { Spinner } from "@/components/ui/spinner";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import type { CharacterModel, ModelBox } from "@/lib/api";
 import { characterModelFileQuery, defaultCallBox } from "@/lib/character-models";
+import { subscribeWindowShows, windowShows } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 
 export type StageState = "loading" | "ready" | "failed";
@@ -134,6 +135,12 @@ export function ModelStage({
   useEffect(() => {
     ready?.stage.wear(outfit);
   }, [ready, outfit]);
+  // A desktop app's window hidden while it feeds the desktop companion still runs its page.
+  const windowShown = useSyncExternalStore(subscribeWindowShows, windowShows);
+  useEffect(() => {
+    if (windowShown) ready?.stage.resume();
+    else ready?.stage.pause();
+  }, [ready, windowShown]);
 
   const state: StageState =
     failed || file.isError ? "failed" : ready !== null ? "ready" : "loading";

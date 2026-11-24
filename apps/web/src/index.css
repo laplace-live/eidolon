@@ -287,6 +287,15 @@
   -webkit-app-region: no-drag;
 }
 
+/* The desktop app's window hidden while it feeds the desktop companion: its page still runs, and an
+   animation running, a spinner's or a pulse's, would keep it drawing. Unlayered, so it wins over the
+   utilities that set the animations. */
+html[data-window-hidden] *,
+html[data-window-hidden] *::before,
+html[data-window-hidden] *::after {
+  animation-play-state: paused;
+}
+
 /* The desktop companion's window is transparent: her page paints nothing but her. Unlayered, so it
    wins over the base layer's background; a dark scheme on a transparent root may paint a backdrop. */
 html[data-companion],
