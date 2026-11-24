@@ -150,4 +150,15 @@ describe("CallSignals", () => {
     signals.close();
     expect(stops).toHaveBeenCalledTimes(2);
   });
+
+  // A track, and the meters on it, need a browser.
+  test("has no feed meter without a track", () => {
+    const signals = new CallSignals(fakeClock().clock);
+    expect(signals.feedMouth).toBeNull();
+    signals.begin();
+    signals.listen(null);
+    expect(signals.feedMouth).toBeNull();
+    signals.end();
+    expect(signals.feedMouth).toBeNull();
+  });
 });
