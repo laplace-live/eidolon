@@ -280,9 +280,9 @@ call's turns. The local app's Studio previews a persona's models with it.
 loop; the model has none of its own.
 
 - **`show(model, setup)`** disposes the model shown before; the same model shown again takes the new
-  setup in place, without starting over a clip the setup didn't change. `frame(box)` frames a
-  region of the rig's canvas, filling the element whatever its size; until it is called the stage
-  shows the whole canvas.
+  setup in place, without starting over a clip the setup didn't change, and stops one it took
+  away. `frame(box)` frames a region of the rig's canvas, filling the element whatever its size;
+  until it is called the stage shows the whole canvas.
 - **The loop** runs on animation frames (`clock`, which tests replace), at `fps` at most when it is
   above 0, stepping at most 0.1 s a frame. It pauses while the page is hidden, while an
   IntersectionObserver says the canvas is off screen, and after `pause()`. The device pixel ratio
@@ -332,8 +332,9 @@ thinking, where she looks, the latest gesture). Both are plain data, so they cro
 
 `moodTags(direction)` reads a direction such as `懒洋洋的，带点笑意` into at most two of
 `MOOD_TAGS` (happy, gentle, lazy, pout, wry, shy, sad, angry, surprised, thinking, gloom), in a
-fixed precedence: Chinese keywords match anywhere, except `哭` inside `哭笑不得` and `困` inside
-`困惑`, `困扰` and `困难`, and English ones as whole words. `DEFAULT_MOOD_EXPRESSIONS` maps each to
+fixed precedence: Chinese keywords match anywhere, except `哭` inside `哭笑不得`, `困` inside
+`困惑`, `困扰` and `困难`, and a keyword right after a negation (`不开心`, `没有生气`, `不太高兴`),
+and English ones as whole words. `DEFAULT_MOOD_EXPRESSIONS` maps each to
 the standard expression ids PSD2Live gives a generated rig (`smile`, `sleepy`, `angry`, `sad`,
 `shy`, `surprised`, `gloom`); lazy and happy together show sleepy and smile. `soundCueEffect(name)`
 decides every cue in `CUE_EMOJI`.

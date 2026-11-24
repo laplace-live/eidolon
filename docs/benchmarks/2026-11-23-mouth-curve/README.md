@@ -15,7 +15,7 @@ and `mouthCurve`.
 - **A voiced frame** is louder than -45 dBFS.
 - **Shut** is an opening below 0.2.
 - **A closure** is the opening falling below 0.2 after it rose above 0.45, counted per second of the
-  whole file, silences included.
+  frames read, 60 to a second, silences included.
 
 It prints the voiced frames' p10, p50 and p90, then for `MOUTH_CURVE` and for the loudness map alone
 (-40 to -8 dBFS, opening in 35 ms and closing in 90 ms, as Phase 0 left it) the share of voiced
