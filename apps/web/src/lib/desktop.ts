@@ -68,16 +68,13 @@ export function desktop(): EidolonDesktop | null {
 let unsavedHolds = 0;
 
 /**
- * Holds the page as one with unsaved edits until the release it returns, which counts once. The
- * desktop app hears true as the first hold starts and false as the last ends.
+ * Holds the page as one with unsaved edits until the release it returns. The desktop app hears true
+ * as the first hold starts and false as the last ends.
  */
 export function holdUnsaved(): () => void {
   unsavedHolds++;
   if (unsavedHolds === 1) desktop()?.unsaved?.(true);
-  let released = false;
   return () => {
-    if (released) return;
-    released = true;
     unsavedHolds--;
     if (unsavedHolds === 0) desktop()?.unsaved?.(false);
   };

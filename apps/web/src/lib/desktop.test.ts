@@ -112,17 +112,11 @@ describe("holdUnsaved", () => {
     expect(bridge.said).toEqual([true, false, true, false]);
   });
 
-  test("a release counts once, so StrictMode's second run of an effect leaves one hold", () => {
+  test("StrictMode's run, cleanup and second run of an effect leave one hold", () => {
     const bridge = editsBridge();
     globalThis.eidolonDesktop = bridge;
-    // StrictMode runs an effect, its cleanup, then the effect again.
-    const first = holdUnsaved();
-    first();
+    holdUnsaved()();
     const second = holdUnsaved();
-    first();
-    const other = holdUnsaved();
-    other();
-    other();
     expect(bridge.said).toEqual([true, false, true]);
     second();
     expect(bridge.said).toEqual([true, false, true, false]);
