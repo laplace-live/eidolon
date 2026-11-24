@@ -78,6 +78,8 @@ const NO_FOLDER_DIALOG = "Eidolon: background mode didn't open the folder dialog
 const NOTICE = "Eidolon: background mode didn't show a notification: ";
 /** main.log's line when main lets the page go over its beforeunload. */
 const LET_GO = "Eidolon: the page asked to stay (beforeunload); letting it go";
+/** main.log's line once the window has loaded the failure page. */
+const FAILED_SHOWN = "Eidolon: the window shows eidolon-app://shell/failed";
 /** What Settings' Desktop App says under each option this copy can't offer, by why. */
 const DESKTOP_NOTES = {
   background: "Background mode leaves this computer as it is.",
@@ -288,7 +290,7 @@ async function walkApp(walk: Walk): Promise<void> {
     (step) => attach(walk, first, step),
   );
   await steps.run(
-    "quit: --quit stops main and the backend, an unsaved edit on the page and all, leaving nothing",
+    "quit: over an unsaved edit, the failure page and Try Again, then --quit stops main and the backend, leaving nothing",
     (step) => quit(walk, step),
   );
 }
@@ -1696,32 +1698,89 @@ function inOrder(
   return { ok: true, detail: found.join(" → ") };
 }
 
+/** The backend Try Again started, and main.log's line for the failure the kill caused. */
+interface Retried {
+  readonly pid: number;
+  readonly failure: string;
+}
+
 /**
- * The last launch spawns its own backend again, and quits while the page holds an unsaved edit,
- * whose beforeunload asks the page to stay: main must let it go, or the quit stops with the window
- * hidden and the backend already stopped.
+ * Kills `backend` while the page holds an unsaved edit: main must let the page go to load the
+ * failure page, whose Try Again starts a backend and loads Home. Null when the failure page didn't
+ * show.
+ */
+async function killAndRetry(
+  walk: Walk,
+  page: Page,
+  backend: number,
+  step: Step,
+): Promise<Retried | null> {
+  const { smoke } = walk;
+  const failure = "Eidolon: the backend failed (exited)";
+  const from = smoke.log("main").length;
+  process.kill(backend, "SIGKILL");
+  await smoke.waitForLine("main", FAILED_SHOWN, { from, timeoutMs: 15_000 }).catch(() => null);
+  const log = smoke.log("main").slice(from);
+  const shown = inOrder(log, [
+    `Eidolon: the backend (pid ${backend}) exited (SIGKILL)`,
+    failure,
+    LET_GO,
+    FAILED_SHOWN,
+  ]);
+  step.check(
+    "the backend killed: main lets the page go for the failure page",
+    shown.ok,
+    shown.detail,
+  );
+  const failed = log.split(/\r?\n/).find((line) => line.includes(failure));
+  if (!shown.ok || failed === undefined) return null;
+  await step.shot(page, "failed-over-unsaved");
+  const retryFrom = smoke.log("main").length;
+  await page.getByRole("button", { name: STRINGS.en.label.tryAgain, exact: true }).click();
+  const started = await smoke.waitForLine("main", LINES.started, {
+    from: retryFrom,
+    timeoutMs: 30_000,
+  });
+  const pid = Number(LINES.started.exec(started)?.[1]);
+  await smoke.processes.adopt("backend", pid);
+  await home(page);
+  step.check("Try Again: another backend, and Home", pid !== backend, `${after(started)}; Home`);
+  return { pid, failure: failed };
+}
+
+/**
+ * The last launch spawns its own backend again, and the page holds an unsaved edit, whose
+ * beforeunload asks it to stay: main must let it go to load the failure page when the backend dies,
+ * and at the quit, or the failure page never shows and the quit stops with the window hidden and the
+ * backend already stopped.
  */
 async function quit(walk: Walk, step: Step) {
   const { smoke } = walk;
   const from = smoke.log("main").length;
   let main: Started | null = null;
+  let killed: Retried | null = null;
   try {
     const driven = await drive(walk, []);
     main = driven.main;
+    const { page } = driven;
     const started = await smoke.waitForLine("main", LINES.started, { from, timeoutMs: 30_000 });
-    const pid = Number(LINES.started.exec(started)?.[1]);
-    await smoke.processes.adopt("backend", pid);
-    await home(driven.page);
-    const edited = await editPrompt(driven.page);
+    const first = Number(LINES.started.exec(started)?.[1]);
+    await smoke.processes.adopt("backend", first);
+    await home(page);
+    const edited = await editPrompt(page);
     step.check("the System Prompt holds an unsaved edit", edited.ok, edited.detail);
-    await step.shot(driven.page, "unsaved-prompt");
+    killed = await killAndRetry(walk, page, first, step);
+    if (killed === null) return;
+    const again = await editPrompt(page);
+    step.check("the System Prompt holds an unsaved edit again", again.ok, again.detail);
+    await step.shot(page, "unsaved-prompt");
     const quitFrom = smoke.log("main").length;
-    const ending = await quitApp(walk, driven.main, pid);
+    const ending = await quitApp(walk, driven.main, killed.pid);
     step.check("--quit: the second launch, main and the backend exit 0", ending.ok, ending.detail);
     const said = inOrder(smoke.log("main").slice(quitFrom), [
       LINES.quitting,
       "Eidolon: the window is hidden",
-      `Eidolon: the backend (pid ${pid}) exited (0)`,
+      `Eidolon: the backend (pid ${killed.pid}) exited (0)`,
       LET_GO,
       "Eidolon: the window is closed",
     ]);
@@ -1735,13 +1794,16 @@ async function quit(walk: Walk, step: Step) {
     left.length === 0,
     left.length === 0 ? "nothing left" : left.join(", "),
   );
+  const caused = killed.failure;
   const errors = [
-    ...errorLines(smoke.log("main"), "main"),
+    ...errorLines(smoke.log("main"), "main").filter((line) => line !== caused),
     ...errorLines(smoke.log("backend"), "backend"),
   ];
   step.check(
-    "no error lines in main.log or backend.log",
+    "no error lines in main.log or backend.log but the failure the kill caused",
     errors.length === 0,
-    errors.length === 0 ? "no error lines in either log" : errors.slice(0, 3).join(" | "),
+    errors.length === 0
+      ? "no error lines in either log but the kill's"
+      : errors.slice(0, 3).join(" | "),
   );
 }

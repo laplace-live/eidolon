@@ -1379,9 +1379,11 @@ Each step prints one line, made of the checks inside it:
     Settings' Restart there waits for the supervisor's next server, a restart from outside the app
     is survived, and quitting leaves the server running until the smoke stops it.
 11. **Quit:** a last launch spawns its own backend again, and the smoke types into the persona's
-    System Prompt, leaving the edit unsaved. `--quit` still ends main and the backend with exit 0,
-    main.log saying it quit, hid the window, stopped the backend, let the page go and closed the
-    window, in that order, and it leaves nothing running and no error line in either log.
+    System Prompt, leaving the edit unsaved. It kills the backend: main.log says main let the page
+    go and loaded the failure page, whose Try Again starts another backend and loads Home. With the
+    edit typed again, `--quit` still ends main and the backend with exit 0, main.log saying it
+    quit, hid the window, stopped the backend, let the page go and closed the window, in that order,
+    and it leaves nothing running and no error line in either log but the failure the kill caused.
 
 After the steps come the window watch's line and the kit's. The run's folder keeps
 `results/results.json`, with every check and each step's time, and `results/screenshots`; a pass
