@@ -228,7 +228,8 @@ function placed(bounds: Rectangle | null): string {
 
 /**
  * The desktop companion's window as the step drives it: her page, found by its address, and what
- * it logged; input reaches it through sendInputEvent, never the system's cursor.
+ * it logged; input reaches it through sendInputEvent, never the system's cursor. Declared above
+ * the walk, which runs at the module's top level: a class, unlike a function, isn't hoisted.
  */
 class Her {
   /** Console errors and uncaught exceptions on her page, from its first load. */
@@ -1691,6 +1692,17 @@ async function setModel(walk: Walk, id: string | null): Promise<void> {
   if (put.status !== 200) throw new Error(`PUT settings: ${put.status}`);
 }
 
+/** A pick from her menu for the call, sent to the main window as main sends it (`companion-pick`). */
+async function sendPick(driven: Driven, pick: "mute" | "unmute"): Promise<void> {
+  await driven.app.evaluate(
+    ({ BrowserWindow }, { url, channel, pick }) => {
+      const main = BrowserWindow.getAllWindows().find((win) => win.webContents.getURL() !== url);
+      main?.webContents.send(channel, pick);
+    },
+    { url: COMPANION_PAGE, channel: BRIDGE.companionPick, pick },
+  );
+}
+
 async function activeCalls(walk: Walk): Promise<number> {
   const response = await walk.smoke.api("/api/local/status");
   return ((await response.json()) as Partial<Status>).activeCalls ?? 0;
@@ -2137,6 +2149,29 @@ async function callWithHer(walk: Walk, driven: Driven, her: Her, stage: boolean,
     "her menu during her call starts with Hang Up and Mute Microphone",
     menu?.startsWith(`${MENU_LINE}${HER_CALL_MENU}`) === true,
     menu ?? "main.log has no menu line within 5 s",
+  );
+  // Background mode closes her menu with no pick, so the smoke hands the app page her Mute and
+  // Unmute as main does.
+  const micOn = page.getByRole("button", { name: "Mute your mic" }).first();
+  await until("the call live, its microphone on", () => micOn.isEnabled(), 30_000);
+  await sendPick(driven, "mute");
+  const muted = await page
+    .getByRole("button", { name: "Unmute your mic" })
+    .first()
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  await sendPick(driven, "unmute");
+  const unmuted = await micOn.waitFor({ timeout: 5000 }).then(
+    () => true,
+    () => false,
+  );
+  step.check(
+    "her menu's Mute and Unmute, handed to the app page from main, set the call's microphone",
+    muted && unmuted,
+    `companion-pick mute: ${muted ? "the microphone off" : "nothing changed"}; unmute: ${unmuted ? "on again" : "still off"}`,
   );
   if (video) return true;
   const hangUp = smoke.log("main").length;
