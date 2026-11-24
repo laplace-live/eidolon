@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
+import { type AddressInfo, connect } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -761,6 +761,37 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       { status: 0, stdout: 'hello ["x"]\n', stderr: "", marks: [] },
       { status: 0, stdout: 'corp ["x"]\n', stderr: "", marks: [] },
     ]);
+  }, 60_000);
+
+  test("installs through the proxy the project's .npmrc names, which pnpm reads from none", async () => {
+    // pnpm tunnels a plain http request through a proxy too. This one opens each tunnel it is
+    // asked for.
+    const tunnels: string[] = [];
+    const proxy = createServer();
+    proxy.on("connect", (request, socket, head) => {
+      tunnels.push(request.url ?? "");
+      const target = new URL(`http://${request.url}`);
+      const upstream = connect(Number(target.port), target.hostname, () => {
+        socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+        upstream.write(head);
+        upstream.pipe(socket);
+        socket.pipe(upstream);
+      });
+      upstream.on("error", () => socket.destroy());
+      socket.on("error", () => upstream.destroy());
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+    try {
+      const project = write(join(scratch, "npm-project-proxy"), {
+        "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+        ".npmrc": `proxy=http://127.0.0.1:${(proxy.address() as AddressInfo).port}/\n`,
+      });
+      const ran = await launch("npx", ["-y", "eidolon-test-hello", "x"], { cwd: project });
+      expect(ran).toEqual({ status: 0, stdout: 'hello ["x"]\n', stderr: "", marks: [] });
+      expect(tunnels).toContain(new URL(registry).host);
+    } finally {
+      proxy.close();
+    }
   }, 60_000);
 
   test("runs nothing, as npm, under a credential an .npmrc gives no registry", async () => {

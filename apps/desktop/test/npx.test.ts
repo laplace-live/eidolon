@@ -47,6 +47,7 @@ interface NpmExec {
 }
 interface Npx {
   pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
+  pnpmNetworkEnv(sources: readonly Source[]): Record<string, string>;
   npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
   devEngines(
     manifest: unknown,
@@ -502,6 +503,32 @@ describe("npm's config, which npx installs by", () => {
     expect(npx.pnpmNpmrc([{ "@v:registry": `\${V}` }, {}], "/work", "/home")).toBe(
       '"@v:registry"="%24%7BV%7D"',
     );
+  });
+
+  // pnpm reads these from no project's .npmrc and none of npm's variables.
+  test("hands pnpm npm's proxies and strict-ssl as its own variables, as npm ranks them", () => {
+    const variables = { "https-proxy": "http://user:secret@proxy.test:8080/" };
+    const project = {
+      "https-proxy": "http://project.test:3128/",
+      proxy: "http://plain.test:3128/",
+      noproxy: ["internal.test", ".corp.test"],
+      "strict-ssl": "false",
+      registry: "http://registry.test/",
+    };
+    const user = { proxy: "http://user.test:3128/", "strict-ssl": "true", noproxy: "" };
+    expect(npx.pnpmNetworkEnv([variables, project, user])).toEqual({
+      pnpm_config_proxy: "http://plain.test:3128/",
+      pnpm_config_https_proxy: "http://user:secret@proxy.test:8080/",
+      pnpm_config_noproxy: "internal.test,.corp.test",
+      pnpm_config_strict_ssl: "false",
+    });
+    // The user's alone, which pnpm reads too; npm's false for proxy, and a number for strict-ssl.
+    expect(npx.pnpmNetworkEnv([{}, {}, { proxy: "false", "strict-ssl": "0" }])).toEqual({
+      pnpm_config_proxy: "false",
+      pnpm_config_strict_ssl: "false",
+    });
+    // An empty value is none, as npm takes one.
+    expect(npx.pnpmNetworkEnv([{}, { "https-proxy": "" }, {}])).toEqual({});
   });
 });
 

@@ -735,7 +735,10 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   `pnpm-workspace.yaml` or `packageManager` reaches it. A `${VAR}` naming an unset variable stays
   as npm leaves it, percent-encoded, where pnpm would drop the registry or credential holding it
   for the user's: a registry so named fails as an invalid URL, as under npm. That folder is the
-  owner's alone and goes when pnpm ends. pnpm reads the user's `.npmrc` and `pnpm_config_*`
+  owner's alone and goes when pnpm ends. npm's `proxy`, `https-proxy`, `noproxy` and `strict-ssl`,
+  which pnpm reads from no project's `.npmrc` and none of npm's variables, reach it as its own
+  `pnpm_config_*` variables, each from npm's variables, that `.npmrc` or the user's, as npm ranks
+  them (`pnpmNetworkEnv`). pnpm reads the user's `.npmrc` and `pnpm_config_*`
   variables itself, and keeps its store and caches under the owner's home, where its dlx cache
   holds npx's installs apart from those of pnpx and `pnpm dlx`, which install as pnpm does, and
   from npx's under other settings or registries, each for a day.

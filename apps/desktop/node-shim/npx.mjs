@@ -90,6 +90,25 @@ export function pnpmNpmrc([variables = {}, project = {}], cwd, home, platform = 
   return lines.join("\n");
 }
 
+// npm's settings for reaching a registry. pnpm takes these only from the user's .npmrc, its own
+// variables or its command line, never from a project's .npmrc or npm's variables.
+const NETWORK_SETTINGS = ["proxy", "https-proxy", "noproxy", "strict-ssl"];
+
+/**
+ * pnpm's variables for npm's network settings in its config `sources`, as npmConfig reads them,
+ * each from the highest source that gives it, as npm ranks them.
+ */
+export function pnpmNetworkEnv(sources) {
+  const env = {};
+  for (const key of NETWORK_SETTINGS) {
+    const value = settingOf(sources, key);
+    if (value === undefined || value === "") continue;
+    env[`pnpm_config_${key.replaceAll("-", "_")}`] =
+      key === "strict-ssl" ? String(flag(value)) : [value].flat().join(",");
+  }
+  return env;
+}
+
 /** A boolean setting as npm reads one: a number unless 0, any other word unless false or null. */
 function flag(value) {
   if (value === undefined) return false;
@@ -738,11 +757,13 @@ function install(packages) {
     "-e",
     REPORT,
   ];
-  // pnpm's stdout goes to stderr with its own, and it never reads the server's stdin.
+  // pnpm's stdout goes to stderr with its own, and it never reads the server's stdin. Its
+  // variables carry npm's network settings, which a proxy's URL can hold credentials in: only the
+  // owner's processes read them.
   const child = spawn(process.execPath, args, {
     cwd: scratch,
     stdio: ["ignore", 2, 2],
-    env: { ...process.env, EIDOLON_NPX_REPORT: report },
+    env: { ...process.env, ...pnpmNetworkEnv(sources), EIDOLON_NPX_REPORT: report },
     windowsHide: true,
   });
   const undo = relay(child);
