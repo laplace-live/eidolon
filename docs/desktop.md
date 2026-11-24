@@ -711,11 +711,12 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   flat, so a package finds what it uses and the packages beside it as under npm; and no
   `.pnpmfile.cjs` rewrites what installs, as npm reads none. Where `allow-git`, `allow-remote`,
   `allow-file` or `allow-directory` is `none`, a git, URL, tarball or folder package npx is asked
-  for ends it with npm's error (`EALLOWGIT` and the rest) before pnpm starts; `root` lets one
-  through, as npm takes npx's packages for the root's, and the project's own bin and a local bin
-  run whatever they say. Under a credential the user's or the project's `.npmrc` gives no registry
-  (`_authToken`, `_auth`, `username`, `_password`), or a `registry` that isn't a URL, npx runs
-  nothing at all, local bins included, and ends with npm's error (`ERR_INVALID_AUTH`,
+  for ends it with npm's error (`EALLOWGIT` and the rest) before pnpm starts, a git URL's password
+  in it shown as `***`, as npm's log redacts one, since a server's stderr reaches the task; `root`
+  lets one through, as npm takes npx's packages for the root's, and the project's own bin and a
+  local bin run whatever they say. Under a credential the user's or the project's `.npmrc` gives no
+  registry (`_authToken`, `_auth`, `username`, `_password`), or a `registry` that isn't a URL, npx
+  runs nothing at all, local bins included, and ends with npm's error (`ERR_INVALID_AUTH`,
   `ERR_INVALID_URL`). So too where the `devEngines` of the `package.json` at npm's local prefix
   doesn't match, which npm 11.19.1 checks before any command, npx taking itself for that npm and
   Eidolon's binary for the Node: it ends with npm's `EBADDEVENGINES`, or only warns where the

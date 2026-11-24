@@ -161,7 +161,7 @@ function isGitHubShorthand(arg) {
 
 /**
  * The spec npm-package-arg saves for the repo `giturl` names on a host hosted-git-info knows, in
- * the form it was given in; undefined for anything else.
+ * the form it was given in but with its password shown as `***`; undefined for anything else.
  */
 function hostedGit(giturl) {
   const parsed = parseGitUrl(isGitHubShorthand(giturl) ? `github:${giturl}` : giturl);
@@ -173,9 +173,11 @@ function hostedGit(giturl) {
     : Object.keys(GIT_HOSTS).find((name) => GIT_HOSTS[name].domain === hostname);
   if (type === undefined) return undefined;
   const { domain, protocols, extract } = GIT_HOSTS[type];
+  // npx only prints this spec, and hides the password as npm's log does: an MCP server's stderr
+  // reaches the task. npm prints this one as it was given.
   const auth =
     GIT_PROTOCOLS[parsed.protocol]?.auth && (parsed.username || parsed.password)
-      ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ""}`
+      ? `${parsed.username}${parsed.password ? ":***" : ""}`
       : null;
   let repo;
   try {
@@ -286,7 +288,9 @@ export function npmSpec(arg, where, home, platform = process.platform) {
         (scp !== null && !/:[0-9]+(\/|$)/.test(scp[1])) ||
         /^git(?:\+(?:https?|rsync|ftp|file|ssh))?:$/.test(url?.protocol ?? "")
       ) {
-        return { type: "git", name, saveSpec: spec };
+        // Its password hidden, as a hosted one's.
+        const saveSpec = spec.replace(/^([^:/?#]+:\/\/[^/?#@:]*:)[^/?#]+@/, "$1***@");
+        return { type: "git", name, saveSpec };
       }
       if (url?.protocol === "http:" || url?.protocol === "https:") return { type: "remote", name };
       return undefined;

@@ -689,6 +689,31 @@ describe("a spec's kind, as npm-package-arg reads it, and allow-git and the rest
     );
   });
 
+  // npm 11.19.1 prints the password there as it was given.
+  test("shows a refused git URL's password as npm's log redacts one", () => {
+    for (const [spec, saved] of [
+      [
+        "git+https://user:s3cret@github.com/user/repo.git#v1",
+        "git+https://user:***@github.com/user/repo.git#v1",
+      ],
+      [
+        "name@https://user:s3cret@github.com/user/repo",
+        "name@git+https://user:***@github.com/user/repo.git",
+      ],
+      ["git+https://user:s3cret@example.test/x/y.git", "git+https://user:***@example.test/x/y.git"],
+      ["git+ssh://user:s3cret@example.test:x/y.git", "git+ssh://user:***@example.test:x/y.git"],
+      ["git+https://tok3n@github.com/user/repo.git", "git+https://tok3n@github.com/user/repo.git"],
+    ]) {
+      expect(npx.refusal([spec], [{ "allow-git": "none" }], "/work", "/home/me")).toBe(
+        [
+          "code EALLOWGIT",
+          'Fetching packages of type "git" have been disabled',
+          `Refusing to fetch "${saved}"`,
+        ].join("\n"),
+      );
+    }
+  });
+
   test("never refuses a registry's package, an alias, or a spec npm can't read", () => {
     const none = {
       "allow-git": "none",
