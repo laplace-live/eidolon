@@ -94,6 +94,20 @@ function nameFrom(filename: string | null): string {
   return [...stem.trim()].slice(0, MAX_NAME).join("").trim();
 }
 
+/** `name`, or past the names `taken`, `name 2`, `name 3`…, cut to fit MAX_NAME characters. */
+function freeName(name: string, taken: ReadonlySet<string>): string {
+  const chars = [...name];
+  for (let n = 1; ; n++) {
+    const suffix = n === 1 ? "" : ` ${n}`;
+    const stem = chars
+      .slice(0, MAX_NAME - suffix.length)
+      .join("")
+      .trimEnd();
+    const named = `${stem}${suffix}`;
+    if (!taken.has(named)) return named;
+  }
+}
+
 /** model.json's fields besides `format` and `file`, at the top level, as this code writes them. */
 function isModelFields(value: Record<string, unknown>): boolean {
   return (
@@ -179,8 +193,8 @@ function save(persona: string, model: CharacterModel): void {
 }
 
 /**
- * Keeps `bytes`, a rig the runtime read as `inventory`, as a new model of hers under an id made
- * from `filename`, with no settings of its own.
+ * Keeps `bytes`, a rig the runtime read as `inventory`, as a new model of hers with no settings of
+ * its own, under an id and a name made from `filename`, the name numbered past her other models'.
  */
 export function importModel(
   persona: string,
@@ -189,10 +203,11 @@ export function importModel(
   inventory: ModelInventory,
 ): CharacterModel {
   const id = modelSlug(filename, new Set(namesIn(modelsDir(persona))));
+  const names = new Set(listModels(persona).map(({ name }) => name));
   const now = new Date().toISOString();
   const model: CharacterModel = {
     id,
-    name: nameFrom(filename) || id,
+    name: freeName(nameFrom(filename) || id, names),
     kind: "psd2live",
     size: bytes.byteLength,
     sha256: hash("sha256", bytes, "hex"),
