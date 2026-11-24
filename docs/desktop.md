@@ -1618,7 +1618,7 @@ Each step prints one line, made of the checks inside it:
 After the steps come the window watch's line and the kit's. The run's folder keeps
 `results/results.json`, with every check and each step's time, and `results/screenshots`; a pass
 removes them with the rest of the folder, unless `--keep` first copies them to
-`<run's folder>-results`. A run takes about 90 s: about 50 of them the wait for the task's notices,
+`<run's folder>-results`. A run takes about 80 s: 40 to 50 of them the wait for the task's notices,
 and about 12 the desktop companion's step. With `--headful`, the checks that only background mode
 makes true (off screen, never audible, main.log's background lines, the folder dialog's line and the
 notices: the unpackaged app shows none) are skipped, the desktop companion's step is off, since she
