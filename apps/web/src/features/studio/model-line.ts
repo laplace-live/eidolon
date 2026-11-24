@@ -2,7 +2,12 @@
 // the SDK's direction, with a made-up mouth in place of her voice, so nothing is billed.
 import { parseMarkup } from "@laplace.live/eidolon-sdk";
 import {
+  type AvatarStage,
   type DirectionEvent,
+  type DirectionState,
+  direct,
+  directionOf,
+  directionState,
   type MoodTag,
   moodTags,
   soundCueEffect,
@@ -62,6 +67,18 @@ export function lineEvents(
       { type: "bot-stopped-speaking", at: done },
     ],
   };
+}
+
+const lines = new WeakMap<AvatarStage, DirectionState>();
+
+/**
+ * Directs `stage` by events of a line tried on it, going on from the lines tried before: a stage
+ * plays a gesture only for a seq it hasn't played, which a line's `reset` keeps counting.
+ */
+export function directLine(stage: AvatarStage, events: readonly DirectionEvent[]): void {
+  const state = events.reduce(direct, lines.get(stage) ?? directionState());
+  lines.set(stage, state);
+  stage.direct(directionOf(state));
 }
 
 /** A syllable's opening, varied so a line doesn't read as a metronome; never quite shut or wide. */
