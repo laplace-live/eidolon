@@ -624,11 +624,11 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     column, named as the dock is: her model bust-up, or a tile per persona on a group call, the
     speaker's lit and moving her mouth, her picture for anyone without one; her name and the timer
     on top; a caption of the last thing said, dimmed once said, on or off as `localStorage`'s
-    `eidolon.call.captions` remembers; her latest photo; **Mute**, **Captions**, **Shrink** and
-    **Hang Up**; and the call's notices, the mic's pill and the waiting bar. The log under it is
-    inert. **Shrink** docks the call, and a call that ends docks as one without a model does. A
-    model that fails to load shows her picture, and the call goes on; when no one's model draws,
-    the call shows as one without a model.
+    `eidolon.call.captions` remembers; her latest photo; the mic's mute toggle, **Captions**,
+    **Shrink** and **Hang Up**; and the call's notices, the mic's pill and the waiting bar. The log
+    under it is inert. **Shrink** docks the call, and a call that ends docks as one without a model
+    does. A model that fails to load shows her picture, and the call goes on; when no one's model
+    draws, the call shows as one without a model.
   - **A group call** is answered as it connects, since no one greets on one: its state line never
     waits for an answer, and until the viewer speaks the log says everyone can hear them.
   - **The composer** waits, disabled and reading **In a call**, keeping any draft; Stop and the
@@ -665,8 +665,9 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     during a call; Home's links into setup wait too, since setup sits outside the app's frame and
     opening it ends the call. Studio's Appearance says its changes show from her next call.
   - `/call` stays the standalone call to the active persona, with no chat. With her model, it shows
-    the same screen under its header, with **Type a Message** and **Transcript**, which opens its
-    transcript beside the call, or below it on a phone.
+    the call's screen under its header, with the mic's mute toggle, **Type a Message**,
+    **Captions**, **Transcript** and **Hang Up**; **Transcript** opens its transcript beside the
+    call, or below it on a phone.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Tasks
@@ -1096,12 +1097,12 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   - the Tasks list showing the first done and the second stopped, with no button or field, the
     first's row opening the chat with the card in view, in focus its card alone, until `/normal`
     brings every card back;
-  - a call in that chat, the test rig made her active model, so it opens on the video screen,
-    whose greeting holds none of the status blocks the chat stored, and no task tool; a line its
-    fake hearing hears (`say`), and her `start_task` for it, with the hint, her next round reading
-    the started result, and her call and its result stored in the chat under the call's id,
-    between the call's lines; the card, and the waiting bar inside the video screen, asking to
-    start it; **Allow Once** on the bar there, then her pointer to the card at the path question,
+  - a call in that chat, whose greeting holds none of the status blocks the chat stored, and no task
+    tool, opening on the video screen since the walk makes the test rig her active model first; a
+    line its fake hearing hears (`say`), and her `start_task` for it, with the hint, her next round
+    reading the started result, and her call and its result stored in the chat under the call's id,
+    between the call's lines; the card, and the waiting bar inside the video screen, asking to start
+    it; **Allow Once** on the bar there, then her pointer to the card at the path question,
     answering the waiting nudge with no task tool and a block ending on the line for no tools;
     **Show Task** on the bar, docking the call with the card in focus and the bar above the dock;
     **Allow Once** again, then her word on the end on the call, answering the ended nudge
