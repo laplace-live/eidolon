@@ -193,12 +193,13 @@ describe("CallStages", () => {
     tap.source = null;
     signals.notify();
     expect(stage.directed.length).toBe(directed + 1);
+    expect(stage.directed.at(-1)?.persona).toBeNull();
     expect(tap.source).toBe(signals.meter);
     expect(stages[0]?.directed.length).toBe(1);
   });
 
-  test("gives the mouth only to the stage of whoever speaks on a group call", async () => {
-    const { parts } = fakeParts();
+  test("steers each stage on a group call by its member, and gives the mouth only to whoever speaks", async () => {
+    const { parts, stages } = fakeParts();
     const signals = fakeSignals();
     const cast = new CallStages(signals, parts);
     const { how, pending } = loads();
@@ -211,6 +212,7 @@ describe("CallStages", () => {
 
     signals.speaking.add("hazel");
     signals.notify();
+    expect(stages.map((stage) => stage.directed.at(-1)?.persona)).toEqual(["milky-green", "hazel"]);
     expect(taps()).toEqual([null, signals.meter]);
     signals.speaking.delete("hazel");
     signals.speaking.add("milky-green");
