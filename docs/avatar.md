@@ -218,9 +218,11 @@ and ends lent moods. The stage applies the direction each frame:
 ## Moods
 
 `moodTags(direction)` reads a direction into at most two mood tags: each family below matches by its
-Chinese keywords anywhere in the direction and its English ones as whole words, whatever their
-case, and a direction keeps the first two families it matches, in this order. A mood shows its
-default expressions, the standard ids PSD2Live gives a generated rig:
+Chinese keywords anywhere in the direction except right after a negation, and its English ones as
+whole words, whatever their case, and a direction keeps the first two families it matches, in this
+order. A negation is 不, 不是, 没, 没有 or 别, never the 别 of 特别, softened or not by 太, 大, 很,
+怎么, 那么, 这么, 特别 or 再: 不开心 and 不太高兴 are never happy, and 一点都不害羞 never shy. A mood
+shows its default expressions, the standard ids PSD2Live gives a generated rig:
 
 | Mood | Chinese, anywhere | English, whole words | Shows |
 | --- | --- | --- | --- |
