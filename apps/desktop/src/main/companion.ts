@@ -269,8 +269,8 @@ export function companionWindowSetup(
   };
 }
 
-/** An owner's name for a menu item: one line, no control, format or separator characters, clipped, `&` doubled on Windows. */
-export function menuLabel(name: string, platform: NodeJS.Platform): string {
+/** An owner's name for a menu item: one line, no control, format or separator characters, clipped, `&` doubled. */
+export function menuLabel(name: string): string {
   const line = name
     .replace(/[\p{Cc}\p{Cf}\u2028\u2029]/gu, " ")
     .replace(/\s+/g, " ")
@@ -278,8 +278,9 @@ export function menuLabel(name: string, platform: NodeJS.Platform): string {
   const chars = [...line];
   const clipped =
     chars.length > LABEL_CHARS ? `${chars.slice(0, LABEL_CHARS).join("").trimEnd()}…` : line;
-  // A Windows menu reads one & as its access key.
-  const label = platform === "win32" ? clipped.replaceAll("&", "&&") : clipped;
+  // Windows' menus read one & as an access key, and Electron's macOS ones drop it as Chromium's
+  // FixUpWindowsStyleLabel does; both show && as one.
+  const label = clipped.replaceAll("&", "&&");
   return label === "" ? "—" : label;
 }
 

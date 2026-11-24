@@ -241,7 +241,6 @@ export function companionMenu(
   { label }: Strings,
   state: CompanionMenuState,
   own: CompanionMenuOwn,
-  platform: NodeJS.Platform,
   pick: (pick: CompanionPick) => void,
 ): MenuItemConstructorOptions[] {
   const item = (
@@ -261,7 +260,7 @@ export function companionMenu(
     looks.push({
       label: label.appearance,
       submenu: state.models.map((model) =>
-        radio(menuLabel(model.name, platform), `model:${model.id}`, model.id === state.model),
+        radio(menuLabel(model.name), `model:${model.id}`, model.id === state.model),
       ),
     });
   }
@@ -271,11 +270,7 @@ export function companionMenu(
       submenu: [
         radio(label.asExported, "outfit:", state.outfit === null),
         ...state.outfits.map((outfit) =>
-          radio(
-            menuLabel(outfit.name, platform),
-            `outfit:${outfit.id}`,
-            outfit.id === state.outfit,
-          ),
+          radio(menuLabel(outfit.name), `outfit:${outfit.id}`, outfit.id === state.outfit),
         ),
       ],
     });

@@ -293,9 +293,9 @@ describe("her menu", () => {
   const own = { size: "medium", alwaysOnTop: true } as const;
 
   /** Her menu, with the picks its clicks hand on. */
-  function menu(state: CompanionMenuState, platform: NodeJS.Platform = "darwin") {
+  function menu(state: CompanionMenuState) {
     const picks: CompanionPick[] = [];
-    const items = companionMenu(en, state, own, platform, (pick) => picks.push(pick));
+    const items = companionMenu(en, state, own, (pick) => picks.push(pick));
     return { items, picks };
   }
 
@@ -341,20 +341,14 @@ describe("her menu", () => {
       { type: "radio", label: "Large", checked: false },
     ]);
     expect(find(items, "Always on Top")).toMatchObject({ type: "checkbox", checked: true });
-    const unchecked = companionMenu(
-      en,
-      idle,
-      { size: "large", alwaysOnTop: false },
-      "darwin",
-      () => {},
-    );
+    const unchecked = companionMenu(en, idle, { size: "large", alwaysOnTop: false }, () => {});
     expect(find(unchecked, "Always on Top")).toMatchObject({ checked: false });
     expect(itemsOf(find(unchecked, "Size")).map((item) => item.checked)).toEqual([
       false,
       false,
       true,
     ]);
-    expect(outline(companionMenu(zh, idle, own, "darwin", () => {})).slice(0, 3)).toEqual([
+    expect(outline(companionMenu(zh, idle, own, () => {})).slice(0, 3)).toEqual([
       "通话",
       "-",
       "打开 Eidolon",
@@ -418,10 +412,9 @@ describe("her menu", () => {
     ]);
   });
 
-  test("a model named A & B reads A && B on Windows, whose menus take one & as an access key", () => {
+  test("a model named A & B reads A && B, which every platform's menu shows as A & B", () => {
     const named = { ...idle, models: [{ id: "ab", name: "A & B" }], model: "ab" };
-    expect(itemsOf(find(menu(named, "win32").items, "Appearance"))[0]?.label).toBe("A && B");
-    expect(itemsOf(find(menu(named, "darwin").items, "Appearance"))[0]?.label).toBe("A & B");
+    expect(itemsOf(find(menu(named).items, "Appearance"))[0]?.label).toBe("A && B");
   });
 
   test("every item hands its pick, and only its own", () => {

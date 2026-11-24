@@ -84,7 +84,6 @@ export interface CompanionIo {
 export interface CompanionFlowOptions {
   readonly settings: CompanionSettings;
   readonly background: boolean;
-  readonly platform: NodeJS.Platform;
   /** This launch is the login item's. */
   readonly atLogin: boolean;
   readonly strings: () => Strings;
@@ -93,7 +92,6 @@ export interface CompanionFlowOptions {
 export class Companion {
   readonly #io: CompanionIo;
   readonly #background: boolean;
-  readonly #platform: NodeJS.Platform;
   readonly #atLogin: boolean;
   readonly #strings: () => Strings;
   #settings: CompanionSettings;
@@ -136,7 +134,6 @@ export class Companion {
     this.#io = io;
     this.#settings = options.settings;
     this.#background = options.background;
-    this.#platform = options.platform;
     this.#atLogin = options.atLogin;
     this.#strings = options.strings;
   }
@@ -256,7 +253,7 @@ export class Companion {
     let picked = null as CompanionPick | null;
     try {
       const own = { size: this.#settings.size, alwaysOnTop: this.#settings.alwaysOnTop };
-      const items = companionMenu(this.#strings(), state, own, this.#platform, (pick) => {
+      const items = companionMenu(this.#strings(), state, own, (pick) => {
         picked = pick;
       });
       await this.#io.popup(items);

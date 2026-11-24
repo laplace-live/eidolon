@@ -401,7 +401,6 @@ function run(): void {
       const companionFlow = new Companion(herWindow, {
         settings: readCompanion(join(app.getPath("userData"), COMPANION_FILE)),
         background,
-        platform: process.platform,
         atLogin,
         strings,
       });

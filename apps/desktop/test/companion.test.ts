@@ -290,27 +290,27 @@ describe("her window's options", () => {
 
 describe("menuLabel", () => {
   test("an owner's name reads as one clean line", () => {
-    expect(menuLabel("Milky\tGreen\u202e\n v2", "darwin")).toBe("Milky Green v2");
-    expect(menuLabel(" 奶绿\u2028夏装\u2029 ", "darwin")).toBe("奶绿 夏装");
+    expect(menuLabel("Milky\tGreen\u202e\n v2")).toBe("Milky Green v2");
+    expect(menuLabel(" 奶绿\u2028夏装\u2029 ")).toBe("奶绿 夏装");
   });
 
   test("clipped to LABEL_CHARS characters with an ellipsis", () => {
     const name = "a".repeat(50);
     expect(LABEL_CHARS).toBe(40);
-    expect(menuLabel(name, "darwin")).toBe(`${"a".repeat(40)}…`);
-    expect(menuLabel("a".repeat(40), "darwin")).toBe("a".repeat(40));
-    expect([...menuLabel("绿".repeat(45), "darwin")]).toHaveLength(41);
+    expect(menuLabel(name)).toBe(`${"a".repeat(40)}…`);
+    expect(menuLabel("a".repeat(40))).toBe("a".repeat(40));
+    expect([...menuLabel("绿".repeat(45))]).toHaveLength(41);
   });
 
-  test("& doubled on Windows alone, whose menus read one as an access key", () => {
-    expect(menuLabel("A & B", "win32")).toBe("A && B");
-    expect(menuLabel("A & B", "darwin")).toBe("A & B");
+  test("& doubled, which Windows' menus and Electron's macOS ones both show as one", () => {
+    expect(menuLabel("A & B")).toBe("A && B");
+    expect(menuLabel("A && B")).toBe("A &&&& B");
   });
 
   test("a name with nothing to show reads as a dash", () => {
-    expect(menuLabel("\u200b", "darwin")).toBe("—");
-    expect(menuLabel("", "win32")).toBe("—");
-    expect(menuLabel(" \t ", "darwin")).toBe("—");
+    expect(menuLabel("\u200b")).toBe("—");
+    expect(menuLabel("")).toBe("—");
+    expect(menuLabel(" \t ")).toBe("—");
   });
 });
 

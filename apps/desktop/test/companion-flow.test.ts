@@ -50,10 +50,10 @@ function flat(items: readonly MenuItemConstructorOptions[]): MenuItemConstructor
   ]);
 }
 
-/** A companion on a fake io, with `settings` over the defaults, outside background mode on macOS. */
+/** A companion on a fake io, with `settings` over the defaults, outside background mode. */
 function companion(
   settings: Partial<CompanionSettings> = {},
-  options: Partial<Pick<CompanionFlowOptions, "background" | "platform" | "atLogin">> = {},
+  options: Partial<Pick<CompanionFlowOptions, "background" | "atLogin">> = {},
 ) {
   const calls: unknown[][] = [];
   const lines: string[] = [];
@@ -123,7 +123,6 @@ function companion(
   const flow = new Companion(io, {
     settings: { ...DEFAULT_COMPANION, ...settings },
     background: false,
-    platform: "darwin",
     atLogin: false,
     strings: () => STRINGS.en,
     ...options,
@@ -171,7 +170,7 @@ type Fake = ReturnType<typeof companion>;
 /** She is on, her page drew her and she shows. */
 function shownCompanion(
   settings: Partial<CompanionSettings> = {},
-  options: Partial<Pick<CompanionFlowOptions, "background" | "platform" | "atLogin">> = {},
+  options: Partial<Pick<CompanionFlowOptions, "background" | "atLogin">> = {},
 ): Fake {
   const fake = companion({ on: true, ...settings }, options);
   fake.flow.appPage();

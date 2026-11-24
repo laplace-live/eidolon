@@ -516,7 +516,8 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   once it is live; **Open Eidolon**; **Appearance**, her models as radio items, whenever she has
   any, her picture's included; **Outfit**, the active model's outfits, **As Exported** first;
   **Size**; **Always on Top**; and **Hide**, a separator between groups. A model's or an outfit's
-  name shows as one line of at most 40 characters, `&` doubled on Windows. Main acts on each pick
+  name shows as one line of at most 40 characters, `&` doubled, which every platform's menu shows
+  as one. Main acts on each pick
   100 ms after the menu closes, so a click Electron delivers after the close still counts: Open
   Eidolon brings the main window forward; Size reshapes her on her feet; Always on Top flips her
   floating; Hide turns her off, the same switch as Settings', and, turned off while a call of hers
