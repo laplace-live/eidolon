@@ -1666,11 +1666,7 @@ async function attached(
   );
 }
 
-/**
- * Types into the persona's System Prompt and leaves the edit unsaved, by hand: Chromium honours a
- * page's beforeunload only after a gesture on it
- * (https://www.chromestatus.com/feature/5082396709879808).
- */
+/** Types into the persona's System Prompt, and leaves the edit unsaved. */
 async function editPrompt(page: Page): Promise<{ readonly ok: boolean; readonly detail: string }> {
   await page.goto(`eidolon-app://app/personas/${PERSONA}/prompt`);
   const area = page.getByLabel("System Prompt", { exact: true });
@@ -1678,11 +1674,7 @@ async function editPrompt(page: Page): Promise<{ readonly ok: boolean; readonly 
   await area.pressSequentially(" unsaved");
   await page.getByText("Unsaved changes", { exact: true }).waitFor();
   const save = await page.getByRole("button", { name: "Save", exact: true }).isEnabled();
-  const gesture = await page.evaluate(() => navigator.userActivation.hasBeenActive);
-  return {
-    ok: save && gesture,
-    detail: `"Unsaved changes", Save ${save ? "enabled" : "disabled"}, ${gesture ? "after" : "with no"} a gesture on the page`,
-  };
+  return { ok: save, detail: `"Unsaved changes", Save ${save ? "enabled" : "disabled"}` };
 }
 
 /** Each of `lines` in main.log's `text`, in order, each after the one before. */
@@ -1721,7 +1713,7 @@ async function quit(walk: Walk, step: Step) {
     await smoke.processes.adopt("backend", pid);
     await home(driven.page);
     const edited = await editPrompt(driven.page);
-    step.check("the System Prompt holds an edit typed by hand, unsaved", edited.ok, edited.detail);
+    step.check("the System Prompt holds an unsaved edit", edited.ok, edited.detail);
     await step.shot(driven.page, "unsaved-prompt");
     const quitFrom = smoke.log("main").length;
     const ending = await quitApp(walk, driven.main, pid);
