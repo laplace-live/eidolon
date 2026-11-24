@@ -34,23 +34,28 @@ async function compile(bytes: BufferSource): Promise<WebAssembly.Module> {
 }
 
 async function fetchRuntime(url: string): Promise<WebAssembly.Module> {
+  const unfetched = (error: unknown) =>
+    new AvatarError("runtime", `PSD2Live's runtime could not be fetched: ${messageOf(error)}`, {
+      cause: error,
+    });
   let response: Response;
   try {
     response = await fetch(url);
   } catch (error) {
-    throw new AvatarError(
-      "runtime",
-      `PSD2Live's runtime could not be fetched: ${messageOf(error)}`,
-      {
-        cause: error,
-      },
-    );
+    throw unfetched(error);
   }
   if (!response.ok) {
     throw new AvatarError("runtime", `PSD2Live's runtime could not be fetched: ${response.status}`);
   }
-  // compileStreaming needs application/wasm, which not every server sends.
-  return compile(await response.arrayBuffer());
+  let bytes: ArrayBuffer;
+  try {
+    // compileStreaming needs application/wasm, which not every server sends.
+    bytes = await response.arrayBuffer();
+  } catch (error) {
+    // fetch resolves at the headers; the body can still break off.
+    throw unfetched(error);
+  }
+  return compile(bytes);
 }
 
 /** The runtime's module: the vendored one unless given, fetched and compiled once per URL. */

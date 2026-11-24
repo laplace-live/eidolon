@@ -241,7 +241,7 @@ call's turns. The local app's Studio previews a persona's models with it.
   Vite and webpack 5 resolve and ship. A host can pass a URL, the bytes or a compiled
   `WebAssembly.Module` instead; Node's `fetch` refuses `file:` URLs, so code on Node passes bytes.
 - **One instance per model.** Each model gets a runtime instance of its own, so a trap ends only
-  that model. An instance whose ABI isn't 1.x at 1.2 or later is refused (`AvatarError` `runtime`).
+  that model. An instance whose ABI isn't 1.2 or a later 1.x is refused (`AvatarError` `runtime`).
 - **The page's CSP** must allow `'wasm-unsafe-eval'` in `script-src`, which permits compiling
   WebAssembly and nothing else; without it the load fails as `runtime`. The page runs no
   JavaScript that came with a model.
@@ -264,7 +264,8 @@ call's turns. The local app's Studio previews a persona's models with it.
   player's `-1` stopped the clip or faded every expression out.
 - **A clip played once above layer 0 stops as it ends** and fades out, so the layers below show
   through again: the runtime holds a finished one-shot at its last frame, which would freeze her
-  idle under every nod. With `loop`, a clip that ends by itself starts again instead.
+  idle under every nod. A clip authored to loop, which never ends by itself, stops after one
+  pass. With `loop`, a clip that ends by itself starts again instead.
 - **`resolveSetup(inventory, overrides?)`** turns a model's owner's choices into what the stage
   plays: each mood's expressions (the owner's, else `DEFAULT_MOOD_EXPRESSIONS`, kept to the ids the
   rig has, at most two) and each gesture's clip (`idle`, `talk`, `nod`, `shake`: the owner's clip,
@@ -280,9 +281,9 @@ call's turns. The local app's Studio previews a persona's models with it.
 loop; the model has none of its own.
 
 - **`show(model, setup)`** disposes the model shown before; the same model shown again takes the new
-  setup in place, without starting over a clip the setup didn't change. `frame(box)` frames a
-  region of the rig's canvas, filling the element whatever its size; until it is called the stage
-  shows the whole canvas.
+  setup in place, without starting over a clip the setup didn't change, and stops one it took
+  away. `frame(box)` frames a region of the rig's canvas, filling the element whatever its size;
+  until it is called the stage shows the whole canvas.
 - **The loop** runs on animation frames (`clock`, which tests replace), at `fps` at most when it is
   above 0, stepping at most 0.1 s a frame. It pauses while the page is hidden, while an
   IntersectionObserver says the canvas is off screen, and after `pause()`. The device pixel ratio
@@ -332,8 +333,9 @@ thinking, where she looks, the latest gesture). Both are plain data, so they cro
 
 `moodTags(direction)` reads a direction such as `懒洋洋的，带点笑意` into at most two of
 `MOOD_TAGS` (happy, gentle, lazy, pout, wry, shy, sad, angry, surprised, thinking, gloom), in a
-fixed precedence: Chinese keywords match anywhere, except `哭` inside `哭笑不得` and `困` inside
-`困惑`, `困扰` and `困难`, and English ones as whole words. `DEFAULT_MOOD_EXPRESSIONS` maps each to
+fixed precedence: Chinese keywords match anywhere, except `哭` inside `哭笑不得`, `困` inside
+`困惑`, `困扰` and `困难`, and a keyword right after a negation (`不开心`, `没有生气`, `不太高兴`),
+and English ones as whole words. `DEFAULT_MOOD_EXPRESSIONS` maps each to
 the standard expression ids PSD2Live gives a generated rig (`smile`, `sleepy`, `angry`, `sad`,
 `shy`, `surprised`, `gloom`); lazy and happy together show sleepy and smile. `soundCueEffect(name)`
 decides every cue in `CUE_EMOJI`.

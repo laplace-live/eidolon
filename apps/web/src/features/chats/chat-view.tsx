@@ -12,7 +12,7 @@ import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRoundIcon, MessageSquareOffIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
@@ -22,8 +22,10 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
+import { useCallPresence, useShellCall } from "@/features/call/call-context";
 import { MicPill } from "@/features/call/call-controls";
-import { useCall } from "@/features/call/use-call";
+import { chatCallView, chatTarget, hostOf } from "@/features/call/target";
+import { VideoCall } from "@/features/call/video-call";
 import { nameableSkills, skillsQuery } from "@/features/settings/skills";
 import { chatTasksQuery } from "@/features/tasks/queries";
 import { stopChoice } from "@/features/tasks/state";
@@ -129,27 +131,23 @@ export function ChatView({ id }: { readonly id: string }) {
   const lang = useLang();
   const queryClient = useQueryClient();
   const chat = useQuery(chatQuery(id));
-  const { data: status, refetch: refetchStatus } = useQuery(statusQuery);
+  const { data: status } = useQuery(statusQuery);
   const personaOf = usePersonaOf();
-  const call = useCall();
-  // Whom the docked call is with, her alone or everyone: set by Call, cleared by closing the dock.
-  const [callee, setCallee] = useState<{
-    readonly persona: ParticipantId;
-    readonly group: boolean;
-    /** The server's id for it, once it is up. */
-    readonly call?: string;
-  } | null>(null);
-  const { phase } = call;
-  const calling = phase.name !== "idle" && phase.name !== "ended";
   // The server's word on a call in the chat, which another tab may hold.
   const serverCall = useMemo(
     () => (chat.data === undefined ? null : callOn(chat.data)),
     [chat.data],
   );
+  const presence = useCallPresence();
+  const { target, setLayout } = presence;
+  const view = chatCallView(presence, id);
+  // This tab knows of its own call before the server's answer says so.
+  const inCall = view.calling || serverCall !== null;
   const events = chat.data?.events;
   const tasks = useChatTasks(id, events ?? NO_EVENTS);
-  // Another tab's call is followed too, so its lines show and its end frees the composer.
-  const turns = useChat(id, calling || serverCall !== null, tasks.awaitingReport);
+  // Another tab's call is followed too, so its lines show and its end frees the composer. During
+  // any call in the tab, or the chat's in another tab, her voice messages keep quiet.
+  const turns = useChat(id, inCall, tasks.awaitingReport, presence.up || serverCall !== null);
   const draftFiles = useDraftFiles(id);
   const [recordable] = useState(canRecord);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -211,10 +209,11 @@ export function ChatView({ id }: { readonly id: string }) {
     [summary, personaOf],
   );
   const next = useMemo(() => nextUp(events ?? []), [events]);
-  // This page's call shows as it is said, until the log has all of it.
+  // The tab's call in this chat shows as it is said, until the log has all of it.
+  const held = view.mine ? presence.serverCall : null;
   const callFrom = useMemo(
-    () => (callee?.call === undefined ? null : ongoingCall(events ?? [], callee.call)),
-    [events, callee],
+    () => (held === null ? null : ongoingCall(events ?? [], held)),
+    [events, held],
   );
   const chainLimit = useMemo(() => chainLimitOf(events ?? []), [events]);
   const replyMode = useMemo(() => replyModeOf(events ?? []), [events]);
@@ -225,31 +224,14 @@ export function ChatView({ id }: { readonly id: string }) {
   // A disabled query still answers from the cache that Settings fills.
   const skills = named ? (nameable.data ?? []) : [];
 
-  // While this page's call is up, the chat holds no other: the call a read made then says it holds
-  // is this page's. Neither the offer's answer nor the page's clock names it, and the cached log may
-  // still name a call a killed server never ended.
-  const up = phase.name === "live";
-  const refetchChat = chat.refetch;
+  // A task to show docks the call as it is asked for, once: the log under the screen takes no
+  // focus, so its card can't, and Expand keeps the screen though a link names no card here.
+  const asked = useRef<string | null>(null);
   useEffect(() => {
-    if (!up) return;
-    let current = true;
-    void refetchChat().then((read) => {
-      const held = read.status === "success" ? callOn(read.data) : null;
-      if (!current || held === null) return;
-      setCallee((placed) =>
-        placed === null || placed.call !== undefined ? placed : { ...placed, call: held.id },
-      );
-    });
-    return () => {
-      current = false;
-    };
-  }, [up, refetchChat]);
-
-  // Status then says whether the bot recorded a failure.
-  const ended = phase.name === "ended";
-  useEffect(() => {
-    if (ended) void refetchStatus();
-  }, [ended, refetchStatus]);
+    if (focus === asked.current) return;
+    asked.current = focus;
+    if (focus !== null && view.video) setLayout("dock");
+  }, [focus, view.video, setLayout]);
 
   if (chat.data === undefined || summary === null) {
     const state =
@@ -268,8 +250,6 @@ export function ChatView({ id }: { readonly id: string }) {
   const names = listOf(personas.map((persona) => persona.name));
   const now = Date.now();
   const menuName = chatName(title, who, createdAt, lang, now);
-  // This page knows of its own call before the server's answer says so.
-  const inCall = calling || serverCall !== null;
   const retry = turns.busy || inCall ? null : retryable;
   const placeholder =
     solo === null ? t`Message everyone` : t`Message ${ph({ name: shortNameOf(solo) })}`;
@@ -278,26 +258,20 @@ export function ChatView({ id }: { readonly id: string }) {
     : chat.data.hearingRefusal !== null
       ? "no-key"
       : "ready";
-  // Hanging up returns to the composer; a call that ended any other way stays to say why.
-  const docked =
-    callee !== null &&
-    phase.name !== "idle" &&
-    !(phase.name === "ended" && phase.end.kind === "hung-up");
-  const startCall = (persona: ParticipantId, group: boolean) => {
-    setCallee({ persona, group });
-    call.start({ chatId: id, persona, ...(group ? { group } : {}) });
-  };
+  const placeCall = (persona: ParticipantId, group: boolean) =>
+    presence.start(chatTarget(id, personaOf(persona), group ? personas : null));
   const liveCall: LiveCall | null =
-    callFrom === null || callee === null
+    callFrom === null || target?.kind !== "chat"
       ? null
-      : {
-          from: callFrom,
-          transcript: call.transcript,
-          wait: call.wait,
-          persona: callee.persona,
-          group: callee.group,
-          live: phase.name === "live",
-        };
+      : { from: callFrom, persona: hostOf(target).id, group: target.group };
+  const waiting =
+    tasks.bar === null ? undefined : (
+      <WaitingBar
+        task={tasks.bar.task}
+        others={tasks.bar.others}
+        onShow={() => setFocus(tasks.bar?.task.id ?? null)}
+      />
+    );
 
   // Read afresh: the chat's list polls only every few seconds, and only once her log holds a task.
   const askStop = async () => {
@@ -343,7 +317,8 @@ export function ChatView({ id }: { readonly id: string }) {
           personas={personas}
           groupCall={chat.data.groupCall}
           disabled={inCall}
-          onCall={startCall}
+          unavailable={view.elsewhere ? t`You're already in a call. Hang up first.` : null}
+          onCall={placeCall}
         />
         <ChatMenu id={id} name={menuName} onSettings={() => setSettingsOpen(true)} />
       </header>
@@ -364,26 +339,19 @@ export function ChatView({ id }: { readonly id: string }) {
           call={liveCall}
           onSend={turns.send}
           onSendVoice={turns.sendVoice}
-          focusTask={focus}
+          focusTask={view.video ? null : focus}
           onFocused={focused}
+          inert={view.video}
           footer={
             <>
-              <MicPill call={call} className="bottom-full mb-2" />
-              {tasks.bar !== null && (
-                <WaitingBar
-                  task={tasks.bar.task}
-                  others={tasks.bar.others}
-                  onShow={() => setFocus(tasks.bar?.task.id ?? null)}
-                />
-              )}
-              {docked && (
+              {view.docked && <DockPill />}
+              {!view.video && waiting}
+              {view.docked && (
                 <CallDock
-                  call={call}
-                  persona={personaOf(callee.persona)}
-                  group={callee.group ? personas : null}
                   status={status}
-                  onCallAgain={() => startCall(callee.persona, callee.group)}
-                  onClose={() => setCallee(null)}
+                  onCallAgain={() => {
+                    if (target?.kind === "chat") placeCall(hostOf(target).id, target.group);
+                  }}
                 />
               )}
               {turns.live.error !== null && (
@@ -400,6 +368,7 @@ export function ChatView({ id }: { readonly id: string }) {
                 busy={turns.busy}
                 mic={mic}
                 inCall={inCall}
+                callElsewhere={view.elsewhere}
                 files={draftFiles}
                 leading={
                   // Only a chat of hers alone starts tasks.
@@ -421,6 +390,15 @@ export function ChatView({ id }: { readonly id: string }) {
           }
         />
         <DropFiles disabled={inCall} onFiles={draftFiles.add} />
+        {view.video && (
+          <VideoCall
+            className="absolute inset-0 z-10"
+            status={status}
+            titled
+            waiting={waiting}
+            onShrink={() => setLayout("dock")}
+          />
+        )}
       </div>
       <ChatSettingsSheet
         id={id}
@@ -439,8 +417,11 @@ export function ChatView({ id }: { readonly id: string }) {
         tasks={stopping.tasks}
         onOpenChange={(open) => setStopping((current) => ({ ...current, open }))}
       />
-      {/* biome-ignore lint/a11y/useMediaCaption: a live MediaStream takes no track; the chat's log is its caption. */}
-      <audio ref={call.audioRef} autoPlay hidden />
     </>
   );
+}
+
+/** The mic's pill over the dock: it, not the page, renders again with each of the call's events. */
+function DockPill() {
+  return <MicPill call={useShellCall()} className="bottom-full mb-2" />;
 }

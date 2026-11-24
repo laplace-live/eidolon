@@ -364,6 +364,31 @@ describe("her direction", () => {
     ]);
   });
 
+  test("a clip the new setup takes away stops, even once she has stopped speaking", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, SETUP);
+    stage.direct(direction({ speaking: true }));
+    clock.frame(0);
+    model.play.mockClear();
+
+    stage.show(model, { ...SETUP, gestures: { ...SETUP.gestures, idle: null, talk: null } });
+    clock.frame(16);
+    expect(model.play.mock.calls).toEqual([
+      [null, 0, { loop: true }],
+      [null, 1, { loop: true }],
+    ]);
+
+    stage.show(model, SETUP);
+    clock.frame(32);
+    model.play.mockClear();
+    // Her talk clip changes as she stops speaking, before a frame plays the new one.
+    stage.show(model, resolveSetup(INVENTORY, { gestures: { talk: "shake-id" } }));
+    stage.direct(direction({ speaking: false }));
+    clock.frame(48);
+    expect(model.play.mock.calls).toEqual([[null, 1, { loop: true }]]);
+  });
+
   test("dresses each model shown in the outfit", () => {
     const stage = stageOf();
     const outfit = { poses: [{ group: 0, entry: 1 }], parameters: [], hiddenParts: [] };

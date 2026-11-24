@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { UnavailableButton } from "@/components/unavailable-button";
 import { CopyCommand } from "@/features/setup/copy-command";
 import { QDRANT_COMMAND } from "@/features/setup/wizard";
 import { call, type MemoryStatus, type Status } from "@/lib/api";
@@ -55,26 +56,42 @@ const VIEWS = {
 function QdrantHelp({
   view,
   retrying,
+  calling,
   onRetry,
 }: {
   readonly view: "off" | "down";
   readonly retrying: boolean;
+  /** A call is up in this tab: setup, which would end it, waits. */
+  readonly calling: boolean;
   readonly onRetry: () => void;
 }) {
   const { t } = useLingui();
+  const waits = t`Setup would end the call. Hang up first.`;
   return (
     <SectionCard
       note={t(VIEWS[view].note)}
       actions={
         view === "off" ? (
-          <Button asChild>
-            <Link to="/setup?step=memory">{t`Turn On Memory`}</Link>
-          </Button>
+          calling ? (
+            <UnavailableButton variant="default" reason={waits}>
+              {t`Turn On Memory`}
+            </UnavailableButton>
+          ) : (
+            <Button asChild>
+              <Link to="/setup?step=memory">{t`Turn On Memory`}</Link>
+            </Button>
+          )
         ) : (
           <>
-            <Button variant="outline" asChild>
-              <Link to="/setup?step=memory">{t`Check the Address`}</Link>
-            </Button>
+            {calling ? (
+              <UnavailableButton variant="outline" reason={waits}>
+                {t`Check the Address`}
+              </UnavailableButton>
+            ) : (
+              <Button variant="outline" asChild>
+                <Link to="/setup?step=memory">{t`Check the Address`}</Link>
+              </Button>
+            )}
             <Button disabled={retrying} onClick={onRetry}>
               {retrying && <Spinner />}
               {t`Try Again`}
@@ -131,9 +148,12 @@ function ForgetButton({
 export function MemoryPanel({
   persona,
   memory,
+  calling,
 }: {
   readonly persona: Status["persona"];
   readonly memory: MemoryStatus;
+  /** A call is up in this tab: setup, which would end it, waits. */
+  readonly calling: boolean;
 }) {
   const { t } = useLingui();
   const lang = useLang();
@@ -184,7 +204,12 @@ export function MemoryPanel({
       }
     >
       {(view === "off" || view === "down") && (
-        <QdrantHelp view={view} retrying={list.isFetching} onRetry={() => void list.refetch()} />
+        <QdrantHelp
+          view={view}
+          retrying={list.isFetching}
+          calling={calling}
+          onRetry={() => void list.refetch()}
+        />
       )}
       {view === "loading" && (
         <div className="flex flex-col gap-3 rounded-xl border bg-card p-6">

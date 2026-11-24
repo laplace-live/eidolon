@@ -315,11 +315,14 @@ msgstr "{name} is now her active model."
 msgid "{name} is now the active persona."
 msgstr "{name} is now the active persona."
 
+#: src/features/call/call-bar.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/call-dock.tsx
 msgid "{name} is speaking"
 msgstr "{name} is speaking"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "{name} is thinking…"
 msgstr "{name} is thinking…"
@@ -527,10 +530,15 @@ msgstr "A budget this key falls under is used up."
 msgid "A call fills the screen it's on: try her on a wide one and on a phone's."
 msgstr "A call fills the screen it's on: try her on a wide one and on a phone's."
 
+#: src/components/persona-switcher.tsx
 #: src/features/home/route.tsx
+#: src/features/setup/new-persona.tsx
+#: src/features/studio/route.tsx
 msgid "A call is in progress: switch personas after it ends."
 msgstr "A call is in progress: switch personas after it ends."
 
+#: src/features/settings/restart-button.tsx
+#: src/features/studio/model-list.tsx
 #: src/lib/labels.ts
 msgid "A call is in progress. Hang up first."
 msgstr "A call is in progress. Hang up first."
@@ -546,6 +554,10 @@ msgstr "A call needs a voice. Pick one for her first."
 #: src/features/studio/voice-section.tsx
 msgid "A call needs one: pick her voice below."
 msgstr "A call needs one: pick her voice below."
+
+#: src/features/studio/appearance-section.tsx
+msgid "A call with {name} is in progress: changes here show from her next call."
+msgstr "A call with {name} is in progress: changes here show from her next call."
 
 #: src/features/setup/persona-step.tsx
 msgid "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
@@ -634,6 +646,7 @@ msgid "A review on the task's model lets routine actions through and asks you ab
 msgstr "A review on the task's model lets routine actions through and asks you about the rest. Each review bills the task."
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 msgid "A selfie from {name}"
 msgstr "A selfie from {name}"
 
@@ -1306,6 +1319,7 @@ msgstr "Call ended · {duration}"
 msgid "Call her"
 msgstr "Call her"
 
+#: src/features/call/video-call.tsx
 #: src/features/chats/call-dock.tsx
 #: src/features/chats/call-line.ts
 msgid "Call with {name}"
@@ -1396,6 +1410,10 @@ msgstr "Cancelled"
 #: src/features/jobs/labels.ts
 msgid "Cancelled."
 msgstr "Cancelled."
+
+#: src/features/call/video-call.tsx
+msgid "Captions"
+msgstr "Captions"
 
 #: src/features/studio/videos-section.tsx
 msgid "Change"
@@ -1565,6 +1583,7 @@ msgstr "Clips"
 
 #: src/components/ui/dialog.tsx
 #: src/components/ui/sheet.tsx
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Close"
@@ -2189,10 +2208,13 @@ msgstr "Every persona's memories of you live in Qdrant, and each change to them 
 msgid "Every video is downloaded."
 msgstr "Every video is downloaded."
 
+#: src/features/call/call-bar.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/call-dock.tsx
 msgid "Everyone"
 msgstr "Everyone"
 
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Everyone can hear you. Say something to start."
 msgstr "Everyone can hear you. Say something to start."
@@ -2200,6 +2222,10 @@ msgstr "Everyone can hear you. Say something to start."
 #: src/features/settings/route.tsx
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "Everything the other sections don't show. Most installs never change these."
+
+#: src/features/chats/call-dock.tsx
+msgid "Expand"
+msgstr "Expand"
 
 #: src/components/app-sidebar.tsx
 msgid "Expand Sidebar"
@@ -2496,6 +2522,10 @@ msgstr "Group ID"
 #: src/features/call/call-controls.tsx
 msgid "Hang Up"
 msgstr "Hang Up"
+
+#: src/features/call/call-page.tsx
+msgid "Hang up the call in your chat to call {name} here."
+msgstr "Hang up the call in your chat to call {name} here."
 
 #: src/features/call/call-state.tsx
 msgid "Hanging up…"
@@ -3992,6 +4022,10 @@ msgstr "One of her providers reported a problem. Check its key and credit in Set
 msgid "One per line, relative to her folder."
 msgstr "One per line, relative to her folder."
 
+#: src/features/call/call-bar.tsx
+msgid "Ongoing Call"
+msgstr "Ongoing Call"
+
 #: src/features/home/readiness-labels.ts
 msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
 msgstr "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
@@ -4798,6 +4832,10 @@ msgstr "Retrieval Gate Provider"
 msgid "Retry"
 msgstr "Retry"
 
+#: src/features/call/call-bar.tsx
+msgid "Return to Call"
+msgstr "Return to Call"
+
 #: src/features/studio/text-editor.tsx
 msgid "Revert"
 msgstr "Revert"
@@ -5124,6 +5162,11 @@ msgstr "Setup"
 msgid "Setup Steps"
 msgstr "Setup Steps"
 
+#: src/features/home/memory-panel.tsx
+#: src/features/home/readiness-list.tsx
+msgid "Setup would end the call. Hang up first."
+msgstr "Setup would end the call. Hang up first."
+
 #: src/features/usage/tables.tsx
 msgid "Share"
 msgstr "Share"
@@ -5293,6 +5336,10 @@ msgstr "Show Transcript"
 #: src/components/settings-form/field.tsx
 msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
 msgstr "Shown only: set it in settings.yaml or with <0>{env}</0>."
+
+#: src/features/call/video-call.tsx
+msgid "Shrink"
+msgstr "Shrink"
 
 #: src/features/studio/appearance-labels.ts
 msgctxt "mood"
@@ -5513,6 +5560,7 @@ msgid "Steps, rules and examples, in Markdown"
 msgstr "Steps, rules and examples, in Markdown"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Still waiting for {name}. If nothing comes, say it again."
 msgstr "Still waiting for {name}. If nothing comes, say it again."
@@ -6463,6 +6511,10 @@ msgstr "Transcribing bills your Soniox account."
 msgid "Transcribing…"
 msgstr "Transcribing…"
 
+#: src/features/call/video-call.tsx
+msgid "Transcript"
+msgstr "Transcript"
+
 #: src/lib/labels.ts
 msgid "Transcript Refinement"
 msgstr "Transcript Refinement"
@@ -6558,6 +6610,10 @@ msgstr "Turns a video's audio into a transcript with Soniox."
 #: src/features/chats/composer.tsx
 msgid "Type /focus, /normal or /verbose to choose how much of her tasks this chat shows, or /stop to stop one."
 msgstr "Type /focus, /normal or /verbose to choose how much of her tasks this chat shows, or /stop to stop one."
+
+#: src/features/call/video-call.tsx
+msgid "Type a Message"
+msgstr "Type a Message"
 
 #: src/features/call/call-controls.tsx
 msgid "Type a message to {name}"
@@ -6821,6 +6877,7 @@ msgstr "Waiting"
 msgid "Waiting for {name} to answer…"
 msgstr "Waiting for {name} to answer…"
 
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Waiting for a reply…"
 msgstr "Waiting for a reply…"
@@ -7100,6 +7157,7 @@ msgid "You"
 msgstr "You"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 msgctxt "call transcript speaker"
 msgid "You"
 msgstr "You"
@@ -7124,6 +7182,15 @@ msgstr "You denied it when it asked to start."
 #: src/features/setup/done-step.tsx
 msgid "You're all set"
 msgstr "You're all set"
+
+#: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
+msgid "You're already in a call. Hang up first."
+msgstr "You're already in a call. Hang up first."
+
+#: src/features/call/call-page.tsx
+msgid "You're in a call"
+msgstr "You're in a call"
 
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"

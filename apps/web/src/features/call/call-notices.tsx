@@ -18,7 +18,7 @@ import { studioPath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 import type { MicProblem } from "./media";
 import { type CallEnd, sessionErrorSince } from "./phase";
-import type { Call } from "./use-call";
+import type { CallHandle } from "./use-call";
 
 interface Ending {
   readonly title: string;
@@ -186,13 +186,15 @@ export function CallNotices({
   status,
   name,
   persona = status.persona.id,
+  className,
 }: {
-  readonly call: Call;
+  readonly call: CallHandle;
   readonly status: Status;
   /** The persona's short name. */
   readonly name: string;
   /** Whom the call is with; status checks the active persona's voice alone. */
   readonly persona?: string;
+  readonly className?: string;
 }) {
   const { t } = useLingui();
   const { phase, botError } = call;
@@ -205,7 +207,12 @@ export function CallNotices({
 
   if (!end && !mic && !botError && !call.audioBlocked && voice?.ok !== false) return null;
   return (
-    <div className="flex flex-col gap-2 border-b px-4 py-3 *:mx-auto *:w-full *:max-w-3xl sm:px-6">
+    <div
+      className={cn(
+        "flex flex-col gap-2 border-b px-4 py-3 *:mx-auto *:w-full *:max-w-3xl sm:px-6",
+        className,
+      )}
+    >
       {end && <EndingNotice ending={end} />}
       {mic && <EndingNotice ending={mic} />}
       {call.audioBlocked && (

@@ -384,6 +384,12 @@ and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
   layout that sits side by side when wide, such as the studio's and Settings' sections, or a model
   beside its tabs in the studio's Appearance, goes by the width it is given, through a container
   query, not the window's, which the sidebar shares.
+- **The call bar,** **Ongoing Call**, sits at the foot of the page while a call is up and nothing
+  on the page shows it (`features/call/call-bar.tsx`): whom the call is with, her picture ringed
+  while she speaks, the call's state line and timer, its notices, the mic's toggle, **Hang Up** and
+  **Return to Call**. A call that ended on its own keeps its reason there, with **Return to Call**
+  and **Close**, until **Close**; one the viewer hung up leaves nothing. It shows her picture, never
+  her model, and is never a drag row.
 
 ## In the desktop app
 
@@ -413,14 +419,15 @@ has neither, and without them nothing below happens.
 **The chrome.** The window has no title bar. A row marked `data-window-drag` stands in for it: the
 window drags by the row, while its links, buttons and fields keep their clicks. The rows are the
 sidebar's first row (the logo), each page's header (a chat's, the call's, setup's), and the bar
-above a page without one, `MobileBar`. A browser shows that bar only below `md`, with the sidebar's
-button and the logo; the desktop app keeps it from `md` up too, empty, 3.5rem tall: the height of a
-chat's header, and the height the window's caption buttons on Windows should take. The page
-scrolls in a box of its own below it, not in the frame (`PageLayout` in
-`components/app-shell.tsx`), as setup's page does below its header, so no row is in what scrolls;
-the skip link focuses that box, which the keys then scroll. An error, the sign-in screen and the
-loading spinner get a strip of their own (`WindowDragStrip`). The rows keep clear of the window's
-buttons, whose place the Window Controls Overlay gives as `env(titlebar-area-*)`:
+above a page without one, `MobileBar`; the call bar, at a page's foot, is never one. A browser
+shows `MobileBar` only below `md`, with the sidebar's button and the logo; the desktop app keeps it
+from `md` up too, empty, 3.5rem tall: the height of a chat's header, and the height the window's
+caption buttons on Windows should take. The page scrolls in a box of its own below it, not in the
+frame (`PageLayout` in `components/app-shell.tsx`), as setup's page does below its header, so no
+row is in what scrolls; the skip link focuses that box, which the keys then scroll. An error, the
+sign-in screen and the loading spinner get a strip of their own (`WindowDragStrip`). The rows keep
+clear of the window's buttons, whose place the Window Controls Overlay gives as
+`env(titlebar-area-*)`:
 
 - **macOS:** the traffic lights sit at the top left. A page's row starts after them, measured from
   the window's edge: at the edge while the sidebar is a sheet, beside the 3rem rail when collapsed.
@@ -482,7 +489,8 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     lines in a centered column. With none open, `/chats` offers **New Chat**.
   - **The message box** floats at the foot of the column, with no bar behind it: the lines scroll
     under it and fade out above it, and the waiting bar, the call's dock and a reply that couldn't
-    start stack above it. Under the text is a row: the chat's permission picker
+    start stack above it, while a call with her model shows its screen over the column in the
+    dock's place. Under the text is a row: the chat's permission picker
     ([Tasks](#tasks)) or whom the line mentions, then **Stop** while a reply runs, and the
     microphone or **Send**. A press anywhere in the box off its buttons puts the caret in the text.
   - **New Chat**, in the sidebar or on `/chats`, ticks one to six personas, the active one listed
@@ -604,38 +612,62 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   keeps running when the tab closes.
 - **A call in the chat** ([chat.md](chat.md#calls)):
   - **Call** in the header calls her in a chat of one; in a group it opens **Who to Call**. She
-    needn't be the active persona. It is disabled while the chat is in a call, by this page's word
-    or by `ChatContents.call`.
+    needn't be the active persona. It is disabled while the chat is in a call, by this tab's word
+    or by `ChatContents.call`, and unavailable, with a tooltip saying so, while this tab is on a
+    call anywhere else.
   - **The dock** above the composer shows her avatar, ringed while she speaks, the call's state
     line, the call's notices, the mic's mute toggle and **Hang Up**. Hanging up closes it. A call
-    that ends any other way stays docked with why, **Call Again** and **Close**.
+    that ends any other way stays docked with why, **Call Again** and **Close**. With her model,
+    its picture is her model live, and **Expand** opens the screen.
+  - **Her model:** when the persona called (anyone, on a group call) has an active model
+    ([avatar.md](avatar.md#the-call-screen)), the call opens as a video call over the chat's
+    column, named as the dock is: her model bust-up, or a tile per persona on a group call, the
+    speaker's lit and moving her mouth, her picture for anyone without one; her name and the timer
+    on top; a caption of the last thing said, dimmed once said, on or off as `localStorage`'s
+    `eidolon.call.captions` remembers; her latest photo; the mic's mute toggle, **Captions**,
+    **Shrink** and **Hang Up**; and the call's notices, the mic's pill and the waiting bar. The log
+    under it is inert. **Shrink** docks the call, and a call that ends docks as one without a model
+    does. A model that fails to load shows her picture, and the call goes on; when no one's model
+    draws, the call shows as one without a model.
   - **A group call** is answered as it connects, since no one greets on one: its state line never
     waits for an answer, and until the viewer speaks the log says everyone can hear them.
   - **The composer** waits, disabled and reading **In a call**, keeping any draft; Stop and the
     microphone are hidden, and a recording under way is thrown away. It takes the focus back when
-    the call ends.
-  - **What is said** shows as it is said, on the page that placed the call: below the call's start,
-    the call's own transcript (`call-live.ts`) stands in for its stored lines, the viewer's words
-    as they are heard and hers sentence by sentence as she says them, the rest dimmed until she
-    has, with the thinking dots and the stuck notice of `/call`. The chat stores a line only once
-    it is finished, her reply once all of it has played.
+    the call ends. In the tab's other chats during a call, text still sends, but the microphone is
+    hidden.
+  - **What is said** shows as it is said, on the chat's page, whenever it is open: below the call's
+    start, the call's own transcript (`call-live.ts`) stands in for its stored lines, the viewer's
+    words as they are heard and hers sentence by sentence as she says them, the rest dimmed until
+    she has, with the thinking dots and the stuck notice of `/call`. The chat stores a line only
+    once it is finished, her reply once all of it has played.
   - **What is stored** arrives through `GET chats/:id/live` as call lines, and takes the
     transcript's place once the call's end is stored after them: messages with a small phone mark,
     her cut-off ones marked **Interrupted**, with no Why She Answered, and her selfies as photos.
     The call's start and end are quiet centred lines, "Call with 奶绿 · 3:12" and "Call ended".
-  - **Voice messages** stay quiet, since the microphone would hear them: a call starting pauses the
-    one playing and drops those waiting to play on their own, and none plays on its own until the
-    call ends. Play still plays one.
+  - **Voice messages** stay quiet in every chat while any call is up in the tab, since the
+    microphone would hear them: a call starting pauses the one playing, and none plays on its own,
+    or waits to, until the call ends. Play still plays one.
   - **Another tab** that learns of the call from `ChatContents.call`, as a refused send rereads it,
     follows it too, and gets its composer back when the call ends.
   - **Her tasks on a call,** in a chat of hers alone: she starts, checks, steers and stops them by
     voice ([assistant.md](assistant.md#calls)). The card of a task she starts on the call is stored
-    at its place in the log, which while this page holds the call is under the call's separator,
-    above its transcript, and among the call's lines once its end is stored. The waiting bar sits
-    above the dock, with the card's buttons. A group call, a realtime one and `/call` have no
-    tasks.
-  - **Leaving the page,** or opening another chat, hangs up, as leaving `/call` does.
-  - `/call` stays the standalone call to the active persona, with no chat.
+    at its place in the log, which while the tab holds the call is under the call's separator,
+    above its transcript, and among the call's lines once its end is stored. The waiting bar, with
+    the card's buttons, sits above the dock, or in the video screen, where **Show Task**, or a link
+    to one of the chat's tasks, docks the call first. A group call, a realtime one and `/call` have
+    no tasks.
+  - **The call belongs to the app, not the page** (`features/call/call-provider.tsx`): opening
+    another chat or page keeps it, and the call bar brings it back. Hang Up, the call ending, a
+    reload, opening setup, or losing the session (the sign-in screen) end it. While it is up,
+    another chat's **Call** and `/call`'s are unavailable and `/call` says you're in a call; the
+    persona switcher, **Make Active**, New Persona's **Switch to Her Now**, **Restart**, and
+    importing or replacing a character model wait for its end, since the server refuses them
+    during a call; Home's links into setup wait too, since setup sits outside the app's frame and
+    opening it ends the call. Studio's Appearance says its changes show from her next call.
+  - `/call` stays the standalone call to the active persona, with no chat. With her model, it shows
+    the call's screen under its header, with the mic's mute toggle, **Type a Message**,
+    **Captions**, **Transcript** and **Hang Up**; **Transcript** opens its transcript beside the
+    call, or below it on a phone.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Tasks
@@ -739,7 +771,8 @@ tools.
   many more wait, with the card's buttons, which share the card's model, web access and
   spend-pause field, and **Show Task**, which scrolls to the card. Above its buttons it lists her
   queued lines as the card does, since its Allow or Continue lets the task read them too. During a
-  call it sits above the dock. The Tasks list's waiting row says the same line.
+  call it sits above the dock, or in the video screen. The Tasks list's waiting row says the same
+  line.
 - **Her task tools** show in the page's log only as `start_task`'s card. While one runs, her
   reply's quiet line reads **Starting a task…**, **Passing it on to the task…**, **Stopping the
   task…** or **Checking on the task…**, each with its icon (`TOOL_STATES`,
@@ -977,11 +1010,13 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   picked for **Import a Model**, kept in her folder byte for byte with a `model.json` listing its
   Idle, Nod and Talk clips, its seven expressions and `HitAreaHead`, at 0700 and 0600, and not made
   active; the preview ready and drawing her under the app's CSP, which a screenshot of its canvas
-  alone shows, then an expression held and a clip played on it, and a line tried on it, which a
-  stage made anew mid-line, as reduced motion makes one, ends at once; a PNG refused with the page's
-  own sentence before any upload, and the rig cut short refused `invalid-model` with the app's,
-  leaving no folder; then **Make Active**, which her summary and the status name, and **Stop
-  Using**, so the calls after it meet her picture;
+  alone shows, then an expression held and a clip played on it, **Use Microphone** turned off and
+  its tab left while the browser still asks for the microphone, which closes the audio its clicks
+  started, and a line tried on it, which a stage made anew mid-line, as reduced motion makes one,
+  ends at once; a mood put back while its Save is out, which stays put back once the answer comes;
+  a PNG refused with the page's own sentence before any upload, and the rig cut short refused
+  `invalid-model` with the app's, leaving no folder; then **Make Active**, which her summary and the
+  status name, and **Stop Using**, so the chat call after it meets her picture;
 - an `ingest-facts` job over two fact lines against that server, with the model picked, and the
   jobs page showing it done;
 - a text chat with milky-green, her mind pointed at that server's streaming `/chat/completions`:
@@ -1003,11 +1038,27 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   own to its end, its file answering the player's `Range` request with a `206`, both bubbles after
   a reload, and the voice and hearing spend in the ledger;
 - a call inside a chat, on the same OpenAI account, whose realtime transcription session the
-  server accepts and hears nothing on, and whose speech it answers as a call's PCM: a line typed
+  server accepts and hears nothing on, and whose speech it answers as a call's PCM, a quiet tone
+  in syllables, four a second, which the walk's Chrome plays muted (`--mute-audio`): a line typed
   first, then **Call**, the dock, her greeting answering that line from the call's history and
   landing in the log with its phone mark under its separator, the composer waiting and a send
-  refused `chat-in-call`, then **Hang Up**, the log's `call-ended` with `hangup`, the separators
-  with the call's length, the composer back, and no server error during the call;
+  refused `chat-in-call`; mid-call, Home from the sidebar showing **Ongoing Call** at the window's
+  foot with **Hang Up** and **Return to Call** while the chat still holds the call and Home's setup
+  links wait, the persona switcher's other personas unavailable, another chat's **Call**
+  unavailable with its microphone hidden, `/call` saying you're in a call, and **Return to Call**
+  bringing back the dock and her greeting as the call's own line; then **Hang Up**, the log's
+  `call-ended` with `hangup`, the separators with the call's length, the composer back, and no
+  server error during the call;
+- a video call in a chat of hers, the test rig made her active model: **Call** opening the screen,
+  named as the dock is, her stage ready within 30 s; a line the fake hearing hears, answered
+  `[开心地] 看得到呀，你也在笑！`, her mouth opening on the tone while she speaks, her words as the
+  caption, her mood `happy`, and her mouth shut once she stops; **Shrink** docking the call with
+  **Expand** in focus and her stage's same canvas, and **Expand** bringing the screen back,
+  drawing again; Home showing **Ongoing Call** with no canvas in it, whose **Return to Call** brings
+  the screen back on the same stage, and whose **Hang Up** ends the call; then a second call, her
+  mouth moving on its greeting on the stage that call made. Its detail gives the longest
+  main-thread task from **Call** to her stage ready. Where WebGL is refused, the call docks with
+  her picture and no **Expand**, and the walk says so;
 - tasks in a new chat with milky-green, last, since her answers in a chat of one are offered
   `start_task` once the assistant has a model: Settings → Assistant Mode set to the OpenRouter
   account at that server and a model typed into its picker, and her greeting offered neither
@@ -1048,13 +1099,15 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   - the Tasks list showing the first done and the second stopped, with no button or field, the
     first's row opening the chat with the card in view, in focus its card alone, until `/normal`
     brings every card back;
-  - a call in that chat, whose greeting holds none of the status blocks the chat stored, and no
-    task tool; a line its fake hearing hears (`say`), and her `start_task` for it, with the hint,
-    her next round reading the started result, and her call and its result stored in the chat
-    under the call's id, between the call's lines; the card, and the waiting bar above the dock,
-    asking to start it; **Allow Once** on the bar, then her pointer to the card at the path
-    question, answering the waiting nudge with no task tool and a block ending on the line for no
-    tools; **Allow Once** again, then her word on the end on the call, answering the ended nudge
+  - a call in that chat, whose greeting holds none of the status blocks the chat stored, and no task
+    tool, opening on the video screen since the walk makes the test rig her active model first; a
+    line its fake hearing hears (`say`), and her `start_task` for it, with the hint, her next round
+    reading the started result, and her call and its result stored in the chat under the call's id,
+    between the call's lines; the card, and the waiting bar inside the video screen, asking to start
+    it; **Allow Once** on the bar there, then her pointer to the card at the path question,
+    answering the waiting nudge with no task tool and a block ending on the line for no tools;
+    **Show Task** on the bar, docking the call with the card in focus and the bar above the dock;
+    **Allow Once** again, then her word on the end on the call, answering the ended nudge
     with the worker's report only in her call's `tool` message; and after **Hang Up**, the call's
     lines and her call's events in order, no turn telling it again, the page on disk, and the
     Tasks list showing it done;
@@ -1100,7 +1153,8 @@ temporary data home: it refuses to start when that `.env` sets `EIDOLON_HOME`, o
 shows (with a fake, silent microphone) and plays the bot through the speakers. The persona must be
 milky-green, whose template needs no index: recall is simply off. It checks:
 
-- the call connecting, the greeting in the transcript, and the bot's audio playing;
+- the call connecting, the greeting in the transcript, and the bot's audio playing in the call's
+  `<audio data-call>`;
 - a typed question and its reply, text and audio;
 - with `--selfie`, a same-origin `/api/selfie/` picture in its 3:4 box within 90 s;
 - Fish markup shown as chips and notes, never as `[…]` or `<tag>`;

@@ -1,23 +1,39 @@
 import { useLingui } from "@lingui/react/macro";
 import { MicIcon, MicOffIcon, PhoneIcon, PhoneOffIcon, SendHorizontalIcon } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { UnavailableButton } from "@/components/unavailable-button";
 import { cn } from "@/lib/utils";
-import type { Call } from "./use-call";
+import type { CallHandle } from "./use-call";
 
-function MessageInput({
+export function MessageInput({
   disabled,
   name,
   onSend,
+  autoFocus,
 }: {
   readonly disabled: boolean;
   readonly name: string;
   readonly onSend: (text: string) => void;
+  readonly autoFocus?: boolean;
 }) {
   const { t } = useLingui();
   const [text, setText] = useState("");
+  const box = useRef<HTMLInputElement>(null);
+  const opener = useRef<Element | null>(null);
+
+  // autoFocus can't focus a box opened before the call is live: it takes the focus once enabled,
+  // unless the viewer has moved it since.
+  useEffect(() => {
+    if (!autoFocus) return;
+    if (disabled) opener.current ??= document.activeElement;
+    else if (opener.current !== null) {
+      if (document.activeElement === opener.current) box.current?.focus();
+      opener.current = null;
+    }
+  }, [autoFocus, disabled]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -37,6 +53,7 @@ function MessageInput({
   return (
     <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={submit}>
       <Input
+        ref={box}
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={keepComposing}
@@ -45,6 +62,7 @@ function MessageInput({
         disabled={disabled}
         autoComplete="off"
         enterKeyHint="send"
+        autoFocus={autoFocus}
         className="h-9 bg-card"
       />
       <Button
@@ -61,7 +79,7 @@ function MessageInput({
 }
 
 /** Mutes and unmutes the viewer's mic, once the call is live. */
-export function MicToggle({ call }: { readonly call: Call }) {
+export function MicToggle({ call }: { readonly call: CallHandle }) {
   const { t } = useLingui();
   const micLabel = call.micOn ? t`Mute your mic` : t`Unmute your mic`;
   return (
@@ -83,7 +101,7 @@ export function MicToggle({ call }: { readonly call: Call }) {
   );
 }
 
-export function HangUpButton({ call }: { readonly call: Call }) {
+export function HangUpButton({ call }: { readonly call: CallHandle }) {
   const { t } = useLingui();
   return (
     <Button
@@ -101,17 +119,36 @@ export function HangUpButton({ call }: { readonly call: Call }) {
 }
 
 /** Call, or once in a call: the mic, the text box and the hang-up. */
-export function CallControls({ call, name }: { readonly call: Call; readonly name: string }) {
+export function CallControls({
+  call,
+  name,
+  onStart,
+  unavailable = null,
+}: {
+  readonly call: CallHandle;
+  readonly name: string;
+  readonly onStart: () => void;
+  /** Why Call can't be used now, shown in its tooltip; null while it can. */
+  readonly unavailable?: string | null;
+}) {
   const { t } = useLingui();
   const { phase } = call;
 
   if (phase.name === "idle" || phase.name === "ended") {
+    const label = phase.name === "ended" ? t`Call Again` : t`Call ${name}`;
     return (
       <div className="flex justify-center px-4 py-4 sm:px-6">
-        <Button size="lg" onClick={() => call.start()}>
-          <PhoneIcon data-icon="inline-start" />
-          {phase.name === "ended" ? t`Call Again` : t`Call ${name}`}
-        </Button>
+        {unavailable === null ? (
+          <Button size="lg" onClick={onStart}>
+            <PhoneIcon data-icon="inline-start" />
+            {label}
+          </Button>
+        ) : (
+          <UnavailableButton size="lg" variant="default" reason={unavailable}>
+            <PhoneIcon data-icon="inline-start" />
+            {label}
+          </UnavailableButton>
+        )}
       </div>
     );
   }
@@ -126,7 +163,13 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
 }
 
 /** Over the transcript's foot during a call: that the bot hears the viewer, or can't. */
-export function MicPill({ call, className }: { readonly call: Call; readonly className?: string }) {
+export function MicPill({
+  call,
+  className,
+}: {
+  readonly call: CallHandle;
+  readonly className?: string;
+}) {
   const { t } = useLingui();
   const live = call.phase.name === "live";
   const muted = live && !call.micOn;

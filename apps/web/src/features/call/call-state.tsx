@@ -65,7 +65,7 @@ export function Face({
       persona={persona}
       size={size}
       className={cn(
-        "transition-shadow",
+        "motion-safe:transition-shadow",
         speaking && "ring-2 ring-success ring-offset-2 ring-offset-card",
       )}
     />

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ErrorAlert } from "@/components/error-alert";
 import { SectionCardSkeleton } from "@/components/section-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCallPresence } from "@/features/call/call-context";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
 import { desktop } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
@@ -41,6 +42,7 @@ export function Component() {
   const lang = useLang();
   const formats = useMemo(() => formatsFor(lang), [lang]);
   const status = useQuery({ ...statusQuery, refetchInterval: POLL_MS });
+  const { up } = useCallPresence();
   const [pickingVoice, setPickingVoice] = useState(false);
   const [creating, setCreating] = useState(false);
   const items = useMemo(
@@ -52,7 +54,8 @@ export function Component() {
   if (status.isError) return <ErrorAlert error={status.error} />;
 
   const { persona } = status.data;
-  const live = status.data.activeCalls > 0;
+  // Status counts another tab's call too, but only as often as it polls.
+  const live = status.data.activeCalls > 0 || up;
   // The desktop app releases on its own versions, apart from the server it ships.
   const app = desktop();
   return (
@@ -63,7 +66,7 @@ export function Component() {
         title={t`Readiness`}
         description={t`What calls and builds need, and how to fix what's missing.`}
       >
-        <ReadinessList items={items} onPickVoice={() => setPickingVoice(true)} />
+        <ReadinessList items={items} calling={up} onPickVoice={() => setPickingVoice(true)} />
       </HomeSection>
 
       <HomeSection
@@ -77,7 +80,7 @@ export function Component() {
         <PersonaGrid live={live} onNew={() => setCreating(true)} />
       </HomeSection>
 
-      <MemoryPanel key={persona.id} persona={persona} memory={status.data.memory} />
+      <MemoryPanel key={persona.id} persona={persona} memory={status.data.memory} calling={up} />
 
       <p className="text-muted-foreground text-xs">
         {app === null

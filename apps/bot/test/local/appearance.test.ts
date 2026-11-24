@@ -3,15 +3,22 @@
 // the app's pages. The templates' bytes are pinned across this whole file.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { createHash } from "node:crypto";
+import * as fs from "node:fs";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataHome, envOptional, personaHomeDir, templatesDir } from "@eidolon/config";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { type CharacterModel, MAX_MODEL_BYTES } from "../../src/local/api.ts";
 import { modelSlug } from "../../src/local/appearance.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, fakeModules, raw } from "./harness.ts";
+
+// An ES module's exports can't be spied on in place: every importer gets this renameSync instead.
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, renameSync: vi.fn(actual.renameSync) };
+});
 
 function hashTree(root: string): Map<string, string> {
   const hashes = new Map<string, string>();
@@ -455,6 +462,36 @@ describe("editing", () => {
     expect([missing.status, missing.body.error.code]).toEqual([404, "unknown-model"]);
   });
 
+  test("PUT file that can't save model.json puts the old file back", async () => {
+    await upload("tml.p2lrt");
+    const manifest = readFileSync(join(folderOf("tml"), "model.json"));
+    const rename = vi.mocked(fs.renameSync);
+    const through = rename.getMockImplementation() as typeof fs.renameSync;
+    rename.mockImplementation((from, to) => {
+      if (String(to).endsWith("model.json")) {
+        throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+      }
+      through(from, to);
+    });
+    let failed: Awaited<ReturnType<typeof call>>;
+    try {
+      failed = await call(
+        "PUT",
+        `/personas/${MILKY}/models/tml/file`,
+        withoutMeta(RIG),
+        "application/octet-stream",
+      );
+    } finally {
+      rename.mockImplementation(through);
+    }
+    expect([failed.status, failed.body.error.code]).toEqual([500, "internal"]);
+    expect(readdirSync(folderOf("tml")).sort()).toEqual(["model.json", "model.p2lrt"]);
+    expect(readFileSync(join(folderOf("tml"), "model.json"))).toEqual(manifest);
+    expect(readFileSync(join(folderOf("tml"), "model.p2lrt"))).toEqual(RIG);
+    const file = await api("GET", `/personas/${MILKY}/models/tml/file?sha256=${SHA256}`);
+    expect(Buffer.from(await file.arrayBuffer())).toEqual(RIG);
+  });
+
   test("DELETE removes the model, and her appearance.model with it when it named it", async () => {
     await upload("tml.p2lrt");
     await upload("tml.p2lrt");
@@ -616,5 +653,43 @@ describe("model ids that try to leave their folder", () => {
     expect((await call("DELETE", `/personas/${MILKY}/models/tml`)).body).toEqual({ ok: true });
     expect(readdirSync(join(personaHomeDir(MILKY), "models"))).toEqual(["other"]);
     expect(readFileSync(sentinel, "utf8")).toBe("SENTINEL");
+  });
+});
+
+describe("a model.json the app didn't write", () => {
+  test("lists nothing, and no route reads its fields or changes the model", async () => {
+    const { id: _id, ...fields } = (await upload("tml.p2lrt")).body as CharacterModel;
+    const { inventory } = fields;
+    const outfit = { id: "plain", name: "Plain", poses: [], parameters: [], hiddenParts: [] };
+    const manifest = join(folderOf("tml"), "model.json");
+    const other = withoutMeta(RIG);
+    for (const broken of [
+      { inventory: {} },
+      { inventory: { ...inventory, clips: [{ id: NOD }] } },
+      { framing: {} },
+      { moods: { happy: "smile" } },
+      { gestures: { nod: [NOD] } },
+      { outfits: [{}] },
+      { outfits: [{ ...outfit, poses: [null] }] },
+    ]) {
+      const text = JSON.stringify({ format: 1, file: "model.p2lrt", ...fields, ...broken });
+      writeFileSync(manifest, text);
+      const listed = await call("GET", `/personas/${MILKY}/models`);
+      const patched = await call("PATCH", `/personas/${MILKY}/models/tml`, { moods: {} });
+      const replaced = await call(
+        "PUT",
+        `/personas/${MILKY}/models/tml/file`,
+        other,
+        "application/octet-stream",
+      );
+      expect([
+        broken,
+        listed.body.models,
+        [patched.status, patched.body.error?.code],
+        [replaced.status, replaced.body.error?.code],
+      ]).toEqual([broken, [], [404, "unknown-model"], [404, "unknown-model"]]);
+      expect(readFileSync(manifest, "utf8")).toBe(text);
+      expect(readFileSync(join(folderOf("tml"), "model.p2lrt"))).toEqual(RIG);
+    }
   });
 });

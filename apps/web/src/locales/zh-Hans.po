@@ -315,11 +315,14 @@ msgstr "{name} 现在是她的当前形象。"
 msgid "{name} is now the active persona."
 msgstr "当前人设已切换为{name}。"
 
+#: src/features/call/call-bar.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/call-dock.tsx
 msgid "{name} is speaking"
 msgstr "{name}正在说话"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "{name} is thinking…"
 msgstr "{name}正在思考…"
@@ -527,10 +530,15 @@ msgstr "这个密钥所属的预算已用完。"
 msgid "A call fills the screen it's on: try her on a wide one and on a phone's."
 msgstr "通话会铺满所在的屏幕：在宽屏和手机屏幕上都看看她。"
 
+#: src/components/persona-switcher.tsx
 #: src/features/home/route.tsx
+#: src/features/setup/new-persona.tsx
+#: src/features/studio/route.tsx
 msgid "A call is in progress: switch personas after it ends."
 msgstr "正在通话中：请在通话结束后切换人设。"
 
+#: src/features/settings/restart-button.tsx
+#: src/features/studio/model-list.tsx
 #: src/lib/labels.ts
 msgid "A call is in progress. Hang up first."
 msgstr "通话正在进行，请先挂断。"
@@ -546,6 +554,10 @@ msgstr "通话需要一个声音。请先为她选一个。"
 #: src/features/studio/voice-section.tsx
 msgid "A call needs one: pick her voice below."
 msgstr "通话需要声音：请在下面为她选一个。"
+
+#: src/features/studio/appearance-section.tsx
+msgid "A call with {name} is in progress: changes here show from her next call."
+msgstr "正在和{name}通话：这里的改动从下次通话起生效。"
 
 #: src/features/setup/persona-step.tsx
 msgid "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
@@ -634,6 +646,7 @@ msgid "A review on the task's model lets routine actions through and asks you ab
 msgstr "用任务自己的模型先审一遍：常规操作直接放行，其余的都会问你。每次审核都算在任务的花费里。"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 msgid "A selfie from {name}"
 msgstr "{name}发来的自拍"
 
@@ -1306,6 +1319,7 @@ msgstr "通话已结束 · {duration}"
 msgid "Call her"
 msgstr "开始通话"
 
+#: src/features/call/video-call.tsx
 #: src/features/chats/call-dock.tsx
 #: src/features/chats/call-line.ts
 msgid "Call with {name}"
@@ -1396,6 +1410,10 @@ msgstr "已取消"
 #: src/features/jobs/labels.ts
 msgid "Cancelled."
 msgstr "已取消。"
+
+#: src/features/call/video-call.tsx
+msgid "Captions"
+msgstr "字幕"
 
 #: src/features/studio/videos-section.tsx
 msgid "Change"
@@ -1565,6 +1583,7 @@ msgstr "动画"
 
 #: src/components/ui/dialog.tsx
 #: src/components/ui/sheet.tsx
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Close"
@@ -2189,10 +2208,13 @@ msgstr "所有人设对你的记忆都保存在 Qdrant 中，每次改动都会�
 msgid "Every video is downloaded."
 msgstr "所有视频都已下载。"
 
+#: src/features/call/call-bar.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/call-dock.tsx
 msgid "Everyone"
 msgstr "所有人"
 
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Everyone can hear you. Say something to start."
 msgstr "大家都在听，说点什么开始吧。"
@@ -2200,6 +2222,10 @@ msgstr "大家都在听，说点什么开始吧。"
 #: src/features/settings/route.tsx
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "其他分区没有列出的设置。大多数情况下无需修改。"
+
+#: src/features/chats/call-dock.tsx
+msgid "Expand"
+msgstr "放大"
 
 #: src/components/app-sidebar.tsx
 msgid "Expand Sidebar"
@@ -2496,6 +2522,10 @@ msgstr "Group ID"
 #: src/features/call/call-controls.tsx
 msgid "Hang Up"
 msgstr "挂断"
+
+#: src/features/call/call-page.tsx
+msgid "Hang up the call in your chat to call {name} here."
+msgstr "先挂断聊天里的通话，才能在这里呼叫{name}。"
 
 #: src/features/call/call-state.tsx
 msgid "Hanging up…"
@@ -3992,6 +4022,10 @@ msgstr "她用的某个服务商报告了问题。请在设置中检查它的密
 msgid "One per line, relative to her folder."
 msgstr "每行一个，相对于她的文件夹。"
 
+#: src/features/call/call-bar.tsx
+msgid "Ongoing Call"
+msgstr "进行中的通话"
+
 #: src/features/home/readiness-labels.ts
 msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
 msgstr "数据目录所在磁盘只剩 {free}。下载的音频会占用大量空间。"
@@ -4798,6 +4832,10 @@ msgstr "检索门控服务商"
 msgid "Retry"
 msgstr "重试"
 
+#: src/features/call/call-bar.tsx
+msgid "Return to Call"
+msgstr "回到通话"
+
 #: src/features/studio/text-editor.tsx
 msgid "Revert"
 msgstr "还原"
@@ -5124,6 +5162,11 @@ msgstr "设置向导"
 msgid "Setup Steps"
 msgstr "设置步骤"
 
+#: src/features/home/memory-panel.tsx
+#: src/features/home/readiness-list.tsx
+msgid "Setup would end the call. Hang up first."
+msgstr "打开设置向导会结束通话，请先挂断。"
+
 #: src/features/usage/tables.tsx
 msgid "Share"
 msgstr "占比"
@@ -5293,6 +5336,10 @@ msgstr "显示文字"
 #: src/components/settings-form/field.tsx
 msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
 msgstr "仅供查看：请在 settings.yaml 中或用 <0>{env}</0> 设置。"
+
+#: src/features/call/video-call.tsx
+msgid "Shrink"
+msgstr "缩小"
 
 #: src/features/studio/appearance-labels.ts
 msgctxt "mood"
@@ -5513,6 +5560,7 @@ msgid "Steps, rules and examples, in Markdown"
 msgstr "步骤、规则和示例，用 Markdown 写"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Still waiting for {name}. If nothing comes, say it again."
 msgstr "还在等{name}回应。如果一直没有回应，请再说一遍。"
@@ -6463,6 +6511,10 @@ msgstr "转写会向你的 Soniox 账户收费。"
 msgid "Transcribing…"
 msgstr "正在转写…"
 
+#: src/features/call/video-call.tsx
+msgid "Transcript"
+msgstr "文字记录"
+
 #: src/lib/labels.ts
 msgid "Transcript Refinement"
 msgstr "转写整理"
@@ -6558,6 +6610,10 @@ msgstr "用 Soniox 把视频的音频转写成文字稿。"
 #: src/features/chats/composer.tsx
 msgid "Type /focus, /normal or /verbose to choose how much of her tasks this chat shows, or /stop to stop one."
 msgstr "输入 /focus、/normal 或 /verbose 选择这个聊天显示多少任务内容，或输入 /stop 停止一个任务。"
+
+#: src/features/call/video-call.tsx
+msgid "Type a Message"
+msgstr "发消息"
 
 #: src/features/call/call-controls.tsx
 msgid "Type a message to {name}"
@@ -6821,6 +6877,7 @@ msgstr "等待中"
 msgid "Waiting for {name} to answer…"
 msgstr "等待{name}接听…"
 
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Waiting for a reply…"
 msgstr "等待回复…"
@@ -7100,6 +7157,7 @@ msgid "You"
 msgstr "你"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 msgctxt "call transcript speaker"
 msgid "You"
 msgstr "我"
@@ -7124,6 +7182,15 @@ msgstr "它请求开始时你拒绝了。"
 #: src/features/setup/done-step.tsx
 msgid "You're all set"
 msgstr "设置完成"
+
+#: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
+msgid "You're already in a call. Hang up first."
+msgstr "你已经在通话中了，请先挂断。"
+
+#: src/features/call/call-page.tsx
+msgid "You're in a call"
+msgstr "你正在通话中"
 
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"

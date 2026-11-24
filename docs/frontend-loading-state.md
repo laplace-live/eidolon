@@ -1,7 +1,7 @@
 # Handover: Frontend loading-state indicators
 
 **Audience:** frontend engineers on a client of the bot: the `laplace` web client, or the local
-web app's call page (`apps/web/src/features/call/`).
+web app's calls (`apps/web/src/features/call/`).
 **Scope:** how to show the user that the bot is *doing something* (transcribing, thinking,
 synthesising speech) between the moment they stop talking and the moment they hear a reply.
 
@@ -486,5 +486,7 @@ pcClient.on(RTVIEvent.ServerMessage, (data) => {
 - [`../packages/voice/src/call/floor.ts`](../packages/voice/src/call/floor.ts) — when each message
   goes out; [`../packages/voice/src/rtvi/emitter.ts`](../packages/voice/src/rtvi/emitter.ts) — its
   shape
-- [`../apps/web/src/features/call/`](../apps/web/src/features/call/) — the local web app's call
-  page: `use-call.ts` (its listeners), `watchdog.ts`, `transcript.ts`
+- [`../apps/web/src/features/call/`](../apps/web/src/features/call/) — the local web app's calls:
+  `call-provider.tsx` (the app's one call, which outlives its page), `use-call.ts` (its
+  listeners), `transcript.ts`; and the watchdog it uses,
+  [`../packages/sdk/src/watchdog.ts`](../packages/sdk/src/watchdog.ts)

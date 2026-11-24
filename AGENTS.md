@@ -91,7 +91,7 @@ a row here and writing the prose there — not a new section in this file.**
 | a string the web app shows, its languages, or its `.po` catalogs | [web-app.md](docs/web-app.md#strings-and-languages) |
 | changesets, the version PR, `changelog.json` (`scripts/changelog.ts`), tags (the desktop app's included), or publishing the npm packages (`apps/eidolon`, `packages/sdk`) | [releasing.md](docs/releasing.md) |
 | the browser client SDK (`@laplace.live/eidolon-sdk`, `packages/sdk`) | [client-sdk.md](docs/client-sdk.md) |
-| avatars: a persona's PSD2Live models (`/api/local/personas/:id/models`, `apps/bot/src/local/appearance.ts` and `psd2live.ts`, `appearance.model`), the studio's Appearance, the SDK's avatar entry (`packages/sdk/src/avatar`) and its vendored runtime, her moods from her cues, lip sync, framing or outfits | [avatar.md](docs/avatar.md) |
+| avatars: a persona's PSD2Live models (`/api/local/personas/:id/models`, `apps/bot/src/local/appearance.ts` and `psd2live.ts`, `appearance.model`), the studio's Appearance, the SDK's avatar entry (`packages/sdk/src/avatar`) and its vendored runtime, her moods from her cues, lip sync, framing or outfits, the call screen, the call bar and the shell's call (`apps/web/src/features/call`) | [avatar.md](docs/avatar.md); for a call, [its call screen](docs/avatar.md#the-call-screen), [the call bar](docs/web-app.md#the-layout) and [web-app.md](docs/web-app.md#chats) |
 | any env var — all 50-odd are documented there | `.env.example` |
 | Soniox's per-project vocabulary glossary | `personas/milky-green/glossary.toml` |
 | broadcast overviews, date-scoped recall, the archive lookup tool, or when she last did something | [stream-recall.md](docs/stream-recall.md) |
@@ -185,7 +185,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`, and for what production loads `bun apps/bot/scripts/bun-check.ts`; for retrieval, the gate or the voice loop, also the row above that names it |
 | anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
-| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun run test apps/bot/test/local`, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a character model the studio's Appearance imports and draws under the app's CSP, a chat, a group chat, voice messages and a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
+| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun run test apps/bot/test/local`, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a character model the studio's Appearance imports and draws under the app's CSP, a chat, a group chat, voice messages, a call that outlives its page, a video call with her model, a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, answered on its video screen, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
 | her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`; a task that needs a lookup and a run, which names its kind, asks on its card before the command and searches. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64 and Windows x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, loads its native modules, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
@@ -335,6 +335,14 @@ the layout's one line.
   leaves Lingui's plugin out. Keep macros out of the modules tests import; a test that needs one
   stubs `@lingui/core/macro` with `apps/web/src/test/lingui-macro.ts` through `vi.doMock` in its
   own file, never in a setup file.
+- **The app's one call belongs to its shell.** `CallProvider`
+  (`apps/web/src/features/call/call-provider.tsx`), in `AppShell`, holds it and its
+  `<audio data-call>`: pages read it through `useShellCall()` and `useCallPresence()`, never call
+  `useCall()` or render a call's audio, and leaving a page never hangs up. A view of the call calls
+  `useShowsCall()`, and the call bar shows wherever none is mounted; the bar renders no WebGL,
+  since a throw there reaches AppShell's boundary and ends the call, and each stage view has its
+  own boundary. What would end the call or the server refuses during one (setup's links, a
+  restart, a persona switch, a model import) waits while it is up.
 - **Bun's version lives only in package.json's `packageManager`.** CI's setup-bun reads it
   (`bun-version-file`) and the image follows `oven/bun:1`: a bump edits that one line, never a
   workflow. Bun installs, runs the scripts and serves production; the npm package ships none.

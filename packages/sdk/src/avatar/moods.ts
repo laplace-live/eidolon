@@ -21,7 +21,7 @@ export type MoodTag = (typeof MOOD_TAGS)[number];
 
 interface MoodFamily {
   readonly tag: MoodTag;
-  /** Matched anywhere in a direction. */
+  /** Matched anywhere in a direction but right after a negation. */
   readonly zh: readonly string[];
   /** Matched as whole words, whatever their case, so "unhappy" is never happy. */
   readonly en: readonly string[];
@@ -89,6 +89,12 @@ const REFUSED_INSIDE: ReadonlyMap<string, readonly string[]> = new Map([
   ["困", ["困惑", "困扰", "困难"]],
 ]);
 
+/** A negation, softened or not: 不, 不是, 没有, 别, 不太, 不是特别…; the 别 of 特别 negates nothing. */
+const NEGATION = "(?:不是?|没有?|(?<!特)别)(?:太|大|很|怎么|那么|这么|特别|再)?";
+
+/** A keyword right after a negation, erased whole, so 不害羞 takes its 羞 along. */
+const NEGATED = new RegExp(`${NEGATION}(?:${FAMILIES.flatMap(({ zh }) => zh).join("|")})`, "g");
+
 const MAX_TAGS = 2;
 
 function matchesZh(direction: string, keyword: string): boolean {
@@ -103,10 +109,11 @@ function matchesEn(direction: string, words: readonly string[]): boolean {
 
 /** The moods a direction such as 懒洋洋的，带点笑意 tags, in precedence order, at most two. */
 export function moodTags(direction: string): MoodTag[] {
+  const affirmed = direction.replace(NEGATED, "\n");
   const tags: MoodTag[] = [];
   for (const family of FAMILIES) {
     if (
-      family.zh.some((keyword) => matchesZh(direction, keyword)) ||
+      family.zh.some((keyword) => matchesZh(affirmed, keyword)) ||
       matchesEn(direction, family.en)
     ) {
       tags.push(family.tag);

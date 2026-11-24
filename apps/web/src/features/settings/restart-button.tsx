@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { UnavailableButton } from "@/components/unavailable-button";
+import { useCallPresence } from "@/features/call/call-context";
 import { COMMAND_LABELS } from "@/features/jobs/labels";
 import { jobsQuery } from "@/features/jobs/queries";
 import type { JobSnapshot } from "@/lib/api";
@@ -37,6 +39,7 @@ export function RestartButton({
   const { t } = useLingui();
   const queryClient = useQueryClient();
   const { restart, restarting } = useRestart();
+  const { up } = useCallPresence();
   const [checking, setChecking] = useState(false);
   const [asking, setAsking] = useState<Asking | null>(null);
 
@@ -53,15 +56,25 @@ export function RestartButton({
   const ephemeral = asking?.jobs?.some((job) => job.ephemeral) ?? false;
   return (
     <>
-      <Button
-        size={size}
-        variant={variant}
-        disabled={restarting || checking}
-        onClick={() => void begin()}
-      >
-        {(restarting || checking) && <Spinner />}
-        {restarting ? t`Restarting…` : label}
-      </Button>
+      {up ? (
+        <UnavailableButton
+          size={size}
+          variant={variant}
+          reason={t`A call is in progress. Hang up first.`}
+        >
+          {label}
+        </UnavailableButton>
+      ) : (
+        <Button
+          size={size}
+          variant={variant}
+          disabled={restarting || checking}
+          onClick={() => void begin()}
+        >
+          {(restarting || checking) && <Spinner />}
+          {restarting ? t`Restarting…` : label}
+        </Button>
+      )}
       <AlertDialog open={asking !== null} onOpenChange={(open) => !open && setAsking(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
