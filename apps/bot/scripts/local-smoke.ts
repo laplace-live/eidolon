@@ -2294,7 +2294,10 @@ async function chatLog(walk: Walk, id: string): Promise<readonly LoggedEvent[]> 
  */
 async function hangUpIfUp(walk: Walk): Promise<void> {
   const button = walk.page.getByRole("button", { name: t("en", "Hang Up"), exact: true }).first();
-  if (await button.isVisible().catch(() => false)) await button.click().catch(() => undefined);
+  // A call already ending shows it disabled until it goes.
+  if (await button.isVisible().catch(() => false)) {
+    await button.click({ timeout: 5_000 }).catch(() => undefined);
+  }
   await poll(
     async () => ((await (await walk.api("GET", "/api/local/status")).json()) as Status).activeCalls,
     (calls) => calls === 0,
