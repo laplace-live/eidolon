@@ -410,6 +410,7 @@ their names:
 | `data-stage` | a stage's canvas | `<persona>:<n>`, one per stage made |
 | `data-tile` | a group call's tile | the member's id |
 | `data-captions` | the caption | present, with `data-live` `true` or `false` |
+| `data-caption-text` | the caption's text | present |
 | `data-live-call` | a chat's live call row | present |
 
 ## The vendored runtime
@@ -475,8 +476,10 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
 - **The app's call** (`bun run test apps/web`), on Node with no browser: `target.test.ts` holds
   whom a call is with and how each page shows it, `signals.test.ts` what moves her and the tick,
   `stages.test.ts` her stages on fake parts, through a call's end into the next call and a group
-  call's routing, `captions.test.ts` the caption, and `call-tiles.test.ts` and
-  `video-call.test.ts` the tiles' and the screen's markup.
+  call's routing, `captions.test.ts` the caption, `call-tiles.test.ts` and `video-call.test.ts`
+  the tiles' and the screen's markup, `call-bar.test.ts` when the bar shows, hides and keeps an
+  ending until Close, and `call-dock.test.ts` the dock's Expand, its focusable region, and a chat's
+  Call waiting while the tab's call is elsewhere.
 - **The browser smoke** (`bun apps/bot/scripts/local-smoke.ts`,
   [web-app.md](web-app.md#the-browser-smoke-test)) imports the test rig in the studio's Appearance,
   checks its preview draws under the app's CSP, that Use Microphone closes its audio while the
