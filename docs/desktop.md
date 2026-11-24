@@ -1383,16 +1383,19 @@ Each step prints one line, made of the checks inside it:
    task already there at its first answer, so the task starts once the server is ready. Deny on
    the card stops it, and within 45 s the watch's notice of that follows, with the stopped task's
    words: two notices in all.
-10. **Attach:** after `--quit` ends that launch and its backend, a server started first on the
-    same home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced:
-    Settings' Restart there waits for the supervisor's next server, a restart from outside the app
-    is survived, and quitting leaves the server running until the smoke stops it.
+10. **Attach:** after `--quit` ends that launch and its backend, with no box, a server started
+    first on the same home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not
+    replaced: Settings' Restart there waits for the supervisor's next server, a restart from outside
+    the app is survived, and quitting, again with no box, leaves the server running until the smoke
+    stops it.
 11. **Quit:** a last launch spawns its own backend again, and the smoke types into the persona's
     System Prompt, leaving the edit unsaved. It kills the backend: main.log says main let the page
     go and loaded the failure page, whose Try Again starts another backend and loads Home. With the
-    edit typed again, `--quit` still ends main and the backend with exit 0, main.log saying it
-    quit, hid the window, stopped the backend, let the page go and closed the window, in that order,
-    and it leaves nothing running and no error line in either log but the failure the kill caused.
+    edit typed again, `--quit` still ends main and the backend with exit 0. main.log says
+    background mode answered Quit to the quit's box, whose text is "Quit Eidolon? Your unsaved
+    changes will be lost.", then that main quit, hid the window, stopped the backend, let the page
+    go and closed the window, in that order, and the quit leaves nothing running and no error line
+    in either log but the failure the kill caused.
 
 After the steps come the window watch's line and the kit's. The run's folder keeps
 `results/results.json`, with every check and each step's time, and `results/screenshots`; a pass
@@ -1401,8 +1404,8 @@ removes them with the rest of the folder, unless `--keep` first copies them to
 `--headful`, the checks that only background mode makes true (off screen, never audible, main.log's
 background lines, the folder dialog's line and the notices: the unpackaged app shows none) are
 skipped, Choose Folder gets the replaced handler alone, Settings → Desktop says the options are for
-the installed app only, and a hook the smoke adds in main saves downloads into the same folder
-instead of asking.
+the installed app only, a hook the smoke adds in main saves downloads into the same folder instead
+of asking, and the last quit's box waits for the developer's Quit, within the 30 s the quit has.
 
 #### The packaged smoke
 

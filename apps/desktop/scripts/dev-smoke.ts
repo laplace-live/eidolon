@@ -80,6 +80,10 @@ const NOTICE = "Eidolon: background mode didn't show a notification: ";
 const LET_GO = "Eidolon: the page asked to stay (beforeunload); letting it go";
 /** main.log's line once the window has loaded the failure page. */
 const FAILED_SHOWN = "Eidolon: the window shows eidolon-app://shell/failed";
+/** In main.log's line for a box background mode answered, just before the box's words. */
+const BOX = "to a message box: ";
+/** main.log's line for the quit box over an unsaved edit, with nothing else running. */
+const UNSAVED_QUIT_BOX = `Eidolon: background mode answered "${STRINGS.en.label.quit}" ${BOX}${STRINGS.en.text.quitTitle} ${STRINGS.en.text.unsavedLost(null)}`;
 /** What Settings' Desktop App says under each option this copy can't offer, by why. */
 const DESKTOP_NOTES = {
   background: "Background mode leaves this computer as it is.",
@@ -290,7 +294,7 @@ async function walkApp(walk: Walk): Promise<void> {
     (step) => attach(walk, first, step),
   );
   await steps.run(
-    "quit: over an unsaved edit, the failure page and Try Again, then --quit stops main and the backend, leaving nothing",
+    "quit: over an unsaved edit, the failure page and Try Again, then --quit's box warns of it and stops main and the backend, leaving nothing",
     (step) => quit(walk, step),
   );
 }
@@ -1522,12 +1526,14 @@ async function quitApp(walk: Walk, main: Started, backend: number | null): Promi
 async function attach(walk: Walk, first: Driven, step: Step) {
   const { smoke } = walk;
   // The launch before ends first, so that its backend leaves the data home.
+  const quitFrom = smoke.log("main").length;
   const ending = await quitApp(walk, first.main, smoke.server()?.pid ?? null);
   const gone = await smoke.processes.settle(10_000);
+  const asked = smoke.log("main").slice(quitFrom).includes(BOX);
   step.check(
-    "--quit ends the launch before, its backend with it",
-    ending.ok && gone.length === 0,
-    `${ending.detail}${gone.length > 0 ? `; still running: ${gone.join(", ")}` : ""}`,
+    "--quit ends the launch before, its backend with it, and asks nothing",
+    ending.ok && gone.length === 0 && !asked,
+    `${ending.detail}; ${asked ? "a quit box" : "no quit box"}${gone.length > 0 ? `; still running: ${gone.join(", ")}` : ""}`,
   );
 
   const output = openSync(join(smoke.run.scratch, "server.output.log"), "a");
@@ -1651,7 +1657,7 @@ async function attached(
   // Quitting the app leaves the server running; the smoke stops it.
   const quitFrom = smoke.log("main").length;
   const ending = await quitApp(walk, driven.main, null);
-  const asked = smoke.log("main").slice(quitFrom).includes("to a message box");
+  const asked = smoke.log("main").slice(quitFrom).includes(BOX);
   const still = await serverStatus(walk, "/api/local/status");
   step.check(
     "quitting the app asks nothing and leaves the server running",
@@ -1752,7 +1758,7 @@ async function killAndRetry(
  * The last launch spawns its own backend again, and the page holds an unsaved edit, whose
  * beforeunload asks it to stay: main must let it go to load the failure page when the backend dies,
  * and at the quit, or the failure page never shows and the quit stops with the window hidden and the
- * backend already stopped.
+ * backend already stopped. The quit's box, which background mode answers, says the edit will be lost.
  */
 async function quit(walk: Walk, step: Step) {
   const { smoke } = walk;
@@ -1777,6 +1783,14 @@ async function quit(walk: Walk, step: Step) {
     const quitFrom = smoke.log("main").length;
     const ending = await quitApp(walk, driven.main, killed.pid);
     step.check("--quit: the second launch, main and the backend exit 0", ending.ok, ending.detail);
+    if (walk.background) {
+      const asked = inOrder(smoke.log("main").slice(quitFrom), [UNSAVED_QUIT_BOX, LINES.quitting]);
+      step.check(
+        "main.log: the quit box says the unsaved edit will be lost, then the quit goes on",
+        asked.ok,
+        asked.detail,
+      );
+    }
     const said = inOrder(smoke.log("main").slice(quitFrom), [
       LINES.quitting,
       "Eidolon: the window is hidden",
