@@ -185,6 +185,20 @@ test("keeps /call's transcript mounted beside the call, or below it, never over 
   expect(markup.indexOf("Hang Up")).toBeLessThan(at);
 });
 
+test("marks its toggles pressed or not: Captions on by default, Type a Message and Transcript off", () => {
+  const markup = render({
+    target: soloTarget(MILKY),
+    props: { titled: false, typing: true, transcript: createElement("div", { role: "log" }) },
+  });
+  const pressed = (label: string) =>
+    markup
+      .match(new RegExp(`<button [^>]*aria-label="${label}"[^>]*>`))?.[0]
+      .match(/ aria-pressed="([^"]*)"/)?.[1];
+  expect(pressed("Captions")).toBe("true");
+  expect(pressed("Type a Message")).toBe("false");
+  expect(pressed("Transcript")).toBe("false");
+});
+
 test("holds a chat's waiting bar opaque, and the one part that scrolls", () => {
   const markup = render({
     props: { waiting: createElement("section", { "data-waiting": "t1" }, "Waiting for You") },
