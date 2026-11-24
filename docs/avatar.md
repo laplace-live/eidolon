@@ -436,8 +436,9 @@ Electron 45.4.1 (Chromium 156), on CC0 rigs exported by PSD2Live 3.8.4's command
   it shader compiles (26 ms in a second window); the textures 42–54 ms.
 - **Memory:** 10.6 MB of wasm memory per model, and a JS heap of 5.6 MB with one model, 13 MB with
   three.
-- **CPU in Electron:** the GPU process 1.2%, a page drawing at 120 fps 0.8%, and one capped at 30
-  fps 0.4% (0.33 + 0.16 ms a frame).
+- **CPU in Electron,** as Electron's `percentCPUUsage` reads it, a share of all of that Mac's 16
+  cores: the GPU process 1.2%, a page drawing at 120 fps 0.8%, and one capped at 30 fps 0.4% (0.33 +
+  0.16 ms a frame). Of one core, as Activity Monitor counts, that is about 19%, 13% and 6%.
 - **The server's check:** the same wasm loads a rig under Node 24 and Bun 1.4.5, compiling in 1–2 ms
   and loading in 8–20 ms, with no browser.
 - **Bad files** failed cleanly, with no trap: `Not a .p2lrt rig`, `Chunk TEXR lies outside the
