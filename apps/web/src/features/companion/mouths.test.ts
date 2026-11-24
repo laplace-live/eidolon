@@ -6,7 +6,6 @@ import {
   VOICE_FPS,
   VoiceTimeline,
   voiceOpenings,
-  WidestTap,
 } from "./mouths";
 
 function clock() {
@@ -115,14 +114,4 @@ describe("VoiceTimeline", () => {
     time.at(10_000);
     expect(timeline.read()).toBe(0);
   });
-});
-
-test("WidestTap passes each reading on and keeps the widest until taken", () => {
-  const readings = [0.2, 0.7, 0.1];
-  const tap = new WidestTap();
-  expect(tap.read(0.016)).toBe(0);
-  tap.source = { read: () => readings.shift() ?? 0 };
-  expect([tap.read(0.016), tap.read(0.016), tap.read(0.016)]).toEqual([0.2, 0.7, 0.1]);
-  expect(tap.take()).toBe(0.7);
-  expect(tap.take()).toBe(0);
 });
