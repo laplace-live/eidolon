@@ -221,7 +221,7 @@ export function VideoCall({
         {titled && (
           <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col items-center gap-0.5 bg-linear-to-b from-background/80 to-transparent px-4 pt-3 pb-8">
             <p className="max-w-full truncate font-semibold">{heading}</p>
-            <p className="flex max-w-full items-center gap-1.5 text-muted-foreground text-xs">
+            <p className="flex max-w-full items-center gap-1.5 rounded-full bg-background/80 px-2.5 py-0.5 text-muted-foreground text-xs backdrop-blur-sm">
               <CallStatus phase={phase} name={name} />
             </p>
           </div>

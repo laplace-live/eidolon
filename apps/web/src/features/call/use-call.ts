@@ -77,7 +77,7 @@ interface ActiveCall {
 }
 
 /** `signals`, which her stages follow, hears the call's events and taps the bot's track. */
-export function useCall(signals?: CallSignals): Call {
+export function useCall(signals: CallSignals): Call {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [phase, dispatchPhase] = useReducer(reducePhase, IDLE);
   const [transcript, dispatchTranscript] = useReducer(reduceTranscript, EMPTY_TRANSCRIPT);
@@ -103,7 +103,7 @@ export function useCall(signals?: CallSignals): Call {
       setBotSpeaking(false);
       setAudioBlocked(false);
       if (audioRef.current) audioRef.current.srcObject = null;
-      signals?.listen(null);
+      signals.listen(null);
     },
     [watchdog, signals],
   );
@@ -115,7 +115,7 @@ export function useCall(signals?: CallSignals): Call {
       const playing = audio.srcObject instanceof MediaStream ? audio.srcObject : null;
       if (playing?.getAudioTracks()[0]?.id === track.id) return;
       audio.srcObject = new MediaStream([track]);
-      signals?.listen(track);
+      signals.listen(track);
       audio
         .play()
         .then(() => setAudioBlocked(false))
@@ -144,7 +144,7 @@ export function useCall(signals?: CallSignals): Call {
           | "bot-llm-started"
           | "bot-interrupted"
           | "function-call",
-      ) => signals?.feed({ type, at: signals.now() });
+      ) => signals.feed({ type, at: signals.now() });
       const offs = [
         // The client hands its own mic to the peer connection; only the bot's audio is the page's.
         client.on("trackStarted", (track, participant) => {
@@ -193,8 +193,8 @@ export function useCall(signals?: CallSignals): Call {
         }),
         client.on("botOutput", (data) => {
           dispatchTranscript({ type: "bot-output", data });
-          const event = signals === undefined ? null : outputEvent(data, signals.now());
-          if (event !== null) signals?.feed(event);
+          const event = outputEvent(data, signals.now());
+          if (event !== null) signals.feed(event);
         }),
         client.on("botInterrupted", () => {
           dispatchTranscript({ type: "interrupted" });
@@ -204,7 +204,7 @@ export function useCall(signals?: CallSignals): Call {
         client.on("serverMessage", (message) => {
           if (message.type === "speaker") {
             dispatchTranscript({ type: "speaker", speaker: message.speaker });
-            signals?.feed({ type: "speaker", at: signals.now(), persona: message.speaker.persona });
+            signals.feed({ type: "speaker", at: signals.now(), persona: message.speaker.persona });
           } else if (message.type === "selfie" && message.urls.length > 0) {
             dispatchTranscript({ type: "selfie", paths: message.urls, persona: message.persona });
           }
@@ -321,7 +321,7 @@ export function useCall(signals?: CallSignals): Call {
       if (call === null || trimmed === "") return;
       const key = `typed-${++typedRef.current}`;
       dispatchTranscript({ type: "typed", key, text: trimmed });
-      signals?.feed({ type: "user-words", at: signals.now() });
+      signals.feed({ type: "user-words", at: signals.now() });
       call.heardAt = Date.now();
       // Typed text skips the bot's VAD, so no user-stopped-speaking starts the wait.
       watchdog.arm();
@@ -335,7 +335,7 @@ export function useCall(signals?: CallSignals): Call {
 
   const playAudio = useCallback(() => {
     // In the click itself: a browser resumes an AudioContext it held back only within one.
-    signals?.wake();
+    signals.wake();
     audioRef.current
       ?.play()
       .then(() => setAudioBlocked(false))
@@ -346,8 +346,7 @@ export function useCall(signals?: CallSignals): Call {
   const dial = useCallback((target?: ChatCallRequestData) => void start(target), [start]);
   const end = useCallback(() => void hangUp(), [hangUp]);
 
-  // Unmounting hangs up and frees the mic: the shell's call ends as the shell goes (the sign-in
-  // screen, setup, a reload).
+  // The shell going away (the sign-in screen, setup, a reload) hangs up and frees the mic.
   useEffect(
     () => () => {
       attemptRef.current++;

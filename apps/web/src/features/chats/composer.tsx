@@ -162,6 +162,7 @@ function SuggestionList<T>({
  * the text until it is sent, which waits for them to be kept. While the box is empty with no file,
  * the microphone takes the send button's place, and a take replaces the text while it records.
  * During a call it is disabled, keeping any draft, and it takes the focus back when the call ends.
+ * In another chat during a call, the microphone is hidden.
  * A command goes to `onCommand`, never to her; one it can't run keeps the draft.
  */
 export function Composer({
@@ -171,6 +172,7 @@ export function Composer({
   busy,
   mic,
   inCall,
+  callElsewhere,
   leading,
   files,
   onSend,
@@ -185,6 +187,8 @@ export function Composer({
   readonly busy: boolean;
   readonly mic: MicState;
   readonly inCall: boolean;
+  /** A call is up in another chat or on /call: no voice message is recorded over it. */
+  readonly callElsewhere: boolean;
   /** The chat's own controls, at the start of the row under the text. */
   readonly leading: ReactNode;
   /** The files the line carries. */
@@ -214,6 +218,7 @@ export function Composer({
   const { text } = draft;
   const trimmed = text.trim();
   const attached = files.files.length > 0;
+  const callOn = inCall || callElsewhere;
 
   const group = participants.length > 1;
   const open = focused ? openAt(draft, participants, skills) : null;
@@ -228,8 +233,8 @@ export function Composer({
   // A call takes the microphone, and the chat takes no voice message during one.
   const { stop } = recorder;
   useEffect(() => {
-    if (inCall) stop(false);
-  }, [inCall, stop]);
+    if (callOn) stop(false);
+  }, [callOn, stop]);
 
   // A picked name moves the caret past it once React has put the new text in the box.
   useLayoutEffect(() => {
@@ -485,7 +490,7 @@ export function Composer({
               <SquareIcon className="size-3 fill-current" />
             </Button>
           )}
-          {showsMic({ recording, empty: trimmed === "" && !attached, inCall }) ? (
+          {showsMic({ recording, empty: trimmed === "" && !attached, inCall: callOn }) ? (
             // A take under way can always be sent, whatever the chat learned since it started.
             <MicButton
               recorder={recorder}
@@ -497,7 +502,7 @@ export function Composer({
               type="submit"
               size="icon-lg"
               className="rounded-full"
-              disabled={inCall || !files.ready}
+              disabled={inCall || !files.ready || (callElsewhere && trimmed === "" && !attached)}
               aria-label={t`Send`}
             >
               <ArrowUpIcon />

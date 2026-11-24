@@ -1,21 +1,18 @@
-// The call this page holds, shown as it is said. The chat stores each of its lines only once it is
-// finished, her reply once all of it has played, so while the call is on, its own transcript (what
-// the call page shows) stands in for its stored lines, until the call's end is stored after them.
+// The tab's call in this chat, shown as it is said. The chat stores each of its lines only once it
+// is finished, her reply once all of it has played, so while the call is on, its own transcript
+// (what the call page shows) stands in for its stored lines, until the call's end is stored after
+// them.
 import type { ChatEvent, ParticipantId } from "@eidolon/chat";
-import type { WaitState } from "@laplace.live/eidolon-sdk";
 import type { BotEntry, SelfieEntry, Transcript, UserEntry } from "@/features/call/transcript";
 import { type ChatItem, saidBy } from "./items";
 
+/** Where the tab's call shows in the log; its transcript, wait and state are the shell's call's. */
 export interface LiveCall {
   /** The seq of its call-started: the lines of it stored after this, the transcript shows. */
   readonly from: number;
-  readonly transcript: Transcript;
-  readonly wait: WaitState;
   /** Whom the viewer called, whose replies these are on a call with her alone; else the host. */
   readonly persona: ParticipantId;
   readonly group: boolean;
-  /** Up and hearing the viewer. */
-  readonly live: boolean;
 }
 
 /**

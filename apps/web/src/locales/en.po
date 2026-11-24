@@ -2223,6 +2223,10 @@ msgstr "Everyone can hear you. Say something to start."
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "Everything the other sections don't show. Most installs never change these."
 
+#: src/features/chats/call-dock.tsx
+msgid "Expand"
+msgstr "Expand"
+
 #: src/components/app-sidebar.tsx
 msgid "Expand Sidebar"
 msgstr "Expand Sidebar"
@@ -2518,6 +2522,10 @@ msgstr "Group ID"
 #: src/features/call/call-controls.tsx
 msgid "Hang Up"
 msgstr "Hang Up"
+
+#: src/features/call/call-page.tsx
+msgid "Hang up the call in your chat to call {name} here."
+msgstr "Hang up the call in your chat to call {name} here."
 
 #: src/features/call/call-state.tsx
 msgid "Hanging up…"
@@ -7174,6 +7182,15 @@ msgstr "You denied it when it asked to start."
 #: src/features/setup/done-step.tsx
 msgid "You're all set"
 msgstr "You're all set"
+
+#: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
+msgid "You're already in a call. Hang up first."
+msgstr "You're already in a call. Hang up first."
+
+#: src/features/call/call-page.tsx
+msgid "You're in a call"
+msgstr "You're in a call"
 
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"

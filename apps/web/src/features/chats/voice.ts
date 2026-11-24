@@ -55,14 +55,15 @@ export function voiceReplies(events: readonly ChatEvent[]): number[] {
 
 /**
  * The replies waiting to play on their own once her new `replies` arrive: they join the queue while
- * the tab has the focus, and none waits while a call is on, whose microphone would hear them.
+ * the tab has the focus, and none waits while a call is up in this tab, whose microphone would hear
+ * them.
  */
 export function queueReplies(
   waiting: readonly number[],
   replies: readonly number[],
-  { focused, calling }: { readonly focused: boolean; readonly calling: boolean },
+  { focused, quiet }: { readonly focused: boolean; readonly quiet: boolean },
 ): readonly number[] {
-  if (calling) return [];
+  if (quiet) return [];
   return focused ? [...waiting, ...replies] : waiting;
 }
 
