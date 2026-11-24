@@ -19,7 +19,6 @@ import {
   areaAt,
   COMPANION_LINES,
   type CompanionSettings,
-  clampBounds,
   companionLine,
   companionSize,
   DEFAULT_ASPECT,
@@ -32,6 +31,7 @@ import {
   placement,
   RETRY_MS,
   settled,
+  standing,
 } from "./companion.ts";
 import { companionMenu } from "./menus.ts";
 import type { Strings } from "./strings.ts";
@@ -101,6 +101,11 @@ export class Companion {
   #app = false;
   #page: "none" | "loading" | "drawn" = "none";
   #shape: CompanionShape = { kind: "model", aspect: DEFAULT_ASPECT };
+  /**
+   * Where she stands while her window is there, unrounded: read back from a window's whole-DIP
+   * bounds, her feet would move half a DIP at each reshape between an odd and an even width.
+   */
+  #feet: Point | null = null;
   /** Main's record of her showing. */
   #shown = false;
   /** The main window shows now, as mainShown last said. */
@@ -226,7 +231,8 @@ export class Companion {
         const dropped = settled(moved, areas);
         this.#io.setBounds(dropped);
         this.#dragStart = null;
-        this.#save({ feet: feetOf(dropped) });
+        this.#feet = feetOf(dropped);
+        this.#save({ feet: this.#feet });
       }
     }
     this.#sync();
@@ -281,12 +287,12 @@ export class Companion {
   }
 
   displaysChanged(): void {
-    const bounds = this.#io.bounds();
-    if (bounds === null) return;
-    const areas = this.#io.areas();
-    const feet = feetOf(bounds);
-    const size = companionSize(this.#settings.size, this.#shape, areaAt(feet, areas));
-    this.#io.setBounds(clampBounds(placement(feet, size, areas, this.#io.displays()), areas));
+    const before = this.#io.bounds();
+    if (before === null) return;
+    const { bounds } = this.#placed();
+    this.#io.setBounds(bounds);
+    // A display that went, or a Dock that grew under her, moved her: she stands there now.
+    if (bounds.x !== before.x || bounds.y !== before.y) this.#feet = feetOf(bounds);
   }
 
   popOut(): CompanionState {
@@ -355,6 +361,8 @@ export class Companion {
   #open(): void {
     if (this.#quitting) return;
     this.#page = "loading";
+    // A new window stands where her settings left her; one loaded again keeps her place.
+    if (this.#io.bounds() === null) this.#feet = null;
     this.#io.open(this.#placed().bounds);
     this.#io.passClicks(true);
     if (!this.#background) this.#io.setAlwaysOnTop(this.#settings.alwaysOnTop);
@@ -368,11 +376,12 @@ export class Companion {
   /** Her window's size and bounds as her settings and shape have them, standing where she stood. */
   #placed(): { readonly size: WindowSize; readonly bounds: Rectangle } {
     const areas = this.#io.areas();
-    const window = this.#io.bounds();
-    const feet = window === null ? this.#settings.feet : feetOf(window);
+    const displays = this.#io.displays();
+    const feet = this.#feet ?? this.#settings.feet;
     const area = feet === null ? areas[0] : areaAt(feet, areas);
     const size = companionSize(this.#settings.size, this.#shape, area);
-    return { size, bounds: placement(feet, size, areas, this.#io.displays()) };
+    this.#feet = standing(feet, size, areas, displays);
+    return { size, bounds: placement(this.#feet, size, areas, displays) };
   }
 
   #act(pick: CompanionPick | null, state: CompanionMenuState): void {

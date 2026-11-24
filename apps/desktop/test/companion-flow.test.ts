@@ -419,6 +419,30 @@ describe("her window", () => {
     // With her window still on a display, she stays.
     flow.displaysChanged();
     expect(calls.at(-1)).toEqual(["setBounds", FIRST]);
+    // She stands there now: her picture's window keeps her feet.
+    flow.shape({ kind: "picture" });
+    const feet = feetOf(FIRST);
+    expect(calls.at(-1)).toEqual([
+      "setBounds",
+      { x: feet.x - 64, y: feet.y - 128, width: 128, height: 128 },
+    ]);
+  });
+
+  test("reshaped between odd and even widths, she stands on her own feet, never drifting", () => {
+    // Where a drag of her 205-DIP-wide model left her feet: half a DIP into a pixel.
+    const feet = { x: 700.5, y: 900 };
+    const model = { kind: "model", aspect: 0.427 } as const;
+    const { flow, values } = shownCompanion({ feet });
+    expect(flow.shape(model)).toEqual({ width: 205, height: 480 });
+    const standing = values("setBounds").at(-1);
+    expect(standing).toEqual({ x: 598, y: 420, width: 205, height: 480 });
+    for (let trip = 0; trip < 5; trip++) {
+      flow.shape({ kind: "picture" });
+      // Displays that change nothing under her move nothing either.
+      flow.displaysChanged();
+      flow.shape(model);
+      expect([trip, values("setBounds").at(-1)]).toEqual([trip, standing]);
+    }
   });
 
   test("a Dock that grew under her pushes her up onto its edge, rather than off to her first place", () => {
@@ -428,7 +452,12 @@ describe("her window", () => {
       [LAPTOP_DISPLAY, EXTERNAL_DISPLAY],
     );
     flow.displaysChanged();
-    expect(calls.at(-1)).toEqual(["setBounds", { x: 199, y: 825 - 480, width: 202, height: 480 }]);
+    const onItsEdge = { x: 199, y: 825 - 480, width: 202, height: 480 };
+    expect(calls.at(-1)).toEqual(["setBounds", onItsEdge]);
+    // She stands there now, as a drag would leave her, and stays once it shrinks back.
+    setScreens([LAPTOP, EXTERNAL], [LAPTOP_DISPLAY, EXTERNAL_DISPLAY]);
+    flow.displaysChanged();
+    expect(calls.at(-1)).toEqual(["setBounds", onItsEdge]);
   });
 });
 
