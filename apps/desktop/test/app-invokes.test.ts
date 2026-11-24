@@ -4,13 +4,18 @@ import { describe, expect, test } from "vitest";
 import { type AppInvokes, appInvokes, type InvokeAnswer } from "../src/main/app-invokes.ts";
 import { BRIDGE, type IpcSender, type PageChannel } from "../src/shared/bridge.ts";
 
-const app: IpcSender = { window: true, mainFrame: true, origin: "eidolon-app://app" };
+const app: IpcSender = { window: "main", mainFrame: true, origin: "eidolon-app://app" };
 const others: Readonly<Record<string, IpcSender>> = {
-  "the shell's page": { window: true, mainFrame: true, origin: "eidolon-app://shell" },
-  "a subframe": { window: true, mainFrame: false, origin: "eidolon-app://app" },
-  "another webContents": { window: false, mainFrame: false, origin: "eidolon-app://app" },
-  "a frame that's gone": { window: true, mainFrame: true, origin: null },
-  "a sandboxed document": { window: true, mainFrame: true, origin: "null" },
+  "the shell's page": { window: "main", mainFrame: true, origin: "eidolon-app://shell" },
+  "a subframe": { window: "main", mainFrame: false, origin: "eidolon-app://app" },
+  "another webContents": { window: null, mainFrame: false, origin: "eidolon-app://app" },
+  "a frame that's gone": { window: "main", mainFrame: true, origin: null },
+  "a sandboxed document": { window: "main", mainFrame: true, origin: "null" },
+  "the desktop companion's page": {
+    window: "companion",
+    mainFrame: true,
+    origin: "eidolon-app://app",
+  },
 };
 
 const INSTALLED = { state: "installed", path: "/usr/local/bin/eidolon" } as const;

@@ -1,10 +1,13 @@
-// The bridges between the window's pages and main: the IPC channels, what each carries, and which
-// page may use it. The sandboxed preload bundles it too, so it imports nothing.
+// The bridges between the windows' pages and main: the IPC channels, what each carries, and which
+// window's page may use it. The sandboxed preload bundles it too, so it imports nothing.
 
 export const SCHEME = "eidolon-app";
 
 /** The window's two kinds of page: the app's own, from the backend, and the shell's. */
 export type Page = "app" | "shell";
+
+/** The app's two windows: the main one, and the desktop companion's. */
+export type WindowKind = "main" | "companion";
 
 /**
  * Which page a frame at `url` shows, by protocol and host: Node's URL gives a custom scheme's
@@ -94,28 +97,31 @@ export const BRIDGE = {
   quit: "eidolon:quit",
 } as const;
 
-/** The channels main listens on, each with the one page whose main frame may send on it. */
+/**
+ * The channels main listens on, each with the one window and page whose main frame may send on it.
+ * Both windows' pages are at the app's address: only the window tells them apart.
+ */
 const SENDERS = {
-  [BRIDGE.theme]: "app",
-  [BRIDGE.language]: "app",
-  [BRIDGE.versions]: "app",
-  [BRIDGE.takesCommands]: "app",
-  [BRIDGE.chooseFolder]: "app",
-  [BRIDGE.loginItem]: "app",
-  [BRIDGE.setLoginItem]: "app",
-  [BRIDGE.terminalCommand]: "app",
-  [BRIDGE.setTerminalCommand]: "app",
-  [BRIDGE.retry]: "shell",
-  [BRIDGE.showLogs]: "shell",
-  [BRIDGE.quit]: "shell",
-} as const satisfies Record<string, Page>;
+  [BRIDGE.theme]: ["main", "app"],
+  [BRIDGE.language]: ["main", "app"],
+  [BRIDGE.versions]: ["main", "app"],
+  [BRIDGE.takesCommands]: ["main", "app"],
+  [BRIDGE.chooseFolder]: ["main", "app"],
+  [BRIDGE.loginItem]: ["main", "app"],
+  [BRIDGE.setLoginItem]: ["main", "app"],
+  [BRIDGE.terminalCommand]: ["main", "app"],
+  [BRIDGE.setTerminalCommand]: ["main", "app"],
+  [BRIDGE.retry]: ["main", "shell"],
+  [BRIDGE.showLogs]: ["main", "shell"],
+  [BRIDGE.quit]: ["main", "shell"],
+} as const satisfies Record<string, readonly [WindowKind, Page]>;
 
 export type PageChannel = keyof typeof SENDERS;
 
 /** Who sent an IPC message, as main sees it on the event. */
 export interface IpcSender {
-  /** Whether it came from the app window's own webContents. */
-  readonly window: boolean;
+  /** Which of the app's windows sent it, by its webContents; null for anything else. */
+  readonly window: WindowKind | null;
   /** Whether it came from that window's main frame. */
   readonly mainFrame: boolean;
   /**
@@ -126,15 +132,17 @@ export interface IpcSender {
 }
 
 /**
- * Whether main takes a message on `channel` from `sender`: only from the channel's page, in the
- * app window's main frame.
+ * Whether main takes a message on `channel` from `sender`: only from the channel's window and page,
+ * in that window's main frame. Never widen it to any window of the app's: the companion's page would
+ * then reach the system options, the folder dialog, the theme and the language.
  */
 export function accepts(channel: PageChannel, sender: IpcSender): boolean {
+  const [kind, page] = SENDERS[channel];
   return (
-    sender.window &&
+    sender.window === kind &&
     sender.mainFrame &&
     sender.origin !== null &&
-    pageAt(sender.origin) === SENDERS[channel]
+    pageAt(sender.origin) === page
   );
 }
 

@@ -1,9 +1,8 @@
-// The app's one window: no system title bar, its bounds kept across launches, closed only by
+// The app's main window: no system title bar, its bounds kept across launches, closed only by
 // a quit. Main keeps whether it shows itself: Electron reports an occluded window as hidden. In
 // background mode main keeps that state alone, and never puts the window on screen.
 import { join } from "node:path";
-import { app, BrowserWindow, type IpcMainEvent, nativeTheme, screen } from "electron";
-import type { IpcSender } from "../shared/bridge.ts";
+import { app, BrowserWindow, nativeTheme, screen } from "electron";
 import { backgroundWindowOptions, showCalls } from "./background.ts";
 import { background } from "./instance.ts";
 import { mainLog } from "./log.ts";
@@ -45,16 +44,6 @@ function setShown(next: { readonly shown?: boolean; readonly painted?: boolean }
 /** The window, while it exists: a page's window.close() destroys it, and a launch makes another. */
 export function mainWindow(): BrowserWindow | null {
   return window !== null && !window.isDestroyed() ? window : null;
-}
-
-/** Who sent `event`, a message or an invoke, for the bridges' sender rule (bridge.ts's accepts). */
-export function ipcSender(event: Pick<IpcMainEvent, "sender" | "senderFrame">): IpcSender {
-  const win = mainWindow();
-  return {
-    window: win !== null && event.sender === win.webContents,
-    mainFrame: win !== null && event.senderFrame === win.webContents.mainFrame,
-    origin: event.senderFrame?.origin ?? null,
-  };
 }
 
 function boundsFile(): string {

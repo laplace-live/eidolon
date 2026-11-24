@@ -38,6 +38,7 @@ import {
 import { installQuit, watchSession } from "./quit.ts";
 import type { BackendFetch } from "./quit-check.ts";
 import { HideNotice } from "./quit-flow.ts";
+import { senderWindow } from "./senders.ts";
 import { STRINGS, shellLanguage } from "./strings.ts";
 import {
   loginItemQuery,
@@ -188,6 +189,7 @@ function run(): void {
     about: () => native.aboutPanel(aboutOptions()),
     quit: () => app.quit(),
   };
+  senderWindow("main", () => mainWindow()?.webContents ?? null);
 
   function loadUrl(url: string): void {
     // A failed load is did-fail-load's, which decides; a replaced one is no failure.

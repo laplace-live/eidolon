@@ -89,8 +89,10 @@ describe("accepts", () => {
     BRIDGE.terminalCommand,
     BRIDGE.setTerminalCommand,
   ];
-  const app: IpcSender = { window: true, mainFrame: true, origin: "eidolon-app://app" };
-  const shell: IpcSender = { window: true, mainFrame: true, origin: "eidolon-app://shell" };
+  const app: IpcSender = { window: "main", mainFrame: true, origin: "eidolon-app://app" };
+  const shell: IpcSender = { window: "main", mainFrame: true, origin: "eidolon-app://shell" };
+  /** The desktop companion's page shares the app page's origin: only her window tells it apart. */
+  const her: IpcSender = { window: "companion", mainFrame: true, origin: "eidolon-app://app" };
 
   test("the app's page alone sets the theme and the language, asks for the versions, takes commands, picks a folder and reads or changes the system options", () => {
     for (const channel of APP_CHANNELS) {
@@ -112,7 +114,7 @@ describe("accepts", () => {
       const own = APP_CHANNELS.includes(channel) ? app : shell;
       expect(accepts(channel, own)).toBe(true);
       expect(accepts(channel, { ...own, mainFrame: false })).toBe(false);
-      expect(accepts(channel, { ...own, window: false })).toBe(false);
+      expect(accepts(channel, { ...own, window: null })).toBe(false);
       expect(accepts(channel, { ...own, origin: null })).toBe(false);
       expect(accepts(channel, { ...own, origin: "eidolon-app://other" })).toBe(false);
       expect(accepts(channel, { ...own, origin: "data:text/html," })).toBe(false);
@@ -122,6 +124,13 @@ describe("accepts", () => {
   test("never from a document at the app's address with an opaque origin, as a sandboxed one has", () => {
     for (const channel of APP_CHANNELS) {
       expect(accepts(channel, { ...app, origin: "null" })).toBe(false);
+    }
+  });
+
+  test("never from the desktop companion's window, though her page is at the app's own origin", () => {
+    for (const channel of [...APP_CHANNELS, BRIDGE.retry, BRIDGE.showLogs, BRIDGE.quit]) {
+      expect([channel, accepts(channel, her)]).toEqual([channel, false]);
+      expect(accepts(channel, { ...her, origin: "eidolon-app://shell" })).toBe(false);
     }
   });
 });

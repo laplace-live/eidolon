@@ -13,7 +13,8 @@ import {
   type Language,
 } from "../shared/bridge.ts";
 import { type AppInvokes, appInvokes } from "./app-invokes.ts";
-import { ipcSender, mainWindow } from "./window.ts";
+import { ipcSender } from "./senders.ts";
+import { mainWindow } from "./window.ts";
 import { titleBarOverlay } from "./window-options.ts";
 
 /** Per window: the caption buttons' colour on Windows, and the fullscreen mark on macOS. */
