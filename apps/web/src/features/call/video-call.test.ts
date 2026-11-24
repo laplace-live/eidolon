@@ -191,6 +191,9 @@ test("holds a chat's waiting bar opaque, and the one part that scrolls", () => {
   });
   const wrapper = markup.match(/<div class="([^"]*)"><section data-waiting="t1"/)?.[1]?.split(" ");
   expect(wrapper).toEqual(expect.arrayContaining(["bg-background", "overflow-y-auto", "min-h-0"]));
+  // It scrolls only within a bound: the foot holding it keeps to 70% of the stage, from its bottom.
+  const foot = openAt(markup, markup.indexOf("<section data-waiting")).at(-2) ?? "";
+  expect(classesOf(foot)).toEqual(expect.arrayContaining(["absolute", "bottom-0", "max-h-[70%]"]));
 });
 
 test("waits for one persona by her name, and for a group's reply without one", () => {
