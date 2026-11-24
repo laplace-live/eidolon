@@ -7011,8 +7011,8 @@ msgid "What each provider has cost, as calls, video jobs and MCP searches on thi
 msgstr "各服务商的花费，由这台电脑上的通话、视频作业和 MCP 检索记录。"
 
 #: src/features/settings/desktop-card.tsx
-msgid "What Eidolon can add to this computer, each only when you choose it here."
-msgstr "Eidolon 能为这台电脑添加的功能，每一项都只在你在这里选择后才会添加。"
+msgid "What Eidolon can add to this computer, each only when you choose it."
+msgstr "Eidolon 能为这台电脑添加的功能，每一项都只在你选择后才会添加。"
 
 #: src/features/settings/route.tsx
 msgid "What every persona knows about you."

@@ -258,7 +258,7 @@ export function DesktopCard() {
   return (
     <SectionCard
       title={t`Desktop App`}
-      description={t`What Eidolon can add to this computer, each only when you choose it here.`}
+      description={t`What Eidolon can add to this computer, each only when you choose it.`}
     >
       <div className="flex flex-col divide-y">
         {system && <LoginItemRow app={app} />}

@@ -327,6 +327,13 @@ describe("the card", () => {
     );
   });
 
+  test("says each option is added only when the owner chooses it, which for her may be in her menu, the tray or Pop Out rather than here", () => {
+    const markup = render("darwin", undefined, undefined, { state: OFF });
+    expect(text(markup)).toContain(
+      "Desktop App What Eidolon can add to this computer, each only when you choose it.",
+    );
+  });
+
   test("Desktop Companion's switch follows her, and Show at Login's can't be switched while she is off", () => {
     const off = render("darwin", undefined, undefined, { state: OFF });
     expect(companionRow(off)).toContain('role="switch"');
