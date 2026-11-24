@@ -14,8 +14,13 @@ vi.doMock("@lingui/core/macro", linguiMacro);
 vi.doMock("@lingui/react/macro", linguiReactMacro);
 // Her picture's version store has no server snapshot: a mark stands in for her picture.
 vi.doMock("@/components/avatar", () => ({
-  PersonaAvatar: ({ persona }: { readonly persona: { readonly id: string } }) =>
-    createElement("i", { "data-face": persona.id }),
+  PersonaAvatar: ({
+    persona,
+    className,
+  }: {
+    readonly persona: { readonly id: string };
+    readonly className?: string;
+  }) => createElement("i", { "data-face": persona.id, className }),
 }));
 const { CallTiles } = await import("./call-tiles");
 const { AvatarView } = await import("./avatar-view");
@@ -136,6 +141,10 @@ test("a tile per persona, host first: her model once it draws, else her picture"
   const plain = tile(markup, "plain");
   expect(plain).not.toContain("data-avatar");
   expect(plain).toContain('data-face="plain"');
+  // Her ring, like the tile's, changes at once under reduced motion.
+  const ring = plain.match(/<i data-face="plain" class="([^"]*)"/)?.[1]?.split(" ") ?? [];
+  expect(ring).toContain("motion-safe:transition-shadow");
+  expect(ring).not.toContain("transition-shadow");
   const failed = tile(markup, "broken");
   expect(failed).toContain('data-avatar="broken" data-state="failed"');
   expect(failed).toContain('data-face="broken"');
