@@ -273,6 +273,54 @@ describe("calls", () => {
   });
 });
 
+describe("another persona", () => {
+  test("shows none of the last one's mood, voice message or lent mood; her numbers go on", () => {
+    const director = new CompanionDirector(0);
+    director.said(message(13, "[chuckling] 嘿嘿"), 0);
+    expect(director.direction(0).gesture).toEqual({ name: "nod", seq: 1 });
+    director.said(message(14, "[生气] 哼，不理你了！"), 10);
+    director.voice(message(14, "[生气] 哼，不理你了！"), true, 20);
+    director.tap("body", 30);
+    expect(director.direction(30)).toMatchObject({
+      mood: ["angry"],
+      pulse: "surprised",
+      speaking: true,
+    });
+
+    director.newPersona(40);
+    expect(director.direction(40)).toMatchObject({ mood: [], pulse: null, speaking: false });
+    expect(director.voicing).toBeNull();
+    director.said(message(15, "[chuckling] 哈哈"), 50);
+    expect(director.direction(50).gesture).toEqual({ name: "nod", seq: 2 });
+  });
+
+  test("starts her taps over: one at once, after pokes or their pout, is her first", () => {
+    const director = new CompanionDirector(0);
+    for (const at of [1_000, 1_500, 2_000, 2_500]) director.tap("body", at);
+    director.newPersona(2_600);
+    director.tap("body", 2_700);
+    expect(director.direction(2_700).pulse).toBe("surprised");
+
+    for (const at of [3_200, 3_700, 4_200, 4_700]) director.tap("body", at);
+    expect(director.direction(4_700).pulse).toBe("pout");
+    director.newPersona(4_800);
+    director.tap("body", 4_900);
+    expect(director.direction(4_900).pulse).toBe("surprised");
+  });
+
+  test("comes awake, and a message told before her is told again when it plays", () => {
+    const director = new CompanionDirector(0);
+    director.said(message(16, "[开心地] 回来啦"), 0);
+    expect(director.dozing(DOZE_MS)).toBe(true);
+    director.newPersona(DOZE_MS);
+    expect(director.dozing(DOZE_MS + 1)).toBe(false);
+    expect(director.direction(DOZE_MS + 1).mood).toEqual([]);
+
+    director.voice(message(16, "[开心地] 回来啦"), true, DOZE_MS + 2);
+    expect(director.direction(DOZE_MS + 2)).toMatchObject({ mood: ["happy"], speaking: true });
+  });
+});
+
 test("a stage made anew gets no gesture made before it, a tap's or a call's, until her next", () => {
   const director = new CompanionDirector(0);
   director.tap("head", 1_000);

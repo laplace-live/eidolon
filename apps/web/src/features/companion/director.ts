@@ -148,6 +148,22 @@ export class CompanionDirector {
     this.#gesture = null;
   }
 
+  /**
+   * Another persona is active: she starts over as on a new page, keeping only the call and her
+   * gesture numbering. The last one's voice message would never end here: the main window passes on
+   * only the active persona's messages.
+   */
+  newPersona(at: number): void {
+    this.#own = direct(this.#own, { type: "reset", at });
+    this.#announced = null;
+    this.#voicing = null;
+    this.#lent = null;
+    this.#touched = at;
+    this.#pokes = [];
+    this.#restUntil = Number.NEGATIVE_INFINITY;
+    this.#reacted = Number.NEGATIVE_INFINITY;
+  }
+
   tick(at: number): void {
     this.#own = direct(this.#own, { type: "tick", at });
     if (this.#lent !== null && this.#lent.until <= at) this.#lent = null;

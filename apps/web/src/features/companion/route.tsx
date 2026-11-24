@@ -151,10 +151,18 @@ class Control {
     });
   }
 
-  /** What the page rendered: a stage made anew plays no gesture made before it. */
+  /**
+   * What the page rendered: a stage made anew plays no gesture made before it, and another active
+   * persona starts her direction over.
+   */
   rendered(live: Live): void {
-    if (live.stage !== this.#live.stage) this.director.newStage();
+    const before = this.#live;
     this.#live = live;
+    if (live.stage !== before.stage) this.director.newStage();
+    const persona = live.persona?.id;
+    if (before.persona !== undefined && persona !== undefined && persona !== before.persona.id) {
+      this.director.newPersona(performance.now());
+    }
   }
 
   tick(): void {
