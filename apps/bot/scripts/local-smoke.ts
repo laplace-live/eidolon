@@ -1887,9 +1887,9 @@ async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
   const models = `/api/local/personas/${PERSONA}/models`;
   const isUpload = (response: PageResponse) =>
     response.request().method() === "POST" && new URL(response.url()).pathname === models;
-  const uploads: number[] = [];
+  let uploads = 0;
   const listen = (response: PageResponse) => {
-    if (isUpload(response)) uploads.push(response.status());
+    if (isUpload(response)) uploads++;
   };
   /** The model her summary and the status name, or the persona the status is about instead. */
   const named = async () => {
@@ -2011,7 +2011,7 @@ async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
     })
       .png()
       .toBuffer();
-    const sent = uploads.length;
+    const sent = uploads;
     await input.setInputFiles({ name: "her.png", mimeType: "image/png", buffer: png });
     const picked = await shows(
       page.getByText(
@@ -2020,7 +2020,7 @@ async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
       ),
       10_000,
     );
-    const pngSent = uploads.length - sent;
+    const pngSent = uploads - sent;
     const refused = page.waitForResponse(isUpload);
     await input.setInputFiles({
       name: "cut-short.p2lrt",
