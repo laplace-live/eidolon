@@ -235,8 +235,10 @@ export function VideoCall({
             name={name}
             persona={host.id}
             className={cn(
-              "absolute inset-x-0 z-10 border-b-0 bg-transparent",
+              "absolute z-10 border-b-0 bg-transparent",
               titled ? "top-16" : "top-0",
+              // Beside her photo, which keeps its clicks.
+              photo === undefined ? "inset-x-0" : "right-20 left-0",
             )}
           />
         )}

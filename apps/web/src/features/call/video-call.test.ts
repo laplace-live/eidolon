@@ -62,6 +62,8 @@ interface Render {
   readonly transcript?: Transcript;
   readonly thinking?: boolean;
   readonly botSpeaking?: boolean;
+  /** The browser holds her voice back: a notice with Play. */
+  readonly audioBlocked?: boolean;
   readonly props?: Partial<Parameters<typeof VideoCall>[0]>;
 }
 
@@ -70,6 +72,7 @@ function render({
   transcript = EMPTY_TRANSCRIPT,
   thinking = false,
   botSpeaking = false,
+  audioBlocked = false,
   props,
 }: Render = {}): string {
   const signals = new CallSignals();
@@ -79,6 +82,7 @@ function render({
     transcript,
     wait: { thinking, stuck: false },
     botSpeaking,
+    audioBlocked,
     target,
     up: isUp(LIVE),
     serverCall: null,
@@ -123,6 +127,20 @@ function render({
 }
 
 const classesOf = (tag: string): string[] => tag.match(/ class="([^"]*)"/)?.[1]?.split(" ") ?? [];
+
+const VOID = new Set(["img", "input", "br", "hr", "meta", "link"]);
+
+/** The tags still open at `at` in `markup`, outermost first. */
+function openAt(markup: string, at: number): string[] {
+  const open: string[] = [];
+  for (const [tag, closing, name = "", selfClosing] of markup
+    .slice(0, at)
+    .matchAll(/<(\/?)([a-z][a-z0-9-]*)[^>]*?(\/?)>/g)) {
+    if (closing === "/") open.pop();
+    else if (selfClosing !== "/" && !VOID.has(name)) open.push(tag);
+  }
+  return open;
+}
 
 test("names the call as the dock does, and is never a drag row", () => {
   const markup = render({ props: { onShrink: () => {} } });
@@ -211,4 +229,23 @@ test("shows her newest photo in the corner while the call is up", () => {
   const markup = render({ transcript: shot });
   expect(markup).toMatch(/<img src="\/api\/selfie\/a.png" alt="A selfie from 奶绿"/);
   expect(render()).not.toContain("<img");
+});
+
+test("keeps the notices beside her photo, never over it", () => {
+  const shot = reduceTranscript(EMPTY_TRANSCRIPT, {
+    type: "selfie",
+    paths: ["/api/selfie/a.png"],
+  });
+  // The layer over the stage that holds the notice.
+  const layer = (markup: string): string[] => {
+    const at = markup.indexOf("Your browser is holding back");
+    expect(at).toBeGreaterThan(-1);
+    return classesOf(openAt(markup, at).find((tag) => classesOf(tag).includes("absolute")) ?? "");
+  };
+  for (const titled of [true, false]) {
+    const beside = layer(render({ transcript: shot, audioBlocked: true, props: { titled } }));
+    expect(beside).toEqual(expect.arrayContaining(["left-0", "right-20"]));
+    expect(beside).not.toContain("inset-x-0");
+  }
+  expect(layer(render({ audioBlocked: true }))).toContain("inset-x-0");
 });
