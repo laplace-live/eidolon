@@ -90,7 +90,7 @@ function MoodRow({
           pressed={trying}
           onPressedChange={onTry}
           disabled={disabled}
-          aria-describedby={labelId}
+          aria-label={t`Try ${ph({ name: label })}`}
         >
           {t`Try`}
         </Toggle>

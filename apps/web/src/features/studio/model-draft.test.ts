@@ -14,6 +14,7 @@ import {
   moodExpressions,
   nameProblem,
   newOutfitId,
+  newOutfitName,
   nudgedBox,
   rebaseDraft,
   rigPointAt,
@@ -221,6 +222,15 @@ describe("outfits", () => {
     let full: ModelDraft = { ...draftOf(SAVED), outfits: [] };
     for (let n = 0; n < MAX_OUTFITS + 3; n++) full = withNewOutfit(full, `${n}`);
     expect(full.outfits).toHaveLength(MAX_OUTFITS);
+  });
+
+  test("a new outfit is named with the lowest number no outfit's name has", () => {
+    const named = (n: number) => `Outfit ${n}`;
+    expect(newOutfitName([], named)).toBe("Outfit 1");
+    expect(newOutfitName([{ name: "Outfit 2" }, { name: "Outfit 2" }], named)).toBe("Outfit 1");
+    expect(newOutfitName([{ name: " Outfit 1" }, { name: "Outfit 2" }], named)).toBe("Outfit 3");
+    // A translation that drops the number can't make a free name; it still makes one.
+    expect(newOutfitName([{ name: "Outfit" }], () => "Outfit")).toBe("Outfit");
   });
 
   test("taking away the one she wears leaves her in none", () => {

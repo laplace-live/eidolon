@@ -290,7 +290,9 @@ function LineReading({ plan }: { readonly plan: LinePlan }) {
       <span>
         {plan.moods.length > 0
           ? t`Mood: ${ph({ moods })}`
-          : t`No mood found, so her face stays neutral.`}
+          : plan.cues.length > 0
+            ? t`No mood found, so only her cues change her face.`
+            : t`No mood found, so her face stays neutral.`}
       </span>
       {plan.cues.map((cue, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: a cue can come twice, in order.

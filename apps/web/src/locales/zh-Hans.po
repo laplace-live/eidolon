@@ -1325,7 +1325,7 @@ msgstr "服务商拒绝的密钥会导致通话失败。请修正上面标出的
 
 #: src/features/studio/model-controls.tsx
 msgid "Calls frame her head and shoulders until you frame her yourself."
-msgstr "在你亲自取景之前，通话会取她的头和肩膀。"
+msgstr "在你自己取景之前，通话画面默认框住她的头和肩膀。"
 
 #: src/features/home/memory-panel.tsx
 msgid "Calls go on without memory meanwhile."
@@ -3628,6 +3628,10 @@ msgstr "还没有模型"
 msgid "No mood found, so her face stays neutral."
 msgstr "没有读出情绪，她保持平常的表情。"
 
+#: src/features/studio/model-controls.tsx
+msgid "No mood found, so only her cues change her face."
+msgstr "没有读出情绪，只有提示会改变她的表情。"
+
 #: src/features/home/readiness-labels.ts
 msgid "No outfit references, so she can't take selfies."
 msgstr "没有服装参考图，她无法自拍。"
@@ -4492,13 +4496,17 @@ msgstr "相对于她的文件夹。默认 prompt.md。"
 #: src/features/settings/commands-card.tsx
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
-#: src/features/studio/model-list.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove"
 msgstr "移除"
 
 #: src/features/settings/accounts-card.tsx
 msgctxt "delete an account"
+msgid "Remove"
+msgstr "删除"
+
+#: src/features/studio/model-list.tsx
+msgctxt "model"
 msgid "Remove"
 msgstr "删除"
 
@@ -5816,7 +5824,7 @@ msgstr "无法执行检查。"
 
 #: src/features/studio/model-moods.tsx
 msgid "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then."
-msgstr "每种动作播放的动画：待机一直播放，说话时播放说话，点头和摇头偶尔出现。"
+msgstr "每种动作对应的动画：待机动画一直播放，说话时播放说话动画，偶尔点头或摇头。"
 
 #: src/features/call/call-notices.tsx
 msgid "The connection dropped."
@@ -6402,6 +6410,10 @@ msgstr "触发词：{words}"
 #: src/features/studio/model-moods.tsx
 msgid "Try"
 msgstr "试试"
+
+#: src/features/studio/model-moods.tsx
+msgid "Try {name}"
+msgstr "试试{name}"
 
 #: src/features/studio/model-controls.tsx
 msgid "Try a Line"

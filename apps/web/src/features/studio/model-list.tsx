@@ -83,13 +83,20 @@ import {
 import { Hint } from "./parts";
 import { draggingFiles } from "./pictures";
 
+/** The upload limit, 200 MiB, as its round number: formatBytes, counting in thousands, says 209.7. */
+function maxModelSize(lang: Lang): string {
+  return new Intl.NumberFormat(lang, { style: "unit", unit: "megabyte" }).format(
+    MAX_MODEL_BYTES / 1024 ** 2,
+  );
+}
+
 /** Why nothing could be imported from what was picked, in the viewer's language. */
 function fileProblemText(problem: ModelFileProblem, lang: Lang): string {
   switch (problem) {
     case "type":
       return t`Pick a .p2lrt file from PSD2Live, or the folder or zip of its web export.`;
     case "size":
-      return t`A model can be up to ${ph({ max: formatBytes(MAX_MODEL_BYTES, lang) })}.`;
+      return t`A model can be up to ${ph({ max: maxModelSize(lang) })}.`;
     case "header":
       return t`That file isn't a PSD2Live model.`;
     case "none":
@@ -300,7 +307,7 @@ function ModelMenu({
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={() => (opening.current = onRemove)}>
           <Trash2Icon />
-          {t`Remove`}
+          {t({ message: "Remove", context: "model" })}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -599,7 +606,7 @@ export function ModelListCard({
               }}
             >
               {removing.isPending && <Spinner />}
-              {t`Remove`}
+              {t({ message: "Remove", context: "model" })}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

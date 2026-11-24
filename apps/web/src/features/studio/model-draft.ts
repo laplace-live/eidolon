@@ -240,6 +240,18 @@ export function newOutfitId(outfits: readonly Pick<ModelOutfit, "id">[]): string
   }
 }
 
+/** The first of `named(1)`, `named(2)`… that none of `outfits` is called. */
+export function newOutfitName(
+  outfits: readonly Pick<ModelOutfit, "name">[],
+  named: (n: number) => string,
+): string {
+  const taken = new Set(outfits.map(({ name }) => name.trim()));
+  for (let n = 1; n <= outfits.length; n++) {
+    if (!taken.has(named(n))) return named(n);
+  }
+  return named(outfits.length + 1);
+}
+
 /** `draft` with a new, empty outfit called `name`; unchanged once it has as many as it can. */
 export function withNewOutfit(draft: ModelDraft, name: string): ModelDraft {
   if (draft.outfits.length >= MAX_OUTFITS) return draft;

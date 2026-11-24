@@ -26,6 +26,7 @@ import {
   MAX_OUTFITS,
   type ModelDraft,
   nameProblem,
+  newOutfitName,
   withHiddenParts,
   withNewOutfit,
   withOutfit,
@@ -216,7 +217,7 @@ export function OutfitsPanel({
   const full = draft.outfits.length >= MAX_OUTFITS;
 
   function add() {
-    const name = t`Outfit ${ph({ count: draft.outfits.length + 1 })}`;
+    const name = newOutfitName(draft.outfits, (count) => t`Outfit ${ph({ count })}`);
     const next = withNewOutfit(draft, name);
     const added = next.outfits.at(-1);
     onDraft(() => next);

@@ -3628,6 +3628,10 @@ msgstr "No models yet"
 msgid "No mood found, so her face stays neutral."
 msgstr "No mood found, so her face stays neutral."
 
+#: src/features/studio/model-controls.tsx
+msgid "No mood found, so only her cues change her face."
+msgstr "No mood found, so only her cues change her face."
+
 #: src/features/home/readiness-labels.ts
 msgid "No outfit references, so she can't take selfies."
 msgstr "No outfit references, so she can't take selfies."
@@ -4492,13 +4496,17 @@ msgstr "Relative to her folder. Default prompt.md."
 #: src/features/settings/commands-card.tsx
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
-#: src/features/studio/model-list.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove"
 msgstr "Remove"
 
 #: src/features/settings/accounts-card.tsx
 msgctxt "delete an account"
+msgid "Remove"
+msgstr "Remove"
+
+#: src/features/studio/model-list.tsx
+msgctxt "model"
 msgid "Remove"
 msgstr "Remove"
 
@@ -6402,6 +6410,10 @@ msgstr "Trigger words: {words}"
 #: src/features/studio/model-moods.tsx
 msgid "Try"
 msgstr "Try"
+
+#: src/features/studio/model-moods.tsx
+msgid "Try {name}"
+msgstr "Try {name}"
 
 #: src/features/studio/model-controls.tsx
 msgid "Try a Line"
