@@ -2,6 +2,7 @@
 // vendors, loads the .p2lrt as a page would, and what it reads of the rig is kept beside it.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Worker } from "node:worker_threads";
 import { logger, psd2liveDir } from "@eidolon/config";
 import type { ModelClip, ModelInventory, ModelNamed, ModelParameter } from "./api.ts";
 
@@ -17,8 +18,7 @@ const ERROR_CAPACITY = 201;
 const OUT_BYTES = 24;
 /**
  * The most an inventory may hold, counting its text and ENTRY_BYTES an entry, since every list and
- * status reads it back: the test rig's takes 10 KB. The runtime's load, before it, has no such
- * bound: 20,000 hit areas sharing one 5,000-character name take it 0.5 s, and 40,000 take 2 s.
+ * status reads it back: the test rig's takes 10 KB.
  */
 const INVENTORY_BYTES = 1 << 20;
 /** Near what model.json spends on an entry besides its text. */
@@ -105,10 +105,14 @@ export type RigCheck =
 
 let compiled: WebAssembly.Module | null = null;
 
+function runtimeModule(): WebAssembly.Module {
+  compiled ??= new WebAssembly.Module(readFileSync(join(psd2liveDir(), "p2l_runtime.wasm")));
+  return compiled;
+}
+
 /** A fresh instance, so a trap in one check leaves nothing behind for the next. */
 function instantiate(): P2lRuntime {
-  compiled ??= new WebAssembly.Module(readFileSync(join(psd2liveDir(), "p2l_runtime.wasm")));
-  const runtime = new WebAssembly.Instance(compiled, {}).exports as unknown as P2lRuntime;
+  const runtime = new WebAssembly.Instance(runtimeModule(), {}).exports as unknown as P2lRuntime;
   const abi = runtime.p2l_abi_version();
   if (abi >>> 16 !== 1 || (abi & 0xffff) < 2) {
     throw new Error(
@@ -254,6 +258,58 @@ function inventoryOf(runtime: P2lRuntime, rig: Pointer): RigCheck {
   };
 }
 
+function isRigFile(bytes: Uint8Array): boolean {
+  return MAGIC.every((byte, index) => bytes[index] === byte);
+}
+
+/** The longest the runtime may take to load a rig: a 200 MiB export takes it under 1 s. */
+export const LOAD_DEADLINE_MS = 5000;
+
+// The runtime's load grows with the square of a rig's hit areas: 100,000 sharing a 6,000-character
+// name take it 18 s, and a file far under MAX_MODEL_BYTES holds many more. It runs here in a worker
+// first, ended at the deadline, so the server's thread loads only a rig that loaded within it.
+const LOAD_SOURCE = `
+const { parentPort, workerData } = require("node:worker_threads");
+const { module, bytes, flags, capacity } = workerData;
+const runtime = new WebAssembly.Instance(module, {}).exports;
+const at = runtime.p2l_alloc(bytes.byteLength + 1);
+new Uint8Array(runtime.memory.buffer, at >>> 0, bytes.byteLength).set(bytes);
+const error = runtime.p2l_alloc(capacity);
+const rig = runtime.p2l_rig_load_ex(at, bytes.byteLength, flags, error, capacity);
+if (rig !== 0) runtime.p2l_rig_free(rig);
+parentPort.postMessage(rig !== 0);
+`;
+
+/**
+ * The refusal for `bytes` the runtime takes longer than `deadline` ms to load, as a worker times
+ * it; null for any other, which checkRig then reads, a file it refuses or traps on included.
+ */
+export async function slowRefusal(
+  bytes: Uint8Array,
+  deadline = LOAD_DEADLINE_MS,
+): Promise<Extract<RigCheck, { ok: false }> | null> {
+  if (!isRigFile(bytes)) return null;
+  const worker = new Worker(LOAD_SOURCE, {
+    eval: true,
+    workerData: { module: runtimeModule(), bytes, flags: VERIFY_CRC, capacity: ERROR_CAPACITY },
+  });
+  const slow = await new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(true), deadline);
+    const done = () => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    worker.once("message", done).once("error", done).once("exit", done);
+  });
+  await worker.terminate();
+  if (!slow) return null;
+  return {
+    ok: false,
+    code: "invalid-model",
+    message: `PSD2Live's runtime takes over ${deadline / 1000} s to load it, far longer than any export`,
+  };
+}
+
 /**
  * Whether `bytes` are a rig PSD2Live's runtime loads, every chunk's CRC checked, every texture a
  * PNG in the file and its inventory within INVENTORY_BYTES, and if so what it holds. Bytes that
@@ -261,7 +317,7 @@ function inventoryOf(runtime: P2lRuntime, rig: Pointer): RigCheck {
  * with the runtime's reason when it refused.
  */
 export function checkRig(bytes: Uint8Array): RigCheck {
-  if (!MAGIC.every((byte, index) => bytes[index] === byte)) {
+  if (!isRigFile(bytes)) {
     return {
       ok: false,
       code: "unsupported-media-type",

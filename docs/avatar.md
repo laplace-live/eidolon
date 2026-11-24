@@ -97,6 +97,10 @@ Importing one:
   What the runtime refuses is 400 `invalid-model` with its reason, such as `Chunk TEXR fails its
   CRC`, control characters stripped and at most 200 characters. A trap in the runtime ends that
   instance alone and is refused the same way.
+- **Loaded within 5 s** (`LOAD_DEADLINE_MS`), timed in a worker first, since the runtime's load
+  grows with the square of a rig's hit areas and a 200 MiB file can hold enough to take it
+  minutes: a rig that takes longer is 400 `invalid-model`, its load ended at the deadline, and only
+  one that loaded within it is loaded again on the server's thread. A 200 MiB export takes under 1 s.
 - **An inventory of at most 1 MiB** (`INVENTORY_BYTES`), counting its text and 64 bytes an entry,
   about a hundred times the test rig's, since every list and status reads it back: a rig past it,
   which no export comes near, is 400 `invalid-model`, refused before the list or name that would
@@ -552,10 +556,10 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
 - **The server** (`bun run test apps/bot/test/local`): `psd2live.test.ts` checks the upload check on
   the test rig, on PNG and zip bytes, on a cut-off file, a flipped byte inside a chunk and a changed
   version, on a texture page that isn't a PNG inside the file, and on rigs it rewrites past the
-  inventory's 1 MiB, a long name within it kept whole; `appearance.test.ts` the ids, the
-  folder an import makes, the 200 MiB limit declared and streamed, the call refusal, the active
-  model, every route, and ids that try to leave their folder. `static.test.ts` pins the CSP, its
-  `'wasm-unsafe-eval'` included, and the wasm's type.
+  inventory's 1 MiB, a long name within it kept whole, and on one whose load passes a deadline,
+  ended there; `appearance.test.ts` the ids, the folder an import makes, the 200 MiB limit declared
+  and streamed, the call refusal, the active model, every route, and ids that try to leave their
+  folder. `static.test.ts` pins the CSP, its `'wasm-unsafe-eval'` included, and the wasm's type.
 - **The app's call** (`bun run test apps/web`), on Node with no browser: `target.test.ts` holds
   whom a call is with and how each page shows it, `signals.test.ts` what moves her and the tick,
   `stages.test.ts` her stages on fake parts, through a call's end into the next call and a group
