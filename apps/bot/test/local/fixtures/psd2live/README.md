@@ -9,8 +9,9 @@ PSD2Live 3.8.4 through its MCP operations, as its editor does: `project_import_p
 to `p2lrt` with `compress` and `zstd`.
 
 - 3,471,396 bytes, sha256 `59c68b11c223d31828261d3420e015c091ce29dc29e23072e71b93c6f283ed81`.
-- An editor export: its clip ids are `modifier:m32:…` while their names and groups are `Idle`,
-  `Blink`, `Nod`, `Shake` and `Talk`; six 1024² texture pages; zstd-compressed chunks.
+- An editor export: its clip ids are `modifier:m32:…` to `modifier:m36:…` while their names and
+  groups are `Idle`, `Blink`, `Nod`, `Shake` and `Talk`; six 1024² texture pages; zstd-compressed
+  chunks.
 - Seven expressions (`smile`, `sad`, `angry`, `surprised`, `shy`, `sleepy`, `gloom`), hit areas
   `HitAreaHead` and `HitAreaBody`, a 2048² canvas.
 
