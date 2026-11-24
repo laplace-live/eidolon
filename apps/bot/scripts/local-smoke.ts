@@ -3,15 +3,15 @@
 // prompt, a voice style added and removed, a PSD2Live model imported, drawn and made active in the
 // studio's Appearance, which refuses a picture and a rig cut short, a facts index built through the
 // studio, a text chat from greeting to delete, a group chat with a second persona, voice messages
-// both ways, a call inside a chat that outlives its page, a task she starts, checks, steers and
-// reports in a chat, a second she stops, a third shown in each of the chat's displays and stopped
-// with /stop, a fourth she starts by voice on a call there, a coding task on the kind's own model
-// that reads the owner's skill and runs commands its card allows once, denies and allows for good,
-// one moving to the background, and two whose workers call a fake MCP server's tool. The keys are
-// fake, so the providers refuse them for free, and the embeddings, the chats' replies, the
-// director's decisions, the voice messages' speech, the calls' hearing, mind and voice and the
-// tasks' workers come from a fake server, so nothing is billed. Online, one task's worker fetches
-// example.com.
+// both ways, a call inside a chat that outlives its page, a video call with her model, a task she
+// starts, checks, steers and reports in a chat, a second she stops, a third shown in each of the
+// chat's displays and stopped with /stop, a fourth she starts by voice on a call there, a coding
+// task on the kind's own model that reads the owner's skill and runs commands its card allows once,
+// denies and allows for good, one moving to the background, and two whose workers call a fake MCP
+// server's tool. The keys are fake, so the providers refuse them for free, and the embeddings, the
+// chats' replies, the director's decisions, the voice messages' speech, the calls' hearing, mind
+// and voice and the tasks' workers come from a fake server, so nothing is billed. Online, one
+// task's worker fetches example.com.
 // --call instead places a real call from the call page with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
@@ -43,6 +43,7 @@ import {
   type AccountsResponse,
   type AccountView,
   type AllowedCommandsResponse,
+  type CharacterModel,
   type CharacterModels,
   type ChatContents,
   type JobSnapshot,
@@ -299,6 +300,14 @@ const CALL_TOLD = "我家的猫叫团子。";
 const CALL_TOLD_REPLY = "团子这名字好可爱！";
 /** Her greeting on the call, which the fake mind gives only when the call's history holds CALL_TOLD. */
 const CALL_GREETING = "团子今天乖不乖呀？";
+/** What the fake hearing hears on the video call. */
+const VIDEO_ASK = "看得到我吗？";
+/** Her answer: a direction the mood table tags happy, then words. */
+const VIDEO_REPLY = "[开心地] 看得到呀，你也在笑！";
+const VIDEO_REPLY_SAID = "看得到呀，你也在笑！";
+/** How wide her stage's mouth opens while she speaks, at least, and how shut once she stops. */
+const MOUTH_OPEN = 0.2;
+const MOUTH_SHUT = 0.05;
 /** The assistant role's model, on the decisions account, whose usage blocks report a cost. */
 const WORKER_MODEL = "fake-worker";
 /** What each of the worker's requests reports it cost, so its spend pauses can count it. */
@@ -1111,6 +1120,7 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
         if (Array.isArray(asked)) return completionStream([FILES_REPLY], 0);
         if (asked === VOICE_TRANSCRIPT) return completionStream([HEARD_REPLY], 0);
         if (asked === VOICE_ASK) return completionStream([VOICE_REPLY], 0);
+        if (asked === VIDEO_ASK) return completionStream([VIDEO_REPLY], 0);
         if (asked === CALL_TOLD) return completionStream([CALL_TOLD_REPLY], 0);
         if (heard(body, CALL_TOLD)) return completionStream([CALL_GREETING], 0);
         if (heard(body, SECOND_REPLY)) return completionStream([HOP_REPLY], 0);
@@ -1528,7 +1538,7 @@ interface Walk {
   readonly api: (
     method: string,
     path: string,
-    body?: string,
+    body?: string | Uint8Array<ArrayBuffer>,
     headers?: Readonly<Record<string, string>>,
   ) => Promise<Response>;
 }
@@ -2324,6 +2334,22 @@ async function configure(
   const body = JSON.stringify({ scope: "persona", persona, values });
   const saved = await walk.api("PUT", "/api/local/settings", body);
   if (!saved.ok) throw new Error(`PUT settings for ${persona} answered ${saved.status}`);
+}
+
+/** Her first character model's id, the CC0 fixture imported when she has none. */
+async function fixtureModel(walk: Walk): Promise<string> {
+  const models = `/api/local/personas/${PERSONA}/models`;
+  const listed = (await (await walk.api("GET", models)).json()) as CharacterModels;
+  const first = listed.models[0];
+  if (first !== undefined) return first.id;
+  const imported = await walk.api(
+    "POST",
+    `${models}?filename=tml.p2lrt`,
+    new Uint8Array(readFileSync(MODEL_FIXTURE)),
+    { "content-type": "application/octet-stream" },
+  );
+  if (imported.status !== 201) throw new Error(`POST models answered ${imported.status}`);
+  return ((await imported.json()) as CharacterModel).id;
 }
 
 /**
@@ -3451,6 +3477,321 @@ async function chatCallWalk(walk: Walk): Promise<void> {
     );
   } finally {
     await hangUpIfUp(walk);
+  }
+}
+
+/** Her stage on the call's screen. */
+const SCREEN_STAGE = "[data-call-screen] [data-avatar]";
+
+/**
+ * Watches her stage on the screen every frame from now on: `moved` turns true once the stage has
+ * said she speaks and its mouth has opened past MOUTH_OPEN, false after 30 s.
+ */
+async function watchMouth(page: Page): Promise<{ readonly moved: Promise<boolean> }> {
+  await page.evaluate(() => {
+    (window as unknown as { smokeMouth: unknown }).smokeMouth = { max: 0, spoke: false };
+  });
+  const moved = page
+    .waitForFunction(
+      ({ selector, open }) => {
+        const host = document.querySelector(selector);
+        const seen = (window as unknown as { smokeMouth: { max: number; spoke: boolean } })
+          .smokeMouth;
+        if (host?.getAttribute("data-speaking") === "true") seen.spoke = true;
+        seen.max = Math.max(seen.max, Number(host?.getAttribute("data-mouth") ?? 0));
+        return seen.spoke && seen.max > open;
+      },
+      { selector: SCREEN_STAGE, open: MOUTH_OPEN },
+      { polling: "raf", timeout: 30_000 },
+    )
+    .then(
+      () => true,
+      () => false,
+    );
+  return { moved };
+}
+
+/** The widest her stage's mouth opened since the watch began. */
+async function widestMouth(page: Page): Promise<number> {
+  return page.evaluate(
+    () => (window as unknown as { smokeMouth?: { max: number } }).smokeMouth?.max ?? 0,
+  );
+}
+
+interface Drawing {
+  /** Her stage's frames as it first wrote them; null if it never did. */
+  readonly from: number | null;
+  /** What they grew to within 5 s. */
+  readonly to: number | null;
+}
+
+/** Her stage on the screen drawing on: its frames, read as it writes them each tick. */
+async function drawsOn(page: Page): Promise<Drawing> {
+  const read = () =>
+    page.evaluate((selector) => {
+      const frames = document.querySelector(selector)?.getAttribute("data-frames");
+      return frames === null || frames === undefined ? null : Number(frames);
+    }, SCREEN_STAGE);
+  const from = await poll(read, (frames) => frames !== null, 5_000);
+  if (from === null) return { from, to: null };
+  const to = await poll(read, (frames) => frames !== null && frames > from + 3, 5_000);
+  return { from, to };
+}
+
+const drew = (drawing: Drawing): boolean =>
+  drawing.from !== null && drawing.to !== null && drawing.to > drawing.from + 3;
+
+/**
+ * A call with her model, every role at the fake server: Call opens the chat's video screen, her
+ * stage drawing the CC0 rig, and the fake hearing's question gets her answer, which opens with a
+ * happy direction: her mouth moves on the voice's tone, her mood shows, and the caption says it.
+ * Shrink docks the same stage and Expand brings it back; Home shows the call bar, which draws no
+ * stage, and Return to Call the screen, drawing again; the bar's Hang Up ends the call; and a second
+ * call in the tab moves her mouth again.
+ */
+async function videoCallWalk(walk: Walk): Promise<void> {
+  const { page, checks, origin } = walk;
+  const { listening } = walk.embeddings.seen;
+  // Nobody speaks on this call but the fake hearing.
+  writeFileSync(walk.mic, silentWav(2));
+  await configure(walk, PERSONA, { "appearance.model": await fixtureModel(walk) });
+  try {
+    const listed = (await (
+      await walk.api("GET", "/api/local/personas")
+    ).json()) as PersonasResponse;
+    const persona = listed.personas.find((entry) => entry.id === PERSONA);
+    if (persona === undefined) throw new Error(`GET personas has no ${PERSONA}`);
+    const short = persona.shortName.trim() || persona.name;
+    const made = await walk.api(
+      "POST",
+      "/api/local/chats",
+      JSON.stringify({ participants: [PERSONA] }),
+    );
+    if (made.status !== 201) throw new Error(`POST chats answered ${made.status}`);
+    const id = ((await made.json()) as { id: string }).id;
+    await poll(
+      () => chatLog(walk, id),
+      (events) => said(events, "persona", GREETING),
+      30_000,
+    );
+    // A fresh load, so GET personas names her model.
+    await page.goto(`${origin}/chats/${id}`);
+    const region = page.getByRole("region", {
+      name: t("en", "Call with {name}", { name: short }),
+      exact: true,
+    });
+    const screen = page.locator("[data-call-screen]");
+    const ready = region.locator(`[data-avatar="${PERSONA}"][data-state="ready"]`);
+    const stageOf = () =>
+      region
+        .locator("canvas[data-stage]")
+        .getAttribute("data-stage", { timeout: 5_000 })
+        .catch(() => null);
+    const call = page.getByRole("button", { name: t("en", "Call"), exact: true });
+    const hangUp = (where: Locator) =>
+      where.getByRole("button", { name: t("en", "Hang Up"), exact: true });
+    const webgl = await page.evaluate(
+      () => document.createElement("canvas").getContext("webgl") !== null,
+    );
+    const heard = listening.length;
+    await page.evaluate(() => {
+      const seen = window as unknown as { smokeTasks: number[] };
+      seen.smokeTasks = [];
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) seen.smokeTasks.push(entry.duration);
+      }).observe({ type: "longtask" });
+    });
+    await call.click();
+    if (!webgl) {
+      // Her stage can't draw here, so the call docks as one without a model does.
+      const docked = await poll(
+        async () => (await region.count()) === 1 && (await screen.count()) === 0,
+        (yes) => yes,
+        30_000,
+      );
+      const expands = await region
+        .getByRole("button", { name: t("en", "Expand"), exact: true })
+        .count();
+      const pictured = await region.locator('[data-slot="avatar"]').count();
+      checks.add(
+        "video call",
+        docked && expands === 0 && pictured > 0,
+        `this browser makes no WebGL context, so the call ${docked ? "docked" : "never docked"} ` +
+          `as one without a model does, ${expands === 0 ? "with no" : "but with"} Expand and ` +
+          `${pictured > 0 ? "with" : "WITHOUT"} her picture; the stage, mouth, frames and ` +
+          `canvas checks, and the steps after this one, were skipped`,
+      );
+      return;
+    }
+    const opened =
+      (await shows(region, 10_000)) && (await region.getAttribute("data-call-screen")) !== null;
+    const drawn = await shows(ready, 30_000);
+    const longest = await page.evaluate(() =>
+      Math.max(0, ...(window as unknown as { smokeTasks: number[] }).smokeTasks),
+    );
+    const placed = await stageOf();
+    const greeted = await poll(
+      () => chatLog(walk, id),
+      (events) => saidOnCall(events, "persona", GREETING),
+      60_000,
+    );
+    if (!saidOnCall(greeted, "persona", GREETING)) {
+      throw new Error(`her greeting on the video call was never stored: ${await alerts(page)}`);
+    }
+    const sessions = await poll(
+      async () => listening.slice(heard),
+      (opening) => opening.length > 0,
+      10_000,
+    );
+    const ear = sessions[0];
+    if (ear === undefined) throw new Error("her hearing opened no session on the video call");
+
+    const answer = await watchMouth(page);
+    ear.say(VIDEO_ASK);
+    const moved = await answer.moved;
+    const widest = await widestMouth(page);
+    const captioned = await shows(
+      region.locator("[data-captions]").getByText(VIDEO_REPLY_SAID, { exact: true }),
+      15_000,
+    );
+    const happy = await shows(region.locator('[data-avatar][data-mood~="happy"]'), 5_000);
+    const mood = await region
+      .locator("[data-avatar]")
+      .getAttribute("data-mood", { timeout: 5_000 })
+      .catch(() => null);
+    const shut = await page
+      .waitForFunction(
+        ({ selector, closed }) => {
+          const host = document.querySelector(selector);
+          return (
+            host?.getAttribute("data-speaking") === "false" &&
+            Number(host.getAttribute("data-mouth") ?? 1) < closed
+          );
+        },
+        { selector: SCREEN_STAGE, closed: MOUTH_SHUT },
+        { timeout: 15_000 },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+    checks.add(
+      "video call",
+      opened && drawn && placed !== null && moved && captioned && happy && shut,
+      `Call ${opened ? "opened the video screen" : "opened no video screen"}, her stage ` +
+        `${drawn ? `ready on ${String(placed)}` : `never ready: ${await alerts(page)}`}, the ` +
+        `longest main-thread task from Call to then ${Math.round(longest)} ms; as she answered, ` +
+        `her mouth ${moved ? "moved" : "never moved"}, opening to ${widest.toFixed(2)}, the ` +
+        `caption ${captioned ? "said" : "never said"} ${quote(VIDEO_REPLY_SAID)}, her mood ` +
+        `${happy ? "happy" : `NOT happy (${JSON.stringify(mood)})`}, and her mouth ` +
+        `${shut ? "shut" : "never shut"} once she stopped`,
+    );
+
+    await region.getByRole("button", { name: t("en", "Shrink"), exact: true }).click();
+    const shrunk = await screen
+      .waitFor({ state: "detached", timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    const expand = region.getByRole("button", { name: t("en", "Expand"), exact: true });
+    const expandShown = await shows(expand, 5_000);
+    const focused = await poll(
+      () => expand.evaluate((el) => el === document.activeElement).catch(() => false),
+      (yes) => yes,
+      5_000,
+    );
+    const docked = await stageOf();
+    await expand.click();
+    const expanded = await shows(screen, 5_000);
+    const unshrunk = await stageOf();
+    const drawing = await drawsOn(page);
+    checks.add(
+      "video call shrink",
+      shrunk &&
+        expandShown &&
+        focused &&
+        docked === placed &&
+        expanded &&
+        unshrunk === placed &&
+        drew(drawing),
+      `Shrink ${shrunk ? "docked the call" : "left the screen up"}, its Expand ` +
+        `${expandShown ? (focused ? "shown and focused" : "shown, NOT focused") : "missing"}, on ` +
+        `stage ${String(docked)}; Expand ${expanded ? "opened the screen" : "opened no screen"} ` +
+        `on stage ${String(unshrunk)}, placed as ${String(placed)}, whose frames went ` +
+        `${String(drawing.from)} to ${String(drawing.to)} in 5 s`,
+    );
+
+    await page.locator('nav a[href="/"]').first().click();
+    await page.waitForURL(`${origin}/`);
+    const bar = page.getByRole("region", { name: t("en", "Ongoing Call"), exact: true });
+    const barShown = await shows(bar, 10_000);
+    const barCanvases = await bar.locator("canvas").count();
+    await bar.getByRole("link", { name: t("en", "Return to Call"), exact: true }).click();
+    await page.waitForURL(`${origin}/chats/${id}`);
+    const returned = (await shows(screen, 10_000)) && (await shows(ready, 10_000));
+    const kept = await stageOf();
+    const redrawing = await drawsOn(page);
+    const barGone = await bar
+      .waitFor({ state: "hidden", timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    await page.locator('nav a[href="/"]').first().click();
+    await page.waitForURL(`${origin}/`);
+    await hangUp(bar).click();
+    const barHidden = await bar
+      .waitFor({ state: "hidden", timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    const ended = await poll(
+      () => chatLog(walk, id),
+      (events) => events.some((e) => e.type === "call-ended"),
+      20_000,
+    );
+    const end = ended.find((e) => e.type === "call-ended");
+    await page.locator(`nav a[href="/chats/${id}"]`).first().click();
+    await page.waitForURL(`${origin}/chats/${id}`);
+    const box = page.getByRole("textbox", {
+      name: t("en", "Message {name}", { name: short }),
+      exact: true,
+    });
+    const free = (await shows(box, 10_000)) && (await box.isEnabled());
+    const left = await region.count();
+    checks.add(
+      "video call away",
+      barShown &&
+        barCanvases === 0 &&
+        returned &&
+        kept === placed &&
+        drew(redrawing) &&
+        barGone &&
+        barHidden &&
+        end?.reason === "hangup" &&
+        free &&
+        left === 0,
+      `on Home the call bar ${barShown ? "showed" : "never showed"}, with ${barCanvases} ` +
+        `canvas(es) in it; Return to Call brought ${returned ? "the screen back" : "no screen"} ` +
+        `on stage ${String(kept)}, its frames going ${String(redrawing.from)} to ` +
+        `${String(redrawing.to)} in 5 s, the bar ${barGone ? "gone" : "still there"}; the bar's ` +
+        `Hang Up ${barHidden ? "hid it" : "left it"}, the log ending the call ` +
+        `${end === undefined ? "never" : String(end.reason)}; back in the chat, ${left} region(s) ` +
+        `named for the call, its text box ${free ? "free" : "NOT free"}`,
+    );
+
+    const again = await watchMouth(page);
+    await call.click();
+    const reopened = (await shows(screen, 10_000)) && (await shows(ready, 30_000));
+    const movedAgain = await again.moved;
+    const widestAgain = await widestMouth(page);
+    checks.add(
+      "video call again",
+      reopened && movedAgain,
+      `a second Call ${reopened ? "opened the screen on a ready stage" : `opened no ready stage: ${await alerts(page)}`}, ` +
+        `where her mouth ${movedAgain ? "moved" : "never moved"} as she greeted, opening to ` +
+        `${widestAgain.toFixed(2)}`,
+    );
+    await hangUp(region).click();
+  } finally {
+    await hangUpIfUp(walk);
+    await configure(walk, PERSONA, { "appearance.model": null });
   }
 }
 
@@ -5746,7 +6087,7 @@ async function smoke(options: Options): Promise<Checks> {
     const api = async (
       method: string,
       path: string,
-      body?: string,
+      body?: string | Uint8Array<ArrayBuffer>,
       headers: Readonly<Record<string, string>> = {},
     ): Promise<Response> => {
       const response = await fetch(`${origin}${path}`, {
@@ -5825,6 +6166,7 @@ async function smoke(options: Options): Promise<Checks> {
         const called =
           (await checks.step("voice chat", () => voiceChatWalk(walk))) &&
           (await checks.step("chat call", () => chatCallWalk(walk)));
+        if (called) await checks.step("video call", () => videoCallWalk(walk));
         // Last: once the assistant has a model, her answers in a chat of one offer her start_task.
         const tasked: { chat?: TaskChatPage } = {};
         if (chatted) {
