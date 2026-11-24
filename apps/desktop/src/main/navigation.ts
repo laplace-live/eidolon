@@ -96,7 +96,6 @@ export function guardCompanionNavigation(
     log.warn(`Eidolon: the companion left its page for ${loggedUrl(url)}; loading it again`);
     strayed();
   };
-  // Emitted for the main frame alone, and never for an error page.
   contents.on("did-navigate", (_event, url) => landed(url));
   // A pushState or a fragment, which raise no will-navigate.
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {

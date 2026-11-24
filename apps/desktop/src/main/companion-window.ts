@@ -30,7 +30,7 @@ import { native } from "./native.ts";
 import { guardCompanionNavigation } from "./navigation.ts";
 import { COMPANION_PAGE, loggedUrl } from "./policy.ts";
 import { ipcSender } from "./senders.ts";
-import { mainWindow } from "./window.ts";
+import { ERR_ABORTED, mainWindow } from "./window.ts";
 import { type Rectangle, workAreas } from "./window-options.ts";
 
 export interface CompanionWindowEvents {
@@ -63,7 +63,6 @@ export function companionWindow(
   let poll: ReturnType<typeof setInterval> | null = null;
 
   const current = (): BrowserWindow | null => (win !== null && !win.isDestroyed() ? win : null);
-  // A failure is did-fail-load's, which decides; a replaced load is no failure.
   const load = (w: BrowserWindow): void => {
     w.loadURL(COMPANION_PAGE).catch(() => {});
   };
@@ -105,8 +104,7 @@ export function companionWindow(
     });
     w.on("page-title-updated", (event) => event.preventDefault());
     contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
-      // -3 is ERR_ABORTED: a load that another replaced, such as main's own next one.
-      if (!own() || !isMainFrame || code === -3) return;
+      if (!own() || !isMainFrame || code === ERR_ABORTED) return;
       deps.events.failed(`${description} (${code}) loading ${loggedUrl(url)}`);
     });
     contents.on("preload-error", (_event, _path, error) => {
@@ -263,7 +261,6 @@ export function handleCompanionBridge(bridge: CompanionBridge): void {
     }
   });
   for (const [channel, answer] of companionInvokes(bridge)) {
-    // The sender is read before anything awaits: senderFrame turns null once the page navigates.
     ipcMain.handle(channel, (event, argument: unknown) => answer(ipcSender(event), argument));
   }
 }
