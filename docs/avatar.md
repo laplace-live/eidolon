@@ -96,7 +96,8 @@ Importing one:
 - **Loaded within 5 s** (`LOAD_DEADLINE_MS`), timed in a worker first, since the runtime's load
   grows with the square of a rig's hit areas and a 200 MiB file can hold enough to take it
   minutes: a rig that takes longer is 400 `invalid-model`, its load ended at the deadline, and only
-  one that loaded within it is loaded again on the server's thread. A 200 MiB export takes under 1 s.
+  one that loaded within it is loaded again on the server's thread. The test rig padded to 200 MiB
+  with a chunk the runtime doesn't know takes the worker under 0.1 s, and the check 0.04 s.
 - **An inventory of at most 1 MiB** (`INVENTORY_BYTES`), counting its text and 64 bytes an entry,
   about a hundred times the test rig's, since every list and status reads it back: a rig past it,
   which no export comes near, is 400 `invalid-model`, refused before the list or name that would
