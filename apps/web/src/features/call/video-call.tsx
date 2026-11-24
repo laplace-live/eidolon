@@ -183,7 +183,6 @@ export function VideoCall({
   const host = hostOf(target);
   const group = target.kind === "chat" && target.group;
   const name = group ? listOf(target.cast.map(shortNameOf)) : shortNameOf(host);
-  // On a group call, whom the speaker label says the viewer hears, or heard last.
   const { speaker } = said;
   const voice =
     group && speaker !== null
