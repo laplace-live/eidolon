@@ -155,6 +155,10 @@ describe("STRINGS", () => {
     ]);
   });
 
+  test("the tray's and the Window menu's Desktop Companion is Settings' word for her", () => {
+    expect(webChinese("Desktop Companion")).toBe(zh.label.desktopCompanion);
+  });
+
   test("names the holder of the data home by what its lock and refusal tell", () => {
     expect(en.text.heldDetail({ pid: 4821, port: 7860 })).toBe(
       "It runs as process 4821 on port 7860. This window can't connect to it. Quit it, then try again.",
