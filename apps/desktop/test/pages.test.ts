@@ -428,6 +428,39 @@ describe("the page's beforeunload", () => {
   });
 });
 
+describe("the page's unsaved edits", () => {
+  test("are the app page's word, kept until it says otherwise", () => {
+    const unloads = new PageUnloads(() => false);
+    expect(unloads.unsaved).toBe(false);
+    unloads.held(true);
+    unloads.held(true);
+    expect(unloads.unsaved).toBe(true);
+    unloads.held(false);
+    expect(unloads.unsaved).toBe(false);
+  });
+
+  test("go with the page's document: a new one committed, or its renderer gone", () => {
+    const unloads = new PageUnloads(() => false);
+    unloads.held(true);
+    unloads.gone();
+    expect(unloads.unsaved).toBe(false);
+    // The next document holds edits of its own once it says so.
+    unloads.held(true);
+    expect(unloads.unsaved).toBe(true);
+  });
+
+  test("go as main starts a load of its own, which lets the page go, edits and all", async () => {
+    const unloads = new PageUnloads(() => false);
+    unloads.held(true);
+    const load = Promise.withResolvers<void>();
+    const loading = unloads.mainLoad(() => load.promise);
+    expect(unloads.unsaved).toBe(false);
+    load.resolve();
+    await loading;
+    expect(unloads.unsaved).toBe(false);
+  });
+});
+
 test("the shell pages' strings are the table's, in the language given", () => {
   expect(shellPageStrings("en", en)).toEqual({
     lang: "en",

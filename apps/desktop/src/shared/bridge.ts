@@ -83,6 +83,8 @@ export const BRIDGE = {
   terminalCommand: "eidolon:terminal-command",
   /** App page → main, invoked with a CommandAction: the CommandChange. */
   setTerminalCommand: "eidolon:set-terminal-command",
+  /** App page → main, with a boolean: whether the page holds unsaved edits now. */
+  unsaved: "eidolon:unsaved",
   /**
    * Main → any page, on macOS: whether the window is fullscreen, on entering and leaving it and
    * after each navigation, since a new page starts without the mark.
@@ -105,6 +107,7 @@ const SENDERS = {
   [BRIDGE.setLoginItem]: "app",
   [BRIDGE.terminalCommand]: "app",
   [BRIDGE.setTerminalCommand]: "app",
+  [BRIDGE.unsaved]: "app",
   [BRIDGE.retry]: "shell",
   [BRIDGE.showLogs]: "shell",
   [BRIDGE.quit]: "shell",
@@ -266,6 +269,8 @@ export interface EidolonDesktop {
   /** The `eidolon` command for terminals. */
   readonly terminalCommand: () => Promise<CommandState>;
   readonly setTerminalCommand: (action: "install" | "remove") => Promise<CommandChange>;
+  /** Whether the page holds unsaved edits, which the quit and restart boxes warn of. */
+  readonly unsaved: (held: boolean) => void;
 }
 
 /** `window.eidolonShell`, on the shell pages alone: the failure page's buttons. */

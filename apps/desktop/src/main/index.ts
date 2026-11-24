@@ -235,7 +235,11 @@ function run(): void {
             strayed: () => pages.strayed(),
           });
           // At the commit of a new document, before its script can say it listens.
-          win.webContents.on("did-navigate", () => commands.replaced());
+          win.webContents.on("did-navigate", () => {
+            commands.replaced();
+            unloads.gone();
+          });
+          win.webContents.on("render-process-gone", () => unloads.gone());
           // Here preventDefault() lets the unload go ahead, over the page's beforeunload.
           win.webContents.on("will-prevent-unload", (event) => {
             if (!unloads.goes()) return;
@@ -348,6 +352,7 @@ function run(): void {
         versions: () => ({ version, serverVersion: backend.serverVersion }),
         language: languageChanged,
         takesCommands: () => commands.listening(),
+        unsaved: (held) => unloads.held(held),
         chooseFolder,
         loginItem: () => loginItemState(process.platform, unavailable, readLoginItem),
         // The write returns nothing and only logs a failure, so the state is read again after it.
