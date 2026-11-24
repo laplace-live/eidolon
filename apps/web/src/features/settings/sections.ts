@@ -32,9 +32,22 @@ export function offersSystemOptions(app: EidolonDesktop | null): app is SystemOp
   );
 }
 
-/** The sections this page shows: Desktop only in a desktop app that offers its options. */
+/** A desktop app's bridge with the desktop companion, which older apps lack. */
+export type CompanionOptions = EidolonDesktop &
+  Required<Pick<EidolonDesktop, "companion" | "setCompanion">>;
+
+export function offersCompanion(app: EidolonDesktop | null): app is CompanionOptions {
+  return app !== null && app.companion !== undefined && app.setCompanion !== undefined;
+}
+
+/**
+ * The sections this page shows: Desktop only in a desktop app that offers its options or the
+ * desktop companion.
+ */
 export function shownSections(app: EidolonDesktop | null): readonly SectionId[] {
-  return offersSystemOptions(app) ? SECTIONS : SECTIONS.filter((id) => id !== "desktop");
+  return offersSystemOptions(app) || offersCompanion(app)
+    ? SECTIONS
+    : SECTIONS.filter((id) => id !== "desktop");
 }
 
 export type CardId = "you" | "storage" | "embeddings" | "ytDlp" | "assistant" | "kinds";
