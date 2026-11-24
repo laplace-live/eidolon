@@ -19,6 +19,7 @@ import { killTree } from "@eidolon/config";
 import type { JobRecord, Status } from "../../bot/src/local/api.ts";
 import { PLATFORMS } from "../../eidolon/src/launcher.ts";
 import { dataHome, isAlive, probe, readToken } from "../src/main/attach.ts";
+import { COMPANION_FILE } from "../src/main/companion.ts";
 import { BACKEND_RUNTIME_ARGS, backendEnv, RESTART_EXIT_CODE } from "../src/main/controller.ts";
 import { checkNatives, type NativesReport } from "./natives.ts";
 import { POSIX_LAUNCHERS, shimPnpm } from "./node-shim.ts";
@@ -80,6 +81,8 @@ const JSON_TYPE = { "content-type": "application/json" };
 // NSIS setup alone took 58 s on windows-latest.
 const INSTALL_MS = 180_000;
 const START_MS = 90_000;
+/** From the web app shown to the desktop companion drawn. */
+const COMPANION_MS = 30_000;
 const JOB_MS = 90_000;
 const SEARCH_MS = 60_000;
 const RESTART_MS = 60_000;
@@ -114,6 +117,11 @@ async function line(
     const waited = (timeoutMs / 1000).toFixed(1);
     throw new Error(`${(error as Error).message} within ${waited} s; its last: ${last}`);
   }
+}
+
+/** A line of main.log from "Eidolon: " on, its time and level left out. */
+function fromEidolon(text: string): string {
+  return text.slice(text.indexOf("Eidolon: "));
 }
 
 /** main.log's line for backend `pid`'s exit, its code or signal captured. */
@@ -437,6 +445,8 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   });
 
   const app = packagedApp(run, layout.binary);
+  // In background mode alone, since --headful would show her on the screen of whoever runs it.
+  if (!smoke.args.headful) writeFileSync(join(run.profile, COMPANION_FILE), '{"on":true}\n');
   const launchedAt = Date.now();
   const main = smoke.start(app);
   const START = "the app starts on the run's home and profile and shows the web app";
@@ -457,6 +467,17 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   const server = smoke.server();
   if (!shown || server === null) return;
   await smoke.processes.adopt("backend", server.pid);
+
+  if (!smoke.args.headful) {
+    // The run's home has no model, so she draws as her picture.
+    const COMPANION = "the desktop companion draws, hidden";
+    await checks.step(COMPANION, async () => {
+      const left = budget(COMPANION_MS);
+      const drawn = await line(smoke, "main", LINES.companionDrawn, left());
+      const hidden = await line(smoke, "main", LINES.companionOffScreen, left());
+      checks.add(COMPANION, true, `${fromEidolon(drawn)}; ${fromEidolon(hidden)}`);
+    });
+  }
 
   const BACKEND =
     "its backend is the app's binary in node mode on the payload's server, under main";
