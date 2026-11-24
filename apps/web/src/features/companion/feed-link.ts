@@ -50,7 +50,7 @@ export class FeedLink {
   readonly #receive: (message: ToApp) => void;
   readonly #now: () => number;
   #port: PortLike | null = null;
-  #persona: { readonly id: string; readonly stamp: string } | null = null;
+  #persona: { readonly id: string; readonly stamp: string; readonly picture: number } | null = null;
   #call: CompanionCall | null = null;
   /** Her voice message playing now, as told, and when: her page loaded anew hears it from there. */
   #voice: { readonly fact: Extract<ChatFact, { type: "voice" }>; readonly at: number } | null =
@@ -106,11 +106,12 @@ export class FeedLink {
   }
 
   /** Kept; sent when it changed. */
-  persona(id: string, stamp: string): void {
-    if (this.#persona?.id === id && this.#persona.stamp === stamp) return;
-    if (this.#persona?.id !== id) this.#voice = null;
-    this.#persona = { id, stamp };
-    this.#send({ type: "persona", id, stamp });
+  persona(id: string, stamp: string, picture: number): void {
+    const told = this.#persona;
+    if (told?.id === id && told.stamp === stamp && told.picture === picture) return;
+    if (told?.id !== id) this.#voice = null;
+    this.#persona = { id, stamp, picture };
+    this.#send({ type: "persona", id, stamp, picture });
   }
 
   /** Kept; sent when it changed. */

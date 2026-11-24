@@ -100,7 +100,8 @@ Importing one:
 - **Loaded within 5 s** (`LOAD_DEADLINE_MS`), timed in a worker first, since the runtime's load
   grows with the square of a rig's hit areas and a 200 MiB file can hold enough to take it
   minutes: a rig that takes longer is 400 `invalid-model`, its load ended at the deadline, and only
-  one that loaded within it is loaded again on the server's thread. A 200 MiB export takes under 1 s.
+  one that loaded within it is loaded again on the server's thread. The test rig padded to 200 MiB
+  with a chunk the runtime doesn't know takes the worker under 0.1 s, and the check 0.04 s.
 - **An inventory of at most 1 MiB** (`INVENTORY_BYTES`), counting its text and 64 bytes an entry,
   about a hundred times the test rig's, since every list and status reads it back: a rig past it,
   which no export comes near, is 400 `invalid-model`, refused before the list or name that would
@@ -494,11 +495,13 @@ since one page can reload onto a newer build before the other, an unknown field 
 message that doesn't read ignored; none carries a time, since each window's clock has its own
 origin. To her: `persona`, the active persona's id and her active model's stamp
 (`<id>:<sha256>:<updatedAt>`, empty for none), at whose change her page reads status and her models
-again; `call`, whether one is up, live and hers, the microphone, and whether `/call` can call now;
-`direction`, the call's; `mouth`, a level from 0 to 1; and her chat's `said` and `voice` facts, a
-voice fact naming the message's file, `playing`, `paused` or `ended`, and its position. From her
-only `appearance`, after her menu changed her model or her outfit. Nothing that acts on the call
-crosses it: her menu's call picks go from main to the app page.
+again, and the main window's version of her picture, which grows as Studio changes it there, at
+whose change her page loads her picture again and reads status (`pictures.ts`); `call`, whether one
+is up, live and hers, the microphone, and whether `/call` can call now; `direction`, the call's;
+`mouth`, a level from 0 to 1; and her chat's `said` and `voice` facts, a voice fact naming the
+message's file, `playing`, `paused` or `ended`, and its position. From her only `appearance`, after
+her menu changed her model or her outfit. Nothing that acts on the call crosses it: her menu's call
+picks go from main to the app page.
 
 ## The vendored runtime
 

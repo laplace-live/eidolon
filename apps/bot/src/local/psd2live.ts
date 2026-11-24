@@ -262,7 +262,7 @@ function isRigFile(bytes: Uint8Array): boolean {
   return MAGIC.every((byte, index) => bytes[index] === byte);
 }
 
-/** The longest the runtime may take to load a rig: a 200 MiB export takes it under 1 s. */
+/** The longest the runtime may take to load a rig: the test rig padded to 200 MiB takes 0.04 s. */
 export const LOAD_DEADLINE_MS = 5000;
 
 // The runtime's load grows with the square of a rig's hit areas: 100,000 sharing a 6,000-character
