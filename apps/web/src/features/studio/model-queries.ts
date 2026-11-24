@@ -123,7 +123,8 @@ export function useActivateModel(persona: string) {
         body: { scope: "persona", persona, values: { "appearance.model": model } },
       }),
     onSuccess: async (response, model) => {
-      edit(queryClient, persona, (list) => ({ ...list, active: model }));
+      // Cleared, hers can leave the environment's model active: the list reloaded says which.
+      if (model !== null) edit(queryClient, persona, (list) => ({ ...list, active: model }));
       await Promise.all([
         refreshSettings(queryClient, persona, response),
         refresh(queryClient, persona),

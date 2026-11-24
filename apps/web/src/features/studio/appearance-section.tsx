@@ -1,12 +1,13 @@
 // Appearance: the 2D models she can look like, which one is active, and the one picked in the list,
 // live on a stage to test, frame and set up. `?model=` picks it, so a link can open one.
 import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { SectionCardSkeleton } from "@/components/section-card";
 import { settingsQuery } from "@/components/settings-form/queries";
-import { ownValue } from "@/features/setup/wizard";
 import type { CharacterModels, PersonaSummary } from "@/lib/api";
 import { characterModelsQuery } from "@/lib/character-models";
+import { activeModelOf } from "./model-draft";
 import { ModelListCard } from "./model-list";
 import { ModelPreviewCard } from "./model-preview";
 import { LoadError } from "./parts";
@@ -28,36 +29,45 @@ export function AppearanceSection({ persona }: { readonly persona: PersonaSummar
   const models = useQuery(characterModelsQuery(persona.id));
   const settings = useQuery(settingsQuery(persona.id));
   const [params, setParams] = useSearchParams();
+  const wanted = params.get("model");
+  const shown = models.data === undefined ? null : shownModel(models.data, wanted);
+  const shownId = shown?.id ?? null;
+
+  const pick = useCallback(
+    (id: string) =>
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set("model", id);
+          return next;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
+  // Named in the address once shown, so making another model active never swaps it, and its edits,
+  // out from under the owner.
+  useEffect(() => {
+    if (shownId !== null && shownId !== wanted) pick(shownId);
+  }, [shownId, wanted, pick]);
 
   if (models.isPending) return <SectionCardSkeleton rows={2} footer={false} />;
   if (models.isError) return <LoadError error={models.error} />;
   const list = models.data;
   const row = settings.data?.settings.find((entry) => entry.path === APPEARANCE_PATH);
-  // Her own setting names none, so the active model is the environment's default.
-  const inherited = list.active !== null && row !== undefined && ownValue(row) === null;
-  const shown = shownModel(list, params.get("model"));
 
   return (
     <>
       <ModelListCard
         persona={persona}
         list={list}
-        inheritedActive={inherited}
-        selected={shown?.id ?? null}
-        onImported={(model) =>
-          setParams(
-            (current) => {
-              const next = new URLSearchParams(current);
-              next.set("model", model.id);
-              return next;
-            },
-            { replace: true },
-          )
-        }
+        active={activeModelOf(list, row)}
+        selected={shownId}
+        onImported={(model) => pick(model.id)}
       />
       {shown !== null && (
-        // A new file is a new stage; edits saved to the same one keep it.
-        <ModelPreviewCard key={`${shown.id}:${shown.sha256}`} persona={persona} model={shown} />
+        // A new file for it keeps the card, and the owner's edits that the new rig still has.
+        <ModelPreviewCard key={shown.id} persona={persona} model={shown} />
       )}
     </>
   );

@@ -64,7 +64,7 @@ import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { type Lang, useLang } from "@/locales/i18n";
 import { MODEL_KIND_LABELS, NAME_PROBLEMS } from "./appearance-labels";
-import { MAX_NAME, nameProblem } from "./model-draft";
+import { type ActiveModel, MAX_NAME, nameProblem } from "./model-draft";
 import {
   MAX_MODEL_BYTES,
   MODEL_ACCEPT,
@@ -245,15 +245,15 @@ function RenameForm({
 }
 
 function ModelMenu({
-  active,
+  stoppable,
   busy,
   onRename,
   onReplace,
   onStop,
   onRemove,
 }: {
-  /** Hers to stop using: active through her own setting, not the environment's. */
-  readonly active: boolean;
+  /** Active through her own setting, which clearing would change what she shows. */
+  readonly stoppable: boolean;
   readonly busy: boolean;
   readonly onRename: () => void;
   readonly onReplace: () => void;
@@ -290,7 +290,7 @@ function ModelMenu({
           <FileUpIcon />
           {t`Replace File`}
         </DropdownMenuItem>
-        {active && (
+        {stoppable && (
           <DropdownMenuItem onSelect={onStop}>
             <PowerOffIcon />
             {t`Stop Using`}
@@ -369,14 +369,14 @@ function ModelRow({
 export function ModelListCard({
   persona,
   list,
-  inheritedActive,
+  active,
   selected,
   onImported,
 }: {
   readonly persona: PersonaSummary;
   readonly list: CharacterModels;
-  /** The active model comes from the environment's setting, which hers would override. */
-  readonly inheritedActive: boolean;
+  /** Where the active model comes from; null with none active, or while her setting loads. */
+  readonly active: ActiveModel | null;
   /** The model shown below. */
   readonly selected: string | null;
   readonly onImported: (model: CharacterModel) => void;
@@ -398,6 +398,12 @@ export function ModelListCard({
     replacing.isPending ||
     activating.isPending ||
     removing.isPending;
+
+  /** Removing `id` leaves her picture: it's the model she shows, and no other of hers takes over. */
+  function removesLook(id: string): boolean {
+    const fallback = active?.fallback ?? null;
+    return id === list.active && (fallback === null || fallback === id);
+  }
 
   async function take(reading: Promise<File | ModelFileProblem>, target: Target) {
     setReading(true);
@@ -489,13 +495,14 @@ export function ModelListCard({
             )}
             <ListCard label={t`Her Models`}>
               {list.models.map((model) => {
-                const active = model.id === list.active;
+                const isActive = model.id === list.active;
+                const own = isActive && active?.own === true;
                 return (
                   <ModelRow
                     key={model.id}
                     model={model}
-                    active={active}
-                    inherited={inheritedActive}
+                    active={isActive}
+                    inherited={isActive && active?.own === false}
                     selected={model.id === selected}
                     busy={busy}
                     onActivate={() =>
@@ -506,7 +513,8 @@ export function ModelListCard({
                     }
                     menu={
                       <ModelMenu
-                        active={active && !inheritedActive}
+                        // Not when the environment names it too: cleared, hers would leave it.
+                        stoppable={own && active?.fallback !== model.id}
                         busy={busy}
                         onRename={() => setRenamed(model)}
                         onReplace={() => pickers.openFile({ kind: "replace", model })}
@@ -565,7 +573,7 @@ export function ModelListCard({
           <AlertDialogHeader>
             <AlertDialogTitle>{t`Remove ${ph({ name: removed?.name ?? "" })}?`}</AlertDialogTitle>
             <AlertDialogDescription>
-              {removed !== null && removed.id === list.active && !inheritedActive
+              {removed !== null && removesLook(removed.id)
                 ? t`Its file and settings are deleted from her folder. It's her active model, so she shows her picture until you make another one active.`
                 : t`Its file and settings are deleted from her folder.`}
             </AlertDialogDescription>

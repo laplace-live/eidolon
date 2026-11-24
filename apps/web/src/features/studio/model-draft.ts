@@ -10,9 +10,11 @@ import {
 import type {
   CharacterModel,
   CharacterModelPatch,
+  CharacterModels,
   ModelBox,
   ModelInventory,
   ModelOutfit,
+  SettingRow,
 } from "@/lib/api";
 
 export type ModelDraft = Pick<
@@ -84,6 +86,59 @@ export function rebaseDraft(draft: ModelDraft, base: ModelDraft, next: ModelDraf
     out[field] = sameValue(draft[field], base[field]) ? next[field] : draft[field];
   }
   return out as ModelDraft;
+}
+
+/**
+ * `draft` on a new file the runtime read as `inventory`: what it names that the rig lacks goes, and
+ * values keep within their new ranges, as the server keeps what was saved.
+ */
+export function keptDraft(draft: ModelDraft, inventory: ModelInventory): ModelDraft {
+  const expressions = new Set(inventory.expressions.map(({ id }) => id));
+  const clips = new Set(inventory.clips.map(({ id }) => id));
+  const parts = new Set(inventory.parts.map(({ id }) => id));
+  const ranges = new Map(inventory.parameters.map((parameter) => [parameter.id, parameter]));
+  return {
+    ...draft,
+    moods: Object.fromEntries(
+      Object.entries(draft.moods).flatMap(([mood, ids]) => {
+        const left = ids.filter((id) => expressions.has(id));
+        return left.length > 0 || ids.length === 0 ? [[mood, left]] : [];
+      }),
+    ),
+    gestures: Object.fromEntries(Object.entries(draft.gestures).filter(([, id]) => clips.has(id))),
+    outfits: draft.outfits.map((outfit) => ({
+      ...outfit,
+      poses: outfit.poses.filter(({ group, entry }) => entry < (inventory.poseGroups[group] ?? 0)),
+      parameters: outfit.parameters.flatMap(({ id, value }) => {
+        const range = ranges.get(id);
+        return range ? [{ id, value: Math.min(range.max, Math.max(range.min, value)) }] : [];
+      }),
+      hiddenParts: outfit.hiddenParts.filter((id) => parts.has(id)),
+    })),
+  };
+}
+
+/** The model she shows, and where that comes from. */
+export interface ActiveModel {
+  readonly id: string;
+  /** Her own appearance.model names it; else she inherits the environment's. */
+  readonly own: boolean;
+  /** What she shows once her own setting is cleared: the environment's model, while she has it. */
+  readonly fallback: string | null;
+}
+
+/** Which of `list`'s models she shows, by her appearance.model row; null for none, or while it loads. */
+export function activeModelOf(
+  list: CharacterModels,
+  setting: Pick<SettingRow, "value" | "envValue"> | undefined,
+): ActiveModel | null {
+  if (list.active === null || setting === undefined) return null;
+  const env = setting.envValue;
+  return {
+    id: list.active,
+    own: typeof setting.value === "string" && setting.value !== "",
+    fallback: env !== null && list.models.some(({ id }) => id === env) ? env : null,
+  };
 }
 
 /** Why the server would refuse a name: none, too long, or more than one line. */

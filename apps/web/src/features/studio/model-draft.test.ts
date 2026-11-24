@@ -1,12 +1,14 @@
 import { describe, expect, test } from "vitest";
 import type { CharacterModel, ModelInventory, ModelOutfit } from "@/lib/api";
 import {
+  activeModelOf,
   boxScale,
   clampBox,
   draftChanges,
   draftOf,
   draftProblem,
   gestureClip,
+  keptDraft,
   MAX_OUTFITS,
   type ModelDraft,
   moodExpressions,
@@ -300,5 +302,86 @@ describe("framing", () => {
   test("a nudge moves her, so the frame goes the other way", () => {
     expect(nudgedBox(box, 1, 0)).toEqual({ ...box, x: 780 });
     expect(nudgedBox(box, 0, -1)).toEqual({ ...box, y: 325 });
+  });
+});
+
+describe("a new file", () => {
+  test("keeps what of the draft its rig still has, as the server keeps what was saved", () => {
+    const rig: ModelInventory = {
+      ...INVENTORY,
+      clips: INVENTORY.clips.filter(({ id }) => id !== "wave"),
+      expressions: INVENTORY.expressions.filter(({ id }) => id !== "sad"),
+      parameters: [{ id: "ParamCheek", min: 0, max: 0.4, default: 0 }],
+      parts: [{ id: "bag", name: "包" }],
+      poseGroups: [2],
+    };
+    const draft: ModelDraft = {
+      framing: { call: { x: 1, y: 2, width: 3, height: 4 }, companion: null },
+      moods: { happy: ["sad"], sad: ["sad", "smile"], thinking: [] },
+      gestures: { nod: "wave", idle: "modifier:m32:6d6f74696f6e" },
+      outfits: [
+        {
+          ...SCHOOL,
+          poses: [
+            { group: 0, entry: 1 },
+            { group: 1, entry: 0 },
+          ],
+          parameters: [
+            { id: "ParamCheek", value: 0.5 },
+            { id: "ParamAngleX", value: 3 },
+          ],
+          hiddenParts: ["hat", "bag"],
+        },
+      ],
+      outfit: "outfit-1",
+    };
+    expect(keptDraft(draft, rig)).toEqual({
+      framing: draft.framing,
+      // A mood left with none of its expressions goes back to its default; none chosen stays none.
+      moods: { sad: ["smile"], thinking: [] },
+      gestures: { idle: "modifier:m32:6d6f74696f6e" },
+      outfits: [
+        {
+          ...SCHOOL,
+          poses: [{ group: 0, entry: 1 }],
+          parameters: [{ id: "ParamCheek", value: 0.4 }],
+          hiddenParts: ["bag"],
+        },
+      ],
+      outfit: "outfit-1",
+    });
+  });
+});
+
+describe("her active model", () => {
+  const OTHER = { ...SAVED, id: "other" };
+  const list = (active: string | null) => ({ active, models: [SAVED, OTHER] });
+
+  test("comes from her own setting, else from the environment's", () => {
+    expect(activeModelOf(list("tml"), { value: "tml", envValue: null })).toEqual({
+      id: "tml",
+      own: true,
+      fallback: null,
+    });
+    for (const value of [null, ""]) {
+      expect(activeModelOf(list("tml"), { value, envValue: "tml" })).toEqual({
+        id: "tml",
+        own: false,
+        fallback: "tml",
+      });
+    }
+  });
+
+  test("falls back to the environment's model once hers is cleared, while she has it", () => {
+    const own = (envValue: string) =>
+      activeModelOf(list("tml"), { value: "tml", envValue })?.fallback;
+    expect(own("tml")).toBe("tml");
+    expect(own("other")).toBe("other");
+    expect(own("gone")).toBeNull();
+  });
+
+  test("is none while she shows none, and unknown until her setting loads", () => {
+    expect(activeModelOf(list(null), { value: "gone", envValue: null })).toBeNull();
+    expect(activeModelOf(list("tml"), undefined)).toBeNull();
   });
 });

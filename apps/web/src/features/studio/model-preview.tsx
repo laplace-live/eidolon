@@ -38,6 +38,7 @@ import {
   draftChanges,
   draftOf,
   draftProblem,
+  keptDraft,
   type ModelDraft,
   nudgedBox,
   rebaseDraft,
@@ -204,11 +205,13 @@ export function ModelPreviewCard({
   const reducedMotion = useReducedMotion();
   const [state, setState] = useState(() => ({ saved: model, draft: draftOf(model) }));
   let current = state;
-  // Saved elsewhere, such as a rename: the fields left alone here take what was saved.
+  // Saved elsewhere, such as a rename or a new file: the fields left alone here take what was
+  // saved, and a new file's rig keeps what it has of the rest.
   if (state.saved !== model) {
+    const rebased = rebaseDraft(state.draft, draftOf(state.saved), draftOf(model));
     current = {
       saved: model,
-      draft: rebaseDraft(state.draft, draftOf(state.saved), draftOf(model)),
+      draft: model.sha256 === state.saved.sha256 ? rebased : keptDraft(rebased, model.inventory),
     };
     setState(current);
   }
