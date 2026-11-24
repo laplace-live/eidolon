@@ -2214,13 +2214,21 @@ async function popOut(walk: Walk, driven: Driven, her: Her, step: Step) {
           ?.dataset.frames ?? Number.NaN,
       ),
     );
+  // The page hears it a few frames after main logs it: wait for its mark, and a frame more.
+  const marked = await page
+    .waitForSelector("html[data-window-hidden]", { state: "attached", timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  await sleep(250);
   const before = await frames();
   await sleep(1000);
   const held = await frames();
   step.check(
     "hidden, the window's call draws no frame",
-    Number.isFinite(before) && held === before,
-    `its stage's data-frames ${before}, and ${held} a second later`,
+    marked && Number.isFinite(before) && held === before,
+    `${marked ? "the page marked hidden" : "no data-window-hidden on the page"}; its stage's data-frames ${before}, and ${held} a second later`,
   );
   from = smoke.log("main").length;
   await screen.getByRole("button", { name: "Hang Up" }).click();
