@@ -17,6 +17,7 @@ import { pausePlayback } from "@/features/chats/voice";
 import { CompanionFeed } from "@/features/companion/feed";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import type { Status } from "@/lib/api";
+import { subscribeWindowShows, windowShows } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
 import {
   type CallPresence,
@@ -49,6 +50,10 @@ export function CallProvider({ children }: { readonly children: ReactNode }): Re
   const up = isUp(phase);
   const reduced = useReducedMotion();
   const blank = useSyncExternalStore(stages.subscribe, () => stages.blank);
+  // A desktop app's window hidden while it feeds the desktop companion keeps its page running, so its
+  // stages would draw for no one; the call, its signals and the feed go on.
+  const windowShown = useSyncExternalStore(subscribeWindowShows, windowShows);
+  useEffect(() => stages.hold(!windowShown), [stages, windowShown]);
   const video = target !== null && opensVideo(target) && !blank;
   const shown = views > 0;
   const { data: active = null } = useQuery({ ...statusQuery, select: activeOf });

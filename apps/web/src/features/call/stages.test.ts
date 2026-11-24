@@ -5,7 +5,7 @@ import type {
   MouthSource,
   ResolvedSetup,
 } from "@laplace.live/eidolon-sdk/avatar";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { ActiveCharacterModel } from "@/lib/api";
 import type { LoadedModel } from "./cast";
 import { CallStages, type StageLike, type StageLoad, type StageParts } from "./stages";
@@ -145,6 +145,52 @@ function loads(reducedMotion = false) {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("CallStages", () => {
+  test("held, no stage runs a frame, one already asked for included; released, each runs once", async () => {
+    let next = 0;
+    const frames = new Map<number, (now: number) => void>();
+    vi.stubGlobal("requestAnimationFrame", (frame: (now: number) => void) => {
+      next += 1;
+      frames.set(next, frame);
+      return next;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (handle: number) => frames.delete(handle));
+    const runAll = (now: number) => {
+      const due = [...frames.values()];
+      frames.clear();
+      for (const frame of due) frame(now);
+    };
+    try {
+      const { parts, stages } = fakeParts();
+      const cast = new CallStages(fakeSignals(), parts);
+      cast.load(soloTarget(member("milky-green")), loads().how);
+      await settle();
+      const clock = stages[0]?.options.clock;
+      if (clock === undefined) throw new Error("no clock");
+      const ran: string[] = [];
+      clock.request(() => ran.push("asked before"));
+      cast.hold(true);
+      clock.request(() => ran.push("asked while held"));
+      runAll(16);
+      expect(ran).toEqual([]);
+      expect(cast.get("milky-green")?.frames).toBe(0);
+      cast.hold(false);
+      runAll(33);
+      expect(ran).toEqual(["asked before", "asked while held"]);
+      expect(cast.get("milky-green")?.frames).toBe(2);
+      // Cancelled while held, a frame never runs; disposed while held, nothing waits.
+      cast.hold(true);
+      clock.cancel(clock.request(() => ran.push("cancelled")));
+      clock.request(() => ran.push("disposed"));
+      cast.dispose();
+      cast.hold(false);
+      runAll(50);
+      expect(ran).toEqual(["asked before", "asked while held"]);
+      expect(frames.size).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test("makes a member's stage at once, and shows her model once it loads", async () => {
     const { parts, stages } = fakeParts();
     const signals = fakeSignals();

@@ -11,6 +11,8 @@ import {
   onCompanionPort,
   runCommand,
   subscribeCompanionPick,
+  subscribeWindowShows,
+  windowShows,
 } from "./desktop";
 import { setTheme } from "./theme";
 
@@ -138,6 +140,7 @@ test("an app whose bridge predates the desktop companion offers none of her memb
   expect(app?.linkCompanion).toBeUndefined();
   expect(app?.feedingCompanion).toBeUndefined();
   expect(app?.onCompanionPick).toBeUndefined();
+  expect(app?.onWindowShows).toBeUndefined();
   expect(offersPopOut(app)).toBe(false);
   // Connecting such an app hands no pick on, and throws for none it lacks.
   const heard = vi.fn();
@@ -145,6 +148,31 @@ test("an app whose bridge predates the desktop companion offers none of her memb
   connectDesktop(vi.fn());
   stop();
   expect(heard).not.toHaveBeenCalled();
+  expect(windowShows()).toBe(true);
+});
+
+test("the window shows until the app's bridge says otherwise, and each change reaches its listeners", () => {
+  let tell: ((shows: boolean) => void) | undefined;
+  globalThis.eidolonDesktop = {
+    ...fakeBridge(),
+    onWindowShows: (callback) => {
+      tell = callback;
+      callback(false);
+    },
+  };
+  const heard = vi.fn();
+  const stop = subscribeWindowShows(heard);
+  expect(windowShows()).toBe(true);
+  connectDesktop(vi.fn());
+  expect(windowShows()).toBe(false);
+  tell?.(false);
+  tell?.(true);
+  expect(windowShows()).toBe(true);
+  stop();
+  tell?.(false);
+  tell?.(true);
+  // Told false, then true again: two changes heard while subscribed, none repeated.
+  expect(heard).toHaveBeenCalledTimes(2);
 });
 
 test("a bridge with the companion's members offers Pop Out and hands their answers on", async () => {

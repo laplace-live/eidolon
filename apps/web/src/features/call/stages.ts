@@ -72,16 +72,11 @@ const DOM_PARTS: StageParts = {
   },
 };
 
-/** Animation frames, each counted on `entry` as it runs. */
-function countedFrames(entry: Entry): FrameClock {
-  return {
-    request: (frame) =>
-      requestAnimationFrame((now) => {
-        entry.frames += 1;
-        frame(now);
-      }),
-    cancel: (handle) => cancelAnimationFrame(handle as number),
-  };
+/** A frame a stage asked its clock for, and its animation frame while one is asked for it. */
+interface Asked {
+  readonly entry: Entry;
+  readonly frame: (now: number) => void;
+  handle: number | null;
 }
 
 export class CallStages {
@@ -94,6 +89,10 @@ export class CallStages {
   #version = 0;
   #unsubscribe: (() => void) | null = null;
   readonly #listeners = new Set<() => void>();
+  /** No stage runs a frame: the desktop app's window doesn't show, though its page still runs. */
+  #held = false;
+  /** Every frame a stage asked for and hasn't had. */
+  readonly #asked = new Set<Asked>();
 
   /** No side effects: the DOM's parts unless given. */
   constructor(signals: StageSignals, parts: StageParts = DOM_PARTS) {
@@ -144,6 +143,19 @@ export class CallStages {
   /** Bumped on every state change and dispose. */
   readonly version = (): number => this.#version;
 
+  /** Held, no stage runs a frame, nor draws: each one asked for waits, and runs once released. */
+  hold(held: boolean): void {
+    if (held === this.#held) return;
+    this.#held = held;
+    for (const asked of this.#asked) {
+      if (!held) this.#run(asked);
+      else if (asked.handle !== null) {
+        cancelAnimationFrame(asked.handle);
+        asked.handle = null;
+      }
+    }
+  }
+
   /** Every stage and canvas gone, every load aborted; the object stays usable. */
   dispose(): void {
     this.#drop();
@@ -160,7 +172,7 @@ export class CallStages {
       stage = await this.#parts.stage(entry.canvas, {
         reducedMotion: how.reducedMotion,
         onError: () => this.#set(entry, "failed"),
-        clock: countedFrames(entry),
+        clock: this.#frames(entry),
       });
       if (signal.aborted) {
         stage.dispose();
@@ -212,6 +224,35 @@ export class CallStages {
       entry.canvas.remove();
     }
     this.#entries = [];
+    for (const asked of this.#asked) {
+      if (asked.handle !== null) cancelAnimationFrame(asked.handle);
+    }
+    this.#asked.clear();
+  }
+
+  /** Animation frames for `entry`'s stage, each counted on it as it runs, none while held. */
+  #frames(entry: Entry): FrameClock {
+    return {
+      request: (frame) => {
+        const asked: Asked = { entry, frame, handle: null };
+        this.#asked.add(asked);
+        if (!this.#held) this.#run(asked);
+        return asked;
+      },
+      cancel: (handle) => {
+        const asked = handle as Asked;
+        this.#asked.delete(asked);
+        if (asked.handle !== null) cancelAnimationFrame(asked.handle);
+      },
+    };
+  }
+
+  #run(asked: Asked): void {
+    asked.handle = requestAnimationFrame((now) => {
+      this.#asked.delete(asked);
+      asked.entry.frames += 1;
+      asked.frame(now);
+    });
   }
 
   #changed(): void {

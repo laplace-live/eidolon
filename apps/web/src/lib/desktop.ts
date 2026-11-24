@@ -137,6 +137,11 @@ export interface EidolonDesktop {
   readonly feedingCompanion?: (feeding: boolean) => void;
   /** Hands `callback` each pick the owner clicked in her menu for the call. */
   readonly onCompanionPick?: (callback: (pick: CompanionCallPick) => void) => void;
+  /**
+   * Hands `callback` whether the window shows, now and at each change: hidden while it feeds her, its
+   * page still runs, as throttling's off.
+   */
+  readonly onWindowShows?: (callback: (shows: boolean) => void) => void;
 }
 
 /** `window.eidolonCompanion`, on the desktop companion's page alone. */
@@ -207,10 +212,26 @@ export function subscribeCompanionPick(listener: (pick: CompanionCallPick) => vo
   };
 }
 
+let shown = true;
+const showsListeners = new Set<() => void>();
+
+/** Whether the desktop app's window shows, as main last said; true in a browser. */
+export function windowShows(): boolean {
+  return shown;
+}
+
+/** Calls `listener` at each change of windowShows(); the function it returns stops it. */
+export function subscribeWindowShows(listener: () => void): () => void {
+  showsListeners.add(listener);
+  return () => {
+    showsListeners.delete(listener);
+  };
+}
+
 /**
  * Tells the desktop app the theme setting and the language, now and on every change, runs its
- * commands through `navigate`, and hands her menu's call picks to their subscribers, a pick with
- * none being dropped. Nothing in a browser.
+ * commands through `navigate`, hands her menu's call picks to their subscribers, a pick with none
+ * being dropped, and keeps whether its window shows. Nothing in a browser.
  */
 export function connectDesktop(navigate: (to: string) => void): void {
   const app = desktop();
@@ -236,6 +257,11 @@ export function connectDesktop(navigate: (to: string) => void): void {
   app.onCommand((command) => runCommand(command, navigate));
   app.onCompanionPick?.((pick) => {
     for (const listener of [...pickListeners]) listener(pick);
+  });
+  app.onWindowShows?.((shows) => {
+    if (shows === shown) return;
+    shown = shows;
+    for (const listener of [...showsListeners]) listener();
   });
 }
 
