@@ -156,6 +156,18 @@ test("names the call as the dock does, and is never a drag row", () => {
   expect(markup).not.toContain("data-call-transcript");
 });
 
+test("backs the state line under her name, which the shade over her model has faded behind", () => {
+  const markup = render();
+  const at = markup.indexOf("Waiting for 奶绿 to answer…");
+  expect(at).toBeGreaterThan(-1);
+  const line = openAt(markup, at)
+    .filter((tag) => tag.startsWith("<p"))
+    .at(-1);
+  expect(classesOf(line ?? "")).toEqual(
+    expect.arrayContaining(["bg-background/80", "rounded-full", "text-muted-foreground"]),
+  );
+});
+
 test("offers Shrink only where the call can dock", () => {
   expect(render()).not.toContain("Shrink");
   expect(render({ props: { onShrink: null } })).not.toContain("Shrink");
