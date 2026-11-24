@@ -414,10 +414,13 @@ has none of them, and without them nothing below happens.
   companion](desktop.md#the-desktop-companion)'s: `companion()`, `setCompanion(change)` and
   `popOut()`, each a promise of her state (`on`, `showAtLogin`, and `background`, true while
   background mode keeps her off screen); `linkCompanion()`, which asks main for a port to her page,
-  and `feedingCompanion(feeding)`, whether a call she is on is up here; and
+  and `feedingCompanion(feeding)`, whether a call she is on is up here;
   `onCompanionPick(callback)`, which hands the page her menu's picks for the call, `call`,
-  `hang-up`, `mute` or `unmute`. `connectDesktop` passes each pick to whoever listens through
-  `subscribeCompanionPick` at that moment, and drops one nobody does.
+  `hang-up`, `mute` or `unmute`; and `onWindowShows(callback)`, whether the window shows, at once
+  and at each change. `connectDesktop` passes each pick to whoever listens through
+  `subscribeCompanionPick` at that moment, and drops one nobody does, and keeps the window's showing
+  as a store (`windowShows()`, `subscribeWindowShows`), true in a browser, by which the call's
+  provider holds its stages while the window doesn't show.
 - **The port** to her page, which isn't a bridge member, since the preload posts it: a window
   message from this window itself, tagged `{eidolon: "companion-port"}`, with one port, which
   `onCompanionPort` hands on. Main pairs the app page and hers once both have asked, and again
