@@ -4,6 +4,7 @@ import {
   isP2lrtHeader,
   MAX_MODEL_BYTES,
   MODEL_ACCEPT,
+  ModelUpload,
   modelFileFrom,
   modelFileFromDrop,
   modelFileProblem,
@@ -337,5 +338,15 @@ describe("modelFileFromDrop", () => {
     expect(await modelFileFromDrop({ entries: [null], files: [file("x", "her.png")] })).toBe(
       "type",
     );
+  });
+});
+
+describe("ModelUpload", () => {
+  test("hands its file to the upload once, keeping only the name", async () => {
+    const file = new File([RIG], "tml.p2lrt");
+    const upload = new ModelUpload(file);
+    expect(upload.filename).toBe("tml.p2lrt");
+    expect(upload.take()).toBe(file);
+    expect(upload.take().size).toBe(0);
   });
 });

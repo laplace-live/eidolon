@@ -11,6 +11,7 @@ import {
 import { characterModelsQuery } from "@/lib/character-models";
 import { toastError } from "@/lib/feedback";
 import { statusQuery } from "@/lib/query";
+import type { ModelUpload } from "./model-files";
 
 function edit(
   queryClient: QueryClient,
@@ -45,11 +46,11 @@ async function refresh(queryClient: QueryClient, persona: string): Promise<void>
 export function useImportModel(persona: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) =>
+    mutationFn: (upload: ModelUpload) =>
       call("POST /api/local/personas/:id/models", {
         params: { id: persona },
-        query: { filename: file.name },
-        body: file,
+        query: { filename: upload.filename },
+        body: upload.take(),
       }),
     onSuccess: async (model) => {
       edit(queryClient, persona, (list) => withModel(list, model));
@@ -63,11 +64,11 @@ export function useImportModel(persona: string) {
 export function useReplaceModelFile(persona: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ model, file }: { model: string; file: File }) =>
+    mutationFn: ({ model, upload }: { model: string; upload: ModelUpload }) =>
       call("PUT /api/local/personas/:id/models/:model/file", {
         params: { id: persona, model },
-        query: { filename: file.name },
-        body: file,
+        query: { filename: upload.filename },
+        body: upload.take(),
       }),
     onSuccess: async (model) => {
       edit(queryClient, persona, (list) => withModel(list, model));

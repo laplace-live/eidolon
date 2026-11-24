@@ -235,6 +235,27 @@ export async function modelFileFrom(files: readonly File[]): Promise<File | Mode
   }
 }
 
+/**
+ * A model's file for one upload, which takes it: an upload's variables outlive its answer, kept by
+ * the mutation and by the render before the next, and a model taken from a zip is held in memory.
+ */
+export class ModelUpload {
+  readonly filename: string;
+  #file: Blob | null;
+
+  constructor(file: File) {
+    this.filename = file.name;
+    this.#file = file;
+  }
+
+  /** The file to send, given once. */
+  take(): Blob {
+    const file = this.#file ?? new Blob();
+    this.#file = null;
+    return file;
+  }
+}
+
 /** What a drop holds, taken in its event, after which its items are gone. */
 export interface Dropped {
   /** Each item's `webkitGetAsEntry()`, which reaches into a folder. */

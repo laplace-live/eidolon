@@ -69,6 +69,7 @@ import {
   MAX_MODEL_BYTES,
   MODEL_ACCEPT,
   type ModelFileProblem,
+  ModelUpload,
   modelFileFrom,
   modelFileFromDrop,
 } from "./model-files";
@@ -413,8 +414,9 @@ export function ModelListCard({
       toast.error(fileProblemText(picked, lang));
       return;
     }
+    const upload = new ModelUpload(picked);
     if (target.kind === "import") {
-      importing.mutate(picked, {
+      importing.mutate(upload, {
         onSuccess: (model) => {
           toast.success(t`${ph({ name: model.name })} imported.`);
           onImported(model);
@@ -422,7 +424,7 @@ export function ModelListCard({
       });
     } else {
       replacing.mutate(
-        { model: target.model.id, file: picked },
+        { model: target.model.id, upload },
         {
           onSuccess: (model) =>
             toast.success(t`${ph({ name: model.name })} now uses the new file.`),
