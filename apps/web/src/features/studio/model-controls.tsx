@@ -140,6 +140,8 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
     readonly meter: MouthMeter;
   } | null>(null);
   const requests = useRef(new MicRequests());
+  // The context of a request still under way, which the browser holds while its prompt is open.
+  const asking = useRef<AudioContext | null>(null);
   const problems = useRef(onProblem);
   useEffect(() => {
     problems.current = onProblem;
@@ -147,6 +149,8 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
 
   const stop = useCallback(() => {
     requests.current.cancel();
+    void asking.current?.close().catch(() => {});
+    asking.current = null;
     const current = held.current;
     held.current = null;
     setPhase("off");
@@ -169,6 +173,7 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
     if (request === null) return;
     // Made in the click, where the browser lets it start.
     const context = new AudioContext();
+    asking.current = context;
     setPhase("starting");
     media.getUserMedia({ audio: true }).then(
       (stream) => {
@@ -177,6 +182,7 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
           void context.close().catch(() => {});
           return;
         }
+        asking.current = null;
         let meter: MouthMeter;
         try {
           meter = new MouthMeter(stream, { context });
@@ -194,6 +200,7 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
       (error: unknown) => {
         void context.close().catch(() => {});
         if (!requests.current.settle(request)) return;
+        asking.current = null;
         setPhase("off");
         problems.current(micProblemOf(error));
       },

@@ -1880,13 +1880,50 @@ function percent(share: number): string {
   return `${Math.round(share * 100)}%`;
 }
 
+/** What the page keeps while its microphone requests go unanswered. */
+interface UnansweredMic {
+  smokeContexts: AudioContext[];
+  smokeAsks: ((error: unknown) => void)[];
+  smokeAnswer: () => void;
+}
+
+/**
+ * Leaves the page's microphone requests unanswered, as an open permission prompt does, keeping each
+ * AudioContext it makes; `smokeAnswer` then refuses them, as Block does, and puts both back.
+ */
+function leaveMicUnanswered(): void {
+  const page = window as unknown as UnansweredMic;
+  const Context = window.AudioContext;
+  const media = navigator.mediaDevices;
+  const ask = media.getUserMedia;
+  page.smokeContexts = [];
+  page.smokeAsks = [];
+  window.AudioContext = class extends Context {
+    constructor(options?: AudioContextOptions) {
+      super(options);
+      page.smokeContexts.push(this);
+    }
+  };
+  media.getUserMedia = () =>
+    new Promise((_, reject) => {
+      page.smokeAsks.push(reject);
+    });
+  page.smokeAnswer = () => {
+    window.AudioContext = Context;
+    media.getUserMedia = ask;
+    for (const reject of page.smokeAsks.splice(0)) {
+      reject(new DOMException("Permission denied", "NotAllowedError"));
+    }
+  };
+}
+
 /**
  * Her look in the studio's Appearance: the test rig picked for Import a Model, kept in her folder as
  * the server's runtime read it and not made active; the preview drawing it under the app's CSP, an
- * expression held and a clip played on it, and a line tried on it, which a stage made anew ends; a
- * picture and a rig cut short refused with the app's sentences; then Make Active, which her summary
- * and the status name, and Stop Using. The model stays, inactive, so the calls after this meet her
- * picture.
+ * expression held and a clip played on it, Use Microphone letting go of its audio while the browser
+ * still asks for the microphone, and a line tried on it, which a stage made anew ends; a picture and
+ * a rig cut short refused with the app's sentences; then Make Active, which her summary and the
+ * status name, and Stop Using. The model stays, inactive, so the calls after this meet her picture.
  */
 async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
   const { page, checks, origin } = walk;
@@ -2009,6 +2046,34 @@ async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
           `${percent(behind)} once the canvas is hidden; ${expression.name} ` +
           `${held ? "held" : "NOT held"}, then ${clip.name} played, after which the preview is ` +
           `${after ?? "gone"}${after === "ready" ? `, covering ${percent(still)}` : `: ${await alerts(page)}`}`,
+      );
+
+      const microphone = page
+        .getByRole("region", { name: t("en", "Microphone and Pointer"), exact: true })
+        .getByRole("button", { name: t("en", "Use Microphone") });
+      await page.evaluate(leaveMicUnanswered);
+      await microphone.click();
+      await microphone.click();
+      await microphone.click();
+      await page.getByRole("tab", { name: t("en", "Framing"), exact: true }).click();
+      const asked = () =>
+        page.evaluate(() => {
+          const { smokeAsks, smokeContexts } = window as unknown as UnansweredMic;
+          return { asks: smokeAsks.length, audio: smokeContexts.map((context) => context.state) };
+        });
+      const mic = await poll(
+        asked,
+        ({ audio }) => audio.every((state) => state === "closed"),
+        5_000,
+      );
+      await page.evaluate(() => (window as unknown as UnansweredMic).smokeAnswer());
+      await page.getByRole("tab", { name: t("en", "Test", {}, "model"), exact: true }).click();
+      checks.add(
+        "appearance microphone",
+        mic.asks === 2 && mic.audio.length === 2 && mic.audio.every((state) => state === "closed"),
+        `with the browser still asking for the microphone, Use Microphone turned off and then ` +
+          `its tab left made ${mic.asks} request(s) and left their clicks' audio ` +
+          `${JSON.stringify(mic.audio)}`,
       );
 
       // Reduced motion makes her stage anew, as Replace File and a lost context do.
