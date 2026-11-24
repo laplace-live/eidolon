@@ -427,6 +427,30 @@ describe("her window", () => {
     expect(values("open")).toEqual([saved, saved]);
   });
 
+  test("a reshape during a drag stands her where the drag has her, and the drag goes on at her new size", () => {
+    const { flow, values } = shownCompanion();
+    flow.drag({ phase: "start", x: 1387, y: 600 });
+    flow.drag({ phase: "move", x: 1187, y: 600 });
+    flow.shape({ kind: "picture" });
+    // Displays that change nothing under her move nothing either.
+    flow.displaysChanged();
+    flow.drag({ phase: "move", x: 1137, y: 560 });
+    flow.drag({ phase: "end", x: 1137, y: 600 });
+    const picture = { x: 1123, y: 772, width: 128, height: 128 };
+    expect(values("setBounds")).toEqual([
+      { x: 1086, y: 420, width: 202, height: 480 },
+      picture,
+      picture,
+      { x: 1073, y: 732, width: 128, height: 128 },
+      { x: 1073, y: 772, width: 128, height: 128 },
+    ]);
+    expect(values("save").at(-1)).toEqual({
+      ...DEFAULT_COMPANION,
+      on: true,
+      feet: { x: 1137, y: 900 },
+    });
+  });
+
   test("a hit makes her window take clicks, and a miss passes them, while it exists", () => {
     const { flow, values } = shownCompanion();
     flow.hit(true);
