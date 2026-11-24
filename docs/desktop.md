@@ -1681,13 +1681,13 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
 On an Apple silicon Mac (macOS 27), 2026-11-21, every run of the app with the login-shell read
 off:
 
-- **The stage** (darwin-arm64): 4,967 files and 392 MiB, of which LanceDB 250, onnxruntime 43, the
+- **The stage** (darwin-arm64): 4,971 files and 392 MiB, of which LanceDB 250, onnxruntime 43, the
   node shim 20, sharp and libvips 19, `dist/` 7.5 and the web app 2; about 11 s with npm's cache
-  warm. The node shim, added on 2026-11-23, is 451 of those files, about 4.9 MB as a tar.gz. A
+  warm. The node shim, added on 2026-11-23, is 455 of those files, about 4.9 MB as a tar.gz. A
   win32-x64 payload, installed for that target from a Mac, is about 447 MiB before its VC++ copies
   and its node shim.
-- **Packaging** takes 61–64 s: Eidolon.app is 628 MiB, the DMG 261 MB and the zip 255 MB, before
-  the node shim.
+- **Packaging** takes 61–68 s. With the node shim, measured on 2026-11-23, Eidolon.app is 672 MiB,
+  the DMG 266 MB and the zip 261 MB.
 - **Starting:** the packaged app shows its page about 1.1 s after launch, and the unpackaged app
   paints Home in 1.3–1.8 s. The first run after packaging is slower: the packaged binary's backend
   listened 3.6–4.2 s after it started, against 0.55 s warm.
