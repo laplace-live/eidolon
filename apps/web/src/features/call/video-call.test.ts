@@ -257,6 +257,27 @@ test("captions her last sentence while she says it, and asks a group call to sta
   expect(quiet).not.toContain("data-captions");
 });
 
+test("clamps the caption to three lines at every size, inside its padding", () => {
+  const announced = reduceTranscript(EMPTY_TRANSCRIPT, {
+    type: "bot-output",
+    data: {
+      text: "看得到呀，你也在笑！",
+      segment_id: 1,
+      output_type: "sentence",
+      will_be_spoken: true,
+      spoken_status: "new",
+    },
+  });
+  const markup = render({ transcript: announced, botSpeaking: true });
+  const caption = markup.match(/<p data-captions[^>]*>/)?.[0] ?? "";
+  // Clamped on the padded p, a fourth line's top showed in the padding; clamped below sm alone, a
+  // long line climbed past the foot over her name and the timer.
+  expect(classesOf(caption).filter((name) => name.includes("line-clamp"))).toEqual([]);
+  expect(classesOf(caption)).toEqual(expect.arrayContaining(["px-4", "py-2"]));
+  const inner = markup.slice(markup.indexOf(caption) + caption.length).match(/^<span [^>]*>/)?.[0];
+  expect(classesOf(inner ?? "")).toContain("line-clamp-3");
+});
+
 test("shows her newest photo in the corner while the call is up", () => {
   const shot = reduceTranscript(EMPTY_TRANSCRIPT, {
     type: "selfie",
