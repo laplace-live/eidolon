@@ -159,7 +159,16 @@ describe("appInvokes", () => {
     const set = answer(BRIDGE.setCompanion);
     expect(set(app, { on: true })).toEqual(STATE);
     expect(set(app, { showAtLogin: false })).toEqual(STATE);
-    for (const change of [{}, { on: "yes" }, { on: true, x: 1 }, true, null, undefined]) {
+    for (const change of [
+      {},
+      { on: "yes" },
+      { on: true, x: 1 },
+      { on: true, x: true },
+      { x: true },
+      true,
+      null,
+      undefined,
+    ]) {
       expect(() => set(app, change), JSON.stringify(change)).toThrow("the desktop companion takes");
     }
     expect(calls).toEqual([

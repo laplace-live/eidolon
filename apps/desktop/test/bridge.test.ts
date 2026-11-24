@@ -364,7 +364,16 @@ describe("the desktop companion's values", () => {
       showAtLogin: false,
       background: true,
     });
-    for (const answer of [null, undefined, "on", 1, [], { on: "true", showAtLogin: 0 }]) {
+    for (const answer of [
+      null,
+      undefined,
+      "on",
+      1,
+      [],
+      { on: "true", showAtLogin: 0 },
+      { background: "true" },
+      { background: 1 },
+    ]) {
       expect(companionStateOf(answer)).toEqual({ on: false, showAtLogin: true, background: false });
     }
   });
@@ -377,6 +386,8 @@ describe("the desktop companion's values", () => {
       {},
       { on: "yes" },
       { on: true, x: 1 },
+      { on: true, x: true },
+      { x: true },
       { on: undefined },
       { showAtLogin: null },
       null,
@@ -713,7 +724,14 @@ describe("the preload's bridges", () => {
     });
     expect(await bridge.popOut()).toEqual({ on: false, showAtLogin: true, background: false });
     // What a page could pass despite the types.
-    for (const change of [{}, { on: "yes" }, { on: true, x: 1 }, null]) {
+    for (const change of [
+      {},
+      { on: "yes" },
+      { on: true, x: 1 },
+      { on: true, x: true },
+      { x: true },
+      null,
+    ]) {
       await expect(bridge.setCompanion(change as never)).rejects.toThrow();
     }
     expect(invoked).toEqual([
