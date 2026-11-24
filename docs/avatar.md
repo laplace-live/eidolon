@@ -526,3 +526,8 @@ Electron 45.4.1 (Chromium 156), on CC0 rigs exported by PSD2Live 3.8.4's command
 - **Exports:** a command-line export took about 4.7 s and 1.5 GB of memory. `tml.p2lrt` was 4.4 MB,
   3.6 MB with zstd, about half of it its one 4096² PNG page: a 2048² canvas, 25 meshes, 4,011
   vertices, 7 parts, 78 parameters, `Idle` a 12 s loop and `Talk` 6 s.
+
+On a call, on 2026-11-23, in the free browser smoke on Playwright's headless shell (Chrome for
+Testing 159, its WebGL on SwiftShader) on the same Mac: from **Call** to the test rig's stage ready,
+while the call connected, the longest main-thread task took 137–142 ms in four runs of six, and
+none passed 50 ms in the other two ([the video call](web-app.md#the-browser-smoke-test)).
