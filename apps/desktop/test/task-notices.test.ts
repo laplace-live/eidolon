@@ -196,6 +196,7 @@ const MILKY: PersonaSummary = {
   template: true,
   own: true,
   avatar: false,
+  appearance: { model: null },
 };
 const RIN: PersonaSummary = { ...MILKY, id: "rin", name: "Rin", shortName: "Rin", template: false };
 
