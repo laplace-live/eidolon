@@ -281,8 +281,9 @@ export function menuLabel(name: string): string {
   const clipped =
     chars.length > LABEL_CHARS ? `${chars.slice(0, LABEL_CHARS).join("").trimEnd()}…` : line;
   // Windows' menus read one & as an access key, and Electron's macOS ones drop it as Chromium's
-  // FixUpWindowsStyleLabel does; both show && as one.
-  const label = clipped.replaceAll("&", "&&");
+  // FixUpWindowsStyleLabel does; both show && as one. That also drops a "(&x)" group, as "(&&)"
+  // reads, which a zero-width space breaks.
+  const label = clipped.replaceAll("&", "&&").replaceAll("(&&)", "(\u200b&&)");
   return label === "" ? "—" : label;
 }
 

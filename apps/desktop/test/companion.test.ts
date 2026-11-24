@@ -309,6 +309,8 @@ describe("menuLabel", () => {
   test("& doubled, which Windows' menus and Electron's macOS ones both show as one", () => {
     expect(menuLabel("A & B")).toBe("A && B");
     expect(menuLabel("A && B")).toBe("A &&&& B");
+    // macOS drops a "(&x)" group as it would on Windows, so "(&&)" keeps a zero-width space inside.
+    expect(menuLabel("Rock (&) Roll")).toBe("Rock (\u200b&&) Roll");
   });
 
   test("a name with nothing to show reads as a dash", () => {
