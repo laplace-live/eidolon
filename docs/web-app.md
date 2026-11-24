@@ -661,10 +661,11 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     another chat or page keeps it, and the call bar brings it back. Hang Up, the call ending, a
     reload, opening setup, or losing the session (the sign-in screen) end it. While it is up,
     another chat's **Call** and `/call`'s are unavailable and `/call` says you're in a call; the
-    persona switcher, **Make Active**, New Persona's **Switch to Her Now**, **Restart**, and
-    importing or replacing a character model wait for its end, since the server refuses them
-    during a call; Home's links into setup wait too, since setup sits outside the app's frame and
-    opening it ends the call. Studio's Appearance says its changes show from her next call.
+    persona switcher, a persona card's **Make Active**, New Persona's **Switch to Her Now**,
+    **Restart**, and importing or replacing a character model wait for its end, since the server
+    refuses them during a call; Home's links into setup wait too, since setup sits outside the
+    app's frame and opening it ends the call. Studio's Appearance says its changes show from her
+    next call.
   - `/call` stays the standalone call to the active persona, with no chat. With her model, it shows
     the call's screen under its header, with the mic's mute toggle, **Type a Message**,
     **Captions**, **Transcript** and **Hang Up**; **Transcript** opens its transcript beside the
