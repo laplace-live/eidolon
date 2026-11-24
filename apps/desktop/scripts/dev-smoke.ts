@@ -76,6 +76,8 @@ const SIGN_IN = /This Window Isn't Signed In|Open Eidolon from Your Terminal/;
 const NO_FOLDER_DIALOG = "Eidolon: background mode didn't open the folder dialog";
 /** How main.log's line for a notification background mode kept off screen starts. */
 const NOTICE = "Eidolon: background mode didn't show a notification: ";
+/** main.log's line when main lets the page go over its beforeunload. */
+const LET_GO = "Eidolon: the page asked to stay (beforeunload); letting it go";
 /** What Settings' Desktop App says under each option this copy can't offer, by why. */
 const DESKTOP_NOTES = {
   background: "Background mode leaves this computer as it is.",
@@ -285,8 +287,9 @@ async function walkApp(walk: Walk): Promise<void> {
     "attach: after a quit, a server started first is used, restarted and left running",
     (step) => attach(walk, first, step),
   );
-  await steps.run("quit: --quit stops main and the backend, leaving nothing", (step) =>
-    quit(walk, step),
+  await steps.run(
+    "quit: --quit stops main and the backend, an unsaved edit on the page and all, leaving nothing",
+    (step) => quit(walk, step),
   );
 }
 
@@ -1663,19 +1666,76 @@ async function attached(
   );
 }
 
+/**
+ * Types into the persona's System Prompt and leaves the edit unsaved, by hand: Chromium honours a
+ * page's beforeunload only after a gesture on it
+ * (https://www.chromestatus.com/feature/5082396709879808).
+ */
+async function editPrompt(page: Page): Promise<{ readonly ok: boolean; readonly detail: string }> {
+  await page.goto(`eidolon-app://app/personas/${PERSONA}/prompt`);
+  const area = page.getByLabel("System Prompt", { exact: true });
+  await area.click();
+  await area.pressSequentially(" unsaved");
+  await page.getByText("Unsaved changes", { exact: true }).waitFor();
+  const save = await page.getByRole("button", { name: "Save", exact: true }).isEnabled();
+  const gesture = await page.evaluate(() => navigator.userActivation.hasBeenActive);
+  return {
+    ok: save && gesture,
+    detail: `"Unsaved changes", Save ${save ? "enabled" : "disabled"}, ${gesture ? "after" : "with no"} a gesture on the page`,
+  };
+}
+
+/** Each of `lines` in main.log's `text`, in order, each after the one before. */
+function inOrder(
+  text: string,
+  lines: readonly string[],
+): { readonly ok: boolean; readonly detail: string } {
+  const found: string[] = [];
+  let rest = text.split(/\r?\n/);
+  for (const line of lines) {
+    const at = rest.findIndex((candidate) => candidate.includes(line));
+    if (at === -1) {
+      found.push(`no "${after(line)}"${found.length > 0 ? " after that" : ""}`);
+      return { ok: false, detail: found.join(" → ") };
+    }
+    found.push(after(rest[at]));
+    rest = rest.slice(at + 1);
+  }
+  return { ok: true, detail: found.join(" → ") };
+}
+
+/**
+ * The last launch spawns its own backend again, and quits while the page holds an unsaved edit,
+ * whose beforeunload asks the page to stay: main must let it go, or the quit stops with the window
+ * hidden and the backend already stopped.
+ */
 async function quit(walk: Walk, step: Step) {
   const { smoke } = walk;
   const from = smoke.log("main").length;
-  const main = smoke.start(walk.launch, LANGUAGE_ARGS);
+  let main: Started | null = null;
   try {
+    const driven = await drive(walk, []);
+    main = driven.main;
     const started = await smoke.waitForLine("main", LINES.started, { from, timeoutMs: 30_000 });
-    await smoke.waitForLine("main", LINES.appShown, { from, timeoutMs: 60_000 });
     const pid = Number(LINES.started.exec(started)?.[1]);
     await smoke.processes.adopt("backend", pid);
-    const ending = await quitApp(walk, main, pid);
+    await home(driven.page);
+    const edited = await editPrompt(driven.page);
+    step.check("the System Prompt holds an edit typed by hand, unsaved", edited.ok, edited.detail);
+    await step.shot(driven.page, "unsaved-prompt");
+    const quitFrom = smoke.log("main").length;
+    const ending = await quitApp(walk, driven.main, pid);
     step.check("--quit: the second launch, main and the backend exit 0", ending.ok, ending.detail);
+    const said = inOrder(smoke.log("main").slice(quitFrom), [
+      LINES.quitting,
+      "Eidolon: the window is hidden",
+      `Eidolon: the backend (pid ${pid}) exited (0)`,
+      LET_GO,
+      "Eidolon: the window is closed",
+    ]);
+    step.check("main.log: the quit lets the page go, then closes the window", said.ok, said.detail);
   } finally {
-    if (runs(main)) await smoke.quit(walk.launch).catch(() => undefined);
+    if (main !== null && runs(main)) await smoke.quit(walk.launch).catch(() => undefined);
   }
   const left = await smoke.processes.settle(10_000);
   step.check(
