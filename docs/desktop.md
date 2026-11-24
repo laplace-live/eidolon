@@ -745,16 +745,16 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
 - **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
   `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
   On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on
-  Windows an `.exe` starts directly and anything else through cmd.exe, each word escaped once for
-  each time cmd.exe will read it (`rereads`, with `cross-spawn.mjs`, ported from cross-spawn): one
-  escape fewer lets cmd.exe act on a word, one more leaves carets in it. A batch file's words are
-  escaped twice, as npm escapes them, and three times for a cmd-shim, npm's or pnpm's, with no
-  `node.exe` beside it, whose bare `node` cmd.exe would find to be the shim's own `node.cmd`
-  (looking in the folder the command runs in first, unless `NoDefaultCurrentDirectoryInExePath` is
-  set, then on its `PATH`, with `.JS` out of `PATHEXT` for pnpm's), since that `node.cmd`'s `%*`
-  reads them a third time. It starts without
-  `ELECTRON_RUN_AS_NODE`, as npm starts it: a Node script among them runs on `node`, which, where
-  it is the shim's, sets it again for itself. On macOS npx passes SIGINT and SIGTERM on to it; on
+  Windows an `.exe` or `.com` starts directly and anything else through cmd.exe, each word escaped
+  once for each time cmd.exe will read it (`rereads`, with `cross-spawn.mjs`, ported from
+  cross-spawn): one escape fewer lets cmd.exe act on a word, one more leaves carets in it. A batch
+  file's words are escaped twice, as npm escapes them, and three times for a cmd-shim, npm's or
+  pnpm's, with no `node.exe` beside it, whose bare `node` cmd.exe would find to be the shim's own
+  `node.cmd` (looking in the folder the command runs in first, unless
+  `NoDefaultCurrentDirectoryInExePath` is set, then on its `PATH`, with `.JS` out of `PATHEXT` for
+  pnpm's), since that `node.cmd`'s `%*` reads them a third time. It starts without
+  `ELECTRON_RUN_AS_NODE`, as npm starts it: a Node script among them runs on `node`, which, where it
+  is the shim's, sets it again for itself. On macOS npx passes SIGINT and SIGTERM on to it; on
   Windows, where `kill()` is TerminateProcess, it only waits. npx ends with the command's exit code,
   or on macOS its signal. pnpm writes only to stderr, so stdout, which the MCP protocol owns, holds
   only the server's output.
@@ -1217,9 +1217,9 @@ against `bun.lock`, the pruning, its natives loading from it (a LanceDB table, a
 session and sharp, through `scripts/natives.ts`, with every native library and VC++ DLL the
 process mapped coming from the payload: `payloadLibraries()` picks them by file name, so Windows'
 own `msvcp_win.dll`, mapped in every process with a window, isn't one), the node shim (its
-launchers as their sources in `node-shim/node_modules/.bin`, the payload's one `.bin`, the sh ones
-executable, and its pnpm at `bun.lock`'s pin, licensed, pruned to the target's natives and with no
-`.exe`), on a Windows stage the VC++ copies and the
+launchers in `node-shim/node_modules/.bin`, the payload's one `.bin`, equal to their sources in
+`apps/desktop/node-shim`, the sh ones executable, and its pnpm at `bun.lock`'s pin, licensed,
+pruned to the target's natives and with no `.exe`), on a Windows stage the VC++ copies and the
 signers, and, once the app was packaged after the stage, that the packaged payload holds the same
 files. A target with no stage skips, and so does one staged from another
 version or `bun.lock`, whose title then says to run `bun run build:desktop`.
