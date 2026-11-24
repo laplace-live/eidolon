@@ -198,7 +198,7 @@ and ends lent moods. The stage applies the direction each frame:
   `completed` once heard, so her pace times her cues.
 - **An interruption** (`bot-interrupted`) ends her reply and drops the cues she never got to.
 - **Gestures:** each new gesture plays once on clip layer 2, over her idle and her talking, which
-  show through again as it ends.
+  show through again as it ends; a looping clip picked for one plays a single pass.
 - **A chat reply**, which no voice says (`reply`), sets her mood from its direction, and its cues
   land at her pace.
 - **Group calls:** a `speaker` event sends the bot events after it to that persona, while the

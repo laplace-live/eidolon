@@ -41,6 +41,8 @@ interface Playing {
   readonly clip: string;
   readonly priority: number;
   readonly loop: boolean;
+  /** Seconds left of one pass of a clip that loops by itself, played once; null for the rest. */
+  left: number | null;
 }
 
 export class Psd2liveModel implements AvatarModel {
@@ -80,7 +82,9 @@ export class Psd2liveModel implements AvatarModel {
       const priority = o.priority ?? 1;
       if (!this.rig.playLayer(clip, layer, priority)) return;
       const loop = o.loop ?? false;
-      if (loop || layer > 0) this.#playing.set(layer, { clip, priority, loop });
+      const authored = this.inventory.clips.find(({ id }) => id === clip);
+      const left = !loop && authored?.looping === true ? authored.duration : null;
+      if (loop || layer > 0) this.#playing.set(layer, { clip, priority, loop, left });
       else this.#playing.delete(layer);
     });
   }
@@ -123,14 +127,16 @@ export class Psd2liveModel implements AvatarModel {
       this.rig.update(dt);
       // The runtime holds a finished one-shot at its last frame over the layers below (p2l_runtime.h,
       // p2l_clip_time), which would freeze her idle under a nod: a looped clip starts again as it
-      // ends, and one played once stops.
+      // ends, and one played once stops. A clip authored to loop wraps its time and never says it
+      // finished, so played once it stops after one pass by the clock.
       for (const [layer, playing] of this.#playing) {
         const state = this.rig.layerState(layer);
+        if (playing.left !== null) playing.left -= dt;
         if (state === null || state.clip !== playing.clip) {
           this.#playing.delete(layer);
         } else if (state.finished && playing.loop) {
           this.rig.playLayer(playing.clip, layer, playing.priority);
-        } else if (state.finished) {
+        } else if (state.finished || (playing.left !== null && playing.left <= 0)) {
           this.rig.playLayer(null, layer, 0);
           this.#playing.delete(layer);
         }

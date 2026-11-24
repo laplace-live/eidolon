@@ -363,4 +363,20 @@ describe("the model", () => {
     model.dispose();
     idleOnly.dispose();
   });
+
+  test("a clip authored to loop, played once as a gesture, ends after one pass", () => {
+    const rig = load();
+    const model = new Psd2liveModel(rig, { dispose() {} } as unknown as Psd2liveRenderer);
+    const looping = rig.clips.find((clip) => clip.group === "Idle");
+    const authored = model.inventory.clips.find((clip) => clip.id === looping?.id);
+    expect(authored).toMatchObject({ looping: true });
+    const pass = authored?.duration ?? Number.NaN;
+    model.play(looping?.id ?? null, 2, { priority: 2 });
+    let frames = 0;
+    for (; frames < Math.ceil(pass * 60) - 1; frames++) model.update(1 / 60);
+    expect(rig.layerState(2)?.clip).toBe(looping?.id);
+    for (; frames < Math.ceil(pass * 60) + 2; frames++) model.update(1 / 60);
+    expect(rig.layerState(2)).toMatchObject({ clip: null, priority: 0 });
+    model.dispose();
+  });
 });

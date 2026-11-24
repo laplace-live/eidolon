@@ -4,7 +4,6 @@
 
 import { cueEmoji } from "@laplace.live/eidolon-sdk";
 import {
-  type AvatarModel,
   type AvatarStage,
   type Direction,
   directionOf,
@@ -96,32 +95,14 @@ export function ControlGroup({
 
 /**
  * Plays a clip once over her idle, as a gesture plays, under reduced motion too since it was asked
- * for. A clip that loops never ends by itself, so it is stopped after one pass.
+ * for; the model ends a clip that loops after one pass.
  */
 export function usePlayClip(stage: AvatarStage | null): (clip: ModelClip) => void {
-  const looping = useRef<{ readonly model: AvatarModel; readonly timer: number } | null>(null);
-  const stopLoop = useCallback(() => {
-    const current = looping.current;
-    looping.current = null;
-    if (current === null) return;
-    window.clearTimeout(current.timer);
-    if (stage?.model === current.model) current.model.play(null, GESTURE_LAYER);
-  }, [stage]);
-  useEffect(() => stopLoop, [stopLoop]);
   return useCallback(
     (clip: ModelClip) => {
-      const model = stage?.model;
-      if (model == null) return;
-      stopLoop();
-      model.play(clip.id, GESTURE_LAYER, { priority: GESTURE_PRIORITY });
-      if (!clip.looping) return;
-      const timer = window.setTimeout(() => {
-        looping.current = null;
-        if (stage?.model === model) model.play(null, GESTURE_LAYER);
-      }, clip.duration * 1000);
-      looping.current = { model, timer };
+      stage?.model?.play(clip.id, GESTURE_LAYER, { priority: GESTURE_PRIORITY });
     },
-    [stage, stopLoop],
+    [stage],
   );
 }
 
