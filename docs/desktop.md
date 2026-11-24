@@ -1562,10 +1562,11 @@ Each step prints one line, made of the checks inside it:
    `companion.json`, and a right-click log her menu. Her reply in a new chat makes her `happy`, and
    her voice message, which plays as it arrives under Playwright's focus and again from Play Voice
    Message, makes her speak; a call with her opens the video screen, turns the main window's
-   throttling off and opens her mouth past 0.2, her menu then starting with Hang Up; Pop Out hides
-   the window, the screen's Hang Up ends the call, a second launch shows the window again, and the
-   switch turns her off. With no WebGL she is her picture, the call docks, and what needs a stage is
-   skipped, Pop Out included.
+   throttling off and opens her mouth past 0.2, her menu then starting with Hang Up, and her menu's
+   Mute and Unmute, sent to the app page as main sends them, set the call's microphone; Pop Out
+   hides the window, the screen's Hang Up ends the call, a second launch shows the window again, and
+   the switch turns her off. With no WebGL she is her picture, the call docks, and what needs a
+   stage is skipped, Pop Out included.
 10. **A task that waits:** the smoke sets Assistant Mode on the fakes' OpenRouter account (a `PUT`
     of `assistant.provider` and `assistant.model`) and gives the fakes a folder of the run's,
     outside `assistant.folders`, where her answer to the task line in a new chat starts a task with
@@ -1824,8 +1825,10 @@ and keeps to these rules:
   passes for a probe that read wrong, and a drag's moves carry `leftbuttondown`, each its screen
   point less her window's place as it stands then. Her pixels come from `webContents.capturePage()`
   with no `stayHidden`, which counts her page visible while it runs; an empty capture of her hidden
-  window fails the check, never skips it. Her page is found by its address, `app.windows()`'s page
-  at `eidolon-app://app/companion`, and found again after her page loads anew.
+  window fails the check, never skips it. Background mode closes her menu with no pick, so a pick
+  for the call is sent to the main window as main sends one (`companion-pick`). Her page is found by
+  its address, `app.windows()`'s page at `eidolon-app://app/companion`, and found again after her
+  page loads anew.
 - **Off screen** is checked by main's pid: `lsappinfo` gives its `ApplicationType` as `UIElement`,
   and every window's `isVisible()` and `isFocused()` are false. `app.dock.isVisible()` can read true
   while a second launch's process exists, and `isVisible()` reads false for a window behind
