@@ -67,9 +67,11 @@ function clamp(value: number, limit: number): number {
 
 /** What was applied to the model, so a frame applies only what changed. */
 interface Applied {
-  idle: boolean;
+  /** The clip the stage plays on the idle layer; null for none. */
+  idle: string | null;
   expressions: string | null;
-  talking: boolean;
+  /** The clip the stage plays on the talk layer; null for none. */
+  talk: string | null;
   outfit: boolean;
 }
 
@@ -84,7 +86,7 @@ export class AvatarStage {
   #setup: ResolvedSetup | null = null;
   #box: Box | null = null;
   #direction: Direction = NEUTRAL;
-  #applied: Applied = { idle: false, expressions: null, talking: false, outfit: false };
+  #applied: Applied = { idle: null, expressions: null, talk: null, outfit: false };
   #gestureSeq: number | null = null;
   #mouth: MouthSource | null = null;
   #gaze: "direction" | "pointer" | readonly [number, number] = "direction";
@@ -138,7 +140,6 @@ export class AvatarStage {
       return;
     }
     const same = this.#model === model;
-    const before = same ? this.#setup : null;
     if (!same) {
       this.#drop();
       this.#last = null;
@@ -147,9 +148,9 @@ export class AvatarStage {
     this.#setup = setup;
     const was = this.#applied;
     this.#applied = {
-      idle: was.idle && before?.gestures.idle === setup.gestures.idle,
+      idle: same ? was.idle : null,
       expressions: null,
-      talking: was.talking && before?.gestures.talk === setup.gestures.talk,
+      talk: same ? was.talk : null,
       outfit: was.outfit && same,
     };
     this.#reschedule();
@@ -308,11 +309,10 @@ export class AvatarStage {
       model.wear(this.#outfit);
       applied.outfit = true;
     }
-    if (!applied.idle) {
-      if (!this.#reducedMotion && setup.gestures.idle !== null) {
-        model.play(setup.gestures.idle, IDLE, { loop: true });
-      }
-      applied.idle = true;
+    const idle = this.#reducedMotion ? null : setup.gestures.idle;
+    if (idle !== applied.idle) {
+      model.play(idle, IDLE, { loop: true });
+      applied.idle = idle;
     }
     // A lent mood shows over the reply's when the two can't both.
     const tags = direction.pulse === null ? direction.mood : [direction.pulse, ...direction.mood];
@@ -322,10 +322,10 @@ export class AvatarStage {
       model.setExpressions(expressions);
       applied.expressions = key;
     }
-    const talking = direction.speaking && !this.#reducedMotion && setup.gestures.talk !== null;
-    if (talking !== applied.talking) {
-      model.play(talking ? setup.gestures.talk : null, TALK, { loop: true });
-      applied.talking = talking;
+    const talk = direction.speaking && !this.#reducedMotion ? setup.gestures.talk : null;
+    if (talk !== applied.talk) {
+      model.play(talk, TALK, { loop: true });
+      applied.talk = talk;
     }
     const gesture = direction.gesture;
     if (gesture !== null && gesture.seq !== this.#gestureSeq) {

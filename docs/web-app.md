@@ -1010,11 +1010,13 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   picked for **Import a Model**, kept in her folder byte for byte with a `model.json` listing its
   Idle, Nod and Talk clips, its seven expressions and `HitAreaHead`, at 0700 and 0600, and not made
   active; the preview ready and drawing her under the app's CSP, which a screenshot of its canvas
-  alone shows, then an expression held and a clip played on it, and a line tried on it, which a
-  stage made anew mid-line, as reduced motion makes one, ends at once; a PNG refused with the page's
-  own sentence before any upload, and the rig cut short refused `invalid-model` with the app's,
-  leaving no folder; then **Make Active**, which her summary and the status name, and **Stop
-  Using**, so the chat call after it meets her picture;
+  alone shows, then an expression held and a clip played on it, **Use Microphone** turned off and
+  its tab left while the browser still asks for the microphone, which closes the audio its clicks
+  started, and a line tried on it, which a stage made anew mid-line, as reduced motion makes one,
+  ends at once; a mood put back while its Save is out, which stays put back once the answer comes;
+  a PNG refused with the page's own sentence before any upload, and the rig cut short refused
+  `invalid-model` with the app's, leaving no folder; then **Make Active**, which her summary and the
+  status name, and **Stop Using**, so the chat call after it meets her picture;
 - an `ingest-facts` job over two fact lines against that server, with the model picked, and the
   jobs page showing it done;
 - a text chat with milky-green, her mind pointed at that server's streaming `/chat/completions`:

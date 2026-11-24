@@ -200,7 +200,7 @@ and ends lent moods. The stage applies the direction each frame:
   `completed` once heard, so her pace times her cues.
 - **An interruption** (`bot-interrupted`) ends her reply and drops the cues she never got to.
 - **Gestures:** each new gesture plays once on clip layer 2, over her idle and her talking, which
-  show through again as it ends.
+  show through again as it ends; a looping clip picked for one plays a single pass.
 - **A chat reply**, which no voice says (`reply`), sets her mood from its direction, and its cues
   land at her pace.
 - **Group calls:** a `speaker` event sends the bot events after it to that persona, while the
@@ -220,9 +220,11 @@ and ends lent moods. The stage applies the direction each frame:
 ## Moods
 
 `moodTags(direction)` reads a direction into at most two mood tags: each family below matches by its
-Chinese keywords anywhere in the direction and its English ones as whole words, whatever their
-case, and a direction keeps the first two families it matches, in this order. A mood shows its
-default expressions, the standard ids PSD2Live gives a generated rig:
+Chinese keywords anywhere in the direction except right after a negation, and its English ones as
+whole words, whatever their case, and a direction keeps the first two families it matches, in this
+order. A negation is 不, 不是, 没, 没有 or 别, never the 别 of 特别, softened or not by 太, 大, 很,
+怎么, 那么, 这么, 特别 or 再: 不开心 and 不太高兴 are never happy, and 一点都不害羞 never shy. A mood
+shows its default expressions, the standard ids PSD2Live gives a generated rig:
 
 | Mood | Chinese, anywhere | English, whole words | Shows |
 | --- | --- | --- | --- |
@@ -422,7 +424,7 @@ no imports, so it reaches nothing but its own memory; at that commit its ABI is 
 `THIRD_PARTY_LICENSES.md` holds the licenses of the crates compiled into it (miniz_oxide, adler2,
 ruzstd, twox-hash).
 
-- **The ABI check:** the page and the server alike run it only at ABI 1.x, 1.2 or later: 1.2
+- **The ABI check:** the page and the server alike run it only at ABI 1.2 or a later 1.x: 1.2
   brought clip layers with priorities, several expressions at once and lip sync. The page checks
   `PSD2LIVE_ABI` and refuses another as `AvatarError` `runtime`; the server's upload check holds
   its own copy of that minimum, in `apps/bot/src/local/psd2live.ts`.
@@ -477,11 +479,13 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   `video-call.test.ts` the tiles' and the screen's markup.
 - **The browser smoke** (`bun apps/bot/scripts/local-smoke.ts`,
   [web-app.md](web-app.md#the-browser-smoke-test)) imports the test rig in the studio's Appearance,
-  checks its preview draws under the app's CSP and that a stage made anew ends a line tried on it,
-  refuses a PNG and a cut-off rig, and makes the model active, then stops using it. Its video call
-  makes the rig her active model again and calls her: her stage ready, her mouth moving on the
-  smoke's tone, the caption and her mood, Shrink and Expand on one canvas, the call bar on another
-  page, and a second call's stage; its task call answers a task's question on the screen.
+  checks its preview draws under the app's CSP, that Use Microphone closes its audio while the
+  browser still asks for the microphone, that a stage made anew ends a line tried on it, and that a
+  mood put back while its Save is out stays put back, refuses a PNG and a cut-off rig, and makes the
+  model active, then stops using it. Its video call makes the rig her active model again and calls
+  her: her stage ready, her mouth moving on the smoke's tone, the caption and her mood, Shrink and
+  Expand on one canvas, the call bar on another page, and a second call's stage; its task call
+  answers a task's question on the screen.
 - **The npm package:** `ci-install-check.ts` imports the test rig into the packed server on Linux
   and Windows CI, which proves the upload check finds its runtime under `EIDOLON_APP_ROOT`, and the
   package's and the desktop stage's tests hold `data/psd2live/` in place.

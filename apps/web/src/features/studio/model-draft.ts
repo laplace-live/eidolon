@@ -4,6 +4,7 @@ import {
   type Box,
   type Gesture,
   type MoodTag,
+  panBox,
   resolveSetup,
   zoomBox,
 } from "@laplace.live/eidolon-sdk/avatar";
@@ -78,12 +79,22 @@ export function draftChanges(draft: ModelDraft, saved: ModelDraft): CharacterMod
 
 /**
  * `draft` once what it was made from went from `base` to `next`, as after a Save or a rename: a
- * field the owner left as it was takes `next`'s, and one they changed meanwhile stays theirs.
+ * field the owner left as it was takes `next`'s, and one they changed meanwhile stays theirs. While
+ * a Save of `sending` is out, a field `next` holds as it was sent was made from `sending`.
  */
-export function rebaseDraft(draft: ModelDraft, base: ModelDraft, next: ModelDraft): ModelDraft {
+export function rebaseDraft(
+  draft: ModelDraft,
+  base: ModelDraft,
+  next: ModelDraft,
+  sending: ModelDraft | null = null,
+): ModelDraft {
   const out: Record<string, unknown> = {};
   for (const field of FIELDS) {
-    out[field] = sameValue(draft[field], base[field]) ? next[field] : draft[field];
+    const from =
+      sending !== null && sameValue(next[field], normalized(sending)[field])
+        ? sending[field]
+        : base[field];
+    out[field] = sameValue(draft[field], from) ? next[field] : draft[field];
   }
   return out as ModelDraft;
 }
@@ -331,6 +342,31 @@ export function rigPointAt(box: Box, size: Size, at: readonly [number, number]):
     box.x + box.width / 2 + (at[0] - size.width / 2) / scale,
     box.y + box.height / 2 + (at[1] - size.height / 2) / scale,
   ];
+}
+
+type Point = readonly [number, number];
+
+/**
+ * What a step of a pinch on an element of `size` does to the frame, one finger moving from `last`
+ * to `next` while the other stays at `fixed`: a zoom by how far they spread, about what was under
+ * their middle, which then goes where their middle went, so each finger keeps what is under it.
+ * Null when the fingers meet.
+ */
+export function pinchStep(
+  size: Size,
+  fixed: Point,
+  last: Point,
+  next: Point,
+): ((box: Box) => Box) | null {
+  const before = Math.hypot(last[0] - fixed[0], last[1] - fixed[1]);
+  const after = Math.hypot(next[0] - fixed[0], next[1] - fixed[1]);
+  if (!(before > 0 && after > 0)) return null;
+  const from: Point = [(last[0] + fixed[0]) / 2, (last[1] + fixed[1]) / 2];
+  const to: Point = [(next[0] + fixed[0]) / 2, (next[1] + fixed[1]) / 2];
+  return (box) => {
+    const zoomed = zoomBox(box, after / before, rigPointAt(box, size, from));
+    return panBox(zoomed, to[0] - from[0], to[1] - from[1], boxScale(zoomed, size));
+  };
 }
 
 /** Where `box` shows in an element of `size`, in CSS pixels: centred, whole, touching two sides. */

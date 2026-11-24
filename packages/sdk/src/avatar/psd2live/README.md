@@ -8,8 +8,9 @@ PSD2Live. The editor itself is GPL-3.0 and none of it is here.
 - `wasm/p2l_runtime.wasm` is PSD2Live's committed build of `runtime/`, byte for byte (629,677 bytes,
   sha256 `d8bbff52f27aebd40baca94139f9eca5af0f9d2a07c1c70fc5c15633121862a7`), the file every `web`
   export carries. It imports nothing. `wasm/LICENSE` is `runtime/LICENSE` and
-  `wasm/THIRD_PARTY_LICENSES.md` the licenses of the crates compiled into it. The npm package ships
-  the folder as `data/psd2live/`, where the local app's upload check reads it.
+  `wasm/THIRD_PARTY_LICENSES.md` the licenses of the crates compiled into it. The SDK's pack ships
+  the folder as `dist/avatar/wasm/`, and `@laplace.live/eidolon` as `data/psd2live/`, where the
+  local app's upload check reads it.
 - `rig.ts` and `renderer.ts` are ported from the player,
   `targets/web/src/main/resources/io/github/psd2live/targets/web/p2l.js` (sha256
   `d4732ce620d7bf5cb37495f16a8129f8df2ca352ea40b27640dbdd49e771878d`), split into what runs without

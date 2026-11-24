@@ -84,6 +84,29 @@ describe("moodTags", () => {
     expect(moodTags("困惑完又犯困")).toEqual(["thinking", "lazy"]);
   });
 
+  test("a negation right before a Chinese keyword, softened or not, takes its mood away", () => {
+    const cases: readonly (readonly [string, MoodTag[]])[] = [
+      ["不高兴地嘟囔", ["pout"]],
+      ["有点不开心，慢慢地说", []],
+      ["不太开心，闷闷地说", ["sad"]],
+      ["没有生气，只是无奈", ["wry"]],
+      ["没生气，就是有点委屈", ["sad"]],
+      ["不是生气，是委屈", ["sad"]],
+      ["一点也不惊讶，懒洋洋的", ["lazy"]],
+      ["别难过，温柔地哄", ["gentle"]],
+      ["一点都不害羞，大大方方地说", []],
+      ["不困，突然来劲", []],
+      ["特别开心，语速变快", ["happy"]],
+      ["忍不住笑出声", ["happy"]],
+      ["毫不掩饰地得意", ["happy"]],
+      ["有点不爽，嘴硬", ["angry", "pout"]],
+      ["完全没想到，愣了一下", ["surprised"]],
+      ["没好气地说", ["wry"]],
+    ];
+    for (const [direction, tags] of cases)
+      expect([direction, moodTags(direction)]).toEqual([direction, tags]);
+  });
+
   test("matches English keywords as whole words, whatever their case", () => {
     const cases: readonly (readonly [string, MoodTag[]])[] = [
       ["softly, with a warm smile", ["gentle"]],

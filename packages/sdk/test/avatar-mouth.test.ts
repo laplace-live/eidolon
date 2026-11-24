@@ -90,11 +90,13 @@ describe("mouthCurve", () => {
     }
   });
 
-  test("keeps it shut in silence and just above the floor", () => {
+  test("keeps it shut in silence and just above the floor, opening from 2 dB above it", () => {
     expect(Math.max(...mouthCurve(frames(1, () => 0)))).toBe(0);
     const faint = frames(1, tone(0.008));
     expect(faint[10]).toBeLessThan(MOUTH_CURVE.lo + 2);
     expect(Math.max(...mouthCurve(faint))).toBe(0);
+    expect(Math.max(...mouthCurve(Array(60).fill(MOUTH_CURVE.lo + 1.9)))).toBe(0);
+    expect(mouthCurve(Array(60).fill(MOUTH_CURVE.lo + 2)).at(-1)).toBeGreaterThan(0);
   });
 
   test("opens faster than it closes, and a frame of no time moves nothing", () => {

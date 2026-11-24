@@ -4,7 +4,7 @@
 
 /** The opening curve, loudness in dBFS and times in seconds. */
 export interface MouthCurveOptions {
-  /** Loudness at which the mouth starts to open; 2 dB above it the mouth is shut outright. */
+  /** Loudness at which the loudness map reads 0; the mouth stays shut until 2 dB above it. */
   readonly lo: number;
   /** Loudness at which it opens fully. */
   readonly hi: number;

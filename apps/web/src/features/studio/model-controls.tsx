@@ -4,10 +4,8 @@
 
 import { cueEmoji } from "@laplace.live/eidolon-sdk";
 import {
-  type AvatarModel,
   type AvatarStage,
   type Direction,
-  direct,
   directionOf,
   directionState,
   type ModelClip,
@@ -47,7 +45,7 @@ import type { ModelInventory } from "@/lib/api";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { MOOD_LABELS } from "./appearance-labels";
-import { type LinePlan, lineEvents, planLine, syllableLevel } from "./model-line";
+import { directLine, type LinePlan, lineEvents, planLine, syllableLevel } from "./model-line";
 import { Hint } from "./parts";
 
 /** The layer the stage plays gestures on, above her idle and her talking. */
@@ -97,32 +95,14 @@ export function ControlGroup({
 
 /**
  * Plays a clip once over her idle, as a gesture plays, under reduced motion too since it was asked
- * for. A clip that loops never ends by itself, so it is stopped after one pass.
+ * for; the model ends a clip that loops after one pass.
  */
 export function usePlayClip(stage: AvatarStage | null): (clip: ModelClip) => void {
-  const looping = useRef<{ readonly model: AvatarModel; readonly timer: number } | null>(null);
-  const stopLoop = useCallback(() => {
-    const current = looping.current;
-    looping.current = null;
-    if (current === null) return;
-    window.clearTimeout(current.timer);
-    if (stage?.model === current.model) current.model.play(null, GESTURE_LAYER);
-  }, [stage]);
-  useEffect(() => stopLoop, [stopLoop]);
   return useCallback(
     (clip: ModelClip) => {
-      const model = stage?.model;
-      if (model == null) return;
-      stopLoop();
-      model.play(clip.id, GESTURE_LAYER, { priority: GESTURE_PRIORITY });
-      if (!clip.looping) return;
-      const timer = window.setTimeout(() => {
-        looping.current = null;
-        if (stage?.model === model) model.play(null, GESTURE_LAYER);
-      }, clip.duration * 1000);
-      looping.current = { model, timer };
+      stage?.model?.play(clip.id, GESTURE_LAYER, { priority: GESTURE_PRIORITY });
     },
-    [stage, stopLoop],
+    [stage],
   );
 }
 
@@ -141,6 +121,8 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
     readonly meter: MouthMeter;
   } | null>(null);
   const requests = useRef(new MicRequests());
+  // The context of a request still under way, which the browser holds while its prompt is open.
+  const asking = useRef<AudioContext | null>(null);
   const problems = useRef(onProblem);
   useEffect(() => {
     problems.current = onProblem;
@@ -148,6 +130,8 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
 
   const stop = useCallback(() => {
     requests.current.cancel();
+    void asking.current?.close().catch(() => {});
+    asking.current = null;
     const current = held.current;
     held.current = null;
     setPhase("off");
@@ -170,6 +154,7 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
     if (request === null) return;
     // Made in the click, where the browser lets it start.
     const context = new AudioContext();
+    asking.current = context;
     setPhase("starting");
     media.getUserMedia({ audio: true }).then(
       (stream) => {
@@ -178,6 +163,7 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
           void context.close().catch(() => {});
           return;
         }
+        asking.current = null;
         let meter: MouthMeter;
         try {
           meter = new MouthMeter(stream, { context });
@@ -195,6 +181,7 @@ function useMicrophoneMouth(stage: AvatarStage | null, onProblem: (problem: MicP
       (error: unknown) => {
         void context.close().catch(() => {});
         if (!requests.current.settle(request)) return;
+        asking.current = null;
         setPhase("off");
         problems.current(micProblemOf(error));
       },
@@ -244,19 +231,15 @@ function useTryLine(stage: AvatarStage | null, restoreMouth: () => MouthSource |
       if (stage === null) return;
       clear();
       setPlaying(true);
-      const at = performance.now();
-      const { start, end } = lineEvents(plan, at);
-      let state = start.reduce(direct, directionState());
-      stage.direct(directionOf(state));
+      const { start, end } = lineEvents(plan, performance.now());
+      directLine(stage, start);
       stage.mouth(new LineMouth(plan.seconds));
       const tick = window.setInterval(() => {
-        state = direct(state, { type: "tick", at: performance.now() });
-        stage.direct(directionOf(state));
+        directLine(stage, [{ type: "tick", at: performance.now() }]);
       }, TICK_MS);
       const done = window.setTimeout(() => {
         window.clearInterval(tick);
-        state = end.reduce(direct, state);
-        stage.direct(directionOf(state));
+        directLine(stage, end);
         stage.mouth(restoreMouth());
         const settle = window.setTimeout(() => {
           stage.direct(NEUTRAL);
