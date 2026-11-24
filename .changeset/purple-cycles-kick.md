@@ -2,4 +2,4 @@
 "laplace-eidolon-desktop": patch
 ---
 
-fix: Eidolon asks before a quit loses unsaved changes, and no longer gets stuck
+fix: Eidolon asks before a quit drops unsaved changes, which no longer leave it stuck
