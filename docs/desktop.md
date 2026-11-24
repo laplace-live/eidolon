@@ -286,13 +286,14 @@ and leaves it running when it quits.
   listener closed while its jobs stop, or one whose `local-token` was deleted under it), and
   respawning in a loop would boot a whole backend each round, or take the lock from a terminal
   supervisor's next child, which would then exit 2 and end `bun run app`.
-- **While attached,** quitting leaves the server running and asks nothing. A refused or unproven
-  connection, a forwarded restart answering 2xx, or one of the page's connections to it closing
-  starts a grace period, never a takeover: requests wait without the Bearer while main re-reads the
-  hint and probes every 500 ms for up to 60 s, and a fresh proof resumes forwarding, which after an
-  ordinary idle close costs one round trip. Only after 60 s with no server on the data home does
-  main spawn its own, on that port, under the refusal rule above; spawning sooner would race the
-  terminal supervisor's new child for the lock, and replace the owner's server if it won.
+- **While attached,** quitting leaves the server running, and asks only over the window's unsaved
+  edits ([Quit](#the-window)). A refused or unproven connection, a forwarded restart answering 2xx,
+  or one of the page's connections to it closing starts a grace period, never a takeover: requests
+  wait without the Bearer while main re-reads the hint and probes every 500 ms for up to 60 s, and
+  a fresh proof resumes forwarding, which after an ordinary idle close costs one round trip. Only
+  after 60 s with no server on the data home does main spawn its own, on that port, under the
+  refusal rule above; spawning sooner would race the terminal supervisor's new child for the lock,
+  and replace the owner's server if it won.
 - **The page matches the server.** It comes from whichever server answers, so its UI and API match
   even when a terminal's server runs another version; only the desktop's chrome can be missing
   then. Main reads each server's version from `GET /api/local/status` once, before the window
