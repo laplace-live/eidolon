@@ -59,7 +59,7 @@ export function LeaveDialog({
 }
 
 /** Asks before a navigation, or a reload, would drop unsaved edits. */
-function UnsavedGuard({ dirty }: { readonly dirty: boolean }) {
+export function UnsavedGuard({ dirty }: { readonly dirty: boolean }) {
   const blocker = useBlocker(dirty);
   useBeforeUnload((event) => {
     if (dirty) event.preventDefault();

@@ -1,9 +1,9 @@
 # The local web app
 
 Eidolon on your own computer, with a web app to set it up, build personas, and call or text them: a
-setup wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call
-page, text chats, the tasks she runs on this computer when asked in a chat or on a call in one,
-settings, and the offline chain's commands run as jobs. It is a second entry
+setup wizard, a persona studio (identity, prompt, voice, appearance, facts, videos, glossary,
+pictures), a call page, text chats, the tasks she runs on this computer when asked in a chat or on a
+call in one, settings, and the offline chain's commands run as jobs. It is a second entry
 point beside the bot, `apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React,
 shadcn, Tailwind) on loopback only. The bot that `bun run start` and the Docker image run never
 loads it.
@@ -230,7 +230,7 @@ server log's line that holds what went wrong, and the app shows it beside the de
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
 | Voice styles | `PUT personas/:id/voice-styles` | `{styles}`: all of hers, in order, each with a name of its own, a voice and a hint, replacing her `persona.yaml`'s `voice.styles`; answers as `GET settings` does. Any name her file can hold passes, since a save sends back those a hand-written file gave her; the studio names a new style with a lowercase letter, then letters, digits or `_`, never `default` |
 | Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar` | Outfits and friends under `references/`, and the avatar, `avatar.*` at the root of her folder, where selfies never take it for an outfit; a template's pictures can't be deleted |
-| Character models | `GET`, `POST personas/:id/models?filename=`, `PUT personas/:id/models/:model/file`, `PATCH`, `DELETE personas/:id/models/:model`, `GET personas/:id/models/:model/file?sha256=` | Her PSD2Live models, each in `models/<model>/` of her folder in the data home, never a template's ([avatar.md](avatar.md)): POST takes a `.p2lrt`'s bytes, which PSD2Live's runtime loads before they are kept, under an id made from `filename`, and never makes it the one she shows, which is `appearance.model`, set through `PUT settings`; GET's `active` is that model, while she has it. PUT puts a new file in place, keeping the model's settings that still name what it holds; PATCH replaces its name, framing, moods, gestures, outfits or outfit, each checked against what the file holds; DELETE also clears her `appearance.model` when it names the model. The file is served under its sha256, which the browser keeps for good. An import or a new file waits while a call is on. A persona's summary and status' `persona` carry `appearance.model`: the active model's id, name, kind, sha256 and `updatedAt`, or null |
+| Character models | `GET`, `POST personas/:id/models?filename=`, `PUT personas/:id/models/:model/file`, `PATCH`, `DELETE personas/:id/models/:model`, `GET personas/:id/models/:model/file?sha256=` | Her PSD2Live models, each in `models/<model>/` of her folder in the data home, never a template's ([avatar.md](avatar.md)): POST takes a `.p2lrt`'s bytes, which PSD2Live's runtime loads before they are kept, under an id and a name made from `filename`, the name numbered past her other models' (`tml 2`), and never makes it the one she shows, which is `appearance.model`, set through `PUT settings`; GET's `active` is that model, while she has it. PUT puts a new file in place, keeping the model's settings that still name what it holds; PATCH replaces its name, framing, moods, gestures, outfits or outfit, each checked against what the file holds; DELETE also clears her `appearance.model` when it names the model. The file is served under its sha256, which the browser keeps for good. An import or a new file waits while a call is on. A persona's summary and status' `persona` carry `appearance.model`: the active model's id, name, kind, sha256 and `updatedAt`, or null |
 | Knowledge | `personas/:id/facts[/:file]`, `GET personas/:id/index` | Fact files with whether the patterns pick them and whether they changed since the last index; the index from its build records |
 | Videos | `POST personas/:id/batches` | `{urls}` → a new batch of the URLs her lists don't have yet |
 | Voices | `GET voices/search?q=&language=&page=`, `GET accounts/:id/voices?q=&visibility=&page=` | Fish Audio's public voices, searched without your key; a Fish account's own, private and unlisted ones included, newest first, listed with its key, and `status` saying when it has no key or Fish refuses it |
@@ -379,8 +379,9 @@ and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
   a chat's or the call's header, and following a link in it closes it.
 - **The page:** a chat, `/chats` and the call page fill the window beside it under their own
   headers; every other page scrolls in a column there, and the window itself never scrolls. A
-  layout that sits side by side when wide, such as the studio's and Settings' sections, goes by the
-  width it is given, through a container query, not the window's, which the sidebar shares.
+  layout that sits side by side when wide, such as the studio's and Settings' sections, or a model
+  beside its tabs in the studio's Appearance, goes by the width it is given, through a container
+  query, not the window's, which the sidebar shares.
 
 ## In the desktop app
 
@@ -909,6 +910,14 @@ context `task kind`), **Run Once** 运行一次, **Always in This Folder** 在�
 (`features/tasks/state.ts`) is typed by the bot's constant, so changing one fails typecheck until
 the other follows.
 
+Her looks have words of their own, kept apart from her picture and her AI models: **Appearance** is
+形象, its card **How She Looks** 她的形象, and a model's kind **2D Model · PSD2Live** 2D 模型 ·
+PSD2Live. **Import a Model** is 导入模型, and a model's **Make Active** carries the context `model`
+(设为当前形象), apart from a persona's (设为当前人设); the setting it writes, `appearance.model`, is
+**Character Model** (当前形象). 头像 stays her picture, and 模型 alone (Mind's **Models**) her AI
+models. Her moods' labels carry the context `mood` and her gestures' `gesture`
+(`features/studio/appearance-labels.ts`).
+
 The English capitalizes as laplace-chat's does. A short label is Title Case, with articles,
 conjunctions and prepositions lowercased whatever their length and a phrasal verb's particle
 capitalized: a button, a menu item, a heading, a setting's name, a tab or column label, an
@@ -939,6 +948,14 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   Providers, then picked for embeddings with a model from the server's own list;
 - `credentials.json` at 0600, each key in its account, and no answer or log line holding a key;
 - a saved prompt landing in the temporary home, with `personas/` byte-identical;
+- a model in the studio's Appearance: the CC0 test rig (`apps/bot/test/local/fixtures/psd2live/`)
+  picked for **Import a Model**, kept in her folder byte for byte with a `model.json` listing its
+  Idle, Nod and Talk clips, its seven expressions and `HitAreaHead`, at 0700 and 0600, and not made
+  active; the preview ready and drawing her under the app's CSP, which a screenshot of its canvas
+  alone shows, then an expression held and a clip played on it; a PNG refused with the page's own
+  sentence before any upload, and the rig cut short refused `invalid-model` with the app's,
+  leaving no folder; then **Make Active**, which her summary and the status name, and **Stop
+  Using**, so the calls after it meet her picture;
 - an `ingest-facts` job over two fact lines against that server, with the model picked, and the
   jobs page showing it done;
 - a text chat with milky-green, her mind pointed at that server's streaming `/chat/completions`:

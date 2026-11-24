@@ -193,6 +193,19 @@ describe("importing", () => {
     expect(existsSync(personaYaml())).toBe(false);
   });
 
+  test("numbers a name another of her models has, so the same file twice lists apart", async () => {
+    expect((await upload("tml.p2lrt")).body).toMatchObject({ id: "tml", name: "tml" });
+    expect((await upload("tml.p2lrt")).body).toMatchObject({ id: "tml-2", name: "tml 2" });
+    // Names clash, not ids: renamed away, a name is free again.
+    expect((await call("PATCH", `/personas/${MILKY}/models/tml`, { name: "Spring" })).status).toBe(
+      200,
+    );
+    expect((await upload("tml.p2lrt")).body).toMatchObject({ id: "tml-3", name: "tml" });
+    const long = `${"制".repeat(70)}.p2lrt`;
+    expect((await upload(long)).body.name).toBe("制".repeat(64));
+    expect((await upload(long)).body.name).toBe(`${"制".repeat(62)} 2`);
+  });
+
   test("refuses what isn't a .p2lrt, an empty file, and what the runtime refuses, keeping nothing", async () => {
     const png = await upload("a.p2lrt", PNG);
     expect([png.status, png.body.error.code]).toEqual([415, "unsupported-media-type"]);

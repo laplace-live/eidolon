@@ -172,3 +172,17 @@ export async function stream<R extends RawRoute>(
   if (!response.body) throw new ApiError(response.status, "bad-response", "no body");
   return response.body;
 }
+
+/** A raw route's body whole, such as a character model's file for the stage. */
+export async function bytes<R extends RawRoute>(
+  route: R,
+  ...[input]: Args<R>
+): Promise<ArrayBuffer> {
+  const response = await send(route, input);
+  try {
+    return await response.arrayBuffer();
+  } catch (error) {
+    if (input?.signal?.aborted) throw error;
+    throw new ApiError(response.status, "bad-response", "the body stopped short");
+  }
+}

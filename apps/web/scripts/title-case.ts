@@ -177,6 +177,7 @@ const HEADED = new Set([
   "ListRow",
   "LargeDialogContent",
   "PicturesCard",
+  "ControlGroup",
   "ChoiceCard",
   "Priced",
 ]);

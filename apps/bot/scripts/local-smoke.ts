@@ -1,15 +1,16 @@
 // A browser walk through the local web app on a throwaway data home: sign-in, the wizard's keys step
 // in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
-// prompt, a voice style added and removed, a facts index built through the studio, a text chat
-// from greeting to delete, a group chat with a second persona, voice messages both ways, a call
-// inside a chat, a task she starts, checks, steers and reports in a chat, a second she stops, a
-// third shown in each of the chat's displays and stopped with /stop, a fourth she starts by voice
-// on a call there, a coding task on the kind's own model that reads the owner's skill and runs
-// commands its card allows once, denies and allows for good, one moving to the background, and two
-// whose workers call a fake MCP server's tool. The keys are fake, so the providers refuse them for
-// free, and the embeddings, the chats' replies, the director's decisions, the voice messages'
-// speech, the calls' hearing, mind and voice and the tasks' workers come from a fake server, so
-// nothing is billed. Online, one task's worker fetches example.com.
+// prompt, a voice style added and removed, a PSD2Live model imported, drawn and made active in the
+// studio's Appearance, which refuses a picture and a rig cut short, a facts index built through the
+// studio, a text chat from greeting to delete, a group chat with a second persona, voice messages
+// both ways, a call inside a chat, a task she starts, checks, steers and reports in a chat, a second
+// she stops, a third shown in each of the chat's displays and stopped with /stop, a fourth she
+// starts by voice on a call there, a coding task on the kind's own model that reads the owner's
+// skill and runs commands its card allows once, denies and allows for good, one moving to the
+// background, and two whose workers call a fake MCP server's tool. The keys are fake, so the
+// providers refuse them for free, and the embeddings, the chats' replies, the director's decisions,
+// the voice messages' speech, the calls' hearing, mind and voice and the tasks' workers come from a
+// fake server, so nothing is billed. Online, one task's worker fetches example.com.
 // --call instead places a real call from the call page with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
@@ -41,8 +42,10 @@ import {
   type AccountsResponse,
   type AccountView,
   type AllowedCommandsResponse,
+  type CharacterModels,
   type ChatContents,
   type JobSnapshot,
+  type ModelInventory,
   type PersonasResponse,
   STEER_PREFIX,
   type Status,
@@ -68,6 +71,24 @@ const FACT_LINES = [
   "明前奶绿的猫叫坚果，是拉普拉斯花店的店长。",
 ];
 const JOB_TIMEOUT_MS = 120_000;
+
+/** The CC0 rig the tests load: a PSD2Live editor export. */
+const MODEL_FIXTURE = join(ROOT, "apps/bot/test/local/fixtures/psd2live/tml.p2lrt");
+/** What its model.json must list: clips by name, expressions and the head's hit area by id. */
+const MODEL_CLIPS = ["Idle", "Nod", "Talk"];
+const MODEL_EXPRESSIONS = ["smile", "sad", "angry", "surprised", "shy", "sleepy", "gloom"];
+const MODEL_HEAD = "HitAreaHead";
+/** What the walk plays on the preview, by clip name and expression id. */
+const MODEL_CLIP = "Nod";
+const MODEL_EXPRESSION = "smile";
+/** The least of the preview her rig must cover, at the head-and-shoulders a call frames. */
+const MODEL_DRAWN = 0.1;
+// A screenshot of the preview's canvas alone: the page's backgrounds would make it opaque anyway.
+const ONLY_CANVAS =
+  "*, *::before, *::after { visibility: hidden !important; background: transparent !important; } " +
+  "canvas { visibility: visible !important; }";
+const NO_CANVAS =
+  "*, *::before, *::after { visibility: hidden !important; background: transparent !important; }";
 
 const QUESTION = "你还记得你的猫叫什么吗？";
 const SELFIE_REQUEST = "给我发张自拍吧";
@@ -1835,6 +1856,244 @@ async function voiceStyles(walk: Walk, templates: string): Promise<void> {
     );
   } finally {
     await page.unroute(search);
+  }
+}
+
+/** The share of a PNG's pixels that aren't wholly transparent. */
+async function opaqueShare(png: Buffer): Promise<number> {
+  const { data, info } = await sharp(png)
+    .ensureAlpha()
+    .extractChannel("alpha")
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let opaque = 0;
+  for (const alpha of data) if (alpha > 0) opaque++;
+  return opaque / (info.width * info.height);
+}
+
+function percent(share: number): string {
+  return `${Math.round(share * 100)}%`;
+}
+
+/**
+ * Her look in the studio's Appearance: the test rig picked for Import a Model, kept in her folder as
+ * the server's runtime read it and not made active; the preview drawing it under the app's CSP, an
+ * expression held and a clip played on it; a picture and a rig cut short refused with the app's
+ * sentences; then Make Active, which her summary and the status name, and Stop Using. The model
+ * stays, inactive, so the calls after this meet her picture.
+ */
+async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
+  const { page, checks, origin } = walk;
+  const models = `/api/local/personas/${PERSONA}/models`;
+  const isUpload = (response: PageResponse) =>
+    response.request().method() === "POST" && new URL(response.url()).pathname === models;
+  let uploads = 0;
+  const listen = (response: PageResponse) => {
+    if (isUpload(response)) uploads++;
+  };
+  /** The model her summary and the status name, or the persona the status is about instead. */
+  const named = async () => {
+    const listed = (await (
+      await walk.api("GET", "/api/local/personas")
+    ).json()) as PersonasResponse;
+    const { persona } = (await (await walk.api("GET", "/api/local/status")).json()) as Status;
+    return {
+      summary: listed.personas.find((entry) => entry.id === PERSONA)?.appearance.model?.id ?? null,
+      status: persona.id === PERSONA ? (persona.appearance.model?.id ?? null) : `${persona.id}'s`,
+    };
+  };
+  page.on("response", listen);
+  try {
+    await page.goto(`${origin}/personas/${PERSONA}/appearance`);
+    const card = page.getByRole("region", { name: t("en", "How She Looks"), exact: true });
+    const empty = await shows(card.getByText(t("en", "No models yet"), { exact: true }));
+    const input = page.locator(`input[type="file"][aria-label="${t("en", "Model File")}"]`);
+    const posted = page.waitForResponse(isUpload);
+    await input.setInputFiles(MODEL_FIXTURE);
+    const status = (await posted).status();
+    const bytes = readFileSync(MODEL_FIXTURE);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const list = (await (await walk.api("GET", models)).json()) as CharacterModels;
+    const model = list.models.find((entry) => entry.sha256 === sha256);
+    if (model === undefined) {
+      throw new Error(`POST models answered ${status}; GET models lists no model with its sha256`);
+    }
+    const dir = join(walk.home, "personas", PERSONA, "models", model.id);
+    const manifest = join(dir, "model.json");
+    const rig = join(dir, "model.p2lrt");
+    const same =
+      existsSync(rig) && createHash("sha256").update(readFileSync(rig)).digest("hex") === sha256;
+    const inventory = existsSync(manifest)
+      ? (JSON.parse(readFileSync(manifest, "utf8")) as { readonly inventory?: ModelInventory })
+          .inventory
+      : undefined;
+    const clips = (inventory?.clips ?? []).map((clip) => clip.name);
+    const expressions = (inventory?.expressions ?? []).map((expression) => expression.id);
+    const areas = (inventory?.hitAreas ?? []).map((area) => area.id);
+    const read =
+      MODEL_CLIPS.every((name) => clips.includes(name)) &&
+      expressions.length === MODEL_EXPRESSIONS.length &&
+      MODEL_EXPRESSIONS.every((id) => expressions.includes(id)) &&
+      areas.includes(MODEL_HEAD);
+    const modes = [modeOf(dir), modeOf(manifest), modeOf(rig)];
+    const toasted = await shows(
+      page.getByText(t("en", "{name} imported.", { name: model.name }), { exact: true }),
+    );
+    const row = card.getByRole("listitem").filter({ hasText: model.name });
+    const listed = await shows(row);
+    checks.add(
+      "appearance import",
+      empty &&
+        status === 201 &&
+        toasted &&
+        same &&
+        read &&
+        JSON.stringify(modes) === JSON.stringify(["0700", "0600", "0600"]) &&
+        listed &&
+        list.active === null,
+      `the card ${empty ? "showed" : "never showed"} no models; POST models ${status}, ` +
+        `${toasted ? "with" : "without"} its toast; <home>/personas/${PERSONA}/models/${model.id}/ ` +
+        `(${modes[0]}) ${same ? "holds the rig byte for byte" : "lacks the rig"} (${modes[2]}) and ` +
+        `a model.json (${modes[1]}) listing clips ${JSON.stringify(clips)}, expressions ` +
+        `${JSON.stringify(expressions)} and hit areas ${JSON.stringify(areas)}; the card ` +
+        `${listed ? "lists" : "doesn't list"} it, and the active model is ${String(list.active)}`,
+    );
+
+    const stage = page.locator(`[data-model-stage="${model.id}"]`);
+    const ready = await shows(
+      page.locator(`[data-model-stage="${model.id}"][data-state="ready"]`),
+      30_000,
+    );
+    if (!ready) {
+      checks.add("appearance preview", false, `the preview never drew: ${await alerts(page)}`);
+    } else {
+      const canvas = stage.locator("canvas");
+      const coverage = async () =>
+        opaqueShare(await canvas.screenshot({ omitBackground: true, style: ONLY_CANVAS }));
+      // Its first frame comes after the ready state.
+      const drawn = await poll(coverage, (share) => share >= MODEL_DRAWN, 5_000);
+      const box = await canvas.boundingBox();
+      const behind =
+        box === null
+          ? 1
+          : await opaqueShare(
+              await page.screenshot({ clip: box, omitBackground: true, style: NO_CANVAS }),
+            );
+      const expression = model.inventory.expressions.find((each) => each.id === MODEL_EXPRESSION);
+      const clip = model.inventory.clips.find((each) => each.name === MODEL_CLIP);
+      if (expression === undefined || clip === undefined) {
+        throw new Error(`the rig has no ${MODEL_EXPRESSION} expression or ${MODEL_CLIP} clip`);
+      }
+      const chip = page
+        .getByRole("region", { name: t("en", "Expressions"), exact: true })
+        .getByRole("button", { name: expression.name || expression.id, exact: true });
+      await chip.click();
+      const held = (await chip.getAttribute("aria-pressed")) === "true";
+      await page
+        .getByRole("region", { name: t("en", "Clips"), exact: true })
+        .getByRole("button", { name: clip.name || clip.id, exact: true })
+        .click();
+      await Bun.sleep(clip.duration * 1000 + 500);
+      const after = await stage.getAttribute("data-state");
+      const still = after === "ready" ? await coverage() : 0;
+      checks.add(
+        "appearance preview",
+        drawn >= MODEL_DRAWN && behind === 0 && held && after === "ready" && still >= MODEL_DRAWN,
+        `her rig covers ${percent(drawn)} of the preview's canvas, and the page behind it ` +
+          `${percent(behind)} once the canvas is hidden; ${expression.name} ` +
+          `${held ? "held" : "NOT held"}, then ${clip.name} played, after which the preview is ` +
+          `${after ?? "gone"}${after === "ready" ? `, covering ${percent(still)}` : `: ${await alerts(page)}`}`,
+      );
+    }
+
+    const png = await sharp({
+      create: { width: 2, height: 2, channels: 4, background: "#00000000" },
+    })
+      .png()
+      .toBuffer();
+    const sent = uploads;
+    await input.setInputFiles({ name: "her.png", mimeType: "image/png", buffer: png });
+    const picked = await shows(
+      page.getByText(
+        t("en", "Pick a .p2lrt file from PSD2Live, or the folder or zip of its web export."),
+        { exact: true },
+      ),
+      10_000,
+    );
+    const pngSent = uploads - sent;
+    const refused = page.waitForResponse(isUpload);
+    await input.setInputFiles({
+      name: "cut-short.p2lrt",
+      mimeType: "application/octet-stream",
+      buffer: bytes.subarray(0, 64 * 1024),
+    });
+    const refusal = await refused;
+    const answer = (await refusal.json().catch(() => null)) as {
+      readonly error?: { readonly code?: string };
+    } | null;
+    const unusable = await shows(
+      page.getByText(t("en", "Eidolon can't use that model file."), { exact: true }),
+      10_000,
+    );
+    const kept = readdirSync(join(walk.home, "personas", PERSONA, "models"));
+    checks.add(
+      "appearance refusals",
+      picked &&
+        pngSent === 0 &&
+        refusal.status() === 400 &&
+        answer?.error?.code === "invalid-model" &&
+        unusable &&
+        JSON.stringify(kept) === JSON.stringify([model.id]),
+      `a PNG ${picked ? "was refused with" : "wasn't refused with"} the page's own sentence ` +
+        `after ${pngSent} upload(s); the rig cut to 64 KiB answered ${refusal.status()} ` +
+        `${String(answer?.error?.code)}, ${unusable ? "shown as" : "NOT shown as"} the app's ` +
+        `sentence; her models/ holds ${JSON.stringify(kept)}`,
+    );
+
+    const settings = `${origin}/api/local/settings`;
+    const activated = page.waitForResponse(isPut(settings));
+    await row
+      .getByRole("button", { name: t("en", "Make Active", {}, "model"), exact: true })
+      .click();
+    const activeStatus = (await activated).status();
+    const badged = await shows(row.getByText(t("en", "Active"), { exact: true }));
+    const on = await poll(
+      named,
+      (seen) => seen.summary === model.id && seen.status === model.id,
+      5_000,
+    );
+    await row.getByRole("button", { name: t("en", "Model Options"), exact: true }).click();
+    const stopped = page.waitForResponse(isPut(settings));
+    await page.getByRole("menuitem", { name: t("en", "Stop Using"), exact: true }).click();
+    const stopStatus = (await stopped).status();
+    const hinted = await shows(
+      card.getByText(
+        t("en", "None is active, so she shows her picture. Make one active to use it as her look."),
+        { exact: true },
+      ),
+    );
+    const off = await poll(named, (seen) => seen.summary === null && seen.status === null, 5_000);
+    const untouched = treeHash(join(ROOT, "personas")) === templates;
+    checks.add(
+      "appearance active",
+      activeStatus === 200 &&
+        badged &&
+        on.summary === model.id &&
+        on.status === model.id &&
+        stopStatus === 200 &&
+        hinted &&
+        off.summary === null &&
+        off.status === null &&
+        untouched,
+      `Make Active: PUT settings ${activeStatus}, the row ${badged ? "badged" : "NOT badged"} ` +
+        `Active, her summary naming ${String(on.summary)} and the status ${String(on.status)}; ` +
+        `Stop Using: PUT settings ${stopStatus}, ${hinted ? "the hint back" : "no hint"}, her ` +
+        `summary naming ${String(off.summary)} and the status ${String(off.status)}; personas/ ` +
+        `${untouched ? "unchanged" : "CHANGED"}`,
+    );
+  } finally {
+    page.off("response", listen);
+    await configure(walk, PERSONA, { "appearance.model": null });
   }
 }
 
@@ -5355,6 +5614,7 @@ async function smoke(options: Options): Promise<Checks> {
       await checks.step("credentials.json", () => credentialsAtRest(walk));
       await checks.step("prompt", () => savePrompt(walk, templates));
       await checks.step("voice styles", () => voiceStyles(walk, templates));
+      await checks.step("appearance", () => appearanceWalk(walk, templates));
       if (embedder && (await checks.step("ingest-facts", () => indexFacts(walk)))) {
         await checks.step("jobs page", () => jobsPage(walk));
       }
