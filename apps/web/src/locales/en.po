@@ -2519,6 +2519,10 @@ msgstr "Group ID"
 msgid "Hang Up"
 msgstr "Hang Up"
 
+#: src/features/call/call-page.tsx
+msgid "Hang up the call in your chat to call {name} here."
+msgstr "Hang up the call in your chat to call {name} here."
+
 #: src/features/call/call-state.tsx
 msgid "Hanging up…"
 msgstr "Hanging up…"
@@ -7174,6 +7178,14 @@ msgstr "You denied it when it asked to start."
 #: src/features/setup/done-step.tsx
 msgid "You're all set"
 msgstr "You're all set"
+
+#: src/features/call/call-page.tsx
+msgid "You're already in a call. Hang up first."
+msgstr "You're already in a call. Hang up first."
+
+#: src/features/call/call-page.tsx
+msgid "You're in a call"
+msgstr "You're in a call"
 
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"

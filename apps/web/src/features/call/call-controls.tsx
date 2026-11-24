@@ -4,8 +4,9 @@ import { type FormEvent, type KeyboardEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { UnavailableButton } from "@/components/unavailable-button";
 import { cn } from "@/lib/utils";
-import type { Call, CallHandle } from "./use-call";
+import type { CallHandle } from "./use-call";
 
 export function MessageInput({
   disabled,
@@ -104,17 +105,36 @@ export function HangUpButton({ call }: { readonly call: CallHandle }) {
 }
 
 /** Call, or once in a call: the mic, the text box and the hang-up. */
-export function CallControls({ call, name }: { readonly call: Call; readonly name: string }) {
+export function CallControls({
+  call,
+  name,
+  onStart,
+  unavailable = null,
+}: {
+  readonly call: CallHandle;
+  readonly name: string;
+  readonly onStart: () => void;
+  /** Why Call can't be used now, shown in its tooltip; null while it can. */
+  readonly unavailable?: string | null;
+}) {
   const { t } = useLingui();
   const { phase } = call;
 
   if (phase.name === "idle" || phase.name === "ended") {
+    const label = phase.name === "ended" ? t`Call Again` : t`Call ${name}`;
     return (
       <div className="flex justify-center px-4 py-4 sm:px-6">
-        <Button size="lg" onClick={() => call.start()}>
-          <PhoneIcon data-icon="inline-start" />
-          {phase.name === "ended" ? t`Call Again` : t`Call ${name}`}
-        </Button>
+        {unavailable === null ? (
+          <Button size="lg" onClick={onStart}>
+            <PhoneIcon data-icon="inline-start" />
+            {label}
+          </Button>
+        ) : (
+          <UnavailableButton size="lg" variant="default" reason={unavailable}>
+            <PhoneIcon data-icon="inline-start" />
+            {label}
+          </UnavailableButton>
+        )}
       </div>
     );
   }

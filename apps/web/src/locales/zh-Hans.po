@@ -2519,6 +2519,10 @@ msgstr "Group ID"
 msgid "Hang Up"
 msgstr "挂断"
 
+#: src/features/call/call-page.tsx
+msgid "Hang up the call in your chat to call {name} here."
+msgstr "先挂断聊天里的通话，才能在这里呼叫{name}。"
+
 #: src/features/call/call-state.tsx
 msgid "Hanging up…"
 msgstr "正在挂断…"
@@ -7174,6 +7178,14 @@ msgstr "它请求开始时你拒绝了。"
 #: src/features/setup/done-step.tsx
 msgid "You're all set"
 msgstr "设置完成"
+
+#: src/features/call/call-page.tsx
+msgid "You're already in a call. Hang up first."
+msgstr "你已经在通话中了，请先挂断。"
+
+#: src/features/call/call-page.tsx
+msgid "You're in a call"
+msgstr "你正在通话中"
 
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"
