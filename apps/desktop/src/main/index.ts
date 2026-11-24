@@ -167,6 +167,7 @@ function run(): void {
     process.platform === "win32" ? nativeImage.createFromPath(trayIconPath()) : undefined;
   const flow = installQuit({
     backend,
+    unsaved: () => unloads.unsaved,
     strings,
     icon,
     approved: () => {

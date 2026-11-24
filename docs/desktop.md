@@ -333,7 +333,8 @@ nothing. Main owns its title.
   bridge, in its main frame alone. The app's page gets `window.eidolonDesktop`: `platform`,
   `version` and `serverVersion`, read before the page's first script over a synchronous message
   main answers from what it already knows (`version` is `0.0.0-dev` unpackaged), and `setTheme`,
-  `setLanguage` and `onCommand`; and five calls the page awaits, each an invoke main answers
+  `setLanguage`, `onCommand` and `unsaved(held)`, which tells main whether the page holds unsaved
+  edits, for the quit's box (below); and five calls the page awaits, each an invoke main answers
   through `ipcMain.handle`: `chooseFolder` (the folder dialog, below), `loginItem` and
   `setLoginItem(on)` ([Open at Login](#open-at-login)), `terminalCommand` and
   `setTerminalCommand(action)` ([the terminal command](#the-terminal-command)). The preload sends
@@ -407,17 +408,24 @@ nothing. Main owns its title.
 - **Quit.** Every quit, ⌘Q, a menu, the Dock, the tray or a second launch's `--quit`, goes through
   `before-quit`. While our own backend is ready, main first asks it what would stop
   (`GET /api/local/status` and `GET /api/local/jobs`, with the Bearer, 2 s for both). When a call, a
-  task or a job runs, or it couldn't tell, a "Quit Eidolon?" box names what stops, Quit being the
+  task or a job runs, or it couldn't tell, or the window holds unsaved edits, a "Quit Eidolon?" box
+  names what stops and, for the edits, says "Your unsaved changes will be lost.", Quit being the
   default and Esc cancelling; it has no owner window, so a hidden window stays hidden, and a quit
-  while it is open joins it. An attached server is never asked or stopped. On macOS a power-off
-  skips the box until the window has attention again. Once the quit is approved, main hides the
-  window, stops the task watch, removes the tray icon, stops its backend, and quits. The restart
-  that installs an update goes the same way, with its own box ([Updates](#updates)). A page's
-  `beforeunload`, which the studio's text editors use to keep unsaved edits, holds against its own
-  reloads and navigations alone: Electron would cancel the unload, and with it the quit, leaving the
-  app running hidden with its backend stopped. Once a quit is approved, the restart included, and
-  while main loads a page of its own (the loading or failure page, or the app's reload), main lets
-  the page go, edits and all (`will-prevent-unload`, as `PageUnloads` in `pages.ts` decides).
+  while it is open joins it. An attached server is never asked or stopped, but unsaved edits ask
+  all the same, as they do while no backend is ready: they are in the window, whatever server it
+  talks to. On macOS a power-off skips the box until the window has attention again. Once the quit
+  is approved, main hides the window, stops the task watch, removes the tray icon, stops its
+  backend, and quits. The restart that installs an update goes the same way, with its own box
+  ([Updates](#updates)).
+- **Unsaved edits.** The studio's text editors hold their unsaved edits for the boxes: the page
+  tells main `true` as the first editor has some and `false` as the last saves, reverts or goes
+  (the bridge's `unsaved`). Main keeps the page's word until its document goes: a new one commits,
+  its renderer goes, or main loads a page of its own, since a page says nothing as it unloads. A
+  page's `beforeunload`, which the same editors use, holds against its own reloads and navigations
+  alone: Electron would cancel the unload, and with it the quit, leaving the app running hidden
+  with its backend stopped. Once a quit is approved, the restart included, and while main loads a
+  page of its own (the loading or failure page, or the app's reload), main lets the page go, edits
+  and all (`will-prevent-unload`). `PageUnloads` in `pages.ts` decides both.
 
 ## Notifications
 
@@ -1081,13 +1089,13 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
   the update to `autoInstallOnAppQuit` at the next quit, with no relaunch. Restart moves the state
   to installing first, so a second Restart does nothing: `quitAndInstall` twice asks Squirrel to
   relaunch twice, which leaves two copies running. Then it goes the way a [quit](#the-window) goes:
-  the quit check, whose box names what a restart stops (on Windows the installer kills any
-  `Eidolon.exe` still running from the install folder, a CLI job's included); the latch, after
-  which a close no longer hides the window; the backend's graceful stop; and only then
-  `quitAndInstall(true, true)`, once. A Cancel there hands the state back to downloaded. None of it
-  runs inside `before-quit`: on macOS `quitAndInstall` closes every window before `before-quit`
-  fires, so a latch set there would let the hide-on-close window veto the relaunch, as persona's
-  did from 0.32.0 to 0.63.2.
+  the quit check, whose "Restart Eidolon?" box names what a restart stops (on Windows the installer
+  kills any `Eidolon.exe` still running from the install folder, a CLI job's included) and, as the
+  quit's does, asks over the window's unsaved edits too; the latch, after which a close no longer
+  hides the window; the backend's graceful stop; and only then `quitAndInstall(true, true)`, once.
+  A Cancel there hands the state back to downloaded. None of it runs inside `before-quit`: on
+  macOS `quitAndInstall` closes every window before `before-quit` fires, so a latch set there would
+  let the hide-on-close window veto the relaunch, as persona's did from 0.32.0 to 0.63.2.
 - **An error after the download,** such as Squirrel.Mac refusing the update, takes Restart away:
   the update is in error, and the box offers Try Again. One that comes while the restart's quit
   check asks calls the restart off once it's answered, before the latch: nothing is hidden or
@@ -1138,11 +1146,12 @@ that could show something through it.
   on time, and takes Playwright's screenshots and clicks, with no Chromium switch and no
   `backgroundThrottling` change.
 - **Nothing native appears, and main.log names each thing kept off the screen.** A message box is
-  answered with its default button, so a quit that stops a call, a task or a job goes ahead. A web
-  link, Show Logs, Open Data Folder, Licenses, the About panel and a context menu open nothing. A
-  download saves, with no Save dialog, into the profile's `downloads` folder under the name
-  Chromium suggests, numbered ` (1)` on while that name is taken. The folder dialog answers as
-  Cancel (`Eidolon: background mode didn't open the folder dialog`).
+  answered with its default button, as `Eidolon: background mode answered "<button>" to a message
+  box: <message> <detail>`, so a quit that stops a call, a task or a job, or drops unsaved edits,
+  goes ahead. A web link, Show Logs, Open Data Folder, Licenses, the About panel and a context menu
+  open nothing. A download saves, with no Save dialog, into the profile's `downloads` folder under
+  the name Chromium suggests, numbered ` (1)` on while that name is taken. The folder dialog
+  answers as Cancel (`Eidolon: background mode didn't open the folder dialog`).
 - **No notification:** the task watch runs, but each notice is a line in main.log
   ([Notifications](#notifications)). Electron's `Notification` is never made, nor
   `Notification.isSupported()` called, since its presenter alone asks macOS for permission, and on
@@ -1593,7 +1602,7 @@ What it can't see:
   upload's `v<version>/` paths or `eidolonNotes` line, and with no R2 or Cloudflare in between.
 - **What a person's machine adds:** the microphone grant kept across the update on macOS, an install
   in `/Applications` opened from Finder, SmartScreen and Smart App Control on Windows, and a call,
-  task or job running when Restart's quit check asks.
+  task or job running, or unsaved edits in the window, when Restart's quit check asks.
 - **A later update on macOS,** which downloads only the zip's changed blocks against the one the
   last update cached: the first update has none, so it downloads the whole zip.
 - **The app it starts again on its own terms,** which runs outside background mode and on the
