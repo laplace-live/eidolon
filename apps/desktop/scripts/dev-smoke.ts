@@ -1685,7 +1685,6 @@ async function editPrompt(page: Page): Promise<{ readonly ok: boolean; readonly 
   return { ok: save, detail: `"Unsaved changes", Save ${save ? "enabled" : "disabled"}` };
 }
 
-/** Each of `lines` in main.log's `text`, in order, each after the one before. */
 function inOrder(
   text: string,
   lines: readonly string[],

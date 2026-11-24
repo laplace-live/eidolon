@@ -360,10 +360,7 @@ describe("the menus' commands to the app's page", () => {
 describe("the page's beforeunload", () => {
   const settle = () => new Promise((done) => setTimeout(done, 0));
 
-  /**
-   * The page's unloads on a real quit flow whose box answers through `answer`. `closing` holds
-   * whether the page goes each time the quit, or the update's install, closes the window.
-   */
+  /** `closing` holds whether the page goes at each close the quit, or the update's install, makes. */
   function onQuitFlow() {
     let answer: (approved: boolean) => void = () => {};
     const closing: boolean[] = [];
