@@ -58,7 +58,7 @@ mac:
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.inherit.plist
   extendInfo:
-    NSMicrophoneUsageDescription: Eidolon uses your microphone for calls and voice messages.
+    NSMicrophoneUsageDescription: Eidolon uses your microphone for calls, voice messages and trying her lip sync in the studio.
   # The backend, outside the asar so onnxruntime and LanceDB open real files. electron-builder skips a
   # source folder's own top-level node_modules whatever the filter, so the source is the folder above
   # the payload.
