@@ -25,18 +25,20 @@ export type Caption =
 /**
  * The last thing said on the call, hers or the viewer's; null before anything is. Her sentence
  * shows whole from its announcement and stays until the next line, so nothing flickers between two.
+ * A line with nothing to show, her cue alone or a typed message that never went, is passed over.
  */
 export function captionOf(transcript: Transcript, botSpeaking: boolean): Caption | null {
-  const last = transcript.entries.findLast((entry) => entry.kind !== "selfie");
-  if (last === undefined) return null;
-  if (last.kind === "user") {
-    const { said, hearing } = userText(last);
-    if (said.trim() === "" && hearing.trim() === "") return null;
-    return { kind: "you", said, hearing, live: transcript.openUser === last.id };
-  }
-  for (const segment of last.segments.toReversed()) {
-    const text = segment.voiced ? stripCues(segment.text) : "";
-    if (text !== "") return { kind: "her", speaker: last.speaker, text, live: botSpeaking };
+  for (const entry of transcript.entries.toReversed()) {
+    if (entry.kind === "user") {
+      const { said, hearing } = userText(entry);
+      if (entry.failed || (said.trim() === "" && hearing.trim() === "")) continue;
+      return { kind: "you", said, hearing, live: transcript.openUser === entry.id };
+    }
+    if (entry.kind !== "bot") continue;
+    for (const segment of entry.segments.toReversed()) {
+      const text = segment.voiced ? stripCues(segment.text) : "";
+      if (text !== "") return { kind: "her", speaker: entry.speaker, text, live: botSpeaking };
+    }
   }
   return null;
 }

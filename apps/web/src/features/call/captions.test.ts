@@ -122,6 +122,21 @@ test("text she won't say is passed over for the sentence before it", () => {
   expect(captionOf(run(announce(1, "[笑]")), true)).toBeNull();
 });
 
+test("a line with nothing to show leaves the caption on the one before it", () => {
+  expect(captionOf(run(said("你好"), announce(1, "[笑]")), true)).toEqual({
+    kind: "you",
+    said: "你好",
+    hearing: "",
+    live: false,
+  });
+  const unsent = run(
+    announce(1, "在的。"),
+    { type: "typed", key: "k1", text: "看得到我吗" },
+    { type: "typed-failed", key: "k1" },
+  );
+  expect(captionOf(unsent, false)).toMatchObject({ kind: "her", text: "在的。" });
+});
+
 test("a group call's caption says who said it", () => {
   const call = run(said("你们好"), speaking("mint", "薄荷"), announce(1, "我也在。"));
   expect(captionOf(call, true)).toEqual({
