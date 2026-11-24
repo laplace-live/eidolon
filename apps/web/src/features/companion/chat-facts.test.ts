@@ -50,6 +50,33 @@ describe("saidFacts", () => {
     expect(saidFacts(CHAT, [], held(0))).toEqual([]);
   });
 
+  test("tells her words before a tool call, which the chat shows as her reply", () => {
+    const call = (seq: number, said?: string): ChatEvent => ({
+      type: "tool-call",
+      seq,
+      at: AT + seq,
+      persona: "milky-green",
+      turn: "t1",
+      callId: `c${seq}`,
+      name: "take_selfie",
+      arguments: {},
+      ...(said === undefined ? {} : { said }),
+    });
+    const events = [
+      call(2, "[开心地] 等我一下哦～"),
+      call(3),
+      call(4, ""),
+      message(5, { text: "拍好啦" }),
+    ];
+    expect(saidFacts(CHAT, events, held(1))).toEqual([
+      { type: "said", persona: "milky-green", chat: CHAT, seq: 2, text: "[开心地] 等我一下哦～" },
+      { type: "said", persona: "milky-green", chat: CHAT, seq: 5, text: "拍好啦" },
+    ]);
+    expect(saidFacts(CHAT, events, held(2))).toEqual([
+      { type: "said", persona: "milky-green", chat: CHAT, seq: 5, text: "拍好啦" },
+    ]);
+  });
+
   test("tells only what the log the page held doesn't, as GET live replays a turn from its start", () => {
     const line = [
       message(3, { text: "[开心地] 晚上好呀" }),

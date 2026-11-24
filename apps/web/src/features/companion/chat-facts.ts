@@ -19,9 +19,10 @@ export function onChatFact(listener: (fact: ChatFact) => void): () => void {
 }
 
 /**
- * The facts of an `events` line: each persona's message past the end of `held`, the chat's log as
- * the page held it before the line, a call's excepted (the call's signals carry those). None while
- * it held none: what the page reads is never told, only what arrives.
+ * The facts of an `events` line: each persona's message and words before a tool call past the end
+ * of `held`, the chat's log as the page held it before the line; a call's excepted (the call's
+ * signals carry those). None while it held none: what the page reads is never told, only what
+ * arrives.
  */
 export function saidFacts(
   chat: string,
@@ -30,12 +31,14 @@ export function saidFacts(
 ): ChatFact[] {
   if (held === undefined) return [];
   const last = held.events.at(-1)?.seq ?? 0;
-  return events.flatMap((event): ChatFact[] =>
-    event.seq > last &&
-    event.type === "message" &&
-    event.speaker.kind === "persona" &&
-    event.modality !== "call"
+  return events.flatMap((event): ChatFact[] => {
+    if (event.seq <= last) return [];
+    if (event.type === "tool-call") {
+      const { persona, seq, said } = event;
+      return said ? [{ type: "said", persona, chat, seq, text: said }] : [];
+    }
+    return event.type === "message" && event.speaker.kind === "persona" && event.modality !== "call"
       ? [{ type: "said", persona: event.speaker.id, chat, seq: event.seq, text: event.text }]
-      : [],
-  );
+      : [];
+  });
 }
