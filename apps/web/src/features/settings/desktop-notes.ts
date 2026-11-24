@@ -1,8 +1,14 @@
-// What Settings' Desktop App card says under Open at Login and the terminal command, by the state the
-// desktop app reports for each, and what a failed change's toast says.
+// What Settings' Desktop App card says under Open at Login, the desktop companion and the terminal
+// command, by the state the desktop app reports for each, and what a failed change's toast says.
 import type { MessageDescriptor } from "@lingui/core";
 import { msg, ph } from "@lingui/core/macro";
-import type { CommandChange, CommandState, LoginItemState, Unavailable } from "@/lib/desktop";
+import type {
+  CommandChange,
+  CommandState,
+  CompanionState,
+  LoginItemState,
+  Unavailable,
+} from "@/lib/desktop";
 
 /** Why this copy of the app can't offer an option, said under either row. */
 const UNAVAILABLE_NOTES: Readonly<Record<Unavailable, MessageDescriptor>> = {
@@ -32,6 +38,19 @@ export function loginItemNote(item: LoginItemState): Note | null {
     case "off":
       return null;
   }
+}
+
+/** The lines under Desktop Companion: background mode, and her picture while she has no model. */
+export function companionNotes(state: CompanionState, hasModel: boolean): Note[] {
+  const notes: Note[] = [];
+  if (state.background) notes.push({ text: msg`Background mode never shows her.`, tone: "muted" });
+  if (!hasModel) {
+    notes.push({
+      text: msg`She shows as her picture until she has an active character model.`,
+      tone: "muted",
+    });
+  }
+  return notes;
 }
 
 /**

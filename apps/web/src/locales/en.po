@@ -1210,6 +1210,10 @@ msgstr "Back to Home"
 msgid "Background mode leaves this computer as it is."
 msgstr "Background mode leaves this computer as it is."
 
+#: src/features/settings/desktop-notes.ts
+msgid "Background mode never shows her."
+msgstr "Background mode never shows her."
+
 #: src/features/studio/videos-section.tsx
 msgid "Billed"
 msgstr "Billed"
@@ -1838,6 +1842,10 @@ msgstr "Desktop"
 #: src/features/settings/desktop-card.tsx
 msgid "Desktop App"
 msgstr "Desktop App"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Desktop Companion"
+msgstr "Desktop Companion"
 
 #: src/features/jobs/parts.tsx
 #: src/features/studio/add-videos.tsx
@@ -3134,6 +3142,10 @@ msgstr "Jobs of a few minutes, such as a list or a few edits to a file. A cheape
 msgid "Keep Editing"
 msgstr "Keep Editing"
 
+#: src/features/settings/desktop-card.tsx
+msgid "Keep her on your desktop, above your other windows. Right-click her for her menu."
+msgstr "Keep her on your desktop, above your other windows. Right-click her for her menu."
+
 #: src/features/studio/voice-section.tsx
 msgid "Keep Hers"
 msgstr "Keep Hers"
@@ -4347,6 +4359,10 @@ msgstr "Play Voice Message"
 msgid "Playback Position"
 msgstr "Playback Position"
 
+#: src/features/call/video-call.tsx
+msgid "Pop Out"
+msgstr "Pop Out"
+
 #: src/features/studio/model-outfits.tsx
 msgid "Pose Group {group}"
 msgstr "Pose Group {group}"
@@ -5235,6 +5251,10 @@ msgstr "She passed these on, and it reads them first when it goes on:"
 msgid "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 msgstr "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 
+#: src/features/settings/desktop-notes.ts
+msgid "She shows as her picture until she has an active character model."
+msgstr "She shows as her picture until she has an active character model."
+
 #: src/features/studio/models-section.tsx
 msgid "She speaks in one of the realtime model's own voices, not the voice picked for her."
 msgstr "She speaks in one of the realtime model's own voices, not the voice picked for her."
@@ -5292,6 +5312,10 @@ msgstr "Show All"
 #: src/features/home/memory-panel.tsx
 msgid "Show All {count}"
 msgstr "Show All {count}"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Show at Login"
+msgstr "Show at Login"
 
 #: src/features/chats/labels.ts
 msgid "Show each task as one card"
@@ -6987,8 +7011,8 @@ msgid "What each provider has cost, as calls, video jobs and MCP searches on thi
 msgstr "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
 
 #: src/features/settings/desktop-card.tsx
-msgid "What Eidolon can add to this computer, each only when you choose it here."
-msgstr "What Eidolon can add to this computer, each only when you choose it here."
+msgid "What Eidolon can add to this computer, each only when you choose it."
+msgstr "What Eidolon can add to this computer, each only when you choose it."
 
 #: src/features/settings/route.tsx
 msgid "What every persona knows about you."
@@ -7057,6 +7081,10 @@ msgstr "What you'd say to ask for it. Left empty, the model goes by the built-in
 #: src/features/studio/voice-styles-card.tsx
 msgid "What you'd say to ask for it. Left empty, the model goes by the name alone."
 msgstr "What you'd say to ask for it. Left empty, the model goes by the name alone."
+
+#: src/features/settings/desktop-card.tsx
+msgid "When Eidolon opens at login, she shows too, before you open its window."
+msgstr "When Eidolon opens at login, she shows too, before you open its window."
 
 #: src/features/studio/video-table.tsx
 msgid "When was it streamed?"

@@ -1,26 +1,33 @@
-// Settings' Desktop App card: what each state of Open at Login and the terminal command says, the
-// controls it leaves usable, and when it reads Open at Login again. Rendered to markup, with the
-// macros stubbed.
+// Settings' Desktop App card: what each state of Open at Login, the desktop companion and the
+// terminal command says, the controls it leaves usable, and when it reads Open at Login and her
+// again. Rendered to markup, with the macros stubbed.
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import type { ActiveCharacterModel, Status } from "@/lib/api";
 import type {
   CommandChange,
   CommandState,
+  CompanionState,
   EidolonDesktop,
   LoginItemState,
   Unavailable,
 } from "@/lib/desktop";
+import { statusQuery } from "@/lib/query";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 vi.doMock("@lingui/core/macro", linguiMacro);
 vi.doMock("@lingui/react/macro", linguiReactMacro);
-const { changeFailed, commandNote, loginItemNote } = await import("./desktop-notes");
-const { DesktopCard, loginItemQuery, terminalCommandQuery } = await import("./desktop-card");
-const { offersSystemOptions } = await import("./sections");
+const { changeFailed, commandNote, companionNotes, loginItemNote } = await import(
+  "./desktop-notes"
+);
+const { companionQuery, DesktopCard, loginItemQuery, terminalCommandQuery } = await import(
+  "./desktop-card"
+);
+const { offersCompanion, offersSystemOptions } = await import("./sections");
 
 const REASONS: Readonly<Record<Unavailable, string>> = {
   background: "Background mode leaves this computer as it is.",
@@ -31,6 +38,18 @@ const REASONS: Readonly<Record<Unavailable, string>> = {
 
 const MAC_LINK = "/usr/local/bin/eidolon";
 const WINDOWS_FOLDER = "C:\\Users\\me\\AppData\\Local\\Programs\\Eidolon\\resources\\bin";
+
+/** The desktop companion as the app reports her: shown, or turned off, outside background mode. */
+const ON: CompanionState = { on: true, showAtLogin: true, background: false };
+const OFF: CompanionState = { on: false, showAtLogin: true, background: false };
+
+const MODEL: ActiveCharacterModel = {
+  id: "tml",
+  name: "TML",
+  kind: "psd2live",
+  sha256: "0".repeat(64),
+  updatedAt: "2026-11-23T00:00:00.000Z",
+};
 
 describe("what each state says", () => {
   test("Open at Login says nothing beside its switch, but why it can't be used or waits for an OK", () => {
@@ -107,6 +126,18 @@ describe("what each state says", () => {
     expect(changeFailed({ command: absent, error: "cancelled" }, "install", "darwin")).toBeNull();
     expect(changeFailed({ command: installed, error: "cancelled" }, "remove", "darwin")).toBeNull();
   });
+
+  test("the desktop companion says when background mode keeps her off screen, and when she shows as her picture", () => {
+    const said = (state: CompanionState, hasModel: boolean) =>
+      companionNotes(state, hasModel).map((note) => [note.text.message, note.tone]);
+    const background = ["Background mode never shows her.", "muted"];
+    const picture = ["She shows as her picture until she has an active character model.", "muted"];
+    expect(said(ON, true)).toEqual([]);
+    expect(said(OFF, true)).toEqual([]);
+    expect(said({ ...ON, background: true }, true)).toEqual([background]);
+    expect(said(ON, false)).toEqual([picture]);
+    expect(said({ ...OFF, background: true }, false)).toEqual([background, picture]);
+  });
 });
 
 describe("reading Open at Login", () => {
@@ -130,10 +161,19 @@ describe("reading Open at Login", () => {
   });
 });
 
+describe("reading the desktop companion", () => {
+  test("again every 2 s while the card shows, since her menu, the tray, the Window menu and Pop Out switch her too", () => {
+    const app = bridge("darwin", { companion: true });
+    if (!offersCompanion(app)) throw new Error("the fake bridge offers her");
+    expect(companionQuery(app).refetchInterval).toBe(2000);
+  });
+});
+
 const ignore = () => {};
 const refuse = () => Promise.reject(new Error("the card reads the seeded state"));
 
-function bridge(platform: string): EidolonDesktop {
+/** An app's bridge: Open at Login and the terminal command unless `system` is false, and her with `companion`. */
+function bridge(platform: string, { system = true, companion = false } = {}): EidolonDesktop {
   return {
     platform,
     version: "0.2.0",
@@ -141,29 +181,53 @@ function bridge(platform: string): EidolonDesktop {
     setTheme: ignore,
     setLanguage: ignore,
     onCommand: ignore,
-    loginItem: refuse,
-    setLoginItem: refuse,
-    terminalCommand: refuse,
-    setTerminalCommand: refuse,
+    ...(system
+      ? {
+          loginItem: refuse,
+          setLoginItem: refuse,
+          terminalCommand: refuse,
+          setTerminalCommand: refuse,
+        }
+      : {}),
+    ...(companion ? { companion: refuse, setCompanion: refuse } : {}),
   };
+}
+
+/** An app that offers the desktop companion, as the card reads her. */
+interface Her {
+  /** As the app reports her; unread without it. */
+  readonly state?: CompanionState;
+  /** Her active character model, as status names it: none for null. */
+  readonly model?: ActiveCharacterModel | null;
+  /** The app offers Open at Login and the terminal command too. */
+  readonly system?: boolean;
 }
 
 afterEach(() => {
   globalThis.eidolonDesktop = undefined;
 });
 
-/** The card as `platform`'s app shows it, with each option's state already read. */
+/** The card as `platform`'s app shows it, with each option's state already read, and her with `her`. */
 function render(
   platform: string,
   login: LoginItemState | undefined,
   command: CommandState | undefined,
+  her?: Her,
 ): string {
-  const app = bridge(platform);
+  const app = bridge(platform, { system: her?.system ?? true, companion: her !== undefined });
   globalThis.eidolonDesktop = app;
-  if (!offersSystemOptions(app)) throw new Error("the fake bridge offers the options");
   const client = new QueryClient();
-  if (login !== undefined) client.setQueryData(loginItemQuery(app).queryKey, login);
-  if (command !== undefined) client.setQueryData(terminalCommandQuery(app).queryKey, command);
+  if (offersSystemOptions(app)) {
+    if (login !== undefined) client.setQueryData(loginItemQuery(app).queryKey, login);
+    if (command !== undefined) client.setQueryData(terminalCommandQuery(app).queryKey, command);
+  }
+  if (her !== undefined) {
+    if (!offersCompanion(app)) throw new Error("the fake bridge offers her");
+    const { state, model = MODEL } = her;
+    if (state !== undefined) client.setQueryData(companionQuery(app).queryKey, state);
+    const status = { persona: { id: "milky-green", appearance: { model } } };
+    client.setQueryData(statusQuery.queryKey, status as unknown as Status);
+  }
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
   return renderToStaticMarkup(
     createElement(
@@ -184,10 +248,16 @@ const text = (markup: string) =>
     .replaceAll("&amp;", "&")
     .replace(/\s+/g, " ");
 
-const loginRow = (markup: string) =>
-  markup.split('data-desktop-option="login-item"')[1]?.split("data-desktop-option")[0] ?? "";
-const commandRow = (markup: string) =>
-  markup.split('data-desktop-option="terminal-command"')[1] ?? "";
+/** The row of `option`, up to the next. */
+const row = (markup: string, option: string) =>
+  markup.split(`data-desktop-option="${option}"`)[1]?.split("data-desktop-option")[0] ?? "";
+const loginRow = (markup: string) => row(markup, "login-item");
+const companionRow = (markup: string) => row(markup, "companion");
+const atLoginRow = (markup: string) => row(markup, "companion-at-login");
+const commandRow = (markup: string) => row(markup, "terminal-command");
+/** The card's rows, in order. */
+const options = (markup: string) =>
+  [...markup.matchAll(/data-desktop-option="([^"]+)"/g)].map((match) => match[1]);
 
 /** The opening tag of the button whose text ends with `label`. */
 function button(markup: string, label: string): string {
@@ -198,7 +268,7 @@ function button(markup: string, label: string): string {
 }
 
 describe("the card", () => {
-  test("a browser, or an app whose bridge predates the options, shows none", () => {
+  test("a browser, or an app whose bridge predates the options and her, shows none", () => {
     const i18n = setupI18n({ locale: "en", messages: { en: {} } });
     const markup = () =>
       renderToStaticMarkup(
@@ -216,10 +286,14 @@ describe("the card", () => {
     const { loginItem: _, ...older } = bridge("darwin");
     globalThis.eidolonDesktop = older;
     expect(markup()).toBe("");
+    const { setCompanion: __, ...half } = bridge("darwin", { system: false, companion: true });
+    globalThis.eidolonDesktop = half;
+    expect(markup()).toBe("");
   });
 
-  test("names both options and what the command gives a terminal", () => {
-    const said = text(render("darwin", { state: "off" }, { state: "absent", path: MAC_LINK }));
+  test("names both options and what the command gives a terminal, and nothing of her in an app before her", () => {
+    const markup = render("darwin", { state: "off" }, { state: "absent", path: MAC_LINK });
+    const said = text(markup);
     expect(said).toContain("Desktop App");
     expect(said).toContain(
       "Open at Login Start Eidolon in the background when you log in to this computer.",
@@ -228,6 +302,76 @@ describe("the card", () => {
     expect(said).toContain(
       "Terminal Command Run eidolon <command> in a terminal, such as eidolon pipeline . With no arguments, it opens Eidolon.",
     );
+    expect(options(markup)).toEqual(["login-item", "terminal-command"]);
+  });
+
+  test("an app that offers the desktop companion shows her two rows after Open at Login", () => {
+    const markup = render(
+      "darwin",
+      { state: "off" },
+      { state: "absent", path: MAC_LINK },
+      { state: OFF },
+    );
+    expect(options(markup)).toEqual([
+      "login-item",
+      "companion",
+      "companion-at-login",
+      "terminal-command",
+    ]);
+    const said = text(markup);
+    expect(said).toContain(
+      "Desktop Companion Keep her on your desktop, above your other windows. Right-click her for her menu.",
+    );
+    expect(said).toContain(
+      "Show at Login When Eidolon opens at login, she shows too, before you open its window.",
+    );
+  });
+
+  test("says each option is added only when the owner chooses it, which for her may be in her menu, the tray or Pop Out rather than here", () => {
+    const markup = render("darwin", undefined, undefined, { state: OFF });
+    expect(text(markup)).toContain(
+      "Desktop App What Eidolon can add to this computer, each only when you choose it.",
+    );
+  });
+
+  test("Desktop Companion's switch follows her, and Show at Login's can't be switched while she is off", () => {
+    const off = render("darwin", undefined, undefined, { state: OFF });
+    expect(companionRow(off)).toContain('role="switch"');
+    expect(companionRow(off)).toContain('aria-checked="false"');
+    expect(companionRow(off)).not.toContain('disabled=""');
+    expect(atLoginRow(off)).toContain('role="switch"');
+    expect(atLoginRow(off)).toContain('aria-checked="true"');
+    expect(atLoginRow(off)).toContain('disabled=""');
+    const on = render("win32", undefined, undefined, { state: { ...ON, showAtLogin: false } });
+    expect(companionRow(on)).toContain('aria-checked="true"');
+    expect(companionRow(on)).not.toContain('disabled=""');
+    expect(atLoginRow(on)).toContain('aria-checked="false"');
+    expect(atLoginRow(on)).not.toContain('disabled=""');
+  });
+
+  test("neither of her switches can be used before her state is read", () => {
+    const unread = render("darwin", undefined, undefined, {});
+    expect(companionRow(unread)).toContain('disabled=""');
+    expect(atLoginRow(unread)).toContain('disabled=""');
+  });
+
+  test("says background mode never shows her, and that she shows as her picture without a model", () => {
+    const shown = (her: Her) => text(companionRow(render("darwin", undefined, undefined, her)));
+    const background = shown({ state: { ...ON, background: true } });
+    expect(background).toContain("Background mode never shows her.");
+    expect(background).not.toContain("her picture");
+    const picture = shown({ state: ON, model: null });
+    expect(picture).toContain("She shows as her picture until she has an active character model.");
+    expect(picture).not.toContain("Background mode");
+    expect(shown({ state: ON })).not.toMatch(/Background mode|her picture/);
+  });
+
+  test("an app that offers the desktop companion alone shows her rows and none of the system's", () => {
+    const markup = render("win32", undefined, undefined, { state: OFF, system: false });
+    expect(options(markup)).toEqual(["companion", "companion-at-login"]);
+    expect(text(markup)).toContain("Desktop App");
+    expect(markup).not.toContain("Open at Login");
+    expect(markup).not.toContain("Terminal Command");
   });
 
   test("Open at Login's switch follows the OS, and stays on while macOS waits for an OK", () => {
