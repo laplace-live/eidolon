@@ -543,8 +543,9 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   way a port crosses `contextBridge`, which copies values. Either page asking again, as a page
   loaded again does, pairs both afresh, and a page whose document went pairs again only once it
   asks. Main never reads a port. Over it the main window tells her the active persona, the call, its
-  direction and her mouth, and her messages in the open chat; her page tells the main window only
-  that her appearance changed ([avatar.md](avatar.md#the-desktop-companion) has what crosses).
+  direction at each change of it and her mouth about 30 times a second, and her messages in the open
+  chat as they come; her page tells the main window only that her appearance changed
+  ([avatar.md](avatar.md#the-desktop-companion) has what crosses).
 - **Throttling.** Chromium slows a hidden window's timers to once a second, and the main window's
   feed reads her mouth from the call on a timer, so main turns the main window's background
   throttling off exactly while she shows and a call of hers is up there (`feedingCompanion`), and on
