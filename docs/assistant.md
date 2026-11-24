@@ -1043,11 +1043,12 @@ until the owner answers it. A level that can't be read asks.
 
 ### Approvals
 
-The owner answers from the task's card in the chat, or the waiting bar above its composer, or
-above the dock during a call ([web-app.md](web-app.md#tasks)), through `POST tasks/:id/approve`
-with `{ answer: "once" | "always" | "deny", pending?, model?, web? }`. Answers to one task are
-taken one at a time. Nothing else answers one: her task tools allow and continue nothing, and on a
-call she points the owner to the card, where a yes said aloud answers nothing ([Calls](#calls)).
+The owner answers from the task's card in the chat, or the waiting bar above its composer, which
+sits above the dock during a call, or in the call's video screen ([web-app.md](web-app.md#tasks)),
+through `POST tasks/:id/approve` with
+`{ answer: "once" | "always" | "deny", pending?, model?, web? }`. Answers to one task are taken one
+at a time. Nothing else answers one: her task tools allow and continue nothing, and on a call she
+points the owner to the card, where a yes said aloud answers nothing ([Calls](#calls)).
 `pending` is the question answered, as the snapshot's `pending` gave it, its `folder` included;
 the card and the bar always send it, so an answer from a view that shows an earlier question
 (another tab, a poll behind) is refused 409 `nothing-pending` instead of answering the next one,
@@ -1220,7 +1221,7 @@ takes her tasks away from it until it ends.
   says why. The call's `GET live` ends only once those are stored, so the page's read after the
   call shows the card; shutdown stops waiting after 2 s.
 - **Approvals** are answered only on the card and on the waiting bar, which sits above the dock
-  during a call.
+  during a call, or in the call's video screen.
 - **A pause:** when a task of hers in the chat pauses for the owner (a path, a site, a command, an
   MCP call, spend, a stall or an unpriced request), the manager's `waiting` hook has the runner
   hand the call
@@ -1421,7 +1422,8 @@ OpenRouter key exported, so Mem0 stays out. In one chat with milky-green:
 
 1. Ask aloud for a page in a new folder outside `assistant.folders`: she calls `start_task`, and her
    line mentions the card's Allow.
-2. Allow Once on the waiting bar above the dock.
+2. Allow Once on the waiting bar: above the dock, or in the video screen when she has an active
+   model.
 3. Ask 写到哪了 midway: she answers from the status block, or through `check_task`.
 4. She speaks the end in a sentence or two, reading no path aloud.
 5. Ask 帮我打开它: no task starts.

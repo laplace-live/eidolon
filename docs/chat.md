@@ -663,9 +663,11 @@ note in place of the rest.
 ## Calls
 
 A call is a mode of a chat. The viewer calls one of its personas from the chat page, the call
-opens on the chat's history, and each line said on it is stored in the chat as a message. It runs
-on the voice engine ([voice-engine.md](voice-engine.md)), and costs what a call from `/call`
-costs. `/call` stays the standalone call to the active persona, with no chat.
+opens on the chat's history, and each line said on it is stored in the chat as a message. The call
+belongs to the tab, not the page: it goes on while the viewer opens other pages
+([web-app.md](web-app.md#chats)). It runs on the voice engine ([voice-engine.md](voice-engine.md)),
+and costs what a call from `/call` costs. `/call` stays the standalone call to the active persona,
+with no chat.
 
 ### The binding
 
@@ -795,8 +797,9 @@ that chat; without a `chatId`, it is the standalone call, unbound.
   stores them after its `call-ended`.
 - `GET live` streams each event the chat stores, from `call-started` on, and ends after
   `call-ended`, so the page follows a reply and a call through one subscription. A line is stored
-  only once it is finished, hers once all of it has played, so the page that placed the call shows
-  the call's own transcript in their place until `call-ended` ([web-app.md](web-app.md#chats)).
+  only once it is finished, hers once all of it has played, so the tab that placed the call shows,
+  on the chat's page whenever it is open, the call's own transcript in their place until
+  `call-ended` ([web-app.md](web-app.md#chats)).
   It ends only once any `start_task` of hers the manager was still answering at the hang-up is
   stored too, so the page's read after the call shows its card; shutdown waits 2 s at most.
 - `GET chats/:id`'s `call` is `{ id, persona }`, with `group: true` on a group call, and null once

@@ -4,9 +4,10 @@ A persona can have character models: 2D models made in
 [PSD2Live](https://github.com/tsunehimatoi/psd2live), which Eidolon draws with PSD2Live's own
 runtime. Eidolon never makes a model. The owner makes one in PSD2Live, exports its `.p2lrt`, and
 imports that in the studio's Appearance section, which previews it and makes one of her models the
-one she shows. The SDK's avatar entry draws a model and moves it with her: her mood from the cues
-she writes, her mouth from her voice, her gaze and gestures from a call's turns. Models live only
-in the owner's data home, so only the local app shows them.
+one she shows, face to face on a call ([The call screen](#the-call-screen)). The SDK's avatar
+entry draws a model and moves it with her: her mood from the cues she writes, her mouth from her
+voice, her gaze and gestures from a call's turns. Models live only in the owner's data home, so
+only the local app shows them.
 
 The kind is `psd2live` in code and files, "2D model" is the plain word, and the app labels one
 "2D Model · PSD2Live". A `.p2lrt` is PSD2Live's own format and needs no Cubism Core; Live2D is
@@ -24,7 +25,8 @@ packages/sdk/src/avatar/psd2live/wasm/   PSD2Live's runtime, byte for byte, with
 apps/bot/src/local/psd2live.ts           the upload check: the same wasm, run by the local server
 apps/bot/src/local/appearance.ts         her models on disk, which routes/appearance.ts serves
 apps/web/src/features/studio/            the studio's Appearance section
-apps/web/src/components/model-stage.tsx  the stage in the app, which falls back to her picture
+apps/web/src/components/model-stage.tsx  Studio's stage, which falls back to her picture
+apps/web/src/features/call/              a call's stages, its video screen and its tiles
 apps/bot/test/local/fixtures/psd2live/   tml.p2lrt, the CC0 test rig
 ```
 
@@ -343,6 +345,68 @@ parameters within their ranges and parts the rig has, each named once.
   back) and `trap` (the runtime failed while running). The stage disposes a model that throws, or
   whose context is lost, and reports it once; the app then shows her picture.
 
+## The call screen
+
+A call with her model shows it face to face: over a chat's column, or under `/call`'s header,
+where [web-app.md](web-app.md#chats) has the screen, its controls and the dock it shrinks to. The
+call is the app shell's (`features/call/call-provider.tsx`), and so are her stages:
+
+- **When it shows.** A call opens as video when someone on it had an active model as it was
+  placed: the persona called, or anyone on a group call (`opensVideo`, `features/call/target.ts`),
+  as the summaries the page holds say. The model itself is read fresh in the Call click
+  (`loadCastModel`, `cast.ts`), and where the two disagree the fresh read wins: a member whose model
+  is gone shows her picture.
+- **A snapshot.** The call keeps the models it opened with. Studio's changes during a call, a
+  model made active, edited or removed, show from her next call, which Appearance says while one is
+  up.
+- **Her stages.** The Call click makes one stage per member with a model (`CallStages`,
+  `stages.ts`), each on a canvas of its own, kept for the call's life and disposed when it is over.
+  The same canvas moves between the screen, a group call's tile and the dock's thumbnail
+  (`avatar-view.tsx`). Out of the page it pauses, and its GL context survives the move, so leaving
+  the chat costs no drawing and coming back no reload.
+- **Loaded on demand.** The renderer comes in through `import("./avatar-loader")`, so the app's
+  first chunk carries none of it: no script the built `index.html` loads at start holds
+  `OES_element_index_uint`, the renderer's extension check.
+- **Direction.** `use-call.ts` feeds `direct()` from the call client's events, through
+  `CallSignals` (`signals.ts`): the bot's and the viewer's speech, `bot-llm-started`, tool calls, a
+  group call's `speaker`, and each bot output that moves her, `outputEvent` dropping words, tokens,
+  backchannels, expressions and text she won't say; a tick every 100 ms lands her cues.
+- **The mouth.** One `MouthMeter` reads the bot's track, on the shell's `AudioContext`, which the
+  Call click makes or resumes and the call's end suspends. Each stage reads it through a tap of its
+  own; one track carries every voice of a group call, so only the speaking member's stage reads it
+  there.
+- **Fallbacks.** A stage that fails (no WebGL, a trap, a lost context, a load refused) shows her
+  picture, quietly, and the call goes on; each view of a stage has an error boundary of its own, so
+  a throw there shows her picture too. When every stage has failed or found no model, the call
+  shows as one without a model: docked in a chat, with no **Expand**, and on `/call` its classic
+  screen.
+- **Reduced motion.** The stages take the system's setting as the call is placed: no clip, her idle
+  included, no saccades and no drift in her look away, while the runtime's blinking and breathing,
+  her expressions and her mouth stay ([Direction and behaviors](#direction-and-behaviors)). The
+  screen's own transitions run only without it.
+- **The smoke's voice.** The free browser smoke's fake voice says a quiet 220 Hz tone in four
+  syllables a second, its peaks about −15 dBFS, well above `MOUTH_CURVE`'s gate, so her mouth opens
+  at each and shuts between them; the walk's Chrome runs `--mute-audio`, so none of it is heard.
+
+The smoke reads the call through these attributes; keep their names:
+
+| Attribute | On | Values |
+| --- | --- | --- |
+| `data-call` | the shell's `<audio>` | present |
+| `data-call-bar` | the call bar's section | present |
+| `data-call-screen` | the video screen's section | present |
+| `data-call-transcript` | `/call`'s transcript panel on the screen | present |
+| `data-avatar` | a stage view's box | the member's id |
+| `data-state` | a stage view's box | `loading`, `ready`, `failed`, `none` |
+| `data-speaking` | a stage view's box, a tile | `true`, `false` |
+| `data-mood` | a stage view's box | her mood tags joined by a space, empty when neutral |
+| `data-mouth` | a stage view's box | the widest opening her stage read in the last tick (100 ms), `0.00`–`1.00` |
+| `data-frames` | a stage view's box | the frames her stage's loop has run, written each tick |
+| `data-stage` | a stage's canvas | `<persona>:<n>`, one per stage made |
+| `data-tile` | a group call's tile | the member's id |
+| `data-captions` | the caption | present, with `data-live` `true` or `false` |
+| `data-live-call` | a chat's live call row | present |
+
 ## The vendored runtime
 
 `packages/sdk/src/avatar/psd2live/wasm/p2l_runtime.wasm` is PSD2Live's committed build of its
@@ -403,10 +467,18 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   folder an import makes, the 200 MiB limit declared and streamed, the call refusal, the active
   model, every route, and ids that try to leave their folder. `static.test.ts` pins the CSP, its
   `'wasm-unsafe-eval'` included, and the wasm's type.
+- **The app's call** (`bun run test apps/web`), on Node with no browser: `target.test.ts` holds
+  whom a call is with and how each page shows it, `signals.test.ts` what moves her and the tick,
+  `stages.test.ts` her stages on fake parts, through a call's end into the next call and a group
+  call's routing, `captions.test.ts` the caption, and `call-tiles.test.ts` and
+  `video-call.test.ts` the tiles' and the screen's markup.
 - **The browser smoke** (`bun apps/bot/scripts/local-smoke.ts`,
   [web-app.md](web-app.md#the-browser-smoke-test)) imports the test rig in the studio's Appearance,
   checks its preview draws under the app's CSP and that a stage made anew ends a line tried on it,
-  refuses a PNG and a cut-off rig, and makes the model active, then stops using it.
+  refuses a PNG and a cut-off rig, and makes the model active, then stops using it. Its video call
+  makes the rig her active model again and calls her: her stage ready, her mouth moving on the
+  smoke's tone, the caption and her mood, Shrink and Expand on one canvas, the call bar on another
+  page, and a second call's stage; its task call answers a task's question on the screen.
 - **The npm package:** `ci-install-check.ts` imports the test rig into the packed server on Linux
   and Windows CI, which proves the upload check finds its runtime under `EIDOLON_APP_ROOT`, and the
   package's and the desktop stage's tests hold `data/psd2live/` in place.
