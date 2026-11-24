@@ -3258,7 +3258,8 @@ async function voiceChatWalk(walk: Walk): Promise<void> {
  * greeting answers the line typed before it; her line lands in the chat while the composer waits.
  * Mid-call the tab leaves the chat for Home, the persona switcher, another chat of hers and /call:
  * the call goes on in the call bar, and what it would end or the server refuses during it waits,
- * until Return to Call brings the dock back. Hang Up stores the call's end.
+ * until Return to Call brings the dock back. Hang Up stores the call's end, and a second call hung
+ * up the moment its offer is out ends on the server too.
  */
 async function chatCallWalk(walk: Walk): Promise<void> {
   const { page, checks, origin } = walk;
@@ -3600,6 +3601,40 @@ async function chatCallWalk(walk: Walk): Promise<void> {
         `${timed ? "the call's length" : "no length"}; a send afterwards answered ${sent.status}; ` +
         `the server logged ${errors.length === 0 ? "no errors" : errors.slice(0, 2).join(" ")} during ` +
         `the call; after a reload the call ${kept ? "stays in the log" : "is gone from the log"}`,
+    );
+
+    const ends = (events: readonly LoggedEvent[]) =>
+      events.filter((e) => e.type === "call-ended").length;
+    const endsBefore = ends(await chatLog(walk, id));
+    const offering = page.waitForRequest(
+      (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/offer",
+    );
+    await page.getByRole("button", { name: t("en", "Call"), exact: true }).click();
+    await offering;
+    await dock.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
+    const hungUpAt = Date.now();
+    const calls = await poll(
+      async () =>
+        ((await (await walk.api("GET", "/api/local/status")).json()) as Status).activeCalls,
+      (count) => count === 0,
+      10_000,
+    );
+    const settled = Date.now() - hungUpAt;
+    const quick = await poll(
+      () => chatLog(walk, id),
+      (events) => ends(events) > endsBefore,
+      5_000,
+    );
+    const quickEnd =
+      ends(quick) > endsBefore ? quick.filter((e) => e.type === "call-ended").at(-1) : undefined;
+    const quickBack = (await shows(textBox, 5_000)) && (await textBox.isEnabled());
+    checks.add(
+      "chat call hung up as it connects",
+      calls === 0 && quickEnd !== undefined && quickBack,
+      `Hang Up as the offer went out: the server held ` +
+        `${calls === 0 ? `no call ${seconds(settled)} later` : `${calls} call(s) after ${seconds(settled)}`}; ` +
+        `the log ${quickEnd ? `ends it: ${String(quickEnd.reason)}` : "never stored its end"}; the ` +
+        `composer ${quickBack ? "came back" : "stayed disabled"}`,
     );
   } finally {
     await hangUpIfUp(walk);

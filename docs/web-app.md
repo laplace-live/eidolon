@@ -716,13 +716,16 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     no tasks.
   - **The call belongs to the app, not the page** (`features/call/call-provider.tsx`): opening
     another chat or page keeps it, and the call bar brings it back. Hang Up, the call ending, a
-    reload, opening setup, or losing the session (the sign-in screen) end it. While it is up,
-    another chat's **Call** and `/call`'s are unavailable and `/call` says you're in a call; the
-    persona switcher, a persona card's **Make Active**, New Persona's **Switch to Her Now**,
-    **Restart**, and importing or replacing a character model wait for its end, since the server
-    refuses them during a call; Home's links into setup wait too, since setup sits outside the
-    app's frame and opening it ends the call. Studio's Appearance says its changes show from her
-    next call.
+    reload, opening setup, or losing the session (the sign-in screen) end it. The server hears a
+    call end only over its connection, so a call hung up while it connects is muted at once and let
+    go once its connection comes up or fails, within 10 s (`features/call/hang-up.ts`): closed
+    sooner, it would leave the server's call, and the chat in it, up for about 30 s. The next call
+    waits for it to go. While a call is up, another chat's **Call** and `/call`'s are unavailable
+    and `/call` says you're in a call; the persona switcher, a persona card's **Make Active**, New
+    Persona's **Switch to Her Now**, **Restart**, and importing or replacing a character model wait
+    for its end, since the server refuses them during a call; Home's links into setup wait too,
+    since setup sits outside the app's frame and opening it ends the call. Studio's Appearance says
+    its changes show from her next call.
   - `/call` stays the standalone call to the active persona, with no chat. With her model, it shows
     the call's screen under its header, with the mic's mute toggle, **Type a Message**,
     **Captions**, **Transcript** and **Hang Up**; **Transcript** opens its transcript beside the
@@ -1107,7 +1110,8 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   unavailable with its microphone hidden, `/call` saying you're in a call, and **Return to Call**
   bringing back the dock and her greeting as the call's own line; then **Hang Up**, the log's
   `call-ended` with `hangup`, the separators with the call's length, the composer back, and no
-  server error during the call;
+  server error during the call; then a second **Call** hung up the moment its offer is out, which
+  the server ends within 10 s, storing its `call-ended`, the composer back;
 - a video call in a chat of hers, the test rig made her active model: **Call** opening the screen,
   named as the dock is, her stage ready within 30 s; a line the fake hearing hears, answered
   `[开心地] 看得到呀，你也在笑！`, her mouth opening on the tone while she speaks, her words as the

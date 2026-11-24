@@ -4,6 +4,7 @@
 import { EidolonClient, type WaitState, Watchdog } from "@laplace.live/eidolon-sdk";
 import { type RefObject, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ChatCallRequestData } from "@/lib/api";
+import { hangUpClient } from "./hang-up";
 import { deviceProblemOf, type MicProblem, probeMic } from "./media";
 import { type CallPhase, connectEnd, endOf, IDLE, reducePhase } from "./phase";
 import { fetchIceServers, offerOptions } from "./signalling";
@@ -92,6 +93,8 @@ export function useCall(signals: CallSignals): Call {
   const activeRef = useRef<ActiveCall | null>(null);
   // Bumped by every start and hang-up: an older start stops at its next await.
   const attemptRef = useRef(0);
+  /** The last call hung up, until its client has disconnected. */
+  const leavingRef = useRef<Promise<void>>(Promise.resolve());
   const typedRef = useRef(0);
 
   const release = useCallback(
@@ -254,6 +257,9 @@ export function useCall(signals: CallSignals): Call {
       setMicProblem(null);
       setBotError(null);
 
+      // Until the server hears the last call go, it refuses another in the same chat.
+      await leavingRef.current;
+      if (stale()) return;
       const problem = await probeMic(navigator.mediaDevices);
       if (stale()) return;
       if (problem !== null) {
@@ -304,7 +310,9 @@ export function useCall(signals: CallSignals): Call {
     const call = activeRef.current;
     if (call !== null) {
       release(call);
-      await call.client.disconnect().catch(() => undefined);
+      const hanging = hangUpClient(call.client);
+      leavingRef.current = hanging.done;
+      if (!hanging.lingers) await hanging.done;
     }
     dispatchPhase({ type: "disconnected", at: Date.now(), end: { kind: "hung-up" } });
   }, [release]);
@@ -355,7 +363,7 @@ export function useCall(signals: CallSignals): Call {
       activeRef.current = null;
       if (call === null) return;
       call.detach();
-      void call.client.disconnect().catch(() => undefined);
+      leavingRef.current = hangUpClient(call.client).done;
     },
     [watchdog],
   );
