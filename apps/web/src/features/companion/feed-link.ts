@@ -125,8 +125,9 @@ export class FeedLink {
     this.#mouthDue = Math.max(at, this.#mouthDue) + MOUTH_SEND_MS;
   }
 
+  /** Sent when it is the persona told's: she is the active persona alone. */
   chat(fact: ChatFact): void {
-    this.#send(fact);
+    if (fact.persona === this.#persona?.id) this.#send(fact);
   }
 
   #send(message: ToCompanion): void {
@@ -147,6 +148,8 @@ export function feedState(
   readonly persona: string | null;
   readonly call: CompanionCall;
   readonly key: string | undefined;
+  /** A call of hers is up: the feed sends her its direction and mouth, and main keeps this window drawing while she shows. */
+  readonly feeding: boolean;
 } {
   const persona = status?.persona.id ?? null;
   const { target } = call;
@@ -162,6 +165,7 @@ export function feedState(
       callable: status !== undefined && !call.up && callBlocker(status) === null,
     },
     key: group && persona !== null ? persona : undefined,
+    feeding: call.up && hers,
   };
 }
 

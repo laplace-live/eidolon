@@ -43,8 +43,8 @@ function Feed({ app }: { readonly app: FeedBridge }): ReactNode {
   const { data: status } = useQuery(statusQuery);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { persona, call, key } = feedState(status, { target, phase, up, micOn });
-  const current = { status, persona, callable: call.callable, start, navigate, hangUp, setMic };
+  const { persona, call, key, feeding } = feedState(status, { target, phase, up, micOn });
+  const current = { status, callable: call.callable, start, navigate, hangUp, setMic };
   const latest = useRef(current);
   // The one thing her page asks of this window: her models and her summary, read again.
   const [link] = useState(
@@ -102,7 +102,6 @@ function Feed({ app }: { readonly app: FeedBridge }): ReactNode {
     link.call({ up: callUp, live, hers, micOn: callMicOn, callable });
   }, [link, callUp, live, hers, callMicOn, callable]);
 
-  const feeding = callUp && hers;
   useEffect(() => {
     app.feedingCompanion(feeding);
   }, [app, feeding]);
@@ -128,13 +127,7 @@ function Feed({ app }: { readonly app: FeedBridge }): ReactNode {
     };
   }, [feeding, signals, key, link]);
 
-  useEffect(
-    () =>
-      onChatFact((fact) => {
-        if (fact.persona === latest.current.persona) link.chat(fact);
-      }),
-    [link],
-  );
+  useEffect(() => onChatFact((fact) => link.chat(fact)), [link]);
 
   return null;
 }

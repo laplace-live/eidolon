@@ -1,7 +1,7 @@
 import type { Direction } from "@laplace.live/eidolon-sdk/avatar";
 import { describe, expect, test } from "vitest";
 import { type CallPhase, IDLE, type PhaseEvent, reducePhase } from "@/features/call/phase";
-import { type CastMember, chatTarget, soloTarget } from "@/features/call/target";
+import { type CallTarget, type CastMember, chatTarget, soloTarget } from "@/features/call/target";
 import type { Status } from "@/lib/api";
 import { FeedLink, feedState, MOUTH_SEND_MS, MOUTH_SLACK_MS, mouthLevel } from "./feed-link";
 import type { PortLike } from "./page-port";
@@ -177,12 +177,15 @@ describe("FeedLink", () => {
     ]);
   });
 
-  test("sends her chat's facts as told", () => {
+  test("sends the chat facts of the persona told alone, as told", () => {
     const { link } = feedLink();
     const one = fakePort();
     link.connect(one.port);
     link.chat(FACT);
-    expect(one.posted).toEqual([FACT]);
+    link.persona("milky-green", "");
+    link.chat(FACT);
+    link.chat({ ...FACT, persona: "hazel" });
+    expect(one.posted).toEqual([{ type: "persona", id: "milky-green", stamp: "" }, FACT]);
   });
 
   test("hands on only her appearance changing from the companion's page", () => {
@@ -229,8 +232,10 @@ describe("FeedLink", () => {
     one.end();
     expect(received).toEqual([]);
     expect(link.linked).toBe(true);
+    link.persona("milky-green", "");
     link.chat(FACT);
-    expect(two.posted).toEqual([FACT]);
+    expect(two.posted.at(-1)).toEqual(FACT);
+    expect(one.posted).toEqual([]);
   });
 });
 
@@ -265,8 +270,13 @@ describe("feedState", () => {
       persona: null,
       call: { up: false, live: false, hers: false, micOn: true, callable: false },
       key: undefined,
+      feeding: false,
     });
-    expect(feedState(undefined, { ...idle, target: soloTarget(MILKY) }).call.hers).toBe(false);
+    const up = { target: soloTarget(MILKY), phase: LIVE, up: true, micOn: true };
+    expect([feedState(undefined, up).call.hers, feedState(undefined, up).feeding]).toEqual([
+      false,
+      false,
+    ]);
   });
 
   test("a ready status with no call up calls", () => {
@@ -274,7 +284,19 @@ describe("feedState", () => {
       persona: "milky-green",
       call: { up: false, live: false, hers: false, micOn: true, callable: true },
       key: undefined,
+      feeding: false,
     });
+  });
+
+  test("feeds her only while a call of hers is up, starting or live", () => {
+    const feeding = (target: CallTarget | null, phase: CallPhase, up: boolean) =>
+      feedState(READY, { target, phase, up, micOn: true }).feeding;
+    expect(feeding(soloTarget(MILKY), STARTING, true)).toBe(true);
+    expect(feeding(soloTarget(MILKY), LIVE, true)).toBe(true);
+    expect(feeding(chatTarget("c1", HAZEL, [HAZEL, MILKY]), LIVE, true)).toBe(true);
+    expect(feeding(chatTarget("c1", HAZEL, null), LIVE, true)).toBe(false);
+    expect(feeding(soloTarget(MILKY), IDLE, false)).toBe(false);
+    expect(feeding(null, IDLE, false)).toBe(false);
   });
 
   test("/call's call with her is hers, her direction its own", () => {
