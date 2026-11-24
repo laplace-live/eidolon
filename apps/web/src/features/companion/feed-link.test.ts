@@ -246,6 +246,32 @@ describe("FeedLink", () => {
     expect(one.posted).toEqual([{ type: "persona", id: "milky-green", stamp: "" }, FACT]);
   });
 
+  test("tells a new port her voice message still playing, from where it is by then", () => {
+    const { link, at } = feedLink();
+    link.persona("milky-green", "");
+    const voice: ChatFact = {
+      type: "voice",
+      persona: "milky-green",
+      chat: FACT.chat,
+      seq: 5,
+      text: "嗯嗯",
+      file: "voice-5.mp3",
+      state: "playing",
+      position: 1,
+    };
+    at(10_000);
+    link.chat(voice);
+    at(12_500);
+    const two = fakePort();
+    link.connect(two.port);
+    expect(two.posted.at(-1)).toEqual({ ...voice, position: 3.5 });
+    // Once it stops, a new port hears nothing of it.
+    link.chat({ ...voice, state: "ended", position: 9 });
+    const three = fakePort();
+    link.connect(three.port);
+    expect(three.posted).toEqual([{ type: "persona", id: "milky-green", stamp: "" }]);
+  });
+
   test("hands on only her appearance changing from the companion's page", () => {
     const { link, received } = feedLink();
     const one = fakePort();

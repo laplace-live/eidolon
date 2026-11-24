@@ -48,6 +48,9 @@ export class FeedLink {
   #port: PortLike | null = null;
   #persona: { readonly id: string; readonly stamp: string } | null = null;
   #call: CompanionCall | null = null;
+  /** Her voice message playing now, as told, and when: her page loaded anew hears it from there. */
+  #voice: { readonly fact: Extract<ChatFact, { type: "voice" }>; readonly at: number } | null =
+    null;
   /** The last direction sent to this port. */
   #direction: Direction | null = null;
   /** The widest mouth level since the last one sent, and when the next may go. */
@@ -59,7 +62,10 @@ export class FeedLink {
     this.#now = now;
   }
 
-  /** Closes the port before it, forgets the last direction sent, then sends the last persona and call told. */
+  /**
+   * Closes the port before it, forgets the last direction sent, then sends the last persona and call
+   * told, and her voice message still playing.
+   */
   connect(port: PortLike): void {
     const before = this.#port;
     this.#port = port;
@@ -77,6 +83,10 @@ export class FeedLink {
     });
     if (this.#persona !== null) this.#send({ type: "persona", ...this.#persona });
     if (this.#call !== null) this.#send({ type: "call", call: this.#call });
+    if (this.#voice !== null) {
+      const { fact, at } = this.#voice;
+      this.#send({ ...fact, position: fact.position + (this.#now() - at) / 1000 });
+    }
   }
 
   disconnect(): void {
@@ -94,6 +104,7 @@ export class FeedLink {
   /** Kept; sent when it changed. */
   persona(id: string, stamp: string): void {
     if (this.#persona?.id === id && this.#persona.stamp === stamp) return;
+    if (this.#persona?.id !== id) this.#voice = null;
     this.#persona = { id, stamp };
     this.#send({ type: "persona", id, stamp });
   }
@@ -127,7 +138,11 @@ export class FeedLink {
 
   /** Sent when it is the persona told's: she is the active persona alone. */
   chat(fact: ChatFact): void {
-    if (fact.persona === this.#persona?.id) this.#send(fact);
+    if (fact.persona !== this.#persona?.id) return;
+    if (fact.type === "voice") {
+      this.#voice = fact.state === "playing" ? { fact, at: this.#now() } : null;
+    }
+    this.#send(fact);
   }
 
   #send(message: ToCompanion): void {
