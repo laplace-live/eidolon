@@ -150,8 +150,8 @@ export function quitBox(
 
 export interface QuitConfirmationOptions {
   /**
-   * Starts one check; null while no backend of ours is ready, whose quit stops nothing. A check
-   * that rejects asks as when the backend can't say, and its cause goes to `log`.
+   * Starts one check of what our own backend runs; null while none of ours is ready. A check that
+   * rejects asks as when the backend can't say, and its cause goes to `log`.
    */
   readonly check: () => Promise<Stopping> | null;
   /**
@@ -196,19 +196,19 @@ export class QuitConfirmation {
   }
 
   async #decide(purpose: QuitPurpose): Promise<boolean> {
-    const pending = this.#options.check();
+    const options = this.#options;
+    const pending = options.check();
     const check =
       pending === null
         ? null
         : await pending.catch((error: unknown): QuitCheck => {
-            const log = this.#options.log ?? console;
+            const log = options.log ?? console;
             log.warn(`Eidolon: couldn't check what quitting stops: ${explain(error)}`);
             return "unknown";
           });
-    const options = this.#options;
     const box = quitBox(check, options.strings(), options.platform, purpose, options.unsaved());
     if (box === null) return true;
-    const { response } = await this.#options.show(box);
+    const { response } = await options.show(box);
     return response === QUIT;
   }
 }
