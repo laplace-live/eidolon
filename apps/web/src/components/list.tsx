@@ -39,15 +39,27 @@ export interface ListRowProps {
   readonly trailing?: ReactNode;
   /** An app path the row opens. */
   readonly href?: string;
+  /** The row whose item the page shows, as a list beside it picks one. */
+  readonly current?: boolean;
   readonly className?: string;
 }
 
-export function ListRow({ leading, title, description, trailing, href, className }: ListRowProps) {
+export function ListRow({
+  leading,
+  title,
+  description,
+  trailing,
+  href,
+  current = false,
+  className,
+}: ListRowProps) {
   return (
     <li
       className={cn(
         "relative flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6",
         href !== undefined && "transition-colors hover:bg-muted/40",
+        current &&
+          "bg-muted/50 hover:bg-muted/50 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary",
         className,
       )}
     >
@@ -61,6 +73,7 @@ export function ListRow({ leading, title, description, trailing, href, className
           ) : (
             <Link
               to={href}
+              aria-current={current ? "true" : undefined}
               className="outline-none after:absolute after:inset-0 focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50 focus-visible:after:ring-inset"
             >
               {title}

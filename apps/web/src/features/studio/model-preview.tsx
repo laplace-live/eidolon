@@ -287,7 +287,7 @@ export function ModelPreviewCard({
   return (
     <form onSubmit={submit} noValidate>
       <SectionCard
-        // Not hidden: the stage sticks beside long tabs, which a clipping ancestor would stop.
+        // Not hidden: the stage sticks while long tabs scroll, which a clipping ancestor would stop.
         className="overflow-clip"
         title={model.name}
         description={t`Try her out, frame her for calls, and choose how she shows each mood and what she wears, then save.`}
@@ -312,14 +312,21 @@ export function ModelPreviewCard({
       >
         <div className="@container">
           <div className="grid gap-6 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,19rem)] @2xl:items-start">
-            <div className="flex min-w-0 flex-col gap-3 @2xl:sticky @2xl:top-4">
+            <div
+              className={cn(
+                "flex min-w-0 flex-col gap-3",
+                // Stacked above the tabs too, she stays in view, below MobileBar where it shows.
+                "sticky top-14 z-10 -my-2 bg-card py-2 md:top-0 shell:@max-2xl:top-0",
+                "@2xl:top-4 @2xl:z-auto @2xl:my-0 @2xl:bg-transparent @2xl:py-0",
+              )}
+            >
               <div
                 ref={surface}
                 className={cn(
                   "relative overflow-hidden rounded-lg border bg-muted/40",
                   shape === "wide"
-                    ? "aspect-[4/3] w-full"
-                    : "mx-auto aspect-[9/16] h-[min(36rem,70svh)] max-w-full",
+                    ? "mx-auto aspect-[4/3] w-full max-w-[calc(40svh*4/3)] @2xl:max-w-none"
+                    : "mx-auto aspect-[9/16] h-[min(36rem,40svh)] max-w-full @2xl:h-[min(36rem,70svh)]",
                   framing && ready !== null && "cursor-grab touch-none active:cursor-grabbing",
                 )}
               >

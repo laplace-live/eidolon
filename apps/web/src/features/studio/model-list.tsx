@@ -336,7 +336,7 @@ function ModelRow({
   ];
   return (
     <ListRow
-      className={cn(selected && "bg-muted/50")}
+      current={selected}
       href={`?model=${encodeURIComponent(model.id)}`}
       leading={
         <span className="flex size-10 items-center justify-center rounded-full bg-muted">
