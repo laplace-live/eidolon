@@ -116,15 +116,16 @@ The studio's **Appearance** section (形象), after Voice, holds one card, **How
   export's folder or zip, it takes the `.p2lrt` out and leaves the rest, the export's `p2l.js` and
   wasm included. The card lists her models, with an **Active** badge on the one she shows. **Make
   Active** sets her `appearance.model`, with a hint while none is active, and **Model Options**
-  holds Rename, Replace File and Remove.
+  holds Rename, Replace File and Remove, and Stop Using when clearing her own `appearance.model`
+  would change what she shows.
 - **The preview** draws the model on the SDK's stage, or her picture when it can't, with the tabs
   **Test**, **Framing**, **Moods** and **Outfits**, which edit one draft that Save sends:
   - **Test:** expression chips and clip buttons; **Try a Line**, which reads a pasted reply's
     direction and cues with the SDK's moods and plays them on the preview, billing nothing; **Use
     Microphone**, which moves her mouth through the mouth meter; and **Follow Pointer**.
   - **Framing** edits the call framing, a box of the rig's canvas, with the pointer and the wheel.
-  - **Moods** sets the expressions each mood shows, and **Outfits** her outfits and the one she
-    wears.
+  - **Moods** sets the expressions each mood shows and the clip each gesture plays, and
+    **Outfits** her outfits and the one she wears.
 - **Under reduced motion** the preview plays no clip by itself, her idle included, while a clip
   played from the Test tab still plays.
 
@@ -394,6 +395,10 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   folder an import makes, the 200 MiB limit declared and streamed, the call refusal, the active
   model, every route, and ids that try to leave their folder. `static.test.ts` pins the CSP, its
   `'wasm-unsafe-eval'` included, and the wasm's type.
+- **The browser smoke** (`bun apps/bot/scripts/local-smoke.ts`,
+  [web-app.md](web-app.md#the-browser-smoke-test)) imports the test rig in the studio's Appearance,
+  checks its preview draws under the app's CSP, refuses a PNG and a cut-off rig, and makes the model
+  active, then stops using it.
 - **The npm package:** `ci-install-check.ts` imports the test rig into the packed server on Linux
   and Windows CI, which proves the upload check finds its runtime under `EIDOLON_APP_ROOT`, and the
   package's and the desktop stage's tests hold `data/psd2live/` in place.
