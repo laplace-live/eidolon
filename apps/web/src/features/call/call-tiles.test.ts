@@ -40,6 +40,7 @@ function member(id: string, model: ActiveCharacterModel | null = MODEL): CastMem
 const MILKY = member("milky-green");
 const MINT = member("mint");
 const PLAIN = member("plain", null);
+const BROKEN = member("broken");
 
 const STAGE: StageLike = {
   show() {},
@@ -50,8 +51,16 @@ const STAGE: StageLike = {
   dispose() {},
 };
 
-/** Stages on fake parts: `ready` loads at once, any other member's load never ends. */
-function staged(signals: Signals, target: CallTarget, ready: readonly string[]): Stages {
+/**
+ * Stages on fake parts: `ready` loads at once, `failing` is refused, any other member's load never
+ * ends.
+ */
+function staged(
+  signals: Signals,
+  target: CallTarget,
+  ready: readonly string[],
+  failing: readonly string[] = [],
+): Stages {
   const stages = new CallStages(signals, {
     canvas: () => ({ remove() {} }) as unknown as HTMLCanvasElement,
     stage: async () => STAGE,
@@ -65,7 +74,9 @@ function staged(signals: Signals, target: CallTarget, ready: readonly string[]):
             box: { x: 0, y: 0, width: 1, height: 1 },
             outfit: null,
           })
-        : new Promise(() => {}),
+        : failing.includes(who.id)
+          ? Promise.reject(new Error("load refused"))
+          : new Promise(() => {}),
     reducedMotion: false,
   });
   return stages;
@@ -103,9 +114,9 @@ const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 const quiet = () => ({ now: () => 0, every: () => () => {} });
 
 test("a tile per persona, host first: her model once it draws, else her picture", async () => {
-  const target = chatTarget("c1", MILKY, [MINT, MILKY, PLAIN]);
+  const target = chatTarget("c1", MILKY, [MINT, MILKY, PLAIN, BROKEN]);
   const signals = new CallSignals(quiet());
-  const stages = staged(signals, target, ["milky-green"]);
+  const stages = staged(signals, target, ["milky-green"], ["broken"]);
   await settled();
   const markup = render(target, signals, stages, createElement(CallTiles, { cast: target.cast }));
 
@@ -113,6 +124,7 @@ test("a tile per persona, host first: her model once it draws, else her picture"
     "milky-green",
     "mint",
     "plain",
+    "broken",
   ]);
   expect(markup.match(/^<div class="([^"]*)"/)?.[1]?.split(" ")).toContain("grid-cols-2");
   const host = tile(markup, "milky-green");
@@ -124,6 +136,9 @@ test("a tile per persona, host first: her model once it draws, else her picture"
   const plain = tile(markup, "plain");
   expect(plain).not.toContain("data-avatar");
   expect(plain).toContain('data-face="plain"');
+  const failed = tile(markup, "broken");
+  expect(failed).toContain('data-avatar="broken" data-state="failed"');
+  expect(failed).toContain('data-face="broken"');
   expect(markup).not.toContain('data-speaking="true"');
 });
 
