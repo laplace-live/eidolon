@@ -81,8 +81,8 @@ function ScreenControl({
 }
 
 /**
- * The last thing said. Not a live region: the call is heard, and /call's transcript announces
- * its lines.
+ * The last thing said. Not a live region: the call is heard, and /call's transcript announces its
+ * lines only while Transcript shows it.
  */
 function CaptionLine({ caption, group }: { readonly caption: Caption; readonly group: boolean }) {
   const { t } = useLingui();
