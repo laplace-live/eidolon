@@ -5,12 +5,14 @@ import type { ChatFact } from "./protocol";
 
 const CHAT = "0199a3f2-7c1e-7d40-9b6a-3f5e8c2d1a07";
 const AUDIO = { kind: "audio", name: `${"d".repeat(64)}.mp3`, mime: "audio/mpeg" } as const;
+/** A time the chat was written at, in ms since the epoch: never a seq. */
+const AT = 1_763_900_000_000;
 
 function message(seq: number, fields: Partial<ChatEvent & { type: "message" }>): ChatEvent {
   return {
     type: "message",
     seq,
-    at: seq,
+    at: AT + seq,
     id: `m${seq}`,
     speaker: { kind: "persona", id: "milky-green" },
     text: "",
@@ -22,12 +24,12 @@ describe("saidFacts", () => {
   test("tells each of her messages, voice messages too, and nothing else", () => {
     const events: ChatEvent[] = [
       message(1, { speaker: { kind: "user" }, text: "在吗？" }),
-      { type: "decision", seq: 2, at: 2, after: 1, replies: [], source: "single" },
+      { type: "decision", seq: 2, at: AT + 2, after: 1, replies: [], source: "single" },
       message(3, { text: "[开心地] 在呀！" }),
       message(4, { text: "听我说哦", modality: "voice", attachments: [AUDIO] }),
       message(5, { text: "我在通话里说的", modality: "call" }),
       message(6, { speaker: { kind: "user" }, text: "好呀", modality: "voice" }),
-      { type: "title", seq: 7, at: 7, title: "闲聊" },
+      { type: "title", seq: 7, at: AT + 7, title: "闲聊" },
       message(8, { speaker: { kind: "persona", id: "hazel" }, text: "我也在" }),
     ];
     expect(saidFacts(CHAT, events)).toEqual([
