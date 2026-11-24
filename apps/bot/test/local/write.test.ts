@@ -25,6 +25,7 @@ import {
   personaWriteTarget,
   readPersonaFile,
   updatePersonaFile,
+  userFolder,
   WriteRefused,
   writeDataFile,
 } from "../../src/local/write.ts";
@@ -135,6 +136,50 @@ describe("writeDataFile", () => {
       }
     },
   );
+});
+
+describe("userFolder", () => {
+  test("is a folder really in the data home, or the home itself, outside every template", () => {
+    const own = join(dataHome(), "personas", "x", "models", "m");
+    mkdirSync(own, { recursive: true });
+    expect([userFolder(own), userFolder(dataHome())]).toEqual([true, true]);
+    const outside = mkdtempSync(join(tmpdir(), "eidolon-outside-"));
+    try {
+      // A link in the data home counts as where it leads, and so does a folder reached through one.
+      symlinkSync(personaTemplateDir("milky-green"), join(dataHome(), "personas", "template"));
+      symlinkSync(outside, join(dataHome(), "personas", "evil"));
+      for (const folder of [
+        join(dataHome(), "personas", "missing"),
+        outside,
+        templatesDir(),
+        personaTemplateDir("milky-green"),
+        join(dataHome(), "personas", "template"),
+        join(dataHome(), "personas", "template", "references"),
+        join(dataHome(), "personas", "evil"),
+      ]) {
+        expect([folder, userFolder(folder)]).toEqual([folder, false]);
+      }
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses a template in the data home, by any spelling the disk takes for it", () => {
+    const app = join(dataHome(), "app");
+    mkdirSync(join(app, "personas", "x"), { recursive: true });
+    const before = process.env.EIDOLON_APP_ROOT;
+    process.env.EIDOLON_APP_ROOT = app;
+    try {
+      expect(userFolder(join(app, "personas", "x"))).toBe(false);
+      // Only where the file system folds case (APFS, by default): elsewhere it's another folder.
+      if (existsSync(tmpdir().toUpperCase())) {
+        expect(userFolder(join(dataHome(), "APP", "personas", "x"))).toBe(false);
+      }
+    } finally {
+      if (before === undefined) delete process.env.EIDOLON_APP_ROOT;
+      else process.env.EIDOLON_APP_ROOT = before;
+    }
+  });
 });
 
 describe("persona files", () => {
