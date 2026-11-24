@@ -8,6 +8,7 @@ import { verdictMessage } from "@/components/settings-form/check-labels";
 import { checkTone } from "@/components/settings-form/credentials";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { UnavailableButton } from "@/components/unavailable-button";
 import { RestartButton } from "@/features/settings/restart-button";
 import { call } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
@@ -52,18 +53,29 @@ function CheckButton({ target }: { readonly target: "qdrant" | { readonly accoun
 function FixButton({
   fix,
   quiet,
+  calling,
   onPickVoice,
 }: {
   readonly fix: Fix;
   /** A change to something that works, rather than a fix. */
   readonly quiet: boolean;
+  /** A call is up in this tab: setup, which would end it, waits. */
+  readonly calling: boolean;
   readonly onPickVoice: () => void;
 }) {
   const { t } = useLingui();
   const variant = quiet ? "ghost" : "outline";
   switch (fix.kind) {
     case "link":
-      return (
+      return calling && fix.to.startsWith("/setup") ? (
+        <UnavailableButton
+          variant={variant}
+          size="sm"
+          reason={t`Setup would end the call. Hang up first.`}
+        >
+          {t(FIX_LABELS[fix.label])}
+        </UnavailableButton>
+      ) : (
         <Button variant={variant} size="sm" asChild>
           <Link to={fix.to}>{t(FIX_LABELS[fix.label])}</Link>
         </Button>
@@ -84,9 +96,12 @@ function FixButton({
 /** What calls and builds need, each with the action that fixes it. */
 export function ReadinessList({
   items,
+  calling,
   onPickVoice,
 }: {
   readonly items: readonly Item[];
+  /** A call is up in this tab: setup, which would end it, waits. */
+  readonly calling: boolean;
   readonly onPickVoice: () => void;
 }) {
   const { t, i18n } = useLingui();
@@ -109,7 +124,12 @@ export function ReadinessList({
             }
             trailing={
               item.fix && (
-                <FixButton fix={item.fix} quiet={item.tone === "ok"} onPickVoice={onPickVoice} />
+                <FixButton
+                  fix={item.fix}
+                  quiet={item.tone === "ok"}
+                  calling={calling}
+                  onPickVoice={onPickVoice}
+                />
               )
             }
           />

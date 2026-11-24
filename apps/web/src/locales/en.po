@@ -528,10 +528,15 @@ msgstr "A budget this key falls under is used up."
 msgid "A call fills the screen it's on: try her on a wide one and on a phone's."
 msgstr "A call fills the screen it's on: try her on a wide one and on a phone's."
 
+#: src/components/persona-switcher.tsx
 #: src/features/home/route.tsx
+#: src/features/setup/new-persona.tsx
+#: src/features/studio/route.tsx
 msgid "A call is in progress: switch personas after it ends."
 msgstr "A call is in progress: switch personas after it ends."
 
+#: src/features/settings/restart-button.tsx
+#: src/features/studio/model-list.tsx
 #: src/lib/labels.ts
 msgid "A call is in progress. Hang up first."
 msgstr "A call is in progress. Hang up first."
@@ -547,6 +552,10 @@ msgstr "A call needs a voice. Pick one for her first."
 #: src/features/studio/voice-section.tsx
 msgid "A call needs one: pick her voice below."
 msgstr "A call needs one: pick her voice below."
+
+#: src/features/studio/appearance-section.tsx
+msgid "A call with {name} is in progress: changes here show from her next call."
+msgstr "A call with {name} is in progress: changes here show from her next call."
 
 #: src/features/setup/persona-step.tsx
 msgid "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
@@ -5134,6 +5143,11 @@ msgstr "Setup"
 #: src/features/setup/stepper.tsx
 msgid "Setup Steps"
 msgstr "Setup Steps"
+
+#: src/features/home/memory-panel.tsx
+#: src/features/home/readiness-list.tsx
+msgid "Setup would end the call. Hang up first."
+msgstr "Setup would end the call. Hang up first."
 
 #: src/features/usage/tables.tsx
 msgid "Share"

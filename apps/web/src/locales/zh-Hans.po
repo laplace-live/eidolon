@@ -528,10 +528,15 @@ msgstr "这个密钥所属的预算已用完。"
 msgid "A call fills the screen it's on: try her on a wide one and on a phone's."
 msgstr "通话会铺满所在的屏幕：在宽屏和手机屏幕上都看看她。"
 
+#: src/components/persona-switcher.tsx
 #: src/features/home/route.tsx
+#: src/features/setup/new-persona.tsx
+#: src/features/studio/route.tsx
 msgid "A call is in progress: switch personas after it ends."
 msgstr "正在通话中：请在通话结束后切换人设。"
 
+#: src/features/settings/restart-button.tsx
+#: src/features/studio/model-list.tsx
 #: src/lib/labels.ts
 msgid "A call is in progress. Hang up first."
 msgstr "通话正在进行，请先挂断。"
@@ -547,6 +552,10 @@ msgstr "通话需要一个声音。请先为她选一个。"
 #: src/features/studio/voice-section.tsx
 msgid "A call needs one: pick her voice below."
 msgstr "通话需要声音：请在下面为她选一个。"
+
+#: src/features/studio/appearance-section.tsx
+msgid "A call with {name} is in progress: changes here show from her next call."
+msgstr "正在和{name}通话：这里的改动从下次通话起生效。"
 
 #: src/features/setup/persona-step.tsx
 msgid "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
@@ -5134,6 +5143,11 @@ msgstr "设置向导"
 #: src/features/setup/stepper.tsx
 msgid "Setup Steps"
 msgstr "设置步骤"
+
+#: src/features/home/memory-panel.tsx
+#: src/features/home/readiness-list.tsx
+msgid "Setup would end the call. Hang up first."
+msgstr "打开设置向导会结束通话，请先挂断。"
 
 #: src/features/usage/tables.tsx
 msgid "Share"
