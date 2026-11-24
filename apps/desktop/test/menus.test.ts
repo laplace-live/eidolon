@@ -1,8 +1,9 @@
-// The menus as data: what each holds, in either language, and Check for Updates… as the updater
-// stands.
+// The menus as data: what each holds, in either language, Check for Updates… as the updater
+// stands, and the desktop companion's own menu.
 import { describe, expect, test } from "vitest";
 import {
   aboutPanel,
+  companionMenu,
   contextMenu,
   macMenu,
   type TrayActions,
@@ -11,6 +12,7 @@ import {
   windowsMenu,
 } from "../src/main/menus.ts";
 import { STRINGS } from "../src/main/strings.ts";
+import type { CompanionMenuState, CompanionPick } from "../src/shared/bridge.ts";
 
 /** A menu item, as the templates give it. */
 type MenuItemConstructorOptions = ReturnType<typeof macMenu>[number];
@@ -226,6 +228,192 @@ test("the tray's menu: Open, Settings…, Check for Updates…, Show Logs, Open 
   );
   expect(trayMenu(en, actions, "disabled")[2]).toMatchObject({ enabled: false });
   expect(outline(trayMenu(en, actions, "hidden"))).not.toContain("Check for Updates…");
+});
+
+describe("her menu", () => {
+  const idle: CompanionMenuState = {
+    call: "idle",
+    live: false,
+    micOn: true,
+    models: [
+      { id: "milky", name: "奶绿" },
+      { id: "tml", name: "TML" },
+    ],
+    model: "tml",
+    outfits: [{ id: "summer", name: "Summer" }],
+    outfit: null,
+  };
+  const own = { size: "medium", alwaysOnTop: true } as const;
+
+  /** Her menu, with the picks its clicks hand on. */
+  function menu(state: CompanionMenuState, platform: NodeJS.Platform = "darwin") {
+    const picks: CompanionPick[] = [];
+    const items = companionMenu(en, state, own, platform, (pick) => picks.push(pick));
+    return { items, picks };
+  }
+
+  /** The item labelled `label`, among `items` and their submenus. */
+  function find(items: MenuItemConstructorOptions[], label: string) {
+    const found = items
+      .flatMap((item) => [item, ...itemsOf(item)])
+      .find((item) => item.label === label);
+    if (found === undefined) throw new Error(`no ${label}`);
+    return found;
+  }
+
+  test("with no call up: Call, Open Eidolon, Appearance, Outfit, Size, Always on Top and Hide, a separator between groups", () => {
+    const { items } = menu(idle);
+    expect(outline(items)).toEqual([
+      "Call",
+      "-",
+      "Open Eidolon",
+      "-",
+      "Appearance",
+      "Outfit",
+      "-",
+      "Size",
+      "Always on Top",
+      "-",
+      "Hide",
+    ]);
+    expect(itemsOf(find(items, "Appearance"))).toMatchObject([
+      { type: "radio", label: "奶绿", checked: false },
+      { type: "radio", label: "TML", checked: true },
+    ]);
+    expect(itemsOf(find(items, "Outfit"))).toMatchObject([
+      { type: "radio", label: "As Exported", checked: true },
+      { type: "radio", label: "Summer", checked: false },
+    ]);
+    expect(itemsOf(find(items, "Outfit"))[1]).toMatchObject({ checked: false });
+    expect(
+      itemsOf(menu({ ...idle, outfit: "summer" }).items.find((item) => item.label === "Outfit")),
+    ).toMatchObject([{ checked: false }, { checked: true }]);
+    expect(itemsOf(find(items, "Size"))).toMatchObject([
+      { type: "radio", label: "Small", checked: false },
+      { type: "radio", label: "Medium", checked: true },
+      { type: "radio", label: "Large", checked: false },
+    ]);
+    expect(find(items, "Always on Top")).toMatchObject({ type: "checkbox", checked: true });
+    const unchecked = companionMenu(
+      en,
+      idle,
+      { size: "large", alwaysOnTop: false },
+      "darwin",
+      () => {},
+    );
+    expect(find(unchecked, "Always on Top")).toMatchObject({ checked: false });
+    expect(itemsOf(find(unchecked, "Size")).map((item) => item.checked)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+    expect(outline(companionMenu(zh, idle, own, "darwin", () => {})).slice(0, 3)).toEqual([
+      "通话",
+      "-",
+      "打开 Eidolon",
+    ]);
+  });
+
+  test("with a call up and live: Hang Up, then Mute Microphone, or Unmute while the microphone is off", () => {
+    const up = { ...idle, call: "up", live: true } as const;
+    expect(outline(menu(up).items).slice(0, 4)).toEqual([
+      "Hang Up",
+      "Mute Microphone",
+      "-",
+      "Open Eidolon",
+    ]);
+    expect(menu(up).items[1]).toMatchObject({ enabled: true });
+    const muted = menu({ ...up, micOn: false }).items;
+    expect(outline(muted).slice(0, 2)).toEqual(["Hang Up", "Unmute Microphone"]);
+    expect(muted[1]).toMatchObject({ enabled: true });
+  });
+
+  test("while the call starts or connects, Hang Up still cancels it and the microphone waits", () => {
+    const connecting = menu({ ...idle, call: "up", live: false }).items;
+    expect(outline(connecting).slice(0, 2)).toEqual(["Hang Up", "Mute Microphone"]);
+    expect(connecting[0]?.enabled).not.toBe(false);
+    expect(connecting[1]).toMatchObject({ enabled: false });
+    const off = menu({ ...idle, call: "up", live: false, micOn: false }).items;
+    expect(off[1]).toMatchObject({ label: "Unmute Microphone", enabled: false });
+  });
+
+  test("with models and none active, Appearance checks none, and there is no Outfit", () => {
+    const { items } = menu({ ...idle, model: null, outfits: [] });
+    expect(outline(items)).toEqual([
+      "Call",
+      "-",
+      "Open Eidolon",
+      "-",
+      "Appearance",
+      "-",
+      "Size",
+      "Always on Top",
+      "-",
+      "Hide",
+    ]);
+    expect(itemsOf(find(items, "Appearance")).map((item) => item.checked)).toEqual([false, false]);
+    // An active model past the list's cap checks none either.
+    const past = menu({ ...idle, model: "unlisted" }).items;
+    expect(itemsOf(find(past, "Appearance")).map((item) => item.checked)).toEqual([false, false]);
+  });
+
+  test("with no models and no outfits, neither submenu, and no separator doubles up", () => {
+    const { items } = menu({ ...idle, models: [], model: null, outfits: [] });
+    expect(outline(items)).toEqual([
+      "Call",
+      "-",
+      "Open Eidolon",
+      "-",
+      "Size",
+      "Always on Top",
+      "-",
+      "Hide",
+    ]);
+  });
+
+  test("a model named A & B reads A && B on Windows, whose menus take one & as an access key", () => {
+    const named = { ...idle, models: [{ id: "ab", name: "A & B" }], model: "ab" };
+    expect(itemsOf(find(menu(named, "win32").items, "Appearance"))[0]?.label).toBe("A && B");
+    expect(itemsOf(find(menu(named, "darwin").items, "Appearance"))[0]?.label).toBe("A & B");
+  });
+
+  test("every item hands its pick, and only its own", () => {
+    const { items, picks } = menu(idle);
+    for (const label of [
+      "Call",
+      "Open Eidolon",
+      "奶绿",
+      "TML",
+      "As Exported",
+      "Summer",
+      "Small",
+      "Medium",
+      "Large",
+      "Always on Top",
+      "Hide",
+    ]) {
+      click(find(items, label));
+    }
+    expect(picks).toEqual([
+      "call",
+      "open",
+      "model:milky",
+      "model:tml",
+      "outfit:",
+      "outfit:summer",
+      "size:small",
+      "size:medium",
+      "size:large",
+      "always-on-top",
+      "hide",
+    ]);
+    const up = menu({ ...idle, call: "up", live: true });
+    click(find(up.items, "Hang Up"));
+    click(find(up.items, "Mute Microphone"));
+    const muted = menu({ ...idle, call: "up", live: true, micOn: false });
+    click(find(muted.items, "Unmute Microphone"));
+    expect([...up.picks, ...muted.picks]).toEqual(["hang-up", "mute", "unmute"]);
+  });
 });
 
 test("updatesItem: hidden while unsupported, disabled while a check, a download or the restart runs", () => {

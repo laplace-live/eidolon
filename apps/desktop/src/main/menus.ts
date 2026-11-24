@@ -1,8 +1,16 @@
 // The shell's menus as data: macOS's application menu, Windows' (zoom alone, under a
-// hidden title bar) and its tray icon's, the context menu Electron doesn't have, and the About
-// panel they open. Electron-free: menu.ts, tray.ts and index.ts hand them to Electron.
+// hidden title bar) and its tray icon's, the context menu Electron doesn't have, the desktop
+// companion's own menu, and the About panel they open. Electron-free: menu.ts, tray.ts and index.ts
+// hand them to Electron.
 import type { AboutPanelOptionsOptions, MenuItemConstructorOptions } from "electron";
-import type { DesktopVersions } from "../shared/bridge.ts";
+import {
+  COMPANION_SIZES,
+  type CompanionMenuState,
+  type CompanionPick,
+  type CompanionSize,
+  type DesktopVersions,
+} from "../shared/bridge.ts";
+import { menuLabel } from "./companion.ts";
 import type { Strings } from "./strings.ts";
 import type { UpdateState } from "./update-flow.ts";
 
@@ -188,6 +196,73 @@ export function trayMenu(
     separator(),
     { label: label.quitEidolon, click: () => actions.quit() },
   ];
+}
+
+/** What her menu shows of main's own settings. */
+export interface CompanionMenuOwn {
+  readonly size: CompanionSize;
+  readonly alwaysOnTop: boolean;
+}
+
+/**
+ * Her right-click menu, each item handing `pick` its CompanionPick: the call's items, Open Eidolon,
+ * her models and outfits, her window's size and floating, and Hide, a separator between groups.
+ * Hang Up works while the call is up, so one still connecting can be cancelled; Mute and Unmute
+ * only once it is live.
+ */
+export function companionMenu(
+  { label }: Strings,
+  state: CompanionMenuState,
+  own: CompanionMenuOwn,
+  platform: NodeJS.Platform,
+  pick: (pick: CompanionPick) => void,
+): MenuItemConstructorOptions[] {
+  const item = (
+    text: string,
+    picked: CompanionPick,
+    options: MenuItemConstructorOptions = {},
+  ): MenuItemConstructorOptions => ({ ...options, label: text, click: () => pick(picked) });
+  const radio = (text: string, picked: CompanionPick, checked: boolean) =>
+    item(text, picked, { type: "radio", checked });
+  const microphone = state.micOn
+    ? item(label.muteMicrophone, "mute", { enabled: state.live })
+    : item(label.unmuteMicrophone, "unmute", { enabled: state.live });
+  const call =
+    state.call === "up" ? [item(label.hangUp, "hang-up"), microphone] : [item(label.call, "call")];
+  const looks: MenuItemConstructorOptions[] = [];
+  if (state.models.length > 0) {
+    looks.push({
+      label: label.appearance,
+      submenu: state.models.map((model) =>
+        radio(menuLabel(model.name, platform), `model:${model.id}`, model.id === state.model),
+      ),
+    });
+  }
+  if (state.outfits.length > 0) {
+    looks.push({
+      label: label.outfit,
+      submenu: [
+        radio(label.asExported, "outfit:", state.outfit === null),
+        ...state.outfits.map((outfit) =>
+          radio(
+            menuLabel(outfit.name, platform),
+            `outfit:${outfit.id}`,
+            outfit.id === state.outfit,
+          ),
+        ),
+      ],
+    });
+  }
+  const placing: MenuItemConstructorOptions[] = [
+    {
+      label: label.size,
+      submenu: COMPANION_SIZES.map((size) => radio(label[size], `size:${size}`, size === own.size)),
+    },
+    item(label.alwaysOnTop, "always-on-top", { type: "checkbox", checked: own.alwaysOnTop }),
+  ];
+  return [call, [item(label.openEidolon, "open")], looks, placing, [item(label.hide, "hide")]]
+    .filter((group) => group.length > 0)
+    .flatMap((group, index) => (index === 0 ? group : [separator(), ...group]));
 }
 
 /** Cut, copy, paste and select all in a field; copy over selected text; nothing elsewhere. */

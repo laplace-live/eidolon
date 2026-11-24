@@ -141,6 +141,20 @@ describe("STRINGS", () => {
     expect(`${webChinese("Settings")}…`).toBe(zh.label.settings);
   });
 
+  test("her menu's words are the web app's Chinese where its catalog has them", () => {
+    expect(webChinese("Call")).toBe(zh.label.call);
+    expect(webChinese("Hang Up")).toBe(zh.label.hangUp);
+    expect(webChinese("Appearance")).toBe(zh.label.appearance);
+    expect(webChinese("As Exported")).toBe(zh.label.asExported);
+    expect(webChinese("Mute your mic")).toBe(zh.label.muteMicrophone);
+    expect(webChinese("Unmute your mic")).toBe(zh.label.unmuteMicrophone);
+    expect([en.label.desktopCompanion, en.label.alwaysOnTop, en.label.hangUp]).toEqual([
+      "Desktop Companion",
+      "Always on Top",
+      "Hang Up",
+    ]);
+  });
+
   test("names the holder of the data home by what its lock and refusal tell", () => {
     expect(en.text.heldDetail({ pid: 4821, port: 7860 })).toBe(
       "It runs as process 4821 on port 7860. This window can't connect to it. Quit it, then try again.",
