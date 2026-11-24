@@ -35,9 +35,11 @@ afterEach(() => {
   rmSync(folder, { recursive: true, force: true });
 });
 
-/** A laptop's work area under macOS's menu bar and above its Dock. */
+/** A laptop's display, and its work area under macOS's menu bar and above its Dock. */
+const laptopDisplay = { x: 0, y: 0, width: 1512, height: 982 };
 const laptop = { x: 0, y: 25, width: 1512, height: 875 };
-/** A second display to its right, taller. */
+/** A second display to its right, taller, under its own menu bar. */
+const externalDisplay = { x: 1512, y: -225, width: 2560, height: 1440 };
 const external = { x: 1512, y: -200, width: 2560, height: 1415 };
 
 describe("the settings file", () => {
@@ -142,41 +144,57 @@ describe("her window's size", () => {
 
 describe("where she stands", () => {
   const size = { width: 202, height: 480 };
+  const areas = [laptop, external];
+  const displays = [laptopDisplay, externalDisplay];
+  /** Her first place on the laptop alone. */
+  const first = { x: 1512 - 24 - 202, y: 900 - 480, ...size };
 
   test("the first time, at the primary work area's bottom right, EDGE_DIP in", () => {
-    const rect = placement(null, size, [laptop, external]);
+    const rect = placement(null, size, areas, displays);
     expect(rect).toEqual({
       x: laptop.x + laptop.width - EDGE_DIP - size.width,
       y: laptop.y + laptop.height - size.height,
       ...size,
     });
     expect(feetOf(rect)).toEqual({ x: 1512 - 24 - 101, y: 900 });
+    expect(placement(null, size, [laptop], [laptopDisplay])).toEqual(first);
   });
 
   test("where her feet were, on whichever display holds them", () => {
     const feet = { x: 3000, y: 1215 };
-    expect(placement(feet, size, [laptop, external])).toEqual({ x: 2899, y: 735, ...size });
-    expect(feetOf(placement(feet, size, [laptop, external]))).toEqual(feet);
+    expect(placement(feet, size, areas, displays)).toEqual({ x: 2899, y: 735, ...size });
+    expect(feetOf(placement(feet, size, areas, displays))).toEqual(feet);
   });
 
   test("at her first place once her feet are on no display", () => {
-    expect(placement({ x: 6000, y: 300 }, size, [laptop, external])).toEqual(
-      placement(null, size, [laptop, external]),
+    expect(placement({ x: 6000, y: 300 }, size, areas, displays)).toEqual(
+      placement(null, size, areas, displays),
     );
-    expect(placement({ x: 700, y: 2000 }, size, [laptop])).toEqual(placement(null, size, [laptop]));
+    expect(placement({ x: 700, y: 2000 }, size, [laptop], [laptopDisplay])).toEqual(first);
+  });
+
+  test("at her first place once the display under her feet is gone, though her window would reach onto one that stays", () => {
+    // A display to the laptop's left, unplugged: her feet were 10 DIP past their shared edge.
+    expect(placement({ x: -10, y: 900 }, size, [laptop], [laptopDisplay])).toEqual(first);
+    // A display below it, unplugged: her feet were on its top.
+    expect(placement({ x: 700, y: 1200 }, size, [laptop], [laptopDisplay])).toEqual(first);
   });
 
   test("a Dock or a taskbar that grew under her feet pushes her up onto its edge, where she stood", () => {
     // The Dock took 75 DIP more of the laptop's bottom since she was left standing on it.
     const shrunk = { ...laptop, height: laptop.height - 75 };
-    const rect = placement({ x: 300, y: 900 }, size, [shrunk]);
+    const rect = placement({ x: 300, y: 900 }, size, [shrunk], [laptopDisplay]);
     expect(rect).toEqual({ x: 199, y: 825 - size.height, ...size });
     expect(feetOf(rect)).toEqual({ x: 300, y: 825 });
   });
 
   test("a window taller than the work area is held at its top", () => {
     const tall = { width: 300, height: 1000 };
-    expect(placement({ x: 700, y: 900 }, tall, [laptop])).toEqual({ x: 550, y: 25, ...tall });
+    expect(placement({ x: 700, y: 900 }, tall, [laptop], [laptopDisplay])).toEqual({
+      x: 550,
+      y: 25,
+      ...tall,
+    });
   });
 
   test("the work area holding a point, its right and bottom edges included, else the nearest", () => {

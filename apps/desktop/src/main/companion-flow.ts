@@ -58,6 +58,8 @@ export interface CompanionIo {
   throttle(allowed: boolean): void;
   /** The displays' work areas, the primary's first (window-options.ts's workAreas). */
   areas(): readonly Rectangle[];
+  /** The displays' bounds: her feet on none of them send her to her first place. */
+  displays(): readonly Rectangle[];
   save(settings: CompanionSettings): void;
   /** Pops `items` up over her window, at the cursor; resolves once the menu has closed. */
   popup(items: readonly MenuItemConstructorOptions[]): Promise<void>;
@@ -284,7 +286,7 @@ export class Companion {
     const areas = this.#io.areas();
     const feet = feetOf(bounds);
     const size = companionSize(this.#settings.size, this.#shape, areaAt(feet, areas));
-    this.#io.setBounds(clampBounds(placement(feet, size, areas), areas));
+    this.#io.setBounds(clampBounds(placement(feet, size, areas, this.#io.displays()), areas));
   }
 
   popOut(): CompanionState {
@@ -370,7 +372,7 @@ export class Companion {
     const feet = window === null ? this.#settings.feet : feetOf(window);
     const area = feet === null ? areas[0] : areaAt(feet, areas);
     const size = companionSize(this.#settings.size, this.#shape, area);
-    return { size, bounds: placement(feet, size, areas) };
+    return { size, bounds: placement(feet, size, areas, this.#io.displays()) };
   }
 
   #act(pick: CompanionPick | null, state: CompanionMenuState): void {

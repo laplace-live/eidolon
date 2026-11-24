@@ -26,9 +26,11 @@ import { STRINGS } from "../src/main/strings.ts";
 import type { Rectangle } from "../src/main/window-options.ts";
 import type { CompanionMenuState } from "../src/shared/bridge.ts";
 
-/** A laptop's work area under macOS's menu bar and above its Dock: the primary. */
+/** A laptop's display, and its work area under macOS's menu bar and above its Dock: the primary. */
+const LAPTOP_DISPLAY = { x: 0, y: 0, width: 1512, height: 982 };
 const LAPTOP = { x: 0, y: 25, width: 1512, height: 875 };
-/** A second display to its right. */
+/** A second display to its right, under its own menu bar. */
+const EXTERNAL_DISPLAY = { x: 1512, y: -225, width: 2560, height: 1440 };
 const EXTERNAL = { x: 1512, y: -200, width: 2560, height: 1415 };
 /** Her first place on the laptop, at the medium size for a full-length figure. */
 const FIRST = { x: 1286, y: 420, width: 202, height: 480 };
@@ -58,6 +60,7 @@ function companion(
   const timers: Timer[] = [];
   let window: Rectangle | null = null;
   let areas: readonly Rectangle[] = [LAPTOP, EXTERNAL];
+  let displays: readonly Rectangle[] = [LAPTOP_DISPLAY, EXTERNAL_DISPLAY];
   /** The label of the item the next popup clicks; null clicks nothing. */
   let clicking: string | null = null;
   /** The last popup's items. */
@@ -93,6 +96,7 @@ function companion(
     cursor: record("cursor"),
     throttle: record("throttle"),
     areas: () => areas,
+    displays: () => displays,
     save: record("save"),
     popup: async (items) => {
       calls.push(["popup"]);
@@ -144,8 +148,10 @@ function companion(
     closeWindow: () => {
       window = null;
     },
-    setAreas: (next: readonly Rectangle[]) => {
-      areas = next;
+    /** The displays' work areas, and their bounds. */
+    setScreens: (nextAreas: readonly Rectangle[], nextDisplays: readonly Rectangle[]) => {
+      areas = nextAreas;
+      displays = nextDisplays;
     },
     click: (label: string | null) => {
       clicking = label;
@@ -180,10 +186,12 @@ describe("her showing", () => {
     expect(names()).toEqual(["save", "menus"]);
     flow.appPage();
     expect(FIRST).toEqual(
-      placement(null, companionSize("medium", { kind: "model", aspect: DEFAULT_ASPECT }, LAPTOP), [
-        LAPTOP,
-        EXTERNAL,
-      ]),
+      placement(
+        null,
+        companionSize("medium", { kind: "model", aspect: DEFAULT_ASPECT }, LAPTOP),
+        [LAPTOP, EXTERNAL],
+        [LAPTOP_DISPLAY, EXTERNAL_DISPLAY],
+      ),
     );
     expect(calls.slice(2)).toEqual([
       ["open", FIRST],
@@ -364,6 +372,14 @@ describe("her window", () => {
     expect(calls[0]).toEqual(["open", { x: 2899, y: 735, width: 202, height: 480 }]);
   });
 
+  test("she opens at her first place once the display her feet were left on is gone, though her window would reach onto the laptop's", () => {
+    // A display to the laptop's left, unplugged since: her feet were 10 DIP past their shared edge.
+    const { flow, calls, setScreens } = companion({ on: true, feet: { x: -10, y: 900 } });
+    setScreens([LAPTOP], [LAPTOP_DISPLAY]);
+    flow.appPage();
+    expect(calls[0]).toEqual(["open", FIRST]);
+  });
+
   test("a drag moves her with the pointer, and a drop near the bottom stands her on it and keeps her feet", () => {
     const { flow, calls, names, reset } = shownCompanion();
     reset();
@@ -394,9 +410,9 @@ describe("her window", () => {
   });
 
   test("a display that goes takes her back to her first place on the primary's", () => {
-    const { flow, calls, setAreas, window } = companion({ on: true, feet: { x: 3000, y: 1215 } });
+    const { flow, calls, setScreens, window } = companion({ on: true, feet: { x: 3000, y: 1215 } });
     flow.appPage();
-    setAreas([LAPTOP]);
+    setScreens([LAPTOP], [LAPTOP_DISPLAY]);
     flow.displaysChanged();
     expect(calls.at(-1)).toEqual(["setBounds", FIRST]);
     expect(window()).toEqual(FIRST);
@@ -406,8 +422,11 @@ describe("her window", () => {
   });
 
   test("a Dock that grew under her pushes her up onto its edge, rather than off to her first place", () => {
-    const { flow, calls, setAreas } = shownCompanion({ feet: { x: 300, y: 900 } });
-    setAreas([{ ...LAPTOP, height: LAPTOP.height - 75 }, EXTERNAL]);
+    const { flow, calls, setScreens } = shownCompanion({ feet: { x: 300, y: 900 } });
+    setScreens(
+      [{ ...LAPTOP, height: LAPTOP.height - 75 }, EXTERNAL],
+      [LAPTOP_DISPLAY, EXTERNAL_DISPLAY],
+    );
     flow.displaysChanged();
     expect(calls.at(-1)).toEqual(["setBounds", { x: 199, y: 825 - 480, width: 202, height: 480 }]);
   });

@@ -115,13 +115,13 @@ export function companionSize(
   };
 }
 
-/** Whether `area` holds `point`, its right and bottom edges included: her feet stand on its bottom. */
-function holds(area: Rectangle, point: Point): boolean {
+/** Whether `rect` holds `point`, its right and bottom edges included: her feet stand on its bottom. */
+function holds(rect: Rectangle, point: Point): boolean {
   return (
-    point.x >= area.x &&
-    point.x <= area.x + area.width &&
-    point.y >= area.y &&
-    point.y <= area.y + area.height
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.height
   );
 }
 
@@ -140,19 +140,16 @@ export function areaAt(point: Point, areas: readonly Rectangle[]): Rectangle {
   );
 }
 
-function overlaps(a: Rectangle, b: Rectangle): boolean {
-  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-}
-
 /**
- * Her window of `size` standing on `feet`, or at her first place once it would be on no work area,
- * kept inside the work area under it. A Dock or a taskbar that grew under her feet pushes her up
- * onto its edge.
+ * Her window of `size` standing on `feet` while one of `displays` (their bounds) holds them, else at
+ * her first place; then kept inside the work area under it, so a Dock or a taskbar that grew under
+ * her feet pushes her up onto its edge.
  */
 export function placement(
   feet: Point | null,
   size: WindowSize,
   areas: readonly Rectangle[],
+  displays: readonly Rectangle[],
 ): Rectangle {
   const standingOn = (point: Point): Rectangle => ({
     x: Math.round(point.x - size.width / 2),
@@ -160,9 +157,8 @@ export function placement(
     width: size.width,
     height: size.height,
   });
-  const standing = feet === null ? null : standingOn(feet);
-  if (standing !== null && areas.some((area) => overlaps(area, standing))) {
-    return clampBounds(standing, areas);
+  if (feet !== null && displays.some((display) => holds(display, feet))) {
+    return clampBounds(standingOn(feet), areas);
   }
   const [primary] = areas;
   const first = {

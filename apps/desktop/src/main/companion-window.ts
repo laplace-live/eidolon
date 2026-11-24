@@ -190,6 +190,9 @@ export function companionWindow(
     areas() {
       return workAreas(screen.getPrimaryDisplay(), screen.getAllDisplays());
     },
+    displays() {
+      return screen.getAllDisplays().map((display) => display.bounds);
+    },
     save(settings) {
       try {
         writeCompanion(join(app.getPath("userData"), COMPANION_FILE), settings);
