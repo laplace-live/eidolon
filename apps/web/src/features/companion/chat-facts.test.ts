@@ -20,6 +20,11 @@ function message(seq: number, fields: Partial<ChatEvent & { type: "message" }>):
   } as ChatEvent;
 }
 
+/** The chat's log as the page held it: `last` events, her lines. */
+function held(last: number): { readonly events: readonly ChatEvent[] } {
+  return { events: Array.from({ length: last }, (_, index) => message(index + 1, { text: "嗯" })) };
+}
+
 describe("saidFacts", () => {
   test("tells each of her messages, voice messages too, and nothing else", () => {
     const events: ChatEvent[] = [
@@ -32,7 +37,7 @@ describe("saidFacts", () => {
       { type: "title", seq: 7, at: AT + 7, title: "闲聊" },
       message(8, { speaker: { kind: "persona", id: "hazel" }, text: "我也在" }),
     ];
-    expect(saidFacts(CHAT, events)).toEqual([
+    expect(saidFacts(CHAT, events, held(0))).toEqual([
       { type: "said", persona: "milky-green", chat: CHAT, seq: 3, text: "[开心地] 在呀！" },
       { type: "said", persona: "milky-green", chat: CHAT, seq: 4, text: "听我说哦" },
       { type: "said", persona: "hazel", chat: CHAT, seq: 8, text: "我也在" },
@@ -40,8 +45,25 @@ describe("saidFacts", () => {
   });
 
   test("a line with none of her messages tells nothing", () => {
-    expect(saidFacts(CHAT, [message(1, { speaker: { kind: "user" }, text: "hi" })])).toEqual([]);
-    expect(saidFacts(CHAT, [])).toEqual([]);
+    const line = [message(1, { speaker: { kind: "user" }, text: "hi" })];
+    expect(saidFacts(CHAT, line, held(0))).toEqual([]);
+    expect(saidFacts(CHAT, [], held(0))).toEqual([]);
+  });
+
+  test("tells only what the log the page held doesn't, as GET live replays a turn from its start", () => {
+    const line = [
+      message(3, { text: "[开心地] 晚上好呀" }),
+      message(4, { speaker: { kind: "persona", id: "hazel" }, text: "我也在" }),
+      message(5, { text: "还想说一句" }),
+    ];
+    expect(saidFacts(CHAT, line, held(5))).toEqual([]);
+    expect(saidFacts(CHAT, line, held(4))).toEqual([
+      { type: "said", persona: "milky-green", chat: CHAT, seq: 5, text: "还想说一句" },
+    ]);
+  });
+
+  test("tells nothing while the page holds no log: the read it waits for holds them", () => {
+    expect(saidFacts(CHAT, [message(3, { text: "在呀" })], undefined)).toEqual([]);
   });
 });
 

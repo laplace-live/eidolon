@@ -124,8 +124,9 @@ export function useChat(
           const superseded = sends.current.superseded(opened);
           const reached = reaches(line, superseded);
           if (line.type === "events") {
+            const held = queryClient.getQueryData(chatQuery(id).queryKey);
             store(line.events);
-            for (const fact of saidFacts(id, line.events)) tellCompanion(fact);
+            for (const fact of saidFacts(id, line.events, held)) tellCompanion(fact);
             const replies = key === null || superseded ? [] : voiceReplies(line.events);
             if (replies.length > 0) {
               const state = { focused: document.hasFocus(), quiet: quietRef.current };
