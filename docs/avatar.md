@@ -4,7 +4,8 @@ A persona can have character models: 2D models made in
 [PSD2Live](https://github.com/tsunehimatoi/psd2live), which Eidolon draws with PSD2Live's own
 runtime. Eidolon never makes a model. The owner makes one in PSD2Live, exports its `.p2lrt`, and
 imports that in the studio's Appearance section, which previews it and makes one of her models the
-one she shows, face to face on a call ([The call screen](#the-call-screen)). The SDK's avatar
+one she shows, face to face on a call ([The call screen](#the-call-screen)) and, in the desktop
+app, on the owner's desktop ([The desktop companion](#the-desktop-companion)). The SDK's avatar
 entry draws a model and moves it with her: her mood from the cues she writes, her mouth from her
 voice, her gaze and gestures from a call's turns. Models live only in the owner's data home, so
 only the local app shows them.
@@ -27,6 +28,7 @@ apps/bot/src/local/appearance.ts         her models on disk, which routes/appear
 apps/web/src/features/studio/            the studio's Appearance section
 apps/web/src/components/model-stage.tsx  Studio's stage, which falls back to her picture
 apps/web/src/features/call/              a call's stages, its video screen and its tiles
+apps/web/src/features/companion/         the desktop companion's page, and the main window's feed
 apps/bot/test/local/fixtures/psd2live/   tml.p2lrt, the CC0 test rig
 ```
 
@@ -413,6 +415,86 @@ their names:
 | `data-caption-text` | the caption's text | present |
 | `data-live-call` | a chat's live call row | present |
 
+## The desktop companion
+
+In the desktop app the active persona can stand on the owner's desktop too, in a transparent window
+of her own above their other windows; [desktop.md](desktop.md#the-desktop-companion) has the
+window, her menu and how main places and shows her, and
+[web-app.md](web-app.md#in-the-desktop-app) her page's route and the main window's feed. Her page,
+`/companion` (`features/companion/route.tsx`), draws her alone:
+
+- **Whom, and what.** The active persona as status names her, the one `/call` reaches, with the
+  model her `appearance.model` makes active, read fresh: a model made active, or an outfit picked
+  from her menu, shows on her at once, where a call keeps its snapshot. Her models are read whenever
+  her page runs, so her menu's Appearance lists them while she shows her picture. She shows her
+  picture with no active model, and, quietly, whenever her model can't draw (no WebGL, a bad file, a
+  trap, a lost context, a read that failed), ringed while she speaks; only a status that can't be
+  read keeps her hidden.
+- **Her framing** is her model's `framing.companion`, or else all of her: `companionBox` of every
+  mesh drawn, at the pose of her first update (`defaultCompanionBox`). Her window takes the box's
+  shape, between 0.1 and 4 times as wide as it is tall, and the stage letterboxes a box past those.
+- **Her direction** has two sources (`director.ts`). Outside a call of hers it is her own: each of
+  her messages that reaches the chat open in the main window is a `reply` to `direct()`, whose
+  opening direction sets her mood and whose cues land at her pace, and her voice message, playing
+  there, makes her speak until it pauses or ends, a message that arrives and then plays counting
+  once. While a call she is on is up, the call's own direction comes over the port, each change of
+  it. Her page numbers the gestures of both anew, so their numbers never meet on her stage, and
+  going back to her own direction after a call replays none.
+- **What she adds.** A tap on her head lends her `shy` for 2 s with a nod, one on her body
+  `surprised` for 2 s, and a tap within 0.5 s of her last reaction none; five taps within 3 s lend
+  her `pout` for 3 s with a shake, and she rests from taps for those 3 s. Picking her up for a drag
+  lends her `surprised` for 1.5 s. After 5 minutes with no tap, drag, menu, reply, voice message or
+  call she dozes, her face `sleepy` (the `lazy` mood) and her eyes no longer on the cursor, until
+  any of those wakes her, a tap with `surprised`. Awake, with no call of hers, no press and no menu,
+  her model's eyes follow the cursor main sends her, a target set each 100 ms that the runtime eases
+  toward, and wander on their own again 4 s after it stops (`gaze.ts`).
+- **Her mouth.** On a call of hers the main window reads a second `MouthMeter` on the call's track
+  (`CallSignals.feedMouth`: a meter's follower steps with each read, so the stages' meter and the
+  feed's are two) and sends her its widest opening about 30 times a second, a message up to 8 ms
+  early and the next a period after; in a group call, only while she speaks. Her page holds each
+  level 250 ms, then shuts her mouth. For a voice message her page reads the message's file itself,
+  decodes it offline (`voice-file.ts`, the last eight kept) and runs it through `mouthCurve` at 60
+  frames a second (`mouths.ts`), then plays those openings from the position the bubble's playback
+  events give. No audio graph touches the bubble, and the main window's frames don't matter.
+- **Reduced motion** makes her stage again with it: no clip, her idle included, no saccades or
+  drift, and her eyes off the cursor; a tap still changes her face.
+- **30 fps,** dozing included, at a pixel ratio of at most 2. Her route is lazy, so the app's first
+  chunk carries none of her; the main window's feed joins it with no renderer either.
+
+Her root carries these attributes, written each 100 ms tick and never through React state
+(`data-hit` and `data-dragging` also at once), for the dev smoke to read; keep their names:
+
+| Attribute | Values |
+| --- | --- |
+| `data-companion-root` | present |
+| `data-view` | `loading`, `model`, `picture` |
+| `data-persona` | the active persona's id |
+| `data-mood` | her mood tags joined by a space, empty when neutral |
+| `data-pulse` | the mood lent her, empty for none |
+| `data-speaking` | `true`, `false` |
+| `data-mouth` | the widest opening her stage read since the last tick, `0.00`–`1.00`; `0.00` for her picture |
+| `data-frames` | the animation frames her stage's loop has run, at the display's rate while she draws at 30 fps |
+| `data-hit` | `true` while her window takes clicks |
+| `data-moves` | the mouse moves her page has seen, so a test tells an input that never arrived from a probe that read wrong |
+| `data-dragging` | `true` during a drag |
+| `data-dozing` | `true`, `false` |
+| `data-follow` | `true` while her eyes follow the cursor |
+| `data-gaze` | `cursor` or `direction` |
+| `data-call` | her menu's call state: `idle` (Call places `/call`'s call with her), `open` (Call opens `/call`), `up` |
+| `data-linked` | `true` while a port to the main window is connected |
+| `data-probe` | `x,y`: her eyes in CSS px, or her picture's centre; empty while she loads |
+
+**What crosses the port** (`features/companion/protocol.ts`): each message is read at both ends,
+since one page can reload onto a newer build before the other, an unknown field dropped and a
+message that doesn't read ignored; none carries a time, since each window's clock has its own
+origin. To her: `persona`, the active persona's id and her active model's stamp
+(`<id>:<sha256>:<updatedAt>`, empty for none), at whose change her page reads status and her models
+again; `call`, whether one is up, live and hers, the microphone, and whether `/call` can call now;
+`direction`, the call's; `mouth`, a level from 0 to 1; and her chat's `said` and `voice` facts, a
+voice fact naming the message's file, `playing`, `paused` or `ended`, and its position. From her
+only `appearance`, after her menu changed her model or her outfit. Nothing that acts on the call
+crosses it: her menu's call picks go from main to the app page.
+
 ## The vendored runtime
 
 `packages/sdk/src/avatar/psd2live/wasm/p2l_runtime.wasm` is PSD2Live's committed build of its
@@ -480,6 +562,13 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   the tiles' and the screen's markup, `call-bar.test.ts` when the bar shows, hides and keeps an
   ending until Close, and `call-dock.test.ts` the dock's Expand, its focusable region, and a chat's
   Call waiting while the tab's call is elsewhere.
+- **The desktop companion** (`bun run test apps/web apps/desktop`), on Node with no browser:
+  `director.test.ts` holds her moods, taps, pokes, dozing, a call's direction and the gesture
+  numbering, `gaze.test.ts` her eyes, `mouths.test.ts` her mouth from the port and from a voice
+  message's file, `pointer.test.ts`, `menu.test.ts`, `handshake.test.ts`, `page-port.test.ts` and
+  `protocol.test.ts` her page's parts, and `chat-facts.test.ts` and `feed-link.test.ts` the main
+  window's feed; main's side is `apps/desktop`'s ([desktop.md](desktop.md#the-vitest-project)). The
+  dev smoke walks her whole in background mode ([desktop.md](desktop.md#the-dev-smoke)).
 - **The browser smoke** (`bun apps/bot/scripts/local-smoke.ts`,
   [web-app.md](web-app.md#the-browser-smoke-test)) imports the test rig in the studio's Appearance,
   checks its preview draws under the app's CSP, that Use Microphone closes its audio while the
