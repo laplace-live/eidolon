@@ -108,6 +108,42 @@ describe("FeedLink", () => {
     ]);
   });
 
+  test("sends a call again when any one of its fields changes", () => {
+    for (const field of ["up", "live", "hers", "micOn", "callable"] as const) {
+      const { link } = feedLink();
+      const one = fakePort();
+      link.connect(one.port);
+      link.call(CALL);
+      link.call({ ...CALL, [field]: !CALL[field] });
+      expect([field, one.posted.length]).toEqual([field, 2]);
+    }
+  });
+
+  test("sends a direction again when any one field it compares changes", () => {
+    const changes: readonly Partial<Direction>[] = [
+      { persona: "milky-green" },
+      { mood: ["sad"] },
+      { mood: [] },
+      { pulse: "shy" },
+      { speaking: false },
+      { listening: true },
+      { thinking: true },
+      { looking: "viewer" },
+      { gesture: { name: "shake", seq: 1 } },
+      { gesture: { name: "nod", seq: 2 } },
+      { gesture: null },
+    ];
+    for (const change of changes) {
+      const { link } = feedLink();
+      const one = fakePort();
+      link.connect(one.port);
+      link.direction(direction());
+      link.direction(direction(change));
+      link.direction(direction(change));
+      expect([change, one.posted.length]).toEqual([change, 2]);
+    }
+  });
+
   test("sends a direction that differs, field by field, from the last one sent to this port", () => {
     const { link } = feedLink();
     const one = fakePort();
@@ -175,6 +211,28 @@ describe("FeedLink", () => {
       { type: "mouth", level: 0.2 },
       { type: "mouth", level: 0.4 },
     ]);
+  });
+
+  test("keeps about 30 a second on a timer whose runs come 28 and 38 ms apart, and no more on a faster one", () => {
+    /** When a timer whose runs come `gaps` apart, in turn, sent her mouth in one second. */
+    const sent = (gaps: readonly number[]): number[] => {
+      const { link, at } = feedLink();
+      const one = fakePort();
+      link.connect(one.port);
+      const times: number[] = [];
+      for (let now = 0, run = 0; now < 1000; now += gaps[run++ % gaps.length]) {
+        at(now);
+        const before = one.posted.length;
+        link.mouth(0.5);
+        if (one.posted.length > before) times.push(now);
+      }
+      return times;
+    };
+    expect(sent([28, 38]).length).toBeGreaterThanOrEqual(29);
+    const fast = sent([5]);
+    expect(fast.length).toBeLessThanOrEqual(31);
+    const closest = Math.min(...fast.slice(1).map((time, index) => time - fast[index]));
+    expect(closest).toBeGreaterThanOrEqual(MOUTH_SEND_MS - MOUTH_SLACK_MS);
   });
 
   test("sends the chat facts of the persona told alone, as told", () => {
