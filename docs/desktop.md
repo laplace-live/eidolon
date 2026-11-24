@@ -668,13 +668,15 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   `pnpx` (sh, 0755), their `.cmd` twins (CRLF, each under `setlocal`), `npx.mjs`, `cross-spawn.mjs`
   and the modules `npx.mjs` imports that are ported from npm's own packages: `npm-config.mjs`
   (npm's config, from @npmcli/config and ini), `npm-spec.mjs` (a package spec, from npm-package-arg,
-  validate-npm-package-name and hosted-git-info) and `npm-checks.mjs` (a project's devEngines, from
-  npm-install-checks); in `node_modules/node_modules/pnpm`, the launchers' `../node_modules/pnpm`,
-  the pnpm `apps/desktop` pins as an exact dev dependency, so `bun.lock` pins it as it pins the
-  rest. The launchers sit in a `node_modules/.bin` because cross-spawn, which starts an MCP server,
-  escapes the words of a `.cmd` there twice: it takes one for a cmd-shim, whose `%*` cmd.exe reads
-  a second time, and a launcher's `%*` is read again the same way. A `.cmd` anywhere else gets its
-  words escaped once, so cmd.exe acts on a word holding a quote and one of `&`, `|`, `<`, `>` or
+  validate-npm-package-name and hosted-git-info), `npm-exec.mjs` (a package's bins and npm's
+  `PATH`, from npm-normalize-package-bin, @npmcli/package-json, libnpmexec and @npmcli/run-script)
+  and `npm-checks.mjs` (a project's devEngines, from npm-install-checks); in
+  `node_modules/node_modules/pnpm`, the launchers' `../node_modules/pnpm`, the pnpm `apps/desktop`
+  pins as an exact dev dependency, so `bun.lock` pins it as it pins the rest. The launchers sit in
+  a `node_modules/.bin` because cross-spawn, which starts an MCP server, escapes the words of a
+  `.cmd` there twice: it takes one for a cmd-shim, whose `%*` cmd.exe reads a second time, and a
+  launcher's `%*` is read again the same way. A `.cmd` anywhere else gets its words escaped once,
+  so cmd.exe acts on a word holding a quote and one of `&`, `|`, `<`, `>` or
   `^` when it reads it the second time: the word arrives cut, and what follows an `&` runs as a
   command. `scripts/node-shim.ts`, ported from deepseek-harness, stages them from
   `apps/desktop/node-shim` and a copy of the installed pnpm, pruned of the natives its `dist/`
