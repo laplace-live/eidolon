@@ -402,7 +402,9 @@ has neither, and without them nothing below happens.
   added since the first desktop release are optional, since a terminal's server can serve this
   page to an older app, and the page looks for each before it uses it: `chooseFolder()`,
   `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and `setTerminalCommand(action)`, each a
-  promise of main's answer ([desktop.md](desktop.md#the-window)).
+  promise of main's answer ([desktop.md](desktop.md#the-window)), and `unsaved(held)`. A studio
+  text editor with unsaved edits holds them through `holdUnsaved()`, counted, so the app hears
+  `true` as the first hold starts and `false` as the last ends, for its quit and restart boxes.
 - **The marks** on `<html>`: `data-shell`, `mac` or `win`, and on macOS `data-fullscreen` while the
   window is fullscreen. The preload sets `data-shell` as `<html>` is created, before the page's
   script runs and before its first paint, and `data-fullscreen` as the window enters and leaves

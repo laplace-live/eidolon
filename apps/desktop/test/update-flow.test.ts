@@ -1082,6 +1082,7 @@ describe("background mode's answers", () => {
     const steps: string[] = [];
     const confirmation = new QuitConfirmation({
       check: async (): Promise<Stopping> => ({ calls: 0, tasks: 0, jobs: 1 }),
+      unsaved: () => false,
       strings: () => en,
       show: (box) => native.messageBox(box),
       focus: () => {},

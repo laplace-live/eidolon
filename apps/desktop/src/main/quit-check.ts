@@ -3,8 +3,8 @@
 //
 // Ported from deepseek-harness apps/desktop/src/quit-confirmation.ts@2e39e70496
 //
-// Before quitting stops our own backend: whether it runs a call, a task or a job, and the box that
-// asks first when anything would be cut, or when it couldn't say.
+// Before a quit: whether our own backend runs a call, a task or a job, and the box that asks first
+// when anything would be cut, the window's unsaved edits included, or when it couldn't say.
 import type { MessageBoxOptions } from "electron";
 import type { JobSnapshot, Status } from "../../../bot/src/local/api.ts";
 import type { Stopping, Strings } from "./strings.ts";
@@ -106,27 +106,41 @@ export async function checkQuit(fetch: BackendFetch): Promise<Stopping> {
   }
 }
 
+/** What `check` says would stop, in `text`; null when nothing would. */
+function stopsText(
+  check: QuitCheck | null,
+  text: Strings["text"],
+  restart: boolean,
+): string | null {
+  if (check === null) return null;
+  if (check === "unknown") return restart ? text.restartUnknown : text.quitUnknown;
+  if (check.calls + check.tasks + check.jobs === 0) return null;
+  return restart ? text.restartDetail(check) : text.quitDetail(check);
+}
+
 /**
- * The "Quit Eidolon?" box for `check`, or "Restart Eidolon?" before an update's restart; null when
- * it cuts nothing off.
+ * The "Quit Eidolon?" box, or "Restart Eidolon?" before an update's restart, for what our own
+ * backend's `check` found (null with none of ours ready) and the window's `unsaved` edits; null
+ * when it cuts nothing off.
  */
 export function quitBox(
-  check: QuitCheck,
+  check: QuitCheck | null,
   { label, text }: Strings,
   platform: NodeJS.Platform = process.platform,
   purpose: QuitPurpose = "quit",
+  unsaved = false,
 ): MessageBoxOptions | null {
-  if (check !== "unknown" && check.calls + check.tasks + check.jobs === 0) return null;
   const restart = purpose === "restart";
-  const detail = restart ? text.restartDetail : text.quitDetail;
+  const stops = stopsText(check, text, restart);
+  const detail = unsaved ? text.unsavedLost(stops) : stops;
+  if (detail === null) return null;
   // Windows' task dialog takes the app's icon, which the caller can add; macOS draws it on its own
   // warning icon.
   return {
     type: platform === "win32" ? "none" : "warning",
     title: "Eidolon",
     message: restart ? text.restartTitle : text.quitTitle,
-    detail:
-      check === "unknown" ? (restart ? text.restartUnknown : text.quitUnknown) : detail(check),
+    detail,
     buttons: [restart ? label.restart : label.quit, label.cancel],
     defaultId: QUIT,
     cancelId: CANCEL,
@@ -136,10 +150,15 @@ export function quitBox(
 
 export interface QuitConfirmationOptions {
   /**
-   * Starts one check; null while no backend of ours is ready, and the quit goes ahead unasked. A
-   * check that rejects asks as when the backend can't say, and its cause goes to `log`.
+   * Starts one check of what our own backend runs; null while none of ours is ready. A check that
+   * rejects asks as when the backend can't say, and its cause goes to `log`.
    */
   readonly check: () => Promise<Stopping> | null;
+  /**
+   * Whether the window's page holds unsaved edits, read once the check answers: the quit drops
+   * them whatever server the page talks to, so the box asks over them alone too.
+   */
+  readonly unsaved: () => boolean;
   readonly strings: () => Strings;
   /** A native box with no owner window, so a hidden window stays hidden. */
   readonly show: (options: MessageBoxOptions) => Promise<{ readonly response: number }>;
@@ -177,16 +196,19 @@ export class QuitConfirmation {
   }
 
   async #decide(purpose: QuitPurpose): Promise<boolean> {
-    const pending = this.#options.check();
-    if (pending === null) return true;
-    const check = await pending.catch((error: unknown): QuitCheck => {
-      const log = this.#options.log ?? console;
-      log.warn(`Eidolon: couldn't check what quitting stops: ${explain(error)}`);
-      return "unknown";
-    });
-    const box = quitBox(check, this.#options.strings(), this.#options.platform, purpose);
+    const options = this.#options;
+    const pending = options.check();
+    const check =
+      pending === null
+        ? null
+        : await pending.catch((error: unknown): QuitCheck => {
+            const log = options.log ?? console;
+            log.warn(`Eidolon: couldn't check what quitting stops: ${explain(error)}`);
+            return "unknown";
+          });
+    const box = quitBox(check, options.strings(), options.platform, purpose, options.unsaved());
     if (box === null) return true;
-    const { response } = await this.#options.show(box);
+    const { response } = await options.show(box);
     return response === QUIT;
   }
 }

@@ -1,7 +1,8 @@
 // Which page the window shows: the loading page until the backend is ready, then the
 // app, and the failure page when the backend fails or the window's own page does. It also words
-// the shell pages. Electron-free: index.ts drives it with the backend's states and the window's
-// failures, and loads what it asks for.
+// the shell pages, keeps whether the page holds unsaved edits, and decides when its beforeunload
+// holds. Electron-free: index.ts drives it with the backend's states and the window's failures, and
+// loads what it asks for.
 import type { DesktopCommand, Language } from "../shared/bridge.ts";
 import {
   type BackendFailure,
@@ -189,6 +190,70 @@ export class WindowPages {
   #show(page: WindowPage): void {
     this.#page = page;
     this.#io.load(page);
+  }
+}
+
+/** The part of the window's webContents that tells when its page's document goes. */
+export interface PageDocument {
+  on(event: "did-navigate" | "render-process-gone", listener: () => void): unknown;
+}
+
+/**
+ * The page's unsaved edits, as it last told of them, and its beforeunload, which asks it to stay
+ * while it holds some. Electron cancels an unload the page refuses, and with it a quit or main's
+ * own load: an approved quit would leave the app running hidden, its backend stopped, deaf to every
+ * later quit. So it holds against the page's own reloads and navigations alone, never a quit under
+ * way, the update's restart included, or main's own load.
+ */
+export class PageUnloads {
+  readonly #quitting: () => boolean;
+  /** Main's own loads under way, counted: the next can start before the one it replaces settles. */
+  #loading = 0;
+  #unsaved = false;
+
+  constructor(quitting: () => boolean) {
+    this.#quitting = quitting;
+  }
+
+  /** Whether the window's page holds unsaved edits, which a quit or the update's restart drops. */
+  get unsaved(): boolean {
+    return this.#unsaved;
+  }
+
+  /** The app's page tells whether it holds unsaved edits now. */
+  held(unsaved: boolean): void {
+    this.#unsaved = unsaved;
+  }
+
+  /**
+   * Forgets the page's edits as `contents` loses its document: a new one commits, or its renderer
+   * goes. A page says nothing as it unloads, so its last word would outlive it.
+   */
+  follow(contents: PageDocument): void {
+    const gone = (): void => {
+      this.#unsaved = false;
+    };
+    contents.on("did-navigate", gone);
+    contents.on("render-process-gone", gone);
+  }
+
+  /**
+   * Main's own load, `start` being loadURL: under way from the call until it settles. It lets the
+   * page go, edits and all, from the call.
+   */
+  async mainLoad(start: () => Promise<void>): Promise<void> {
+    this.#loading++;
+    this.#unsaved = false;
+    try {
+      await start();
+    } finally {
+      this.#loading--;
+    }
+  }
+
+  /** will-prevent-unload: whether the page goes anyway. */
+  goes(): boolean {
+    return this.#loading > 0 || this.#quitting();
   }
 }
 

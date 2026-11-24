@@ -76,6 +76,14 @@ const SIGN_IN = /This Window Isn't Signed In|Open Eidolon from Your Terminal/;
 const NO_FOLDER_DIALOG = "Eidolon: background mode didn't open the folder dialog";
 /** How main.log's line for a notification background mode kept off screen starts. */
 const NOTICE = "Eidolon: background mode didn't show a notification: ";
+/** main.log's line when main lets the page go over its beforeunload. */
+const LET_GO = "Eidolon: the page asked to stay (beforeunload); letting it go";
+/** main.log's line once the window has loaded the failure page. */
+const FAILED_SHOWN = "Eidolon: the window shows eidolon-app://shell/failed";
+/** In main.log's line for a box background mode answered, just before the box's words. */
+const BOX = "to a message box: ";
+/** main.log's line for the quit box over an unsaved edit, with nothing else running. */
+const UNSAVED_QUIT_BOX = `Eidolon: background mode answered "${STRINGS.en.label.quit}" ${BOX}${STRINGS.en.text.quitTitle} ${STRINGS.en.text.unsavedLost(null)}`;
 /** What Settings' Desktop App says under each option this copy can't offer, by why. */
 const DESKTOP_NOTES = {
   background: "Background mode leaves this computer as it is.",
@@ -285,8 +293,9 @@ async function walkApp(walk: Walk): Promise<void> {
     "attach: after a quit, a server started first is used, restarted and left running",
     (step) => attach(walk, first, step),
   );
-  await steps.run("quit: --quit stops main and the backend, leaving nothing", (step) =>
-    quit(walk, step),
+  await steps.run(
+    "quit: over an unsaved edit, the failure page and Try Again, then --quit's box warns of it and stops main and the backend, leaving nothing",
+    (step) => quit(walk, step),
   );
 }
 
@@ -1517,12 +1526,14 @@ async function quitApp(walk: Walk, main: Started, backend: number | null): Promi
 async function attach(walk: Walk, first: Driven, step: Step) {
   const { smoke } = walk;
   // The launch before ends first, so that its backend leaves the data home.
+  const quitFrom = smoke.log("main").length;
   const ending = await quitApp(walk, first.main, smoke.server()?.pid ?? null);
   const gone = await smoke.processes.settle(10_000);
+  const asked = smoke.log("main").slice(quitFrom).includes(BOX);
   step.check(
-    "--quit ends the launch before, its backend with it",
-    ending.ok && gone.length === 0,
-    `${ending.detail}${gone.length > 0 ? `; still running: ${gone.join(", ")}` : ""}`,
+    "--quit ends the launch before, its backend with it, and asks nothing",
+    ending.ok && gone.length === 0 && !asked,
+    `${ending.detail}; ${asked ? "a quit box" : "no quit box"}${gone.length > 0 ? `; still running: ${gone.join(", ")}` : ""}`,
   );
 
   const output = openSync(join(smoke.run.scratch, "server.output.log"), "a");
@@ -1646,7 +1657,7 @@ async function attached(
   // Quitting the app leaves the server running; the smoke stops it.
   const quitFrom = smoke.log("main").length;
   const ending = await quitApp(walk, driven.main, null);
-  const asked = smoke.log("main").slice(quitFrom).includes("to a message box");
+  const asked = smoke.log("main").slice(quitFrom).includes(BOX);
   const still = await serverStatus(walk, "/api/local/status");
   step.check(
     "quitting the app asks nothing and leaves the server running",
@@ -1663,19 +1674,132 @@ async function attached(
   );
 }
 
+/** Types into the persona's System Prompt, and leaves the edit unsaved. */
+async function editPrompt(page: Page): Promise<{ readonly ok: boolean; readonly detail: string }> {
+  await page.goto(`eidolon-app://app/personas/${PERSONA}/prompt`);
+  const area = page.getByLabel("System Prompt", { exact: true });
+  await area.click();
+  await area.pressSequentially(" unsaved");
+  await page.getByText("Unsaved changes", { exact: true }).waitFor();
+  const save = await page.getByRole("button", { name: "Save", exact: true }).isEnabled();
+  return { ok: save, detail: `"Unsaved changes", Save ${save ? "enabled" : "disabled"}` };
+}
+
+function inOrder(
+  text: string,
+  lines: readonly string[],
+): { readonly ok: boolean; readonly detail: string } {
+  const found: string[] = [];
+  let rest = text.split(/\r?\n/);
+  for (const line of lines) {
+    const at = rest.findIndex((candidate) => candidate.includes(line));
+    if (at === -1) {
+      found.push(`no "${after(line)}"${found.length > 0 ? " after that" : ""}`);
+      return { ok: false, detail: found.join(" → ") };
+    }
+    found.push(after(rest[at]));
+    rest = rest.slice(at + 1);
+  }
+  return { ok: true, detail: found.join(" → ") };
+}
+
+/** The backend Try Again started, and main.log's line for the failure the kill caused. */
+interface Retried {
+  readonly pid: number;
+  readonly failure: string;
+}
+
+/**
+ * Kills `backend` while the page holds an unsaved edit: main must let the page go to load the
+ * failure page, whose Try Again starts a backend and loads Home. Null when the failure page didn't
+ * show.
+ */
+async function killAndRetry(
+  walk: Walk,
+  page: Page,
+  backend: number,
+  step: Step,
+): Promise<Retried | null> {
+  const { smoke } = walk;
+  const failure = "Eidolon: the backend failed (exited)";
+  const from = smoke.log("main").length;
+  process.kill(backend, "SIGKILL");
+  await smoke.waitForLine("main", FAILED_SHOWN, { from, timeoutMs: 15_000 }).catch(() => null);
+  const log = smoke.log("main").slice(from);
+  const shown = inOrder(log, [
+    `Eidolon: the backend (pid ${backend}) exited (SIGKILL)`,
+    failure,
+    LET_GO,
+    FAILED_SHOWN,
+  ]);
+  step.check(
+    "the backend killed: main lets the page go for the failure page",
+    shown.ok,
+    shown.detail,
+  );
+  const failed = log.split(/\r?\n/).find((line) => line.includes(failure));
+  if (!shown.ok || failed === undefined) return null;
+  await step.shot(page, "failed-over-unsaved");
+  const retryFrom = smoke.log("main").length;
+  await page.getByRole("button", { name: STRINGS.en.label.tryAgain, exact: true }).click();
+  const started = await smoke.waitForLine("main", LINES.started, {
+    from: retryFrom,
+    timeoutMs: 30_000,
+  });
+  const pid = Number(LINES.started.exec(started)?.[1]);
+  await smoke.processes.adopt("backend", pid);
+  await home(page);
+  step.check("Try Again: another backend, and Home", pid !== backend, `${after(started)}; Home`);
+  return { pid, failure: failed };
+}
+
+/**
+ * The last launch spawns its own backend again, and the page holds an unsaved edit, whose
+ * beforeunload asks it to stay: main must let it go to load the failure page when the backend dies,
+ * and at the quit, or the failure page never shows and the quit stops with the window hidden and the
+ * backend already stopped. The quit's box, which background mode answers, warns of the edit.
+ */
 async function quit(walk: Walk, step: Step) {
   const { smoke } = walk;
   const from = smoke.log("main").length;
-  const main = smoke.start(walk.launch, LANGUAGE_ARGS);
+  let main: Started | null = null;
+  let killed: Retried | null = null;
   try {
+    const driven = await drive(walk, []);
+    main = driven.main;
+    const { page } = driven;
     const started = await smoke.waitForLine("main", LINES.started, { from, timeoutMs: 30_000 });
-    await smoke.waitForLine("main", LINES.appShown, { from, timeoutMs: 60_000 });
-    const pid = Number(LINES.started.exec(started)?.[1]);
-    await smoke.processes.adopt("backend", pid);
-    const ending = await quitApp(walk, main, pid);
+    const first = Number(LINES.started.exec(started)?.[1]);
+    await smoke.processes.adopt("backend", first);
+    await home(page);
+    const edited = await editPrompt(page);
+    step.check("the System Prompt holds an unsaved edit", edited.ok, edited.detail);
+    killed = await killAndRetry(walk, page, first, step);
+    if (killed === null) return;
+    const again = await editPrompt(page);
+    step.check("the System Prompt holds an unsaved edit again", again.ok, again.detail);
+    await step.shot(page, "unsaved-prompt");
+    const quitFrom = smoke.log("main").length;
+    const ending = await quitApp(walk, driven.main, killed.pid);
     step.check("--quit: the second launch, main and the backend exit 0", ending.ok, ending.detail);
+    if (walk.background) {
+      const asked = inOrder(smoke.log("main").slice(quitFrom), [UNSAVED_QUIT_BOX, LINES.quitting]);
+      step.check(
+        "main.log: the quit box says the unsaved edit will be lost, then the quit goes on",
+        asked.ok,
+        asked.detail,
+      );
+    }
+    const said = inOrder(smoke.log("main").slice(quitFrom), [
+      LINES.quitting,
+      "Eidolon: the window is hidden",
+      `Eidolon: the backend (pid ${killed.pid}) exited (0)`,
+      LET_GO,
+      "Eidolon: the window is closed",
+    ]);
+    step.check("main.log: the quit lets the page go, then closes the window", said.ok, said.detail);
   } finally {
-    if (runs(main)) await smoke.quit(walk.launch).catch(() => undefined);
+    if (main !== null && runs(main)) await smoke.quit(walk.launch).catch(() => undefined);
   }
   const left = await smoke.processes.settle(10_000);
   step.check(
@@ -1683,13 +1807,16 @@ async function quit(walk: Walk, step: Step) {
     left.length === 0,
     left.length === 0 ? "nothing left" : left.join(", "),
   );
+  const caused = killed.failure;
   const errors = [
-    ...errorLines(smoke.log("main"), "main"),
+    ...errorLines(smoke.log("main"), "main").filter((line) => line !== caused),
     ...errorLines(smoke.log("backend"), "backend"),
   ];
   step.check(
-    "no error lines in main.log or backend.log",
+    "no error lines in main.log or backend.log but the failure the kill caused",
     errors.length === 0,
-    errors.length === 0 ? "no error lines in either log" : errors.slice(0, 3).join(" | "),
+    errors.length === 0
+      ? "no error lines in either log but the kill's"
+      : errors.slice(0, 3).join(" | "),
   );
 }
