@@ -23,7 +23,7 @@ import {
   setDotted,
   writeFailure,
 } from "../personas.ts";
-import { checkRig } from "../psd2live.ts";
+import { checkRig, slowRefusal } from "../psd2live.ts";
 import { fileResponse } from "../ranges.ts";
 import { imageHeaders, localError, localJson, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
@@ -75,6 +75,8 @@ async function readUpload(
   const bytes = await readBytes(request, MAX_MODEL_BYTES);
   if (bytes === null) return localError(413, "payload-too-large", "A model is 200 MiB at most");
   if (bytes.byteLength === 0) return localError(400, "bad-request", "The file is empty");
+  const slow = await slowRefusal(bytes);
+  if (slow !== null) return localError(400, slow.code, slow.message);
   // Loading a rig holds the server for a while, which a call that started meanwhile would hear.
   const started = callRefusal(app);
   if (started !== null) return started;
