@@ -4899,12 +4899,13 @@ function callShape(events: readonly LoggedEvent[]): string[] {
 }
 
 /**
- * A call in the task's chat, every role at the fake server: it opens without the status block the
- * chat stored; the fake hearing hears the viewer ask for a task, which she starts, her call and its
- * started result stored in the chat between their lines; Allow Once on the waiting bar, above the
- * dock; her pointer to the card at the task's pause and her word on its end, both on the call; Hang
- * Up, whose call-ended names the end as told, after which no text turn tells it again; and its row
- * in the Tasks list.
+ * A call in the task's chat, every role at the fake server, with her model, so it opens on the video
+ * screen: it opens without the status block the chat stored; the fake hearing hears the viewer ask
+ * for a task, which she starts, her call and its started result stored in the chat between their
+ * lines; Allow Once on the waiting bar, inside the screen; at the task's pause, Show Task, which
+ * docks the call and focuses the card, the bar above the dock; her pointer to the card and her word
+ * on the task's end, both on the call; Hang Up, whose call-ended names the end as told, after which
+ * no text turn tells it again; and its row in the Tasks list.
  */
 async function callTaskWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
   const { page, checks, origin } = walk;
@@ -4912,273 +4913,310 @@ async function callTaskWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
   const { call: folder, notes } = walk.embeddings.places;
   // Nobody speaks on this call but the fake hearing.
   writeFileSync(walk.mic, silentWav(2));
-  if (new URL(page.url()).pathname !== `/chats/${chat.id}`) {
-    await page.goto(`${origin}/chats/${chat.id}`);
-  }
-  // The block the stop's answer stored, still in her view of the chat.
-  const stale = shownBlock(await chatLog(walk, chat.id));
-  const [minded, listened, worked] = [chats.length, listening.length, workers.length];
-  const logged = walk.serverLog().length;
-  await page.getByRole("button", { name: t("en", "Call"), exact: true }).click();
-  const dock = page.getByRole("region", {
-    name: t("en", "Call with {name}", { name: chat.short }),
-    exact: true,
-  });
-  if (!(await shows(dock, 10_000))) throw new Error("the call's dock never showed");
-  const greeted = await poll(
-    () => chatLog(walk, chat.id),
-    (events) => saidOnCall(events, "persona", CALL_TASK_GREETING),
-    60_000,
-  );
-  if (!saidOnCall(greeted, "persona", CALL_TASK_GREETING)) {
-    throw new Error(
-      `her greeting on the call was never stored, after ${chats.length - minded} mind request(s)`,
-    );
-  }
-  const opened = greeted.findLast((e) => e.type === "call-started");
-  const greeting = chats
-    .slice(minded)
-    .find((request) => lastContent(request).startsWith(GREETING_KICKOFF));
-  checks.add(
-    "task call greeting",
-    stale !== undefined &&
-      greeting !== undefined &&
-      statusBlocks(greeting).length === 0 &&
-      taskToolsOf(greeting).length === 0 &&
-      !hinted(greeting),
-    `the chat ${stale === undefined ? "had no status block in her view" : `had ${quote(stale.content ?? "", 120)} in her view`}; ` +
-      `her greeting on the call ` +
-      (greeting === undefined
-        ? "was never asked for"
-        : `was asked for with ${statusBlocks(greeting).length} status block(s), offered ` +
-          `${toolsNamed(greeting)}, ${hinted(greeting) ? "with" : "without"} the hint`),
-  );
-
-  const sessions = await poll(
-    async () => listening.slice(listened),
-    (opening) => opening.length > 0,
-    10_000,
-  );
-  const ear = sessions[0];
-  if (ear === undefined) throw new Error("her hearing opened no session on the call");
-  const asked = chats.length;
-  ear.say(CALL_TASK_LINE);
-  const started = await poll(
-    () => chatLog(walk, chat.id),
-    (events) =>
-      startedTask(events, CALL_TASK_CALL) !== null && saidOnCall(events, "persona", CALL_TASK_ACK),
-    60_000,
-  );
-  const task = startedTask(started, CALL_TASK_CALL);
-  if (task === null || !saidOnCall(started, "persona", CALL_TASK_ACK)) {
-    const minds = chats.slice(asked).map((request) => quote(lastContent(request), 40));
-    throw new Error(
-      `the line heard on the call ${task === null ? "started no task" : "got no answer"}: her ` +
-        `mind was asked ${minds.join(", ") || "nothing"}`,
-    );
-  }
-  const line = chats.slice(asked).find((request) => lastContent(request) === CALL_TASK_LINE);
-  const after = chats.slice(asked).find((request) => resultFor(request) === CALL_TASK_CALL);
-  const read = `{"task": "${task}", "status": "awaiting-approval"}`;
-  const call = started.find((e) => e.type === "tool-call" && e.callId === CALL_TASK_CALL);
-  const result = started.find(
-    (e) => e.type === "tool-result" && e.callId === CALL_TASK_CALL && e.stage === "started",
-  );
-  const card = chat.log.locator(`article[data-task="${task}"]`);
-  const startAsked = await shows(
-    card.getByText(t("en", "Start this task?"), { exact: true }),
-    20_000,
-  );
-  const bar = page.locator(`section[data-waiting="${task}"]`);
-  const barShown = await shows(
-    bar.getByText(t("en", "Waiting for your OK to work in {folder}", { folder }), { exact: true }),
-    15_000,
-  );
-  const [barBox, dockBox] = [await bar.boundingBox(), await dock.boundingBox()];
-  const above = barBox !== null && dockBox !== null && barBox.y + barBox.height <= dockBox.y;
-  const waiting = await taskOf(walk, task);
-  checks.add(
-    "task call start",
-    JSON.stringify(taskToolsOf(line)) === '["start_task"]' &&
-      hinted(line) &&
-      lastContent(after) === read &&
-      call?.persona === PERSONA &&
-      call.turn === opened?.call &&
-      call.name === "start_task" &&
-      JSON.stringify(call.arguments) === JSON.stringify({ goal: CALL_TASK_GOAL, folder }) &&
-      JSON.stringify(result?.result) === JSON.stringify({ task, status: "awaiting-approval" }) &&
-      waiting?.status === "awaiting-approval" &&
-      waiting.chat?.call === CALL_TASK_CALL &&
-      startAsked &&
-      barShown &&
-      above,
-    `her answer to the line heard on the call was offered ${toolsNamed(line)}, ` +
-      `${hinted(line) ? "with" : "without"} the hint, and her next round read ` +
-      `${quote(lastContent(after))}; the chat stores her call ` +
-      `${call === undefined ? "nowhere" : `under turn ${call.turn === opened?.call ? "the call's id" : String(call.turn)} with ${JSON.stringify(call.arguments)}`}` +
-      ` and its started result ${JSON.stringify(result?.result ?? null)}; the task ` +
-      `${String(waiting?.status)}; the card ${startAsked ? "asks" : "doesn't ask"} to start it, ` +
-      `the waiting bar ${barShown ? (above ? "too, above the dock" : "too, but not above the dock") : "doesn't"}`,
-  );
-
-  const approved = () =>
-    page.waitForResponse(
-      (response) =>
-        response.request().method() === "POST" &&
-        response.url() === `${origin}/api/local/tasks/${task}/approve`,
-    );
-  let answer = approved();
-  await bar.locator('[data-answer="once"]').click();
-  const startStatus = (await answer).status();
-  const paused = await poll(
-    () => chatLog(walk, chat.id),
-    (events) => saidOnCall(events, "persona", CALL_WAIT_LINE),
-    60_000,
-  );
-  const pointed = chats.slice(asked).find((request) => {
-    const nudge = nudgeOf(request);
-    return nudge?.callId === CALL_TASK_CALL && !nudge.ended;
-  });
-  const block = statusBlocks(pointed)[0] ?? "";
-  // Her task's number there, the earlier walks' tasks counted.
-  const nth = tasksStarted(started).indexOf(task) + 1;
-  const pausedTask = await taskOf(walk, task);
-  const granted = { folder: realpathSync(dirname(notes)) };
-  const barAsks = await shows(
-    bar.getByText(t("en", "Waiting for your OK to read everything in {folder}", granted), {
+  // Her model, set here so a video walk that failed leaves nothing to trip on, and a load so that
+  // GET personas names it.
+  await configure(walk, PERSONA, { "appearance.model": await fixtureModel(walk) });
+  await page.goto(`${origin}/chats/${chat.id}`);
+  // To the walk's end, whose later checks read the call's: a throw mid-call must not leave it up.
+  try {
+    // The block the stop's answer stored, still in her view of the chat.
+    const stale = shownBlock(await chatLog(walk, chat.id));
+    const [minded, listened, worked] = [chats.length, listening.length, workers.length];
+    const logged = walk.serverLog().length;
+    await page.getByRole("button", { name: t("en", "Call"), exact: true }).click();
+    // The screen, then the dock once Show Task docks the call.
+    const region = page.getByRole("region", {
+      name: t("en", "Call with {name}", { name: chat.short }),
       exact: true,
-    }),
-    15_000,
-  );
-  checks.add(
-    "task call pause",
-    startStatus === 200 &&
-      saidOnCall(paused, "persona", CALL_WAIT_LINE) &&
-      lastContent(pointed) === waitingNudge(CALL_TASK_CALL) &&
-      taskToolsOf(pointed).length === 0 &&
-      block.includes(`任务${nth}「`) &&
-      block.includes(ASKS_TO_READ) &&
-      block.endsWith(NO_TOOLS_TAIL) &&
-      pausedTask?.status === "paused" &&
-      pausedTask.pending?.kind === "path" &&
-      barAsks,
-    `Allow Once on the waiting bar answered ${startStatus}; the task then ` +
-      `${String(pausedTask?.status)} for ${pausedTask?.pending?.kind ?? "nothing"}, and her ` +
-      `follow-up ${pointed === undefined ? "never came" : `answered ${quote(lastContent(pointed), 200)}, offered ${toolsNamed(pointed)}, with ${block === "" ? "no status block" : quote(block, 400)}`}; ` +
-      `her line ${saidOnCall(paused, "persona", CALL_WAIT_LINE) ? "is" : "isn't"} stored; the ` +
-      `waiting bar ${barAsks ? "asks" : "doesn't ask"} about the path`,
-  );
+    });
+    if (!(await shows(region, 10_000))) throw new Error("the call's screen never showed");
+    const greeted = await poll(
+      () => chatLog(walk, chat.id),
+      (events) => saidOnCall(events, "persona", CALL_TASK_GREETING),
+      60_000,
+    );
+    if (!saidOnCall(greeted, "persona", CALL_TASK_GREETING)) {
+      throw new Error(
+        `her greeting on the call was never stored, after ${chats.length - minded} mind request(s)`,
+      );
+    }
+    const opened = greeted.findLast((e) => e.type === "call-started");
+    const greeting = chats
+      .slice(minded)
+      .find((request) => lastContent(request).startsWith(GREETING_KICKOFF));
+    checks.add(
+      "task call greeting",
+      stale !== undefined &&
+        greeting !== undefined &&
+        statusBlocks(greeting).length === 0 &&
+        taskToolsOf(greeting).length === 0 &&
+        !hinted(greeting),
+      `the chat ${stale === undefined ? "had no status block in her view" : `had ${quote(stale.content ?? "", 120)} in her view`}; ` +
+        `her greeting on the call ` +
+        (greeting === undefined
+          ? "was never asked for"
+          : `was asked for with ${statusBlocks(greeting).length} status block(s), offered ` +
+            `${toolsNamed(greeting)}, ${hinted(greeting) ? "with" : "without"} the hint`),
+    );
 
-  answer = approved();
-  await bar.locator('[data-answer="once"]').click();
-  const pathStatus = (await answer).status();
-  const reported = await poll(
-    () => chatLog(walk, chat.id),
-    (events) => saidOnCall(events, "persona", CALL_REPORT_LINE),
-    60_000,
-  );
-  const toldOn = chats.slice(asked).find((request) => {
-    const nudge = nudgeOf(request);
-    return nudge?.callId === CALL_TASK_CALL && nudge.ended;
-  });
-  // The worker's report reaches her only as her call's result, never in a message of a higher rank.
-  const quoting = rolesHolding(toldOn, CALL_WORKER_REPORT);
-  const holder = toldOn?.messages?.find((m) =>
-    String(m.content ?? "").includes(CALL_WORKER_REPORT),
-  );
-  const enveloped = (toldOn?.messages ?? []).some((m) =>
-    String(m.content ?? "").startsWith(ASYNC_FINISHED),
-  );
-  checks.add(
-    "task call report",
-    pathStatus === 200 &&
-      saidOnCall(reported, "persona", CALL_REPORT_LINE) &&
-      lastContent(toldOn) === endedNudge(CALL_TASK_CALL) &&
-      taskToolsOf(toldOn).length === 0 &&
-      JSON.stringify(quoting) === '["tool"]' &&
-      holder?.tool_call_id === CALL_TASK_CALL &&
-      !enveloped,
-    `Allow Once on the path answered ${pathStatus}; her follow-up ` +
-      `${toldOn === undefined ? "never came" : `answered ${quote(lastContent(toldOn), 200)}, offered ${toolsNamed(toldOn)}`}, ` +
-      `reading the worker's report in ${quoting.length > 0 ? quoting.join(" and ") : "no"} ` +
-      `message(s)${holder?.tool_call_id === CALL_TASK_CALL ? ", her call's result" : ""}` +
-      `${enveloped ? " and a final envelope" : ""}; her word on it ` +
-      `${saidOnCall(reported, "persona", CALL_REPORT_LINE) ? "is" : "isn't"} stored`,
-  );
+    const sessions = await poll(
+      async () => listening.slice(listened),
+      (opening) => opening.length > 0,
+      10_000,
+    );
+    const ear = sessions[0];
+    if (ear === undefined) throw new Error("her hearing opened no session on the call");
+    const asked = chats.length;
+    ear.say(CALL_TASK_LINE);
+    const started = await poll(
+      () => chatLog(walk, chat.id),
+      (events) =>
+        startedTask(events, CALL_TASK_CALL) !== null &&
+        saidOnCall(events, "persona", CALL_TASK_ACK),
+      60_000,
+    );
+    const task = startedTask(started, CALL_TASK_CALL);
+    if (task === null || !saidOnCall(started, "persona", CALL_TASK_ACK)) {
+      const minds = chats.slice(asked).map((request) => quote(lastContent(request), 40));
+      throw new Error(
+        `the line heard on the call ${task === null ? "started no task" : "got no answer"}: her ` +
+          `mind was asked ${minds.join(", ") || "nothing"}`,
+      );
+    }
+    const line = chats.slice(asked).find((request) => lastContent(request) === CALL_TASK_LINE);
+    const after = chats.slice(asked).find((request) => resultFor(request) === CALL_TASK_CALL);
+    const read = `{"task": "${task}", "status": "awaiting-approval"}`;
+    const call = started.find((e) => e.type === "tool-call" && e.callId === CALL_TASK_CALL);
+    const result = started.find(
+      (e) => e.type === "tool-result" && e.callId === CALL_TASK_CALL && e.stage === "started",
+    );
+    const card = chat.log.locator(`article[data-task="${task}"]`);
+    const startAsked = await shows(
+      card.getByText(t("en", "Start this task?"), { exact: true }),
+      20_000,
+    );
+    const bar = page.locator(`section[data-waiting="${task}"]`);
+    const barShown = await shows(
+      bar.getByText(t("en", "Waiting for your OK to work in {folder}", { folder }), {
+        exact: true,
+      }),
+      15_000,
+    );
+    // In the screen her model fills, not in the log the screen covers.
+    const inside =
+      (await page.locator(`[data-call-screen] section[data-waiting="${task}"]`).count()) === 1;
+    const waiting = await taskOf(walk, task);
+    checks.add(
+      "task call start",
+      JSON.stringify(taskToolsOf(line)) === '["start_task"]' &&
+        hinted(line) &&
+        lastContent(after) === read &&
+        call?.persona === PERSONA &&
+        call.turn === opened?.call &&
+        call.name === "start_task" &&
+        JSON.stringify(call.arguments) === JSON.stringify({ goal: CALL_TASK_GOAL, folder }) &&
+        JSON.stringify(result?.result) === JSON.stringify({ task, status: "awaiting-approval" }) &&
+        waiting?.status === "awaiting-approval" &&
+        waiting.chat?.call === CALL_TASK_CALL &&
+        startAsked &&
+        barShown &&
+        inside,
+      `her answer to the line heard on the call was offered ${toolsNamed(line)}, ` +
+        `${hinted(line) ? "with" : "without"} the hint, and her next round read ` +
+        `${quote(lastContent(after))}; the chat stores her call ` +
+        `${call === undefined ? "nowhere" : `under turn ${call.turn === opened?.call ? "the call's id" : String(call.turn)} with ${JSON.stringify(call.arguments)}`}` +
+        ` and its started result ${JSON.stringify(result?.result ?? null)}; the task ` +
+        `${String(waiting?.status)}; the card ${startAsked ? "asks" : "doesn't ask"} to start it, ` +
+        `the waiting bar ${barShown ? (inside ? "too, inside the video screen" : "too, but not inside the video screen") : "doesn't"}`,
+    );
 
-  const hungUp = chats.length;
-  await dock.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
-  await poll(
-    () => chatLog(walk, chat.id),
-    (events) => events.some((e) => e.type === "call-ended" && e.call === opened?.call),
-    20_000,
-  );
-  // Told on the call, so no text turn tells it again.
-  await Bun.sleep(QUIET_MS);
-  const events = await chatLog(walk, chat.id);
-  const from = events.findIndex((e) => e.type === "call-started" && e.call === opened?.call);
-  const shape = callShape(events.slice(from + 1));
-  const expected = [
-    `persona: ${CALL_TASK_GREETING}`,
-    `user: ${CALL_TASK_LINE}`,
-    `call ${CALL_TASK_CALL}`,
-    `started ${CALL_TASK_CALL}`,
-    `persona: ${CALL_TASK_ACK}`,
-    `persona: ${CALL_WAIT_LINE}`,
-    `final ${CALL_TASK_CALL}`,
-    `persona: ${CALL_REPORT_LINE}`,
-    `call-ended told ${CALL_TASK_CALL}`,
-  ];
-  const nudges = chats.slice(asked).flatMap((request) => {
-    const nudge = nudgeOf(request);
-    return nudge?.callId === CALL_TASK_CALL ? [nudge.ended ? "ended" : "waits"] : [];
-  });
-  const retold = chats.slice(hungUp).some((request) => nudgeOf(request) !== null);
-  const final = events.find(
-    (e) => e.type === "tool-result" && e.callId === CALL_TASK_CALL && e.stage === "final",
-  );
-  const done = await poll(
-    () => taskOf(walk, task),
-    (snapshot) => snapshot?.reported === true,
-    10_000,
-  );
-  const badge = await shows(card.locator('[data-status="succeeded"]'), 15_000);
-  const written = join(folder, "index.html");
-  const wrote = existsSync(written) && readFileSync(written, "utf8") === INDEX_HTML;
-  const errors = walk
-    .serverLog()
-    .slice(logged)
-    .split("\n")
-    .filter((entry) => /\| (ERROR|CRITICAL) +\|/.test(entry));
-  await page.locator('nav a[href="/tasks"]').first().click();
-  await page.waitForURL(`${origin}/tasks`);
-  const row = page
-    .getByRole("list", { name: t("en", "Tasks"), exact: true })
-    .getByRole("listitem")
-    .filter({ hasText: CALL_TASK_GOAL });
-  const listed = await shows(row.locator('[data-status="succeeded"]'), 15_000);
-  checks.add(
-    "task call end",
-    JSON.stringify(shape) === JSON.stringify(expected) &&
-      JSON.stringify(nudges) === '["waits","ended"]' &&
-      !retold &&
-      final?.result?.status === "succeeded" &&
-      final.result.report === CALL_WORKER_REPORT &&
-      done?.status === "succeeded" &&
-      done.reported === true &&
-      badge &&
-      wrote &&
-      workers.length - worked === 4 &&
-      errors.length === 0 &&
-      listed,
-    `the call's span in the log holds ${JSON.stringify(shape)}; her mind was nudged about the ` +
-      `task ${JSON.stringify(nudges)} on the call and ${retold ? "again" : "never"} after Hang Up; ` +
-      `the task ${String(done?.status)}${done?.reported === true ? ", reported" : ", not reported"}, ` +
-      `after ${workers.length - worked} worker request(s); the card ` +
-      `${badge ? "shows" : "doesn't show"} it done; index.html ${wrote ? "holds the page" : "is missing or wrong"}; ` +
-      `the server logged ${errors.length === 0 ? "no errors" : errors.slice(0, 2).join(" ")}; ` +
-      `the Tasks list ${listed ? "shows" : "doesn't show"} it done`,
-  );
+    const approved = () =>
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response.url() === `${origin}/api/local/tasks/${task}/approve`,
+      );
+    let answer = approved();
+    await bar.locator('[data-answer="once"]').click();
+    const startStatus = (await answer).status();
+    const paused = await poll(
+      () => chatLog(walk, chat.id),
+      (events) => saidOnCall(events, "persona", CALL_WAIT_LINE),
+      60_000,
+    );
+    const pointed = chats.slice(asked).find((request) => {
+      const nudge = nudgeOf(request);
+      return nudge?.callId === CALL_TASK_CALL && !nudge.ended;
+    });
+    const block = statusBlocks(pointed)[0] ?? "";
+    // Her task's number there, the earlier walks' tasks counted.
+    const nth = tasksStarted(started).indexOf(task) + 1;
+    const pausedTask = await taskOf(walk, task);
+    const granted = { folder: realpathSync(dirname(notes)) };
+    const barAsks = await shows(
+      bar.getByText(t("en", "Waiting for your OK to read everything in {folder}", granted), {
+        exact: true,
+      }),
+      15_000,
+    );
+    // Show Task docks the call first: the log under the screen can't take the focus.
+    await bar.getByRole("button", { name: t("en", "Show Task"), exact: true }).click();
+    const docked = await page
+      .locator("[data-call-screen]")
+      .waitFor({ state: "detached", timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    const expandable = await shows(
+      region.getByRole("button", { name: t("en", "Expand"), exact: true }),
+      10_000,
+    );
+    const cardFocused = await poll(
+      () => card.evaluate((el) => el === document.activeElement).catch(() => false),
+      (focused) => focused,
+      5_000,
+    );
+    const [barBox, dockBox] = [await bar.boundingBox(), await region.boundingBox()];
+    const above = barBox !== null && dockBox !== null && barBox.y + barBox.height <= dockBox.y;
+    checks.add(
+      "task call pause",
+      startStatus === 200 &&
+        saidOnCall(paused, "persona", CALL_WAIT_LINE) &&
+        lastContent(pointed) === waitingNudge(CALL_TASK_CALL) &&
+        taskToolsOf(pointed).length === 0 &&
+        block.includes(`任务${nth}「`) &&
+        block.includes(ASKS_TO_READ) &&
+        block.endsWith(NO_TOOLS_TAIL) &&
+        pausedTask?.status === "paused" &&
+        pausedTask.pending?.kind === "path" &&
+        barAsks &&
+        docked &&
+        expandable &&
+        cardFocused &&
+        above,
+      `Allow Once on the waiting bar answered ${startStatus}; the task then ` +
+        `${String(pausedTask?.status)} for ${pausedTask?.pending?.kind ?? "nothing"}, and her ` +
+        `follow-up ${pointed === undefined ? "never came" : `answered ${quote(lastContent(pointed), 200)}, offered ${toolsNamed(pointed)}, with ${block === "" ? "no status block" : quote(block, 400)}`}; ` +
+        `her line ${saidOnCall(paused, "persona", CALL_WAIT_LINE) ? "is" : "isn't"} stored; the ` +
+        `waiting bar ${barAsks ? "asks" : "doesn't ask"} about the path; Show Task ` +
+        `${docked ? "docked the call" : "left the screen up"}, ${expandable ? "with" : "WITHOUT"} ` +
+        `Expand in the dock, the card ${cardFocused ? "focused" : "NOT focused"}, the bar ` +
+        `${above ? "above the dock" : "not above the dock"}`,
+    );
+
+    answer = approved();
+    await bar.locator('[data-answer="once"]').click();
+    const pathStatus = (await answer).status();
+    const reported = await poll(
+      () => chatLog(walk, chat.id),
+      (events) => saidOnCall(events, "persona", CALL_REPORT_LINE),
+      60_000,
+    );
+    const toldOn = chats.slice(asked).find((request) => {
+      const nudge = nudgeOf(request);
+      return nudge?.callId === CALL_TASK_CALL && nudge.ended;
+    });
+    // The worker's report reaches her only as her call's result, never in a message of a higher rank.
+    const quoting = rolesHolding(toldOn, CALL_WORKER_REPORT);
+    const holder = toldOn?.messages?.find((m) =>
+      String(m.content ?? "").includes(CALL_WORKER_REPORT),
+    );
+    const enveloped = (toldOn?.messages ?? []).some((m) =>
+      String(m.content ?? "").startsWith(ASYNC_FINISHED),
+    );
+    checks.add(
+      "task call report",
+      pathStatus === 200 &&
+        saidOnCall(reported, "persona", CALL_REPORT_LINE) &&
+        lastContent(toldOn) === endedNudge(CALL_TASK_CALL) &&
+        taskToolsOf(toldOn).length === 0 &&
+        JSON.stringify(quoting) === '["tool"]' &&
+        holder?.tool_call_id === CALL_TASK_CALL &&
+        !enveloped,
+      `Allow Once on the path answered ${pathStatus}; her follow-up ` +
+        `${toldOn === undefined ? "never came" : `answered ${quote(lastContent(toldOn), 200)}, offered ${toolsNamed(toldOn)}`}, ` +
+        `reading the worker's report in ${quoting.length > 0 ? quoting.join(" and ") : "no"} ` +
+        `message(s)${holder?.tool_call_id === CALL_TASK_CALL ? ", her call's result" : ""}` +
+        `${enveloped ? " and a final envelope" : ""}; her word on it ` +
+        `${saidOnCall(reported, "persona", CALL_REPORT_LINE) ? "is" : "isn't"} stored`,
+    );
+
+    const hungUp = chats.length;
+    await region.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
+    await poll(
+      () => chatLog(walk, chat.id),
+      (events) => events.some((e) => e.type === "call-ended" && e.call === opened?.call),
+      20_000,
+    );
+    // Told on the call, so no text turn tells it again.
+    await Bun.sleep(QUIET_MS);
+    const events = await chatLog(walk, chat.id);
+    const from = events.findIndex((e) => e.type === "call-started" && e.call === opened?.call);
+    const shape = callShape(events.slice(from + 1));
+    const expected = [
+      `persona: ${CALL_TASK_GREETING}`,
+      `user: ${CALL_TASK_LINE}`,
+      `call ${CALL_TASK_CALL}`,
+      `started ${CALL_TASK_CALL}`,
+      `persona: ${CALL_TASK_ACK}`,
+      `persona: ${CALL_WAIT_LINE}`,
+      `final ${CALL_TASK_CALL}`,
+      `persona: ${CALL_REPORT_LINE}`,
+      `call-ended told ${CALL_TASK_CALL}`,
+    ];
+    const nudges = chats.slice(asked).flatMap((request) => {
+      const nudge = nudgeOf(request);
+      return nudge?.callId === CALL_TASK_CALL ? [nudge.ended ? "ended" : "waits"] : [];
+    });
+    const retold = chats.slice(hungUp).some((request) => nudgeOf(request) !== null);
+    const final = events.find(
+      (e) => e.type === "tool-result" && e.callId === CALL_TASK_CALL && e.stage === "final",
+    );
+    const done = await poll(
+      () => taskOf(walk, task),
+      (snapshot) => snapshot?.reported === true,
+      10_000,
+    );
+    const badge = await shows(card.locator('[data-status="succeeded"]'), 15_000);
+    const written = join(folder, "index.html");
+    const wrote = existsSync(written) && readFileSync(written, "utf8") === INDEX_HTML;
+    const errors = walk
+      .serverLog()
+      .slice(logged)
+      .split("\n")
+      .filter((entry) => /\| (ERROR|CRITICAL) +\|/.test(entry));
+    await page.locator('nav a[href="/tasks"]').first().click();
+    await page.waitForURL(`${origin}/tasks`);
+    const row = page
+      .getByRole("list", { name: t("en", "Tasks"), exact: true })
+      .getByRole("listitem")
+      .filter({ hasText: CALL_TASK_GOAL });
+    const listed = await shows(row.locator('[data-status="succeeded"]'), 15_000);
+    checks.add(
+      "task call end",
+      JSON.stringify(shape) === JSON.stringify(expected) &&
+        JSON.stringify(nudges) === '["waits","ended"]' &&
+        !retold &&
+        final?.result?.status === "succeeded" &&
+        final.result.report === CALL_WORKER_REPORT &&
+        done?.status === "succeeded" &&
+        done.reported === true &&
+        badge &&
+        wrote &&
+        workers.length - worked === 4 &&
+        errors.length === 0 &&
+        listed,
+      `the call's span in the log holds ${JSON.stringify(shape)}; her mind was nudged about the ` +
+        `task ${JSON.stringify(nudges)} on the call and ${retold ? "again" : "never"} after Hang Up; ` +
+        `the task ${String(done?.status)}${done?.reported === true ? ", reported" : ", not reported"}, ` +
+        `after ${workers.length - worked} worker request(s); the card ` +
+        `${badge ? "shows" : "doesn't show"} it done; index.html ${wrote ? "holds the page" : "is missing or wrong"}; ` +
+        `the server logged ${errors.length === 0 ? "no errors" : errors.slice(0, 2).join(" ")}; ` +
+        `the Tasks list ${listed ? "shows" : "doesn't show"} it done`,
+    );
+  } finally {
+    await hangUpIfUp(walk);
+    await configure(walk, PERSONA, { "appearance.model": null });
+  }
 }
 
 /** The fields her start_task's schema requires in `request`, as JSON. */
