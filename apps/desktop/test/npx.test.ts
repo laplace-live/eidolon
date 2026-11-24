@@ -359,6 +359,7 @@ describe("npm's config, which npx installs by", () => {
         "",
       ].join("\r\n"),
       "home/.npmrc": "min-release-age=7\nallow-remote=none\n",
+      "home/work.npmrc": "allow-git=none\n",
       "other/.npmrc": "allow-remote=root\n",
     });
     const project = join(base, "project");
@@ -377,6 +378,10 @@ describe("npm's config, which npx installs by", () => {
     const userconfig = join(base, "other", ".npmrc");
     expect(npmConfig({ npm_config_userconfig: userconfig }, project, home)[2]).toEqual({
       "allow-remote": "root",
+    });
+    // A ~/ from the home, as npm resolves a path setting.
+    expect(npmConfig({ npm_config_userconfig: "~/work.npmrc" }, project, home)[2]).toEqual({
+      "allow-git": "none",
     });
     // In the home, the project's .npmrc is the user's, which npm reads once.
     expect(npmConfig({}, home, home)).toEqual([

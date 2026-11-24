@@ -105,7 +105,7 @@ export function npmConfig(env, prefix, home) {
     );
     if (setting !== "__proto__") variables[setting] = envReplace(value.trim(), env);
   }
-  const user = path.resolve(variables.userconfig ?? path.join(home, ".npmrc"));
+  const user = userConfig(variables, home);
   const project = path.join(prefix, ".npmrc");
   return [variables, project === user ? {} : readNpmrc(project, env), readNpmrc(user, env)];
 }
@@ -118,6 +118,13 @@ export const settingOf = (sources, key) =>
 export function settingPath(text, cwd, home, platform = process.platform) {
   const fromHome = (platform === "win32" ? /^~[/\\]/ : /^~\//).test(text);
   return fromHome ? path.resolve(home, text.slice(2)) : path.resolve(cwd, text);
+}
+
+/** The user .npmrc npm reads: the one its `userconfig` variable names, from `cwd`, or home's. */
+export function userConfig(variables, home, cwd = process.cwd()) {
+  return variables.userconfig
+    ? settingPath(variables.userconfig, cwd, home)
+    : path.join(home, ".npmrc");
 }
 
 /**

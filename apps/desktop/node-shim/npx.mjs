@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { formatWithOptions } from "node:util";
 import { cmdLine } from "./cross-spawn.mjs";
 import { currentEnv, devEngineFailures } from "./npm-checks.mjs";
-import { invalidConfig, npmConfig, settingOf, settingPath } from "./npm-config.mjs";
+import { invalidConfig, npmConfig, settingOf, settingPath, userConfig } from "./npm-config.mjs";
 import { binOf, binsOf, isFile, localBin, npmPath, pathOf } from "./npm-exec.mjs";
 import { npmSpec, TARBALL } from "./npm-spec.mjs";
 
@@ -568,6 +568,13 @@ export function commandEnv(env, value) {
 const envValue = (env, name) =>
   Object.entries(env).find(([key]) => key.toUpperCase() === name.toUpperCase())?.[1];
 
+/** `env` with `variables` set, each in place of every spelling of its name `env` has. */
+function withVariables(env, variables) {
+  const names = new Set(Object.keys(variables).map((name) => name.toUpperCase()));
+  const kept = Object.entries(env).filter(([key]) => !names.has(key.toUpperCase()));
+  return { ...Object.fromEntries(kept), ...variables };
+}
+
 /**
  * The file `command` names, searched for from `cwd` on `pathEnv` as sh does: the first executable
  * one, or with none the first there, which sh then fails to run. On Windows as cmd.exe does
@@ -761,11 +768,18 @@ function install(packages) {
   ];
   // pnpm's stdout goes to stderr with its own, and it never reads the server's stdin. Its
   // variables carry npm's network settings, which a proxy's URL can hold credentials in: only the
-  // owner's processes read them.
+  // owner's processes read them. A relative userconfig pnpm would read from its own folder.
+  const userconfig = sources[0].userconfig && {
+    npm_config_userconfig: userConfig(sources[0], homedir()),
+  };
   const child = spawn(process.execPath, args, {
     cwd: scratch,
     stdio: ["ignore", 2, 2],
-    env: { ...process.env, ...pnpmNetworkEnv(sources), EIDOLON_NPX_REPORT: report },
+    env: withVariables(process.env, {
+      ...pnpmNetworkEnv(sources),
+      ...userconfig,
+      EIDOLON_NPX_REPORT: report,
+    }),
     windowsHide: true,
   });
   const undo = relay(child);

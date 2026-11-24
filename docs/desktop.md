@@ -698,25 +698,25 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   and `pnpx` run the bundled pnpm's own. The server inherits the variable, so one that starts Node
   as `process.execPath` runs Eidolon's binary as Node too. On Windows the launchers are `.cmd`
   files, which a shell or cross-spawn runs, cross-spawn escaping the payload's words twice.
-- **npx** runs `npx.mjs`, which decides as npm's npx does on npm's default config (`plan`). With
-  no `--package`, the project's own bin, a bin in a `node_modules/.bin` from npm's local prefix up,
-  or a package npm's local tree holds at a version the spec allows, by npm's semver, which pnpm's
+- **npx** runs `npx.mjs`, which decides as npm's npx does on npm's default config (`plan`). With no
+  `--package`, the project's own bin, a bin in a `node_modules/.bin` from npm's local prefix up, or
+  a package npm's local tree holds at a version the spec allows, by npm's semver, which pnpm's
   `dist/` carries, runs as it is, from the workspace's folder in an npm workspace. Anything else the
   bundled pnpm installs into its dlx cache, `npxSettings` making it install as npm does under the
   owner's npm config, which `npmConfig` reads from `npm_config_*` variables, the `.npmrc` at npm's
   local prefix and the user's, parsed and `${VAR}`-expanded as npm does: every dependency's install
   scripts run, or none under `ignore-scripts`; the newest version is taken, or the newest
-  `min-release-age` or `before` allows; git and tarball-URL dependencies install, but a
-  dependency's own not where `allow-git` or `allow-remote` is `root` or `none`; `node_modules` is
-  flat, so a package finds what it uses and the packages beside it as under npm; and no
-  `.pnpmfile.cjs` rewrites what installs, as npm reads none. Where `allow-git`, `allow-remote`,
-  `allow-file` or `allow-directory` is `none`, a git, URL, tarball or folder package npx is asked
-  for ends it with npm's error (`EALLOWGIT` and the rest) before pnpm starts, a git URL's password
-  in it shown as `***`, as npm's log redacts one, since a server's stderr reaches the task; `root`
-  lets one through, as npm takes npx's packages for the root's, and the project's own bin and a
-  local bin run whatever they say. Under a credential the user's or the project's `.npmrc` gives no
-  registry (`_authToken`, `_auth`, `username`, `_password`), or a `registry` that isn't a URL, npx
-  runs nothing at all, local bins included, and ends with npm's error (`ERR_INVALID_AUTH`,
+  `min-release-age` or `before` allows; git and tarball-URL dependencies install, but a dependency's
+  own not where `allow-git` or `allow-remote` is `root` or `none`; `node_modules` is flat, so a
+  package finds what it uses and the packages beside it as under npm; and no `.pnpmfile.cjs`
+  rewrites what installs, as npm reads none. Where `allow-git`, `allow-remote`, `allow-file` or
+  `allow-directory` is `none`, a git, URL, tarball or folder package npx is asked for ends it with
+  npm's error (`EALLOWGIT` and the rest) before pnpm starts, a git URL's password in it shown as
+  `***`, as npm's log redacts one, since a server's stderr reaches the task; `root` lets one
+  through, as npm takes npx's packages for the root's, and the project's own bin and a local bin run
+  whatever they say. Under a credential the user's or the project's `.npmrc` gives no registry
+  (`_authToken`, `_auth`, `username`, `_password`), or a `registry` that isn't a URL, npx runs
+  nothing at all, local bins included, and ends with npm's error (`ERR_INVALID_AUTH`,
   `ERR_INVALID_URL`). So too where the `devEngines` of the `package.json` at npm's local prefix
   doesn't match, which npm 11.19.1 checks before any command, npx taking itself for that npm and
   Eidolon's binary for the Node: it ends with npm's `EBADDEVENGINES`, or only warns where the
@@ -724,24 +724,24 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   nothing and says why, unless `ignore-scripts` or `dangerously-allow-all-scripts` is set too: npm
   fails only an install holding a package with install scripts `allow-scripts` doesn't name, while
   pnpm's dlx runs the scripts of the packages it is asked for unasked and skips a dependency's
-  without failing. A folder is
-  linked, as npm links one, and runs as it is; a relative path resolves from the folder npx runs
-  in; and a folder or tarball runs its own bins whatever name the spec gives it, as under npm.
-  pnpm runs in a folder of its own with no pnpm workspace around it, whose `.npmrc` npx writes
-  with the registries, credentials and certificates of the `.npmrc` npm reads at its local prefix,
-  as npm reads them, files resolved as npm finds them, and over them the registries
-  `npm_config_registry` and `npm_config_@scope:registry` name, as npm ranks them, never on pnpm's
-  command line, which any process can read. So no other project's `.npmrc`,
-  `pnpm-workspace.yaml` or `packageManager` reaches it. A `${VAR}` naming an unset variable stays
-  as npm leaves it, percent-encoded, where pnpm would drop the registry or credential holding it
-  for the user's: a registry so named fails as an invalid URL, as under npm. That folder is the
-  owner's alone and goes when pnpm ends. npm's `proxy`, `https-proxy`, `noproxy` and `strict-ssl`,
-  which pnpm reads from no project's `.npmrc` and none of npm's variables, reach it as its own
+  without failing. A folder is linked, as npm links one, and runs as it is; a relative path resolves
+  from the folder npx runs in; and a folder or tarball runs its own bins whatever name the spec
+  gives it, as under npm. pnpm runs in a folder of its own with no pnpm workspace around it, whose
+  `.npmrc` npx writes with the registries, credentials and certificates of the `.npmrc` npm reads at
+  its local prefix, as npm reads them, files resolved as npm finds them, and over them the
+  registries `npm_config_registry` and `npm_config_@scope:registry` name, as npm ranks them, never
+  on pnpm's command line, which any process can read. So no other project's `.npmrc`,
+  `pnpm-workspace.yaml` or `packageManager` reaches it. A `${VAR}` naming an unset variable stays as
+  npm leaves it, percent-encoded, where pnpm would drop the registry or credential holding it for
+  the user's: a registry so named fails as an invalid URL, as under npm. That folder is the owner's
+  alone and goes when pnpm ends. npm's `proxy`, `https-proxy`, `noproxy` and `strict-ssl`, which
+  pnpm reads from no project's `.npmrc` and none of npm's variables, reach it as its own
   `pnpm_config_*` variables, each from npm's variables, that `.npmrc` or the user's, as npm ranks
-  them (`pnpmNetworkEnv`). pnpm reads the user's `.npmrc` and `pnpm_config_*`
-  variables itself, and keeps its store and caches under the owner's home, where its dlx cache
-  holds npx's installs apart from those of pnpx and `pnpm dlx`, which install as pnpm does, and
-  from npx's under other settings or registries, each for a day.
+  them (`pnpmNetworkEnv`). pnpm reads the user's `.npmrc` and `pnpm_config_*` variables itself, the
+  `.npmrc` an `npm_config_userconfig` names handed to it as npm resolves that, from the folder npx
+  runs in or a `~/` from the home, and keeps its store and caches under the owner's home, where its
+  dlx cache holds npx's installs apart from those of pnpx and `pnpm dlx`, which install as pnpm
+  does, and from npx's under other settings or registries, each for a day.
 - **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
   `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
   On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on

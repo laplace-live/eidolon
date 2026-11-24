@@ -794,6 +794,18 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     }
   }, 60_000);
 
+  test("reads the user .npmrc npm_config_userconfig names from the folder npx runs in", async () => {
+    // The project's .npmrc names the private registry, the user's its token.
+    const project = write(join(scratch, "npm-project-userconfig"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": `@eidolon-corp:registry=${registry}${PRIVATE}/\n`,
+      "config/user.npmrc": `${registry.slice("http:".length)}${PRIVATE}/:_authToken=${TOKEN}\n`,
+    });
+    const env = { npm_config_userconfig: join("config", "user.npmrc") };
+    const ran = await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd: project, env });
+    expect(ran).toEqual({ status: 0, stdout: 'corp ["x"]\n', stderr: "", marks: [] });
+  }, 60_000);
+
   test("runs nothing, as npm, under a credential an .npmrc gives no registry", async () => {
     const project = write(join(scratch, "npm-project-unscoped"), {
       "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
