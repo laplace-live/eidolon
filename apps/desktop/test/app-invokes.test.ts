@@ -1,24 +1,42 @@
-// The app page's invokes: each refuses any sender but the app's main frame before it acts, and
+// The pages' invokes: each refuses any sender but its own window's main frame before it acts, and
 // takes only its own argument.
 import { describe, expect, test } from "vitest";
-import { type AppInvokes, appInvokes, type InvokeAnswer } from "../src/main/app-invokes.ts";
-import { BRIDGE, type IpcSender, type PageChannel } from "../src/shared/bridge.ts";
+import {
+  type AppInvokes,
+  appInvokes,
+  type CompanionInvokes,
+  companionInvokes,
+  type InvokeAnswer,
+} from "../src/main/app-invokes.ts";
+import {
+  BRIDGE,
+  type CompanionMenuState,
+  type IpcSender,
+  type PageChannel,
+} from "../src/shared/bridge.ts";
 
 const app: IpcSender = { window: "main", mainFrame: true, origin: "eidolon-app://app" };
+const her: IpcSender = { window: "companion", mainFrame: true, origin: "eidolon-app://app" };
 const others: Readonly<Record<string, IpcSender>> = {
   "the shell's page": { window: "main", mainFrame: true, origin: "eidolon-app://shell" },
   "a subframe": { window: "main", mainFrame: false, origin: "eidolon-app://app" },
   "another webContents": { window: null, mainFrame: false, origin: "eidolon-app://app" },
   "a frame that's gone": { window: "main", mainFrame: true, origin: null },
   "a sandboxed document": { window: "main", mainFrame: true, origin: "null" },
-  "the desktop companion's page": {
-    window: "companion",
-    mainFrame: true,
-    origin: "eidolon-app://app",
-  },
+  "the desktop companion's page": her,
 };
 
 const INSTALLED = { state: "installed", path: "/usr/local/bin/eidolon" } as const;
+
+/** Finds `channel`'s answer in `list`. */
+function answerIn(
+  list: readonly (readonly [PageChannel, InvokeAnswer])[],
+  channel: PageChannel,
+): InvokeAnswer {
+  const found = list.find(([listed]) => listed === channel);
+  if (found === undefined) throw new Error(`no invoke on ${channel}`);
+  return found[1];
+}
 
 /** The invokes, on actions that record each call and answer as main would. */
 function invokes() {
@@ -46,12 +64,7 @@ function invokes() {
     },
   };
   const list = appInvokes(actions);
-  const answer = (channel: PageChannel): InvokeAnswer => {
-    const found = list.find(([listed]) => listed === channel);
-    if (found === undefined) throw new Error(`no invoke on ${channel}`);
-    return found[1];
-  };
-  return { list, answer, calls };
+  return { list, answer: (channel: PageChannel) => answerIn(list, channel), calls };
 }
 
 describe("appInvokes", () => {
@@ -71,7 +84,7 @@ describe("appInvokes", () => {
       for (const [name, sender] of Object.entries(others)) {
         // Thrown, not a rejection: nothing awaits before the check. A bad argument is refused as
         // the sender, so the argument is never looked at first.
-        for (const argument of [true, "install", "x", undefined]) {
+        for (const argument of [true, "install", "x", undefined, { on: true }]) {
           expect(() => answer(sender, argument), `${channel} from ${name}`).toThrow("refused");
         }
       }
@@ -114,6 +127,82 @@ describe("appInvokes", () => {
     expect(calls).toEqual([
       ["setTerminalCommand", "install"],
       ["setTerminalCommand", "remove"],
+    ]);
+  });
+});
+
+/** Her menu's state, as her page would send it. */
+const MENU_STATE: CompanionMenuState = {
+  call: "idle",
+  live: false,
+  micOn: true,
+  models: [{ id: "milky", name: "奶绿" }],
+  model: "milky",
+  outfits: [],
+  outfit: null,
+};
+
+/** Her invokes, on actions that record each call. */
+function herInvokes() {
+  const calls: unknown[][] = [];
+  const actions: CompanionInvokes = {
+    shape: (shape) => {
+      calls.push(["shape", shape]);
+      return { width: 202, height: 480 };
+    },
+    menu: async (state) => {
+      calls.push(["menu", state]);
+      return "hide";
+    },
+  };
+  const list = companionInvokes(actions);
+  return { list, answer: (channel: PageChannel) => answerIn(list, channel), calls };
+}
+
+describe("companionInvokes", () => {
+  test("answers her shape and her menu, one invoke each", () => {
+    expect(herInvokes().list.map(([channel]) => channel)).toEqual([
+      BRIDGE.companionShape,
+      BRIDGE.companionMenu,
+    ]);
+  });
+
+  test("refuses the main window's page and every other sender, before it acts or reads the argument", () => {
+    const { list, calls } = herInvokes();
+    const senders = [
+      ...Object.entries(others).filter(([, sender]) => sender !== her),
+      ["the main window's app page", app] as const,
+    ];
+    for (const [channel, answer] of list) {
+      for (const [name, sender] of senders) {
+        for (const argument of [{ kind: "picture" }, MENU_STATE, "x", undefined]) {
+          expect(() => answer(sender, argument), `${channel} from ${name}`).toThrow("refused");
+        }
+      }
+    }
+    expect(calls).toEqual([]);
+  });
+
+  test("takes her shape and her menu's state from her page alone, in their shapes", async () => {
+    const { answer, calls } = herInvokes();
+    expect(answer(BRIDGE.companionShape)(her, { kind: "model", aspect: 0.5, x: 1 })).toEqual({
+      width: 202,
+      height: 480,
+    });
+    expect(await answer(BRIDGE.companionMenu)(her, MENU_STATE)).toBe("hide");
+    for (const shape of [{ kind: "model", aspect: 40 }, { kind: "video" }, null]) {
+      expect(() => answer(BRIDGE.companionShape)(her, shape)).toThrow("her shape");
+    }
+    for (const state of [
+      { ...MENU_STATE, call: "ringing" },
+      { ...MENU_STATE, models: "x" },
+      null,
+    ]) {
+      expect(() => answer(BRIDGE.companionMenu)(her, state)).toThrow("her menu");
+    }
+    expect(calls).toEqual([
+      ["shape", { kind: "model", aspect: 0.5 }],
+      ["menu", MENU_STATE],
     ]);
   });
 });
