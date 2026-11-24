@@ -475,7 +475,11 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
       const left = budget(COMPANION_MS);
       const drawn = await line(smoke, "main", LINES.companionDrawn, left());
       const hidden = await line(smoke, "main", LINES.companionOffScreen, left());
-      checks.add(COMPANION, true, `${fromEidolon(drawn)}; ${fromEidolon(hidden)}`);
+      checks.add(
+        COMPANION,
+        LINES.companionDrawn.exec(drawn)?.[1] === "picture",
+        `${fromEidolon(drawn)}; ${fromEidolon(hidden)}`,
+      );
     });
   }
 

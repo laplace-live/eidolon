@@ -1,6 +1,6 @@
 // The desktop companion's settings file, her window's size and place on the displays, her window's
 // options, her menu's names, and her log lines.
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -57,6 +57,10 @@ describe("the settings file", () => {
       writeFileSync(file, text);
       expect([text, readCompanion(file)]).toEqual([text, DEFAULT_COMPANION]);
     }
+    // One that can't be read at all: a folder where the file goes.
+    const folderInPlace = join(folder, "unreadable", COMPANION_FILE);
+    mkdirSync(folderInPlace, { recursive: true });
+    expect(readCompanion(folderInPlace)).toEqual(DEFAULT_COMPANION);
   });
 
   test("keeps what it holds, field by field", () => {
