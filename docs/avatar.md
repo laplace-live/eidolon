@@ -347,15 +347,16 @@ parameters within their ranges and parts the rig has, each named once.
 
 ## The call screen
 
-A call with her model shows it face to face: over a chat's column, or under `/call`'s header,
-where [web-app.md](web-app.md#chats) has the screen, its controls and the dock it shrinks to. The
+A call with her model shows it face to face, over a chat's column or under `/call`'s header;
+[web-app.md](web-app.md#chats) describes the screen, its controls and the dock it shrinks to. The
 call is the app shell's (`features/call/call-provider.tsx`), and so are her stages:
 
 - **When it shows.** A call opens as video when someone on it had an active model as it was
   placed: the persona called, or anyone on a group call (`opensVideo`, `features/call/target.ts`),
-  as the summaries the page holds say. The model itself is read fresh in the Call click
-  (`loadCastModel`, `cast.ts`), and where the two disagree the fresh read wins: a member whose model
-  is gone shows her picture.
+  as the summaries the page holds say. The model itself is read fresh as the call is placed
+  (`loadCastModel`, `cast.ts`) for each member whose summary names one: the model active then is
+  the one drawn, and a member whose model is gone shows her picture. A member whose summary names
+  none gets no stage.
 - **A snapshot.** The call keeps the models it opened with. Studio's changes during a call, a
   model made active, edited or removed, show from her next call, which Appearance says while one is
   up.
@@ -383,12 +384,14 @@ call is the app shell's (`features/call/call-provider.tsx`), and so are her stag
 - **Reduced motion.** The stages take the system's setting as the call is placed: no clip, her idle
   included, no saccades and no drift in her look away, while the runtime's blinking and breathing,
   her expressions and her mouth stay ([Direction and behaviors](#direction-and-behaviors)). The
-  screen's own transitions run only without it.
+  caption's dimming and the speaking ring, on her picture or a tile, change with no transition
+  under it.
 - **The smoke's voice.** The free browser smoke's fake voice says a quiet 220 Hz tone in four
   syllables a second, its peaks about −15 dBFS, well above `MOUTH_CURVE`'s gate, so her mouth opens
   at each and shuts between them; the walk's Chrome runs `--mute-audio`, so none of it is heard.
 
-The smoke reads the call through these attributes; keep their names:
+The call's parts carry these attributes for the browser smoke and the render tests to find; keep
+their names:
 
 | Attribute | On | Values |
 | --- | --- | --- |
