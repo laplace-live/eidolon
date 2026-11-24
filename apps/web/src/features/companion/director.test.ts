@@ -227,6 +227,14 @@ describe("calls", () => {
     expect(director.direction(500).gesture).toEqual({ name: "shake", seq: 3 });
   });
 
+  test("another persona starts her over with none of the last one's gestures", () => {
+    const director = new CompanionDirector(0);
+    director.tap("head", 10);
+    expect(director.direction(10).gesture?.name).toBe("nod");
+    director.newPersona(20);
+    expect(director.direction(20).gesture).toBeNull();
+  });
+
   test("a page that joins a call of hers under way plays none of its gestures from before, and the next", () => {
     const director = new CompanionDirector(0);
     director.joined();

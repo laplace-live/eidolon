@@ -174,6 +174,7 @@ export class CompanionDirector {
    */
   newPersona(at: number): void {
     this.#own = direct(this.#own, { type: "reset", at });
+    this.#gesture = null;
     this.#announced = null;
     this.#voicing = null;
     this.#lent = null;
