@@ -16,6 +16,7 @@ import { describe, expect, test } from "vitest";
 import type { SettingRow } from "../../lib/api";
 import { defaultModel, roleById } from "../../lib/providers";
 import {
+  appendPath,
   cardSections,
   changes,
   controlFor,
@@ -407,6 +408,48 @@ describe("Assistant Mode", () => {
     for (const path of ["a", "./a", "", "C:", "C:a", "~a", "~me/a"]) {
       expect(isFullPath(path)).toBe(false);
     }
+  });
+
+  test("a folder the dialog picks goes on a line of its own after the rest", () => {
+    expect(appendPath("", "/Users/me/site")).toBe("/Users/me/site");
+    expect(appendPath(" \n\n", "/Users/me/site")).toBe("/Users/me/site");
+    expect(appendPath("~/Projects", "/Users/me/site")).toBe("~/Projects\n/Users/me/site");
+    // Blank lines and spaces at the end go, which the reader drops anyway.
+    expect(appendPath("~/Projects  \n\n", "/Users/me/site")).toBe("~/Projects\n/Users/me/site");
+    expect(appendPath("C:\\work\r\n", "C:\\Users\\me\\site")).toBe("C:\\work\nC:\\Users\\me\\site");
+    const folders = control("assistant.folders");
+    expect(parseDraft(appendPath("~/Projects\n", "/Users/me/site") as string, folders)).toEqual({
+      ok: true,
+      value: ["~/Projects", "/Users/me/site"],
+    });
+  });
+
+  test("a folder the draft already lists, as the reader strips its lines, leaves it as it is", () => {
+    const draft = "~/Projects\n  /Users/me/site \n";
+    expect(appendPath(draft, "/Users/me/site")).toBe(draft);
+    expect(appendPath(draft, "~/Projects")).toBe(draft);
+    // Only the same text is the same folder: the page can't resolve ~ or a link.
+    expect(appendPath("~/site", "/Users/me/site")).toBe("~/site\n/Users/me/site");
+  });
+
+  test("a folder the list can't hold as it is adds nothing", () => {
+    const draft = "~/Projects";
+    for (const path of [
+      // Two other folders, one of them real.
+      "/tmp/p/a\n/Users/me/Documents",
+      "/tmp/p/a\r\n~/Documents",
+      // Another folder, stripped of what ends it.
+      "/Users/me/site ",
+      "/Users/me/site\u3000",
+      "/Users/me/site\u00a0",
+      // What saving refuses.
+      "/Users/me/a\tb",
+      "/Users/me/a,b",
+    ]) {
+      expect([path, appendPath(draft, path)]).toEqual([path, null]);
+    }
+    expect(appendPath(draft, "/Users/me/ Projects")).toBe("~/Projects\n/Users/me/ Projects");
+    expect(appendPath(draft, "/Users/me/奶绿 (2)")).toBe("~/Projects\n/Users/me/奶绿 (2)");
   });
 
   test("its commands are on while nothing sets them, as assistantSettings reads them", () => {

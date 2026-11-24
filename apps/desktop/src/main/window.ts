@@ -12,6 +12,7 @@ import {
   BOUNDS_FILE,
   backgroundColor,
   chromeOptions,
+  keptMaximized,
   MIN_SIZE,
   placement,
   readBounds,
@@ -29,6 +30,8 @@ let window: BrowserWindow | null = null;
 let shown = false;
 /** Its first page has painted. Until then it stays hidden, whatever asks to show it. */
 let painted = false;
+/** The saved maximized state, for the window's first showing, which a hidden start puts off. */
+let maximizeAtFirstShow = false;
 
 /** Moves main's shown state; each change to what the window is goes to main.log, for the smokes. */
 function setShown(next: { readonly shown?: boolean; readonly painted?: boolean }): void {
@@ -44,8 +47,8 @@ export function mainWindow(): BrowserWindow | null {
   return window !== null && !window.isDestroyed() ? window : null;
 }
 
-/** Who sent `event`, for the bridges' sender rule (bridge.ts's accepts). */
-export function ipcSender(event: IpcMainEvent): IpcSender {
+/** Who sent `event`, a message or an invoke, for the bridges' sender rule (bridge.ts's accepts). */
+export function ipcSender(event: Pick<IpcMainEvent, "sender" | "senderFrame">): IpcSender {
   const win = mainWindow();
   return {
     window: win !== null && event.sender === win.webContents,
@@ -79,8 +82,11 @@ export interface WindowHooks {
   readonly failed: (detail: string) => void;
 }
 
-/** Hidden until its first page is ready to paint, at the bounds it had last. */
-export function createWindow(hooks: WindowHooks): BrowserWindow {
+/**
+ * Hidden until its first page is ready to paint, at the bounds it had last; with `hidden`, until
+ * something shows it. A hidden window still hears Windows' session end, which a missing one wouldn't.
+ */
+export function createWindow(hooks: WindowHooks, hidden = false): BrowserWindow {
   const saved = placement(
     readBounds(boundsFile()),
     workAreas(screen.getPrimaryDisplay(), screen.getAllDisplays()),
@@ -106,19 +112,24 @@ export function createWindow(hooks: WindowHooks): BrowserWindow {
     },
   });
   window = win;
-  // It shows once its first page paints, unless a quit hides it first.
-  shown = true;
+  // It shows once its first page paints, unless it starts hidden or a quit hides it first.
+  shown = !hidden;
   painted = false;
+  maximizeAtFirstShow = saved.maximized;
   win.once("ready-to-show", () => {
     setShown({ painted: true });
     // maximize() shows a hidden window at once, before anything has painted.
-    if (shown) bringForward(win, saved.maximized);
+    if (shown) bringForward(win, takeMaximize());
   });
   // Main owns the title: the page's <title> would name the window after each page.
   win.on("page-title-updated", (event) => event.preventDefault());
 
-  // Background mode never maximizes the window, so it keeps the flag as it was read.
-  const maximized = (): boolean => (background ? saved.maximized : win.isMaximized());
+  const maximized = (): boolean =>
+    keptMaximized(background, {
+      saved: saved.maximized,
+      waiting: maximizeAtFirstShow,
+      maximized: win.isMaximized(),
+    });
   let timer: ReturnType<typeof setTimeout> | null = null;
   const later = (): void => {
     if (timer !== null) clearTimeout(timer);
@@ -172,12 +183,19 @@ function bringForward(win: BrowserWindow, maximize: boolean): void {
   }
 }
 
+/** The saved maximized state once, for the first showing alone. */
+function takeMaximize(): boolean {
+  const maximize = maximizeAtFirstShow;
+  maximizeAtFirstShow = false;
+  return maximize;
+}
+
 /** Brings the window forward, from hidden or minimized; a new one, once it has painted. */
 export function showWindow(): void {
   const win = mainWindow();
   if (win === null) return;
   setShown({ shown: true });
-  if (painted) bringForward(win, false);
+  if (painted) bringForward(win, takeMaximize());
 }
 
 /**

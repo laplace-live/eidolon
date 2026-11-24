@@ -3,10 +3,11 @@
 //
 // Ported from deepseek-harness apps/desktop/src/login-shell-environment.ts@2e39e70496
 //
-// The backend's environment: on macOS the owner's login shell's over the one the app was launched
-// with, on Windows the launch environment as it is. The controller adds its own variables
+// The backend's environment: the one the app was launched with, under the owner's login shell's
+// variables on macOS and the registry's on Windows. The controller adds its own variables
 // (backendEnv).
 import { type LoginShellFailure, PROBE_ENVIRONMENT, readLoginShell } from "./login-shell.ts";
+import { ENVIRONMENT_KEYS, type RegistryValue, readRegistry } from "./registry-environment.ts";
 
 /** They describe the probe's own shell process, not the owner's configuration. */
 const SESSION = new Set(["PWD", "OLDPWD", "SHLVL", "_", ...Object.keys(PROBE_ENVIRONMENT)]);
@@ -25,9 +26,11 @@ export interface EnvironmentOptions {
   readonly platform?: NodeJS.Platform;
   /** The login shells to try; the account's, then zsh, bash and sh, unless a test names its own. */
   readonly shells?: readonly string[];
-  /** Aborting ends a login shell's read: the launch environment is used. */
+  /** The powershell.exe that reads the registry: the system's, unless a test names its own. */
+  readonly powershell?: string;
+  /** Aborting ends a login shell's or the registry's read: the launch environment is used. */
   readonly signal?: AbortSignal;
-  /** Where a login shell's failure goes: main.log. */
+  /** Where a read's failure goes: main.log. */
   readonly log?: { warn(message: string): void };
 }
 
@@ -43,7 +46,7 @@ export interface StartupEnvironment {
   /**
    * The controller's `environment`, called before each spawn: a fresh read, so a Restart sees a
    * changed PATH, but for a first spawn just after startup, which takes the startup read so a cold
-   * start runs the owner's rc files once.
+   * start runs the owner's rc files, or PowerShell, once.
    */
   readonly forSpawn: () => Promise<NodeJS.ProcessEnv>;
 }
@@ -92,7 +95,10 @@ export function launchFlag(
   return fallback ? !FLAG_OFF.has(raw) : FLAG_ON.has(raw);
 }
 
-/** `EIDOLON_DESKTOP_LOGIN_SHELL` turned off in the launch environment, as both smokes turn it. */
+/**
+ * `EIDOLON_DESKTOP_LOGIN_SHELL` turned off in the launch environment, as both smokes turn it: no
+ * login shell on macOS, no registry read on Windows.
+ */
 export function loginShellOff(
   launch: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform,
@@ -101,10 +107,17 @@ export function loginShellOff(
 }
 
 /**
- * `launch` with the login shell's variables over it, except the probe shell's own, `ELECTRON_*`,
- * which never come from the shell, and the `EIDOLON_*` that `launch` sets, so a smoke's or a
+ * Whether a merge leaves `name` as `launch` has it: the probe shell's own variables; `ELECTRON_*`,
+ * which never come from outside the app; and an `EIDOLON_*` that `launch` sets, so a smoke's or a
  * terminal's `EIDOLON_HOME` holds. A blank value counts as unset there, as everywhere in Eidolon.
  */
+function launchKeeps(launch: NodeJS.ProcessEnv, name: string, platform: NodeJS.Platform): boolean {
+  const folded = platform === "win32" ? name.toUpperCase() : name;
+  if (SESSION.has(folded) || folded.startsWith("ELECTRON_")) return true;
+  return folded.startsWith("EIDOLON_") && Boolean(read(launch, name, platform));
+}
+
+/** `launch` with the login shell's variables over it, but for those `launchKeeps`. */
 export function mergeShellEnvironment(
   launch: NodeJS.ProcessEnv,
   shell: Readonly<Record<string, string>>,
@@ -112,24 +125,90 @@ export function mergeShellEnvironment(
 ): NodeJS.ProcessEnv {
   const merged = { ...launch };
   for (const [name, value] of Object.entries(shell)) {
-    const folded = platform === "win32" ? name.toUpperCase() : name;
-    if (SESSION.has(folded) || folded.startsWith("ELECTRON_")) continue;
-    if (folded.startsWith("EIDOLON_") && read(launch, name, platform)) continue;
-    write(merged, name, value, platform);
+    if (!launchKeeps(launch, name, platform)) write(merged, name, value, platform);
   }
   return merged;
 }
 
 /**
- * What the backend runs on before its own variables: on macOS the login shell's merged over
- * `launch`, unless `EIDOLON_DESKTOP_LOGIN_SHELL` is off or every shell fails, and on Windows
- * `launch` as it is. Never rejects; a shell that fails is logged.
+ * `value` with each `%NAME%` that `env` has replaced by its value, names matched without case. As
+ * Windows expands, an unknown name stays as written, and its closing `%` may open the next one.
+ */
+function expand(value: string, env: NodeJS.ProcessEnv): string {
+  const parts = value.split("%");
+  let expanded = parts[0] as string;
+  let i = 1;
+  while (i < parts.length) {
+    const name = parts[i] as string;
+    const found = i + 1 < parts.length ? read(env, name, "win32") : undefined;
+    if (found === undefined) {
+      expanded += `%${name}`;
+      i += 1;
+    } else {
+      expanded += found + parts[i + 1];
+      i += 2;
+    }
+  }
+  return expanded;
+}
+
+/**
+ * Windows: `launch` with the registry's variables over it, as Windows builds a new process's: key
+ * by key, its REG_SZ values before its REG_EXPAND_SZ ones, which expand against the variables so
+ * far, and no other kind. `Path` is each key's own, the system's first, with a `;` between where
+ * the one before doesn't end with one. A name `launchKeeps` stays as `launch` has it, and so does
+ * a variable deleted from the registry since.
+ */
+export function mergeRegistryEnvironment(
+  launch: NodeJS.ProcessEnv,
+  keys: readonly (readonly RegistryValue[])[],
+): NodeJS.ProcessEnv {
+  const merged = { ...launch };
+  const owner = read(launch, "USERNAME", "win32");
+  let path: string | undefined;
+  for (const [index, values] of keys.entries()) {
+    for (const kind of ["String", "ExpandString"]) {
+      for (const { name, kind: stored, value } of values) {
+        if (stored !== kind || launchKeeps(launch, name, "win32")) continue;
+        let text = kind === "String" ? value : expand(value, merged);
+        if (name.toUpperCase() === "PATH") {
+          path = !path || path.endsWith(";") ? `${path ?? ""}${text}` : `${path};${text}`;
+          text = path;
+        }
+        write(merged, name, text, "win32");
+      }
+    }
+    // Windows sets the account's USERNAME between the system key, whose own is SYSTEM, and the
+    // user's, whose values expand with it.
+    if (index === 0 && owner) write(merged, "USERNAME", owner, "win32");
+  }
+  return merged;
+}
+
+/**
+ * What the backend runs on before its own variables: `launch` under the login shell's on macOS and
+ * the registry's on Windows, unless `EIDOLON_DESKTOP_LOGIN_SHELL` is off or the read fails. Never
+ * rejects; a read that fails is logged.
  */
 export async function readEnvironment(
   launch: NodeJS.ProcessEnv,
-  { platform = process.platform, shells, signal, log = console }: EnvironmentOptions = {},
+  {
+    platform = process.platform,
+    shells,
+    powershell,
+    signal,
+    log = console,
+  }: EnvironmentOptions = {},
 ): Promise<EnvironmentRead> {
-  if (platform === "win32" || loginShellOff(launch, platform)) {
+  if (loginShellOff(launch, platform)) return { env: { ...launch }, failures: [] };
+  if (platform === "win32") {
+    const registry = await readRegistry(ENVIRONMENT_KEYS, { env: launch, powershell, signal });
+    if ("values" in registry) {
+      return { env: mergeRegistryEnvironment(launch, registry.values), failures: [] };
+    }
+    log.warn(
+      `Eidolon: couldn't read the registry's variables, so the backend runs on the launch's: ${registry.failure}`,
+    );
     return { env: { ...launch }, failures: [] };
   }
   const { variables, failures } = await readLoginShell(launch, { shells, signal });

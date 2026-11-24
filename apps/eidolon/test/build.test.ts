@@ -206,16 +206,20 @@ describe("the third-party notices", () => {
 
   test("NOTICE, which the package ships, names every copyright a ported file's header does", () => {
     const notice = readFileSync(join(ROOT, "NOTICE"), "utf8");
-    // pipedog's ports are BSD-2, pi-mono's and deepseek-harness's MIT.
+    // pipedog's and npm-install-checks' ports are BSD-2, those of npm's other packages ISC, and
+    // pi-mono's, deepseek-harness's and cross-spawn's MIT.
     const holders = new Map<string, Set<string>>([
       ["BSD-2-Clause", new Set()],
+      ["ISC", new Set()],
       ["MIT", new Set()],
     ]);
-    for (const file of globSync("{apps,packages}/*/src/**/*.ts", { cwd: ROOT })) {
+    const ported = ["{apps,packages}/*/src/**/*.ts", "apps/desktop/node-shim/*.mjs"];
+    for (const file of globSync(ported, { cwd: ROOT })) {
       const source = readFileSync(join(ROOT, file), "utf8");
-      const license = /^\/\/ SPDX-License-Identifier: (BSD-2-Clause|MIT)$/m.exec(source)?.[1];
+      const license = /^\/\/ SPDX-License-Identifier: (BSD-2-Clause|ISC|MIT)$/m.exec(source)?.[1];
       if (license === undefined) continue;
-      for (const [, line] of source.matchAll(/^\/\/ (Copyright \(c\) .+)$/gm)) {
+      // @npmcli/package-json's license writes its copyright without "(c)".
+      for (const [, line] of source.matchAll(/^\/\/ (Copyright .+)$/gm)) {
         holders.get(license)?.add(line as string);
       }
     }

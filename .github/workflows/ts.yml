@@ -157,3 +157,11 @@ jobs:
           -t "Windows|its children, when the host exits without closing it"
 
       - run: bun run test apps/cli/test/cli.test.ts -t relayStopMessages
+
+      # The desktop app's own: its PATH and registry scripts on scratch keys under HKCU, the .cmd
+      # launchers of its terminal command and node shim, and the shim's npx through cmd.exe.
+      - run: >-
+          bun run test apps/desktop/test/terminal-command-windows.test.ts
+          apps/desktop/test/registry-environment-windows.test.ts
+          apps/desktop/test/node-shim-windows.test.ts
+          apps/desktop/test/npx-windows.test.ts

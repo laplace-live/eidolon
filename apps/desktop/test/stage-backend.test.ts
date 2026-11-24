@@ -1,9 +1,17 @@
 // stage-backend's parts, on made-up lockfiles, folders, PE files and zips: the pinning to bun.lock,
 // what is pruned, where the VC++ runtime goes, the unsigned-PE list and the license texts. The
 // staged payload itself is stage.test.ts's.
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  type Dirent,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { crc32, deflateRawSync } from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
 import { packageManifest } from "../../eidolon/scripts/build.ts";
@@ -19,8 +27,11 @@ import {
   resolveFrom,
   supports,
 } from "../scripts/lockfile.ts";
+import { NODE_SHIM } from "../scripts/node-shim.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
+  copyVcRuntime,
+  dropUnpacked,
   newestVcRedist,
   parseTarget,
   peFilesIn,
@@ -30,7 +41,6 @@ import {
   stageDir,
   thirdPartyLicenses,
   unsignedNames,
-  vcRuntimeNeeds,
 } from "../scripts/stage-backend.ts";
 
 const ROOT = join(import.meta.dirname, "../../..");
@@ -576,6 +586,32 @@ describe("onnxruntime-node", () => {
   });
 });
 
+describe("what electron-builder never packs", () => {
+  test("goes from the stage at any depth, and every other dotfile stays", () => {
+    const payload = temp();
+    const kept = [
+      "node_modules/a/.gitattributes",
+      "node_modules/a/.npmignore",
+      "node_modules/a/index.js",
+      "node-shim/node_modules/node_modules/pnpm/dist/node_modules/undici/lib/llhttp/constants.js",
+    ];
+    for (const path of [
+      ...kept,
+      ".DS_Store",
+      "node_modules/a/.gitkeep",
+      "node-shim/node_modules/node_modules/pnpm/dist/node_modules/undici/lib/llhttp/.gitkeep",
+    ]) {
+      put(join(payload, path));
+    }
+    dropUnpacked(payload);
+    const files = (readdirSync(payload, { recursive: true, withFileTypes: true }) as Dirent[])
+      .filter((entry) => entry.isFile())
+      .map((entry) => relative(payload, join(entry.parentPath, entry.name)).split("\\").join("/"))
+      .sort();
+    expect(files).toEqual([...kept].sort());
+  });
+});
+
 describe("the VC++ runtime", () => {
   function install(root: string, version: string, crt: string, names = VC): string {
     const dir = join(root, "VC", "Redist", "MSVC", version, "x64", crt);
@@ -603,7 +639,7 @@ describe("the VC++ runtime", () => {
     expect(() => newestVcRedist([temp()])).toThrow("No Visual Studio redist with vcruntime140.dll");
   });
 
-  test("goes beside each native that imports it, with what its DLLs import in turn", () => {
+  test("goes beside each native in the payload that imports it, with what its DLLs import in turn", () => {
     const redist = temp();
     const runtimeImports: Record<string, string[]> = {
       "vcruntime140_1.dll": ["VCRUNTIME140.dll"],
@@ -611,7 +647,8 @@ describe("the VC++ runtime", () => {
       "msvcp140_1.dll": ["MSVCP140.dll"],
     };
     for (const name of VC) put(join(redist, name), pe({ imports: runtimeImports[name] ?? [] }));
-    const modules = temp();
+    const payload = temp();
+    const modules = join(payload, "node_modules");
     const ort = join(modules, "onnxruntime-node", "bin", "napi-v6", "win32", "x64");
     put(join(ort, "onnxruntime_binding.node"), pe({ imports: ["MSVCP140.dll"] }));
     put(
@@ -623,10 +660,32 @@ describe("the VC++ runtime", () => {
     const sharp = join(modules, "@img", "sharp-win32-x64", "lib");
     put(join(sharp, "sharp-win32-x64.node"), pe({ imports: ["KERNEL32.dll"] }));
     put(join(sharp, "libvips-42.dll"), pe());
-    expect(vcRuntimeNeeds(modules, redist)).toEqual(
+    // The node shim's pnpm's, which pnpm loads to clone a package into place; the UCRT is Windows'.
+    const reflink = join(
+      payload,
+      NODE_SHIM,
+      "node_modules",
+      "pnpm",
+      "dist",
+      "node_modules",
+      "@reflink",
+      "reflink-win32-x64-msvc",
+    );
+    put(
+      join(reflink, "reflink.win32-x64-msvc.node"),
+      pe({ imports: ["VCRUNTIME140.dll", "api-ms-win-crt-heap-l1-1-0.dll"] }),
+    );
+    copyVcRuntime(payload, redist);
+    const copies = new Map<string, string[]>();
+    const entries = readdirSync(payload, { recursive: true, withFileTypes: true }) as Dirent[];
+    for (const entry of entries.filter((entry) => VC.includes(entry.name))) {
+      copies.set(entry.parentPath, [...(copies.get(entry.parentPath) ?? []), entry.name].sort());
+    }
+    expect(copies).toEqual(
       new Map([
         [lancedb, ["vcruntime140.dll"]],
         [ort, [...VC].sort()],
+        [reflink, ["vcruntime140.dll"]],
       ]),
     );
   });
@@ -731,6 +790,31 @@ describe("THIRD_PARTY_LICENSES.txt", () => {
     expect(text).not.toContain(LIBVIPS_SOURCE);
     expect(text).not.toContain(LGPL_TITLE);
     expect(text).not.toContain("Visual C++");
+  });
+
+  test("gives the node shim's pnpm and each package its dist/ bundles theirs, SPDX's where they ship none", () => {
+    const root = payload();
+    const pnpm = join(root, "node-shim", "node_modules", "node_modules", "pnpm");
+    manifest(pnpm, { name: "pnpm", version: "11.0.0", license: "MIT" });
+    put(join(root, "node-shim", "node_modules", ".bin", "npx.mjs"));
+    put(join(pnpm, "LICENSE"), "Copyright (c) pnpm contributors\n");
+    const bundled = join(pnpm, "dist", "node_modules");
+    manifest(join(bundled, "tar"), { name: "tar", version: "7.0.0", license: "BlueOak-1.0.0" });
+    manifest(join(bundled, "@reflink", "reflink"), {
+      name: "@reflink/reflink",
+      version: "0.1.0",
+      license: "MIT",
+    });
+    put(join(bundled, ".bin", "tar"));
+    const found = sections(thirdPartyLicenses(root, null));
+    expect([...found.keys()].slice(0, 3)).toEqual([
+      "@reflink/reflink 0.1.0 (MIT)",
+      "pnpm 11.0.0 (MIT)",
+      "tar 7.0.0 (BlueOak-1.0.0)",
+    ]);
+    expect(found.get("pnpm 11.0.0 (MIT)")).toBe("Copyright (c) pnpm contributors");
+    expect(found.get("tar 7.0.0 (BlueOak-1.0.0)")).toContain("Blue Oak Model License");
+    expect(found.get("@reflink/reflink 0.1.0 (MIT)")).toContain("Permission is hereby granted");
   });
 
   test("says where libvips's source is and gives the LGPL, from its own package or sharp's", () => {

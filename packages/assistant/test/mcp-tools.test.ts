@@ -11,7 +11,7 @@ import { buildTaskPrompt } from "../src/index.ts";
 import type { CallToolResult } from "../src/mcp/protocol/content.ts";
 import type { Tool } from "../src/mcp/protocol/types.ts";
 import { type McpSecrets, parseMcpConfig } from "../src/mcp/servers.ts";
-import { McpSession } from "../src/mcp/session.ts";
+import { McpSession, nodeShim } from "../src/mcp/session.ts";
 import {
   capMcpTools,
   convertMcpResult,
@@ -504,7 +504,9 @@ describe("the servers' processes", () => {
       const { values } = JSON.parse(
         (await call(session, "mcp__fake__env", { values: ["PATH"] })).content,
       );
-      expect(values.PATH).toBe("/usr/bin:/bin");
+      // On Electron's Node the desktop app's node shim comes last (mcp-node-shim.test.ts).
+      const shim = nodeShim();
+      expect(values.PATH).toBe(["/usr/bin", "/bin", ...(shim ? [shim.folder] : [])].join(":"));
     } finally {
       process.env.PATH = before;
     }

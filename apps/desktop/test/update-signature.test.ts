@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   parseDn,
   powershellArgs,
+  powershellExe,
   signatureScript,
   signatureVerdict,
 } from "../src/main/update-signature.ts";
@@ -75,5 +76,13 @@ describe("the script", () => {
       "-EncodedCommand",
     ]);
     expect(Buffer.from(args[5] as string, "base64").toString("utf16le")).toBe(script);
+  });
+
+  test("names Windows PowerShell by its full path under SystemRoot, never by its bare name", () => {
+    const exe = "System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+    expect(powershellExe({ SystemRoot: "D:\\WINNT" })).toBe(`D:\\WINNT\\${exe}`);
+    for (const env of [{}, { SystemRoot: "" }]) {
+      expect(powershellExe(env)).toBe(`C:\\Windows\\${exe}`);
+    }
   });
 });

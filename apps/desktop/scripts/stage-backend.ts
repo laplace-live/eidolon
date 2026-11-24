@@ -1,8 +1,9 @@
 // Stages the backend the desktop app ships for one target, in apps/desktop/.stage/<target>/eidolon
 // (`node apps/desktop/scripts/stage-backend.ts [--target darwin-arm64|win32-x64]`, this machine's by
 // default): what the npm package stages, plus its dependencies installed by npm for the target,
-// pinned to bun.lock and pruned. On Windows the natives also get the VC++ runtime beside them, and
-// .stage/win32-x64/unsigned-pe.json lists the PE files the release signs.
+// pinned to bun.lock and pruned, and the node shim (node-shim.ts). On Windows the natives also get
+// the VC++ runtime beside them, and .stage/win32-x64/unsigned-pe.json lists the PE files the release
+// signs.
 import { type SpawnSyncOptionsWithStringEncoding, spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -25,6 +26,7 @@ import {
 } from "../../eidolon/scripts/build.ts";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { type LsNode, lockDrift, lockedTree, pinOverrides, readBunLock } from "./lockfile.ts";
+import { NODE_SHIM, shimPnpm, stageNodeShim } from "./node-shim.ts";
 import { compareVersions, type Pe, readPe } from "./pe.ts";
 import { readZip } from "./zip.ts";
 
@@ -143,6 +145,18 @@ export function pruneOnnxruntime(modules: string, target: Target): void {
   }
 }
 
+/** What electron-builder never packs, whatever its filters: builder-util's walk skips these names. */
+export const UNPACKED_NAMES: ReadonlySet<string> = new Set([".DS_Store", ".gitkeep"]);
+
+/** Removes what electron-builder would leave out, at any depth, so the stage is what ships. */
+export function dropUnpacked(payload: string): void {
+  for (const entry of readdirSync(payload, { recursive: true, withFileTypes: true })) {
+    if (UNPACKED_NAMES.has(entry.name)) {
+      rmSync(join(entry.parentPath, entry.name), { recursive: true, force: true });
+    }
+  }
+}
+
 /** A Microsoft.VC14x.CRT folder of a Visual Studio install, with the redist version it's under. */
 export interface VcRedist {
   readonly version: string;
@@ -205,19 +219,18 @@ function vcImports(file: string): string[] {
 }
 
 /**
- * Each folder under `modules` holding a native addon, with the VC++ runtime DLLs its own natives
- * import and the ones those import in turn: Node loads an addon with LOAD_WITH_ALTERED_SEARCH_PATH,
- * which looks in the addon's folder first.
+ * Beside each native addon in `payload`, the node shim's included, copies from `redist` the VC++
+ * runtime DLLs its folder's natives import and the ones those import in turn: Node loads an addon
+ * with LOAD_WITH_ALTERED_SEARCH_PATH, which looks in the addon's folder first.
  */
-export function vcRuntimeNeeds(modules: string, redist: string): Map<string, string[]> {
+export function copyVcRuntime(payload: string, redist: string): void {
   const runtime = new Map(VC_RUNTIME_DLLS.map((dll) => [dll, vcImports(join(redist, dll))]));
   const folders = new Set(
-    files(modules)
+    files(payload)
       .filter((file) => file.endsWith(".node"))
       .map((file) => dirname(file)),
   );
-  const needs = new Map<string, string[]>();
-  for (const folder of [...folders].sort()) {
+  for (const folder of folders) {
     const needed = new Set(
       readdirSync(folder)
         .filter(
@@ -226,9 +239,8 @@ export function vcRuntimeNeeds(modules: string, redist: string): Map<string, str
         .flatMap((name) => vcImports(join(folder, name))),
     );
     for (const dll of needed) for (const more of runtime.get(dll) ?? []) needed.add(more);
-    if (needed.size > 0) needs.set(folder, [...needed].sort());
+    for (const dll of needed) copyFileSync(join(redist, dll), join(folder, dll));
   }
-  return needs;
 }
 
 /** A `.node` or `.dll` file, by the basename signExts matches it by, and what its headers say. */
@@ -377,14 +389,22 @@ function packageLicense(pkg: Bundled, dir: string): string {
 
 /**
  * THIRD_PARTY_LICENSES.txt, the one file the Licenses item opens, so it holds every license the
- * payload carries: each node_modules package's, on Windows the VC++ runtime's copied from
- * `vcRuntime`, then the payload's own NOTICE, THIRD_PARTY_NOTICES.md and its data's licenses.
+ * payload carries: each package's in npm's node_modules, the node shim's and the dist/ of its pnpm,
+ * on Windows the VC++ runtime's copied from `vcRuntime`, then the payload's own NOTICE,
+ * THIRD_PARTY_NOTICES.md and its data's licenses.
  */
 export function thirdPartyLicenses(payload: string, vcRuntime: VcRedist | null): string {
   const packages = new Map<string, { pkg: Bundled; dir: string }>();
-  for (const [name, dir] of installedPackages(join(payload, "node_modules"))) {
-    for (const pkg of inlinedPackages(new Map([[name, dir]]))) {
-      packages.set(`${pkg.name}@${pkg.version}`, { pkg, dir });
+  const pnpm = shimPnpm(payload);
+  for (const modules of [
+    join(payload, "node_modules"),
+    dirname(pnpm),
+    join(pnpm, "dist", "node_modules"),
+  ]) {
+    for (const [name, dir] of installedPackages(modules)) {
+      for (const pkg of inlinedPackages(new Map([[name, dir]]))) {
+        packages.set(`${pkg.name}@${pkg.version}`, { pkg, dir });
+      }
     }
   }
   const sections = [...packages.values()]
@@ -422,9 +442,10 @@ export function thirdPartyLicenses(payload: string, vcRuntime: VcRedist | null):
   return [
     "Third-party licenses\n",
     "Eidolon's backend includes the third-party code and data below, each with its license: first",
-    "what its node_modules folder holds, then NOTICE, which covers the code Eidolon ports from other",
-    "projects and the data and the font it ships, then THIRD_PARTY_NOTICES.md, for the packages its",
-    "bundles in dist/ and its web app in web/ include, and last the license files of its data.\n",
+    "the packages its node_modules folders hold, the pnpm its node shim runs and the packages pnpm",
+    "bundles among them, then NOTICE, which covers the code Eidolon ports from other projects and",
+    "the data and the font it ships, then THIRD_PARTY_NOTICES.md, for the packages its bundles in",
+    "dist/ and its web app in web/ include, and last the license files of its data.\n",
     ...sections,
     ...runtime,
     ...notices,
@@ -495,12 +516,12 @@ export async function stageBackend(
     for (const entry of links) rmSync(join(entry.parentPath, entry.name), { recursive: true });
     rmSync(join(modules, ".package-lock.json"), { force: true });
     pruneOnnxruntime(modules, target);
+    stageNodeShim(payload, { os, cpu });
+    dropUnpacked(payload);
     let vcRuntime: VcRedist | null = null;
     if (target === "win32-x64") {
       vcRuntime = newestVcRedist();
-      for (const [folder, dlls] of vcRuntimeNeeds(modules, vcRuntime.dir)) {
-        for (const dll of dlls) copyFileSync(join(vcRuntime.dir, dll), join(folder, dll));
-      }
+      copyVcRuntime(payload, vcRuntime.dir);
       const unsigned = unsignedNames([
         ...peFilesIn(payload),
         ...peFilesInZip(await electronZip(), "Eidolon"),
@@ -527,6 +548,7 @@ export async function stageBackend(
       sharp: bytesUnder(join(modules, "sharp")) + bytesUnder(join(modules, "@img")),
       web: bytesUnder(join(payload, "web")),
       dist: bytesUnder(join(payload, "dist")),
+      "node shim": bytesUnder(join(payload, NODE_SHIM)),
     },
     seconds: (performance.now() - started) / 1000,
   };

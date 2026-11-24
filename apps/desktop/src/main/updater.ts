@@ -22,6 +22,7 @@ import {
 } from "./update-flow.ts";
 import {
   powershellArgs,
+  powershellExe,
   SIGNATURE_TIMEOUT_MS,
   signatureScript,
   signatureVerdict,
@@ -66,16 +67,12 @@ async function verifySetupSignature(
   for (const name of Object.keys(env)) if (/^psmodulepath$/i.test(name)) delete env[name];
   let verdict: string | null;
   try {
-    const { stdout } = await execFileAsync(
-      "powershell.exe",
-      powershellArgs(signatureScript(file)),
-      {
-        encoding: "utf8",
-        env,
-        timeout: SIGNATURE_TIMEOUT_MS,
-        windowsHide: true,
-      },
-    );
+    const { stdout } = await execFileAsync(powershellExe(), powershellArgs(signatureScript(file)), {
+      encoding: "utf8",
+      env,
+      timeout: SIGNATURE_TIMEOUT_MS,
+      windowsHide: true,
+    });
     verdict = signatureVerdict(stdout, file, publisherNames);
   } catch (error) {
     verdict = `couldn't check the update's signature: ${String(error)}`;

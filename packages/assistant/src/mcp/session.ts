@@ -6,10 +6,11 @@
 // One task's MCP servers, started together at its first run and killed, process groups and all,
 // when it ends. Each runs in a folder no task can write, with the task's cut environment plus its
 // entry's own, and every secret one was given is hidden in the errors and stderr it hands back.
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { basename } from "node:path";
+import { basename, delimiter } from "node:path";
 import { pathToFileURL } from "node:url";
-import { errorText } from "@eidolon/config";
+import { errorText, jsRuntime, shippedPath } from "@eidolon/config";
 import { shellEnv } from "../tools/shell.ts";
 import { sliceTail } from "../tools/truncate.ts";
 import type { AssistantTool, PathGuard } from "../types.ts";
@@ -92,6 +93,44 @@ function redactor(secrets: ReadonlyMap<string, string>): (text: string) => strin
 function hintOf(tool: Tool): McpToolRef["hint"] {
   if (tool.annotations?.readOnlyHint === true) return "read-only";
   return tool.annotations?.destructiveHint === true ? "destructive" : undefined;
+}
+
+/** The desktop app's node shim: the folder of its node, npx, pnpm and pnpx launchers. */
+export interface NodeShim {
+  readonly folder: string;
+  /** The binary they run as Node: the backend's own. */
+  readonly node: string;
+}
+
+/**
+ * The node shim, when the backend runs on the desktop app's binary as Node and the shim is there:
+ * the payload's, or under dev:desktop its sources in the checkout. Null under Node.
+ */
+export function nodeShim(): NodeShim | null {
+  if (process.versions.electron === undefined) return null;
+  const folder = shippedPath("node-shim/node_modules/.bin", "apps/desktop/node-shim");
+  return existsSync(folder) ? { folder, node: jsRuntime().command } : null;
+}
+
+/**
+ * What every server's environment starts from: the task's cut one, and with `shim` its folder last
+ * on PATH, unless the task may write it, so a node the computer has comes first, and EIDOLON_NODE,
+ * which the launchers run. A task's commands never get the shim.
+ */
+export async function serverEnv(
+  guard: PathGuard,
+  shim: NodeShim | null = nodeShim(),
+  from: NodeJS.ProcessEnv = process.env,
+): Promise<Record<string, string>> {
+  const env = await shellEnv(guard, from);
+  if (shim === null) return env;
+  // After the cut, which drops every node_modules/.bin, the payload's shim folder among them.
+  const writable = await guard.resolve(shim.folder, "write").then(
+    () => true,
+    () => false,
+  );
+  const path = writable ? env.PATH : [env.PATH, shim.folder].join(delimiter);
+  return { ...env, PATH: path, EIDOLON_NODE: shim.node };
 }
 
 /** Connects to one server within its timeout, or says why it couldn't. */
@@ -227,7 +266,7 @@ export class McpSession {
     }
     if (ready.length === 0) return new McpSession([], failed);
     await mkdir(options.cwd, { recursive: true, mode: 0o700 });
-    const env = await shellEnv(options.guard);
+    const env = await serverEnv(options.guard);
     signal.throwIfAborted();
     const outcomes = await Promise.all(
       ready.map(({ server, resolved }) => start(server, resolved, env, options)),

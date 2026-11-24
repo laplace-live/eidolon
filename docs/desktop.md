@@ -13,7 +13,7 @@ the app's updater finds the next one ([Releasing](#releasing), [Updates](#update
 ```text
 Eidolon (main process)
  ├─ the single-instance lock: a second launch shows the window, or quits the app with --quit
- ├─ the environment: the login shell's on macOS, the launch's on Windows
+ ├─ the environment: the login shell's on macOS, the registry's on Windows
  ├─ the data home: EIDOLON_HOME, else ~/.laplace/eidolon
  ├─ the backend controller, one attempt at a time
  │    ├─ attach: locks/4273f434b594.info names a live server that proves it holds local-token
@@ -23,6 +23,7 @@ Eidolon (main process)
  ├─ the eidolon-app: scheme
  │    ├─ shell/  the loading and failure pages
  │    └─ app/    forwarded to the backend, with the Bearer only main holds
+ ├─ the task watch: the server's tasks, for notifications
  └─ the window at eidolon-app://app/: sandboxed, with the preload's bridge
 ```
 
@@ -34,21 +35,25 @@ apps/desktop/
   resources/             build resources: entitlements, installer.nsh, the icon, and the designated
                          requirement release builds carry (designated-requirement.mac)
   assets/                what main loads at run time through process.resourcesPath: the tray icon
+  launchers/             the eidolon command's, shipped to the app's resources/bin
+  node-shim/             the node shim's launchers, which the stage copies into the payload
   dev-app-update.yml     the release feed for EIDOLON_DESKTOP_DEV_UPDATE, read only unpackaged
   scripts/               build.ts, dev.ts, package.ts; stage-backend.ts with lockfile.ts, pe.ts,
-                         zip.ts and natives.ts; signed-check.ts, the signed build's checks;
-                         vite-common.ts, electron-env.ts;
+                         zip.ts, natives.ts and node-shim.ts; signed-check.ts, the signed
+                         build's checks; vite-common.ts, electron-env.ts;
                          test-on-electron.ts, the Electron lane; system-ca.ts, CI's system CA
                          proof; dev-smoke.ts with dev-smoke/, the dev smoke; smoke.ts, the
                          packaged smoke; smoke/, the kit both share, with the packaged
                          smoke's packaged.ts and nsis.ts; and update-test.ts with update-test/,
                          CI's update test
   src/main/              main: the Electron-free modules that decide (controller, attach, forwarder,
-                         backend, environment, login-shell, pages, policy, menus, window-options,
-                         quit-check, quit-flow, update-flow, strings, shell-pages, log-filter,
-                         log-files, background), and thin Electron layers over them (index,
-                         instance, protocol, window, chrome, menu, tray, permissions, navigation,
-                         native, quit, updater, log)
+                         backend, environment, login-shell, registry-environment, pages, policy,
+                         menus, window-options, quit-check, quit-flow, update-flow,
+                         update-signature, strings, shell-pages, log-filter, log-files,
+                         background, app-invokes, folder-dialog, system-options, terminal-command,
+                         task-notices), and thin Electron layers over them (index, instance,
+                         protocol, window, chrome, menu, tray, permissions, navigation, native,
+                         quit, updater, log)
   src/preload/           the sandboxed CommonJS preload: the page's marks and its bridge
   src/shared/bridge.ts   the IPC channels and who may send on each; it imports nothing
   src/shared/release-notes.ts
@@ -87,16 +92,18 @@ the app is in [background mode](#background-mode).
 
 - **Main** (`src/main`, built to `dist/main/index.js`) holds the profile, the single-instance lock,
   the environment and the data home, the backend controller, the `eidolon-app:` scheme and its
-  forwarder, the window, the menus, the tray and the logs. No backend code runs in it or in the
-  window: `apps/desktop/src` loads at run time only `electron`, `electron-updater`, `electron-log`,
-  `undici`, `node:*` and its own modules, and takes `@eidolon/*` and `apps/bot` as types alone
-  (`test/boundary.test.ts`). So main imports no `@eidolon/config` either: it finds the payload
-  through `process.resourcesPath` when packaged, or the checkout when not, and mirrors the few
-  things it needs (`jsRuntime().args`, `dataHome()`), each held equal to the original by a test.
+  forwarder, the window, the menus, the tray, the task watch and the logs. No backend code runs in
+  it or in the window: `apps/desktop/src` loads at run time only `electron`, `electron-updater`,
+  `electron-log`, `undici`, `node:*` and its own modules, and takes `@eidolon/*` and `apps/bot` as
+  types alone (`test/boundary.test.ts`). So main imports no `@eidolon/config` either: it finds the
+  payload through `process.resourcesPath` when packaged, or the checkout when not, and mirrors the
+  few things it needs (`jsRuntime().args`, `dataHome()`), each held equal to the original by a
+  test.
 - **The backend** is the local server, run by the app's own binary as Node
   (`ELECTRON_RUN_AS_NODE=1`): packaged, the payload's `dist/server.js`; unpackaged, the checkout's
   `apps/bot/src/local/server.ts`, whose types the dev Electron's Node strips. Its jobs, grep's
-  matcher and the `eidolon` command its tasks run start the same binary through `jsRuntime()`.
+  matcher and the `eidolon` command its tasks run start the same binary through `jsRuntime()`, and
+  so does an MCP server through the [node shim](#the-node-shim).
 - **The window** is one BrowserWindow: a sandboxed renderer with context isolation, no Node
   integration and no `<webview>`, and the preload, `dist/preload/index.cjs`.
 
@@ -118,14 +125,15 @@ the app is in [background mode](#background-mode).
    running app through the normal quit, and with no app running it exits 0 and starts nothing.
 
 Then main registers the scheme and, on Windows, sets the AppUserModelID `live.laplace.eidolon`,
-which the installer's shortcut carries, before any window. Once Electron is ready it installs the
+which the installer's shortcut carries, and the installed app's toast activator
+([Notifications](#notifications)), before any window. Once Electron is ready it installs the
 session's permission handlers, the scheme's handler, the bridges' handlers, the menus and, on
-Windows outside background mode, the tray, opens the window on the loading page, and only then
-reads the environment, resolves the data home and starts the controller. The window moves to
-`eidolon-app://app/` once the backend is ready. The data home is `EIDOLON_HOME` from that
-environment, else `~/.laplace/eidolon` (`%USERPROFILE%\.laplace\eidolon`), the one npx and
-`bun run app` use; the backend gets it as its `EIDOLON_HOME`, so the two never read different
-homes.
+Windows outside background mode, the tray, opens the window on the loading page (kept hidden after
+a [launch at login](#open-at-login)), and only then reads the environment, resolves the data home
+and starts the controller. The window moves to `eidolon-app://app/` once the backend is ready.
+The data home is `EIDOLON_HOME` from that environment, else `~/.laplace/eidolon`
+(`%USERPROFILE%\.laplace\eidolon`), the one npx and `bun run app` use; the backend gets it as its
+`EIDOLON_HOME`, so the two never read different homes.
 
 ### The backend
 
@@ -300,8 +308,10 @@ One window, 1280×820 at first and at least 520×600, never larger than the work
 it opens on (the primary one, centred, when it has no position, as at first), hidden until its first
 page is ready to paint, at the bounds it had last: `window-bounds.json` in the profile, written
 through a temporary file. A saved position is dropped when no display shows 100×40 px of the
-window's top, and a window saved maximized is maximized only once it has painted, since
-`maximize()` shows a hidden window. Main owns its title.
+window's top, and a window saved maximized is maximized only at its first showing once it has
+painted, since `maximize()` shows a hidden window; until that showing, which a
+[hidden start](#open-at-login) puts off, the file keeps it maximized, so a quit before it loses
+nothing. Main owns its title.
 
 - **Its pages.** The window shows `eidolon-app://shell/loading` until the backend is ready, then
   `eidolon-app://app/`. The failure page, `eidolon-app://shell/failed`, says why in the shell's
@@ -323,15 +333,32 @@ window's top, and a window saved maximized is maximized only once it has painted
   bridge, in its main frame alone. The app's page gets `window.eidolonDesktop`: `platform`,
   `version` and `serverVersion`, read before the page's first script over a synchronous message
   main answers from what it already knows (`version` is `0.0.0-dev` unpackaged), and `setTheme`,
-  `setLanguage` and `onCommand`. A shell page gets `window.eidolonShell`: `retry`, `showLogs` and
-  `quit`. Main takes each message only from the window's own webContents and main frame, on the
-  channel's own page, judged by the frame's origin, never its URL: a sandboxed document the backend
-  serves has an app URL and an opaque origin (`accepts()` in `src/shared/bridge.ts`).
+  `setLanguage` and `onCommand`; and five calls the page awaits, each an invoke main answers
+  through `ipcMain.handle`: `chooseFolder` (the folder dialog, below), `loginItem` and
+  `setLoginItem(on)` ([Open at Login](#open-at-login)), `terminalCommand` and
+  `setTerminalCommand(action)` ([the terminal command](#the-terminal-command)). The preload sends
+  only what main takes (`true` or `false`, `install` or `remove`) and hands the page main's answers
+  only in the shapes `src/shared/bridge.ts` declares. A shell page gets `window.eidolonShell`:
+  `retry`, `showLogs` and `quit`. Main takes each message only from the window's own webContents
+  and main frame, on the channel's own page, judged by the frame's origin, never its URL: a
+  sandboxed document the backend serves has an app URL and an opaque origin (`accepts()` in
+  `src/shared/bridge.ts`). An invoke's sender is judged before anything awaits, since its frame
+  reads null once the page navigates; one from anyone else, or with another kind of argument,
+  throws (`app-invokes.ts`).
 - **The theme** the page reports goes to `nativeTheme.themeSource` as it is, `system` included: a
   resolved theme would pin `prefers-color-scheme` and stop the page's System from following the OS.
   Native menus, dialogs and Windows' caption buttons follow it.
-- **A menu's command,** Settings… (⌘, on macOS, the tray's on Windows), goes to the app's page
-  once its script says it listens, so it reaches the page from the loading page or a new window too.
+- **A command** for the app's page, a menu's Settings… (⌘, on macOS, the tray's on Windows) or a
+  notification's click (`tasks`, or `open-task:<chat>:<task>`, which `openTaskCommand` builds from
+  two ids alone), goes to it once its script says it listens, so it reaches the page from the
+  loading page or a new window too. A page that doesn't know a command ignores it.
+- **The folder dialog,** which Settings → Assistant Mode's Choose Folder opens for its folders
+  (`folder-dialog.ts`): the native one, for one folder, a sheet on the window on macOS, in the
+  shell's language, and opening at the home folder, since Electron opens Downloads otherwise.
+  macOS's can make a folder and says what the folders are for, and Windows' keeps the pick off its
+  recent list. One shows at a time: an ask while it's open gets its answer (`joinPending`). The
+  page adds the pick to the folders' draft, or says why the list can't hold it; saving decides, and
+  `FolderPolicy` after it.
 - **Chrome.** No system title bar. On macOS, `hiddenInset`, the traffic lights at `{x: 16, y: 20}`,
   centred on the web app's 56 px first row, and `titleBarOverlay: true`, without which macOS
   publishes no `env(titlebar-area-*)` for the page's insets. On Windows, a hidden title bar under a
@@ -348,10 +375,11 @@ window's top, and a window saved maximized is maximized only once it has painted
   runs from a read-only volume, and disabled while a check, a download or the restart runs. Both
   get a context menu, since Electron has none: cut, copy, paste and select all in a field, copy
   over selected text. The About panel names the app's version and the server's.
-- **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, dialogs and the shell
-  pages) come in English and Simplified Chinese, following the language the page reports and the
-  system's until it has. Menus and the tray are rebuilt when it changes. Labels are Title Case,
-  which `strings.test.ts` checks with apps/web's own rule.
+- **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, dialogs,
+  notifications, macOS's password prompt and the shell pages) come in English and Simplified
+  Chinese, following the language the page reports and the system's until it has. Menus and the
+  tray are rebuilt when it changes. Labels are Title Case, which `strings.test.ts` checks with
+  apps/web's own rule.
 - **Links and navigation.** The window never leaves `eidolon-app://`. A link the page opens in a new
   window goes to the default browser when it is `https:` or `http:`; one to the app's own address,
   such as an attachment, saves through Electron's Save dialog (`downloadURL`: the window has no
@@ -383,8 +411,128 @@ window's top, and a window saved maximized is maximized only once it has painted
   default and Esc cancelling; it has no owner window, so a hidden window stays hidden, and a quit
   while it is open joins it. An attached server is never asked or stopped. On macOS a power-off
   skips the box until the window has attention again. Once the quit is approved, main hides the
-  window, removes the tray icon, stops its backend, and quits. The restart that installs an update
-  goes the same way, with its own box ([Updates](#updates)).
+  window, stops the task watch, removes the tray icon, stops its backend, and quits. The restart
+  that installs an update goes the same way, with its own box ([Updates](#updates)).
+
+## Notifications
+
+While the window isn't focused, the OS's notifications tell the owner of her tasks: one that comes
+to wait on them, and one that ends. `task-notices.ts` decides without Electron, and
+`test/task-notices.test.ts` covers it on fake answers and a fake clock; `native.ts` shows each
+through Electron's `Notification`.
+
+- **The watch** (`TaskWatch`) asks the server ready now, our own or one attached to, for
+  `GET /api/local/tasks` with main's Bearer (`Backend.get`, GET alone): every 3 s while a task
+  runs and every 30 s otherwise, each request aborted after 10 s. A ready server it doesn't follow
+  yet, a restarted one included, starts it on a new baseline: the first answer records every task
+  as it stands and tells nothing, closing only the notices it outdates. An attached server's hold
+  at each idle close leaves it be (`followBackend`); no server, or an approved quit, stops it. A
+  failure logs once a streak (`Eidolon: notifications couldn't read the tasks: …`) and tries again
+  in 30 s.
+- **What is told,** after the baseline: a task that ended, however it ended, and one that waits on
+  the owner for something it didn't wait for at the poll before (its status, its card's question
+  and its pause, compared as one key): its start, a path outside its folders to read or write, a
+  site, a command, an MCP call, a spend, stall or unpriced pause, an interruption, or anything else
+  it waits on. A new wait replaces the task's notice, a wait that's over closes it, and an end
+  replaces it and stays.
+- **Only while the window isn't focused** at the poll that sees the change, both as its answer comes
+  and once her name is read: one seen while it is focused is recorded, and never told later.
+- **What one says:** her name as its title, the task's chat's persona as `GET /api/local/personas`
+  names her (read once a baseline, and again for a persona it doesn't know), else `Eidolon`; a fixed
+  phrase for its kind in the shell's language; and her goal on a second line, made one line,
+  without control, format or bidi characters, and cut at 80 characters. Never what a worker wrote
+  or a page it read could have: no command, path, site, tool or arguments, no step, file name,
+  report or error.
+- **It answers nothing.** A notification has no action and no reply: only the task's card and the
+  waiting bar answer a task. A click shows the window and, while the server's status counts no live
+  call (a page that leaves a call hangs it up), opens the task in its chat
+  (`open-task:<chat>:<task>`), or the Tasks page for a task without one (`noticeCommand`).
+- **Its handle** is kept by task until the task's next notice replaces it or its wait ends: Electron
+  drops a notification nothing holds, and its click with it.
+- **Which copies:** the packaged app, on Windows only its installed copy (`isUpdatableInstall`),
+  since another would point the installed app's Start menu shortcut and its COM key at itself; and
+  any copy in background mode, which only logs them. Any other runs no watch, and says so once in
+  main.log: `Eidolon: notifications are off in this copy of the app`. The installed Windows app
+  pins its toast activator's CLSID before any notification: Electron otherwise makes one up
+  whenever the shortcut has none, as after each update rewrites it, and registers each under HKCU
+  for good.
+- **Background mode** runs the watch but makes no `Notification` ([below](#background-mode)), and
+  logs each instead:
+  `Eidolon: background mode didn't show a notification: <title>: <line> / <line>`.
+
+## Open at Login
+
+Settings → Desktop's switch ([web-app.md](web-app.md#in-the-desktop-app)) has the OS start Eidolon
+when the owner logs in, its window hidden. `system-options.ts` decides without Electron, and
+`test/system-options.test.ts` covers it. Only the owner's click there changes the login item,
+never an install, a launch or an update; a launch reads only whether it was the login item's.
+
+- **Which copies:** the packaged app outside background mode, on macOS in the Applications folder
+  (`app.isInApplicationsFolder()`) and on Windows NSIS's per-user install (`isUpdatableInstall`):
+  a login item for a copy that moves, or that an update replaces elsewhere, would start the wrong
+  app. Any other copy reads nothing and answers `unavailable` with why (`background`,
+  `unpackaged`, `outside-applications` or `not-installed`), which Settings says. The [terminal
+  command](#the-terminal-command) is offered in the same copies (`optionsUnavailable`).
+- **macOS** registers the app itself through SMAppService (`{openAtLogin}`, with no type, and no
+  hidden flag, which SMAppService lacks). It reads `on` while enabled, `needs-approval` while the
+  owner has it off under System Settings → General → Login Items, where Settings sends them, and
+  `unavailable` when SMAppService can't find the app.
+- **Windows** writes its HKCU Run entry with `--opened-at-login`, which a read must name to match
+  it. It reads `on` only while the entry is there and Startup apps leaves it on, and turning the
+  switch on enables one turned off there again.
+- **A change** is logged (`Eidolon: Open at Login was turned on`, or `off`), then read back:
+  Electron's write answers nothing and only logs a failure.
+- **The hidden start.** A launch at login, told by the switch on Windows and by
+  `wasOpenedAtLogin` on macOS, makes the window but keeps it hidden (`Eidolon: opened at login, so
+  the window stays hidden until it's asked for`), and the backend starts as always. The Dock, the
+  tray, a second launch, a menu item or a notification's click shows it, and its first showing
+  takes the saved maximize. The window is made all the same because Windows delivers
+  `query-session-end` and `session-end` to windows: with none, a sign-out would skip [the backend's
+  stop](#the-backend). The updater's launch check, and the box it may open, waits for that first
+  showing. NSIS's relaunch after an update passes `--updated`, not the switch, so that start shows.
+
+## The terminal command
+
+Settings → Desktop installs `eidolon` for the owner's own terminals, and removes it, on their click
+alone: `eidolon <command>` runs the CLI on the app's binary as Node, and `eidolon` alone opens
+Eidolon. It is apart from the `eidolon` a task's commands run, which the backend writes into
+`<data home>/bin` ([assistant.md](assistant.md#commands)). `terminal-command.ts`, ported from
+deepseek-harness, reads and changes it, and `test/terminal-command.test.ts` covers it on temporary
+folders and fake runners.
+
+- **The launchers** ship in the app's resources, never written at run time: the signed bundle is
+  sealed, and every update replaces the Windows install folder. `launchers/mac/eidolon` (sh, 0755)
+  becomes `Eidolon.app/Contents/Resources/bin/eidolon`, and `launchers/win/eidolon.cmd` (CRLF,
+  which cmd.exe needs) `resources\bin\eidolon.cmd`. Given arguments, one sets
+  `ELECTRON_RUN_AS_NODE=1`, `EIDOLON_APP_ROOT` to the payload and `EIDOLON_NO_DOTENV=1`, runs the
+  app's binary with `--disable-sigusr1 --use-system-ca` on the payload's `dist/cli.js`, and exits
+  with its code; `EIDOLON_HOME` is the terminal's, so it finds the data home the app does. Given
+  none, it opens the app: `open` on macOS, and on Windows `start`, with `ELECTRON_RUN_AS_NODE`
+  cleared. The macOS one follows its links to find its bundle. The Windows one is a `.cmd`, which
+  Git Bash runs as `eidolon.cmd`, and on which Ctrl+C asks cmd's `Terminate batch job (Y/N)?`.
+- **macOS** links `/usr/local/bin/eidolon` to this copy's launcher. That link reads `installed`;
+  nothing there, or a link to another copy's launcher (an app moved since), reads `absent`, which
+  Install replaces; anything else, a link into a renamed bundle (`Eidolon 2.app`) or a path it
+  can't read included, reads `taken`, and Install leaves it. Where `/usr/local/bin` is writable it
+  links or unlinks at once; otherwise `osascript` asks for an administrator's password, with the
+  shell's prompt, and runs only `mkdir -p`, `ln -sfh` or `rm -f` on those fixed paths, never
+  Eidolon's binary. A cancelled prompt (AppleScript's -128) answers `cancelled`, of which Settings
+  says nothing; another failure answers `failed`, which Settings toasts, and main.log says why.
+  Remove takes away only Eidolon's link, this copy's or another's.
+- **Windows** appends `<install>\resources\bin` to `HKCU\Environment`'s `Path`, so an `eidolon`
+  the owner already has stays first, and Remove takes it out, through one PowerShell run each
+  (`userPathScript`, encoded by `powershellArgs`). It reads the value raw, compares entries as
+  Windows reads them (without case, variables expanded, a trailing backslash or none), adds or
+  removes that folder alone, and writes the value back with its kind, never through
+  `[Environment]::SetEnvironmentVariable('Path', …)` or `setx`; then it broadcasts the change, so
+  the terminals Explorer starts after see it. It reads `installed` or `absent`, the folder being
+  its path, and a read that fails reads `absent` and is logged. Each read starts PowerShell, 1–3 s
+  cold.
+- **Which copies:** those that offer [Open at Login](#open-at-login); any other reads and changes
+  nothing. Each install and removal is logged in main.log.
+- **What an uninstall leaves:** deleting the app on macOS leaves `/usr/local/bin/eidolon`
+  dangling, which works again for a copy put back in its place and reads `absent` for one
+  elsewhere, whose Install replaces it; NSIS's uninstaller leaves the folder on the user `Path`.
 
 ## The environment
 
@@ -395,39 +543,59 @@ The backend runs on the environment main reads, plus four variables of its own, 
   ported from deepseek-harness): the account's shell (`os.userInfo().shell`), then zsh, bash and sh,
   each run as `-ilc` with delimiters around `env -0`, 10 s apiece, its process group killed on a
   timeout or a quit. When every one fails, the launch environment stands, and main.log names why.
+- **Windows.** The launch environment holds the registry's variables as they were when Eidolon
+  started, and a `PATH` folder a tool's installer adds later would reach no spawn until a
+  relaunch, so main reads the registry (`registry-environment.ts`). One `powershell.exe` run, by
+  its full path under `SystemRoot` as main runs every PowerShell (`powershellExe`: Windows looks
+  for a bare name in the current folder first, and `eidolon` starts the app in the terminal's), its
+  script encoded (`powershellArgs`) and its output UTF-8, prints the raw values and kinds of
+  `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, `HKCU\Environment` and
+  `HKCU\Volatile Environment`, in Windows' own order. Not reg.exe, whose redirected output follows
+  the OEM code page and garbles a path that isn't ASCII. A failure, or no answer in 10 s, leaves
+  the launch environment, and main.log says why (`Eidolon: couldn't read the registry's
+  variables, so the backend runs on the launch's: …`); a quit kills the run.
 - **The merge.** The shell's values win, except `PWD`, `OLDPWD`, `SHLVL`, `_` and the probe's own
   variables; `ELECTRON_*`, which never come from the shell; and an `EIDOLON_*` the launch
   environment sets to a non-blank value, so a test's or a terminal launch's `EIDOLON_HOME` holds.
+  The registry's go over the launch environment as Windows builds a new process's, but for the
+  same names: key by key, each key's `REG_SZ` values before its `REG_EXPAND_SZ` ones, which expand
+  against the variables so far (`%NAME%` without case, an unknown one left as written), and no
+  other kind; `Path` is the system's, then the user's, joined by `;` as Windows joins them. The
+  system key's `USERNAME` is SYSTEM, and Windows sets the account's before the user's key, so the
+  launch's goes back there, and a user value's `%USERNAME%` names the owner. A variable deleted
+  from the registry since the launch stays as the launch had it.
+- **Windows' names have no case,** but a copy of the environment does, and spawn keeps only the
+  first of two spellings, so main reads and writes names without case, one key each: a `Path`
+  stays one key.
 - **When.** Once at startup, which names the data home. The first spawn within 10 s takes that read,
-  so a cold start runs the owner's rc files once; every later spawn reads afresh, so a Restart sees
-  a changed `PATH`.
+  so a cold start runs the owner's rc files, or PowerShell, once; every later spawn reads afresh, so
+  a Restart sees a `PATH` or a variable changed since, and on Windows every spawn after the first
+  waits for PowerShell.
 - **`EIDOLON_DESKTOP_LOGIN_SHELL=0`** (or `false`, `no`, `off`, in any case) in the launch
-  environment skips the read, and the launch environment is used as it is. A test run of the app
-  sets it, and starts the app with no credential, setting or provider variable, as
-  `local-smoke.ts` starts its server: otherwise a key the developer's shell exports would reach the
-  backend, win over the test's fake accounts (a non-empty variable beats `credentials.json`) and
-  bill.
-- **Windows** takes the launch environment as it is; an Explorer launch carries the registry's user
-  and system variables. Git for Windows installed later is found after a Restart, because
-  `windowsBash()` checks its install folders first, but a tool found only on a newer `PATH` needs
-  the app relaunched. Its names have no case, but a copy of the environment does, and spawn keeps
-  only the first of two spellings, so main reads and writes names without case, one key each: a
-  `Path` stays one key.
+  environment skips the read, the login shell's on macOS and the registry's on Windows, and the
+  launch environment is used as it is. A test run of the app sets it, and starts the app with no
+  credential, setting or provider variable, as `local-smoke.ts` starts its server: otherwise a key
+  the developer's shell or registry holds would reach the backend, win over the test's fake
+  accounts (a non-empty variable beats `credentials.json`) and bill.
 - **The backend's own variables,** set last: `EIDOLON_HOME`, the data home main resolved, so a
   respawn never serves another; `EIDOLON_APP_ROOT`, the payload, unset unpackaged so files resolve
   from the checkout; `EIDOLON_NO_DOTENV=1`, so no `.env` is read, unpackaged included; and
   `ELECTRON_RUN_AS_NODE=1`.
 - **`ELECTRON_RUN_AS_NODE`** makes an Electron binary run as Node at any non-empty value, `0`
   included, so nothing sets it to mean off. Our own JS starts through `jsRuntime()`, which adds it
-  inside Electron. A task's commands and MCP servers never get it, since `shellEnv()` passes listed
-  names alone, and neither may any spawn that can start a program the owner chose, or an Electron
-  app such as VS Code's `code` would run as Node. yt-dlp keeps it on purpose: its JS runtime is the
-  app binary. Electron's GUI starts without it: `dev:desktop` through `electronEnv()`
+  inside Electron. A task's commands and MCP servers never get it from the backend, since
+  `shellEnv()` passes listed names alone, and neither may any spawn that can start a program the
+  owner chose, or an Electron app such as VS Code's `code` would run as Node. A [node
+  shim](#the-node-shim) launcher sets it itself, for the process it runs on Eidolon's binary, and
+  that process's children inherit it, all but the command the shim's npx runs, which starts without
+  it, as npm starts it. yt-dlp keeps it on purpose: its JS runtime is the app binary.
+  Electron's GUI starts without it: `dev:desktop` through `electronEnv()`
   (`scripts/electron-env.ts`), which deletes it from a copy of the environment, and the smokes on
   the environment `appEnv()` builds, which takes no `ELECTRON_*` name.
 - **Node mode's flags.** Every node-mode process the app starts carries `--disable-sigusr1
   --use-system-ca` before its script: `jsRuntime().args` for the jobs, grep's matcher and the
-  `eidolon` command, and main's own copy, `BACKEND_RUNTIME_ARGS`, for the backend. With the
+  `eidolon` command, main's own copy, `BACKEND_RUNTIME_ARGS`, for the backend, and the same two in
+  the terminal command's launchers, which a test holds to that copy, and the node shim's. With the
   packaged app's nodeOptions fuse off, node mode ignores `NODE_OPTIONS` and drops
   `NODE_EXTRA_CA_CERTS`, so a CA file npx honours never reaches the backend; `--use-system-ca`
   trusts the OS store instead, a corporate CA included. The inspect fuse doesn't reach node mode,
@@ -446,7 +614,8 @@ VC++ copies.
   `stage()` (`dist/{server,cli,app}.js`, `web/`, `personas/`, `data/`, the built-in skills,
   `bin/eidolon.mjs`, the README, LICENSE, NOTICE and THIRD_PARTY_NOTICES.md), plus its runtime
   dependencies in `node_modules`: onnxruntime-node, werift, libopus-wasm, apache-arrow, sharp and
-  the target's LanceDB binary, whose JS is inlined in `dist/`. Main runs `dist/server.js` with
+  the target's LanceDB binary, whose JS is inlined in `dist/`; and, which the npm package never
+  holds, the [node shim](#the-node-shim) in `node-shim/`. Main runs `dist/server.js` with
   `EIDOLON_APP_ROOT` set to the payload, so `shippedPath` finds everything in it.
 - **Pinned to bun.lock.** The payload's `package.json` is the npm package's manifest plus
   `overrides` for every package its dependencies reach in `bun.lock`, nested where bun.lock nests a
@@ -460,14 +629,16 @@ VC++ copies.
   a second, identical copy; on win32-x64 `onnxruntime.dll`, without DirectML's DLLs, which CPU
   sessions never load. Type-only packages stay, or `npm ls` would call them missing.
 - **The VC++ runtime on Windows.** LanceDB, which loads at boot, and onnxruntime import it, so a
-  machine without the redistributable couldn't start the backend. Each folder holding a native addon
-  gets the runtime DLLs its natives import (their import and delay-import tables, and what those
-  DLLs import in turn): onnxruntime's folder five, LanceDB's `vcruntime140.dll`. All come from the
-  newest `Microsoft.VC14*.CRT` folder vswhere finds, since whichever copy loads first serves the
-  whole process. Node loads an addon with `LOAD_WITH_ALTERED_SEARCH_PATH`, which looks in its own
-  folder first, so an older System32 copy can't win. The copies shadow System32's, and Windows
-  Update never services them: each release refreshes them. The stage test checks their file
-  version is at least the natives' linker version.
+  machine without the redistributable couldn't start the backend, and so does the reflink addon
+  the node shim's pnpm loads to clone a package into place. Each folder in the payload holding a
+  native addon, the node shim's included, gets the runtime DLLs its natives import (their import
+  and delay-import tables, and what those DLLs import in turn): onnxruntime's folder five,
+  LanceDB's and reflink's `vcruntime140.dll`. All come from the newest `Microsoft.VC14*.CRT` folder
+  vswhere finds, since whichever copy loads first serves the whole process. Node loads an addon
+  with `LOAD_WITH_ALTERED_SEARCH_PATH`, which looks in its own folder first, so an older System32
+  copy can't win. The copies shadow System32's, and Windows Update never services them: each
+  release refreshes them. The stage test checks their file version is at least the natives' linker
+  version.
 - **The unsigned-PE list.** `.stage/win32-x64/unsigned-pe.json` names, by basename, each `.node` and
   `.dll` with an empty certificate table, in the payload and in the Electron zip electron-builder
   packs (`electron_wer.dll` under its packaged name, `Eidolon_wer.dll`), for a signed release to
@@ -478,12 +649,121 @@ VC++ copies.
   the prune drops onnxruntime's.
 - **Licenses.** `THIRD_PARTY_LICENSES.txt` in the payload, which Licenses opens (the Help menu on
   macOS, the tray on Windows), holds every license the payload carries: each `node_modules`
-  package's, SPDX's text where one ships none, with libvips's LGPL-3.0-or-later text and where its
-  source is for each package that ships libvips (on Windows, sharp's own platform package); the
-  VC++ runtime's terms on Windows; then the payload's NOTICE, THIRD_PARTY_NOTICES.md (what its
-  bundles and web app include) and the license files under `data/`. Main's build writes the
-  licenses of what it inlines to `dist/main/THIRD_PARTY_LICENSES.md`, and `apps/desktop`'s
-  `LICENSE-deepseek` and `THIRD_PARTY.md` cover the code ported from deepseek-harness.
+  package's, the node shim's pnpm and the packages its `dist/` bundles included, SPDX's text where
+  one ships none, with libvips's LGPL-3.0-or-later text and where its source is for each package
+  that ships libvips (on Windows, sharp's own platform package); the VC++ runtime's terms on
+  Windows; then the payload's NOTICE, THIRD_PARTY_NOTICES.md (what its bundles and web app include)
+  and the license files under `data/`. Main's build writes the licenses of what it inlines to
+  `dist/main/THIRD_PARTY_LICENSES.md`, and `apps/desktop`'s `LICENSE-deepseek`,
+  `LICENSE-cross-spawn`, `LICENSE-npm` and `THIRD_PARTY.md` cover the code ported from
+  deepseek-harness, cross-spawn and npm's own packages, which NOTICE names too.
+
+## The node shim
+
+An `mcp.json` entry that runs `npx`, `node`, `pnpm`, `pnpx` or `pnpm dlx` starts in the desktop app
+on a computer with no Node: the payload holds launchers that run each on the app's own binary as
+Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs wins.
+
+- **Its files,** in the payload's `node-shim/`: in `node_modules/.bin/`, `node`, `npx`, `pnpm` and
+  `pnpx` (sh, 0755), their `.cmd` twins (CRLF, each under `setlocal`), `npx.mjs`, `cross-spawn.mjs`
+  and the modules `npx.mjs` imports that are ported from npm's own packages: `npm-config.mjs`
+  (npm's config, from @npmcli/config and ini), `npm-spec.mjs` (a package spec, from npm-package-arg,
+  validate-npm-package-name and hosted-git-info), `npm-exec.mjs` (a package's bins and npm's
+  `PATH`, from npm-normalize-package-bin, @npmcli/package-json, libnpmexec and @npmcli/run-script)
+  and `npm-checks.mjs` (a project's devEngines, from npm-install-checks); in
+  `node_modules/node_modules/pnpm`, the launchers' `../node_modules/pnpm`, the pnpm `apps/desktop`
+  pins as an exact dev dependency, so `bun.lock` pins it as it pins the rest. The launchers sit in
+  a `node_modules/.bin` because cross-spawn, which starts an MCP server, escapes the words of a
+  `.cmd` there twice: it takes one for a cmd-shim, whose `%*` cmd.exe reads a second time, and a
+  launcher's `%*` is read again the same way. A `.cmd` anywhere else gets its words escaped once,
+  so cmd.exe acts on a word holding a quote and one of `&`, `|`, `<`, `>` or
+  `^` when it reads it the second time: the word arrives cut, and what follows an `&` runs as a
+  command. `scripts/node-shim.ts`, ported from deepseek-harness, stages them from
+  `apps/desktop/node-shim` and a copy of the installed pnpm, pruned of the natives its `dist/`
+  bundles for other platforms (`prunePnpmForeignNativePackages`), its bundled packages' `.bin`
+  links, and `dist/vendor`'s fastlist executables, which nothing runs and the Windows release would
+  sign as Eidolon's. [The stage test](#the-stage-test) holds them to their sources, the pin and the
+  target's natives, with no `.exe`, and pnpm's `dist/` to the semver and `node-gyp-bin` that
+  npx uses. In a checkout, under `dev:desktop` and in the Electron lane, the launchers'
+  folder is `apps/desktop/node-shim` itself, whose `../node_modules/pnpm` is the installed one.
+- **A server gets it** from `serverEnv` (`packages/assistant/src/mcp/session.ts`) when the backend
+  runs on Electron's Node and the launchers' folder is there (`shippedPath`): that folder last on
+  the server's `PATH`, added after `shellEnv()`'s filter, which drops every `node_modules/.bin`,
+  and left off, as the filter would leave it, where the task may write it; and `EIDOLON_NODE`, the
+  backend's own binary (`jsRuntime().command`). A `node`, `npx` or `pnpm` on the owner's `PATH`
+  comes first, and a `PATH` or `EIDOLON_NODE` in the server's `mcp.json` entry replaces these. A
+  task's commands never get it, and under Node, npx's or a checkout's, nothing changes.
+- **The launchers** refuse to run without `EIDOLON_NODE`, then set `ELECTRON_RUN_AS_NODE=1` and run
+  that binary with `--disable-sigusr1 --use-system-ca`: `node` passes its arguments on, and `pnpm`
+  and `pnpx` run the bundled pnpm's own. The server inherits the variable, so one that starts Node
+  as `process.execPath` runs Eidolon's binary as Node too. On Windows the launchers are `.cmd`
+  files, which a shell or cross-spawn runs, cross-spawn escaping the payload's words twice.
+- **npx** runs `npx.mjs`, which decides as npm's npx does on npm's default config (`plan`). With no
+  `--package`, the project's own bin, a bin in a `node_modules/.bin` from npm's local prefix up, or
+  a package npm's local tree holds at a version the spec allows, by npm's semver, which pnpm's
+  `dist/` carries, runs as it is, from the workspace's folder in an npm workspace. Anything else the
+  bundled pnpm installs into its dlx cache, `npxSettings` making it install as npm does under the
+  owner's npm config, which `npmConfig` reads from `npm_config_*` variables, the `.npmrc` at npm's
+  local prefix and the user's, parsed and `${VAR}`-expanded as npm does: every dependency's install
+  scripts run, or none under `ignore-scripts`; the newest version is taken, or the newest
+  `min-release-age` or `before` allows; git and tarball-URL dependencies install, but a dependency's
+  own not where `allow-git` or `allow-remote` is `root` or `none`; `node_modules` is flat, so a
+  package finds what it uses and the packages beside it as under npm; and no `.pnpmfile.cjs`
+  rewrites what installs, as npm reads none. Where `allow-git`, `allow-remote`, `allow-file` or
+  `allow-directory` is `none`, a git, URL, tarball or folder package npx is asked for ends it with
+  npm's error (`EALLOWGIT` and the rest) before pnpm starts, a git URL's password in it shown as
+  `***`, as npm's log redacts one, since a server's stderr reaches the task; `root` lets one
+  through, as npm takes npx's packages for the root's, and the project's own bin and a local bin run
+  whatever they say. Under a credential the user's or the project's `.npmrc` gives no registry
+  (`_authToken`, `_auth`, `username`, `_password`), or a `registry` that isn't a URL, npx runs
+  nothing at all, local bins included, and ends with npm's error (`ERR_INVALID_AUTH`,
+  `ERR_INVALID_URL`). So too where the `devEngines` of the `package.json` at npm's local prefix
+  doesn't match, which npm 11.19.1 checks before any command, npx taking itself for that npm and
+  Eidolon's binary for the Node: it ends with npm's `EBADDEVENGINES`, or only warns where the
+  engine's last choice says `warn` or `force` is set. Under `strict-allow-scripts` npx installs
+  nothing and says why, unless `ignore-scripts` or `dangerously-allow-all-scripts` is set too: npm
+  fails only an install holding a package with install scripts `allow-scripts` doesn't name, while
+  pnpm's dlx runs the scripts of the packages it is asked for unasked and skips a dependency's
+  without failing. A folder is linked, as npm links one, and runs as it is; a relative path resolves
+  from the folder npx runs in; and a folder or tarball runs its own bins whatever name the spec
+  gives it, as under npm. pnpm runs in a folder of its own with no pnpm workspace around it, whose
+  `.npmrc` npx writes with the registries, credentials and certificates of the `.npmrc` npm reads at
+  its local prefix, as npm reads them, files resolved as npm finds them, and over them the
+  registries `npm_config_registry` and `npm_config_@scope:registry` name, as npm ranks them, never
+  on pnpm's command line, which any process can read. So no other project's `.npmrc`,
+  `pnpm-workspace.yaml` or `packageManager` reaches it. A `${VAR}` naming an unset variable stays as
+  npm leaves it, percent-encoded, where pnpm would drop the registry or credential holding it for
+  the user's: a registry so named fails as an invalid URL, as under npm. That folder is the owner's
+  alone and goes when pnpm ends. npm's `proxy`, `https-proxy`, `noproxy` and `strict-ssl`, which
+  pnpm reads from no project's `.npmrc` and none of npm's variables, reach it as its own
+  `pnpm_config_*` variables, each from npm's variables, that `.npmrc` or the user's, as npm ranks
+  them (`pnpmNetworkEnv`). pnpm reads the user's `.npmrc` and `pnpm_config_*` variables itself, the
+  `.npmrc` an `npm_config_userconfig` names handed to it as npm resolves that, from the folder npx
+  runs in or a `~/` from the home, and keeps its store and caches under the owner's home, where its
+  dlx cache holds npx's installs apart from those of pnpx and `pnpm dlx`, which install as pnpm
+  does, and from npx's under other settings or registries, each for a day.
+- **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
+  `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
+  On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on
+  Windows an `.exe` or `.com` starts directly and anything else through cmd.exe, each word escaped
+  once for each time cmd.exe will read it (`rereads`, with `cross-spawn.mjs`, ported from
+  cross-spawn): one escape fewer lets cmd.exe act on a word, one more leaves carets in it. A batch
+  file's words are escaped twice, as npm escapes them, and three times for a cmd-shim, npm's or
+  pnpm's, with no `node.exe` beside it, whose bare `node` cmd.exe would find to be the shim's own
+  `node.cmd` (looking in the folder the command runs in first, unless
+  `NoDefaultCurrentDirectoryInExePath` is set, then on its `PATH`, with `.JS` out of `PATHEXT` for
+  pnpm's), since that `node.cmd`'s `%*` reads them a third time. It starts without
+  `ELECTRON_RUN_AS_NODE`, as npm starts it: a Node script among them runs on `node`, which, where it
+  is the shim's, sets it again for itself. On macOS npx passes SIGINT and SIGTERM on to it; on
+  Windows, where `kill()` is TerminateProcess, it only waits. npx ends with the command's exit code,
+  or on macOS its signal. pnpm writes only to stderr, so stdout, which the MCP protocol owns, holds
+  only the server's output.
+- **On Electron's Node,** a server's N-API native modules load, while one whose prebuilds are for
+  Node's ABI alone looks for an Electron build; and macOS shows a shim-run server's permission
+  prompts in Eidolon's name.
+- **A pnpm bump** is an exact pin in `apps/desktop/package.json`, under the same 14-day gate as
+  [Electron's](#bumping-electron); `bun install` rewrites `bun.lock`, which `docker.yml` doesn't
+  skip, so merging it restarts production. Stage and package the app, then run the stage test.
 
 ## Packaging
 
@@ -511,13 +791,16 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   is the folder above the payload, `.stage/<target>` with the filter `eidolon/**/*`, because
   electron-builder skips a source folder's own top-level `node_modules` whatever the filter. Asar
   integrity doesn't cover it. `assets/`, with the tray icon, ships the same way.
+- **The [terminal command](#the-terminal-command)'s launchers** ship as each platform's extra
+  resource too, `launchers/mac` or `launchers/win` as `bin`: `Eidolon.app/Contents/Resources/bin`,
+  or `resources\bin`. `apps/desktop/.gitattributes` keeps every `.cmd`, the node shim's too, CRLF.
 - **The fuses,** each one listed, since an unlisted fuse keeps Electron's default: `runAsNode` on,
-  for the backend, its jobs and the `eidolon` command; the nodeOptions and CLI inspect fuses off;
-  asar integrity and loading the app only from the asar on; `grantFileProtocolExtraPrivileges` off,
-  since no page loads over `file:`; cookie encryption and the browser-process V8 snapshot off, their
-  defaults. `wasmTrapHandlers` keeps its default, on, as electron-builder has no key for it.
-  `resetAdHocDarwinSignature`, beside them, re-signs an unsigned build ad hoc after the fuses
-  change, so it launches on Apple silicon.
+  for the backend, its jobs, the `eidolon` command and the node shim; the nodeOptions and CLI
+  inspect fuses off; asar integrity and loading the app only from the asar on;
+  `grantFileProtocolExtraPrivileges` off, since no page loads over `file:`; cookie encryption and
+  the browser-process V8 snapshot off, their defaults. `wasmTrapHandlers` keeps its default, on, as
+  electron-builder has no key for it. `resetAdHocDarwinSignature`, beside them, re-signs an
+  unsigned build ad hoc after the fuses change, so it launches on Apple silicon.
 - **macOS:** arm64 DMG and zip, the hardened runtime, the entitlements (`allow-jit`,
   `allow-unsigned-executable-memory`, `disable-library-validation`, which ad-hoc signing with the
   hardened runtime needs, and `audio-input`; no camera), and the microphone's usage string. The DMG
@@ -550,8 +833,7 @@ what electron-builder's own loader and schema make of it:
   listed entry: an extension would re-sign Microsoft's DLLs over their signatures. Signing made the
   Windows packaging 43–57 s longer on CI's runner, 2–4 s a file.
 
-The app needs macOS 13 or Windows 10 (x64), Electron's minimums. Intel Macs have no LanceDB or
-onnxruntime build; Windows on Arm runs the x64 build under emulation, untested.
+The app needs macOS 13 or Windows 10 (x64), Electron's minimums.
 
 ## Releasing
 
@@ -773,11 +1055,11 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
   updates itself only from a folder it can write to: move it to the Applications folder, then open
   it again. A folder that is only not the user's to write, `/Applications` for a standard account,
   still updates: Squirrel.Mac asks for an administrator's password there.
-- **Checking:** once, quietly, 10 s after the backend is first ready, and from Check for Updates…
-  (in macOS's app menu after About, in Windows' tray menu after Settings…), which is disabled while
-  a check, a download or the restart runs. The quiet check only logs that the app is up to date or
-  that the check failed; Check for Updates… also says so in a box. A check asked while one runs
-  joins it.
+- **Checking:** once, quietly, 10 s after the backend is first ready (after a [launch at
+  login](#open-at-login), once the window has also shown), and from Check for Updates… (in macOS's
+  app menu after About, in Windows' tray menu after Settings…), which is disabled while a check, a
+  download or the restart runs. The quiet check only logs that the app is up to date or that the
+  check failed; Check for Updates… also says so in a box. A check asked while one runs joins it.
 - **Downloading:** nothing downloads unasked (`autoDownload` is off). "Eidolon X.Y.Z is available"
   offers Download, the default, Later and Release Notes, which opens the GitHub Release of
   `laplace-eidolon-desktop@X.Y.Z` in the default browser, through the link policy. After Later or
@@ -852,7 +1134,17 @@ that could show something through it.
   answered with its default button, so a quit that stops a call, a task or a job goes ahead. A web
   link, Show Logs, Open Data Folder, Licenses, the About panel and a context menu open nothing. A
   download saves, with no Save dialog, into the profile's `downloads` folder under the name
-  Chromium suggests, numbered ` (1)` on while that name is taken.
+  Chromium suggests, numbered ` (1)` on while that name is taken. The folder dialog answers as
+  Cancel (`Eidolon: background mode didn't open the folder dialog`).
+- **No notification:** the task watch runs, but each notice is a line in main.log
+  ([Notifications](#notifications)). Electron's `Notification` is never made, nor
+  `Notification.isSupported()` called, since its presenter alone asks macOS for permission, and on
+  Windows rewrites the Start menu shortcut and a COM key under HKCU; no toast activator is set
+  either.
+- **Nothing changes the owner's system:** Open at Login and the terminal command answer
+  `unavailable` (`background`), which Settings says, and read and write nothing: no login item, no
+  `/usr/local/bin` and no user `Path`, so no `osascript`, PowerShell or password prompt. A launch
+  reads no login item, so it is never one at login.
 - **Nothing is heard:** Chromium's `--mute-audio` is set before `ready`, so no page plays through
   the speakers, a call's reply included. WebRTC still receives that reply, so a test can check it
   arrived. Measured with Electron 45.4.1 on macOS, Chromium hands the switch to its audio service
@@ -889,17 +1181,34 @@ it, with its test, and the Electron code stays a thin layer over it. It covers t
 states, races and port fallbacks against fake children and real processes (`test/fake-server.ts`
 answers as the local server does); the forwarder's headers, gating, holding, connection proofs and
 errors against real local servers and the real local server booted in the test; the login-shell
-read and the merge, Windows' case-blind names included; the quit check and flow; the updater's
-mode, flow, boxes and mock, with the restart on the real quit flow; links,
-navigation, permissions and the debugging switches; the bounds, chrome, menus and pages;
-background mode's decisions; both languages' strings; the shell pages' escaping and CSP; the
-bridges' sender rule; the logs' rotation and link filter; stage-backend's parts on made-up
-lockfiles, PE files and zips; the release overlay through electron-builder's own loader, and
-signed-check's reading of codesign, Gatekeeper, stapler and Authenticode output; the release notes'
-parsing, slice and text; the smokes' kit and parts, the fakes over real loopback requests
+read, the registry read's script and output, and both merges, Windows' case-blind names and
+`%NAME%` expansion included; the quit check and flow; the updater's mode, flow, boxes and mock,
+with the restart on the real quit flow; links, navigation, permissions and the debugging switches;
+the bounds, chrome, menus and pages; background mode's decisions; both languages' strings; the
+shell pages' escaping and CSP; the bridges' sender rule, the invokes' argument checks and the
+shapes of main's answers; the folder dialog's options and its one at a time; which copies offer
+Open at Login and the terminal command, and the login item's reads and writes; the terminal
+command's states, link, password prompt and `Path` script on temporary folders and fake runners,
+and its macOS launcher run through links against a stand-in bundle; the task watch's polls,
+baselines and notices, their text in both languages and a click's command, on fake answers and a
+fake clock; the node shim's npx decisions, against npm's on made-up trees (`npx.test.ts`), its
+launchers run on this Node with the checkout's pnpm and a fake registry, the shim the stage writes,
+its `.cmd` launchers where cross-spawn's own test takes them for cmd-shims, and how many times
+cmd.exe reads the words npx starts a batch file with, on made-up cmd-shims and folders; the logs'
+rotation and link filter; stage-backend's parts on
+made-up lockfiles, PE files and zips; the release overlay through electron-builder's own loader,
+and signed-check's reading of codesign, Gatekeeper, stapler and Authenticode output; the release
+notes' parsing, slice and text; the smokes' kit and parts, the fakes over real loopback requests
 included; the update test's feed over real loopback requests and against the URLs electron-updater
 derives from a manifest, its steps against the lines the real updater logs, and its readings of an
 install; the manifest; and the import boundary.
+
+Some files run only on Windows, where `ts.yml`'s Windows job runs them ([In CI](#in-ci)). The two
+that touch the registry do it on scratch keys under `HKCU\Software\Eidolon Test`, which each
+deletes after, never the real `Environment`: `test/terminal-command-windows.test.ts` drives the
+real `Path` script there and runs the `.cmd` launcher against a stand-in install whose
+`Eidolon.exe` is a copy of Node, about 80 MB; and `test/registry-environment-windows.test.ts`
+reads `REG_SZ`, `REG_EXPAND_SZ` and non-ASCII values there through the real registry read.
 
 ### The stage test
 
@@ -907,9 +1216,12 @@ install; the manifest; and the import boundary.
 against `bun.lock`, the pruning, its natives loading from it (a LanceDB table, an onnxruntime
 session and sharp, through `scripts/natives.ts`, with every native library and VC++ DLL the
 process mapped coming from the payload: `payloadLibraries()` picks them by file name, so Windows'
-own `msvcp_win.dll`, mapped in every process with a window, isn't one), on a Windows stage the
-VC++ copies and the signers, and, once the app was packaged after the stage, that the packaged
-payload holds the same files. A target with no stage skips, and so does one staged from another
+own `msvcp_win.dll`, mapped in every process with a window, isn't one), the node shim (its
+launchers in `node-shim/node_modules/.bin`, the payload's one `.bin`, equal to their sources in
+`apps/desktop/node-shim`, the sh ones executable, and its pnpm at `bun.lock`'s pin, licensed,
+pruned to the target's natives and with no `.exe`), on a Windows stage the VC++ copies and the
+signers, and, once the app was packaged after the stage, that the packaged payload holds the same
+files. A target with no stage skips, and so does one staged from another
 version or `bun.lock`, whose title then says to run `bun run build:desktop`.
 `EIDOLON_REQUIRE_STAGE=1` requires this machine's stage, current, and fails with that hint when it
 isn't:
@@ -931,12 +1243,13 @@ node apps/desktop/scripts/test-on-electron.ts [paths] [vitest flags]
 It runs Vitest's `node` project, or the paths given in it, on the binary `require("electron")`
 names from `apps/desktop` (downloaded on the first run), as Node (`ELECTRON_RUN_AS_NODE=1`), and
 exits with Vitest's code. `desktop.yml` runs the whole project there on macOS, and on Windows the
-tests `ts.yml`'s Windows job runs ([In CI](#in-ci)). Two things differ on that Node.
+`node`-project tests of `ts.yml`'s Windows job ([In CI](#in-ci)). Two things differ on that Node.
 `process.execPath` is the Electron binary, which starts its GUI unless the child's environment
 carries `ELECTRON_RUN_AS_NODE`: a test that spawns `process.execPath` with an environment of its
 own merges `jsRuntime().env` into it, as the app's own spawns do. And a `Date` keeps its local hours
 when `TZ` changes at run time, so a test of another time zone runs in a child process started in
-it.
+it. Only there, off Windows, does `packages/assistant/test/mcp-node-shim.test.ts` start MCP
+servers as `node` and `npx` through the [node shim](#the-node-shim)'s launchers.
 
 ### The smokes
 
@@ -968,7 +1281,8 @@ Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers
 
 - **`fakes.ts`:** loopback stand-ins on `node:http` for every provider the app reaches, ported from
   `local-smoke.ts`'s: her mind's streamed chat completions, with a hold between and after a
-  reply's parts; the retrieval gate's and the director's decisions; embeddings, with a hold;
+  reply's parts, and her tool calls for a selfie and for a task (`start_task`, in a folder the smoke
+  names); the retrieval gate's and the director's decisions; embeddings, with a hold;
   OpenAI's speech, transcriptions and realtime transcription sessions, for a voice message and a
   call; OpenRouter's images, for a selfie; and the model listings. They answer one key, and count
   what they answer by route.
@@ -1037,19 +1351,38 @@ Each step prints one line, made of the checks inside it:
 6. **Close and reopen:** closing hides the window while the backend serves on, and a second launch
    shows it again, never on screen or in front, and exits within 30 s; one that doesn't is killed
    and fails the step.
-7. **Attach:** after `--quit` ends that launch and its backend, a server started first on the same
-   home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced: Settings'
-   Restart there waits for the supervisor's next server, a restart from outside the app is
-   survived, and quitting leaves the server running until the smoke stops it.
-8. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
-   with exit 0, leaving nothing running and no error line in either log.
+7. **Choose Folder,** in Settings → Assistant Mode, beside a line typed into Assistant Folders:
+   main's own handler opens no dialog in background mode, as main.log says, and the draft stays as
+   typed; then the smoke replaces the handler through Playwright's `app.evaluate`
+   (`ipcMain.removeHandler`, then `ipcMain.handle` answering a folder of the run's), and the folder
+   it answers joins the draft as a line of its own, which nothing saves.
+8. **Settings → Desktop:** Open at Login and the terminal command each say "Background mode leaves
+   this computer as it is.", their switch and button disabled.
+9. **A task that waits:** the smoke sets Assistant Mode on the fakes' OpenRouter account (a `PUT`
+   of `assistant.provider` and `assistant.model`) and gives the fakes a folder of the run's,
+   outside `assistant.folders`, where her answer to the task line in a new chat starts a task with
+   `start_task`: its card asks "Start this task?". Within 60 s main.log must read `background mode
+   didn't show a notification: <her name>: <the start's words> / <its goal>`, in the words
+   `strings.ts` has in English: the watch polls every 30 s while no task runs, and never tells of a
+   task already there at its first answer, so the task starts once the server is ready. Deny on
+   the card stops it, and within 45 s the watch's notice of that follows, with the stopped task's
+   words: two notices in all.
+10. **Attach:** after `--quit` ends that launch and its backend, a server started first on the
+    same home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced:
+    Settings' Restart there waits for the supervisor's next server, a restart from outside the app
+    is survived, and quitting leaves the server running until the smoke stops it.
+11. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
+    with exit 0, leaving nothing running and no error line in either log.
 
 After the steps come the window watch's line and the kit's. The run's folder keeps
 `results/results.json`, with every check and each step's time, and `results/screenshots`; a pass
 removes them with the rest of the folder, unless `--keep` first copies them to
-`<run's folder>-results`. A run takes about 30 s. With `--headful`, the checks that only background
-mode makes true (off screen, never audible, main.log's background lines) are skipped, and a hook
-the smoke adds in main saves downloads into the same folder instead of asking.
+`<run's folder>-results`. A run takes about 80 s, 50 of them the wait for the task's notices. With
+`--headful`, the checks that only background mode makes true (off screen, never audible, main.log's
+background lines, the folder dialog's line and the notices: the unpackaged app shows none) are
+skipped, Choose Folder gets the replaced handler alone, Settings → Desktop says the options are for
+the installed app only, and a hook the smoke adds in main saves downloads into the same folder
+instead of asking.
 
 #### The packaged smoke
 
@@ -1064,6 +1397,21 @@ main's forwarder does, and runs the app's binary in node mode beside it, as main
   opens a LanceDB table, runs Silero on an onnxruntime CPU session and makes a JPEG with sharp,
   every library mapped from the payload. The tray icon's file is in the app's resources, since
   background mode shows no tray.
+- **The launchers,** run as a terminal runs them (on Windows the `.cmd` files through
+  `cmd /d /s /c`), before the app starts. The eidolon command, `bin/eidolon` in the app's
+  resources (`bin\eidolon.cmd` on Windows), with `search --help`, exits 0 with laplace-search's
+  usage on stdout, its CLI writing to the `EIDOLON_HOME` it was given, a folder of the run's; never
+  with no arguments, which opens the app outside background mode. The node shim's launchers, in
+  the payload's `node-shim/node_modules/.bin`, first run a stand-in as `EIDOLON_NODE` that prints the
+  `ELECTRON_RUN_AS_NODE` it got, which must be 1 from each: one that left it unset would start
+  Eidolon itself on the installed app's profile, so none runs on the app's binary then. After it,
+  they run with `EIDOLON_NODE` naming the app's binary, a home of the run's, and a `PATH` of the
+  OS's own folders, which must hold no node, then the shim's: `node -p process.versions.electron`
+  prints the pinned Electron, `pnpm --version` the payload's pnpm, and `npx -y file:<a package of
+  the run's>` its command's line alone on stdout, that command run on the app's Electron through
+  the shim's node; `npx` without `EIDOLON_NODE` exits 1 with its reason. They stay offline: a
+  `file:` package needs no registry, and `pnpm_config_registry` names a closed port, with pnpm's
+  fetch retries off so a request fails at once.
 - **The app:** it starts on the run's home and profile; its backend is the binary in node mode on
   the payload's `server.js`, under main, with no key from the smoke's own environment; main.log
   names a packaged build on the pinned Electron, and the server reports the payload's version; the
@@ -1093,13 +1441,22 @@ default one would show it touching a data home; the smoke writes there on a CI r
 removes the marker and the folders it made after. Where Eidolon is installed for the user already,
 it refuses to run rather than replace and remove that install. Each step has a time limit of its
 own, so a hung run still ends in failed checks, its uninstall and results included, well inside
-`desktop.yml`'s 15 minutes. After `finish()` it writes `results.json`, every check with the timings,
-into the run's folder, which a pass leaves holding that file alone. A run takes about 6–8 s on
-macOS.
+`desktop-build.yml`'s 20 minutes. After `finish()` it writes `results.json`, every check with the
+timings, into the run's folder, which a pass leaves holding that file alone. A run takes about 12 s
+on macOS.
 
 ### In CI
 
-`ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips.
+`ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips, and
+its Windows job the project's Windows-only tests: `terminal-command-windows.test.ts` (the PATH
+script on a scratch key under HKCU, and the eidolon command's `.cmd`),
+`registry-environment-windows.test.ts` (the registry read, on scratch keys),
+`node-shim-windows.test.ts` (the node shim's `.cmd` launchers, on Node, then staged as the
+payload holds them and started by the backend's own cross-spawn, `node` and `npx -y -p <folder>
+<bin>`, on a `PATH` where only they offer node, with words cmd.exe acts on when it reads one more
+time than they were escaped for) and `npx-windows.test.ts` (its npx through `npx.cmd` and cmd.exe,
+with the words cmd.exe treats specially, and a folder's bin through pnpm's cmd-shim and the shim's
+`node.cmd`).
 `.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
 request that changes more than docs, on a dispatch, and from a release's tag
 ([Releasing](#releasing)): the payload comes from `bun.lock` and the backend's packages, so a filter
@@ -1122,8 +1479,8 @@ platform with its secrets alone ([Secrets](#secrets)):
 5. **The stage test,** with `EIDOLON_REQUIRE_STAGE=1`, so a stage that is missing or stale fails
    instead of skipping; run after packaging, it also holds the app's payload to the stage.
 6. **The Electron lane,** through `test-on-electron.ts`: the whole `node` project on macOS, and on
-   Windows the tests `ts.yml`'s Windows job runs, with its filters.
-7. **The packaged smoke,** in background mode, within 15 minutes, installing and uninstalling the
+   Windows the `node`-project tests of `ts.yml`'s Windows job, with its filters.
+7. **The packaged smoke,** in background mode, within 20 minutes, installing and uninstalling the
    NSIS setup on Windows. When it fails, its `results.json`, the profile's logs and the launches'
    output are uploaded as `<OS>-smoke-desktop`, kept 7 days: never the run's home, which holds
    `local-token`.
@@ -1328,10 +1685,13 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
 On an Apple silicon Mac (macOS 27), 2026-11-21, every run of the app with the login-shell read
 off:
 
-- **The stage** (darwin-arm64): 4,515 files and 372 MiB, of which LanceDB 250, onnxruntime 43, sharp
-  and libvips 19, `dist/` 7.5 and the web app 2; about 11 s with npm's cache warm. A win32-x64
-  payload, installed for that target from a Mac, is about 447 MiB before its VC++ copies.
-- **Packaging** takes 61–64 s: Eidolon.app is 628 MiB, the DMG 261 MB and the zip 255 MB.
+- **The stage** (darwin-arm64): 4,971 files and 392 MiB, of which LanceDB 250, onnxruntime 43, the
+  node shim 20, sharp and libvips 19, `dist/` 7.5 and the web app 2; about 11 s with npm's cache
+  warm. The node shim, added on 2026-11-23, is 455 of those files, about 4.9 MB as a tar.gz. A
+  win32-x64 payload, installed for that target from a Mac, is about 447 MiB before its VC++ copies
+  and its node shim.
+- **Packaging** takes 61–68 s. With the node shim, measured on 2026-11-23, Eidolon.app is 672 MiB,
+  the DMG 266 MB and the zip 261 MB.
 - **Starting:** the packaged app shows its page about 1.1 s after launch, and the unpackaged app
   paints Home in 1.3–1.8 s. The first run after packaging is slower: the packaged binary's backend
   listened 3.6–4.2 s after it started, against 0.55 s warm.

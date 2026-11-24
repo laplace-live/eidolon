@@ -18,8 +18,7 @@ It needs Node.js 24 or later. Everything it keeps, settings and keys included, i
 ## Platforms
 
 LanceDB and ONNX Runtime, its native parts, decide where it runs: macOS on Apple silicon (with an
-arm64 Node), Linux with glibc on x64 or arm64, and Windows on x64. Intel Macs and musl Linux, such
-as Alpine, are not supported.
+arm64 Node), Linux with glibc on x64 or arm64, and Windows on x64.
 
 On Windows, LanceDB and ONNX Runtime need the Microsoft Visual C++ Redistributable: install it from
 https://aka.ms/vs/17/release/vc_redist.x64.exe if `eidolon` says it is missing. Windows on Arm runs

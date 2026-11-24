@@ -154,8 +154,25 @@ describe("nativeUi", () => {
         aboutPanel: (panel) => void calls.push(`aboutPanel ${panel.applicationName}`),
         stealFocus: () => void calls.push("stealFocus"),
         popup: (menu) => void calls.push(`popup ${menu.length}`),
+        chooseFolder: async (_window, options) => {
+          calls.push(`chooseFolder ${options.defaultPath}`);
+          return "/Users/me/Projects";
+        },
+        notify: (options) => {
+          calls.push(`notify ${options.title}`);
+          return { close: () => void calls.push("close") };
+        },
       },
     };
+  }
+
+  /** Electron's calls, which background mode must never reach. */
+  function untouchable(): NativeUi {
+    return new Proxy({} as NativeUi, {
+      get: () => {
+        throw new Error("background mode reached Electron");
+      },
+    });
   }
 
   const quitBox: MessageBoxOptions = {
@@ -167,6 +184,7 @@ describe("nativeUi", () => {
     defaultId: 0,
     cancelId: 1,
   };
+  const ignored = { click: () => {}, failed: () => {} };
 
   test("off, it is Electron's own calls", async () => {
     const { ui, calls } = electron();
@@ -174,8 +192,45 @@ describe("nativeUi", () => {
     const off = nativeUi(false, ui, log);
     expect(off).toBe(ui);
     expect(await off.messageBox(quitBox)).toEqual({ response: 1, checkboxChecked: false });
-    expect(calls).toEqual(["messageBox Quit Eidolon?"]);
+    expect(await off.chooseFolder(null, { defaultPath: "/Users/me" })).toBe("/Users/me/Projects");
+    off.notify({ title: "Milky Green", body: "Finished the task" }, ignored).close();
+    expect(calls).toEqual([
+      "messageBox Quit Eidolon?",
+      "chooseFolder /Users/me",
+      "notify Milky Green",
+      "close",
+    ]);
     expect(lines).toEqual([]);
+  });
+
+  test("on, the folder dialog is logged and answered as cancelled, and Electron is never reached", async () => {
+    const { lines, log } = recorder();
+    const on = nativeUi(true, untouchable(), log);
+    expect(
+      await on.chooseFolder(null, {
+        properties: ["openDirectory", "createDirectory"],
+        defaultPath: "/Users/me",
+        title: "Choose a Folder",
+      }),
+    ).toBeNull();
+    expect(lines).toEqual(["Eidolon: background mode didn't open the folder dialog"]);
+  });
+
+  test("on, a notification is logged with its title and its lines, and Electron's Notification is never made", () => {
+    const { lines, log } = recorder();
+    const on = nativeUi(true, untouchable(), log);
+    const events = {
+      click: () => expect.unreachable("a notice that never showed was clicked"),
+      failed: () => expect.unreachable("a notice that never showed failed"),
+    };
+    on.notify({ title: "Milky Green", body: "Finished the task\nWrite a TodoMVC" }, events).close();
+    on.notify({ title: "Eidolon", body: "The task failed" }, events).close();
+    on.notify({ body: "A\r\nB" }, events);
+    expect(lines).toEqual([
+      "Eidolon: background mode didn't show a notification: Milky Green: Finished the task / Write a TodoMVC",
+      "Eidolon: background mode didn't show a notification: Eidolon: The task failed",
+      "Eidolon: background mode didn't show a notification: : A / B",
+    ]);
   });
 
   test("on, a message box is logged with its text and answered with its default button", async () => {

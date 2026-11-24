@@ -105,7 +105,7 @@ describe("the shell pages", () => {
     const actions = [...render("failed", EN).html.matchAll(/data-action="(\w+)"/g)].map(
       ([, action]) => action,
     );
-    const bridge = shellBridge({ send() {}, on() {} });
+    const bridge = shellBridge({ send() {} });
     expect(actions.toSorted()).toEqual(Object.keys(bridge).toSorted());
     expect(template("failed")).toContain('<script type="module" src="./failed.ts"></script>');
   });
