@@ -1,3 +1,4 @@
+import type { Box } from "@laplace.live/eidolon-sdk/avatar";
 import { describe, expect, test } from "vitest";
 import type { CharacterModel, ModelInventory, ModelOutfit } from "@/lib/api";
 import {
@@ -16,6 +17,7 @@ import {
   newOutfitId,
   newOutfitName,
   nudgedBox,
+  pinchStep,
   rebaseDraft,
   rigPointAt,
   sameValue,
@@ -312,6 +314,55 @@ describe("framing", () => {
   test("a nudge moves her, so the frame goes the other way", () => {
     expect(nudgedBox(box, 1, 0)).toEqual({ ...box, x: 780 });
     expect(nudgedBox(box, 0, -1)).toEqual({ ...box, y: 325 });
+  });
+
+  type Point = readonly [number, number];
+  type Move = { readonly finger: 0 | 1; readonly to: Point };
+
+  /** `from` after `moves`, each moving one finger as a pointermove does, the other where it was. */
+  function touched(from: Box, fingers: readonly [Point, Point], moves: readonly Move[]): Box {
+    const at: [Point, Point] = [...fingers];
+    let frame = from;
+    for (const { finger, to } of moves) {
+      const step = pinchStep(wide, at[1 - finger], at[finger], to);
+      if (step === null) throw new Error("the fingers met");
+      frame = step(frame);
+      at[finger] = to;
+    }
+    return frame;
+  }
+
+  const near = (point: Point) => point.map((value) => expect.closeTo(value, 6));
+
+  test("a pinch keeps what is under each finger under it", () => {
+    const still: Point = [300, 250];
+    const moving: Point = [400, 250];
+    const spread = Array.from(
+      { length: 15 },
+      (_, n): Move => ({ finger: 1, to: [410 + n * 10, 250] }),
+    );
+    const pinched = touched(box, [still, moving], spread);
+    expect(box.height / pinched.height).toBeCloseTo(2.5);
+    expect(rigPointAt(pinched, wide, still)).toEqual(near(rigPointAt(box, wide, still)));
+    expect(rigPointAt(pinched, wide, [550, 250])).toEqual(near(rigPointAt(box, wide, moving)));
+  });
+
+  test("two fingers dragged together carry her with them", () => {
+    const left: Point = [300, 250];
+    const right: Point = [500, 250];
+    const drag = Array.from({ length: 10 }, (_, n): Move[] => [
+      { finger: 0, to: [300 + (n + 1) * 10, 250 - (n + 1) * 5] },
+      { finger: 1, to: [500 + (n + 1) * 10, 250 - (n + 1) * 5] },
+    ]).flat();
+    const dragged = touched(box, [left, right], drag);
+    expect(dragged.height).toBeCloseTo(box.height);
+    expect(rigPointAt(dragged, wide, [400, 200])).toEqual(near(rigPointAt(box, wide, left)));
+    expect(rigPointAt(dragged, wide, [600, 200])).toEqual(near(rigPointAt(box, wide, right)));
+  });
+
+  test("fingers that meet leave the frame alone", () => {
+    expect(pinchStep(wide, [10, 10], [10, 10], [20, 20])).toBeNull();
+    expect(pinchStep(wide, [10, 10], [20, 20], [10, 10])).toBeNull();
   });
 });
 

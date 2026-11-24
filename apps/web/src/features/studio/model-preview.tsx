@@ -41,6 +41,7 @@ import {
   keptDraft,
   type ModelDraft,
   nudgedBox,
+  pinchStep,
   rebaseDraft,
   rigPointAt,
   shownRect,
@@ -132,11 +133,8 @@ function useFramingGestures(
         return;
       }
       const [, fixed] = other;
-      const before = Math.hypot(last[0] - fixed[0], last[1] - fixed[1]);
-      const after = Math.hypot(next[0] - fixed[0], next[1] - fixed[1]);
-      if (!(before > 0 && after > 0)) return;
-      const middle = local((next[0] + fixed[0]) / 2, (next[1] + fixed[1]) / 2);
-      latest.current((box) => zoomBox(box, after / before, rigPointAt(box, size, middle)));
+      const step = pinchStep(size, local(...fixed), local(...last), local(...next));
+      if (step !== null) latest.current(step);
     };
     const onUp = (event: PointerEvent) => {
       pointers.delete(event.pointerId);
