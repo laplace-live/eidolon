@@ -225,22 +225,22 @@ default expressions, the standard ids PSD2Live gives a generated rig:
 | Mood | Chinese, anywhere | English, whole words | Shows |
 | --- | --- | --- | --- |
 | surprised | 惊, 意外, 没想到, 诧异, 愣住 | surprised, shocked, startled, amazed | `surprised` |
-| thinking | 疑惑, 摸不着头脑, 回忆, 想了想, 思考, 琢磨, 犹豫, 纳闷 | thinking, puzzled, pondering, curious | nothing |
+| thinking | 疑惑, 困惑, 摸不着头脑, 回忆, 想了想, 思考, 琢磨, 犹豫, 纳闷 | thinking, puzzled, pondering, curious | nothing |
 | wry | 哭笑不得, 无奈, 无语, 叹气, 没好气, 好笑又, 又好笑 | wry, exasperated, resigned | `sad`, `smile` |
 | shy | 害羞, 不好意思, 心虚, 脸红, 羞, 扭捏, 找补, 歉意 | shy, embarrassed, sheepish, bashful | `shy` |
 | sad | 难过, 失落, 伤心, 委屈, 低落, 闷闷, 哽咽, 哭 (never inside 哭笑不得) | sad, hurt, sorrowful, crying | `sad` |
 | angry | 生气, 恼火, 愤, 气呼呼, 不爽, 烦躁 | angry, annoyed, furious, irritated | `angry` |
 | gloom | 阴沉, 阴阳, 冷笑, 阴森 | ominous, sinister, sarcastic | `gloom` |
 | pout | 嘴硬, 嫌弃, 傲娇, 轻哼, 哼, 吐槽, 反驳, 理直气壮, 嘟囔 | pouting, defiant, tsundere | `angry` |
-| lazy | 懒洋洋, 慵懒, 散漫, 漫不经心, 拖长音, 困, 哈欠 | lazy, sleepy, drowsy, languid | `sleepy` |
+| lazy | 懒洋洋, 慵懒, 散漫, 漫不经心, 拖长音, 困 (never inside 困惑, 困扰 or 困难), 哈欠 | lazy, sleepy, drowsy, languid | `sleepy` |
 | happy | 笑, 开心, 高兴, 欢快, 兴奋, 得意, 调侃, 起哄, 打趣, 轻快, 雀跃 | happy, cheerful, playful, teasing, excited, delighted | `smile` |
 | gentle | 温柔, 轻柔, 软软, 哄, 安慰, 轻声 | gentle, soft, tender, warm, soothing | `smile` |
 
 Of `prompt.md`'s published directions, 懒洋洋的，带点笑意 is lazy and happy, 嘴硬，装作嫌弃 pout,
 温柔地安慰 gentle and 有点失落，慢慢地说 sad, while 压低声音，像在说悄悄话 tags none and leaves her
-neutral. 哭笑不得 is wry and happy, never sad. Two moods show the union of their expressions in tag
-order, at most two: lazy and happy show `sleepy` and `smile`, the face that direction asks for. A
-cue's lent mood comes first, over the reply's.
+neutral. 哭笑不得 is wry and happy, never sad, and 困惑 is thinking, never lazy. Two moods show the
+union of their expressions in tag order, at most two: lazy and happy show `sleepy` and `smile`, the
+face that direction asks for. A cue's lent mood comes first, over the reply's.
 
 **Cues.** `soundCueEffect` decides every cue the SDK's `CUE_EMOJI` knows. `chuckling` and `laughing`
 lend happy for 1.5 s and nod; `sighing` lends wry for 2 s and `groaning` for 1.5 s; `gasping` and

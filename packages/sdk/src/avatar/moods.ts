@@ -37,7 +37,7 @@ const FAMILIES: readonly MoodFamily[] = [
   },
   {
     tag: "thinking",
-    zh: ["疑惑", "摸不着头脑", "回忆", "想了想", "思考", "琢磨", "犹豫", "纳闷"],
+    zh: ["疑惑", "困惑", "摸不着头脑", "回忆", "想了想", "思考", "琢磨", "犹豫", "纳闷"],
     en: ["thinking", "puzzled", "pondering", "curious"],
   },
   {
@@ -83,8 +83,11 @@ const FAMILIES: readonly MoodFamily[] = [
   },
 ];
 
-/** Words a keyword never matches inside: 哭笑不得 is wry, never sad. */
-const REFUSED_INSIDE: ReadonlyMap<string, readonly string[]> = new Map([["哭", ["哭笑不得"]]]);
+/** Words a keyword never matches inside: 哭笑不得 is wry, never sad, and 困惑 puzzled, never sleepy. */
+const REFUSED_INSIDE: ReadonlyMap<string, readonly string[]> = new Map([
+  ["哭", ["哭笑不得"]],
+  ["困", ["困惑", "困扰", "困难"]],
+]);
 
 const MAX_TAGS = 2;
 

@@ -75,6 +75,15 @@ describe("moodTags", () => {
     expect(moodTags("哭腔")).toEqual(["sad"]);
   });
 
+  test("困惑 is puzzled and 困扰 or 困难 no mood, while a 困 outside them is sleepy", () => {
+    expect(moodTags("困惑地")).toEqual(["thinking"]);
+    expect(moodTags("有点困惑，又忍不住笑")).toEqual(["thinking", "happy"]);
+    expect(moodTags("被问得有点困扰")).toEqual([]);
+    expect(moodTags("觉得这事挺困难")).toEqual([]);
+    expect(moodTags("困得睁不开眼")).toEqual(["lazy"]);
+    expect(moodTags("困惑完又犯困")).toEqual(["thinking", "lazy"]);
+  });
+
   test("matches English keywords as whole words, whatever their case", () => {
     const cases: readonly (readonly [string, MoodTag[]])[] = [
       ["softly, with a warm smile", ["gentle"]],

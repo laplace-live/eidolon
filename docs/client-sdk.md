@@ -332,10 +332,11 @@ thinking, where she looks, the latest gesture). Both are plain data, so they cro
 
 `moodTags(direction)` reads a direction such as `懒洋洋的，带点笑意` into at most two of
 `MOOD_TAGS` (happy, gentle, lazy, pout, wry, shy, sad, angry, surprised, thinking, gloom), in a
-fixed precedence: Chinese keywords match anywhere, except `哭` inside `哭笑不得`, and English ones
-as whole words. `DEFAULT_MOOD_EXPRESSIONS` maps each to the standard expression ids PSD2Live gives
-a generated rig (`smile`, `sleepy`, `angry`, `sad`, `shy`, `surprised`, `gloom`); lazy and happy
-together show sleepy and smile. `soundCueEffect(name)` decides every cue in `CUE_EMOJI`.
+fixed precedence: Chinese keywords match anywhere, except `哭` inside `哭笑不得` and `困` inside
+`困惑`, `困扰` and `困难`, and English ones as whole words. `DEFAULT_MOOD_EXPRESSIONS` maps each to
+the standard expression ids PSD2Live gives a generated rig (`smile`, `sleepy`, `angry`, `sad`,
+`shy`, `surprised`, `gloom`); lazy and happy together show sleepy and smile. `soundCueEffect(name)`
+decides every cue in `CUE_EMOJI`.
 
 ### Mouth and framing
 
