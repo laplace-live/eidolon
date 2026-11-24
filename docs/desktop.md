@@ -445,8 +445,8 @@ through Electron's `Notification`.
   report or error.
 - **It answers nothing.** A notification has no action and no reply: only the task's card and the
   waiting bar answer a task. A click shows the window and, while the server's status counts no live
-  call (a page that leaves a call hangs it up), opens the task in its chat
-  (`open-task:<chat>:<task>`), or the Tasks page for a task without one (`noticeCommand`).
+  call, opens the task in its chat (`open-task:<chat>:<task>`), or the Tasks page for a task
+  without one (`noticeCommand`).
 - **Its handle** is kept by task until the task's next notice replaces it or its wait ends: Electron
   drops a notification nothing holds, and its click with it.
 - **Which copies:** the packaged app, on Windows only its installed copy (`isUpdatableInstall`),
