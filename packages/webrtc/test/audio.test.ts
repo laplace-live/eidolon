@@ -232,14 +232,18 @@ describe("AudioOut", () => {
     stop();
     const before = sender.sent.length;
     const last = sender.sent[before - 1]!;
+    // Measured, not 300: Node's timers count whole milliseconds of libuv's cached loop time, so a
+    // delay(300) can end a fraction of a millisecond early by performance.now().
+    const pausedFrom = performance.now();
     await delay(300);
+    const paused = performance.now() - pausedFrom;
     out.play(new ToneSource(24_000), () => true);
     await until(() => sender.sent.length > before, 4000);
     out.stop();
     const next = sender.sent[before]!;
     expect(next.rtp.header.sequenceNumber).toBe((last.rtp.header.sequenceNumber + 1) & 0xffff);
     const ticks = (next.rtp.header.timestamp - last.rtp.header.timestamp) >>> 0;
-    expect(ticks).toBeGreaterThanOrEqual(300 * 48);
+    expect(ticks).toBeGreaterThanOrEqual(Math.floor(paused * 48));
     expect(ticks).toBeLessThanOrEqual((next.at - last.at) * 48 + 960);
   });
 });
