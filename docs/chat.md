@@ -663,9 +663,11 @@ note in place of the rest.
 ## Calls
 
 A call is a mode of a chat. The viewer calls one of its personas from the chat page, the call
-opens on the chat's history, and each line said on it is stored in the chat as a message. It runs
-on the voice engine ([voice-engine.md](voice-engine.md)), and costs what a call from `/call`
-costs. `/call` stays the standalone call to the active persona, with no chat.
+opens on the chat's history, and each line said on it is stored in the chat as a message. The call
+belongs to the tab, not the page: it goes on while the viewer opens other pages
+([web-app.md](web-app.md#chats)). It runs on the voice engine ([voice-engine.md](voice-engine.md)),
+and costs what a call from `/call` costs. `/call` stays the standalone call to the active persona,
+with no chat.
 
 ### The binding
 
@@ -795,8 +797,9 @@ that chat; without a `chatId`, it is the standalone call, unbound.
   stores them after its `call-ended`.
 - `GET live` streams each event the chat stores, from `call-started` on, and ends after
   `call-ended`, so the page follows a reply and a call through one subscription. A line is stored
-  only once it is finished, hers once all of it has played, so the page that placed the call shows
-  the call's own transcript in their place until `call-ended` ([web-app.md](web-app.md#chats)).
+  only once it is finished, hers once all of it has played, so the tab that placed the call shows,
+  on the chat's page whenever it is open, the call's own transcript in their place until
+  `call-ended` ([web-app.md](web-app.md#chats)).
   It ends only once any `start_task` of hers the manager was still answering at the hang-up is
   stored too, so the page's read after the call shows its card; shutdown waits 2 s at most.
 - `GET chats/:id`'s `call` is `{ id, persona }`, with `group: true` on a group call, and null once
@@ -937,7 +940,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 - `bun run test packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
   `packages/runtime/test/native/binding.test.ts` runs a bound call on scripted hearing, mind and
   voice, and once over a real werift peer.
-- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks five chats against its fake
+- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks the chats below against its fake
   OpenAI-compatible server, which also answers the director's Decisions route, OpenAI's speech and
   transcriptions, a call's realtime transcription session, and a task's worker. It bills nothing.
   - **A chat of one:** New Chat and the greeting, a reply that streams in with its cue as a chip,
@@ -953,10 +956,16 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
     of what was spoken, playing on its own to its end, its file served in ranges, and both
     roles' spend in the ledger.
   - **A call,** with her hearing, mind and voice at the fake server: a line typed first, then Call,
-    the dock, her greeting answering that line from the call's seed and landing in the log as a
-    call line, the composer waiting and a send refused `chat-in-call`, then Hang Up, the
-    `call-ended`, the separators with the call's length, and the composer back. A second tab, open
-    before the call and told of it by a refused send, gets its composer back at the hang-up too.
+    the dock, her greeting answering that line from the call's seed and landing in the log as a call
+    line, the composer waiting and a send refused `chat-in-call`; mid-call, Home showing the Ongoing
+    Call bar, another chat's Call unavailable, `/call` saying you're in a call, and Return to Call
+    bringing the dock back; then Hang Up, the `call-ended`, the separators with the call's length,
+    and the composer back. A second tab, open before the call and told of it by a refused send, gets
+    its composer back at the hang-up too.
+  - **A video call,** the test rig made her active model: Call opening the screen, her stage ready,
+    her mouth opening on the fake voice's tone and her words as the caption, Shrink and Expand on
+    one canvas, the call bar on Home, whose Return to Call brings the screen back and whose Hang Up
+    ends the call, and a second call moving her mouth on the stage it made.
   - **Tasks,** with the assistant role on an OpenRouter account at the fake server: her greeting
     offered neither `start_task` nor its hint, her `start_task` call for the viewer's line and her
     line after it, reading the task's status; 弄好了吗 answered from the status block before and
@@ -966,9 +975,9 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
     the final as her call's result after the nudge. Then, in the same chat, a second task she
     stops with `stop_task`, with no turn telling of it; a third in each of the chat's displays,
     its words before her call shown above its card, stopped with `/stop`; and a fourth she starts
-    on a call, which opens with no stale status block: her `start_task` for a line the fake
-    hearing hears, stored in the chat among the call's lines, her pointer to the card when the
-    task pauses, the end she speaks on the call, and no report in text after it
+    on a call, shown on the video screen, which opens with no stale status block: her `start_task`
+    for a line the fake hearing hears, stored in the chat among the call's lines, her pointer to the
+    card when the task pauses, the end she speaks on the call, and no report in text after it
     ([web-app.md](web-app.md#the-browser-smoke-test)).
 - `bun run director-decisions` after changing the director's questions, state or thresholds
   ([Calibrating](#calibrating)).
