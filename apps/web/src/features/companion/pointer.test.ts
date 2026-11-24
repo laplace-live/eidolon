@@ -79,6 +79,7 @@ describe("HoverProbe", () => {
     expect(changed.mock.calls).toEqual([[true], [false]]);
 
     probe.move(2, 2);
+    probe.move(3, 3);
     probe.leave();
     calls[1]?.answer(1);
     await settled();
@@ -88,12 +89,12 @@ describe("HoverProbe", () => {
     expect(calls).toHaveLength(2);
 
     // A move after the leave reads again once the read under way is done.
-    probe.move(3, 3);
-    probe.leave();
     probe.move(4, 4);
+    probe.leave();
+    probe.move(5, 5);
     calls[2]?.answer(0);
     await settled();
-    expect(calls.map(({ x, y }) => [x, y]).at(-1)).toEqual([4, 4]);
+    expect(calls.map(({ x, y }) => [x, y]).at(-1)).toEqual([5, 5]);
     calls[3]?.answer(1);
     await settled();
     expect(probe.over).toBe(true);
