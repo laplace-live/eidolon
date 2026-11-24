@@ -57,6 +57,15 @@ const MESSAGES: readonly ToCompanion[] = [
 ];
 
 describe("toCompanion", () => {
+  test("a persona from a main window that sends no picture's version reads as version 0", () => {
+    expect(toCompanion({ type: "persona", id: "milky-green", stamp: "" })).toEqual({
+      type: "persona",
+      id: "milky-green",
+      stamp: "",
+      picture: 0,
+    });
+  });
+
   test("each message type comes back equal", () => {
     for (const message of MESSAGES) expect(toCompanion(message)).toEqual(message);
   });
@@ -89,7 +98,6 @@ describe("toCompanion", () => {
     ["a persona id with a slash", { type: "persona", id: "a/b", stamp: "" }],
     ["a stamp that isn't a string", { type: "persona", id: "milky-green", stamp: null }],
     ["a stamp far too long", { type: "persona", id: "milky-green", stamp: "x".repeat(513) }],
-    ["no picture", { type: "persona", id: "milky-green", stamp: "" }],
     ["a picture below 0", { type: "persona", id: "milky-green", stamp: "", picture: -1 }],
     ["a picture of 1.5", { type: "persona", id: "milky-green", stamp: "", picture: 1.5 }],
     ["a call missing a field", { type: "call", call: { up: true, live: true, hers: true } }],
