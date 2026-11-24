@@ -55,6 +55,14 @@ export interface MenuTarget {
   readonly model: string | undefined;
 }
 
+/** What her menu listed: the persona it was for, and the active model of the list it showed. */
+export function menuTarget(
+  persona: string | undefined,
+  models: CharacterModels | undefined,
+): MenuTarget {
+  return { persona, model: models?.active ?? undefined };
+}
+
 /**
  * Whether a pick still applies: her menu listed `opened`'s models and outfits, and the active
  * persona, or for an outfit her model, may have changed while it was open.

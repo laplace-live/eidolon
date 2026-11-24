@@ -27,7 +27,14 @@ import { statusQuery } from "@/lib/query";
 import { COMPANION_TICK_MS, CompanionDirector, type TapArea } from "./director";
 import { CURSOR_REST_MS, eyePoint, gazeToward } from "./gaze";
 import { handshake, SIZE_WAIT_MS } from "./handshake";
-import { type MenuTarget, menuState, type PageAction, pageAction, pickHolds } from "./menu";
+import {
+  type MenuTarget,
+  menuState,
+  menuTarget,
+  type PageAction,
+  pageAction,
+  pickHolds,
+} from "./menu";
 import { PortMouth, VoiceTimeline } from "./mouths";
 import { PagePort } from "./page-port";
 import { HoverProbe, onPicture, Press, tapArea } from "./pointer";
@@ -278,9 +285,12 @@ class Control {
     this.director.touch(performance.now());
     this.#menuOpen = true;
     this.#tell(true);
-    const opened = this.#target();
+    let listed: MenuTarget | null = null;
     void this.#listedModels()
-      .then((models) => this.#bridge.menu(this.#menu(models)))
+      .then((models) => {
+        listed = menuTarget(this.#live.persona?.id, models);
+        return this.#bridge.menu(this.#menu(models));
+      })
       .catch(() => null)
       .then((pick) => {
         this.#menuOpen = false;
@@ -288,7 +298,9 @@ class Control {
         if (pick?.startsWith("size:")) this.probe.leave();
         this.#release();
         const action = pageAction(pick);
-        if (action !== null && pickHolds(opened, this.#target(), action)) void this.#act(action);
+        if (action !== null && listed !== null && pickHolds(listed, this.#target(), action)) {
+          void this.#act(action, listed);
+        }
       });
   }
 
@@ -354,9 +366,8 @@ class Control {
     return menuState({ linked: this.port.linked, call: this.#call, models });
   }
 
-  async #act(action: PageAction): Promise<void> {
-    const persona = this.#live.persona?.id;
-    const model = this.#live.model?.id;
+  /** A pick of hers, on the persona and model her menu listed. */
+  async #act(action: PageAction, { persona, model }: MenuTarget): Promise<void> {
     if (persona === undefined) return;
     try {
       if (action.kind === "model") {

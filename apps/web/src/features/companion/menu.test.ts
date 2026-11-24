@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { CharacterModel, CharacterModels, ModelOutfit } from "@/lib/api";
 import type { CompanionPick } from "@/lib/desktop";
-import { menuState, pageAction, pickHolds } from "./menu";
+import { menuState, menuTarget, pageAction, pickHolds } from "./menu";
 import { type CompanionCall, NO_COMPANION_CALL } from "./protocol";
 
 const outfit = (id: string): ModelOutfit => ({
@@ -160,6 +160,18 @@ describe("pageAction", () => {
       null,
     ];
     for (const pick of picks) expect(pageAction(pick)).toBeNull();
+  });
+});
+
+describe("menuTarget", () => {
+  test("is the persona her menu was for and the active model of the list it showed", () => {
+    const listed = { active: "b", models: [model("a"), model("b")] } satisfies CharacterModels;
+    expect(menuTarget("milky-green", listed)).toEqual({ persona: "milky-green", model: "b" });
+    expect(menuTarget("milky-green", { ...listed, active: null })).toEqual({
+      persona: "milky-green",
+      model: undefined,
+    });
+    expect(menuTarget(undefined, undefined)).toEqual({ persona: undefined, model: undefined });
   });
 });
 
