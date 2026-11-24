@@ -27,7 +27,7 @@ import { statusQuery } from "@/lib/query";
 import { COMPANION_TICK_MS, CompanionDirector, type TapArea } from "./director";
 import { CURSOR_REST_MS, eyePoint, gazeToward } from "./gaze";
 import { handshake, SIZE_WAIT_MS } from "./handshake";
-import { menuState, type PageAction, pageAction } from "./menu";
+import { type MenuTarget, menuState, type PageAction, pageAction, pickHolds } from "./menu";
 import { PortMouth, VoiceTimeline } from "./mouths";
 import { PagePort } from "./page-port";
 import { HoverProbe, onPicture, Press, tapArea } from "./pointer";
@@ -39,6 +39,9 @@ import {
 } from "./protocol";
 import { type CompanionView, useCompanionStage } from "./use-companion-stage";
 import { voiceOpeningsOf } from "./voice-file";
+
+/** How long her menu waits on reading her models again before it opens with the list she has. */
+const MENU_READ_MS = 250;
 
 export function Component() {
   const bridge = companion();
@@ -275,8 +278,9 @@ class Control {
     this.director.touch(performance.now());
     this.#menuOpen = true;
     this.#tell(true);
-    void this.#bridge
-      .menu(this.#menu())
+    const opened = this.#target();
+    void this.#listedModels()
+      .then((models) => this.#bridge.menu(this.#menu(models)))
       .catch(() => null)
       .then((pick) => {
         this.#menuOpen = false;
@@ -284,8 +288,26 @@ class Control {
         if (pick?.startsWith("size:")) this.probe.leave();
         this.#release();
         const action = pageAction(pick);
-        if (action !== null) void this.#act(action);
+        if (action !== null && pickHolds(opened, this.#target(), action)) void this.#act(action);
       });
+  }
+
+  #target(): MenuTarget {
+    return { persona: this.#live.persona?.id, model: this.#live.model?.id };
+  }
+
+  /**
+   * Her models, read again for her menu: an import makes no model active, so nothing else tells her
+   * page of it. A read slower than MENU_READ_MS keeps the list she has.
+   */
+  async #listedModels(): Promise<CharacterModels | undefined> {
+    const persona = this.#live.persona?.id;
+    if (persona === undefined) return this.#live.models;
+    const read = this.#queryClient
+      .fetchQuery({ ...characterModelsQuery(persona), staleTime: 0 })
+      .catch(() => undefined);
+    const late = new Promise<undefined>((settle) => setTimeout(settle, MENU_READ_MS));
+    return (await Promise.race([read, late])) ?? this.#live.models;
   }
 
   #held(): boolean {
@@ -328,8 +350,8 @@ class Control {
     return tapArea(hit, model.inventory);
   }
 
-  #menu(): CompanionMenuState {
-    return menuState({ linked: this.port.linked, call: this.#call, models: this.#live.models });
+  #menu(models = this.#live.models): CompanionMenuState {
+    return menuState({ linked: this.port.linked, call: this.#call, models });
   }
 
   async #act(action: PageAction): Promise<void> {

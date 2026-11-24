@@ -48,3 +48,18 @@ export function pageAction(pick: CompanionPick | null): PageAction | null {
   }
   return null;
 }
+
+/** Whose models and outfits her menu listed, or whose they are now. */
+export interface MenuTarget {
+  readonly persona: string | undefined;
+  readonly model: string | undefined;
+}
+
+/**
+ * Whether a pick still applies: her menu listed `opened`'s models and outfits, and the active
+ * persona, or for an outfit her model, may have changed while it was open.
+ */
+export function pickHolds(opened: MenuTarget, now: MenuTarget, action: PageAction): boolean {
+  if (opened.persona === undefined || opened.persona !== now.persona) return false;
+  return action.kind === "model" || opened.model === now.model;
+}

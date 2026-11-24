@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { CharacterModel, CharacterModels, ModelOutfit } from "@/lib/api";
 import type { CompanionPick } from "@/lib/desktop";
-import { menuState, pageAction } from "./menu";
+import { menuState, pageAction, pickHolds } from "./menu";
 import { type CompanionCall, NO_COMPANION_CALL } from "./protocol";
 
 const outfit = (id: string): ModelOutfit => ({
@@ -160,5 +160,28 @@ describe("pageAction", () => {
       null,
     ];
     for (const pick of picks) expect(pageAction(pick)).toBeNull();
+  });
+});
+
+describe("pickHolds", () => {
+  const opened = { persona: "milky-green", model: "tml" };
+
+  test("a pick acts on the persona and model her menu listed while they're still hers", () => {
+    expect(pickHolds(opened, opened, { kind: "model", id: "other" })).toBe(true);
+    expect(pickHolds(opened, opened, { kind: "outfit", id: "summer" })).toBe(true);
+  });
+
+  test("another persona since takes every pick away, another model an outfit's", () => {
+    const now = { persona: "hazel", model: "tml" };
+    expect(pickHolds(opened, now, { kind: "model", id: "tml" })).toBe(false);
+    expect(pickHolds(opened, now, { kind: "outfit", id: null })).toBe(false);
+    const swapped = { ...opened, model: "other" };
+    expect(pickHolds(opened, swapped, { kind: "outfit", id: "summer" })).toBe(false);
+    expect(pickHolds(opened, swapped, { kind: "model", id: "tml" })).toBe(true);
+  });
+
+  test("with no persona read, nothing holds", () => {
+    const unread = { persona: undefined, model: undefined };
+    expect(pickHolds(unread, unread, { kind: "model", id: "tml" })).toBe(false);
   });
 });
