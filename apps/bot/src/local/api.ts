@@ -1191,8 +1191,8 @@ export interface LocalApi {
   /** Also clears her appearance.model when it names the model. */
   "DELETE /api/local/personas/:id/models/:model": Endpoint<undefined, Ok>;
   /**
-   * The model's .p2lrt while `sha256` is its file's, kept for good by the browser's cache. 400
-   * bad-request without `sha256`; 404 not-found for any other.
+   * The model's .p2lrt while `sha256` is its file's, as immutable, which a browser caches for good.
+   * 400 bad-request without `sha256`; 404 not-found for any other.
    */
   "GET /api/local/personas/:id/models/:model/file": Endpoint<
     undefined,

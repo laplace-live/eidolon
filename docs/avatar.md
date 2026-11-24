@@ -101,9 +101,10 @@ Importing one:
   name and framing, and the moods, gestures and outfit entries that still name what the new file
   holds. Outfit values are clamped into the new ranges, and a mood left with none of its
   expressions goes back to its default.
-- **The file** is served only under its current SHA-256 (`GET …/:model/file?sha256=`), which the
-  browser keeps for good, and only to the app's pages: it takes the session's cookie and proof,
-  where her avatar picture takes the cookie alone.
+- **The file** is served only under its current SHA-256 (`GET …/:model/file?sha256=`), as
+  immutable, and only to the app's pages: it takes the session's cookie and proof, where her avatar
+  picture takes the cookie alone. A browser keeps it for good, while the desktop app's page fetches
+  it again on each full load; either page keeps it in memory for a minute once nothing shows it.
 
 The routes, their answers and their errors are in [web-app.md](web-app.md#the-api).
 
