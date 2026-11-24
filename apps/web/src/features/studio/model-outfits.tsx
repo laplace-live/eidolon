@@ -268,6 +268,9 @@ export function OutfitsPanel({
             {draft.outfits.map((outfit) => {
               const open = outfit.id === editing;
               const invalid = nameProblem(outfit.name) !== null;
+              const name = outfit.name.trim() || t`Unnamed`;
+              const edit = open ? t`Done` : t`Edit ${ph({ name })}`;
+              const remove = t`Remove ${ph({ name })}`;
               return (
                 <li key={outfit.id} className={cn(open && "bg-muted/30")}>
                   <div className="flex items-center gap-2 px-3 py-2">
@@ -278,15 +281,15 @@ export function OutfitsPanel({
                         invalid && "text-destructive",
                       )}
                     >
-                      {outfit.name.trim() || t`Unnamed`}
+                      {name}
                     </span>
                     {draft.outfit === outfit.id && <Badge variant="secondary">{t`Worn`}</Badge>}
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={open ? t`Done` : t`Edit`}
-                      title={open ? t`Done` : t`Edit`}
+                      aria-label={edit}
+                      title={edit}
                       aria-expanded={open}
                       onClick={() => onEditing(open ? null : outfit.id)}
                     >
@@ -296,8 +299,8 @@ export function OutfitsPanel({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={t`Remove`}
-                      title={t`Remove`}
+                      aria-label={remove}
+                      title={remove}
                       onClick={() => {
                         if (open) onEditing(null);
                         onDraft((current) => withoutOutfit(current, outfit.id));

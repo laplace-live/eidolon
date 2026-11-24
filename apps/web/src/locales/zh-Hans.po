@@ -1907,13 +1907,13 @@ msgid "Earlier steps summarized, from {tokens} tokens"
 msgstr "较早的步骤已概括（原 {tokens} token）"
 
 #: src/features/studio/knowledge-section.tsx
-#: src/features/studio/model-outfits.tsx
 msgid "Edit"
 msgstr "编辑"
 
 #: src/features/settings/account-dialog.tsx
 #: src/features/settings/accounts-card.tsx
 #: src/features/studio/knowledge-section.tsx
+#: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Edit {name}"
 msgstr "编辑 {name}"
@@ -4226,9 +4226,12 @@ msgstr "重新规划"
 
 #: src/features/call/call-notices.tsx
 #: src/features/studio/model-controls.tsx
-#: src/features/studio/model-moods.tsx
 msgid "Play"
 msgstr "播放"
+
+#: src/features/studio/model-moods.tsx
+msgid "Play {name}"
+msgstr "播放{name}"
 
 #: src/features/chats/voice-bubble.tsx
 msgid "Play Voice Message"
@@ -4490,7 +4493,6 @@ msgstr "相对于她的文件夹。默认 prompt.md。"
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 #: src/features/studio/model-list.tsx
-#: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove"
 msgstr "移除"
@@ -4656,13 +4658,13 @@ msgstr "调研任务暂时使用助手模式的模型"
 msgid "Reset"
 msgstr "重置"
 
+#: src/features/studio/model-moods.tsx
+msgid "Reset {name} to Default"
+msgstr "将{name}恢复默认"
+
 #: src/features/studio/model-controls.tsx
 msgid "Reset Framing"
 msgstr "重置取景"
-
-#: src/features/studio/model-moods.tsx
-msgid "Reset to Default"
-msgstr "恢复默认"
 
 #: src/features/home/readiness-labels.ts
 #: src/features/settings/notices.tsx

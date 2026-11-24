@@ -7,6 +7,7 @@ import {
   MOOD_TAGS,
   type MoodTag,
 } from "@laplace.live/eidolon-sdk/avatar";
+import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { PlayIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
@@ -34,15 +35,16 @@ import {
   withoutMood,
 } from "./model-draft";
 
-function ResetButton({ onReset }: { readonly onReset: () => void }) {
+function ResetButton({ name, onReset }: { readonly name: string; readonly onReset: () => void }) {
   const { t } = useLingui();
+  const label = t`Reset ${ph({ name })} to Default`;
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label={t`Reset to Default`}
-      title={t`Reset to Default`}
+      aria-label={label}
+      title={label}
       onClick={onReset}
     >
       <RotateCcwIcon />
@@ -69,6 +71,7 @@ function MoodRow({
 }) {
   const { t } = useLingui();
   const labelId = useId();
+  const label = t(MOOD_LABELS[tag]);
   const shown = moodExpressions(inventory, moods, tag);
   const chosen = Object.hasOwn(moods, tag);
   return (
@@ -76,11 +79,11 @@ function MoodRow({
       <div className="flex items-center gap-1.5">
         <span className="min-w-0 flex-1">
           <span id={labelId} className="font-medium text-sm">
-            {t(MOOD_LABELS[tag])}
+            {label}
           </span>
           {!chosen && <span className="ml-2 text-muted-foreground text-xs">{t`Default`}</span>}
         </span>
-        {chosen && <ResetButton onReset={() => onMoods(withoutMood(moods, tag))} />}
+        {chosen && <ResetButton name={label} onReset={() => onMoods(withoutMood(moods, tag))} />}
         <Toggle
           variant="outline"
           size="sm"
@@ -133,6 +136,7 @@ function GestureRow({
 }) {
   const { t } = useLingui();
   const label = t(GESTURE_LABELS[gesture]);
+  const play = t`Play ${ph({ name: label })}`;
   const clip = gestureClip(inventory, gestures, gesture);
   const chosen = Object.hasOwn(gestures, gesture);
   return (
@@ -144,7 +148,9 @@ function GestureRow({
             <span className="ml-2 font-normal text-muted-foreground text-xs">{t`Default`}</span>
           )}
         </span>
-        {chosen && <ResetButton onReset={() => onGestures(withoutGesture(gestures, gesture))} />}
+        {chosen && (
+          <ResetButton name={label} onReset={() => onGestures(withoutGesture(gestures, gesture))} />
+        )}
       </div>
       <div className="flex items-center gap-2">
         <Select
@@ -166,8 +172,8 @@ function GestureRow({
           type="button"
           variant="outline"
           size="icon-sm"
-          aria-label={t`Play`}
-          title={t`Play`}
+          aria-label={play}
+          title={play}
           disabled={disabled || clip === null}
           onClick={() => clip !== null && onPlay(clip)}
         >
