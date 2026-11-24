@@ -2,7 +2,7 @@ import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { AudioLinesIcon, BrainIcon, KeyRoundIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, type Ref, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ function MemoryChip({ memory, name }: { readonly memory: MemoryStatus; readonly 
 
 /** The call, filling the frame: who she is and how it stands, what is said, then the controls. */
 function Frame({
+  ref,
   persona,
   speaking,
   state,
@@ -57,6 +58,7 @@ function Frame({
   footer,
   children,
 }: {
+  readonly ref?: Ref<HTMLElement>;
   readonly persona: Persona;
   readonly speaking: boolean;
   readonly state: ReactNode;
@@ -66,7 +68,7 @@ function Frame({
   readonly children: ReactNode;
 }) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
+    <section ref={ref} tabIndex={-1} className="flex min-h-0 flex-1 flex-col outline-none">
       <header data-window-drag className="flex items-center gap-3 border-b px-4 py-3 sm:px-6">
         <SidebarTrigger className="-ml-1.5 md:hidden" />
         <Face persona={persona} size="md" speaking={speaking} />
@@ -117,6 +119,16 @@ function CallRoom({ status }: { readonly status: Status }) {
   useShowsCall(own);
   const { phase } = shown;
   const short = persona.shortName.trim() || persona.name;
+  const frame = useRef<HTMLElement>(null);
+  // The screen goes with the focus when every stage failed or the call ended: the keyboard stays
+  // in the call.
+  const screened = useRef(video);
+  useEffect(() => {
+    if (screened.current && !video && document.activeElement === document.body) {
+      frame.current?.focus({ preventScroll: true });
+    }
+    screened.current = video;
+  }, [video]);
 
   const placeholder = elsewhere
     ? t`Hang up the call in your chat to call ${ph({ name: short })} here.`
@@ -128,6 +140,7 @@ function CallRoom({ status }: { readonly status: Status }) {
     <>
       <h1 className="sr-only">{t`Call`}</h1>
       <Frame
+        ref={frame}
         persona={persona}
         speaking={shown.botSpeaking}
         state={<CallStatus phase={phase} name={short} />}

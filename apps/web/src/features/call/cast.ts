@@ -29,6 +29,7 @@ export async function loadCastModel(
   signal: AbortSignal,
 ): Promise<LoadedModel | null> {
   const list = await queryClient.fetchQuery({ ...characterModelsQuery(member.id), staleTime: 0 });
+  signal.throwIfAborted();
   const model = list.models.find(({ id }) => id === list.active);
   if (model === undefined) return null;
   const bytes = await queryClient.fetchQuery(

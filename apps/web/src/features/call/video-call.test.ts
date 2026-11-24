@@ -201,7 +201,14 @@ test("keeps /call's transcript mounted beside the call, or below it, never over 
   const panel = markup.slice(at);
   const tag = panel.match(/^<div [^>]*>/)?.[0] ?? "";
   expect(tag).toContain(' hidden=""');
-  expect(classesOf(tag)).toContain("max-md:h-[55%]");
+  // Beside the stage only from lg: at md, beside the open sidebar, a 20rem panel left the stage
+  // 192 px of a 768-px window, and its 290-px controls row lost Mute and half of Hang Up.
+  const root = markup.match(/<section [^>]*>/)?.[0] ?? "";
+  expect(classesOf(root)).toContain("max-lg:flex-col");
+  expect(classesOf(tag)).toEqual(expect.arrayContaining(["max-lg:h-[55%]", "lg:w-80"]));
+  expect(
+    [...classesOf(root), ...classesOf(tag)].filter((name) => /^(max-)?md:/.test(name)),
+  ).toEqual([]);
   expect(classesOf(tag)).not.toContain("absolute");
   expect(panel).toContain("她说的话");
   expect(panel).not.toContain("Hang Up");
@@ -259,6 +266,43 @@ test("captions her last sentence while she says it, and asks a group call to sta
   const quiet = render({ target: chatTarget("c1", MILKY, [MILKY, MINT]) });
   expect(quiet).toContain("Everyone can hear you. Say something to start.");
   expect(quiet).not.toContain("data-captions");
+});
+
+test("clamps the caption to three lines at every size, inside its padding", () => {
+  const announced = reduceTranscript(EMPTY_TRANSCRIPT, {
+    type: "bot-output",
+    data: {
+      text: "看得到呀，你也在笑！",
+      segment_id: 1,
+      output_type: "sentence",
+      will_be_spoken: true,
+      spoken_status: "new",
+    },
+  });
+  const markup = render({ transcript: announced, botSpeaking: true });
+  const caption = markup.match(/<p data-captions[^>]*>/)?.[0] ?? "";
+  // Clamped on the padded p, a fourth line's top showed in the padding; clamped below sm alone, a
+  // long line climbed past the foot over her name and the timer.
+  expect(classesOf(caption).filter((name) => name.includes("line-clamp"))).toEqual([]);
+  expect(classesOf(caption)).toEqual(expect.arrayContaining(["px-4", "py-2"]));
+  const inner = markup.slice(markup.indexOf(caption) + caption.length).match(/^<span [^>]*>/)?.[0];
+  expect(classesOf(inner ?? "")).toContain("line-clamp-3");
+});
+
+test("keeps the newest of the viewer's words in the caption's three lines", () => {
+  const heard = reduceTranscript(EMPTY_TRANSCRIPT, {
+    type: "user-transcript",
+    data: { text: "我刚才说到哪里了", final: false },
+  });
+  const markup = render({ transcript: heard });
+  const caption = markup.match(/<p data-captions[^>]*>/)?.[0] ?? "";
+  expect(caption).not.toBe("");
+  const inner = markup.slice(markup.indexOf(caption) + caption.length).match(/^<span [^>]*>/)?.[0];
+  // A clamp keeps a line's start: while the viewer goes on, their newest words would hide behind it.
+  expect(classesOf(inner ?? "").filter((name) => name.includes("line-clamp"))).toEqual([]);
+  expect(classesOf(inner ?? "")).toEqual(
+    expect.arrayContaining(["max-h-[3lh]", "flex-col", "justify-end", "overflow-hidden"]),
+  );
 });
 
 test("shows her newest photo in the corner while the call is up", () => {

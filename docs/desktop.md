@@ -444,9 +444,9 @@ through Electron's `Notification`.
   or a page it read could have: no command, path, site, tool or arguments, no step, file name,
   report or error.
 - **It answers nothing.** A notification has no action and no reply: only the task's card and the
-  waiting bar answer a task. A click shows the window and, while the server's status counts no live
-  call (a page that leaves a call hangs it up), opens the task in its chat
-  (`open-task:<chat>:<task>`), or the Tasks page for a task without one (`noticeCommand`).
+  waiting bar answer a task. A click shows the window and opens the task in its chat
+  (`open-task:<chat>:<task>`), or the Tasks page for a task without one (`noticeCommand`); a call
+  goes on meanwhile, as it does through any page.
 - **Its handle** is kept by task until the task's next notice replaces it or its wait ends: Electron
   drops a notification nothing holds, and its click with it.
 - **Which copies:** the packaged app, on Windows only its installed copy (`isUpdatableInstall`),

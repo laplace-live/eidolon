@@ -83,8 +83,8 @@ function ScreenControl({
 }
 
 /**
- * The last thing said. Not a live region: the call is heard, and /call's transcript announces
- * its lines.
+ * The last thing said. Not a live region: the call is heard, and /call's transcript announces its
+ * lines only while Transcript shows it.
  */
 function CaptionLine({ caption, group }: { readonly caption: Caption; readonly group: boolean }) {
   const { t } = useLingui();
@@ -93,29 +93,34 @@ function CaptionLine({ caption, group }: { readonly caption: Caption; readonly g
       data-captions
       data-live={caption.live}
       className={cn(
-        "max-w-full shrink-0 rounded-2xl bg-background/80 px-4 py-2 text-center text-base backdrop-blur-sm max-sm:line-clamp-3 sm:max-w-2xl sm:text-lg motion-safe:transition-colors",
+        "max-w-full shrink-0 rounded-2xl bg-background/80 px-4 py-2 text-center text-base backdrop-blur-sm sm:max-w-2xl sm:text-lg motion-safe:transition-colors",
         !caption.live && "text-muted-foreground",
       )}
     >
+      {/* Three lines inside the padding, which would show the top of a fourth, at every size, so a
+          long line never climbs past the foot over her name and the timer: her sentence from its
+          start, which shows whole before she says it, and the viewer's words to the newest heard. */}
       {caption.kind === "her" ? (
-        <>
+        <span className="line-clamp-3">
           {group && caption.speaker !== null && (
             <span data-caption-speaker className="mr-1.5 font-medium">
               {caption.speaker.name}
             </span>
           )}
           <span data-caption-text>{caption.text}</span>
-        </>
+        </span>
       ) : (
-        <>
-          <span className="mr-1.5 font-medium">
-            {t({ message: "You", context: "call transcript speaker" })}
+        <span className="flex max-h-[3lh] flex-col justify-end overflow-hidden">
+          <span>
+            <span className="mr-1.5 font-medium">
+              {t({ message: "You", context: "call transcript speaker" })}
+            </span>
+            <span data-caption-text>
+              {caption.said}
+              <span className="italic opacity-70">{caption.hearing}</span>
+            </span>
           </span>
-          <span data-caption-text>
-            {caption.said}
-            <span className="italic opacity-70">{caption.hearing}</span>
-          </span>
-        </>
+        </span>
       )}
     </p>
   );
@@ -214,7 +219,7 @@ export function VideoCall({
       data-call-screen
       tabIndex={-1}
       className={cn(
-        "flex min-h-0 overflow-hidden bg-background outline-none max-md:flex-col",
+        "flex min-h-0 overflow-hidden bg-background outline-none max-lg:flex-col",
         className,
       )}
     >
@@ -336,12 +341,13 @@ export function VideoCall({
         </div>
       </div>
       {transcript !== undefined && (
-        // Always mounted, so the transcript keeps its lines, its scroll and its log in the page.
-        // Beside the stage from md; below it on a phone, under the controls.
+        // Always mounted, so the transcript keeps its lines and its scroll. Beside the stage from
+        // lg, where the open sidebar still leaves the stage room for its controls; below them in a
+        // narrower window.
         <div
           data-call-transcript
           hidden={!transcriptOpen}
-          className="relative min-h-0 bg-background max-md:h-[55%] max-md:shrink-0 max-md:border-t md:w-80 md:shrink-0 md:border-l lg:w-96"
+          className="relative min-h-0 bg-background max-lg:h-[55%] max-lg:shrink-0 max-lg:border-t lg:w-80 lg:shrink-0 lg:border-l xl:w-96"
         >
           {transcript}
         </div>

@@ -325,17 +325,14 @@ function run(): void {
     }
   }
 
-  /** A notification's click: the window, then its task, as noticeCommand decides. */
+  /** A notification's click: the window, then its task. */
   function openNotice(notice: Notice): void {
     openWindow();
-    noticeCommand(notice, backendFetch).then(
-      (command) => {
-        if (command !== null) commands.send(command);
-      },
-      (error: unknown) => {
-        mainLog.warn(`Eidolon: couldn't open the task a notification named: ${String(error)}`);
-      },
-    );
+    try {
+      commands.send(noticeCommand(notice));
+    } catch (error) {
+      mainLog.warn(`Eidolon: couldn't open the task a notification named: ${String(error)}`);
+    }
   }
 
   app.on("second-instance", (_event, _argv, _cwd, data) => {

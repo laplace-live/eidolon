@@ -311,7 +311,8 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 ## The setup wizard
 
 `/setup` runs five steps: keys, persona, voice, memory and done. While a key the active persona's
-calls need is missing, every page but Settings sends you to its first.
+calls need is missing, every page but Settings sends you to its first, except during a call, which
+opening setup would end (`firstRunRedirect`).
 
 - **Keys** picks an account for each role a call needs (who hears, thinks and speaks) and for the
   optional ones (embeddings, for every persona, and her retrieval gate's decision model), from each
@@ -660,14 +661,15 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     another chat or page keeps it, and the call bar brings it back. Hang Up, the call ending, a
     reload, opening setup, or losing the session (the sign-in screen) end it. While it is up,
     another chat's **Call** and `/call`'s are unavailable and `/call` says you're in a call; the
-    persona switcher, **Make Active**, New Persona's **Switch to Her Now**, **Restart**, and
-    importing or replacing a character model wait for its end, since the server refuses them
-    during a call; Home's links into setup wait too, since setup sits outside the app's frame and
-    opening it ends the call. Studio's Appearance says its changes show from her next call.
+    persona switcher, a persona card's **Make Active**, New Persona's **Switch to Her Now**,
+    **Restart**, and importing or replacing a character model wait for its end, since the server
+    refuses them during a call; Home's links into setup wait too, since setup sits outside the
+    app's frame and opening it ends the call. Studio's Appearance says its changes show from her
+    next call.
   - `/call` stays the standalone call to the active persona, with no chat. With her model, it shows
     the call's screen under its header, with the mic's mute toggle, **Type a Message**,
     **Captions**, **Transcript** and **Hang Up**; **Transcript** opens its transcript beside the
-    call, or below it on a phone.
+    call in a window at least 1024 px wide, or below it in a narrower one.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Tasks
