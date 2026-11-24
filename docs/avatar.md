@@ -363,7 +363,8 @@ ruzstd, twox-hash).
   and the desktop app's payload takes it from there.
 - **Refreshing** follows [its README](../packages/sdk/src/avatar/psd2live/README.md): copy the
   newer commit's wasm and update every test that pins its SHA-256 (`git grep d8bbff52`), port
-  upstream's `p2l.js` diff into `rig.ts` and `renderer.ts` with the headers' commit, copy the
+  upstream's `p2l.js` diff into `rig.ts` and `renderer.ts`, put the new commit wherever the old one
+  is named (`git grep f66ba46`), the SDK's `THIRD_PARTY.md` and AGENTS.md included, copy the
   licenses, and check `PSD2LIVE_ABI`, and the server's minimum in `apps/bot/src/local/psd2live.ts`,
   against `runtime/include/p2l_runtime.h`.
 

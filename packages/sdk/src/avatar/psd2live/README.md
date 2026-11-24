@@ -20,7 +20,9 @@ To refresh at a newer commit:
 1. Copy `targets/web/src/main/resources/io/github/psd2live/targets/web/p2l_runtime.wasm` to
    `wasm/`, and note its sha256 here and wherever a test pins it (`git grep d8bbff52`).
 2. Diff upstream's `p2l.js` between the two commits and port the change into `rig.ts` and
-   `renderer.ts`; update the header's commit.
+   `renderer.ts`, then put the new commit wherever the old one is named (`git grep f66ba46`): the
+   headers, this README, the SDK's `THIRD_PARTY.md`, which its pack ships, AGENTS.md, the docs and
+   a test.
 3. Copy `runtime/LICENSE`, and refresh `wasm/THIRD_PARTY_LICENSES.md` from `runtime/Cargo.lock`.
 4. Check `PSD2LIVE_ABI`, and the minimum the local app's upload check holds in
    `apps/bot/src/local/psd2live.ts`, against `runtime/include/p2l_runtime.h`.
