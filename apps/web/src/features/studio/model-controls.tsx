@@ -13,6 +13,7 @@ import {
   type ModelClip,
   MouthMeter,
   type MouthSource,
+  type ResolvedSetup,
 } from "@laplace.live/eidolon-sdk/avatar";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
@@ -273,8 +274,9 @@ function useTryLine(stage: AvatarStage | null, restoreMouth: () => MouthSource |
     () => () => {
       clear();
       stage?.direct(NEUTRAL);
+      stage?.mouth(restoreMouth());
     },
-    [stage, clear],
+    [stage, restoreMouth, clear],
   );
   return { playing, play, stop };
 }
@@ -302,6 +304,7 @@ function LineReading({ plan }: { readonly plan: LinePlan }) {
 
 export function TestPanel({
   stage,
+  setup,
   inventory,
   reducedMotion,
   text,
@@ -309,6 +312,8 @@ export function TestPanel({
 }: {
   /** Null until her model shows. */
   readonly stage: AvatarStage | null;
+  /** What the stage shows her with; it starts her face afresh when this changes. */
+  readonly setup: ResolvedSetup;
   readonly inventory: ModelInventory;
   readonly reducedMotion: boolean;
   /** The line to try, kept while other tabs are open. */
@@ -329,22 +334,24 @@ export function TestPanel({
   const line = useTryLine(stage, mic.mouth);
   const off = stage === null;
 
-  // Leaving the tab, or a stage made anew, takes off what it held on her.
+  // Leaving the tab, a stage made anew, or a new setup, which a Save or Discard can bring, takes off
+  // what it held on her.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: setup only triggers it.
   useEffect(() => {
     if (stage === null) return;
     return () => {
       stage.model?.setExpressions([]);
       setHeld([]);
     };
-  }, [stage]);
+  }, [stage, setup]);
   useEffect(() => {
     if (stage === null) return;
     stage.gaze(following ? "pointer" : "direction");
     return () => stage.gaze("direction");
   }, [stage, following]);
 
-  // Straight onto the model: the stage sets expressions only as her direction changes, which a
-  // line does, so the two never hold at once.
+  // Straight onto the model, which the stage leaves alone until her direction asks for other
+  // expressions: a line with no mood never does, so a line takes these off before it plays.
   function hold(ids: string[]) {
     setHeld(ids);
     stage?.model?.setExpressions(ids);
@@ -353,7 +360,7 @@ export function TestPanel({
   function tryLine() {
     const plan = planLine(text.trim());
     setReading(plan);
-    setHeld([]);
+    hold([]);
     line.play(plan);
   }
 

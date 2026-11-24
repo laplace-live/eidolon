@@ -369,6 +369,7 @@ export function ModelPreviewCard({
               <TabsContent value="test">
                 <TestPanel
                   stage={ready?.stage ?? null}
+                  setup={setup}
                   inventory={inventory}
                   reducedMotion={reducedMotion}
                   text={line}
