@@ -215,7 +215,8 @@ describe("the third-party notices", () => {
       const source = readFileSync(join(ROOT, file), "utf8");
       const license = /^\/\/ SPDX-License-Identifier: (BSD-2-Clause|ISC|MIT)$/m.exec(source)?.[1];
       if (license === undefined) continue;
-      for (const [, line] of source.matchAll(/^\/\/ (Copyright \(c\) .+)$/gm)) {
+      // @npmcli/package-json's license writes its copyright without "(c)".
+      for (const [, line] of source.matchAll(/^\/\/ (Copyright .+)$/gm)) {
         holders.get(license)?.add(line as string);
       }
     }
