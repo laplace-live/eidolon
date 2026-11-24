@@ -1,5 +1,5 @@
 // Which page the window shows as the backend's state and the window's own failures move it, what
-// the failure page says, and what Try Again does.
+// the failure page says, what Try Again does, and when the page's beforeunload holds.
 import { describe, expect, test } from "vitest";
 import { BearerToken } from "../src/main/attach.ts";
 import type { BackendFailure, BackendState } from "../src/main/controller.ts";
@@ -7,10 +7,12 @@ import {
   type Failure,
   failurePage,
   PageCommands,
+  PageUnloads,
   shellPageStrings,
   type WindowPage,
   WindowPages,
 } from "../src/main/pages.ts";
+import { QuitFlow } from "../src/main/quit-flow.ts";
 import { STRINGS } from "../src/main/strings.ts";
 
 const en = STRINGS.en;
@@ -351,6 +353,78 @@ describe("the menus' commands to the app's page", () => {
     expect(sent).toEqual([]);
     page.listening();
     expect(sent).toEqual(["settings"]);
+  });
+});
+
+describe("the page's beforeunload", () => {
+  const settle = () => new Promise((done) => setTimeout(done, 0));
+
+  /**
+   * The page's unloads on a real quit flow whose box answers through `answer`. `closing` holds
+   * whether the page goes each time the quit, or the update's install, closes the window.
+   */
+  function onQuitFlow() {
+    let answer: (approved: boolean) => void = () => {};
+    const closing: boolean[] = [];
+    const flow: QuitFlow = new QuitFlow({
+      confirm: () =>
+        new Promise<boolean>((done) => {
+          answer = done;
+        }),
+      hideWindows: () => {},
+      stopBackend: async () => {},
+      quit: () => closing.push(unloads.goes()),
+      log: { info: () => {}, error: () => {} },
+    });
+    const unloads = new PageUnloads(() => flow.quitting);
+    return { flow, unloads, closing, answer: (approved: boolean) => answer(approved) };
+  }
+
+  test("holds against the page's own reloads and navigations", () => {
+    expect(onQuitFlow().unloads.goes()).toBe(false);
+  });
+
+  test("gives way to a quit once it's approved, never while its box asks or after a Cancel", async () => {
+    const quit = onQuitFlow();
+    quit.flow.beforeQuit();
+    await settle();
+    expect(quit.unloads.goes()).toBe(false);
+    quit.answer(false);
+    await settle();
+    expect(quit.unloads.goes()).toBe(false);
+    quit.flow.beforeQuit();
+    await settle();
+    quit.answer(true);
+    await settle();
+    expect(quit.closing).toEqual([true]);
+  });
+
+  test("gives way to the update's restart, whose install closes the window", async () => {
+    const quit = onQuitFlow();
+    const restarted = quit.flow.restart(
+      () => quit.closing.push(quit.unloads.goes()),
+      () => true,
+    );
+    await settle();
+    expect(quit.unloads.goes()).toBe(false);
+    quit.answer(true);
+    expect(await restarted).toBe(true);
+    expect(quit.closing).toEqual([true]);
+  });
+
+  test("gives way to main's own load from its call until it settles, the load replacing it included", async () => {
+    const { unloads } = onQuitFlow();
+    const first = Promise.withResolvers<void>();
+    const next = Promise.withResolvers<void>();
+    const loading = unloads.mainLoad(() => first.promise);
+    expect(unloads.goes()).toBe(true);
+    const replacing = unloads.mainLoad(() => next.promise);
+    first.reject(new Error("ERR_ABORTED (-3) loading 'eidolon-app://shell/loading'"));
+    await expect(loading).rejects.toThrow("ERR_ABORTED");
+    expect(unloads.goes()).toBe(true);
+    next.resolve();
+    await replacing;
+    expect(unloads.goes()).toBe(false);
   });
 });
 

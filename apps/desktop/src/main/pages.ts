@@ -1,7 +1,7 @@
 // Which page the window shows: the loading page until the backend is ready, then the
 // app, and the failure page when the backend fails or the window's own page does. It also words
-// the shell pages. Electron-free: index.ts drives it with the backend's states and the window's
-// failures, and loads what it asks for.
+// the shell pages, and decides when the page's beforeunload holds. Electron-free: index.ts drives
+// it with the backend's states and the window's failures, and loads what it asks for.
 import type { DesktopCommand, Language } from "../shared/bridge.ts";
 import {
   type BackendFailure,
@@ -189,6 +189,38 @@ export class WindowPages {
   #show(page: WindowPage): void {
     this.#page = page;
     this.#io.load(page);
+  }
+}
+
+/**
+ * The page's beforeunload, which asks it to stay while it holds unsaved edits. Electron cancels an
+ * unload it refuses, and with it a quit or main's own load: an approved quit would leave the app
+ * running hidden, its backend stopped, deaf to every later quit. So it holds against the page's own
+ * reloads and navigations alone, never a quit under way, the update's restart included, or main's
+ * own load.
+ */
+export class PageUnloads {
+  readonly #quitting: () => boolean;
+  /** Main's own loads under way, counted: the next can start before the one it replaces settles. */
+  #loading = 0;
+
+  constructor(quitting: () => boolean) {
+    this.#quitting = quitting;
+  }
+
+  /** Main's own load, `start` being loadURL: under way from the call until it settles. */
+  async mainLoad(start: () => Promise<void>): Promise<void> {
+    this.#loading++;
+    try {
+      await start();
+    } finally {
+      this.#loading--;
+    }
+  }
+
+  /** will-prevent-unload: whether the page goes anyway. */
+  goes(): boolean {
+    return this.#loading > 0 || this.#quitting();
   }
 }
 

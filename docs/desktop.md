@@ -412,7 +412,12 @@ nothing. Main owns its title.
   while it is open joins it. An attached server is never asked or stopped. On macOS a power-off
   skips the box until the window has attention again. Once the quit is approved, main hides the
   window, stops the task watch, removes the tray icon, stops its backend, and quits. The restart
-  that installs an update goes the same way, with its own box ([Updates](#updates)).
+  that installs an update goes the same way, with its own box ([Updates](#updates)). A page's
+  `beforeunload`, which the studio's text editors use to keep unsaved edits, holds against its own
+  reloads and navigations alone: Electron would cancel the unload, and with it the quit, leaving the
+  app running hidden with its backend stopped. Once a quit is approved, the restart included, and
+  while main loads a page of its own (the loading or failure page, or the app's reload), main lets
+  the page go, edits and all (`will-prevent-unload`, as `PageUnloads` in `pages.ts` decides).
 
 ## Notifications
 
@@ -1030,7 +1035,9 @@ needs a `sign` dispatch from `master` or `electron` that passes both legs, the u
   data home, <origin>`; `Eidolon: the backend listens on <origin>`; `Eidolon: the window shows
   <url>`; `Eidolon: the window is shown`, `… is hidden` and `… is closed` as main's own record of
   the window changes, which counts it as shown once it has painted, in background mode too; and at
-  a quit `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`. Background mode also
+  a quit `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`. Main letting a page go
+  over its `beforeunload` logs `Eidolon: the page asked to stay (beforeunload); letting it go`,
+  before the page it loads or, at a quit, before the window is closed. Background mode also
   logs each thing it keeps off the screen ([below](#background-mode)), and the updater each of its
   steps ([Updates](#updates)).
 

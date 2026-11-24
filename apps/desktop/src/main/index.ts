@@ -22,6 +22,7 @@ import { guardNavigation } from "./navigation.ts";
 import {
   failurePage,
   PageCommands,
+  PageUnloads,
   shellPageStrings,
   type WindowPage,
   WindowPages,
@@ -174,6 +175,7 @@ function run(): void {
       tray = null;
     },
   });
+  const unloads = new PageUnloads(() => flow.quitting);
 
   const actions: TrayActions = {
     open: () => openWindow(),
@@ -190,10 +192,9 @@ function run(): void {
   };
 
   function loadUrl(url: string): void {
+    const win = mainWindow();
     // A failed load is did-fail-load's, which decides; a replaced one is no failure.
-    mainWindow()
-      ?.loadURL(url)
-      .catch(() => {});
+    if (win !== null) unloads.mainLoad(() => win.loadURL(url)).catch(() => {});
   }
 
   function load(page: WindowPage): void {
@@ -235,6 +236,12 @@ function run(): void {
           });
           // At the commit of a new document, before its script can say it listens.
           win.webContents.on("did-navigate", () => commands.replaced());
+          // Here preventDefault() lets the unload go ahead, over the page's beforeunload.
+          win.webContents.on("will-prevent-unload", (event) => {
+            if (!unloads.goes()) return;
+            event.preventDefault();
+            mainLog.info("Eidolon: the page asked to stay (beforeunload); letting it go");
+          });
           attachContextMenu(win.webContents, strings);
           dressWindow(win);
           watchSession(win, flow, backend);
