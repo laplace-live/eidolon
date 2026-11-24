@@ -668,7 +668,7 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - `/call` stays the standalone call to the active persona, with no chat. With her model, it shows
     the call's screen under its header, with the mic's mute toggle, **Type a Message**,
     **Captions**, **Transcript** and **Hang Up**; **Transcript** opens its transcript beside the
-    call, or below it on a phone.
+    call in a window at least 1024 px wide, or below it in a narrower one.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Tasks

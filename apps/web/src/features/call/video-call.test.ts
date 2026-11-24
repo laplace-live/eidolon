@@ -190,7 +190,14 @@ test("keeps /call's transcript mounted beside the call, or below it, never over 
   const panel = markup.slice(at);
   const tag = panel.match(/^<div [^>]*>/)?.[0] ?? "";
   expect(tag).toContain(' hidden=""');
-  expect(classesOf(tag)).toContain("max-md:h-[55%]");
+  // Beside the stage only from lg: at md, beside the open sidebar, a 20rem panel left the stage
+  // 192 px of a 768-px window, and its 290-px controls row lost Mute and half of Hang Up.
+  const root = markup.match(/<section [^>]*>/)?.[0] ?? "";
+  expect(classesOf(root)).toContain("max-lg:flex-col");
+  expect(classesOf(tag)).toEqual(expect.arrayContaining(["max-lg:h-[55%]", "lg:w-80"]));
+  expect(
+    [...classesOf(root), ...classesOf(tag)].filter((name) => /^(max-)?md:/.test(name)),
+  ).toEqual([]);
   expect(classesOf(tag)).not.toContain("absolute");
   expect(panel).toContain("她说的话");
   expect(panel).not.toContain("Hang Up");

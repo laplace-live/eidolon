@@ -208,7 +208,7 @@ export function VideoCall({
       data-call-screen
       tabIndex={-1}
       className={cn(
-        "flex min-h-0 overflow-hidden bg-background outline-none max-md:flex-col",
+        "flex min-h-0 overflow-hidden bg-background outline-none max-lg:flex-col",
         className,
       )}
     >
@@ -325,12 +325,13 @@ export function VideoCall({
         </div>
       </div>
       {transcript !== undefined && (
-        // Always mounted, so the transcript keeps its lines, its scroll and its log in the page.
-        // Beside the stage from md; below it on a phone, under the controls.
+        // Always mounted, so the transcript keeps its lines and its scroll. Beside the stage from
+        // lg, where the open sidebar still leaves the stage room for its controls; below them in a
+        // narrower window.
         <div
           data-call-transcript
           hidden={!transcriptOpen}
-          className="relative min-h-0 bg-background max-md:h-[55%] max-md:shrink-0 max-md:border-t md:w-80 md:shrink-0 md:border-l lg:w-96"
+          className="relative min-h-0 bg-background max-lg:h-[55%] max-lg:shrink-0 max-lg:border-t lg:w-80 lg:shrink-0 lg:border-l xl:w-96"
         >
           {transcript}
         </div>
