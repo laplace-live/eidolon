@@ -349,7 +349,7 @@ app's second, with rules of its own.
   `CompanionState`; `linkCompanion()`, which says the page listens for a port to her page, and
   `feedingCompanion(feeding)`, whether a call she is on is up there; `onCompanionPick`, which
   hands the page her menu's call picks (`companion-pick`); and `onWindowShows`, whether the window
-  shows, which the preload reads from main over a synchronous message as it starts and main sends
+  shows, which the preload reads from main over a synchronous message as the page asks and main sends
   again at each change (`window-shows`). The preload sends only what main takes
   (`true` or `false`, `install` or `remove`, a change of `on` or `showAtLogin` alone) and hands the
   page main's answers only in the shapes `src/shared/bridge.ts` declares. A shell page gets
@@ -555,8 +555,9 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   throttling off exactly while she shows and a call of hers is up there (`feedingCompanion`), and on
   again after; a new main window takes it afresh. Throttling off also keeps a hidden page visible to
   itself, so main tells the app page whether its window shows (`onWindowShows`), and while it
-  doesn't, hidden or minimized, the call's stages there draw nothing (`CallStages.hold`); the
-  call, its signals and her feed go on, and the stages draw again as the window shows. Her voice
+  doesn't, hidden or minimized, its stages draw nothing (the call's, `CallStages.hold`, and Studio's
+  preview) and its CSS animations wait (`data-window-hidden` on `<html>`); the call, its signals and
+  her feed go on, and all of it draws again as the window shows. Her voice
   messages need none: her page works out their mouth from the file.
 - **Her one page.** Main loads nothing but `eidolon-app://app/companion` (`COMPANION_PAGE`, an exact
   match) in her window, and her own guard (`guardCompanionNavigation`) keeps her there:

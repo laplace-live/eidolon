@@ -120,7 +120,7 @@ export const BRIDGE = {
   companionPick: "eidolon:companion-pick",
   /**
    * Main → app page: a boolean, whether its window shows, at each change. App page → main,
-   * synchronous: the same, read as its preload starts, since a page loads before it hears a change.
+   * synchronous: the same, read as the page asks for it, since a page loads before it hears a change.
    */
   windowShows: "eidolon:window-shows",
   /** Main → both pages, through postMessage: a MessagePort to the other page, in the event's ports. */
