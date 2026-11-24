@@ -649,7 +649,9 @@ const NODE_CMD = fileURLToPath(new URL("node.cmd", import.meta.url));
  * for a file it runs as it is; once for a batch file, whose `%*` hands them on, as npm's npx counts;
  * twice for a cmd-shim with no node.exe beside it whose bare `node` cmd.exe would find to be
  * `nodeCmd`, the shim's own, which hands them on again. cmd.exe looks `node` up in `cwd` first,
- * unless NoDefaultCurrentDirectoryInExePath is set, then on `env`'s PATH.
+ * unless NoDefaultCurrentDirectoryInExePath is set, then on `env`'s PATH. Set means there at
+ * all, empty too: Windows checks only that it exists
+ * (https://learn.microsoft.com/windows/win32/api/processenv/nf-processenv-needcurrentdirectoryforexepathw).
  */
 export function rereads(file, { env, cwd, nodeCmd = NODE_CMD }) {
   if (!/\.(?:cmd|bat)$/i.test(file)) return 0;
@@ -666,7 +668,7 @@ export function rereads(file, { env, cwd, nodeCmd = NODE_CMD }) {
     cwd,
     platform: "win32",
     pathext: shim.lessJs ? pathext?.replace(/;\.JS;/gi, ";") : pathext,
-    cwdFirst: !envValue(env, "NoDefaultCurrentDirectoryInExePath"),
+    cwdFirst: envValue(env, "NoDefaultCurrentDirectoryInExePath") === undefined,
   });
   return node !== undefined && sameFile(node, nodeCmd) ? 2 : 1;
 }

@@ -269,9 +269,10 @@ describe("how many times cmd.exe reads the words npx starts a batch file with", 
     expect(reads(pnpm, ["other", "shim"])).toBe(2);
     const here = join(base, "here");
     expect(reads(pnpm, ["bin", "shim"], here)).toBe(2);
-    // Unless cmd.exe is told to look on PATH alone.
+    // Unless cmd.exe is told to look on PATH alone, by the variable being there, empty or not.
     const alone = { NoDefaultCurrentDirectoryInExePath: "1" };
     expect(reads(pnpm, ["bin", "shim"], here, alone)).toBe(3);
+    expect(reads(pnpm, ["bin", "shim"], here, { NoDefaultCurrentDirectoryInExePath: "" })).toBe(3);
   });
 
   test("a node.js before the shim's node.cmd: run for npm's shim, which puts .JS back in PATHEXT first, not pnpm's", () => {
