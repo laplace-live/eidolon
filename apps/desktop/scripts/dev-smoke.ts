@@ -2206,6 +2206,22 @@ async function popOut(walk: Walk, driven: Driven, her: Her, step: Step) {
     popped !== null && hidden !== null && calls === 1,
     `${hidden === null ? "the window isn't hidden" : after(hidden)}; ${popped === null ? "no popped-out line" : after(popped)}; ${calls} call(s) up`,
   );
+  // Hidden, the window's page still runs for her feed, and its call's stage draws nothing.
+  const frames = () =>
+    page.evaluate(() =>
+      Number(
+        document.querySelector<HTMLElement>("[data-call-screen] [data-avatar][data-frames]")
+          ?.dataset.frames ?? Number.NaN,
+      ),
+    );
+  const before = await frames();
+  await sleep(1000);
+  const held = await frames();
+  step.check(
+    "hidden, the window's call draws no frame",
+    Number.isFinite(before) && held === before,
+    `its stage's data-frames ${before}, and ${held} a second later`,
+  );
   from = smoke.log("main").length;
   await screen.getByRole("button", { name: "Hang Up" }).click();
   const throttled = await smoke
