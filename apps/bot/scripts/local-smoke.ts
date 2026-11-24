@@ -1,16 +1,16 @@
 // A browser walk through the local web app on a throwaway data home: sign-in, the wizard's keys step
 // in English and 简体中文, saved keys, an embeddings account added and picked in Settings, a saved
-// prompt, a voice style added and removed, a PSD2Live model imported, drawn, refused in two bad
-// copies and made active in the studio's Appearance, a facts index built through the studio, a text
-// chat from greeting to delete, a group chat with a second persona, voice messages both ways, a call
-// inside a chat, a task she starts, checks, steers and reports in a chat, a second she stops, a
-// third shown in each of the chat's displays and stopped with /stop, a fourth she starts by voice
-// on a call there, a coding task on the kind's own model that reads the owner's skill and runs
-// commands its card allows once, denies and allows for good, one moving to the background, and two
-// whose workers call a fake MCP server's tool. The keys are fake, so the providers refuse them for
-// free, and the embeddings, the chats' replies, the director's decisions, the voice messages'
-// speech, the calls' hearing, mind and voice and the tasks' workers come from a fake server, so
-// nothing is billed. Online, one task's worker fetches example.com.
+// prompt, a voice style added and removed, a PSD2Live model imported, drawn and made active in the
+// studio's Appearance, which refuses a picture and a rig cut short, a facts index built through the
+// studio, a text chat from greeting to delete, a group chat with a second persona, voice messages
+// both ways, a call inside a chat, a task she starts, checks, steers and reports in a chat, a second
+// she stops, a third shown in each of the chat's displays and stopped with /stop, a fourth she
+// starts by voice on a call there, a coding task on the kind's own model that reads the owner's
+// skill and runs commands its card allows once, denies and allows for good, one moving to the
+// background, and two whose workers call a fake MCP server's tool. The keys are fake, so the
+// providers refuse them for free, and the embeddings, the chats' replies, the director's decisions,
+// the voice messages' speech, the calls' hearing, mind and voice and the tasks' workers come from a
+// fake server, so nothing is billed. Online, one task's worker fetches example.com.
 // --call instead places a real call from the call page with the .env's keys, which bills them.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
