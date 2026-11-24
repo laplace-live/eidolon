@@ -2,4 +2,4 @@
 "laplace-eidolon-desktop": patch
 ---
 
-fix: Quitting with unsaved changes no longer leaves Eidolon stuck in the background
+fix: Unsaved changes no longer leave Eidolon stuck when it quits or its server stops
