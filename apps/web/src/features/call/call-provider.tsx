@@ -14,6 +14,7 @@ import { useRevalidator } from "react-router";
 import { chatQuery } from "@/features/chats/queries";
 import { callOn } from "@/features/chats/stream";
 import { pausePlayback } from "@/features/chats/voice";
+import { CompanionFeed } from "@/features/companion/feed";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import type { Status } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
@@ -166,6 +167,7 @@ export function CallProvider({ children }: { readonly children: ReactNode }): Re
     <CallPresenceContext.Provider value={presence}>
       <ShellCallContext.Provider value={full}>
         {children}
+        <CompanionFeed />
         {/* biome-ignore lint/a11y/useMediaCaption: a live MediaStream takes no track; the call's captions and transcript are its caption. */}
         <audio ref={audioRef} autoPlay hidden data-call />
       </ShellCallContext.Provider>
