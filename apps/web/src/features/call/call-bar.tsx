@@ -17,6 +17,21 @@ import { CallNotices } from "./call-notices";
 import { CallStatus, Face } from "./call-state";
 import { barShown, callPath, hostOf, isUp } from "./target";
 
+/**
+ * The bar's ref: Hang Up, Close and Return to Call take the bar, the page's last stop, away with the
+ * focus, which the page's content then takes, as from the skip link, so Tab stays in the page.
+ */
+function handFocusOn(section: HTMLElement | null) {
+  if (section === null) return;
+  return () => {
+    const held = document.activeElement;
+    if (held !== document.body && !section.contains(held)) return;
+    (document.getElementById("content") ?? document.getElementById("main"))?.focus({
+      preventScroll: true,
+    });
+  };
+}
+
 export function CallBar(): ReactNode {
   const { t } = useLingui();
   const call = useShellCall();
@@ -36,6 +51,7 @@ export function CallBar(): ReactNode {
     // Never a drag row: Electron builds those in document order, and a page's foot keeps clear of
     // Windows' caption buttons.
     <section
+      ref={handFocusOn}
       aria-label={t`Ongoing Call`}
       data-call-bar
       // mt-auto: a page shorter than the window would leave a sticky bar right under it.
