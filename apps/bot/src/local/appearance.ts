@@ -322,8 +322,16 @@ export function replaceRig(
     inventory,
     ...kept(model, inventory),
   };
-  writeDataFile(rigPath(persona, model.id), bytes);
-  save(persona, replaced);
+  const rig = rigPath(persona, model.id);
+  const before = readFileSync(rig);
+  writeDataFile(rig, bytes);
+  try {
+    save(persona, replaced);
+  } catch (error) {
+    // model.json still names the old file, whose URL would serve the new one for good.
+    writeDataFile(rig, before);
+    throw error;
+  }
   return replaced;
 }
 
