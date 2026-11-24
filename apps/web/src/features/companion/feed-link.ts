@@ -1,10 +1,14 @@
 // The main window's end of the port to the desktop companion's page: what it tells her of the
 // active persona, the shell's call and the open chat, and what of the call is hers.
 import type { Direction } from "@laplace.live/eidolon-sdk/avatar";
+import type { QueryClient } from "@tanstack/react-query";
+import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
 import { callBlocker } from "@/features/call/blockers";
 import type { CallPhase } from "@/features/call/phase";
 import type { CallTarget } from "@/features/call/target";
 import type { Status } from "@/lib/api";
+import { characterModelsQuery } from "@/lib/character-models";
+import { statusQuery } from "@/lib/query";
 import type { PortLike } from "./page-port";
 import { type ChatFact, type CompanionCall, type ToApp, type ToCompanion, toApp } from "./protocol";
 
@@ -140,7 +144,11 @@ export class FeedLink {
   chat(fact: ChatFact): void {
     if (fact.persona !== this.#persona?.id) return;
     if (fact.type === "voice") {
-      this.#voice = fact.state === "playing" ? { fact, at: this.#now() } : null;
+      if (fact.state === "playing") this.#voice = { fact, at: this.#now() };
+      // Playing one message pauses the last, whose pause can come after the new one plays.
+      else if (this.#voice?.fact.chat === fact.chat && this.#voice.fact.seq === fact.seq) {
+        this.#voice = null;
+      }
     }
     this.#send(fact);
   }
@@ -191,4 +199,19 @@ export function mouthLevel(
   speaking: (key: string) => boolean,
 ): number {
   return key === undefined || speaking(key) ? level : 0;
+}
+
+/**
+ * Her page changed her appearance through the API: what this window shows of it is read again, her
+ * settings' rows included, which say whether her model is her own choice.
+ */
+export function appearanceChanged(queryClient: QueryClient, persona: string): void {
+  void queryClient.invalidateQueries({
+    queryKey: characterModelsQuery(persona).queryKey,
+    exact: true,
+  });
+  void queryClient.invalidateQueries({ queryKey: personasQuery.queryKey, exact: true });
+  void queryClient.invalidateQueries({ queryKey: statusQuery.queryKey });
+  void queryClient.invalidateQueries({ queryKey: settingsQuery(persona).queryKey, exact: true });
+  void queryClient.invalidateQueries({ queryKey: settingsQuery().queryKey, exact: true });
 }

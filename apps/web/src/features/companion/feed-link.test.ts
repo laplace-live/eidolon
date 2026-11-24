@@ -1,9 +1,20 @@
 import type { Direction } from "@laplace.live/eidolon-sdk/avatar";
+import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, test } from "vitest";
+import { personasQuery, settingsQuery } from "@/components/settings-form/queries";
 import { type CallPhase, IDLE, type PhaseEvent, reducePhase } from "@/features/call/phase";
 import { type CallTarget, type CastMember, chatTarget, soloTarget } from "@/features/call/target";
 import type { Status } from "@/lib/api";
-import { FeedLink, feedState, MOUTH_SEND_MS, MOUTH_SLACK_MS, mouthLevel } from "./feed-link";
+import { characterModelsQuery } from "@/lib/character-models";
+import { statusQuery } from "@/lib/query";
+import {
+  appearanceChanged,
+  FeedLink,
+  feedState,
+  MOUTH_SEND_MS,
+  MOUTH_SLACK_MS,
+  mouthLevel,
+} from "./feed-link";
 import type { PortLike } from "./page-port";
 import type { ChatFact, CompanionCall, ToApp } from "./protocol";
 
@@ -265,6 +276,12 @@ describe("FeedLink", () => {
     const two = fakePort();
     link.connect(two.port);
     expect(two.posted.at(-1)).toEqual({ ...voice, position: 3.5 });
+    // Another message's stop, as playing this one paused the last, forgets nothing.
+    link.chat({ ...voice, seq: 4, state: "paused", position: 2 });
+    link.chat({ ...voice, chat: "other", state: "ended", position: 2 });
+    const later = fakePort();
+    link.connect(later.port);
+    expect(later.posted.at(-1)).toEqual({ ...voice, position: 3.5 });
     // Once it stops, a new port hears nothing of it.
     link.chat({ ...voice, state: "ended", position: 9 });
     const three = fakePort();
@@ -429,5 +446,25 @@ describe("mouthLevel", () => {
     expect(mouthLevel(0.6, undefined, () => false)).toBe(0.6);
     expect(mouthLevel(0.6, "milky-green", () => false)).toBe(0);
     expect(mouthLevel(0.6, "milky-green", (key) => key === "milky-green")).toBe(0.6);
+  });
+});
+
+describe("appearanceChanged", () => {
+  test("reads again what shows her appearance: her models, the personas, status and her settings", () => {
+    const queryClient = new QueryClient();
+    const keys: readonly (readonly unknown[])[] = [
+      characterModelsQuery("milky-green").queryKey,
+      personasQuery.queryKey,
+      statusQuery.queryKey,
+      settingsQuery("milky-green").queryKey,
+      settingsQuery().queryKey,
+    ];
+    const kept = characterModelsQuery("hazel").queryKey;
+    for (const key of [...keys, kept]) queryClient.setQueryData<unknown>(key, {});
+    appearanceChanged(queryClient, "milky-green");
+    for (const key of keys) {
+      expect([key, queryClient.getQueryState(key)?.isInvalidated]).toEqual([key, true]);
+    }
+    expect(queryClient.getQueryState(kept)?.isInvalidated).toBe(false);
   });
 });

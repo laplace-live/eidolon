@@ -1,10 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { memo, type ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { personasQuery } from "@/components/settings-form/queries";
 import { useShellCall } from "@/features/call/call-context";
 import { soloTarget } from "@/features/call/target";
-import { characterModelsQuery } from "@/lib/character-models";
 import {
   type CompanionCallPick,
   desktop,
@@ -14,7 +12,7 @@ import {
 } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
 import { onChatFact } from "./chat-facts";
-import { FeedLink, feedState, MOUTH_SEND_MS, mouthLevel } from "./feed-link";
+import { appearanceChanged, FeedLink, feedState, MOUTH_SEND_MS, mouthLevel } from "./feed-link";
 import { appearanceStamp } from "./protocol";
 
 /** A desktop app's bridge that offers the desktop companion's feed. */
@@ -46,17 +44,9 @@ function Feed({ app }: { readonly app: FeedBridge }): ReactNode {
   const { persona, call, key, feeding } = feedState(status, { target, phase, up, micOn });
   const current = { status, callable: call.callable, start, navigate, hangUp, setMic };
   const latest = useRef(current);
-  // The one thing her page asks of this window: her models and her summary, read again.
+  // The one thing her page asks of this window: what shows her appearance, read again.
   const [link] = useState(
-    () =>
-      new FeedLink(({ persona: changed }) => {
-        void queryClient.invalidateQueries({
-          queryKey: characterModelsQuery(changed).queryKey,
-          exact: true,
-        });
-        void queryClient.invalidateQueries({ queryKey: personasQuery.queryKey, exact: true });
-        void queryClient.invalidateQueries({ queryKey: statusQuery.queryKey });
-      }),
+    () => new FeedLink(({ persona: changed }) => appearanceChanged(queryClient, changed)),
   );
 
   useEffect(() => {
