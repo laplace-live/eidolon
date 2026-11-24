@@ -51,6 +51,8 @@ export interface EidolonDesktop {
   /** The `eidolon` command for terminals. */
   readonly terminalCommand?: () => Promise<CommandState>;
   readonly setTerminalCommand?: (action: "install" | "remove") => Promise<CommandChange>;
+  /** Whether the page holds unsaved edits, which the app's quit and restart boxes warn of. */
+  readonly unsaved?: (held: boolean) => void;
 }
 
 declare global {
@@ -60,6 +62,22 @@ declare global {
 /** The bridge, or null in a browser. */
 export function desktop(): EidolonDesktop | null {
   return globalThis.eidolonDesktop ?? null;
+}
+
+/** The editors holding unsaved edits now. */
+let unsavedHolds = 0;
+
+/**
+ * Holds the page as one with unsaved edits until the release it returns. The desktop app hears true
+ * as the first hold starts and false as the last ends.
+ */
+export function holdUnsaved(): () => void {
+  unsavedHolds++;
+  if (unsavedHolds === 1) desktop()?.unsaved?.(true);
+  return () => {
+    unsavedHolds--;
+    if (unsavedHolds === 0) desktop()?.unsaved?.(false);
+  };
 }
 
 /** What each command the desktop app sends does here; any other is ignored. */

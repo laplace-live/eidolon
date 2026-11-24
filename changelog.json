@@ -2,6 +2,74 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-24T01:42:44.433Z",
+      "versions": {
+        "laplace-eidolon-desktop": "0.3.0",
+        "laplace-eidolon": "0.15.1",
+        "@laplace.live/eidolon": "0.15.1"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Open Eidolon at login, in the background"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Get a notification when a task needs you or ends while Eidolon is in the background"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Start MCP servers that run npx, node or pnpm on a computer without Node"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "On Windows, Restart picks up PATH and variables changed since Eidolon started"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Install the eidolon command for your terminal from Settings"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Choose an Assistant folder in a native folder dialog"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Say Assistant Commands run on Windows too, with Git Bash, Cygwin or MSYS2"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Run only Windows' own PowerShell, never a powershell.exe in the current folder"
+        }
+      ]
+    },
+    {
       "date": "2026-11-23T14:20:57.486Z",
       "versions": {
         "laplace-eidolon": "0.15.0",

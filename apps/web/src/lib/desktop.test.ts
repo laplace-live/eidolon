@@ -1,6 +1,6 @@
 import { i18n } from "@lingui/core";
-import { afterEach, expect, test, vi } from "vitest";
-import { connectDesktop, desktop, type EidolonDesktop, runCommand } from "./desktop";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { connectDesktop, desktop, type EidolonDesktop, holdUnsaved, runCommand } from "./desktop";
 import { setTheme } from "./theme";
 
 interface FakeBridge extends EidolonDesktop {
@@ -86,6 +86,53 @@ test("an app whose bridge predates the folder dialog and the system options is s
   expect(desktop()?.setLoginItem).toBeUndefined();
   expect(desktop()?.terminalCommand).toBeUndefined();
   expect(desktop()?.setTerminalCommand).toBeUndefined();
+  expect(desktop()?.unsaved).toBeUndefined();
+});
+
+/** A bridge that records what the page says of its unsaved edits. */
+function editsBridge(): EidolonDesktop & { readonly said: boolean[] } {
+  const said: boolean[] = [];
+  return { ...fakeBridge(), said, unsaved: (held) => said.push(held) };
+}
+
+describe("holdUnsaved", () => {
+  test("tells the app true as the first hold starts and false as the last ends, in any order", () => {
+    const bridge = editsBridge();
+    globalThis.eidolonDesktop = bridge;
+    const prompt = holdUnsaved();
+    const glossary = holdUnsaved();
+    expect(bridge.said).toEqual([true]);
+    prompt();
+    const facts = holdUnsaved();
+    glossary();
+    expect(bridge.said).toEqual([true]);
+    facts();
+    expect(bridge.said).toEqual([true, false]);
+    holdUnsaved()();
+    expect(bridge.said).toEqual([true, false, true, false]);
+  });
+
+  test("StrictMode's run, cleanup and second run of an effect leave one hold", () => {
+    const bridge = editsBridge();
+    globalThis.eidolonDesktop = bridge;
+    holdUnsaved()();
+    const second = holdUnsaved();
+    expect(bridge.said).toEqual([true, false, true]);
+    second();
+    expect(bridge.said).toEqual([true, false, true, false]);
+  });
+
+  test("a browser and an app whose bridge predates it hear nothing, and the count holds there too", () => {
+    const inBrowser = holdUnsaved();
+    globalThis.eidolonDesktop = fakeBridge();
+    const inOlderApp = holdUnsaved();
+    inBrowser();
+    inOlderApp();
+    const bridge = editsBridge();
+    globalThis.eidolonDesktop = bridge;
+    holdUnsaved()();
+    expect(bridge.said).toEqual([true, false]);
+  });
 });
 
 test("a bridge with them hands their answers on", async () => {

@@ -22,6 +22,7 @@ import { guardNavigation } from "./navigation.ts";
 import {
   failurePage,
   PageCommands,
+  PageUnloads,
   shellPageStrings,
   type WindowPage,
   WindowPages,
@@ -166,6 +167,7 @@ function run(): void {
     process.platform === "win32" ? nativeImage.createFromPath(trayIconPath()) : undefined;
   const flow = installQuit({
     backend,
+    unsaved: () => unloads.unsaved,
     strings,
     icon,
     approved: () => {
@@ -174,6 +176,7 @@ function run(): void {
       tray = null;
     },
   });
+  const unloads = new PageUnloads(() => flow.quitting);
 
   const actions: TrayActions = {
     open: () => openWindow(),
@@ -190,10 +193,9 @@ function run(): void {
   };
 
   function loadUrl(url: string): void {
+    const win = mainWindow();
     // A failed load is did-fail-load's, which decides; a replaced one is no failure.
-    mainWindow()
-      ?.loadURL(url)
-      .catch(() => {});
+    if (win !== null) unloads.mainLoad(() => win.loadURL(url)).catch(() => {});
   }
 
   function load(page: WindowPage): void {
@@ -235,6 +237,13 @@ function run(): void {
           });
           // At the commit of a new document, before its script can say it listens.
           win.webContents.on("did-navigate", () => commands.replaced());
+          unloads.follow(win.webContents);
+          // Here preventDefault() lets the unload go ahead, over the page's beforeunload.
+          win.webContents.on("will-prevent-unload", (event) => {
+            if (!unloads.goes()) return;
+            event.preventDefault();
+            mainLog.info("Eidolon: the page asked to stay (beforeunload); letting it go");
+          });
           attachContextMenu(win.webContents, strings);
           dressWindow(win);
           watchSession(win, flow, backend);
@@ -338,6 +347,7 @@ function run(): void {
         versions: () => ({ version, serverVersion: backend.serverVersion }),
         language: languageChanged,
         takesCommands: () => commands.listening(),
+        unsaved: (held) => unloads.held(held),
         chooseFolder,
         loginItem: () => loginItemState(process.platform, unavailable, readLoginItem),
         // The write returns nothing and only logs a failure, so the state is read again after it.
