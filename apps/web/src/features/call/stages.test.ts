@@ -157,6 +157,8 @@ describe("CallStages", () => {
     expect(cast.version()).toBeGreaterThan(before);
     await settle();
     expect(stages[0]?.options.reducedMotion).toBe(true);
+    // At most 60 frames a second, however fast the display.
+    expect(stages[0]?.options.fps).toBe(60);
     const loading = cast.version();
     pending.get("milky-green")?.resolve(loadedModel());
     await settle();

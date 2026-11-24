@@ -72,6 +72,12 @@ const DOM_PARTS: StageParts = {
   },
 };
 
+/**
+ * The most frames a second a call's stage draws, however fast the display: drawing each of a 120 Hz
+ * display's cost the window about 15% of a core and the GPU process 25%.
+ */
+const CALL_FPS = 60;
+
 /** Animation frames, each counted on `entry` as it runs. */
 function countedFrames(entry: Entry): FrameClock {
   return {
@@ -159,6 +165,7 @@ export class CallStages {
     try {
       stage = await this.#parts.stage(entry.canvas, {
         reducedMotion: how.reducedMotion,
+        fps: CALL_FPS,
         onError: () => this.#set(entry, "failed"),
         clock: countedFrames(entry),
       });
