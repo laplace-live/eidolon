@@ -191,7 +191,8 @@ export function toCompanion(data: unknown): ToCompanion | null {
   if (message === null) return null;
   switch (message.type) {
     case "persona": {
-      const { id, stamp, picture } = message;
+      // A main window on a build before the picture's version sends none.
+      const { id, stamp, picture = 0 } = message;
       if (!isId(id) || typeof stamp !== "string" || stamp.length > MAX_STAMP) return null;
       if (!Number.isSafeInteger(picture) || (picture as number) < 0) return null;
       return { type: "persona", id, stamp, picture: picture as number };
