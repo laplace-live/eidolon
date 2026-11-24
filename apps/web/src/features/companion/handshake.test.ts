@@ -4,11 +4,16 @@ import { companionShape, type HandshakeSteps, handshake } from "./handshake";
 
 const BOX = { x: 0, y: 0, width: 42, height: 100 };
 
-/** Steps that record their calls; `shape` answers as given. */
+/**
+ * Steps that record their calls; `shape` answers as given, and `sized` and `frame` run inside their
+ * step, before it resolves.
+ */
 function recorded(
   o: {
     readonly hidden?: boolean;
     readonly shape?: (shape: CompanionShape) => Promise<WindowSize>;
+    readonly sized?: () => void;
+    readonly frame?: () => void;
   } = {},
 ) {
   const calls: unknown[][] = [];
@@ -19,10 +24,12 @@ function recorded(
     },
     sized: async (size) => {
       calls.push(["sized", size]);
+      o.sized?.();
     },
     hidden: () => o.hidden ?? false,
     frame: async (view) => {
       calls.push(["frame", view]);
+      o.frame?.();
     },
     drawn: (view) => {
       calls.push(["drawn", view]);
@@ -70,6 +77,20 @@ describe("handshake", () => {
     });
     await handshake("model", BOX, steps, controller.signal);
     expect(calls.map(([step]) => step)).toEqual(["shape"]);
+  });
+
+  test("an abort while her window takes its size stops it there", async () => {
+    const controller = new AbortController();
+    const { calls, steps } = recorded({ sized: () => controller.abort() });
+    await handshake("model", BOX, steps, controller.signal);
+    expect(calls.map(([step]) => step)).toEqual(["shape", "sized"]);
+  });
+
+  test("an abort while a frame of her is drawn never says she is", async () => {
+    const controller = new AbortController();
+    const { calls, steps } = recorded({ frame: () => controller.abort() });
+    await handshake("model", BOX, steps, controller.signal);
+    expect(calls.map(([step]) => step)).toEqual(["shape", "sized", "frame"]);
   });
 
   test("an abort before it starts asks nothing", async () => {
