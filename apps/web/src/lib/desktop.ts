@@ -1,8 +1,8 @@
 // The desktop app's bridges: its preload puts `eidolonDesktop` on the app's own page and
 // `eidolonCompanion` on the desktop companion's, and a browser has neither, so everything that
-// differs in the desktop app asks `desktop()` first. The page can come from a server of another
-// version than the app's, so a member added since the first release is optional, and asked for
-// before it's used.
+// differs in the desktop app asks `desktop()`, or on her page `companion()`, first. The page can
+// come from a server of another version than the app's, so a member added since the first release
+// is optional, and asked for before it's used.
 import { i18n } from "@lingui/core";
 import type { Lang } from "@/locales/i18n";
 import { onThemeChange, type Theme, themeSetting } from "./theme";
