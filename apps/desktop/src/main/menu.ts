@@ -6,15 +6,19 @@ import { contextMenu, type MenuActions, macMenu, type UpdatesItem, windowsMenu }
 import { native } from "./native.ts";
 import type { Strings } from "./strings.ts";
 
-/** Sets the application menu; again whenever the shell's language or Check for Updates… changes. */
+/**
+ * Sets the application menu; again whenever the shell's language, Check for Updates… or the desktop
+ * companion's being on changes.
+ */
 export function setApplicationMenu(
   strings: Strings,
   actions: MenuActions,
   updates: UpdatesItem,
+  companion: boolean,
 ): void {
   const template =
     process.platform === "darwin"
-      ? macMenu(strings, actions, { packaged: app.isPackaged, background, updates })
+      ? macMenu(strings, actions, { packaged: app.isPackaged, background, updates, companion })
       : windowsMenu(strings);
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

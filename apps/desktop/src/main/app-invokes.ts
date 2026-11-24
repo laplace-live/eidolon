@@ -1,16 +1,26 @@
-// The app page's invokes on main, the folder dialog and the system options: each answers only the
-// window's main frame at eidolon-app://app, and takes only the argument its action does.
-// Electron-free: chrome.ts hands each to ipcMain.handle.
+// The pages' invokes on main: the app page's (the folder dialog, the system options and the desktop
+// companion), each answering only the main window's main frame at eidolon-app://app, and the
+// companion's, each answering only her window's. Each takes only the argument its action does.
+// Electron-free: chrome.ts and companion-window.ts hand each to ipcMain.handle.
 import {
   accepts,
   BRIDGE,
   type CommandAction,
   type CommandChange,
   type CommandState,
+  type CompanionChange,
+  type CompanionMenuState,
+  type CompanionPick,
+  type CompanionShape,
+  type CompanionState,
+  companionMenuStateOf,
+  companionShapeOf,
   type IpcSender,
   isCommandAction,
+  isCompanionChange,
   type LoginItemState,
   type PageChannel,
+  type WindowSize,
 } from "../shared/bridge.ts";
 
 export interface AppInvokes {
@@ -20,6 +30,9 @@ export interface AppInvokes {
   readonly setLoginItem: (on: boolean) => LoginItemState;
   readonly terminalCommand: () => Promise<CommandState>;
   readonly setTerminalCommand: (action: CommandAction) => Promise<CommandChange>;
+  readonly companion: () => CompanionState;
+  readonly setCompanion: (change: CompanionChange) => CompanionState;
+  readonly popOut: () => CompanionState;
 }
 
 /** An invoke's answer to who sent it and its argument; throws for another sender or argument. */
@@ -51,6 +64,37 @@ export function appInvokes(actions: AppInvokes): readonly (readonly [PageChannel
     guarded(BRIDGE.setTerminalCommand, (action) => {
       if (!isCommandAction(action)) throw new Error("the terminal command takes install or remove");
       return actions.setTerminalCommand(action);
+    }),
+    guarded(BRIDGE.companion, () => actions.companion()),
+    guarded(BRIDGE.setCompanion, (change) => {
+      if (!isCompanionChange(change)) {
+        throw new Error("the desktop companion takes on or showAtLogin, each true or false");
+      }
+      return actions.setCompanion(change);
+    }),
+    guarded(BRIDGE.popOut, () => actions.popOut()),
+  ];
+}
+
+export interface CompanionInvokes {
+  readonly shape: (shape: CompanionShape) => WindowSize;
+  readonly menu: (state: CompanionMenuState) => Promise<CompanionPick | null>;
+}
+
+/** Her page's invokes: each refuses another sender before it reads the argument, then one that doesn't read. */
+export function companionInvokes(
+  actions: CompanionInvokes,
+): readonly (readonly [PageChannel, InvokeAnswer])[] {
+  return [
+    guarded(BRIDGE.companionShape, (value) => {
+      const shape = companionShapeOf(value);
+      if (shape === null) throw new Error("her shape is her picture, or her model's aspect");
+      return actions.shape(shape);
+    }),
+    guarded(BRIDGE.companionMenu, (value) => {
+      const state = companionMenuStateOf(value);
+      if (state === null) throw new Error("her menu takes the call's state and her models");
+      return actions.menu(state);
     }),
   ];
 }

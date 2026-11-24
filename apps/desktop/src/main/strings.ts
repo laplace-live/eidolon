@@ -84,6 +84,23 @@ export interface Strings {
     /** The folder dialog's title, where the OS shows one, and its button. */
     readonly chooseFolderTitle: string;
     readonly chooseFolderButton: string;
+    /** The tray's and macOS's Window menu's checkbox for her. */
+    readonly desktopCompanion: string;
+    /** Her own menu's items. */
+    readonly call: string;
+    readonly hangUp: string;
+    readonly muteMicrophone: string;
+    readonly unmuteMicrophone: string;
+    readonly appearance: string;
+    readonly outfit: string;
+    /** Her outfit as her model was exported. */
+    readonly asExported: string;
+    readonly size: string;
+    readonly small: string;
+    readonly medium: string;
+    readonly large: string;
+    readonly alwaysOnTop: string;
+    readonly hide: string;
   };
   /** Sentences, titles phrased as one, and statuses: sentence case. */
   readonly text: {
@@ -226,6 +243,20 @@ const en: Strings = {
     restart: "Restart",
     chooseFolderTitle: "Choose a Folder",
     chooseFolderButton: "Choose",
+    desktopCompanion: "Desktop Companion",
+    call: "Call",
+    hangUp: "Hang Up",
+    muteMicrophone: "Mute Microphone",
+    unmuteMicrophone: "Unmute Microphone",
+    appearance: "Appearance",
+    outfit: "Outfit",
+    asExported: "As Exported",
+    size: "Size",
+    small: "Small",
+    medium: "Medium",
+    large: "Large",
+    alwaysOnTop: "Always on Top",
+    hide: "Hide",
   },
   text: {
     loading: "Starting Eidolon…",
@@ -375,6 +406,20 @@ const zhHans: Strings = {
     restart: "重启",
     chooseFolderTitle: "选择文件夹",
     chooseFolderButton: "选择",
+    desktopCompanion: "桌面形象",
+    call: "通话",
+    hangUp: "挂断",
+    muteMicrophone: "关闭麦克风",
+    unmuteMicrophone: "打开麦克风",
+    appearance: "形象",
+    outfit: "服装",
+    asExported: "原样",
+    size: "大小",
+    small: "小",
+    medium: "中",
+    large: "大",
+    alwaysOnTop: "始终置顶",
+    hide: "隐藏",
   },
   text: {
     loading: "正在启动 Eidolon…",

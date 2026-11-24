@@ -1,15 +1,26 @@
 // The desktop app's main process, in this order: the profile, the logs and the single-instance
 // lock first (instance.ts), then the scheme; once Electron is ready, the session's guards and the
 // scheme's handler, the window on the loading page (hidden at a launch at login), and then the
-// environment and the backend, which the window and the task notifications follow.
+// environment and the backend, which the window, the desktop companion and the task notifications
+// follow.
 import "./instance.ts";
 import { join } from "node:path";
-import { type AboutPanelOptionsOptions, app, nativeImage, session } from "electron";
-import { type Language, pageAt } from "../shared/bridge.ts";
+import {
+  type AboutPanelOptionsOptions,
+  app,
+  MessageChannelMain,
+  nativeImage,
+  screen,
+  session,
+} from "electron";
+import { BRIDGE, type Language, pageAt } from "../shared/bridge.ts";
 import { dataHome } from "./attach.ts";
 import { Backend, licensesFile } from "./backend.ts";
 import { BACKGROUND_LINE, backendPort, hasTray } from "./background.ts";
-import { dressWindow, handleAppBridge, sendCommand } from "./chrome.ts";
+import { dressWindow, handleAppBridge, sendCommand, sendCompanionPick } from "./chrome.ts";
+import { COMPANION_FILE, readCompanion } from "./companion.ts";
+import { Companion, CompanionLink } from "./companion-flow.ts";
+import { companionWindow, handleCompanionBridge } from "./companion-window.ts";
 import type { AppPaths } from "./controller.ts";
 import { folderDialogOptions, joinPending } from "./folder-dialog.ts";
 import { APP_ORIGIN, DEV_SERVER } from "./forwarder.ts";
@@ -38,6 +49,7 @@ import {
 import { installQuit, watchSession } from "./quit.ts";
 import type { BackendFetch } from "./quit-check.ts";
 import { HideNotice } from "./quit-flow.ts";
+import { senderWindow } from "./senders.ts";
 import { STRINGS, shellLanguage } from "./strings.ts";
 import {
   loginItemQuery,
@@ -57,7 +69,7 @@ import { type CommandHost, changeCommand, commandState } from "./terminal-comman
 import { AppTray, trayIconPath } from "./tray.ts";
 import { isUpdatableInstall, type UpdateFlow } from "./update-flow.ts";
 import { installUpdater } from "./updater.ts";
-import { createWindow, mainWindow, showWindow } from "./window.ts";
+import { createWindow, hideWindow, mainWindow, onWindowShows, showWindow } from "./window.ts";
 
 /** NSIS gives the Start menu shortcut appId as its AppUserModelID. */
 const APP_USER_MODEL_ID = "live.laplace.eidolon";
@@ -115,10 +127,15 @@ function run(): void {
   let updatesHeld = false;
 
   const pages = new WindowPages({
-    load: (page) => load(page),
+    load: (page) => {
+      load(page);
+      if (page === "app") companion?.appPage();
+      else companion?.shellPage();
+    },
     reloadApp: () => {
       const url = mainWindow()?.webContents.getURL() ?? "";
       loadUrl(pageAt(url) === "app" ? url : `${APP_ORIGIN}/`);
+      companion?.appPage();
     },
     serverVersion: () => backend.serverVersion,
   });
@@ -170,6 +187,7 @@ function run(): void {
     icon,
     approved: () => {
       watch?.stop();
+      companion?.quit();
       tray?.destroy();
       tray = null;
     },
@@ -186,8 +204,41 @@ function run(): void {
     openDataFolder: () => open(backend.home ?? dataHome(process.env)),
     licenses: () => open(licensesFile(paths)),
     about: () => native.aboutPanel(aboutOptions()),
+    companion: (on) => companion?.setOn(on),
     quit: () => app.quit(),
   };
+  /** The desktop companion's flow, from the moment Electron is ready. */
+  let companion: Companion | null = null;
+  const link = new CompanionLink(pairPorts);
+  const herWindow = companionWindow({
+    events: {
+      failed: (detail) => companion?.failed(detail),
+      replaced: () => {
+        link.companionGone();
+        companion?.pageReplaced();
+      },
+      gone: () => link.companionGone(),
+      closed: () => companion?.closed(),
+    },
+    background,
+    openMain: () => openWindow(),
+    hideMain: () => hideWindow(),
+    command: (command) => commands.send(command),
+    pick: (pick) => sendCompanionPick(pick),
+    menus: () => setMenus(),
+  });
+  senderWindow("main", () => mainWindow()?.webContents ?? null);
+  senderWindow("companion", () => herWindow.contents());
+
+  /** Hands the app page and hers each an end of a new channel; main never reads it. */
+  function pairPorts(): void {
+    const main = mainWindow()?.webContents;
+    const her = herWindow.contents();
+    if (main === undefined || her === null) return;
+    const { port1, port2 } = new MessageChannelMain();
+    main.postMessage(BRIDGE.companionPort, null, [port1]);
+    her.postMessage(BRIDGE.companionPort, null, [port2]);
+  }
 
   function loadUrl(url: string): void {
     // A failed load is did-fail-load's, which decides; a replaced one is no failure.
@@ -209,11 +260,15 @@ function run(): void {
     app.setAboutPanelOptions(aboutOptions());
   }
 
-  /** The application menu and the tray's, in the shell's language, as the updater stands. */
+  /**
+   * The application menu and the tray's, in the shell's language, as the updater stands and with
+   * the desktop companion's checkbox as she is.
+   */
   function setMenus(): void {
     menuUpdates = updates === null ? "hidden" : updatesItem(updates.state.phase);
-    setApplicationMenu(strings(), actions, menuUpdates);
-    tray?.relabel(strings(), menuUpdates);
+    const on = companion?.on ?? false;
+    setApplicationMenu(strings(), actions, menuUpdates, on);
+    tray?.relabel(strings(), menuUpdates, on);
   }
 
   function languageChanged(next: Language): void {
@@ -234,7 +289,12 @@ function run(): void {
             strayed: () => pages.strayed(),
           });
           // At the commit of a new document, before its script can say it listens.
-          win.webContents.on("did-navigate", () => commands.replaced());
+          win.webContents.on("did-navigate", () => {
+            commands.replaced();
+            companion?.feeding(false);
+            link.appGone();
+          });
+          win.on("closed", () => link.appGone());
           attachContextMenu(win.webContents, strings);
           dressWindow(win);
           watchSession(win, flow, backend);
@@ -249,6 +309,7 @@ function run(): void {
       },
       hidden,
     );
+    companion?.mainWindowMade();
     commands.replaced();
     pages.opened(backend.state);
   }
@@ -330,6 +391,24 @@ function run(): void {
         inApplications: process.platform === "darwin" && app.isInApplicationsFolder(),
         installedCopy,
       });
+      // Background mode reads no login item.
+      const atLogin =
+        !background &&
+        openedAtLogin(
+          process.platform,
+          process.argv,
+          app.getLoginItemSettings().wasOpenedAtLogin === true,
+        );
+      updatesHeld = atLogin;
+      // Before the first window, whose loading page is the first page it hears of.
+      const companionFlow = new Companion(herWindow, {
+        settings: readCompanion(join(app.getPath("userData"), COMPANION_FILE)),
+        background,
+        platform: process.platform,
+        atLogin,
+        strings,
+      });
+      companion = companionFlow;
       const commandHost: CommandHost = {
         platform: process.platform,
         resourcesPath: process.resourcesPath,
@@ -352,11 +431,29 @@ function run(): void {
           }),
         terminalCommand: () => commandState(commandHost),
         setTerminalCommand: (action) => changeCommand(commandHost, action),
+        companion: () => companionFlow.state(),
+        setCompanion: (change) => companionFlow.change(change),
+        popOut: () => companionFlow.popOut(),
+        linkCompanion: () => link.appAsks(),
+        feedingCompanion: (on) => companionFlow.feeding(on),
       });
+      handleCompanionBridge({
+        linkApp: () => link.companionAsks(),
+        hit: (over) => companionFlow.hit(over),
+        drag: (drag) => companionFlow.drag(drag),
+        drawn: (drawn) => companionFlow.drawn(drawn),
+        follow: (on) => companionFlow.follow(on),
+        shape: (shape) => companionFlow.shape(shape),
+        menu: (state) => companionFlow.menu(state),
+      });
+      onWindowShows((shows) => companionFlow.mainShown(shows));
+      screen.on("display-added", () => companionFlow.displaysChanged());
+      screen.on("display-removed", () => companionFlow.displaysChanged());
+      screen.on("display-metrics-changed", () => companionFlow.displaysChanged());
       setMenus();
       setAbout();
       if (hasTray(process.platform, background)) {
-        tray = new AppTray(strings(), actions, menuUpdates);
+        tray = new AppTray(strings(), actions, menuUpdates, companionFlow.on);
         hideNotice = new HideNotice({
           marker: join(app.getPath("userData"), TRAY_NOTICE_MARKER),
           show: () => {
@@ -374,15 +471,6 @@ function run(): void {
           log: mainLog,
         });
       }
-      // Background mode reads no login item.
-      const atLogin =
-        !background &&
-        openedAtLogin(
-          process.platform,
-          process.argv,
-          app.getLoginItemSettings().wasOpenedAtLogin === true,
-        );
-      updatesHeld = atLogin;
       const watchFollows = watch === null ? null : followBackend(watch);
       backend.subscribe((state) => {
         pages.backend(state);
