@@ -137,7 +137,9 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
     `Sec-Fetch-Site` other than `same-origin` or `none`, since every localhost port is the same
     site to a browser;
   - a change (any method but GET and HEAD) made with the cookie must carry `Origin`;
-  - HEAD on a GET API route gets 405, and `/api/local` answers are `Cache-Control: no-store`.
+  - HEAD on a GET API route gets 405, and `/api/local` answers are `Cache-Control: no-store`,
+    except a chat's files and a character model's file, served under their content's hash, which
+    are `private, max-age=31536000, immutable`.
 - **Listed origins.** `EIDOLON_LOCAL_ALLOWED_ORIGINS`, comma-separated and read at boot, lets
   another site's pages, such as one built on `@laplace.live/eidolon-sdk` at
   `http://localhost:3000`, call the bot's API: `/api/ice-servers`, `/api/offer`,
