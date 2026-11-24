@@ -24,7 +24,9 @@ Eidolon (main process)
  │    ├─ shell/  the loading and failure pages
  │    └─ app/    forwarded to the backend, with the Bearer only main holds
  ├─ the task watch: the server's tasks, for notifications
- └─ the window at eidolon-app://app/: sandboxed, with the preload's bridge
+ ├─ the window at eidolon-app://app/: sandboxed, with the preload's bridge
+ └─ the desktop companion at eidolon-app://app/companion: transparent, on top, never focused,
+      clicks passing through outside her
 ```
 
 ```text
@@ -51,10 +53,11 @@ apps/desktop/
                          menus, window-options, quit-check, quit-flow, update-flow,
                          update-signature, strings, shell-pages, log-filter, log-files,
                          background, app-invokes, folder-dialog, system-options, terminal-command,
-                         task-notices), and thin Electron layers over them (index, instance,
-                         protocol, window, chrome, menu, tray, permissions, navigation, native,
-                         quit, updater, log)
-  src/preload/           the sandboxed CommonJS preload: the page's marks and its bridge
+                         task-notices, companion, companion-flow), and thin Electron layers over
+                         them (index, instance, protocol, window, companion-window, senders,
+                         chrome, menu, tray, permissions, navigation, native, quit, updater, log)
+  src/preload/           the sandboxed CommonJS preload, in both windows: each page's marks and
+                         bridge, and the port main pairs the app page and hers with
   src/shared/bridge.ts   the IPC channels and who may send on each; it imports nothing
   src/shared/release-notes.ts
                          changelog.json's types, the manifest's eidolonNotes, and what an update's box
@@ -92,8 +95,8 @@ the app is in [background mode](#background-mode).
 
 - **Main** (`src/main`, built to `dist/main/index.js`) holds the profile, the single-instance lock,
   the environment and the data home, the backend controller, the `eidolon-app:` scheme and its
-  forwarder, the window, the menus, the tray, the task watch and the logs. No backend code runs in
-  it or in the window: `apps/desktop/src` loads at run time only `electron`, `electron-updater`,
+  forwarder, the windows, the menus, the tray, the task watch and the logs. No backend code runs in
+  it or in the windows: `apps/desktop/src` loads at run time only `electron`, `electron-updater`,
   `electron-log`, `undici`, `node:*` and its own modules, and takes `@eidolon/*` and `apps/bot` as
   types alone (`test/boundary.test.ts`). So main imports no `@eidolon/config` either: it finds the
   payload through `process.resourcesPath` when packaged, or the checkout when not, and mirrors the
@@ -104,8 +107,10 @@ the app is in [background mode](#background-mode).
   `apps/bot/src/local/server.ts`, whose types the dev Electron's Node strips. Its jobs, grep's
   matcher and the `eidolon` command its tasks run start the same binary through `jsRuntime()`, and
   so does an MCP server through the [node shim](#the-node-shim).
-- **The window** is one BrowserWindow: a sandboxed renderer with context isolation, no Node
-  integration and no `<webview>`, and the preload, `dist/preload/index.cjs`.
+- **The windows** are the main window and, while she is on, the [desktop
+  companion](#the-desktop-companion)'s, each a BrowserWindow: a sandboxed renderer with context
+  isolation, no Node integration and no `<webview>`, and the one preload,
+  `dist/preload/index.cjs`, which tells her window by the switch main gives its renderer.
 
 ### Startup
 
@@ -131,6 +136,8 @@ session's permission handlers, the scheme's handler, the bridges' handlers, the 
 Windows outside background mode, the tray, opens the window on the loading page (kept hidden after
 a [launch at login](#open-at-login)), and only then reads the environment, resolves the data home
 and starts the controller. The window moves to `eidolon-app://app/` once the backend is ready.
+While the [desktop companion](#the-desktop-companion) is on, her window is made only then, as the
+window first shows the app page: the main window is always the app's first.
 The data home is `EIDOLON_HOME` from that environment, else `~/.laplace/eidolon`
 (`%USERPROFILE%\.laplace\eidolon`), the one npx and `bun run app` use; the backend gets it as its
 `EIDOLON_HOME`, so the two never read different homes.
@@ -304,14 +311,15 @@ and leaves it running when it quits.
 
 ## The window
 
-One window, 1280×820 at first and at least 520×600, never larger than the work area of the display
-it opens on (the primary one, centred, when it has no position, as at first), hidden until its first
-page is ready to paint, at the bounds it had last: `window-bounds.json` in the profile, written
-through a temporary file. A saved position is dropped when no display shows 100×40 px of the
-window's top, and a window saved maximized is maximized only at its first showing once it has
+The main window, 1280×820 at first and at least 520×600, never larger than the work area of the
+display it opens on (the primary one, centred, when it has no position, as at first), hidden until
+its first page is ready to paint, at the bounds it had last: `window-bounds.json` in the profile,
+written through a temporary file. A saved position is dropped when no display shows 100×40 px of
+the window's top, and a window saved maximized is maximized only at its first showing once it has
 painted, since `maximize()` shows a hidden window; until that showing, which a
 [hidden start](#open-at-login) puts off, the file keeps it maximized, so a quit before it loses
-nothing. Main owns its title.
+nothing. Main owns its title. The [desktop companion](#the-desktop-companion)'s window is the
+app's second, with rules of its own.
 
 - **Its pages.** The window shows `eidolon-app://shell/loading` until the backend is ready, then
   `eidolon-app://app/`. The failure page, `eidolon-app://shell/failed`, says why in the shell's
@@ -333,25 +341,35 @@ nothing. Main owns its title.
   bridge, in its main frame alone. The app's page gets `window.eidolonDesktop`: `platform`,
   `version` and `serverVersion`, read before the page's first script over a synchronous message
   main answers from what it already knows (`version` is `0.0.0-dev` unpackaged), and `setTheme`,
-  `setLanguage` and `onCommand`; and five calls the page awaits, each an invoke main answers
-  through `ipcMain.handle`: `chooseFolder` (the folder dialog, below), `loginItem` and
-  `setLoginItem(on)` ([Open at Login](#open-at-login)), `terminalCommand` and
-  `setTerminalCommand(action)` ([the terminal command](#the-terminal-command)). The preload sends
-  only what main takes (`true` or `false`, `install` or `remove`) and hands the page main's answers
-  only in the shapes `src/shared/bridge.ts` declares. A shell page gets `window.eidolonShell`:
-  `retry`, `showLogs` and `quit`. Main takes each message only from the window's own webContents
-  and main frame, on the channel's own page, judged by the frame's origin, never its URL: a
-  sandboxed document the backend serves has an app URL and an opaque origin (`accepts()` in
-  `src/shared/bridge.ts`). An invoke's sender is judged before anything awaits, since its frame
+  `setLanguage` and `onCommand`; five calls the page awaits, each an invoke main answers through
+  `ipcMain.handle`: `chooseFolder` (the folder dialog, below), `loginItem` and `setLoginItem(on)`
+  ([Open at Login](#open-at-login)), `terminalCommand` and `setTerminalCommand(action)` ([the
+  terminal command](#the-terminal-command)); and the [desktop companion](#the-desktop-companion)'s
+  six: `companion()`, `setCompanion(change)` and `popOut()`, three more invokes, each answering her
+  `CompanionState`; `linkCompanion()`, which says the page listens for a port to her page, and
+  `feedingCompanion(feeding)`, whether a call she is on is up there; and `onCompanionPick`, which
+  hands the page her menu's call picks (`companion-pick`). The preload sends only what main takes
+  (`true` or `false`, `install` or `remove`, a change of `on` or `showAtLogin` alone) and hands the
+  page main's answers only in the shapes `src/shared/bridge.ts` declares. A shell page gets
+  `window.eidolonShell`: `retry`, `showLogs` and `quit`; her page gets `window.eidolonCompanion`
+  alone. Main takes each message only from its own window, by the sender's webContents
+  (`ipcSender` in `senders.ts`, which knows each window's as main names it, `senderWindow`), from
+  that window's main frame, on the channel's own page, judged by the frame's origin, never its URL:
+  a sandboxed document the backend serves has an app URL and an opaque origin, and the app page and
+  hers share the origin `eidolon-app://app`. `SENDERS` in `src/shared/bridge.ts` names each
+  channel's window kind and page, every channel but hers the main window's alone, and `accepts()`
+  holds each message to it. An invoke's sender is judged before anything awaits, since its frame
   reads null once the page navigates; one from anyone else, or with another kind of argument,
   throws (`app-invokes.ts`).
 - **The theme** the page reports goes to `nativeTheme.themeSource` as it is, `system` included: a
   resolved theme would pin `prefers-color-scheme` and stop the page's System from following the OS.
   Native menus, dialogs and Windows' caption buttons follow it.
-- **A command** for the app's page, a menu's Settings… (⌘, on macOS, the tray's on Windows) or a
+- **A command** for the app's page, a menu's Settings… (⌘, on macOS, the tray's on Windows), a
   notification's click (`tasks`, or `open-task:<chat>:<task>`, which `openTaskCommand` builds from
-  two ids alone), goes to it once its script says it listens, so it reaches the page from the
-  loading page or a new window too. A page that doesn't know a command ignores it.
+  two ids alone), or her menu's Call while `/call` can't place the call or her page isn't linked to
+  the app page (`call`, which opens `/call`), goes to it once its script says it listens, so it
+  reaches the page from the loading page or a new window too. A page that doesn't know a command
+  ignores it.
 - **The folder dialog,** which Settings → Assistant Mode's Choose Folder opens for its folders
   (`folder-dialog.ts`): the native one, for one folder, a sheet on the window on macOS, in the
   shell's language, and opening at the home folder, since Electron opens Downloads otherwise.
@@ -366,16 +384,18 @@ nothing. Main owns its title.
 - **Menus and the tray.** macOS's menu bar is declared in full, since a custom menu replaces
   Electron's: Eidolon (About, Check for Updates…, Settings…, Services, Hide, Hide Others, Show All,
   Quit), Edit (its roles, without which copy and paste break), View (zoom, full screen, and Toggle
-  Developer Tools only unpackaged), Window (⌘W hides) and Help (Show Logs, Open Data Folder,
-  Licenses). Windows has no menu bar: main sets a menu of View's zoom roles alone, since Electron
-  would otherwise install its default one, whose accelerators act even under a hidden title bar,
-  and a notification-area icon holds the rest for the whole run (Open Eidolon, Settings…, Check for
-  Updates…, Show Logs, Open Data Folder, Licenses, About Eidolon, Quit Eidolon); a click on it
-  opens the window. Check for Updates… is there only when the app [updates itself](#updates) or
-  runs from a read-only volume, and disabled while a check, a download or the restart runs. Both
-  get a context menu, since Electron has none: cut, copy, paste and select all in a field, copy
-  over selected text. The About panel names the app's version and the server's.
-- **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, dialogs,
+  Developer Tools only unpackaged), Window (⌘W hides, and Desktop Companion, a checkbox that turns
+  the [desktop companion](#the-desktop-companion) on and off) and Help (Show Logs, Open Data
+  Folder, Licenses). Windows has no menu bar: main sets a menu of View's zoom roles alone, since
+  Electron would otherwise install its default one, whose accelerators act even under a hidden
+  title bar, and a notification-area icon holds the rest for the whole run (Open Eidolon, Desktop
+  Companion, the same checkbox, Settings…, Check for Updates…, Show Logs, Open Data Folder,
+  Licenses, About Eidolon, Quit Eidolon); a click on it opens the window. Check for Updates… is
+  there only when the app [updates itself](#updates) or runs from a read-only volume, and disabled
+  while a check, a download or the restart runs. Both get a context menu, since Electron has none:
+  cut, copy, paste and select all in a field, copy over selected text. The About panel names the
+  app's version and the server's.
+- **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, her menu, dialogs,
   notifications, macOS's password prompt and the shell pages) come in English and Simplified
   Chinese, following the language the page reports and the system's until it has. Menus and the
   tray are rebuilt when it changes. Labels are Title Case, which `strings.test.ts` checks with
@@ -387,16 +407,18 @@ nothing. Main owns its title.
   opens. A navigation off the app's address is cancelled, and opened in the browser if it is to the
   web; a redirect off it is cancelled. `about:blank` raises no `will-navigate` (Chromium runs no
   navigation throttle for it), so a main frame that lands anywhere off `eidolon-app://` is put back
-  on main's page. A `<webview>` is never attached.
+  on main's page. A `<webview>` is never attached. Her window keeps a stricter rule of its own
+  ([below](#the-desktop-companion)).
 - **Permissions.** Both of the session's handlers are set before the first load; with none,
   Electron grants every request and passes every check. The microphone goes only to the app
   window's main frame whose `securityOrigin` is `eidolon-app://app`, asking for audio alone, and the
   check handler answers the same by `requestingOrigin`. On macOS main then asks the OS when it
   hasn't been asked, and once the owner has denied it, which macOS never asks again, says where to
   turn it on; macOS ties a grant to the app's signature, so each ad-hoc build asks again. Clipboard
-  writes go to that frame too. Everything else, the camera included, is denied. Windows has no
-  per-app prompt: with its privacy setting off, `getUserMedia` fails and apps/web shows its
-  microphone error.
+  writes go to that frame too. Everything else, the camera included, is denied, and so is
+  everything the desktop companion's page asks: it has the app's origin, in another window, whose
+  webContents isn't the app window's. Windows has no per-app prompt: with its privacy setting off,
+  `getUserMedia` fails and apps/web shows its microphone error.
 - **Close.** Closing hides the window, and calls, tasks and jobs run on. On macOS it leaves
   fullscreen first, since a hidden fullscreen window leaves a black Space behind; on Windows the
   first hide says once that Eidolon is in the tray (`tray-notice-shown` in the profile). Electron
@@ -411,8 +433,165 @@ nothing. Main owns its title.
   default and Esc cancelling; it has no owner window, so a hidden window stays hidden, and a quit
   while it is open joins it. An attached server is never asked or stopped. On macOS a power-off
   skips the box until the window has attention again. Once the quit is approved, main hides the
-  window, stops the task watch, removes the tray icon, stops its backend, and quits. The restart
-  that installs an update goes the same way, with its own box ([Updates](#updates)).
+  window, stops the task watch, closes the desktop companion, removes the tray icon, stops its
+  backend, and quits. The restart that installs an update goes the same way, with its own box
+  ([Updates](#updates)).
+
+## The desktop companion
+
+The desktop companion is the app's second window: the active persona, the one the switcher calls
+Active and `/call` reaches, standing on the owner's desktop above their other windows. She shows
+her active character model, framed by its `framing.companion` or else all of her, and her window
+takes that box's shape; with no active model, or one that can't draw, she shows her round
+picture, with her menu and her drag all the same. What her page draws and how she moves is in
+[avatar.md](avatar.md#the-desktop-companion), and her page and the main window's feed in
+[web-app.md](web-app.md#in-the-desktop-app). She is off until the owner turns her on, and one
+switch turns her on and off wherever it is: Settings → Desktop's Desktop Companion, the Window
+menu's checkbox on macOS, the tray's on Windows, her menu's Hide, and Pop Out, which turns her on.
+`companion.ts` holds her settings, sizes, places and log lines, and `companion-flow.ts` decides
+when she is made, shown, moved and closed, both without Electron (`test/companion.test.ts`,
+`test/companion-flow.test.ts`); `companion-window.ts` carries it out on Electron.
+
+- **Her settings** are `companion.json` in the profile, beside `window-bounds.json`, never in the
+  data home: `on` (off at first), `showAtLogin` and `alwaysOnTop` (both on at first), `size` and
+  her `feet`, each read on its own, a field of another kind its default, and written through a
+  temporary file.
+- **Her window** is hidden at first, transparent (`#00000000`), frameless and shadowless, not
+  resizable, minimizable, maximizable or fullscreenable, off the taskbar, and never focusable
+  (`focusable: false`); on macOS it takes every click as a first click (`acceptFirstMouse`, without
+  which macOS keeps a never-active window's clicks from its page), is hidden in Mission Control and
+  left out of the Window menu's window list. Her renderer is sandboxed with context isolation, no
+  Node integration, no `<webview>` and no spellcheck, and gets `--eidolon-window=companion`, by
+  which the one preload knows her window. Main shows her with `showInactive()`, never `show()`, so
+  showing her never takes the focus; floats her while Always on Top is on
+  (`setAlwaysOnTop(true, "floating")`); on macOS puts her on every Space, full-screen apps' included
+  (`setVisibleOnAllWorkspaces` with `skipTransformProcessType`, without which macOS turns the app
+  into a foreground one and back, and the Dock flickers); and lets clicks through her window,
+  forwarding the mouse's moves to her page. Nothing of hers vetoes a close: her window has no
+  `close` handler.
+- **When she is made and shown.** While she is on, her window is made, hidden, as the main window
+  shows the app page, and her page is loaded again whenever that page is, as for another server; a
+  shell page in the main window leaves hers as it is, hidden. She shows exactly while she is on, the
+  main window shows the app page, her page has said she is drawn, no quit is approved and, at a
+  [launch at login](#open-at-login), Show at Login is on or the main window has shown: main keeps
+  that record and logs each change of it. Her page says she is drawn only after its handshake: it
+  gives main her shape (`shape`: her model's aspect, 0.1 to 4, or her picture), which main answers
+  with the size it gave her window, standing her where she stood; it waits up to 1 s for the window
+  to take that size, then, unless the page is hidden, for one drawn frame of her model, or two
+  animation frames for her picture; then it says `drawn`. So main never shows a window that hasn't
+  drawn her. Her page says `drawn(null)` while it can't read status, and when its chunk fails to
+  load: she hides, letting clicks through. A page that hasn't drawn her 30 s after a load gets a
+  warning in main.log and nothing else. One that fails to load, whose preload fails or whose
+  renderer goes logs why and is loaded once more 2 s later, and not again until she is drawn. A new
+  document in her window, main's load or her guard's, takes her back to undrawn, hidden until it
+  draws her. Turning her off closes her window; one closed by anything else, as an update's restart
+  closes every window, is made again only at the app page's next load.
+- **Her size:** Small, Medium or Large, 360, 480 or 640 DIP tall and as wide as her framing's
+  aspect (0.42, a full-length figure's, until her page says), or for her picture 96, 128 or 160 DIP
+  square; at most 90% of the work area each way, scaled as one.
+- **Where she stands** is her feet, her window's bottom centre in screen DIPs, which main keeps
+  unrounded: a new size or shape, her model swapped for her picture included, keeps her standing
+  there, growing from her feet, never moving her by the half DIP an odd width would. Her first
+  place, and her place whenever no display holds her feet (a display unplugged), is the primary
+  display's work area, on its bottom, 24 DIP in from its right edge. Her window is then kept inside
+  the work area under it, so a Dock or a taskbar that grows under her pushes her up onto its edge; a
+  display change that moves her window sets her feet where it put her.
+- **Click-through.** Her window lets clicks through, until her page finds her under the pointer
+  from the forwarded moves: a 1-pixel alpha read of her model's last drawn frame, above 24/255, at
+  most one read at a time and always of the latest point; for her picture, inside its disc. Her
+  page then tells main (`hit`), which has her window take clicks, and tells it again as the pointer
+  leaves her; a press on her or her menu keeps it taking clicks until it ends. A new page of hers,
+  `drawn(null)`, a model starting to load and a Size pick, which reshapes her under a still
+  pointer, let clicks through again.
+- **A drag** is a left press on her that moves past 4 px: main moves her window by the pointer's
+  travel since the press, from the screen points her page sends (`drag`), never by polling the
+  cursor, and keeps it inside the work area under her. A drop sets and saves her feet; one with her
+  feet within 24 DIP of the work area's bottom stands her on it. A new size or shape during a drag
+  stands her under the pointer, and the rest of the drag keeps her new size. A shorter press is a
+  tap, which her page alone answers.
+- **Her menu**, on a right-click on her, is main's own native menu at the cursor
+  (`companionMenu` in `menus.ts`, in the shell's language), from the state her page gives it:
+  **Call**, or **Hang Up** and **Mute Microphone** (**Unmute Microphone** while it is off) while a
+  call of hers is up, Hang Up working while the call still connects and the microphone's item only
+  once it is live; **Open Eidolon**; **Appearance**, her models as radio items, whenever she has
+  any, her picture's included; **Outfit**, the active model's outfits, **As Exported** first;
+  **Size**; **Always on Top**; and **Hide**, a separator between groups. A model's or an outfit's
+  name shows as one line of at most 40 characters, `&` doubled on Windows. Main acts on each pick
+  100 ms after the menu closes, so a click Electron delivers after the close still counts: Open
+  Eidolon brings the main window forward; Size reshapes her on her feet; Always on Top flips her
+  floating; Hide turns her off, the same switch as Settings', and, turned off while a call of hers
+  goes on in a window that doesn't show (after Pop Out), main brings that window back first, so a
+  call never goes on with nothing of it on screen. Her page acts on Appearance and Outfit itself,
+  through the API.
+- **Call from her menu** brings the main window forward first, so a call never starts where nobody
+  sees it fail. Then main hands the app page the pick (`companion-pick`): sent once, never held, and
+  dropped when no app page listens, so it never places a call on a page that loads later. The app
+  page places `/call`'s call with her and opens `/call`. While her page isn't linked to the app
+  page, or `/call` can't call, Call goes as the `call` command instead, which opens `/call` and says
+  why. Hang Up, Mute and Unmute reach the call the same way, from main: her page never drives the
+  call or the microphone, and nothing that acts on the call crosses the port.
+- **Pop Out**, on the video screen of a call she is on
+  ([web-app.md](web-app.md#in-the-desktop-app)), turns her on and, once she shows, hides the main
+  window: she carries the call, which goes on there. When she isn't drawn within 10 s, main.log says
+  so and the window stays. Open Eidolon from her menu, the Dock or the tray brings the screen back.
+- **The cursor poll.** While she shows and follows the cursor, as her page says (`follow`), main
+  reads the cursor's screen point every 33 ms and sends her page each new one, relative to her
+  window (`companionCursor`); never during a drag.
+- **The port.** The app page and hers each ask main for a port (`linkCompanion`, and her `link`);
+  once both have, main makes a `MessageChannelMain` and posts an end to each webContents
+  (`companion-port`), and each preload hands its end to its page with `window.postMessage`, the one
+  way a port crosses `contextBridge`, which copies values. Either page asking again, as a page
+  loaded again does, pairs both afresh, and a page whose document went pairs again only once it
+  asks. Main never reads a port. Over it the main window tells her the active persona, the call, its
+  direction and her mouth, and her messages in the open chat; her page tells the main window only
+  that her appearance changed ([avatar.md](avatar.md#the-desktop-companion) has what crosses).
+- **Throttling.** Chromium slows a hidden window's timers to once a second, and the main window's
+  feed reads her mouth from the call on a timer, so main turns the main window's background
+  throttling off exactly while she shows and a call of hers is up there (`feedingCompanion`), and on
+  again after; a new main window takes it afresh. Her voice messages need none: her page works out
+  their mouth from the file.
+- **Her one page.** Main loads nothing but `eidolon-app://app/companion` (`COMPANION_PAGE`, an exact
+  match) in her window, and her own guard (`guardCompanionNavigation`) keeps her there:
+  `window.open` is denied, with no browser and no download; a navigation or a redirect anywhere
+  else is cancelled; a landing anywhere else, a `pushState` or a fragment included, loads her page
+  again; and no `<webview>` is attached. The main window's guard and its web links are never hers.
+- **No permission.** The session's handlers grant the microphone and clipboard writes to the main
+  window's webContents alone, so her page gets neither, nor anything else. Main takes from her page
+  only her own channels (`SENDERS`), and her preload gives her `window.eidolonCompanion` alone:
+  `platform`, `link`, `hit`, `drag`, `shape`, `drawn`, `follow`, `onCursor` and `menu`, each sending
+  only what main takes.
+- **Show at Login,** her own setting in `companion.json`, never a second login item: at a launch at
+  login she shows once drawn while the window stays hidden, or with it off only once the window
+  first shows. Her showing releases nothing the window's first showing does, the held update check
+  included.
+- **Quit and updates.** The approved quit closes her before the backend stops, and an update's
+  `quitAndInstall` closes her like any window. The quit box and an update's boxes are the main
+  window's. Hide Eidolon (⌘H) hides her with the app and Show All brings her back; ⌘W never reaches
+  her, since she is never the focused window.
+- **In background mode** she is made and draws, but is never shown: main's record moves as always
+  and logs that background mode keeps her off screen where it would show her; nothing sets her
+  always on top or on every Space, no cursor poll runs, and her window lets clicks through without
+  forwarding the mouse's moves (on Windows forwarding is a mouse hook on main's thread for every
+  move on the machine). Her menu is logged, as a menu closed with no pick ([Background
+  mode](#background-mode)).
+- **Her lines** in main.log, `COMPANION_LINES` and her guard's: `Eidolon: the desktop companion was
+  turned on` (or `off`); `Eidolon: the companion loaded eidolon-app://app/companion`; `Eidolon: the
+  companion's page drew her model` (or `picture`); `Eidolon: the companion is shown`, `… is hidden`,
+  or `Eidolon: background mode keeps the companion off screen`; `Eidolon: the companion's page
+  didn't draw her within 30 s`; `Eidolon: the companion's page failed: <why>` and `Eidolon: loading
+  the companion's page again`; `Eidolon: popped out: the companion carries the call, and the window
+  hides`, or `Eidolon: Pop Out left the window: the companion didn't draw within 10 s`; `Eidolon:
+  background throttling is off for the window while it feeds the companion` and `… is back on for
+  the window`; `Eidolon: the companion's window is closed`; `Eidolon: the companion refused to open
+  a window`, `Eidolon: cancelled the companion's navigation to <url>` and `Eidolon: the companion
+  left its page for <url>; loading it again`. None contains `the window shows`, `the window is
+  shown` or `the window is hidden`, which the smokes match for the main window.
+- **The owner's hand check.** Background mode keeps her off screen, so what only a window on screen
+  shows is the owner's to check, on the packaged app on each platform, before her changes merge:
+  her transparency and click-through, that a tap, a drag and her menu leave the app in front as it
+  was, Spaces and full-screen apps, displays at different scales, her menu at the cursor, Pop Out
+  and a minimized window with another app in front, Show at Login, and her renderer's cost. What it
+  finds goes in this section, dated, with any fallback it applies to her window's options.
 
 ## Notifications
 
@@ -490,6 +669,9 @@ never an install, a launch or an update; a launch reads only whether it was the 
   `query-session-end` and `session-end` to windows: with none, a sign-out would skip [the backend's
   stop](#the-backend). The updater's launch check, and the box it may open, waits for that first
   showing. NSIS's relaunch after an update passes `--updated`, not the switch, so that start shows.
+  The [desktop companion](#the-desktop-companion), when she is on and Show at Login is, shows once
+  drawn while the window stays hidden; her showing releases nothing the window's first showing
+  does.
 
 ## The terminal command
 
@@ -1031,8 +1213,9 @@ needs a `sign` dispatch from `master` or `electron` that passes both legs, the u
   <url>`; `Eidolon: the window is shown`, `… is hidden` and `… is closed` as main's own record of
   the window changes, which counts it as shown once it has painted, in background mode too; and at
   a quit `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`. Background mode also
-  logs each thing it keeps off the screen ([below](#background-mode)), and the updater each of its
-  steps ([Updates](#updates)).
+  logs each thing it keeps off the screen ([below](#background-mode)), the updater each of its
+  steps ([Updates](#updates)), and the desktop companion hers ([her
+  lines](#the-desktop-companion)).
 
 ## Updates
 
@@ -1155,7 +1338,15 @@ that could show something through it.
   moment: a test run that took it then would leave the owner's next server exiting on a taken port,
   and their `bun run app` with it.
 - **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
-  Developer Tools, which opens a window, isn't offered unpackaged either.
+  Developer Tools, which opens a window, isn't offered unpackaged either. A popup menu, the
+  desktop companion's included, is logged with its labels (`Eidolon: background mode didn't open a
+  menu: …`) and closes as a menu closed with no pick.
+- **The desktop companion** is made and draws, but is never shown: main's record of her showing
+  moves as always and logs `Eidolon: background mode keeps the companion off screen` where it would
+  show her. Nothing sets her always on top or on every Space, no cursor poll runs, and her window
+  lets clicks through without forwarding the mouse's moves, which on Windows would be a mouse hook
+  on main's thread for every move on the machine: a test drives her page through
+  `sendInputEvent` instead ([Driving it in background mode](#driving-it-in-background-mode)).
 - **No updates:** no check runs and there is no Check for Updates…, unless
   `EIDOLON_DESKTOP_MOCK_UPDATE` fakes the flow or, on a CI runner only,
   `EIDOLON_DESKTOP_UPDATE_TEST` runs the real one ([Updates](#updates)), whose boxes take their
@@ -1181,27 +1372,28 @@ it, with its test, and the Electron code stays a thin layer over it. It covers t
 states, races and port fallbacks against fake children and real processes (`test/fake-server.ts`
 answers as the local server does); the forwarder's headers, gating, holding, connection proofs and
 errors against real local servers and the real local server booted in the test; the login-shell
-read, the registry read's script and output, and both merges, Windows' case-blind names and
-`%NAME%` expansion included; the quit check and flow; the updater's mode, flow, boxes and mock,
-with the restart on the real quit flow; links, navigation, permissions and the debugging switches;
-the bounds, chrome, menus and pages; background mode's decisions; both languages' strings; the
-shell pages' escaping and CSP; the bridges' sender rule, the invokes' argument checks and the
-shapes of main's answers; the folder dialog's options and its one at a time; which copies offer
-Open at Login and the terminal command, and the login item's reads and writes; the terminal
-command's states, link, password prompt and `Path` script on temporary folders and fake runners,
-and its macOS launcher run through links against a stand-in bundle; the task watch's polls,
-baselines and notices, their text in both languages and a click's command, on fake answers and a
-fake clock; the node shim's npx decisions, against npm's on made-up trees (`npx.test.ts`), its
-launchers run on this Node with the checkout's pnpm and a fake registry, the shim the stage writes,
-its `.cmd` launchers where cross-spawn's own test takes them for cmd-shims, and how many times
-cmd.exe reads the words npx starts a batch file with, on made-up cmd-shims and folders; the logs'
-rotation and link filter; stage-backend's parts on
-made-up lockfiles, PE files and zips; the release overlay through electron-builder's own loader,
-and signed-check's reading of codesign, Gatekeeper, stapler and Authenticode output; the release
-notes' parsing, slice and text; the smokes' kit and parts, the fakes over real loopback requests
-included; the update test's feed over real loopback requests and against the URLs electron-updater
-derives from a manifest, its steps against the lines the real updater logs, and its readings of an
-install; the manifest; and the import boundary.
+read, the registry read's script and output, and both merges, Windows' case-blind names and `%NAME%`
+expansion included; the quit check and flow; the updater's mode, flow, boxes and mock, with the
+restart on the real quit flow; links, navigation, permissions and the debugging switches; the
+bounds, chrome, menus and pages; background mode's decisions; the desktop companion's settings file,
+sizes, places and window options, her flow (when she is made, shown and moved, her menu's picks,
+throttling, Pop Out and the port's pairing) and her menu; both languages' strings; the shell pages'
+escaping and CSP; the bridges' sender rule by window kind, the invokes' argument checks and the
+shapes of main's answers; the folder dialog's options and its one at a time; which copies offer Open
+at Login and the terminal command, and the login item's reads and writes; the terminal command's
+states, link, password prompt and `Path` script on temporary folders and fake runners, and its macOS
+launcher run through links against a stand-in bundle; the task watch's polls, baselines and notices,
+their text in both languages and a click's command, on fake answers and a fake clock; the node
+shim's npx decisions, against npm's on made-up trees (`npx.test.ts`), its launchers run on this Node
+with the checkout's pnpm and a fake registry, the shim the stage writes, its `.cmd` launchers where
+cross-spawn's own test takes them for cmd-shims, and how many times cmd.exe reads the words npx
+starts a batch file with, on made-up cmd-shims and folders; the logs' rotation and link filter;
+stage-backend's parts on made-up lockfiles, PE files and zips; the release overlay through
+electron-builder's own loader, and signed-check's reading of codesign, Gatekeeper, stapler and
+Authenticode output; the release notes' parsing, slice and text; the smokes' kit and parts, the
+fakes over real loopback requests included; the update test's feed over real loopback requests and
+against the URLs electron-updater derives from a manifest, its steps against the lines the real
+updater logs, and its readings of an install; the manifest; and the import boundary.
 
 Some files run only on Windows, where `ts.yml`'s Windows job runs them ([In CI](#in-ci)). The two
 that touch the registry do it on scratch keys under `HKCU\Software\Eidolon Test`, which each
@@ -1358,31 +1550,48 @@ Each step prints one line, made of the checks inside it:
    it answers joins the draft as a line of its own, which nothing saves.
 8. **Settings → Desktop:** Open at Login and the terminal command each say "Background mode leaves
    this computer as it is.", their switch and button disabled.
-9. **A task that waits:** the smoke sets Assistant Mode on the fakes' OpenRouter account (a `PUT`
-   of `assistant.provider` and `assistant.model`) and gives the fakes a folder of the run's,
-   outside `assistant.folders`, where her answer to the task line in a new chat starts a task with
-   `start_task`: its card asks "Start this task?". Within 60 s main.log must read `background mode
-   didn't show a notification: <her name>: <the start's words> / <its goal>`, in the words
-   `strings.ts` has in English: the watch polls every 30 s while no task runs, and never tells of a
-   task already there at its first answer, so the task starts once the server is ready. Deny on
-   the card stops it, and within 45 s the watch's notice of that follows, with the stopped task's
-   words: two notices in all.
-10. **Attach:** after `--quit` ends that launch and its backend, a server started first on the
+9. **The desktop companion,** drawn and never shown in background mode: the test rig, imported
+   through the API, is made her active model, and Settings → Desktop's switch, which says background
+   mode never shows her, turns her on. Her page draws her off screen with `eidolonCompanion` alone
+   and no permission (`getUserMedia` refused, the microphone's and clipboard-write's permissions
+   denied), keeps its address (a `pushState` loads it again, a navigation is cancelled,
+   `window.open` refused), and a capture of her hidden window reads alpha 0 at its corner, the dark
+   scheme forced too, and above 200 at her eyes. Mouse events injected into her window, each move
+   checked to arrive, make her eyes take clicks and her corner pass them, a tap on her head lend her
+   `shy` with no model call, a drag move her window 60 px left and 40 up and keep her feet in
+   `companion.json`, and a right-click log her menu. Her reply in a new chat makes her `happy`, and
+   her voice message, which plays as it arrives under Playwright's focus and again from Play Voice
+   Message, makes her speak; a call with her opens the video screen, turns the main window's
+   throttling off and opens her mouth past 0.2, her menu then starting with Hang Up; Pop Out hides
+   the window, the screen's Hang Up ends the call, a second launch shows the window again, and the
+   switch turns her off. With no WebGL she is her picture, the call docks, and what needs a stage is
+   skipped, Pop Out included.
+10. **A task that waits:** the smoke sets Assistant Mode on the fakes' OpenRouter account (a `PUT`
+    of `assistant.provider` and `assistant.model`) and gives the fakes a folder of the run's,
+    outside `assistant.folders`, where her answer to the task line in a new chat starts a task with
+    `start_task`: its card asks "Start this task?". Within 60 s main.log must read `background mode
+    didn't show a notification: <her name>: <the start's words> / <its goal>`, in the words
+    `strings.ts` has in English: the watch polls every 30 s while no task runs, and never tells of a
+    task already there at its first answer, so the task starts once the server is ready. Deny on
+    the card stops it, and within 45 s the watch's notice of that follows, with the stopped task's
+    words: two notices in all.
+11. **Attach:** after `--quit` ends that launch and its backend, a server started first on the
     same home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced:
     Settings' Restart there waits for the supervisor's next server, a restart from outside the app
     is survived, and quitting leaves the server running until the smoke stops it.
-11. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
+12. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
     with exit 0, leaving nothing running and no error line in either log.
 
 After the steps come the window watch's line and the kit's. The run's folder keeps
 `results/results.json`, with every check and each step's time, and `results/screenshots`; a pass
 removes them with the rest of the folder, unless `--keep` first copies them to
-`<run's folder>-results`. A run takes about 80 s, 50 of them the wait for the task's notices. With
-`--headful`, the checks that only background mode makes true (off screen, never audible, main.log's
-background lines, the folder dialog's line and the notices: the unpackaged app shows none) are
-skipped, Choose Folder gets the replaced handler alone, Settings → Desktop says the options are for
-the installed app only, and a hook the smoke adds in main saves downloads into the same folder
-instead of asking.
+`<run's folder>-results`. A run takes about 80 s: about 40 of them the wait for the task's
+notices, and about 12 the desktop companion's step. With `--headful`, the checks that only
+background mode makes true (off screen, never audible, main.log's background lines, the folder
+dialog's line and the notices: the unpackaged app shows none) are skipped, the desktop companion's
+step is off, since she and her menu would show on screen, Choose Folder gets the replaced handler
+alone, Settings → Desktop says the options are for the installed app only, and a hook the smoke
+adds in main saves downloads into the same folder instead of asking.
 
 #### The packaged smoke
 
@@ -1417,6 +1626,11 @@ main's forwarder does, and runs the app's binary in node mode beside it, as main
   names a packaged build on the pinned Electron, and the server reports the payload's version; the
   Bearer gets a session, a wrong one or none a 401, and main's probe proves the token; the status
   answers and `/` is the web app.
+- **The desktop companion,** in background mode alone: the smoke writes `companion.json` into the
+  profile as `{"on":true}` before the app starts, and within 30 s of the web app showing, main.log
+  must say her page drew her (her picture: the run's home has no model) and that background mode
+  keeps her off screen. `--headful` seeds nothing, since she would show on the screen of whoever
+  runs it, and has no such step.
 - **Its natives in use:** a photo with EXIF orientation 6 comes back from a chat upright and bare,
   through the backend's sharp; the backend maps LanceDB from its start and sharp with the photo,
   from the payload (`lsof` on macOS, the process's modules on Windows); an `ingest-facts` job, the
@@ -1603,6 +1817,15 @@ and keeps to these rules:
   opens those from the page, with no hook in main to keep them off the screen.
 - **After a navigation main cancelled,** such as a link to the web, Playwright's locator clicks wait
   forever: use `page.mouse` or `page.evaluate`.
+- **The desktop companion's window** takes input through `webContents.sendInputEvent`, from
+  Playwright's `app.evaluate`, with `globalX` and `globalY` her window's place plus the event's
+  point: never the system's cursor, which is the owner's. Each move is checked to have reached her
+  page (her root's `data-moves` grows) before anything reads what it did, so a lost input never
+  passes for a probe that read wrong, and a drag's moves carry `leftbuttondown`, each its screen
+  point less her window's place as it stands then. Her pixels come from `webContents.capturePage()`
+  with no `stayHidden`, which counts her page visible while it runs; an empty capture of her hidden
+  window fails the check, never skips it. Her page is found by its address, `app.windows()`'s page
+  at `eidolon-app://app/companion`, and found again after her page loads anew.
 - **Off screen** is checked by main's pid: `lsappinfo` gives its `ApplicationType` as `UIElement`,
   and every window's `isVisible()` and `isFocused()` are false. `app.dock.isVisible()` can read true
   while a second launch's process exists, and `isVisible()` reads false for a window behind
@@ -1698,6 +1921,20 @@ off:
 - **Streaming** through the forwarder: a chat reply's first chunk 25–28 ms after sending, the rest
   as the fake sent it, nothing buffered. Inside Electron, an aborted stream's socket to the backend
   closed within 2 ms.
+
+The [desktop companion](#the-desktop-companion), first in a spike on 2026-11-23 on the same Mac and
+Electron 45.4.1, before the port: a 30 fps companion page took 0.4% of a core (0.33 + 0.16 ms a
+frame) and 10.6 MB of wasm memory per model; a capture of her transparent window read alpha 0 in a
+corner and 255 at her head; showing her with `showInactive` left the app in front as it was; a
+1-pixel alpha read after the draw took 0.78 ms (p95 1.0); a message over a `MessagePort` between
+the two windows took 0.46 ms (p95 1.4) at 120 a second; and a hidden window's animation frames
+stopped until its throttling was turned off, after which it drew a call's stage at 0.8% renderer
+and 1.3% GPU, against 0.1% and 0.5% throttled. In the app, on 2026-11-24 in background
+mode on the test rig: her page drew her model 0.35–0.55 s after Settings' switch; the feed sent her
+mouth 29.9–30.3 times a second on a call, its widest reading on the fakes' -20 dBFS tone 0.51–0.57;
+and her `data-frames` counted the display's 120 animation frames a second while her stage drew at
+30 fps. Her renderer's cost with her on screen is the owner's hand check's to measure, with its
+other findings.
 
 A prototype measured on 2026-11-20 and 21, whose main forwarded through Node's global fetch, adds
 what this app hasn't measured yet: with the login-shell read on, Home painted at 1.5 s, about
