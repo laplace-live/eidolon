@@ -5,6 +5,7 @@ import type { AvatarStage, Bounds, Box } from "@laplace.live/eidolon-sdk/avatar"
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { PersonaAvatar } from "@/components/avatar";
+import { avatarChanged } from "@/components/avatar/version";
 import { MouthTap } from "@/features/call/signals";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import {
@@ -37,6 +38,7 @@ import {
 } from "./menu";
 import { PortMouth, VoiceTimeline } from "./mouths";
 import { PagePort } from "./page-port";
+import { HeardPictures } from "./pictures";
 import { HoverProbe, onPicture, Press, tapArea } from "./pointer";
 import {
   appearanceStamp,
@@ -127,6 +129,7 @@ class Control {
   readonly #bridge: EidolonCompanion;
   readonly #queryClient: QueryClient;
   readonly #root: RefObject<HTMLDivElement | null>;
+  readonly #pictures = new HeardPictures();
   #call: CompanionCall = NO_COMPANION_CALL;
   #press: Press | null = null;
   /** The last point a drag was sent at, where a cancelled one ends. */
@@ -400,6 +403,11 @@ class Control {
     const at = performance.now();
     switch (message.type) {
       case "persona": {
+        if (this.#pictures.changed(message.id, message.picture)) {
+          avatarChanged(message.id);
+          // Whether she has a picture at all is status's.
+          void this.#queryClient.invalidateQueries({ queryKey: statusQuery.queryKey });
+        }
         const persona = this.#live.persona;
         const stamp = persona === undefined ? null : appearanceStamp(persona.appearance.model);
         if (persona?.id === message.id && stamp === message.stamp) return;

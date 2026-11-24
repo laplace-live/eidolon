@@ -494,11 +494,13 @@ since one page can reload onto a newer build before the other, an unknown field 
 message that doesn't read ignored; none carries a time, since each window's clock has its own
 origin. To her: `persona`, the active persona's id and her active model's stamp
 (`<id>:<sha256>:<updatedAt>`, empty for none), at whose change her page reads status and her models
-again; `call`, whether one is up, live and hers, the microphone, and whether `/call` can call now;
-`direction`, the call's; `mouth`, a level from 0 to 1; and her chat's `said` and `voice` facts, a
-voice fact naming the message's file, `playing`, `paused` or `ended`, and its position. From her
-only `appearance`, after her menu changed her model or her outfit. Nothing that acts on the call
-crosses it: her menu's call picks go from main to the app page.
+again, and the main window's version of her picture, which grows as Studio changes it there, at
+whose change her page loads her picture again and reads status (`pictures.ts`); `call`, whether one
+is up, live and hers, the microphone, and whether `/call` can call now; `direction`, the call's;
+`mouth`, a level from 0 to 1; and her chat's `said` and `voice` facts, a voice fact naming the
+message's file, `playing`, `paused` or `ended`, and its position. From her only `appearance`, after
+her menu changed her model or her outfit. Nothing that acts on the call crosses it: her menu's call
+picks go from main to the app page.
 
 ## The vendored runtime
 

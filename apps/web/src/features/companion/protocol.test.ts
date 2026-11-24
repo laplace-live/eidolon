@@ -25,8 +25,8 @@ const DIRECTION: Direction = {
 };
 
 const MESSAGES: readonly ToCompanion[] = [
-  { type: "persona", id: "milky-green", stamp: "tml:ab12:2026-11-23T00:00:00.000Z" },
-  { type: "persona", id: "milky-green", stamp: "" },
+  { type: "persona", id: "milky-green", stamp: "tml:ab12:2026-11-23T00:00:00.000Z", picture: 0 },
+  { type: "persona", id: "milky-green", stamp: "", picture: 3 },
   { type: "call", call: CALL },
   { type: "call", call: NO_COMPANION_CALL },
   { type: "direction", direction: DIRECTION },
@@ -89,6 +89,9 @@ describe("toCompanion", () => {
     ["a persona id with a slash", { type: "persona", id: "a/b", stamp: "" }],
     ["a stamp that isn't a string", { type: "persona", id: "milky-green", stamp: null }],
     ["a stamp far too long", { type: "persona", id: "milky-green", stamp: "x".repeat(513) }],
+    ["no picture", { type: "persona", id: "milky-green", stamp: "" }],
+    ["a picture below 0", { type: "persona", id: "milky-green", stamp: "", picture: -1 }],
+    ["a picture of 1.5", { type: "persona", id: "milky-green", stamp: "", picture: 1.5 }],
     ["a call missing a field", { type: "call", call: { up: true, live: true, hers: true } }],
     ["a call with a string for a flag", { type: "call", call: { ...CALL, micOn: "true" } }],
     ["no call", { type: "call" }],

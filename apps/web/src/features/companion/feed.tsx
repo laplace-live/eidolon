@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { memo, type ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { useAvatarVersion } from "@/components/avatar/version";
 import { useShellCall } from "@/features/call/call-context";
 import { soloTarget } from "@/features/call/target";
 import {
@@ -83,9 +84,10 @@ function Feed({ app }: { readonly app: FeedBridge }): ReactNode {
   }, [app, link]);
 
   const stamp = status === undefined ? null : appearanceStamp(status.persona.appearance.model);
+  const picture = useAvatarVersion(persona ?? "");
   useEffect(() => {
-    if (persona !== null && stamp !== null) link.persona(persona, stamp);
-  }, [link, persona, stamp]);
+    if (persona !== null && stamp !== null) link.persona(persona, stamp, picture);
+  }, [link, persona, stamp, picture]);
 
   const { up: callUp, live, hers, micOn: callMicOn, callable } = call;
   useEffect(() => {

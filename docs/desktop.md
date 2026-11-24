@@ -1972,10 +1972,11 @@ Settings' switch, at 30 fps of the display's 120 animation frames a second, each
 of script; her renderer took 3.8–4.5% of a core, idle, dozing, under reduced motion and on a call
 alike, and the GPU process 3.9–4.1%, against 0.09% with her off; her picture took 0.12% and 0.01%;
 her model 11.6 MB of wasm memory, and her renderer's memory held at 184–196 MB over 5.5 minutes; a
-chat video call's main window took 15–18% in its renderer and 25–27% in the GPU process, her on or
-off, its stage drawing every one of the display's 120 frames a second; popped out, the window hidden
-while she carried the call, it took 9.2% and 10.3% with its stages held, against 15.6% and 25.5%
-before they were (2026-11-24, the same call, 30 s each); and the feed sent her mouth 29.9–30.3 times
+chat video call's main window took 12.5% in its renderer and 18.1% in the GPU process, its stage
+drawing 60 of the display's 120 animation frames a second, against 15–18% and 25–27% drawing all of
+them before the cap, her on or off; popped out, the window hidden while she carried the call, it
+took 8.2–9.2% and 6.0–10.3% with its stages held, against 15.6% and 25.5% before they were
+(2026-11-24, the same call, 30 s each); and the feed sent her mouth 29.9–30.3 times
 a second on a call, its widest reading on the fakes' -20 dBFS tone 0.51–0.57. Her renderer's cost with her on screen is the owner's hand check's to measure, with
 its other findings.
 

@@ -85,7 +85,7 @@ const FACT: ChatFact = {
 describe("FeedLink", () => {
   test("sends nothing before a port, then the last persona and call told", () => {
     const { link } = feedLink();
-    link.persona("milky-green", "tml:abc:1");
+    link.persona("milky-green", "tml:abc:1", 0);
     link.call({ ...CALL, live: false });
     link.call(CALL);
     link.direction(direction());
@@ -96,24 +96,26 @@ describe("FeedLink", () => {
     link.connect(one.port);
     expect(link.linked).toBe(true);
     expect(one.posted).toEqual([
-      { type: "persona", id: "milky-green", stamp: "tml:abc:1" },
+      { type: "persona", id: "milky-green", stamp: "tml:abc:1", picture: 0 },
       { type: "call", call: CALL },
     ]);
   });
 
-  test("sends a persona or a call only when it changed", () => {
+  test("sends a persona or a call only when it changed, her picture's version included", () => {
     const { link } = feedLink();
     const one = fakePort();
     link.connect(one.port);
-    link.persona("milky-green", "");
-    link.persona("milky-green", "");
-    link.persona("milky-green", "tml:abc:1");
+    link.persona("milky-green", "", 0);
+    link.persona("milky-green", "", 0);
+    link.persona("milky-green", "tml:abc:1", 0);
+    link.persona("milky-green", "tml:abc:1", 1);
     link.call(CALL);
     link.call({ ...CALL });
     link.call({ ...CALL, micOn: false });
     expect(one.posted).toEqual([
-      { type: "persona", id: "milky-green", stamp: "" },
-      { type: "persona", id: "milky-green", stamp: "tml:abc:1" },
+      { type: "persona", id: "milky-green", stamp: "", picture: 0 },
+      { type: "persona", id: "milky-green", stamp: "tml:abc:1", picture: 0 },
+      { type: "persona", id: "milky-green", stamp: "tml:abc:1", picture: 1 },
       { type: "call", call: CALL },
       { type: "call", call: { ...CALL, micOn: false } },
     ]);
@@ -251,15 +253,18 @@ describe("FeedLink", () => {
     const one = fakePort();
     link.connect(one.port);
     link.chat(FACT);
-    link.persona("milky-green", "");
+    link.persona("milky-green", "", 0);
     link.chat(FACT);
     link.chat({ ...FACT, persona: "hazel" });
-    expect(one.posted).toEqual([{ type: "persona", id: "milky-green", stamp: "" }, FACT]);
+    expect(one.posted).toEqual([
+      { type: "persona", id: "milky-green", stamp: "", picture: 0 },
+      FACT,
+    ]);
   });
 
   test("tells a new port her voice message still playing, from where it is by then", () => {
     const { link, at } = feedLink();
-    link.persona("milky-green", "");
+    link.persona("milky-green", "", 0);
     const voice: ChatFact = {
       type: "voice",
       persona: "milky-green",
@@ -286,7 +291,7 @@ describe("FeedLink", () => {
     link.chat({ ...voice, state: "ended", position: 9 });
     const three = fakePort();
     link.connect(three.port);
-    expect(three.posted).toEqual([{ type: "persona", id: "milky-green", stamp: "" }]);
+    expect(three.posted).toEqual([{ type: "persona", id: "milky-green", stamp: "", picture: 0 }]);
   });
 
   test("hands on only her appearance changing from the companion's page", () => {
@@ -333,7 +338,7 @@ describe("FeedLink", () => {
     one.end();
     expect(received).toEqual([]);
     expect(link.linked).toBe(true);
-    link.persona("milky-green", "");
+    link.persona("milky-green", "", 0);
     link.chat(FACT);
     expect(two.posted.at(-1)).toEqual(FACT);
     expect(one.posted).toEqual([]);

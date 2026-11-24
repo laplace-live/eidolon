@@ -55,8 +55,16 @@ export type ChatFact =
 
 /** The main window to the companion. */
 export type ToCompanion =
-  /** The active persona, and her active model as status names it ("" for none). */
-  | { readonly type: "persona"; readonly id: string; readonly stamp: string }
+  /**
+   * The active persona, her active model as status names it ("" for none), and her picture's
+   * version in the main window, which grows at each change of it made there.
+   */
+  | {
+      readonly type: "persona";
+      readonly id: string;
+      readonly stamp: string;
+      readonly picture: number;
+    }
   | { readonly type: "call"; readonly call: CompanionCall }
   | { readonly type: "direction"; readonly direction: Direction }
   /** The widest mouth opening, 0..1, the call's second meter read since the last. */
@@ -183,9 +191,10 @@ export function toCompanion(data: unknown): ToCompanion | null {
   if (message === null) return null;
   switch (message.type) {
     case "persona": {
-      const { id, stamp } = message;
+      const { id, stamp, picture } = message;
       if (!isId(id) || typeof stamp !== "string" || stamp.length > MAX_STAMP) return null;
-      return { type: "persona", id, stamp };
+      if (!Number.isSafeInteger(picture) || (picture as number) < 0) return null;
+      return { type: "persona", id, stamp, picture: picture as number };
     }
     case "call": {
       const call = callOf(message.call);
