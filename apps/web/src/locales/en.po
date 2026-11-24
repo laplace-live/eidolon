@@ -315,6 +315,7 @@ msgstr "{name} is now her active model."
 msgid "{name} is now the active persona."
 msgstr "{name} is now the active persona."
 
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 msgid "{name} is speaking"
 msgstr "{name} is speaking"
@@ -1565,6 +1566,7 @@ msgstr "Clips"
 
 #: src/components/ui/dialog.tsx
 #: src/components/ui/sheet.tsx
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Close"
@@ -2189,6 +2191,7 @@ msgstr "Every persona's memories of you live in Qdrant, and each change to them 
 msgid "Every video is downloaded."
 msgstr "Every video is downloaded."
 
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 msgid "Everyone"
 msgstr "Everyone"
@@ -3992,6 +3995,10 @@ msgstr "One of her providers reported a problem. Check its key and credit in Set
 msgid "One per line, relative to her folder."
 msgstr "One per line, relative to her folder."
 
+#: src/features/call/call-bar.tsx
+msgid "Ongoing Call"
+msgstr "Ongoing Call"
+
 #: src/features/home/readiness-labels.ts
 msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
 msgstr "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
@@ -4797,6 +4804,10 @@ msgstr "Retrieval Gate Provider"
 #: src/features/chats/chat-log.tsx
 msgid "Retry"
 msgstr "Retry"
+
+#: src/features/call/call-bar.tsx
+msgid "Return to Call"
+msgstr "Return to Call"
 
 #: src/features/studio/text-editor.tsx
 msgid "Revert"

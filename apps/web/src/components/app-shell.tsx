@@ -1,4 +1,4 @@
-// The app's frame: the sidebar, and the page beside it, filling the window.
+// The app's frame: the sidebar, the page beside it, and the call, which outlives the page.
 
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
@@ -6,6 +6,8 @@ import { Outlet, useLocation } from "react-router";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileBar } from "@/components/mobile-bar";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { CallBar } from "@/features/call/call-bar";
+import { CallProvider } from "@/features/call/call-provider";
 
 /** Whether the sidebar was left collapsed, in this browser. */
 const COLLAPSED_KEY = "eidolon.sidebar.collapsed";
@@ -72,35 +74,38 @@ export function AppShell() {
   const main = useRef<HTMLElement>(null);
 
   return (
-    <SidebarProvider
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        storeOpen(next);
-      }}
-      className="h-svh"
-    >
-      <button
-        type="button"
-        // The keys scroll the box around the focus: in the desktop app, a page's own. Focused with
-        // preventScroll, or below md a browser would slide the page's top under MobileBar.
-        onClick={() =>
-          (document.getElementById("content") ?? main.current)?.focus({ preventScroll: true })
-        }
-        className="sr-only font-medium text-sm focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:shadow-md focus:outline-none focus:ring-[3px] focus:ring-ring/50 shell:focus:top-[calc(env(titlebar-area-height,0px)+0.75rem)]"
+    <CallProvider>
+      <SidebarProvider
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          storeOpen(next);
+        }}
+        className="h-svh"
       >
-        {t`Skip to content`}
-      </button>
-      <CloseOnNavigate />
-      <AppSidebar />
-      <SidebarInset
-        id="main"
-        ref={main}
-        tabIndex={-1}
-        className="min-w-0 overflow-y-auto outline-none"
-      >
-        <Outlet />
-      </SidebarInset>
-    </SidebarProvider>
+        <button
+          type="button"
+          // The keys scroll the box around the focus: in the desktop app, a page's own. Focused
+          // with preventScroll, or below md a browser would slide the page's top under MobileBar.
+          onClick={() =>
+            (document.getElementById("content") ?? main.current)?.focus({ preventScroll: true })
+          }
+          className="sr-only font-medium text-sm focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:shadow-md focus:outline-none focus:ring-[3px] focus:ring-ring/50 shell:focus:top-[calc(env(titlebar-area-height,0px)+0.75rem)]"
+        >
+          {t`Skip to content`}
+        </button>
+        <CloseOnNavigate />
+        <AppSidebar />
+        <SidebarInset
+          id="main"
+          ref={main}
+          tabIndex={-1}
+          className="min-w-0 overflow-y-auto outline-none"
+        >
+          <Outlet />
+          <CallBar />
+        </SidebarInset>
+      </SidebarProvider>
+    </CallProvider>
   );
 }
