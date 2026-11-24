@@ -277,6 +277,41 @@ describe("CallStages", () => {
     expect(cast.version()).toBe(version + 1);
   });
 
+  test("changes nothing when a model fails to load after the call is over", async () => {
+    const { parts } = fakeParts();
+    const cast = new CallStages(fakeSignals(), parts);
+    const { how, pending } = loads();
+    cast.load(soloTarget(member("milky-green")), how);
+    await settle();
+    const entry = cast.get("milky-green")!;
+    cast.dispose();
+    const version = cast.version();
+    pending.get("milky-green")?.reject(new DOMException("aborted", "AbortError"));
+    await settle();
+    expect(entry.state).toBe("loading");
+    expect(cast.version()).toBe(version);
+  });
+
+  test("disposes a stage made after the call is over, and loads no model on it", async () => {
+    const { parts, stages } = fakeParts();
+    const avatarCode = Promise.withResolvers<void>();
+    const cast = new CallStages(fakeSignals(), {
+      ...parts,
+      stage: async (canvas, options) => {
+        await avatarCode.promise;
+        return parts.stage(canvas, options);
+      },
+    });
+    const { how, pending } = loads();
+    cast.load(soloTarget(member("milky-green")), how);
+    await settle();
+    cast.dispose();
+    avatarCode.resolve();
+    await settle();
+    expect(stages[0]?.disposed).toBe(1);
+    expect(pending.size).toBe(0);
+  });
+
   test("fails a stage whose model fails after it showed", async () => {
     const { parts, stages } = fakeParts();
     const cast = new CallStages(fakeSignals(), parts);
