@@ -217,10 +217,8 @@ function run(): void {
         link.companionGone();
         companion?.pageReplaced();
       },
-      closed: () => {
-        link.companionGone();
-        companion?.closed();
-      },
+      gone: () => link.companionGone(),
+      closed: () => companion?.closed(),
     },
     background,
     openMain: () => openWindow(),

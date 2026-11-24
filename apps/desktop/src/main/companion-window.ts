@@ -40,6 +40,8 @@ export interface CompanionWindowEvents {
   replaced(): void;
   /** Her window closed, by anything but her io's own close. */
   closed(): void;
+  /** Her page went with her window, her io's own close included. */
+  gone(): void;
 }
 
 export interface CompanionWindowDeps {
@@ -126,6 +128,7 @@ export function companionWindow(
       if (!own()) return;
       win = null;
       stopCursor();
+      deps.events.gone();
       deps.events.closed();
     });
     return w;
@@ -140,6 +143,8 @@ export function companionWindow(
       if (w === null) return;
       win = null;
       stopCursor();
+      // Now, not at its closed, which can come after the page of a window made since has asked.
+      deps.events.gone();
       w.close();
     },
     show() {
