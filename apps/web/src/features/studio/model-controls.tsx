@@ -7,7 +7,6 @@ import {
   type AvatarModel,
   type AvatarStage,
   type Direction,
-  direct,
   directionOf,
   directionState,
   type ModelClip,
@@ -47,7 +46,7 @@ import type { ModelInventory } from "@/lib/api";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { MOOD_LABELS } from "./appearance-labels";
-import { type LinePlan, lineEvents, planLine, syllableLevel } from "./model-line";
+import { directLine, type LinePlan, lineEvents, planLine, syllableLevel } from "./model-line";
 import { Hint } from "./parts";
 
 /** The layer the stage plays gestures on, above her idle and her talking. */
@@ -244,19 +243,15 @@ function useTryLine(stage: AvatarStage | null, restoreMouth: () => MouthSource |
       if (stage === null) return;
       clear();
       setPlaying(true);
-      const at = performance.now();
-      const { start, end } = lineEvents(plan, at);
-      let state = start.reduce(direct, directionState());
-      stage.direct(directionOf(state));
+      const { start, end } = lineEvents(plan, performance.now());
+      directLine(stage, start);
       stage.mouth(new LineMouth(plan.seconds));
       const tick = window.setInterval(() => {
-        state = direct(state, { type: "tick", at: performance.now() });
-        stage.direct(directionOf(state));
+        directLine(stage, [{ type: "tick", at: performance.now() }]);
       }, TICK_MS);
       const done = window.setTimeout(() => {
         window.clearInterval(tick);
-        state = end.reduce(direct, state);
-        stage.direct(directionOf(state));
+        directLine(stage, end);
         stage.mouth(restoreMouth());
         const settle = window.setTimeout(() => {
           stage.direct(NEUTRAL);
