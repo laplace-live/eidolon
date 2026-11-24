@@ -278,6 +278,22 @@ test("clamps the caption to three lines at every size, inside its padding", () =
   expect(classesOf(inner ?? "")).toContain("line-clamp-3");
 });
 
+test("keeps the newest of the viewer's words in the caption's three lines", () => {
+  const heard = reduceTranscript(EMPTY_TRANSCRIPT, {
+    type: "user-transcript",
+    data: { text: "我刚才说到哪里了", final: false },
+  });
+  const markup = render({ transcript: heard });
+  const caption = markup.match(/<p data-captions[^>]*>/)?.[0] ?? "";
+  expect(caption).not.toBe("");
+  const inner = markup.slice(markup.indexOf(caption) + caption.length).match(/^<span [^>]*>/)?.[0];
+  // A clamp keeps a line's start: while the viewer goes on, their newest words would hide behind it.
+  expect(classesOf(inner ?? "").filter((name) => name.includes("line-clamp"))).toEqual([]);
+  expect(classesOf(inner ?? "")).toEqual(
+    expect.arrayContaining(["max-h-[3lh]", "flex-col", "justify-end", "overflow-hidden"]),
+  );
+});
+
 test("shows her newest photo in the corner while the call is up", () => {
   const shot = reduceTranscript(EMPTY_TRANSCRIPT, {
     type: "selfie",

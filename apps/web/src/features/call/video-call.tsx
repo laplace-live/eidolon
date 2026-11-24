@@ -95,20 +95,21 @@ function CaptionLine({ caption, group }: { readonly caption: Caption; readonly g
         !caption.live && "text-muted-foreground",
       )}
     >
-      {/* Inside the padding, which would show the top of a fourth line, and at every size, so a
-          long line never climbs past the foot over her name and the timer. */}
-      <span className="line-clamp-3">
-        {caption.kind === "her" ? (
-          <>
-            {group && caption.speaker !== null && (
-              <span data-caption-speaker className="mr-1.5 font-medium">
-                {caption.speaker.name}
-              </span>
-            )}
-            <span data-caption-text>{caption.text}</span>
-          </>
-        ) : (
-          <>
+      {/* Three lines inside the padding, which would show the top of a fourth, at every size, so a
+          long line never climbs past the foot over her name and the timer: her sentence from its
+          start, which shows whole before she says it, and the viewer's words to the newest heard. */}
+      {caption.kind === "her" ? (
+        <span className="line-clamp-3">
+          {group && caption.speaker !== null && (
+            <span data-caption-speaker className="mr-1.5 font-medium">
+              {caption.speaker.name}
+            </span>
+          )}
+          <span data-caption-text>{caption.text}</span>
+        </span>
+      ) : (
+        <span className="flex max-h-[3lh] flex-col justify-end overflow-hidden">
+          <span>
             <span className="mr-1.5 font-medium">
               {t({ message: "You", context: "call transcript speaker" })}
             </span>
@@ -116,9 +117,9 @@ function CaptionLine({ caption, group }: { readonly caption: Caption; readonly g
               {caption.said}
               <span className="italic opacity-70">{caption.hearing}</span>
             </span>
-          </>
-        )}
-      </span>
+          </span>
+        </span>
+      )}
     </p>
   );
 }
