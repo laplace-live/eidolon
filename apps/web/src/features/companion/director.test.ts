@@ -273,6 +273,22 @@ describe("calls", () => {
   });
 });
 
+test("a stage made anew gets no gesture made before it, a tap's or a call's, until her next", () => {
+  const director = new CompanionDirector(0);
+  director.tap("head", 1_000);
+  expect(director.direction(1_000).gesture).toEqual({ name: "nod", seq: 1 });
+  director.newStage();
+  expect(director.direction(1_100).gesture).toBeNull();
+  director.tap("head", 1_000 + REACT_GAP_MS);
+  expect(director.direction(1_000 + REACT_GAP_MS).gesture).toEqual({ name: "nod", seq: 2 });
+
+  director.call(HERS, 2_000);
+  director.callDirection(callDirection({ gesture: { name: "shake", seq: 1 } }));
+  expect(director.direction(2_000).gesture).toEqual({ name: "shake", seq: 3 });
+  director.newStage();
+  expect(director.direction(2_100).gesture).toBeNull();
+});
+
 test("a pick-up lends surprised for PICK_UP_MS", () => {
   const director = new CompanionDirector(0);
   director.pickUp(1_000);

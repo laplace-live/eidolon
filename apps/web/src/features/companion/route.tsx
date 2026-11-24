@@ -102,7 +102,7 @@ class Control {
   readonly tap = new WidestTap();
   readonly probe: HoverProbe;
   readonly port: PagePort;
-  live: Live = {
+  #live: Live = {
     view: "loading",
     stage: null,
     box: null,
@@ -151,9 +151,16 @@ class Control {
     });
   }
 
+  /** What the page rendered: a stage made anew plays no gesture made before it. */
+  rendered(live: Live): void {
+    if (live.stage !== this.#live.stage) this.director.newStage();
+    this.#live = live;
+  }
+
   tick(): void {
     const at = performance.now();
-    const { director, live } = this;
+    const { director } = this;
+    const live = this.#live;
     director.tick(at);
     const direction = director.direction(at);
     live.stage?.direct(direction);
@@ -234,7 +241,7 @@ class Control {
     if (press.end() === "drag-end") {
       this.#bridge.drag({ phase: "end", x: event.screenX, y: event.screenY });
       this.#mark("dragging", false);
-    } else if (this.live.view === "model") {
+    } else if (this.#live.view === "model") {
       this.director.tap(this.#tapArea(event), performance.now());
     } else {
       this.director.touch(performance.now());
@@ -294,14 +301,14 @@ class Control {
   }
 
   #alphaAt(x: number, y: number): Promise<number> {
-    const { view, stage } = this.live;
+    const { view, stage } = this.#live;
     if (view === "model" && stage !== null) return stage.alphaAt(x, y);
     if (view === "picture") return Promise.resolve(onPicture(x, y, innerWidth) ? 1 : 0);
     return Promise.resolve(0);
   }
 
   #tapArea(event: PointerEvent): TapArea {
-    const model = this.live.stage?.model ?? null;
+    const model = this.#live.stage?.model ?? null;
     if (model === null) return "body";
     let hit: string | null = null;
     try {
@@ -313,12 +320,12 @@ class Control {
   }
 
   #menu(): CompanionMenuState {
-    return menuState({ linked: this.port.linked, call: this.#call, models: this.live.models });
+    return menuState({ linked: this.port.linked, call: this.#call, models: this.#live.models });
   }
 
   async #act(action: PageAction): Promise<void> {
-    const persona = this.live.persona?.id;
-    const model = this.live.model?.id;
+    const persona = this.#live.persona?.id;
+    const model = this.#live.model?.id;
     if (persona === undefined) return;
     try {
       if (action.kind === "model") {
@@ -351,7 +358,7 @@ class Control {
     const at = performance.now();
     switch (message.type) {
       case "persona": {
-        const persona = this.live.persona;
+        const persona = this.#live.persona;
         const stamp = persona === undefined ? null : appearanceStamp(persona.appearance.model);
         if (persona?.id === message.id && stamp === message.stamp) return;
         void this.#queryClient.invalidateQueries({ queryKey: statusQuery.queryKey });
@@ -447,7 +454,7 @@ function CompanionPage({ bridge }: { readonly bridge: EidolonCompanion }) {
   const { view, box, stage: shown } = stage;
 
   useEffect(() => {
-    control.live = {
+    control.rendered({
       view: stage.view,
       stage: stage.stage,
       box: stage.box,
@@ -457,7 +464,7 @@ function CompanionPage({ bridge }: { readonly bridge: EidolonCompanion }) {
       model,
       models: list,
       reducedMotion,
-    };
+    });
   });
 
   useEffect(() => {

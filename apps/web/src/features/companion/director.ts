@@ -143,6 +143,11 @@ export class CompanionDirector {
     this.#touched = at;
   }
 
+  /** Her stage was made anew, which plays any gesture it hasn't seen: it gets none until her next. */
+  newStage(): void {
+    this.#gesture = null;
+  }
+
   tick(at: number): void {
     this.#own = direct(this.#own, { type: "tick", at });
     if (this.#lent !== null && this.#lent.until <= at) this.#lent = null;
