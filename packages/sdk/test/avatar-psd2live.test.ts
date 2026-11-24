@@ -131,6 +131,34 @@ describe("the vendored runtime", () => {
     });
   });
 
+  test("a download that breaks off is a runtime error, and is fetched again after", async () => {
+    const bytes = new Uint8Array(readFileSync(psd2liveRuntimeUrl()));
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(bytes.subarray(0, 1024));
+              controller.error(new TypeError("terminated"));
+            },
+          }),
+        ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const url = "https://example.test/assets/cut-off.wasm";
+    await expect(compilePsd2liveRuntime(url)).rejects.toMatchObject({
+      name: "AvatarError",
+      code: "runtime",
+      message: "PSD2Live's runtime could not be fetched: terminated",
+    });
+    await expect(inspectPsd2liveRig(fixture, { runtime: url })).rejects.toMatchObject({
+      code: "runtime",
+    });
+    fetch.mockResolvedValueOnce(new Response(bytes));
+    expect(await compilePsd2liveRuntime(url)).toBeInstanceOf(WebAssembly.Module);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   test("hands strings across as NUL-terminated UTF-8", () => {
     const rt = instantiatePsd2live(module);
     expect(withCString(rt, "她的形象", (pointer) => cString(rt, pointer))).toBe("她的形象");
