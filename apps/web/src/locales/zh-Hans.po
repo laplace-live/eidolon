@@ -1210,6 +1210,10 @@ msgstr "返回首页"
 msgid "Background mode leaves this computer as it is."
 msgstr "后台模式不会改动这台电脑。"
 
+#: src/features/settings/desktop-notes.ts
+msgid "Background mode never shows her."
+msgstr "后台模式下她不会出现。"
+
 #: src/features/studio/videos-section.tsx
 msgid "Billed"
 msgstr "收费"
@@ -1838,6 +1842,10 @@ msgstr "桌面应用"
 #: src/features/settings/desktop-card.tsx
 msgid "Desktop App"
 msgstr "桌面应用"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Desktop Companion"
+msgstr "桌面形象"
 
 #: src/features/jobs/parts.tsx
 #: src/features/studio/add-videos.tsx
@@ -3133,6 +3141,10 @@ msgstr "几分钟就能做完的小活，比如写个清单、改几处文字。
 #: src/features/studio/text-editor.tsx
 msgid "Keep Editing"
 msgstr "继续编辑"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Keep her on your desktop, above your other windows. Right-click her for her menu."
+msgstr "让她待在桌面上，浮在其他窗口之上。右键点她可以打开她的菜单。"
 
 #: src/features/studio/voice-section.tsx
 msgid "Keep Hers"
@@ -5239,6 +5251,10 @@ msgstr "她转告的话，接着做时会先看："
 msgid "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 msgstr "这些是她在你们的通话里记下的，只有她会读到：每个人设各记各的。"
 
+#: src/features/settings/desktop-notes.ts
+msgid "She shows as her picture until she has an active character model."
+msgstr "在设好当前形象之前，她会以头像出现。"
+
 #: src/features/studio/models-section.tsx
 msgid "She speaks in one of the realtime model's own voices, not the voice picked for her."
 msgstr "她会使用实时语音模型自带的声音，而不是为她选的声音。"
@@ -5296,6 +5312,10 @@ msgstr "显示全部"
 #: src/features/home/memory-panel.tsx
 msgid "Show All {count}"
 msgstr "显示全部 {count} 条"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Show at Login"
+msgstr "登录时显示"
 
 #: src/features/chats/labels.ts
 msgid "Show each task as one card"
@@ -7061,6 +7081,10 @@ msgstr "你要求切换时会说的话。留空时，模型按内置触发词判
 #: src/features/studio/voice-styles-card.tsx
 msgid "What you'd say to ask for it. Left empty, the model goes by the name alone."
 msgstr "你要求切换时会说的话。留空时，模型只按名称判断。"
+
+#: src/features/settings/desktop-card.tsx
+msgid "When Eidolon opens at login, she shows too, before you open its window."
+msgstr "Eidolon 在登录时打开后，她也会出现，不必先打开它的窗口。"
 
 #: src/features/studio/video-table.tsx
 msgid "When was it streamed?"
