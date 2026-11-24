@@ -83,7 +83,9 @@ export class CallSignals {
   #state: DirectionState = directionState();
   #context: AudioContext | null = null;
   #meter: MouthMeter | null = null;
-  #track: string | null = null;
+  #feedMeter: MouthMeter | null = null;
+  /** The bot's track the meters tap. */
+  #track: MediaStreamTrack | null = null;
   #stopTicking: (() => void) | null = null;
   readonly #listeners = new Set<() => void>();
   readonly #tickListeners = new Set<() => void>();
@@ -100,11 +102,11 @@ export class CallSignals {
 
   /** Taps `track` with a MouthMeter on that context (never on the destination); null closes it. */
   listen(track: MediaStreamTrack | null): void {
-    if (track !== null && track.id === this.#track) return;
+    if (track !== null && track.id === this.#track?.id) return;
     this.#closeMeter();
     if (track !== null && this.#context !== null) {
       this.#meter = new MouthMeter(track, { context: this.#context });
-      this.#track = track.id;
+      this.#track = track;
     }
     this.#notify();
   }
@@ -112,6 +114,18 @@ export class CallSignals {
   /** The bot track's meter, null without one. */
   get mouth(): MouthSource | null {
     return this.#meter;
+  }
+
+  /**
+   * A second meter on the bot's track, for the desktop companion's feed: a meter's follower steps
+   * with each read, so the stages' meter and the feed's are two. Made at the first read while a
+   * track is listened to, on the same context; null without one.
+   */
+  get feedMouth(): MouthSource | null {
+    if (this.#feedMeter === null && this.#track !== null && this.#context !== null) {
+      this.#feedMeter = new MouthMeter(this.#track, { context: this.#context });
+    }
+    return this.#feedMeter;
   }
 
   /** A call starts: fresh direction, ticking every TICK_MS. */
@@ -185,7 +199,9 @@ export class CallSignals {
 
   #closeMeter(): void {
     this.#meter?.close();
+    this.#feedMeter?.close();
     this.#meter = null;
+    this.#feedMeter = null;
     this.#track = null;
   }
 

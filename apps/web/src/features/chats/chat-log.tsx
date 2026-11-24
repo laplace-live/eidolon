@@ -45,7 +45,7 @@ import {
 import { toolState } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
 import { type LiveRow, type LiveState, liveRows, type PendingLine, type VoiceClip } from "./stream";
-import { type AutoPlayEnd, useObjectUrl, VoiceBubble } from "./voice-bubble";
+import { type AutoPlayEnd, useObjectUrl, VoiceBubble, type VoiceBubbleFact } from "./voice-bubble";
 import { WhyAnswered } from "./why-answered";
 
 /** How long a card brought into view stays ringed. */
@@ -244,6 +244,7 @@ function HerBubble({
   aside,
   autoPlay = false,
   onAutoPlayEnd,
+  fact,
 }: {
   readonly chatId: string;
   readonly name: string;
@@ -251,6 +252,8 @@ function HerBubble({
   readonly text: string;
   readonly images?: readonly Attachment[];
   readonly voice?: AudioAttachment | null;
+  /** Her voice message, for the desktop companion. */
+  readonly fact?: VoiceBubbleFact;
   /** Her voice couldn't be made, so her words came as text. */
   readonly sentAsText?: boolean;
   readonly interrupted?: boolean;
@@ -283,6 +286,7 @@ function HerBubble({
             transcript={shown === "" ? null : <BotText runs={runs} />}
             autoPlay={autoPlay}
             onAutoPlayEnd={onAutoPlayEnd}
+            fact={fact}
           />
         </div>
       )}
@@ -473,6 +477,17 @@ const Item = memo(function Item({
         text={item.text}
         images={item.images}
         voice={item.voice}
+        fact={
+          item.voice === null
+            ? undefined
+            : {
+                persona: item.persona,
+                chat: chatId,
+                seq: item.seq,
+                text: item.text,
+                file: item.voice.name,
+              }
+        }
         sentAsText={item.sentAsText}
         interrupted={item.interrupted}
         cutOff={item.cutOff !== null}

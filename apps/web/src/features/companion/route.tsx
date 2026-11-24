@@ -5,6 +5,7 @@ import type { AvatarStage, Bounds, Box } from "@laplace.live/eidolon-sdk/avatar"
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { PersonaAvatar } from "@/components/avatar";
+import { MouthTap } from "@/features/call/signals";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import {
   asApiError,
@@ -27,7 +28,7 @@ import { COMPANION_TICK_MS, CompanionDirector, type TapArea } from "./director";
 import { CURSOR_REST_MS, eyePoint, gazeToward } from "./gaze";
 import { handshake, SIZE_WAIT_MS } from "./handshake";
 import { menuState, type PageAction, pageAction } from "./menu";
-import { PortMouth, VoiceTimeline, WidestTap } from "./mouths";
+import { PortMouth, VoiceTimeline } from "./mouths";
 import { PagePort } from "./page-port";
 import { HoverProbe, onPicture, Press, tapArea } from "./pointer";
 import {
@@ -99,7 +100,7 @@ class Control {
   readonly director = new CompanionDirector(performance.now());
   readonly portMouth = new PortMouth();
   readonly timeline = new VoiceTimeline();
-  readonly tap = new WidestTap();
+  readonly tap = new MouthTap();
   readonly probe: HoverProbe;
   readonly port: PagePort;
   #live: Live = {

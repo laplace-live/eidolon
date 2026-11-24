@@ -400,6 +400,57 @@ describe("her window", () => {
     expect(calls).toHaveLength(4);
   });
 
+  test("a drop is where she stands: her picture then stands on the feet it left", () => {
+    const { flow, values } = shownCompanion();
+    flow.drag({ phase: "start", x: 1387, y: 600 });
+    flow.drag({ phase: "move", x: 1087, y: 500 });
+    flow.drag({ phase: "end", x: 1087, y: 590 });
+    expect(values("setBounds").at(-1)).toEqual({ x: 986, y: 420, width: 202, height: 480 });
+    flow.shape({ kind: "picture" });
+    expect(values("setBounds").at(-1)).toEqual({ x: 1023, y: 772, width: 128, height: 128 });
+  });
+
+  test("a new window stands on her saved feet, not where a display change left the last one", () => {
+    const { flow, values, setScreens } = shownCompanion({ feet: { x: 300, y: 900 } });
+    const saved = { x: 199, y: 420, width: 202, height: 480 };
+    expect(values("open")).toEqual([saved]);
+    setScreens(
+      [{ ...LAPTOP, height: LAPTOP.height - 75 }, EXTERNAL],
+      [LAPTOP_DISPLAY, EXTERNAL_DISPLAY],
+    );
+    flow.displaysChanged();
+    setScreens([LAPTOP, EXTERNAL], [LAPTOP_DISPLAY, EXTERNAL_DISPLAY]);
+    flow.displaysChanged();
+    expect(values("setBounds").at(-1)).toEqual({ ...saved, y: 825 - 480 });
+    flow.setOn(false);
+    flow.setOn(true);
+    expect(values("open")).toEqual([saved, saved]);
+  });
+
+  test("a reshape during a drag stands her where the drag has her, and the drag goes on at her new size", () => {
+    const { flow, values } = shownCompanion();
+    flow.drag({ phase: "start", x: 1387, y: 600 });
+    flow.drag({ phase: "move", x: 1187, y: 600 });
+    flow.shape({ kind: "picture" });
+    // Displays that change nothing under her move nothing either.
+    flow.displaysChanged();
+    flow.drag({ phase: "move", x: 1137, y: 560 });
+    flow.drag({ phase: "end", x: 1137, y: 600 });
+    const picture = { x: 1123, y: 772, width: 128, height: 128 };
+    expect(values("setBounds")).toEqual([
+      { x: 1086, y: 420, width: 202, height: 480 },
+      picture,
+      picture,
+      { x: 1073, y: 732, width: 128, height: 128 },
+      { x: 1073, y: 772, width: 128, height: 128 },
+    ]);
+    expect(values("save").at(-1)).toEqual({
+      ...DEFAULT_COMPANION,
+      on: true,
+      feet: { x: 1137, y: 900 },
+    });
+  });
+
   test("a hit makes her window take clicks, and a miss passes them, while it exists", () => {
     const { flow, values } = shownCompanion();
     flow.hit(true);
@@ -419,6 +470,30 @@ describe("her window", () => {
     // With her window still on a display, she stays.
     flow.displaysChanged();
     expect(calls.at(-1)).toEqual(["setBounds", FIRST]);
+    // She stands there now: her picture's window keeps her feet.
+    flow.shape({ kind: "picture" });
+    const feet = feetOf(FIRST);
+    expect(calls.at(-1)).toEqual([
+      "setBounds",
+      { x: feet.x - 64, y: feet.y - 128, width: 128, height: 128 },
+    ]);
+  });
+
+  test("reshaped between odd and even widths, she stands on her own feet, never drifting", () => {
+    // Where a drag of her 205-DIP-wide model left her feet: half a DIP into a pixel.
+    const feet = { x: 700.5, y: 900 };
+    const model = { kind: "model", aspect: 0.427 } as const;
+    const { flow, values } = shownCompanion({ feet });
+    expect(flow.shape(model)).toEqual({ width: 205, height: 480 });
+    const standing = values("setBounds").at(-1);
+    expect(standing).toEqual({ x: 598, y: 420, width: 205, height: 480 });
+    for (let trip = 0; trip < 5; trip++) {
+      flow.shape({ kind: "picture" });
+      // Displays that change nothing under her move nothing either.
+      flow.displaysChanged();
+      flow.shape(model);
+      expect([trip, values("setBounds").at(-1)]).toEqual([trip, standing]);
+    }
   });
 
   test("a Dock that grew under her pushes her up onto its edge, rather than off to her first place", () => {
@@ -428,7 +503,12 @@ describe("her window", () => {
       [LAPTOP_DISPLAY, EXTERNAL_DISPLAY],
     );
     flow.displaysChanged();
-    expect(calls.at(-1)).toEqual(["setBounds", { x: 199, y: 825 - 480, width: 202, height: 480 }]);
+    const onItsEdge = { x: 199, y: 825 - 480, width: 202, height: 480 };
+    expect(calls.at(-1)).toEqual(["setBounds", onItsEdge]);
+    // She stands there now, as a drag would leave her, and stays once it shrinks back.
+    setScreens([LAPTOP, EXTERNAL], [LAPTOP_DISPLAY, EXTERNAL_DISPLAY]);
+    flow.displaysChanged();
+    expect(calls.at(-1)).toEqual(["setBounds", onItsEdge]);
   });
 });
 

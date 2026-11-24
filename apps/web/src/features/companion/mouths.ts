@@ -89,22 +89,3 @@ export class VoiceTimeline implements MouthSource {
     return openings[Math.floor(seconds * VOICE_FPS)] ?? 0;
   }
 }
-
-/** What her stage reads, passed through: it keeps the widest opening for data-mouth. */
-export class WidestTap implements MouthSource {
-  source: MouthSource | null = null;
-  #widest = 0;
-
-  read(dt: number): number {
-    const level = this.source?.read(dt) ?? 0;
-    if (level > this.#widest) this.#widest = level;
-    return level;
-  }
-
-  /** The widest since the last take, then 0 again. */
-  take(): number {
-    const widest = this.#widest;
-    this.#widest = 0;
-    return widest;
-  }
-}

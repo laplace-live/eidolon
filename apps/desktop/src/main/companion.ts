@@ -141,9 +141,26 @@ export function areaAt(point: Point, areas: readonly Rectangle[]): Rectangle {
 }
 
 /**
- * Her window of `size` standing on `feet` while one of `displays` (their bounds) holds them, else at
- * her first place; then kept inside the work area under it, so a Dock or a taskbar that grew under
- * her feet pushes her up onto its edge.
+ * Where her window of `size` stands her: on `feet` while one of `displays` (their bounds) holds
+ * them, else at her first place.
+ */
+export function standing(
+  feet: Point | null,
+  size: WindowSize,
+  areas: readonly Rectangle[],
+  displays: readonly Rectangle[],
+): Point {
+  if (feet !== null && displays.some((display) => holds(display, feet))) return feet;
+  const [primary] = areas;
+  return {
+    x: primary.x + primary.width - EDGE_DIP - size.width / 2,
+    y: primary.y + primary.height,
+  };
+}
+
+/**
+ * Her window of `size` standing where `standing` puts her feet, then kept inside the work area under
+ * it, so a Dock or a taskbar that grew under her feet pushes her up onto its edge.
  */
 export function placement(
   feet: Point | null,
@@ -151,21 +168,16 @@ export function placement(
   areas: readonly Rectangle[],
   displays: readonly Rectangle[],
 ): Rectangle {
-  const standingOn = (point: Point): Rectangle => ({
-    x: Math.round(point.x - size.width / 2),
-    y: Math.round(point.y - size.height),
-    width: size.width,
-    height: size.height,
-  });
-  if (feet !== null && displays.some((display) => holds(display, feet))) {
-    return clampBounds(standingOn(feet), areas);
-  }
-  const [primary] = areas;
-  const first = {
-    x: primary.x + primary.width - EDGE_DIP - size.width / 2,
-    y: primary.y + primary.height,
-  };
-  return clampBounds(standingOn(first), areas);
+  const at = standing(feet, size, areas, displays);
+  return clampBounds(
+    {
+      x: Math.round(at.x - size.width / 2),
+      y: Math.round(at.y - size.height),
+      width: size.width,
+      height: size.height,
+    },
+    areas,
+  );
 }
 
 const clamp = (value: number, low: number, high: number): number =>
