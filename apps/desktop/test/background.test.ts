@@ -290,4 +290,43 @@ describe("nativeUi", () => {
       "Eidolon: background mode didn't open a menu: Cut, Copy, Select All",
     ]);
   });
+
+  test("on, a menu is logged and closes as one closed with no pick, calling its callback once", () => {
+    const { ui, calls } = electron();
+    const { lines, log } = recorder();
+    const on = nativeUi(true, ui, log);
+    let closed = 0;
+    let picked = false;
+    on.popup(
+      [
+        {
+          label: "Call",
+          click: () => {
+            picked = true;
+          },
+        },
+        { type: "separator" },
+        { label: "Size", submenu: [{ type: "radio", label: "Small" }] },
+        {
+          label: "Hide",
+          click: () => {
+            picked = true;
+          },
+        },
+      ],
+      {
+        callback: () => {
+          closed++;
+        },
+      },
+    );
+    on.popup([{ label: "Cut" }], {});
+    expect(closed).toBe(1);
+    expect(picked).toBe(false);
+    expect(calls).toEqual([]);
+    expect(lines).toEqual([
+      "Eidolon: background mode didn't open a menu: Call, Size, Hide",
+      "Eidolon: background mode didn't open a menu: Cut",
+    ]);
+  });
 });

@@ -184,8 +184,9 @@ function labels(menu: readonly MenuItemConstructorOptions[]): string {
 /**
  * `electron` as it is, or in background mode calls that log what they would have shown and answer
  * as the owner taking the defaults would: a message box its default button, a folder dialog its
- * Cancel. A notification never reaches Electron's Notification, whose very presenter asks macOS for
- * permission and rewrites a Start menu shortcut and a COM key on Windows.
+ * Cancel, a menu closed with no pick. A notification never reaches Electron's Notification, whose
+ * very presenter asks macOS for permission and rewrites a Start menu shortcut and a COM key on
+ * Windows.
  */
 export function nativeUi(background: boolean, electron: NativeUi, log: Log): NativeUi {
   if (!background) return electron;
@@ -211,8 +212,9 @@ export function nativeUi(background: boolean, electron: NativeUi, log: Log): Nat
       );
     },
     stealFocus() {},
-    popup(menu) {
+    popup(menu, options) {
       log.info(`Eidolon: background mode didn't open a menu: ${labels(menu)}`);
+      options.callback?.();
     },
     async chooseFolder() {
       log.info("Eidolon: background mode didn't open the folder dialog");
