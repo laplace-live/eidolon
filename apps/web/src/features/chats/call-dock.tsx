@@ -153,9 +153,9 @@ export function CallDock({
   const call = useShellCall();
   useShowsCall();
   const root = useRef<HTMLElement>(null);
-  // The screen goes with the focus and no Expand takes it when every stage failed or the call
-  // ended, and the bar's Return to Call still holds it: the keyboard stays in the call. Expand's
-  // effect runs first, so Shrink still lands there.
+  // Nothing holds the focus once the screen goes with no Expand to take it, every stage having
+  // failed or the call ended, and the bar's link still holds it as Return to Call brings the dock
+  // back. Expand's effect runs first, so Shrink still lands there.
   useEffect(() => {
     const held = document.activeElement;
     if (held === document.body || held?.closest("[data-call-bar]")) {

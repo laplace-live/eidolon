@@ -18,8 +18,10 @@ import { CallStatus, Face } from "./call-state";
 import { barShown, callPath, hostOf, isUp } from "./target";
 
 /**
- * The bar's ref: Hang Up, Close and Return to Call take the bar, the page's last stop, away with the
- * focus, which the page's content then takes, as from the skip link, so Tab stays in the page.
+ * The bar's ref. Hang Up, Close and Return to Call take the bar, the page's last stop, away with
+ * the focus, which the page's content then takes, as from the skip link, so Tab stays in the page.
+ * Hang Up has lost it to the body by then: Chrome blurs a button a frame after it is disabled, as
+ * Hang Up is while the call ends.
  */
 function handFocusOn(section: HTMLElement | null) {
   if (section === null) return;
