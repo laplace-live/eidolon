@@ -29,6 +29,8 @@ import { personasQuery } from "@/components/settings-form/queries";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { UnavailableButton } from "@/components/unavailable-button";
+import { useCallPresence } from "@/features/call/call-context";
 import { useActivatePersona } from "@/features/setup/personas";
 import type { PersonaSummary } from "@/lib/api";
 import { studioPath } from "@/lib/paths";
@@ -97,6 +99,7 @@ function Header({
 }) {
   const { t } = useLingui();
   const activate = useActivatePersona();
+  const { up } = useCallPresence();
 
   return (
     <PageHeader
@@ -119,6 +122,13 @@ function Header({
               })}
             </Link>
           </Button>
+        ) : up ? (
+          <UnavailableButton
+            variant="default"
+            reason={t`A call is in progress: switch personas after it ends.`}
+          >
+            {t`Make Active`}
+          </UnavailableButton>
         ) : (
           <Button disabled={activate.isPending} onClick={() => activate.mutate(persona.id)}>
             {activate.isPending && <Spinner />}

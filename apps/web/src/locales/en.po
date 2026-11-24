@@ -315,6 +315,7 @@ msgstr "{name} is now her active model."
 msgid "{name} is now the active persona."
 msgstr "{name} is now the active persona."
 
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 msgid "{name} is speaking"
 msgstr "{name} is speaking"
@@ -527,10 +528,15 @@ msgstr "A budget this key falls under is used up."
 msgid "A call fills the screen it's on: try her on a wide one and on a phone's."
 msgstr "A call fills the screen it's on: try her on a wide one and on a phone's."
 
+#: src/components/persona-switcher.tsx
 #: src/features/home/route.tsx
+#: src/features/setup/new-persona.tsx
+#: src/features/studio/route.tsx
 msgid "A call is in progress: switch personas after it ends."
 msgstr "A call is in progress: switch personas after it ends."
 
+#: src/features/settings/restart-button.tsx
+#: src/features/studio/model-list.tsx
 #: src/lib/labels.ts
 msgid "A call is in progress. Hang up first."
 msgstr "A call is in progress. Hang up first."
@@ -546,6 +552,10 @@ msgstr "A call needs a voice. Pick one for her first."
 #: src/features/studio/voice-section.tsx
 msgid "A call needs one: pick her voice below."
 msgstr "A call needs one: pick her voice below."
+
+#: src/features/studio/appearance-section.tsx
+msgid "A call with {name} is in progress: changes here show from her next call."
+msgstr "A call with {name} is in progress: changes here show from her next call."
 
 #: src/features/setup/persona-step.tsx
 msgid "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
@@ -1565,6 +1575,7 @@ msgstr "Clips"
 
 #: src/components/ui/dialog.tsx
 #: src/components/ui/sheet.tsx
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Close"
@@ -2189,6 +2200,7 @@ msgstr "Every persona's memories of you live in Qdrant, and each change to them 
 msgid "Every video is downloaded."
 msgstr "Every video is downloaded."
 
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 msgid "Everyone"
 msgstr "Everyone"
@@ -3992,6 +4004,10 @@ msgstr "One of her providers reported a problem. Check its key and credit in Set
 msgid "One per line, relative to her folder."
 msgstr "One per line, relative to her folder."
 
+#: src/features/call/call-bar.tsx
+msgid "Ongoing Call"
+msgstr "Ongoing Call"
+
 #: src/features/home/readiness-labels.ts
 msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
 msgstr "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
@@ -4798,6 +4814,10 @@ msgstr "Retrieval Gate Provider"
 msgid "Retry"
 msgstr "Retry"
 
+#: src/features/call/call-bar.tsx
+msgid "Return to Call"
+msgstr "Return to Call"
+
 #: src/features/studio/text-editor.tsx
 msgid "Revert"
 msgstr "Revert"
@@ -5123,6 +5143,11 @@ msgstr "Setup"
 #: src/features/setup/stepper.tsx
 msgid "Setup Steps"
 msgstr "Setup Steps"
+
+#: src/features/home/memory-panel.tsx
+#: src/features/home/readiness-list.tsx
+msgid "Setup would end the call. Hang up first."
+msgstr "Setup would end the call. Hang up first."
 
 #: src/features/usage/tables.tsx
 msgid "Share"

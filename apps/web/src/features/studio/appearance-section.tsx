@@ -1,10 +1,13 @@
 // Appearance: the 2D models she can look like, which one is active, and the one picked in the list,
 // live on a stage to test, frame and set up. `?model=` picks it, so a link can open one.
+import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { SectionCardSkeleton } from "@/components/section-card";
 import { settingsQuery } from "@/components/settings-form/queries";
+import { useCallPresence } from "@/features/call/call-context";
+import { shortNameOf } from "@/features/chats/persona";
 import type { CharacterModels, PersonaSummary } from "@/lib/api";
 import { characterModelsQuery } from "@/lib/character-models";
 import { activeModelOf } from "./model-draft";
@@ -26,8 +29,11 @@ function shownModel(list: CharacterModels, wanted: string | null) {
 }
 
 export function AppearanceSection({ persona }: { readonly persona: PersonaSummary }) {
+  const { t } = useLingui();
   const models = useQuery(characterModelsQuery(persona.id));
   const settings = useQuery(settingsQuery(persona.id));
+  const { up, target } = useCallPresence();
+  const calling = up && target?.cast.some((member) => member.id === persona.id);
   const [params, setParams] = useSearchParams();
   const wanted = params.get("model");
   const shown = models.data === undefined ? null : shownModel(models.data, wanted);
@@ -55,9 +61,15 @@ export function AppearanceSection({ persona }: { readonly persona: PersonaSummar
   if (models.isError) return <LoadError error={models.error} />;
   const list = models.data;
   const row = settings.data?.settings.find((entry) => entry.path === APPEARANCE_PATH);
+  const name = shortNameOf(persona);
 
   return (
     <>
+      {calling && (
+        <p className="text-muted-foreground text-sm">
+          {t`A call with ${name} is in progress: changes here show from her next call.`}
+        </p>
+      )}
       <ModelListCard
         persona={persona}
         list={list}

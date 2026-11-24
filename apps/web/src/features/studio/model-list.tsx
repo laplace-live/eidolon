@@ -59,6 +59,8 @@ import {
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { UnavailableButton } from "@/components/unavailable-button";
+import { useCallPresence } from "@/features/call/call-context";
 import type { CharacterModel, CharacterModels, PersonaSummary } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -255,6 +257,7 @@ function RenameForm({
 function ModelMenu({
   stoppable,
   busy,
+  waiting,
   onRename,
   onReplace,
   onStop,
@@ -263,6 +266,8 @@ function ModelMenu({
   /** Active through her own setting, which clearing would change what she shows. */
   readonly stoppable: boolean;
   readonly busy: boolean;
+  /** Why a new file waits, which the server would refuse now; null when it can be sent. */
+  readonly waiting: string | null;
   readonly onRename: () => void;
   readonly onReplace: () => void;
   readonly onStop: () => void;
@@ -294,10 +299,13 @@ function ModelMenu({
           {t`Rename`}
         </DropdownMenuItem>
         {/* A file picker needs the click itself, not the menu's closing after it. */}
-        <DropdownMenuItem onSelect={onReplace}>
+        <DropdownMenuItem disabled={waiting !== null} onSelect={onReplace}>
           <FileUpIcon />
           {t`Replace File`}
         </DropdownMenuItem>
+        {waiting !== null && (
+          <p className="max-w-56 px-2 pb-1.5 text-muted-foreground text-xs">{waiting}</p>
+        )}
         {stoppable && (
           <DropdownMenuItem onSelect={onStop}>
             <PowerOffIcon />
@@ -396,6 +404,9 @@ export function ModelListCard({
   const activating = useActivateModel(persona.id);
   const removing = useRemoveModel(persona.id);
   const renaming = useUpdateModel(persona.id);
+  // A file of up to 200 MiB is never picked only for the server to refuse it during a call.
+  const { up } = useCallPresence();
+  const waiting = up ? t`A call is in progress. Hang up first.` : null;
   const [reading, setReading] = useState(false);
   const [over, setOver] = useState(false);
   const [renamed, setRenamed] = useState<CharacterModel | null>(null);
@@ -445,7 +456,7 @@ export function ModelListCard({
   function drop(event: DragEvent) {
     event.preventDefault();
     setOver(false);
-    if (busy || event.dataTransfer.files.length === 0) return;
+    if (waiting !== null || busy || event.dataTransfer.files.length === 0) return;
     // Taken now: the drop's items are gone once its event returns.
     const dropped = {
       entries: [...event.dataTransfer.items].map((item) => item.webkitGetAsEntry()),
@@ -455,14 +466,20 @@ export function ModelListCard({
   }
 
   const empty = list.models.length === 0;
-  const importMenu = (variant: "default" | "outline") => (
-    <ImportMenu
-      variant={variant}
-      busy={busy}
-      onFile={() => pickers.openFile({ kind: "import" })}
-      onFolder={pickers.openFolder}
-    />
-  );
+  const importMenu = (variant: "default" | "outline") =>
+    waiting === null ? (
+      <ImportMenu
+        variant={variant}
+        busy={busy}
+        onFile={() => pickers.openFile({ kind: "import" })}
+        onFolder={pickers.openFolder}
+      />
+    ) : (
+      <UnavailableButton variant={variant} reason={waiting}>
+        <FileUpIcon />
+        {t`Import a Model`}
+      </UnavailableButton>
+    );
 
   return (
     <SectionCard
@@ -476,8 +493,9 @@ export function ModelListCard({
       <div
         onDragOver={(event) => {
           if (!draggingFiles(event)) return;
+          // Even while a call is up and the drop is ignored: left to it, the browser opens the file.
           event.preventDefault();
-          setOver(true);
+          if (waiting === null) setOver(true);
         }}
         onDragLeave={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false);
@@ -492,15 +510,22 @@ export function ModelListCard({
           <EmptyState
             icon={<PersonStandingIcon />}
             title={t`No models yet`}
-            description={t`Import a .p2lrt from PSD2Live, or the folder or zip of its web export. You can drop one here too.`}
+            description={
+              waiting ??
+              t`Import a .p2lrt from PSD2Live, or the folder or zip of its web export. You can drop one here too.`
+            }
             action={importMenu("default")}
           />
         ) : (
           <>
-            {list.active === null && (
-              <Hint>
-                {t`None is active, so she shows her picture. Make one active to use it as her look.`}
-              </Hint>
+            {waiting !== null ? (
+              <Hint>{waiting}</Hint>
+            ) : (
+              list.active === null && (
+                <Hint>
+                  {t`None is active, so she shows her picture. Make one active to use it as her look.`}
+                </Hint>
+              )
             )}
             <ListCard label={t`Her Models`}>
               {list.models.map((model) => {
@@ -525,6 +550,7 @@ export function ModelListCard({
                         // Not when the environment names it too: cleared, hers would leave it.
                         stoppable={own && active?.fallback !== model.id}
                         busy={busy}
+                        waiting={waiting}
                         onRename={() => setRenamed(model)}
                         onReplace={() => pickers.openFile({ kind: "replace", model })}
                         onStop={() =>

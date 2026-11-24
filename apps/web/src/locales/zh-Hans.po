@@ -315,6 +315,7 @@ msgstr "{name} 现在是她的当前形象。"
 msgid "{name} is now the active persona."
 msgstr "当前人设已切换为{name}。"
 
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 msgid "{name} is speaking"
 msgstr "{name}正在说话"
@@ -527,10 +528,15 @@ msgstr "这个密钥所属的预算已用完。"
 msgid "A call fills the screen it's on: try her on a wide one and on a phone's."
 msgstr "通话会铺满所在的屏幕：在宽屏和手机屏幕上都看看她。"
 
+#: src/components/persona-switcher.tsx
 #: src/features/home/route.tsx
+#: src/features/setup/new-persona.tsx
+#: src/features/studio/route.tsx
 msgid "A call is in progress: switch personas after it ends."
 msgstr "正在通话中：请在通话结束后切换人设。"
 
+#: src/features/settings/restart-button.tsx
+#: src/features/studio/model-list.tsx
 #: src/lib/labels.ts
 msgid "A call is in progress. Hang up first."
 msgstr "通话正在进行，请先挂断。"
@@ -546,6 +552,10 @@ msgstr "通话需要一个声音。请先为她选一个。"
 #: src/features/studio/voice-section.tsx
 msgid "A call needs one: pick her voice below."
 msgstr "通话需要声音：请在下面为她选一个。"
+
+#: src/features/studio/appearance-section.tsx
+msgid "A call with {name} is in progress: changes here show from her next call."
+msgstr "正在和{name}通话：这里的改动从下次通话起生效。"
 
 #: src/features/setup/persona-step.tsx
 msgid "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
@@ -1565,6 +1575,7 @@ msgstr "动画"
 
 #: src/components/ui/dialog.tsx
 #: src/components/ui/sheet.tsx
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Close"
@@ -2189,6 +2200,7 @@ msgstr "所有人设对你的记忆都保存在 Qdrant 中，每次改动都会�
 msgid "Every video is downloaded."
 msgstr "所有视频都已下载。"
 
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 msgid "Everyone"
 msgstr "所有人"
@@ -3992,6 +4004,10 @@ msgstr "她用的某个服务商报告了问题。请在设置中检查它的密
 msgid "One per line, relative to her folder."
 msgstr "每行一个，相对于她的文件夹。"
 
+#: src/features/call/call-bar.tsx
+msgid "Ongoing Call"
+msgstr "进行中的通话"
+
 #: src/features/home/readiness-labels.ts
 msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
 msgstr "数据目录所在磁盘只剩 {free}。下载的音频会占用大量空间。"
@@ -4798,6 +4814,10 @@ msgstr "检索门控服务商"
 msgid "Retry"
 msgstr "重试"
 
+#: src/features/call/call-bar.tsx
+msgid "Return to Call"
+msgstr "回到通话"
+
 #: src/features/studio/text-editor.tsx
 msgid "Revert"
 msgstr "还原"
@@ -5123,6 +5143,11 @@ msgstr "设置向导"
 #: src/features/setup/stepper.tsx
 msgid "Setup Steps"
 msgstr "设置步骤"
+
+#: src/features/home/memory-panel.tsx
+#: src/features/home/readiness-list.tsx
+msgid "Setup would end the call. Hang up first."
+msgstr "打开设置向导会结束通话，请先挂断。"
 
 #: src/features/usage/tables.tsx
 msgid "Share"

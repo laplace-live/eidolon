@@ -5,16 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { Call } from "./use-call";
+import type { Call, CallHandle } from "./use-call";
 
-function MessageInput({
+export function MessageInput({
   disabled,
   name,
   onSend,
+  autoFocus,
 }: {
   readonly disabled: boolean;
   readonly name: string;
   readonly onSend: (text: string) => void;
+  readonly autoFocus?: boolean;
 }) {
   const { t } = useLingui();
   const [text, setText] = useState("");
@@ -45,6 +47,7 @@ function MessageInput({
         disabled={disabled}
         autoComplete="off"
         enterKeyHint="send"
+        autoFocus={autoFocus}
         className="h-9 bg-card"
       />
       <Button
@@ -61,7 +64,7 @@ function MessageInput({
 }
 
 /** Mutes and unmutes the viewer's mic, once the call is live. */
-export function MicToggle({ call }: { readonly call: Call }) {
+export function MicToggle({ call }: { readonly call: CallHandle }) {
   const { t } = useLingui();
   const micLabel = call.micOn ? t`Mute your mic` : t`Unmute your mic`;
   return (
@@ -83,7 +86,7 @@ export function MicToggle({ call }: { readonly call: Call }) {
   );
 }
 
-export function HangUpButton({ call }: { readonly call: Call }) {
+export function HangUpButton({ call }: { readonly call: CallHandle }) {
   const { t } = useLingui();
   return (
     <Button
@@ -126,7 +129,13 @@ export function CallControls({ call, name }: { readonly call: Call; readonly nam
 }
 
 /** Over the transcript's foot during a call: that the bot hears the viewer, or can't. */
-export function MicPill({ call, className }: { readonly call: Call; readonly className?: string }) {
+export function MicPill({
+  call,
+  className,
+}: {
+  readonly call: CallHandle;
+  readonly className?: string;
+}) {
   const { t } = useLingui();
   const live = call.phase.name === "live";
   const muted = live && !call.micOn;

@@ -1,11 +1,13 @@
-// One call at a time, over SmallWebRTC to this server's /api/offer. Each call gets a fresh client,
-// so nothing a finished or cancelled call leaves running can reach the next one.
+// One call at a time, over SmallWebRTC to this server's /api/offer; the app's shell holds the one
+// call (call-provider.tsx). Each call gets a fresh client, so nothing a finished or cancelled call
+// leaves running can reach the next one.
 import { EidolonClient, type WaitState, Watchdog } from "@laplace.live/eidolon-sdk";
 import { type RefObject, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ChatCallRequestData } from "@/lib/api";
 import { deviceProblemOf, type MicProblem, probeMic } from "./media";
 import { type CallPhase, connectEnd, endOf, IDLE, reducePhase } from "./phase";
 import { fetchIceServers, offerOptions } from "./signalling";
+import { type CallSignals, outputEvent } from "./signals";
 import { EMPTY_TRANSCRIPT, reduceTranscript, type Transcript } from "./transcript";
 import { TurnWait } from "./turn-wait";
 
@@ -39,6 +41,32 @@ export interface Call {
   playAudio(): void;
 }
 
+/** What a call's controls, notices and transcript read and do. */
+export type CallHandle = Omit<Call, "start" | "audioRef">;
+
+/** No call: what /call shows while the tab's call is a chat's, or with a persona no longer active. */
+export const NO_CALL: CallHandle = {
+  phase: IDLE,
+  transcript: EMPTY_TRANSCRIPT,
+  wait: { thinking: false, stuck: false },
+  micOn: true,
+  userSpeaking: false,
+  botSpeaking: false,
+  micProblem: null,
+  botError: null,
+  audioBlocked: false,
+  hangUp() {},
+  setMic() {},
+  sendText() {},
+  dismissBotError() {},
+  playAudio() {},
+};
+
+/** The viewer's words came in: a final transcript with words, as TurnWait hears them. */
+function worded(transcript: { readonly text: string; readonly final: boolean }): boolean {
+  return transcript.final && transcript.text.trim() !== "";
+}
+
 interface ActiveCall {
   readonly client: EidolonClient;
   /** The bot said it was leaving before the transport went. */
@@ -48,7 +76,8 @@ interface ActiveCall {
   detach(): void;
 }
 
-export function useCall(): Call {
+/** `signals`, which her stages follow, hears the call's events and taps the bot's track. */
+export function useCall(signals?: CallSignals): Call {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [phase, dispatchPhase] = useReducer(reducePhase, IDLE);
   const [transcript, dispatchTranscript] = useReducer(reduceTranscript, EMPTY_TRANSCRIPT);
@@ -74,24 +103,29 @@ export function useCall(): Call {
       setBotSpeaking(false);
       setAudioBlocked(false);
       if (audioRef.current) audioRef.current.srcObject = null;
+      signals?.listen(null);
     },
-    [watchdog],
+    [watchdog, signals],
   );
 
-  const playBot = useCallback((track: MediaStreamTrack) => {
-    const audio = audioRef.current;
-    if (audio === null) return;
-    const playing = audio.srcObject instanceof MediaStream ? audio.srcObject : null;
-    if (playing?.getAudioTracks()[0]?.id === track.id) return;
-    audio.srcObject = new MediaStream([track]);
-    audio
-      .play()
-      .then(() => setAudioBlocked(false))
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "NotAllowedError")
-          setAudioBlocked(true);
-      });
-  }, []);
+  const playBot = useCallback(
+    (track: MediaStreamTrack) => {
+      const audio = audioRef.current;
+      if (audio === null) return;
+      const playing = audio.srcObject instanceof MediaStream ? audio.srcObject : null;
+      if (playing?.getAudioTracks()[0]?.id === track.id) return;
+      audio.srcObject = new MediaStream([track]);
+      signals?.listen(track);
+      audio
+        .play()
+        .then(() => setAudioBlocked(false))
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "NotAllowedError")
+            setAudioBlocked(true);
+        });
+    },
+    [signals],
+  );
 
   const subscribe = useCallback(
     (call: ActiveCall): (() => void) => {
@@ -100,6 +134,17 @@ export function useCall(): Call {
       const heard = () => {
         call.heardAt = Date.now();
       };
+      const cue = (
+        type:
+          | "bot-started-speaking"
+          | "bot-stopped-speaking"
+          | "user-started-speaking"
+          | "user-stopped-speaking"
+          | "user-words"
+          | "bot-llm-started"
+          | "bot-interrupted"
+          | "function-call",
+      ) => signals?.feed({ type, at: signals.now() });
       const offs = [
         // The client hands its own mic to the peer connection; only the bot's audio is the page's.
         client.on("trackStarted", (track, participant) => {
@@ -110,37 +155,56 @@ export function useCall(): Call {
           turn.settled();
           setBotSpeaking(true);
           dispatchPhase({ type: "answered", at: Date.now() });
+          cue("bot-started-speaking");
         }),
         client.on("botStoppedSpeaking", () => {
           heard();
           setBotSpeaking(false);
+          cue("bot-stopped-speaking");
         }),
         client.on("userStartedSpeaking", () => {
           heard();
           turn.started();
           setUserSpeaking(true);
+          cue("user-started-speaking");
         }),
         client.on("userStoppedSpeaking", () => {
           heard();
           setUserSpeaking(false);
           turn.stopped();
+          cue("user-stopped-speaking");
         }),
-        client.on("botLlmStarted", () => turn.llmStarted()),
+        client.on("botLlmStarted", () => {
+          turn.llmStarted();
+          cue("bot-llm-started");
+        }),
         client.on("userInput", (data) => {
           heard();
           turn.heard(data);
           dispatchTranscript({ type: "user-input", data });
+          if (data.input_type === "transcription" && worded(data)) cue("user-words");
         }),
         client.on("userTranscript", (data) => {
           heard();
           turn.heard(data);
           dispatchTranscript({ type: "user-transcript", data });
+          // Most transcriptions come as user-input too: words heard twice move her no further.
+          if (worded(data)) cue("user-words");
         }),
-        client.on("botOutput", (data) => dispatchTranscript({ type: "bot-output", data })),
-        client.on("botInterrupted", () => dispatchTranscript({ type: "interrupted" })),
+        client.on("botOutput", (data) => {
+          dispatchTranscript({ type: "bot-output", data });
+          const event = signals === undefined ? null : outputEvent(data, signals.now());
+          if (event !== null) signals?.feed(event);
+        }),
+        client.on("botInterrupted", () => {
+          dispatchTranscript({ type: "interrupted" });
+          cue("bot-interrupted");
+        }),
+        client.on("llmFunctionCallStarted", () => cue("function-call")),
         client.on("serverMessage", (message) => {
           if (message.type === "speaker") {
             dispatchTranscript({ type: "speaker", speaker: message.speaker });
+            signals?.feed({ type: "speaker", at: signals.now(), persona: message.speaker.persona });
           } else if (message.type === "selfie" && message.urls.length > 0) {
             dispatchTranscript({ type: "selfie", paths: message.urls, persona: message.persona });
           }
@@ -175,7 +239,7 @@ export function useCall(): Call {
         for (const off of offs) off();
       };
     },
-    [playBot, release, watchdog],
+    [playBot, release, watchdog, signals],
   );
 
   const start = useCallback(
@@ -257,6 +321,7 @@ export function useCall(): Call {
       if (call === null || trimmed === "") return;
       const key = `typed-${++typedRef.current}`;
       dispatchTranscript({ type: "typed", key, text: trimmed });
+      signals?.feed({ type: "user-words", at: signals.now() });
       call.heardAt = Date.now();
       // Typed text skips the bot's VAD, so no user-stopped-speaking starts the wait.
       watchdog.arm();
@@ -265,19 +330,24 @@ export function useCall(): Call {
         dispatchTranscript({ type: "typed-failed", key });
       });
     },
-    [watchdog],
+    [watchdog, signals],
   );
 
   const playAudio = useCallback(() => {
+    // In the click itself: a browser resumes an AudioContext it held back only within one.
+    signals?.wake();
     audioRef.current
       ?.play()
       .then(() => setAudioBlocked(false))
       .catch(() => undefined);
-  }, []);
+  }, [signals]);
 
   const dismissBotError = useCallback(() => setBotError(null), []);
+  const dial = useCallback((target?: ChatCallRequestData) => void start(target), [start]);
+  const end = useCallback(() => void hangUp(), [hangUp]);
 
-  // Leaving the page hangs up and frees the mic.
+  // Unmounting hangs up and frees the mic: the shell's call ends as the shell goes (the sign-in
+  // screen, setup, a reload).
   useEffect(
     () => () => {
       attemptRef.current++;
@@ -302,8 +372,8 @@ export function useCall(): Call {
     botError,
     audioBlocked,
     audioRef,
-    start: (target?: ChatCallRequestData) => void start(target),
-    hangUp: () => void hangUp(),
+    start: dial,
+    hangUp: end,
     setMic,
     sendText,
     dismissBotError,
