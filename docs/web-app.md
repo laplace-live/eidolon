@@ -948,6 +948,14 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   Providers, then picked for embeddings with a model from the server's own list;
 - `credentials.json` at 0600, each key in its account, and no answer or log line holding a key;
 - a saved prompt landing in the temporary home, with `personas/` byte-identical;
+- a model in the studio's Appearance: the CC0 test rig (`apps/bot/test/local/fixtures/psd2live/`)
+  picked for **Import a Model**, kept in her folder byte for byte with a `model.json` listing its
+  Idle, Nod and Talk clips, its seven expressions and `HitAreaHead`, at 0700 and 0600, and not made
+  active; the preview ready and drawing her under the app's CSP, which a screenshot of its canvas
+  alone shows, then an expression held and a clip played on it; a PNG refused with the page's own
+  sentence before any upload, and the rig cut short refused `invalid-model` with the app's,
+  leaving no folder; then **Make Active**, which her summary and the status name, and **Stop
+  Using**, so the calls after it meet her picture;
 - an `ingest-facts` job over two fact lines against that server, with the model picked, and the
   jobs page showing it done;
 - a text chat with milky-green, her mind pointed at that server's streaming `/chat/completions`:
