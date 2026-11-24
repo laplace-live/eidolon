@@ -39,6 +39,8 @@ import {
 
 /** How often Open at Login is read again while it waits for the owner's OK in System Settings. */
 const APPROVAL_POLL_MS = 3000;
+/** How often her state is read again while the card shows, since she is switched elsewhere too. */
+const COMPANION_POLL_MS = 2000;
 
 export function loginItemQuery(app: SystemOptions) {
   return queryOptions({
@@ -58,7 +60,11 @@ export function terminalCommandQuery(app: SystemOptions) {
 }
 
 export function companionQuery(app: CompanionOptions) {
-  return queryOptions({ queryKey: ["desktop", "companion"], queryFn: () => app.companion() });
+  return queryOptions({
+    queryKey: ["desktop", "companion"],
+    queryFn: () => app.companion(),
+    refetchInterval: COMPANION_POLL_MS,
+  });
 }
 
 const ROW = "gap-6 py-5 first:pt-0 last:pb-0";

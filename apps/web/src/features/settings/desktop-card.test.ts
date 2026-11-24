@@ -1,6 +1,6 @@
 // Settings' Desktop App card: what each state of Open at Login, the desktop companion and the
-// terminal command says, the controls it leaves usable, and when it reads Open at Login again.
-// Rendered to markup, with the macros stubbed.
+// terminal command says, the controls it leaves usable, and when it reads Open at Login and her
+// again. Rendered to markup, with the macros stubbed.
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -158,6 +158,14 @@ describe("reading Open at Login", () => {
     ] as const) {
       expect(every(data)).toBe(false);
     }
+  });
+});
+
+describe("reading the desktop companion", () => {
+  test("again every 2 s while the card shows, since her menu, the tray, the Window menu and Pop Out switch her too", () => {
+    const app = bridge("darwin", { companion: true });
+    if (!offersCompanion(app)) throw new Error("the fake bridge offers her");
+    expect(companionQuery(app).refetchInterval).toBe(2000);
   });
 });
 
