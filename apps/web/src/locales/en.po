@@ -4347,6 +4347,10 @@ msgstr "Play Voice Message"
 msgid "Playback Position"
 msgstr "Playback Position"
 
+#: src/features/call/video-call.tsx
+msgid "Pop Out"
+msgstr "Pop Out"
+
 #: src/features/studio/model-outfits.tsx
 msgid "Pose Group {group}"
 msgstr "Pose Group {group}"

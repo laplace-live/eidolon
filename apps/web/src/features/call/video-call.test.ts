@@ -1,14 +1,16 @@
 // The video screen names the call as the dock does, keeps its controls and a chat's waiting bar in
-// reach, and holds /call's transcript in a panel that never covers them: rendered to markup, with
-// the macros, her picture and her stage stubbed.
+// reach, holds /call's transcript in a panel that never covers them, and offers Pop Out only where
+// the desktop companion can carry the call: rendered to markup, with the macros, her picture and her
+// stage stubbed.
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
-import { expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Status } from "@/lib/api";
+import type { EidolonDesktop } from "@/lib/desktop";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 import { type CallPhase, IDLE, type PhaseEvent, reducePhase } from "./phase";
 import type { CallTarget, CastMember } from "./target";
@@ -33,6 +35,13 @@ function run(...events: PhaseEvent[]): CallPhase {
 }
 
 const LIVE = run({ type: "start", at: 1 }, { type: "dial" }, { type: "ready" });
+const ENDED = run(
+  { type: "start", at: 1 },
+  { type: "dial" },
+  { type: "ready" },
+  { type: "hang-up" },
+  { type: "disconnected", at: 2, end: { kind: "hung-up" } },
+);
 
 const member = (id: string, name: string, shortName: string): CastMember => ({
   id,
@@ -59,6 +68,7 @@ const STATUS = {
 
 interface Render {
   readonly target?: CallTarget;
+  readonly phase?: CallPhase;
   readonly transcript?: Transcript;
   readonly thinking?: boolean;
   readonly botSpeaking?: boolean;
@@ -69,6 +79,7 @@ interface Render {
 
 function render({
   target = chatTarget("c1", MILKY, null),
+  phase = LIVE,
   transcript = EMPTY_TRANSCRIPT,
   thinking = false,
   botSpeaking = false,
@@ -78,13 +89,13 @@ function render({
   const signals = new CallSignals();
   const call = {
     ...NO_CALL,
-    phase: LIVE,
+    phase,
     transcript,
     wait: { thinking, stuck: false },
     botSpeaking,
     audioBlocked,
     target,
-    up: isUp(LIVE),
+    up: isUp(phase),
     serverCall: null,
     layout: "screen" as const,
     video: true,
@@ -277,4 +288,59 @@ test("keeps the notices beside her photo, never over it", () => {
     expect(beside).not.toContain("inset-x-0");
   }
   expect(layer(render({ audioBlocked: true }))).toContain("inset-x-0");
+});
+
+/** A desktop app's bridge, with Pop Out unless it predates the desktop companion. */
+function desktopApp({ popOut = true } = {}): EidolonDesktop {
+  const ignore = () => {};
+  const state = { on: true, showAtLogin: true, background: false };
+  return {
+    platform: "darwin",
+    version: "0.3.0",
+    serverVersion: "0.14.0",
+    setTheme: ignore,
+    setLanguage: ignore,
+    onCommand: ignore,
+    ...(popOut ? { popOut: async () => state } : {}),
+  };
+}
+
+describe("Pop Out", () => {
+  afterEach(() => {
+    globalThis.eidolonDesktop = undefined;
+  });
+
+  test("shows on a call whose cast holds the active persona, last before Hang Up", () => {
+    globalThis.eidolonDesktop = desktopApp();
+    const markup = render({ props: { onShrink: () => {} } });
+    const at = markup.indexOf('aria-label="Pop Out"');
+    expect(at).toBeGreaterThan(markup.indexOf('aria-label="Shrink"'));
+    // The next button is Hang Up.
+    expect(markup.slice(at).split("<button ")[1]).toContain("Hang Up</span></button>");
+    // A group call another persona hosts, and /call's own.
+    const group = render({ target: chatTarget("c1", MINT, [MINT, MILKY]) });
+    expect(group).toContain('aria-label="Pop Out"');
+    const solo = render({ target: soloTarget(MILKY), props: { titled: false } });
+    expect(solo).toContain('aria-label="Pop Out"');
+  });
+
+  test("not in a browser, nor in an app whose bridge predates her", () => {
+    expect(render()).not.toContain("Pop Out");
+    globalThis.eidolonDesktop = desktopApp({ popOut: false });
+    expect(render()).not.toContain("Pop Out");
+  });
+
+  test("not on a call with another persona, nor before status names the active one", () => {
+    globalThis.eidolonDesktop = desktopApp();
+    expect(render({ target: chatTarget("c1", MINT, null) })).not.toContain("Pop Out");
+    expect(render({ target: chatTarget("c1", MINT, [MINT]) })).not.toContain("Pop Out");
+    expect(render({ props: { status: undefined } })).not.toContain("Pop Out");
+  });
+
+  test("not once the call ended", () => {
+    globalThis.eidolonDesktop = desktopApp();
+    const markup = render({ phase: ENDED });
+    expect(markup).toContain("Hang Up");
+    expect(markup).not.toContain("Pop Out");
+  });
 });

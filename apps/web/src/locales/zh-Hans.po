@@ -4347,6 +4347,10 @@ msgstr "播放语音消息"
 msgid "Playback Position"
 msgstr "播放进度"
 
+#: src/features/call/video-call.tsx
+msgid "Pop Out"
+msgstr "弹出到桌面"
+
 #: src/features/studio/model-outfits.tsx
 msgid "Pose Group {group}"
 msgstr "姿势组 {group}"

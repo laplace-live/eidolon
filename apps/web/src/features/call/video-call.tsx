@@ -9,6 +9,7 @@ import {
   HourglassIcon,
   KeyboardIcon,
   Minimize2Icon,
+  PictureInPicture2Icon,
   ScrollTextIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { shortNameOf } from "@/features/chats/persona";
 import type { Status } from "@/lib/api";
+import { desktop, offersPopOut } from "@/lib/desktop";
 import { listOf } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { AvatarView } from "./avatar-view";
@@ -171,7 +173,7 @@ export function VideoCall({
   const [captions, setCaptions] = useState(storedCaptions);
   const [typeOpen, setTypeOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const { target, phase, transcript: said, wait, botSpeaking } = call;
+  const { target, phase, up, transcript: said, wait, botSpeaking } = call;
   const placed = target !== null;
 
   // The keyboard lands in the call after Call, Expand or Return to Call.
@@ -200,6 +202,10 @@ export function VideoCall({
   const photo = selfie?.paths.at(-1);
   const whose = target.cast.find((member) => member.id === selfie?.persona);
   const photoAlt = t`A selfie from ${ph({ name: whose === undefined ? name : shortNameOf(whose) })}`;
+  // The desktop companion is the active persona: she can carry only a call she is on.
+  const active = status?.persona.id;
+  const popOut =
+    up && offersPopOut(desktop()) && target.cast.some((member) => member.id === active);
 
   return (
     <section
@@ -318,6 +324,11 @@ export function VideoCall({
             {onShrink && (
               <ScreenControl label={t`Shrink`} onClick={onShrink}>
                 <Minimize2Icon />
+              </ScreenControl>
+            )}
+            {popOut && (
+              <ScreenControl label={t`Pop Out`} onClick={() => void desktop()?.popOut?.()}>
+                <PictureInPicture2Icon />
               </ScreenControl>
             )}
             <HangUpButton call={call} />
