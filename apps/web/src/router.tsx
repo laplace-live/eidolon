@@ -83,7 +83,7 @@ export function createRouter({ queryClient, exchanged }: RouterDeps) {
       ],
     },
     // The desktop companion's window, outside "/", whose loader sends a fresh install to /setup and
-    // whose boundary is opaque; a chunk that fails to load needs a boundary outside that chunk.
+    // whose boundary is opaque.
     {
       path: "/companion",
       lazy: () => import("@/features/companion/route"),

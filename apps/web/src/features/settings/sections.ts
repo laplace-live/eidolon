@@ -32,7 +32,7 @@ export function offersSystemOptions(app: EidolonDesktop | null): app is SystemOp
   );
 }
 
-/** A desktop app's bridge with the desktop companion, which older apps lack. */
+/** A desktop app's bridge that offers the desktop companion. */
 export type CompanionOptions = EidolonDesktop &
   Required<Pick<EidolonDesktop, "companion" | "setCompanion">>;
 

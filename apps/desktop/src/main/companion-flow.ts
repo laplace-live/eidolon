@@ -71,10 +71,7 @@ export interface CompanionIo {
   hideMain(): void;
   /** PageCommands.send. */
   command(command: DesktopCommand): void;
-  /**
-   * chrome.ts's sendCompanionPick: a pick from her menu the app page's call acts on. Sent now, never
-   * held: one no app page listens for is dropped, so it never places a call on a page loaded later.
-   */
+  /** chrome.ts's sendCompanionPick. */
   pick(pick: CompanionCallPick): void;
   /** Runs `run` once after `ms`; the function it returns cancels it. */
   after(ms: number, run: () => void): () => void;
@@ -344,7 +341,7 @@ export class Companion {
     this.#sync();
   }
 
-  /** Her window closed by something other than this flow, as quitAndInstall closes every window. */
+  /** Her window closed by something other than this flow. */
   closed(): void {
     this.#page = "none";
     this.#following = false;
