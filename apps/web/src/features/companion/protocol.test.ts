@@ -130,6 +130,7 @@ describe("toCompanion", () => {
     ["text past 20,000 characters", { ...said, text: "啊".repeat(20_001) }],
     ["text that isn't a string", { ...said, text: null }],
     ["a file of ../a.mp3", { ...voice, file: "../a.mp3" }],
+    ["a file of ..", { ...voice, file: ".." }],
     ["a file in a folder", { ...voice, file: "a/b.mp3" }],
     ["a file behind a backslash", { ...voice, file: "a\\b.mp3" }],
     ["an empty file", { ...voice, file: "" }],
@@ -152,10 +153,10 @@ describe("toApp", () => {
 
   test("nothing that would act on the call, and nothing else, is taken", () => {
     for (const message of [
-      { type: "call" },
-      { type: "hang-up" },
-      { type: "mic", on: true },
-      { type: "mic", on: false },
+      { type: "call", persona: "milky-green" },
+      { type: "hang-up", persona: "milky-green" },
+      { type: "mic", on: true, persona: "milky-green" },
+      { type: "mic", on: false, persona: "milky-green" },
       { type: "appearance" },
       { type: "appearance", persona: "Milky" },
       { type: "persona", id: "milky-green", stamp: "" },
