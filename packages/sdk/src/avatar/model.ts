@@ -148,7 +148,10 @@ export function clipFor(clips: readonly ModelClip[], wanted: string): string | n
   return clip?.id ?? null;
 }
 
-/** Each mood's expressions and each gesture's clip: the owner's where they name what the file has, else the defaults it has. */
+/**
+ * Each mood's expressions, the owner's where they made a choice, else the defaults, kept to those
+ * the file has; each gesture's clip, the owner's where the file has it, else the default it has.
+ */
 export function resolveSetup(
   inventory: ModelInventory,
   overrides: SetupOverrides = {},
