@@ -618,3 +618,41 @@ describe("model ids that try to leave their folder", () => {
     expect(readFileSync(sentinel, "utf8")).toBe("SENTINEL");
   });
 });
+
+describe("a model.json the app didn't write", () => {
+  test("lists nothing, and no route reads its fields or changes the model", async () => {
+    const { id: _id, ...fields } = (await upload("tml.p2lrt")).body as CharacterModel;
+    const { inventory } = fields;
+    const outfit = { id: "plain", name: "Plain", poses: [], parameters: [], hiddenParts: [] };
+    const manifest = join(folderOf("tml"), "model.json");
+    const other = withoutMeta(RIG);
+    for (const broken of [
+      { inventory: {} },
+      { inventory: { ...inventory, clips: [{ id: NOD }] } },
+      { framing: {} },
+      { moods: { happy: "smile" } },
+      { gestures: { nod: [NOD] } },
+      { outfits: [{}] },
+      { outfits: [{ ...outfit, poses: [null] }] },
+    ]) {
+      const text = JSON.stringify({ format: 1, file: "model.p2lrt", ...fields, ...broken });
+      writeFileSync(manifest, text);
+      const listed = await call("GET", `/personas/${MILKY}/models`);
+      const patched = await call("PATCH", `/personas/${MILKY}/models/tml`, { moods: {} });
+      const replaced = await call(
+        "PUT",
+        `/personas/${MILKY}/models/tml/file`,
+        other,
+        "application/octet-stream",
+      );
+      expect([
+        broken,
+        listed.body.models,
+        [patched.status, patched.body.error?.code],
+        [replaced.status, replaced.body.error?.code],
+      ]).toEqual([broken, [], [404, "unknown-model"], [404, "unknown-model"]]);
+      expect(readFileSync(manifest, "utf8")).toBe(text);
+      expect(readFileSync(join(folderOf("tml"), "model.p2lrt"))).toEqual(RIG);
+    }
+  });
+});

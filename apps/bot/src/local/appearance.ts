@@ -108,24 +108,66 @@ function freeName(name: string, taken: ReadonlySet<string>): string {
   }
 }
 
-/** model.json's fields besides `format` and `file`, at the top level, as this code writes them. */
-function isModelFields(value: Record<string, unknown>): boolean {
-  return (
-    typeof value.name === "string" &&
-    (CHARACTER_MODEL_KINDS as readonly unknown[]).includes(value.kind) &&
-    Number.isSafeInteger(value.size) &&
-    typeof value.sha256 === "string" &&
-    SHA256.test(value.sha256) &&
-    typeof value.importedAt === "string" &&
-    typeof value.updatedAt === "string" &&
-    isPlainObject(value.inventory) &&
-    isPlainObject(value.framing) &&
-    isPlainObject(value.moods) &&
-    isPlainObject(value.gestures) &&
-    Array.isArray(value.outfits) &&
-    (value.outfit === null || typeof value.outfit === "string")
-  );
+type Check = (value: unknown) => boolean;
+
+const isString: Check = (value) => typeof value === "string";
+const isNumber: Check = (value) => typeof value === "number";
+const isBoolean: Check = (value) => typeof value === "boolean";
+
+function orNull(check: Check): Check {
+  return (value) => value === null || check(value);
 }
+
+function listOf(check: Check): Check {
+  return (value) => Array.isArray(value) && value.every(check);
+}
+
+function recordOf(check: Check): Check {
+  return (value) => isPlainObject(value) && Object.values(value).every(check);
+}
+
+/** An object with at least `fields`, each passing its check. */
+function shaped(fields: Record<string, Check>): Check {
+  return (value) =>
+    isPlainObject(value) && Object.entries(fields).every(([key, check]) => check(value[key]));
+}
+
+const NAMED = { id: isString, name: isString };
+
+/** model.json's fields besides `format` and `file`, in the shapes this code writes them. */
+const isModelFields = shaped({
+  name: isString,
+  kind: (kind) => (CHARACTER_MODEL_KINDS as readonly unknown[]).includes(kind),
+  size: Number.isSafeInteger,
+  sha256: (sha256) => typeof sha256 === "string" && SHA256.test(sha256),
+  importedAt: isString,
+  updatedAt: isString,
+  inventory: shaped({
+    runtime: isString,
+    generator: orNull(isString),
+    canvas: shaped({ width: isNumber, height: isNumber }),
+    clips: listOf(shaped({ ...NAMED, group: isString, duration: isNumber, looping: isBoolean })),
+    expressions: listOf(shaped(NAMED)),
+    hitAreas: listOf(shaped(NAMED)),
+    parameters: listOf(shaped({ id: isString, min: isNumber, max: isNumber, default: isNumber })),
+    parts: listOf(shaped(NAMED)),
+    poseGroups: listOf(Number.isSafeInteger),
+    lipSync: isBoolean,
+    textures: Number.isSafeInteger,
+  }),
+  framing: (framing) => framingOf(framing) !== null,
+  moods: recordOf(listOf(isString)),
+  gestures: recordOf(isString),
+  outfits: listOf(
+    shaped({
+      ...NAMED,
+      poses: listOf(shaped({ group: Number.isSafeInteger, entry: Number.isSafeInteger })),
+      parameters: listOf(shaped({ id: isString, value: isNumber })),
+      hiddenParts: listOf(isString),
+    }),
+  ),
+  outfit: orNull(isString),
+});
 
 /**
  * Her model `model`; null when the id isn't a slug, or its folder lacks either file, or holds a
