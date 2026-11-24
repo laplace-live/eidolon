@@ -1,8 +1,8 @@
 // Closing and quitting: a close hides the window, and every quit, from ⌘Q, a menu, the
 // Dock, the tray or a second launch's --quit, goes through one flow: ask when work or unsaved edits
-// would be cut, hide, stop our own backend, then let the quit through. The restart that installs an update goes
-// the same way. Electron-free: quit.ts wires it to the app's events, and the confirmation
-// (quit-check.ts) decides whether to ask.
+// would be cut, hide, stop our own backend, then let the quit through. The restart that installs an
+// update goes the same way. Electron-free: quit.ts wires it to the app's events, and the
+// confirmation (quit-check.ts) decides whether to ask.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { QuitPurpose } from "./quit-check.ts";

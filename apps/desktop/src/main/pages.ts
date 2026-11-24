@@ -195,8 +195,8 @@ export class WindowPages {
 
 /**
  * The page's unsaved edits, as it last told of them, and its beforeunload, which asks it to stay
- * while it holds some. Electron cancels an unload the page refuses, and with it a quit or main's own
- * load: an approved quit would leave the app running hidden, its backend stopped, deaf to every
+ * while it holds some. Electron cancels an unload the page refuses, and with it a quit or main's
+ * own load: an approved quit would leave the app running hidden, its backend stopped, deaf to every
  * later quit. So it holds against the page's own reloads and navigations alone, never a quit under
  * way, the update's restart included, or main's own load.
  */

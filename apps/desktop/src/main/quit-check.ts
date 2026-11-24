@@ -120,8 +120,8 @@ function stopsText(
 
 /**
  * The "Quit Eidolon?" box, or "Restart Eidolon?" before an update's restart, for what our own
- * backend's `check` found (null with none of ours ready) and the window's `unsaved` edits; null when
- * it cuts nothing off.
+ * backend's `check` found (null with none of ours ready) and the window's `unsaved` edits; null
+ * when it cuts nothing off.
  */
 export function quitBox(
   check: QuitCheck | null,

@@ -1758,7 +1758,7 @@ async function killAndRetry(
  * The last launch spawns its own backend again, and the page holds an unsaved edit, whose
  * beforeunload asks it to stay: main must let it go to load the failure page when the backend dies,
  * and at the quit, or the failure page never shows and the quit stops with the window hidden and the
- * backend already stopped. The quit's box, which background mode answers, says the edit will be lost.
+ * backend already stopped. The quit's box, which background mode answers, warns of the edit.
  */
 async function quit(walk: Walk, step: Step) {
   const { smoke } = walk;
