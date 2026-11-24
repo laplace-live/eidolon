@@ -72,7 +72,6 @@ export class FeedLink {
       const message = toApp(event.data);
       if (message !== null) this.#receive(message);
     };
-    // Electron adds `close` to a renderer's MessagePort, for an end that went.
     port.addEventListener("close", () => {
       if (this.#port === port) this.disconnect();
     });

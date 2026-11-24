@@ -1,5 +1,5 @@
 // Her messages in the chat open in the main window, as they arrive and as her voice messages play:
-// what the desktop companion's feed passes on. Kept for the page's life, as the bubble playing is.
+// what the desktop companion's feed passes on to her.
 import type { ChatEvent } from "@eidolon/chat";
 import type { ChatFact } from "./protocol";
 
