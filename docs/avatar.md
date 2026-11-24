@@ -109,8 +109,9 @@ The routes, their answers and their errors are in [web-app.md](web-app.md#the-ap
 
 ## Studio's Appearance
 
-The studio's **Appearance** section (形象), after Voice, holds one card, **How She Looks**
-(她的形象) ([web-app.md](web-app.md)):
+The studio's **Appearance** section (形象), after Voice, holds **How She Looks** (她的形象), which
+lists her models, and below it, once she has one, a card named after the model picked there, its
+preview ([web-app.md](web-app.md)):
 
 - **Import a Model**, or a file dropped on the card, uploads a `.p2lrt`; given a PSD2Live `web`
   export's folder or zip, it takes the `.p2lrt` out and leaves the rest, the export's `p2l.js` and
