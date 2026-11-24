@@ -236,11 +236,8 @@ function run(): void {
             strayed: () => pages.strayed(),
           });
           // At the commit of a new document, before its script can say it listens.
-          win.webContents.on("did-navigate", () => {
-            commands.replaced();
-            unloads.gone();
-          });
-          win.webContents.on("render-process-gone", () => unloads.gone());
+          win.webContents.on("did-navigate", () => commands.replaced());
+          unloads.follow(win.webContents);
           // Here preventDefault() lets the unload go ahead, over the page's beforeunload.
           win.webContents.on("will-prevent-unload", (event) => {
             if (!unloads.goes()) return;

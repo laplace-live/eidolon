@@ -1,5 +1,6 @@
 // Which page the window shows as the backend's state and the window's own failures move it, what
 // the failure page says, what Try Again does, and when the page's beforeunload holds.
+import { EventEmitter } from "node:events";
 import { describe, expect, test } from "vitest";
 import { BearerToken } from "../src/main/attach.ts";
 import type { BackendFailure, BackendState } from "../src/main/controller.ts";
@@ -441,12 +442,19 @@ describe("the page's unsaved edits", () => {
 
   test("go with the page's document: a new one committed, or its renderer gone", () => {
     const unloads = new PageUnloads(() => false);
+    const contents = new EventEmitter();
+    unloads.follow(contents);
     unloads.held(true);
-    unloads.gone();
+    // A route of the app's own keeps its document.
+    contents.emit("did-navigate-in-page");
+    expect(unloads.unsaved).toBe(true);
+    contents.emit("did-navigate");
     expect(unloads.unsaved).toBe(false);
     // The next document holds edits of its own once it says so.
     unloads.held(true);
     expect(unloads.unsaved).toBe(true);
+    contents.emit("render-process-gone");
+    expect(unloads.unsaved).toBe(false);
   });
 
   test("go as main starts a load of its own, which lets the page go, edits and all", async () => {

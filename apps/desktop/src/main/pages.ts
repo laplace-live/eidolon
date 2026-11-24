@@ -193,6 +193,11 @@ export class WindowPages {
   }
 }
 
+/** The part of the window's webContents that tells when its page's document goes. */
+export interface PageDocument {
+  on(event: "did-navigate" | "render-process-gone", listener: () => void): unknown;
+}
+
 /**
  * The page's unsaved edits, as it last told of them, and its beforeunload, which asks it to stay
  * while it holds some. Electron cancels an unload the page refuses, and with it a quit or main's
@@ -221,11 +226,15 @@ export class PageUnloads {
   }
 
   /**
-   * The page's document is gone, and its edits with it: a new one committed, or its renderer went.
-   * A page says nothing as it unloads, so its last word would outlive it.
+   * Forgets the page's edits as `contents` loses its document: a new one commits, or its renderer
+   * goes. A page says nothing as it unloads, so its last word would outlive it.
    */
-  gone(): void {
-    this.#unsaved = false;
+  follow(contents: PageDocument): void {
+    const gone = (): void => {
+      this.#unsaved = false;
+    };
+    contents.on("did-navigate", gone);
+    contents.on("render-process-gone", gone);
   }
 
   /**
