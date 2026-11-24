@@ -1,8 +1,8 @@
 // Follows the chat on screen: its running turn from GET live when it opens, each reply a send
-// starts, a call this page holds in it, and her report on a task that ended. A dropped stream
-// leaves the turn running on the server, so live picks it up again once. Her voice messages
-// answering a send from this tab play on their own, one after another, while the tab has the focus
-// and no call is on.
+// starts, a call in it, and her report on a task that ended. A dropped stream leaves the turn
+// running on the server, so live picks it up again once. Her voice messages answering a send from
+// this tab play on their own, one after another, while the tab has the focus and no call is on in
+// the tab.
 import type { Attachment, ChatEvent, ChatStreamLine } from "@eidolon/chat";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
@@ -55,8 +55,15 @@ export interface ChatTurns {
  * `calling`: a call is on in the chat, whose lines GET live carries as they are stored.
  * `awaitingReport`: when the page saw a task of the chat end whose report, a turn with no line of
  * the viewer's, isn't in the log yet, the latest; null for none.
+ * `quiet`: a call is up in the tab, or the server's in the chat: none of her voice messages plays
+ * on its own, or waits to.
  */
-export function useChat(id: string, calling: boolean, awaitingReport: number | null): ChatTurns {
+export function useChat(
+  id: string,
+  calling: boolean,
+  awaitingReport: number | null,
+  quiet: boolean,
+): ChatTurns {
   const queryClient = useQueryClient();
   const [live, dispatch] = useReducer(reduceLive, IDLE);
   const streams = useRef(new Set<AbortController>());
@@ -64,14 +71,14 @@ export function useChat(id: string, calling: boolean, awaitingReport: number | n
   const carried = useRef(0);
   const sends = useRef(new Sends());
   const [toPlay, setToPlay] = useState<readonly number[]>([]);
-  const callOn = useRef(calling);
+  const quietRef = useRef(quiet);
 
   useEffect(() => {
-    callOn.current = calling;
-    if (!calling) return;
+    quietRef.current = quiet;
+    if (!quiet) return;
     pausePlayback();
     setToPlay([]);
-  }, [calling]);
+  }, [quiet]);
 
   const store = useCallback(
     (events: readonly ChatEvent[]) => {
@@ -119,7 +126,7 @@ export function useChat(id: string, calling: boolean, awaitingReport: number | n
             store(line.events);
             const replies = key === null || superseded ? [] : voiceReplies(line.events);
             if (replies.length > 0) {
-              const state = { focused: document.hasFocus(), calling: callOn.current };
+              const state = { focused: document.hasFocus(), quiet: quietRef.current };
               setToPlay((waiting) => queueReplies(waiting, replies, state));
             }
           } else if (line.type === "started" && reached) [turn, ended] = [line.turn, false];
@@ -239,7 +246,7 @@ export function useChat(id: string, calling: boolean, awaitingReport: number | n
     send,
     sendVoice: sendVoiceClip,
     stop,
-    autoPlay: calling ? null : (toPlay[0] ?? null),
+    autoPlay: quiet ? null : (toPlay[0] ?? null),
     autoPlayEnded,
   };
 }

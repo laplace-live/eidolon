@@ -101,12 +101,12 @@ describe("voiceReplies", () => {
 
 describe("queueReplies", () => {
   test("her new replies wait their turn to play while the tab has the focus", () => {
-    expect(queueReplies([3], [5, 7], { focused: true, calling: false })).toEqual([3, 5, 7]);
-    expect(queueReplies([3], [5], { focused: false, calling: false })).toEqual([3]);
+    expect(queueReplies([3], [5, 7], { focused: true, quiet: false })).toEqual([3, 5, 7]);
+    expect(queueReplies([3], [5], { focused: false, quiet: false })).toEqual([3]);
   });
 
-  test("none waits while a call is on, whose microphone would hear them", () => {
-    expect(queueReplies([3], [5], { focused: true, calling: true })).toEqual([]);
+  test("none waits while a call is up in the tab, whose microphone would hear them", () => {
+    expect(queueReplies([3], [5], { focused: true, quiet: true })).toEqual([]);
   });
 });
 

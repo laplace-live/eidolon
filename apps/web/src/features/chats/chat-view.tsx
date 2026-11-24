@@ -145,8 +145,9 @@ export function ChatView({ id }: { readonly id: string }) {
   const inCall = view.calling || serverCall !== null;
   const events = chat.data?.events;
   const tasks = useChatTasks(id, events ?? NO_EVENTS);
-  // Another tab's call is followed too, so its lines show and its end frees the composer.
-  const turns = useChat(id, inCall, tasks.awaitingReport);
+  // Another tab's call is followed too, so its lines show and its end frees the composer. During
+  // any call in the tab, or the chat's in another tab, her voice messages keep quiet.
+  const turns = useChat(id, inCall, tasks.awaitingReport, presence.up || serverCall !== null);
   const draftFiles = useDraftFiles(id);
   const [recordable] = useState(canRecord);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -363,6 +364,7 @@ export function ChatView({ id }: { readonly id: string }) {
                 busy={turns.busy}
                 mic={mic}
                 inCall={inCall}
+                callElsewhere={view.elsewhere}
                 files={draftFiles}
                 leading={
                   // Only a chat of hers alone starts tasks.
