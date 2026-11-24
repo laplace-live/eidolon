@@ -396,26 +396,43 @@ and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
 
 The desktop app (`apps/desktop`) shows this same app in its own window, at `eidolon-app://app/`,
 and its main process adds the Bearer to every request, so the page never signs in
-([desktop.md](desktop.md) has the app itself). Its preload gives the page two things; a browser
-has neither, and without them nothing below happens.
+([desktop.md](desktop.md) has the app itself). Its preload gives the page three things; a browser
+has none of them, and without them nothing below happens.
 
 - **The bridge**, `window.eidolonDesktop` (`lib/desktop.ts`): `{platform, version, serverVersion,
   setTheme(setting), setLanguage(language), onCommand(callback)}`, `platform` being Node's name for
   the OS (`darwin`, `win32`). The page reports the theme *setting* (`light`, `dark` or `system`,
-  never the theme System resolves to) and the active language (`en`, `zh-Hans`) once at start and
-  on every change. `onCommand` hands it the menus' and the notifications' commands: `settings`
-  opens `/settings`, `tasks` `/tasks`, and `open-task:<chat>:<task>` `/chats/<chat>?task=<task>`
-  when both are ids; one it doesn't know is ignored (`runCommand` in `lib/desktop.ts`). The members
-  added since the first desktop release are optional, since a terminal's server can serve this
-  page to an older app, and the page looks for each before it uses it: `chooseFolder()`,
-  `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and `setTerminalCommand(action)`, each a
-  promise of main's answer ([desktop.md](desktop.md#the-window)).
+  never the theme System resolves to) and the active language (`en`, `zh-Hans`) once at start and on
+  every change. `onCommand` hands it the menus' and the notifications' commands: `settings` opens
+  `/settings`, `tasks` `/tasks`, `call` `/call`, and `open-task:<chat>:<task>`
+  `/chats/<chat>?task=<task>` when both are ids; one it doesn't know is ignored (`runCommand` in
+  `lib/desktop.ts`). The members added since the first desktop release are optional, since a
+  terminal's server can serve this page to an older app, and the page looks for each before it uses
+  it: `chooseFolder()`, `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and
+  `setTerminalCommand(action)`, each a promise of main's answer
+  ([desktop.md](desktop.md#the-window)); and the [desktop
+  companion](desktop.md#the-desktop-companion)'s: `companion()`, `setCompanion(change)` and
+  `popOut()`, each a promise of her state (`on`, `showAtLogin`, and `background`, true while
+  background mode keeps her off screen); `linkCompanion()`, which asks main for a port to her page,
+  and `feedingCompanion(feeding)`, whether a call she is on is up here; and
+  `onCompanionPick(callback)`, which hands the page her menu's picks for the call, `call`,
+  `hang-up`, `mute` or `unmute`. `connectDesktop` passes each pick to whoever listens through
+  `subscribeCompanionPick` at that moment, and drops one nobody does.
+- **The port** to her page, which isn't a bridge member, since the preload posts it: a window
+  message from this window itself, tagged `{eidolon: "companion-port"}`, with one port, which
+  `onCompanionPort` hands on. Main pairs the app page and hers once both have asked, and again
+  whenever either asks. Over it this page tells her the active persona, the call and her chat
+  ([avatar.md](avatar.md#the-desktop-companion)); the one thing her page asks of it is
+  `appearance`, after her menu changed her model or her outfit, which has this page read her
+  models, the personas and status again. Her menu's call picks never cross it: they come from main.
 - **The marks** on `<html>`: `data-shell`, `mac` or `win`, and on macOS `data-fullscreen` while the
   window is fullscreen. The preload sets `data-shell` as `<html>` is created, before the page's
   script runs and before its first paint, and `data-fullscreen` as the window enters and leaves
   fullscreen; nothing in the page depends on when a mark lands. The chrome they turn on is in
   `index.css`, at its end, and the `shell:` variant there styles a component only in the desktop
-  app.
+  app. The desktop companion's page gets `data-companion` instead, never `data-shell` or
+  `data-fullscreen`, and `window.eidolonCompanion` instead of `eidolonDesktop`, so `desktop()` is
+  null there and her page asks `companion()`.
 
 **The chrome.** The window has no title bar. A row marked `data-window-drag` stands in for it: the
 window drags by the row, while its links, buttons and fields keep their clicks. The rows are the
@@ -449,16 +466,50 @@ clear of the window's buttons, whose place the Window Controls Overlay gives as
   to.
 - **Settings → Desktop** (`features/settings/desktop-card.tsx`), last before Advanced, shows only
   when the bridge has all four of `loginItem`, `setLoginItem`, `terminalCommand` and
-  `setTerminalCommand`; elsewhere `?tab=desktop` leads to the default section. Its Desktop App card
-  asks the bridge, never the server, and acts at once: **Open at Login**'s switch, with a note to
-  turn Eidolon on under System Settings → General → Login Items while macOS waits for that, read
-  again every 3 s until it does; and **Terminal Command**'s Install or Remove, with where it goes or
-  is (on Windows a folder on the PATH, which a new terminal sees; on macOS a link, whose Install may
-  ask for a password), or that another `eidolon` is there, which disables Install. A copy that
-  can't offer them says why under each, its control disabled (`desktop-notes.ts`): background
-  mode, a build that isn't the installed app, or a Mac copy outside the Applications folder. A
-  failed change toasts where Show Logs is, and a cancelled password prompt says nothing
-  ([desktop.md](desktop.md#open-at-login), [the terminal command](desktop.md#the-terminal-command)).
+  `setTerminalCommand`, or both of `companion` and `setCompanion`; elsewhere `?tab=desktop` leads to
+  the default section. Its Desktop App card, "What Eidolon can add to this computer, each only when
+  you choose it.", asks the bridge, never the server, and acts at once, its rows in this order, each
+  only when the bridge offers it: **Open at Login**'s switch, with a note to turn Eidolon on under
+  System Settings → General → Login Items while macOS waits for that, read again every 3 s until it
+  does; **Desktop Companion**'s switch, which shows and hides the [desktop
+  companion](desktop.md#the-desktop-companion), and **Show at Login**'s, which has a launch at login
+  show her before the window, disabled while she is off; and **Terminal Command**'s Install or
+  Remove, with where it goes or is (on Windows a folder on the PATH, which a new terminal sees; on
+  macOS a link, whose Install may ask for a password), or that another `eidolon` is there, which
+  disables Install. A copy that can't offer Open at Login or the terminal command says why under
+  each, its control disabled (`desktop-notes.ts`): background mode, a build that isn't the installed
+  app, or a Mac copy outside the Applications folder. Under Desktop Companion it says when
+  background mode never shows her, and while status names no active model for her, that she shows
+  as her picture; her switches stay usable in background mode, where main keeps her off screen. The
+  card reads her again every 2 s while it shows, since her menu's Hide, the tray, the Window menu
+  and Pop Out switch her too. A failed change toasts where Show Logs is, and a cancelled password
+  prompt says nothing ([desktop.md](desktop.md#open-at-login), [the terminal
+  command](desktop.md#the-terminal-command)).
+- **Pop Out,** on the video screen of a call the active persona is on, while the bridge has
+  `popOut` (`features/call/video-call.tsx`), before Hang Up: it turns the desktop companion on and,
+  once she is drawn, main hides the window and the call goes on in it, the screen mounted; her
+  menu's Open Eidolon, the Dock or the tray brings the window back.
+- **The desktop companion's page,** `/companion` (`features/companion/route.tsx`): a route of the
+  same `index.html`, outside the app's shell and its root loader, which would send a fresh install
+  to `/setup`, lazy, with `Nothing` and `CompanionError` static on the route, so a chunk that fails
+  to load still has a boundary, which tells main she isn't drawn. In a browser it renders nothing.
+  In her window it paints nothing but her (`index.css`'s `html[data-companion]` rules: a transparent
+  page whose `color-scheme` stays normal over the theme's, never a dark backdrop), draws the active
+  persona's model, or her picture, and tells main when she is drawn
+  ([avatar.md](avatar.md#the-desktop-companion)).
+- **The desktop companion's feed,** `CompanionFeed` (`features/companion/feed.tsx`), in the shell's
+  `CallProvider`: it renders nothing, and runs only while the bridge has `linkCompanion` and
+  `feedingCompanion`. It asks for her port as it mounts, and over each new port tells her the active
+  persona with her active model's stamp, then the call. It passes on her messages as they reach the
+  open chat (`saidFacts` in `features/companion/chat-facts.ts`): only the active persona's, only
+  what extends the log the page held, so nothing the page read and nothing a replay repeats is
+  told, her words before a tool call included, a call's lines left to the call; and her voice
+  messages as their bubble plays, pauses and ends (`VoiceBubble`'s `fact`). While a call of hers is
+  up it tells main so (`feedingCompanion`), sends the call's direction as it changes, and reads a
+  second meter on the call's track for her mouth about 30 times a second, in a group call only while
+  her direction speaks. Her menu's call picks act here, as main hands them over: Call places
+  `/call`'s call with her when `/call` can call (`callBlocker`) and opens `/call`, Hang Up hangs up,
+  and Mute and Unmute set the microphone.
 - **Choose Folder,** under Settings → Assistant Mode's folders while the bridge has
   `chooseFolder`: the native folder dialog, whose pick joins the draft on a line of its own unless
   a line already holds it (`appendPath`); saving decides, as for a typed one. A pick the list
