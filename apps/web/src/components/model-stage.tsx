@@ -1,6 +1,6 @@
 // Her model drawn on a stage of its own: a canvas made and removed with the stage (StrictMode
-// mounts twice, and a GL context outlives a canvas React keeps), her picture until it draws or if
-// it fails, and the box's data-state for whatever waits on it.
+// mounts twice, and a GL context outlives a canvas React keeps), a spinner while it loads, her
+// picture if it fails, and the box's data-state for whatever waits on it.
 import {
   AvatarStage,
   type Box,
@@ -27,9 +27,10 @@ export interface StageReady {
 }
 
 export interface ModelStageProps {
-  /** Whose model it is: her picture stands in until it draws. */
+  /** Whose model it is: her picture stands in if it can't show. */
   readonly persona: PersonaAvatarProps["persona"];
   readonly model: Pick<CharacterModel, "id" | "sha256">;
+  /** Each mood's expressions and each gesture's clip; a new one starts over only a clip it changes. */
   readonly setup: ResolvedSetup;
   /** The part of her canvas shown; null shows what a call frames by default. */
   readonly box: ModelBox | null;
