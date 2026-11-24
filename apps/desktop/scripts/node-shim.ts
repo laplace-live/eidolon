@@ -28,6 +28,7 @@ export const LAUNCHER_FILES: readonly string[] = [
   "cross-spawn.mjs",
   "npm-checks.mjs",
   "npm-config.mjs",
+  "npm-exec.mjs",
   "npm-spec.mjs",
 ];
 

@@ -38,6 +38,13 @@ interface NpmSpec {
     platform?: string,
   ): { type: string; name?: string; saveSpec?: string; path?: string } | undefined;
 }
+interface NpmExec {
+  binsOf(manifest: object, dir: string): Record<string, string>;
+  binOf(manifest: object, dir: string): string | undefined;
+  localBin(start: string, name: string): string | undefined;
+  pathOf(env: Env, delimiter?: string): string;
+  npmPath(bins: readonly string[], runPath: string, nodeGyp: string, rest: string): string;
+}
 interface Npx {
   pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
   npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
@@ -66,15 +73,10 @@ interface Npx {
     home: string,
     platform?: string,
   ): { path: string; tarball: boolean } | undefined;
-  binsOf(manifest: object, dir: string): Record<string, string>;
-  binOf(manifest: object, dir: string): string | undefined;
   npmPrefix(cwd: string): { prefix: string; workspace?: string };
-  localBin(start: string, name: string): string | undefined;
   treePackages(prefix: string): Installed[];
   inTree(packages: readonly Installed[], spec: string): Installed | undefined;
   plan(args: readonly string[], cwd: string, home?: string, env?: Env, current?: Current): Plan;
-  pathOf(env: Env, delimiter?: string): string;
-  npmPath(bins: readonly string[], runPath: string, nodeGyp: string, rest: string): string;
   commandEnv(env: Env, value: string): Env;
   which(
     command: string,
@@ -97,6 +99,9 @@ const { envReplace, invalidConfig, npmConfig }: NpmConfig = await import(
 );
 const { npmSpec }: NpmSpec = await import(
   pathToFileURL(join(LAUNCHER_SOURCES, "npm-spec.mjs")).href
+);
+const { binsOf, binOf, localBin, pathOf, npmPath }: NpmExec = await import(
+  pathToFileURL(join(LAUNCHER_SOURCES, "npm-exec.mjs")).href
 );
 const cross: CrossSpawn = await import(
   pathToFileURL(join(LAUNCHER_SOURCES, "cross-spawn.mjs")).href
@@ -788,27 +793,24 @@ describe("a folder or tarball spec, as npm-package-arg reads it", () => {
 
 describe("the bins npm reads from a package.json", () => {
   test("name a string bin after the package, unscoped, and clean names and paths", () => {
-    expect(npx.binsOf({ name: "@s/tool", bin: "cli.js" }, root)).toEqual({ tool: "cli.js" });
-    expect(npx.binsOf({ bin: "cli.js" }, root)).toEqual({});
-    expect(npx.binsOf({ name: "x", bin: ["bin/a.js", "b.js"] }, root)).toEqual({
+    expect(binsOf({ name: "@s/tool", bin: "cli.js" }, root)).toEqual({ tool: "cli.js" });
+    expect(binsOf({ bin: "cli.js" }, root)).toEqual({});
+    expect(binsOf({ name: "x", bin: ["bin/a.js", "b.js"] }, root)).toEqual({
       "a.js": "bin/a.js",
       "b.js": "b.js",
     });
     expect(
-      npx.binsOf(
-        { name: "x", bin: { "../up": "../../etc/x", "c:d": "d.js", e: 1, "": "f.js" } },
-        root,
-      ),
+      binsOf({ name: "x", bin: { "../up": "../../etc/x", "c:d": "d.js", e: 1, "": "f.js" } }, root),
     ).toEqual({ up: "etc/x", d: "d.js" });
   });
 
   test("take every file of directories.bin when there's no bin", () => {
     const dir = tree({ "scripts/a": "", "scripts/sub/b": "", "scripts/.hidden": "" });
-    expect(npx.binsOf({ name: "x", directories: { bin: "./scripts" } }, dir)).toEqual({
+    expect(binsOf({ name: "x", directories: { bin: "./scripts" } }, dir)).toEqual({
       a: "scripts/a",
       b: "scripts/sub/b",
     });
-    expect(npx.binsOf({ name: "x", bin: "c.js", directories: { bin: "scripts" } }, dir)).toEqual({
+    expect(binsOf({ name: "x", bin: "c.js", directories: { bin: "scripts" } }, dir)).toEqual({
       x: "c.js",
     });
   });
@@ -817,18 +819,18 @@ describe("the bins npm reads from a package.json", () => {
     const dir = tree({ "scripts/a": "", "scripts/sub/b": "" });
     // One link back into it: a second would make a walk that follows links run without end.
     symlinkSync("..", join(dir, "scripts", "sub", "up"));
-    expect(npx.binsOf({ name: "x", directories: { bin: "scripts" } }, dir)).toEqual({
+    expect(binsOf({ name: "x", directories: { bin: "scripts" } }, dir)).toEqual({
       a: "scripts/a",
       b: "scripts/sub/b",
     });
   });
 
   test("pick the one bin, or one file's several names, or the package's own name", () => {
-    expect(npx.binOf({ name: "x", bin: { a: "cli.js" } }, root)).toBe("a");
-    expect(npx.binOf({ name: "x", bin: { a: "cli.js", b: "./cli.js" } }, root)).toBe("a");
-    expect(npx.binOf({ name: "@s/x", bin: { a: "a.js", x: "x.js" } }, root)).toBe("x");
-    expect(npx.binOf({ name: "x", bin: { a: "a.js", b: "b.js" } }, root)).toBeUndefined();
-    expect(npx.binOf({ name: "x" }, root)).toBeUndefined();
+    expect(binOf({ name: "x", bin: { a: "cli.js" } }, root)).toBe("a");
+    expect(binOf({ name: "x", bin: { a: "cli.js", b: "./cli.js" } }, root)).toBe("a");
+    expect(binOf({ name: "@s/x", bin: { a: "a.js", x: "x.js" } }, root)).toBe("x");
+    expect(binOf({ name: "x", bin: { a: "a.js", b: "b.js" } }, root)).toBeUndefined();
+    expect(binOf({ name: "x" }, root)).toBeUndefined();
   });
 });
 
@@ -890,9 +892,9 @@ describe("a local bin, as libnpmexec finds one", () => {
       "a/node_modules/.bin": null,
       "a/b": null,
     });
-    expect(npx.localBin(join(base, "a", "b"), TOOL)).toBe(join(base, "node_modules", ".bin"));
+    expect(localBin(join(base, "a", "b"), TOOL)).toBe(join(base, "node_modules", ".bin"));
     const near = tree({ [`node_modules/.bin/${TOOL}`]: "", [`a/node_modules/.bin/${TOOL}`]: "" });
-    expect(npx.localBin(join(near, "a"), TOOL)).toBe(join(near, "a", "node_modules", ".bin"));
+    expect(localBin(join(near, "a"), TOOL)).toBe(join(near, "a", "node_modules", ".bin"));
   });
 
   test("never a folder, a link to nothing, or a name with an extension it wasn't given", () => {
@@ -901,10 +903,10 @@ describe("a local bin, as libnpmexec finds one", () => {
       [`node_modules/.bin/${TOOL}-cmd.cmd`]: "",
     });
     symlinkSync(join(base, "missing"), join(base, "node_modules", ".bin", `${TOOL}-dangling`));
-    expect(npx.localBin(base, TOOL)).toBeUndefined();
-    expect(npx.localBin(base, `${TOOL}-dangling`)).toBeUndefined();
-    expect(npx.localBin(base, `${TOOL}-cmd`)).toBeUndefined();
-    expect(npx.localBin(base, `${TOOL}-cmd.cmd`)).toBe(join(base, "node_modules", ".bin"));
+    expect(localBin(base, TOOL)).toBeUndefined();
+    expect(localBin(base, `${TOOL}-dangling`)).toBeUndefined();
+    expect(localBin(base, `${TOOL}-cmd`)).toBeUndefined();
+    expect(localBin(base, `${TOOL}-cmd.cmd`)).toBe(join(base, "node_modules", ".bin"));
   });
 });
 
@@ -1226,11 +1228,11 @@ describe("what npx does, as npm decides it", () => {
 
 describe("npm's PATH", () => {
   test("joins each key Windows spells PATH with, in order", () => {
-    expect(npx.pathOf({ Path: "a;b", PATH: "b;c", path: "", other: "x" }, ";")).toBe("a;b;c");
+    expect(pathOf({ Path: "a;b", PATH: "b;c", path: "", other: "x" }, ";")).toBe("a;b;c");
   });
 
   test("is the bins, each node_modules/.bin up from the folder, node-gyp's, the caller's", () => {
-    expect(npx.npmPath(["/x/.bin"], "/a/b", "/gyp", "/usr/bin:/bin")).toBe(
+    expect(npmPath(["/x/.bin"], "/a/b", "/gyp", "/usr/bin:/bin")).toBe(
       "/x/.bin:/a/b/node_modules/.bin:/a/node_modules/.bin:/node_modules/.bin:/gyp:/usr/bin:/bin",
     );
   });

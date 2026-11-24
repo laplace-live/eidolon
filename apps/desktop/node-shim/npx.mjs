@@ -25,7 +25,8 @@ import { fileURLToPath } from "node:url";
 import { formatWithOptions } from "node:util";
 import { cmdLine } from "./cross-spawn.mjs";
 import { currentEnv, devEngineFailures } from "./npm-checks.mjs";
-import { invalidConfig, npmConfig, settingOf } from "./npm-config.mjs";
+import { invalidConfig, npmConfig, settingOf, settingPath } from "./npm-config.mjs";
+import { binOf, binsOf, isFile, localBin, npmPath, pathOf } from "./npm-exec.mjs";
 import { npmSpec, TARBALL } from "./npm-spec.mjs";
 
 const DROPPED = new Set(["-y", "--yes", "-q", "--quiet"]);
@@ -76,8 +77,7 @@ export function pnpmNpmrc([variables = {}, project = {}], cwd, home, platform = 
       .map(asWritten)) {
       let file = text;
       if (key === "cafile") {
-        const fromHome = (platform === "win32" ? /^~[/\\]/ : /^~\//).test(text);
-        file = fromHome ? path.resolve(home, text.slice(2)) : path.resolve(cwd, text);
+        file = settingPath(text, cwd, home, platform);
       } else if (client !== undefined) {
         file = path.resolve(cwd, text);
       }
@@ -252,60 +252,12 @@ function stat(file) {
   }
 }
 
-const isFile = (file) => stat(file)?.isFile() === true;
-
 function readJson(file) {
   try {
     return JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
   } catch {
     return undefined;
   }
-}
-
-/** A manifest's bins, named and pointing inside the package `dir` as npm normalizes them. */
-export function binsOf(manifest, dir) {
-  let { bin } = manifest;
-  if (!bin && typeof manifest.directories?.bin === "string" && manifest.directories.bin) {
-    const folder = path.posix.join("/", manifest.directories.bin.replace(/\\/g, "/")).slice(1);
-    const root = path.resolve(dir, folder);
-    let entries = [];
-    // npm's glob enters no link. A recursive readdir follows one to a folder, and two links back
-    // into it never end.
-    try {
-      entries = globSync("**", { cwd: root, withFileTypes: true });
-    } catch {}
-    bin = {};
-    for (const entry of entries) {
-      const file = path
-        .relative(root, path.join(entry.parentPath, entry.name))
-        .split(path.sep)
-        .join("/");
-      if (entry.isFile() && !file.startsWith(".")) bin[entry.name] = `${folder}/${file}`;
-    }
-  } else if (typeof bin === "string") {
-    bin = typeof manifest.name === "string" ? { [manifest.name]: bin } : undefined;
-  } else if (Array.isArray(bin)) {
-    bin = Object.fromEntries(
-      bin.filter((file) => typeof file === "string").map((file) => [path.basename(file), file]),
-    );
-  }
-  const clean = {};
-  if (bin === null || typeof bin !== "object") return clean;
-  for (const [key, value] of Object.entries(bin)) {
-    const name = path.posix.join("/", path.posix.basename(key.replace(/\\|:/g, "/"))).slice(1);
-    if (typeof value !== "string" || !name) continue;
-    const file = path.posix.join("/", value.replace(/\\/g, "/")).slice(1);
-    if (file) clean[name] = file;
-  }
-  return clean;
-}
-
-/** The bin npm runs from a package given no command, or undefined where npm can't tell which. */
-export function binOf(manifest, dir) {
-  const bins = binsOf(manifest, dir);
-  if (new Set(Object.values(bins)).size === 1) return Object.keys(bins)[0];
-  const own = String(manifest.name ?? "").replace(/^@[^/]+\//, "");
-  return Object.hasOwn(bins, own) ? own : undefined;
 }
 
 /** npm's reading of `pattern` as a glob, for workspaces' paths. */
@@ -358,15 +310,6 @@ export function npmPrefix(cwd) {
     }
     if (path.dirname(dir) === dir)
       return { prefix: found ?? path.resolve(cwd), workspace: undefined };
-  }
-}
-
-/** The node_modules/.bin from `start` up that holds `name`, as libnpmexec's localFileExists. */
-export function localBin(start, name) {
-  for (let dir = path.resolve(start); ; dir = path.dirname(dir)) {
-    const bin = path.join(dir, "node_modules", ".bin");
-    if (isFile(path.resolve(bin, name))) return bin;
-    if (path.dirname(dir) === dir) return undefined;
   }
 }
 
@@ -587,25 +530,6 @@ function decide(args, cwd, home, sources, prefix, workspace) {
     }
   }
   return { ...(install.length > 0 ? { install } : {}), command, args: rest, bins: [], runPath };
-}
-
-/** The env's PATH as npm reads it: each key Windows may spell it with, joined in order. */
-export function pathOf(env, delimiter = path.delimiter) {
-  return Object.keys(env)
-    .filter((key) => /^path$/i.test(key) && env[key])
-    .map((key) => env[key].split(delimiter))
-    .reduce((dirs, more) => dirs.concat(more.filter((dir) => !dirs.includes(dir))), [])
-    .join(delimiter);
-}
-
-/** npm's PATH: `bins`, each node_modules/.bin from `runPath` up, then node-gyp's and `rest`. */
-export function npmPath(bins, runPath, nodeGyp, rest, delimiter = path.delimiter) {
-  const dirs = [...bins];
-  for (let dir = runPath; ; dir = path.dirname(dir)) {
-    dirs.push(path.resolve(dir, "node_modules", ".bin"));
-    if (path.dirname(dir) === dir) break;
-  }
-  return [...dirs, nodeGyp, rest].join(delimiter);
 }
 
 /**

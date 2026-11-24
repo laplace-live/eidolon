@@ -114,6 +114,12 @@ export function npmConfig(env, prefix, home) {
 export const settingOf = (sources, key) =>
   sources.find((source) => Object.hasOwn(source, key))?.[key];
 
+/** The file a setting of npm's path type names: after a ~/ from `home`, else from `cwd`. */
+export function settingPath(text, cwd, home, platform = process.platform) {
+  const fromHome = (platform === "win32" ? /^~[/\\]/ : /^~\//).test(text);
+  return fromHome ? path.resolve(home, text.slice(2)) : path.resolve(cwd, text);
+}
+
 /**
  * npm's error, as it prints it, for the config `sources` npmConfig reads that npm runs no command
  * under: a registry that isn't a URL, or credentials the user's or the project's .npmrc gives no

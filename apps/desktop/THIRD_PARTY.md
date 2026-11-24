@@ -2,13 +2,15 @@
 
 The desktop app ports parts of DeepSeek Harness's desktop shell, under the MIT License in
 `LICENSE-deepseek`. Its node shim's npx starts a Windows batch file as cross-spawn does, under the
-MIT License in `LICENSE-cross-spawn`, and reads npm's config, a package spec and a project's
-devEngines as npm's own packages do: @npmcli/config, ini, npm-package-arg,
-validate-npm-package-name and hosted-git-info, under the ISC License, and npm-install-checks,
-under the BSD 2-Clause License, all in `LICENSE-npm`. Each file whose header names one of them is
-ported from it, at the commit or version the header names. Main's build inlines the packages main
-runs and writes their licenses beside it, in `dist/main/THIRD_PARTY_LICENSES.md`. The app runs on
-Electron (MIT), which ships its own notices and Chromium's.
+MIT License in `LICENSE-cross-spawn`, and reads npm's config, a package spec, a package's bins,
+npm's PATH and a project's devEngines as npm's own packages do: @npmcli/config, ini,
+npm-package-arg, validate-npm-package-name, hosted-git-info, npm-normalize-package-bin,
+@npmcli/package-json, libnpmexec and @npmcli/run-script, under the ISC License, and
+npm-install-checks, under the BSD 2-Clause License, all in `LICENSE-npm`. Each file whose header
+names one of them is ported from it, at the commit or version the header names. Main's build
+inlines the packages main runs and writes their licenses beside it, in
+`dist/main/THIRD_PARTY_LICENSES.md`. The app runs on Electron (MIT), which ships its own notices
+and Chromium's.
 
 ## DeepSeek Harness
 
@@ -170,6 +172,101 @@ INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
 LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
+```
+
+## npm-normalize-package-bin
+
+License: `ISC`  
+Source: https://github.com/npm/npm-normalize-package-bin, version `5.0.0`
+
+```text
+The ISC License
+
+Copyright (c) npm, Inc.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+## @npmcli/package-json
+
+License: `ISC`  
+Source: https://github.com/npm/package-json, version `7.0.5`
+
+```text
+ISC License
+
+Copyright GitHub Inc.
+
+Permission to use, copy, modify, and/or distribute this
+software for any purpose with or without fee is hereby
+granted, provided that the above copyright notice and this
+permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND NPM DISCLAIMS ALL
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO
+EVENT SHALL NPM BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
+USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+## libnpmexec
+
+License: `ISC`  
+Source: https://github.com/npm/cli (`workspaces/libnpmexec`), version `10.3.2`
+
+```text
+The ISC License
+
+Copyright (c) GitHub Inc.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+## @npmcli/run-script
+
+License: `ISC`  
+Source: https://github.com/npm/run-script, version `10.0.4`
+
+```text
+The ISC License
+
+Copyright (c) npm, Inc.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
 ## npm-install-checks

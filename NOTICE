@@ -135,12 +135,14 @@ THE SOFTWARE.
 npm's packages
 ==============
 
-apps/desktop/node-shim/npm-config.mjs, npm-spec.mjs and npm-checks.mjs are ported from npm's own
-packages and keep their copyright headers; the desktop app's node shim includes them.
-npm-config.mjs reads npm's config as @npmcli/config 10.12.0 and ini 6.0.0 do, npm-spec.mjs a
-package spec as npm-package-arg 13.0.2, validate-npm-package-name 7.0.2 and hosted-git-info 9.0.3
-do, and npm-checks.mjs a project's devEngines as npm-install-checks 8.0.0 does. Each package's
-license follows under its name.
+apps/desktop/node-shim/npm-config.mjs, npm-spec.mjs, npm-exec.mjs and npm-checks.mjs are ported
+from npm's own packages and keep their copyright headers; the desktop app's node shim includes
+them. npm-config.mjs reads npm's config as @npmcli/config 10.12.0 and ini 6.0.0 do, npm-spec.mjs
+a package spec as npm-package-arg 13.0.2, validate-npm-package-name 7.0.2 and hosted-git-info
+9.0.3 do, npm-exec.mjs a package's bins and npm's PATH as npm-normalize-package-bin 5.0.0,
+@npmcli/package-json 7.0.5, libnpmexec 10.3.2 and @npmcli/run-script 10.0.4 do, and
+npm-checks.mjs a project's devEngines as npm-install-checks 8.0.0 does. Each package's license
+follows under its name.
 
 @npmcli/config
 --------------
@@ -235,6 +237,93 @@ INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
 LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
+
+npm-normalize-package-bin
+-------------------------
+
+https://github.com/npm/npm-normalize-package-bin
+
+The ISC License
+
+Copyright (c) npm, Inc.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+@npmcli/package-json
+--------------------
+
+https://github.com/npm/package-json
+
+ISC License
+
+Copyright GitHub Inc.
+
+Permission to use, copy, modify, and/or distribute this
+software for any purpose with or without fee is hereby
+granted, provided that the above copyright notice and this
+permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND NPM DISCLAIMS ALL
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO
+EVENT SHALL NPM BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
+USE OR PERFORMANCE OF THIS SOFTWARE.
+
+libnpmexec
+----------
+
+https://github.com/npm/cli
+
+The ISC License
+
+Copyright (c) GitHub Inc.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+@npmcli/run-script
+------------------
+
+https://github.com/npm/run-script
+
+The ISC License
+
+Copyright (c) npm, Inc.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 npm-install-checks
 ------------------
