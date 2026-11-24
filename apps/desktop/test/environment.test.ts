@@ -4,7 +4,8 @@
 // Ported from deepseek-harness apps/desktop/tests/login-shell-environment.spec.ts@2e39e70496
 //
 // deepseek's merge, with Eidolon's own rules: the launch environment's EIDOLON_* names win, Windows
-// reads and writes names in any case, and a respawn stays on main's data home.
+// reads and writes names in any case and merges the registry's variables, and a respawn stays on
+// main's data home.
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,10 +14,12 @@ import { backendEnv } from "../src/main/controller.ts";
 import {
   launchFlag,
   loginShellOff,
+  mergeRegistryEnvironment,
   mergeShellEnvironment,
   readEnvironment,
   startupEnvironment,
 } from "../src/main/environment.ts";
+import { type RegistryValue, registryScript } from "../src/main/registry-environment.ts";
 
 let directory: string;
 
@@ -34,6 +37,60 @@ function shell(name: string, body: string): string {
   chmodSync(path, 0o755);
   return path;
 }
+
+/**
+ * A stand-in powershell.exe, for the read's `powershell`, which runs on the launch environment, so
+ * on its PATH's tools: it checks it was given an encoded script, keeps the script, then runs `body`.
+ */
+function powershell(body: string): { readonly powershell: string; readonly script: () => string } {
+  const path = join(directory, "powershell.exe");
+  const kept = join(directory, "script");
+  writeFileSync(
+    path,
+    [
+      "#!/bin/sh",
+      '[ "$1 $2 $3 $4 $5" = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand" ] || exit 64',
+      `printf %s "$6" > '${kept}'`,
+      body,
+    ].join("\n"),
+  );
+  chmodSync(path, 0o755);
+  return {
+    powershell: path,
+    script: () => Buffer.from(readFileSync(kept, "utf8"), "base64").toString("utf16le"),
+  };
+}
+
+function running(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** One value as the registry script prints it. */
+interface Printed {
+  readonly Key: number;
+  readonly Name: string;
+  readonly Kind: string;
+  readonly Value: string;
+}
+
+/** A stand-in body that prints the registry script's output for `records`, which a later call replaces. */
+function prints(records: readonly Printed[]): string {
+  const file = join(directory, "registry.json");
+  writeFileSync(file, JSON.stringify(records));
+  return `cat '${file}'`;
+}
+
+const sz = (name: string, value: string): RegistryValue => ({ name, kind: "String", value });
+const expandSz = (name: string, value: string): RegistryValue => ({
+  name,
+  kind: "ExpandString",
+  value,
+});
 
 /** The keys of `env` that name `name` in any case. */
 function spellings(env: NodeJS.ProcessEnv, name: string): string[] {
@@ -110,6 +167,129 @@ describe("mergeShellEnvironment", () => {
   });
 });
 
+describe("mergeRegistryEnvironment", () => {
+  test("applies the system's values, then the user's, then the session's, and keeps what none has", () => {
+    const launch = {
+      Path: "C:\\Windows",
+      SystemRoot: "C:\\Windows",
+      USERPROFILE: "C:\\Users\\owner",
+      USERNAME: "owner",
+      temp: "C:\\Users\\owner\\AppData\\Local\\Temp",
+      FROM_LAUNCH: "kept",
+    };
+    const merged = mergeRegistryEnvironment(launch, [
+      [
+        sz("USERNAME", "SYSTEM"),
+        expandSz("TEMP", "%SystemRoot%\\TEMP"),
+        sz("BOTH", "system"),
+        sz("SYSTEM_ONLY", "system"),
+      ],
+      [expandSz("TEMP", "%USERPROFILE%\\AppData\\Local\\Temp\\2"), sz("BOTH", "user")],
+      [sz("USERNAME", "owner")],
+    ]);
+    expect(merged).toEqual({
+      Path: "C:\\Windows",
+      SystemRoot: "C:\\Windows",
+      USERPROFILE: "C:\\Users\\owner",
+      USERNAME: "owner",
+      temp: "C:\\Users\\owner\\AppData\\Local\\Temp\\2",
+      FROM_LAUNCH: "kept",
+      BOTH: "user",
+      SYSTEM_ONLY: "system",
+    });
+    expect(launch.temp).toBe("C:\\Users\\owner\\AppData\\Local\\Temp");
+  });
+
+  test("expands the user's values with the owner's USERNAME, which Windows sets after the system key's SYSTEM", () => {
+    const merged = mergeRegistryEnvironment({ SystemRoot: "C:\\Windows", USERNAME: "owner" }, [
+      [sz("USERNAME", "SYSTEM"), expandSz("Path", "%SystemRoot%\\system32;C:\\%USERNAME%")],
+      [
+        expandSz("Path", "C:\\Users\\%USERNAME%\\bin"),
+        expandSz("GOPATH", "C:\\Users\\%username%\\go"),
+      ],
+      [sz("USERNAME", "owner")],
+    ]);
+    expect(merged).toEqual({
+      SystemRoot: "C:\\Windows",
+      USERNAME: "owner",
+      // A system value's is SYSTEM, as Windows expands it.
+      Path: "C:\\Windows\\system32;C:\\SYSTEM;C:\\Users\\owner\\bin",
+      GOPATH: "C:\\Users\\owner\\go",
+    });
+  });
+
+  test("makes Path the system's then the user's, under the launch's one key", () => {
+    const launch = { PATH: "C:\\Stale;C:\\Users\\owner\\Stale", SystemRoot: "C:\\Windows" };
+    const merged = mergeRegistryEnvironment(launch, [
+      [expandSz("Path", "%SystemRoot%\\system32;C:\\Program Files\\Git\\cmd")],
+      [sz("path", "C:\\Users\\owner\\bin")],
+      [],
+    ]);
+    expect(merged).toEqual({
+      PATH: "C:\\Windows\\system32;C:\\Program Files\\Git\\cmd;C:\\Users\\owner\\bin",
+      SystemRoot: "C:\\Windows",
+    });
+    expect(spellings(merged, "PATH")).toEqual(["PATH"]);
+    expect(mergeRegistryEnvironment(launch, [[], [sz("Path", "C:\\Users\\owner\\bin")]])).toEqual({
+      PATH: "C:\\Users\\owner\\bin",
+      SystemRoot: "C:\\Windows",
+    });
+    // Windows adds no `;` after a Path that ends with one, nor after an empty one.
+    for (const system of ["C:\\Windows\\system32;", ""]) {
+      expect(
+        mergeRegistryEnvironment(launch, [
+          [sz("Path", system)],
+          [sz("Path", "C:\\Users\\owner\\bin")],
+        ]).PATH,
+      ).toBe(`${system}C:\\Users\\owner\\bin`);
+    }
+  });
+
+  test("expands REG_EXPAND_SZ against the variables so far, after the key's REG_SZ, and takes no other kind", () => {
+    const merged = mergeRegistryEnvironment({ SystemRoot: "C:\\Windows" }, [
+      [
+        expandSz(
+          "Path",
+          "%JAVA_HOME%\\bin;%systemroot%\\system32;%NOPE%\\x;C:\\50%\\y;%JAVA_HOME%\\z",
+        ),
+        sz("JAVA_HOME", "C:\\Java"),
+        sz("LITERAL", "%SystemRoot%\\literal"),
+        { name: "NUMBER", kind: "DWord", value: "1" },
+        { name: "LIST", kind: "MultiString", value: "a b" },
+      ],
+      [expandSz("FROM_USER", "%java_home%;%LITERAL%;100%")],
+    ]);
+    expect(merged).toEqual({
+      SystemRoot: "C:\\Windows",
+      // JAVA_HOME, a REG_SZ, is set before the Path listed ahead of it. An unknown name stays, and
+      // its closing % opens the next one.
+      Path: "C:\\Java\\bin;C:\\Windows\\system32;%NOPE%\\x;C:\\50%\\y;C:\\Java\\z",
+      JAVA_HOME: "C:\\Java",
+      LITERAL: "%SystemRoot%\\literal",
+      FROM_USER: "C:\\Java;%SystemRoot%\\literal;100%",
+    });
+  });
+
+  test("leaves what the shell's merge leaves: the probe's own, ELECTRON_* and the launch's EIDOLON_*", () => {
+    const merged = mergeRegistryEnvironment({ Eidolon_Home: "C:\\smoke", EIDOLON_PERSONA: "" }, [
+      [
+        sz("EIDOLON_HOME", "C:\\registry"),
+        sz("EIDOLON_PERSONA", "from-system"),
+        expandSz("EIDOLON_SHARED_SKILLS", "%EIDOLON_HOME%\\skills"),
+        sz("electron_run_as_node", "1"),
+        sz("PWD", "C:\\"),
+        sz("_", "C:\\Windows\\system32\\cmd.exe"),
+      ],
+      [sz("EIDOLON_PERSONA", "from-user")],
+    ]);
+    expect(merged).toEqual({
+      Eidolon_Home: "C:\\smoke",
+      EIDOLON_PERSONA: "from-user",
+      EIDOLON_SHARED_SKILLS: "C:\\smoke\\skills",
+    });
+  });
+});
+
 // The stand-in shell is a POSIX script.
 test.skipIf(process.platform === "win32")(
   "a respawn stays on main's data home after the rc's EIDOLON_HOME moves",
@@ -162,15 +342,113 @@ describe("loginShellOff", () => {
 });
 
 describe("readEnvironment", () => {
-  test("on Windows, takes a copy of the launch environment as it is, without running a shell", async () => {
-    const marker = join(directory, "ran");
-    const unused = shell("unused", `touch '${marker}'`);
-    const launch = { Path: "C:\\Windows" };
-    const read = await readEnvironment(launch, { platform: "win32", shells: [unused] });
-    expect(read).toEqual({ env: { Path: "C:\\Windows" }, failures: [] });
-    expect(read.env).not.toBe(launch);
-    expect(existsSync(marker)).toBe(false);
-  });
+  // The stand-ins are POSIX scripts.
+  test.skipIf(process.platform === "win32")(
+    "on Windows, merges the registry's variables over the launch's, without running a login shell",
+    async () => {
+      const marker = join(directory, "ran");
+      const unused = shell("unused", `touch '${marker}'`);
+      const stand = powershell(
+        prints([
+          { Key: 0, Name: "Path", Kind: "ExpandString", Value: "%SystemRoot%\\system32" },
+          { Key: 0, Name: "USERNAME", Kind: "String", Value: "SYSTEM" },
+          { Key: 1, Name: "Path", Kind: "String", Value: "C:\\Users\\owner\\bin" },
+          { Key: 2, Name: "USERNAME", Kind: "String", Value: "owner" },
+        ]),
+      );
+      const launch = { PATH: "/usr/bin:/bin", SystemRoot: "C:\\Windows", USERNAME: "owner" };
+      const read = await readEnvironment(launch, {
+        platform: "win32",
+        shells: [unused],
+        powershell: stand.powershell,
+      });
+      expect(read).toEqual({
+        env: {
+          PATH: "C:\\Windows\\system32;C:\\Users\\owner\\bin",
+          SystemRoot: "C:\\Windows",
+          USERNAME: "owner",
+        },
+        failures: [],
+      });
+      expect(launch.PATH).toBe("/usr/bin:/bin");
+      expect(stand.script()).toBe(
+        registryScript([
+          "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+          "HKCU:\\Environment",
+          "HKCU:\\Volatile Environment",
+        ]),
+      );
+      expect(existsSync(marker)).toBe(false);
+    },
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "on Windows, keeps the launch environment when the read fails, and logs why",
+    async () => {
+      const stand = powershell("printf 'Access is denied.\\r\\nAt line:1 char:1\\n' >&2; exit 1");
+      const missing = join(directory, "missing.exe");
+      const warn = vi.fn<(message: string) => void>();
+      for (const program of [stand.powershell, missing]) {
+        const launch = { PATH: "/usr/bin:/bin" };
+        const read = await readEnvironment(launch, {
+          platform: "win32",
+          powershell: program,
+          log: { warn },
+        });
+        expect(read).toEqual({ env: launch, failures: [] });
+        expect(read.env).not.toBe(launch);
+      }
+      const why =
+        "Eidolon: couldn't read the registry's variables, so the backend runs on the launch's";
+      expect(warn.mock.calls).toEqual([
+        [`${why}: exit 1: Access is denied.`],
+        [`${why}: spawn ${missing} ENOENT`],
+      ]);
+    },
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "on Windows, an abort, as at a quit, kills PowerShell and keeps the launch environment",
+    async () => {
+      const pid = join(directory, "pid");
+      const stand = powershell(`echo $$ > '${pid}'\nexec sleep 30`);
+      const warn = vi.fn<(message: string) => void>();
+      const controller = new AbortController();
+      const launch = { PATH: "/usr/bin:/bin" };
+      const read = readEnvironment(launch, {
+        platform: "win32",
+        powershell: stand.powershell,
+        signal: controller.signal,
+        log: { warn },
+      });
+      const child = await vi.waitFor(() => {
+        const value = Number(readFileSync(pid, "utf8"));
+        expect(value).toBeGreaterThan(0);
+        return value;
+      });
+      controller.abort();
+      await expect(read).resolves.toEqual({ env: launch, failures: [] });
+      expect(warn.mock.calls).toEqual([
+        [
+          "Eidolon: couldn't read the registry's variables, so the backend runs on the launch's: aborted",
+        ],
+      ]);
+      await vi.waitFor(() => expect(running(child)).toBe(false));
+    },
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "on Windows, with EIDOLON_DESKTOP_LOGIN_SHELL off in any case, takes the launch environment without reading the registry",
+    async () => {
+      const marker = join(directory, "ran");
+      const stand = powershell(`touch '${marker}'`);
+      const launch = { PATH: "/usr/bin:/bin", eidolon_desktop_login_shell: "off" };
+      await expect(
+        readEnvironment(launch, { platform: "win32", powershell: stand.powershell }),
+      ).resolves.toEqual({ env: launch, failures: [] });
+      expect(existsSync(marker)).toBe(false);
+    },
+  );
 
   test("with EIDOLON_DESKTOP_LOGIN_SHELL=0, takes the launch environment as it is", async () => {
     const marker = join(directory, "ran");
@@ -293,5 +571,21 @@ describe.skipIf(process.platform === "win32")("startupEnvironment", () => {
       PATH: "/second/bin:/usr/bin:/bin",
     });
     expect(reads()).toBe(2);
+  });
+
+  test("on Windows, a cold start's first spawn takes the startup read, and a later one reads the registry again", async () => {
+    const runs = join(directory, "runs");
+    const path = (folder: string) =>
+      prints([{ Key: 0, Name: "Path", Kind: "String", Value: folder }]);
+    const stand = powershell(`echo x >> '${runs}'\n${path("C:\\First")}`);
+    const startup = await startupEnvironment(
+      { PATH: "/usr/bin:/bin" },
+      { platform: "win32", powershell: stand.powershell },
+    );
+    expect(startup.env.PATH).toBe("C:\\First");
+    await expect(startup.forSpawn()).resolves.toBe(startup.env);
+    path("C:\\Second");
+    await expect(startup.forSpawn()).resolves.toMatchObject({ PATH: "C:\\Second" });
+    expect(readFileSync(runs, "utf8")).toBe("x\nx\n");
   });
 });

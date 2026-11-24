@@ -1,7 +1,9 @@
 import { ph, t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
+import { FolderPlusIcon } from "lucide-react";
 import { type ReactNode, useId, useMemo } from "react";
+import { toast } from "sonner";
 import { QuietBadge } from "@/components/quiet-badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
@@ -17,10 +19,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { accountsQuery } from "@/lib/accounts";
 import type { SettingRow } from "@/lib/api";
+import { desktop } from "@/lib/desktop";
+import { toastError } from "@/lib/feedback";
 import { ROLE_LABELS } from "@/lib/labels";
 import { defaultVoice, providerById, providerName, providerOfAccount } from "@/lib/providers";
 import { cn } from "@/lib/utils";
 import {
+  appendPath,
   type Control,
   controlFor,
   envDraft,
@@ -463,8 +468,8 @@ function ControlInput({
         </Select>
       );
     }
-    case "paths":
-      return (
+    case "paths": {
+      const textarea = (
         <Textarea
           {...common}
           className={cn(mono, width)}
@@ -473,6 +478,36 @@ function ControlInput({
           onChange={(event) => onDraft(event.target.value)}
         />
       );
+      const choose = control.folders ? desktop()?.chooseFolder : undefined;
+      if (choose === undefined) return textarea;
+      return (
+        <div className="flex flex-col items-start gap-2">
+          {textarea}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={locked}
+            // The dialog is modal to the window, so the draft can't change while it's open.
+            onClick={() =>
+              choose().then((folder) => {
+                if (folder === null) return;
+                const next = appendPath(draft, folder);
+                if (next !== null) onDraft(next);
+                else {
+                  toast.error(t`This folder can't be added.`, {
+                    description: t`Its path has a comma, a line break or a space at an end. Rename the folder, or use Allow Once when a task asks for it.`,
+                  });
+                }
+              }, toastError)
+            }
+          >
+            <FolderPlusIcon />
+            {t`Choose Folder`}
+          </Button>
+        </div>
+      );
+    }
     default:
       return (
         <Input

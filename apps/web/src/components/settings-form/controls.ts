@@ -250,6 +250,8 @@ export function orphanedByProvider(
 /** Python's `str.isspace()` set, which the readers strip from each item. */
 export const SPACE_CLASS = String.raw`\t\n\v\f\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000`;
 const EDGES = new RegExp(`^[${SPACE_CLASS}]+|[${SPACE_CLASS}]+$`, "g");
+const TRAILING = new RegExp(`[${SPACE_CLASS}]+$`);
+const CONTROL = /\p{Cc}/u;
 
 export function strip(text: string): string {
   return text.replace(EDGES, "");
@@ -260,6 +262,19 @@ function items(text: string, separator: string | RegExp): string[] {
     .split(separator)
     .map(strip)
     .filter((item) => item !== "");
+}
+
+/**
+ * A paths draft with `path` on a line of its own after the rest, as the folder dialog adds one; the
+ * draft as it is when one of its lines already holds `path`. Null for a path the list can't hold as
+ * it is: the draft splits it at a line break, the reader at a comma and strips whitespace off its
+ * ends, and the server refuses a control character.
+ */
+export function appendPath(draft: string, path: string): string | null {
+  if (path.includes(",") || CONTROL.test(path) || strip(path) !== path) return null;
+  if (items(draft, /\r?\n/).includes(path)) return draft;
+  const kept = draft.replace(TRAILING, "");
+  return kept === "" ? path : `${kept}\n${path}`;
 }
 
 const FLAG_ON = new Set(["true", "1", "yes", "on"]);

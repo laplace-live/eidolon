@@ -1,8 +1,8 @@
 // The payloads staged in apps/desktop/.stage (`bun run build:desktop` stages this machine's): what
-// each holds, pinned to bun.lock and pruned, its natives loading from it, on Windows the VC++
-// runtime and the signatures, and the packaged app holding it file for file. A target with no
-// stage, or one staged from another version or bun.lock, skips, unless EIDOLON_REQUIRE_STAGE=1 and
-// it is this machine's.
+// each holds, pinned to bun.lock and pruned, its natives loading from it, its node shim, on Windows
+// the VC++ runtime and the signatures, and the packaged app holding it file for file. A target with
+// no stage, or one staged from another version or bun.lock, skips, unless EIDOLON_REQUIRE_STAGE=1
+// and it is this machine's.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
@@ -10,8 +10,23 @@ import { isDeepStrictEqual } from "node:util";
 import { describe, expect, test } from "vitest";
 import { packageManifest } from "../../eidolon/scripts/build.ts";
 import { PLATFORMS, VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
-import { lockDrift, lockedTree, pinOverrides, readBunLock } from "../scripts/lockfile.ts";
+import {
+  lockDrift,
+  lockedTree,
+  pinOverrides,
+  readBunLock,
+  resolveFrom,
+  supports,
+} from "../scripts/lockfile.ts";
 import { checkNatives } from "../scripts/natives.ts";
+import {
+  LAUNCHER_FILES,
+  LAUNCHER_SOURCES,
+  NODE_SHIM,
+  POSIX_LAUNCHERS,
+  shimLaunchers,
+  shimPnpm,
+} from "../scripts/node-shim.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
   electronZip,
@@ -90,6 +105,25 @@ function packageOf(path: string): string {
   return [...parts.slice(0, at + 1), ...name].join("/");
 }
 
+/** Each package folder directly under `modules`, a scope's included. */
+function packageDirs(modules: string): string[] {
+  const dirs = (parent: string) =>
+    readdirSync(parent, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => join(parent, entry.name));
+  return dirs(modules).flatMap((dir) => (basename(dir).startsWith("@") ? dirs(dir) : [dir]));
+}
+
+function manifestOf(dir: string): {
+  name: string;
+  version: string;
+  license?: string;
+  os?: string[];
+  cpu?: string[];
+} {
+  return JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+}
+
 /** THIRD_PARTY_LICENSES.txt's sections, by title. */
 function licenseSections(text: string): Map<string, string> {
   const parts = text.split(/^={78}\n(.+)\n={78}\n/m);
@@ -106,6 +140,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
   const current = staged && isCurrent(payload);
   const { os, cpu, onnxruntime } = TARGETS[target];
   const modules = join(payload, "node_modules");
+  const pnpm = shimPnpm(payload);
   const title = `the ${target} payload${staged && !current ? ` (${STALE})` : ""}`;
 
   describe.skipIf(!current && !(REQUIRED && target === HOST))(title, () => {
@@ -134,8 +169,10 @@ for (const target of Object.keys(TARGETS) as Target[]) {
         expect([file, files.includes(file)]).toEqual([file, true]);
       }
       expect(links).toEqual([]);
+      // The node shim's launchers are the one .bin.
+      const launchers = relative(payload, shimLaunchers(payload)).split("\\").join("/");
       expect(files.filter((file) => /(^|\/)(\.bin\/|\.?package-lock\.json$)/.test(file))).toEqual(
-        [],
+        LAUNCHER_FILES.map((file) => `${launchers}/${file}`).sort(),
       );
     });
 
@@ -184,6 +221,59 @@ for (const target of Object.keys(TARGETS) as Target[]) {
           expect([prefix, line, text.includes(line)]).toEqual([prefix, line, true]);
         }
       }
+      // The node shim's pnpm, and each package its dist/ bundles.
+      for (const dir of [pnpm, ...packageDirs(join(pnpm, "dist", "node_modules"))]) {
+        const { name, version, license } = manifestOf(dir);
+        const section = `${name} ${version} (${license})`;
+        expect([section, licenses.has(section)]).toEqual([section, true]);
+      }
+      expect(licenses.get(`pnpm ${manifestOf(pnpm).version} (MIT)`)).toBe(
+        readFileSync(join(pnpm, "LICENSE"), "utf8").trim(),
+      );
+    });
+
+    test("holds the node shim: the checkout's launchers, sh's executable, and the pnpm bun.lock pins", () => {
+      const bin = shimLaunchers(payload);
+      for (const file of LAUNCHER_FILES) {
+        expect([file, readFileSync(join(bin, file), "utf8")], STALE).toEqual([
+          file,
+          readFileSync(join(LAUNCHER_SOURCES, file), "utf8"),
+        ]);
+      }
+      if (process.platform !== "win32") {
+        for (const name of POSIX_LAUNCHERS) {
+          expect([name, statSync(join(bin, name)).mode & 0o777]).toEqual([name, 0o755]);
+        }
+      }
+      const { version } = manifestOf(pnpm);
+      const { devDependencies } = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8"));
+      expect(version).toBe(devDependencies.pnpm);
+      expect(resolveFrom(readBunLock(join(ROOT, "bun.lock")), [], "pnpm")?.version).toBe(version);
+      // With what the shim's npx takes from pnpm's dist: npm's semver, and node-gyp's bin for
+      // npm's PATH.
+      for (const file of [
+        "bin/pnpm.mjs",
+        "bin/pnpx.mjs",
+        "dist/pnpm.mjs",
+        "dist/node_modules/semver/index.js",
+        "dist/node-gyp-bin/node-gyp",
+      ]) {
+        expect([file, existsSync(join(pnpm, file))]).toEqual([file, true]);
+      }
+      // The Windows release signs every .exe it packs.
+      const { files } = listing(join(payload, NODE_SHIM));
+      expect(files.filter((file) => file.endsWith(".exe"))).toEqual([]);
+    });
+
+    test("keeps only the target's natives among the packages pnpm bundles", () => {
+      const natives = packageDirs(join(pnpm, "dist", "node_modules"))
+        .map(manifestOf)
+        .filter((fields) => fields.os !== undefined || fields.cpu !== undefined);
+      expect(natives.length).toBeGreaterThan(0);
+      for (const fields of natives) {
+        const admitted = supports(fields.os, os) && supports(fields.cpu, cpu);
+        expect([fields.name, admitted]).toEqual([fields.name, true]);
+      }
     });
 
     test("is the tree bun.lock pins, as npm ls shows it", () => {
@@ -227,25 +317,32 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       "has the VC++ runtime from one redist beside the natives that import it, as new as their linker",
       () => {
         const copies = new Map<string, string[]>();
-        for (const file of listing(modules).files) {
+        for (const file of listing(payload).files) {
           if (VC_RUNTIME_DLLS.includes(basename(file).toLowerCase())) {
             copies.set(dirname(file), [...(copies.get(dirname(file)) ?? []), basename(file)]);
           }
         }
-        expect(copies.get("onnxruntime-node/bin/napi-v6/win32/x64")?.sort()).toEqual(
+        expect(copies.get("node_modules/onnxruntime-node/bin/napi-v6/win32/x64")?.sort()).toEqual(
           [...VC_RUNTIME_DLLS].sort(),
         );
-        expect(copies.get("@lancedb/lancedb-win32-x64-msvc")).toEqual(["vcruntime140.dll"]);
+        expect(copies.get("node_modules/@lancedb/lancedb-win32-x64-msvc")).toEqual([
+          "vcruntime140.dll",
+        ]);
+        // pnpm's reflink addon, wherever the shim keeps pnpm.
+        const shim = [...copies].filter(([folder]) => folder.startsWith(`${NODE_SHIM}/`));
+        expect(shim.map(([folder, dlls]) => [basename(folder), dlls])).toEqual([
+          ["reflink-win32-x64-msvc", ["vcruntime140.dll"]],
+        ]);
         const hashes = new Map<string, Set<string>>();
         for (const [folder, dlls] of copies) {
-          const natives = readdirSync(join(modules, folder)).filter(
+          const natives = readdirSync(join(payload, folder)).filter(
             (name) => /\.(node|dll)$/i.test(name) && !dlls.includes(name),
           );
           for (const dll of dlls) {
-            const file = join(modules, folder, dll);
+            const file = join(payload, folder, dll);
             const version = readPe(file)?.fileVersion ?? "0";
             for (const native of natives) {
-              const linker = readPe(join(modules, folder, native))?.linker ?? "99";
+              const linker = readPe(join(payload, folder, native))?.linker ?? "99";
               expect([dll, version, native, linker, compareVersions(version, linker) >= 0]).toEqual(
                 [dll, version, native, linker, true],
               );
@@ -288,6 +385,12 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       staged && existsSync(packaged) && statSync(packaged).mtimeMs >= statSync(payload).mtimeMs;
     test.skipIf(!repackaged)("is what the app packaged after it holds, file for file", () => {
       expect(listing(packaged).files).toEqual(listing(payload).files);
+      if (process.platform !== "win32") {
+        for (const name of POSIX_LAUNCHERS) {
+          const mode = statSync(join(shimLaunchers(packaged), name)).mode & 0o777;
+          expect([name, mode]).toEqual([name, 0o755]);
+        }
+      }
     });
   });
 }

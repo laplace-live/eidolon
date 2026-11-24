@@ -85,7 +85,8 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
   the `.env` put in the server's environment reaches either, unless an mcp.json entry names it.
   A command's `PATH` starts with `<data home>/bin`, Eidolon's `eidolon` command and the managed
   yt-dlp, and it gets `EIDOLON_TASK_PERSONA`, the id of the persona whose chat started the task
-  ([Commands](#commands)).
+  ([Commands](#commands)). In the desktop app an MCP server's `PATH` ends with the app's node
+  shim, and it gets `EIDOLON_NODE` ([MCP servers](#mcp-servers)); a command never does.
 - **Of the file tools, only `skill` reads in the data home or the app's own folder,** and only a
   listed or named skill's own files, never a dot-file or a dot-folder; `bash_output` reads only
   its task's own logs there, and commands and MCP servers run outside `FolderPolicy`. Of a skill,
@@ -328,7 +329,9 @@ call that started it. Each command waits for the owner's OK first ([Approvals](#
   paid stages stay Studio's. An app task's commands also get
   `EIDOLON_TASK_PERSONA` (`BashJobs`' `variables`), its chat's persona; a skill names it as
   `--persona "$EIDOLON_TASK_PERSONA"`, since a checkout's `.env` overrides `EIDOLON_PERSONA` in the
-  CLI.
+  CLI. The desktop app can also install `eidolon` for the owner's own terminals, from Settings →
+  Desktop ([desktop.md](desktop.md#the-terminal-command)): a launcher in the app's resources, apart
+  from this one, which still leads a task's `PATH`.
 - **Its output** goes to `<task>/bash/<n>.log` (0600, in a 0700 `bash/`) from its first byte; the
   call shows the tail, ANSI codes and redrawn lines cleaned, binary output named and not shown,
   and `bash_output` pages the log. At 16 MB the command is killed, and its result says to send big
@@ -485,8 +488,14 @@ the task's card unless the owner always allows that tool ([Approvals](#approvals
 - **Where it runs:** in `<data home>/mcp/`, 0700 and denied to every task, unless its `cwd` is
   absolute or starts with `~/`; a relative one is refused. Its environment is `shellEnv()`, with
   the PATH a command of the task got when the task's first run started the server (a folder
-  granted later stays on it), plus the entry's own `env`; its roots are the task's folder. The
-  manager passes nothing of its own environment.
+  granted later stays on it), then the entry's own `env` over it; its roots are the task's folder.
+  The manager passes nothing of its own environment. In the desktop app, whose backend runs on
+  Electron's Node, that `PATH` also ends with the app's [node shim](desktop.md#the-node-shim) and
+  the server gets `EIDOLON_NODE`, so an entry that runs `npx`, `node`, `pnpm`, `pnpx` or `pnpm dlx`
+  starts on a computer with no Node, on the app's own binary, `npx` deciding and installing as npm's
+  npx does, through the pnpm the app bundles; the owner's own Node, where they have one, comes
+  first. A `PATH` in the entry's `env` replaces all of that `PATH`, the shim's folder included, as
+  an `EIDOLON_NODE` there replaces the app's.
 - **One session per task** (`McpSession`), opened at its first run, every server at once within
   its `timeout` (in seconds, default 60, at most 2,147,483, `setTimeout`'s limit; it also bounds
   each call and a server's progress renews). The run's Stop and the server's stop abort an open,

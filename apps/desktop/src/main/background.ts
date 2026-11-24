@@ -5,8 +5,11 @@
 import { basename, extname, join } from "node:path";
 import type {
   AboutPanelOptionsOptions,
+  BrowserWindow,
   MenuItemConstructorOptions,
   MessageBoxOptions,
+  NotificationConstructorOptions,
+  OpenDialogOptions,
   PopupOptions,
 } from "electron";
 import { launchFlag } from "./environment.ts";
@@ -142,6 +145,16 @@ export interface MessageBoxAnswer {
   readonly checkboxChecked: boolean;
 }
 
+/** What a shown notification tells: a click on it, or that it couldn't show. */
+export interface NoticeEvents {
+  click(): void;
+  failed(error: string): void;
+}
+
+export interface NoticeHandle {
+  close(): void;
+}
+
 /**
  * The calls into Electron that could put something in front of the owner. Chromium opens a file
  * input's chooser, a date field's calendar and a datalist's suggestions with none of them, and
@@ -156,6 +169,10 @@ export interface NativeUi {
   /** Makes the app active, over whichever app is. */
   stealFocus(): void;
   popup(menu: readonly MenuItemConstructorOptions[], options: PopupOptions): void;
+  /** The native folder dialog; the folder picked, or null when cancelled. */
+  chooseFolder(window: BrowserWindow | null, options: OpenDialogOptions): Promise<string | null>;
+  /** Shows one notification; the handle closes it. Keep the handle: Electron drops a collected one. */
+  notify(options: NotificationConstructorOptions, events: NoticeEvents): NoticeHandle;
 }
 
 function labels(menu: readonly MenuItemConstructorOptions[]): string {
@@ -166,7 +183,9 @@ function labels(menu: readonly MenuItemConstructorOptions[]): string {
 
 /**
  * `electron` as it is, or in background mode calls that log what they would have shown and answer
- * as the owner taking the defaults would: a message box its default button.
+ * as the owner taking the defaults would: a message box its default button, a folder dialog its
+ * Cancel. A notification never reaches Electron's Notification, whose very presenter asks macOS for
+ * permission and rewrites a Start menu shortcut and a COM key on Windows.
  */
 export function nativeUi(background: boolean, electron: NativeUi, log: Log): NativeUi {
   if (!background) return electron;
@@ -194,6 +213,15 @@ export function nativeUi(background: boolean, electron: NativeUi, log: Log): Nat
     stealFocus() {},
     popup(menu) {
       log.info(`Eidolon: background mode didn't open a menu: ${labels(menu)}`);
+    },
+    async chooseFolder() {
+      log.info("Eidolon: background mode didn't open the folder dialog");
+      return null;
+    },
+    notify({ title, body }) {
+      const lines = (body ?? "").replaceAll(/\r?\n/g, " / ");
+      log.info(`Eidolon: background mode didn't show a notification: ${title ?? ""}: ${lines}`);
+      return { close() {} };
     },
   };
 }

@@ -120,6 +120,8 @@ export class StdioTransport extends TransportEvents implements McpTransport {
     if (this.#closed) throw new McpConnectionClosedError();
     this.#started = true;
     // Node starts no .cmd, as npx is on Windows, but through cmd.exe, which cross-spawn quotes for.
+    // It doubles only one backslash of a run before a quote or a word's end, so such a word reaches
+    // the program changed (https://github.com/moxystudio/node-cross-spawn/issues/188).
     const child = crossSpawn(this.options.command, this.options.args ?? [], {
       cwd: this.options.cwd,
       env: { ...this.options.env },

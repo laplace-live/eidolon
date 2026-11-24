@@ -193,8 +193,8 @@ export class WindowPages {
 }
 
 /**
- * The menus' commands to the app's page, which hears them only once its script listens. One sent
- * before that, while the window shows a shell page, loads, or was made again, waits for it.
+ * Commands for the app's page, which hears them only once its script listens. One sent before
+ * that, while the window shows a shell page, loads, or was made again, waits for it.
  */
 export class PageCommands {
   readonly #send: (command: DesktopCommand) => void;
@@ -205,7 +205,7 @@ export class PageCommands {
     this.#send = send;
   }
 
-  /** A menu's command: to the page now if it listens, else once it does. */
+  /** To the page now if it listens, else once it does. */
   send(command: DesktopCommand): void {
     if (this.#listening) this.#send(command);
     else this.#held = command;

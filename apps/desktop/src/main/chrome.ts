@@ -1,6 +1,7 @@
 // The window's chrome and the app's bridge to main: the theme the page reports, which
 // native menus, dialogs and the caption buttons follow; the fullscreen mark on macOS; the page's
-// language; and the versions its bridge carries.
+// language; the versions its bridge carries; and the folder dialog and the system options it asks
+// main for.
 import { type BrowserWindow, ipcMain, nativeTheme } from "electron";
 import {
   accepts,
@@ -11,6 +12,7 @@ import {
   isThemeSetting,
   type Language,
 } from "../shared/bridge.ts";
+import { type AppInvokes, appInvokes } from "./app-invokes.ts";
 import { ipcSender, mainWindow } from "./window.ts";
 import { titleBarOverlay } from "./window-options.ts";
 
@@ -36,7 +38,7 @@ export function dressWindow(win: BrowserWindow): void {
   }
 }
 
-export interface AppBridge {
+export interface AppBridge extends AppInvokes {
   /** The desktop's version and the server's, as the backend last reported it. */
   readonly versions: () => DesktopVersions;
   readonly language: (language: Language) => void;
@@ -45,9 +47,9 @@ export interface AppBridge {
 }
 
 /**
- * The app page's messages, each taken only from the window's main frame at eidolon-app://app. The
- * theme setting goes to `themeSource` as it is: a resolved theme would pin prefers-color-scheme and
- * stop the page's System from following the OS.
+ * The app page's messages and invokes, each taken only from the window's main frame at
+ * eidolon-app://app. The theme setting goes to `themeSource` as it is: a resolved theme would pin
+ * prefers-color-scheme and stop the page's System from following the OS.
  */
 export function handleAppBridge(bridge: AppBridge): void {
   ipcMain.on(BRIDGE.theme, (event, setting: unknown) => {
@@ -67,9 +69,16 @@ export function handleAppBridge(bridge: AppBridge): void {
   ipcMain.on(BRIDGE.versions, (event) => {
     event.returnValue = accepts(BRIDGE.versions, ipcSender(event)) ? bridge.versions() : null;
   });
+  for (const [channel, answer] of appInvokes(bridge)) {
+    // The sender is read before anything awaits: senderFrame turns null once the page navigates.
+    ipcMain.handle(channel, (event, argument: unknown) => answer(ipcSender(event), argument));
+  }
 }
 
-/** Hands the app's page a menu's command, such as opening Settings; a shell page has no listener. */
+/**
+ * Hands the app's page a menu's or a notification's command, such as opening Settings; a shell page
+ * has no listener.
+ */
 export function sendCommand(command: DesktopCommand): void {
   mainWindow()?.webContents.send(BRIDGE.command, command);
 }

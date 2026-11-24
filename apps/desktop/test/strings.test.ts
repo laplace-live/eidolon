@@ -32,8 +32,8 @@ describe("STRINGS", () => {
     expect(Object.keys(STRINGS)).toEqual([...LANGUAGES]);
     expect(shape(zh).sort()).toEqual(shape(en).sort());
     for (const language of LANGUAGES) {
-      const { label, text } = STRINGS[language];
-      const blank = [...Object.entries(label), ...Object.entries(text)]
+      const { label, text, notice } = STRINGS[language];
+      const blank = [...Object.entries(label), ...Object.entries(text), ...Object.entries(notice)]
         .filter(([, value]) => typeof value === "string" && value.trim() === "")
         .map(([key]) => `${language} ${key}`);
       expect(blank).toEqual([]);
@@ -61,8 +61,36 @@ describe("STRINGS", () => {
       en.text.checkFailedTitle,
       en.text.downloadFailedTitle,
       en.text.readOnlyTitle,
+      en.text.chooseFolder,
+      en.text.installCommandPrompt,
+      en.text.removeCommandPrompt,
     ];
     expect(titles.filter((title) => titleCase(title) === title)).toEqual([]);
+  });
+
+  test("a task notification's lines are sentence case, ending with no stop, in both languages", () => {
+    const lines = Object.entries(en.notice);
+    expect(lines).toHaveLength(14);
+    expect(lines.filter(([, line]) => titleCase(line) === line)).toEqual([]);
+    for (const language of LANGUAGES) {
+      const stopped = Object.entries(STRINGS[language].notice).filter(([, line]) =>
+        /[.。!！]$/.test(line),
+      );
+      expect([language, stopped]).toEqual([language, []]);
+    }
+  });
+
+  test("the folder dialog and macOS's password prompt for the terminal command", () => {
+    expect([en.label.chooseFolderTitle, en.label.chooseFolderButton]).toEqual([
+      "Choose a Folder",
+      "Choose",
+    ]);
+    for (const { text } of [en, zh]) {
+      for (const prompt of [text.installCommandPrompt, text.removeCommandPrompt]) {
+        expect(prompt).toContain("eidolon");
+        expect(prompt).toContain("/usr/local/bin");
+      }
+    }
   });
 
   test("the update's labels are Title Case, and the Chinese ones the web app's where it has them", () => {

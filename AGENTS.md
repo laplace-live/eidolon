@@ -84,7 +84,7 @@ a row here and writing the prose there — not a new section in this file.**
 | settings files, credentials, the data home, a persona's folder or its sources | [personas.md](docs/personas.md) |
 | the offline chain (`packages/ingest` and its `laplace-*` commands) or their `--json` events | [typescript.md](docs/typescript.md#the-offline-chain) |
 | the local web app (`apps/web`, `apps/bot/src/local`): local mode, its API, jobs or security | [web-app.md](docs/web-app.md) |
-| the desktop app (`apps/desktop`): its main process, the backend it stages and spawns, the `eidolon-app:` forwarder, attaching to a running server, its window, environment, logs or packaging, background mode, its tests and smokes, `desktop.yml`, its updater (`update-flow.ts`, `updater.ts`), its releases (the signing overlay, the signed build's checks, the R2 upload, `changelog.json` and `releases.json`), or an Electron bump | [desktop.md](docs/desktop.md) |
+| the desktop app (`apps/desktop`): its main process, the backend it stages and spawns, the `eidolon-app:` forwarder, attaching to a running server, its window and bridge, task notifications, the folder dialog, Open at Login, the terminal command and its launchers, its environment (the Windows registry's included), the node shim, logs or packaging, background mode, its tests and smokes, `desktop.yml`, its updater (`update-flow.ts`, `updater.ts`), its releases (the signing overlay, the signed build's checks, the R2 upload, `changelog.json` and `releases.json`), or an Electron bump | [desktop.md](docs/desktop.md) |
 | chats, the chat log format, the turn engine, group chats' director, voice messages, or the images and text files the viewer sends (`packages/chat`, `packages/engine`, `packages/engine/src/seen.ts`, `apps/bot/src/images.ts`, `packages/context/src/director.ts`, `packages/providers/src/speech/batch`) | [chat.md](docs/chat.md) |
 | the production chat endpoint (`apps/bot/src/chat`, `/api/chat/*`, a call inside a chat), its signing, quotas or `EIDOLON_CHAT_SECRET` | [chat.md](docs/chat.md#production-the-browser-keeps-the-chat) |
 | the voice engine (`packages/voice`, `packages/webrtc`, `packages/runtime`), its models, or call-mode turns | [voice-engine.md](docs/voice-engine.md) |
@@ -188,10 +188,10 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`; a task that needs a lookup and a run, which names its kind, asks on its card before the command and searches. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
 | `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64 and Windows x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, loads its native modules, and stops it |
 | `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
-| `apps/desktop`, or what its payload takes from `apps/eidolon`'s stage | `bun run typecheck`, `bun run lint` and `bun run test apps/desktop`, whose tests never load `electron`; then `bun run build:desktop`, `bun run package:desktop` and `EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts`, which also holds the packaged payload to the stage; then both [smokes](docs/desktop.md#the-smokes), which bill nothing and show nothing: `bun run smoke:desktop` (the packaged app's natives, its backend's API, a restart and `--quit`) and, on macOS, `bun run smoke:desktop:dev`, which builds and walks the unpackaged app (Home, a chat, a call, Restart, attaching and quitting). `desktop.yml` runs the packaged smoke on Windows too. An Electron bump follows [desktop.md's procedure](docs/desktop.md#bumping-electron) |
+| `apps/desktop`, or what its payload takes from `apps/eidolon`'s stage | `bun run typecheck`, `bun run lint` and `bun run test apps/desktop`, whose tests never load `electron`; then `bun run build:desktop`, `bun run package:desktop` and `EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts`, which also holds the packaged payload to the stage; then both [smokes](docs/desktop.md#the-smokes), which bill nothing and show nothing: `bun run smoke:desktop` (the packaged app's natives, the `eidolon` command and the node shim's launchers, its backend's API, a restart and `--quit`) and, on macOS, `bun run smoke:desktop:dev`, which builds and walks the unpackaged app (Home, a chat, a call, Restart, Choose Folder, Settings' Desktop options, a waiting task's notifications, attaching and quitting). `desktop.yml` runs the packaged smoke on Windows too. An Electron bump follows [desktop.md's procedure](docs/desktop.md#bumping-electron) |
 | the desktop app's release: `apps/desktop/electron-builder.release.mjs`, `apps/desktop/scripts/signed-check.ts`, or `desktop.yml`'s tag check, signing, upload or index | the row above, whose `bun run test apps/desktop` holds the overlay to electron-builder's loader and schema and the checks' verdicts to the tools' output; then, since only a run proves them, a `sign` dispatch from `electron` or `master` that passes both legs (notarized and stapled on macOS, Authenticode-valid on Windows), and for the index a `release_index` dispatch, which rewrites the live `releases.json` from R2's listing. The upload itself runs only from a release's tag ([desktop.md](docs/desktop.md#releasing)) |
 | the desktop app's updater (`update-flow.ts`, `updater.ts`, `electron-builder.yml`'s `publish`), or its update test (`apps/desktop/scripts/update-test.ts` and `update-test/`, `desktop.yml`'s `update-test` job) | the desktop row, whose `bun run test apps/desktop` holds the flow to background mode's answers and the test's feed and steps to electron-updater's URLs and the updater's lines; then, since only signed builds update, an `update_test` dispatch from `electron` or `master` that passes both legs: a signed 0.0.1 updated to 0.0.2 through the real updater ([the update test](docs/desktop.md#the-update-test)). The script refuses to run outside CI |
-| `jsRuntime()` (`packages/config/src/runtime.ts`), or a test that spawns `process.execPath` with an environment of its own | the gates above, then the backend suite on Electron's Node, `node apps/desktop/scripts/test-on-electron.ts` ([the Electron lane](docs/desktop.md#the-electron-lane)): there `process.execPath` is Electron's binary, which starts as an app, not as Node, unless the child's environment carries `jsRuntime().env` |
+| `jsRuntime()` (`packages/config/src/runtime.ts`), the node shim (`apps/desktop/node-shim`, or `nodeShim()` and `serverEnv()` in `packages/assistant/src/mcp/session.ts`), or a test that spawns `process.execPath` with an environment of its own | the gates above, then the backend suite on Electron's Node, `node apps/desktop/scripts/test-on-electron.ts` ([the Electron lane](docs/desktop.md#the-electron-lane)): there `process.execPath` is Electron's binary, which starts as an app, not as Node, unless the child's environment carries `jsRuntime().env`, and only there do MCP servers start through the node shim |
 
 ## Rules
 
@@ -433,7 +433,9 @@ the layout's one line.
   server's as the task's first run found it), so no `.env` key reaches one unless an `mcp.json`
   entry names it. A command's `PATH` starts with `<data home>/bin`, where the app writes the
   `eidolon` command at each start beside the managed yt-dlp, and it gets `EIDOLON_TASK_PERSONA`,
-  its chat's persona; `eidolon` sets its own data home and runs on the app's own Node.
+  its chat's persona; `eidolon` sets its own data home and runs on the app's own Node. Inside the
+  desktop app an MCP server's `PATH` ends with `<app root>/node-shim/node_modules/.bin` and it
+  gets `EIDOLON_NODE`: servers only, never a task's commands.
 - **Of the file tools, only `skill` reads in the data home or the app's folder,** and only a listed
   or named skill's own files, never a dot-file; `bash_output` reads only its task's logs there, and
   commands and MCP servers run outside `FolderPolicy`. Of a skill only its name reaches her, and
@@ -479,7 +481,10 @@ the layout's one line.
   `appEnv()` builds one without any `ELECTRON_*` name. Inside Electron `jsRuntime()` adds
   `ELECTRON_RUN_AS_NODE=1`, at whose every non-empty value, `0` included, an Electron binary runs as
   Node: no spawn that can start a program the owner chose (a task's command, an MCP server) may
-  carry it, or VS Code's `code` would run as Node.
+  carry it, or VS Code's `code` would run as Node. The node shim keeps to that: the backend starts
+  an MCP server without it, and a shim launcher sets it only for the process it runs on Eidolon's
+  binary, whose children inherit it, all but the command the shim's npx runs, which starts without
+  it.
 - **Every node-mode process the app starts carries `--disable-sigusr1 --use-system-ca`** before its
   script (yt-dlp's JS runtime, which yt-dlp starts, aside): `jsRuntime().args`, which main mirrors
   as `BACKEND_RUNTIME_ARGS`, a test holding the two equal. The inspect fuse doesn't reach node mode,
@@ -509,6 +514,12 @@ the layout's one line.
   script (`--ignore-scripts`): one could rewrite the electron-builder that step runs.
 - **Installing, updating and uninstalling the app never touch the data home,** which it shares with
   npx and `bun run app`; its uninstaller removes the install folder alone.
+- **The terminal command and Open at Login change the owner's system only on their click in
+  Settings,** never at install, launch or update, and never in background mode, which reads neither
+  (`system-options.ts`, `terminal-command.ts`).
+- **Notifications never answer a task and carry only runtime facts, the persona's name and her
+  goal:** no action or reply, since only its card and the waiting bar answer it, and nothing a
+  worker wrote or a page it read could have (`task-notices.ts`).
 - **An update installs only after the quit sequence, never from inside `before-quit`:** Restart's
   (the quit check, whose box names what a restart stops, the quit latch and the backend's graceful
   stop, then `quitAndInstall(true, true)` once, behind the `installing` state), or any approved
@@ -531,6 +542,12 @@ the layout's one line.
 - **deepseek-harness-derived code carries its MIT header,** then
   `Ported from deepseek-harness <path>@2e39e70496`; `apps/desktop` keeps `LICENSE-deepseek` and
   `THIRD_PARTY.md`, and `NOTICE` names the holder (`build.test.ts` checks it).
+- **cross-spawn-derived code carries its MIT header,** then `Ported from cross-spawn <path>@77cd97f`;
+  `apps/desktop` keeps `LICENSE-cross-spawn` and `THIRD_PARTY.md`, and `NOTICE` names the holder
+  (`build.test.ts` checks it).
+- **npm-derived code carries its ISC or BSD-2-Clause header,** then
+  `Ported from <package> <path>@<version>`; `apps/desktop` keeps `LICENSE-npm` and `THIRD_PARTY.md`,
+  and `NOTICE` names each holder (`build.test.ts` checks it).
 
 ### Identity and quotas
 
@@ -643,7 +660,7 @@ the layout's one line.
   `paths-ignore` (`README.md`, `CLAUDE.md`, the `ts.yml` and `release.yml` workflows,
   `vitest.config.ts`, `tsconfig.scripts.json`, `tsconfig.no-bun.d.ts`) skip the image
   build; anything else, `personas/` included, ships, and so does a bump of the
-  desktop's Electron or electron-builder, which changes `bun.lock`.
+  desktop's Electron, electron-builder or the node shim's pnpm, which changes `bun.lock`.
 - **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
   publish to npm.** Merging the Release workflow's version PR bumps
   `apps/bot/package.json`, `apps/eidolon/package.json`, `packages/sdk/package.json`

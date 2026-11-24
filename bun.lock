@@ -15,7 +15,7 @@
     },
     "apps/bot": {
       "name": "laplace-eidolon",
-      "version": "0.13.0",
+      "version": "0.15.0",
       "dependencies": {
         "@eidolon/access": "workspace:*",
         "@eidolon/chat": "workspace:*",
@@ -63,6 +63,7 @@
     },
     "apps/desktop": {
       "name": "laplace-eidolon-desktop",
+      "version": "0.2.0",
       "devDependencies": {
         "@eidolon/config": "workspace:*",
         "electron": "45.4.1",
@@ -70,13 +71,14 @@
         "electron-log": "5.4.4",
         "electron-updater": "6.8.11",
         "playwright-core": "1.64.1",
+        "pnpm": "11.28.11",
         "undici": "7.30.2",
         "vite": "8.3.5",
       },
     },
     "apps/eidolon": {
       "name": "@laplace.live/eidolon",
-      "version": "0.13.0",
+      "version": "0.15.0",
       "devDependencies": {
         "@eidolon/cli": "workspace:*",
         "@eidolon/config": "workspace:*",
@@ -1799,6 +1801,8 @@
     "playwright-core": ["playwright-core@1.64.1", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ=="],
 
     "plist": ["plist@3.1.0", "", { "dependencies": { "@xmldom/xmldom": "^0.8.8", "base64-js": "^1.5.1", "xmlbuilder": "^15.1.1" } }, "sha512-uysumyrvkUX0rX/dEVqt8gC3sTBzd4zoWfLeS29nb53imdaXVvLINYXTI2GNqzaMuvacNx4uJQ8+b3zXR0pkgQ=="],
+
+    "pnpm": ["pnpm@11.28.11", "", { "bin": { "pn": "bin/pnpm.mjs", "pnx": "bin/pnpx.mjs", "pnpm": "bin/pnpm.mjs", "pnpx": "bin/pnpx.mjs" } }, "sha512-dAGE0Q+B9dWxZb6IVg7numJAbEE0iWq8J6WAEJ7sL0fB5B2RJRyUTCyrq8scIkYXmeu3LeLsYlryAwsONsc1ow=="],
 
     "pofile-ts": ["pofile-ts@4.0.3", "", {}, "sha512-sz1pnjgEfPyZ+QvaeX3NtCmbYnEvG01LZRLoN/uXoLtPZtxCIH5IctL7yXXc0fFyk/fqV6K8g3hlNfr6IJwupA=="],
 

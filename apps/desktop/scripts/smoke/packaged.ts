@@ -1,5 +1,6 @@
-// What only the packaged smoke (scripts/smoke.ts) reads of a packaged app and its processes. Paths
-// and command lines follow the platform passed in, so Windows' rules are tested on any OS.
+// What only the packaged smoke (scripts/smoke.ts) reads of a packaged app and its processes, and how
+// it runs the app's launchers as a terminal would. Paths and command lines follow the platform
+// passed in, so Windows' rules are tested on any OS.
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -12,6 +13,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { type AddressInfo, createServer } from "node:net";
 import { dirname, join, posix, win32 } from "node:path";
 import { promisify } from "node:util";
 import { BACKEND_RUNTIME_ARGS } from "../../src/main/controller.ts";
@@ -28,6 +30,10 @@ export interface AppLayout {
   readonly payload: string;
   /** What main loads for the tray, and on macOS the About panel. */
   readonly trayIcon: string;
+  /** The eidolon command's launcher, which Settings links or puts on the PATH. */
+  readonly terminalCommand: string;
+  /** The node shim's launchers, which MCP servers get last on their PATH. */
+  readonly nodeShim: string;
 }
 
 export function appLayout(binary: string, platform: NodeJS.Platform = process.platform): AppLayout {
@@ -36,12 +42,130 @@ export function appLayout(binary: string, platform: NodeJS.Platform = process.pl
     platform === "win32"
       ? path.join(path.dirname(binary), "resources")
       : path.join(path.dirname(path.dirname(binary)), "Resources");
+  const payload = path.join(resources, "eidolon");
   return {
     binary,
     resources,
-    payload: path.join(resources, "eidolon"),
+    payload,
     trayIcon: path.join(resources, "assets", "tray-icon.ico"),
+    terminalCommand: path.join(resources, "bin", platform === "win32" ? "eidolon.cmd" : "eidolon"),
+    nodeShim: path.join(payload, "node-shim", "node_modules", ".bin"),
   };
+}
+
+/** How to run a launcher with `args`, as a terminal would. */
+export interface ScriptRun {
+  readonly command: string;
+  readonly args: readonly string[];
+  /** Windows: the command line is cmd.exe's own, quoted as it reads it. */
+  readonly windowsVerbatimArguments: boolean;
+}
+
+/**
+ * A launcher `script` run with `args`: itself, by its #! line, on macOS; on Windows a .cmd through
+ * cmd.exe, each argument in quotes, as a terminal runs it. An argument holding a quote, or ending
+ * in a backslash, which escapes its closing quote, can't be passed this way.
+ */
+export function scriptRun(
+  script: string,
+  args: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+  comspec = "cmd.exe",
+): ScriptRun {
+  if (platform !== "win32") return { command: script, args, windowsVerbatimArguments: false };
+  // /s strips the outer quotes, leaving the line inside as typed.
+  const line = [script, ...args].map((arg) => `"${arg}"`).join(" ");
+  return {
+    command: comspec,
+    args: ["/d", "/s", "/c", `"${line}"`],
+    windowsVerbatimArguments: true,
+  };
+}
+
+/** The OS's own folders, which a PATH with no node of the computer's holds. */
+export function systemFolders(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (platform !== "win32") return ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+  const root = env.SystemRoot ?? "C:\\Windows";
+  return [
+    win32.join(root, "System32"),
+    root,
+    win32.join(root, "System32", "Wbem"),
+    win32.join(root, "System32", "WindowsPowerShell", "v1.0"),
+  ];
+}
+
+/**
+ * `env` with `values` in place of the variables they name; on Windows found without case, since a
+ * name spelled twice there runs with either value (Windows' own PATH is often `Path`).
+ */
+export function withVariables(
+  env: Readonly<Record<string, string>>,
+  values: Readonly<Record<string, string>>,
+  platform: NodeJS.Platform = process.platform,
+): Record<string, string> {
+  const key = (name: string) => (platform === "win32" ? name.toUpperCase() : name);
+  const replaced = new Set(Object.keys(values).map(key));
+  const kept = Object.entries(env).filter(([name]) => !replaced.has(key(name)));
+  return { ...Object.fromEntries(kept), ...values };
+}
+
+/** Each node in `folders` that a shell would run for `node`. */
+export function nodesIn(
+  folders: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  const path = platform === "win32" ? win32 : posix;
+  const names = platform === "win32" ? ["node.exe", "node.cmd", "node.bat"] : ["node"];
+  return folders.flatMap((folder) =>
+    names.map((name) => path.join(folder, name)).filter((file) => existsSync(file)),
+  );
+}
+
+/** A loopback port nothing listens on, where a request fails at once. */
+export async function closedPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((done) => server.close(() => done()));
+  return port;
+}
+
+/**
+ * A stand-in for EIDOLON_NODE in `folder` that prints the ELECTRON_RUN_AS_NODE it got. A launcher
+ * that ran the app's binary without it would start Eidolon itself on the installed app's profile,
+ * where an Eidolon already running would come forward.
+ */
+export function runAsNodeProbe(
+  folder: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (platform === "win32") {
+    const probe = join(folder, "run-as-node.cmd");
+    writeFileSync(probe, "@echo off\r\necho %ELECTRON_RUN_AS_NODE%\r\n");
+    return probe;
+  }
+  const probe = join(folder, "run-as-node");
+  writeFileSync(probe, '#!/bin/sh\nprintf "%s\\n" "$ELECTRON_RUN_AS_NODE"\n', { mode: 0o755 });
+  return probe;
+}
+
+/**
+ * What a failed run's stderr says went wrong: the line Node gives an uncaught error, else its first
+ * error line, else its last line.
+ */
+export function cause(stderr: string): string {
+  const lines = stderr
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  // Node prints an uncaught error below the line that threw it, which can name an error too, and a
+  // caret under that, and ends with its own version, which says nothing.
+  const caret = lines.findIndex((line) => /^\^+$/.test(line));
+  const thrown = caret === -1 ? undefined : lines[caret + 1];
+  return thrown ?? lines.find((line) => /error\b|\bERR_/i.test(line)) ?? lines.at(-1) ?? "";
 }
 
 /** A Windows command line's arguments, split as the C runtime splits them. */
