@@ -357,7 +357,7 @@ no imports, so it reaches nothing but its own memory; at that commit its ABI is 
 `THIRD_PARTY_LICENSES.md` holds the licenses of the crates compiled into it (miniz_oxide, adler2,
 ruzstd, twox-hash).
 
-- **The ABI check:** the page and the server alike run it only at ABI 1.x, 1.2 or later: 1.2
+- **The ABI check:** the page and the server alike run it only at ABI 1.2 or a later 1.x: 1.2
   brought clip layers with priorities, several expressions at once and lip sync. The page checks
   `PSD2LIVE_ABI` and refuses another as `AvatarError` `runtime`; the server's upload check holds
   its own copy of that minimum, in `apps/bot/src/local/psd2live.ts`.

@@ -241,7 +241,7 @@ call's turns. The local app's Studio previews a persona's models with it.
   Vite and webpack 5 resolve and ship. A host can pass a URL, the bytes or a compiled
   `WebAssembly.Module` instead; Node's `fetch` refuses `file:` URLs, so code on Node passes bytes.
 - **One instance per model.** Each model gets a runtime instance of its own, so a trap ends only
-  that model. An instance whose ABI isn't 1.x at 1.2 or later is refused (`AvatarError` `runtime`).
+  that model. An instance whose ABI isn't 1.2 or a later 1.x is refused (`AvatarError` `runtime`).
 - **The page's CSP** must allow `'wasm-unsafe-eval'` in `script-src`, which permits compiling
   WebAssembly and nothing else; without it the load fails as `runtime`. The page runs no
   JavaScript that came with a model.
