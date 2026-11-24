@@ -5,6 +5,7 @@ import {
   characterModelFileQuery,
   characterModelsQuery,
   defaultCallBox,
+  defaultCompanionBox,
   headAreaOf,
   outfitOf,
   setupOf,
@@ -128,6 +129,25 @@ describe("defaultCallBox", () => {
       width: 2000,
       height: 1000,
     });
+  });
+
+  test("the desktop companion frames all of her, a little room around, whatever her head", () => {
+    const fake = model(INVENTORY, { HitAreaHead: head, "": character });
+    const box = defaultCompanionBox(fake);
+    // 4% of her size on each side.
+    expect(box.x).toBeCloseTo(500 - 40);
+    expect(box.y).toBeCloseTo(300 - 104);
+    expect(box.width).toBeCloseTo(1080);
+    expect(box.height).toBeCloseTo(2808);
+    expect(fake.asked).toEqual([null]);
+  });
+
+  test("the desktop companion, with nothing drawn, frames the whole canvas", () => {
+    const box = defaultCompanionBox(model(INVENTORY, {}));
+    expect(box.x).toBeCloseTo(-80);
+    expect(box.y).toBeCloseTo(-120);
+    expect(box.width).toBeCloseTo(2160);
+    expect(box.height).toBeCloseTo(3240);
   });
 });
 

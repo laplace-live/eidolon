@@ -1,6 +1,17 @@
 import { i18n } from "@lingui/core";
 import { afterEach, expect, test, vi } from "vitest";
-import { connectDesktop, desktop, type EidolonDesktop, runCommand } from "./desktop";
+import {
+  type CompanionCallPick,
+  companion,
+  connectDesktop,
+  desktop,
+  type EidolonCompanion,
+  type EidolonDesktop,
+  offersPopOut,
+  onCompanionPort,
+  runCommand,
+  subscribeCompanionPick,
+} from "./desktop";
 import { setTheme } from "./theme";
 
 interface FakeBridge extends EidolonDesktop {
@@ -30,11 +41,14 @@ function fakeBridge(): FakeBridge {
 
 afterEach(() => {
   globalThis.eidolonDesktop = undefined;
+  globalThis.eidolonCompanion = undefined;
   vi.unstubAllGlobals();
 });
 
 test("a browser has no bridge, and connecting there touches nothing", () => {
   expect(desktop()).toBeNull();
+  expect(companion()).toBeNull();
+  expect(offersPopOut(desktop())).toBe(false);
   const navigate = vi.fn();
   connectDesktop(navigate);
   expect(navigate).not.toHaveBeenCalled();
@@ -46,6 +60,12 @@ test("the menu's Settings command opens Settings, and nothing else runs", () => 
   runCommand("toString", navigate);
   runCommand("quit", navigate);
   expect(navigate.mock.calls).toEqual([["/settings"]]);
+});
+
+test("the desktop companion's Call, while nothing here can place it, opens /call", () => {
+  const navigate = vi.fn();
+  runCommand("call", navigate);
+  expect(navigate.mock.calls).toEqual([["/call"]]);
 });
 
 const CHAT = "0b7f5f2e-3c1d-4e8a-9f60-1a2b3c4d5e6f";
@@ -107,6 +127,114 @@ test("a bridge with them hands their answers on", async () => {
     command: installed,
     error: "cancelled",
   });
+});
+
+test("an app whose bridge predates the desktop companion offers none of her members, nor Pop Out", () => {
+  globalThis.eidolonDesktop = fakeBridge();
+  const app = desktop();
+  expect(app?.companion).toBeUndefined();
+  expect(app?.setCompanion).toBeUndefined();
+  expect(app?.popOut).toBeUndefined();
+  expect(app?.linkCompanion).toBeUndefined();
+  expect(app?.feedingCompanion).toBeUndefined();
+  expect(app?.onCompanionPick).toBeUndefined();
+  expect(offersPopOut(app)).toBe(false);
+  // Connecting such an app hands no pick on, and throws for none it lacks.
+  const heard = vi.fn();
+  const stop = subscribeCompanionPick(heard);
+  connectDesktop(vi.fn());
+  stop();
+  expect(heard).not.toHaveBeenCalled();
+});
+
+test("a bridge with the companion's members offers Pop Out and hands their answers on", async () => {
+  const state = { on: true, showAtLogin: true, background: false } as const;
+  globalThis.eidolonDesktop = {
+    ...fakeBridge(),
+    companion: async () => state,
+    setCompanion: async (change) => ({ ...state, ...change }),
+    popOut: async () => state,
+    linkCompanion: () => {},
+    feedingCompanion: () => {},
+    onCompanionPick: () => {},
+  };
+  const app = desktop();
+  expect(offersPopOut(app)).toBe(true);
+  expect(await app?.companion?.()).toEqual(state);
+  expect(await app?.setCompanion?.({ showAtLogin: false })).toEqual({
+    ...state,
+    showAtLogin: false,
+  });
+});
+
+test("the desktop companion's page has her own bridge and never the app's", () => {
+  const bridge = { platform: "darwin" } as EidolonCompanion;
+  globalThis.eidolonCompanion = bridge;
+  expect(companion()).toBe(bridge);
+  expect(desktop()).toBeNull();
+});
+
+test("her menu's call picks reach each listener subscribed then, and one with none is dropped", () => {
+  let send: ((pick: CompanionCallPick) => void) | undefined;
+  globalThis.eidolonDesktop = {
+    ...fakeBridge(),
+    onCompanionPick: (callback) => {
+      send = callback;
+    },
+  };
+  connectDesktop(vi.fn());
+  expect(send).toBeDefined();
+
+  // Nobody listens yet: the pick goes nowhere, and no later listener ever hears it.
+  send?.("call");
+  const first = vi.fn();
+  const second = vi.fn();
+  const stopFirst = subscribeCompanionPick(first);
+  const stopSecond = subscribeCompanionPick(second);
+  send?.("mute");
+  stopFirst();
+  send?.("hang-up");
+  stopSecond();
+  send?.("unmute");
+  expect(first.mock.calls).toEqual([["mute"]]);
+  expect(second.mock.calls).toEqual([["mute"], ["hang-up"]]);
+});
+
+test("a port is taken only from this window's own tagged message with exactly one port", () => {
+  const listeners = new Set<(event: unknown) => void>();
+  vi.stubGlobal("addEventListener", (type: string, listener: (event: unknown) => void) => {
+    if (type === "message") listeners.add(listener);
+  });
+  vi.stubGlobal("removeEventListener", (type: string, listener: (event: unknown) => void) => {
+    if (type === "message") listeners.delete(listener);
+  });
+  const post = (event: unknown) => {
+    for (const listener of listeners) listener(event);
+  };
+  const port = { name: "port" } as unknown as MessagePort;
+  const other = { name: "other" } as unknown as MessagePort;
+  const tag = { eidolon: "companion-port" };
+  const got = vi.fn();
+  const stop = onCompanionPort(got);
+  expect(listeners.size).toBe(1);
+
+  post({ source: {}, data: tag, ports: [port] });
+  post({ source: null, data: tag, ports: [port] });
+  post({ source: globalThis, data: {}, ports: [port] });
+  post({ source: globalThis, data: "companion-port", ports: [port] });
+  post({ source: globalThis, data: null, ports: [port] });
+  post({ source: globalThis, data: { eidolon: "companion-ports" }, ports: [port] });
+  post({ source: globalThis, data: tag, ports: [] });
+  post({ source: globalThis, data: tag, ports: [port, other] });
+  expect(got).not.toHaveBeenCalled();
+
+  post({ source: globalThis, data: tag, ports: [port] });
+  expect(got.mock.calls).toEqual([[port]]);
+
+  stop();
+  expect(listeners.size).toBe(0);
+  post({ source: globalThis, data: tag, ports: [other] });
+  expect(got).toHaveBeenCalledTimes(1);
 });
 
 test("the theme setting and the language reach the app at once and on each change", async () => {

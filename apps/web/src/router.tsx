@@ -7,6 +7,7 @@ import { AppShell, FrameLayout, PageLayout } from "@/components/app-shell";
 import { RouteError } from "@/components/route-error";
 import { Spinner } from "@/components/ui/spinner";
 import { WindowDragStrip } from "@/components/window-drag-strip";
+import { CompanionError, Nothing } from "@/features/companion/quiet";
 import { firstRunRedirect } from "@/features/setup/first-run";
 import { ApiError, call, type Status } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
@@ -80,6 +81,14 @@ export function createRouter({ queryClient, exchanged }: RouterDeps) {
           ],
         },
       ],
+    },
+    // The desktop companion's window, outside "/", whose loader sends a fresh install to /setup and
+    // whose boundary is opaque; a chunk that fails to load needs a boundary outside that chunk.
+    {
+      path: "/companion",
+      lazy: () => import("@/features/companion/route"),
+      HydrateFallback: Nothing,
+      ErrorBoundary: CompanionError,
     },
   ]);
 }
