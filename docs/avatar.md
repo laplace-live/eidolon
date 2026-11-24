@@ -400,8 +400,8 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   `'wasm-unsafe-eval'` included, and the wasm's type.
 - **The browser smoke** (`bun apps/bot/scripts/local-smoke.ts`,
   [web-app.md](web-app.md#the-browser-smoke-test)) imports the test rig in the studio's Appearance,
-  checks its preview draws under the app's CSP, refuses a PNG and a cut-off rig, and makes the model
-  active, then stops using it.
+  checks its preview draws under the app's CSP and that a stage made anew ends a line tried on it,
+  refuses a PNG and a cut-off rig, and makes the model active, then stops using it.
 - **The npm package:** `ci-install-check.ts` imports the test rig into the packed server on Linux
   and Windows CI, which proves the upload check finds its runtime under `EIDOLON_APP_ROOT`, and the
   package's and the desktop stage's tests hold `data/psd2live/` in place.

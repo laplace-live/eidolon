@@ -81,6 +81,11 @@ const MODEL_HEAD = "HitAreaHead";
 /** What the walk plays on the preview, by clip name and expression id. */
 const MODEL_CLIP = "Nod";
 const MODEL_EXPRESSION = "smile";
+/** A line of hers for Try a Line, about 30 s long. */
+const MODEL_LINE =
+  "[sleepy, teasing] Oh, you are back. I waited all evening by the window, and the tea went " +
+  "cold twice while I counted the cars going past, so you owe me a long story about where you " +
+  "went today. [chuckling]";
 /** The least of the preview her rig must cover, at the head-and-shoulders a call frames. */
 const MODEL_DRAWN = 0.1;
 // A screenshot of the preview's canvas alone: the page's backgrounds would make it opaque anyway.
@@ -1878,9 +1883,10 @@ function percent(share: number): string {
 /**
  * Her look in the studio's Appearance: the test rig picked for Import a Model, kept in her folder as
  * the server's runtime read it and not made active; the preview drawing it under the app's CSP, an
- * expression held and a clip played on it; a picture and a rig cut short refused with the app's
- * sentences; then Make Active, which her summary and the status name, and Stop Using. The model
- * stays, inactive, so the calls after this meet her picture.
+ * expression held and a clip played on it, and a line tried on it, which a stage made anew ends; a
+ * picture and a rig cut short refused with the app's sentences; then Make Active, which her summary
+ * and the status name, and Stop Using. The model stays, inactive, so the calls after this meet her
+ * picture.
  */
 async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
   const { page, checks, origin } = walk;
@@ -2003,6 +2009,32 @@ async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
           `${percent(behind)} once the canvas is hidden; ${expression.name} ` +
           `${held ? "held" : "NOT held"}, then ${clip.name} played, after which the preview is ` +
           `${after ?? "gone"}${after === "ready" ? `, covering ${percent(still)}` : `: ${await alerts(page)}`}`,
+      );
+
+      // Reduced motion makes her stage anew, as Replace File and a lost context do.
+      const play = page.getByRole("button", { name: t("en", "Play"), exact: true });
+      const stop = page.getByRole("button", { name: t("en", "Stop"), exact: true });
+      await page
+        .getByRole("textbox", { name: t("en", "Try a Line"), exact: true })
+        .fill(MODEL_LINE);
+      await play.click();
+      const playing = await shows(stop, 5_000);
+      const switched = Date.now();
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      const freed = await shows(play, 10_000);
+      const freedMs = Date.now() - switched;
+      const anew = await shows(
+        page.locator(`[data-model-stage="${model.id}"][data-state="ready"]`),
+        30_000,
+      );
+      const chips = anew && (await chip.isEnabled());
+      await page.emulateMedia({ reducedMotion: null });
+      checks.add(
+        "appearance line",
+        playing && freed && anew && chips,
+        `Try a Line ${playing ? "played" : "never played"} her line; her stage, made anew a ` +
+          `moment in, ${freed ? `gave Play back after ${freedMs} ms` : "left Stop up"}, and ` +
+          `${anew ? `once ready had its expression chips ${chips ? "enabled" : "disabled"}` : "never was ready again"}`,
       );
     }
 

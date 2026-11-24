@@ -270,14 +270,8 @@ function useTryLine(stage: AvatarStage | null, restoreMouth: () => MouthSource |
     [stage, restoreMouth, clear],
   );
 
-  useEffect(
-    () => () => {
-      clear();
-      stage?.direct(NEUTRAL);
-      stage?.mouth(restoreMouth());
-    },
-    [stage, restoreMouth, clear],
-  );
+  // A stage made anew ends the line: its timers, which would have ended `playing`, go with the old.
+  useEffect(() => stop, [stop]);
   return { playing, play, stop };
 }
 
