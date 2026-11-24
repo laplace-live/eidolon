@@ -3682,8 +3682,9 @@ async function videoCallWalk(walk: Walk): Promise<void> {
       "video call",
       opened && drawn && placed !== null && moved && captioned && happy && shut,
       `Call ${opened ? "opened the video screen" : "opened no video screen"}, her stage ` +
-        `${drawn ? `ready on ${String(placed)}` : `never ready: ${await alerts(page)}`}, the ` +
-        `longest main-thread task from Call to then ${Math.round(longest)} ms; as she answered, ` +
+        `${drawn ? `ready on ${String(placed)}` : `never ready: ${await alerts(page)}`}, ` +
+        `${longest === 0 ? "no main-thread task over 50 ms" : `the longest main-thread task ${Math.round(longest)} ms`} ` +
+        `from Call to then; as she answered, ` +
         `her mouth ${moved ? "moved" : "never moved"}, opening to ${widest.toFixed(2)}, the ` +
         `caption ${captioned ? "said" : "never said"} ${quote(VIDEO_REPLY_SAID)}, her mood ` +
         `${happy ? "happy" : `NOT happy (${JSON.stringify(mood)})`}, and her mouth ` +
