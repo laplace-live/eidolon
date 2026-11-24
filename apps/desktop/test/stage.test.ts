@@ -249,7 +249,8 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       const { devDependencies } = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8"));
       expect(version).toBe(devDependencies.pnpm);
       expect(resolveFrom(readBunLock(join(ROOT, "bun.lock")), [], "pnpm")?.version).toBe(version);
-      // With what npx.mjs takes from pnpm's dist: npm's semver, and node-gyp's bin for npm's PATH.
+      // With what the shim's npx takes from pnpm's dist: npm's semver, and node-gyp's bin for
+      // npm's PATH.
       for (const file of [
         "bin/pnpm.mjs",
         "bin/pnpx.mjs",

@@ -545,6 +545,9 @@ the layout's one line.
 - **cross-spawn-derived code carries its MIT header,** then `Ported from cross-spawn <path>@77cd97f`;
   `apps/desktop` keeps `LICENSE-cross-spawn` and `THIRD_PARTY.md`, and `NOTICE` names the holder
   (`build.test.ts` checks it).
+- **npm-derived code carries its ISC or BSD-2-Clause header,** then
+  `Ported from <package> <path>@<version>`; `apps/desktop` keeps `LICENSE-npm` and `THIRD_PARTY.md`,
+  and `NOTICE` names each holder (`build.test.ts` checks it).
 
 ### Identity and quotas
 

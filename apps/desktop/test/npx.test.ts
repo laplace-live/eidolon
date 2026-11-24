@@ -25,23 +25,34 @@ type Plan = (
   | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string }
 ) & { warnings?: string[] };
 type Current = Record<string, { name?: string; version?: string }>;
-interface Npx {
+interface NpmConfig {
   envReplace(text: string, env: Env): string;
   npmConfig(env: Env, prefix: string, home: string): Source[];
-  pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
-  npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
   invalidConfig(sources: readonly Source[]): string | undefined;
-  devEngines(
-    manifest: unknown,
-    force: boolean,
-    current: Current,
-  ): { warnings: string[]; error?: string };
+}
+interface NpmSpec {
   npmSpec(
     spec: string,
     where: string,
     home: string,
     platform?: string,
   ): { type: string; name?: string; saveSpec?: string; path?: string } | undefined;
+}
+interface NpmExec {
+  binsOf(manifest: object, dir: string): Record<string, string>;
+  binOf(manifest: object, dir: string): string | undefined;
+  localBin(start: string, name: string): string | undefined;
+  pathOf(env: Env, delimiter?: string): string;
+  npmPath(bins: readonly string[], runPath: string, nodeGyp: string, rest: string): string;
+}
+interface Npx {
+  pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
+  npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
+  devEngines(
+    manifest: unknown,
+    force: boolean,
+    current: Current,
+  ): { warnings: string[]; error?: string };
   refusal(
     specs: readonly string[],
     sources: readonly Source[],
@@ -62,15 +73,10 @@ interface Npx {
     home: string,
     platform?: string,
   ): { path: string; tarball: boolean } | undefined;
-  binsOf(manifest: object, dir: string): Record<string, string>;
-  binOf(manifest: object, dir: string): string | undefined;
   npmPrefix(cwd: string): { prefix: string; workspace?: string };
-  localBin(start: string, name: string): string | undefined;
   treePackages(prefix: string): Installed[];
   inTree(packages: readonly Installed[], spec: string): Installed | undefined;
   plan(args: readonly string[], cwd: string, home?: string, env?: Env, current?: Current): Plan;
-  pathOf(env: Env, delimiter?: string): string;
-  npmPath(bins: readonly string[], runPath: string, nodeGyp: string, rest: string): string;
   commandEnv(env: Env, value: string): Env;
   which(
     command: string,
@@ -88,6 +94,15 @@ interface CrossSpawn {
   escapeArgument(arg: string, doubleEscape: boolean): string;
 }
 const npx: Npx = await import(pathToFileURL(join(LAUNCHER_SOURCES, "npx.mjs")).href);
+const { envReplace, invalidConfig, npmConfig }: NpmConfig = await import(
+  pathToFileURL(join(LAUNCHER_SOURCES, "npm-config.mjs")).href
+);
+const { npmSpec }: NpmSpec = await import(
+  pathToFileURL(join(LAUNCHER_SOURCES, "npm-spec.mjs")).href
+);
+const { binsOf, binOf, localBin, pathOf, npmPath }: NpmExec = await import(
+  pathToFileURL(join(LAUNCHER_SOURCES, "npm-exec.mjs")).href
+);
 const cross: CrossSpawn = await import(
   pathToFileURL(join(LAUNCHER_SOURCES, "cross-spawn.mjs")).href
 );
@@ -306,7 +321,7 @@ describe("npm's config, which npx installs by", () => {
       "npm_config_//npm.corp.test/:_authToken": "secret",
       npm_config_registry_x: "https://x.test/",
     };
-    const [variables = {}] = npx.npmConfig(env, root, root);
+    const [variables = {}] = npmConfig(env, root, root);
     // Any process can read pnpm's arguments, and a registry's URL can hold its token.
     expect(settingsOf(variables, { registry: "https://user.test/" })).toEqual(DEFAULTS);
     const project = { registry: "https://project.test/", "@other:registry": "https://other.test/" };
@@ -353,17 +368,17 @@ describe("npm's config, which npx installs by", () => {
       npm_config_allow_git: "",
       PATH: "/bin",
     };
-    expect(npx.npmConfig(env, project, home)).toEqual([
+    expect(npmConfig(env, project, home)).toEqual([
       { "min-release-age": "3", "strict-allow-scripts": "false" },
       { "ignore-scripts": "true", "allow-git": "root", "strict-allow-scripts": "true" },
       { "min-release-age": "7", "allow-remote": "none" },
     ]);
     const userconfig = join(base, "other", ".npmrc");
-    expect(npx.npmConfig({ npm_config_userconfig: userconfig }, project, home)[2]).toEqual({
+    expect(npmConfig({ npm_config_userconfig: userconfig }, project, home)[2]).toEqual({
       "allow-remote": "root",
     });
     // In the home, the project's .npmrc is the user's, which npm reads once.
-    expect(npx.npmConfig({}, home, home)).toEqual([
+    expect(npmConfig({}, home, home)).toEqual([
       {},
       {},
       { "min-release-age": "7", "allow-remote": "none" },
@@ -391,7 +406,7 @@ describe("npm's config, which npx installs by", () => {
         "after=unread",
       ].join("\n"),
     });
-    expect(npx.npmConfig({}, base, root)[1]).toEqual({
+    expect(npmConfig({}, base, root)[1]).toEqual({
       plain: "a b",
       hash: "a",
       escaped: String.raw`a;b#c\d\x`,
@@ -408,7 +423,7 @@ describe("npm's config, which npx installs by", () => {
     const env = { HOST: "npm.corp.test", TOKEN: "t0k", EMPTY: "" };
     // An escaped \${ stays, and each pair of backslashes before one is one.
     expect(
-      npx.envReplace(`\${TOKEN}-\${UNSET}-\${UNSET?}-\${EMPTY}-\\\${TOKEN}-\\\\\${TOKEN}`, env),
+      envReplace(`\${TOKEN}-\${UNSET}-\${UNSET?}-\${EMPTY}-\\\${TOKEN}-\\\\\${TOKEN}`, env),
     ).toBe(`t0k-\${UNSET}---\${TOKEN}-\\t0k`);
     // Keys once the file is read: of two that expand alike, the one that first comes later wins.
     const base = tree({
@@ -420,13 +435,13 @@ describe("npm's config, which npx installs by", () => {
       ].join("\n"),
     });
     const before = ` \${EMPTY}2020-01-01 `;
-    expect(npx.npmConfig({ ...env, npm_config_before: before }, base, root).slice(0, 2)).toEqual([
+    expect(npmConfig({ ...env, npm_config_before: before }, base, root).slice(0, 2)).toEqual([
       { before: "2020-01-01" },
       { "//npm.corp.test/:_authToken": "literal", registry: "https://npm.corp.test/" },
     ]);
-    expect(
-      npx.npmConfig(env, tree({ ".npmrc": `//\${HOST}/:_authToken=\${TOKEN}` }), root)[1],
-    ).toEqual({ "//npm.corp.test/:_authToken": "t0k" });
+    expect(npmConfig(env, tree({ ".npmrc": `//\${HOST}/:_authToken=\${TOKEN}` }), root)[1]).toEqual(
+      { "//npm.corp.test/:_authToken": "t0k" },
+    );
   });
 
   test("gives pnpm the project's registries, their credentials and certificates, as npm", () => {
@@ -502,7 +517,7 @@ describe("npm's config it runs no command under", () => {
   test("is a credential the user's or the project's .npmrc gives no registry", () => {
     const project = { _authToken: "t", "//r.test/:_authToken": "scoped" };
     const user = { _authtoken: "t", username: "u", _password: "cA==", "-authtoken": "x" };
-    expect(npx.invalidConfig([{ registry: "https://r.test/npm/x" }, project, user])).toBe(
+    expect(invalidConfig([{ registry: "https://r.test/npm/x" }, project, user])).toBe(
       authError(
         "`_authtoken` is not allowed in user config",
         "`-authtoken` is not allowed in user config",
@@ -512,7 +527,7 @@ describe("npm's config it runs no command under", () => {
       ),
     );
     // A username or a password alone.
-    expect(npx.invalidConfig([{}, { username: "u" }, { _password: "p", _auth: "a" }])).toBe(
+    expect(invalidConfig([{}, { username: "u" }, { _password: "p", _auth: "a" }])).toBe(
       authError(
         "`_auth` must be renamed to `//registry.npmjs.org/:_auth` in user config",
         "`_password` is not allowed in user config",
@@ -521,17 +536,17 @@ describe("npm's config it runs no command under", () => {
     );
     // Values npm takes as none, and a variable's, which it doesn't check.
     const none = { _authToken: "false", username: "null", _auth: "" };
-    expect(npx.invalidConfig([{ _authtoken: "t" }, none, {}])).toBeUndefined();
+    expect(invalidConfig([{ _authtoken: "t" }, none, {}])).toBeUndefined();
   });
 
   test("is a registry that isn't a URL, a scope's aside", () => {
     for (const registry of ["", "true", "not a url"]) {
-      expect([registry, npx.invalidConfig([{}, { registry }, { _auth: "a" }])]).toEqual([
+      expect([registry, invalidConfig([{}, { registry }, { _auth: "a" }])]).toEqual([
         registry,
         "code ERR_INVALID_URL\nInvalid URL",
       ]);
     }
-    expect(npx.invalidConfig([{ "@s:registry": "not a url" }, {}, {}])).toBeUndefined();
+    expect(invalidConfig([{ "@s:registry": "not a url" }, {}, {}])).toBeUndefined();
   });
 });
 
@@ -694,12 +709,12 @@ describe("a spec's kind, as npm-package-arg reads it, and allow-git and the rest
   });
 
   test("gives the folder or tarball a path names, as npm resolves it", () => {
-    expect(npx.npmSpec("./a#b/../c d", "/work/x y", "/home/me", "linux")).toEqual({
+    expect(npmSpec("./a#b/../c d", "/work/x y", "/home/me", "linux")).toEqual({
       type: "directory",
       name: undefined,
       path: "/work/x y/c d",
     });
-    expect(npx.npmSpec("@s/n@file:../t.tgz", "/work/x", "/home/me", "linux")).toEqual({
+    expect(npmSpec("@s/n@file:../t.tgz", "/work/x", "/home/me", "linux")).toEqual({
       type: "file",
       name: "@s/n",
       path: "/work/t.tgz",
@@ -778,27 +793,24 @@ describe("a folder or tarball spec, as npm-package-arg reads it", () => {
 
 describe("the bins npm reads from a package.json", () => {
   test("name a string bin after the package, unscoped, and clean names and paths", () => {
-    expect(npx.binsOf({ name: "@s/tool", bin: "cli.js" }, root)).toEqual({ tool: "cli.js" });
-    expect(npx.binsOf({ bin: "cli.js" }, root)).toEqual({});
-    expect(npx.binsOf({ name: "x", bin: ["bin/a.js", "b.js"] }, root)).toEqual({
+    expect(binsOf({ name: "@s/tool", bin: "cli.js" }, root)).toEqual({ tool: "cli.js" });
+    expect(binsOf({ bin: "cli.js" }, root)).toEqual({});
+    expect(binsOf({ name: "x", bin: ["bin/a.js", "b.js"] }, root)).toEqual({
       "a.js": "bin/a.js",
       "b.js": "b.js",
     });
     expect(
-      npx.binsOf(
-        { name: "x", bin: { "../up": "../../etc/x", "c:d": "d.js", e: 1, "": "f.js" } },
-        root,
-      ),
+      binsOf({ name: "x", bin: { "../up": "../../etc/x", "c:d": "d.js", e: 1, "": "f.js" } }, root),
     ).toEqual({ up: "etc/x", d: "d.js" });
   });
 
   test("take every file of directories.bin when there's no bin", () => {
     const dir = tree({ "scripts/a": "", "scripts/sub/b": "", "scripts/.hidden": "" });
-    expect(npx.binsOf({ name: "x", directories: { bin: "./scripts" } }, dir)).toEqual({
+    expect(binsOf({ name: "x", directories: { bin: "./scripts" } }, dir)).toEqual({
       a: "scripts/a",
       b: "scripts/sub/b",
     });
-    expect(npx.binsOf({ name: "x", bin: "c.js", directories: { bin: "scripts" } }, dir)).toEqual({
+    expect(binsOf({ name: "x", bin: "c.js", directories: { bin: "scripts" } }, dir)).toEqual({
       x: "c.js",
     });
   });
@@ -807,18 +819,18 @@ describe("the bins npm reads from a package.json", () => {
     const dir = tree({ "scripts/a": "", "scripts/sub/b": "" });
     // One link back into it: a second would make a walk that follows links run without end.
     symlinkSync("..", join(dir, "scripts", "sub", "up"));
-    expect(npx.binsOf({ name: "x", directories: { bin: "scripts" } }, dir)).toEqual({
+    expect(binsOf({ name: "x", directories: { bin: "scripts" } }, dir)).toEqual({
       a: "scripts/a",
       b: "scripts/sub/b",
     });
   });
 
   test("pick the one bin, or one file's several names, or the package's own name", () => {
-    expect(npx.binOf({ name: "x", bin: { a: "cli.js" } }, root)).toBe("a");
-    expect(npx.binOf({ name: "x", bin: { a: "cli.js", b: "./cli.js" } }, root)).toBe("a");
-    expect(npx.binOf({ name: "@s/x", bin: { a: "a.js", x: "x.js" } }, root)).toBe("x");
-    expect(npx.binOf({ name: "x", bin: { a: "a.js", b: "b.js" } }, root)).toBeUndefined();
-    expect(npx.binOf({ name: "x" }, root)).toBeUndefined();
+    expect(binOf({ name: "x", bin: { a: "cli.js" } }, root)).toBe("a");
+    expect(binOf({ name: "x", bin: { a: "cli.js", b: "./cli.js" } }, root)).toBe("a");
+    expect(binOf({ name: "@s/x", bin: { a: "a.js", x: "x.js" } }, root)).toBe("x");
+    expect(binOf({ name: "x", bin: { a: "a.js", b: "b.js" } }, root)).toBeUndefined();
+    expect(binOf({ name: "x" }, root)).toBeUndefined();
   });
 });
 
@@ -880,9 +892,9 @@ describe("a local bin, as libnpmexec finds one", () => {
       "a/node_modules/.bin": null,
       "a/b": null,
     });
-    expect(npx.localBin(join(base, "a", "b"), TOOL)).toBe(join(base, "node_modules", ".bin"));
+    expect(localBin(join(base, "a", "b"), TOOL)).toBe(join(base, "node_modules", ".bin"));
     const near = tree({ [`node_modules/.bin/${TOOL}`]: "", [`a/node_modules/.bin/${TOOL}`]: "" });
-    expect(npx.localBin(join(near, "a"), TOOL)).toBe(join(near, "a", "node_modules", ".bin"));
+    expect(localBin(join(near, "a"), TOOL)).toBe(join(near, "a", "node_modules", ".bin"));
   });
 
   test("never a folder, a link to nothing, or a name with an extension it wasn't given", () => {
@@ -891,10 +903,10 @@ describe("a local bin, as libnpmexec finds one", () => {
       [`node_modules/.bin/${TOOL}-cmd.cmd`]: "",
     });
     symlinkSync(join(base, "missing"), join(base, "node_modules", ".bin", `${TOOL}-dangling`));
-    expect(npx.localBin(base, TOOL)).toBeUndefined();
-    expect(npx.localBin(base, `${TOOL}-dangling`)).toBeUndefined();
-    expect(npx.localBin(base, `${TOOL}-cmd`)).toBeUndefined();
-    expect(npx.localBin(base, `${TOOL}-cmd.cmd`)).toBe(join(base, "node_modules", ".bin"));
+    expect(localBin(base, TOOL)).toBeUndefined();
+    expect(localBin(base, `${TOOL}-dangling`)).toBeUndefined();
+    expect(localBin(base, `${TOOL}-cmd`)).toBeUndefined();
+    expect(localBin(base, `${TOOL}-cmd.cmd`)).toBe(join(base, "node_modules", ".bin"));
   });
 });
 
@@ -1216,11 +1228,11 @@ describe("what npx does, as npm decides it", () => {
 
 describe("npm's PATH", () => {
   test("joins each key Windows spells PATH with, in order", () => {
-    expect(npx.pathOf({ Path: "a;b", PATH: "b;c", path: "", other: "x" }, ";")).toBe("a;b;c");
+    expect(pathOf({ Path: "a;b", PATH: "b;c", path: "", other: "x" }, ";")).toBe("a;b;c");
   });
 
   test("is the bins, each node_modules/.bin up from the folder, node-gyp's, the caller's", () => {
-    expect(npx.npmPath(["/x/.bin"], "/a/b", "/gyp", "/usr/bin:/bin")).toBe(
+    expect(npmPath(["/x/.bin"], "/a/b", "/gyp", "/usr/bin:/bin")).toBe(
       "/x/.bin:/a/b/node_modules/.bin:/a/node_modules/.bin:/node_modules/.bin:/gyp:/usr/bin:/bin",
     );
   });

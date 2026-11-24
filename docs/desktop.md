@@ -654,8 +654,9 @@ VC++ copies.
   that ships libvips (on Windows, sharp's own platform package); the VC++ runtime's terms on
   Windows; then the payload's NOTICE, THIRD_PARTY_NOTICES.md (what its bundles and web app include)
   and the license files under `data/`. Main's build writes the licenses of what it inlines to
-  `dist/main/THIRD_PARTY_LICENSES.md`, and `apps/desktop`'s `LICENSE-deepseek` and `THIRD_PARTY.md`
-  cover the code ported from deepseek-harness.
+  `dist/main/THIRD_PARTY_LICENSES.md`, and `apps/desktop`'s `LICENSE-deepseek`,
+  `LICENSE-cross-spawn`, `LICENSE-npm` and `THIRD_PARTY.md` cover the code ported from
+  deepseek-harness, cross-spawn and npm's own packages, which NOTICE names too.
 
 ## The node shim
 
@@ -664,13 +665,18 @@ on a computer with no Node: the payload holds launchers that run each on the app
 Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs wins.
 
 - **Its files,** in the payload's `node-shim/`: in `node_modules/.bin/`, `node`, `npx`, `pnpm` and
-  `pnpx` (sh, 0755), their `.cmd` twins (CRLF, each under `setlocal`), `npx.mjs` and
-  `cross-spawn.mjs`; in `node_modules/node_modules/pnpm`, the launchers' `../node_modules/pnpm`,
-  the pnpm `apps/desktop` pins as an exact dev dependency, so `bun.lock` pins it as it pins the
-  rest. The launchers sit in a `node_modules/.bin` because cross-spawn, which starts an MCP server,
-  escapes the words of a `.cmd` there twice: it takes one for a cmd-shim, whose `%*` cmd.exe reads
-  a second time, and a launcher's `%*` is read again the same way. A `.cmd` anywhere else gets its
-  words escaped once, so cmd.exe acts on a word holding a quote and one of `&`, `|`, `<`, `>` or
+  `pnpx` (sh, 0755), their `.cmd` twins (CRLF, each under `setlocal`), `npx.mjs`, `cross-spawn.mjs`
+  and the modules `npx.mjs` imports that are ported from npm's own packages: `npm-config.mjs`
+  (npm's config, from @npmcli/config and ini), `npm-spec.mjs` (a package spec, from npm-package-arg,
+  validate-npm-package-name and hosted-git-info), `npm-exec.mjs` (a package's bins and npm's
+  `PATH`, from npm-normalize-package-bin, @npmcli/package-json, libnpmexec and @npmcli/run-script)
+  and `npm-checks.mjs` (a project's devEngines, from npm-install-checks); in
+  `node_modules/node_modules/pnpm`, the launchers' `../node_modules/pnpm`, the pnpm `apps/desktop`
+  pins as an exact dev dependency, so `bun.lock` pins it as it pins the rest. The launchers sit in
+  a `node_modules/.bin` because cross-spawn, which starts an MCP server, escapes the words of a
+  `.cmd` there twice: it takes one for a cmd-shim, whose `%*` cmd.exe reads a second time, and a
+  launcher's `%*` is read again the same way. A `.cmd` anywhere else gets its words escaped once,
+  so cmd.exe acts on a word holding a quote and one of `&`, `|`, `<`, `>` or
   `^` when it reads it the second time: the word arrives cut, and what follows an `&` runs as a
   command. `scripts/node-shim.ts`, ported from deepseek-harness, stages them from
   `apps/desktop/node-shim` and a copy of the installed pnpm, pruned of the natives its `dist/`
@@ -678,7 +684,7 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   links, and `dist/vendor`'s fastlist executables, which nothing runs and the Windows release would
   sign as Eidolon's. [The stage test](#the-stage-test) holds them to their sources, the pin and the
   target's natives, with no `.exe`, and pnpm's `dist/` to the semver and `node-gyp-bin` that
-  `npx.mjs` uses. In a checkout, under `dev:desktop` and in the Electron lane, the launchers'
+  npx uses. In a checkout, under `dev:desktop` and in the Electron lane, the launchers'
   folder is `apps/desktop/node-shim` itself, whose `../node_modules/pnpm` is the installed one.
 - **A server gets it** from `serverEnv` (`packages/assistant/src/mcp/session.ts`) when the backend
   runs on Electron's Node and the launchers' folder is there (`shippedPath`): that folder last on
