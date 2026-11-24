@@ -13,6 +13,7 @@ import { listOf } from "@/lib/labels";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
+import { callBlocker } from "./blockers";
 import { useCallPresence, useShellCall, useShowsCall } from "./call-context";
 import { CallControls, MicPill } from "./call-controls";
 import { CallNotices } from "./call-notices";
@@ -244,57 +245,56 @@ export function CallPage() {
 
   const { persona } = status;
   const short = persona.shortName.trim() || persona.name;
-  const missing = status.keys.filter((key) => !key.set);
-  const names = listOf(missing.map((key) => key.name));
   // What a call needs is asked before one starts: a status change during one never hides it.
-  if (!up && missing.length > 0) {
-    return (
-      <Blocker
-        persona={persona}
-        media={
-          <div className="flex size-24 items-center justify-center rounded-full bg-muted">
-            <KeyRoundIcon className="size-9 text-muted-foreground" />
-          </div>
-        }
-        title={t`Add your API keys first`}
-        body={t`A call needs a key for each provider she uses. Missing: ${names}.`}
-        to="/setup"
-        icon={<KeyRoundIcon data-icon="inline-start" />}
-        action={t`Add Keys`}
-      />
-    );
-  }
-  const problem = status.call.roles.find((role) => role.problem !== null);
-  if (!up && problem) {
-    return (
-      <Blocker
-        persona={persona}
-        media={
-          <div className="flex size-24 items-center justify-center rounded-full bg-muted">
-            <BrainIcon className="size-9 text-muted-foreground" />
-          </div>
-        }
-        title={t`${ph({ name: short })}'s models need fixing`}
-        body={problem.problem ?? ""}
-        to={studioPath(persona.id, "models")}
-        icon={<BrainIcon data-icon="inline-start" />}
-        action={t`Open Her Models`}
-      />
-    );
-  }
-  // A realtime model speaks in its own voice, so only a call with a voice role needs one.
-  if (!up && persona.voice.id === null && !status.call.realtime) {
-    return (
-      <Blocker
-        persona={persona}
-        media={<Face persona={persona} size="xl" />}
-        title={t`Pick a voice for ${ph({ name: short })}`}
-        body={t`A call needs a voice. Pick one for her first.`}
-        to={studioPath(persona.id, "voice")}
-        icon={<AudioLinesIcon data-icon="inline-start" />}
-        action={t`Pick a Voice`}
-      />
-    );
+  switch (up ? null : callBlocker(status)) {
+    case "keys": {
+      const names = listOf(status.keys.filter((key) => !key.set).map((key) => key.name));
+      return (
+        <Blocker
+          persona={persona}
+          media={
+            <div className="flex size-24 items-center justify-center rounded-full bg-muted">
+              <KeyRoundIcon className="size-9 text-muted-foreground" />
+            </div>
+          }
+          title={t`Add your API keys first`}
+          body={t`A call needs a key for each provider she uses. Missing: ${names}.`}
+          to="/setup"
+          icon={<KeyRoundIcon data-icon="inline-start" />}
+          action={t`Add Keys`}
+        />
+      );
+    }
+    case "roles": {
+      const problem = status.call.roles.find((role) => role.problem !== null)?.problem;
+      return (
+        <Blocker
+          persona={persona}
+          media={
+            <div className="flex size-24 items-center justify-center rounded-full bg-muted">
+              <BrainIcon className="size-9 text-muted-foreground" />
+            </div>
+          }
+          title={t`${ph({ name: short })}'s models need fixing`}
+          body={problem ?? ""}
+          to={studioPath(persona.id, "models")}
+          icon={<BrainIcon data-icon="inline-start" />}
+          action={t`Open Her Models`}
+        />
+      );
+    }
+    case "voice":
+      return (
+        <Blocker
+          persona={persona}
+          media={<Face persona={persona} size="xl" />}
+          title={t`Pick a voice for ${ph({ name: short })}`}
+          body={t`A call needs a voice. Pick one for her first.`}
+          to={studioPath(persona.id, "voice")}
+          icon={<AudioLinesIcon data-icon="inline-start" />}
+          action={t`Pick a Voice`}
+        />
+      );
   }
   // The call is the shell's: a persona switch starts the page's own state afresh, and only that.
   return <CallRoom key={persona.id} status={status} />;
