@@ -415,7 +415,10 @@ class Control {
   }
 
   #linked(on: boolean): void {
-    if (on) return;
+    if (on) {
+      this.director.joined();
+      return;
+    }
     const at = performance.now();
     this.#call = NO_COMPANION_CALL;
     this.director.call(NO_COMPANION_CALL, at);

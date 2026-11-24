@@ -59,6 +59,10 @@ export class CompanionDirector {
   #gesture: DirectionGesture | null = null;
   #seq = 0;
   readonly #seen: { own: number | null; call: number | null } = { own: null, call: null };
+  /** Her page linked anew, and hasn't yet heard of the call. */
+  #joining = false;
+  /** She joined a call of hers under way: its next direction still holds a gesture from before. */
+  #joinedLate = false;
   #touched: number;
   #pokes: number[] = [];
   #restUntil = Number.NEGATIVE_INFINITY;
@@ -86,25 +90,40 @@ export class CompanionDirector {
     this.#stopVoice(at);
   }
 
+  /** Her page linked anew: the call its first message tells of may be under way. */
+  joined(): void {
+    this.#joining = true;
+  }
+
   call(call: CompanionCall, at: number): void {
     const before = this.#call;
     const was = before.up && before.hers;
+    const joining = this.#joining;
+    this.#joining = false;
     this.#call = call;
     // A call's end counts as one, so she dozes off only after DOZE_MS without one.
     if (call.up !== before.up) this.#touched = at;
     const hers = this.#herCall();
     if (hers && !was) {
       this.#seen.call = null;
+      this.#joinedLate = joining;
       if (this.#voicing !== null) this.#stopVoice(at);
     }
     if (hers) return;
+    this.#joinedLate = false;
     this.#callDirection = null;
     // What her own direction gestured during the call is past once she is back to it.
     if (was) this.#note("own", directionOf(this.#own).gesture, false);
   }
 
   callDirection(direction: Direction): void {
-    if (this.#herCall()) this.#callDirection = direction;
+    if (!this.#herCall()) return;
+    if (this.#joinedLate) {
+      // A call's direction keeps its last gesture until the next, which her page never saw made.
+      this.#joinedLate = false;
+      this.#seen.call = direction.gesture?.seq ?? null;
+    }
+    this.#callDirection = direction;
   }
 
   tap(area: TapArea, at: number): void {

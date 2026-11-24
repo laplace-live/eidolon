@@ -227,6 +227,26 @@ describe("calls", () => {
     expect(director.direction(500).gesture).toEqual({ name: "shake", seq: 3 });
   });
 
+  test("a page that joins a call of hers under way plays none of its gestures from before, and the next", () => {
+    const director = new CompanionDirector(0);
+    director.joined();
+    director.call(HERS, 100);
+    // The call's direction keeps its last gesture until the next one: this nod came before her page.
+    director.callDirection(callDirection({ gesture: { name: "nod", seq: 1 } }));
+    expect(director.direction(100).gesture).toBeNull();
+    director.callDirection(callDirection({ gesture: { name: "shake", seq: 2 } }));
+    expect(director.direction(200).gesture).toEqual({ name: "shake", seq: 1 });
+  });
+
+  test("a page linked before a call of hers comes up plays its first gesture", () => {
+    const director = new CompanionDirector(0);
+    director.joined();
+    director.call(NO_COMPANION_CALL, 0);
+    director.call(HERS, 100);
+    director.callDirection(callDirection({ gesture: { name: "nod", seq: 1 } }));
+    expect(director.direction(100).gesture).toEqual({ name: "nod", seq: 1 });
+  });
+
   test("her own gestures wait out a call of hers, and none comes once it ends", () => {
     const director = new CompanionDirector(0);
     director.call(HERS, 0);
