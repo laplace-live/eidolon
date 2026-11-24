@@ -2223,6 +2223,10 @@ msgstr "Everyone can hear you. Say something to start."
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "Everything the other sections don't show. Most installs never change these."
 
+#: src/features/chats/call-dock.tsx
+msgid "Expand"
+msgstr "Expand"
+
 #: src/components/app-sidebar.tsx
 msgid "Expand Sidebar"
 msgstr "Expand Sidebar"
@@ -7180,6 +7184,7 @@ msgid "You're all set"
 msgstr "You're all set"
 
 #: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
 msgid "You're already in a call. Hang up first."
 msgstr "You're already in a call. Hang up first."
 

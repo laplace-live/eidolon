@@ -2223,6 +2223,10 @@ msgstr "大家都在听，说点什么开始吧。"
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "其他分区没有列出的设置。大多数情况下无需修改。"
 
+#: src/features/chats/call-dock.tsx
+msgid "Expand"
+msgstr "放大"
+
 #: src/components/app-sidebar.tsx
 msgid "Expand Sidebar"
 msgstr "展开侧边栏"
@@ -7180,6 +7184,7 @@ msgid "You're all set"
 msgstr "设置完成"
 
 #: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
 msgid "You're already in a call. Hang up first."
 msgstr "你已经在通话中了，请先挂断。"
 
