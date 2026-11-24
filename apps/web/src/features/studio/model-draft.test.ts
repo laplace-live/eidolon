@@ -141,6 +141,20 @@ describe("the draft", () => {
     const typed = { ...sent, gestures: {} };
     expect(rebaseDraft(typed, sent, draftOf(answer)).gestures).toEqual({});
   });
+
+  test("a field put back while its Save is out stays put back, whatever reaches the card first", () => {
+    const saved = draftOf(SAVED);
+    const sent = { ...saved, moods: { happy: ["sad", "smile"] } };
+    const answer = draftOf({ ...SAVED, moods: sent.moods });
+    expect(rebaseDraft(saved, saved, answer, sent)).toEqual(saved);
+    // The server trims the names it was sent, which makes its answer no less the Save's.
+    const spaced = withOutfit(saved, { ...SCHOOL, name: " Summer " });
+    const trimmed = draftOf({ ...SAVED, outfits: [{ ...SCHOOL, name: "Summer" }] });
+    expect(rebaseDraft(saved, saved, trimmed, spaced)).toEqual(saved);
+    // A rename from before the Save reached the server leaves what was sent.
+    const renamed: CharacterModel = { ...SAVED, name: "Tml" };
+    expect(rebaseDraft(sent, saved, draftOf(renamed), sent)).toEqual(sent);
+  });
 });
 
 describe("names", () => {

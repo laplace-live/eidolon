@@ -162,6 +162,13 @@ function useFramingGestures(
   }, [surface, on]);
 }
 
+interface PreviewState {
+  readonly saved: CharacterModel;
+  readonly draft: ModelDraft;
+  /** What a Save under way sent: its answer reaches her list, and so this card, before Save hears. */
+  readonly sending: ModelDraft | null;
+}
+
 /** Why the stage can't show her model, as the preview says it. */
 function StageFailure({
   error,
@@ -201,13 +208,18 @@ export function ModelPreviewCard({
 }) {
   const { t } = useLingui();
   const reducedMotion = useReducedMotion();
-  const [state, setState] = useState(() => ({ saved: model, draft: draftOf(model) }));
+  const [state, setState] = useState<PreviewState>(() => ({
+    saved: model,
+    draft: draftOf(model),
+    sending: null,
+  }));
   let current = state;
   // Saved elsewhere, such as a rename or a new file: the fields left alone here take what was
   // saved, and a new file's rig keeps what it has of the rest.
   if (state.saved !== model) {
-    const rebased = rebaseDraft(state.draft, draftOf(state.saved), draftOf(model));
+    const rebased = rebaseDraft(state.draft, draftOf(state.saved), draftOf(model), state.sending);
     current = {
+      ...state,
       saved: model,
       draft: model.sha256 === state.saved.sha256 ? rebased : keptDraft(rebased, model.inventory),
     };
@@ -265,6 +277,7 @@ export function ModelPreviewCard({
     event.preventDefault();
     if (!dirty || problem !== null || save.isPending) return;
     const sent = draft;
+    setState((previous) => ({ ...previous, sending: sent }));
     save.mutate(
       { model: model.id, patch: changes },
       {
@@ -272,9 +285,11 @@ export function ModelPreviewCard({
           setState((previous) => ({
             saved,
             draft: rebaseDraft(previous.draft, sent, draftOf(saved)),
+            sending: null,
           }));
           toast.success(t`${ph({ name: saved.name })} saved.`);
         },
+        onError: () => setState((previous) => ({ ...previous, sending: null })),
       },
     );
   }
@@ -302,7 +317,7 @@ export function ModelPreviewCard({
             pending={save.isPending}
             blocked={problem !== null}
             onDiscard={() => {
-              setState({ saved: model, draft: draftOf(model) });
+              setState({ saved: model, draft: draftOf(model), sending: null });
               setEditing(null);
             }}
           />

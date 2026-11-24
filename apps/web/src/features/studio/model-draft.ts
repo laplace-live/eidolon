@@ -79,12 +79,22 @@ export function draftChanges(draft: ModelDraft, saved: ModelDraft): CharacterMod
 
 /**
  * `draft` once what it was made from went from `base` to `next`, as after a Save or a rename: a
- * field the owner left as it was takes `next`'s, and one they changed meanwhile stays theirs.
+ * field the owner left as it was takes `next`'s, and one they changed meanwhile stays theirs. While
+ * a Save of `sending` is out, a field `next` holds as it was sent was made from `sending`.
  */
-export function rebaseDraft(draft: ModelDraft, base: ModelDraft, next: ModelDraft): ModelDraft {
+export function rebaseDraft(
+  draft: ModelDraft,
+  base: ModelDraft,
+  next: ModelDraft,
+  sending: ModelDraft | null = null,
+): ModelDraft {
   const out: Record<string, unknown> = {};
   for (const field of FIELDS) {
-    out[field] = sameValue(draft[field], base[field]) ? next[field] : draft[field];
+    const from =
+      sending !== null && sameValue(next[field], normalized(sending)[field])
+        ? sending[field]
+        : base[field];
+    out[field] = sameValue(draft[field], from) ? next[field] : draft[field];
   }
   return out as ModelDraft;
 }

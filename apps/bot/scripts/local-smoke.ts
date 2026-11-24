@@ -1921,9 +1921,10 @@ function leaveMicUnanswered(): void {
  * Her look in the studio's Appearance: the test rig picked for Import a Model, kept in her folder as
  * the server's runtime read it and not made active; the preview drawing it under the app's CSP, an
  * expression held and a clip played on it, Use Microphone letting go of its audio while the browser
- * still asks for the microphone, and a line tried on it, which a stage made anew ends; a picture and
- * a rig cut short refused with the app's sentences; then Make Active, which her summary and the
- * status name, and Stop Using. The model stays, inactive, so the calls after this meet her picture.
+ * still asks for the microphone, a line tried on it, which a stage made anew ends, and a mood put
+ * back while its Save is out staying put back; a picture and a rig cut short refused with the app's
+ * sentences; then Make Active, which her summary and the status name, and Stop Using. The model
+ * stays, inactive, so the calls after this meet her picture.
  */
 async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
   const { page, checks, origin } = walk;
@@ -2101,6 +2102,63 @@ async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
           `moment in, ${freed ? `gave Play back after ${freedMs} ms` : "left Stop up"}, and ` +
           `${anew ? `once ready had its expression chips ${chips ? "enabled" : "disabled"}` : "never was ready again"}`,
       );
+
+      // A mood put back while its Save is out stays put back once the answer comes.
+      const form = page.locator("form").filter({ has: stage });
+      const save = form.getByRole("button", { name: t("en", "Save"), exact: true });
+      await page.getByRole("tab", { name: t("en", "Moods"), exact: true }).click();
+      const happy = page
+        .getByRole("toolbar", { name: t("en", "Happy", {}, "mood"), exact: true })
+        .getByRole("button", { name: expression.name || expression.id, exact: true });
+      const patch = (url: URL) => url.pathname === `${models}/${model.id}`;
+      let answer = () => {};
+      const answered = new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      await page.route(patch, async (route) => {
+        if (route.request().method() === "PATCH") await answered;
+        await route.continue();
+      });
+      try {
+        await happy.click();
+        const patched = page.waitForRequest(
+          (request) => request.method() === "PATCH" && patch(new URL(request.url())),
+        );
+        await save.click();
+        const body = (await patched).postDataJSON() as { readonly moods?: unknown } | null;
+        await happy.click();
+        answer();
+        const toasted = await shows(
+          page.getByText(t("en", "{name} saved.", { name: model.name }), { exact: true }),
+          10_000,
+        );
+        const shown = await poll(
+          () => happy.getAttribute("aria-pressed"),
+          (pressed) => pressed === "true",
+          2_000,
+        );
+        const dirty = await save.isEnabled();
+        const kept = (
+          (await (await walk.api("GET", models)).json()) as CharacterModels
+        ).models.find((each) => each.id === model.id)?.moods;
+        const discard = form.getByRole("button", { name: t("en", "Discard"), exact: true });
+        if (await discard.isVisible()) await discard.click();
+        checks.add(
+          "appearance save",
+          JSON.stringify(body?.moods) === '{"happy":[]}' &&
+            toasted &&
+            shown === "true" &&
+            dirty &&
+            JSON.stringify(kept) === '{"happy":[]}',
+          `Save sent moods ${JSON.stringify(body?.moods)}, and ${expression.name}, put back in ` +
+            `Happy while it was out, ${shown === "true" ? "stayed back" : "went off again"} once ` +
+            `${toasted ? "its answer came" : "no answer came"}, with Save ${dirty ? "on" : "off"}; ` +
+            `the server keeps moods ${JSON.stringify(kept)}`,
+        );
+      } finally {
+        answer();
+        await page.unroute(patch);
+      }
     }
 
     const png = await sharp({
