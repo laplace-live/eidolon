@@ -369,7 +369,7 @@ export function TestPanel({
   return (
     <div className="flex flex-col gap-6">
       {reducedMotion && (
-        <Hint>{t`Your system asks for less motion, so she doesn't talk or gesture with her body by herself. A clip you play still plays.`}</Hint>
+        <Hint>{t`Your system asks for less motion, so she plays no clip by herself, not even her idle. A clip you play still plays.`}</Hint>
       )}
       <ControlGroup
         title={t`Expressions`}

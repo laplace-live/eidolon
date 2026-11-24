@@ -7185,8 +7185,8 @@ msgid "Your switches can't be read"
 msgstr "Your switches can't be read"
 
 #: src/features/studio/model-controls.tsx
-msgid "Your system asks for less motion, so she doesn't talk or gesture with her body by herself. A clip you play still plays."
-msgstr "Your system asks for less motion, so she doesn't talk or gesture with her body by herself. A clip you play still plays."
+msgid "Your system asks for less motion, so she plays no clip by herself, not even her idle. A clip you play still plays."
+msgstr "Your system asks for less motion, so she plays no clip by herself, not even her idle. A clip you play still plays."
 
 #: src/features/studio/text-editor.tsx
 msgid "Your unsaved changes will be lost."
