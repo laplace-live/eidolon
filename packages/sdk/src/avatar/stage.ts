@@ -128,17 +128,30 @@ export class AvatarStage {
     return this.#model;
   }
 
-  /** Shows `model`, disposing the one shown before. */
+  /**
+   * Shows `model`, disposing the one shown before. Shown again, the same model takes `setup` in
+   * place, and a clip it plays goes on unless `setup` changed it.
+   */
   show(model: AvatarModel, setup: ResolvedSetup): void {
     if (this.#disposed) {
       model.dispose();
       return;
     }
-    if (this.#model !== model) this.#drop();
+    const same = this.#model === model;
+    const before = same ? this.#setup : null;
+    if (!same) {
+      this.#drop();
+      this.#last = null;
+    }
     this.#model = model;
     this.#setup = setup;
-    this.#applied = { idle: false, expressions: null, talking: false, outfit: false };
-    this.#last = null;
+    const was = this.#applied;
+    this.#applied = {
+      idle: was.idle && before?.gestures.idle === setup.gestures.idle,
+      expressions: null,
+      talking: was.talking && before?.gestures.talk === setup.gestures.talk,
+      outfit: was.outfit && same,
+    };
     this.#reschedule();
   }
 

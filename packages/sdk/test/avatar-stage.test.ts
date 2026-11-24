@@ -338,6 +338,32 @@ describe("her direction", () => {
     expect(model.mouth).toHaveBeenLastCalledWith(0);
   });
 
+  test("a new setup for the model shown changes her face without starting her clips over", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, SETUP);
+    stage.direct(direction({ mood: ["happy"], speaking: true }));
+    clock.frame(0);
+    expect(model.setExpressions).toHaveBeenLastCalledWith(["smile"]);
+    model.play.mockClear();
+    model.wear.mockClear();
+
+    stage.show(model, resolveSetup(INVENTORY, { moods: { happy: ["sad"] } }));
+    clock.frame(16);
+    expect(model.play).not.toHaveBeenCalled();
+    expect(model.wear).not.toHaveBeenCalled();
+    expect(model.setExpressions).toHaveBeenLastCalledWith(["sad"]);
+    expect(model.update).toHaveBeenLastCalledWith(0.016);
+
+    // A clip the setup changed starts in the old one's place.
+    stage.show(model, resolveSetup(INVENTORY, { gestures: { idle: "nod-id", talk: "shake-id" } }));
+    clock.frame(32);
+    expect(model.play.mock.calls).toEqual([
+      ["nod-id", 0, { loop: true }],
+      ["shake-id", 1, { loop: true }],
+    ]);
+  });
+
   test("dresses each model shown in the outfit", () => {
     const stage = stageOf();
     const outfit = { poses: [{ group: 0, entry: 1 }], parameters: [], hiddenParts: [] };
