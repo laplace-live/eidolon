@@ -140,17 +140,19 @@ export function areaAt(point: Point, areas: readonly Rectangle[]): Rectangle {
   );
 }
 
-/**
- * Where her window of `size` stands her: on `feet` while one of `displays` (their bounds) holds
- * them, else at her first place.
- */
+/** Whether one of `displays` (their bounds) holds `feet`, where she then stands. */
+export function onDisplay(feet: Point | null, displays: readonly Rectangle[]): feet is Point {
+  return feet !== null && displays.some((display) => holds(display, feet));
+}
+
+/** Where her window of `size` stands her: on `feet` while a display holds them, else at her first place. */
 export function standing(
   feet: Point | null,
   size: WindowSize,
   areas: readonly Rectangle[],
   displays: readonly Rectangle[],
 ): Point {
-  if (feet !== null && displays.some((display) => holds(display, feet))) return feet;
+  if (onDisplay(feet, displays)) return feet;
   const [primary] = areas;
   return {
     x: primary.x + primary.width - EDGE_DIP - size.width / 2,

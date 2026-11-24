@@ -26,6 +26,7 @@ import {
   dragged,
   feetOf,
   MENU_SETTLE_MS,
+  onDisplay,
   POP_TIMEOUT_MS,
   type Point,
   placement,
@@ -101,6 +102,11 @@ export class Companion {
    * bounds, her feet would move half a DIP at each reshape between an odd and an even width.
    */
   #feet: Point | null = null;
+  /**
+   * A new window stood her at her first place, measured for a shape her page hadn't said yet: until
+   * she is drawn, each shape it says stands her there afresh.
+   */
+  #firstPlace = false;
   /** Main's record of her showing. */
   #shown = false;
   /** The main window shows now, as mainShown last said. */
@@ -195,6 +201,7 @@ export class Companion {
     } else {
       const before = this.#page;
       this.#page = "drawn";
+      this.#firstPlace = false;
       this.#retried = false;
       this.#cancelDrawTimer();
       if (before !== "drawn") this.#io.log.info(COMPANION_LINES.drawn(kind));
@@ -204,6 +211,7 @@ export class Companion {
 
   shape(shape: CompanionShape): WindowSize {
     this.#shape = shape;
+    if (this.#firstPlace) this.#feet = null;
     const { size, bounds } = this.#placed();
     this.#setBounds(bounds);
     this.#sync();
@@ -363,7 +371,10 @@ export class Companion {
     if (this.#quitting) return;
     this.#page = "loading";
     // A new window stands where her settings left her; one loaded again keeps her place.
-    if (this.#io.bounds() === null) this.#feet = null;
+    if (this.#io.bounds() === null) {
+      this.#feet = null;
+      this.#firstPlace = !onDisplay(this.#settings.feet, this.#io.displays());
+    }
     this.#io.open(this.#placed().bounds);
     this.#io.passClicks(true);
     if (!this.#background) this.#io.setAlwaysOnTop(this.#settings.alwaysOnTop);

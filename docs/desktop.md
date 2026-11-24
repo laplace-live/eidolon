@@ -493,7 +493,8 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   unrounded: a new size or shape, her model swapped for her picture included, keeps her standing
   there, growing from her feet, never moving her by the half DIP an odd width would. Her first
   place, and her place whenever no display holds her feet (a display unplugged), is the primary
-  display's work area, on its bottom, her window's right edge 24 DIP in from the area's. Her window is then kept inside
+  display's work area, on its bottom, her window's right edge 24 DIP in from the area's, for the
+  shape her page first says. Her window is then kept inside
   the work area under it, so a Dock or a taskbar that grows under her pushes her up onto its edge; a
   display change that moves her window sets her feet where it put her.
 - **Click-through.** Her window lets clicks through, until her page finds her under the pointer

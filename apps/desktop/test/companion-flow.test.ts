@@ -354,15 +354,28 @@ describe("turning her on and off", () => {
 });
 
 describe("her window", () => {
-  test("her picture's shape makes it 128 DIP square, standing where her feet were", () => {
+  test("her picture's shape makes it 128 DIP square, at her first place while she has no feet of her own", () => {
     const { flow, calls } = companion({ on: true });
     flow.appPage();
     expect(flow.shape({ kind: "picture" })).toEqual({ width: 128, height: 128 });
+    // Her window's right edge 24 DIP in, as for a full-length figure's.
+    expect(calls.at(-1)).toEqual(["setBounds", { x: 1360, y: 772, width: 128, height: 128 }]);
+  });
+
+  test("once drawn, a new shape grows from her feet, as it does from feet she was left on", () => {
+    const { flow, calls } = companion({ on: true });
+    flow.appPage();
+    flow.drawn("model");
+    flow.shape({ kind: "picture" });
     const feet = feetOf(FIRST);
     expect(calls.at(-1)).toEqual([
       "setBounds",
       { x: feet.x - 64, y: feet.y - 128, width: 128, height: 128 },
     ]);
+    const saved = companion({ on: true, feet: { x: 300, y: 900 } });
+    saved.flow.appPage();
+    saved.flow.shape({ kind: "picture" });
+    expect(saved.calls.at(-1)).toEqual(["setBounds", { x: 236, y: 772, width: 128, height: 128 }]);
   });
 
   test("she opens where her feet were left, on the display that holds them", () => {
