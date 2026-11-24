@@ -12,7 +12,7 @@ import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRoundIcon, MessageSquareOffIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
@@ -224,8 +224,12 @@ export function ChatView({ id }: { readonly id: string }) {
   // A disabled query still answers from the cache that Settings fills.
   const skills = named ? (nameable.data ?? []) : [];
 
-  // A task to show docks the call: the log under the screen takes no focus, so its card can't.
+  // A task to show docks the call as it is asked for, once: the log under the screen takes no
+  // focus, so its card can't, and Expand keeps the screen though a link names no card here.
+  const asked = useRef<string | null>(null);
   useEffect(() => {
+    if (focus === asked.current) return;
+    asked.current = focus;
     if (focus !== null && view.video) setLayout("dock");
   }, [focus, view.video, setLayout]);
 
