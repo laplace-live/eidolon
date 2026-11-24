@@ -1020,6 +1020,20 @@ function reviewAnswer(body: ChatRequest): Response {
   );
 }
 
+/**
+ * A call's speech, as OpenAI's PCM: 16-bit mono at 24 kHz, a 220 Hz tone in four syllables a
+ * second, so her stage's mouth opens and closes on it.
+ */
+function speechPcm(seconds: number, rate = 24_000): Uint8Array<ArrayBuffer> {
+  const view = new DataView(new ArrayBuffer(seconds * rate * 2));
+  for (let i = 0; i < seconds * rate; i++) {
+    const at = i / rate;
+    const syllable = 0.5 - 0.5 * Math.cos(2 * Math.PI * 4 * at);
+    view.setInt16(i * 2, Math.round(Math.sin(2 * Math.PI * 220 * at) * syllable * 6000), true);
+  }
+  return new Uint8Array(view.buffer);
+}
+
 /** `seconds` of silent MPEG-1 Layer III frames, mono, 44.1 kHz at 128 kbps: the fake voice. */
 function silentMp3(seconds: number): Uint8Array<ArrayBuffer> {
   // 144 × 128000 / 44100, unpadded; all-zero side info decodes as silence.
@@ -1111,8 +1125,7 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
         const body = (await request.json()) as SpeechRequest;
         seen.speech.push(body);
         if (body.response_format === "pcm") {
-          // A call's: 16-bit mono at 24 kHz, OpenAI's rate.
-          return new Response(new Uint8Array(SPEECH_SECONDS * 24_000 * 2), {
+          return new Response(speechPcm(SPEECH_SECONDS), {
             headers: { "content-type": "audio/pcm" },
           });
         }
@@ -5599,10 +5612,11 @@ async function smoke(options: Options): Promise<Checks> {
     writeFileSync(mic, toneWav(2));
     let browser: Browser;
     try {
+      // Muted, so a headful run never plays her calls' tone; headless, Playwright mutes it anyway.
       browser = await chromium.launch({
         ...chrome(),
         headless: !options.headful,
-        args: fakeMicArgs(mic),
+        args: [...fakeMicArgs(mic), "--mute-audio"],
       });
     } catch (error) {
       checks.add("browser", false, error instanceof Error ? error.message.split("\n")[0] : "");
@@ -5767,7 +5781,7 @@ interface CallHooks {
 
 /**
  * Installed in the page before its own scripts: copies the RTVI messages off the transport's data
- * channel, and samples the bot's <audio> element, whether it plays and how loud.
+ * channel, and samples the call's `<audio data-call>`, whether it plays and how loud.
  */
 function observeCall({ intervalMs, floorDb }: { intervalMs: number; floorDb: number }): void {
   const hooks = window as unknown as CallHooks;
@@ -5804,7 +5818,8 @@ function observeCall({ intervalMs, floorDb }: { intervalMs: number; floorDb: num
   let trackId: string | null = null;
   let lastTime = 0;
   setInterval(() => {
-    const audio = document.querySelector("audio");
+    // A chat's voice messages put their own <audio> before it.
+    const audio = document.querySelector<HTMLAudioElement>("audio[data-call]");
     const stream = audio?.srcObject instanceof MediaStream ? audio.srcObject : null;
     const track = stream?.getAudioTracks()[0];
     if (!audio || !stream || !track) {
