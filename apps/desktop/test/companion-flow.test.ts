@@ -400,6 +400,33 @@ describe("her window", () => {
     expect(calls).toHaveLength(4);
   });
 
+  test("a drop is where she stands: her picture then stands on the feet it left", () => {
+    const { flow, values } = shownCompanion();
+    flow.drag({ phase: "start", x: 1387, y: 600 });
+    flow.drag({ phase: "move", x: 1087, y: 500 });
+    flow.drag({ phase: "end", x: 1087, y: 590 });
+    expect(values("setBounds").at(-1)).toEqual({ x: 986, y: 420, width: 202, height: 480 });
+    flow.shape({ kind: "picture" });
+    expect(values("setBounds").at(-1)).toEqual({ x: 1023, y: 772, width: 128, height: 128 });
+  });
+
+  test("a new window stands on her saved feet, not where a display change left the last one", () => {
+    const { flow, values, setScreens } = shownCompanion({ feet: { x: 300, y: 900 } });
+    const saved = { x: 199, y: 420, width: 202, height: 480 };
+    expect(values("open")).toEqual([saved]);
+    setScreens(
+      [{ ...LAPTOP, height: LAPTOP.height - 75 }, EXTERNAL],
+      [LAPTOP_DISPLAY, EXTERNAL_DISPLAY],
+    );
+    flow.displaysChanged();
+    setScreens([LAPTOP, EXTERNAL], [LAPTOP_DISPLAY, EXTERNAL_DISPLAY]);
+    flow.displaysChanged();
+    expect(values("setBounds").at(-1)).toEqual({ ...saved, y: 825 - 480 });
+    flow.setOn(false);
+    flow.setOn(true);
+    expect(values("open")).toEqual([saved, saved]);
+  });
+
   test("a hit makes her window take clicks, and a miss passes them, while it exists", () => {
     const { flow, values } = shownCompanion();
     flow.hit(true);
