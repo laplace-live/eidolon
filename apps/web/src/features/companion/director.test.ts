@@ -129,6 +129,14 @@ describe("taps", () => {
     director.tap("head", 3_000 + POKE_REST_MS);
     expect(director.direction(3_000 + POKE_REST_MS).pulse).toBe("shy");
   });
+
+  test("pokes count only within POKE_WINDOW_MS: five a second apart are five taps", () => {
+    const director = new CompanionDirector(0);
+    for (const at of [1_000, 2_000, 3_000, 4_000, 5_000]) director.tap("body", at);
+    const fifth = director.direction(5_000);
+    expect(fifth.pulse).toBe("surprised");
+    expect(fifth.gesture).toBeNull();
+  });
 });
 
 describe("dozing", () => {
@@ -148,6 +156,22 @@ describe("dozing", () => {
     expect(woken.mood).toEqual([]);
     // Waking is all a tap does then: no nod.
     expect(woken.gesture).toBeNull();
+  });
+
+  test("the tap that wakes her is no poke: four more within POKE_WINDOW_MS bring no pout", () => {
+    const director = new CompanionDirector(0);
+    director.tap("body", DOZE_MS);
+    for (const at of [600, 1_200, 1_800, 2_400]) director.tap("body", DOZE_MS + at);
+    const fourth = director.direction(DOZE_MS + 2_400);
+    expect(fourth.pulse).toBe("surprised");
+    expect(fourth.gesture).toBeNull();
+  });
+
+  test("every tap puts her dozing off, not only one that wakes her", () => {
+    const director = new CompanionDirector(0);
+    director.tap("body", 200_000);
+    expect(director.dozing(200_000 + DOZE_MS - 1)).toBe(false);
+    expect(director.dozing(200_000 + DOZE_MS)).toBe(true);
   });
 
   test("never while a call is up or a voice message plays", () => {
