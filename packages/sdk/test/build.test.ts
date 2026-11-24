@@ -69,9 +69,16 @@ describe("@laplace.live/eidolon-sdk package build", () => {
 
     const workspacePkg = JSON.parse(
       readFileSync(resolve(import.meta.dirname, "../package.json"), "utf8"),
-    ) as { version: string; private?: boolean; publishConfig?: Record<string, unknown> };
+    ) as {
+      version: string;
+      private?: boolean;
+      sideEffects?: boolean;
+      publishConfig?: Record<string, unknown>;
+    };
     expect(workspacePkg.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(workspacePkg.private).toBeUndefined();
+    // The app bundles the workspace package: without it, a page that reads her moods carries the renderer.
+    expect(workspacePkg.sideEffects).toBe(false);
     expect(workspacePkg.publishConfig).toEqual({
       access: "public",
       provenance: true,
