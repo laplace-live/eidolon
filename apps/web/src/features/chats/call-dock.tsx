@@ -152,6 +152,16 @@ export function CallDock({
   const { t } = useLingui();
   const call = useShellCall();
   useShowsCall();
+  const root = useRef<HTMLElement>(null);
+  // The screen goes with the focus and no Expand takes it when every stage failed or the call
+  // ended, and the bar's Return to Call still holds it: the keyboard stays in the call. Expand's
+  // effect runs first, so Shrink still lands there.
+  useEffect(() => {
+    const held = document.activeElement;
+    if (held === document.body || held?.closest("[data-call-bar]")) {
+      root.current?.focus({ preventScroll: true });
+    }
+  }, []);
   const { target, phase, botSpeaking } = call;
   if (target === null) return null;
   const host = hostOf(target);
@@ -166,8 +176,10 @@ export function CallDock({
   const up = isUp(phase);
   return (
     <section
+      ref={root}
       aria-label={t`Call with ${name}`}
-      className="overflow-hidden rounded-xl border bg-card text-card-foreground"
+      tabIndex={-1}
+      className="overflow-hidden rounded-xl border bg-card text-card-foreground outline-none"
     >
       {status !== undefined && (
         <CallNotices call={call} status={status} name={name} persona={host.id} />

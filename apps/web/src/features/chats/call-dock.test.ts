@@ -97,6 +97,14 @@ test("a call whose stages all failed or found none offers no Expand", () => {
   expect(dock(LIVE, false)).not.toContain('aria-label="Expand"');
 });
 
+test("the dock's region can take the focus the screen or the bar's Return to Call leaves", () => {
+  for (const video of [true, false]) {
+    const region = dock(LIVE, video).match(/<section [^>]*>/)?.[0] ?? "";
+    expect(region).toContain('aria-label="Call with 奶绿"');
+    expect(region).toContain('tabindex="-1"');
+  }
+});
+
 test("a call that ended never offers Expand, but Call Again and Close", () => {
   const markup = dock(DROPPED, true);
   expect(markup).not.toContain('aria-label="Expand"');
