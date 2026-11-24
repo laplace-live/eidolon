@@ -27,9 +27,12 @@ router = createRouter({ queryClient, exchanged });
 connectDesktop((to) => void router?.navigate(to));
 // Hidden while it feeds the desktop companion, the desktop app's window still runs this page, and
 // an animation running would keep it drawing: index.css pauses them under the mark.
-subscribeWindowShows(() => {
+const markWindowShows = () => {
   document.documentElement.toggleAttribute("data-window-hidden", !windowShows());
-});
+};
+subscribeWindowShows(markWindowShows);
+// A page loaded while the window is hidden heard so before it listened.
+markWindowShows();
 
 // Rendered once a language is active: the viewer's, else English.
 void dynamicActivate(initialLang()).then(() => {
