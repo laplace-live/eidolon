@@ -418,15 +418,16 @@ nothing. Main owns its title.
   is approved, main hides the window, stops the task watch, removes the tray icon, stops its
   backend, and quits. The restart that installs an update goes the same way, with its own box
   ([Updates](#updates)).
-- **Unsaved edits.** The studio's text editors hold their unsaved edits for the boxes: the page
-  tells main `true` as the first editor has some and `false` as the last saves, reverts or goes
-  (the bridge's `unsaved`). Main keeps the page's word until its document goes: a new one commits,
-  its renderer goes, or main loads a page of its own, since a page says nothing as it unloads. A
-  page's `beforeunload`, which the same editors use, holds against its own reloads and navigations
-  alone: Electron would cancel the unload, and with it the quit, leaving the app running hidden
-  with its backend stopped. Once a quit is approved, the restart included, and while main loads a
-  page of its own (the loading or failure page, or the app's reload), main lets the page go, edits
-  and all (`will-prevent-unload`). `PageUnloads` in `pages.ts` decides both.
+- **Unsaved edits.** The studio's text editors and Appearance's model draft hold their unsaved
+  edits for the boxes: the page tells main `true` as the first editor has some and `false` as the
+  last saves, reverts or goes (the bridge's `unsaved`). Main keeps the page's word until its
+  document goes: a new one commits, its renderer goes, or main loads a page of its own, since a
+  page says nothing as it unloads. A page's `beforeunload`, which the same editors use, holds
+  against its own reloads and navigations alone: Electron would cancel the unload, and with it the
+  quit, leaving the app running hidden with its backend stopped. Once a quit is approved, the
+  restart included, and while main loads a page of its own (the loading or failure page, or the
+  app's reload), main lets the page go, edits and all (`will-prevent-unload`). `PageUnloads` in
+  `pages.ts` decides both.
 
 ## Notifications
 
