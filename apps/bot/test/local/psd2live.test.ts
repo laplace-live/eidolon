@@ -6,7 +6,12 @@ import { join } from "node:path";
 import { crc32, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { psd2liveDir } from "@eidolon/config";
 import { describe, expect, test } from "vitest";
-import { checkRig, type RigCheck } from "../../src/local/psd2live.ts";
+import {
+  checkRig,
+  LOAD_DEADLINE_MS,
+  type RigCheck,
+  slowRefusal,
+} from "../../src/local/psd2live.ts";
 
 const RIG = readFileSync(join(import.meta.dirname, "fixtures/psd2live/tml.p2lrt"));
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
@@ -80,6 +85,17 @@ function headNamed(name: string): Uint8Array {
     const renamed = Buffer.from(areas);
     renamed.writeUInt32LE(index, 8);
     return renamed;
+  });
+}
+
+/** The test rig with `count` copies of its first hit area, each named `name`. */
+function crowdedWith(count: number, name: string): Uint8Array {
+  return rewritten(headNamed(name), "HITA", (areas) => {
+    const copies = Buffer.alloc(4 + 16 * count);
+    copies.writeUInt32LE(count, 0);
+    // The head's id, name, mesh count (1) and mesh.
+    for (let copy = 0; copy < count; copy++) areas.copy(copies, 4 + 16 * copy, 4, 20);
+    return copies;
   });
 }
 
@@ -185,14 +201,7 @@ describe("checkRig", () => {
     if (!long.ok) throw new Error(long.message);
     expect(long.inventory.hitAreas[0]).toEqual({ id: "HitAreaHead", name: "头".repeat(100_000) });
     expect(refusal(checkRig(headNamed("头".repeat(400_000))))).toEqual(oversized);
-    const crowded = rewritten(RIG, "HITA", (areas) => {
-      const copies = Buffer.alloc(4 + 16 * 100_000);
-      copies.writeUInt32LE(100_000, 0);
-      // The head's id, name, mesh count (1) and mesh.
-      for (let copy = 0; copy < 100_000; copy++) areas.copy(copies, 4 + 16 * copy, 4, 20);
-      return copies;
-    });
-    expect(refusal(checkRig(crowded))).toEqual(oversized);
+    expect(refusal(checkRig(crowdedWith(100_000, "头")))).toEqual(oversized);
   });
 
   test("the runtime is PSD2Live's committed build, byte for byte", () => {
@@ -200,5 +209,30 @@ describe("checkRig", () => {
     expect(createHash("sha256").update(wasm).digest("hex")).toBe(
       "d8bbff52f27aebd40baca94139f9eca5af0f9d2a07c1c70fc5c15633121862a7",
     );
+  });
+});
+
+describe("slowRefusal", () => {
+  test("lets through what the runtime loads, refuses or can't read within the deadline", async () => {
+    expect(LOAD_DEADLINE_MS).toBe(5000);
+    expect(await slowRefusal(RIG)).toBeNull();
+    expect(await slowRefusal(PNG)).toBeNull();
+    const flipped = Uint8Array.from(RIG);
+    const textures = chunk(flipped, "TEXR");
+    const inside = textures.at + (textures.length >> 1);
+    flipped[inside] = (flipped[inside] as number) ^ 0xff;
+    expect(await slowRefusal(flipped)).toBeNull();
+  });
+
+  test("refuses a rig the runtime takes longer to load, ending its load at the deadline", async () => {
+    // The runtime's load is quadratic in hit areas: 40,000 sharing this name take it about 2 s.
+    const slow = crowdedWith(40_000, "x".repeat(5000));
+    const started = performance.now();
+    expect(await slowRefusal(slow, 100)).toEqual({
+      ok: false,
+      code: "invalid-model",
+      message: "PSD2Live's runtime takes over 0.1 s to load it, far longer than any export",
+    });
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 });
