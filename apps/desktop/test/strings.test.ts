@@ -229,6 +229,26 @@ describe("STRINGS", () => {
     expect(en.text.restartUnknown).toContain("Restarting stops any call, task or job");
     expect(webChinese("Restart")).toBe(zh.label.restart);
   });
+
+  test("says unsaved changes will be lost in the studio's own words, after what else stops", () => {
+    const lost = "Your unsaved changes will be lost.";
+    expect(en.text.unsavedLost(null)).toBe(lost);
+    expect(titleCase(lost)).not.toBe(lost);
+    expect(zh.text.unsavedLost(null)).toBe(webChinese(lost));
+    const stopping = { calls: 1, tasks: 0, jobs: 2 };
+    expect(en.text.unsavedLost(en.text.quitDetail(stopping))).toBe(
+      "Quitting stops the call and 2 jobs. Your unsaved changes will be lost.",
+    );
+    expect(en.text.unsavedLost(en.text.restartUnknown)).toBe(
+      "Eidolon couldn't check what's running. Restarting stops any call, task or job in progress. Your unsaved changes will be lost.",
+    );
+    expect(zh.text.unsavedLost(zh.text.quitDetail(stopping))).toBe(
+      "通话和 2 个作业会在退出时中断。未保存的修改将会丢失。",
+    );
+    expect(zh.text.unsavedLost(zh.text.restartUnknown)).toBe(
+      "Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在重启时中断。未保存的修改将会丢失。",
+    );
+  });
 });
 
 describe("shellLanguage", () => {

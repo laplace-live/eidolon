@@ -113,6 +113,7 @@ describe("accepts", () => {
     BRIDGE.setLoginItem,
     BRIDGE.terminalCommand,
     BRIDGE.setTerminalCommand,
+    BRIDGE.unsaved,
   ];
   const SHELL_CHANNELS: PageChannel[] = [BRIDGE.retry, BRIDGE.showLogs, BRIDGE.quit];
   /** The app page's channels for the desktop companion. */
@@ -143,7 +144,7 @@ describe("accepts", () => {
   const ownSender = (channel: PageChannel): IpcSender =>
     HER_CHANNELS.includes(channel) ? her : SHELL_CHANNELS.includes(channel) ? shell : app;
 
-  test("the app's page alone sets the theme and the language, asks for the versions, takes commands, picks a folder and reads or changes the system options", () => {
+  test("the app's page alone sets the theme and the language, asks for the versions, takes commands, picks a folder, reads or changes the system options and tells of its unsaved edits", () => {
     for (const channel of APP_CHANNELS) {
       expect(accepts(channel, app)).toBe(true);
       expect(accepts(channel, shell)).toBe(false);
@@ -620,6 +621,21 @@ describe("the preload's bridges", () => {
       [BRIDGE.theme, "dark"],
       [BRIDGE.theme, "system"],
       [BRIDGE.language, "zh-Hans"],
+    ]);
+  });
+
+  test("the app's bridge tells main of the page's unsaved edits in booleans alone", () => {
+    const { ipc, sent } = fakeIpc();
+    const bridge = desktopBridge(ipc, "darwin", { version: "", serverVersion: "" });
+    bridge.unsaved(true);
+    bridge.unsaved(false);
+    // What a page could pass despite the types.
+    for (const held of ["true", 1, null, undefined, { valueOf: () => true }]) {
+      bridge.unsaved(held as never);
+    }
+    expect(sent).toEqual([
+      [BRIDGE.unsaved, true],
+      [BRIDGE.unsaved, false],
     ]);
   });
 

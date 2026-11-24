@@ -365,8 +365,9 @@ call is the app shell's (`features/call/call-provider.tsx`), and so are her stag
   model made active, edited or removed, show from her next call, which Appearance says while one is
   up.
 - **Her stages.** The Call click makes one stage per member with a model (`CallStages`,
-  `stages.ts`), each on a canvas of its own, kept for the call's life and disposed when it is over.
-  The same canvas moves between the screen, a group call's tile and the dock's thumbnail
+  `stages.ts`), each on a canvas of its own, kept for the call's life and disposed when it is over,
+  and drawing at most 60 frames a second, however fast the display. The same canvas moves between
+  the screen, a group call's tile and the dock's thumbnail
   (`avatar-view.tsx`). Out of the page it pauses, and its GL context survives the move, so leaving
   the chat costs no drawing and coming back no reload.
 - **Loaded on demand.** The renderer comes in through `import("./avatar-loader")`, so the app's

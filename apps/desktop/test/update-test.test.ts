@@ -494,6 +494,7 @@ describe("main.log's steps", () => {
     const native = nativeUi(true, electron, log);
     const confirmation = new QuitConfirmation({
       check: async () => ({ calls: 0, tasks: 0, jobs: 0 }),
+      unsaved: () => false,
       strings: () => STRINGS.en,
       show: (box) => native.messageBox(box),
       focus: () => {},

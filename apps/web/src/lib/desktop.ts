@@ -126,6 +126,8 @@ export interface EidolonDesktop {
   /** The `eidolon` command for terminals. */
   readonly terminalCommand?: () => Promise<CommandState>;
   readonly setTerminalCommand?: (action: "install" | "remove") => Promise<CommandChange>;
+  /** Whether the page holds unsaved edits, which the app's quit and restart boxes warn of. */
+  readonly unsaved?: (held: boolean) => void;
   /** The desktop companion, as Settings shows her. */
   readonly companion?: () => Promise<CompanionState>;
   readonly setCompanion?: (change: CompanionChange) => Promise<CompanionState>;
@@ -177,6 +179,22 @@ export function companion(): EidolonCompanion | null {
 /** Whether the app offers Pop Out, which hands a call to the desktop companion. */
 export function offersPopOut(app: EidolonDesktop | null): boolean {
   return app?.popOut !== undefined;
+}
+
+/** The editors holding unsaved edits now. */
+let unsavedHolds = 0;
+
+/**
+ * Holds the page as one with unsaved edits until the release it returns. The desktop app hears true
+ * as the first hold starts and false as the last ends.
+ */
+export function holdUnsaved(): () => void {
+  unsavedHolds++;
+  if (unsavedHolds === 1) desktop()?.unsaved?.(true);
+  return () => {
+    unsavedHolds--;
+    if (unsavedHolds === 0) desktop()?.unsaved?.(false);
+  };
 }
 
 /** What each command the desktop app sends does here; any other is ignored. */

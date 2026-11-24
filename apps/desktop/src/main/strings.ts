@@ -127,6 +127,11 @@ export interface Strings {
     readonly restartTitle: string;
     readonly restartDetail: (stopping: Stopping) => string;
     readonly restartUnknown: string;
+    /**
+     * Either box's text while the window holds unsaved edits, as the studio's own Leave box words
+     * it: after what else stops, or alone (null).
+     */
+    readonly unsavedLost: (before: string | null) => string;
     readonly updateAvailableTitle: (version: string) => string;
     /** Under it, with the version that runs now. */
     readonly updateAvailable: (current: string) => string;
@@ -299,6 +304,8 @@ const en: Strings = {
     restartDetail: (stopping) => `Restarting stops ${stoppingEn(stopping)}.`,
     restartUnknown:
       "Eidolon couldn't check what's running. Restarting stops any call, task or job in progress.",
+    unsavedLost: (before) =>
+      `${before === null ? "" : `${before} `}Your unsaved changes will be lost.`,
     updateAvailableTitle: (version) => `Eidolon ${version} is available`,
     updateAvailable: (current) =>
       `You have ${current}. Eidolon downloads the update in the background, then asks before restarting.`,
@@ -460,6 +467,7 @@ const zhHans: Strings = {
     restartTitle: "重启 Eidolon？",
     restartDetail: (stopping) => `${stoppingZh(stopping)}会在重启时中断。`,
     restartUnknown: "Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在重启时中断。",
+    unsavedLost: (before) => `${before ?? ""}未保存的修改将会丢失。`,
     updateAvailableTitle: (version) => `Eidolon ${version} 已发布`,
     updateAvailable: (current) =>
       `当前版本为 ${current}。Eidolon 会在后台下载更新，下载完成后会先询问再重启。`,

@@ -293,13 +293,14 @@ and leaves it running when it quits.
   listener closed while its jobs stop, or one whose `local-token` was deleted under it), and
   respawning in a loop would boot a whole backend each round, or take the lock from a terminal
   supervisor's next child, which would then exit 2 and end `bun run app`.
-- **While attached,** quitting leaves the server running and asks nothing. A refused or unproven
-  connection, a forwarded restart answering 2xx, or one of the page's connections to it closing
-  starts a grace period, never a takeover: requests wait without the Bearer while main re-reads the
-  hint and probes every 500 ms for up to 60 s, and a fresh proof resumes forwarding, which after an
-  ordinary idle close costs one round trip. Only after 60 s with no server on the data home does
-  main spawn its own, on that port, under the refusal rule above; spawning sooner would race the
-  terminal supervisor's new child for the lock, and replace the owner's server if it won.
+- **While attached,** quitting leaves the server running, and asks only over the window's unsaved
+  edits ([Quit](#the-window)). A refused or unproven connection, a forwarded restart answering 2xx,
+  or one of the page's connections to it closing starts a grace period, never a takeover: requests
+  wait without the Bearer while main re-reads the hint and probes every 500 ms for up to 60 s, and
+  a fresh proof resumes forwarding, which after an ordinary idle close costs one round trip. Only
+  after 60 s with no server on the data home does main spawn its own, on that port, under the
+  refusal rule above; spawning sooner would race the terminal supervisor's new child for the lock,
+  and replace the owner's server if it won.
 - **The page matches the server.** It comes from whichever server answers, so its UI and API match
   even when a terminal's server runs another version; only the desktop's chrome can be missing
   then. Main reads each server's version from `GET /api/local/status` once, before the window
@@ -339,30 +340,30 @@ app's second, with rules of its own.
 - **The bridges.** The preload marks `<html>` (`data-shell`, and on macOS `data-fullscreen`) for
   apps/web's chrome ([web-app.md](web-app.md#in-the-desktop-app)), and gives each page its own
   bridge, in its main frame alone. The app's page gets `window.eidolonDesktop`: `platform`,
-  `version` and `serverVersion`, read before the page's first script over a synchronous message
-  main answers from what it already knows (`version` is `0.0.0-dev` unpackaged), and `setTheme`,
-  `setLanguage` and `onCommand`; five calls the page awaits, each an invoke main answers through
+  `version` and `serverVersion`, read before the page's first script over a synchronous message main
+  answers from what it already knows (`version` is `0.0.0-dev` unpackaged), and `setTheme`,
+  `setLanguage`, `onCommand` and `unsaved(held)`, which tells main whether the page holds unsaved
+  edits, for the quit's box (below); five calls the page awaits, each an invoke main answers through
   `ipcMain.handle`: `chooseFolder` (the folder dialog, below), `loginItem` and `setLoginItem(on)`
   ([Open at Login](#open-at-login)), `terminalCommand` and `setTerminalCommand(action)` ([the
   terminal command](#the-terminal-command)); and the [desktop companion](#the-desktop-companion)'s
-  seven: `companion()`, `setCompanion(change)` and `popOut()`, three more invokes, each answering her
-  `CompanionState`; `linkCompanion()`, which says the page listens for a port to her page, and
-  `feedingCompanion(feeding)`, whether a call she is on is up there; `onCompanionPick`, which
-  hands the page her menu's call picks (`companion-pick`); and `onWindowShows`, whether the window
-  shows, which the preload reads from main over a synchronous message as the page asks and main sends
-  again at each change (`window-shows`). The preload sends only what main takes
-  (`true` or `false`, `install` or `remove`, a change of `on` or `showAtLogin` alone) and hands the
-  page main's answers only in the shapes `src/shared/bridge.ts` declares. A shell page gets
-  `window.eidolonShell`: `retry`, `showLogs` and `quit`; her page gets `window.eidolonCompanion`
-  alone. Main takes each message only from its own window, by the sender's webContents
-  (`ipcSender` in `senders.ts`, which knows each window's as main names it, `senderWindow`), from
-  that window's main frame, on the channel's own page, judged by the frame's origin, never its URL:
-  a sandboxed document the backend serves has an app URL and an opaque origin, and the app page and
-  hers share the origin `eidolon-app://app`. `SENDERS` in `src/shared/bridge.ts` names each
-  channel's window kind and page, every channel but hers the main window's alone, and `accepts()`
-  holds each message to it. An invoke's sender is judged before anything awaits, since its frame
-  reads null once the page navigates; one from anyone else, or with another kind of argument,
-  throws (`app-invokes.ts`).
+  seven: `companion()`, `setCompanion(change)` and `popOut()`, three more invokes, each answering
+  her `CompanionState`; `linkCompanion()`, which says the page listens for a port to her page, and
+  `feedingCompanion(feeding)`, whether a call she is on is up there; `onCompanionPick`, which hands
+  the page her menu's call picks (`companion-pick`); and `onWindowShows`, whether the window shows,
+  which the preload reads from main over a synchronous message as the page asks and main sends again
+  at each change (`window-shows`). The preload sends only what main takes (`true` or `false`,
+  `install` or `remove`, a change of `on` or `showAtLogin` alone) and hands the page main's answers
+  only in the shapes `src/shared/bridge.ts` declares. A shell page gets `window.eidolonShell`:
+  `retry`, `showLogs` and `quit`; her page gets `window.eidolonCompanion` alone. Main takes each
+  message only from its own window, by the sender's webContents (`ipcSender` in `senders.ts`, which
+  knows each window's as main names it, `senderWindow`), from that window's main frame, on the
+  channel's own page, judged by the frame's origin, never its URL: a sandboxed document the backend
+  serves has an app URL and an opaque origin, and the app page and hers share the origin
+  `eidolon-app://app`. `SENDERS` in `src/shared/bridge.ts` names each channel's window kind and
+  page, every channel but hers the main window's alone, and `accepts()` holds each message to it. An
+  invoke's sender is judged before anything awaits, since its frame reads null once the page
+  navigates; one from anyone else, or with another kind of argument, throws (`app-invokes.ts`).
 - **The theme** the page reports goes to `nativeTheme.themeSource` as it is, `system` included: a
   resolved theme would pin `prefers-color-scheme` and stop the page's System from following the OS.
   Native menus, dialogs and Windows' caption buttons follow it.
@@ -431,13 +432,25 @@ app's second, with rules of its own.
 - **Quit.** Every quit, ⌘Q, a menu, the Dock, the tray or a second launch's `--quit`, goes through
   `before-quit`. While our own backend is ready, main first asks it what would stop
   (`GET /api/local/status` and `GET /api/local/jobs`, with the Bearer, 2 s for both). When a call, a
-  task or a job runs, or it couldn't tell, a "Quit Eidolon?" box names what stops, Quit being the
+  task or a job runs, or it couldn't tell, or the window holds unsaved edits, a "Quit Eidolon?" box
+  names what stops and, for the edits, says "Your unsaved changes will be lost.", Quit being the
   default and Esc cancelling; it has no owner window, so a hidden window stays hidden, and a quit
-  while it is open joins it. An attached server is never asked or stopped. On macOS a power-off
-  skips the box until the window has attention again. Once the quit is approved, main hides the
-  window, stops the task watch, closes the desktop companion, removes the tray icon, stops its
-  backend, and quits. The restart that installs an update goes the same way, with its own box
-  ([Updates](#updates)).
+  while it is open joins it. An attached server is never asked or stopped, but unsaved edits ask all
+  the same, as they do while no backend is ready: they are in the window, whatever server it talks
+  to. On macOS a power-off skips the box until the window has attention again. Once the quit is
+  approved, main hides the window, stops the task watch, closes the desktop companion, removes the
+  tray icon, stops its backend, and quits. The restart that installs an update goes the same way,
+  with its own box ([Updates](#updates)).
+- **Unsaved edits.** The studio's text editors and Appearance's model draft hold their unsaved
+  edits for the boxes: the page tells main `true` as the first editor has some and `false` as the
+  last saves, reverts or goes (the bridge's `unsaved`). Main keeps the page's word until its
+  document goes: a new one commits, its renderer goes, or main loads a page of its own, since a
+  page says nothing as it unloads. A page's `beforeunload`, which the same editors use, holds
+  against its own reloads and navigations alone: Electron would cancel the unload, and with it the
+  quit, leaving the app running hidden with its backend stopped. Once a quit is approved, the
+  restart included, and while main loads a page of its own (the loading or failure page, or the
+  app's reload), main lets the page go, edits and all (`will-prevent-unload`). `PageUnloads` in
+  `pages.ts` decides both.
 
 ## The desktop companion
 
@@ -1222,10 +1235,11 @@ needs a `sign` dispatch from `master` or `electron` that passes both legs, the u
   data home, <origin>`; `Eidolon: the backend listens on <origin>`; `Eidolon: the window shows
   <url>`; `Eidolon: the window is shown`, `… is hidden` and `… is closed` as main's own record of
   the window changes, which counts it as shown once it has painted, in background mode too; and at
-  a quit `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`. Background mode also
-  logs each thing it keeps off the screen ([below](#background-mode)), the updater each of its
-  steps ([Updates](#updates)), and the desktop companion hers ([her
-  lines](#the-desktop-companion)).
+  a quit `Eidolon: quitting`, then `Eidolon: the backend (pid N) exited (0)`. Main letting a page go
+  over its `beforeunload` logs `Eidolon: the page asked to stay (beforeunload); letting it go`,
+  before the page it loads or, at a quit, before the window is closed. Background mode also logs
+  each thing it keeps off the screen ([below](#background-mode)), the updater each of its steps
+  ([Updates](#updates)), and the desktop companion hers ([her lines](#the-desktop-companion)).
 
 ## Updates
 
@@ -1267,13 +1281,13 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
   the update to `autoInstallOnAppQuit` at the next quit, with no relaunch. Restart moves the state
   to installing first, so a second Restart does nothing: `quitAndInstall` twice asks Squirrel to
   relaunch twice, which leaves two copies running. Then it goes the way a [quit](#the-window) goes:
-  the quit check, whose box names what a restart stops (on Windows the installer kills any
-  `Eidolon.exe` still running from the install folder, a CLI job's included); the latch, after
-  which a close no longer hides the window; the backend's graceful stop; and only then
-  `quitAndInstall(true, true)`, once. A Cancel there hands the state back to downloaded. None of it
-  runs inside `before-quit`: on macOS `quitAndInstall` closes every window before `before-quit`
-  fires, so a latch set there would let the hide-on-close window veto the relaunch, as persona's
-  did from 0.32.0 to 0.63.2.
+  the quit check, whose "Restart Eidolon?" box names what a restart stops (on Windows the installer
+  kills any `Eidolon.exe` still running from the install folder, a CLI job's included) and, as the
+  quit's does, asks over the window's unsaved edits too; the latch, after which a close no longer
+  hides the window; the backend's graceful stop; and only then `quitAndInstall(true, true)`, once.
+  A Cancel there hands the state back to downloaded. None of it runs inside `before-quit`: on
+  macOS `quitAndInstall` closes every window before `before-quit` fires, so a latch set there would
+  let the hide-on-close window veto the relaunch, as persona's did from 0.32.0 to 0.63.2.
 - **An error after the download,** such as Squirrel.Mac refusing the update, takes Restart away:
   the update is in error, and the box offers Try Again. One that comes while the restart's quit
   check asks calls the restart off once it's answered, before the latch: nothing is hidden or
@@ -1324,11 +1338,12 @@ that could show something through it.
   on time, and takes Playwright's screenshots and clicks, with no Chromium switch and no
   `backgroundThrottling` change.
 - **Nothing native appears, and main.log names each thing kept off the screen.** A message box is
-  answered with its default button, so a quit that stops a call, a task or a job goes ahead. A web
-  link, Show Logs, Open Data Folder, Licenses, the About panel and a context menu open nothing. A
-  download saves, with no Save dialog, into the profile's `downloads` folder under the name
-  Chromium suggests, numbered ` (1)` on while that name is taken. The folder dialog answers as
-  Cancel (`Eidolon: background mode didn't open the folder dialog`).
+  answered with its default button, as `Eidolon: background mode answered "<button>" to a message
+  box: <message> <detail>`, so a quit that stops a call, a task or a job, or drops unsaved edits,
+  goes ahead. A web link, Show Logs, Open Data Folder, Licenses, the About panel and a context menu
+  open nothing. A download saves, with no Save dialog, into the profile's `downloads` folder under
+  the name Chromium suggests, numbered ` (1)` on while that name is taken. The folder dialog
+  answers as Cancel (`Eidolon: background mode didn't open the folder dialog`).
 - **No notification:** the task watch runs, but each notice is a line in main.log
   ([Notifications](#notifications)). Electron's `Notification` is never made, nor
   `Notification.isSupported()` called, since its presenter alone asks macOS for permission, and on
@@ -1583,26 +1598,34 @@ Each step prints one line, made of the checks inside it:
     `start_task`: its card asks "Start this task?". Within 60 s main.log must read `background mode
     didn't show a notification: <her name>: <the start's words> / <its goal>`, in the words
     `strings.ts` has in English: the watch polls every 30 s while no task runs, and never tells of a
-    task already there at its first answer, so the task starts once the server is ready. Deny on
-    the card stops it, and within 45 s the watch's notice of that follows, with the stopped task's
+    task already there at its first answer, so the task starts once the server is ready. Deny on the
+    card stops it, and within 45 s the watch's notice of that follows, with the stopped task's
     words: two notices in all.
-11. **Attach:** after `--quit` ends that launch and its backend, a server started first on the
-    same home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not replaced:
-    Settings' Restart there waits for the supervisor's next server, a restart from outside the app
-    is survived, and quitting leaves the server running until the smoke stops it.
-12. **Quit:** a last launch spawns its own backend again, and `--quit` ends main and the backend
-    with exit 0, leaving nothing running and no error line in either log.
+11. **Attach:** after `--quit` ends that launch and its backend, with no box, a server started first
+    on the same home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not
+    replaced: Settings' Restart there waits for the supervisor's next server, a restart from outside
+    the app is survived, and quitting, again with no box, leaves the server running until the smoke
+    stops it.
+12. **Quit:** a last launch spawns its own backend again, and the smoke types into the persona's
+    System Prompt, leaving the edit unsaved. It kills the backend: main.log says main let the page
+    go and loaded the failure page, whose Try Again starts another backend and loads Home. With the
+    edit typed again, `--quit` still ends main and the backend with exit 0. main.log says background
+    mode answered Quit to the quit's box, whose text is "Quit Eidolon? Your unsaved changes will be
+    lost.", then that main quit, hid the window, stopped the backend, let the page go and closed the
+    window, in that order, and the quit leaves nothing running and no error line in either log but
+    the failure the kill caused.
 
 After the steps come the window watch's line and the kit's. The run's folder keeps
 `results/results.json`, with every check and each step's time, and `results/screenshots`; a pass
 removes them with the rest of the folder, unless `--keep` first copies them to
-`<run's folder>-results`. A run takes about 80 s: about 40 of them the wait for the task's
-notices, and about 12 the desktop companion's step. With `--headful`, the checks that only
-background mode makes true (off screen, never audible, main.log's background lines, the folder
-dialog's line and the notices: the unpackaged app shows none) are skipped, the desktop companion's
-step is off, since she and her menu would show on screen, Choose Folder gets the replaced handler
-alone, Settings → Desktop says the options are for the installed app only, and a hook the smoke
-adds in main saves downloads into the same folder instead of asking.
+`<run's folder>-results`. A run takes about 90 s: about 50 of them the wait for the task's notices,
+and about 12 the desktop companion's step. With `--headful`, the checks that only background mode
+makes true (off screen, never audible, main.log's background lines, the folder dialog's line and the
+notices: the unpackaged app shows none) are skipped, the desktop companion's step is off, since she
+and her menu would show on screen, Choose Folder gets the replaced handler alone, Settings → Desktop
+says the options are for the installed app only, a hook the smoke adds in main saves downloads into
+the same folder instead of asking, and the last quit's box waits for the developer's Quit, within
+the 30 s the quit has.
 
 #### The packaged smoke
 
@@ -1807,7 +1830,7 @@ What it can't see:
   upload's `v<version>/` paths or `eidolonNotes` line, and with no R2 or Cloudflare in between.
 - **What a person's machine adds:** the microphone grant kept across the update on macOS, an install
   in `/Applications` opened from Finder, SmartScreen and Smart App Control on Windows, and a call,
-  task or job running when Restart's quit check asks.
+  task or job running, or unsaved edits in the window, when Restart's quit check asks.
 - **A later update on macOS,** which downloads only the zip's changed blocks against the one the
   last update cached: the first update has none, so it downloads the whole zip.
 - **The app it starts again on its own terms,** which runs outside background mode and on the

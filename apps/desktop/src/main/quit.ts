@@ -12,6 +12,8 @@ import { hideWindow } from "./window.ts";
 
 export interface QuitOptions {
   readonly backend: Backend;
+  /** Whether the window's page holds unsaved edits, which the quit's box names. */
+  readonly unsaved: () => boolean;
   readonly strings: () => Strings;
   /** Windows' box takes the app's icon; macOS draws it on its warning icon. */
   readonly icon?: NativeImage;
@@ -22,6 +24,7 @@ export interface QuitOptions {
 export function installQuit(options: QuitOptions): QuitFlow {
   const confirmation = new QuitConfirmation({
     check: () => options.backend.quitCheck(),
+    unsaved: options.unsaved,
     strings: options.strings,
     // No owner window: a hidden window stays hidden, and the box is a window of its own.
     show: (box) => native.messageBox(options.icon ? { ...box, icon: options.icon } : box),

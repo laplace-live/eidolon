@@ -1,7 +1,7 @@
 // The window's chrome and the app's bridge to main: the theme the page reports, which
 // native menus, dialogs and the caption buttons follow; the fullscreen mark on macOS; the page's
-// language; the versions its bridge carries; the folder dialog, the system options and the desktop
-// companion it asks main for; and her menu's picks for its call.
+// language and its unsaved edits; the versions its bridge carries; the folder dialog, the system
+// options and the desktop companion it asks main for; and her menu's picks for its call.
 import { type BrowserWindow, ipcMain, nativeTheme } from "electron";
 import {
   accepts,
@@ -46,6 +46,8 @@ export interface AppBridge extends AppInvokes {
   readonly language: (language: Language) => void;
   /** The page listens for commands now. */
   readonly takesCommands: () => void;
+  /** Whether the page holds unsaved edits now. */
+  readonly unsaved: (held: boolean) => void;
   /** The page listens for a port to the companion's page. */
   readonly linkCompanion: () => void;
   /** Whether a call she is on is up in the page. */
@@ -72,6 +74,11 @@ export function handleAppBridge(bridge: AppBridge): void {
   });
   ipcMain.on(BRIDGE.takesCommands, (event) => {
     if (accepts(BRIDGE.takesCommands, ipcSender(event))) bridge.takesCommands();
+  });
+  ipcMain.on(BRIDGE.unsaved, (event, held: unknown) => {
+    if (accepts(BRIDGE.unsaved, ipcSender(event)) && typeof held === "boolean") {
+      bridge.unsaved(held);
+    }
   });
   ipcMain.on(BRIDGE.linkCompanion, (event) => {
     if (accepts(BRIDGE.linkCompanion, ipcSender(event))) bridge.linkCompanion();

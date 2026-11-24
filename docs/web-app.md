@@ -410,18 +410,20 @@ has none of them, and without them nothing below happens.
   terminal's server can serve this page to an older app, and the page looks for each before it uses
   it: `chooseFolder()`, `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and
   `setTerminalCommand(action)`, each a promise of main's answer
-  ([desktop.md](desktop.md#the-window)); and the [desktop
+  ([desktop.md](desktop.md#the-window)); `unsaved(held)`; and the [desktop
   companion](desktop.md#the-desktop-companion)'s: `companion()`, `setCompanion(change)` and
   `popOut()`, each a promise of her state (`on`, `showAtLogin`, and `background`, true while
   background mode keeps her off screen); `linkCompanion()`, which asks main for a port to her page,
-  and `feedingCompanion(feeding)`, whether a call she is on is up here;
-  `onCompanionPick(callback)`, which hands the page her menu's picks for the call, `call`,
-  `hang-up`, `mute` or `unmute`; and `onWindowShows(callback)`, whether the window shows, at once
-  and at each change. `connectDesktop` passes each pick to whoever listens through
-  `subscribeCompanionPick` at that moment, and drops one nobody does, and keeps the window's showing
-  as a store (`windowShows()`, `subscribeWindowShows`), true in a browser, by which the call's
-  provider and Studio's preview hold their stages while the window doesn't show, and `main.tsx` marks
-  `<html>` with `data-window-hidden`, under which `index.css` pauses every animation.
+  and `feedingCompanion(feeding)`, whether a call she is on is up here; `onCompanionPick(callback)`,
+  which hands the page her menu's picks for the call, `call`, `hang-up`, `mute` or `unmute`; and
+  `onWindowShows(callback)`, whether the window shows, at once and at each change. `connectDesktop`
+  passes each pick to whoever listens through `subscribeCompanionPick` at that moment, and drops one
+  nobody does, and keeps the window's showing as a store (`windowShows()`, `subscribeWindowShows`),
+  true in a browser, by which the call's provider and Studio's preview hold their stages while the
+  window doesn't show, and `main.tsx` marks `<html>` with `data-window-hidden`, under which
+  `index.css` pauses every animation. A studio text editor or Appearance's model draft with unsaved
+  edits holds them through `holdUnsaved()`, counted, so the app hears `true` as the first hold
+  starts and `false` as the last ends, for its quit and restart boxes.
 - **The port** to her page, which isn't a bridge member, since the preload posts it: a window
   message from this window itself, tagged `{eidolon: "companion-port"}`, with one port, which
   `onCompanionPort` hands on. Main pairs the app page and hers once both have asked, and again

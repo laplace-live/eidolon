@@ -2606,18 +2606,21 @@ describe("commands", () => {
 
   test("a paused task's command runs on, and its end reaches the worker once the owner answers", async () => {
     settings = { ...settings, folders: [work] };
+    const folder = join(work, "paused");
     minds.script("Paused", [
-      calls([bash("b1", "sleep 0.6; echo slept")]),
+      // Held until the test writes `go`: a slow runner reached the fetch after a timed sleep ended.
+      calls([bash("b1", "until [ -e go ]; do sleep 0.05; done; echo slept")]),
       calls([call("f1", "web_fetch", { url: "https://203.0.113.7/" })]),
       says("Done."),
     ]);
     const tasks = quick();
     await tasks.boot();
-    const { id } = await tasks.start({ goal: "Paused", folder: join(work, "paused") }, ORIGIN);
+    const { id } = await tasks.start({ goal: "Paused", folder }, ORIGIN);
     await reach(tasks, id, "paused");
     await tasks.approve(id, { answer: "once" });
     await until(async () => (await tasks.get(id)).pending?.kind === "fetch");
     expect((await tasks.get(id)).background).toHaveLength(1);
+    writeFileSync(join(folder, "go"), "");
     await until(async () => (await tasks.get(id)).background === undefined);
 
     await tasks.approve(id, { answer: "deny" });
