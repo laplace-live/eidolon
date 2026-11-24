@@ -32,6 +32,9 @@ export const TASK_GOAL = "把截图按拍摄日期分进不同的文件夹";
 export const TASK_ACK = "好，你在任务卡片上点一下允许我就开始。";
 /** The model the smokes' tasks name: any model the fakes list. */
 export const TASK_MODEL = "fake-worker";
+/** A line her answer to opens with a direction, which the desktop companion's mood follows. */
+export const COMPANION_LINE = "你会一直在桌面上陪着我吗？";
+export const COMPANION_REPLY = "[开心地] 会呀，我就在你屏幕边上！";
 
 const SELFIE_TOOL = "take_selfie";
 const SELFIE_CALL_ID = "call_smoke_selfie";
@@ -265,6 +268,7 @@ function answerTo(
     const args = { goal: TASK_GOAL, folder: taskFolder };
     return { texts: [], call: { id: TASK_CALL_ID, name: TASK_TOOL, args } };
   }
+  if (asked === COMPANION_LINE) return say(COMPANION_REPLY);
   if (asked === CHAT_MESSAGE) return say(...REPLY);
   if (asked.includes(VOICE_TRANSCRIPT)) return say(HEARD_REPLY);
   return say(GREETING);

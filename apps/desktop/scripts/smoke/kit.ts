@@ -21,6 +21,7 @@ import { join, relative, resolve } from "node:path";
 import type { AccountsResponse } from "../../../bot/src/local/api.ts";
 import { hintFrom, originOf, readServerInfo, readToken } from "../../src/main/attach.ts";
 import { BACKGROUND_LINE, FAKE_MEDIA_DEVICE } from "../../src/main/background.ts";
+import { COMPANION_LINES } from "../../src/main/companion.ts";
 import { appEnv } from "./env.ts";
 import { type Fakes, type FakesOptions, startFakes } from "./fakes.ts";
 import { type FocusWatch, watchFocus } from "./focus.ts";
@@ -50,6 +51,10 @@ export const LINES = {
   quitting: "Eidolon: quitting",
   /** The pid, and its exit code or signal. */
   exited: /Eidolon: the backend \(pid (\d+)\) exited \((\w+)\)/,
+  /** The desktop companion's page said she is drawn: her model, or her picture. */
+  companionDrawn: /Eidolon: the companion's page drew her (model|picture)/,
+  /** Background mode's record of her showing, where it would show her. */
+  companionOffScreen: COMPANION_LINES.offScreen,
 } as const;
 
 export interface SmokeArgs {
