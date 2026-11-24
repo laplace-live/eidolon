@@ -194,6 +194,14 @@ export async function p2lrtFromZip(
   return chunks === null ? "zip" : new File(chunks, name);
 }
 
+/** `file` once its name, size and header say it's a model; else why not. */
+async function checked(file: File): Promise<File | ModelFileProblem> {
+  const problem = modelFileProblem(file);
+  if (problem !== null) return problem;
+  const head = new Uint8Array(await file.slice(0, MAGIC.length).arrayBuffer());
+  return isP2lrtHeader(head) ? file : "header";
+}
+
 async function chosen(files: readonly File[]): Promise<File | ModelFileProblem> {
   let file: File;
   // A folder picked holds its files under its own name, even a folder of one.
@@ -212,10 +220,7 @@ async function chosen(files: readonly File[]): Promise<File | ModelFileProblem> 
       file = only;
     }
   }
-  const problem = modelFileProblem(file);
-  if (problem !== null) return problem;
-  const head = new Uint8Array(await file.slice(0, MAGIC.length).arrayBuffer());
-  return isP2lrtHeader(head) ? file : "header";
+  return checked(file);
 }
 
 /**
@@ -225,6 +230,61 @@ async function chosen(files: readonly File[]): Promise<File | ModelFileProblem> 
 export async function modelFileFrom(files: readonly File[]): Promise<File | ModelFileProblem> {
   try {
     return await chosen(files);
+  } catch {
+    return "read";
+  }
+}
+
+/** What a drop holds, taken in its event, after which its items are gone. */
+export interface Dropped {
+  /** Each item's `webkitGetAsEntry()`, which reaches into a folder. */
+  readonly entries: readonly (FileSystemEntry | null)[];
+  /** Its files, in which a folder is a file of its name, with nothing to read. */
+  readonly files: readonly File[];
+}
+
+/** A folder's entries, which its reader gives a batch at a time until an empty one. */
+async function entriesIn(folder: FileSystemDirectoryEntry): Promise<FileSystemEntry[]> {
+  const reader = folder.createReader();
+  const all: FileSystemEntry[] = [];
+  for (;;) {
+    const batch = await new Promise<FileSystemEntry[]>((done, failed) =>
+      reader.readEntries(done, failed),
+    );
+    if (batch.length === 0) return all;
+    all.push(...batch);
+  }
+}
+
+/** The .p2lrt files under what was dropped, each folder read all the way down. */
+async function modelEntries(dropped: readonly FileSystemEntry[]): Promise<FileSystemFileEntry[]> {
+  const found: FileSystemFileEntry[] = [];
+  const queue = [...dropped];
+  for (let entry = queue.shift(); entry !== undefined; entry = queue.shift()) {
+    if (entry.isDirectory) {
+      if (!isMacExtra(entry.fullPath)) {
+        queue.push(...(await entriesIn(entry as FileSystemDirectoryEntry)));
+      }
+    } else if (entry.isFile && isModelPath(entry.fullPath)) {
+      found.push(entry as FileSystemFileEntry);
+    }
+  }
+  return found;
+}
+
+/**
+ * The .p2lrt to import from a drop: as from a picker, unless a folder is among what was dropped,
+ * which is read for the one model under it, as the folder picker finds it.
+ */
+export async function modelFileFromDrop(dropped: Dropped): Promise<File | ModelFileProblem> {
+  const entries = dropped.entries.filter((entry) => entry !== null);
+  if (!entries.some((entry) => entry.isDirectory)) return modelFileFrom(dropped.files);
+  try {
+    const models = await modelEntries(entries);
+    if (models.length > 1) return "several";
+    const [model] = models;
+    if (model === undefined) return "none";
+    return await checked(await new Promise<File>((done, failed) => model.file(done, failed)));
   } catch {
     return "read";
   }

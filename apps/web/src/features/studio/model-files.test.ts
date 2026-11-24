@@ -5,6 +5,7 @@ import {
   MAX_MODEL_BYTES,
   MODEL_ACCEPT,
   modelFileFrom,
+  modelFileFromDrop,
   modelFileProblem,
   p2lrtFromZip,
   pickFromFolder,
@@ -231,5 +232,110 @@ describe("modelFileFrom", () => {
     }
     expect(await modelFileFrom([new Unreadable([RIG], "tml.p2lrt")])).toBe("read");
     expect(await modelFileFrom([new Unreadable([RIG], "web.zip")])).toBe("read");
+  });
+});
+
+describe("modelFileFromDrop", () => {
+  const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+
+  /** A file as a drop's webkitGetAsEntry gives it. */
+  function fileEntry(path: string, data: Uint8Array<ArrayBuffer> | string = RIG): FileSystemEntry {
+    const entry = {
+      isFile: true,
+      isDirectory: false,
+      name: nameOf(path),
+      fullPath: `/${path}`,
+      file: (done: (file: File) => void) => done(new File([data], nameOf(path))),
+    };
+    return entry as unknown as FileSystemEntry;
+  }
+
+  /** A folder as a drop gives it, whose reader hands out `batch` entries a call, as browsers do. */
+  function folderEntry(
+    path: string,
+    children: readonly FileSystemEntry[],
+    { batch = 2, broken = false } = {},
+  ): FileSystemEntry {
+    const entry = {
+      isFile: false,
+      isDirectory: true,
+      name: nameOf(path),
+      fullPath: `/${path}`,
+      createReader: () => {
+        let at = 0;
+        return {
+          readEntries: (
+            done: (entries: FileSystemEntry[]) => void,
+            failed: (error: DOMException) => void,
+          ) => {
+            if (broken) {
+              failed(new DOMException("gone", "NotFoundError"));
+              return;
+            }
+            done(children.slice(at, at + batch));
+            at += batch;
+          },
+        };
+      },
+    };
+    return entry as unknown as FileSystemEntry;
+  }
+
+  /** A drop of `entries`, whose files list a folder as one empty file of its name. */
+  const drop = (...entries: FileSystemEntry[]) => ({
+    entries,
+    files: entries.map((entry) => new File([], entry.name)),
+  });
+
+  test("a folder gives the one .p2lrt under it, at any depth and after every batch", async () => {
+    const web = folderEntry("web", [
+      fileEntry("web/index.html", "<html>"),
+      fileEntry("web/p2l.js", "x"),
+      fileEntry("web/p2l_runtime.wasm", "x"),
+      folderEntry("web/assets", [fileEntry("web/assets/tml.p2lrt")]),
+    ]);
+    const picked = await modelFileFromDrop(drop(web));
+    expect(picked).toBeInstanceOf(File);
+    expect(await bytesOf(picked as File)).toEqual([...RIG]);
+    expect((picked as File).name).toBe("tml.p2lrt");
+  });
+
+  test("a folder with none, or more than one, says so, leaving out what macOS adds", async () => {
+    const mac = folderEntry("web/__MACOSX", [fileEntry("web/__MACOSX/tml.p2lrt")]);
+    expect(
+      await modelFileFromDrop(drop(folderEntry("web", [fileEntry("web/index.html", "x"), mac]))),
+    ).toBe("none");
+    expect(
+      await modelFileFromDrop(
+        drop(folderEntry("web", [fileEntry("web/a.p2lrt"), fileEntry("web/._a.p2lrt", "x")])),
+      ),
+    ).toBeInstanceOf(File);
+    expect(
+      await modelFileFromDrop(
+        drop(folderEntry("web", [fileEntry("web/a.p2lrt"), fileEntry("web/b.p2lrt")])),
+      ),
+    ).toBe("several");
+    expect(
+      await modelFileFromDrop(
+        drop(folderEntry("a", [fileEntry("a/x.p2lrt")]), fileEntry("y.p2lrt")),
+      ),
+    ).toBe("several");
+  });
+
+  test("the model in a folder is checked as a picked one is", async () => {
+    const fake = folderEntry("web", [fileEntry("web/tml.p2lrt", "PNG?")]);
+    expect(await modelFileFromDrop(drop(fake))).toBe("header");
+  });
+
+  test("a folder the browser can't read says so", async () => {
+    expect(await modelFileFromDrop(drop(folderEntry("web", [], { broken: true })))).toBe("read");
+  });
+
+  test("files with no folder among them go as picked ones do", async () => {
+    const rig = file(RIG, "tml.p2lrt");
+    expect(await modelFileFromDrop({ entries: [fileEntry("tml.p2lrt")], files: [rig] })).toBe(rig);
+    expect(await modelFileFromDrop({ entries: [null], files: [file("x", "her.png")] })).toBe(
+      "type",
+    );
   });
 });

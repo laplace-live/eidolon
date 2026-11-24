@@ -65,7 +65,13 @@ import { cn } from "@/lib/utils";
 import { type Lang, useLang } from "@/locales/i18n";
 import { MODEL_KIND_LABELS, NAME_PROBLEMS } from "./appearance-labels";
 import { MAX_NAME, nameProblem } from "./model-draft";
-import { MAX_MODEL_BYTES, MODEL_ACCEPT, type ModelFileProblem, modelFileFrom } from "./model-files";
+import {
+  MAX_MODEL_BYTES,
+  MODEL_ACCEPT,
+  type ModelFileProblem,
+  modelFileFrom,
+  modelFileFromDrop,
+} from "./model-files";
 import {
   useActivateModel,
   useImportModel,
@@ -393,9 +399,9 @@ export function ModelListCard({
     activating.isPending ||
     removing.isPending;
 
-  async function take(files: File[], target: Target) {
+  async function take(reading: Promise<File | ModelFileProblem>, target: Target) {
     setReading(true);
-    const picked = await modelFileFrom(files);
+    const picked = await reading;
     setReading(false);
     if (typeof picked === "string") {
       toast.error(fileProblemText(picked, lang));
@@ -419,13 +425,18 @@ export function ModelListCard({
     }
   }
 
-  const pickers = usePickers((files, target) => void take(files, target));
+  const pickers = usePickers((files, target) => void take(modelFileFrom(files), target));
 
   function drop(event: DragEvent) {
     event.preventDefault();
     setOver(false);
-    const files = [...event.dataTransfer.files];
-    if (files.length > 0 && !busy) void take(files, { kind: "import" });
+    if (busy || event.dataTransfer.files.length === 0) return;
+    // Taken now: the drop's items are gone once its event returns.
+    const dropped = {
+      entries: [...event.dataTransfer.items].map((item) => item.webkitGetAsEntry()),
+      files: [...event.dataTransfer.files],
+    };
+    void take(modelFileFromDrop(dropped), { kind: "import" });
   }
 
   const empty = list.models.length === 0;
