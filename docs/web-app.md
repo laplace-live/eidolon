@@ -311,7 +311,8 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 ## The setup wizard
 
 `/setup` runs five steps: keys, persona, voice, memory and done. While a key the active persona's
-calls need is missing, every page but Settings sends you to its first.
+calls need is missing, every page but Settings sends you to its first, except during a call, which
+opening setup would end (`firstRunRedirect`).
 
 - **Keys** picks an account for each role a call needs (who hears, thinks and speaks) and for the
   optional ones (embeddings, for every persona, and her retrieval gate's decision model), from each
