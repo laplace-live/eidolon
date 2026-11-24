@@ -4,4 +4,4 @@
 "laplace-eidolon-desktop": patch
 ---
 
-fix: Hanging up while a call connects ends it at once, instead of about 30 s later
+fix: Hanging up as a call connects ends it within seconds, not about 30 s later

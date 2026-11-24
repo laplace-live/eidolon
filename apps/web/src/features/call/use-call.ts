@@ -354,7 +354,8 @@ export function useCall(signals: CallSignals): Call {
   const dial = useCallback((target?: ChatCallRequestData) => void start(target), [start]);
   const end = useCallback(() => void hangUp(), [hangUp]);
 
-  // The shell going away (the sign-in screen, setup, a reload) hangs up and frees the mic.
+  // The shell going away (the sign-in screen, setup, a reload) hangs up: the mic is muted at once
+  // and freed as the call goes.
   useEffect(
     () => () => {
       attemptRef.current++;

@@ -37,6 +37,7 @@ import {
   type Locator,
   type Page,
   type Response as PageResponse,
+  type Route,
 } from "playwright-core";
 import sharp from "sharp";
 import {
@@ -3606,13 +3607,30 @@ async function chatCallWalk(walk: Walk): Promise<void> {
     const ends = (events: readonly LoggedEvent[]) =>
       events.filter((e) => e.type === "call-ended").length;
     const endsBefore = ends(await chatLog(walk, id));
-    const offering = page.waitForRequest(
-      (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/offer",
-    );
-    await page.getByRole("button", { name: t("en", "Call"), exact: true }).click();
-    await offering;
-    await dock.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
-    const hungUpAt = Date.now();
+    // The offer is held until Hang Up has run, so the call is still connecting when it does.
+    let releaseOffer = () => {};
+    const offerReleased = new Promise<void>((resolve) => {
+      releaseOffer = resolve;
+    });
+    const holdOffer = async (route: Route) => {
+      if (route.request().method() === "POST") await offerReleased;
+      await route.continue();
+    };
+    await page.route("**/api/offer", holdOffer);
+    let hungUpAt = 0;
+    try {
+      const offering = page.waitForRequest(
+        (request) =>
+          request.method() === "POST" && new URL(request.url()).pathname === "/api/offer",
+      );
+      await page.getByRole("button", { name: t("en", "Call"), exact: true }).click();
+      await offering;
+      await dock.getByRole("button", { name: t("en", "Hang Up"), exact: true }).click();
+      hungUpAt = Date.now();
+    } finally {
+      releaseOffer();
+      await page.unroute("**/api/offer", holdOffer);
+    }
     const calls = await poll(
       async () =>
         ((await (await walk.api("GET", "/api/local/status")).json()) as Status).activeCalls,
@@ -3630,8 +3648,8 @@ async function chatCallWalk(walk: Walk): Promise<void> {
     const quickBack = (await shows(textBox, 5_000)) && (await textBox.isEnabled());
     checks.add(
       "chat call hung up as it connects",
-      calls === 0 && quickEnd !== undefined && quickBack,
-      `Hang Up as the offer went out: the server held ` +
+      calls === 0 && settled <= 10_000 && quickEnd?.reason === "hangup" && quickBack,
+      `Hang Up with the offer held: the server held ` +
         `${calls === 0 ? `no call ${seconds(settled)} later` : `${calls} call(s) after ${seconds(settled)}`}; ` +
         `the log ${quickEnd ? `ends it: ${String(quickEnd.reason)}` : "never stored its end"}; the ` +
         `composer ${quickBack ? "came back" : "stayed disabled"}`,
