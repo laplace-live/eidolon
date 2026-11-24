@@ -273,6 +273,8 @@ export class Companion {
   /** A call she is on is up in the main window. */
   feeding(on: boolean): void {
     this.#feeding = on;
+    // A call over before she shows leaves nothing for her to carry.
+    if (!on) this.#cancelPopTimer();
     this.#sync();
   }
 

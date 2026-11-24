@@ -725,6 +725,18 @@ describe("Pop Out", () => {
     expect(lines.at(-1)).toBe(COMPANION_LINES.poppedOut);
   });
 
+  test("leaves the window when the call ends before she shows, and says nothing late", () => {
+    const { flow, names, lines, fire } = companion();
+    flow.appPage();
+    flow.feeding(true);
+    flow.popOut();
+    flow.feeding(false);
+    flow.drawn("model");
+    expect(names()).not.toContain("hideMain");
+    fire(POP_TIMEOUT_MS);
+    expect(lines).not.toContain(`warn: ${COMPANION_LINES.popLate}`);
+  });
+
   test("leaves the window when she draws nothing within 10 s", () => {
     const { flow, names, lines, fire } = companion();
     flow.appPage();
