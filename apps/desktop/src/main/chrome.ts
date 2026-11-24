@@ -50,6 +50,8 @@ export interface AppBridge extends AppInvokes {
   readonly linkCompanion: () => void;
   /** Whether a call she is on is up in the page. */
   readonly feedingCompanion: (on: boolean) => void;
+  /** window.ts's windowShows. */
+  readonly windowShows: () => boolean;
 }
 
 /**
@@ -83,6 +85,9 @@ export function handleAppBridge(bridge: AppBridge): void {
   ipcMain.on(BRIDGE.versions, (event) => {
     event.returnValue = accepts(BRIDGE.versions, ipcSender(event)) ? bridge.versions() : null;
   });
+  ipcMain.on(BRIDGE.windowShows, (event) => {
+    event.returnValue = accepts(BRIDGE.windowShows, ipcSender(event)) ? bridge.windowShows() : null;
+  });
   for (const [channel, answer] of appInvokes(bridge)) {
     // The sender is read before anything awaits: senderFrame turns null once the page navigates.
     ipcMain.handle(channel, (event, argument: unknown) => answer(ipcSender(event), argument));
@@ -103,4 +108,9 @@ export function sendCommand(command: DesktopCommand): void {
  */
 export function sendCompanionPick(pick: CompanionCallPick): void {
   mainWindow()?.webContents.send(BRIDGE.companionPick, pick);
+}
+
+/** Tells the app page whether its window shows: hidden or minimized, its call draws for no one. */
+export function sendWindowShows(shows: boolean): void {
+  mainWindow()?.webContents.send(BRIDGE.windowShows, shows);
 }

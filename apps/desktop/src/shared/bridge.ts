@@ -118,6 +118,11 @@ export const BRIDGE = {
   feedingCompanion: "eidolon:feeding-companion",
   /** Main → app page: a CompanionCallPick the owner clicked in her menu, for the call. */
   companionPick: "eidolon:companion-pick",
+  /**
+   * Main → app page: a boolean, whether its window shows, at each change. App page → main,
+   * synchronous: the same, read as its preload starts, since a page loads before it hears a change.
+   */
+  windowShows: "eidolon:window-shows",
   /** Main → both pages, through postMessage: a MessagePort to the other page, in the event's ports. */
   companionPort: "eidolon:companion-port",
   /** Companion page → main, with nothing: it listens for a port to the app page. */
@@ -160,6 +165,7 @@ const SENDERS = {
   [BRIDGE.popOut]: ["main", "app"],
   [BRIDGE.linkCompanion]: ["main", "app"],
   [BRIDGE.feedingCompanion]: ["main", "app"],
+  [BRIDGE.windowShows]: ["main", "app"],
   [BRIDGE.linkApp]: ["companion", "app"],
   [BRIDGE.companionHit]: ["companion", "app"],
   [BRIDGE.companionDrag]: ["companion", "app"],
@@ -557,6 +563,11 @@ export interface EidolonDesktop {
   readonly feedingCompanion: (feeding: boolean) => void;
   /** Hands `callback` each pick from her menu that main sends for the call. */
   readonly onCompanionPick: (callback: (pick: CompanionCallPick) => void) => void;
+  /**
+   * Hands `callback` whether the window shows, now and at each change: hidden while it feeds her, its
+   * page still runs, as throttling's off.
+   */
+  readonly onWindowShows: (callback: (shows: boolean) => void) => void;
 }
 
 /** `window.eidolonShell`, on the shell pages alone: the failure page's buttons. */

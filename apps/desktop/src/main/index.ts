@@ -17,7 +17,13 @@ import { BRIDGE, type Language, pageAt } from "../shared/bridge.ts";
 import { dataHome } from "./attach.ts";
 import { Backend, licensesFile } from "./backend.ts";
 import { BACKGROUND_LINE, backendPort, hasTray } from "./background.ts";
-import { dressWindow, handleAppBridge, sendCommand, sendCompanionPick } from "./chrome.ts";
+import {
+  dressWindow,
+  handleAppBridge,
+  sendCommand,
+  sendCompanionPick,
+  sendWindowShows,
+} from "./chrome.ts";
 import { COMPANION_FILE, readCompanion } from "./companion.ts";
 import { Companion, CompanionLink } from "./companion-flow.ts";
 import { companionWindow, handleCompanionBridge } from "./companion-window.ts";
@@ -69,7 +75,14 @@ import { type CommandHost, changeCommand, commandState } from "./terminal-comman
 import { AppTray, trayIconPath } from "./tray.ts";
 import { isUpdatableInstall, type UpdateFlow } from "./update-flow.ts";
 import { installUpdater } from "./updater.ts";
-import { createWindow, hideWindow, mainWindow, onWindowShows, showWindow } from "./window.ts";
+import {
+  createWindow,
+  hideWindow,
+  mainWindow,
+  onWindowShows,
+  showWindow,
+  windowShows,
+} from "./window.ts";
 
 /** NSIS gives the Start menu shortcut appId as its AppUserModelID. */
 const APP_USER_MODEL_ID = "live.laplace.eidolon";
@@ -432,6 +445,7 @@ function run(): void {
         popOut: () => companionFlow.popOut(),
         linkCompanion: () => link.appAsks(),
         feedingCompanion: (on) => companionFlow.feeding(on),
+        windowShows,
       });
       handleCompanionBridge({
         linkApp: () => link.companionAsks(),
@@ -442,7 +456,10 @@ function run(): void {
         shape: (shape) => companionFlow.shape(shape),
         menu: (state) => companionFlow.menu(state),
       });
-      onWindowShows((shows) => companionFlow.mainShown(shows));
+      onWindowShows((shows) => {
+        companionFlow.mainShown(shows);
+        sendWindowShows(shows);
+      });
       screen.on("display-added", () => companionFlow.displaysChanged());
       screen.on("display-removed", () => companionFlow.displaysChanged());
       screen.on("display-metrics-changed", () => companionFlow.displaysChanged());

@@ -64,6 +64,10 @@ function fakeIpc(answers: unknown[] = []) {
       invoked.push([channel, ...args]);
       return answers.shift();
     },
+    sendSync: (channel, ...args) => {
+      sent.push([channel, ...args]);
+      return answers.shift();
+    },
   };
   const deliver = (channel: string, ...args: unknown[]) => {
     for (const listener of listeners.get(channel) ?? [])
@@ -118,6 +122,7 @@ describe("accepts", () => {
     BRIDGE.popOut,
     BRIDGE.linkCompanion,
     BRIDGE.feedingCompanion,
+    BRIDGE.windowShows,
   ];
   /** Her page's own channels. */
   const HER_CHANNELS: PageChannel[] = [
@@ -695,6 +700,7 @@ describe("the preload's bridges", () => {
       invoke: async () => {
         throw new Error("Error invoking remote method 'eidolon:login-item': Error: refused");
       },
+      sendSync: () => null,
     };
     const bridge = desktopBridge(ipc, "win32", { version: "", serverVersion: "" });
     await expect(bridge.loginItem()).rejects.toThrow("refused");
@@ -754,6 +760,24 @@ describe("the preload's bridges", () => {
       [BRIDGE.feedingCompanion, false],
       [BRIDGE.feedingCompanion, false],
     ]);
+  });
+
+  test("the app's bridge says whether its window shows, as main answers at once and at each change", () => {
+    const { ipc, sent, deliver } = fakeIpc([false]);
+    const shows: unknown[][] = [];
+    desktopBridge(ipc, "darwin", { version: "", serverVersion: "" }).onWindowShows((...args) =>
+      shows.push(args),
+    );
+    expect(sent).toEqual([[BRIDGE.windowShows]]);
+    for (const value of [true, "false", 0, null, false]) deliver(BRIDGE.windowShows, value);
+    expect(shows).toEqual([[false], [true], [false]]);
+    // Whatever main answers but false reads as shown: a page hidden by mistake would draw nothing.
+    const other = fakeIpc([null]);
+    const read: unknown[] = [];
+    desktopBridge(other.ipc, "darwin", { version: "", serverVersion: "" }).onWindowShows((value) =>
+      read.push(value),
+    );
+    expect(read).toEqual([true]);
   });
 
   test("a pick from her menu reaches the app's page as a call pick alone, never with the IPC event", () => {

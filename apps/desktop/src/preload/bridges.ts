@@ -31,6 +31,7 @@ export interface PreloadIpc {
   send(channel: string, ...args: unknown[]): void;
   on(channel: string, listener: (event: unknown, ...args: unknown[]) => void): unknown;
   invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+  sendSync(channel: string, ...args: unknown[]): unknown;
 }
 
 /**
@@ -92,6 +93,12 @@ export function desktopBridge(
     onCompanionPick: (callback) => {
       ipc.on(BRIDGE.companionPick, (_event, pick) => {
         if (isCompanionCallPick(pick)) callback(pick);
+      });
+    },
+    onWindowShows: (callback) => {
+      callback(ipc.sendSync(BRIDGE.windowShows) !== false);
+      ipc.on(BRIDGE.windowShows, (_event, shows) => {
+        if (typeof shows === "boolean") callback(shows);
       });
     },
   };
