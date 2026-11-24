@@ -8,7 +8,7 @@ import type { Status } from "@/lib/api";
 import type { PortLike } from "./page-port";
 import { type ChatFact, type CompanionCall, type ToApp, type ToCompanion, toApp } from "./protocol";
 
-/** The fewest milliseconds between two mouth messages: about 30 a second. */
+/** The mouth messages' period: about 30 a second. */
 export const MOUTH_SEND_MS = 33;
 /**
  * How much early a mouth message may still go: a 33 ms timer's runs came 28 to 38 ms apart in
@@ -113,7 +113,7 @@ export class FeedLink {
     this.#send({ type: "direction", direction });
   }
 
-  /** The widest level since the last send, sent at most every MOUTH_SEND_MS. */
+  /** The widest level since the last send, sent about every MOUTH_SEND_MS and up to MOUTH_SLACK_MS early. */
   mouth(level: number): void {
     if (this.#port === null) return;
     this.#widest = Math.max(this.#widest, level);

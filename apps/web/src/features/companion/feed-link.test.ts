@@ -170,7 +170,7 @@ describe("FeedLink", () => {
     ]);
   });
 
-  test("sends the widest mouth level at most every MOUTH_SEND_MS", () => {
+  test("sends the widest mouth level since the last, once MOUTH_SEND_MS has passed", () => {
     const { link, at } = feedLink();
     const one = fakePort();
     link.connect(one.port);
