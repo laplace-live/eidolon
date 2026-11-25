@@ -2,6 +2,67 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-25T14:55:54.141Z",
+      "versions": {
+        "laplace-eidolon": "0.17.0",
+        "@laplace.live/eidolon": "0.17.0",
+        "laplace-eidolon-desktop": "0.5.0",
+        "@laplace.live/eidolon-sdk": "0.4.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "@laplace.live/eidolon-sdk",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Tune how far her 2D model turns her head in Appearance's new Motion tab"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "@laplace.live/eidolon-sdk",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Build moods from a 2D model's parameters; she nods and shakes without clips"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Let her stand partly off screen, with Reset Position in Settings to bring her back"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Add Eidolon's menu bar icon on macOS, and show her model files in Finder or Explorer"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Round the video call's buttons and message box to match their bars"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Count a tap near her head as a head tap when her 2D model marks no head"
+        }
+      ]
+    },
+    {
       "date": "2026-11-25T00:23:40.774Z",
       "versions": {
         "laplace-eidolon": "0.16.0",

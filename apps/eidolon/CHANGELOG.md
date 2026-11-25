@@ -1,5 +1,16 @@
 # @laplace.live/eidolon
 
+## 0.17.0
+
+### Minor Changes
+
+- 9bbe563: Tune how far her 2D model turns her head in Appearance's new Motion tab
+- 76f362e: Build moods from a 2D model's parameters; she nods and shakes without clips
+
+### Patch Changes
+
+- 5704a53: Round the video call's buttons and message box to match their bars
+
 ## 0.16.0
 
 ### Minor Changes
