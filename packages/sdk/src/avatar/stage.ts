@@ -3,12 +3,15 @@
 // and reported once, so the page can show her picture instead.
 import type { Direction } from "./direct.ts";
 import { type Box, viewFor } from "./framing.ts";
+import { MoodHolds } from "./holds.ts";
 import {
   AvatarError,
   type AvatarModel,
   avatarErrorOf,
   type ModelOutfitLike,
   moodExpressions,
+  moodSettings,
+  type ParameterHold,
   type ResolvedSetup,
 } from "./model.ts";
 import type { MouthSource } from "./mouth.ts";
@@ -65,6 +68,21 @@ function clamp(value: number, limit: number): number {
   return Math.min(Math.max(value, -limit), limit);
 }
 
+function sameHolds(a: readonly ParameterHold[], b: readonly ParameterHold[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((hold, i) => {
+      const other = b[i];
+      return (
+        other !== undefined &&
+        hold.id === other.id &&
+        hold.value === other.value &&
+        hold.weight === other.weight
+      );
+    })
+  );
+}
+
 /** What was applied to the model, so a frame applies only what changed. */
 interface Applied {
   /** The clip the stage plays on the idle layer; null for none. */
@@ -89,6 +107,11 @@ export class AvatarStage {
   #box: Box | null = null;
   #direction: Direction = NEUTRAL;
   #applied: Applied = { idle: null, expressions: null, talk: null, outfit: false, look: null };
+  #moods = new MoodHolds();
+  /** A setup was shown since the last frame: its moods' parameters take their values at once. */
+  #settle = true;
+  /** What the model was last told to hold. */
+  #held: readonly ParameterHold[] = [];
   #gestureSeq: number | null = null;
   #mouth: MouthSource | null = null;
   #gaze: "direction" | "pointer" | readonly [number, number] = "direction";
@@ -145,9 +168,12 @@ export class AvatarStage {
     if (!same) {
       this.#drop();
       this.#last = null;
+      this.#moods = new MoodHolds();
+      this.#held = [];
     }
     this.#model = model;
     this.#setup = setup;
+    this.#settle = true;
     const was = this.#applied;
     this.#applied = {
       idle: same ? was.idle : null,
@@ -266,7 +292,7 @@ export class AvatarStage {
     this.#last = now;
     const reads = this.#reads.splice(0);
     try {
-      this.#apply(model, now);
+      this.#apply(model, now, dt);
       model.mouth(this.#level(dt));
       model.update(dt);
       model.draw(this.#pixelRatio(), this.#view(model));
@@ -303,7 +329,7 @@ export class AvatarStage {
     );
   }
 
-  #apply(model: AvatarModel, now: number): void {
+  #apply(model: AvatarModel, now: number, dt: number): void {
     const setup = this.#setup;
     if (setup === null) return;
     const direction = this.#direction;
@@ -328,6 +354,13 @@ export class AvatarStage {
     if (key !== applied.expressions) {
       model.setExpressions(expressions);
       applied.expressions = key;
+    }
+    this.#moods.set(moodSettings(setup, tags), this.#settle);
+    this.#settle = false;
+    const holds = this.#moods.step(dt);
+    if (!sameHolds(holds, this.#held)) {
+      model.hold(holds);
+      this.#held = holds;
     }
     const talk = direction.speaking && !this.#reducedMotion ? setup.gestures.talk : null;
     if (talk !== applied.talk) {

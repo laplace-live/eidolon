@@ -106,6 +106,7 @@ describe("directLine", () => {
       lookAt: () => {},
       lookStrength: () => {},
       wear: () => {},
+      hold: () => {},
       bounds: () => null,
       update: () => {},
       draw: () => {},

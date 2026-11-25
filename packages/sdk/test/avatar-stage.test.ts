@@ -56,7 +56,12 @@ const INVENTORY: ModelInventory = {
   clips: ["Idle", "Talk", "Nod", "Shake"].map(clip),
   expressions: ["smile", "sleepy", "sad", "surprised"].map((id) => ({ id, name: id })),
   hitAreas: [{ id: "HitAreaHead", name: "Head" }],
-  parameters: [],
+  parameters: [
+    { id: "ParamAngleX", min: -30, max: 30, default: 0 },
+    { id: "ParamAngleY", min: -30, max: 30, default: 0 },
+    { id: "ParamMouthForm", min: -1, max: 1, default: 0 },
+    { id: "ParamEyeLSmile", min: -1, max: 1, default: 0 },
+  ],
   parts: [],
   poseGroups: [],
   lipSync: true,
@@ -75,6 +80,7 @@ function fakeModel() {
     lookAt: vi.fn<AvatarModel["lookAt"]>(),
     lookStrength: vi.fn<AvatarModel["lookStrength"]>(),
     wear: vi.fn<AvatarModel["wear"]>(),
+    hold: vi.fn<AvatarModel["hold"]>(),
     bounds: vi.fn<AvatarModel["bounds"]>(() => null),
     update: vi.fn<AvatarModel["update"]>(),
     draw: vi.fn<AvatarModel["draw"]>(),
@@ -388,6 +394,91 @@ describe("her direction", () => {
     stage.direct(direction({ speaking: false }));
     clock.frame(48);
     expect(model.play.mock.calls).toEqual([[null, 1, { loop: true }]]);
+  });
+
+  test("fades a mood's parameters in and out as PSD2Live fades expressions, over half a second", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    const mouth = (value: number) => ({ id: "ParamMouthForm", value });
+    stage.show(
+      model,
+      resolveSetup(INVENTORY, {
+        moodParameters: {
+          happy: [mouth(1)],
+          sad: [mouth(-0.8), { id: "ParamEyeLSmile", value: -1 }],
+        },
+      }),
+    );
+    clock.frame(0);
+    expect(model.hold).not.toHaveBeenCalled();
+    const held = () => model.hold.mock.lastCall?.[0] ?? [];
+    const weights = () => held().map((hold) => Number(hold.weight.toFixed(3)));
+
+    stage.direct(direction({ mood: ["happy"] }));
+    const rising: number[] = [];
+    for (const now of [100, 200, 300, 400, 500]) {
+      clock.frame(now);
+      rising.push(...weights());
+    }
+    // The runtime's ease, 0.5 - 0.5·cos(π·t/0.5 s), a frame every 0.1 s.
+    expect(rising).toEqual([0.095, 0.345, 0.655, 0.905, 1]);
+    expect(held()).toEqual([{ ...mouth(1), weight: 1 }]);
+    model.hold.mockClear();
+    clock.frame(600);
+    expect(model.hold).not.toHaveBeenCalled();
+
+    // Another mood moves what both hold from one value to the other, and fades in what it adds.
+    stage.direct(direction({ mood: ["sad"] }));
+    for (const now of [700, 800, 850]) clock.frame(now);
+    expect(held()).toEqual([
+      { id: "ParamMouthForm", value: expect.closeTo(0.1, 5), weight: 1 },
+      { id: "ParamEyeLSmile", value: -1, weight: expect.closeTo(0.5, 5) },
+    ]);
+    for (const now of [900, 1000, 1100]) clock.frame(now);
+    expect(held()).toEqual([
+      { id: "ParamMouthForm", value: -0.8, weight: 1 },
+      { id: "ParamEyeLSmile", value: -1, weight: 1 },
+    ]);
+
+    // A lent mood's come first: its value wins where both hold a parameter.
+    stage.direct(direction({ mood: ["sad"], pulse: "happy" }));
+    for (const now of [1200, 1300, 1400, 1500, 1600]) clock.frame(now);
+    expect(held()).toEqual([
+      { id: "ParamMouthForm", value: 1, weight: 1 },
+      { id: "ParamEyeLSmile", value: -1, weight: 1 },
+    ]);
+
+    // Neutral lets go of every one, fading out, and holds nothing once they have.
+    stage.direct(direction({}));
+    for (const now of [1700, 1800, 1850]) clock.frame(now);
+    expect(weights()).toEqual([0.5, 0.5]);
+    for (const now of [1900, 2000, 2100]) clock.frame(now);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+  });
+
+  test("a setup shown in place sets a mood's parameters at once, as the owner edits them", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    const happy = (value: number) =>
+      resolveSetup(INVENTORY, {
+        moodParameters: { happy: [{ id: "ParamMouthForm", value }] },
+      });
+    stage.show(model, happy(1));
+    stage.direct(direction({ mood: ["happy"] }));
+    clock.frame(0);
+    expect(model.hold).toHaveBeenLastCalledWith([{ id: "ParamMouthForm", value: 1, weight: 1 }]);
+    stage.show(model, happy(0.25));
+    clock.frame(16);
+    expect(model.hold).toHaveBeenLastCalledWith([{ id: "ParamMouthForm", value: 0.25, weight: 1 }]);
+    stage.show(model, resolveSetup(INVENTORY));
+    clock.frame(32);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+
+    // A model shown anew holds nothing until its first frame says so.
+    const next = fakeModel();
+    stage.show(next, happy(0.5));
+    clock.frame(48);
+    expect(next.hold.mock.calls).toEqual([[[{ id: "ParamMouthForm", value: 0.5, weight: 1 }]]]);
   });
 
   test("turns her as far as each setup's look says, applied once per setup shown", () => {

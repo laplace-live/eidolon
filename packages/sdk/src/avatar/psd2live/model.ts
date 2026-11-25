@@ -6,6 +6,7 @@ import {
   avatarErrorOf,
   type ModelInventory,
   type ModelOutfitLike,
+  type ParameterHold,
 } from "../model.ts";
 import { Psd2liveRenderer } from "./renderer.ts";
 import { Psd2liveRig } from "./rig.ts";
@@ -55,6 +56,9 @@ export class Psd2liveModel implements AvatarModel {
   /** Each pose group's entry as loaded, which taking an outfit off shows again. */
   readonly #poses: readonly number[];
   #worn: ModelOutfitLike | null = null;
+  #holds: readonly ParameterHold[] = [];
+  /** What the runtime's override layer holds, by parameter id: a value and its weight. */
+  #overrides = new Map<string, readonly [number, number]>();
   #disposed = false;
 
   constructor(rig: Psd2liveRig, renderer: Psd2liveRenderer) {
@@ -105,7 +109,6 @@ export class Psd2liveModel implements AvatarModel {
     this.#run(() => {
       const worn = this.#worn;
       if (worn !== null) {
-        for (const { id } of worn.parameters) this.rig.setParameterOverride(id, 0, 0);
         for (const id of worn.hiddenParts) this.rig.setPartOpacity(id, 1);
         for (const { group } of worn.poses) {
           const entry = this.#poses[group];
@@ -113,10 +116,18 @@ export class Psd2liveModel implements AvatarModel {
         }
       }
       this.#worn = outfit;
-      if (outfit === null) return;
-      for (const { group, entry } of outfit.poses) this.rig.showPose(group, entry);
-      for (const { id, value } of outfit.parameters) this.rig.setParameterOverride(id, value, 1);
-      for (const id of outfit.hiddenParts) this.rig.setPartOpacity(id, 0);
+      if (outfit !== null) {
+        for (const { group, entry } of outfit.poses) this.rig.showPose(group, entry);
+        for (const id of outfit.hiddenParts) this.rig.setPartOpacity(id, 0);
+      }
+      this.#override();
+    });
+  }
+
+  hold(holds: readonly ParameterHold[]): void {
+    this.#run(() => {
+      this.#holds = holds;
+      this.#override();
     });
   }
 
@@ -176,6 +187,36 @@ export class Psd2liveModel implements AvatarModel {
     try {
       this.rig.dispose();
     } catch {}
+  }
+
+  /**
+   * The outfit's parameters and the holds over them, written as one override a parameter, since the
+   * runtime keeps only one: (a, w1) under (b, w2) moves a value as (c, w) does, for
+   * w = 1 - (1 - w1)(1 - w2) and c = (a·w1·(1 - w2) + b·w2) / w. What none of them names is let go.
+   */
+  #override(): void {
+    const next = new Map<string, readonly [number, number]>();
+    for (const { id, value } of this.#worn?.parameters ?? []) next.set(id, [value, 1]);
+    for (const { id, value, weight } of this.#holds) {
+      const w2 = Math.min(weight, 1);
+      if (!(w2 > 0)) continue;
+      const below = next.get(id);
+      if (below === undefined) {
+        next.set(id, [value, w2]);
+        continue;
+      }
+      const [a, w1] = below;
+      const w = 1 - (1 - w1) * (1 - w2);
+      next.set(id, [(a * w1 * (1 - w2) + value * w2) / w, w]);
+    }
+    for (const id of this.#overrides.keys()) {
+      if (!next.has(id)) this.rig.setParameterOverride(id, 0, 0);
+    }
+    for (const [id, [value, weight]] of next) {
+      const was = this.#overrides.get(id);
+      if (was?.[0] !== value || was[1] !== weight) this.rig.setParameterOverride(id, value, weight);
+    }
+    this.#overrides = next;
   }
 
   #run<T>(task: () => T): T {

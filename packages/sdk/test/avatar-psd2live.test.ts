@@ -364,6 +364,48 @@ describe("the model", () => {
     idleOnly.dispose();
   });
 
+  test("holds layer over her outfit: where both set a parameter, it moves from the outfit's value", () => {
+    const rig = load();
+    const model = new Psd2liveModel(rig, { dispose() {} } as unknown as Psd2liveRenderer);
+    const value = (id: string) => rig.parameterValues()[rig.parameters.indexOf(id)] ?? Number.NaN;
+    const override = vi.spyOn(rig, "setParameterOverride");
+    model.wear({ poses: [], parameters: [{ id: "ParamCheek", value: 1 }], hiddenParts: [] });
+    model.hold([
+      { id: "ParamCheek", value: 0, weight: 0.25 },
+      { id: "ParamMouthForm", value: -1, weight: 0.5 },
+      { id: "ParamNope", value: 1, weight: 1 },
+    ]);
+    model.update(0.1);
+    expect(value("ParamCheek")).toBeCloseTo(0.75, 4);
+    expect(value("ParamMouthForm")).toBeCloseTo(-0.5, 4);
+
+    // A later hold goes over an earlier one: 0, then halfway to -1, then halfway from there to 1.
+    model.hold([
+      { id: "ParamMouthForm", value: -1, weight: 0.5 },
+      { id: "ParamMouthForm", value: 1, weight: 0.5 },
+    ]);
+    model.update(0.1);
+    expect(value("ParamMouthForm")).toBeCloseTo(0.25, 4);
+    expect(value("ParamCheek")).toBeCloseTo(1, 4);
+
+    // Only what changed reaches the runtime; what nothing holds any more is let go.
+    override.mockClear();
+    model.hold([
+      { id: "ParamMouthForm", value: -1, weight: 0.5 },
+      { id: "ParamMouthForm", value: 1, weight: 0.5 },
+    ]);
+    expect(override).not.toHaveBeenCalled();
+    model.hold([]);
+    model.wear(null);
+    model.update(0.1);
+    expect(override.mock.calls.sort()).toEqual([
+      ["ParamCheek", 0, 0],
+      ["ParamMouthForm", 0, 0],
+    ]);
+    expect([value("ParamCheek"), value("ParamMouthForm")]).toEqual([0, 0]);
+    model.dispose();
+  });
+
   test("her look scales how far her gaze turns her head, and a negative one changes nothing", () => {
     const turned = (strength: number) => {
       const rig = load();
