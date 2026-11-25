@@ -82,7 +82,7 @@ export function MessageInput({
   );
 }
 
-/** Mutes and unmutes the viewer's mic, once the call is live; round for a pill-shaped bar. */
+/** Mutes and unmutes the viewer's mic, once the call is live. */
 export function MicToggle({
   call,
   round = false,
@@ -112,7 +112,6 @@ export function MicToggle({
   );
 }
 
-/** Round for a pill-shaped bar. */
 export function HangUpButton({
   call,
   round = false,
