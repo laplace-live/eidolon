@@ -335,7 +335,7 @@ app's second, with rules of its own.
   CSP that allows its own inline style by hash and, on the failure page alone, its script from the
   shell host: no `'unsafe-inline'`, and `frame-ancestors 'none'`. The waiting page is served at the
   app's address, so its style must stay inline and it has no script: a path there reaches the
-  backend. Each has a drag strip at the top as tall as the web app's header row, or the title-bar
+  backend. Each has a drag strip at the top as tall as the web app's title strip, or the title-bar
   area if that's taller.
 - **The bridges.** The preload marks `<html>` (`data-shell`, and on macOS `data-fullscreen`) for
   apps/web's chrome ([web-app.md](web-app.md#in-the-desktop-app)), and gives each page its own
@@ -383,10 +383,12 @@ app's second, with rules of its own.
   recent list. One shows at a time: an ask while it's open gets its answer (`joinPending`). The
   page adds the pick to the folders' draft, or says why the list can't hold it; saving decides, and
   `FolderPolicy` after it.
-- **Chrome.** No system title bar. On macOS, `hiddenInset`, the traffic lights at `{x: 16, y: 20}`,
-  centred on the web app's 56 px first row, and `titleBarOverlay: true`, without which macOS
-  publishes no `env(titlebar-area-*)` for the page's insets. On Windows, a hidden title bar under a
-  transparent 56 px overlay, whose caption glyphs main recolours on each theme change.
+- **Chrome.** No system title bar: the web app draws a strip in its place
+  ([web-app.md](web-app.md#in-the-desktop-app)). On macOS, `hiddenInset`, the traffic lights at
+  `{x: 16, y: 15}`, centred on the web app's 44 px strip as macOS 27 draws them, 14 px tall, and
+  `titleBarOverlay: true`, without which macOS publishes no `env(titlebar-area-*)` for the page's
+  insets. On Windows, a hidden title bar under a transparent 44 px overlay, whose caption glyphs
+  main recolours on each theme change.
 - **Menus and the tray.** macOS's menu bar is declared in full, since a custom menu replaces
   Electron's: Eidolon (About, Check for Updates…, Settings…, Services, Hide, Hide Others, Show All,
   Quit), Edit (its roles, without which copy and paste break), View (zoom, full screen, and Toggle
@@ -1566,8 +1568,9 @@ Each step prints one line, made of the checks inside it:
    outfit to draw, opens and saves the same way. Each link must be an `<a download>`: main's
    `downloadURL` fallback would save a `target="_blank"` one too, with the same lines in main.log.
 3. **Theme and language:** the page's theme setting reaches `nativeTheme.themeSource` as it is, its
-   language rebuilds the menus in it, and its `[data-shell]` rows drag while their controls don't,
-   the sidebar's clear of the traffic lights on macOS.
+   language rebuilds the menus in it, and its `[data-shell]` strip drags while its buttons don't,
+   clear of the traffic lights on macOS, with the sidebar and the page below it and no drag row
+   in them.
 4. **Settings' Restart,** from the banner a setting read at boot puts up: main holds requests, the
    backend exits 75 and comes back on the same port, and the page says it's back.
 5. **A call** on Chromium's fake microphone: her hearing gets the speech, her answer is in the

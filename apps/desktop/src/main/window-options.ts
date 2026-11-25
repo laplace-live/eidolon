@@ -9,9 +9,10 @@ export const MIN_SIZE = { width: 520, height: 600 } as const;
 /** In userData. */
 export const BOUNDS_FILE = "window-bounds.json";
 
-/** apps/web's header row, 3.5rem: the row the traffic lights sit on, and the caption buttons' height. */
-export const HEADER_ROW_PX = 56;
-const TRAFFIC_LIGHTS_PX = 16;
+/** apps/web's title strip, 2.75rem: the row the traffic lights sit on, and the caption buttons' height. */
+export const STRIP_PX = 44;
+/** The traffic lights' height as macOS 27 draws them: the overlay's area is 2y + 14 px tall. */
+const TRAFFIC_LIGHTS_PX = 14;
 
 export interface Rectangle {
   readonly x: number;
@@ -131,10 +132,10 @@ export function symbolColor(dark: boolean): string {
 
 /** Windows' caption buttons over the page, which draws its own bar beneath them. */
 export function titleBarOverlay(dark: boolean): TitleBarOverlayOptions {
-  return { color: "#00000000", symbolColor: symbolColor(dark), height: HEADER_ROW_PX };
+  return { color: "#00000000", symbolColor: symbolColor(dark), height: STRIP_PX };
 }
 
-/** No system title bar: the page's rows stand in for it, beside the window's own buttons. */
+/** No system title bar: the page's strip stands in for it, around the window's own buttons. */
 export function chromeOptions(
   platform: NodeJS.Platform,
   dark: boolean,
@@ -142,7 +143,7 @@ export function chromeOptions(
   if (platform === "darwin") {
     return {
       titleBarStyle: "hiddenInset",
-      trafficLightPosition: { x: 16, y: (HEADER_ROW_PX - TRAFFIC_LIGHTS_PX) / 2 },
+      trafficLightPosition: { x: 16, y: (STRIP_PX - TRAFFIC_LIGHTS_PX) / 2 },
       // Without it macOS publishes no env(titlebar-area-*) for the page's insets.
       titleBarOverlay: true,
     };

@@ -16,10 +16,10 @@
   --ring: oklch(0.708 0 0);
   --primary: oklch(0.488 0.243 264.376);
   --primary-foreground: oklch(0.97 0.014 254.604);
-  /* apps/web's 3.5rem header row, which Windows' caption buttons fill, and never shorter than the
+  /* apps/web's 2.75rem title strip, which Windows' caption buttons fill, and never shorter than the
      area the Window Controls Overlay reports for them. Its rem is apps/web's: the root keeps the
      browser's font size. */
-  --strip: max(3.5rem, calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px)));
+  --strip: max(2.75rem, calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px)));
 }
 
 @media (prefers-color-scheme: dark) {

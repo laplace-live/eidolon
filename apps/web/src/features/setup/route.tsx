@@ -38,12 +38,12 @@ export function Component() {
   const voiceTarget = target ?? activeTarget;
 
   return (
-    // In the desktop app the page scrolls below the header, as PageLayout's does below its bar.
+    // In the desktop app the page scrolls below the header, clear of Windows' caption buttons.
     <div className="flex min-h-svh flex-col shell:h-svh">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
         <div
           data-window-drag
-          className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2.5 px-4 sm:px-6 shell:max-w-none"
+          className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2.5 px-4 sm:px-6 shell:h-(--strip) shell:max-w-none"
         >
           <span className="flex shrink-0 items-center gap-1.5 font-semibold">
             <AppMark />

@@ -2536,6 +2536,14 @@ msgstr "词汇表已保存，但目前还无法解析。"
 msgid "Glossary saved."
 msgstr "词汇表已保存。"
 
+#: src/components/title-strip.tsx
+msgid "Go Back"
+msgstr "后退"
+
+#: src/components/title-strip.tsx
+msgid "Go Forward"
+msgstr "前进"
+
 #: src/features/setup/done-step.tsx
 msgid "Go to Home"
 msgstr "前往首页"
@@ -6581,6 +6589,7 @@ msgstr "待索引"
 msgid "To transcribe"
 msgstr "待转写"
 
+#: src/components/title-strip.tsx
 #: src/components/ui/sidebar.tsx
 msgid "Toggle Sidebar"
 msgstr "展开或收起侧边栏"
