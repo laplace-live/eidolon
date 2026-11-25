@@ -105,7 +105,7 @@ function ported(message: string, transcribeError: string): string {
     .replace("  ✗ transcribe failed (exit=1)", `  ✗ transcribe failed: ${transcribeError}`)
     .replace(
       /`tools\.transcribe (.*) --date YYYY-MM-DD`/,
-      "`bun run laplace-transcribe $1 --date YYYY-MM-DD --persona milky-green`",
+      "`pnpm laplace-transcribe $1 --date YYYY-MM-DD --persona milky-green`",
     );
 }
 

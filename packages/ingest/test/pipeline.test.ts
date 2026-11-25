@@ -95,7 +95,7 @@ function base(overrides: Partial<pipeline.PipelineOptions> = {}): pipeline.Pipel
 function portHint(message: string): string {
   return message.replace(
     /`tools\.transcribe (.*) --date YYYY-MM-DD`/,
-    "`bun run laplace-transcribe $1 --date YYYY-MM-DD --persona milky-green`",
+    "`pnpm laplace-transcribe $1 --date YYYY-MM-DD --persona milky-green`",
   );
 }
 

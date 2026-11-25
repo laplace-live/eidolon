@@ -115,7 +115,7 @@ describe("the release overlay", () => {
     ).toThrow(`${missing}`);
     expect(() =>
       overlay.releaseConfig({ platform: "win32", env: AZURE, unsignedPe: missing }),
-    ).toThrow("bun run build:desktop");
+    ).toThrow("pnpm build:desktop");
   });
 
   // On Windows the default reads this checkout's stage, which a test run needn't have.

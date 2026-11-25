@@ -81,7 +81,7 @@ describe("routeRequest", () => {
     expect((await route("/c/../a/b")).name).toBe("ab");
   });
 
-  test("params arrive percent-decoded, as Bun gave them; one that won't decode stays as sent", async () => {
+  test("params arrive percent-decoded; one that won't decode stays as sent", async () => {
     const route = dispatch({ "/s/:id": { GET: named("s") } });
     expect((await route("/s/abc%2Epng")).params).toEqual({ id: "abc.png" });
     expect((await route("/s/a%20b%2Fc")).params).toEqual({ id: "a b/c" });

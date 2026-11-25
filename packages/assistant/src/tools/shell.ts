@@ -7,7 +7,7 @@
 // with everything it started. On Windows commands run in Git Bash, as pi's do, and an MCP server
 // gets the same environment.
 import { accessSync, constants } from "node:fs";
-import { basename, delimiter, isAbsolute, join, resolve, sep } from "node:path";
+import { delimiter, isAbsolute, join, resolve, sep } from "node:path";
 import { killTree, which } from "@eidolon/config";
 import { fold } from "../policy.ts";
 import type { PathGuard } from "../types.ts";
@@ -142,28 +142,23 @@ function windowsSystemPath(env: NodeJS.ProcessEnv): string {
   return [`${root}\\System32`, root].join(";");
 }
 
-/** A folder npm and bun put first on a script's PATH, for the package's own tools. */
+/** A folder a package manager puts first on a script's PATH, for the package's own tools. */
 function isPackageBin(entry: string): boolean {
   const parts = entry.split(sep).filter((part) => part !== "");
   const [folder, bin] = parts.slice(-2).map(fold);
   return parts.length >= 2 && folder === "node_modules" && bin === ".bin";
 }
 
-/** The folder `bun run` puts first on a script's PATH where Node is missing: its `node` is Bun. */
-function isBunNodeShim(entry: string): boolean {
-  return fold(basename(entry)).startsWith("bun-node-");
-}
-
 /**
  * `path` without the folders a task could put a program in, ahead of the owner's own: empty and
- * relative entries (the folder a command starts in), every node_modules/.bin (npx and bun run add
- * the server's folder's and each one's above it), Bun's node shim, and every folder `guard` lets
- * the task write. Only this task's: another task's folders stay, and so does a link from a folder
+ * relative entries (the folder a command starts in), every node_modules/.bin (npx and `npm run`
+ * add the server's folder's and each one's above it), and every folder `guard` lets the task
+ * write. Only this task's: another task's folders stay, and so does a link from a folder
  * kept into one this task writes.
  */
 async function commandPath(path: string, guard: PathGuard | undefined): Promise<string> {
   const entries = [...new Set(path.split(delimiter))].filter(
-    (entry) => entry !== "" && isAbsolute(entry) && !isPackageBin(entry) && !isBunNodeShim(entry),
+    (entry) => entry !== "" && isAbsolute(entry) && !isPackageBin(entry),
   );
   const writable = await Promise.all(
     entries.map((entry) =>

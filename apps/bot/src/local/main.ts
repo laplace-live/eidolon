@@ -1,4 +1,4 @@
-// `bun run local`: supervises the local web app's server (server.ts), and starts a fresh one when
+// `pnpm local`: supervises the local web app's server (server.ts), and starts a fresh one when
 // it exits 75 to apply settings read once at boot.
 
 // The first two imports, in this order: the environment as this process started (environ.ts), then

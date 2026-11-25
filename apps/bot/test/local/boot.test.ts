@@ -145,7 +145,7 @@ describe("boot", () => {
       rmSync(empty, { recursive: true, force: true });
     }
     expect(io.exits).toEqual([2]);
-    expect(io.err.join("")).toContain("bun run build:web");
+    expect(io.err.join("")).toContain("pnpm build:web");
     expect(existsSync(tokenPath())).toBe(false);
   });
 

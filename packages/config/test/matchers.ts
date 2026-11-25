@@ -1,4 +1,4 @@
-// Bun's matchers the tests were written with, on Vitest's expect (a setup file, vitest.config.ts).
+// toStartWith, toEndWith and toBeNumber, on Vitest's expect (a setup file, vitest.config.ts).
 import { expect } from "vitest";
 
 declare module "vitest" {

@@ -259,13 +259,12 @@
               "level": "error",
               "options": {
                 "paths": {
-                  "bun": "Browsers import @laplace.live/eidolon-sdk: no Bun or Node modules.",
                   "react": "Keep the root @laplace.live/eidolon-sdk entry framework-agnostic; React bindings belong in src/react/."
                 },
                 "patterns": [
                   {
-                    "group": ["bun:*", "node:*"],
-                    "message": "Browsers import @laplace.live/eidolon-sdk: no Bun or Node modules."
+                    "group": ["node:*"],
+                    "message": "Browsers import @laplace.live/eidolon-sdk: no Node modules."
                   },
                   {
                     "group": ["@eidolon/*", "@eidolon/**", "**/src/**", "**/apps/**"],
@@ -293,13 +292,10 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "bun": "Browsers import @laplace.live/eidolon-sdk: no Bun or Node modules."
-                },
                 "patterns": [
                   {
-                    "group": ["bun:*", "node:*"],
-                    "message": "Browsers import @laplace.live/eidolon-sdk: no Bun or Node modules."
+                    "group": ["node:*"],
+                    "message": "Browsers import @laplace.live/eidolon-sdk: no Node modules."
                   },
                   {
                     "group": ["@eidolon/*", "@eidolon/**", "**/src/**", "**/apps/**"],
@@ -323,13 +319,10 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "bun": "Browsers import @eidolon/chat: only src/jsonl.ts, its own subpath export, may use Bun or Node."
-                },
                 "patterns": [
                   {
-                    "group": ["bun:*", "node:*"],
-                    "message": "Browsers import @eidolon/chat: only src/jsonl.ts, its own subpath export, may use Bun or Node."
+                    "group": ["node:*"],
+                    "message": "Browsers import @eidolon/chat: only src/jsonl.ts, its own subpath export, may use Node."
                   },
                   {
                     "group": [
@@ -359,13 +352,10 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "bun": "The web app runs in the browser: no Bun or Node modules."
-                },
                 "patterns": [
                   {
-                    "group": ["bun:*", "node:*"],
-                    "message": "The web app runs in the browser: no Bun or Node modules."
+                    "group": ["node:*"],
+                    "message": "The web app runs in the browser: no Node modules."
                   },
                   {
                     "group": [

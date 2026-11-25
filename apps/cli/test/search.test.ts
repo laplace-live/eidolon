@@ -85,10 +85,10 @@ async function run(c: Case) {
   return { code, stdout: out.stdout(), stderr: out.stderr(), opened, calls };
 }
 
-// The missing-table hint names the `bun run` command and the persona; the goldens keep a `uv run`
+// The missing-table hint names the `pnpm` command and the persona; the goldens keep a `uv run`
 // line.
 const PYTHON_HINT = "Run `uv run laplace-ingest-streams` first.";
-const PORT_HINT = "Run `bun run laplace-ingest-streams --persona milky-green` first.";
+const PORT_HINT = "Run `pnpm laplace-ingest-streams --persona milky-green` first.";
 
 describe("laplace-search matches the Python CLI", () => {
   for (const c of goldens) {

@@ -27,9 +27,18 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { CREDENTIALS, dataHome, envOptional, expandUser, SETTINGS } from "@eidolon/config";
+import { setTimeout as delay } from "node:timers/promises";
+import {
+  CREDENTIALS,
+  dataHome,
+  envOptional,
+  expandUser,
+  SETTINGS,
+  type Subprocess,
+  spawnProcess,
+  which,
+} from "@eidolon/config";
 import { PROVIDERS } from "@eidolon/providers/catalog";
-import type { Subprocess } from "bun";
 import {
   type Browser,
   type BrowserContext,
@@ -40,6 +49,8 @@ import {
   type Route,
 } from "playwright-core";
 import sharp from "sharp";
+import { parse as parseYaml } from "yaml";
+import { serveWs } from "../../../packages/providers/test/ws-server.ts";
 import {
   type AccountsResponse,
   type AccountView,
@@ -59,7 +70,7 @@ import {
 } from "../src/local/api.ts";
 import { Output, READY_LINE } from "./output.ts";
 
-const ROOT = resolve(import.meta.dir, "../../..");
+const ROOT = resolve(import.meta.dirname, "../../..");
 const MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const SERVER_ENTRY = join(ROOT, "apps/bot/src/local/server.ts");
 const SERVER_LOAD_ENV = "apps/bot/src/load-env.ts";
@@ -113,8 +124,8 @@ const FLOOR_DB = -120;
 const AUDIBLE_DB = -50;
 const MIN_SAMPLES = 3;
 
-const USAGE = `usage: bun apps/bot/scripts/local-smoke.ts [--headful] [--offline]
-       bun apps/bot/scripts/local-smoke.ts --call [--selfie]
+const USAGE = `usage: node apps/bot/scripts/local-smoke.ts [--headful] [--offline]
+       node apps/bot/scripts/local-smoke.ts --call [--selfie]
 
 Boots the local web app on a temporary data home, walks it in Chrome, then deletes the home. Exits
 0 when every check passes, 1 when one fails.
@@ -450,7 +461,7 @@ const BACKGROUND_ACK = "还在后台跑，跑完它会接着做。";
 /** How a runtime notice that a command ended starts, as the worker reads it. */
 const COMMAND_ENDED = /\[Command (\d+) ended with code 0/;
 /**
- * The fake MCP server, the test fixture run on this Bun, as mcp.json names it, with echo its one
+ * The fake MCP server, the test fixture run on this Node, as mcp.json names it, with echo its one
  * tool tasks get; the tool's name as the worker calls it.
  */
 const MCP_SERVER = "smoke";
@@ -721,7 +732,7 @@ function completionStream(texts: readonly string[], holdMs: number): Response {
     async start(controller) {
       try {
         for (const [i, content] of texts.entries()) {
-          if (i > 0) await Bun.sleep(holdMs);
+          if (i > 0) await delay(holdMs);
           controller.enqueue(chunk(i === 0 ? { role: "assistant", content } : { content }, null));
         }
         controller.enqueue(chunk({}, "stop"));
@@ -1075,7 +1086,7 @@ const ROUTES = new Set([
  * and OpenRouter's Decisions route beside its v1 API. WORKER_MODEL's requests are the task walks'
  * workers'.
  */
-function fakeEmbeddings(key: string, places: TaskPlaces) {
+async function fakeEmbeddings(key: string, places: TaskPlaces) {
   const seen = {
     requests: 0,
     inputs: 0,
@@ -1093,16 +1104,18 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
   };
   /** While set, each worker request waits for it before it is answered. */
   let held: Promise<void> | null = null;
-  const server = Bun.serve<{ session: Listening | null }>({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request, server) {
+  /** The answer to a request for a route the fakes don't serve or without the key; null passes. */
+  const refusal = (route: string, headers: Headers): Response | null => {
+    if (!ROUTES.has(route)) return new Response(null, { status: 404 });
+    if (headers.get("authorization") === `Bearer ${key}`) return null;
+    seen.refused++;
+    return Response.json({ error: { message: "Invalid API key" } }, { status: 401 });
+  };
+  const server = await serveWs({
+    async fetch(request) {
       const route = `${request.method} ${new URL(request.url).pathname}`;
-      if (!ROUTES.has(route)) return new Response(null, { status: 404 });
-      if (request.headers.get("authorization") !== `Bearer ${key}`) {
-        seen.refused++;
-        return Response.json({ error: { message: "Invalid API key" } }, { status: 401 });
-      }
+      const refused = refusal(route, request.headers);
+      if (refused !== null) return refused;
       if (route === "POST /v1/chat/completions") {
         const body = (await request.json()) as ChatRequest;
         if (WORKER_MODELS.has(String(body.model)) && systemOf(body).startsWith(REVIEW_LEAD)) {
@@ -1147,11 +1160,8 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
           headers: { "content-type": "audio/mpeg" },
         });
       }
-      if (route === "GET /v1/realtime") {
-        return server.upgrade(request, { data: { session: null } })
-          ? undefined
-          : new Response(null, { status: 400 });
-      }
+      // Not a handshake, which handshake() answers.
+      if (route === "GET /v1/realtime") return new Response(null, { status: 400 });
       if (route === "POST /v1/audio/transcriptions") {
         const form = await request.formData();
         const file = form.get("file");
@@ -1199,11 +1209,17 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
         usage: { prompt_tokens: 0, total_tokens: 0 },
       });
     },
-    websocket: {
-      open(ws) {
-        ws.send(JSON.stringify({ type: "session.created" }));
-      },
-      message(ws, message) {
+    handshake({ url, headers }) {
+      const route = `GET ${url.pathname}`;
+      return (
+        refusal(route, headers) ??
+        (route === "GET /v1/realtime" ? undefined : new Response(null, { status: 400 }))
+      );
+    },
+    open(ws) {
+      let session: Listening | null = null;
+      ws.send(JSON.stringify({ type: "session.created" }));
+      ws.on("message", (message) => {
         const event = JSON.parse(String(message)) as {
           readonly type?: unknown;
           readonly session?: {
@@ -1211,9 +1227,9 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
           };
         };
         if (event.type === "session.update") {
-          if (ws.data.session === null) {
+          if (session === null) {
             let said = 0;
-            ws.data.session = {
+            session = {
               model: event.session?.audio?.input?.transcription?.model,
               appended: 0,
               say: (text) => {
@@ -1223,20 +1239,20 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
                 ws.send(JSON.stringify({ type, item_id, transcript: text }));
               },
             };
-            seen.listening.push(ws.data.session);
+            seen.listening.push(session);
           }
           ws.send(JSON.stringify({ type: "session.updated" }));
-        } else if (event.type === "input_audio_buffer.append" && ws.data.session !== null) {
-          ws.data.session.appended++;
+        } else if (event.type === "input_audio_buffer.append" && session !== null) {
+          session.appended++;
         }
-      },
+      });
     },
   });
   return {
     url: `http://127.0.0.1:${server.port}/v1`,
     seen,
     places,
-    stop: () => server.stop(true),
+    stop: () => server.stop(),
     /** Holds every worker request from now on, until the function it returns is called. */
     holdWorker(): () => void {
       const { promise, resolve } = Promise.withResolvers<void>();
@@ -1249,7 +1265,7 @@ function fakeEmbeddings(key: string, places: TaskPlaces) {
   };
 }
 
-type FakeEmbeddings = ReturnType<typeof fakeEmbeddings>;
+type FakeEmbeddings = Awaited<ReturnType<typeof fakeEmbeddings>>;
 
 /**
  * The server's environment, which its jobs inherit: this shell's, without anything a setting, a
@@ -1306,9 +1322,14 @@ async function probeEnv(path: string): Promise<void> {
 
 /** What `rel` does when run with `env`; a string says why it couldn't be probed. */
 async function probeLoadEnv(rel: string, env: Record<string, string>): Promise<EnvReport | string> {
-  const child = Bun.spawn(
-    [process.execPath, "--no-env-file", import.meta.path, PROBE_FLAG, join(ROOT, rel)],
-    { cwd: ROOT, env, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+  const child = spawnProcess(
+    [process.execPath, import.meta.filename, PROBE_FLAG, join(ROOT, rel)],
+    {
+      cwd: ROOT,
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
   const [code, out, err] = await Promise.all([
     child.exited,
@@ -1376,7 +1397,7 @@ async function poll<T>(
   for (;;) {
     const value = await read();
     if (done(value) || Date.now() > deadline) return value;
-    await Bun.sleep(500);
+    await delay(500);
   }
 }
 
@@ -1432,25 +1453,26 @@ class Run {
 
   /** Starts the server on Node with `env`, adding the boot check; null when it printed no link. */
   async boot(env: Record<string, string>, checks: Checks): Promise<Server | null> {
-    const node = Bun.which("node", { PATH: env.PATH ?? "" });
+    const node = which("node", env.PATH ?? "");
     if (node === null) {
       checks.add("boot", false, "no node on PATH to run the server with");
       return null;
     }
-    const child = Bun.spawn([node, SERVER_ENTRY, "--port", "0", "--no-open"], {
+    const child = spawnProcess([node, SERVER_ENTRY, "--port", "0", "--no-open"], {
       cwd: ROOT,
       env,
-      stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
     });
     this.#server = child;
-    const stdout = new Output(child.stdout);
-    const stderr = new Output(child.stderr);
+    const stdout = new Output(child.stdout as ReadableStream<Uint8Array>);
+    const stderr = new Output(child.stderr as ReadableStream<Uint8Array>);
     let link: string;
     try {
       link = await stdout.waitFor(READY_LINE, child.exited, 60_000);
     } catch {
+      // A child that exited can still hold stderr in its pipe; one that hung never closes it.
+      await Promise.race([stderr.done, delay(1_000)]);
       checks.add("boot", false, `no link printed:\n${stderr.tail()}`);
       return null;
     }
@@ -1472,7 +1494,7 @@ class Run {
     this.#server = null;
     if (child === null) return null;
     child.kill("SIGTERM");
-    const code = await Promise.race([child.exited, Bun.sleep(15_000).then(() => null)]);
+    const code = await Promise.race([child.exited, delay(15_000).then(() => null)]);
     if (code === null) child.kill("SIGKILL");
     return code;
   }
@@ -1501,12 +1523,9 @@ class Run {
 /** Builds apps/web/dist when `always` or when it has no index.html; false after a failed build. */
 async function buildWeb(checks: Checks, always: boolean): Promise<boolean> {
   if (!always && existsSync(join(ROOT, "apps/web/dist/index.html"))) return true;
-  const build = Bun.spawn([process.execPath, "run", "build:web"], {
-    cwd: ROOT,
-    stdio: ["ignore", "inherit", "inherit"],
-  });
+  const build = spawnProcess(["pnpm", "build:web"], { cwd: ROOT, stdout: "inherit" });
   if ((await build.exited) === 0) return true;
-  checks.add("build", false, "bun run build:web failed");
+  checks.add("build", false, "pnpm build:web failed");
   return false;
 }
 
@@ -1747,7 +1766,7 @@ async function embeddingsAccount(walk: Walk): Promise<void> {
     .getByRole("button", { name: t("en", "Save Anyway"), exact: true })
     .click();
   const saveStatus = (await saved).status();
-  const yaml = Bun.YAML.parse(readFileSync(join(walk.home, "settings.yaml"), "utf8")) as {
+  const yaml = parseYaml(readFileSync(join(walk.home, "settings.yaml"), "utf8")) as {
     embeddings?: { provider?: unknown; model?: unknown };
   };
   const picked =
@@ -1852,8 +1871,7 @@ async function voiceStyles(walk: Walk, templates: string): Promise<void> {
     const yaml = join(walk.home, "personas", PERSONA, "persona.yaml");
     const styles = () =>
       existsSync(yaml)
-        ? (Bun.YAML.parse(readFileSync(yaml, "utf8")) as { voice?: { styles?: unknown } }).voice
-            ?.styles
+        ? (parseYaml(readFileSync(yaml, "utf8")) as { voice?: { styles?: unknown } }).voice?.styles
         : undefined;
     const landed =
       JSON.stringify(styles()) ===
@@ -2065,7 +2083,7 @@ async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
         .getByRole("region", { name: t("en", "Clips"), exact: true })
         .getByRole("button", { name: clip.name || clip.id, exact: true })
         .click();
-      await Bun.sleep(clip.duration * 1000 + 500);
+      await delay(clip.duration * 1000 + 500);
       const after = await stage.getAttribute("data-state");
       const still = after === "ready" ? await coverage() : 0;
       checks.add(
@@ -3084,7 +3102,7 @@ async function voiceChatWalk(walk: Walk): Promise<void> {
     page.getByText(t("en", "Let go to send, or slide off the button to cancel."), { exact: true }),
     10_000,
   );
-  await Bun.sleep(HOLD_MIC_MS);
+  await delay(HOLD_MIC_MS);
   await page.mouse.up();
   const upload = await posted;
   const sentMs = Number(new URL(upload.url()).searchParams.get("durationMs"));
@@ -4039,7 +4057,7 @@ async function videoCallWalk(walk: Walk): Promise<void> {
 function savedAssistantFolders(home: string): string {
   const path = join(home, "settings.yaml");
   if (!existsSync(path)) return "absent";
-  const yaml = Bun.YAML.parse(readFileSync(path, "utf8")) as {
+  const yaml = parseYaml(readFileSync(path, "utf8")) as {
     assistant?: { folders?: unknown };
   } | null;
   const folders = yaml?.assistant?.folders;
@@ -4232,7 +4250,7 @@ async function taskWalk(walk: Walk): Promise<TaskChatPage> {
     .getByRole("button", { name: t("en", "Save"), exact: true })
     .click();
   const saveStatus = (await saved).status();
-  const yaml = Bun.YAML.parse(readFileSync(join(walk.home, "settings.yaml"), "utf8")) as {
+  const yaml = parseYaml(readFileSync(join(walk.home, "settings.yaml"), "utf8")) as {
     assistant?: { provider?: unknown; model?: unknown };
   };
   const mode = await poll(
@@ -4663,7 +4681,7 @@ async function stopWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
     .then(() => true)
     .catch(() => false);
   // Nothing tells a stop: no line of hers after her answer, and no word on its end for her mind.
-  await Bun.sleep(QUIET_MS);
+  await delay(QUIET_MS);
   const after = await chatLog(walk, chat.id);
   const spoke = after.filter(
     (e) => e.type === "message" && e.speaker?.kind === "persona" && e.seq > (ack?.seq ?? 0),
@@ -4972,7 +4990,7 @@ async function displayWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
     15_000,
   );
   // A stop the owner made is told by no one.
-  await Bun.sleep(QUIET_MS);
+  await delay(QUIET_MS);
   const ended = await chatLog(walk, chat.id);
   const spoke = ended.filter(
     (e) => e.type === "message" && e.speaker?.kind === "persona" && e.seq > stoppedAfter,
@@ -5024,7 +5042,7 @@ async function displayWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
     10_000,
   );
   const stopKept = await chat.box.inputValue();
-  await Bun.sleep(QUIET_MS);
+  await delay(QUIET_MS);
   const added = (await chatLog(walk, chat.id)).length - before;
   const dialogs = await dialog.count();
   const requested = chats.length - minded;
@@ -5388,7 +5406,7 @@ async function callTaskWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
       20_000,
     );
     // Told on the call, so no text turn tells it again.
-    await Bun.sleep(QUIET_MS);
+    await delay(QUIET_MS);
     const events = await chatLog(walk, chat.id);
     const from = events.findIndex((e) => e.type === "call-started" && e.call === opened?.call);
     const shape = callShape(events.slice(from + 1));
@@ -5527,7 +5545,7 @@ async function answerCard(
   const url = `${walk.origin}/api/local/tasks/${task}/approve`;
   let status = 0;
   for (let attempt = 0; attempt < 5 && status !== 200; attempt++) {
-    if (attempt > 0) await Bun.sleep(1000);
+    if (attempt > 0) await delay(1000);
     const answered = walk.page.waitForResponse(
       (response) => response.request().method() === "POST" && response.url() === url,
     );
@@ -5564,7 +5582,7 @@ async function kindsWalk(walk: Walk): Promise<void> {
     .getByRole("button", { name: t("en", "Save"), exact: true })
     .click();
   const status = (await saved).status();
-  const yaml = Bun.YAML.parse(readFileSync(join(walk.home, "settings.yaml"), "utf8")) as {
+  const yaml = parseYaml(readFileSync(join(walk.home, "settings.yaml"), "utf8")) as {
     assistant?: { coding?: { provider?: unknown; model?: unknown } };
   };
   const coding = yaml.assistant?.coding;
@@ -5972,7 +5990,7 @@ async function toolsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
 
 /**
  * Two tasks whose workers call the fake MCP server's tool, mcp.json naming the test fixture run on
- * this Bun. The first's card asks for each call, every argument with its size and the server's
+ * this Node. The first's card asks for each call, every argument with its size and the server's
  * hint: Run Once, then Always Allow This Tool, which mcp.json then holds; its server is gone once
  * it ends. The second's call runs unasked. Then Settings' MCP Servers takes the Always back.
  */
@@ -5984,7 +6002,7 @@ async function mcpWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
   const config = join(home, "mcp.json");
   const entry = {
     command: process.execPath,
-    args: ["--no-env-file", join(ROOT, MCP_FIXTURE), "--pidfile", pids],
+    args: [join(ROOT, MCP_FIXTURE), "--pidfile", pids],
     tools: [MCP_TOOL],
   };
   writeFileSync(config, `${JSON.stringify({ mcpServers: { [MCP_SERVER]: entry } }, null, 2)}\n`, {
@@ -6316,7 +6334,7 @@ async function permissionsWalk(walk: Walk, chat: TaskChatPage): Promise<void> {
  * still streaming after 10 s.
  */
 async function settled(bodies: readonly Promise<string | null>[]): Promise<(string | null)[]> {
-  const deadline = Bun.sleep(10_000).then(() => null);
+  const deadline = delay(10_000).then(() => null);
   return Promise.all(bodies.map((body) => Promise.race([body, deadline])));
 }
 
@@ -6334,7 +6352,7 @@ async function smoke(options: Options): Promise<Checks> {
     embed: `not-a-real-key-embed-${id}`,
   };
   // Beside the data home, which no task may touch.
-  const embeddings = fakeEmbeddings(keys.embed as string, {
+  const embeddings = await fakeEmbeddings(keys.embed as string, {
     site: join(run.temp, "task-site"),
     notes: join(run.temp, "task-notes", "notes.txt"),
     second: join(run.temp, "task-second"),
@@ -6379,7 +6397,9 @@ async function smoke(options: Options): Promise<Checks> {
       });
       const text = await response.text();
       bodies.push(Promise.resolve(text));
-      return new Response(text, { status: response.status, headers: response.headers });
+      // A 204's Response takes a null body: Node's constructor throws on any other, "" included.
+      const kept = text === "" ? null : text;
+      return new Response(kept, { status: response.status, headers: response.headers });
     };
 
     const mic = join(run.temp, "voice.wav");
@@ -6796,7 +6816,7 @@ class TranscriptWatch {
           while (this.shownAt.length < lines.length) this.shownAt.push(Date.now());
           this.lines = lines;
         }
-        await Bun.sleep(SAMPLE_MS);
+        await delay(SAMPLE_MS);
       }
     })();
   }
@@ -6813,7 +6833,7 @@ async function waitFor(test: () => boolean | Promise<boolean>, ms: number): Prom
   for (;;) {
     if (await test()) return Date.now();
     if (Date.now() > deadline) return null;
-    await Bun.sleep(SAMPLE_MS);
+    await delay(SAMPLE_MS);
   }
 }
 
@@ -7305,7 +7325,7 @@ async function callSmoke(options: Options): Promise<Checks> {
 }
 
 async function main(): Promise<number> {
-  const argv = Bun.argv.slice(2);
+  const argv = process.argv.slice(2);
   if (argv[0] === PROBE_FLAG && argv[1] !== undefined) {
     await probeEnv(argv[1]);
     return 0;

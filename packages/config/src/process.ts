@@ -1,4 +1,5 @@
-// The part of Bun.spawn's Subprocess the code was written against, over node:child_process.
+// A child process as the code drives it, over node:child_process: its exit as a promise, its output
+// as web streams.
 import { type Serializable, type StdioOptions, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { constants } from "node:os";
@@ -71,7 +72,7 @@ function webStream(stream: Readable | null): ReadableStream<Uint8Array> | null {
   return stream === null ? null : (Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>);
 }
 
-/** Throws at once when the program can't start (Node reports that a tick later; Bun.spawn threw). */
+/** Throws at once when the program can't start, which Node reports a tick later. */
 export function spawnProcess(
   argv: readonly [string, ...string[]],
   options: SpawnOptions = {},
@@ -96,7 +97,7 @@ export function spawnProcess(
     timeout: options.timeout,
   });
   // A failed start and a failed kill emit "error", which with no listener would end this process:
-  // Bun.spawn threw for the first, and nothing reported the second.
+  // the first throws below, and the second goes unreported.
   child.on("error", () => {});
   if (child.pid === undefined) throw startError(command, args, options);
   if (ipc !== undefined) child.on("message", (message) => ipc(message));

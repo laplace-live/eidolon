@@ -1,5 +1,4 @@
-// Bun.serve's routing, which the app was written against, served through srvx: node:http under
-// Node, Bun.serve under Bun.
+// The bot's routes, served through srvx on node:http.
 import { type ServerRequest, serve } from "srvx";
 
 export interface PeerAddress {
@@ -44,7 +43,7 @@ function byPrecedence(a: ParamRoute, b: ParamRoute): number {
   return 0;
 }
 
-/** Bun hands a route its parameters percent-decoded; one that won't decode stays as sent. */
+/** A route gets its parameters percent-decoded; one that won't decode stays as sent. */
 function decodeSegment(segment: string): string {
   try {
     return decodeURIComponent(segment);
@@ -76,10 +75,10 @@ export function matchSegments(
 }
 
 /**
- * Dispatch as Bun.serve({routes, fetch}) does: an exact path first, then `:param` paths (most
- * literal segments wins), then `/*` wildcards (longest prefix). A function route takes every
- * method. A method map answers its methods and runs GET for HEAD; any other method goes to
- * `fallback`, as does a path no route matches. Matching uses `new URL(request.url).pathname`.
+ * Dispatch: an exact path first, then `:param` paths (most literal segments wins), then `/*`
+ * wildcards (longest prefix). A function route takes every method. A method map answers its
+ * methods and runs GET for HEAD; any other method goes to `fallback`, as does a path no route
+ * matches. Matching uses `new URL(request.url).pathname`.
  */
 export function routeRequest(
   routes: Routes,
@@ -131,16 +130,11 @@ export function routeRequest(
   };
 }
 
-/** The socket's peer: the Node request's own socket, or Bun's server asked about its request. */
+/** The socket's peer, from the Node request's own socket. */
 function peerOf(request: Request): PeerAddress | null {
-  const runtime = (request as ServerRequest).runtime;
-  const socket = runtime?.node?.req.socket;
-  if (socket != null) {
-    const { remoteAddress, remotePort } = socket;
-    return remoteAddress === undefined ? null : { address: remoteAddress, port: remotePort ?? 0 };
-  }
-  const peer = runtime?.bun?.server.requestIP(request);
-  return peer ? { address: peer.address, port: peer.port } : null;
+  const socket = (request as ServerRequest).runtime?.node?.req.socket;
+  if (socket?.remoteAddress === undefined) return null;
+  return { address: socket.remoteAddress, port: socket.remotePort ?? 0 };
 }
 
 export interface Listener {
@@ -149,10 +143,7 @@ export interface Listener {
   stop(): Promise<void>;
 }
 
-/**
- * Serves `handle`, at a free port for port 0. stop() closes open connections too, as Bun's
- * stop(true) does.
- */
+/** Serves `handle`, at a free port for port 0. stop() closes open connections too. */
 export async function listen(options: {
   readonly hostname: string;
   readonly port: number;
@@ -165,14 +156,11 @@ export async function listen(options: {
   const srvx = serve({
     hostname: options.hostname,
     port: options.port,
-    // Bun sets SO_REUSEPORT unless told not to, with development off: another server could bind
-    // the same port and take its requests, cookies included.
+    // With SO_REUSEPORT another server could bind the same port and take its requests, cookies
+    // included.
     reusePort: false,
     silent: true,
     gracefulShutdown: false,
-    // Under Bun: no cut after 10 s with nothing written (node:http makes none), and no HTML debug
-    // page for an uncaught error, which Bun serves unless NODE_ENV is "production".
-    bun: { idleTimeout: 0, development: false },
     fetch: (request) => {
       peers.set(request, peerOf(request));
       return options.handle(request, server);
@@ -181,8 +169,7 @@ export async function listen(options: {
   });
   await srvx.ready();
   const address = srvx.node?.server?.address();
-  const port =
-    typeof address === "object" && address !== null ? address.port : srvx.bun?.server?.port;
+  const port = typeof address === "object" && address !== null ? address.port : undefined;
   const url = srvx.url;
   if (port === undefined || url === undefined) {
     throw new Error(`Not listening on ${options.hostname}:${options.port}`);

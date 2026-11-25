@@ -177,9 +177,9 @@ From the repository root, with the voice role's key (`FISH_API_KEY` by default) 
 `credentials.json` or the environment:
 
 ```sh
-bun docs/benchmarks/2026-11-10-fish-flush/measure.ts --dry-run
-bun docs/benchmarks/2026-11-10-fish-flush/measure.ts --wav <path>
-bun run test docs/benchmarks/2026-11-10-fish-flush
+node docs/benchmarks/2026-11-10-fish-flush/measure.ts --dry-run
+node docs/benchmarks/2026-11-10-fish-flush/measure.ts --wav <path>
+pnpm test docs/benchmarks/2026-11-10-fish-flush
 ```
 
 - **`--dry-run`** prints the persona, account, model, endpoint, characters and estimated cost, and

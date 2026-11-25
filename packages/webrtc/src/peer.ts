@@ -16,9 +16,9 @@ import { OPUS_RTP_CLOCK_RATE, type OpusCodec } from "./opus.ts";
 import { icePolicy } from "./patches.ts";
 
 // werift's ICE sockets have no "error" listener. A UDP socket reports ICMP errors from earlier
-// sends (`recvmsg ECONNREFUSED` on Linux under Bun, for a STUN check to a candidate nobody listens
-// on) as an "error" event, which without a listener is an uncaught exception that kills the
-// process. The symbol keeps a second evaluation of this module from patching again.
+// sends (`recvmsg ECONNREFUSED` on Linux, for a STUN check to a candidate nobody listens on) as an
+// "error" event, which without a listener is an uncaught exception that kills the process. The
+// symbol keeps a second evaluation of this module from patching again.
 const UDP_PATCHED = Symbol.for("eidolon.werift.udp-patched");
 const udp = UdpTransport.prototype as unknown as { init: (this: UdpTransport) => Promise<void> };
 const udpInit = udp.init as typeof udp.init & { [UDP_PATCHED]?: boolean };

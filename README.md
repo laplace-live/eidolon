@@ -6,10 +6,9 @@ per-viewer long-term memory via Mem0.
 
 The bot is TypeScript, on its own voice engine, parts of it ported from
 [pipedog](https://github.com/polvallverdu/pipedog), a TypeScript port of
-[Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`, and has
-run production on [Bun](https://bun.sh) since 2026-11-04. The offline chain that
-builds its indexes is TypeScript too (`packages/ingest`), and it and the local app
-run on Node 24.
+[Pipecat](https://docs.pipecat.ai/); it lives in `apps/` and `packages/`. The
+offline chain that builds its indexes is TypeScript too (`packages/ingest`), and
+all of it, production included, runs on Node 24.
 
 The original Python implementation, a Pipecat bot and its offline tools, stays
 in `laplace_eidolon/` as a reference implementation, and CI still publishes it
@@ -44,17 +43,18 @@ the [offline commands](#building-the-rag-indexes-optional) without a checkout, a
 them. Everything it keeps, settings and keys included, is in the data home, `~/.laplace/eidolon`;
 it never reads a `.env`, so set it up in the app or through the environment.
 
-To work on Eidolon, run it from a checkout:
+To work on Eidolon, run it from a checkout, with Node.js 24 and pnpm (`corepack enable pnpm` gets
+the version `package.json` pins):
 
 ```bash
-bun install
-bun run app        # builds the web app when it isn't built, then opens it
+pnpm install
+pnpm app           # builds the web app when it isn't built, then opens it
 ```
 
 The desktop app, Eidolon, runs it in a window of its own, with no Node to install, and updates
 itself: download it for [macOS on Apple silicon](https://downloads.vrp.moe/eidolon/Eidolon-mac-arm64.dmg)
 or [Windows x64](https://downloads.vrp.moe/eidolon/Eidolon-win-x64.exe). From a checkout,
-`bun run dev:desktop` runs it ([`docs/desktop.md`](docs/desktop.md)).
+`pnpm dev:desktop` runs it ([`docs/desktop.md`](docs/desktop.md)).
 
 ### Supported platforms
 
@@ -104,24 +104,24 @@ behind your own reverse proxy.
 ## Local development
 
 ```bash
-bun install
+pnpm install
 cp .env.example .env          # fill in SONIOX_API_KEY, OPENROUTER_API_KEY,
                               # FISH_API_KEY, FISH_VOICE_ID...
 docker compose up -d qdrant   # optional: backs long-term memory
-bun run dev                   # watch mode on localhost:7860; --port to move it
-bun run typecheck && bun run lint && bun run test
+pnpm dev                      # watch mode on localhost:7860; --port to move it
+pnpm typecheck && pnpm lint && pnpm test
 ```
 
-`bun run start` runs it without watch mode. Mem0 is a library inside the bot
-process, not a service — the only thing it needs running is Qdrant, and only if
-you want long-term memory. Set `MEM0_QDRANT_HOST=localhost` in `.env` to point
-the bot at the container above; leave it blank and the bot boots normally with
-memory switched off.
+`pnpm start` runs it without watch mode. Mem0 is a
+library inside the bot process, not a service — the only thing it needs running
+is Qdrant, and only if you want long-term memory. Set
+`MEM0_QDRANT_HOST=localhost` in `.env` to point the bot at the container above;
+leave it blank and the bot boots normally with memory switched off.
 
 The bot serves no UI. The web client is LAPLACE's `/ai` page, whose settings
 take a custom backend URL such as `http://localhost:7860`; the local web app
-(`bun run app`) is a separate entry point with its own pages. To hold a scripted
-call instead, run `bun apps/bot/scripts/e2e-call.ts --text` (or `--audio`).
+(`pnpm app`) is a separate entry point with its own pages. To hold a scripted
+call instead, run `node apps/bot/scripts/e2e-call.ts --text` (or `--audio`).
 How the bot is laid out and what keeps it working is in
 [`docs/typescript.md`](docs/typescript.md).
 
@@ -140,13 +140,13 @@ or `EIDOLON_HOME`), never in git or an image:
 
 ```bash
 # Fact files → persona_facts (embeddings reuse OPENROUTER_API_KEY).
-bun run laplace-ingest-facts
+pnpm laplace-ingest-facts
 
 # Videos → transcripts → refined scenes → stream_chunks and the stream catalog.
 # Transcription (Soniox) and refinement (OpenRouter) are billed; --dry-run
 # shows what a run would do first.
-bun run laplace-pipeline --dry-run ~/.laplace/eidolon/sources/<id>/lists/videos.txt
-bun run laplace-pipeline ~/.laplace/eidolon/sources/<id>/lists/videos.txt
+pnpm laplace-pipeline --dry-run ~/.laplace/eidolon/sources/<id>/lists/videos.txt
+pnpm laplace-pipeline ~/.laplace/eidolon/sources/<id>/lists/videos.txt
 ```
 
 The offline commands work on the active persona, or the one `--persona <id>`
@@ -159,19 +159,19 @@ npm, each is `npx @laplace.live/eidolon <command>`, its name without the
 
 | Command                                | Purpose                                                       |
 | -------------------------------------- | ------------------------------------------------------------- |
-| `bun run laplace-pipeline`             | Download → transcribe → refine → ingest, resumable; `--dry-run` plans |
-| `bun run laplace-download`             | yt-dlp batch download; `--expand` lists a playlist's videos   |
-| `bun run laplace-transcribe`           | Soniox async transcription, with the persona's glossary       |
-| `bun run laplace-refine`               | Two LLM passes per scene → structured memory records          |
-| `bun run laplace-ingest-streams`       | Refined transcripts → `stream_chunks`                         |
-| `bun run laplace-ingest-facts`         | Fact files → `persona_facts`                                  |
-| `bun run laplace-build-stream-catalog` | Broadcast overviews for date-scoped recall                    |
-| `bun run laplace-prepare-batch`        | A series capture's new videos → a batch list                  |
-| `bun run laplace-extract-users`        | Mine danmaku JSON for top usernames                           |
-| `bun run laplace-search`               | Probe the index on the bot's exact retrieval path             |
-| `bun run laplace-eval-retrieval`       | Score retrieval recall@k / MRR against known queries          |
-| `bun run laplace-generate-image`       | Prompt + reference images → a PNG (billed)                    |
-| `bun run gate-decisions`               | The retrieval gate benchmark (billed)                         |
+| `pnpm laplace-pipeline`                | Download → transcribe → refine → ingest, resumable; `--dry-run` plans |
+| `pnpm laplace-download`                | yt-dlp batch download; `--expand` lists a playlist's videos   |
+| `pnpm laplace-transcribe`              | Soniox async transcription, with the persona's glossary       |
+| `pnpm laplace-refine`                  | Two LLM passes per scene → structured memory records          |
+| `pnpm laplace-ingest-streams`          | Refined transcripts → `stream_chunks`                         |
+| `pnpm laplace-ingest-facts`            | Fact files → `persona_facts`                                  |
+| `pnpm laplace-build-stream-catalog`    | Broadcast overviews for date-scoped recall                    |
+| `pnpm laplace-prepare-batch`           | A series capture's new videos → a batch list                  |
+| `pnpm laplace-extract-users`           | Mine danmaku JSON for top usernames                           |
+| `pnpm laplace-search`                  | Probe the index on the bot's exact retrieval path             |
+| `pnpm laplace-eval-retrieval`          | Score retrieval recall@k / MRR against known queries          |
+| `pnpm laplace-generate-image`          | Prompt + reference images → a PNG (billed)                    |
+| `pnpm gate-decisions`                  | The retrieval gate benchmark (billed)                         |
 
 Each takes `--help` except `gate-decisions`, which takes no arguments and starts
 its billed run at once.
@@ -206,9 +206,9 @@ see [`docs/retrieval-gate.md`](docs/retrieval-gate.md).
 To measure how well retrieval is doing on a known set of questions:
 
 ```bash
-bun run laplace-eval-retrieval --verbose --save ~/.laplace/eidolon/sources/<id>/eval/baseline.json
+pnpm laplace-eval-retrieval --verbose --save ~/.laplace/eidolon/sources/<id>/eval/baseline.json
 # ... change something, ingest, re-run ...
-bun run laplace-eval-retrieval --compare ~/.laplace/eidolon/sources/<id>/eval/baseline.json
+pnpm laplace-eval-retrieval --compare ~/.laplace/eidolon/sources/<id>/eval/baseline.json
 ```
 
 Add new queries to the persona's `eval/queries.toml`, beside that baseline,
@@ -334,7 +334,7 @@ overrides it file by file. The install's settings layer as code defaults <
 [`docs/personas.md`](docs/personas.md#layers). For richer detail beyond the
 always-on system prompt, add atomic facts, one per line, to the persona's fact
 files in `~/.laplace/eidolon/sources/<id>/facts/` and re-run
-`bun run laplace-ingest-facts`.
+`pnpm laplace-ingest-facts`.
 
 ## License
 

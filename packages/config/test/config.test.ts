@@ -342,7 +342,7 @@ describe("persona clock", () => {
     const lines: string[] = [];
     const remove = logger.addSink((r) => lines.push(r.message));
     try {
-      // A zone no other test sets: the warn-once memory is per process, and bun runs every file in one.
+      // A zone no other test sets: the warn-once memory outlives the test that warned.
       setEnv("PERSONA_TIMEZONE", "Not/AConfigTestZone");
       expect(personaTimeZone()).toBe("UTC");
       expect(personaTimeZone()).toBe("UTC");

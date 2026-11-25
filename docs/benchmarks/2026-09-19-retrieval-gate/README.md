@@ -81,7 +81,7 @@ Sequential calls on a warm connection took 460 ms at the median and 528 ms
 at p90. Six borderline turns carry no label, and their scores are printed.
 Repeating one input five times moved its score by at most 0.05.
 
-`decisions.json` holds the latest run of `bun run gate-decisions`, which
+`decisions.json` holds the latest run of `pnpm gate-decisions`, which
 rewrites it. On 2026-11-17, with `typesafe/jev-1.14-20261014` answering, it
 kept all 93 recall turns, the lowest at 0.64, and skipped 70 of 92 chit-chat
 turns (dev 39/52, held-out 24/30, fresh 7/10); calls took 426 ms at the

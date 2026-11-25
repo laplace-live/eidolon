@@ -1,4 +1,4 @@
-// `bun run smoke:desktop:dev`, the dev smoke: Playwright's Electron driver on the unpackaged app,
+// `pnpm smoke:desktop:dev`, the dev smoke: Playwright's Electron driver on the unpackaged app,
 // its backend from source, on the kit's fakes, temporary data home and profile, in background mode
 // under the focus watch and the window watch (all off with --headful). It builds the web app and
 // apps/desktop/dist first, so it never runs on a stale build (--no-build runs on what is there),

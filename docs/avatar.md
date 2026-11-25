@@ -592,7 +592,7 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
 
 ## Testing
 
-- **The SDK** (`bun run test packages/sdk`), on Node with no browser:
+- **The SDK** (`pnpm test packages/sdk`), on Node with no browser:
   - `avatar-direct.test.ts` scripts a call's events as each kind of voice sends them: Fish, with no
     progress; a voice with word timings; a realtime model, whose segments arrive after its audio;
     and group calls.
@@ -616,7 +616,7 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   - `parity.test.ts` holds `inspectPsd2liveRig`'s inventory equal to the server's upload check on
     the test rig, and `build.test.ts` the pack: the avatar bundle, the wasm's SHA-256, the license
     files, every asset its bundle names, and a Node import that reads the rig with the packed wasm.
-- **The server** (`bun run test apps/bot/test/local`): `psd2live.test.ts` checks the upload check on
+- **The server** (`pnpm test apps/bot/test/local`): `psd2live.test.ts` checks the upload check on
   the test rig, on PNG and zip bytes, on a cut-off file, a flipped byte inside a chunk and a changed
   version, on a texture page that isn't a PNG inside the file, and on rigs it rewrites past the
   inventory's 1 MiB, a long name within it kept whole, and on one whose load passes a deadline,
@@ -624,17 +624,17 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   and streamed, the call refusal, the active model, every route, PATCH's checks of `look` and
   `moodParameters`, a `model.json` written before them, and ids that try to leave their folder.
   `static.test.ts` pins the CSP, its `'wasm-unsafe-eval'` included, and the wasm's type.
-- **The app's call** (`bun run test apps/web`), on Node with no browser: `target.test.ts` holds
+- **The app's call** (`pnpm test apps/web`), on Node with no browser: `target.test.ts` holds
   whom a call is with and how each page shows it, `signals.test.ts` what moves her and the tick,
   `stages.test.ts` her stages on fake parts, through a call's end into the next call and a group
   call's routing, `captions.test.ts` the caption, `call-tiles.test.ts` and `video-call.test.ts`
   the tiles' and the screen's markup, `call-bar.test.ts` when the bar shows, hides and keeps an
   ending until Close, and `call-dock.test.ts` the dock's Expand, its focusable region, and a chat's
   Call waiting while the tab's call is elsewhere.
-- **Studio's Appearance** (`bun run test apps/web`): `model-draft.test.ts` holds the draft Save
+- **Studio's Appearance** (`pnpm test apps/web`): `model-draft.test.ts` holds the draft Save
   sends, its look and mood parameters included, and what of it a new file keeps, and
   `character-models.test.ts` the setup a model's settings resolve to.
-- **The desktop companion** (`bun run test apps/web apps/desktop`), on Node with no browser:
+- **The desktop companion** (`pnpm test apps/web apps/desktop`), on Node with no browser:
   `director.test.ts` holds her moods, taps, pokes, dozing, a call's direction and the gesture
   numbering, `gaze.test.ts` her eyes and how near them a tap is on her head, `mouths.test.ts` her
   mouth from the port and from a voice message's file, `pointer.test.ts` (a tap's area with and
@@ -642,7 +642,7 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   `protocol.test.ts` her page's parts, and `chat-facts.test.ts` and `feed-link.test.ts` the main
   window's feed; main's side is `apps/desktop`'s ([desktop.md](desktop.md#the-vitest-project)). The
   dev smoke walks her whole in background mode ([desktop.md](desktop.md#the-dev-smoke)).
-- **The browser smoke** (`bun apps/bot/scripts/local-smoke.ts`,
+- **The browser smoke** (`node apps/bot/scripts/local-smoke.ts`,
   [web-app.md](web-app.md#the-browser-smoke-test)) imports the test rig in the studio's Appearance,
   checks its preview draws under the app's CSP, that Use Microphone closes its audio while the
   browser still asks for the microphone, that a stage made anew ends a line tried on it, that a mood
@@ -680,7 +680,7 @@ Electron 45.4.1 (Chromium 156), on CC0 rigs exported by PSD2Live 3.8.4's command
 - **CPU in Electron,** as Electron's `percentCPUUsage` reads it, a share of all of that Mac's 16
   cores: the GPU process 1.2%, a page drawing at 120 fps 0.8%, and one capped at 30 fps 0.4% (0.33 +
   0.16 ms a frame). Of one core, as Activity Monitor counts, that is about 19%, 13% and 6%.
-- **The server's check:** the same wasm loads a rig under Node 24 and Bun 1.4.5, compiling in 1–2 ms
+- **The server's check:** the same wasm loads a rig under Node 24, compiling in 1–2 ms
   and loading in 8–20 ms, with no browser.
 - **Bad files** failed cleanly, with no trap: `Not a .p2lrt rig`, `Chunk TEXR lies outside the
   file`, `Non-zero padding before an array`.

@@ -1,4 +1,4 @@
-// `bun run smoke:desktop`, the packaged smoke: the fused app electron-builder left in
+// `pnpm smoke:desktop`, the packaged smoke: the fused app electron-builder left in
 // apps/desktop/.out, on a temporary data home and profile with every provider faked on loopback,
 // driven through its backend's API with the Bearer, since Playwright and CDP can't drive a fused
 // build. On Windows it installs the NSIS setup silently, smokes the installed app and uninstalls it.
@@ -68,7 +68,7 @@ import { processTable } from "./smoke/processes.ts";
 
 const LABEL = "smoke-desktop";
 const TARGET = `${process.platform}-${process.arch}`;
-const MAKE = "bun run build:web && bun run build:desktop && bun run package:desktop";
+const MAKE = "pnpm build:web && pnpm build:desktop && pnpm package:desktop";
 const PERSONA = "milky-green";
 /** What the ingest job writes and the search reads back. */
 const FACTS = ["明前奶绿说她的猫叫坚果。", "明前奶绿开了一家花店。"] as const;
@@ -892,7 +892,7 @@ interface MarkedHome {
 }
 
 /**
- * On a CI runner, a marker in the default data home, the one npx and `bun run app` share: the
+ * On a CI runner, a marker in the default data home, the one npx and `pnpm app` share: the
  * uninstaller never learns the run's own home, so this is the home the install and uninstall
  * could touch. Never elsewhere, where that home may hold someone's own data.
  */

@@ -44,7 +44,7 @@ async function fakeProxy(): Promise<{ url: string; targets: string[]; server: Se
 }
 
 describe("installHttpDefaults", () => {
-  test("fetch then goes through HTTP_PROXY, as Bun's did", async () => {
+  test("fetch then goes through HTTP_PROXY", async () => {
     const proxy = await fakeProxy();
     try {
       setProxyEnv({ HTTP_PROXY: proxy.url });

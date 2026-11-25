@@ -5,9 +5,8 @@
 // Ported from pipedog packages/core/src/services/websocket_service.ts@ce8f8bc and packages/core/src/utils/network.ts@ce8f8bc
 //
 // The socket the streaming clients share, with the open and close timeouts and the reconnect
-// pacing pipedog's services used. It is the `ws` package's client, which Bun swaps for its own
-// implementation: Node's global WebSocket reports a refused handshake without its status, and
-// can't terminate.
+// pacing pipedog's services used. It is the `ws` package's client: Node's global WebSocket reports
+// a refused handshake without its status, and can't terminate.
 import type { IncomingMessage } from "node:http";
 import { AsyncQueue, logger } from "@eidolon/config";
 import WebSocket from "ws";

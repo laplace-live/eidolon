@@ -2,8 +2,8 @@ name: Desktop
 
 # The desktop app (apps/desktop) built, packaged and checked on each target it ships for; from a
 # laplace-eidolon-desktop@<version> tag, signed, notarized and uploaded to R2 (docs/desktop.md,
-# Releasing). Its payload comes from bun.lock and the backend's packages, so a change to either runs
-# this too.
+# Releasing). Its payload comes from pnpm-lock.yaml and the backend's packages, so a change to
+# either runs this too.
 
 on:
   pull_request:

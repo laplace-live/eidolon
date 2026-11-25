@@ -1,4 +1,4 @@
-// What Bun.serve({ routes, fetch }) stood up for a test, through the bot's own routing.
+// A test's server, on the bot's own routing.
 import { type Fallback, listen, type Routes, routeRequest } from "../src/routing.ts";
 
 export interface ServedRoutes {

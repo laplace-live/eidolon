@@ -1,0 +1,29 @@
+packages:
+  - apps/*
+  - packages/*
+
+# `pnpm add`, and the shadcn CLI that runs it, write exact pins.
+saveExact: true
+
+# Only versions at least 14 days old resolve, and every install checks the lockfile's against it.
+minimumReleaseAge: 20160
+# The desktop's Electron was published 2026-11-19: drop its entry once the gate passes it on
+# 2026-12-03.
+minimumReleaseAgeExclude:
+  - electron@45.4.1
+
+# @qdrant/js-client-rest pins undici exactly, at a version with open advisories, which would keep a
+# second copy in the npm package's bundle.
+overrides:
+  undici: 7.30.2
+
+# Whether a dependency's install script runs; pnpm fails an install that meets one not listed here.
+allowBuilds:
+  # Squirrel.Windows' 7-Zip: electron-builder builds only the nsis target here.
+  electron-winstaller: false
+  # On linux/x64 it downloads the CUDA execution provider; the CPU binaries ship in the tarball.
+  onnxruntime-node: false
+  # It only warns about its dependents' version ranges.
+  protobufjs: false
+  # LanceDB's older copy, which builds from source only beside a global libvips.
+  sharp: false

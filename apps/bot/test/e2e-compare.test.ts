@@ -101,9 +101,15 @@ async function bar(
   const files = ["base.json", "cand.json", "out.json"].map((name) => join(dir, name));
   await writeFile(files[0] as string, JSON.stringify(baseline));
   await writeFile(files[1] as string, JSON.stringify(candidate));
-  // e2e-compare.ts is a Bun script.
   const run = spawnProcess(
-    ["bun", SCRIPT, files[0] as string, files[1] as string, "--json", files[2] as string],
+    [
+      process.execPath,
+      SCRIPT,
+      files[0] as string,
+      files[1] as string,
+      "--json",
+      files[2] as string,
+    ],
     { stdout: "ignore", stderr: "inherit" },
   );
   await run.exited;
@@ -127,6 +133,17 @@ test("a call with no gaps between her sentences has gaps of none; one with no au
   expect((await bar(report(SMOOTH), report(SMOOTH)))["gap between sentences"]).toBe(true);
   expect((await bar(gapped, report(SMOOTH)))["gap between sentences"]).toBe(true);
   expect((await bar(report(SMOOTH), report([])))["gap between sentences"]).toBe(false);
+});
+
+test("--json writes its file into a folder it makes", async () => {
+  const [base, out] = [join(dir, "base.json"), join(dir, "reports", "out.json")];
+  await writeFile(base, JSON.stringify(report(SMOOTH)));
+  const run = spawnProcess([process.execPath, SCRIPT, base, base, "--json", out], {
+    stdout: "ignore",
+    stderr: "inherit",
+  });
+  await run.exited;
+  expect(JSON.parse(await readFile(out, "utf8"))).toHaveProperty("modes.text");
 });
 
 test("bot-stopped-speaking may come early only by the recorder's sampling interval", async () => {

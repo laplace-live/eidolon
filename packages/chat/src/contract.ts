@@ -1,5 +1,5 @@
 // What every ChatStore promises, as a suite for any test runner with describe, test and expect:
-// bun:test runs it on the JSONL store, and a browser store runs it under its own runner.
+// Vitest runs it on the JSONL store, and a browser store runs it under its own runner.
 import { CHAT_FORMAT, type ChatEvent, type ChatHeader, type ChatStore } from "./format.ts";
 
 export interface ContractRunner {

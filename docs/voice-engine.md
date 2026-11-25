@@ -48,9 +48,8 @@ and that the host is one of them; a call that fails the check fails as `Bot sess
 `models/silero_vad.onnx` and `models/smart-turn-v3.2-cpu.onnx` (`voiceModels()`, through
 `@eidolon/config`'s `voiceModelsDir()`; the npm package ships them in `data/models/`), on the
 pinned onnxruntime-node 1.30.0. ORT's telemetry is off (`ORT_DISABLE_TELEMETRY=1`): an upload in
-flight at exit crashed Bun (exit 134). On Node, `src/input/onnx.ts` sets it before ORT first loads,
-unless the environment set it. ORT reads it with `getenv`, which Bun's `process.env` writes never
-reach, so under Bun only the environment sets it: the image's `ENV` and `bun run dev`/`start` do.
+flight at exit crashed the bot (exit 134). `src/input/onnx.ts` sets it before ORT first loads,
+unless the environment set it.
 
 **Logs:** a call logs what the local app and the e2e notes read:
 - the `[bot] Session start …` line and `Starting bot` (`logSessionStart`), a chat window in the
@@ -621,7 +620,7 @@ their checks, event sequences, `stagesMs`, `latencyMs` and audible spans, then t
   once the server hears the caller, so its stops count until the caller's turn ends.
 
 ```bash
-bun run dev                                            # the change, on :7860
-bun apps/bot/scripts/e2e-call.ts --barge-in --headful --out b1.json
-bun apps/bot/scripts/e2e-compare.ts a1.json a2.json … --vs b1.json b2.json …   # a*: a baseline
+pnpm dev                                               # the change, on :7860
+node apps/bot/scripts/e2e-call.ts --barge-in --headful --out b1.json
+node apps/bot/scripts/e2e-compare.ts a1.json a2.json … --vs b1.json b2.json …   # a*: a baseline
 ```

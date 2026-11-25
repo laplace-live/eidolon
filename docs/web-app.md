@@ -5,23 +5,23 @@ setup wizard, a persona studio (identity, prompt, voice, appearance, facts, vide
 pictures), a call page, text chats, the tasks she runs on this computer when asked in a chat or on a
 call in one, settings, and the offline chain's commands run as jobs. It is a second entry
 point beside the bot, `apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React,
-shadcn, Tailwind) on loopback only. The bot that `bun run start` and the Docker image run never
+shadcn, Tailwind) on loopback only. The bot that `pnpm start` and the Docker image run never
 loads it.
 
 ## Running it
 
 ```bash
-bun install
-bun run app        # builds apps/web/dist when it has no index.html, then `local --open`
+pnpm install
+pnpm app           # builds apps/web/dist when it has no index.html, then `local --open`
 ```
 
 | Command | What it runs |
 | --- | --- |
-| `bun run app` | `bun run build:web` when the app isn't built, then `bun run local --open` |
-| `bun run local` | `apps/bot/src/local/main.ts`: the supervisor and the server under it. Without a build it exits 2 and names `bun run build:web` |
-| `bun run dev:local` | `apps/bot/src/local/server.ts` alone, under `node --watch` |
-| `bun run dev:web` | Vite on `http://127.0.0.1:5173`, proxying `/api` and `/mcp` to the server on `localhost:7860` |
-| `bun run build:web` | `apps/web/dist` |
+| `pnpm app` | `pnpm build:web` when the app isn't built, then `pnpm local --open` |
+| `pnpm local` | `apps/bot/src/local/main.ts`: the supervisor and the server under it. Without a build it exits 2 and names `pnpm build:web` |
+| `pnpm dev:local` | `apps/bot/src/local/server.ts` alone, under `node --watch` |
+| `pnpm dev:web` | Vite on `http://127.0.0.1:5173`, proxying `/api` and `/mcp` to the server on `localhost:7860` |
+| `pnpm build:web` | `apps/web/dist` |
 
 The desktop app (`apps/desktop`) runs this server too, as its own backend, and shows the app in
 its window with no link to open ([desktop.md](desktop.md)).
@@ -35,7 +35,7 @@ stdout and never through the logger, is the link that signs a browser in:
 Eidolon is ready: http://localhost:7860/#1762300800.Lb0Yx…
 ```
 
-`bun run local` keeps the server in a child process. When the server exits 75, which is what
+`pnpm local` keeps the server in a child process. When the server exits 75, which is what
 Restart in the app (`POST /api/local/restart`) does, the supervisor starts a new one on the same
 port without opening another tab; that is how settings read once at boot take effect. It passes
 SIGINT and SIGTERM on, and otherwise exits with the server's code. On Windows it passes nothing
@@ -55,9 +55,9 @@ the server holds the token, and prints the link that server would print, never o
 `[::1]` first. Beside a server that records no `host`, from an older version, it exits 2 as on
 another port.
 
-`bun run dev:local` has no supervisor, so Restart stops it, and every reload `--watch` makes
-opens another tab unless you pass `--no-open` (`bun run dev:local --no-open`). To work on the
-app's pages with hot reload, keep the server on 7860, start `bun run dev:web`, and open
+`pnpm dev:local` has no supervisor, so Restart stops it, and every reload `--watch` makes
+opens another tab unless you pass `--no-open` (`pnpm dev:local --no-open`). To work on the
+app's pages with hot reload, keep the server on 7860, start `pnpm dev:web`, and open
 `http://127.0.0.1:5173/#<code>`, where `<code>` is everything after `#` in the server's link. The
 proxy rewrites `Origin` only for requests from that dev origin, so the server's Origin rule still
 refuses every other page.
@@ -1006,7 +1006,7 @@ with, the flag included, and the CLI's own `load-env.ts` applies the `.env` when
 unset. Use it for smoke tests and clean runs:
 
 ```bash
-EIDOLON_NO_DOTENV=1 EIDOLON_HOME=/tmp/eidolon-try bun run local
+EIDOLON_NO_DOTENV=1 EIDOLON_HOME=/tmp/eidolon-try pnpm local
 ```
 
 ## Strings and languages
@@ -1018,7 +1018,7 @@ component, `t` from `@lingui/core/macro` in other code, a `msg` descriptor for a
 sentence with a link or `<code>` inside it. A label keyed by a union type (`Record<JobCommand, …>`)
 fails to compile when the union grows without it.
 
-`bun run i18n` (`lingui extract --clean`) writes every message into
+`pnpm i18n` (`lingui extract --clean`) writes every message into
 `apps/web/src/locales/en.po` and `zh-Hans.po`; each new one then needs its `msgstr` in
 `zh-Hans.po`, or it shows in English. A message's id is its English text, with any `context` that
 sets two meanings of one word apart (`t({ message: "Done", context: "job status" })`), so a reworded
@@ -1064,7 +1064,7 @@ a macro stubs `@lingui/core/macro` with `src/test/lingui-macro.ts`, which gives 
 
 ## The browser smoke test
 
-`bun apps/bot/scripts/local-smoke.ts` (`--headful` to watch it; headless Chrome is killed on some
+`node apps/bot/scripts/local-smoke.ts` (`--headful` to watch it; headless Chrome is killed on some
 Macs) boots the server with `EIDOLON_NO_DOTENV=1`, a temporary data home and no provider key, and
 walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chrome in
 `/Applications` on macOS, and elsewhere the Chrome Playwright finds (its `chrome` channel).
@@ -1205,7 +1205,7 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
     Steps** lists the skill, the commands and the notice; Settings' **Allowed Commands** lists the
     one allowed for good, whose **Remove** empties `allowed-commands.json`;
   - an `mcp.json` naming `packages/assistant/test/fixtures/mcp-server.mjs`, run on the smoke's
-    Bun with `echo` its one tool: a task whose worker calls it twice, its card naming the tool, the
+    Node with `echo` its one tool: a task whose worker calls it twice, its card naming the tool, the
     server, the server's read-only hint and the argument with its size, answered **Run Once**, then
     **Always Allow This Tool**, which `mcp.json` keeps at 0600, the server's process gone once the
     task ends; a second task, called `other` and showing no kind, whose call runs unasked; then
@@ -1250,7 +1250,7 @@ else.
 
 ## Troubleshooting
 
-- **"The web app is not built"** (exit 2): `bun run build:web`, or start with `bun run app`.
+- **"The web app is not built"** (exit 2): `pnpm build:web`, or start with `pnpm app`.
 - **The page asks you to open Eidolon from your terminal**: the link is over 10 minutes old, or
   the cookie or the proof is gone (cleared site data, another browser profile). Run the same
   command again: a running Eidolon prints a fresh link and exits. Pasting the link into that page

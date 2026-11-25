@@ -9,7 +9,7 @@ Browser TypeScript and React client SDK for [LAPLACE Eidolon](https://github.com
 ## Install
 
 ```bash
-bun add @laplace.live/eidolon-sdk
+pnpm add @laplace.live/eidolon-sdk
 ```
 
 React bindings require `react >= 18` when importing `@laplace.live/eidolon-sdk/react`.
@@ -20,9 +20,9 @@ themselves; elsewhere, pass the runtime's URL, bytes or compiled module as `runt
 
 ## Which bot to point it at
 
-A bot in production mode (`bun run dev` or `bun run start` in an Eidolon checkout, or its Docker
+A bot in production mode (`pnpm dev` or `pnpm start` in an Eidolon checkout, or its Docker
 image) answers every origin unless `PIPECAT_ALLOWED_ORIGINS` narrows it. Eidolon's local app
-(`bun run app`, `bun run local`, or the `eidolon` command) refuses other sites' API calls with a
+(`pnpm app`, `pnpm local`, or the `eidolon` command) refuses other sites' API calls with a
 403 until `EIDOLON_LOCAL_ALLOWED_ORIGINS` lists your site's origin, such as
 `http://localhost:3000`; restart it after setting that. Text chats also need `EIDOLON_CHAT_SECRET`
 set on the bot; without it the chat probe reports `"off"`.

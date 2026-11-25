@@ -92,7 +92,7 @@ function logLevel(verbose: number): LogLevel {
   return verbose === 0 ? "INFO" : verbose === 1 ? "DEBUG" : "TRACE";
 }
 
-/** Ctrl-C under `bun run` arrives twice, once from the terminal and once from bun. */
+/** Ctrl-C under `npm run` arrives twice, once from the terminal and once from npm. */
 const REPEAT_MS = 500;
 /** Long enough for the restart request's own response to leave first. */
 const RESTART_DELAY_MS = 200;
@@ -224,7 +224,7 @@ export async function bootLocal(
     site = loadStaticSite(options.dist);
   } catch (error) {
     if (!(error instanceof MissingDist)) throw error;
-    io.stderr(`eidolon: ${error.message}. Build it first: bun run build:web\n`);
+    io.stderr(`eidolon: ${error.message}. Build it first: pnpm build:web\n`);
     io.exit(2);
     return null;
   }

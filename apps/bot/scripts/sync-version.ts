@@ -1,5 +1,5 @@
 // Copies apps/bot/package.json's version, which changesets bumps, into every other place the bot
-// states it. Run by `bun run version` after `changeset version`.
+// states it. Run by `pnpm run version` after `changeset version`.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 

@@ -53,9 +53,8 @@ Mem0.
 
 The gate's connection has to outlive the gap between turns. With a 5 s
 keep-alive, a call made 15–40 s after the previous one paid a fresh TLS
-session: about 1.4 s instead of 0.5 s. Bun's fetch pools sockets
-process-wide, and when measured reused an idle one after 90 s; on Node,
-`installHttpDefaults()` keeps them 90 s, where undici's default is 4 s. A call
+session: about 1.4 s instead of 0.5 s. `installHttpDefaults()`
+keeps idle sockets 90 s, where undici's default is 4 s. A call
 that finds none still pays the fresh session.
 
 ## Accuracy
@@ -84,7 +83,7 @@ the 92 chit-chat turns, against 72 on jev-1.13.
 
 ## Changing it
 
-Re-run `bun run gate-decisions` after touching the questions, the state, the
+Re-run `pnpm gate-decisions` after touching the questions, the state, the
 threshold, or `RETRIEVAL_GATE_MODEL`. It rewrites the benchmark's
 `decisions.json` and exits non-zero if any labeled recall turn would be
 skipped. `~typesafe/jev-latest` follows new Jev releases, which can move
@@ -93,7 +92,7 @@ the calibration the threshold relies on; pin `typesafe/jev-1.13` to hold it.
 timeline answers off with it.
 
 After touching the timeline questions or `TIMELINE_THRESHOLD`, re-run
-`bun docs/benchmarks/2026-11-07-timeline-question/score.ts`. It exits
+`node docs/benchmarks/2026-11-07-timeline-question/score.ts`. It exits
 non-zero if any labeled turn lands on the wrong side of the threshold.
 
 The gate and the group chats' director ask through `DecisionModel`

@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "types": ["bun"],
-    "paths": {}
-  },
-  "include": ["apps/bot/scripts", "packages/sdk/scripts"],
-  "exclude": []
-}

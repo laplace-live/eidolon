@@ -340,7 +340,7 @@ describe("sync", () => {
     items: [{ kind: "feature", packages: ["laplace-eidolon"], text: "Run on Windows" }],
   };
 
-  /** A repository's changelog.json and the status `bun run version` saved before versioning. */
+  /** A repository's changelog.json and the status `pnpm run version` saved before versioning. */
   function snapshotRepo(status: unknown): string {
     const dir = tempDir();
     write(dir, "changelog.json", `${JSON.stringify({ schema: 1, releases: [older] })}\n`);
@@ -473,20 +473,15 @@ describe("changelog.json", () => {
   });
 });
 
-describe("bun run version", () => {
+describe("pnpm run version", () => {
   /**
    * A one-package workspace in its own git repository, with this repository's changesets plugin,
    * the script and its types, and two changesets.
    */
   function fixtureRepo(): string {
     const repo = tempDir();
-    write(
-      repo,
-      "package.json",
-      JSON.stringify({ private: true, type: "module", workspaces: ["packages/*"] }),
-    );
-    // manypkg takes a Bun workspace's root by its lockfile.
-    write(repo, "bun.lock", "");
+    write(repo, "package.json", JSON.stringify({ private: true, type: "module" }));
+    write(repo, "pnpm-workspace.yaml", "packages:\n  - packages/*\n");
     for (const [name, version] of [
       ["fixture-app", "1.0.0"],
       ["fixture-lib", "2.0.0"],
@@ -556,7 +551,7 @@ describe("bun run version", () => {
     for (const step of script.split(" && ")) {
       const [command, ...args] = step.split(" ");
       // The fixture has no bot whose version to copy.
-      if (step === "bun apps/bot/scripts/sync-version.ts") continue;
+      if (step === "node apps/bot/scripts/sync-version.ts") continue;
       if (command === "changeset") args.unshift(changeset);
       else if (command !== "node") throw new Error(`unknown step in the version script: ${step}`);
       execFileSync(process.execPath, args, { cwd: repo, env: ENV, stdio: "pipe" });

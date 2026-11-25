@@ -1,4 +1,4 @@
-// What passes between e2e-call.ts (Bun) and the page it drives (browser bundle).
+// What passes between e2e-call.ts (Node) and the page it drives (browser bundle).
 
 export const LEVEL_INTERVAL_MS = 100;
 export const FLOOR_DB = -120;

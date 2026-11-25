@@ -29,10 +29,10 @@ degrades quietly when its key, table, or vector store is missing, so a fresh
 checkout runs.
 
 The bot is TypeScript, on eidolon's own voice engine (`packages/voice`), in
-`apps/` and `packages/`; production has run it on Bun (`ghcr.io/laplace-live/eidolon`)
-since 2026-11-04. The offline chain is TypeScript too: `packages/ingest`, run
+`apps/` and `packages/`, and production runs it on Node 24
+(`ghcr.io/laplace-live/eidolon`). The offline chain is TypeScript too: `packages/ingest`, run
 through the `laplace-*` commands in `apps/cli`. The local web app and the
-offline commands run on Node 24, and also ship as the npm package
+offline commands run on Node 24 too, and also ship as the npm package
 `@laplace.live/eidolon` (`apps/eidolon`), which runs them, bundled, on the
 user's Node. The desktop app, Eidolon (`apps/desktop`), shows the local app in
 a window and runs its server on Electron's own binary as Node, and ships signed
@@ -52,7 +52,7 @@ apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, an
                       bundles the local app and the CLI with the web app, templates and jieba
 apps/desktop/         the desktop app, Eidolon (Electron): apps/web in a window, on a
                       backend staged from the npm build and run on Electron's binary as Node
-packages/             subsystems, one Bun workspace package each (docs/typescript.md);
+packages/             subsystems, one pnpm workspace package each (docs/typescript.md);
                       packages/ingest is the offline chain, packages/assistant the tools,
                       folder policy and files of the assistant's tasks, and in its skills/ the
                       skills Eidolon ships
@@ -107,34 +107,34 @@ a row here and writing the prose there — not a new section in this file.**
 The bot:
 
 ```bash
-bun install
-bun run dev                            # watch mode on :7860 (--port to move it), on Bun; `start` without watch
-bun run typecheck && bun run lint && bun run test
-bun run test <paths>                   # Vitest on Node, those files or folders only
-bun run laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions / director-decisions / review-decisions
-bun run laplace-task --folder <path> "<goal>"   # one assistant task in the foreground; billed (docs/assistant.md)
+pnpm install
+pnpm dev                               # watch mode on :7860 (--port to move it); `start` without watch
+pnpm typecheck && pnpm lint && pnpm test
+pnpm test <paths>                      # Vitest on Node, those files or folders only
+pnpm laplace-search / laplace-eval-retrieval / laplace-generate-image / gate-decisions / director-decisions / review-decisions
+pnpm laplace-task --folder <path> "<goal>"      # one assistant task in the foreground; billed (docs/assistant.md)
 ```
 
 The local web app, on loopback only ([web-app.md](docs/web-app.md)):
 
 ```bash
-bun run app                            # builds apps/web/dist if missing, then `local --open`
-bun run local                          # the local entry; prints the link that signs a browser in
-bun run dev:local                      # its server alone, under --watch; --no-open, or each reload opens a tab
-bun run dev:web                        # Vite on 127.0.0.1:5173, proxying to :7860; open /#<code>
-bun run build:web                      # apps/web/dist
-bun run i18n                           # extract the app's strings into apps/web/src/locales/*.po
+pnpm app                               # builds apps/web/dist if missing, then `local --open`
+pnpm local                             # the local entry; prints the link that signs a browser in
+pnpm dev:local                         # its server alone, under --watch; --no-open, or each reload opens a tab
+pnpm dev:web                           # Vite on 127.0.0.1:5173, proxying to :7860; open /#<code>
+pnpm build:web                         # apps/web/dist
+pnpm i18n                              # extract the app's strings into apps/web/src/locales/*.po
 ```
 
 The desktop app, Eidolon ([desktop.md](docs/desktop.md)); a test run of it is always in background
 mode, on a temporary data home and profile ([Rules](#the-desktop-app)):
 
 ```bash
-bun run dev:desktop                    # the unpackaged app: pages from Vite on :5173, its backend from source
-bun run build:desktop                  # stages this machine's backend in apps/desktop/.stage, then builds dist/
-bun run package:desktop                # electron-builder into apps/desktop/.out: unsigned, ad hoc on macOS
-bun run smoke:desktop:dev              # the dev smoke, on macOS: builds, then walks the unpackaged app under Playwright on fakes
-bun run smoke:desktop                  # the packaged smoke: the app package:desktop made, on fakes, through its backend's API
+pnpm dev:desktop                       # the unpackaged app: pages from Vite on :5173, its backend from source
+pnpm build:desktop                     # stages this machine's backend in apps/desktop/.stage, then builds dist/
+pnpm package:desktop                   # electron-builder into apps/desktop/.out: unsigned, ad hoc on macOS
+pnpm smoke:desktop:dev                 # the dev smoke, on macOS: builds, then walks the unpackaged app under Playwright on fakes
+pnpm smoke:desktop                     # the packaged smoke: the app package:desktop made, on fakes, through its backend's API
 node apps/desktop/scripts/test-on-electron.ts [paths]   # the Electron lane: the backend's tests on Electron's Node
 ```
 
@@ -142,26 +142,26 @@ The offline chain, each command taking `--persona <id>` and working in that
 persona's folders in the data home (`--json` reports NDJSON events on stdout):
 
 ```bash
-bun run laplace-pipeline <url list>    # download → transcribe → refine → ingest → catalog, resumable
-bun run laplace-pipeline --dry-run     # plans every video the persona's sources know; writes nothing
-bun run laplace-download <url list>    # yt-dlp → vods/, installing its own yt-dlp; --expand <url>
-bun run laplace-transcribe <audio>     # Soniox async → streams/<date>-<id>.md
-bun run laplace-refine                 # LLM cleanup → streams/*.refined.json
-bun run laplace-ingest-streams         # → stream_chunks.lance
-bun run laplace-ingest-facts           # facts/ → persona_facts.lance
-bun run laplace-build-stream-catalog   # → stream_catalog.json
-bun run laplace-prepare-batch          # a series capture's new videos → lists/batches/
-bun run laplace-discover               # her new streams on Bilibili/YouTube, ranked; --save → a batch
-bun run laplace-extract-users          # mine danmaku JSON for glossary.toml terms
+pnpm laplace-pipeline <url list>       # download → transcribe → refine → ingest → catalog, resumable
+pnpm laplace-pipeline --dry-run        # plans every video the persona's sources know; writes nothing
+pnpm laplace-download <url list>       # yt-dlp → vods/, installing its own yt-dlp; --expand <url>
+pnpm laplace-transcribe <audio>        # Soniox async → streams/<date>-<id>.md
+pnpm laplace-refine                    # LLM cleanup → streams/*.refined.json
+pnpm laplace-ingest-streams            # → stream_chunks.lance
+pnpm laplace-ingest-facts              # facts/ → persona_facts.lance
+pnpm laplace-build-stream-catalog      # → stream_catalog.json
+pnpm laplace-prepare-batch             # a series capture's new videos → lists/batches/
+pnpm laplace-discover                  # her new streams on Bilibili/YouTube, ranked; --save → a batch
+pnpm laplace-extract-users             # mine danmaku JSON for glossary.toml terms
 ```
 
 The npm packages, `@laplace.live/eidolon` and `@laplace.live/eidolon-sdk` ([releasing.md](docs/releasing.md)):
 
 ```bash
-bun run build:npm                      # stages it in apps/eidolon/pack/: bundles, web app, templates
-bun run pack:npm                       # stages it, then packs apps/eidolon/laplace.live-eidolon-<version>.tgz
-bun run build:sdk                      # stages @laplace.live/eidolon-sdk in packages/sdk/pack/
-bun run pack:sdk                       # stages it, then packs packages/sdk/laplace.live-eidolon-sdk-<version>.tgz
+pnpm build:npm                         # stages it in apps/eidolon/pack/: bundles, web app, templates
+pnpm pack:npm                          # stages it, then packs apps/eidolon/laplace.live-eidolon-<version>.tgz
+pnpm build:sdk                         # stages @laplace.live/eidolon-sdk in packages/sdk/pack/
+pnpm pack:sdk                          # stages it, then packs packages/sdk/laplace.live-eidolon-sdk-<version>.tgz
 ```
 
 ### Which checks to run
@@ -170,29 +170,29 @@ Match the gate to the surface you touched; don't reflexively run everything.
 
 | You changed | Run |
 | --- | --- |
-| retrieval, tokenization, chunking, `top_k`, or `candidates` | `bun run laplace-eval-retrieval --compare ~/.laplace/eidolon/sources/<id>/eval/baseline.json`. A quality claim without a number is not a claim |
-| an ingest, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests (`bun run laplace-ingest-streams`, `laplace-ingest-facts`) into the persona's `index/`, then copy it to each server's mounted data home with the rsync in [personas.md](docs/personas.md#deploying-a-persona) |
-| anything under `packages/ingest`, an offline command in `apps/cli`, or the write side of `packages/retrieval` | the gates below, then the stage's real-data test with `EIDOLON_REQUIRE_PARITY=1 bun run test <file>`: `packages/ingest/test/*_real.test.ts` (streams, download, transcribe, refine, ingest_streams, pipeline), `apps/cli/test/ingest_facts_real.test.ts`, `packages/retrieval/test/write_real.test.ts`. They are free and only read `~/.laplace/eidolon` (`EIDOLON_REAL_HOME`). Without the variable a missing corpus skips silently |
-| the voice loop (`packages/voice`), the transport (`packages/webrtc`), `packages/runtime`, or the werift patches | `bun run test packages/voice packages/webrtc packages/runtime`, then boot the bot and hold real calls with `e2e-call.ts` (`--text`, `--audio`, `--barge-in`), compared with a baseline's by `e2e-compare.ts` ([voice-engine.md](docs/voice-engine.md#real-calls)) — a call's timing isn't unit-testable. Billed |
-| `packages/imagegen`, the image models (`packages/providers/src/image`), or the `take_selfie` tool | `bun run laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
-| the gate's recall questions, state, or threshold (`packages/context/src/gate.ts`), or `RETRIEVAL_GATE_MODEL` | `bun run gate-decisions` — re-scores the labeled turns of `docs/benchmarks/2026-09-19-retrieval-gate/` into its `decisions.json`, and exits non-zero if any turn that needs recall would be skipped. About $0.002 of gate calls |
-| the director's questions, state, or thresholds (`packages/context/src/director.ts`) | `bun run director-decisions` — asks Jev about the labelled group-chat lines of `docs/benchmarks/2026-11-10-director/` into its `decisions.json`, and exits non-zero if any is decided wrong. About $0.003 of gate calls; after a threshold or label change alone, `bun docs/benchmarks/2026-11-10-director/score.ts --cached --check` replays the stored scores for free |
-| Approve for Me's review: its prompt, its notes or its verdict (`packages/assistant/src/review.ts`) | `bun run review-decisions` — asks the assistant role's model (or `--model <account>/<model>`) about the labelled actions of `docs/benchmarks/2026-11-19-approve-for-me/` into its `decisions.json`, and exits non-zero if any risky one is let through or a review fails. About $0.002 on `deepseek-flash`; run it on the models tasks use |
-| the gate's timeline questions or `TIMELINE_THRESHOLD` (`packages/context/src/gate.ts`) | `bun docs/benchmarks/2026-11-07-timeline-question/score.ts` — exits non-zero if any labeled turn lands on the wrong side of the threshold |
-| `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | no scripted check exists ([the 2026-10-17 benchmark](docs/benchmarks/2026-10-17-drama-3-markup/README.md) records what drama-3 does with each kind). Hold a real call, `bun apps/bot/scripts/e2e-call.ts --text "<a question her reply would mark up>" --headful`, and listen: a direction or a tag spoken aloud is a leak. Billed per character |
+| retrieval, tokenization, chunking, `top_k`, or `candidates` | `pnpm laplace-eval-retrieval --compare ~/.laplace/eidolon/sources/<id>/eval/baseline.json`. A quality claim without a number is not a claim |
+| an ingest, `EMBED_MODEL`, or `EMBED_DIM` | re-run **both** ingests (`pnpm laplace-ingest-streams`, `pnpm laplace-ingest-facts`) into the persona's `index/`, then copy it to each server's mounted data home with the rsync in [personas.md](docs/personas.md#deploying-a-persona) |
+| anything under `packages/ingest`, an offline command in `apps/cli`, or the write side of `packages/retrieval` | the gates below, then the stage's real-data test with `EIDOLON_REQUIRE_PARITY=1 pnpm test <file>`: `packages/ingest/test/*_real.test.ts` (streams, download, transcribe, refine, ingest_streams, pipeline), `apps/cli/test/ingest_facts_real.test.ts`, `packages/retrieval/test/write_real.test.ts`. They are free and only read `~/.laplace/eidolon` (`EIDOLON_REAL_HOME`). Without the variable a missing corpus skips silently |
+| the voice loop (`packages/voice`), the transport (`packages/webrtc`), `packages/runtime`, or the werift patches | `pnpm test packages/voice packages/webrtc packages/runtime`, then boot the bot and hold real calls with `e2e-call.ts` (`--text`, `--audio`, `--barge-in`), compared with a baseline's by `e2e-compare.ts` ([voice-engine.md](docs/voice-engine.md#real-calls)) — a call's timing isn't unit-testable. Billed |
+| `packages/imagegen`, the image models (`packages/providers/src/image`), or the `take_selfie` tool | `pnpm laplace-generate-image` against a real reference — it shares `generate()` with the bot, so a successful render is the check. Billed per image |
+| the gate's recall questions, state, or threshold (`packages/context/src/gate.ts`), or `RETRIEVAL_GATE_MODEL` | `pnpm gate-decisions` — re-scores the labeled turns of `docs/benchmarks/2026-09-19-retrieval-gate/` into its `decisions.json`, and exits non-zero if any turn that needs recall would be skipped. About $0.002 of gate calls |
+| the director's questions, state, or thresholds (`packages/context/src/director.ts`) | `pnpm director-decisions` — asks Jev about the labelled group-chat lines of `docs/benchmarks/2026-11-10-director/` into its `decisions.json`, and exits non-zero if any is decided wrong. About $0.003 of gate calls; after a threshold or label change alone, `node docs/benchmarks/2026-11-10-director/score.ts --cached --check` replays the stored scores for free |
+| Approve for Me's review: its prompt, its notes or its verdict (`packages/assistant/src/review.ts`) | `pnpm review-decisions` — asks the assistant role's model (or `--model <account>/<model>`) about the labelled actions of `docs/benchmarks/2026-11-19-approve-for-me/` into its `decisions.json`, and exits non-zero if any risky one is let through or a review fails. About $0.002 on `deepseek-flash`; run it on the models tasks use |
+| the gate's timeline questions or `TIMELINE_THRESHOLD` (`packages/context/src/gate.ts`) | `node docs/benchmarks/2026-11-07-timeline-question/score.ts` — exits non-zero if any labeled turn lands on the wrong side of the threshold |
+| `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | no scripted check exists ([the 2026-10-17 benchmark](docs/benchmarks/2026-10-17-drama-3-markup/README.md) records what drama-3 does with each kind). Hold a real call, `node apps/bot/scripts/e2e-call.ts --text "<a question her reply would mark up>" --headful`, and listen: a direction or a tag spoken aloud is a leak. Billed per character |
 | `packages/memory`, or `/api/memories` (`apps/bot/src/memory-admin.ts`) | `docker compose up qdrant`, then round-trip a real `add` → `search` → `deleteAll` through `openMemoryEngine(buildMemoryConfig())`. The tests fake Qdrant and both model calls, so only a live run proves the wire format; it needs an embedding key and an LLM key |
-| `packages/assistant`, the task loop (`packages/engine/src/task*`), or `laplace-task` | `bun run test packages/assistant packages/engine apps/cli/test/task.test.ts`, which script every mind, and spawn real processes for `bash` and the MCP client in temporary folders, killing only their own; a change to how a task behaves also needs one billed task on a model you pick: `bun run laplace-task --folder <tmp>/mg-react-todomvc "写一个 React TodoMVC，单文件 index.html"`, then try the page ([assistant.md](docs/assistant.md#laplace-task)) |
+| `packages/assistant`, the task loop (`packages/engine/src/task*`), or `laplace-task` | `pnpm test packages/assistant packages/engine apps/cli/test/task.test.ts`, which script every mind, and spawn real processes for `bash` and the MCP client in temporary folders, killing only their own; a change to how a task behaves also needs one billed task on a model you pick: `pnpm laplace-task --folder <tmp>/mg-react-todomvc "写一个 React TodoMVC，单文件 index.html"`, then try the page ([assistant.md](docs/assistant.md#laplace-task)) |
 | an env var | document it in `.env.example` in the same commit |
-| anything under `apps/` or `packages/` | `bun run typecheck`, `bun run lint`, `bun run test`, and for what production loads `bun apps/bot/scripts/bun-check.ts`; for retrieval, the gate or the voice loop, also the row above that names it |
-| anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `bun run build:web`; after changing a string, `bun run i18n` and its `msgstr` in `zh-Hans.po` |
-| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `bun run test apps/bot/test/local`, then `bun apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a character model the studio's Appearance imports and draws under the app's CSP, a chat, a group chat, voice messages, a call that outlives its page, a video call with her model, a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, answered on its video screen, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
+| anything under `apps/` or `packages/` | `pnpm typecheck`, `pnpm lint` and `pnpm test`; for retrieval, the gate or the voice loop, also the row above that names it |
+| anything under `apps/web` | the row above, whose typecheck also runs both `apps/web` tsconfigs, then `pnpm build:web`; after changing a string, `pnpm i18n` and its `msgstr` in `zh-Hans.po` |
+| local mode (`apps/bot/src/local`), or chats (`packages/chat`, `packages/engine`) | `pnpm test apps/bot/test/local`, then `node apps/bot/scripts/local-smoke.ts --headful`: a browser walk on a temporary data home that bills nothing, a character model the studio's Appearance imports and draws under the app's CSP, a chat, a group chat, voice messages, a call that outlives its page, a video call with her model, a task she starts, steers, checks and stops in a chat, one shown in each display and stopped with `/stop`, one she starts on a call there, answered on its video screen, a coding task on its kind's model that reads a skill and runs commands its card allows once, denies and allows for good, two that call a fake MCP server's tool, and two under the chat's Approve for Me and Full Access, with a fake mind, director, voice, hearing, worker and review included |
 | her task tools' descriptions, her hint, the status block or her nudges (`apps/bot/src/local/tasks`) | the row above, then one billed chat on OpenRouter ([assistant.md](docs/assistant.md#checking-her-side)): a task outside `assistant.folders`, whose line must name the card's question; 弄好了吗 before and after Allow; 具体到哪了, answered through `check_task`; a change, passed on through `steer_task`; 帮我打开它, which starts no task; 算了别做了 on a second task, through `stop_task`; a task that needs a lookup and a run, which names its kind, asks on its card before the command and searches. About $0.20, most of it the worker. A change to tasks on a call also needs a call by hand, billed on Soniox and Fish too, so it waits for the user's go-ahead |
-| `apps/eidolon`, or a file the package bundles or copies | the gates above, then `bun run pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64 and Windows x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, loads its native modules, and stops it |
-| `packages/sdk` (`@laplace.live/eidolon-sdk`) | `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run pack:sdk` |
-| the SDK's avatar entry (`packages/sdk/src/avatar`) or its vendored runtime, the mood table or the mouth curve, a persona's models (`apps/bot/src/local/appearance.ts`, `psd2live.ts`, `routes/appearance.ts`) or the studio's Appearance | the `packages/sdk`, `apps/web` and local mode rows, whose tests hold the SDK's model inventory to the server's upload check (`packages/sdk/test/parity.test.ts`) and the CSP's `'wasm-unsafe-eval'` (`apps/bot/test/local/static.test.ts`), and whose smoke draws the test rig in the studio's Appearance under that CSP. A new runtime also takes the `apps/eidolon` and desktop rows, since the npm package and the desktop payload ship it in `data/psd2live/` for the upload check, which `ci-install-check.ts` runs on the test rig. The mood table's tests (`packages/sdk/test/avatar-moods.test.ts`) hold `prompt.md`'s published directions and lines written in their style, never lines from the owner's chats. A `MOUTH_CURVE` change is scored on her own voice messages, not on synthetic audio alone: `bun docs/benchmarks/2026-11-23-mouth-curve/score.ts <files>` before and after, with ffmpeg on PATH and the owner's go-ahead, since the files are their chats' ([its README](docs/benchmarks/2026-11-23-mouth-curve/README.md) says which, and what it measured) |
-| `apps/desktop`, or what its payload takes from `apps/eidolon`'s stage | `bun run typecheck`, `bun run lint` and `bun run test apps/desktop`, whose tests never load `electron`; then `bun run build:desktop`, `bun run package:desktop` and `EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts`, which also holds the packaged payload to the stage; then both [smokes](docs/desktop.md#the-smokes), which bill nothing and show nothing: `bun run smoke:desktop` (the packaged app's natives, the `eidolon` command and the node shim's launchers, its backend's API, the desktop companion drawn hidden, a restart and `--quit`) and, on macOS, `bun run smoke:desktop:dev`, which builds and walks the unpackaged app (Home, a chat, a call, Restart, Choose Folder, Settings' Desktop options, the desktop companion, a waiting task's notifications, attaching and quitting). `desktop.yml` runs the packaged smoke on Windows too. A change to the desktop companion's window, click-through, menu or Pop Out also needs the owner's hand check ([desktop.md](docs/desktop.md#the-desktop-companion)), which no agent runs. An Electron bump follows [desktop.md's procedure](docs/desktop.md#bumping-electron) |
-| the desktop app's release: `apps/desktop/electron-builder.release.mjs`, `apps/desktop/scripts/signed-check.ts`, or `desktop.yml`'s tag check, signing, upload or index | the row above, whose `bun run test apps/desktop` holds the overlay to electron-builder's loader and schema and the checks' verdicts to the tools' output; then, since only a run proves them, a `sign` dispatch from `electron` or `master` that passes both legs (notarized and stapled on macOS, Authenticode-valid on Windows), and for the index a `release_index` dispatch, which rewrites the live `releases.json` from R2's listing. The upload itself runs only from a release's tag ([desktop.md](docs/desktop.md#releasing)) |
-| the desktop app's updater (`update-flow.ts`, `updater.ts`, `electron-builder.yml`'s `publish`), or its update test (`apps/desktop/scripts/update-test.ts` and `update-test/`, `desktop.yml`'s `update-test` job) | the desktop row, whose `bun run test apps/desktop` holds the flow to background mode's answers and the test's feed and steps to electron-updater's URLs and the updater's lines; then, since only signed builds update, an `update_test` dispatch from `electron` or `master` that passes both legs: a signed 0.0.1 updated to 0.0.2 through the real updater ([the update test](docs/desktop.md#the-update-test)). The script refuses to run outside CI |
+| `apps/eidolon`, or a file the package bundles or copies | the gates above, then `pnpm pack:npm` and `node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/<tarball>`, which CI runs on Linux x64 and Windows x64: it installs the tarball with npm, boots it on Node on a temporary home, signs in, loads its native modules, and stops it |
+| `packages/sdk` (`@laplace.live/eidolon-sdk`) | `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm pack:sdk` |
+| the SDK's avatar entry (`packages/sdk/src/avatar`) or its vendored runtime, the mood table or the mouth curve, a persona's models (`apps/bot/src/local/appearance.ts`, `psd2live.ts`, `routes/appearance.ts`) or the studio's Appearance | the `packages/sdk`, `apps/web` and local mode rows, whose tests hold the SDK's model inventory to the server's upload check (`packages/sdk/test/parity.test.ts`) and the CSP's `'wasm-unsafe-eval'` (`apps/bot/test/local/static.test.ts`), and whose smoke draws the test rig in the studio's Appearance under that CSP. A new runtime also takes the `apps/eidolon` and desktop rows, since the npm package and the desktop payload ship it in `data/psd2live/` for the upload check, which `ci-install-check.ts` runs on the test rig. The mood table's tests (`packages/sdk/test/avatar-moods.test.ts`) hold `prompt.md`'s published directions and lines written in their style, never lines from the owner's chats. A `MOUTH_CURVE` change is scored on her own voice messages, not on synthetic audio alone: `node docs/benchmarks/2026-11-23-mouth-curve/score.ts <files>` before and after, with ffmpeg on PATH and the owner's go-ahead, since the files are their chats' ([its README](docs/benchmarks/2026-11-23-mouth-curve/README.md) says which, and what it measured) |
+| `apps/desktop`, or what its payload takes from `apps/eidolon`'s stage | `pnpm typecheck`, `pnpm lint` and `pnpm test apps/desktop`, whose tests never load `electron`; then `pnpm build:desktop`, `pnpm package:desktop` and `EIDOLON_REQUIRE_STAGE=1 pnpm test apps/desktop/test/stage.test.ts`, which also holds the packaged payload to the stage; then both [smokes](docs/desktop.md#the-smokes), which bill nothing and show nothing: `pnpm smoke:desktop` (the packaged app's natives, the `eidolon` command and the node shim's launchers, its backend's API, the desktop companion drawn hidden, a restart and `--quit`) and, on macOS, `pnpm smoke:desktop:dev`, which builds and walks the unpackaged app (Home, a chat, a call, Restart, Choose Folder, Settings' Desktop options, the desktop companion, a waiting task's notifications, attaching and quitting). `desktop.yml` runs the packaged smoke on Windows too. A change to the desktop companion's window, click-through, menu or Pop Out also needs the owner's hand check ([desktop.md](docs/desktop.md#the-desktop-companion)), which no agent runs. An Electron bump follows [desktop.md's procedure](docs/desktop.md#bumping-electron) |
+| the desktop app's release: `apps/desktop/electron-builder.release.mjs`, `apps/desktop/scripts/signed-check.ts`, or `desktop.yml`'s tag check, signing, upload or index | the row above, whose `pnpm test apps/desktop` holds the overlay to electron-builder's loader and schema and the checks' verdicts to the tools' output; then, since only a run proves them, a `sign` dispatch from `electron` or `master` that passes both legs (notarized and stapled on macOS, Authenticode-valid on Windows), and for the index a `release_index` dispatch, which rewrites the live `releases.json` from R2's listing. The upload itself runs only from a release's tag ([desktop.md](docs/desktop.md#releasing)) |
+| the desktop app's updater (`update-flow.ts`, `updater.ts`, `electron-builder.yml`'s `publish`), or its update test (`apps/desktop/scripts/update-test.ts` and `update-test/`, `desktop.yml`'s `update-test` job) | the desktop row, whose `pnpm test apps/desktop` holds the flow to background mode's answers and the test's feed and steps to electron-updater's URLs and the updater's lines; then, since only signed builds update, an `update_test` dispatch from `electron` or `master` that passes both legs: a signed 0.0.1 updated to 0.0.2 through the real updater ([the update test](docs/desktop.md#the-update-test)). The script refuses to run outside CI |
 | `jsRuntime()` (`packages/config/src/runtime.ts`), the node shim (`apps/desktop/node-shim`, or `nodeShim()` and `serverEnv()` in `packages/assistant/src/mcp/session.ts`), or a test that spawns `process.execPath` with an environment of its own | the gates above, then the backend suite on Electron's Node, `node apps/desktop/scripts/test-on-electron.ts` ([the Electron lane](docs/desktop.md#the-electron-lane)): there `process.execPath` is Electron's binary, which starts as an app, not as Node, unless the child's environment carries `jsRuntime().env`, and only there do MCP servers start through the node shim |
 
 ## Rules
@@ -258,9 +258,8 @@ the layout's one line.
   pipedog's copyright lines and `SPDX-License-Identifier: BSD-2-Clause`, then
   `Ported from pipedog <path>@ce8f8bc`; its package keeps `LICENSE-pipedog` and
   `THIRD_PARTY.md`, and `NOTICE` names every holder (`build.test.ts` checks it).
-- **`load-env.ts` is the only `.env` reader.** Node reads none unasked,
-  `bunfig.toml` sets `env = false` for what runs on Bun, and `vitest.config.ts`
-  loads none into a test. No module reads env at import but
+- **`load-env.ts` is the only `.env` reader.** Node reads none unasked, and
+  `vitest.config.ts` loads none into a test. No module reads env at import but
   `apps/bot/src/local/environ.ts`, which the local entries import before
   `load-env.ts` so the server and jobs they spawn start without its keys, and the
   desktop's `apps/desktop/src/main/instance.ts`, whose process loads no `.env` and
@@ -308,16 +307,15 @@ the layout's one line.
 - **The werift patches in `packages/webrtc/src/patches.ts` are load-bearing** — no
   default STUN server, disconnect on DTLS close, relay-only, the `raddr` scrub. Each
   one's failure mode is in [typescript.md](docs/typescript.md).
-- **Run the tests from the repository root only, as `bun run test [paths]`.** Vitest runs them
+- **Run the tests from the repository root only, as `pnpm test [paths]`.** Vitest runs them
   on Node; elsewhere it finds no `vitest.config.ts`, its setup files are skipped and the data
   home is the real one, so a test file that deletes in it imports
   `packages/config/test/isolated-guard.ts` first, and `isolated-guard.test.ts` enforces that.
-  `bun test` is not the test runner.
 - **The web app's strings are English source text in Lingui macros** (`apps/web`). A component
   writes `` t`Save` `` with `t` from `useLingui()` (`@lingui/react/macro`); other code uses `t`
   from `@lingui/core/macro`; a label looked up by code is a `msg` descriptor in a `*labels.ts`
   module; a sentence with a link or `<code>` in it is a `<Trans>`. After changing one, run
-  `bun run i18n` and fill each new `msgstr` in `apps/web/src/locales/zh-Hans.po`; `catalog.test.ts`
+  `pnpm i18n` and fill each new `msgstr` in `apps/web/src/locales/zh-Hans.po`; `catalog.test.ts`
   fails on a missing translation or a dropped placeholder.
 - **A short label's English is Title Case; everything else is sentence case.** Buttons, menu
   items, headings, setting names, tab and column labels and `aria-label`s capitalize every word but
@@ -343,22 +341,20 @@ the layout's one line.
   since a throw there reaches AppShell's boundary and ends the call, and each stage view has its
   own boundary. What would end the call or the server refuses during one (setup's links, a
   restart, a persona switch, a model import) waits while it is up.
-- **Bun's version lives only in package.json's `packageManager`.** CI's setup-bun reads it
-  (`bun-version-file`) and the image follows `oven/bun:1`: a bump edits that one line, never a
-  workflow. Bun installs, runs the scripts and serves production; the npm package ships none.
-- **Runtime code uses no Bun API.** `apps/*/src` and `packages/*/src` import no `bun` or `bun:*`
-  module and use no `Bun` global, `HTMLRewriter`, `import.meta.dir` or `import.meta.path`, no
-  Bun-only fetch option (`tls`, `proxy`, `timeout`, `unix`, `verbose`) and no
-  `Uint8Array.fromBase64`, `toBase64` or `fromHex`, which Node 24 lacks. Biome bans the globals,
-  `apps/cli/test/no_bun.test.ts` the modules and `import.meta` fields, and the typecheck, on
-  Node's types with `bun` resolving to nothing, the rest.
-- **Whatever production loads also runs on Bun, until production moves to Node.** Everything
-  `apps/bot/src/main.ts` reaches uses only `node:*` modules and packages proven on both
-  runtimes; a merge deploys it on Bun. `bun apps/bot/scripts/bun-check.ts`, which CI runs, boots it
-  there. The local app refuses to start on Bun.
-- **An undici dispatcher does nothing under Bun**, whose fetch ignores it: a keep-alive, proxy,
-  timeout or pinned address set through one holds on Node alone. So `web_fetch`, whose DNS pin is
-  a dispatcher, runs only on Node and refuses under Bun.
+- **pnpm's version lives only in package.json's `packageManager`.** CI's pnpm/action-setup reads
+  it and the image's install stage gets it through corepack: a bump edits that one line, never a
+  workflow. Everything runs on Node 24: CI's setup-node, the image's `node:24-slim`, the npm
+  package's `engines` and the desktop app's Electron.
+- **pnpm-workspace.yaml is the install's policy.** No dependency's install script runs
+  (`allowBuilds`, where pnpm fails on an unlisted one; onnxruntime-node's would fetch CUDA on
+  linux/x64), and `minimumReleaseAge` holds every install to releases at least 14 days old, the
+  lockfile's on a frozen install included: a newer one needs an exact `minimumReleaseAgeExclude`
+  entry until it ages.
+- **Nothing uses a Bun API.** The runtime code, the scripts and the benchmarks import no `bun` or
+  `bun:*` module and use no `Bun` global, `HTMLRewriter`, `import.meta.dir` or `import.meta.path`,
+  and the runtime code no `Uint8Array.fromBase64`, `toBase64` or `fromHex`, which Node 24 lacks.
+  Biome bans the globals in the runtime code, `apps/cli/test/no_bun.test.ts` the modules, globals
+  and `import.meta` fields everywhere, and the typecheck, on Node's types, the rest.
 - **Never find a shipped file through `import.meta`.** The npm package runs bundles, where every
   module's folder is `dist/`. A file the code ships with (a template, the web build, jieba's
   data, an entry to spawn) resolves through `shippedPath` in `@eidolon/config`, under the
@@ -530,11 +526,11 @@ the layout's one line.
   and update-test jobs to `desktop-build.yml` or `desktop-update-test.yml`, one platform's per job,
   and only from a job whose own `if` admits a tag, or a `sign` or `update_test` dispatch on `master`
   or `electron`: a step's `if` runs on the runner, so a secret any step names reaches every runner
-  of its job, a pull request's included. Before the signing step nothing
-  runs that the run fetched but the toolchain and what `bun.lock` pins, and no package's install
-  script (`--ignore-scripts`): one could rewrite the electron-builder that step runs.
+  of its job, a pull request's included. Before the signing step nothing runs that the run
+  fetched but the toolchain and what `pnpm-lock.yaml` pins, and no package's install script
+  (`--ignore-scripts`): one could rewrite the electron-builder that step runs.
 - **Installing, updating and uninstalling the app never touch the data home,** which it shares with
-  npx and `bun run app`; its uninstaller removes the install folder alone.
+  npx and `pnpm app`; its uninstaller removes the install folder alone.
 - **The terminal command and Open at Login change the owner's system only on their click in
   Settings,** never at install, launch or update, and never in background mode, which reads neither
   (`system-options.ts`, `terminal-command.ts`).
@@ -682,7 +678,7 @@ the layout's one line.
 
 - **Every user-facing change ships with a changeset in the same commit** — add
   it yourself, unasked:
-  `bunx changeset add --minor laplace-eidolon,@laplace.live/eidolon -m "feat: Remember a viewer's nickname"`.
+  `pnpm changeset add --minor laplace-eidolon,@laplace.live/eidolon -m "feat: Remember a viewer's nickname"`.
   `--minor` for features and substantial behavior changes, `--patch` for fixes
   and small changes. Start with `feat:`/`fix:`/`perf:`/`chore:`, then one
   capitalized plain sentence under ~80 chars, written for users; the prefix is
@@ -707,9 +703,9 @@ the layout's one line.
   packages (`apps/eidolon`, `packages/sdk`), the desktop app (`apps/desktop` and the `desktop.yml`,
   `desktop-build.yml` and `desktop-update-test.yml` workflows), `.env.example`, or the rest of `docker.yml`'s
   `paths-ignore` (`README.md`, `CLAUDE.md`, the `ts.yml` and `release.yml` workflows,
-  `vitest.config.ts`, `tsconfig.scripts.json`, `tsconfig.no-bun.d.ts`) skip the image
+  `vitest.config.ts`, `tsconfig.json`) skip the image
   build; anything else, `personas/` included, ships, and so does a bump of the
-  desktop's Electron, electron-builder or the node shim's pnpm, which changes `bun.lock`.
+  desktop's Electron, electron-builder or the node shim's pnpm, which changes `pnpm-lock.yaml`.
 - **Never bump a version, push a release tag, hand-edit `CHANGELOG.md`, or
   publish to npm.** Merging the Release workflow's version PR bumps
   `apps/bot/package.json`, `apps/eidolon/package.json`, `packages/sdk/package.json`

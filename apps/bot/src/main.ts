@@ -1,4 +1,4 @@
-// The bot's entry point, run by `bun run dev`/`start` and the Docker CMD; tests never import it.
+// The bot's entry point, run by `pnpm dev`/`start` and the Docker CMD; tests never import it.
 
 // Must stay the first import. ESM evaluates every import before this module's body, so a .env load
 // in the body would run after the packages were evaluated, and anything they read at import would
@@ -35,8 +35,8 @@ const bot = await startBotServer(args, {
   process.exit(1);
 });
 
-// As PID 1, bun ignores SIGTERM unless a handler is installed: docker stop waited out its timeout
-// and SIGKILLed it.
+// As PID 1, a process ignores SIGTERM unless it installs a handler: docker stop would wait out its
+// timeout and SIGKILL it.
 const onSignal = shutdownHandler(bot, (code) => process.exit(code));
 process.on("SIGTERM", onSignal);
 process.on("SIGINT", onSignal);

@@ -1,4 +1,4 @@
-// The image runs `bun install --production`, which installs every workspace's `dependencies`: the
+// The image runs `pnpm install --prod`, which installs every workspace's `dependencies`: the
 // desktop's whole toolchain stays in devDependencies, so none of it reaches production, and main
 // bundles what it runs.
 import { expect, test } from "vitest";

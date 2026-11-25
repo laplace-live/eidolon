@@ -2,10 +2,15 @@
 // @pipecat-ai/client-js and the small-webrtc transport. It touches only the public HTTP + WebRTC +
 // RTVI contract, so it can score any bot at `--base-url`, local or deployed.
 import { createHash } from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { spawnProcess } from "@eidolon/config";
 import { type Browser, chromium, type Page } from "playwright-core";
+import { rolldown } from "rolldown";
+import { serveFetch } from "../../../packages/config/test/http.ts";
 import { checkInvariants, field } from "./e2e/invariants.ts";
 import {
   type ConnectResult,
@@ -35,7 +40,7 @@ const QUESTION_GAIN_DB = -12;
 // Quiet time after the bot's last speaking, LLM or text event before its turn counts as over.
 const SETTLE_MS = 2000;
 
-const USAGE = `usage: bun apps/bot/scripts/e2e-call.ts [--text "<question>" | --audio [<wav>] | --barge-in [<wav>]] [options]
+const USAGE = `usage: node apps/bot/scripts/e2e-call.ts [--text "<question>" | --audio [<wav>] | --barge-in [<wav>]] [options]
 
   --text "<q>"       type <q> after the greeting (the default mode; <q> defaults to ${DEFAULT_QUESTION})
   --audio [<wav>]    say it through Chrome's fake mic; without <wav>, synthesize the default question
@@ -154,8 +159,8 @@ function parseOptions(argv: string[]): Options {
   };
 }
 
-async function run(cmd: string[]): Promise<string> {
-  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+async function run(cmd: readonly string[]): Promise<string> {
+  const proc = spawnProcess(cmd as [string, ...string[]], { stdout: "pipe", stderr: "pipe" });
   const [code, stdout, stderr] = await Promise.all([
     proc.exited,
     new Response(proc.stdout).text(),
@@ -177,7 +182,7 @@ async function synthesize(
 ): Promise<string> {
   const key = createHash("sha1").update(`${SAY_VOICE}\n${text}\n${filter}`).digest("hex");
   const wav = join(dir, `${name}-${key.slice(0, 12)}.wav`);
-  if (await Bun.file(wav).exists()) return wav;
+  if (existsSync(wav)) return wav;
   await mkdir(dir, { recursive: true });
   const aiff = `${wav}.aiff`;
   try {
@@ -214,7 +219,7 @@ function synthesizeBargeIn(dir: string): Promise<string> {
 /** A silent mic for text mode: with no file, Chrome's fake device beeps into the call. */
 async function silence(dir: string): Promise<string> {
   const wav = join(dir, "silence.wav");
-  if (await Bun.file(wav).exists()) return wav;
+  if (existsSync(wav)) return wav;
   await mkdir(dir, { recursive: true });
   await run([
     ...FFMPEG,
@@ -231,14 +236,16 @@ async function silence(dir: string): Promise<string> {
 }
 
 async function bundlePage(): Promise<string> {
-  const build = await Bun.build({
-    entrypoints: [join(import.meta.dir, "e2e", "page.ts")],
-    target: "browser",
-    format: "esm",
-    sourcemap: "inline",
+  const bundle = await rolldown({
+    input: join(import.meta.dirname, "e2e", "page.ts"),
+    platform: "browser",
   });
-  if (!build.success) throw new AggregateError(build.logs, "bundling e2e/page.ts failed");
-  return build.outputs[0]!.text();
+  try {
+    const { output } = await bundle.generate({ format: "es", sourcemap: "inline" });
+    return output[0].code;
+  } finally {
+    await bundle.close();
+  }
 }
 
 interface LevelPoint extends LevelSample {
@@ -319,7 +326,7 @@ class Recorder {
         this.note("harness", "turnComplete", { phase });
         return true;
       }
-      await Bun.sleep(LEVEL_INTERVAL_MS);
+      await delay(LEVEL_INTERVAL_MS);
     }
     this.note("harness", "timeout", { phase });
     return false;
@@ -333,7 +340,7 @@ class Recorder {
         return false;
       }
       if (this.lastSpeechStart >= since) return true;
-      await Bun.sleep(10);
+      await delay(10);
     }
     this.note("harness", "timeout", { phase });
     return false;
@@ -384,7 +391,7 @@ async function converse(page: Page, options: Options, recorder: Recorder, deadli
     return;
   }
   if (!(await recorder.waitForSpeech(asked, deadline, "reply"))) return;
-  await Bun.sleep(BARGE_IN_DELAY_MS);
+  await delay(BARGE_IN_DELAY_MS);
   const barged = Date.now();
   const played = await recorder.within(
     page.evaluate((url) => window.e2e!.bargeIn(url), BARGE_IN_PATH),
@@ -402,22 +409,18 @@ async function call(
   recorder: Recorder,
 ): Promise<unknown> {
   const deadline = recorder.startedAt + options.timeoutMs;
-  const html = await Bun.file(join(import.meta.dir, "e2e", "page.html")).text();
+  const html = await readFile(join(import.meta.dirname, "e2e", "page.html"), "utf8");
   const script = await bundlePage();
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch(request) {
-      const { pathname } = new URL(request.url);
-      if (pathname === "/") return new Response(html, { headers: { "content-type": "text/html" } });
-      if (pathname === "/page.js") {
-        return new Response(script, { headers: { "content-type": "text/javascript" } });
-      }
-      if (pathname === BARGE_IN_PATH && bargeInWav !== null) {
-        return new Response(Bun.file(bargeInWav), { headers: { "content-type": "audio/wav" } });
-      }
-      return new Response(null, { status: pathname === "/favicon.ico" ? 204 : 404 });
-    },
+  const server = await serveFetch(async (request) => {
+    const { pathname } = new URL(request.url);
+    if (pathname === "/") return new Response(html, { headers: { "content-type": "text/html" } });
+    if (pathname === "/page.js") {
+      return new Response(script, { headers: { "content-type": "text/javascript" } });
+    }
+    if (pathname === BARGE_IN_PATH && bargeInWav !== null) {
+      return new Response(await readFile(bargeInWav), { headers: { "content-type": "audio/wav" } });
+    }
+    return new Response(null, { status: pathname === "/favicon.ico" ? 204 : 404 });
   });
   // The /ai page lives on another origin than the bot, so this page does too.
   const origin = `http://127.0.0.1:${server.port}`;
@@ -471,7 +474,7 @@ async function call(
   } finally {
     closing = true;
     await browser?.close();
-    server.stop(true);
+    await server.stop();
   }
   return stats;
 }
@@ -939,7 +942,7 @@ function printSummary(report: Report, out: string): void {
 }
 
 async function main(): Promise<number> {
-  const argv = Bun.argv.slice(2);
+  const argv = process.argv.slice(2);
   if (argv.includes("--help") || argv.includes("-h")) {
     console.log(USAGE);
     return 0;
@@ -966,7 +969,8 @@ async function main(): Promise<number> {
   const capture = options.mode === "audio" ? `${micFile}%noloop` : micFile;
   const stats = await call(options, capture, bargeInWav, recorder);
   const report = analyze(options, micFile, bargeInWav, recorder, stats);
-  await Bun.write(options.out, `${JSON.stringify(report, null, 2)}\n`);
+  await mkdir(dirname(options.out), { recursive: true });
+  await writeFile(options.out, `${JSON.stringify(report, null, 2)}\n`);
   printSummary(report, options.out);
   return report.pass ? 0 : 1;
 }

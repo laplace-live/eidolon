@@ -89,7 +89,7 @@ $0.023 on Deepgram (`nova-3-general`, $0.462/h). The script prints its estimate 
 ## Reproduce
 
 ```bash
-bun docs/benchmarks/2026-11-10-finalize-ack/measure.ts [--persona <id>] [--deepgram-model <id>]
+node docs/benchmarks/2026-11-10-finalize-ack/measure.ts [--persona <id>] [--deepgram-model <id>]
 ```
 
 It writes every finalize to `results.json` beside the script, or to `--out <file>`, and prints a

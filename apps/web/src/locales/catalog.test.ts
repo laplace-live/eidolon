@@ -1,4 +1,4 @@
-// The catalogs `bun run i18n` extracts: every message translated with the same placeholders, and
+// The catalogs `pnpm i18n` extracts: every message translated with the same placeholders, and
 // every SETTINGS row titled. Records keyed by a union type cover the other codes at compile time.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

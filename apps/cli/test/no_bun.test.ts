@@ -1,18 +1,24 @@
-// Runtime code runs on Node: no Bun module, global or import.meta field reaches it. Biome bans the
-// globals (noRestrictedGlobals); its boundary overrides own noRestrictedImports, so the imports, and
-// import.meta's fields, are checked here.
+// Everything runs on Node: no Bun module, global or import.meta field reaches the runtime code or a
+// script. Biome bans the globals (noRestrictedGlobals); its boundary overrides own
+// noRestrictedImports, so the imports, and import.meta's fields, are checked here.
 import { type Dirent, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { withoutComments } from "./code.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
-const RUNTIME_DIRS = [
+const CODE_DIRS = [
   "apps/bot/src",
+  "apps/bot/scripts",
   "apps/cli/src",
   "apps/desktop/src",
+  "apps/desktop/scripts",
   "apps/eidolon/src",
+  "apps/eidolon/scripts",
   ...readdirSync(join(ROOT, "packages")).map((name) => `packages/${name}/src`),
+  "packages/sdk/scripts",
+  "scripts",
+  "docs/benchmarks",
 ];
 const SKIPPED_DIRS = new Set(["node_modules", "dist", "pack"]);
 const BUN_MODULE = String.raw`["']bun(?::[\w-]+)?["']`;
@@ -54,7 +60,7 @@ function bunUses(source: string): string[] {
   });
 }
 
-describe("no runtime code needs Bun", () => {
+describe("nothing needs Bun", () => {
   test("a Bun module, global or import.meta field is flagged; a comment that names one isn't", () => {
     for (const source of [
       `import { Database } from "bun:sqlite";`,
@@ -85,8 +91,8 @@ describe("no runtime code needs Bun", () => {
     }
   });
 
-  test("apps/{bot,cli,desktop,eidolon}/src and packages/*/src use no Bun module, global or field", () => {
-    const files = RUNTIME_DIRS.flatMap((dir) => sourceFiles(join(ROOT, dir)));
+  test("the runtime code, the scripts and the benchmarks use no Bun module, global or field", () => {
+    const files = CODE_DIRS.flatMap((dir) => sourceFiles(join(ROOT, dir)));
     expect(files.length).toBeGreaterThan(300);
     const offenders = files.flatMap((file) =>
       bunUses(readFileSync(file, "utf8")).map((use) => `${relative(ROOT, file)}:${use}`),

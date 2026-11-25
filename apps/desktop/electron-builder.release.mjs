@@ -21,7 +21,7 @@ function unsignedPeNames(list) {
   if (!existsSync(list)) {
     throw new Error(
       `electron-builder.release.mjs: no ${list}, the PE files to sign; stage the backend first ` +
-        "(bun run build:desktop, on Windows)",
+        "(pnpm build:desktop, on Windows)",
     );
   }
   return JSON.parse(readFileSync(list, "utf8"));

@@ -157,9 +157,8 @@ const CRLF = 0x0d0a;
 const DASH_DASH = 0x2d2d;
 
 /**
- * A multipart/form-data body's parts in order, or null when it isn't one. Not Bun's formData(),
- * which types a file part by its filename instead of its Content-Type
- * (https://github.com/oven-sh/bun/issues/45707), and a browser names a recorded Blob "blob".
+ * A multipart/form-data body's parts in order, or null when it isn't one. A part is typed by its
+ * own Content-Type, never by its filename: a browser names a recorded Blob "blob".
  */
 function formParts(body: Buffer, contentType: string): FormPart[] | null {
   const param = /;\s*boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType);

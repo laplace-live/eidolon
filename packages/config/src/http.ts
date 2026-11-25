@@ -1,4 +1,3 @@
-// Under Bun, `undici` is Bun's own stand-in: these agents construct, and its fetch ignores them.
 import { type Dispatcher, EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
 
 // undici drops an idle socket after 4 s, and a call's turns come 15-40 s apart: the gate's
@@ -6,9 +5,9 @@ import { type Dispatcher, EnvHttpProxyAgent, setGlobalDispatcher } from "undici"
 const KEEP_ALIVE = { keepAliveTimeout: 90_000, keepAliveMaxTimeout: 600_000 } as const;
 
 /**
- * Node's fetch as Bun's is: sockets kept 90 s across pauses, HTTP(S)_PROXY/NO_PROXY honored. An
- * entry that fetches calls it once at start; under Bun it does nothing harmful. It reads the proxy
- * variables then, so it runs after the .env applies.
+ * Node's fetch with sockets kept 90 s across pauses and HTTP(S)_PROXY/NO_PROXY honored. An entry
+ * that fetches calls it once at start. It reads the proxy variables then, so it runs after the
+ * .env applies.
  */
 export function installHttpDefaults(): void {
   setGlobalDispatcher(new EnvHttpProxyAgent(KEEP_ALIVE));

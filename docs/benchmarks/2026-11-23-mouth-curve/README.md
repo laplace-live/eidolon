@@ -36,7 +36,7 @@ span p10 -34.8, p50 -19.4 and p90 -9.4 dBFS:
 From the repository root, with ffmpeg on PATH:
 
 ```sh
-bun docs/benchmarks/2026-11-23-mouth-curve/score.ts <her voice messages>…
+node docs/benchmarks/2026-11-23-mouth-curve/score.ts <her voice messages>…
 ```
 
 Her voice messages are the audio of her `message` events with `modality: "voice"` in the owner's

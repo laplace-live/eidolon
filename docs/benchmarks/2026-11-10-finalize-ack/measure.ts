@@ -7,14 +7,17 @@
 // Must stay the first import: the .env and settings files, as the laplace-* commands load them.
 import "../../../apps/cli/src/load-env.ts";
 import { createHash } from "node:crypto";
-import { mkdir, rename, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   activePersona,
   errorText,
   logger,
   setLogLevel,
+  spawnProcess,
 } from "../../../packages/config/src/index.ts";
 import {
   connectWs,
@@ -212,8 +215,8 @@ function cough(ms: number, seed: number): Int16Array {
   return Int16Array.from(out, (v) => Math.round((v / peak) * COUGH_PEAK));
 }
 
-async function run(cmd: string[]): Promise<void> {
-  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "pipe" });
+async function run(cmd: readonly string[]): Promise<void> {
+  const proc = spawnProcess(cmd as [string, ...string[]], { stdout: "ignore", stderr: "pipe" });
   const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
   if (code !== 0) throw new Error(`${cmd[0]} exited with ${code}: ${stderr.trim()}`);
 }
@@ -223,7 +226,7 @@ async function say(text: string): Promise<Int16Array> {
   const dir = join(tmpdir(), "eidolon-finalize-ack-audio");
   const key = createHash("sha1").update(`${SAY_VOICE}\n${text}`).digest("hex").slice(0, 12);
   const raw = join(dir, `${key}.s16le`);
-  if (!(await Bun.file(raw).exists())) {
+  if (!existsSync(raw)) {
     await mkdir(dir, { recursive: true });
     const aiff = `${raw}.aiff`;
     const part = `${raw}.part`;
@@ -237,7 +240,7 @@ async function say(text: string): Promise<Int16Array> {
       await rm(part, { force: true });
     }
   }
-  const pcm = new Int16Array(await Bun.file(raw).arrayBuffer());
+  const pcm = new Int16Array(new Uint8Array(await readFile(raw)).buffer);
   let first = 0;
   while (first < pcm.length && Math.abs(pcm[first] as number) <= SPEECH_FLOOR) first++;
   let last = pcm.length;
@@ -296,7 +299,7 @@ class Pacer {
     }
     // Behind after a stall, frames go out at once and the clock catches up, as a call's do.
     const wait = this.#next - performance.now();
-    if (wait > 0) await Bun.sleep(wait);
+    if (wait > 0) await delay(wait);
     this.#send(pcm);
     this.#frames++;
     this.#next += FRAME_MS;
@@ -841,7 +844,7 @@ function checkFakeRun(
   return problems;
 }
 
-const USAGE = `usage: bun docs/benchmarks/2026-11-10-finalize-ack/measure.ts [options]
+const USAGE = `usage: node docs/benchmarks/2026-11-10-finalize-ack/measure.ts [options]
 
   --persona <id>         whose hearing role and accounts to use (default: the active persona)
   --out <file>           every finalize, as JSON (default: results.json beside this script;
@@ -881,7 +884,7 @@ function parseOptions(argv: readonly string[]): Options {
 async function main(): Promise<number> {
   let options: Options;
   try {
-    options = parseOptions(Bun.argv.slice(2));
+    options = parseOptions(process.argv.slice(2));
   } catch (error) {
     console.error(`${errorText(error)}\n\n${USAGE}`);
     return 2;
@@ -891,7 +894,7 @@ async function main(): Promise<number> {
     SENTENCES.map(async (label) => ({ label, pcm: await say(label) })),
   );
 
-  const fake = options.fake ? new FakeRecognizers() : null;
+  const fake = options.fake ? await FakeRecognizers.start() : null;
   const usage: UsageRecord[] = [];
   const budget = fake === null ? BUDGET_SECONDS : FAKE_BUDGET_SECONDS;
   const targets: (Target | ProviderReport)[] = [];
@@ -945,7 +948,7 @@ async function main(): Promise<number> {
   const out =
     options.out ??
     (fake === null
-      ? join(import.meta.dir, "results.json")
+      ? join(import.meta.dirname, "results.json")
       : join(tmpdir(), `eidolon-finalize-ack-fake-${Date.now()}.json`));
   const document = {
     measuredAt: new Date().toISOString(),
@@ -968,7 +971,8 @@ async function main(): Promise<number> {
     },
     providers: reports,
   };
-  await Bun.write(out, `${JSON.stringify(document, null, 2)}\n`);
+  await mkdir(dirname(out), { recursive: true });
+  await writeFile(out, `${JSON.stringify(document, null, 2)}\n`);
   console.log(`\nWrote ${out}`);
 
   if (fake === null) return 0;

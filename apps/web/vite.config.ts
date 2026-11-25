@@ -30,7 +30,7 @@ export default defineConfig({
   ],
   resolve: { alias: { "@": resolve(import.meta.dirname, "src") } },
   server: {
-    // Under Bun, "localhost" binds [::1] only, which refuses http://127.0.0.1:5173.
+    // "localhost" can bind [::1] alone, which refuses http://127.0.0.1:5173.
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,

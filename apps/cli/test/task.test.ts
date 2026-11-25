@@ -401,7 +401,7 @@ describe("laplace-task", () => {
       const { id, dir } = onlyTask();
       expect(paused.stdout()).toEndWith(
         `\nTask ${id} paused: Spent $0.60; it pauses at every $0.50.\n` +
-          `Resume it with: bun run laplace-task --resume ${id}\n`,
+          `Resume it with: pnpm laplace-task --resume ${id}\n`,
       );
       const stopped = await readSnapshot(dir);
       expect(stopped).toMatchObject({
@@ -539,7 +539,7 @@ describe("laplace-task", () => {
       expect(readFileSync(join(folder, "a.txt"), "utf8")).toBe("a");
       const { id, dir } = onlyTask();
       expect(io.stdout()).toEndWith(
-        `\nTask ${id} paused: ${detail}\nResume it with: bun run laplace-task --resume ${id}\n`,
+        `\nTask ${id} paused: ${detail}\nResume it with: pnpm laplace-task --resume ${id}\n`,
       );
       expect(await readSnapshot(dir)).toMatchObject({
         status: "paused",
@@ -769,7 +769,7 @@ describe("laplace-task", () => {
     const { id, dir } = onlyTask();
     const error = "OpenRouter answered 400: No such model";
     expect(io.stdout()).toBe(
-      `\nTask ${id} failed: ${error}\nResume it with: bun run laplace-task --resume ${id}\n`,
+      `\nTask ${id} failed: ${error}\nResume it with: pnpm laplace-task --resume ${id}\n`,
     );
     expect(await readSnapshot(dir)).toMatchObject({
       status: "failed",
@@ -1256,7 +1256,7 @@ describe("laplace-task", () => {
       endedAt: expect.any(Number),
     });
     expect(io.stdout()).toBe(
-      `\nTask ${id} was cancelled.\nResume it with: bun run laplace-task --resume ${id}\n`,
+      `\nTask ${id} was cancelled.\nResume it with: pnpm laplace-task --resume ${id}\n`,
     );
 
     const again = scripted([says("Done.")]);

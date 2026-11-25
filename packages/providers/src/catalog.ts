@@ -1,7 +1,7 @@
 // Every provider Eidolon can call, what each offers, and the roles a persona fills with them. Keep
-// this module import-free: the web app imports it (`@eidolon/providers/catalog`) without Bun or
-// Node. Prices are the providers' published pay-as-you-go rates; a model priced by plan, by audio
-// tokens Eidolon can't count, or not at all is recorded unpriced, with its usage.
+// this module import-free: the web app imports it (`@eidolon/providers/catalog`) without Node.
+// Prices are the providers' published pay-as-you-go rates; a model priced by plan, by audio tokens
+// Eidolon can't count, or not at all is recorded unpriced, with its usage.
 
 /** What a model does. A realtime model hears, thinks and speaks in one session. */
 export const CATEGORIES = [

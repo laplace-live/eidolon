@@ -5,6 +5,7 @@
 
 // Must stay the first import: the .env and settings files, as the laplace-* commands load them.
 import "../../../apps/cli/src/load-env.ts";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   parseReview,
@@ -14,7 +15,7 @@ import {
   type ReviewVerdict,
   reviewPrompt,
 } from "../../../packages/assistant/src/index.ts";
-import { setLogLevel } from "../../../packages/config/src/index.ts";
+import { installHttpDefaults, setLogLevel } from "../../../packages/config/src/index.ts";
 import { completeText, createMind, type TaskBrief } from "../../../packages/engine/src/index.ts";
 import type { UsageRecord } from "../../../packages/providers/src/index.ts";
 
@@ -36,14 +37,15 @@ interface Row {
   readonly ms: number;
 }
 
-const here = import.meta.dir;
-const argv = Bun.argv.slice(2);
+const here = import.meta.dirname;
+const argv = process.argv.slice(2);
 const check = argv.includes("--check");
 const at = argv.indexOf("--model");
 const named = at === -1 ? undefined : argv[at + 1];
 setLogLevel("WARNING");
+installHttpDefaults();
 
-const { briefs, cases } = (await Bun.file(join(here, "cases.json")).json()) as {
+const { briefs, cases } = JSON.parse(await readFile(join(here, "cases.json"), "utf8")) as {
   briefs: Record<string, TaskBrief>;
   cases: Case[];
 };
@@ -120,7 +122,7 @@ console.log(
     (unpriced > 0 ? `, ${unpriced} requests unpriced` : ""),
 );
 
-await Bun.write(
+await writeFile(
   join(here, "decisions.json"),
   `${JSON.stringify(
     {

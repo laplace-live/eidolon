@@ -1,5 +1,5 @@
-// Builds the npm package @laplace.live/eidolon in apps/eidolon/pack/ (`bun run build:npm`), and
-// with --pack, packs it beside that folder (`bun run pack:npm`).
+// Builds the npm package @laplace.live/eidolon in apps/eidolon/pack/ (`pnpm build:npm`), and
+// with --pack, packs it beside that folder (`pnpm pack:npm`).
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -23,6 +23,7 @@ import {
   voiceModelsDir,
   webDist,
 } from "@eidolon/config";
+import crossSpawn from "cross-spawn";
 import { type Plugin, build as viteBuild } from "vite";
 import { ENTRIES, NODE_MAJOR, PLATFORMS } from "../src/launcher.ts";
 
@@ -427,7 +428,8 @@ export async function stage(root: string): Promise<Manifest> {
 
 /** `npm pack` of PACK_DIR into apps/eidolon/; returns the tarball's path. */
 function pack(): string {
-  const packed = spawnSync("npm", ["pack", "--json", "--pack-destination", HERE], {
+  // cross-spawn, since npm is npm.cmd on Windows, which Node won't start without a shell.
+  const packed = crossSpawn.sync("npm", ["pack", "--json", "--pack-destination", HERE], {
     cwd: PACK_DIR,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],
@@ -440,6 +442,9 @@ function pack(): string {
 
 if (import.meta.main) {
   const manifest = await stage(PACK_DIR);
+  // pnpm publish packs the folder by the checkout's .gitignore, whose dist/ would leave the bundles
+  // out, unless the folder has an .npmignore of its own.
+  writeFileSync(join(PACK_DIR, ".npmignore"), "");
   console.log(`${manifest.name}@${manifest.version} staged in ${relative(ROOT, PACK_DIR)}`);
   if (process.argv.includes("--pack")) console.log(pack());
 }

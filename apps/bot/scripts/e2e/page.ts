@@ -92,8 +92,7 @@ async function describeRequestBody(input: RequestInfo | URL, init?: RequestInit)
 
 const nativeFetch = window.fetch.bind(window);
 let requestCount = 0;
-// The cast drops `preconnect`, which bun-types adds to `typeof fetch` and browsers lack.
-window.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const id = ++requestCount;
   const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
   const url = input instanceof Request ? input.url : String(input);
@@ -117,7 +116,7 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Re
     emit("http", "failed", { id, method, url, error, ms: Math.round(performance.now() - started) });
     throw error;
   }
-}) as typeof fetch;
+};
 
 let peerCount = 0;
 class ObservedPeerConnection extends RTCPeerConnection {

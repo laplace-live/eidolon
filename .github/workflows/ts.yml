@@ -12,11 +12,9 @@ on:
       - ".changeset/changelog.mjs"
       - "changelog.json"
       - "package.json"
-      - "bun.lock"
-      - "bunfig.toml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - "tsconfig.json"
-      - "tsconfig.scripts.json"
-      - "tsconfig.no-bun.d.ts"
       - "vitest.config.ts"
       - "biome.json"
       - "AGENTS.md"
@@ -34,11 +32,9 @@ on:
       - ".changeset/changelog.mjs"
       - "changelog.json"
       - "package.json"
-      - "bun.lock"
-      - "bunfig.toml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - "tsconfig.json"
-      - "tsconfig.scripts.json"
-      - "tsconfig.no-bun.d.ts"
       - "vitest.config.ts"
       - "biome.json"
       - "AGENTS.md"
@@ -63,27 +59,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
+      - uses: pnpm/action-setup@v6
 
-      # The tests run on Node, as the local app, the CLI and the npm package do.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
 
-      - run: bun install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
-      - run: bun run typecheck
+      - run: pnpm typecheck
 
-      - run: bun run lint
+      - run: pnpm lint
 
-      - run: bun run build:web
+      - run: pnpm build:web
 
-      - run: bun run test
-
-      # Production runs the same code on Bun.
-      - run: bun apps/bot/scripts/bun-check.ts
+      - run: pnpm test
 
   # The npm package as npx installs it, install scripts included, on a supported platform the Mac
   # it's built on can't run: Linux x64 with glibc.
@@ -94,17 +84,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v7
         with:
           node-version: 24
 
-      - run: bun install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
-      - run: bun run pack:npm
+      - run: pnpm pack:npm
 
       - run: node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/*.tgz
 
@@ -114,7 +102,7 @@ jobs:
           path: apps/eidolon/*.tgz
           retention-days: 3
 
-      - run: bun run pack:sdk
+      - run: pnpm pack:sdk
 
   # The same tarball on Windows x64, and the tests of what only Windows runs.
   windows:
@@ -128,15 +116,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v7
         with:
           node-version: 24
 
-      - run: bun install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
 
       - uses: actions/download-artifact@v8
         with:
@@ -146,22 +132,22 @@ jobs:
       - run: node apps/eidolon/scripts/ci-install-check.ts apps/eidolon/*.tgz
 
       - run: >-
-          bun run test packages/config/test/which.test.ts packages/config/test/process.test.ts
+          pnpm test packages/config/test/which.test.ts packages/config/test/process.test.ts
           packages/config/test/pypath.test.ts apps/eidolon/test/launcher.test.ts
           apps/bot/test/local/jobs-runner.test.ts
 
       - run: >-
-          bun run test packages/assistant/test/shell.test.ts packages/assistant/test/mcp-stdio.test.ts
+          pnpm test packages/assistant/test/shell.test.ts packages/assistant/test/mcp-stdio.test.ts
           packages/assistant/test/eidolon-command.test.ts packages/assistant/test/path.test.ts
           packages/assistant/test/bash-windows.test.ts packages/ingest/test/limit.test.ts
           -t "Windows|its children, when the host exits without closing it"
 
-      - run: bun run test apps/cli/test/cli.test.ts -t relayStopMessages
+      - run: pnpm test apps/cli/test/cli.test.ts -t relayStopMessages
 
       # The desktop app's own: its PATH and registry scripts on scratch keys under HKCU, the .cmd
       # launchers of its terminal command and node shim, and the shim's npx through cmd.exe.
       - run: >-
-          bun run test apps/desktop/test/terminal-command-windows.test.ts
+          pnpm test apps/desktop/test/terminal-command-windows.test.ts
           apps/desktop/test/registry-environment-windows.test.ts
           apps/desktop/test/node-shim-windows.test.ts
           apps/desktop/test/npx-windows.test.ts

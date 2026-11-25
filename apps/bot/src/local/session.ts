@@ -42,7 +42,7 @@ const SESSION_BODY_LIMIT = 4096;
 /**
  * POST trades the link code for the cookie and the proof; a refused code sets nothing, so a stale
  * link never signs out a working session. GET answers whether the caller is signed in, or, given
- * `probe`, a proof that this server holds the secret (a second `bun run local` asks before
+ * `probe`, a proof that this server holds the secret (a second `pnpm local` asks before
  * printing a link).
  */
 export function sessionRoutes(

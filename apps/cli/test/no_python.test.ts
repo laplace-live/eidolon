@@ -12,7 +12,7 @@ const SELF = relative(ROOT, import.meta.filename);
 const COMMANDS = String.raw`(?:uvx?|pytest|python(?:\d+(?:\.\d+)*)?)(?![\w.-])`;
 /** A string that is one of the commands: `which("uv")`, `[UV, "run", "python", script]`. */
 const COMMAND_STRING = new RegExp(`(["'\`])${COMMANDS}\\1`);
-/** A Bun shell template that runs one. */
+/** A shell template, as zx's `$`, that runs one. */
 const SHELL = new RegExp(`\\$\`\\s*${COMMANDS}`);
 const SPAWN = /\b(?:exec|execFile|execFileSync|execSync|fork|spawn|spawnProcess|spawnSync)\s*\(/g;
 /** In a spawn's arguments: a `.py` path, or a command line that starts with one of the commands. */
@@ -85,7 +85,7 @@ describe("no TypeScript runs the Python", () => {
       `exec("uv run python x.py");`,
       `spawn(["python3.13", "-c", "print(1)"]);`,
       `spawnProcess([process.execPath, "tools/x.py"]);`,
-      "await Bun.$`uvx ruff check .`;",
+      "await $`uvx ruff check .`;",
     ]) {
       expect([source, pythonRuns(source).length > 0]).toEqual([source, true]);
     }

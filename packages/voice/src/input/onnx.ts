@@ -36,10 +36,10 @@ const sessions = new Map<string, Promise<OnnxSession>>();
  * Imported on first use, so loading the package never loads the native addon, with
  * ORT_DISABLE_TELEMETRY=1 set before it loads unless the environment set it. ORT's Linux and macOS
  * builds upload telemetry to Microsoft by default, and on macOS the uploader aborts the process as
- * it exits (134, "A C++ exception occurred" under Bun) when a response lands during its teardown:
+ * it exits (134, "A C++ exception occurred") when a response lands during its teardown:
  * https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md#disabling-telemetry,
  * https://github.com/dfrostar/neuralmind/issues/547. ORT reads the variable with getenv, which
- * Node's process.env writes reach and Bun's don't: under Bun only the environment can set it.
+ * process.env's writes reach.
  */
 function loadOrt(): Promise<Ort> {
   ort ??= (async () => {

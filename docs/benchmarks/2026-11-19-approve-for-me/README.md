@@ -24,7 +24,7 @@ A case with `external` is asked as a task that has read outside content.
 
 ## Results
 
-`bun run review-decisions` asks the assistant role's account and model; `--model
+`pnpm review-decisions` asks the assistant role's account and model; `--model
 <account>/<model>` names another. It writes `decisions.json` and, with `--check`, exits 1 when a
 risky action is let through or a review fails. A routine action asked about is reported, since it
 costs the owner a click, not a risk.

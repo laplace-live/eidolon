@@ -2,14 +2,13 @@
 
 The bot, and the offline chain that builds its indexes, in TypeScript, on eidolon's own voice engine
 ([voice-engine.md](voice-engine.md)), parts of it ported from
-[pipedog](https://github.com/polvallverdu/pipedog) (a TypeScript port of Pipecat). The bot has run
-production on Bun since 2026-11-04; the local app, the CLI and the npm package run on Node 24, and
-the desktop app runs the local app on Electron's own Node 24 ([desktop.md](desktop.md)). The code
+[pipedog](https://github.com/polvallverdu/pipedog) (a TypeScript port of Pipecat). The bot in
+production, the local app, the CLI and the npm package run on Node 24, and the desktop app runs the local app on Electron's own Node 24 ([desktop.md](desktop.md)). The code
 and its own tests are the only source of truth for how it behaves.
 
 ## Layout
 
-Bun workspaces, one package per subsystem. Dependencies point down this list, and `core` imports
+pnpm workspaces, one package per subsystem. Dependencies point down this list, and `core` imports
 nothing.
 
 | Package | Owns |
@@ -31,7 +30,7 @@ nothing.
 | `packages/voice` | the voice engine: a call's loop around the turn engine, the Ear (Silero VAD, Smart Turn, the turn detector), the sentence segmenter, the Mouth and the Speaker, the vendored resampler, the RTVI codec and emitter, and the two ONNX models (`models/`) ([voice-engine.md](voice-engine.md)). Its live recognizers and speech clients are `@eidolon/providers/stt` and `/speech-stream`; only `packages/runtime` imports it (Biome) |
 | `packages/webrtc` | a call's WebRTC on werift and libopus-wasm: the signalling server, the peer, the data channel, the caller's audio in and hers out, and the werift patches ([voice-engine.md](voice-engine.md#the-transport)); only `packages/runtime` imports it (Biome) |
 | `packages/runtime` | the bridge from `apps/bot` to the voice engine: the signalling server, a call's production deps and start, and the `CallBinding` that runs a call inside a chat ([chat.md](chat.md#the-binding)) |
-| `apps/bot` | the routes, on `routing.ts` (Bun.serve's routing, served by srvx: `node:http` under Node, `Bun.serve` under Bun), MCP, the entry point, and the production chat endpoint, `src/chat` ([chat.md](chat.md#production-the-browser-keeps-the-chat)) |
+| `apps/bot` | the routes, on `routing.ts` (a route table served by srvx on `node:http`), MCP, the entry point, and the production chat endpoint, `src/chat` ([chat.md](chat.md#production-the-browser-keeps-the-chat)) |
 | `apps/cli` | every `laplace-*` command and the gate benchmark: argparse specs, the persona, locks, printing, exit codes |
 
 A new context tier implements `ContextProvider`; a new LLM tool implements `LlmTool`; the turn
@@ -45,21 +44,21 @@ own, beside the read-only data home.
 ## Commands
 
 ```bash
-bun install
-bun run dev                           # watch mode on :7860; --port 7861 to run beside another bot
-bun run start                         # no watch
-bun run typecheck && bun run lint && bun run test
-bun run laplace-search "奶绿最喜欢喝什么"
-bun run laplace-eval-retrieval        # recall@k and MRR against the persona's eval queries
-bun run laplace-generate-image        # billed per image
-bun run gate-decisions                # billed; rewrites the gate benchmark's decisions.json
+pnpm install
+pnpm dev                              # watch mode on :7860; --port 7861 to run beside another bot
+pnpm start                            # no watch
+pnpm typecheck && pnpm lint && pnpm test
+pnpm laplace-search "奶绿最喜欢喝什么"
+pnpm laplace-eval-retrieval           # recall@k and MRR against the persona's eval queries
+pnpm laplace-generate-image           # billed per image
+pnpm gate-decisions                   # billed; rewrites the gate benchmark's decisions.json
 docker compose --profile ts up --build bot-ts   # the image on :7861, with Qdrant
 ```
 
 CI publishes the image as `ghcr.io/laplace-live/eidolon`, tagged `edge`, `sha-…`, and per release
 `X.Y.Z`, `X.Y` and `X`.
 
-`bun apps/bot/scripts/e2e-call.ts --text` (or `--audio`) holds a real call through headless
+`node apps/bot/scripts/e2e-call.ts --text` (or `--audio`) holds a real call through headless
 Chrome and reports latency per stage; `--base-url` points it at another bot. On a Mac where
 headless Chrome is killed after about 30 s, add `--headful`.
 
@@ -70,17 +69,17 @@ and never prints. `apps/cli` wraps each stage in a command with argparse-style f
 and `--json` among them:
 
 ```bash
-bun run laplace-pipeline <url list>      # download → transcribe → refine → ingest → catalog, resumable
-bun run laplace-pipeline --dry-run       # plans every video the persona's sources know; writes nothing
-bun run laplace-download <url list>      # yt-dlp → sources/<id>/vods/; --expand <url> lists a playlist
-bun run laplace-transcribe <audio>       # Soniox async → sources/<id>/streams/<date>-<id>.md
-bun run laplace-refine                   # two LLM passes → streams/*.refined.json
-bun run laplace-ingest-streams           # → index/stream_chunks.lance
-bun run laplace-ingest-facts             # sources/<id>/facts/ → index/persona_facts.lance
-bun run laplace-build-stream-catalog     # → index/stream_catalog.json
-bun run laplace-prepare-batch <capture> --expected-count <n>   # new videos → lists/batches/
-bun run laplace-discover                 # her new videos on Bilibili and YouTube; --save → lists/batches/
-bun run laplace-extract-users <export>   # the names a danmaku export reads aloud, for glossary.toml
+pnpm laplace-pipeline <url list>         # download → transcribe → refine → ingest → catalog, resumable
+pnpm laplace-pipeline --dry-run          # plans every video the persona's sources know; writes nothing
+pnpm laplace-download <url list>         # yt-dlp → sources/<id>/vods/; --expand <url> lists a playlist
+pnpm laplace-transcribe <audio>          # Soniox async → sources/<id>/streams/<date>-<id>.md
+pnpm laplace-refine                      # two LLM passes → streams/*.refined.json
+pnpm laplace-ingest-streams              # → index/stream_chunks.lance
+pnpm laplace-ingest-facts                # sources/<id>/facts/ → index/persona_facts.lance
+pnpm laplace-build-stream-catalog        # → index/stream_catalog.json
+pnpm laplace-prepare-batch <capture> --expected-count <n>      # new videos → lists/batches/
+pnpm laplace-discover                    # her new videos on Bilibili and YouTube; --save → lists/batches/
+pnpm laplace-extract-users <export>      # the names a danmaku export reads aloud, for glossary.toml
 ```
 
 Each takes `--persona <id>` (default: the active persona), applied before the settings files load,
@@ -219,8 +218,7 @@ original) or one code path against another (the pipeline's dry run against the p
 - **`@eidolon/providers/catalog` imports nothing.** The web app bundles it for its provider and
   model pickers; a test keeps it import-free, and Biome lets the web app import it alone.
 - **`load-env.ts`, the first import of each entry point, is the only `.env` reader**, with
-  python-dotenv's rules. Node reads no `.env` unless told to; `bunfig.toml` turns Bun's own
-  loader off for what still runs on Bun, which would expand bare `$VAR` and read `.env.local`;
+  python-dotenv's rules. Node reads no `.env` unless told to, and
   `vitest.config.ts` loads none into a test.
 - **No module reads env at import.** Everything reads at call time, so the order of imports
   against the `.env` load cannot pin a fallback. The exceptions are
@@ -230,7 +228,7 @@ original) or one code path against another (the pipeline's dry run against the p
 - **A child inherits what `.env` set, unless it reads `.env` itself.** `spawnProcess` without
   `env` passes `process.env` as it is now, and `which` reads its `PATH` at call time, so yt-dlp
   gets a proxy the `.env` sets. A child that runs a `load-env.ts` of its own, a job's CLI or the
-  server `bun run local` restarts, starts from `STARTED_ENV` instead: the environment the local
+  server `pnpm local` restarts, starts from `STARTED_ENV` instead: the environment the local
   entry started with, which `environ.ts` keeps by being imported before `load-env.ts`. Handed
   `process.env`, it would keep every key deleted from `.env` since, because `override` sets keys
   and never unsets them.
@@ -255,7 +253,7 @@ original) or one code path against another (the pipeline's dry run against the p
   holds that two offers in flight never share one.
 - **Golden fixtures are the code's record.** Each holds what a test pins for fixed inputs. A test
   that fails against one means behavior changed: fix the code, or, when the change is on purpose,
-  update the golden in the same commit and `bunx biome check --write` it. They hold synthetic
+  update the golden in the same commit and `pnpm exec biome check --write` it. They hold synthetic
   data only: the real corpus is checked by the real-data tests.
 
 ## Deliberate behavior
@@ -277,7 +275,7 @@ Choices a reader might take for bugs, and why they stand.
 - `laplace-eval-retrieval`'s `--queries` defaults to `eval/queries.toml` in the persona's
   sources; a missing file's error says to pass `--queries`.
 - The missing-table hint names the command and the persona,
-  `bun run laplace-ingest-streams --persona <id>`.
+  `pnpm laplace-ingest-streams --persona <id>`.
 - Mem0's extraction may reply with up to 8192 tokens, where mem0 allows 2000. A thinking model's
   reasoning counts toward that cap, and under mem0's cut about 1 in 12 Gemini Flash extractions
   ended mid-JSON, losing that turn's memories. Lowering the thinking effort instead also fixed it,
@@ -470,7 +468,7 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   unparseable value is kept as sent. Token dumps keep the corpus's nine fields, then any new ones
   in the API's order.
 - The missing-key message names `credentials.json`, and the closing hint is
-  `bun run laplace-ingest-streams --persona <id>`.
+  `pnpm laplace-ingest-streams --persona <id>`.
 - Cost is estimated at the catalog's price for the model, $0.10 per audio hour for `stt-async-v6`,
   `-v5` and `-v4` (an alias Soniox serves as v5), and reported `unpriced` for a model the catalog
   doesn't list.
@@ -576,7 +574,7 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   `<batch>.done.json`, `{finishedAt, ids, parts, exitCode: 0}`, after a clean run of all four
   stages, once every video it lists, part by part, is downloaded and transcribed or found to hold
   no speech.
-- The no-date hint names `bun run laplace-transcribe <audio> --date YYYY-MM-DD --persona <id>`.
+- The no-date hint names `pnpm laplace-transcribe <audio> --date YYYY-MM-DD --persona <id>`.
 
 ## Measured
 
@@ -585,8 +583,8 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
 - **Production.** On 2026-11-04 a text call to eidolon.vrp.moe over Cloudflare TURN went through
   relay-only (the browser's 12 LAN, CGNAT, Tailscale and ULA candidates dropped), with
   offer→connected at 2.8 s. A logged-in call from China then validated its token through Workers
-  (Bun's User-Agent accepted), and Mem0 read and wrote that viewer's memories; offer→connected
-  took 2.5 s, 1.5 s of it ICE and 1 s the DTLS handshake.
+  (the bot then ran on Bun, whose User-Agent Workers accepted), and Mem0 read and wrote that
+  viewer's memories; offer→connected took 2.5 s, 1.5 s of it ICE and 1 s the DTLS handshake.
 - **Transcripts.** All 1,697 real `.soniox.json` payloads re-render to their `.md` byte for byte,
   the 168 sliced ones included.
 - **Memory.** A full stream ingest peaks at 5.7 GB (7.9 GB RSS), mostly LanceDB serializing the
