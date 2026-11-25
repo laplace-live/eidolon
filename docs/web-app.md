@@ -1077,6 +1077,9 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   its tab left while the browser still asks for the microphone, which closes the audio its clicks
   started, and a line tried on it, which a stage made anew mid-line, as reduced motion makes one,
   ends at once; a mood put back while its Save is out, which stays put back once the answer comes;
+  **Head Turn** set to 40% with the keyboard in the **Motion** tab and the rig's `ParamCheek` added
+  to her Happy mood through **Add Parameter**, which one Save sends and the server keeps, then put
+  back through the API;
   a PNG refused with the page's own sentence before any upload, and the rig cut short refused
   `invalid-model` with the app's, leaving no folder; then **Make Active**, which her summary and the
   status name, and **Stop Using**, so the chat call after it meets her picture;

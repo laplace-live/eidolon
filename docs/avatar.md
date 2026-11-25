@@ -643,9 +643,9 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
 - **The browser smoke** (`bun apps/bot/scripts/local-smoke.ts`,
   [web-app.md](web-app.md#the-browser-smoke-test)) imports the test rig in the studio's Appearance,
   checks its preview draws under the app's CSP, that Use Microphone closes its audio while the
-  browser still asks for the microphone, that a stage made anew ends a line tried on it, and that a
-  mood put back while its Save is out stays put back, refuses a PNG and a cut-off rig, and makes the
-  model active, then stops using it. Its video call makes the rig her active model again and calls
+  browser still asks for the microphone, that a stage made anew ends a line tried on it, that a mood
+  put back while its Save is out stays put back, and that Head Turn and a parameter added to a mood
+  save together, refuses a PNG and a cut-off rig, and makes the model active, then stops using it. Its video call makes the rig her active model again and calls
   her: her stage ready, her mouth moving on the smoke's tone, the caption and her mood, Shrink and
   Expand on one canvas, the call bar on another page, and a second call's stage; its task call
   answers a task's question on the screen.

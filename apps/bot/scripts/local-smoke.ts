@@ -84,6 +84,8 @@ const MODEL_HEAD = "HitAreaHead";
 /** What the walk plays on the preview, by clip name and expression id. */
 const MODEL_CLIP = "Nod";
 const MODEL_EXPRESSION = "smile";
+/** The parameter the walk has her Happy mood hold, at the top of its 0..1 range. */
+const MODEL_PARAMETER = "ParamCheek";
 /** A line of hers for Try a Line, about 30 s long. */
 const MODEL_LINE =
   "[sleepy, teasing] Oh, you are back. I waited all evening by the window, and the tea went " +
@@ -1946,10 +1948,11 @@ function leaveMicUnanswered(): void {
  * Her look in the studio's Appearance: the test rig picked for Import a Model, kept in her folder as
  * the server's runtime read it and not made active; the preview drawing it under the app's CSP, an
  * expression held and a clip played on it, Use Microphone letting go of its audio while the browser
- * still asks for the microphone, a line tried on it, which a stage made anew ends, and a mood put
- * back while its Save is out staying put back; a picture and a rig cut short refused with the app's
- * sentences; then Make Active, which her summary and the status name, and Stop Using. The model
- * stays, inactive, so the calls after this meet her picture.
+ * still asks for the microphone, a line tried on it, which a stage made anew ends, a mood put back
+ * while its Save is out staying put back, and Head Turn and a parameter of a mood's saved together;
+ * a picture and a rig cut short refused with the app's sentences; then Make Active, which her
+ * summary and the status name, and Stop Using. The model stays, inactive, so the calls after this
+ * meet her picture.
  */
 async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
   const { page, checks, origin } = walk;
@@ -2184,6 +2187,54 @@ async function appearanceWalk(walk: Walk, templates: string): Promise<void> {
         answer();
         await page.unroute(patch);
       }
+
+      // Head Turn at 40% and a parameter for her Happy mood, set with the keyboard and saved
+      // together, then put back so the calls after this meet the model as imported.
+      await page.getByRole("tab", { name: t("en", "Motion"), exact: true }).click();
+      const turn = page.getByRole("slider", { name: t("en", "Head Turn"), exact: true });
+      await turn.focus();
+      await page.keyboard.press("Home");
+      for (let step = 0; step < 40; step++) await page.keyboard.press("ArrowRight");
+      await page.getByRole("tab", { name: t("en", "Moods"), exact: true }).click();
+      const add = t("en", "Add Parameter to {name}", { name: t("en", "Happy", {}, "mood") });
+      await page.getByRole("button", { name: add, exact: true }).click();
+      await page.getByPlaceholder(t("en", "Search parameters")).fill(MODEL_PARAMETER);
+      await page.getByRole("option", { name: MODEL_PARAMETER, exact: true }).click();
+      const cheek = page.getByRole("slider", { name: MODEL_PARAMETER, exact: true });
+      await cheek.focus();
+      await page.keyboard.press("End");
+      const patched = page.waitForRequest(
+        (request) => request.method() === "PATCH" && patch(new URL(request.url())),
+      );
+      await save.click();
+      const body = (await patched).postDataJSON() as Record<string, unknown> | null;
+      const toasted = await shows(
+        page.getByText(t("en", "{name} saved.", { name: model.name }), { exact: true }),
+        10_000,
+      );
+      const kept = ((await (await walk.api("GET", models)).json()) as CharacterModels).models.find(
+        (each) => each.id === model.id,
+      );
+      const state = await stage.getAttribute("data-state");
+      const wanted = { look: 0.4, moodParameters: { happy: [{ id: MODEL_PARAMETER, value: 1 }] } };
+      checks.add(
+        "appearance motion",
+        JSON.stringify(body) === JSON.stringify(wanted) &&
+          toasted &&
+          kept?.look === wanted.look &&
+          JSON.stringify(kept.moodParameters) === JSON.stringify(wanted.moodParameters) &&
+          state === "ready",
+        `Save sent ${JSON.stringify(body)} ${toasted ? "and its toast showed" : "with no toast"}; ` +
+          `the server keeps look ${String(kept?.look)} and moodParameters ` +
+          `${JSON.stringify(kept?.moodParameters)}, and the preview is ${state ?? "gone"}`,
+      );
+      const reset = await walk.api(
+        "PATCH",
+        `${models}/${model.id}`,
+        JSON.stringify({ look: 1, moodParameters: {} }),
+      );
+      if (!reset.ok)
+        throw new Error(`PATCH ${model.id} back to its import answered ${reset.status}`);
     }
 
     const png = await sharp({
