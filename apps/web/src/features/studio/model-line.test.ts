@@ -104,6 +104,7 @@ describe("directLine", () => {
       play,
       mouth: () => {},
       lookAt: () => {},
+      lookStrength: () => {},
       wear: () => {},
       bounds: () => null,
       update: () => {},

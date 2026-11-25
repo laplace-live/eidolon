@@ -336,6 +336,14 @@ export class Psd2liveRig {
     this.rt.p2l_behaviors(this.rig, flags);
   }
 
+  /**
+   * How strongly breathing sways her and gaze turns her head, body and eyes, and how quickly gaze
+   * follows, 1 each as loaded; false, changing nothing, for a negative one.
+   */
+  behaviorStrength(sway: number, look: number, lookSpeed: number): boolean {
+    return this.rt.p2l_behavior_strength(this.rig, sway, look, lookSpeed) !== 0;
+  }
+
   /** Frees the rig; it is unusable afterwards. */
   dispose(): void {
     if (!this.rig) return;

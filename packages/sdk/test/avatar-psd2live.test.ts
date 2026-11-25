@@ -364,6 +364,26 @@ describe("the model", () => {
     idleOnly.dispose();
   });
 
+  test("her look scales how far her gaze turns her head, and a negative one changes nothing", () => {
+    const turned = (strength: number) => {
+      const rig = load();
+      const model = new Psd2liveModel(rig, { dispose() {} } as unknown as Psd2liveRenderer);
+      // Gaze alone: breathing sways her head too.
+      rig.behaviors(4);
+      model.lookStrength(strength);
+      model.lookAt(1, 0);
+      for (let frame = 0; frame < 60; frame++) model.update(1 / 30);
+      const angle = rig.parameterValues()[rig.parameters.indexOf("ParamAngleX")] ?? Number.NaN;
+      model.dispose();
+      return angle;
+    };
+    // The rig turns ParamAngleX up to 45°, the top of its range.
+    expect(turned(1)).toBeCloseTo(45, 1);
+    expect(turned(0.4)).toBeCloseTo(18, 1);
+    expect(turned(0)).toBeCloseTo(0, 3);
+    expect(turned(-1)).toBeCloseTo(45, 1);
+  });
+
   test("a clip authored to loop, played once as a gesture, ends after one pass", () => {
     const rig = load();
     const model = new Psd2liveModel(rig, { dispose() {} } as unknown as Psd2liveRenderer);

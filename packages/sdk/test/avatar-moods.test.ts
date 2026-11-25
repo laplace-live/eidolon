@@ -195,4 +195,13 @@ describe("a model's moods", () => {
     );
     expect(setup.gestures).toEqual({ idle: "a", talk: "Talk", nod: "a", shake: null });
   });
+
+  test("her look is the owner's, kept within 0..1, and all of the runtime's turn without one", () => {
+    expect(resolveSetup(inventory()).look).toBe(1);
+    expect(resolveSetup(inventory(), { look: 0.35 }).look).toBe(0.35);
+    expect(resolveSetup(inventory(), { look: 0 }).look).toBe(0);
+    expect(resolveSetup(inventory(), { look: 1.5 }).look).toBe(1);
+    expect(resolveSetup(inventory(), { look: -0.2 }).look).toBe(0);
+    expect(resolveSetup(inventory(), { look: Number.NaN }).look).toBe(1);
+  });
 });

@@ -73,6 +73,7 @@ function fakeModel() {
     play: vi.fn<AvatarModel["play"]>(),
     mouth: vi.fn<AvatarModel["mouth"]>(),
     lookAt: vi.fn<AvatarModel["lookAt"]>(),
+    lookStrength: vi.fn<AvatarModel["lookStrength"]>(),
     wear: vi.fn<AvatarModel["wear"]>(),
     bounds: vi.fn<AvatarModel["bounds"]>(() => null),
     update: vi.fn<AvatarModel["update"]>(),
@@ -387,6 +388,26 @@ describe("her direction", () => {
     stage.direct(direction({ speaking: false }));
     clock.frame(48);
     expect(model.play.mock.calls).toEqual([[null, 1, { loop: true }]]);
+  });
+
+  test("turns her as far as each setup's look says, applied once per setup shown", () => {
+    const stage = stageOf();
+    const first = fakeModel();
+    stage.show(first, resolveSetup(INVENTORY, { look: 0.4 }));
+    clock.frame(0);
+    clock.frame(16);
+    expect(first.lookStrength.mock.calls).toEqual([[0.4]]);
+
+    stage.show(first, resolveSetup(INVENTORY, { look: 0.4, moods: { happy: ["sad"] } }));
+    clock.frame(32);
+    stage.show(first, resolveSetup(INVENTORY));
+    clock.frame(48);
+    expect(first.lookStrength.mock.calls).toEqual([[0.4], [0.4], [1]]);
+
+    const second = fakeModel();
+    stage.show(second, resolveSetup(INVENTORY, { look: 0 }));
+    clock.frame(64);
+    expect(second.lookStrength.mock.calls).toEqual([[0]]);
   });
 
   test("dresses each model shown in the outfit", () => {

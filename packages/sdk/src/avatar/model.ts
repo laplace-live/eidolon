@@ -89,6 +89,8 @@ export interface AvatarModel {
   mouth(level: number): void;
   /** Where she looks, each axis -1..1 (x right, y up). */
   lookAt(x: number, y: number): void;
+  /** How far her gaze turns her head, body and eyes: 0 not at all, 1 as far as the runtime does. */
+  lookStrength(strength: number): void;
   wear(outfit: ModelOutfitLike | null): void;
   /** A hit area's bounds, or with none every mesh drawn, at the last update; null for nothing. */
   bounds(area?: string | null): Bounds | null;
@@ -125,16 +127,23 @@ export function avatarErrorOf(error: unknown, code: AvatarErrorCode): AvatarErro
   });
 }
 
-/** The owner's choices for a model: mood → expression ids, gesture → clip id. */
+/** The owner's choices for a model: mood → expression ids, gesture → clip id, and how far she turns. */
 export interface SetupOverrides {
   readonly moods?: Readonly<Record<string, readonly string[]>>;
   readonly gestures?: Readonly<Record<string, string>>;
+  /** How far her gaze turns her, 0..1; 1 unless given. */
+  readonly look?: number;
 }
 
-/** A model's setup against its file: the expressions each mood shows and the clip each gesture plays. */
+/**
+ * A model's setup against its file: the expressions each mood shows, the clip each gesture plays,
+ * and how far her gaze turns her.
+ */
 export interface ResolvedSetup {
   readonly moods: Readonly<Record<MoodTag, readonly string[]>>;
   readonly gestures: Readonly<Record<Gesture, string | null>>;
+  /** 0..1 of the runtime's turn. */
+  readonly look: number;
 }
 
 const MAX_EXPRESSIONS = 2;
@@ -151,7 +160,8 @@ export function clipFor(clips: readonly ModelClip[], wanted: string): string | n
 
 /**
  * Each mood's expressions, the owner's where they made a choice, else the defaults, kept to those
- * the file has; each gesture's clip, the owner's where the file has it, else the default it has.
+ * the file has; each gesture's clip, the owner's where the file has it, else the default it has;
+ * and the owner's look, kept within 0..1.
  */
 export function resolveSetup(
   inventory: ModelInventory,
@@ -177,7 +187,12 @@ export function resolveSetup(
         ? chosen
         : clipFor(inventory.clips, GESTURE_CLIPS[gesture]);
   }
-  return { moods, gestures };
+  const { look } = overrides;
+  return {
+    moods,
+    gestures,
+    look: look !== undefined && Number.isFinite(look) ? Math.min(Math.max(look, 0), 1) : 1,
+  };
 }
 
 /** The expressions a set of moods shows: each one's in order, without repeats, at most two. */

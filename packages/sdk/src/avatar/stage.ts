@@ -73,6 +73,8 @@ interface Applied {
   /** The clip the stage plays on the talk layer; null for none. */
   talk: string | null;
   outfit: boolean;
+  /** How far her gaze turns her; null until a setup's is applied. */
+  look: number | null;
 }
 
 export class AvatarStage {
@@ -86,7 +88,7 @@ export class AvatarStage {
   #setup: ResolvedSetup | null = null;
   #box: Box | null = null;
   #direction: Direction = NEUTRAL;
-  #applied: Applied = { idle: null, expressions: null, talk: null, outfit: false };
+  #applied: Applied = { idle: null, expressions: null, talk: null, outfit: false, look: null };
   #gestureSeq: number | null = null;
   #mouth: MouthSource | null = null;
   #gaze: "direction" | "pointer" | readonly [number, number] = "direction";
@@ -152,6 +154,7 @@ export class AvatarStage {
       expressions: null,
       talk: same ? was.talk : null,
       outfit: was.outfit && same,
+      look: null,
     };
     this.#reschedule();
   }
@@ -308,6 +311,10 @@ export class AvatarStage {
     if (!applied.outfit) {
       model.wear(this.#outfit);
       applied.outfit = true;
+    }
+    if (setup.look !== applied.look) {
+      model.lookStrength(setup.look);
+      applied.look = setup.look;
     }
     const idle = this.#reducedMotion ? null : setup.gestures.idle;
     if (idle !== applied.idle) {
