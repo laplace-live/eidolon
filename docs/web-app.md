@@ -374,7 +374,10 @@ memory at the saved one.
 ## The layout
 
 The app is a sidebar and the page beside it, as a desktop chat app is (`components/app-shell.tsx`
-and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
+and `components/app-sidebar.tsx`, on shadcn's `Sidebar`). From `md` up the sidebar sits on its own
+ground, with no border, and the page in a card with a hairline border and a rounded top left
+corner, 0.5rem down in a browser and below the title strip in the desktop app
+([In the desktop app](#in-the-desktop-app)):
 
 - **The sidebar**, top to bottom: the logo, which leads home, and the button that collapses it;
   the persona calls reach, whose menu switches her and has **New Persona** and **Open the
@@ -382,10 +385,11 @@ and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
   ([Chats](#chats)), under a heading that leads to `/chats`; and at its foot Settings, the language
   and the theme.
 - **Collapsed**, it keeps the icons and the chats' avatars, each named in a tooltip. The logo, its
-  edge, and ⌘B on a Mac or Ctrl+B elsewhere toggle it, and the browser remembers which it was
-  (`localStorage`'s `eidolon.sidebar.collapsed`).
+  edge, the desktop app's strip, and ⌘B on a Mac or Ctrl+B elsewhere toggle it, and the browser
+  remembers which it was (`localStorage`'s `eidolon.sidebar.collapsed`).
 - **On a phone**, below 768 px, it is a sheet, opened from the bar above each page or the button in
-  a chat's or the call's header, and following a link in it closes it.
+  a chat's or the call's header, or in a narrow desktop window from the strip, and following a link
+  in it closes it.
 - **The page:** a chat, `/chats` and the call page fill the window beside it under their own
   headers; every other page scrolls in a column there, and the window itself never scrolls. A
   layout that sits side by side when wide, such as the studio's and Settings' sections, or a model
@@ -448,27 +452,29 @@ has none of them, and without them nothing below happens.
   `data-fullscreen`, and `window.eidolonCompanion` instead of `eidolonDesktop`, so `desktop()` is
   null there and her page asks `companion()`.
 
-**The chrome.** The window has no title bar. A row marked `data-window-drag` stands in for it: the
-window drags by the row, while its links, buttons and fields keep their clicks. The rows are the
-sidebar's first row (the logo), each page's header (a chat's, the call's, setup's), and the bar
-above a page without one, `MobileBar`; the call bar, at a page's foot, is never one. A browser
-shows `MobileBar` only below `md`, with the sidebar's button and the logo; the desktop app keeps it
-from `md` up too, empty, 3.5rem tall: the height of a chat's header, and the height the window's
-caption buttons on Windows should take. The page scrolls in a box of its own below it, not in the
-frame (`PageLayout` in `components/app-shell.tsx`), as setup's page does below its header, so no
-row is in what scrolls; the skip link focuses that box, which the keys then scroll. An error, the
-sign-in screen and the loading spinner get a strip of their own (`WindowDragStrip`). The rows keep
-clear of the window's buttons, whose place the Window Controls Overlay gives as
-`env(titlebar-area-*)`:
+**The chrome.** The window has no title bar. A strip across its top stands in for it
+(`components/title-strip.tsx`), with the window's own buttons, then **Go Back**, **Go Forward** and
+the sidebar's toggle, and the sidebar and the page's card sit below it, on its ground. Go Back and
+Go Forward step through the Navigation API's entries, which hold the app's own pages alone, never
+the loading page main showed before the first, and are disabled where there is none. The strip is
+2.75rem tall, the row main centres the traffic lights on and Windows' caption buttons' height, or as
+tall as the Window Controls Overlay's area for them where that's taller (`--strip` in
+`index.css`). Its toggle stands in for the sidebar's own, the button in a chat's or the call's
+header and `MobileBar`, none of which shows. A row marked `data-window-drag` stands in for the
+title bar: the window drags by it, while its links, buttons and fields keep their clicks. The rows
+are the strip, setup's header, and the strip atop an error, the sign-in screen and the loading
+spinner outside the frame (`WindowDragStrip`, which renders nothing in the card: `BelowTitleStrip`).
+No row of a page or of the sidebar is one, and the call bar never is. A page scrolls in the card,
+below the strip, as setup's does below its header, so no scrollbar runs under Windows' caption
+buttons, which take every press over them. The rows keep clear of the window's buttons, whose place
+the overlay gives as `env(titlebar-area-*)`:
 
-- **macOS:** the traffic lights sit at the top left. A page's row starts after them, measured from
-  the window's edge: at the edge while the sidebar is a sheet, beside the 3rem rail when collapsed.
-  The sidebar's first row starts below them, open or collapsed, so the lights sit in an empty strip
-  above it. The facts editor's sheet, as wide as a narrow window, stops short of them, and the skip
-  link shows below them. Fullscreen hides them, and drops every inset.
-- **Windows:** the caption buttons sit at the top right, where every page row ends before them.
-  They take every press over them, so a page's scrollbar, with its box, starts below them; a sheet
-  at the right edge starts below them, and a dialog centres below them.
+- **macOS:** the traffic lights sit at the strip's left, its buttons just after them, and setup's
+  header starts after them too. Where they end is read off the area's width, since Electron reports
+  its x 7 px short for the first frame of each resize. Fullscreen hides them, and drops every inset.
+- **Windows:** the caption buttons sit at the strip's right, and setup's header ends before them.
+- A sheet at either side opens below the strip, as the sidebar's does in a narrow window, and a
+  dialog centres below it, so a tall one clears the window's buttons.
 - Menus, popovers, dialogs, sheets and tooltips portal out of `#root` and never drag. A press on a
   drag row never reaches the page, so while one of them is open no row drags, and a press there
   closes it.

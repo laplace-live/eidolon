@@ -69,8 +69,8 @@ function Frame({
 }) {
   return (
     <section ref={ref} tabIndex={-1} className="flex min-h-0 flex-1 flex-col outline-none">
-      <header data-window-drag className="flex items-center gap-3 border-b px-4 py-3 sm:px-6">
-        <SidebarTrigger className="-ml-1.5 md:hidden" />
+      <header className="flex items-center gap-3 border-b px-4 py-3 sm:px-6">
+        <SidebarTrigger className="-ml-1.5 md:hidden shell:hidden" />
         <Face persona={persona} size="md" speaking={speaking} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-semibold text-base tracking-tight">{persona.name}</h2>

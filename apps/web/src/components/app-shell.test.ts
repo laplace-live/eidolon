@@ -1,12 +1,20 @@
-// In the desktop app a page scrolls in a box below the row its window drags by, so no scrollbar runs
-// under Windows' caption buttons, which take a press over them: rendered to markup, with the macros
-// stubbed.
+// A page has no row the window drags by: the desktop app's strip, above the frame the page scrolls
+// in, stands in for the title bar, and an error there gets no strip of its own. Setup, outside the
+// frame, scrolls below its own header, so no scrollbar runs under Windows' caption buttons, which
+// take a press over them. Rendered to markup, with the macros stubbed.
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter, Route, Routes } from "react-router";
+import {
+  createStaticHandler,
+  createStaticRouter,
+  MemoryRouter,
+  Route,
+  Routes,
+  StaticRouterProvider,
+} from "react-router";
 import { expect, test, vi } from "vitest";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
@@ -18,9 +26,17 @@ vi.doMock("@/components/preferences", () => ({
   LanguageSwitch: () => null,
   ThemeMenu: () => null,
 }));
-const { PageLayout } = await import("./app-shell");
+// The call's engine and the sidebar's queries aren't what the frame's error checks.
+vi.doMock("@/features/call/call-provider", () => ({
+  CallProvider: ({ children }: { readonly children: ReactNode }) => children,
+}));
+vi.doMock("@/features/call/call-bar", () => ({ CallBar: () => null }));
+vi.doMock("@/components/app-sidebar", () => ({ AppSidebar: () => null }));
+const { AppShell, PageLayout } = await import("./app-shell");
 const { SidebarProvider } = await import("./ui/sidebar");
+const { TooltipProvider } = await import("./ui/tooltip");
 const { Component: Setup } = await import("@/features/setup/route");
+const { RouteError } = await import("./route-error");
 
 function render(path: string, node: ReactNode): string {
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
@@ -46,15 +62,7 @@ function element(markup: string, className: string): { at: number; classes: stri
   return { at: found?.index ?? -1, classes: found ? classesOf(found[0]) : [] };
 }
 
-/** Every drag row comes before the box that scrolls in the desktop app, and none is in it. */
-function expectRowsAbove(markup: string, scroller: number): void {
-  expect(scroller).toBeGreaterThan(0);
-  const rows = [...markup.matchAll(/data-window-drag/g)].map((row) => row.index);
-  expect(rows.length).toBeGreaterThan(0);
-  expect(rows.filter((row) => row > scroller)).toEqual([]);
-}
-
-test("a page scrolls below MobileBar, in the box the skip link focuses", () => {
+test("a page has no row the window drags by, and sits in the box the skip link focuses", () => {
   const markup = render(
     "/settings",
     createElement(
@@ -71,11 +79,10 @@ test("a page scrolls below MobileBar, in the box the skip link focuses", () => {
       ),
     ),
   );
-  const box = element(markup, "shell:overflow-y-auto");
-  expect(box.classes).toEqual(expect.arrayContaining(["shell:min-h-0", "shell:flex-1"]));
-  expectRowsAbove(markup, box.at);
-  expect(markup.slice(box.at)).toMatch(/^<div id="content" tabindex="-1"/);
-  expect(markup.indexOf("<p>Settings</p>")).toBeGreaterThan(box.at);
+  expect(markup).not.toContain("data-window-drag");
+  const box = markup.indexOf('<div id="content" tabindex="-1"');
+  expect(box).toBeGreaterThan(0);
+  expect(markup.indexOf("<p>Settings</p>")).toBeGreaterThan(box);
 });
 
 test("setup scrolls below its header, in a window-high frame", () => {
@@ -84,6 +91,51 @@ test("setup scrolls below its header, in a window-high frame", () => {
   expect(element(markup, "shell:h-svh").at).toBe(0);
   const box = element(markup, "shell:overflow-y-auto");
   expect(box.classes).toEqual(expect.arrayContaining(["shell:min-h-0", "flex-1"]));
-  expectRowsAbove(markup, box.at);
+  expect(markup).toContain("data-window-drag");
+  expect(markup.lastIndexOf("data-window-drag")).toBeLessThan(box.at);
   expect(markup.indexOf("<main")).toBeGreaterThan(box.at);
+});
+
+test("an error in the frame gets no drag strip below the title strip, and one outside it does", async () => {
+  const fail = () => {
+    throw new Error("boom");
+  };
+  const handler = createStaticHandler([
+    {
+      path: "/",
+      ErrorBoundary: RouteError,
+      children: [
+        { path: "outside", loader: fail, Component: () => null },
+        {
+          Component: AppShell,
+          children: [
+            { path: "inside", loader: fail, Component: () => null, ErrorBoundary: RouteError },
+          ],
+        },
+      ],
+    },
+  ]);
+  const at = async (path: string): Promise<string> => {
+    const context = await handler.query(new Request(`http://app${path}`));
+    if (context instanceof Response) throw new Error(`${path} redirected`);
+    const router = createStaticRouter(handler.dataRoutes, context);
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    return renderToStaticMarkup(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(StaticRouterProvider, { router, context, hydrate: false }),
+        ),
+      ),
+    );
+  };
+  const inside = await at("/inside");
+  expect(inside).toContain("Something went wrong");
+  const rows = [...inside.matchAll(/<[^>]*data-window-drag[^>]*>/g)].map((row) => row[0]);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toContain("data-title-strip");
+  expect(await at("/outside")).toContain("data-window-drag");
 });

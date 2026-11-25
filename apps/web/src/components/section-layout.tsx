@@ -23,7 +23,7 @@ export interface SectionLayoutProps {
 
 /**
  * Whether `box`'s top is above where `scrollIntoView` puts it, its scroll margin below the top of
- * the box it scrolls in: the frame in a browser, a page's own below MobileBar in the desktop app.
+ * the box it scrolls in: the frame, which starts below the title strip in the desktop app.
  */
 export function scrolledPast(box: Element): boolean {
   let port = box.parentElement;
@@ -55,7 +55,7 @@ export function SectionLayout({ nav, active, label, children }: SectionLayoutPro
   }, [active]);
 
   return (
-    // Below md a browser scrolls the page under MobileBar's h-14; the desktop app scrolls it below.
+    // Below md a browser scrolls the page under MobileBar's h-14, which the desktop app never shows.
     <div ref={root} className="@container scroll-mt-20 md:scroll-mt-6 shell:scroll-mt-6">
       <div className="flex flex-col gap-8 @3xl:grid @3xl:grid-cols-[13rem_minmax(0,1fr)] @3xl:items-start @3xl:gap-10">
         <nav

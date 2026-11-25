@@ -1273,33 +1273,79 @@ async function themeAndLanguage(driven: Driven, step: Step) {
       return style.getPropertyValue("app-region") || style.getPropertyValue("-webkit-app-region");
     };
     const rows = [...document.querySelectorAll("[data-window-drag]")];
-    const sidebarRow = rows.find((row) => row.closest('[data-sidebar="sidebar"]') !== null);
-    const pageRow = rows.find((row) => row.closest('[data-sidebar="sidebar"]') === null);
-    const control = sidebarRow?.querySelector("a, button");
+    const strip = document.querySelector("[data-title-strip]");
+    const control = strip?.querySelector("button");
+    const top = (selector: string): number | null =>
+      document.querySelector(selector)?.getBoundingClientRect().top ?? null;
+    const overlay = (
+      navigator as Navigator & { windowControlsOverlay?: { getTitlebarAreaRect(): DOMRect } }
+    ).windowControlsOverlay;
     return {
       shell: document.documentElement.dataset.shell ?? null,
-      fullscreen: document.documentElement.hasAttribute("data-fullscreen"),
       rows: rows.length,
-      sidebar: sidebarRow === undefined ? null : regionOf(sidebarRow),
-      sidebarTop: sidebarRow === undefined ? null : getComputedStyle(sidebarRow).paddingTop,
-      page: pageRow === undefined ? null : regionOf(pageRow),
+      below: rows.filter((row) => row.closest('[data-slot="sidebar"], main') !== null).length,
+      strip: strip == null ? null : regionOf(strip),
+      height: strip?.getBoundingClientRect().height ?? 0,
+      start: control?.getBoundingClientRect().left ?? 0,
       control: control == null ? null : regionOf(control),
+      sidebar: top('[data-slot="sidebar-container"]'),
+      card: top('[data-slot="sidebar-inset"]'),
+      lights: overlay?.getTitlebarAreaRect().x ?? 0,
     };
   });
   const mark = process.platform === "darwin" ? "mac" : "win";
-  // Without titleBarOverlay macOS publishes no env(titlebar-area-*), and the row sits under the
-  // traffic lights.
-  const clear = process.platform !== "darwin" || Number.parseFloat(chrome.sidebarTop ?? "0") > 0;
+  // Without titleBarOverlay macOS publishes no env(titlebar-area-*), and the strip's buttons sit
+  // under the traffic lights.
+  const clear =
+    process.platform !== "darwin" || (chrome.lights > 0 && chrome.start >= chrome.lights - 8);
   step.check(
-    "the preload marks the page, whose title-bar rows drag and whose controls don't",
+    "the preload marks the page, whose strip drags while its buttons don't, above the sidebar and the page",
     chrome.shell === mark &&
-      chrome.sidebar === "drag" &&
-      chrome.page === "drag" &&
+      chrome.strip === "drag" &&
       chrome.control === "no-drag" &&
+      chrome.below === 0 &&
+      (chrome.sidebar ?? 0) >= chrome.height &&
+      (chrome.card ?? 0) >= chrome.height &&
+      chrome.height > 0 &&
       clear,
-    `data-shell=${chrome.shell}; ${chrome.rows} drag rows (sidebar ${chrome.sidebar}, padded ${chrome.sidebarTop} at the top; page ${chrome.page}); a control in one ${chrome.control}`,
+    `data-shell=${chrome.shell}; the strip ${chrome.strip}, ${chrome.height} px tall, its buttons ${chrome.control} from ${chrome.start} px (the overlay's area from ${chrome.lights}); the sidebar from ${chrome.sidebar}, the page from ${chrome.card}; ${chrome.rows} drag rows, ${chrome.below} below the strip`,
   );
   await step.shot(page, "chrome");
+
+  // The strip's Back and Forward, through the app's own pages and over an unsaved edit.
+  const path = (): string => new URL(page.url()).pathname;
+  const from = path();
+  await page.getByRole("link", { name: "Studio" }).first().click();
+  await page.waitForURL(`eidolon-app://app/personas/${PERSONA}`);
+  await page.getByRole("link", { name: "Prompt", exact: true }).click();
+  await page.waitForURL(`eidolon-app://app/personas/${PERSONA}/prompt`);
+  const area = page.getByLabel("System Prompt", { exact: true });
+  await area.click();
+  await area.pressSequentially(" unsaved");
+  await page.getByText("Unsaved changes", { exact: true }).waitFor();
+  const goBack = page.getByRole("button", { name: "Go Back" });
+  const box = page.getByRole("alertdialog");
+  await goBack.click();
+  await box.getByRole("button", { name: "Keep Editing" }).click();
+  await box.waitFor({ state: "hidden" });
+  const kept = path();
+  await goBack.click();
+  await box.getByRole("button", { name: "Discard Changes" }).click();
+  await page.waitForURL(`eidolon-app://app/personas/${PERSONA}`);
+  // The box fades out after the navigation goes on.
+  const left = await box.waitFor({ state: "hidden", timeout: 5000 }).then(
+    () => true,
+    () => false,
+  );
+  await goBack.click();
+  await page.waitForURL(`eidolon-app://app${from}`);
+  await page.getByRole("button", { name: "Go Forward" }).click();
+  await page.waitForURL(`eidolon-app://app/personas/${PERSONA}`);
+  step.check(
+    "the strip's Back and Forward walk the app's pages; over an unsaved edit, Keep Editing stays and Discard Changes leaves",
+    kept === `/personas/${PERSONA}/prompt` && left,
+    `${from} → the studio → its prompt, edited; Back, Keep Editing: ${kept}; Back, Discard Changes: the studio, the box ${left ? "gone" : "still up"}; Back: ${from}; Forward: ${path()}`,
+  );
 }
 
 /** Puts Settings' Restart banner up: a setting the server reads only when it starts. */

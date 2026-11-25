@@ -59,12 +59,12 @@ function lit(page: Pick<Page, "to" | "end" | "section">, pathname: string): bool
   return matchPath({ path: page.to, end: page.end ?? false }, pathname) !== null;
 }
 
-/** The logo, home; collapsed, the logo opens the sidebar again. */
+/** The logo, home; collapsed, the logo opens the sidebar again. The desktop app's strip toggles it. */
 function Brand() {
   const { t } = useLingui();
   const { toggleSidebar } = useSidebar();
   return (
-    <div data-window-drag className="flex h-9 items-center gap-1">
+    <div className="flex h-9 items-center gap-1">
       <Link
         to="/"
         className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 font-logo font-semibold text-xl outline-none ring-sidebar-ring focus-visible:ring-2 group-data-[collapsible=icon]:hidden"
@@ -72,7 +72,7 @@ function Brand() {
         <AppMark />
         <span className="truncate">LAPLACE Eidolon</span>
       </Link>
-      <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
+      <SidebarTrigger className="group-data-[collapsible=icon]:hidden shell:hidden" />
       <button
         type="button"
         onClick={toggleSidebar}
@@ -159,7 +159,11 @@ export function AppSidebar() {
   const side = isMobile || state === "expanded" ? "bottom" : "right";
 
   return (
-    <Sidebar collapsible="icon">
+    // On the frame's ground, which the page's card borders; in the desktop app below the strip.
+    <Sidebar
+      collapsible="icon"
+      className="group-data-[side=left]:border-r-0 shell:top-(--strip) shell:h-auto"
+    >
       <SidebarHeader>
         <Brand />
         <PersonaSwitcher side={side} />

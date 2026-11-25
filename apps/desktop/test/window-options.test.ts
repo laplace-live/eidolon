@@ -8,12 +8,12 @@ import {
   backgroundColor,
   chromeOptions,
   DEFAULT_SIZE,
-  HEADER_ROW_PX,
   keptMaximized,
   MIN_SIZE,
   placement,
   readBounds,
   type SavedBounds,
+  STRIP_PX,
   symbolColor,
   titleBarOverlay,
   workAreas,
@@ -131,25 +131,34 @@ describe("where the window opens", () => {
 });
 
 describe("the chrome", () => {
-  test("macOS: the traffic lights inset and centred on the page's 56 px first row, with the overlay on", () => {
-    expect(HEADER_ROW_PX).toBe(56);
+  test("apps/web's strip and the shell pages' are as tall as main makes the window's buttons' row", () => {
+    const strip = (file: string): number => {
+      const css = readFileSync(join(import.meta.dirname, "../..", file), "utf8");
+      return Number(/--strip: max\(([\d.]+)rem,/.exec(css)?.[1]) * 16;
+    };
+    expect(STRIP_PX).toBe(44);
+    expect(strip("web/src/index.css")).toBe(STRIP_PX);
+    expect(strip("desktop/src/shell/shell.css")).toBe(STRIP_PX);
+  });
+
+  test("macOS: the traffic lights inset and centred on the page's 44 px strip, with the overlay on", () => {
     expect(chromeOptions("darwin", false)).toEqual({
       titleBarStyle: "hiddenInset",
-      trafficLightPosition: { x: 16, y: 20 },
+      trafficLightPosition: { x: 16, y: 15 },
       titleBarOverlay: true,
     });
     expect(chromeOptions("darwin", true)).toEqual(chromeOptions("darwin", false));
   });
 
-  test("Windows: no title bar, the caption buttons over a transparent 56 px overlay in the theme's glyphs", () => {
+  test("Windows: no title bar, the caption buttons over a transparent 44 px overlay in the theme's glyphs", () => {
     expect(chromeOptions("win32", false)).toEqual({
       titleBarStyle: "hidden",
-      titleBarOverlay: { color: "#00000000", symbolColor: "#1f1f1f", height: 56 },
+      titleBarOverlay: { color: "#00000000", symbolColor: "#1f1f1f", height: 44 },
     });
     expect(titleBarOverlay(true)).toEqual({
       color: "#00000000",
       symbolColor: "#ffffff",
-      height: 56,
+      height: 44,
     });
     expect(symbolColor(false)).not.toBe(symbolColor(true));
   });

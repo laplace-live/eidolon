@@ -50,7 +50,15 @@ export function LeaveDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t`Keep Editing`}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={onLeave}>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={(event) => {
+              // Closed by `open` alone: closing here would call onStay as well, and a blocked back
+              // navigation, which goes on a tick later, would meet the reset blocker and ask again.
+              event.preventDefault();
+              onLeave();
+            }}
+          >
             {t`Discard Changes`}
           </AlertDialogAction>
         </AlertDialogFooter>

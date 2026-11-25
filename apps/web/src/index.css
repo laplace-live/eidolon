@@ -210,6 +210,17 @@
  * Electron builds the regions from boxes in document order, not from what is on top, and in its
  * Chromium app-region inherits: a row's text drags with it, and a control's insides don't.
  */
+:root[data-shell] {
+  /* 2.75rem, the row main centres the window's buttons on, or their overlay's area if taller. */
+  --strip: max(2.75rem, calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 0px)));
+}
+
+/* Where the traffic lights end, from the area's width: for the first frame of each resize Electron
+   reports its x 7px short (85 for 92 on macOS 27), which would jolt what sits after them. */
+:root[data-shell="mac"]:not([data-fullscreen]) {
+  --lights: calc(100vw - env(titlebar-area-width, 100vw));
+}
+
 [data-shell] [data-window-drag] {
   -webkit-app-region: drag;
 }
@@ -225,55 +236,34 @@
   -webkit-app-region: no-drag;
 }
 
-/* Windows: the caption buttons, over the window's top right, where a page's rows end. */
-[data-shell="win"] [data-window-drag]:not([data-sidebar="sidebar"] *) {
+/* Windows: the caption buttons, over the window's top right, where a row ends. */
+[data-shell="win"] [data-window-drag] {
   padding-inline-end: max(
     1rem,
     calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 0.5rem)
   );
 }
 
-/* A sheet at the right edge starts below them, or they would cover its close button. */
-[data-shell="win"] [data-slot="sheet-content"][data-side="right"] {
-  top: env(titlebar-area-height, 0px);
+/* macOS: the traffic lights, at the window's top left, where a row starts after them, and the
+   strip's buttons just after them. */
+[data-shell="mac"]:not([data-fullscreen]) [data-window-drag] {
+  padding-inline-start: max(1rem, calc(var(--lights) + 0.25rem));
+}
+
+[data-shell="mac"]:not([data-fullscreen]) [data-title-strip] {
+  padding-inline-start: calc(var(--lights) - 0.25rem);
+}
+
+/* A sheet opens below the strip, clear of the window's buttons, which would cover its corner: the
+   sidebar's too, in a narrow window, whose data-slot is the sidebar's. */
+[data-shell] :is([data-slot="sheet-content"], [data-slot="sidebar"][data-mobile]) {
+  top: var(--strip);
   height: auto;
 }
 
-/* A dialog centres below them, so a tall one's corner clears them in a narrow window. */
-[data-shell="win"] :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
-  top: calc(50% + env(titlebar-area-height, 0px) / 2);
-}
-
-/* macOS: the traffic lights, at the window's top left. A page's row starts after them, measured
-   from the window's edge: it sits there while the sidebar is a sheet, beside the 3rem rail when
-   collapsed, and clear of them beside the open sidebar. */
-[data-shell="mac"]:not([data-fullscreen]) [data-window-drag] {
-  padding-inline-start: max(1rem, calc(env(titlebar-area-x, 0px) + 0.25rem));
-}
-
-/* The sidebar's first row starts below them, inside its header's 0.5rem: beside them, the rail has
-   no room, and the open sidebar leaves the name 116 of the 152px it takes. */
-[data-shell="mac"]:not([data-fullscreen]) [data-sidebar="sidebar"] [data-window-drag] {
-  box-sizing: content-box;
-  padding-top: calc(env(titlebar-area-height, 0px) - 0.5rem);
-  padding-inline-start: revert-layer;
-}
-
-[data-shell="mac"]:not([data-fullscreen])
-  [data-slot="sidebar"][data-state="collapsed"]
-  ~ [data-slot="sidebar-inset"]
-  [data-window-drag] {
-  padding-inline-start: max(
-    1rem,
-    calc(env(titlebar-area-x, 0px) + 0.25rem - var(--sidebar-width-icon))
-  );
-}
-
-[data-shell="mac"]:not([data-fullscreen])
-  [data-slot="sidebar"][data-state="expanded"]
-  ~ [data-slot="sidebar-inset"]
-  [data-window-drag] {
-  padding-inline-start: revert-layer;
+/* A dialog centres below the strip, so a tall one clears the window's buttons. */
+[data-shell] :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+  top: calc(50% + var(--strip) / 2);
 }
 
 /* A press on a row never reaches the page, so while a menu, a dialog, a sheet or a tooltip is open

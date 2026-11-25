@@ -311,8 +311,8 @@ export function ChatView({ id }: { readonly id: string }) {
 
   return (
     <>
-      <header data-window-drag className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
-        <SidebarTrigger className="-ml-1.5 md:hidden" />
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+        <SidebarTrigger className="-ml-1.5 md:hidden shell:hidden" />
         <ParticipantsMenu chatId={id} participants={participants} personaOf={personaOf} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-semibold text-sm leading-tight">{title ?? who}</h2>

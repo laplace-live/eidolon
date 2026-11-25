@@ -2536,6 +2536,14 @@ msgstr "Glossary saved, but it doesn't parse yet."
 msgid "Glossary saved."
 msgstr "Glossary saved."
 
+#: src/components/title-strip.tsx
+msgid "Go Back"
+msgstr "Go Back"
+
+#: src/components/title-strip.tsx
+msgid "Go Forward"
+msgstr "Go Forward"
+
 #: src/features/setup/done-step.tsx
 msgid "Go to Home"
 msgstr "Go to Home"
@@ -6581,6 +6589,7 @@ msgstr "To index"
 msgid "To transcribe"
 msgstr "To transcribe"
 
+#: src/components/title-strip.tsx
 #: src/components/ui/sidebar.tsx
 msgid "Toggle Sidebar"
 msgstr "Toggle Sidebar"
