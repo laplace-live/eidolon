@@ -774,6 +774,14 @@ msgstr "添加服装"
 msgid "Add Outfits"
 msgstr "添加服装"
 
+#: src/features/studio/model-moods.tsx
+msgid "Add Parameter"
+msgstr "添加参数"
+
+#: src/features/studio/model-moods.tsx
+msgid "Add Parameter to {name}"
+msgstr "给{name}添加参数"
+
 #: src/features/chats/participants.tsx
 msgid "Add Persona"
 msgstr "添加人设"
@@ -2630,8 +2638,12 @@ msgid "Her providers take no key."
 msgstr "她用的服务商都不需要密钥。"
 
 #: src/features/studio/model-moods.tsx
-msgid "Her replies' cues give her a mood, which shows as up to two of these expressions."
-msgstr "她回复里的提示会带出一种情绪，用最多两个表情来表现。"
+msgid "Her replies' cues give her a mood, which shows as up to two of these expressions and the parameters you add to it."
+msgstr "她回复里的提示会带出一种情绪，用最多两个表情和你给它添加的参数来表现。"
+
+#: src/features/studio/model-moods.tsx
+msgid "Her replies' cues give her a mood. This model has no expressions, so build each mood from its parameters."
+msgstr "她回复里的提示会带出一种情绪。这个模型没有表情，请用它的参数来搭出每种情绪。"
 
 #: src/features/studio/advanced-section.tsx
 msgid "Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools."
@@ -3766,6 +3778,10 @@ msgstr "还没有服装：她保持模型导出时的样子。"
 msgid "No output."
 msgstr "没有输出。"
 
+#: src/features/studio/model-moods.tsx
+msgid "No parameter by that name."
+msgstr "没有这个名字的参数。"
+
 #: src/features/studio/references-section.tsx
 msgid "No preview: only PNG, JPEG and WebP are shown here. Selfies still use it."
 msgstr "无法预览：这里只显示 PNG、JPEG 和 WebP 图片。自拍仍会用到它。"
@@ -4642,6 +4658,7 @@ msgid "Remove"
 msgstr "删除"
 
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/model-moods.tsx
 #: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove {name}"
@@ -5024,6 +5041,10 @@ msgstr "按名字搜索"
 #: src/components/settings-form/model-picker.tsx
 msgid "Search models"
 msgstr "搜索模型"
+
+#: src/features/studio/model-moods.tsx
+msgid "Search parameters"
+msgstr "搜索参数"
 
 #: src/features/settings/account-dialog.tsx
 msgid "Search providers"
@@ -5996,8 +6017,8 @@ msgid "The check couldn't run."
 msgstr "无法执行检查。"
 
 #: src/features/studio/model-moods.tsx
-msgid "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then."
-msgstr "每种动作对应的动画：待机动画一直播放，说话时播放说话动画，偶尔点头或摇头。"
+msgid "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then. Without a clip, she still nods and shakes her head."
+msgstr "每种动作对应的动画：待机动画一直播放，说话时播放说话动画，偶尔点头或摇头。没有动画时，她也会自己点头和摇头。"
 
 #: src/features/call/call-notices.tsx
 msgid "The connection dropped."

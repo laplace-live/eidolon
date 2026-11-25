@@ -77,12 +77,12 @@ export function outfitOf(model: Pick<CharacterModel, "outfits" | "outfit">): Mod
 }
 
 /**
- * Each mood's expressions and each gesture's clip, the owner's choices, then the defaults, and how
- * far her gaze turns her.
+ * Each mood's expressions and each gesture's clip, the owner's choices, then the defaults; the
+ * parameters each mood holds; and how far her gaze turns her.
  */
 export function setupOf(
-  model: Pick<CharacterModel, "inventory" | "moods" | "gestures" | "look">,
+  model: Pick<CharacterModel, "inventory" | "moods" | "moodParameters" | "gestures" | "look">,
 ): ResolvedSetup {
-  const { inventory, moods, gestures, look } = model;
-  return resolveSetup(inventory, { moods, gestures, look });
+  const { inventory, moods, moodParameters, gestures, look } = model;
+  return resolveSetup(inventory, { moods, moodParameters, gestures, look });
 }

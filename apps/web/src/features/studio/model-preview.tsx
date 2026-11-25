@@ -247,10 +247,10 @@ export function ModelPreviewCard({
   const size = useSize(surface);
 
   const { inventory } = model;
+  const { moods, moodParameters, gestures, look } = draft;
   const setup = useMemo(
-    () =>
-      resolveSetup(inventory, { moods: draft.moods, gestures: draft.gestures, look: draft.look }),
-    [inventory, draft.moods, draft.gestures, draft.look],
+    () => resolveSetup(inventory, { moods, moodParameters, gestures, look }),
+    [inventory, moods, moodParameters, gestures, look],
   );
   const worn = draft.outfits.find((outfit) => outfit.id === draft.outfit) ?? null;
   const shownOutfit =
@@ -434,8 +434,12 @@ export function ModelPreviewCard({
                   stage={ready?.stage ?? null}
                   inventory={inventory}
                   moods={draft.moods}
+                  moodParameters={draft.moodParameters}
                   gestures={draft.gestures}
                   onMoods={(moods) => setDraft((previous) => ({ ...previous, moods }))}
+                  onMoodParameters={(moodParameters) =>
+                    setDraft((previous) => ({ ...previous, moodParameters }))
+                  }
                   onGestures={(gestures) => setDraft((previous) => ({ ...previous, gestures }))}
                 />
               </TabsContent>

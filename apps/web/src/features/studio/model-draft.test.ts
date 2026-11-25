@@ -26,6 +26,7 @@ import {
   withGesture,
   withHiddenParts,
   withMood,
+  withMoodParameter,
   withNewOutfit,
   withOutfit,
   withoutGesture,
@@ -96,6 +97,7 @@ describe("the draft", () => {
       framing: { call: null, companion: null },
       look: 1,
       moods: { happy: ["sad"] },
+      moodParameters: {},
       gestures: { nod: "wave" },
       outfits: [SCHOOL],
       outfit: null,
@@ -209,6 +211,33 @@ describe("moods", () => {
     expect(toggledExpression(["smile"], "sad")).toEqual(["smile", "sad"]);
     expect(toggledExpression(["smile", "sad"], "smile")).toEqual(["sad"]);
     expect(toggledExpression(["smile", "sad"], "angry")).toBeNull();
+  });
+
+  test("a mood holds up to 8 of the model's parameters, each within its range", () => {
+    const rig: ModelInventory = {
+      ...INVENTORY,
+      parameters: Array.from({ length: 9 }, (_, i) => ({
+        id: `p${i}`,
+        min: -1,
+        max: 1,
+        default: 0,
+      })),
+    };
+    const one = withMoodParameter(rig, {}, "happy", "p0", 0.5);
+    expect(one).toEqual({ happy: [{ id: "p0", value: 0.5 }] });
+    // A new value takes its place; one past the range is kept to it; one the model lacks is none.
+    expect(withMoodParameter(rig, one, "happy", "p0", 3)).toEqual({
+      happy: [{ id: "p0", value: 1 }],
+    });
+    expect(withMoodParameter(rig, one, "happy", "gone", 1)).toEqual(one);
+    let full: ModelDraft["moodParameters"] = {};
+    for (let i = 0; i < 9; i++) full = withMoodParameter(rig, full, "sad", `p${i}`, -1);
+    expect(full.sad?.map(({ id }) => id)).toEqual(Array.from({ length: 8 }, (_, i) => `p${i}`));
+    // Letting the last go takes the mood out, as the server keeps none.
+    expect(withMoodParameter(rig, one, "happy", "p0", null)).toEqual({});
+    expect(withoutMood({ happy: [{ id: "p0", value: 0.5 }], sad: [] }, "happy")).toEqual({
+      sad: [],
+    });
   });
 });
 
@@ -398,6 +427,13 @@ describe("a new file", () => {
       framing: { call: { x: 1, y: 2, width: 3, height: 4 }, companion: null },
       look: 0.5,
       moods: { happy: ["sad"], sad: ["sad", "smile"], thinking: [] },
+      moodParameters: {
+        shy: [
+          { id: "ParamCheek", value: 0.9 },
+          { id: "ParamAngleX", value: 3 },
+        ],
+        sad: [{ id: "ParamAngleX", value: -3 }],
+      },
       gestures: { nod: "wave", idle: "modifier:m32:6d6f74696f6e" },
       outfits: [
         {
@@ -420,6 +456,8 @@ describe("a new file", () => {
       look: 0.5,
       // A mood left with none of its expressions goes back to its default; none chosen stays none.
       moods: { sad: ["smile"], thinking: [] },
+      // A mood left with none of its parameters holds none.
+      moodParameters: { shy: [{ id: "ParamCheek", value: 0.4 }] },
       gestures: { idle: "modifier:m32:6d6f74696f6e" },
       outfits: [
         {
