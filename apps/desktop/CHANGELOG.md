@@ -1,5 +1,19 @@
 # laplace-eidolon-desktop
 
+## 0.5.0
+
+### Minor Changes
+
+- 9bbe563: Tune how far her 2D model turns her head in Appearance's new Motion tab
+- 76f362e: Build moods from a 2D model's parameters; she nods and shakes without clips
+- 15bb7f2: Let her stand partly off screen, with Reset Position in Settings to bring her back
+- 15bb7f2: Add Eidolon's menu bar icon on macOS, and show her model files in Finder or Explorer
+
+### Patch Changes
+
+- 5704a53: Round the video call's buttons and message box to match their bars
+- 14154cf: Count a tap near her head as a head tap when her 2D model marks no head
+
 ## 0.4.0
 
 ### Minor Changes

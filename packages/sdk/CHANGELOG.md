@@ -1,5 +1,12 @@
 # @laplace.live/eidolon-sdk
 
+## 0.4.0
+
+### Minor Changes
+
+- 9bbe563: Tune how far her 2D model turns her head in Appearance's new Motion tab
+- 76f362e: Build moods from a 2D model's parameters; she nods and shakes without clips
+
 ## 0.3.0
 
 ### Minor Changes
