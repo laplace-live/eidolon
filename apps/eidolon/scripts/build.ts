@@ -23,6 +23,7 @@ import {
   voiceModelsDir,
   webDist,
 } from "@eidolon/config";
+import crossSpawn from "cross-spawn";
 import { type Plugin, build as viteBuild } from "vite";
 import { ENTRIES, NODE_MAJOR, PLATFORMS } from "../src/launcher.ts";
 
@@ -427,7 +428,8 @@ export async function stage(root: string): Promise<Manifest> {
 
 /** `npm pack` of PACK_DIR into apps/eidolon/; returns the tarball's path. */
 function pack(): string {
-  const packed = spawnSync("npm", ["pack", "--json", "--pack-destination", HERE], {
+  // cross-spawn, since npm is npm.cmd on Windows, which Node won't start without a shell.
+  const packed = crossSpawn.sync("npm", ["pack", "--json", "--pack-destination", HERE], {
     cwd: PACK_DIR,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],

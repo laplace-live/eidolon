@@ -11,6 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import crossSpawn from "cross-spawn";
 import { type Plugin, rolldown } from "rolldown";
 import { parseAst } from "rolldown/parseAst";
 
@@ -387,7 +388,8 @@ export async function stage(outDir: string = PACK_DIR): Promise<SdkManifest> {
 }
 
 function pack(): string {
-  const packed = spawnSync("npm", ["pack", "--json", "--pack-destination", HERE], {
+  // cross-spawn, since npm is npm.cmd on Windows, which Node won't start without a shell.
+  const packed = crossSpawn.sync("npm", ["pack", "--json", "--pack-destination", HERE], {
     cwd: PACK_DIR,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],

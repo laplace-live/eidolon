@@ -31,8 +31,10 @@
     "@eidolon/access": "workspace:*",
     "@eidolon/chat": "workspace:*",
     "@eidolon/runtime": "workspace:*",
+    "@types/cross-spawn": "6.0.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "cross-spawn": "7.0.6",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "rolldown": "1.2.15"
