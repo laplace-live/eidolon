@@ -14,6 +14,7 @@ export const native = nativeUi(
     messageBox: (box) => dialog.showMessageBox(box),
     openExternal: (url) => shell.openExternal(url),
     openPath: (path) => shell.openPath(path),
+    showItemInFolder: (path) => shell.showItemInFolder(path),
     aboutPanel: (panel) => {
       app.setAboutPanelOptions(panel);
       app.showAboutPanel();

@@ -75,6 +75,14 @@ function invokes() {
       calls.push(["popOut", ...args]);
       return STATE;
     },
+    resetCompanionPlace: (...args: unknown[]) => {
+      calls.push(["resetCompanionPlace", ...args]);
+      return STATE;
+    },
+    revealModel: (model) => {
+      calls.push(["revealModel", model]);
+      return model.model === "tml";
+    },
   };
   const list = appInvokes(actions);
   return { list, answer: (channel: PageChannel) => answerIn(list, channel), calls };
@@ -91,6 +99,8 @@ describe("appInvokes", () => {
       BRIDGE.companion,
       BRIDGE.setCompanion,
       BRIDGE.popOut,
+      BRIDGE.resetCompanionPlace,
+      BRIDGE.revealModel,
     ]);
   });
 
@@ -115,12 +125,14 @@ describe("appInvokes", () => {
     expect(await answer(BRIDGE.terminalCommand)(app, "remove")).toEqual(INSTALLED);
     expect(answer(BRIDGE.companion)(app, { on: false })).toEqual(STATE);
     expect(answer(BRIDGE.popOut)(app, "x")).toEqual(STATE);
+    expect(answer(BRIDGE.resetCompanionPlace)(app, { feet: 1 })).toEqual(STATE);
     expect(calls).toEqual([
       ["chooseFolder"],
       ["loginItem"],
       ["terminalCommand"],
       ["companion"],
       ["popOut"],
+      ["resetCompanionPlace"],
     ]);
   });
 
@@ -250,6 +262,30 @@ describe("companionInvokes", () => {
     expect(calls).toEqual([
       ["shape", { kind: "model", aspect: 0.5 }],
       ["menu", MENU_STATE],
+    ]);
+  });
+
+  test("shows a model by a persona's id and a model's id alone, never a path", () => {
+    const { answer, calls } = invokes();
+    const reveal = answer(BRIDGE.revealModel);
+    expect(reveal(app, { persona: "milky-green", model: "tml", x: "/etc" })).toBe(true);
+    expect(reveal(app, { persona: "milky-green", model: "gone" })).toBe(false);
+    for (const model of [
+      { persona: "../etc", model: "tml" },
+      { persona: "milky-green", model: "a/b" },
+      { persona: "milky-green", model: ".." },
+      { persona: "Milky", model: "tml" },
+      { persona: "milky-green" },
+      "milky-green/tml",
+      null,
+    ]) {
+      expect(() => reveal(app, model), JSON.stringify(model)).toThrow(
+        "a model is a persona's id and a model's id",
+      );
+    }
+    expect(calls).toEqual([
+      ["revealModel", { persona: "milky-green", model: "tml" }],
+      ["revealModel", { persona: "milky-green", model: "gone" }],
     ]);
   });
 });

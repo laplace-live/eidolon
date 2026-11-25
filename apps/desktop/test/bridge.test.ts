@@ -114,6 +114,7 @@ describe("accepts", () => {
     BRIDGE.terminalCommand,
     BRIDGE.setTerminalCommand,
     BRIDGE.unsaved,
+    BRIDGE.revealModel,
   ];
   const SHELL_CHANNELS: PageChannel[] = [BRIDGE.retry, BRIDGE.showLogs, BRIDGE.quit];
   /** The app page's channels for the desktop companion. */
@@ -121,6 +122,7 @@ describe("accepts", () => {
     BRIDGE.companion,
     BRIDGE.setCompanion,
     BRIDGE.popOut,
+    BRIDGE.resetCompanionPlace,
     BRIDGE.linkCompanion,
     BRIDGE.feedingCompanion,
     BRIDGE.windowShows,
@@ -760,6 +762,39 @@ describe("the preload's bridges", () => {
       [BRIDGE.companion],
       [BRIDGE.setCompanion, { on: true }],
       [BRIDGE.popOut],
+    ]);
+  });
+
+  test("the app's bridge resets her place, answering her state's shape", async () => {
+    const { ipc, invoked } = fakeIpc([{ on: true, showAtLogin: true, background: false }]);
+    const bridge = desktopBridge(ipc, "darwin", { version: "", serverVersion: "" });
+    expect(await bridge.resetCompanionPlace()).toEqual({
+      on: true,
+      showAtLogin: true,
+      background: false,
+    });
+    expect(invoked).toEqual([[BRIDGE.resetCompanionPlace]]);
+  });
+
+  test("the app's bridge shows a model by its persona's id and its own alone, true only on main's true", async () => {
+    const { ipc, invoked } = fakeIpc([true, "yes", false]);
+    const bridge = desktopBridge(ipc, "darwin", { version: "", serverVersion: "" });
+    expect(await bridge.revealModel({ persona: "milky-green", model: "tml" })).toBe(true);
+    expect(await bridge.revealModel({ persona: "milky-green", model: "tml" })).toBe(false);
+    for (const model of [
+      { persona: "milky-green", model: "../x" },
+      { persona: "/etc", model: "tml" },
+      { persona: "milky-green" },
+      null,
+    ]) {
+      await expect(bridge.revealModel(model as never)).rejects.toThrow();
+    }
+    const extra = { persona: "milky-green", model: "tml", path: "/etc" };
+    expect(await bridge.revealModel(extra)).toBe(false);
+    expect(invoked).toEqual([
+      [BRIDGE.revealModel, { persona: "milky-green", model: "tml" }],
+      [BRIDGE.revealModel, { persona: "milky-green", model: "tml" }],
+      [BRIDGE.revealModel, { persona: "milky-green", model: "tml" }],
     ]);
   });
 

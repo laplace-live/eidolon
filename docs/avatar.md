@@ -131,8 +131,8 @@ preview ([web-app.md](web-app.md)):
   export's folder or zip, it takes the `.p2lrt` out and leaves the rest, the export's `p2l.js` and
   wasm included. The card lists her models, with an **Active** badge on the one she shows. **Make
   Active** sets her `appearance.model`, with a hint while none is active, and **Model Options**
-  holds Rename, Replace File and Remove, and Stop Using when clearing her own `appearance.model`
-  would change what she shows.
+  holds Rename, Replace File and Remove, Stop Using when clearing her own `appearance.model` would
+  change what she shows, and in the desktop app Show in Finder or Show in Explorer.
 - **The preview** draws the model on the SDK's stage, or her picture when it can't, with the tabs
   **Test**, **Framing**, **Moods** and **Outfits**, which edit one draft that Save sends:
   - **Test:** expression chips and clip buttons; **Try a Line**, which reads a pasted reply's

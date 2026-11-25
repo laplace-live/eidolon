@@ -36,7 +36,7 @@ apps/desktop/
                          the release overlay: notarization, the requirement, Windows' Azure signing
   resources/             build resources: entitlements, installer.nsh, the icon, and the designated
                          requirement release builds carry (designated-requirement.mac)
-  assets/                what main loads at run time through process.resourcesPath: the tray icon
+  assets/                what main loads at run time through process.resourcesPath: the tray's icons
   launchers/             the eidolon command's, shipped to the app's resources/bin
   node-shim/             the node shim's launchers, which the stage copies into the payload
   dev-app-update.yml     the release feed for EIDOLON_DESKTOP_DEV_UPDATE, read only unpackaged
@@ -346,9 +346,12 @@ app's second, with rules of its own.
   edits, for the quit's box (below); five calls the page awaits, each an invoke main answers through
   `ipcMain.handle`: `chooseFolder` (the folder dialog, below), `loginItem` and `setLoginItem(on)`
   ([Open at Login](#open-at-login)), `terminalCommand` and `setTerminalCommand(action)` ([the
-  terminal command](#the-terminal-command)); and the [desktop companion](#the-desktop-companion)'s
-  seven: `companion()`, `setCompanion(change)` and `popOut()`, three more invokes, each answering
-  her `CompanionState`; `linkCompanion()`, which says the page listens for a port to her page, and
+  terminal command](#the-terminal-command)); `revealModel({persona, model})`, an invoke whose main
+  shows `<data home>/personas/<persona>/models/<model>/model.p2lrt` selected in Finder or Explorer,
+  both ids lowercase slugs, and answers whether the file was there; and the [desktop
+  companion](#the-desktop-companion)'s eight: `companion()`, `setCompanion(change)`, `popOut()` and
+  `resetCompanionPlace()`, four more invokes, each answering her `CompanionState`;
+  `linkCompanion()`, which says the page listens for a port to her page, and
   `feedingCompanion(feeding)`, whether a call she is on is up there; `onCompanionPick`, which hands
   the page her menu's call picks (`companion-pick`); and `onWindowShows`, whether the window shows,
   which the preload reads from main over a synchronous message as the page asks and main sends again
@@ -388,16 +391,17 @@ app's second, with rules of its own.
   Electron's: Eidolon (About, Check for Updates…, Settings…, Services, Hide, Hide Others, Show All,
   Quit), Edit (its roles, without which copy and paste break), View (zoom, full screen, and Toggle
   Developer Tools only unpackaged), Window (⌘W hides, and Desktop Companion, a checkbox that turns
-  the [desktop companion](#the-desktop-companion) on and off) and Help (Show Logs, Open Data
-  Folder, Licenses). Windows has no menu bar: main sets a menu of View's zoom roles alone, since
-  Electron would otherwise install its default one, whose accelerators act even under a hidden
-  title bar, and a notification-area icon holds the rest for the whole run (Open Eidolon, Desktop
-  Companion, the same checkbox, Settings…, Check for Updates…, Show Logs, Open Data Folder,
-  Licenses, About Eidolon, Quit Eidolon); a click on it opens the window. Check for Updates… is
-  there only when the app [updates itself](#updates) or runs from a read-only volume, and disabled
-  while a check, a download or the restart runs. Both get a context menu, since Electron has none:
-  cut, copy, paste and select all in a field, copy over selected text. The About panel names the
-  app's version and the server's.
+  the [desktop companion](#the-desktop-companion) on and off) and Help (Show Logs, Open Data Folder,
+  Licenses). Windows has no menu bar: main sets a menu of View's zoom roles alone, since Electron
+  would otherwise install its default one, whose accelerators act even under a hidden title bar. The
+  tray's icon stays for the whole run, Windows' in the notification area and macOS's in the menu bar
+  (`trayTemplate.png`, the logo's petals as a template image the menu bar tints), and its menu holds
+  Open Eidolon, Desktop Companion, the same checkbox, Settings…, Check for Updates…, Show Logs, Open
+  Data Folder, Licenses, About Eidolon and Quit Eidolon. On Windows a click on it opens the window;
+  on macOS it opens the menu, as menu bar icons do. Check for Updates… is there only when the app
+  [updates itself](#updates) or runs from a read-only volume, and disabled while a check, a download
+  or the restart runs. Both get a context menu, since Electron has none: cut, copy, paste and select
+  all in a field, copy over selected text. The About panel names the app's version and the server's.
 - **Strings.** The shell's own words (`src/main/strings.ts`: menus, the tray, her menu, dialogs,
   notifications, macOS's password prompt and the shell pages) come in English and Simplified
   Chinese, following the language the page reports and the system's until it has. Menus and the
@@ -462,7 +466,7 @@ picture, with her menu and her drag all the same. What her page draws and how sh
 [avatar.md](avatar.md#the-desktop-companion), and her page and the main window's feed in
 [web-app.md](web-app.md#in-the-desktop-app). She is off until the owner turns her on, and one
 switch turns her on and off wherever it is: Settings → Desktop's Desktop Companion, the Window
-menu's checkbox on macOS, the tray's on Windows, her menu's Hide, and Pop Out, which turns her on.
+menu's checkbox on macOS, the tray's on both, her menu's Hide, and Pop Out, which turns her on.
 `companion.ts` holds her settings, sizes, places and log lines, and `companion-flow.ts` decides
 when she is made, shown, moved and closed, both without Electron (`test/companion.test.ts`,
 `test/companion-flow.test.ts`); `companion-window.ts` carries it out on Electron.
@@ -506,12 +510,13 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   square; at most 90% of the work area each way, scaled as one.
 - **Where she stands** is her feet, her window's bottom centre in screen DIPs, which main keeps
   unrounded: a new size or shape, her model swapped for her picture included, keeps her standing
-  there, growing from her feet, never moving her by the half DIP an odd width would. Her first
-  place, and her place whenever no display holds her feet (a display unplugged), is the primary
-  display's work area, on its bottom, her window's right edge 24 DIP in from the area's, for the
-  shape her page first says. Her window is then kept inside
-  the work area under it, so a Dock or a taskbar that grows under her pushes her up onto its edge; a
-  display change that moves her window sets her feet where it put her.
+  there, growing from her feet, never moving her by the half DIP an odd width would. She may stand
+  partly off a display, peeking in from an edge, as long as a quarter of her window each way
+  (`MIN_SHOWN`) is on one, so that something of her is left to take hold of. Her first place is the
+  primary display's work area, on its bottom, her window's right edge 24 DIP in from the area's, for
+  the shape her page first says. She goes there whenever less than `MIN_SHOWN` of her would show (a
+  display unplugged from under her), and at Settings › Desktop's Reset Position, which saves no feet
+  (`resetCompanionPlace`).
 - **Click-through.** Her window lets clicks through, until her page finds her under the pointer
   from the forwarded moves: a 1-pixel alpha read of her model's last drawn frame, above 24/255, at
   most one read at a time and always of the latest point; for her picture, inside its disc. Her
@@ -521,10 +526,10 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   pointer, let clicks through again.
 - **A drag** is a left press on her that moves past 4 px: main moves her window by the pointer's
   travel since the press, from the screen points her page sends (`drag`), never by polling the
-  cursor, and keeps it inside the work area under her. A drop sets and saves her feet; one with her
-  feet within 24 DIP of the work area's bottom stands her on it. A new size or shape during a drag
-  stands her under the pointer, and the rest of the drag keeps her new size. A shorter press is a
-  tap, which her page alone answers.
+  cursor, and keeps `MIN_SHOWN` of it on the display the drag started on. A drop sets and saves her
+  feet; one with her feet within 24 DIP of the work area's bottom stands her on it. A new size or
+  shape during a drag stands her under the pointer, and the rest of the drag keeps her new size. A
+  shorter press is a tap, which her page alone answers.
 - **Her menu**, on a right-click on her, is main's own native menu at the cursor
   (`companionMenu` in `menus.ts`, in the shell's language), from the state her page gives it:
   **Call**, or **Hang Up** and **Mute Microphone** (**Unmute Microphone** while it is off) while a
@@ -605,9 +610,10 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   hides`, or `Eidolon: Pop Out left the window: the companion didn't draw within 10 s`; `Eidolon:
   background throttling is off for the window while it feeds the companion` and `… is back on for
   the window`; `Eidolon: the companion's window is closed`; `Eidolon: the companion refused to open
-  a window`, `Eidolon: cancelled the companion's navigation to <url>` and `Eidolon: the companion
-  left its page for <url>; loading it again`. None contains `the window shows`, `the window is
-  shown` or `the window is hidden`, which the smokes match for the main window.
+  a window`, `Eidolon: cancelled the companion's navigation to <url>`, `Eidolon: the companion left
+  its page for <url>; loading it again` and `Eidolon: the companion's place was reset to her first
+  place`. None contains `the window shows`, `the window is shown` or `the window is hidden`, which
+  the smokes match for the main window.
 - **The owner's hand check.** Background mode keeps her off screen, so what only a window on screen
   shows is the owner's to check, on the packaged app on each platform, before her changes merge:
   her transparency and click-through, that a tap, a drag and her menu leave the app in front as it
@@ -1329,8 +1335,8 @@ that could show something through it.
 - **macOS:** the app is an accessory from its first module (`app.setActivationPolicy("accessory")`
   in `instance.ts`): no Dock icon past the launch's first 50–150 ms (the limits below), and it
   never becomes the active app.
-- **Windows:** no tray icon, so no notice at the first hide either, and no taskbar button for the
-  window (`skipTaskbar`).
+- **No tray icon** on either platform, so on Windows no notice at the first hide either, and no
+  taskbar button for the window (`skipTaskbar`).
 - **No window is shown.** Main keeps and logs its own record of whether the window shows, as
   always, but calls no `show`, `focus`, `restore` or `maximize` (which shows a hidden window), and
   never `app.focus()`. Measured with Electron 45.4.1 on macOS, a window that is never shown still
@@ -1340,10 +1346,11 @@ that could show something through it.
 - **Nothing native appears, and main.log names each thing kept off the screen.** A message box is
   answered with its default button, as `Eidolon: background mode answered "<button>" to a message
   box: <message> <detail>`, so a quit that stops a call, a task or a job, or drops unsaved edits,
-  goes ahead. A web link, Show Logs, Open Data Folder, Licenses, the About panel and a context menu
-  open nothing. A download saves, with no Save dialog, into the profile's `downloads` folder under
-  the name Chromium suggests, numbered ` (1)` on while that name is taken. The folder dialog
-  answers as Cancel (`Eidolon: background mode didn't open the folder dialog`).
+  goes ahead. A web link, Show Logs, Open Data Folder, Licenses, Show in Finder or Explorer, the
+  About panel and a context menu open nothing. A download saves, with no Save dialog, into the
+  profile's `downloads` folder under the name Chromium suggests, numbered ` (1)` on while that name
+  is taken. The folder dialog answers as Cancel (`Eidolon: background mode didn't open the folder
+  dialog`).
 - **No notification:** the task watch runs, but each notice is a line in main.log
   ([Notifications](#notifications)). Electron's `Notification` is never made, nor
   `Notification.isSupported()` called, since its presenter alone asks macOS for permission, and on
@@ -1584,14 +1591,16 @@ Each step prints one line, made of the checks inside it:
    scheme forced too, and above 200 at her eyes. Mouse events injected into her window, each move
    checked to arrive, make her eyes take clicks and her corner pass them, a tap on her head lend her
    `shy` with no model call, a drag move her window 60 px left and 40 up and keep her feet in
-   `companion.json`, and a right-click log her menu. Her reply in a new chat makes her `happy`, and
-   her voice message, which plays as it arrives under Playwright's focus and again from Play Voice
-   Message, makes her speak; a call with her opens the video screen, turns the main window's
-   throttling off and opens her mouth past 0.2, her menu then starting with Hang Up, and her menu's
-   Mute and Unmute, sent to the app page as main sends them, set the call's microphone; Pop Out
-   hides the window, the screen's Hang Up ends the call, a second launch shows the window again, and
-   the switch turns her off. With no WebGL she is her picture, the call docks, and what needs a
-   stage is skipped, Pop Out included.
+   `companion.json`, and a drag far past her display's corner leave a quarter of her window on it;
+   Settings → Desktop's Reset Position stands her at her first place again, saving no feet, Studio's
+   Model Options logs Show in Finder for the rig's file, and a right-click logs her menu. Her reply
+   in a new chat makes her `happy`, and her voice message, which plays as it arrives under
+   Playwright's focus and again from Play Voice Message, makes her speak; a call with her opens the
+   video screen, turns the main window's throttling off and opens her mouth past 0.2, her menu then
+   starting with Hang Up, and her menu's Mute and Unmute, sent to the app page as main sends them,
+   set the call's microphone; Pop Out hides the window, the screen's Hang Up ends the call, a second
+   launch shows the window again, and the switch turns her off. With no WebGL she is her picture,
+   the call docks, and what needs a stage is skipped, Pop Out included.
 10. **A task that waits:** the smoke sets Assistant Mode on the fakes' OpenRouter account (a `PUT`
     of `assistant.provider` and `assistant.model`) and gives the fakes a folder of the run's,
     outside `assistant.folders`, where her answer to the task line in a new chat starts a task with
@@ -1638,7 +1647,7 @@ main's forwarder does, and runs the app's binary in node mode beside it, as main
 
 - **The payload's natives,** before the app starts: `scripts/natives.ts` on the binary writes and
   opens a LanceDB table, runs Silero on an onnxruntime CPU session and makes a JPEG with sharp,
-  every library mapped from the payload. The tray icon's file is in the app's resources, since
+  every library mapped from the payload. The tray's icon files are in the app's resources, since
   background mode shows no tray.
 - **The launchers,** run as a terminal runs them (on Windows the `.cmd` files through
   `cmd /d /s /c`), before the app starts. The eidolon command, `bin/eidolon` in the app's

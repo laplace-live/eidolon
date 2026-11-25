@@ -384,12 +384,45 @@ describe("her window", () => {
     expect(calls[0]).toEqual(["open", { x: 2899, y: 735, width: 202, height: 480 }]);
   });
 
-  test("she opens at her first place once the display her feet were left on is gone, though her window would reach onto the laptop's", () => {
+  test("she opens where her feet were left while a quarter of her shows on a display, else at her first place", () => {
     // A display to the laptop's left, unplugged since: her feet were 10 DIP past their shared edge.
-    const { flow, calls, setScreens } = companion({ on: true, feet: { x: -10, y: 900 } });
-    setScreens([LAPTOP], [LAPTOP_DISPLAY]);
-    flow.appPage();
-    expect(calls[0]).toEqual(["open", FIRST]);
+    const kept = companion({ on: true, feet: { x: -10, y: 900 } });
+    kept.setScreens([LAPTOP], [LAPTOP_DISPLAY]);
+    kept.flow.appPage();
+    expect(kept.calls[0]).toEqual(["open", { x: -111, y: 420, width: 202, height: 480 }]);
+    // 60 DIP past it, less than a quarter of her reaches onto the laptop.
+    const gone = companion({ on: true, feet: { x: -60, y: 900 } });
+    gone.setScreens([LAPTOP], [LAPTOP_DISPLAY]);
+    gone.flow.appPage();
+    expect(gone.calls[0]).toEqual(["open", FIRST]);
+  });
+
+  test("a drag goes past a display's edge until a quarter of her shows, and the drop keeps her there", () => {
+    const { flow, values } = shownCompanion();
+    flow.drag({ phase: "start", x: 1387, y: 600 });
+    flow.drag({ phase: "move", x: 1387, y: 1000 });
+    flow.drag({ phase: "end", x: 1387, y: 1300 });
+    const below = { x: 1286, y: 982 - 120, width: 202, height: 480 };
+    expect(values("setBounds")).toEqual([{ ...FIRST, y: 820 }, below]);
+    expect(values("save").at(-1)).toEqual({
+      ...DEFAULT_COMPANION,
+      on: true,
+      feet: feetOf(below),
+    });
+  });
+
+  test("Reset Position stands her at her first place and saves no feet, her window or not", () => {
+    const { flow, calls, lines, reset } = shownCompanion({ feet: { x: 300, y: 900 } });
+    reset();
+    expect(flow.resetPlace().on).toBe(true);
+    expect(calls).toEqual([
+      ["save", { ...DEFAULT_COMPANION, on: true, feet: null }],
+      ["setBounds", FIRST],
+    ]);
+    expect(lines.at(-1)).toBe(COMPANION_LINES.placeReset);
+    const off = companion({ feet: { x: 300, y: 900 } });
+    off.flow.resetPlace();
+    expect(off.calls).toEqual([["save", { ...DEFAULT_COMPANION, feet: null }]]);
   });
 
   test("a drag moves her with the pointer, and a drop near the bottom stands her on it and keeps her feet", () => {
@@ -426,14 +459,14 @@ describe("her window", () => {
     const { flow, values, setScreens } = shownCompanion({ feet: { x: 300, y: 900 } });
     const saved = { x: 199, y: 420, width: 202, height: 480 };
     expect(values("open")).toEqual([saved]);
-    setScreens(
-      [{ ...LAPTOP, height: LAPTOP.height - 75 }, EXTERNAL],
-      [LAPTOP_DISPLAY, EXTERNAL_DISPLAY],
-    );
+    // The laptop's display gone a while: she went to her first place on the external one.
+    setScreens([EXTERNAL], [EXTERNAL_DISPLAY]);
     flow.displaysChanged();
+    const away = values("setBounds").at(-1);
+    expect(away).not.toEqual(saved);
     setScreens([LAPTOP, EXTERNAL], [LAPTOP_DISPLAY, EXTERNAL_DISPLAY]);
     flow.displaysChanged();
-    expect(values("setBounds").at(-1)).toEqual({ ...saved, y: 825 - 480 });
+    expect(values("setBounds").at(-1)).toEqual(away);
     flow.setOn(false);
     flow.setOn(true);
     expect(values("open")).toEqual([saved, saved]);
@@ -508,19 +541,14 @@ describe("her window", () => {
     }
   });
 
-  test("a Dock that grew under her pushes her up onto its edge, rather than off to her first place", () => {
+  test("a Dock that grew under her leaves her where she stood, rather than off to her first place", () => {
     const { flow, calls, setScreens } = shownCompanion({ feet: { x: 300, y: 900 } });
     setScreens(
       [{ ...LAPTOP, height: LAPTOP.height - 75 }, EXTERNAL],
       [LAPTOP_DISPLAY, EXTERNAL_DISPLAY],
     );
     flow.displaysChanged();
-    const onItsEdge = { x: 199, y: 825 - 480, width: 202, height: 480 };
-    expect(calls.at(-1)).toEqual(["setBounds", onItsEdge]);
-    // She stands there now, as a drag would leave her, and stays once it shrinks back.
-    setScreens([LAPTOP, EXTERNAL], [LAPTOP_DISPLAY, EXTERNAL_DISPLAY]);
-    flow.displaysChanged();
-    expect(calls.at(-1)).toEqual(["setBounds", onItsEdge]);
+    expect(calls.at(-1)).toEqual(["setBounds", { x: 199, y: 420, width: 202, height: 480 }]);
   });
 });
 

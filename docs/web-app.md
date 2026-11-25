@@ -410,11 +410,13 @@ has none of them, and without them nothing below happens.
   terminal's server can serve this page to an older app, and the page looks for each before it uses
   it: `chooseFolder()`, `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and
   `setTerminalCommand(action)`, each a promise of main's answer
-  ([desktop.md](desktop.md#the-window)); `unsaved(held)`; and the [desktop
-  companion](desktop.md#the-desktop-companion)'s: `companion()`, `setCompanion(change)` and
-  `popOut()`, each a promise of her state (`on`, `showAtLogin`, and `background`, true while
-  background mode keeps her off screen); `linkCompanion()`, which asks main for a port to her page,
-  and `feedingCompanion(feeding)`, whether a call she is on is up here; `onCompanionPick(callback)`,
+  ([desktop.md](desktop.md#the-window)); `unsaved(held)`; `revealModel({persona, model})`, which
+  shows a character model's file in Finder or Explorer (Studio's Model Options offers it as Show in
+  Finder or Show in Explorer); and the [desktop companion](desktop.md#the-desktop-companion)'s:
+  `companion()`, `setCompanion(change)`, `popOut()` and `resetCompanionPlace()`, each a promise of
+  her state (`on`, `showAtLogin`, and `background`, true while background mode keeps her off
+  screen); `linkCompanion()`, which asks main for a port to her page, and
+  `feedingCompanion(feeding)`, whether a call she is on is up here; `onCompanionPick(callback)`,
   which hands the page her menu's picks for the call, `call`, `hang-up`, `mute` or `unmute`; and
   `onWindowShows(callback)`, whether the window shows, at once and at each change. `connectDesktop`
   passes each pick to whoever listens through `subscribeCompanionPick` at that moment, and drops one
@@ -478,18 +480,19 @@ clear of the window's buttons, whose place the Window Controls Overlay gives as
   only when the bridge offers it: **Open at Login**'s switch, with a note to turn Eidolon on under
   System Settings → General → Login Items while macOS waits for that, read again every 3 s until it
   does; **Desktop Companion**'s switch, which shows and hides the [desktop
-  companion](desktop.md#the-desktop-companion), and **Show at Login**'s, which has a launch at login
-  show her before the window, disabled while she is off; and **Terminal Command**'s Install or
-  Remove, with where it goes or is (on Windows a folder on the PATH, which a new terminal sees; on
-  macOS a link, whose Install may ask for a password), or that another `eidolon` is there, which
-  disables Install. A copy that can't offer Open at Login or the terminal command says why under
-  each, its control disabled (`desktop-notes.ts`): background mode, a build that isn't the installed
-  app, or a Mac copy outside the Applications folder. Under Desktop Companion it says when
-  background mode never shows her, and while status names no active model for her, that she shows
-  as her picture; her switches stay usable in background mode, where main keeps her off screen. The
-  card reads her again every 2 s while it shows, since her menu's Hide, the tray, the Window menu
-  and Pop Out switch her too. A failed change toasts where Show Logs is, and a cancelled password
-  prompt says nothing ([desktop.md](desktop.md#open-at-login), [the terminal
+  companion](desktop.md#the-desktop-companion), **Show at Login**'s, which has a launch at login
+  show her before the window, disabled while she is off, and **Her Position**'s Reset Position,
+  which stands her at the bottom right of the main display again, wherever she was dragged; and
+  **Terminal Command**'s Install or Remove, with where it goes or is (on Windows a folder on the
+  PATH, which a new terminal sees; on macOS a link, whose Install may ask for a password), or that
+  another `eidolon` is there, which disables Install. A copy that can't offer Open at Login or the
+  terminal command says why under each, its control disabled (`desktop-notes.ts`): background mode,
+  a build that isn't the installed app, or a Mac copy outside the Applications folder. Under Desktop
+  Companion it says when background mode never shows her, and while status names no active model for
+  her, that she shows as her picture; her switches stay usable in background mode, where main keeps
+  her off screen. The card reads her again every 2 s while it shows, since her menu's Hide, the
+  tray, the Window menu and Pop Out switch her too. A failed change toasts where Show Logs is, and a
+  cancelled password prompt says nothing ([desktop.md](desktop.md#open-at-login), [the terminal
   command](desktop.md#the-terminal-command)).
 - **Pop Out,** on the video screen of a call the active persona is on, while the bridge has
   `popOut` (`features/call/video-call.tsx`), before Hang Up: it turns the desktop companion on and,

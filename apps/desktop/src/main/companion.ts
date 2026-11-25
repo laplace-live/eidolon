@@ -34,6 +34,11 @@ export const EDGE_DIP = 24;
 export const SNAP_DIP = 24;
 /** The most of a work area her window takes, each way. */
 export const MAX_SHARE = 0.9;
+/**
+ * The least of her window, each way, a drag may leave on a display: she may stand partly off it,
+ * but never so far that nothing of her is left to take hold of.
+ */
+export const MIN_SHOWN = 0.25;
 export const DRAW_TIMEOUT_MS = 30_000;
 export const POP_TIMEOUT_MS = 10_000;
 export const CURSOR_MS = 33;
@@ -131,7 +136,7 @@ function distance(area: Rectangle, point: Point): number {
   return Math.hypot(dx, dy);
 }
 
-/** The work area holding `point` (its right and bottom edges included), else the nearest; `areas` is never empty. */
+/** The one of `areas` (work areas or displays) holding `point`, its right and bottom edges included, else the nearest; `areas` is never empty. */
 export function areaAt(point: Point, areas: readonly Rectangle[]): Rectangle {
   const holding = areas.find((area) => holds(area, point));
   if (holding !== undefined) return holding;
@@ -140,19 +145,41 @@ export function areaAt(point: Point, areas: readonly Rectangle[]): Rectangle {
   );
 }
 
-/** Whether one of `displays` (their bounds) holds `feet`, where she then stands. */
-export function onDisplay(feet: Point | null, displays: readonly Rectangle[]): feet is Point {
-  return feet !== null && displays.some((display) => holds(display, feet));
+/** Her window of `size` standing on `feet`. */
+function windowAt(feet: Point, size: WindowSize): Rectangle {
+  return {
+    x: Math.round(feet.x - size.width / 2),
+    y: Math.round(feet.y - size.height),
+    width: size.width,
+    height: size.height,
+  };
 }
 
-/** Where her window of `size` stands her: on `feet` while a display holds them, else at her first place. */
+/** How much of `rect` lies on `display`, each way, as a share of its width and its height. */
+function shownOn(rect: Rectangle, display: Rectangle): { readonly x: number; readonly y: number } {
+  const across =
+    Math.min(rect.x + rect.width, display.x + display.width) - Math.max(rect.x, display.x);
+  const down =
+    Math.min(rect.y + rect.height, display.y + display.height) - Math.max(rect.y, display.y);
+  return { x: Math.max(0, across) / rect.width, y: Math.max(0, down) / rect.height };
+}
+
+/** Whether MIN_SHOWN of `rect`, each way, lies on one of `displays` (their bounds). */
+export function reachable(rect: Rectangle, displays: readonly Rectangle[]): boolean {
+  return displays.some((display) => {
+    const shown = shownOn(rect, display);
+    return shown.x >= MIN_SHOWN && shown.y >= MIN_SHOWN;
+  });
+}
+
+/** Where her window of `size` stands her: on `feet` while enough of it shows, else at her first place. */
 export function standing(
   feet: Point | null,
   size: WindowSize,
   areas: readonly Rectangle[],
   displays: readonly Rectangle[],
 ): Point {
-  if (onDisplay(feet, displays)) return feet;
+  if (feet !== null && reachable(windowAt(feet, size), displays)) return feet;
   const [primary] = areas;
   return {
     x: primary.x + primary.width - EDGE_DIP - size.width / 2,
@@ -160,64 +187,83 @@ export function standing(
   };
 }
 
-/**
- * Her window of `size` standing where `standing` puts her feet, then kept inside the work area under
- * it, so a Dock or a taskbar that grew under her feet pushes her up onto its edge.
- */
+/** Her window of `size` standing where `standing` puts her feet. */
 export function placement(
   feet: Point | null,
   size: WindowSize,
   areas: readonly Rectangle[],
   displays: readonly Rectangle[],
 ): Rectangle {
-  const at = standing(feet, size, areas, displays);
-  return clampBounds(
-    {
-      x: Math.round(at.x - size.width / 2),
-      y: Math.round(at.y - size.height),
-      width: size.width,
-      height: size.height,
-    },
-    areas,
-  );
+  return windowAt(standing(feet, size, areas, displays), size);
 }
 
 const clamp = (value: number, low: number, high: number): number =>
   Math.max(low, Math.min(value, high));
 
-/** `rect` moved, never resized, to lie inside the work area under its centre (at its left or top edge when wider or taller). */
-export function clampBounds(rect: Rectangle, areas: readonly Rectangle[]): Rectangle {
-  const area = areaAt({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, areas);
+/** The one of `displays` showing the most of `rect`, else the one nearest its centre. */
+function displayOf(rect: Rectangle, displays: readonly Rectangle[]): Rectangle {
+  let most: Rectangle | null = null;
+  let shownMost = 0;
+  for (const display of displays) {
+    const shown = shownOn(rect, display);
+    if (shown.x * shown.y > shownMost) {
+      most = display;
+      shownMost = shown.x * shown.y;
+    }
+  }
+  return most ?? areaAt({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, displays);
+}
+
+/**
+ * `rect` as it is while MIN_SHOWN of it, each way, shows on a display; else moved, never resized,
+ * the least way that leaves that much of it on `home`, by default the display showing the most of it.
+ */
+export function keepShown(
+  rect: Rectangle,
+  displays: readonly Rectangle[],
+  home: Rectangle = displayOf(rect, displays),
+): Rectangle {
+  if (reachable(rect, displays)) return rect;
+  const across = Math.ceil(rect.width * MIN_SHOWN);
+  const down = Math.ceil(rect.height * MIN_SHOWN);
   return {
-    x: clamp(rect.x, area.x, area.x + area.width - rect.width),
-    y: clamp(rect.y, area.y, area.y + area.height - rect.height),
+    x: clamp(rect.x, home.x - rect.width + across, home.x + home.width - across),
+    y: clamp(rect.y, home.y - rect.height + down, home.y + home.height - down),
     width: rect.width,
     height: rect.height,
   };
 }
 
-/** Her window as a drag leaves it: moved by the pointer's travel since the drag's start, clamped. */
+/**
+ * Her window as a drag leaves it: moved by the pointer's travel since the drag's start, kept shown on
+ * the display it started on.
+ */
 export function dragged(
   start: { readonly window: Rectangle; readonly pointer: Point },
   pointer: Point,
-  areas: readonly Rectangle[],
+  displays: readonly Rectangle[],
 ): Rectangle {
-  return clampBounds(
+  return keepShown(
     {
       ...start.window,
       x: Math.round(start.window.x + pointer.x - start.pointer.x),
       y: Math.round(start.window.y + pointer.y - start.pointer.y),
     },
-    areas,
+    displays,
+    displayOf(start.window, displays),
   );
 }
 
-/** A drop: within SNAP_DIP of the work area's bottom, her feet on it; then clamped. */
-export function settled(rect: Rectangle, areas: readonly Rectangle[]): Rectangle {
+/** A drop: within SNAP_DIP of the work area's bottom, her feet on it; then kept shown. */
+export function settled(
+  rect: Rectangle,
+  areas: readonly Rectangle[],
+  displays: readonly Rectangle[],
+): Rectangle {
   const area = areaAt({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, areas);
   const bottom = area.y + area.height;
   const near = Math.abs(bottom - (rect.y + rect.height)) <= SNAP_DIP;
-  return clampBounds(near ? { ...rect, y: bottom - rect.height } : rect, areas);
+  return keepShown(near ? { ...rect, y: bottom - rect.height } : rect, displays);
 }
 
 export function feetOf(rect: Rectangle): Point {
@@ -302,6 +348,7 @@ export const COMPANION_LINES = {
   unthrottled: "Eidolon: background throttling is off for the window while it feeds the companion",
   throttled: "Eidolon: background throttling is back on for the window",
   closed: "Eidolon: the companion's window is closed",
+  placeReset: "Eidolon: the companion's place was reset to her first place",
 } as const;
 
 /** The line main logs as its record of her showing changes. */
