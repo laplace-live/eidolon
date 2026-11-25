@@ -8,7 +8,7 @@ import {
 } from "../src/main/update-signature.ts";
 
 const FILE =
-  "C:\\Users\\me\\AppData\\Local\\eidolon-updater\\pending\\temp-Eidolon Setup 0.0.2.exe";
+  "C:\\Users\\me\\AppData\\Local\\eidolon-updater\\pending\\temp-LAPLACE Eidolon Setup 0.0.2.exe";
 const NAMES = ["Sparanoid, Inc.", "LAPLACE Live LLC"];
 const LAPLACE = "CN=LAPLACE Live LLC, O=LAPLACE Live LLC, L=Wilmington, S=Delaware, C=US";
 

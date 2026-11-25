@@ -32,8 +32,8 @@ const { offersCompanion, offersSystemOptions } = await import("./sections");
 const REASONS: Readonly<Record<Unavailable, string>> = {
   background: "Background mode leaves this computer as it is.",
   unpackaged: "Available in the installed app only.",
-  "outside-applications": "Move Eidolon to the Applications folder to use this.",
-  "not-installed": "Install Eidolon with its installer to use this.",
+  "outside-applications": "Move LAPLACE Eidolon to the Applications folder to use this.",
+  "not-installed": "Install LAPLACE Eidolon with its installer to use this.",
 };
 
 const MAC_LINK = "/usr/local/bin/eidolon";
@@ -58,7 +58,7 @@ describe("what each state says", () => {
     expect(loginItemNote({ state: "needs-approval" })).toEqual({
       text: expect.objectContaining({
         message:
-          "Waiting for your OK in System Settings: turn Eidolon on under General → Login Items.",
+          "Waiting for your OK in System Settings: turn LAPLACE Eidolon on under General → Login Items.",
       }),
       tone: "warning",
     });
@@ -296,11 +296,11 @@ describe("the card", () => {
     const said = text(markup);
     expect(said).toContain("Desktop App");
     expect(said).toContain(
-      "Open at Login Start Eidolon in the background when you log in to this computer.",
+      "Open at Login Start LAPLACE Eidolon in the background when you log in to this computer.",
     );
     // Each command is code, which the tags' spaces set apart here.
     expect(said).toContain(
-      "Terminal Command Run eidolon <command> in a terminal, such as eidolon pipeline . With no arguments, it opens Eidolon.",
+      "Terminal Command Run eidolon <command> in a terminal, such as eidolon pipeline . With no arguments, it opens LAPLACE Eidolon.",
     );
     expect(options(markup)).toEqual(["login-item", "terminal-command"]);
   });
@@ -323,14 +323,14 @@ describe("the card", () => {
       "Desktop Companion Keep her on your desktop, above your other windows. Right-click her for her menu.",
     );
     expect(said).toContain(
-      "Show at Login When Eidolon opens at login, she shows too, before you open its window.",
+      "Show at Login When LAPLACE Eidolon opens at login, she shows too, before you open its window.",
     );
   });
 
   test("says each option is added only when the owner chooses it, which for her may be in her menu, the tray or Pop Out rather than here", () => {
     const markup = render("darwin", undefined, undefined, { state: OFF });
     expect(text(markup)).toContain(
-      "Desktop App What Eidolon can add to this computer, each only when you choose it.",
+      "Desktop App What LAPLACE Eidolon can add to this computer, each only when you choose it.",
     );
   });
 

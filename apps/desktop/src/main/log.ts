@@ -59,6 +59,6 @@ export function logsFolder(): string {
 export function logStart(version: string): void {
   const { electron, chrome, node } = process.versions;
   log.info(
-    `Eidolon ${version}${app.isPackaged ? "" : " (unpackaged)"} · Electron ${electron} · Chromium ${chrome} · Node ${node} · ${process.platform} ${release()} ${process.arch}`,
+    `LAPLACE Eidolon ${version}${app.isPackaged ? "" : " (unpackaged)"} · Electron ${electron} · Chromium ${chrome} · Node ${node} · ${process.platform} ${release()} ${process.arch}`,
   );
 }

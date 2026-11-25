@@ -2018,10 +2018,6 @@ msgstr "Eidolon"
 msgid "Eidolon {version}"
 msgstr "Eidolon {version}"
 
-#: src/features/home/route.tsx
-msgid "Eidolon {version} · server {server}"
-msgstr "Eidolon {version} · server {server}"
-
 #: src/lib/labels.ts
 msgid "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
 msgstr "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
@@ -2943,13 +2939,13 @@ msgstr "Install adds {path} to your PATH."
 msgid "Install Docker Desktop, or Docker Engine on Linux, and start it."
 msgstr "Install Docker Desktop, or Docker Engine on Linux, and start it."
 
-#: src/features/settings/desktop-notes.ts
-msgid "Install Eidolon with its installer to use this."
-msgstr "Install Eidolon with its installer to use this."
-
 #: src/features/studio/videos-section.tsx
 msgid "Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH."
 msgstr "Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH."
+
+#: src/features/settings/desktop-notes.ts
+msgid "Install LAPLACE Eidolon with its installer to use this."
+msgstr "Install LAPLACE Eidolon with its installer to use this."
 
 #: src/features/settings/desktop-notes.ts
 msgid "Install puts it at {path}, and may ask for your password."
@@ -3272,6 +3268,10 @@ msgstr "Knowledge Index"
 #: src/components/preferences.tsx
 msgid "Language"
 msgstr "Language"
+
+#: src/features/home/route.tsx
+msgid "LAPLACE Eidolon {version} · server {server}"
+msgstr "LAPLACE Eidolon {version} · server {server}"
 
 #: src/components/settings-form/labels.ts
 msgid "LAPLACE Workers URL"
@@ -3617,8 +3617,8 @@ msgid "Move Down"
 msgstr "Move Down"
 
 #: src/features/settings/desktop-notes.ts
-msgid "Move Eidolon to the Applications folder to use this."
-msgstr "Move Eidolon to the Applications folder to use this."
+msgid "Move LAPLACE Eidolon to the Applications folder to use this."
+msgstr "Move LAPLACE Eidolon to the Applications folder to use this."
 
 #: src/features/studio/model-controls.tsx
 msgid "Move Left"
@@ -4935,8 +4935,8 @@ msgid "Run"
 msgstr "Run"
 
 #: src/features/settings/desktop-card.tsx
-msgid "Run <0>{usage}</0> in a terminal, such as <1>{example}</1>. With no arguments, it opens Eidolon."
-msgstr "Run <0>{usage}</0> in a terminal, such as <1>{example}</1>. With no arguments, it opens Eidolon."
+msgid "Run <0>{usage}</0> in a terminal, such as <1>{example}</1>. With no arguments, it opens LAPLACE Eidolon."
+msgstr "Run <0>{usage}</0> in a terminal, such as <1>{example}</1>. With no arguments, it opens LAPLACE Eidolon."
 
 #: src/features/tasks/cards.tsx
 msgid "Run Once"
@@ -5600,13 +5600,13 @@ msgstr "Start Chat"
 msgid "Start Chatting"
 msgstr "Start Chatting"
 
-#: src/features/settings/desktop-card.tsx
-msgid "Start Eidolon in the background when you log in to this computer."
-msgstr "Start Eidolon in the background when you log in to this computer."
-
 #: src/features/chats/chat-list.tsx
 msgid "Start Group Chat"
 msgstr "Start Group Chat"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Start LAPLACE Eidolon in the background when you log in to this computer."
+msgstr "Start LAPLACE Eidolon in the background when you log in to this computer."
 
 #: src/features/chats/route.tsx
 msgid "Start one with any persona, or with several at once. Each chat keeps its own history."
@@ -7003,8 +7003,8 @@ msgid "Waiting for you to continue it"
 msgstr "Waiting for you to continue it"
 
 #: src/features/settings/desktop-notes.ts
-msgid "Waiting for your OK in System Settings: turn Eidolon on under General → Login Items."
-msgstr "Waiting for your OK in System Settings: turn Eidolon on under General → Login Items."
+msgid "Waiting for your OK in System Settings: turn LAPLACE Eidolon on under General → Login Items."
+msgstr "Waiting for your OK in System Settings: turn LAPLACE Eidolon on under General → Login Items."
 
 #: src/features/tasks/cards.tsx
 msgid "Waiting for your OK to fetch from {host}"
@@ -7098,10 +7098,6 @@ msgstr "What changes with {provider}"
 msgid "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
 msgstr "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
 
-#: src/features/settings/desktop-card.tsx
-msgid "What Eidolon can add to this computer, each only when you choose it."
-msgstr "What Eidolon can add to this computer, each only when you choose it."
-
 #: src/features/settings/route.tsx
 msgid "What every persona knows about you."
 msgstr "What every persona knows about you."
@@ -7113,6 +7109,10 @@ msgstr "What it already finished is kept, so resuming it later picks up where it
 #: src/features/settings/new-skill-dialog.tsx
 msgid "What it does and when to use it: a task picks a skill by this alone."
 msgstr "What it does and when to use it: a task picks a skill by this alone."
+
+#: src/features/settings/desktop-card.tsx
+msgid "What LAPLACE Eidolon can add to this computer, each only when you choose it."
+msgstr "What LAPLACE Eidolon can add to this computer, each only when you choose it."
 
 #: src/features/setup/persona-fields.tsx
 msgid "What prompts shorten her name to, and her avatar's letters. Empty uses her name."
@@ -7171,8 +7171,8 @@ msgid "What you'd say to ask for it. Left empty, the model goes by the name alon
 msgstr "What you'd say to ask for it. Left empty, the model goes by the name alone."
 
 #: src/features/settings/desktop-card.tsx
-msgid "When Eidolon opens at login, she shows too, before you open its window."
-msgstr "When Eidolon opens at login, she shows too, before you open its window."
+msgid "When LAPLACE Eidolon opens at login, she shows too, before you open its window."
+msgstr "When LAPLACE Eidolon opens at login, she shows too, before you open its window."
 
 #: src/features/studio/video-table.tsx
 msgid "When was it streamed?"

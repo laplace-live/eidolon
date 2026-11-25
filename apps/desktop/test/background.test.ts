@@ -183,8 +183,8 @@ describe("nativeUi", () => {
 
   const quitBox: MessageBoxOptions = {
     type: "warning",
-    title: "Eidolon",
-    message: "Quit Eidolon?",
+    title: "LAPLACE Eidolon",
+    message: "Quit LAPLACE Eidolon?",
     detail: "Quitting stops a job.",
     buttons: ["Quit", "Cancel"],
     defaultId: 0,
@@ -201,7 +201,7 @@ describe("nativeUi", () => {
     expect(await off.chooseFolder(null, { defaultPath: "/Users/me" })).toBe("/Users/me/Projects");
     off.notify({ title: "Milky Green", body: "Finished the task" }, ignored).close();
     expect(calls).toEqual([
-      "messageBox Quit Eidolon?",
+      "messageBox Quit LAPLACE Eidolon?",
       "chooseFolder /Users/me",
       "notify Milky Green",
       "close",
@@ -230,11 +230,11 @@ describe("nativeUi", () => {
       failed: () => expect.unreachable("a notice that never showed failed"),
     };
     on.notify({ title: "Milky Green", body: "Finished the task\nWrite a TodoMVC" }, events).close();
-    on.notify({ title: "Eidolon", body: "The task failed" }, events).close();
+    on.notify({ title: "LAPLACE Eidolon", body: "The task failed" }, events).close();
     on.notify({ body: "A\r\nB" }, events);
     expect(lines).toEqual([
       "Eidolon: background mode didn't show a notification: Milky Green: Finished the task / Write a TodoMVC",
-      "Eidolon: background mode didn't show a notification: Eidolon: The task failed",
+      "Eidolon: background mode didn't show a notification: LAPLACE Eidolon: The task failed",
       "Eidolon: background mode didn't show a notification: : A / B",
     ]);
   });
@@ -258,8 +258,8 @@ describe("nativeUi", () => {
     });
     expect(calls).toEqual([]);
     expect(lines).toEqual([
-      'Eidolon: background mode answered "Quit" to a message box: Quit Eidolon? Quitting stops a job.',
-      'Eidolon: background mode answered "Cancel" to a message box: Quit Eidolon? Quitting stops a job.',
+      'Eidolon: background mode answered "Quit" to a message box: Quit LAPLACE Eidolon? Quitting stops a job.',
+      'Eidolon: background mode answered "Cancel" to a message box: Quit LAPLACE Eidolon? Quitting stops a job.',
       'Eidolon: background mode answered "OK" to a message box: Microphone is off',
       'Eidolon: background mode answered "OK" to a message box: Hidden',
     ]);
@@ -272,11 +272,11 @@ describe("nativeUi", () => {
     await on.openExternal("https://example.com/a?token=secret#x");
     expect(await on.openPath("/tmp/profile/logs")).toBe("");
     on.aboutPanel({
-      applicationName: "Eidolon",
+      applicationName: "LAPLACE Eidolon",
       applicationVersion: "0.0.0-dev",
       version: "Server 0.13.0",
     });
-    on.aboutPanel({ applicationName: "Eidolon", applicationVersion: "0.1.0", credits: "" });
+    on.aboutPanel({ applicationName: "LAPLACE Eidolon", applicationVersion: "0.1.0", credits: "" });
     on.showItemInFolder("/tmp/home/personas/milky-green/models/tml/model.p2lrt");
     on.stealFocus();
     on.popup(
@@ -292,8 +292,8 @@ describe("nativeUi", () => {
     expect(lines).toEqual([
       "Eidolon: background mode didn't open https://example.com/a in the default browser",
       "Eidolon: background mode didn't open /tmp/profile/logs",
-      "Eidolon: background mode didn't show the About panel: Eidolon 0.0.0-dev (Server 0.13.0)",
-      "Eidolon: background mode didn't show the About panel: Eidolon 0.1.0",
+      "Eidolon: background mode didn't show the About panel: LAPLACE Eidolon 0.0.0-dev (Server 0.13.0)",
+      "Eidolon: background mode didn't show the About panel: LAPLACE Eidolon 0.1.0",
       "Eidolon: background mode didn't show /tmp/home/personas/milky-green/models/tml/model.p2lrt in the file manager",
       "Eidolon: background mode didn't open a menu: Cut, Copy, Select All",
     ]);

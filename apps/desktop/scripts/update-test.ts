@@ -130,7 +130,7 @@ function plan(args: readonly string[]): Plan | string {
     return (error as Error).message;
   }
   if (platform === "win32" && existsSync(dirname(installedBinary()))) {
-    return `Eidolon is already installed for this user in ${dirname(installedBinary())}. The test installs its own there and uninstalls it after, so it runs only where none is`;
+    return `LAPLACE Eidolon is already installed for this user in ${dirname(installedBinary())}. The test installs its own there and uninstalls it after, so it runs only where none is`;
   }
   return {
     platform,
@@ -159,10 +159,10 @@ const env = { ...appEnv({ homes: run, background: true }), EIDOLON_DESKTOP_UPDAT
 /** On macOS a copy Squirrel.Mac updates in place; on Windows NSIS's per-user folder. */
 const install =
   platform === "darwin"
-    ? join(run.root, "Applications", "Eidolon.app")
+    ? join(run.root, "Applications", "LAPLACE Eidolon.app")
     : dirname(installedBinary());
 const binary =
-  platform === "darwin" ? join(install, "Contents", "MacOS", "Eidolon") : installedBinary();
+  platform === "darwin" ? join(install, "Contents", "MacOS", "LAPLACE Eidolon") : installedBinary();
 /** Where the app the update starts again logs: the default profile's. */
 const relaunchLogs = defaultLogs(platform, process.env, homedir());
 
@@ -267,7 +267,7 @@ function installState(): Record<string, string> {
       "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
       "/s",
       "/f",
-      "Eidolon",
+      "LAPLACE Eidolon",
     ],
     { encoding: "utf8", timeout: 60_000, windowsHide: true },
   );
@@ -324,7 +324,7 @@ function installMac(): Promise<boolean> {
       planned.installer,
     ]);
     try {
-      tool("ditto", [join(mount, "Eidolon.app"), install]);
+      tool("ditto", [join(mount, "LAPLACE Eidolon.app"), install]);
     } finally {
       if (spawnSync("hdiutil", ["detach", mount]).status !== 0) {
         await sleep(2000);

@@ -115,7 +115,7 @@ export function createWindow(hooks: WindowHooks, hidden = false): BrowserWindow 
     minWidth: MIN_SIZE.width,
     minHeight: MIN_SIZE.height,
     show: false,
-    title: "Eidolon",
+    title: "LAPLACE Eidolon",
     backgroundColor: backgroundColor(dark),
     ...chromeOptions(process.platform, dark),
     ...backgroundWindowOptions(process.platform, background),

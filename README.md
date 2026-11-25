@@ -51,7 +51,7 @@ pnpm install
 pnpm app           # builds the web app when it isn't built, then opens it
 ```
 
-The desktop app, Eidolon, runs it in a window of its own, with no Node to install, and updates
+The desktop app, LAPLACE Eidolon, runs it in a window of its own, with no Node to install, and updates
 itself: download it for [macOS on Apple silicon](https://downloads.vrp.moe/eidolon/Eidolon-mac-arm64.dmg)
 or [Windows x64](https://downloads.vrp.moe/eidolon/Eidolon-win-x64.exe). From a checkout,
 `pnpm dev:desktop` runs it ([`docs/desktop.md`](docs/desktop.md)).

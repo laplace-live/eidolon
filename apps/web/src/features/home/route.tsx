@@ -85,7 +85,7 @@ export function Component() {
       <p className="text-muted-foreground text-xs">
         {app === null
           ? t`Eidolon ${ph({ version: status.data.version })}`
-          : t`Eidolon ${ph({ version: app.version })} · server ${ph({ server: status.data.version })}`}
+          : t`LAPLACE Eidolon ${ph({ version: app.version })} · server ${ph({ server: status.data.version })}`}
       </p>
 
       <VoiceDialog

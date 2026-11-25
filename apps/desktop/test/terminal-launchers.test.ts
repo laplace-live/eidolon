@@ -39,7 +39,7 @@ describe("the launchers", () => {
   test("run the CLI with the backend's runtime flags before it", () => {
     for (const file of [MAC_LAUNCHER, WIN_LAUNCHER]) {
       const text = readFileSync(file, "utf8");
-      const flags = /Eidolon(?:\.exe)?" (.*?) "[^"]*cli\.js"/.exec(text)?.[1];
+      const flags = /LAPLACE Eidolon(?:\.exe)?" (.*?) "[^"]*cli\.js"/.exec(text)?.[1];
       expect([file, flags?.split(" ")]).toEqual([file, [...BACKEND_RUNTIME_ARGS]]);
     }
   });
@@ -89,10 +89,12 @@ describe.skipIf(!POSIX)("the macOS launcher, through links to a stand-in bundle"
 
   function standIn() {
     const root = folder("bundle");
-    const bundle = join(root, "Eidolon.app");
+    const bundle = join(root, "LAPLACE Eidolon.app");
     mkdirSync(join(bundle, "Contents", "MacOS"), { recursive: true });
     mkdirSync(join(bundle, "Contents", "Resources", "bin"), { recursive: true });
-    writeFileSync(join(bundle, "Contents", "MacOS", "Eidolon"), FAKE_BINARY, { mode: 0o755 });
+    writeFileSync(join(bundle, "Contents", "MacOS", "LAPLACE Eidolon"), FAKE_BINARY, {
+      mode: 0o755,
+    });
     const launcher = join(bundle, "Contents", "Resources", "bin", "eidolon");
     copyFileSync(MAC_LAUNCHER, launcher);
     chmodSync(launcher, 0o755);
@@ -135,7 +137,7 @@ describe.skipIf(!POSIX)("the macOS launcher, through links to a stand-in bundle"
           EIDOLON_HOME: "/tmp/a home",
         },
         args: [
-          `${bundle}/Contents/MacOS/Eidolon`,
+          `${bundle}/Contents/MacOS/LAPLACE Eidolon`,
           ...BACKEND_RUNTIME_ARGS,
           `${bundle}/Contents/Resources/eidolon/dist/cli.js`,
           ...args,

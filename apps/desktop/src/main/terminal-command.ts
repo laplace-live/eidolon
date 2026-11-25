@@ -53,7 +53,7 @@ export const USER_ENVIRONMENT = "Environment";
 /** How long PowerShell may take, its cold start under an antivirus scan included. */
 const POWERSHELL_TIMEOUT_MS = 60_000;
 /** Another copy's launcher, such as one in an app moved since: Install replaces its link. */
-const OTHER_COPY = /\/Eidolon\.app\/Contents\/Resources\/bin\/eidolon$/i;
+const OTHER_COPY = /\/(?:LAPLACE )?Eidolon\.app\/Contents\/Resources\/bin\/eidolon$/i;
 
 // The elevated steps run only mkdir, ln and rm, on fixed paths: never Eidolon's binary.
 const INSTALL_SCRIPT = [

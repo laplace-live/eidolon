@@ -524,7 +524,7 @@ export async function stageBackend(
       copyVcRuntime(payload, vcRuntime.dir);
       const unsigned = unsignedNames([
         ...peFilesIn(payload),
-        ...peFilesInZip(await electronZip(), "Eidolon"),
+        ...peFilesInZip(await electronZip(), "LAPLACE Eidolon"),
       ]);
       writeFileSync(
         join(stageDir(target), UNSIGNED_PE_FILE),

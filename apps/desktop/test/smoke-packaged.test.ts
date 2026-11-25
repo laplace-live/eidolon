@@ -54,13 +54,13 @@ import {
   withVariables,
 } from "../scripts/smoke/packaged.ts";
 
-const MAC_APP = "/Users/runner/work/eidolon/apps/desktop/.out/mac-arm64/Eidolon.app";
-const MAC_BINARY = `${MAC_APP}/Contents/MacOS/Eidolon`;
+const MAC_APP = "/Users/runner/work/eidolon/apps/desktop/.out/mac-arm64/LAPLACE Eidolon.app";
+const MAC_BINARY = `${MAC_APP}/Contents/MacOS/LAPLACE Eidolon`;
 const MAC_PAYLOAD = `${MAC_APP}/Contents/Resources/eidolon`;
 const WIN_FOLDER = "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\eidolon";
-const WIN_BINARY = `${WIN_FOLDER}\\Eidolon.exe`;
+const WIN_BINARY = `${WIN_FOLDER}\\LAPLACE Eidolon.exe`;
 const WIN_PAYLOAD = `${WIN_FOLDER}\\resources\\eidolon`;
-const WIN_UNINSTALLER = `${WIN_FOLDER}\\Uninstall Eidolon.exe`;
+const WIN_UNINSTALLER = `${WIN_FOLDER}\\Uninstall LAPLACE Eidolon.exe`;
 
 describe("a packaged app's layout", () => {
   test("on macOS: the bundle's Resources hold the payload, the tray icon and the launchers", () => {
@@ -74,7 +74,7 @@ describe("a packaged app's layout", () => {
     });
   });
 
-  test("on Windows: resources beside Eidolon.exe, by Windows' paths on any OS", () => {
+  test("on Windows: resources beside LAPLACE Eidolon.exe, by Windows' paths on any OS", () => {
     expect(appLayout(WIN_BINARY, "win32")).toEqual({
       binary: WIN_BINARY,
       resources: `${WIN_FOLDER}\\resources`,
@@ -285,7 +285,7 @@ describe("command lines", () => {
     expect(runsOnBinary(command, MAC_BINARY, `${MAC_PAYLOAD}/dist/cli.js`, "darwin")).toBe(false);
     expect(
       runsOnBinary(
-        command.replace(MAC_APP, "/Applications/Eidolon.app"),
+        command.replace(MAC_APP, "/Applications/LAPLACE Eidolon.app"),
         MAC_BINARY,
         server,
         "darwin",
@@ -295,15 +295,15 @@ describe("command lines", () => {
 
   test("a job on Windows, quoted or not, whatever the case Windows reports", () => {
     const cli = `${WIN_PAYLOAD}\\dist\\cli.js`;
-    const plain = `${WIN_BINARY} --disable-sigusr1 --use-system-ca ${cli} ingest-facts --json`;
+    const plain = `"${WIN_BINARY}" --disable-sigusr1 --use-system-ca ${cli} ingest-facts --json`;
     expect(runsOnBinary(plain, WIN_BINARY, cli, "win32")).toBe(true);
     expect(runsOnBinary(plain.toLowerCase(), WIN_BINARY, cli, "win32")).toBe(true);
     const spaced = "C:\\Users\\John Doe\\AppData\\Local\\Programs\\eidolon";
-    const quoted = `"${spaced}\\Eidolon.exe" --disable-sigusr1 --use-system-ca "${spaced}\\resources\\eidolon\\dist\\cli.js" ingest-facts`;
+    const quoted = `"${spaced}\\LAPLACE Eidolon.exe" --disable-sigusr1 --use-system-ca "${spaced}\\resources\\eidolon\\dist\\cli.js" ingest-facts`;
     expect(
       runsOnBinary(
         quoted,
-        `${spaced}\\Eidolon.exe`,
+        `${spaced}\\LAPLACE Eidolon.exe`,
         `${spaced}\\resources\\eidolon\\dist\\cli.js`,
         "win32",
       ),
@@ -558,15 +558,15 @@ describe("a marker in a data home", () => {
 
 describe("the NSIS setup's uninstall", () => {
   const entry = {
-    DisplayName: "Eidolon 0.0.0-dev",
+    DisplayName: "LAPLACE Eidolon 0.0.0-dev",
     DisplayVersion: "0.0.0-dev",
     UninstallString: `"${WIN_UNINSTALLER}" /currentuser`,
   };
 
-  test("lists this user's Eidolon entries from HKCU's uninstall key", () => {
+  test("lists this user's LAPLACE Eidolon entries from HKCU's uninstall key", () => {
     expect(UNINSTALL_KEY).toBe("HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall");
     expect(ENTRIES_SCRIPT).toBe(
-      "Get-ChildItem -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath } | Where-Object { $_.DisplayName -like 'Eidolon*' } | Select-Object DisplayName,DisplayVersion,UninstallString",
+      "Get-ChildItem -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath } | Where-Object { $_.DisplayName -like 'LAPLACE Eidolon*' } | Select-Object DisplayName,DisplayVersion,UninstallString",
     );
   });
 
@@ -576,14 +576,14 @@ describe("the NSIS setup's uninstall", () => {
     expect(
       namesUninstaller({ ...entry, UninstallString: `"${WIN_UNINSTALLER}"` }, WIN_FOLDER),
     ).toBe(false);
-    expect(namesUninstaller(entry, "C:\\Program Files\\Eidolon")).toBe(false);
+    expect(namesUninstaller(entry, "C:\\Program Files\\LAPLACE Eidolon")).toBe(false);
     expect(namesUninstaller({}, WIN_FOLDER)).toBe(false);
   });
 
   test("runs silently only the entry naming the folder's uninstaller, with /S; else nothing", () => {
     const other = {
-      DisplayName: "Eidolon Notes 2.1.0",
-      UninstallString: `"C:\\Users\\runneradmin\\AppData\\Local\\Programs\\eidolon-notes\\Uninstall Eidolon Notes.exe" /currentuser`,
+      DisplayName: "LAPLACE Eidolon Notes 2.1.0",
+      UninstallString: `"C:\\Users\\runneradmin\\AppData\\Local\\Programs\\eidolon-notes\\Uninstall LAPLACE Eidolon Notes.exe" /currentuser`,
     };
     expect(silentUninstall([other, entry], WIN_FOLDER)).toEqual({
       command: WIN_UNINSTALLER,

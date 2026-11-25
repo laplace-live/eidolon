@@ -261,12 +261,12 @@ describe("the failure page's words", () => {
 
   test("a backend that ended: why, in the page's language, and its stderr as it wrote it", () => {
     expect(failurePage(backend(EXITED), en)).toEqual({
-      title: "Eidolon's server stopped",
+      title: "LAPLACE Eidolon's server stopped",
       message: "It exited with code 1.\nTry again. If it happens again, Show Logs has the details.",
       stderr: "boom",
     });
     expect(failurePage(backend(EXITED), zh)).toEqual({
-      title: "Eidolon 的服务器停止了",
+      title: "LAPLACE Eidolon 的服务器停止了",
       message: "它退出了，退出码为 1。\n请重试。如果再次出现，详情请在「显示日志」中查看。",
       stderr: "boom",
     });
@@ -291,7 +291,7 @@ describe("the failure page's words", () => {
   test("a spawn that failed: its error under the details, where its stderr would be", () => {
     const failed = { reason: "error", message: "spawn EACCES", stderr: [] } as const;
     expect(failurePage(backend(failed), en)).toEqual({
-      title: "Eidolon's server stopped",
+      title: "LAPLACE Eidolon's server stopped",
       message: `It couldn't be started.\n${en.text.failed}`,
       stderr: "spawn EACCES",
     });
@@ -469,8 +469,8 @@ describe("the page's unsaved edits", () => {
 test("the shell pages' strings are the table's, in the language given", () => {
   expect(shellPageStrings("en", en)).toEqual({
     lang: "en",
-    starting: "Starting Eidolon…",
-    waiting: "Waiting for Eidolon's server…",
+    starting: "Starting LAPLACE Eidolon…",
+    waiting: "Waiting for LAPLACE Eidolon's server…",
     tryAgain: "Try Again",
     showLogs: "Show Logs",
     quit: "Quit",

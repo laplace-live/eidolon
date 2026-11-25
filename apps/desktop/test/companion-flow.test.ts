@@ -721,10 +721,10 @@ describe("her menu", () => {
     ]);
   });
 
-  test("Open Eidolon brings the window forward; a model or an outfit is the page's", async () => {
+  test("Open LAPLACE Eidolon brings the window forward; a model or an outfit is the page's", async () => {
     const fake = shownCompanion();
     fake.reset();
-    expect(await choose(fake, idle, "Open Eidolon")).toBe("open");
+    expect(await choose(fake, idle, "Open LAPLACE Eidolon")).toBe("open");
     expect(await choose(fake, idle, "奶绿")).toBe("model:milky");
     expect(fake.calls).toEqual([["popup"], ["openMain"], ["popup"]]);
   });

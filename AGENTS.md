@@ -34,7 +34,7 @@ The bot is TypeScript, on eidolon's own voice engine (`packages/voice`), in
 through the `laplace-*` commands in `apps/cli`. The local web app and the
 offline commands run on Node 24 too, and also ship as the npm package
 `@laplace.live/eidolon` (`apps/eidolon`), which runs them, bundled, on the
-user's Node. The desktop app, Eidolon (`apps/desktop`), shows the local app in
+user's Node. The desktop app, LAPLACE Eidolon (`apps/desktop`), shows the local app in
 a window and runs its server on Electron's own binary as Node, and ships signed
 from its own release tags ([desktop.md](docs/desktop.md)). The original Python
 runtime is in the repo too, for human readers only; agents never touch it
@@ -50,7 +50,7 @@ apps/web/             the local web app's pages (Vite, React, shadcn), served by
 apps/cli/             every laplace-* command, the offline chain's included
 apps/eidolon/         the npm package @laplace.live/eidolon: a Node launcher, and a build that
                       bundles the local app and the CLI with the web app, templates and jieba
-apps/desktop/         the desktop app, Eidolon (Electron): apps/web in a window, on a
+apps/desktop/         the desktop app, LAPLACE Eidolon (Electron): apps/web in a window, on a
                       backend staged from the npm build and run on Electron's binary as Node
 packages/             subsystems, one pnpm workspace package each (docs/typescript.md);
                       packages/ingest is the offline chain, packages/assistant the tools,
@@ -126,7 +126,7 @@ pnpm build:web                         # apps/web/dist
 pnpm i18n                              # extract the app's strings into apps/web/src/locales/*.po
 ```
 
-The desktop app, Eidolon ([desktop.md](docs/desktop.md)); a test run of it is always in background
+The desktop app, LAPLACE Eidolon ([desktop.md](docs/desktop.md)); a test run of it is always in background
 mode, on a temporary data home and profile ([Rules](#the-desktop-app)):
 
 ```bash

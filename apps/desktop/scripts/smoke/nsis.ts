@@ -7,15 +7,15 @@ import { powershellJson, windowsArgs } from "./packaged.ts";
 /** Where electron-builder's per-user setup writes its uninstall entry. */
 export const UNINSTALL_KEY = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 /** The uninstaller the setup leaves in the install folder. */
-export const UNINSTALLER = "Uninstall Eidolon.exe";
+export const UNINSTALLER = "Uninstall LAPLACE Eidolon.exe";
 
-/** The pipeline that lists Eidolon's uninstall entries for this user. */
-export const ENTRIES_SCRIPT = `Get-ChildItem -Path '${UNINSTALL_KEY}' -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath } | Where-Object { $_.DisplayName -like 'Eidolon*' } | Select-Object DisplayName,DisplayVersion,UninstallString`;
+/** The pipeline that lists LAPLACE Eidolon's uninstall entries for this user. */
+export const ENTRIES_SCRIPT = `Get-ChildItem -Path '${UNINSTALL_KEY}' -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath } | Where-Object { $_.DisplayName -like 'LAPLACE Eidolon*' } | Select-Object DisplayName,DisplayVersion,UninstallString`;
 
 export interface UninstallEntry {
   readonly DisplayName?: string;
   readonly DisplayVersion?: string;
-  /** `"<install folder>\Uninstall Eidolon.exe" /currentuser`. */
+  /** `"<install folder>\Uninstall LAPLACE Eidolon.exe" /currentuser`. */
   readonly UninstallString?: string;
 }
 

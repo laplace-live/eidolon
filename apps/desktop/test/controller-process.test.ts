@@ -70,7 +70,7 @@ function app(path: string, init: RequestInit = {}): Request {
 function forwarderFor(controller: BackendController): Forwarder {
   const forwarder = createForwarder({
     backend: controller,
-    waitingPage: async () => new Response("<!doctype html><title>Eidolon</title>"),
+    waitingPage: async () => new Response("<!doctype html><title>LAPLACE Eidolon</title>"),
     log: { warn: () => {} },
   });
   cleanups.push(() => forwarder.destroy());

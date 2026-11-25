@@ -41,10 +41,10 @@ test("on Windows, the payload's natives and VC++ runtime, never the system's own
 });
 
 test("on macOS, the payload's natives, by their own names and not their folders'", () => {
-  const modules = "/Users/sharp/Eidolon.app/Contents/Resources/eidolon/node_modules";
+  const modules = "/Users/sharp/LAPLACE Eidolon.app/Contents/Resources/eidolon/node_modules";
   expect(
     payloadLibraries([
-      "/Users/sharp/Eidolon.app/Contents/MacOS/Eidolon",
+      "/Users/sharp/LAPLACE Eidolon.app/Contents/MacOS/LAPLACE Eidolon",
       "/usr/lib/libc++.1.dylib",
       `${modules}/@lancedb/lancedb-darwin-arm64/lancedb.darwin-arm64.node`,
       `${modules}/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.dylib`,

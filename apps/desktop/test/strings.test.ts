@@ -106,16 +106,18 @@ describe("STRINGS", () => {
   });
 
   test("the update's boxes name both versions, in both languages", () => {
-    expect(en.text.updateAvailableTitle("0.2.0")).toBe("Eidolon 0.2.0 is available");
+    expect(en.text.updateAvailableTitle("0.2.0")).toBe("LAPLACE Eidolon 0.2.0 is available");
     expect(en.text.updateAvailable("0.1.0")).toContain("You have 0.1.0.");
-    expect(en.text.updateDownloaded("0.2.0")).toContain("Eidolon 0.2.0 is downloaded.");
-    expect(en.text.updateDownloaded("0.2.0")).toContain("installs the next time you quit Eidolon");
-    expect(en.text.upToDate("0.1.0")).toBe("Eidolon 0.1.0 is the latest version.");
+    expect(en.text.updateDownloaded("0.2.0")).toContain("LAPLACE Eidolon 0.2.0 is downloaded.");
+    expect(en.text.updateDownloaded("0.2.0")).toContain(
+      "installs the next time you quit LAPLACE Eidolon",
+    );
+    expect(en.text.upToDate("0.1.0")).toBe("LAPLACE Eidolon 0.1.0 is the latest version.");
     expect(en.text.updateFailed).toContain(`${en.label.showLogs} has the details`);
-    expect(zh.text.updateAvailableTitle("0.2.0")).toBe("Eidolon 0.2.0 已发布");
+    expect(zh.text.updateAvailableTitle("0.2.0")).toBe("LAPLACE Eidolon 0.2.0 已发布");
     expect(zh.text.updateAvailable("0.1.0")).toContain("当前版本为 0.1.0");
     expect(zh.text.updateDownloaded("0.2.0")).toContain("0.2.0");
-    expect(zh.text.updateDownloaded("0.2.0")).toContain("下次退出 Eidolon 时安装");
+    expect(zh.text.updateDownloaded("0.2.0")).toContain("下次退出 LAPLACE Eidolon 时安装");
     expect(zh.text.updateFailed).toContain(`「${zh.label.showLogs}」`);
   });
 
@@ -194,18 +196,18 @@ describe("STRINGS", () => {
       "It exited with code 1.",
       "It was ended by SIGKILL.",
       "It exited.",
-      "It didn't finish starting within 60 seconds, so Eidolon stopped it.",
-      "It started but left no local-token to connect with, so Eidolon stopped it.",
-      "It didn't answer for 60 seconds, so Eidolon stopped it.",
+      "It didn't finish starting within 60 seconds, so LAPLACE Eidolon stopped it.",
+      "It started but left no local-token to connect with, so LAPLACE Eidolon stopped it.",
+      "It didn't answer for 60 seconds, so LAPLACE Eidolon stopped it.",
       "It couldn't be started.",
     ]);
     expect(stops.map((stop) => zh.text.serverStop(stop))).toEqual([
       "它退出了，退出码为 1。",
       "它被 SIGKILL 信号结束了。",
       "它退出了。",
-      "它没有在 60 秒内完成启动，Eidolon 已将它停止。",
-      "它启动了，但没有留下可用于连接的 local-token，Eidolon 已将它停止。",
-      "它已有 60 秒没有响应，Eidolon 已将它停止。",
+      "它没有在 60 秒内完成启动，LAPLACE Eidolon 已将它停止。",
+      "它启动了，但没有留下可用于连接的 local-token，LAPLACE Eidolon 已将它停止。",
+      "它已有 60 秒没有响应，LAPLACE Eidolon 已将它停止。",
       "它无法启动。",
     ]);
     const english = stops.map((stop) => en.text.serverStop(stop));
@@ -240,13 +242,13 @@ describe("STRINGS", () => {
       "Quitting stops the call and 2 jobs. Your unsaved changes will be lost.",
     );
     expect(en.text.unsavedLost(en.text.restartUnknown)).toBe(
-      "Eidolon couldn't check what's running. Restarting stops any call, task or job in progress. Your unsaved changes will be lost.",
+      "LAPLACE Eidolon couldn't check what's running. Restarting stops any call, task or job in progress. Your unsaved changes will be lost.",
     );
     expect(zh.text.unsavedLost(zh.text.quitDetail(stopping))).toBe(
       "通话和 2 个作业会在退出时中断。未保存的修改将会丢失。",
     );
     expect(zh.text.unsavedLost(zh.text.restartUnknown)).toBe(
-      "Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在重启时中断。未保存的修改将会丢失。",
+      "LAPLACE Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在重启时中断。未保存的修改将会丢失。",
     );
   });
 });

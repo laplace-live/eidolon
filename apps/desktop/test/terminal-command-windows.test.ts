@@ -222,11 +222,11 @@ describe.runIf(WINDOWS)("the .cmd launcher against a stand-in install", () => {
     "",
   ].join("\n");
 
-  /** The install at `dir`, its Eidolon.exe written by `binary`. */
+  /** The install at `dir`, its LAPLACE Eidolon.exe written by `binary`. */
   function standIn(dir: string, binary: (to: string) => void): void {
     mkdirSync(join(dir, "resources", "bin"), { recursive: true });
     mkdirSync(join(dir, "resources", "eidolon", "dist"), { recursive: true });
-    binary(join(dir, "Eidolon.exe"));
+    binary(join(dir, "LAPLACE Eidolon.exe"));
     copyFileSync(LAUNCHER, join(dir, "resources", "bin", "eidolon.cmd"));
     writeFileSync(join(dir, "resources", "eidolon", "dist", "cli.js"), CLI);
   }
@@ -264,7 +264,7 @@ describe.runIf(WINDOWS)("the .cmd launcher against a stand-in install", () => {
     const run = cmd(install, ' search --help "two words" "a & b"', env);
     expect([run.status, run.stderr]).toEqual([0, ""]);
     const got = JSON.parse(run.stdout);
-    expect(same(got.execPath)).toBe(same(join(install, "Eidolon.exe")));
+    expect(same(got.execPath)).toBe(same(join(install, "LAPLACE Eidolon.exe")));
     expect(got.execArgv).toEqual([...BACKEND_RUNTIME_ARGS]);
     expect(same(got.argv[0])).toBe(same(join(install, "resources", "eidolon", "dist", "cli.js")));
     expect(got.argv.slice(1)).toEqual(["search", "--help", "two words", "a & b"]);
@@ -306,6 +306,6 @@ describe.runIf(WINDOWS)("the .cmd launcher against a stand-in install", () => {
     const started = JSON.parse(readFileSync(opened, "utf8"));
     expect(started.runAsNode).toBeNull();
     expect(started.argv).toHaveLength(1);
-    expect(same(started.argv[0])).toBe(same(join(gui, "Eidolon.exe")));
+    expect(same(started.argv[0])).toBe(same(join(gui, "LAPLACE Eidolon.exe")));
   }, 60_000);
 });

@@ -846,13 +846,13 @@ describe("the unsigned-PE list", () => {
         { name: "locales/en-US.pak", data: Buffer.from("pak"), deflate: true },
       ]),
     );
-    const pes = peFilesInZip(file, "Eidolon");
+    const pes = peFilesInZip(file, "LAPLACE Eidolon");
     expect(pes.map(([name, { signer }]) => [name, signer])).toEqual([
       ["ffmpeg.dll", null],
       ["d3dcompiler_47.dll", "Microsoft Corporation"],
-      ["Eidolon_wer.dll", null],
+      ["LAPLACE Eidolon_wer.dll", null],
     ]);
-    expect(unsignedNames(pes)).toEqual(["Eidolon_wer.dll", "ffmpeg.dll"]);
+    expect(unsignedNames(pes)).toEqual(["LAPLACE Eidolon_wer.dll", "ffmpeg.dll"]);
   });
 });
 

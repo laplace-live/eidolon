@@ -347,12 +347,12 @@ export function followBackend(
   };
 }
 
-/** The notice's title (the persona, else "Eidolon") and body (the phrase, then the goal on a second line when there is one). */
+/** The notice's title (the persona, else "LAPLACE Eidolon") and body (the phrase, then the goal on a second line when there is one). */
 export function noticeText(notice: Notice, strings: Strings): { title: string; body: string } {
   const phrase = strings.notice[notice.kind];
   const goal = notice.goal.trim();
   return {
-    title: notice.persona?.trim() || "Eidolon",
+    title: notice.persona?.trim() || "LAPLACE Eidolon",
     body: goal === "" ? phrase : `${phrase}\n${goal}`,
   };
 }

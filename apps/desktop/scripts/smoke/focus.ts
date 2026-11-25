@@ -14,8 +14,8 @@ const TYPE_SAMPLE_MS = 500;
  * main's first line can make it an accessory; a main that isn't one by then never becomes one.
  */
 const ACCESSORY_WITHIN_MS = 10_000;
-/** The names the app under test runs as: Electron unpackaged, Eidolon packaged. */
-const APP_NAMES = /^(electron|eidolon)$/i;
+/** The names the app under test runs as: Electron unpackaged, LAPLACE Eidolon packaged. */
+const APP_NAMES = /^(electron|(?:laplace )?eidolon)$/i;
 /** What puts a system prompt in front: the keychain, privacy, an alert, an Open or Save panel. */
 const PROMPT_NAMES =
   /^(SecurityAgent|UserNotificationCenter|CoreServicesUIAgent|universalAccessAuthWarn|Open and Save Panel Service)$/i;

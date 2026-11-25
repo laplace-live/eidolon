@@ -119,9 +119,9 @@ function stopsText(
 }
 
 /**
- * The "Quit Eidolon?" box, or "Restart Eidolon?" before an update's restart, for what our own
- * backend's `check` found (null with none of ours ready) and the window's `unsaved` edits; null
- * when it cuts nothing off.
+ * The "Quit LAPLACE Eidolon?" box, or "Restart LAPLACE Eidolon?" before an update's restart, for
+ * what our own backend's `check` found (null with none of ours ready) and the window's `unsaved`
+ * edits; null when it cuts nothing off.
  */
 export function quitBox(
   check: QuitCheck | null,
@@ -138,7 +138,7 @@ export function quitBox(
   // warning icon.
   return {
     type: platform === "win32" ? "none" : "warning",
-    title: "Eidolon",
+    title: "LAPLACE Eidolon",
     message: restart ? text.restartTitle : text.quitTitle,
     detail,
     buttons: [restart ? label.restart : label.quit, label.cancel],

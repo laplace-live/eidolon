@@ -67,7 +67,7 @@ function follow(env: NodeJS.ProcessEnv = {}): {
     env: { ...environment(dir), EIDOLON_HOME: home, EIDOLON_DESKTOP_LOGIN_SHELL: "0", ...env },
     log: { info: quiet, warn: quiet, error: quiet },
     backendLog: quiet,
-    waitingPage: async () => new Response("<!doctype html><title>Eidolon</title>"),
+    waitingPage: async () => new Response("<!doctype html><title>LAPLACE Eidolon</title>"),
     port: 0,
   });
   backend.subscribe((state) => {
@@ -103,7 +103,7 @@ describe("before the environment is read", () => {
     const page = await backend.handle(app("/", { headers: { accept: "text/html" } }));
     expect([page.status, await page.text()]).toEqual([
       200,
-      "<!doctype html><title>Eidolon</title>",
+      "<!doctype html><title>LAPLACE Eidolon</title>",
     ]);
     const status = await backend.handle(app("/api/local/status"));
     expect([status.status, await status.json()]).toEqual([503, UNREACHABLE]);

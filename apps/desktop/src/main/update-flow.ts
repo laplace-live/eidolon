@@ -198,7 +198,7 @@ export function updateBox(
     buttons: readonly string[],
   ): MessageBoxOptions => ({
     type: platform === "win32" ? "none" : icon,
-    title: "Eidolon",
+    title: "LAPLACE Eidolon",
     message,
     detail,
     buttons: [...buttons],

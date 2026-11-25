@@ -190,13 +190,13 @@ describe("the smoke's arguments", () => {
   test("an outputs folder's installer: its one NSIS setup or DMG, or an error naming the count", () => {
     const out = mkdtempSync(join(tmpdir(), "eidolon-kit-out-"));
     try {
-      writeFileSync(join(out, "Eidolon-0.0.1-arm64.dmg"), "");
-      writeFileSync(join(out, "Eidolon-0.0.1-arm64-mac.zip"), "");
-      writeFileSync(join(out, "Eidolon Setup 0.0.1.exe"), "");
-      writeFileSync(join(out, "Eidolon Setup 0.0.1.exe.blockmap"), "");
-      expect(installer("darwin", out)).toBe(join(out, "Eidolon-0.0.1-arm64.dmg"));
-      expect(installer("win32", out)).toBe(join(out, "Eidolon Setup 0.0.1.exe"));
-      writeFileSync(join(out, "Eidolon Setup 0.0.2.exe"), "");
+      writeFileSync(join(out, "LAPLACE Eidolon-0.0.1-arm64.dmg"), "");
+      writeFileSync(join(out, "LAPLACE Eidolon-0.0.1-arm64-mac.zip"), "");
+      writeFileSync(join(out, "LAPLACE Eidolon Setup 0.0.1.exe"), "");
+      writeFileSync(join(out, "LAPLACE Eidolon Setup 0.0.1.exe.blockmap"), "");
+      expect(installer("darwin", out)).toBe(join(out, "LAPLACE Eidolon-0.0.1-arm64.dmg"));
+      expect(installer("win32", out)).toBe(join(out, "LAPLACE Eidolon Setup 0.0.1.exe"));
+      writeFileSync(join(out, "LAPLACE Eidolon Setup 0.0.2.exe"), "");
       expect(() => installer("win32", out)).toThrow(`${out} holds 2 .exe files, not one`);
       expect(() => installer("darwin", join(out, "missing"))).toThrow("holds 0 .dmg files");
     } finally {
@@ -267,7 +267,7 @@ describe("the server lock's .info and local-token", () => {
 
 test("the logs' error lines: main's at electron-log's error level, the backend's at ERROR", () => {
   const main = [
-    "[2026-11-21 10:29:58.601] [info]  Eidolon 0.0.0-dev · Electron 45.4.1",
+    "[2026-11-21 10:29:58.601] [info]  LAPLACE Eidolon 0.0.0-dev · Electron 45.4.1",
     "[2026-11-21 10:29:59.000] [warn]  Eidolon: couldn't check what quitting stops: timeout",
     "[2026-11-21 10:30:00.000] [error] Eidolon: a renderer is gone (crashed, exit code 11)",
   ].join("\n");

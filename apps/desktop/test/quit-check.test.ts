@@ -224,8 +224,8 @@ describe("quitBox", () => {
   test("on macOS, a warning whose default is Quit, with Cancel on Esc", () => {
     expect(quitBox({ calls: 0, tasks: 1, jobs: 0 }, en, "darwin")).toEqual({
       type: "warning",
-      title: "Eidolon",
-      message: "Quit Eidolon?",
+      title: "LAPLACE Eidolon",
+      message: "Quit LAPLACE Eidolon?",
       detail: "Quitting stops a task.",
       buttons: ["Quit", "Cancel"],
       defaultId: 0,
@@ -237,8 +237,8 @@ describe("quitBox", () => {
   test("on Windows, a plain task dialog, in the shell's language", () => {
     expect(quitBox({ calls: 1, tasks: 2, jobs: 1 }, STRINGS["zh-Hans"], "win32")).toEqual({
       type: "none",
-      title: "Eidolon",
-      message: "退出 Eidolon？",
+      title: "LAPLACE Eidolon",
+      message: "退出 LAPLACE Eidolon？",
       detail: "通话、2 个任务和 1 个作业会在退出时中断。",
       buttons: ["退出", "取消"],
       defaultId: 0,
@@ -251,8 +251,8 @@ describe("quitBox", () => {
     expect(quitBox({ calls: 0, tasks: 0, jobs: 0 }, en, "darwin", "restart")).toBeNull();
     expect(quitBox({ calls: 1, tasks: 0, jobs: 2 }, en, "darwin", "restart")).toEqual({
       type: "warning",
-      title: "Eidolon",
-      message: "Restart Eidolon?",
+      title: "LAPLACE Eidolon",
+      message: "Restart LAPLACE Eidolon?",
       detail: "Restarting stops the call and 2 jobs.",
       buttons: ["Restart", "Cancel"],
       defaultId: 0,
@@ -264,7 +264,7 @@ describe("quitBox", () => {
       quitBox({ calls: 0, tasks: 1, jobs: 1 }, STRINGS["zh-Hans"], "win32", "restart"),
     ).toEqual(
       expect.objectContaining({
-        message: "重启 Eidolon？",
+        message: "重启 LAPLACE Eidolon？",
         detail: "1 个任务和 1 个作业会在重启时中断。",
         buttons: ["重启", "取消"],
       }),
@@ -283,8 +283,8 @@ describe("quitBox", () => {
     for (const check of [null, { calls: 0, tasks: 0, jobs: 0 }]) {
       expect(quitBox(check, en, "darwin", "quit", true)).toEqual({
         type: "warning",
-        title: "Eidolon",
-        message: "Quit Eidolon?",
+        title: "LAPLACE Eidolon",
+        message: "Quit LAPLACE Eidolon?",
         detail: LOST,
         buttons: ["Quit", "Cancel"],
         defaultId: 0,
@@ -293,7 +293,7 @@ describe("quitBox", () => {
       });
       expect(quitBox(check, en, "darwin", "restart", true)).toEqual(
         expect.objectContaining({
-          message: "Restart Eidolon?",
+          message: "Restart LAPLACE Eidolon?",
           detail: LOST,
           buttons: ["Restart", "Cancel"],
         }),
@@ -318,8 +318,8 @@ describe("quitBox", () => {
     const zh = STRINGS["zh-Hans"];
     expect(quitBox({ calls: 1, tasks: 0, jobs: 0 }, zh, "win32", "quit", true)).toEqual({
       type: "none",
-      title: "Eidolon",
-      message: "退出 Eidolon？",
+      title: "LAPLACE Eidolon",
+      message: "退出 LAPLACE Eidolon？",
       detail: "通话会在退出时中断。未保存的修改将会丢失。",
       buttons: ["退出", "取消"],
       defaultId: 0,
@@ -328,7 +328,7 @@ describe("quitBox", () => {
     });
     expect(quitBox(null, zh, "win32", "restart", true)).toEqual(
       expect.objectContaining({
-        message: "重启 Eidolon？",
+        message: "重启 LAPLACE Eidolon？",
         detail: "未保存的修改将会丢失。",
         buttons: ["重启", "取消"],
       }),
@@ -426,7 +426,7 @@ describe("QuitConfirmation", () => {
     checked.resolve({ calls: 1, tasks: 0, jobs: 0 });
     expect(await restart).toBe(true);
     expect(f.shown.map((box) => [box.message, box.detail])).toEqual([
-      ["Restart Eidolon?", "Restarting stops the call."],
+      ["Restart LAPLACE Eidolon?", "Restarting stops the call."],
     ]);
   });
 
@@ -440,8 +440,8 @@ describe("QuitConfirmation", () => {
     f.answer(1);
     expect(await f.confirmation.confirm("restart")).toBe(false);
     expect(f.shown.map((box) => [box.message, box.detail])).toEqual([
-      ["Quit Eidolon?", "Your unsaved changes will be lost."],
-      ["Restart Eidolon?", "Your unsaved changes will be lost."],
+      ["Quit LAPLACE Eidolon?", "Your unsaved changes will be lost."],
+      ["Restart LAPLACE Eidolon?", "Your unsaved changes will be lost."],
     ]);
     expect(f.warn.mock.calls).toEqual([]);
   });

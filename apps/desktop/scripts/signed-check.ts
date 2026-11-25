@@ -238,7 +238,7 @@ export function signatureChecks(
 export function requiredInInstall(listed: readonly string[]): string[] {
   return [
     ...new Set([
-      "Eidolon.exe",
+      "LAPLACE Eidolon.exe",
       UNINSTALLER,
       "d3dcompiler_47.dll",
       ...TARGETS["win32-x64"].onnxruntime,
@@ -273,7 +273,7 @@ function filesUnder(dir: string): string[] {
 }
 
 function checkMac(record: (check: Check) => void): void {
-  const app = join(DESKTOP, ".out", "mac-arm64", "Eidolon.app");
+  const app = join(DESKTOP, ".out", "mac-arm64", "LAPLACE Eidolon.app");
   if (!existsSync(app)) throw new Error(`No ${app}: package the release first`);
   record(verifyCheck(run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", app])));
   record(gatekeeperCheck(run("spctl", ["--assess", "--type", "execute", "--verbose=4", app])));
@@ -299,7 +299,7 @@ function checkMac(record: (check: Check) => void): void {
   const helpers = readdirSync(frameworks)
     .filter((name) => /\.(app|framework)$/.test(name))
     .sort();
-  record(requirementCheck("Eidolon.app", run("codesign", ["-d", "-r-", app]), expected));
+  record(requirementCheck("LAPLACE Eidolon.app", run("codesign", ["-d", "-r-", app]), expected));
   for (const helper of helpers) {
     record(
       requirementCheck(helper, run("codesign", ["-d", "-r-", join(frameworks, helper)]), expected),
@@ -349,16 +349,24 @@ async function uninstall(folder: string): Promise<Check> {
   };
 }
 
+/** Refuses to overwrite and uninstall an install already in `folder`, whatever executable name it holds. */
+export function ensureNoWindowsInstall(
+  folder: string,
+  exists: (path: string) => boolean = existsSync,
+): void {
+  if (exists(folder)) {
+    throw new Error(
+      `LAPLACE Eidolon is already installed for this user in ${folder}. signed-check installs the release ` +
+        "there and uninstalls it after, so it runs only where none is, such as a CI runner",
+    );
+  }
+}
+
 async function checkWindows(record: (check: Check) => void): Promise<void> {
   const setup = installer("win32");
   const binary = installedBinary();
   const folder = dirname(binary);
-  if (existsSync(binary)) {
-    throw new Error(
-      `Eidolon is already installed for this user in ${folder}. signed-check installs the release ` +
-        "there and uninstalls it after, so it runs only where none is, such as a CI runner",
-    );
-  }
+  ensureNoWindowsInstall(folder);
   const listed: string[] = JSON.parse(
     readFileSync(join(stageDir("win32-x64"), UNSIGNED_PE_FILE), "utf8"),
   );

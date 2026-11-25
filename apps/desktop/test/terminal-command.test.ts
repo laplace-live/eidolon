@@ -123,7 +123,7 @@ describe("a copy that can't offer the command", () => {
 describe.skipIf(!POSIX)("on macOS", () => {
   /** An app's resources, its launcher, and the folder the link goes in. */
   function setup(name: string) {
-    const resourcesPath = join(folder(name), "Eidolon.app", "Contents", "Resources");
+    const resourcesPath = join(folder(name), "LAPLACE Eidolon.app", "Contents", "Resources");
     const launcher = join(resourcesPath, "bin", "eidolon");
     const bin = folder(`${name}-bin`);
     return { resourcesPath, launcher, bin, link: join(bin, "eidolon") };
@@ -139,11 +139,14 @@ describe.skipIf(!POSIX)("on macOS", () => {
     symlinkSync(relative(bin, launcher), link);
     expect(await state()).toEqual({ state: "installed", path: link });
     unlinkSync(link);
+    symlinkSync("/Applications/Old Place/LAPLACE Eidolon.app/Contents/Resources/bin/eidolon", link);
+    expect(await state()).toEqual({ state: "absent", path: link });
+    unlinkSync(link);
     symlinkSync("/Applications/Old Place/Eidolon.app/Contents/Resources/bin/eidolon", link);
     expect(await state()).toEqual({ state: "absent", path: link });
     unlinkSync(link);
     // macOS's disks ignore case, so the moved copy's link may differ in it.
-    symlinkSync("/Applications/old place/eidolon.app/Contents/resources/BIN/eidolon", link);
+    symlinkSync("/Applications/old place/laplace eidolon.app/Contents/resources/BIN/eidolon", link);
     expect(await state()).toEqual({ state: "absent", path: link });
     unlinkSync(link);
     symlinkSync("/opt/homebrew/bin/eidolon", link);
@@ -172,7 +175,7 @@ describe.skipIf(!POSIX)("on macOS", () => {
     });
     expect(readlinkSync(link)).toBe(launcher);
     unlinkSync(link);
-    symlinkSync("/Applications/Old Place/Eidolon.app/Contents/Resources/bin/eidolon", link);
+    symlinkSync("/Applications/Old Place/LAPLACE Eidolon.app/Contents/Resources/bin/eidolon", link);
     expect(await changeCommand(host, "install")).toEqual({
       command: { state: "installed", path: link },
     });
