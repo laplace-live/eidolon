@@ -90,7 +90,6 @@ describe("migrateLegacyProfile", () => {
     const userData = join(appData, "LAPLACE Eidolon");
     populateLegacy(legacy);
     mkdirSync(userData, { recursive: true });
-    // Simulate a partial copy that wrote companion.json and was updated by the user, without the marker.
     writeCompanion(join(userData, COMPANION_FILE), {
       on: false,
       showAtLogin: true,
@@ -107,6 +106,19 @@ describe("migrateLegacyProfile", () => {
     expect(readFileSync(join(userData, "Local Storage", "leveldb", "000003.log"), "utf8")).toBe(
       "zh-Hans",
     );
+  });
+
+  test("swallows a locked staging removal error during cleanup without blocking startup", () => {
+    const legacy = join(appData, "Eidolon");
+    const userData = join(appData, "LAPLACE Eidolon");
+    populateLegacy(legacy);
+
+    expect(() =>
+      migrateLegacyProfile(appData, userData, () => {
+        throw Object.assign(new Error("EBUSY"), { code: "EBUSY" });
+      }),
+    ).not.toThrow();
+    expect(existsSync(join(userData, MIGRATED_MARKER))).toBe(false);
   });
 
   test("skips once the completion marker is present", () => {

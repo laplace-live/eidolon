@@ -121,17 +121,17 @@ the app is in [background mode](#background-mode).
    50–150 ms by then.
 2. A packaged launch with `--remote-debugging-port` or `--remote-debugging-pipe`, which no fuse
    covers, exits 1 before the profile, the logs and the lock exist.
-3. Packaged without `--user-data-dir`, an install upgraded from `<appData>/Eidolon` copies its
-   saved `window-bounds.json`, `companion.json`, `tray-notice-shown` and `Local Storage` into
-   `<appData>/LAPLACE Eidolon` once (`.migrated-from-eidolon`), leaving `<appData>/Eidolon` and any
-   running `Eidolon` instance's locks untouched.
-   Unpackaged, the profile (userData) becomes `<appData>/LAPLACE Eidolon Dev`, unless the launch passes
+3. Unpackaged, the profile (userData) becomes `<appData>/LAPLACE Eidolon Dev`, unless the launch passes
    `--user-data-dir`, as a test run does. Whenever the profile isn't the default, the logs move
    into `<profile>/logs`: on macOS `app.getPath("logs")` is `~/Library/Logs/LAPLACE Eidolon` whatever the
    profile, so a test would append to the installed app's logs.
 4. The single-instance lock, scoped to the profile. A second launch shows and focuses the window,
    from hidden or minimized, or makes it again if the page closed it; with `--quit` it quits the
-   running app through the normal quit, and with no app running it exits 0 and starts nothing.
+   running app through the normal quit, and with no app running it exits 0 and starts nothing. Once
+   the primary packaged launch holds the default profile's lock, an install upgraded from
+   `<appData>/Eidolon` copies its saved `window-bounds.json`, `companion.json`, `tray-notice-shown`
+   and `Local Storage` into `<appData>/LAPLACE Eidolon` once (`.migrated-from-eidolon`), leaving
+   `<appData>/Eidolon` and any running `Eidolon` instance's locks untouched.
 
 Then main registers the scheme and, on Windows, sets the AppUserModelID `live.laplace.eidolon`,
 which the installer's shortcut carries, and the installed app's toast activator
