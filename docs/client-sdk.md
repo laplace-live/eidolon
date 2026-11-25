@@ -268,8 +268,16 @@ call's turns. The local app's Studio previews a persona's models with it.
   pass. With `loop`, a clip that ends by itself starts again instead.
 - **`resolveSetup(inventory, overrides?)`** turns a model's owner's choices into what the stage
   plays: each mood's expressions (the owner's, else `DEFAULT_MOOD_EXPRESSIONS`, kept to the ids the
-  rig has, at most two) and each gesture's clip (`idle`, `talk`, `nod`, `shake`: the owner's clip,
-  else the clip whose group, name or id is `Idle`, `Talk`, `Nod` or `Shake`).
+  rig has, at most two) and the parameters it holds (`moodParameters`, the owner's alone, kept to
+  the rig's parameters, each once at a value within its range, at most eight), each gesture's clip
+  (`idle`, `talk`, `nod`, `shake`: the owner's clip, else the clip whose group, name or id is
+  `Idle`, `Talk`, `Nod` or `Shake`), and `look`, how far her gaze turns her (0 to 1, 1 unless
+  given).
+- **A model of another kind** implements `AvatarModel`, which besides drawing and playing scales
+  how far gaze turns her (`lookStrength`), names the parameters a role such as `AngleX` moves
+  (`roleParameters`), and holds parameters over its clips, expressions and outfit (`hold`, each
+  `ParameterHold` moving one from what the layers below give it toward a value by a weight, a later
+  hold over an earlier one).
 - **Errors** are `AvatarError`s with a `code`: `runtime` (the runtime didn't load), `rig` (the file
   isn't a rig it reads, with the runtime's reason), `webgl` (no WebGL 1, or a mesh past 65,535
   vertices without `OES_element_index_uint`), `lost` (the browser took the context back) and
@@ -290,14 +298,24 @@ loop; the model has none of its own.
   is capped at `maxPixelRatio` (2).
 - **`direct(direction)`** sets what the next frame applies, the latest winning: `idle` loops on clip
   layer 0, `talk` plays on layer 1 while she speaks, each new gesture plays once on layer 2, and the
-  expressions are her mood's and a cue's lent mood's, the lent one first, at most two.
+  expressions are her mood's and a cue's lent mood's, the lent one first, at most two. Those moods'
+  parameters are held too, each faded in, to a new value or out over 0.5 s as PSD2Live fades its
+  expressions, and set at once when `show` gives the same model a new setup.
+- **A nod or a head shake with no clip** turns her head through the parameters of the AngleY or
+  AngleX role: a nod dips them and brings them back up in 0.5 s, a shake turns them side to side
+  twice in 0.7 s, each easing in and letting go where it started. A new gesture replaces one still
+  playing. `gesture(name)` makes one outside her direction, its clip or this, under reduced motion
+  too.
 - **`gaze(mode)`:** `"direction"` looks at the viewer while she listens, up and aside while she
   thinks, and around the viewer (within 0.15, every 2 to 5 s) otherwise; `"pointer"` follows the
-  pointer; a pair `[x, y]` holds a point.
+  pointer; a pair `[x, y]` holds a point. How far a look turns her head, body and eyes is the
+  setup's `look`, applied whenever a setup is shown.
 - **`mouth(source)`** reads a `MouthSource` once a frame; `wear(outfit)` shows an outfit's pose
-  entries, holds its parameters and hides its parts.
+  entries, holds its parameters and hides its parts. A mood's parameters and a nod's go over an
+  outfit's.
 - **`reducedMotion`** keeps her face and mouth, and the blinking and breathing the runtime does by
-  itself, and leaves out every clip (idle, talking and gestures) and the wandering eyes.
+  itself, and leaves out every clip (idle, talking and gestures), the stage's own nods and shakes,
+  and the wandering eyes.
 - **Errors:** a model that throws, or a lost WebGL context, is disposed and reported to `onError`
   once, so the page can show her picture instead. `alphaAt(x, y)` resolves with the drawn alpha
   under a page point after the next draw, read before the page composites the frame.
