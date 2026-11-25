@@ -267,6 +267,10 @@ msgstr "{name} API Key"
 msgid "{name} API Key (Optional)"
 msgstr "{name} API Key (Optional)"
 
+#: src/components/settings-form/account-key-field.tsx
+msgid "{name} API Key (Recommended)"
+msgstr "{name} API Key (Recommended)"
+
 #: src/features/chats/chat-view.tsx
 msgid "{name} can't answer yet"
 msgstr "{name} can't answer yet"
@@ -544,8 +548,13 @@ msgid "A call is in progress. Hang up first."
 msgstr "A call is in progress. Hang up first."
 
 #: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
 msgid "A call needs a key for each provider she uses. Missing: {names}."
 msgstr "A call needs a key for each provider she uses. Missing: {names}."
+
+#: src/features/chats/chat-view.tsx
+msgid "A call needs a key for each provider they use. Missing: {names}."
+msgstr "A call needs a key for each provider they use. Missing: {names}."
 
 #: src/features/call/call-page.tsx
 msgid "A call needs a voice. Pick one for her first."
@@ -741,8 +750,8 @@ msgid "Add credit"
 msgstr "Add credit"
 
 #: src/features/setup/keys-step.tsx
-msgid "Add every key above to continue."
-msgstr "Add every key above to continue."
+msgid "Add every required key above to continue."
+msgstr "Add every required key above to continue."
 
 #: src/features/home/readiness-labels.ts
 msgid "Add Facts"
@@ -1352,6 +1361,10 @@ msgstr "Calls"
 #: src/features/settings/notices.tsx
 msgid "Calls already use what you saved; only the MCP server keeps what it read at start until a restart."
 msgstr "Calls already use what you saved; only the MCP server keeps what it read at start until a restart."
+
+#: src/features/setup/keys-step.tsx
+msgid "Calls and voice messages need them. Without them, you can still chat in text."
+msgstr "Calls and voice messages need them. Without them, you can still chat in text."
 
 #: src/features/home/readiness-labels.ts
 msgid "Calls can't start until this setting is fixed."
@@ -4596,6 +4609,10 @@ msgstr "Rebuild Catalog"
 msgid "Recommended"
 msgstr "Recommended"
 
+#: src/features/setup/keys-step.tsx
+msgid "Recommended Providers"
+msgstr "Recommended Providers"
+
 #: src/features/chats/voice-recorder.tsx
 msgid "Record Voice Message"
 msgstr "Record Voice Message"
@@ -5571,6 +5588,7 @@ msgid "Start Chat"
 msgstr "Start Chat"
 
 #: src/features/home/hero.tsx
+#: src/features/setup/done-step.tsx
 msgid "Start Chatting"
 msgstr "Start Chatting"
 
@@ -7206,6 +7224,10 @@ msgstr "Wide"
 #: src/features/setup/memory-step.tsx
 msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
 msgstr "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
+
+#: src/features/setup/keys-step.tsx
+msgid "Without it, calls can't start, and these stay off: {off}."
+msgstr "Without it, calls can't start, and these stay off: {off}."
 
 #: src/features/setup/keys-step.tsx
 msgid "Without it, these stay off: {off}."

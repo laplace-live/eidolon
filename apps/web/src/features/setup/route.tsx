@@ -8,6 +8,7 @@ import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
 import { Button } from "@/components/ui/button";
 import { statusQuery } from "@/lib/query";
 import { DoneStep } from "./done-step";
+import { requiredKeyMissing } from "./first-run";
 import { KeysStep } from "./keys-step";
 import { MemoryStep } from "./memory-step";
 import { PersonaStep, type VoiceTarget } from "./persona-step";
@@ -27,7 +28,7 @@ export function Component() {
   const [target, setTarget] = useState<VoiceTarget | null>(null);
   const [persona, setPersona] = useState<PersonaRef | null>(null);
   const [created, setCreated] = useState(false);
-  const keysReady = status.data ? status.data.keys.every((key) => key.set) : false;
+  const keysReady = status.data ? !requiredKeyMissing(status.data) : false;
 
   const back = () => setStep((current) => previousStep(current) ?? current);
   const forward = () => setStep(nextStep);

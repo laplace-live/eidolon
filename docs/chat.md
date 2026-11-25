@@ -761,7 +761,10 @@ that chat; without a `chatId`, it is the standalone call, unbound.
 
 1. **The checks:** a chat the store has (`404 unknown-chat`), a persona id (`400
    invalid-persona-id`, `404 unknown-persona`) who is in it (`400 bad-request`), and no call on in
-   it already (`409 chat-in-call`).
+   it already (`409 chat-in-call`). Her call roles' keys are none of them, since setup lets them
+   wait: a call without one fails as it starts, storing both ends, the second with `error`. So
+   while no persona in the chat can be called for want of a key, `GET chats/:id`'s
+   `missingCallKeys` names the accounts, and the page offers no call.
 2. **The runner** (`chats/runner.ts`, through `chats/calls.ts`):
    1. stops a running reply at once, as a stop does, even while a send waits for her to finish
       writing; it stores what she said as interrupted;
@@ -911,7 +914,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | --- | --- | --- |
 | `GET chats` | | `ChatSummary[]`, newest activity first |
 | `POST chats` | `{ participants: [id] }`, 1 to 6 personas, each once | `201 { id }`; one persona's greeting then runs |
-| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, call, groupCall, defaultDisplay, defaultPermissions }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; the call on in the chat, `{ id, persona, group? }`, or null; whether its personas can be called together now; and the app's `chats.display` and `assistant.permissions` as the read was made, which the chat follows until a `settings` event of its own sets a `display` or `permissions` |
+| `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, missingCallKeys, call, groupCall, defaultDisplay, defaultPermissions }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; while no persona in it can be called for want of a key, the accounts their calls lack one for, as Settings names them, else none; the call on in the chat, `{ id, persona, group? }`, or null; whether its personas can be called together now; and the app's `chats.display` and `assistant.permissions` as the read was made, which the chat follows until a `settings` event of its own sets a `display` or `permissions` |
 | `POST chats/:id/files?filename=` | A file the viewer sends with a line, as it is: a text file as any `text/*` type, UTF-8, at most 1 MB, named by `filename`, or as any other type an image, a PNG, JPEG, WebP or GIF by its bytes, at most 50 MB and 64 megapixels | `201` with its attachment, kept in `files/` by its hash, an image as `normalizeImage` made it, and in no event until a line names it ([The viewer's files](#the-viewers-files)). `415` for bytes that aren't one, `413` past the size, `400` for an empty body |
 | `POST chats/:id/messages` | `{ text?, attachments? }`: up to 4000 characters, and up to 8 `{ name, filename? }` sent to `POST files` first, each once; one of the two at least | NDJSON `ChatStreamLine`s from the viewer's line on: each decision as an `events` line, and each turn from `started` to `ended`. `400` for a file not in the chat or of a kind a line doesn't carry; `409 chat-in-call` during a call |
 | `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `409 chat-in-call` during a call, `502 upstream-failed` when hearing fails |

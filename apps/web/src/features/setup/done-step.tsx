@@ -1,11 +1,12 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpenIcon, HomeIcon, PhoneIcon } from "lucide-react";
+import { BookOpenIcon, HomeIcon, MessageCircleIcon, PhoneIcon } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { PersonaAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
+import { callBlocker } from "@/features/call/blockers";
 import { VerdictLabel } from "@/features/home/hero";
 import { formatsFor, readiness, verdict } from "@/features/home/readiness";
 import { studioPath } from "@/lib/paths";
@@ -32,6 +33,7 @@ export function DoneStep({
     () => (status.data ? verdict(readiness(status.data, formatsFor(lang))) : null),
     [status.data, lang],
   );
+  const keyless = status.data !== undefined && callBlocker(status.data) === "keys";
   return (
     <StepCard
       title={t`You're all set`}
@@ -46,10 +48,17 @@ export function DoneStep({
             </Link>
           </Button>
           <Button asChild>
-            <Link to="/call">
-              <PhoneIcon />
-              {t`Call ${ph({ name: active?.shortName || active?.name || "" })}`}
-            </Link>
+            {keyless ? (
+              <Link to="/chats">
+                <MessageCircleIcon />
+                {t`Start Chatting`}
+              </Link>
+            ) : (
+              <Link to="/call">
+                <PhoneIcon />
+                {t`Call ${ph({ name: active?.shortName || active?.name || "" })}`}
+              </Link>
+            )}
           </Button>
         </>
       }

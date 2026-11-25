@@ -61,9 +61,10 @@ it offers, beside that kind's others, and a line in each kind's table; chat need
 | assistant-quick, -coding, -research | `assistant.quick.provider`, `.model`, and `.coding`'s and `.research`'s (app-wide) | `ASSISTANT_QUICK_PROVIDER`, `ASSISTANT_QUICK_MODEL`, and `_CODING_`'s and `_RESEARCH_`'s | the assistant's | tasks of that kind |
 | search | `assistant.search.provider`, `.model` (app-wide) | `ASSISTANT_SEARCH_PROVIDER`, `ASSISTANT_SEARCH_MODEL` | off; OpenRouter `exa` once its account is picked | a task's `web_search` |
 
-The local app's setup wizard picks hearing, mind and voice, which a call needs, and the optional
-embeddings and gate, among every provider that offers each, and marks each role's default
-Recommended ([web-app.md](web-app.md#the-setup-wizard)).
+The local app's setup wizard requires the mind, which every chat needs, recommends hearing and
+voice, which calls need, and offers the optional embeddings and gate; for a persona on a realtime
+model, it requires that model's key in place of the three. For each role it lists every provider
+that offers it, the default marked Recommended ([web-app.md](web-app.md#the-setup-wizard)).
 
 The decision models the retrieval gate asks are a category of their own, `decision`: OpenRouter
 lists them under `output_modalities=decisions` (Jev, Reflex, d1 and others), and the catalog

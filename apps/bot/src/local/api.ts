@@ -1336,6 +1336,11 @@ export interface ChatContents {
    * missing-key with this message. null when it can hear one.
    */
   readonly hearingRefusal: string | null;
+  /**
+   * While no persona in the chat can be called for want of a key, the accounts their calls lack
+   * one for, as Settings names them; else empty.
+   */
+  readonly missingCallKeys: readonly string[];
   /** The call on in this chat, from its call-started until its call-ended is stored; else null. */
   readonly call: ChatCallInfo | null;
   /**

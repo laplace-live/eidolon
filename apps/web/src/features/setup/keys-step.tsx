@@ -46,6 +46,7 @@ import {
   pickChanges,
   RIDERS,
 } from "./choices";
+import { RECOMMENDED_ROLES, requiredKeyMissing } from "./first-run";
 import { StepCard } from "./step-card";
 import { cookieDefault, flagOn, isNewInstall } from "./wizard";
 
@@ -138,7 +139,7 @@ function RolePicker({
 }
 
 /**
- * Which providers hear, think and speak for the active persona and embed for every one, each with
+ * Which providers think, hear and speak for the active persona and embed for every one, each with
  * the recommended one marked, then a key for every account they name.
  */
 export function KeysStep({ onDone }: { readonly onDone: () => void }) {
@@ -171,7 +172,8 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
     ? effectiveProvider(roleById("realtime"), rows, {})
     : null;
   const picks = SETUP_ROLES.filter((role) => realtime === null || !callNeeds(role));
-  const required = picks.filter(callNeeds);
+  const required = picks.filter((role) => callNeeds(role) && !RECOMMENDED_ROLES.has(role));
+  const recommended = picks.filter((role) => RECOMMENDED_ROLES.has(role));
   const optional = picks.filter((role) => !callNeeds(role));
   // Reranking, unless she turned it off, and selfies, once she has an outfit to draw.
   const riders = RIDERS.filter((role) =>
@@ -184,7 +186,8 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
   );
   const picked: Picked[] = [
     ...(realtime === null ? [] : [{ role: "realtime" as const, account: realtime, call: true }]),
-    ...picks.map((role) => ({
+    // In the order the step shows them, so the keys a chat needs come first.
+    ...[...required, ...recommended, ...optional].map((role) => ({
       role,
       account: effectiveProvider(roleById(role), rows, drafts),
       call: callNeeds(role),
@@ -255,7 +258,7 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
       setTried(false);
       await keys.save(needs.map((need) => need.account));
       const fresh = await queryClient.fetchQuery(statusQuery);
-      if (fresh.keys.some((key) => !key.set)) {
+      if (requiredKeyMissing(fresh)) {
         setMissing(true);
         return;
       }
@@ -333,6 +336,18 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
           </FieldSet>
 
           {/* A fieldset draws its legend over its own top border, so the divider is outside it. */}
+          {recommended.length > 0 && (
+            <div className="border-t pt-6">
+              <FieldSet className="gap-6">
+                <div className="flex flex-col gap-1.5">
+                  <FieldLegend className="mb-0">{t`Recommended Providers`}</FieldLegend>
+                  <FieldDescription>{t`Calls and voice messages need them. Without them, you can still chat in text.`}</FieldDescription>
+                </div>
+                <div className="grid gap-6 sm:grid-cols-2">{recommended.map(picker)}</div>
+              </FieldSet>
+            </div>
+          )}
+
           <div className="border-t pt-6">
             <FieldSet className="gap-6">
               <div className="flex flex-col gap-1.5">
@@ -365,11 +380,13 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
                       key={need.account}
                       need={need}
                       keys={keys}
-                      optional={!need.required}
+                      tier={need.tier}
                       note={
-                        need.key === "required" && !need.required
-                          ? t`Without it, these stay off: ${off}.`
-                          : undefined
+                        need.tier === "recommended"
+                          ? t`Without it, calls can't start, and these stay off: ${off}.`
+                          : need.tier === "optional" && need.key === "required"
+                            ? t`Without it, these stay off: ${off}.`
+                            : undefined
                       }
                       missing={tried ? lacking.get(need.account) : undefined}
                     />
@@ -383,7 +400,7 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
 
       {missing && (
         <Alert variant="destructive">
-          <AlertTitle>{t`Add every key above to continue.`}</AlertTitle>
+          <AlertTitle>{t`Add every required key above to continue.`}</AlertTitle>
         </Alert>
       )}
       {checksFailed && (

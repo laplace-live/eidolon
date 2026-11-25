@@ -260,6 +260,13 @@ export function ChatView({ id }: { readonly id: string }) {
       : "ready";
   const placeCall = (persona: ParticipantId, group: boolean) =>
     presence.start(chatTarget(id, personaOf(persona), group ? personas : null));
+  const missing = listOf(chat.data.missingCallKeys);
+  const keyless =
+    chat.data.missingCallKeys.length === 0
+      ? null
+      : solo === null
+        ? t`A call needs a key for each provider they use. Missing: ${ph({ names: missing })}.`
+        : t`A call needs a key for each provider she uses. Missing: ${ph({ names: missing })}.`;
   const liveCall: LiveCall | null =
     callFrom === null || target?.kind !== "chat"
       ? null
@@ -317,7 +324,7 @@ export function ChatView({ id }: { readonly id: string }) {
           personas={personas}
           groupCall={chat.data.groupCall}
           disabled={inCall}
-          unavailable={view.elsewhere ? t`You're already in a call. Hang up first.` : null}
+          unavailable={view.elsewhere ? t`You're already in a call. Hang up first.` : keyless}
           onCall={placeCall}
         />
         <ChatMenu id={id} name={menuName} onSettings={() => setSettingsOpen(true)} />
