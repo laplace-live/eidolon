@@ -144,7 +144,7 @@ jobs:
         timeout-minutes: 5
         run: |
           if [[ $RUNNER_OS == Windows ]]; then
-            uninstaller="$(cygpath -u "$LOCALAPPDATA")/Programs/eidolon/Uninstall Eidolon.exe"
+            uninstaller="$(cygpath -u "$LOCALAPPDATA")/Programs/eidolon/Uninstall LAPLACE Eidolon.exe"
             # Git Bash would hand a native program /S as a path.
             if [[ -f $uninstaller ]]; then MSYS_NO_PATHCONV=1 "$uninstaller" /S /currentuser; fi
           else

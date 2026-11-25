@@ -28,7 +28,7 @@ async function microphone({ text, label }: Strings): Promise<boolean> {
   // No owner window: the box stands on its own, whatever the page does meanwhile.
   await native.messageBox({
     type: "warning",
-    title: "Eidolon",
+    title: "LAPLACE Eidolon",
     message: text.microphoneTitle,
     detail: text.microphone,
     buttons: [label.ok],

@@ -114,7 +114,7 @@ export function macMenu(
   const { label } = strings;
   return [
     {
-      label: "Eidolon",
+      label: "LAPLACE Eidolon",
       submenu: [
         background
           ? { label: label.aboutEidolon, click: () => actions.about() }
@@ -232,10 +232,10 @@ export interface CompanionMenuOwn {
 }
 
 /**
- * Her right-click menu, each item handing `pick` its CompanionPick: the call's items, Open Eidolon,
- * her models and outfits, her window's size and floating, and Hide, a separator between groups.
- * Hang Up works while the call is up, so one still connecting can be cancelled; Mute and Unmute
- * only once it is live.
+ * Her right-click menu, each item handing `pick` its CompanionPick: the call's items, Open LAPLACE
+ * Eidolon, her models and outfits, her window's size and floating, and Hide, a separator between
+ * groups. Hang Up works while the call is up, so one still connecting can be cancelled; Mute and
+ * Unmute only once it is live.
  */
 export function companionMenu(
   { label }: Strings,
@@ -319,7 +319,7 @@ export function aboutPanel(
   iconPath: string,
 ): AboutPanelOptionsOptions {
   const server = serverVersion === "" ? "" : text.aboutServer(serverVersion);
-  const panel = { applicationName: "Eidolon", applicationVersion: version };
+  const panel = { applicationName: "LAPLACE Eidolon", applicationVersion: version };
   return platform === "darwin"
     ? { ...panel, version: server }
     : { ...panel, credits: server, iconPath };

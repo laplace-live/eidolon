@@ -203,14 +203,14 @@ function stoppingZh({ calls, tasks, jobs }: Stopping): string {
 
 const en: Strings = {
   label: {
-    aboutEidolon: "About Eidolon",
+    aboutEidolon: "About LAPLACE Eidolon",
     checkForUpdates: "Check for Updates…",
     settings: "Settings…",
     services: "Services",
-    hideEidolon: "Hide Eidolon",
+    hideEidolon: "Hide LAPLACE Eidolon",
     hideOthers: "Hide Others",
     showAll: "Show All",
-    quitEidolon: "Quit Eidolon",
+    quitEidolon: "Quit LAPLACE Eidolon",
     editMenu: "Edit",
     undo: "Undo",
     redo: "Redo",
@@ -235,8 +235,8 @@ const en: Strings = {
     showLogs: "Show Logs",
     openDataFolder: "Open Data Folder",
     licenses: "Licenses",
-    openEidolon: "Open Eidolon",
-    trayTooltip: "Eidolon",
+    openEidolon: "Open LAPLACE Eidolon",
+    trayTooltip: "LAPLACE Eidolon",
     quit: "Quit",
     cancel: "Cancel",
     ok: "OK",
@@ -264,10 +264,10 @@ const en: Strings = {
     hide: "Hide",
   },
   text: {
-    loading: "Starting Eidolon…",
-    waiting: "Waiting for Eidolon's server…",
-    serverStopped: "Eidolon's server stopped",
-    windowFailed: "Eidolon's window ran into a problem",
+    loading: "Starting LAPLACE Eidolon…",
+    waiting: "Waiting for LAPLACE Eidolon's server…",
+    serverStopped: "LAPLACE Eidolon's server stopped",
+    windowFailed: "LAPLACE Eidolon's window ran into a problem",
     failed: "Try again. If it happens again, Show Logs has the details.",
     serverStop: ({ reason, code, signal }) => {
       switch (reason) {
@@ -275,11 +275,11 @@ const en: Strings = {
           if (signal) return `It was ended by ${signal}.`;
           return typeof code === "number" ? `It exited with code ${code}.` : "It exited.";
         case "no-listening":
-          return "It didn't finish starting within 60 seconds, so Eidolon stopped it.";
+          return "It didn't finish starting within 60 seconds, so LAPLACE Eidolon stopped it.";
         case "token":
-          return "It started but left no local-token to connect with, so Eidolon stopped it.";
+          return "It started but left no local-token to connect with, so LAPLACE Eidolon stopped it.";
         case "unanswered":
-          return "It didn't answer for 60 seconds, so Eidolon stopped it.";
+          return "It didn't answer for 60 seconds, so LAPLACE Eidolon stopped it.";
         case "error":
           return "It couldn't be started.";
       }
@@ -296,19 +296,19 @@ const en: Strings = {
               : "";
       return `${known}This window can't connect to it. Quit it, then try again.`;
     },
-    quitTitle: "Quit Eidolon?",
+    quitTitle: "Quit LAPLACE Eidolon?",
     quitDetail: (stopping) => `Quitting stops ${stoppingEn(stopping)}.`,
     quitUnknown:
-      "Eidolon couldn't check what's running. Quitting stops any call, task or job in progress.",
-    restartTitle: "Restart Eidolon?",
+      "LAPLACE Eidolon couldn't check what's running. Quitting stops any call, task or job in progress.",
+    restartTitle: "Restart LAPLACE Eidolon?",
     restartDetail: (stopping) => `Restarting stops ${stoppingEn(stopping)}.`,
     restartUnknown:
-      "Eidolon couldn't check what's running. Restarting stops any call, task or job in progress.",
+      "LAPLACE Eidolon couldn't check what's running. Restarting stops any call, task or job in progress.",
     unsavedLost: (before) =>
       `${before === null ? "" : `${before} `}Your unsaved changes will be lost.`,
-    updateAvailableTitle: (version) => `Eidolon ${version} is available`,
+    updateAvailableTitle: (version) => `LAPLACE Eidolon ${version} is available`,
     updateAvailable: (current) =>
-      `You have ${current}. Eidolon downloads the update in the background, then asks before restarting.`,
+      `You have ${current}. LAPLACE Eidolon downloads the update in the background, then asks before restarting.`,
     notes: {
       kinds: {
         feature: "New",
@@ -324,29 +324,29 @@ const en: Strings = {
     },
     updateDownloadedTitle: "Restart to finish updating",
     updateDownloaded: (version) =>
-      `Eidolon ${version} is downloaded. Restart now to install it, or it installs the next time you quit Eidolon.`,
-    upToDateTitle: "Eidolon is up to date",
-    upToDate: (version) => `Eidolon ${version} is the latest version.`,
-    checkFailedTitle: "Eidolon couldn't check for updates",
-    downloadFailedTitle: "Eidolon couldn't download the update",
+      `LAPLACE Eidolon ${version} is downloaded. Restart now to install it, or it installs the next time you quit LAPLACE Eidolon.`,
+    upToDateTitle: "LAPLACE Eidolon is up to date",
+    upToDate: (version) => `LAPLACE Eidolon ${version} is the latest version.`,
+    checkFailedTitle: "LAPLACE Eidolon couldn't check for updates",
+    downloadFailedTitle: "LAPLACE Eidolon couldn't download the update",
     updateFailed:
       "Check your internet connection, then try again. If it happens again, Show Logs has the details.",
-    readOnlyTitle: "Eidolon can't update itself here",
+    readOnlyTitle: "LAPLACE Eidolon can't update itself here",
     readOnly:
-      "Eidolon updates itself only from a folder it can write to. Move it to the Applications " +
+      "LAPLACE Eidolon updates itself only from a folder it can write to. Move it to the Applications " +
       "folder, then open it again.",
-    hideNoticeTitle: "Eidolon is still running",
+    hideNoticeTitle: "LAPLACE Eidolon is still running",
     hideNotice:
       "Calls, tasks and jobs keep going while the window is closed. Click the tray icon to open it " +
-      "again, or quit Eidolon from the icon's menu.",
-    microphoneTitle: "Eidolon can't use the microphone",
+      "again, or quit LAPLACE Eidolon from the icon's menu.",
+    microphoneTitle: "LAPLACE Eidolon can't use the microphone",
     microphone:
-      "Turn on Eidolon under Privacy & Security → Microphone in System Settings, then quit Eidolon " +
-      "and open it again.",
+      "Turn on LAPLACE Eidolon under Privacy & Security → Microphone in System Settings, then quit " +
+      "LAPLACE Eidolon and open it again.",
     aboutServer: (version) => `Server ${version}`,
     chooseFolder: "Her tasks can read and write in the folders you choose.",
-    installCommandPrompt: "Eidolon wants to install the eidolon command in /usr/local/bin.",
-    removeCommandPrompt: "Eidolon wants to remove the eidolon command from /usr/local/bin.",
+    installCommandPrompt: "LAPLACE Eidolon wants to install the eidolon command in /usr/local/bin.",
+    removeCommandPrompt: "LAPLACE Eidolon wants to remove the eidolon command from /usr/local/bin.",
   },
   notice: {
     start: "Waiting for your OK to start a task",
@@ -368,14 +368,14 @@ const en: Strings = {
 
 const zhHans: Strings = {
   label: {
-    aboutEidolon: "关于 Eidolon",
+    aboutEidolon: "关于 LAPLACE Eidolon",
     checkForUpdates: "检查更新…",
     settings: "设置…",
     services: "服务",
-    hideEidolon: "隐藏 Eidolon",
+    hideEidolon: "隐藏 LAPLACE Eidolon",
     hideOthers: "隐藏其他",
     showAll: "全部显示",
-    quitEidolon: "退出 Eidolon",
+    quitEidolon: "退出 LAPLACE Eidolon",
     editMenu: "编辑",
     undo: "撤销",
     redo: "重做",
@@ -400,8 +400,8 @@ const zhHans: Strings = {
     showLogs: "显示日志",
     openDataFolder: "打开数据目录",
     licenses: "许可证",
-    openEidolon: "打开 Eidolon",
-    trayTooltip: "Eidolon",
+    openEidolon: "打开 LAPLACE Eidolon",
+    trayTooltip: "LAPLACE Eidolon",
     quit: "退出",
     cancel: "取消",
     ok: "确定",
@@ -429,10 +429,10 @@ const zhHans: Strings = {
     hide: "隐藏",
   },
   text: {
-    loading: "正在启动 Eidolon…",
-    waiting: "正在等待 Eidolon 的服务器…",
-    serverStopped: "Eidolon 的服务器停止了",
-    windowFailed: "Eidolon 的窗口出了问题",
+    loading: "正在启动 LAPLACE Eidolon…",
+    waiting: "正在等待 LAPLACE Eidolon 的服务器…",
+    serverStopped: "LAPLACE Eidolon 的服务器停止了",
+    windowFailed: "LAPLACE Eidolon 的窗口出了问题",
     failed: "请重试。如果再次出现，详情请在「显示日志」中查看。",
     serverStop: ({ reason, code, signal }) => {
       switch (reason) {
@@ -440,11 +440,11 @@ const zhHans: Strings = {
           if (signal) return `它被 ${signal} 信号结束了。`;
           return typeof code === "number" ? `它退出了，退出码为 ${code}。` : "它退出了。";
         case "no-listening":
-          return "它没有在 60 秒内完成启动，Eidolon 已将它停止。";
+          return "它没有在 60 秒内完成启动，LAPLACE Eidolon 已将它停止。";
         case "token":
-          return "它启动了，但没有留下可用于连接的 local-token，Eidolon 已将它停止。";
+          return "它启动了，但没有留下可用于连接的 local-token，LAPLACE Eidolon 已将它停止。";
         case "unanswered":
-          return "它已有 60 秒没有响应，Eidolon 已将它停止。";
+          return "它已有 60 秒没有响应，LAPLACE Eidolon 已将它停止。";
         case "error":
           return "它无法启动。";
       }
@@ -461,16 +461,18 @@ const zhHans: Strings = {
               : "";
       return `${known}这个窗口无法连接到它。请先退出它，然后重试。`;
     },
-    quitTitle: "退出 Eidolon？",
+    quitTitle: "退出 LAPLACE Eidolon？",
     quitDetail: (stopping) => `${stoppingZh(stopping)}会在退出时中断。`,
-    quitUnknown: "Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在退出时中断。",
-    restartTitle: "重启 Eidolon？",
+    quitUnknown:
+      "LAPLACE Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在退出时中断。",
+    restartTitle: "重启 LAPLACE Eidolon？",
     restartDetail: (stopping) => `${stoppingZh(stopping)}会在重启时中断。`,
-    restartUnknown: "Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在重启时中断。",
+    restartUnknown:
+      "LAPLACE Eidolon 无法确认正在运行的内容。进行中的通话、任务和作业都会在重启时中断。",
     unsavedLost: (before) => `${before ?? ""}未保存的修改将会丢失。`,
-    updateAvailableTitle: (version) => `Eidolon ${version} 已发布`,
+    updateAvailableTitle: (version) => `LAPLACE Eidolon ${version} 已发布`,
     updateAvailable: (current) =>
-      `当前版本为 ${current}。Eidolon 会在后台下载更新，下载完成后会先询问再重启。`,
+      `当前版本为 ${current}。LAPLACE Eidolon 会在后台下载更新，下载完成后会先询问再重启。`,
     notes: {
       kinds: {
         feature: "新增",
@@ -483,24 +485,25 @@ const zhHans: Strings = {
     },
     updateDownloadedTitle: "重启以完成更新",
     updateDownloaded: (version) =>
-      `Eidolon ${version} 已下载完成。现在重启即可安装，否则会在下次退出 Eidolon 时安装。`,
-    upToDateTitle: "Eidolon 已是最新版本",
-    upToDate: (version) => `Eidolon ${version} 是最新版本。`,
-    checkFailedTitle: "Eidolon 无法检查更新",
-    downloadFailedTitle: "Eidolon 无法下载更新",
+      `LAPLACE Eidolon ${version} 已下载完成。现在重启即可安装，否则会在下次退出 LAPLACE Eidolon 时安装。`,
+    upToDateTitle: "LAPLACE Eidolon 已是最新版本",
+    upToDate: (version) => `LAPLACE Eidolon ${version} 是最新版本。`,
+    checkFailedTitle: "LAPLACE Eidolon 无法检查更新",
+    downloadFailedTitle: "LAPLACE Eidolon 无法下载更新",
     updateFailed: "请检查网络连接，然后重试。如果再次出现，详情请在「显示日志」中查看。",
-    readOnlyTitle: "Eidolon 无法在当前位置更新",
-    readOnly: "Eidolon 只能从可写入的文件夹更新自己。请把它移到「应用程序」文件夹，然后重新打开。",
-    hideNoticeTitle: "Eidolon 仍在运行",
+    readOnlyTitle: "LAPLACE Eidolon 无法在当前位置更新",
+    readOnly:
+      "LAPLACE Eidolon 只能从可写入的文件夹更新自己。请把它移到「应用程序」文件夹，然后重新打开。",
+    hideNoticeTitle: "LAPLACE Eidolon 仍在运行",
     hideNotice:
-      "关闭窗口后，通话、任务和作业会继续进行。点击托盘图标即可重新打开窗口，也可以在托盘图标的菜单中退出 Eidolon。",
-    microphoneTitle: "Eidolon 无法使用麦克风",
+      "关闭窗口后，通话、任务和作业会继续进行。点击托盘图标即可重新打开窗口，也可以在托盘图标的菜单中退出 LAPLACE Eidolon。",
+    microphoneTitle: "LAPLACE Eidolon 无法使用麦克风",
     microphone:
-      "请在「系统设置」→「隐私与安全性」→「麦克风」中打开 Eidolon，然后退出 Eidolon 再重新打开。",
+      "请在「系统设置」→「隐私与安全性」→「麦克风」中打开 LAPLACE Eidolon，然后退出 LAPLACE Eidolon 再重新打开。",
     aboutServer: (version) => `服务器 ${version}`,
     chooseFolder: "她的任务可以读写你选择的文件夹。",
-    installCommandPrompt: "Eidolon 想在 /usr/local/bin 安装 eidolon 命令。",
-    removeCommandPrompt: "Eidolon 想从 /usr/local/bin 移除 eidolon 命令。",
+    installCommandPrompt: "LAPLACE Eidolon 想在 /usr/local/bin 安装 eidolon 命令。",
+    removeCommandPrompt: "LAPLACE Eidolon 想从 /usr/local/bin 移除 eidolon 命令。",
   },
   notice: {
     start: "等你同意开始一个任务",

@@ -41,15 +41,15 @@ export interface PackagedApp {
 function packagedApp(): PackagedApp {
   const target = `${process.platform}-${process.arch}`;
   if (target === "darwin-arm64") {
-    const contents = join(DESKTOP, ".out", "mac-arm64", "Eidolon.app", "Contents");
+    const contents = join(DESKTOP, ".out", "mac-arm64", "LAPLACE Eidolon.app", "Contents");
     return {
-      binary: join(contents, "MacOS", "Eidolon"),
+      binary: join(contents, "MacOS", "LAPLACE Eidolon"),
       payload: join(contents, "Resources", "eidolon"),
     };
   }
   if (target === "win32-x64") {
     const app = join(DESKTOP, ".out", "win-unpacked");
-    return { binary: join(app, "Eidolon.exe"), payload: join(app, "resources", "eidolon") };
+    return { binary: join(app, "LAPLACE Eidolon.exe"), payload: join(app, "resources", "eidolon") };
   }
   throw new Error(`The desktop app ships for darwin-arm64 and win32-x64, not ${target}`);
 }

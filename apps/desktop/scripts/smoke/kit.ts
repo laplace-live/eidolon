@@ -115,8 +115,16 @@ export function electronBinary(): string {
 /** The packaged app electron-builder leaves in apps/desktop/.out for this machine. */
 export function packagedBinary(platform: NodeJS.Platform = process.platform): string {
   return platform === "win32"
-    ? join(DESKTOP, ".out", "win-unpacked", "Eidolon.exe")
-    : join(DESKTOP, ".out", "mac-arm64", "Eidolon.app", "Contents", "MacOS", "Eidolon");
+    ? join(DESKTOP, ".out", "win-unpacked", "LAPLACE Eidolon.exe")
+    : join(
+        DESKTOP,
+        ".out",
+        "mac-arm64",
+        "LAPLACE Eidolon.app",
+        "Contents",
+        "MacOS",
+        "LAPLACE Eidolon",
+      );
 }
 
 /**
@@ -142,7 +150,7 @@ export function installedBinary(env: NodeJS.ProcessEnv = process.env): string {
     env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
     "Programs",
     "eidolon",
-    "Eidolon.exe",
+    "LAPLACE Eidolon.exe",
   );
 }
 

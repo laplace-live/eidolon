@@ -49,10 +49,10 @@ const SHA512 = `${"q".repeat(86)}==`;
 const MAC_MANIFEST = [
   "version: 0.0.2",
   "files:",
-  "  - url: Eidolon-0.0.2-arm64-mac.zip",
+  "  - url: LAPLACE Eidolon-0.0.2-arm64-mac.zip",
   `    sha512: ${SHA512}`,
   "    size: 251658240",
-  "path: Eidolon-0.0.2-arm64-mac.zip",
+  "path: LAPLACE Eidolon-0.0.2-arm64-mac.zip",
   `sha512: ${SHA512}`,
   "releaseDate: '2026-11-22T10:00:00.000Z'",
   "",
@@ -61,10 +61,10 @@ const MAC_MANIFEST = [
 const WIN_MANIFEST = [
   "version: 0.0.2",
   "files:",
-  "  - url: Eidolon Setup 0.0.2.exe",
+  "  - url: LAPLACE Eidolon Setup 0.0.2.exe",
   `    sha512: ${SHA512}`,
   "    size: 262144000",
-  "path: Eidolon Setup 0.0.2.exe",
+  "path: LAPLACE Eidolon Setup 0.0.2.exe",
   `sha512: ${SHA512}`,
   "releaseDate: '2026-11-22T10:00:00.000Z'",
   "",
@@ -97,11 +97,11 @@ describe("the feed's files", () => {
     expect(manifestName("win32")).toBe("latest.yml");
     expect(readManifest(MAC_MANIFEST)).toEqual({
       version: "0.0.2",
-      files: ["Eidolon-0.0.2-arm64-mac.zip"],
+      files: ["LAPLACE Eidolon-0.0.2-arm64-mac.zip"],
     });
     expect(readManifest(WIN_MANIFEST.replaceAll("\n", "\r\n"))).toEqual({
       version: "0.0.2",
-      files: ["Eidolon Setup 0.0.2.exe"],
+      files: ["LAPLACE Eidolon Setup 0.0.2.exe"],
     });
     // YAML quotes a value that needs it, a single quote doubled inside single quotes.
     expect(
@@ -113,10 +113,15 @@ describe("the feed's files", () => {
   });
 
   test("the update is the file electron-updater downloads: the zip on macOS, the setup on Windows", () => {
-    expect(updateFile(readManifest(MAC_MANIFEST), "darwin")).toBe("Eidolon-0.0.2-arm64-mac.zip");
-    expect(updateFile(readManifest(WIN_MANIFEST), "win32")).toBe("Eidolon Setup 0.0.2.exe");
+    expect(updateFile(readManifest(MAC_MANIFEST), "darwin")).toBe(
+      "LAPLACE Eidolon-0.0.2-arm64-mac.zip",
+    );
+    expect(updateFile(readManifest(WIN_MANIFEST), "win32")).toBe("LAPLACE Eidolon Setup 0.0.2.exe");
     expect(
-      updateFile({ version: "0.0.2", files: ["Eidolon-0.0.2-arm64.dmg", "x.zip"] }, "darwin"),
+      updateFile(
+        { version: "0.0.2", files: ["LAPLACE Eidolon-0.0.2-arm64.dmg", "x.zip"] },
+        "darwin",
+      ),
     ).toBe("x.zip");
     expect(updateFile(readManifest(MAC_MANIFEST), "win32")).toBeNull();
   });
@@ -149,52 +154,58 @@ describe("the feed's files", () => {
 
   test("wanted: each file the manifest names, the update's blockmap and the old version's", () => {
     const mac = readManifest(MAC_MANIFEST);
-    expect(wantedNames(mac, "Eidolon-0.0.2-arm64-mac.zip", "0.0.1")).toEqual([
-      "Eidolon-0.0.2-arm64-mac.zip",
-      "Eidolon-0.0.2-arm64-mac.zip.blockmap",
-      "Eidolon-0.0.1-arm64-mac.zip.blockmap",
+    expect(wantedNames(mac, "LAPLACE Eidolon-0.0.2-arm64-mac.zip", "0.0.1")).toEqual([
+      "LAPLACE Eidolon-0.0.2-arm64-mac.zip",
+      "LAPLACE Eidolon-0.0.2-arm64-mac.zip.blockmap",
+      "LAPLACE Eidolon-0.0.1-arm64-mac.zip.blockmap",
     ]);
     const windows = readManifest(WIN_MANIFEST);
-    expect(wantedNames(windows, "Eidolon Setup 0.0.2.exe", "0.0.1")).toEqual([
-      "Eidolon Setup 0.0.2.exe",
-      "Eidolon Setup 0.0.2.exe.blockmap",
-      "Eidolon Setup 0.0.1.exe.blockmap",
+    expect(wantedNames(windows, "LAPLACE Eidolon Setup 0.0.2.exe", "0.0.1")).toEqual([
+      "LAPLACE Eidolon Setup 0.0.2.exe",
+      "LAPLACE Eidolon Setup 0.0.2.exe.blockmap",
+      "LAPLACE Eidolon Setup 0.0.1.exe.blockmap",
     ]);
   });
 
   test("serves the new outputs' manifest, installers and blockmaps and the old outputs' blockmaps alone", () => {
     const older = folder("old", [
       "latest-mac.yml",
-      "Eidolon-0.0.1-arm64.dmg",
-      "Eidolon-0.0.1-arm64-mac.zip",
-      "Eidolon-0.0.1-arm64-mac.zip.blockmap",
+      "LAPLACE Eidolon-0.0.1-arm64.dmg",
+      "LAPLACE Eidolon-0.0.1-arm64-mac.zip",
+      "LAPLACE Eidolon-0.0.1-arm64-mac.zip.blockmap",
       "builder-debug.yml",
       "mac-arm64/",
     ]);
     const newer = folder("new", [
       "latest-mac.yml",
-      "Eidolon-0.0.2-arm64.dmg",
-      "Eidolon-0.0.2-arm64-mac.zip",
-      "Eidolon-0.0.2-arm64-mac.zip.blockmap",
+      "LAPLACE Eidolon-0.0.2-arm64.dmg",
+      "LAPLACE Eidolon-0.0.2-arm64-mac.zip",
+      "LAPLACE Eidolon-0.0.2-arm64-mac.zip.blockmap",
       "builder-debug.yml",
       "builder-effective-config.yaml",
       "mac-arm64/",
-      "Eidolon.zip/",
+      "LAPLACE Eidolon.zip/",
     ]);
     expect(Object.fromEntries(feedFiles(older, newer))).toEqual({
       "latest-mac.yml": join(newer, "latest-mac.yml"),
-      "Eidolon-0.0.2-arm64.dmg": join(newer, "Eidolon-0.0.2-arm64.dmg"),
-      "Eidolon-0.0.2-arm64-mac.zip": join(newer, "Eidolon-0.0.2-arm64-mac.zip"),
-      "Eidolon-0.0.2-arm64-mac.zip.blockmap": join(newer, "Eidolon-0.0.2-arm64-mac.zip.blockmap"),
-      "Eidolon-0.0.1-arm64-mac.zip.blockmap": join(older, "Eidolon-0.0.1-arm64-mac.zip.blockmap"),
+      "LAPLACE Eidolon-0.0.2-arm64.dmg": join(newer, "LAPLACE Eidolon-0.0.2-arm64.dmg"),
+      "LAPLACE Eidolon-0.0.2-arm64-mac.zip": join(newer, "LAPLACE Eidolon-0.0.2-arm64-mac.zip"),
+      "LAPLACE Eidolon-0.0.2-arm64-mac.zip.blockmap": join(
+        newer,
+        "LAPLACE Eidolon-0.0.2-arm64-mac.zip.blockmap",
+      ),
+      "LAPLACE Eidolon-0.0.1-arm64-mac.zip.blockmap": join(
+        older,
+        "LAPLACE Eidolon-0.0.1-arm64-mac.zip.blockmap",
+      ),
     });
   });
 
   test("refuses two builds of one version, whose blockmaps share a name", () => {
-    const older = folder("old", ["latest.yml", "Eidolon Setup 0.0.2.exe.blockmap"]);
-    const newer = folder("new", ["latest.yml", "Eidolon Setup 0.0.2.exe.blockmap"]);
+    const older = folder("old", ["latest.yml", "LAPLACE Eidolon Setup 0.0.2.exe.blockmap"]);
+    const newer = folder("new", ["latest.yml", "LAPLACE Eidolon Setup 0.0.2.exe.blockmap"]);
     expect(() => feedFiles(older, newer)).toThrow(
-      "Eidolon Setup 0.0.2.exe.blockmap is in both builds' outputs",
+      "LAPLACE Eidolon Setup 0.0.2.exe.blockmap is in both builds' outputs",
     );
   });
 });
@@ -234,9 +245,11 @@ describe("a request's byte range", () => {
 describe("a request's file", () => {
   test("its path's one segment, percent-decoded, the query dropped", () => {
     expect(requestedName("/latest-mac.yml?noCache=1jx0g2")).toBe("latest-mac.yml");
-    expect(requestedName("/Eidolon%20Setup%200.0.2.exe")).toBe("Eidolon Setup 0.0.2.exe");
-    expect(requestedName("/Eidolon-0.0.1-arm64-mac.zip.blockmap")).toBe(
-      "Eidolon-0.0.1-arm64-mac.zip.blockmap",
+    expect(requestedName("/LAPLACE%20Eidolon%20Setup%200.0.2.exe")).toBe(
+      "LAPLACE Eidolon Setup 0.0.2.exe",
+    );
+    expect(requestedName("/LAPLACE%20Eidolon-0.0.1-arm64-mac.zip.blockmap")).toBe(
+      "LAPLACE Eidolon-0.0.1-arm64-mac.zip.blockmap",
     );
   });
 
@@ -255,13 +268,13 @@ describe("the feed over loopback", () => {
   beforeEach(async () => {
     const files = folder("feed", []);
     writeFileSync(join(files, "latest.yml"), WIN_MANIFEST);
-    writeFileSync(join(files, "Eidolon Setup 0.0.2.exe"), bytes);
+    writeFileSync(join(files, "LAPLACE Eidolon Setup 0.0.2.exe"), bytes);
     writeFileSync(join(files, "empty.blockmap"), "");
     served = [];
     feed = await startFeed(
       new Map([
         ["latest.yml", join(files, "latest.yml")],
-        ["Eidolon Setup 0.0.2.exe", join(files, "Eidolon Setup 0.0.2.exe")],
+        ["LAPLACE Eidolon Setup 0.0.2.exe", join(files, "LAPLACE Eidolon Setup 0.0.2.exe")],
         ["empty.blockmap", join(files, "empty.blockmap")],
       ]),
       { onServed: (entry) => served.push(entry) },
@@ -281,7 +294,7 @@ describe("the feed over loopback", () => {
     expect(manifest.headers.get("accept-ranges")).toBe("bytes");
     expect(manifest.headers.get("content-type")).toBe("text/yaml; charset=utf-8");
     expect(await manifest.text()).toBe(WIN_MANIFEST);
-    const setup = await get("/Eidolon%20Setup%200.0.2.exe");
+    const setup = await get("/LAPLACE%20Eidolon%20Setup%200.0.2.exe");
     expect(setup.status).toBe(200);
     expect(setup.headers.get("content-type")).toBe("application/octet-stream");
     expect(setup.headers.get("content-length")).toBe("256");
@@ -289,26 +302,30 @@ describe("the feed over loopback", () => {
   });
 
   test("answers one range with 206, its Content-Range and exactly its bytes", async () => {
-    const part = await get("/Eidolon%20Setup%200.0.2.exe", { headers: { range: "bytes=16-31" } });
+    const part = await get("/LAPLACE%20Eidolon%20Setup%200.0.2.exe", {
+      headers: { range: "bytes=16-31" },
+    });
     expect(part.status).toBe(206);
     expect(part.headers.get("content-range")).toBe("bytes 16-31/256");
     expect(part.headers.get("content-length")).toBe("16");
     expect(Buffer.from(await part.arrayBuffer())).toEqual(bytes.subarray(16, 32));
-    const suffix = await get("/Eidolon%20Setup%200.0.2.exe", { headers: { range: "bytes=-4" } });
+    const suffix = await get("/LAPLACE%20Eidolon%20Setup%200.0.2.exe", {
+      headers: { range: "bytes=-4" },
+    });
     expect(suffix.headers.get("content-range")).toBe("bytes 252-255/256");
     expect(Buffer.from(await suffix.arrayBuffer())).toEqual(bytes.subarray(252));
   });
 
   test("refuses an unsatisfiable or multiple range with 416 and the size, never the whole file", async () => {
     for (const range of ["bytes=256-", "bytes=0-1,4-5"]) {
-      const refused = await get("/Eidolon%20Setup%200.0.2.exe", { headers: { range } });
+      const refused = await get("/LAPLACE%20Eidolon%20Setup%200.0.2.exe", { headers: { range } });
       expect([range, refused.status, await refused.text()]).toEqual([range, 416, ""]);
       expect(refused.headers.get("content-range")).toBe("bytes */256");
     }
   });
 
   test("HEAD gives the headers alone; an empty file answers empty", async () => {
-    const head = await get("/Eidolon%20Setup%200.0.2.exe", { method: "HEAD" });
+    const head = await get("/LAPLACE%20Eidolon%20Setup%200.0.2.exe", { method: "HEAD" });
     expect(head.status).toBe(200);
     expect(head.headers.get("content-length")).toBe("256");
     expect(await head.text()).toBe("");
@@ -321,7 +338,12 @@ describe("the feed over loopback", () => {
   });
 
   test("404 for a file it doesn't serve, 405 for anything but GET and HEAD", async () => {
-    for (const path of ["/latest-mac.yml", "/Eidolon Setup 0.0.1.exe.blockmap", "/", "/a/b"]) {
+    for (const path of [
+      "/latest-mac.yml",
+      "/LAPLACE Eidolon Setup 0.0.1.exe.blockmap",
+      "/",
+      "/a/b",
+    ]) {
       const missing = await get(path);
       expect([path, missing.status]).toEqual([path, 404]);
       await missing.body?.cancel();
@@ -334,7 +356,9 @@ describe("the feed over loopback", () => {
 
   test("records each request it answered: the file, the range, the status and the bytes sent", async () => {
     await (await get("/latest.yml?noCache=1")).text();
-    await (await get("/Eidolon%20Setup%200.0.2.exe", { headers: { range: "bytes=0-9" } })).text();
+    await (
+      await get("/LAPLACE%20Eidolon%20Setup%200.0.2.exe", { headers: { range: "bytes=0-9" } })
+    ).text();
     await (await get("/missing.zip")).text();
     // Each is recorded when its response closes, which can trail the body on a busy runner.
     await vi.waitFor(() => expect(served).toHaveLength(3));
@@ -350,8 +374,8 @@ describe("the feed over loopback", () => {
       },
       {
         method: "GET",
-        path: "/Eidolon%20Setup%200.0.2.exe",
-        name: "Eidolon Setup 0.0.2.exe",
+        path: "/LAPLACE%20Eidolon%20Setup%200.0.2.exe",
+        name: "LAPLACE Eidolon Setup 0.0.2.exe",
         range: "bytes=0-9",
         status: 206,
         bytes: 10,
@@ -390,20 +414,20 @@ test("what the feed served of a file: whole, in ranges, or not at all", () => {
   });
   const served = [
     entry("latest.yml", 200, 400),
-    entry("Eidolon Setup 0.0.2.exe.blockmap", 200, 2048),
-    entry("Eidolon Setup 0.0.1.exe.blockmap", 404, 0),
-    entry("Eidolon Setup 0.0.2.exe", 206, 1_048_576),
-    entry("Eidolon Setup 0.0.2.exe", 206, 524_288),
+    entry("LAPLACE Eidolon Setup 0.0.2.exe.blockmap", 200, 2048),
+    entry("LAPLACE Eidolon Setup 0.0.1.exe.blockmap", 404, 0),
+    entry("LAPLACE Eidolon Setup 0.0.2.exe", 206, 1_048_576),
+    entry("LAPLACE Eidolon Setup 0.0.2.exe", 206, 524_288),
   ];
   expect(servedSummary(served, "latest.yml")).toBe("latest.yml whole (400 bytes)");
-  expect(servedSummary(served, "Eidolon Setup 0.0.2.exe")).toBe(
-    "Eidolon Setup 0.0.2.exe in 2 ranges (1.5 MB)",
+  expect(servedSummary(served, "LAPLACE Eidolon Setup 0.0.2.exe")).toBe(
+    "LAPLACE Eidolon Setup 0.0.2.exe in 2 ranges (1.5 MB)",
   );
-  expect(servedSummary(served, "Eidolon Setup 0.0.1.exe.blockmap")).toBe(
-    "Eidolon Setup 0.0.1.exe.blockmap 404",
+  expect(servedSummary(served, "LAPLACE Eidolon Setup 0.0.1.exe.blockmap")).toBe(
+    "LAPLACE Eidolon Setup 0.0.1.exe.blockmap 404",
   );
-  expect(servedSummary(served, "Eidolon-0.0.2-arm64-mac.zip")).toBe(
-    "Eidolon-0.0.2-arm64-mac.zip never asked for",
+  expect(servedSummary(served, "LAPLACE Eidolon-0.0.2-arm64-mac.zip")).toBe(
+    "LAPLACE Eidolon-0.0.2-arm64-mac.zip never asked for",
   );
 });
 
@@ -419,15 +443,18 @@ describe("whether the feed served the update as it should", () => {
   });
   const WIN = {
     manifest: "latest.yml",
-    update: "Eidolon Setup 0.0.2.exe",
-    blockmaps: ["Eidolon Setup 0.0.2.exe.blockmap", "Eidolon Setup 0.0.1.exe.blockmap"],
+    update: "LAPLACE Eidolon Setup 0.0.2.exe",
+    blockmaps: [
+      "LAPLACE Eidolon Setup 0.0.2.exe.blockmap",
+      "LAPLACE Eidolon Setup 0.0.1.exe.blockmap",
+    ],
   };
   const DIFFERENTIAL = [
     get("latest.yml", 200),
-    get("Eidolon Setup 0.0.1.exe.blockmap", 200),
-    get("Eidolon Setup 0.0.2.exe.blockmap", 200),
-    get("Eidolon Setup 0.0.2.exe", 206),
-    get("Eidolon Setup 0.0.2.exe", 206),
+    get("LAPLACE Eidolon Setup 0.0.1.exe.blockmap", 200),
+    get("LAPLACE Eidolon Setup 0.0.2.exe.blockmap", 200),
+    get("LAPLACE Eidolon Setup 0.0.2.exe", 206),
+    get("LAPLACE Eidolon Setup 0.0.2.exe", 206),
   ];
 
   test("Windows: the manifest, both blockmaps, then the setup in ranges alone", () => {
@@ -449,8 +476,11 @@ describe("whether the feed served the update as it should", () => {
   test("macOS: the manifest, then the zip, whole on a first update", () => {
     const MAC = {
       manifest: "latest-mac.yml",
-      update: "Eidolon-0.0.2-arm64-mac.zip",
-      blockmaps: ["Eidolon-0.0.2-arm64-mac.zip.blockmap", "Eidolon-0.0.1-arm64-mac.zip.blockmap"],
+      update: "LAPLACE Eidolon-0.0.2-arm64-mac.zip",
+      blockmaps: [
+        "LAPLACE Eidolon-0.0.2-arm64-mac.zip.blockmap",
+        "LAPLACE Eidolon-0.0.1-arm64-mac.zip.blockmap",
+      ],
     };
     expect(servedUpdate([get(MAC.manifest, 200), get(MAC.update, 200)], "darwin", MAC)).toBe(true);
     expect(servedUpdate([get(MAC.manifest, 200)], "darwin", MAC)).toBe(false);
@@ -564,7 +594,7 @@ describe("main.log's steps", () => {
     // Downloading before the update was found doesn't count until it comes again after.
     const text = logged(
       [
-        "Eidolon 0.0.1 · Electron 45.4.1 · Chromium 142 · Node 24 · darwin 25.0.0 arm64",
+        "LAPLACE Eidolon 0.0.1 · Electron 45.4.1 · Chromium 142 · Node 24 · darwin 25.0.0 arm64",
         "Eidolon: updates are on in background mode (EIDOLON_DESKTOP_UPDATE_TEST)",
         "Eidolon: downloading 0.0.2",
         "Eidolon: checking for updates",
@@ -652,15 +682,15 @@ describe("main.log's steps", () => {
 
   test("the version a log's last start line names, and its tail", () => {
     const text = logged([
-      "Eidolon 0.0.1 · Electron 45.4.1 · Chromium 142.0.7444.59 · Node 24.11.0 · win32 10.0.26100 x64",
+      "LAPLACE Eidolon 0.0.1 · Electron 45.4.1 · Chromium 142.0.7444.59 · Node 24.11.0 · win32 10.0.26100 x64",
       "Eidolon: quitting",
-      "Eidolon 0.0.2 · Electron 45.4.1 · Chromium 142.0.7444.59 · Node 24.11.0 · win32 10.0.26100 x64",
+      "LAPLACE Eidolon 0.0.2 · Electron 45.4.1 · Chromium 142.0.7444.59 · Node 24.11.0 · win32 10.0.26100 x64",
       "Eidolon: the backend listens on http://127.0.0.1:7860",
     ]);
     expect(startedVersion(text)).toBe("0.0.2");
-    expect(startedVersion(logged(["Eidolon 0.0.3 (unpackaged) · Electron 45.4.1 · …"]))).toBe(
-      "0.0.3",
-    );
+    expect(
+      startedVersion(logged(["LAPLACE Eidolon 0.0.3 (unpackaged) · Electron 45.4.1 · …"])),
+    ).toBe("0.0.3");
     expect(startedVersion("Eidolon: quitting\n")).toBeNull();
     expect(tail("a\nb\n\nc\r\nd\n", 2)).toEqual(["c", "d"]);
     expect(tail("", 2)).toEqual([]);
@@ -674,12 +704,15 @@ describe("an install", () => {
     for (const reported of ["0.0.1", "0.0.2.1", "0.0.21", "10.0.2", "", null]) {
       expect([reported, sameVersion(reported, "0.0.2")]).toEqual([reported, false]);
     }
-    const versions = { "the uninstall entry's DisplayVersion": "0.0.2", "Eidolon.exe": "0.0.2" };
+    const versions = {
+      "the uninstall entry's DisplayVersion": "0.0.2",
+      "LAPLACE Eidolon.exe": "0.0.2",
+    };
     expect(atVersion(versions, "0.0.2")).toBe(true);
-    expect(atVersion({ ...versions, "Eidolon.exe": null }, "0.0.2")).toBe(false);
+    expect(atVersion({ ...versions, "LAPLACE Eidolon.exe": null }, "0.0.2")).toBe(false);
     expect(atVersion({}, "0.0.2")).toBe(false);
-    expect(versionsText({ ...versions, "Eidolon.exe": null })).toBe(
-      "the uninstall entry's DisplayVersion 0.0.2, Eidolon.exe unread",
+    expect(versionsText({ ...versions, "LAPLACE Eidolon.exe": null })).toBe(
+      "the uninstall entry's DisplayVersion 0.0.2, LAPLACE Eidolon.exe unread",
     );
   });
 
@@ -689,60 +722,64 @@ describe("an install", () => {
     expect(
       plutilVersion(
         1,
-        "/t/Eidolon.app/Contents/Info.plist: (The file “Info.plist” couldn’t be opened because there is no such file.)",
+        "/t/LAPLACE Eidolon.app/Contents/Info.plist: (The file “Info.plist” couldn’t be opened because there is no such file.)",
       ),
     ).toBeNull();
   });
 
-  test("Windows: the uninstall entry naming the folder's uninstaller, and Eidolon.exe's FileVersion", () => {
+  test("Windows: the uninstall entry naming the folder's uninstaller, and LAPLACE Eidolon.exe's FileVersion", () => {
     const folder = "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\eidolon";
     const ours = {
-      DisplayName: "Eidolon 0.0.2",
+      DisplayName: "LAPLACE Eidolon 0.0.2",
       DisplayVersion: "0.0.2",
-      UninstallString: `"${folder}\\Uninstall Eidolon.exe" /currentuser`,
+      UninstallString: `"${folder}\\Uninstall LAPLACE Eidolon.exe" /currentuser`,
     };
     const other = {
-      DisplayName: "Eidolon Notes 2.1.0",
+      DisplayName: "LAPLACE Eidolon Notes 2.1.0",
       DisplayVersion: "2.1.0",
-      UninstallString: `"${folder}-notes\\Uninstall Eidolon Notes.exe" /currentuser`,
+      UninstallString: `"${folder}-notes\\Uninstall LAPLACE Eidolon Notes.exe" /currentuser`,
     };
     expect(
       windowsVersions([other, ours], [{ FileVersion: "0.0.2", ProductVersion: "0.0.2.0" }], folder),
     ).toEqual({
       "the uninstall entry's DisplayVersion": "0.0.2",
-      "Eidolon.exe's FileVersion": "0.0.2",
+      "LAPLACE Eidolon.exe's FileVersion": "0.0.2",
     });
     expect(windowsVersions([other], [], folder)).toEqual({
       "the uninstall entry's DisplayVersion": null,
-      "Eidolon.exe's FileVersion": null,
+      "LAPLACE Eidolon.exe's FileVersion": null,
     });
-    expect(exeVersionScript("C:\\it's\\Eidolon.exe")).toBe(
-      "Get-Item -LiteralPath 'C:\\it''s\\Eidolon.exe' -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ FileVersion = [string]$_.VersionInfo.FileVersion; ProductVersion = [string]$_.VersionInfo.ProductVersion } }",
+    expect(exeVersionScript("C:\\it's\\LAPLACE Eidolon.exe")).toBe(
+      "Get-Item -LiteralPath 'C:\\it''s\\LAPLACE Eidolon.exe' -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ FileVersion = [string]$_.VersionInfo.FileVersion; ProductVersion = [string]$_.VersionInfo.ProductVersion } }",
     );
   });
 
   test("macOS: its processes run its own executable, not Squirrel.Mac's ShipIt from inside it", () => {
-    const app = "/Users/runner/work/_temp/eidolon-update-test-a1/Applications/Eidolon.app";
+    const app = "/Users/runner/work/_temp/eidolon-update-test-a1/Applications/LAPLACE Eidolon.app";
     const table: ProcessRow[] = [
       { pid: 1, ppid: 0, command: "/sbin/launchd" },
-      { pid: 500, ppid: 1, command: `${app}/Contents/MacOS/Eidolon` },
+      { pid: 500, ppid: 1, command: `${app}/Contents/MacOS/LAPLACE Eidolon` },
       {
         pid: 501,
         ppid: 500,
-        command: `${app}/Contents/Frameworks/Eidolon Helper (Renderer).app/Contents/MacOS/Eidolon Helper (Renderer) --type=renderer`,
+        command: `${app}/Contents/Frameworks/LAPLACE Eidolon Helper (Renderer).app/Contents/MacOS/LAPLACE Eidolon Helper (Renderer) --type=renderer`,
       },
       {
         pid: 502,
         ppid: 500,
-        command: `${app}/Contents/MacOS/Eidolon --disable-sigusr1 --use-system-ca ${app}/Contents/Resources/eidolon/dist/server.js`,
+        command: `${app}/Contents/MacOS/LAPLACE Eidolon --disable-sigusr1 --use-system-ca ${app}/Contents/Resources/eidolon/dist/server.js`,
       },
       {
         pid: 600,
         ppid: 1,
         command: `${app}/Contents/Frameworks/Squirrel.framework/Resources/ShipIt live.laplace.eidolon.ShipIt /Users/runner/Library/Caches/live.laplace.eidolon.ShipIt/ShipItState.plist`,
       },
-      { pid: 700, ppid: 1, command: `${app}.old/Contents/MacOS/Eidolon` },
-      { pid: 701, ppid: 1, command: "/Applications/Eidolon.app/Contents/MacOS/Eidolon" },
+      { pid: 700, ppid: 1, command: `${app}.old/Contents/MacOS/LAPLACE Eidolon` },
+      {
+        pid: 701,
+        ppid: 1,
+        command: "/Applications/LAPLACE Eidolon.app/Contents/MacOS/LAPLACE Eidolon",
+      },
     ];
     const rows = appProcesses(table, app, "darwin");
     expect(rows.map((row) => row.pid)).toEqual([500, 502]);
@@ -753,20 +790,20 @@ describe("an install", () => {
     const folder = "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\eidolon";
     const table: ProcessRow[] = [
       { pid: 4, ppid: 0, command: "System" },
-      { pid: 900, ppid: 880, command: `"${folder}\\Eidolon.exe" --updated` },
-      { pid: 901, ppid: 900, command: `"${folder}\\Eidolon.exe" --type=gpu-process` },
+      { pid: 900, ppid: 880, command: `"${folder}\\LAPLACE Eidolon.exe" --updated` },
+      { pid: 901, ppid: 900, command: `"${folder}\\LAPLACE Eidolon.exe" --type=gpu-process` },
       {
         pid: 902,
         ppid: 900,
-        command: `"${folder.toUpperCase()}\\EIDOLON.EXE" --disable-sigusr1 --use-system-ca "${folder}\\resources\\eidolon\\dist\\server.js"`,
+        command: `"${folder.toUpperCase()}\\LAPLACE EIDOLON.EXE" --disable-sigusr1 --use-system-ca "${folder}\\resources\\eidolon\\dist\\server.js"`,
       },
       {
         pid: 950,
         ppid: 1,
-        command: `"C:\\Users\\runneradmin\\AppData\\Local\\eidolon-updater\\pending\\Eidolon Setup 0.0.2.exe" --updated /S --force-run`,
+        command: `"C:\\Users\\runneradmin\\AppData\\Local\\eidolon-updater\\pending\\LAPLACE Eidolon Setup 0.0.2.exe" --updated /S --force-run`,
       },
-      { pid: 960, ppid: 1, command: `"${folder}-notes\\Eidolon Notes.exe"` },
-      { pid: 970, ppid: 1, command: "Eidolon.exe" },
+      { pid: 960, ppid: 1, command: `"${folder}-notes\\LAPLACE Eidolon Notes.exe"` },
+      { pid: 970, ppid: 1, command: "LAPLACE Eidolon.exe" },
     ];
     const rows = appProcesses(table, folder, "win32");
     expect(rows.map((row) => row.pid)).toEqual([900, 901, 902]);
@@ -774,16 +811,18 @@ describe("an install", () => {
   });
 
   test("the default profile's logs, where Squirrel.Mac's and NSIS's relaunch writes", () => {
-    expect(defaultLogs("darwin", {}, "/Users/runner")).toBe("/Users/runner/Library/Logs/Eidolon");
+    expect(defaultLogs("darwin", {}, "/Users/runner")).toBe(
+      "/Users/runner/Library/Logs/LAPLACE Eidolon",
+    );
     expect(
       defaultLogs(
         "win32",
         { APPDATA: "C:\\Users\\runneradmin\\AppData\\Roaming" },
         "C:\\Users\\runneradmin",
       ),
-    ).toBe("C:\\Users\\runneradmin\\AppData\\Roaming\\Eidolon\\logs");
+    ).toBe("C:\\Users\\runneradmin\\AppData\\Roaming\\LAPLACE Eidolon\\logs");
     expect(defaultLogs("win32", {}, "C:\\Users\\runneradmin")).toBe(
-      "C:\\Users\\runneradmin\\AppData\\Roaming\\Eidolon\\logs",
+      "C:\\Users\\runneradmin\\AppData\\Roaming\\LAPLACE Eidolon\\logs",
     );
   });
 });

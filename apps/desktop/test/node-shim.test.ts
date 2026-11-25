@@ -145,7 +145,7 @@ describe("cross-spawn, which starts an MCP server", () => {
     const payload = temp();
     stageNodeShim(payload, { os: "win32", cpu: "x64" });
     const packaged = appLayout(
-      "C:\\Users\\me\\AppData\\Local\\Programs\\eidolon\\Eidolon.exe",
+      "C:\\Users\\me\\AppData\\Local\\Programs\\eidolon\\LAPLACE Eidolon.exe",
       "win32",
     );
     for (const name of POSIX_LAUNCHERS) {

@@ -111,7 +111,7 @@ function LoginItemRow({ app }: { readonly app: SystemOptions }) {
       <FieldContent>
         <FieldLabel htmlFor={id}>{t`Open at Login`}</FieldLabel>
         <FieldDescription>
-          {t`Start Eidolon in the background when you log in to this computer.`}
+          {t`Start LAPLACE Eidolon in the background when you log in to this computer.`}
         </FieldDescription>
         {note !== null && <NoteLine note={note} />}
         {item.isError && <ErrorAlert error={item.error} />}
@@ -180,7 +180,7 @@ function CompanionRows({ app }: { readonly app: CompanionOptions }) {
         <FieldContent>
           <FieldLabel htmlFor={atLoginId}>{t`Show at Login`}</FieldLabel>
           <FieldDescription>
-            {t`When Eidolon opens at login, she shows too, before you open its window.`}
+            {t`When LAPLACE Eidolon opens at login, she shows too, before you open its window.`}
           </FieldDescription>
         </FieldContent>
         <Switch
@@ -280,7 +280,7 @@ function CommandRow({ app }: { readonly app: SystemOptions }) {
         <FieldDescription>
           <Trans>
             Run <Code>{usage}</Code> in a terminal, such as <Code>{example}</Code>. With no
-            arguments, it opens Eidolon.
+            arguments, it opens LAPLACE Eidolon.
           </Trans>
         </FieldDescription>
         {command.data !== undefined && <NoteLine note={commandNote(command.data, app.platform)} />}
@@ -309,7 +309,7 @@ export function DesktopCard() {
   return (
     <SectionCard
       title={t`Desktop App`}
-      description={t`What Eidolon can add to this computer, each only when you choose it.`}
+      description={t`What LAPLACE Eidolon can add to this computer, each only when you choose it.`}
     >
       <div className="flex flex-col divide-y">
         {system && <LoginItemRow app={app} />}

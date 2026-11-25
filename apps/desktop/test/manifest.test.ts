@@ -18,7 +18,7 @@ test("every devDependency is an exact pin or a workspace package", () => {
 test("it is private and versioned, so its releases are tags and never npm packages", () => {
   expect(manifest).toMatchObject({
     name: "laplace-eidolon-desktop",
-    productName: "Eidolon",
+    productName: "LAPLACE Eidolon",
     private: true,
   });
   expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);

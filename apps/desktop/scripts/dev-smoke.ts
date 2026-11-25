@@ -111,9 +111,9 @@ const COMPANION_NOTE = "Background mode never shows her.";
 /** How main.log's line for a menu background mode closed with no pick starts, before its labels. */
 const MENU_LINE = "Eidolon: background mode didn't open a menu: ";
 /** Her menu with no call of hers up, the test rig her one model, which has no outfits. */
-const HER_MENU = "Call, Open Eidolon, Appearance, Size, Always on Top, Hide";
+const HER_MENU = "Call, Open LAPLACE Eidolon, Appearance, Size, Always on Top, Hide";
 /** How her menu starts while a call of hers is up. */
-const HER_CALL_MENU = "Hang Up, Mute Microphone, Open Eidolon";
+const HER_CALL_MENU = "Hang Up, Mute Microphone, Open LAPLACE Eidolon";
 /** `window.eidolonCompanion`'s members, sorted. */
 const HER_BRIDGE = [
   "drag",
@@ -675,7 +675,7 @@ async function home(page: Page): Promise<string> {
     throw new Error(`the page asks to sign in: "${await signIn.first().textContent()}"`);
   }
   if (page.url() !== "eidolon-app://app/") throw new Error(`Home is at ${page.url()}`);
-  const footer = page.getByText(/^Eidolon \S+( · server \S+)?$/);
+  const footer = page.getByText(/^LAPLACE Eidolon \S+( · server \S+)?$/);
   await footer.waitFor({ timeout: 15_000 });
   return (await footer.textContent()) ?? "";
 }
@@ -942,7 +942,7 @@ async function coldStart(walk: Walk, driven: Driven, launchedAt: number, step: S
     !locked && page1.cookie === "",
     locked ? "a sign-in screen" : "signed in",
   );
-  const expected = `Eidolon ${DESKTOP_VERSION} · server ${SERVER_VERSION}`;
+  const expected = `LAPLACE Eidolon ${DESKTOP_VERSION} · server ${SERVER_VERSION}`;
   const bridge = page1.bridge as { version?: string; serverVersion?: string } | null;
   step.check(
     "Home's two versions: the desktop's and the server's",
@@ -2741,7 +2741,8 @@ async function attached(
   const status = await pageFetch(page, "/api/local/status");
   step.check(
     "the page works on it",
-    status.status === 200 && footer === `Eidolon ${DESKTOP_VERSION} · server ${SERVER_VERSION}`,
+    status.status === 200 &&
+      footer === `LAPLACE Eidolon ${DESKTOP_VERSION} · server ${SERVER_VERSION}`,
     `status ${status.status}; "${footer}"`,
   );
 

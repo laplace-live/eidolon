@@ -63,14 +63,14 @@ describe("macOS's menu bar", () => {
   test("holds the app, Edit, View, Window and Help menus, worded in the shell's language", () => {
     const { actions } = recordingActions();
     expect(macMenu(en, actions, MAC).map((menu) => menu.label)).toEqual([
-      "Eidolon",
+      "LAPLACE Eidolon",
       "Edit",
       "View",
       "Window",
       "Help",
     ]);
     expect(macMenu(zh, actions, MAC).map((menu) => menu.label)).toEqual([
-      "Eidolon",
+      "LAPLACE Eidolon",
       "编辑",
       "显示",
       "窗口",
@@ -97,14 +97,14 @@ describe("macOS's menu bar", () => {
       "quit",
     ]);
     expect(items.map((item) => item.label).filter(Boolean)).toEqual([
-      "About Eidolon",
+      "About LAPLACE Eidolon",
       "Check for Updates…",
       "Settings…",
       "Services",
-      "Hide Eidolon",
+      "Hide LAPLACE Eidolon",
       "Hide Others",
       "Show All",
-      "Quit Eidolon",
+      "Quit LAPLACE Eidolon",
     ]);
     expect(
       itemsOf(macMenu(zh, actions, MAC)[0])
@@ -171,7 +171,7 @@ describe("macOS's menu bar", () => {
     });
     const [about] = itemsOf(menus[0]);
     expect(about?.role).toBeUndefined();
-    expect(about?.label).toBe("About Eidolon");
+    expect(about?.label).toBe("About LAPLACE Eidolon");
     click(about);
     expect(calls).toEqual(["about"]);
     expect(outline(itemsOf(menus[2]))).toEqual([
@@ -233,7 +233,7 @@ test("the tray's menu: Open, Desktop Companion, Settings…, Check for Updates�
   const { actions, calls } = recordingActions();
   const items = trayMenu(en, actions, "enabled", false);
   expect(outline(items)).toEqual([
-    "Open Eidolon",
+    "Open LAPLACE Eidolon",
     "Desktop Companion",
     "Settings…",
     "Check for Updates…",
@@ -241,9 +241,9 @@ test("the tray's menu: Open, Desktop Companion, Settings…, Check for Updates�
     "Show Logs",
     "Open Data Folder",
     "Licenses",
-    "About Eidolon",
+    "About LAPLACE Eidolon",
     "-",
-    "Quit Eidolon",
+    "Quit LAPLACE Eidolon",
   ]);
   for (const item of items) click(item);
   expect(calls).toEqual([
@@ -258,7 +258,7 @@ test("the tray's menu: Open, Desktop Companion, Settings…, Check for Updates�
     "quit",
   ]);
   expect(outline(trayMenu(zh, actions, "enabled", false))).toEqual(
-    expect.arrayContaining(["桌面形象", "检查更新…", "退出 Eidolon"]),
+    expect.arrayContaining(["桌面形象", "检查更新…", "退出 LAPLACE Eidolon"]),
   );
   expect(trayMenu(en, actions, "disabled", false)[3]).toMatchObject({ enabled: false });
   expect(outline(trayMenu(en, actions, "hidden", false))).not.toContain("Check for Updates…");
@@ -308,12 +308,12 @@ describe("her menu", () => {
     return found;
   }
 
-  test("with no call up: Call, Open Eidolon, Appearance, Outfit, Size, Always on Top and Hide, a separator between groups", () => {
+  test("with no call up: Call, Open LAPLACE Eidolon, Appearance, Outfit, Size, Always on Top and Hide, a separator between groups", () => {
     const { items } = menu(idle);
     expect(outline(items)).toEqual([
       "Call",
       "-",
-      "Open Eidolon",
+      "Open LAPLACE Eidolon",
       "-",
       "Appearance",
       "Outfit",
@@ -351,7 +351,7 @@ describe("her menu", () => {
     expect(outline(companionMenu(zh, idle, own, () => {})).slice(0, 3)).toEqual([
       "通话",
       "-",
-      "打开 Eidolon",
+      "打开 LAPLACE Eidolon",
     ]);
   });
 
@@ -361,7 +361,7 @@ describe("her menu", () => {
       "Hang Up",
       "Mute Microphone",
       "-",
-      "Open Eidolon",
+      "Open LAPLACE Eidolon",
     ]);
     expect(menu(up).items[1]).toMatchObject({ enabled: true });
     const muted = menu({ ...up, micOn: false }).items;
@@ -383,7 +383,7 @@ describe("her menu", () => {
     expect(outline(items)).toEqual([
       "Call",
       "-",
-      "Open Eidolon",
+      "Open LAPLACE Eidolon",
       "-",
       "Appearance",
       "-",
@@ -403,7 +403,7 @@ describe("her menu", () => {
     expect(outline(items)).toEqual([
       "Call",
       "-",
-      "Open Eidolon",
+      "Open LAPLACE Eidolon",
       "-",
       "Size",
       "Always on Top",
@@ -421,7 +421,7 @@ describe("her menu", () => {
     const { items, picks } = menu(idle);
     for (const label of [
       "Call",
-      "Open Eidolon",
+      "Open LAPLACE Eidolon",
       "奶绿",
       "TML",
       "As Exported",
@@ -493,12 +493,12 @@ describe("the About panel", () => {
 
   test("names the app's version and the server's beside it", () => {
     expect(aboutPanel("darwin", versions, en, "/icon.ico")).toEqual({
-      applicationName: "Eidolon",
+      applicationName: "LAPLACE Eidolon",
       applicationVersion: "0.1.0",
       version: "Server 0.13.0",
     });
     expect(aboutPanel("win32", versions, zh, "C:\\icon.ico")).toEqual({
-      applicationName: "Eidolon",
+      applicationName: "LAPLACE Eidolon",
       applicationVersion: "0.1.0",
       credits: "服务器 0.13.0",
       iconPath: "C:\\icon.ico",

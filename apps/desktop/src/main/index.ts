@@ -496,7 +496,7 @@ function run(): void {
             const { label, text } = strings();
             return native.messageBox({
               type: "none",
-              title: "Eidolon",
+              title: "LAPLACE Eidolon",
               message: text.hideNoticeTitle,
               detail: text.hideNotice,
               buttons: [label.ok],

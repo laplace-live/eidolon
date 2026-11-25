@@ -1,5 +1,5 @@
 // What the update test reads of an install: the version it says it is, from the bundle's Info.plist
-// on macOS and from the uninstall entry and Eidolon.exe's version resource on Windows; the
+// on macOS and from the uninstall entry and LAPLACE Eidolon.exe's version resource on Windows; the
 // processes it runs, the app Squirrel.Mac or the NSIS setup starts again after the update included;
 // and where an app on the default profile logs.
 import { spawnSync } from "node:child_process";
@@ -44,10 +44,12 @@ export function macVersions(bundle: string): Versions {
     ["-extract", "CFBundleShortVersionString", "raw", "-o", "-", `${bundle}/Contents/Info.plist`],
     { encoding: "utf8" },
   );
-  return { "Eidolon.app's CFBundleShortVersionString": plutilVersion(read.status, read.stdout) };
+  return {
+    "LAPLACE Eidolon.app's CFBundleShortVersionString": plutilVersion(read.status, read.stdout),
+  };
 }
 
-/** What the version script emits for Eidolon.exe, through ConvertTo-Json. */
+/** What the version script emits for LAPLACE Eidolon.exe, through ConvertTo-Json. */
 export interface ExeVersion {
   readonly FileVersion?: string | null;
   readonly ProductVersion?: string | null;
@@ -60,7 +62,7 @@ export function exeVersionScript(exe: string): string {
 
 /**
  * Windows: the DisplayVersion of the uninstall entry that names `folder`'s uninstaller, and
- * Eidolon.exe's FileVersion, which electron-builder writes as the version itself.
+ * LAPLACE Eidolon.exe's FileVersion, which electron-builder writes as the version itself.
  */
 export function windowsVersions(
   entries: readonly UninstallEntry[],
@@ -70,14 +72,14 @@ export function windowsVersions(
   const entry = entries.find((candidate) => namesUninstaller(candidate, folder));
   return {
     "the uninstall entry's DisplayVersion": entry?.DisplayVersion || null,
-    "Eidolon.exe's FileVersion": exe[0]?.FileVersion || null,
+    "LAPLACE Eidolon.exe's FileVersion": exe[0]?.FileVersion || null,
   };
 }
 
 export async function readWindowsVersions(folder: string): Promise<Versions> {
   const [entries, exe] = await Promise.all([
     uninstallEntries(),
-    powershellJson<ExeVersion>(exeVersionScript(win32.join(folder, "Eidolon.exe"))),
+    powershellJson<ExeVersion>(exeVersionScript(win32.join(folder, "LAPLACE Eidolon.exe"))),
   ]);
   return windowsVersions(entries, exe, folder);
 }
@@ -114,7 +116,11 @@ export function defaultLogs(
   home: string,
 ): string {
   if (platform === "win32") {
-    return win32.join(env.APPDATA || win32.join(home, "AppData", "Roaming"), "Eidolon", "logs");
+    return win32.join(
+      env.APPDATA || win32.join(home, "AppData", "Roaming"),
+      "LAPLACE Eidolon",
+      "logs",
+    );
   }
-  return posix.join(home, "Library", "Logs", "Eidolon");
+  return posix.join(home, "Library", "Logs", "LAPLACE Eidolon");
 }

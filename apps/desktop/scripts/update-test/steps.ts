@@ -117,7 +117,7 @@ export function follow(text: string, steps: readonly UpdateStep[]): Progress {
 export function startedVersion(text: string): string | null {
   let version: string | null = null;
   for (const line of text.split(/\r?\n/)) {
-    const started = /^Eidolon (\S+)(?: \(unpackaged\))? · Electron /.exec(message(line));
+    const started = /^LAPLACE Eidolon (\S+)(?: \(unpackaged\))? · Electron /.exec(message(line));
     if (started !== null) version = started[1] as string;
   }
   return version;

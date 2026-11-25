@@ -47,7 +47,14 @@ const REQUIRED = process.env.EIDOLON_REQUIRE_STAGE === "1";
 const HOST = `${process.platform}-${process.arch}`;
 /** Where electron-builder puts each target's payload in the unpacked app. */
 const PACKAGED: Record<Target, string> = {
-  "darwin-arm64": join(DESKTOP, ".out", "mac-arm64", "Eidolon.app", "Contents", "Resources"),
+  "darwin-arm64": join(
+    DESKTOP,
+    ".out",
+    "mac-arm64",
+    "LAPLACE Eidolon.app",
+    "Contents",
+    "Resources",
+  ),
   "win32-x64": join(DESKTOP, ".out", "win-unpacked", "resources"),
 };
 const STALE = "the stage is from another version or pnpm-lock.yaml: run pnpm build:desktop";
@@ -371,7 +378,10 @@ for (const target of Object.keys(TARGETS) as Target[]) {
           readFileSync(join(stageDir(target), UNSIGNED_PE_FILE), "utf8"),
         );
         expect(listed).toEqual([...new Set(listed)].sort());
-        const pes = [...peFilesIn(payload), ...peFilesInZip(await electronZip(), "Eidolon")];
+        const pes = [
+          ...peFilesIn(payload),
+          ...peFilesInZip(await electronZip(), "LAPLACE Eidolon"),
+        ];
         const neither = pes
           .filter(
             ([name, { signer }]) =>

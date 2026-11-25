@@ -21,7 +21,7 @@ import {
   verifyCheck,
 } from "../scripts/signed-check.ts";
 
-const APP = "/Users/runner/work/eidolon/eidolon/apps/desktop/.out/mac-arm64/Eidolon.app";
+const APP = "/Users/runner/work/eidolon/eidolon/apps/desktop/.out/mac-arm64/LAPLACE Eidolon.app";
 const NATIVE = `${APP}/Contents/Resources/eidolon/node_modules/@lancedb/lancedb-darwin-arm64/lancedb.darwin-arm64.node`;
 const ORG_REQUIREMENT =
   'designated => anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and (certificate leaf[subject.OU] = B5483RCL5H or certificate leaf[subject.OU] = "9H3CCD4YMM")';
@@ -29,7 +29,7 @@ const ORG_REQUIREMENT =
 const ok = (output: string): ToolRun => ({ status: 0, output });
 
 /** `codesign -dvvv` of the app, signed with the Developer ID, notarized and stapled. */
-const APP_SIGNATURE = `Executable=${APP}/Contents/MacOS/Eidolon
+const APP_SIGNATURE = `Executable=${APP}/Contents/MacOS/LAPLACE Eidolon
 Identifier=live.laplace.eidolon
 Format=app bundle with Mach-O thin (arm64)
 CodeDirectory v=20500 size=652 flags=0x10000(runtime) hashes=9+7 location=embedded
@@ -154,17 +154,19 @@ describe("macOS", () => {
   test("reads an explicit designated requirement, and none from an ad-hoc signature's implicit one", () => {
     // codesign -d -r- prints the requirement on stdout and Executable= on stderr.
     expect(
-      designatedRequirement(`${ORG_REQUIREMENT}\nExecutable=${APP}/Contents/MacOS/Eidolon\n`),
+      designatedRequirement(
+        `${ORG_REQUIREMENT}\nExecutable=${APP}/Contents/MacOS/LAPLACE Eidolon\n`,
+      ),
     ).toBe(ORG_REQUIREMENT);
     expect(
       designatedRequirement(
-        `# designated => cdhash H"ef4e19c118d117d61c414cb1ae3c3ce3b869302b"\nExecutable=${APP}/Contents/MacOS/Eidolon\n`,
+        `# designated => cdhash H"ef4e19c118d117d61c414cb1ae3c3ce3b869302b"\nExecutable=${APP}/Contents/MacOS/LAPLACE Eidolon\n`,
       ),
     ).toBeNull();
   });
 
   test("passes a bundle whose requirement is the file's, and fails the default or an implicit one", () => {
-    const helper = "Eidolon Helper (GPU).app";
+    const helper = "LAPLACE Eidolon Helper (GPU).app";
     expect(requirementCheck(helper, ok(ORG_REQUIREMENT), ORG_REQUIREMENT).pass).toBe(true);
     // What electron-builder writes without mac.requirements: one team, and the bundle's identifier.
     const defaultRequirement =
@@ -178,8 +180,8 @@ describe("macOS", () => {
   });
 
   test("takes codesign's deep, strict verification only when it is valid and meets its requirement", () => {
-    const passing = `--prepared:${APP}/Contents/Frameworks/Eidolon Helper (GPU).app
---validated:${APP}/Contents/Frameworks/Eidolon Helper (GPU).app
+    const passing = `--prepared:${APP}/Contents/Frameworks/LAPLACE Eidolon Helper (GPU).app
+--validated:${APP}/Contents/Frameworks/LAPLACE Eidolon Helper (GPU).app
 --prepared:${APP}/Contents/Frameworks/Electron Framework.framework/Versions/Current/.
 --validated:${APP}/Contents/Frameworks/Electron Framework.framework/Versions/Current/.
 ${APP}: valid on disk
@@ -224,7 +226,7 @@ ${APP}: satisfies its Designated Requirement
     expect(stapleCheck(ok(`Processing: ${APP}\nThe validate action worked!\n`)).pass).toBe(true);
     const missing = {
       status: 65,
-      output: `Processing: ${APP}\nEidolon.app does not have a ticket stapled to it.\n`,
+      output: `Processing: ${APP}\nLAPLACE Eidolon.app does not have a ticket stapled to it.\n`,
     };
     expect(stapleCheck(missing)).toMatchObject({ pass: false });
     expect(stapleCheck(missing).detail).toContain("does not have a ticket stapled to it");
@@ -232,14 +234,14 @@ ${APP}: satisfies its Designated Requirement
 });
 
 const INSTALL = "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\eidolon";
-const SETUP = "D:\\a\\eidolon\\eidolon\\apps\\desktop\\.out\\Eidolon Setup 0.1.0.exe";
+const SETUP = "D:\\a\\eidolon\\eidolon\\apps\\desktop\\.out\\LAPLACE Eidolon Setup 0.1.0.exe";
 const MODULES = `${INSTALL}\\resources\\eidolon\\node_modules`;
 const ORT = `${MODULES}\\onnxruntime-node\\bin\\napi-v6\\win32\\x64`;
 const LANCEDB = `${MODULES}\\@lancedb\\lancedb-win32-x64-msvc`;
 const SHARP = `${MODULES}\\@img\\sharp-win32-x64\\lib`;
 /** The stage's unsigned-pe.json: Electron's unsigned DLLs and the payload's. */
 const LISTED = [
-  "Eidolon_wer.dll",
+  "LAPLACE Eidolon_wer.dll",
   "dxcompiler.dll",
   "ffmpeg.dll",
   "lancedb.win32-x64-msvc.node",
@@ -267,13 +269,17 @@ function signature(path: string, signer: string | null, status = "Valid"): Authe
 /** A signed release's install, its setup included, as Get-AuthenticodeSignature reads it on CI. */
 const SIGNED: Authenticode[] = [
   signature(SETUP, "LAPLACE Live LLC"),
-  signature(`${INSTALL}\\Eidolon.exe`, "LAPLACE Live LLC"),
-  signature(`${INSTALL}\\Uninstall Eidolon.exe`, "LAPLACE Live LLC"),
+  signature(`${INSTALL}\\LAPLACE Eidolon.exe`, "LAPLACE Live LLC"),
+  signature(`${INSTALL}\\Uninstall LAPLACE Eidolon.exe`, "LAPLACE Live LLC"),
   signature(`${INSTALL}\\resources\\elevate.exe`, "LAPLACE Live LLC"),
   signature(`${INSTALL}\\d3dcompiler_47.dll`, "Microsoft Windows"),
-  ...["dxcompiler.dll", "Eidolon_wer.dll", "ffmpeg.dll", "vk_swiftshader.dll", "vulkan-1.dll"].map(
-    (name) => signature(`${INSTALL}\\${name}`, "LAPLACE Live LLC"),
-  ),
+  ...[
+    "dxcompiler.dll",
+    "LAPLACE Eidolon_wer.dll",
+    "ffmpeg.dll",
+    "vk_swiftshader.dll",
+    "vulkan-1.dll",
+  ].map((name) => signature(`${INSTALL}\\${name}`, "LAPLACE Live LLC")),
   signature(`${ORT}\\onnxruntime_binding.node`, "Microsoft Corporation"),
   signature(`${ORT}\\onnxruntime.dll`, "Microsoft Corporation"),
   ...[
@@ -331,7 +337,7 @@ describe("Windows", () => {
       "resources\\eidolon\\node_modules\\onnxruntime-node\\bin\\napi-v6\\win32\\x64\\onnxruntime.dll keeps Microsoft's signature",
     );
     expect(checks.map((check) => check.name)).toContain(
-      "Eidolon Setup 0.1.0.exe is signed by the org",
+      "LAPLACE Eidolon Setup 0.1.0.exe is signed by the org",
     );
   });
 
@@ -355,8 +361,10 @@ describe("Windows", () => {
       failures(replacing("d3dcompiler_47.dll", (path) => signature(path, "LAPLACE Live LLC"))),
     ).toEqual(["d3dcompiler_47.dll keeps Microsoft's signature"]);
     expect(
-      failures(replacing("Eidolon Setup 0.1.0.exe", (path) => signature(path, "Someone Else"))),
-    ).toEqual(["Eidolon Setup 0.1.0.exe is signed by the org"]);
+      failures(
+        replacing("LAPLACE Eidolon Setup 0.1.0.exe", (path) => signature(path, "Someone Else")),
+      ),
+    ).toEqual(["LAPLACE Eidolon Setup 0.1.0.exe is signed by the org"]);
   });
 
   // Trusted Signing's certificates last three days: a signature without a timestamp lapses with one.
@@ -411,8 +419,8 @@ describe("Windows", () => {
     const required = requiredInInstall(LISTED);
     expect(required).toEqual(
       expect.arrayContaining([
-        "Eidolon.exe",
-        "Uninstall Eidolon.exe",
+        "LAPLACE Eidolon.exe",
+        "Uninstall LAPLACE Eidolon.exe",
         "d3dcompiler_47.dll",
         "onnxruntime.dll",
         "onnxruntime_binding.node",
@@ -422,10 +430,12 @@ describe("Windows", () => {
       ]),
     );
     expect(presenceCheck(FILES, required).pass).toBe(true);
-    const withoutUninstaller = FILES.filter((path) => !path.endsWith("\\Uninstall Eidolon.exe"));
+    const withoutUninstaller = FILES.filter(
+      (path) => !path.endsWith("\\Uninstall LAPLACE Eidolon.exe"),
+    );
     expect(presenceCheck(withoutUninstaller, required)).toMatchObject({
       pass: false,
-      detail: "missing: Uninstall Eidolon.exe",
+      detail: "missing: Uninstall LAPLACE Eidolon.exe",
     });
   });
 });

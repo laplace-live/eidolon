@@ -506,7 +506,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
       .log("main")
       .split(/\r?\n/)
       .find((text) => text.includes(" · Electron "));
-    const named = /Eidolon (\S+)( \(unpackaged\))? · Electron (\S+) · /.exec(started ?? "");
+    const named = /LAPLACE Eidolon (\S+)( \(unpackaged\))? · Electron (\S+) · /.exec(started ?? "");
     const manifest = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8")) as {
       devDependencies: Record<string, string>;
     };
@@ -522,7 +522,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
         named[3] === pinned &&
         typeof status.version === "string" &&
         status.version === staged.version,
-      `main.log names Eidolon ${named?.[1] ?? "?"}${named?.[2] ?? ""} on Electron ${named?.[3] ?? "?"}, pinned ${pinned}; the server reports ${String(status.version)}, the payload's package.json ${String(staged.version)}`,
+      `main.log names LAPLACE Eidolon ${named?.[1] ?? "?"}${named?.[2] ?? ""} on Electron ${named?.[3] ?? "?"}, pinned ${pinned}; the server reports ${String(status.version)}, the payload's package.json ${String(staged.version)}`,
     );
   });
 
@@ -983,7 +983,7 @@ function plan(): { readonly binary: string; readonly setup: string | null } | st
   }
   const binary = installedBinary();
   if (existsSync(dirname(binary))) {
-    return `Eidolon is already installed for this user in ${dirname(binary)}. The smoke installs its own build there and uninstalls it after, so it runs only where none is, such as a CI runner`;
+    return `LAPLACE Eidolon is already installed for this user in ${dirname(binary)}. The smoke installs its own build there and uninstalls it after, so it runs only where none is, such as a CI runner`;
   }
   return { binary, setup };
 }

@@ -1,6 +1,6 @@
 # The desktop app
 
-Eidolon, the desktop app (`apps/desktop`, the private package `laplace-eidolon-desktop`), is the
+LAPLACE Eidolon, the desktop app (`apps/desktop`, the private package `laplace-eidolon-desktop`), is the
 local app in a window that starts its own backend, on macOS (Apple silicon) and Windows (x64): no
 terminal, no Node to install, and no link to sign in with. The window shows `apps/web` as it
 is, served by the same local server `pnpm app` and `npx @laplace.live/eidolon` run, in local
@@ -11,7 +11,7 @@ the app's updater finds the next one ([Releasing](#releasing), [Updates](#update
 `pnpm package:desktop` builds it locally, unsigned.
 
 ```text
-Eidolon (main process)
+LAPLACE Eidolon (main process)
  ├─ the single-instance lock: a second launch shows the window, or quits the app with --quit
  ├─ the environment: the login shell's on macOS, the registry's on Windows
  ├─ the data home: EIDOLON_HOME, else ~/.laplace/eidolon
@@ -86,7 +86,7 @@ Vite and exiting:
 
 `require("electron")` from `apps/desktop` gives the path to Electron's binary, which its package
 downloads on first use, after printing a line of its own to stdout: hence the `tail`. Unpackaged,
-the profile is `Eidolon Dev`, never the installed app's, and the dev backend uses the normal data
+the profile is `LAPLACE Eidolon Dev`, never the installed app's, and the dev backend uses the normal data
 home: a `pnpm app` or `dev:local` already serving it is
 [attached to](#attaching-to-a-server-already-on-the-data-home), not replaced. Every test run of
 the app is in [background mode](#background-mode).
@@ -121,9 +121,9 @@ the app is in [background mode](#background-mode).
    50–150 ms by then.
 2. A packaged launch with `--remote-debugging-port` or `--remote-debugging-pipe`, which no fuse
    covers, exits 1 before the profile, the logs and the lock exist.
-3. Unpackaged, the profile (userData) becomes `<appData>/Eidolon Dev`, unless the launch passes
+3. Unpackaged, the profile (userData) becomes `<appData>/LAPLACE Eidolon Dev`, unless the launch passes
    `--user-data-dir`, as a test run does. Whenever the profile isn't the default, the logs move
-   into `<profile>/logs`: on macOS `app.getPath("logs")` is `~/Library/Logs/Eidolon` whatever the
+   into `<profile>/logs`: on macOS `app.getPath("logs")` is `~/Library/Logs/LAPLACE Eidolon` whatever the
    profile, so a test would append to the installed app's logs.
 4. The single-instance lock, scoped to the profile. A second launch shows and focuses the window,
    from hidden or minimized, or makes it again if the page closed it; with `--quit` it quits the
@@ -390,7 +390,7 @@ app's second, with rules of its own.
   insets. On Windows, a hidden title bar under a transparent 44 px overlay, whose caption glyphs
   main recolours on each theme change.
 - **Menus and the tray.** macOS's menu bar is declared in full, since a custom menu replaces
-  Electron's: Eidolon (About, Check for Updates…, Settings…, Services, Hide, Hide Others, Show All,
+  Electron's: LAPLACE Eidolon (About, Check for Updates…, Settings…, Services, Hide, Hide Others, Show All,
   Quit), Edit (its roles, without which copy and paste break), View (zoom, full screen, and Toggle
   Developer Tools only unpackaged), Window (⌘W hides, and Desktop Companion, a checkbox that turns
   the [desktop companion](#the-desktop-companion) on and off) and Help (Show Logs, Open Data Folder,
@@ -398,8 +398,8 @@ app's second, with rules of its own.
   would otherwise install its default one, whose accelerators act even under a hidden title bar. The
   tray's icon stays for the whole run, Windows' in the notification area and macOS's in the menu bar
   (`trayTemplate.png`, the logo's petals as a template image the menu bar tints), and its menu holds
-  Open Eidolon, Desktop Companion, the same checkbox, Settings…, Check for Updates…, Show Logs, Open
-  Data Folder, Licenses, About Eidolon and Quit Eidolon. On Windows a click on it opens the window;
+  Open LAPLACE Eidolon, Desktop Companion, the same checkbox, Settings…, Check for Updates…, Show Logs, Open
+  Data Folder, Licenses, About LAPLACE Eidolon and Quit LAPLACE Eidolon. On Windows a click on it opens the window;
   on macOS it opens the menu, as menu bar icons do. Check for Updates… is there only when the app
   [updates itself](#updates) or runs from a read-only volume, and disabled while a check, a download
   or the restart runs. Both get a context menu, since Electron has none: cut, copy, paste and select
@@ -438,7 +438,7 @@ app's second, with rules of its own.
 - **Quit.** Every quit, ⌘Q, a menu, the Dock, the tray or a second launch's `--quit`, goes through
   `before-quit`. While our own backend is ready, main first asks it what would stop
   (`GET /api/local/status` and `GET /api/local/jobs`, with the Bearer, 2 s for both). When a call, a
-  task or a job runs, or it couldn't tell, or the window holds unsaved edits, a "Quit Eidolon?" box
+  task or a job runs, or it couldn't tell, or the window holds unsaved edits, a "Quit LAPLACE Eidolon?" box
   names what stops and, for the edits, says "Your unsaved changes will be lost.", Quit being the
   default and Esc cancelling; it has no owner window, so a hidden window stays hidden, and a quit
   while it is open joins it. An attached server is never asked or stopped, but unsaved edits ask all
@@ -537,13 +537,13 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   (`companionMenu` in `menus.ts`, in the shell's language), from the state her page gives it:
   **Call**, or **Hang Up** and **Mute Microphone** (**Unmute Microphone** while it is off) while a
   call is up in the main window, hers or another persona's, Hang Up working while the call still
-  connects and the microphone's item only once it is live; **Open Eidolon**; **Appearance**, her
+  connects and the microphone's item only once it is live; **Open LAPLACE Eidolon**; **Appearance**, her
   models as radio items, whenever she has any, her picture's included; **Outfit**, the active
   model's outfits, **As Exported** first; **Size**; **Always on Top**; and **Hide**, a separator
   between groups. A model's or an outfit's name shows as one line of at most 40 characters, `&`
   doubled, which every platform's menu shows as one. Main acts on each pick 100 ms after the menu
   closes, so a click Electron delivers after the close still counts: Open
-  Eidolon brings the main window forward; Size reshapes her on her feet; Always on Top flips her
+  LAPLACE Eidolon brings the main window forward; Size reshapes her on her feet; Always on Top flips her
   floating; Hide turns her off, the same switch as Settings', and, turned off while a call of hers
   goes on in a window that doesn't show (after Pop Out), main brings that window back first, so a
   call never goes on with nothing of it on screen. Her page acts on Appearance and Outfit itself,
@@ -558,7 +558,7 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
 - **Pop Out**, on the video screen of a call she is on
   ([web-app.md](web-app.md#in-the-desktop-app)), turns her on and, once she shows, hides the main
   window: she carries the call, which goes on there. When she isn't drawn within 10 s, main.log says
-  so and the window stays. Open Eidolon from her menu, the Dock or the tray brings the screen back.
+  so and the window stays. Open LAPLACE Eidolon from her menu, the Dock or the tray brings the screen back.
 - **The cursor poll.** While she shows and follows the cursor, as her page says (`follow`), main
   reads the cursor's screen point every 33 ms and sends her page each new one, relative to her
   window (`companionCursor`); never during a drag.
@@ -596,7 +596,7 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   included.
 - **Quit and updates.** Every approved quit, an update's restart included, closes her before the
   backend stops, and nothing makes her again. The quit box and an update's boxes are main's own,
-  with no owner window, never hers. Hide Eidolon (⌘H) hides her with the app and Show All brings her
+  with no owner window, never hers. Hide LAPLACE Eidolon (⌘H) hides her with the app and Show All brings her
   back; ⌘W never reaches her, since she is never the focused window.
 - **In background mode** she is made and draws, but is never shown: main's record moves as always
   and logs that background mode keeps her off screen where it would show her; nothing sets her
@@ -649,7 +649,7 @@ through Electron's `Notification`.
 - **Only while the window isn't focused** at the poll that sees the change, both as its answer comes
   and once her name is read: one seen while it is focused is recorded, and never told later.
 - **What one says:** her name as its title, the task's chat's persona as `GET /api/local/personas`
-  names her (read once a baseline, and again for a persona it doesn't know), else `Eidolon`; a fixed
+  names her (read once a baseline, and again for a persona it doesn't know), else `LAPLACE Eidolon`; a fixed
   phrase for its kind in the shell's language; and her goal on a second line, made one line,
   without control, format or bidi characters, and cut at 80 characters. Never what a worker wrote
   or a page it read could have: no command, path, site, tool or arguments, no step, file name,
@@ -716,7 +716,7 @@ folders and fake runners.
 
 - **The launchers** ship in the app's resources, never written at run time: the signed bundle is
   sealed, and every update replaces the Windows install folder. `launchers/mac/eidolon` (sh, 0755)
-  becomes `Eidolon.app/Contents/Resources/bin/eidolon`, and `launchers/win/eidolon.cmd` (CRLF,
+  becomes `LAPLACE Eidolon.app/Contents/Resources/bin/eidolon`, and `launchers/win/eidolon.cmd` (CRLF,
   which cmd.exe needs) `resources\bin\eidolon.cmd`. Given arguments, one sets
   `ELECTRON_RUN_AS_NODE=1`, `EIDOLON_APP_ROOT` to the payload and `EIDOLON_NO_DOTENV=1`, runs the
   app's binary with `--disable-sigusr1 --use-system-ca` on the payload's `dist/cli.js`, and exits
@@ -857,7 +857,7 @@ VC++ copies.
   version.
 - **The unsigned-PE list.** `.stage/win32-x64/unsigned-pe.json` names, by basename, each `.node` and
   `.dll` with an empty certificate table, in the payload and in the Electron zip electron-builder
-  packs (`electron_wer.dll` under its packaged name, `Eidolon_wer.dll`), for a signed release to
+  packs (`electron_wer.dll` under its packaged name, `LAPLACE Eidolon_wer.dll`), for a signed release to
   sign: electron-builder signs only `.exe` unless told, and a whole extension would re-sign
   Microsoft's files. On a Windows stage, the stage test fails on a `.node` or `.dll` that is neither
   listed nor signed by Microsoft (`MICROSOFT_SIGNERS`). The list matches by basename, and Electron's
@@ -987,7 +987,7 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
 `pnpm package:desktop` runs electron-builder with `--publish never`, `-c.mac.identity=-` and
 `-c.extraMetadata.version=0.0.0-dev`, and with `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never
 signs with an identity from the keychain or asks for one. It needs `dist/` and warns when there is
-no stage. On macOS it writes `.out/mac-arm64/Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
+no stage. On macOS it writes `.out/mac-arm64/LAPLACE Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
 and `.out/win-unpacked`. Its builds are unsigned: ad hoc on macOS, where that signs every Mach-O,
 the payload's natives included, with the hardened runtime. The flags stay on the command line,
 never in `electron-builder.yml`, which the release overlay extends: an identity there would replace
@@ -996,20 +996,20 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
 
 `electron-builder.yml`:
 
-- **Names.** `appId` `live.laplace.eidolon`, `productName` `Eidolon`, which names the profile
-  (`~/Library/Application Support/Eidolon`, `%APPDATA%\Eidolon`) and scopes the single-instance
+- **Names.** `appId` `live.laplace.eidolon`, `productName` `LAPLACE Eidolon`, which names the profile
+  (`~/Library/Application Support/LAPLACE Eidolon`, `%APPDATA%\LAPLACE Eidolon`) and scopes the single-instance
   lock, and `extraMetadata.name` `eidolon`, which names the per-user install folder,
   `%LOCALAPPDATA%\Programs\eidolon`. Upgrades keep the first install's folder, so the name is fixed.
 - **The asar** holds `dist/` and `package.json`, without source maps; `npmRebuild` is off, since
   main and the preload are bundles and the app has no dependencies. The output is `.out`, and build
   resources are in `resources/`, since the root `.gitignore` ignores `build/` at any depth.
 - **The payload** is an extra resource, outside the asar so onnxruntime and LanceDB open real files:
-  `Eidolon.app/Contents/Resources/eidolon`, or `resources\eidolon` beside `Eidolon.exe`. Its source
+  `LAPLACE Eidolon.app/Contents/Resources/eidolon`, or `resources\eidolon` beside `LAPLACE Eidolon.exe`. Its source
   is the folder above the payload, `.stage/<target>` with the filter `eidolon/**/*`, because
   electron-builder skips a source folder's own top-level `node_modules` whatever the filter. Asar
   integrity doesn't cover it. `assets/`, with the tray icon, ships the same way.
 - **The [terminal command](#the-terminal-command)'s launchers** ship as each platform's extra
-  resource too, `launchers/mac` or `launchers/win` as `bin`: `Eidolon.app/Contents/Resources/bin`,
+  resource too, `launchers/mac` or `launchers/win` as `bin`: `LAPLACE Eidolon.app/Contents/Resources/bin`,
   or `resources\bin`. `apps/desktop/.gitattributes` keeps every `.cmd`, the node shim's too, CRLF.
 - **The fuses,** each one listed, since an unlisted fuse keeps Electron's default: `runAsNode` on,
   for the backend, its jobs, the `eidolon` command and the node shim; the nodeOptions and CLI
@@ -1170,17 +1170,17 @@ runs before a change reaches master.
 step left in `.out`) prints a `PASS` or `FAIL` line per check, as the smokes do, and exits 1 when
 one failed. `test/signed-check.test.ts` holds its verdicts to the tools' own output.
 
-- **macOS,** on `.out/mac-arm64/Eidolon.app`: `codesign --verify --deep --strict` passes; `spctl
+- **macOS,** on `.out/mac-arm64/LAPLACE Eidolon.app`: `codesign --verify --deep --strict` passes; `spctl
   --assess` accepts it as a notarized Developer ID; `stapler validate` finds the ticket; every
   `.node` and `.dylib` in the payload has the hardened runtime and a secure timestamp from Apple's
   server, which neither an ad-hoc signature nor `Signed Time` alone gives; and the designated
   requirement of the app and of each helper app and framework is the requirement file's, as `csreq
   -t` prints it.
-- **Windows:** it installs the setup silently for the user, refusing where Eidolon is installed
+- **Windows:** it installs the setup silently for the user, refusing where LAPLACE Eidolon is installed
   already, then reads `Get-AuthenticodeSignature` on the setup and on every PE file of the install,
   found by its headers whatever its name. Each must be Valid and timestamped, since a Trusted
   Signing certificate lasts three days and an untimestamped signature lapses with it. The setup,
-  every `.exe` in the install (`Eidolon.exe`, the uninstaller, `elevate.exe`) and every name the
+  every `.exe` in the install (`LAPLACE Eidolon.exe`, the uninstaller, `elevate.exe`) and every name the
   stage listed must be signed by one of `publish.publisherName`'s names; every other file must keep
   the Microsoft signature it came with (`MICROSOFT_SIGNERS`): onnxruntime's, the VC++ runtime and
   Electron's `d3dcompiler_47.dll`. The install must hold each of those and every listed file, so no
@@ -1218,7 +1218,7 @@ needs a `sign` dispatch from `master` or `electron` that passes both legs, the u
 
 ## Logs
 
-- **Where:** `app.getPath("logs")`: `~/Library/Logs/Eidolon` on macOS, `%APPDATA%\Eidolon\logs` on
+- **Where:** `app.getPath("logs")`: `~/Library/Logs/LAPLACE Eidolon` on macOS, `%APPDATA%\LAPLACE Eidolon\logs` on
   Windows, or `<profile>/logs` for a profile that isn't the default (unpackaged, or a
   `--user-data-dir`). Show Logs, in the Help menu on macOS and the tray on Windows, opens it.
 - **`main.log`:** main's own lines at info and up, `console` included; uncaught errors in main,
@@ -1279,7 +1279,7 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
   app menu after About, in Windows' tray menu after Settings…), which is disabled while a check, a
   download or the restart runs. The quiet check only logs that the app is up to date or that the
   check failed; Check for Updates… also says so in a box. A check asked while one runs joins it.
-- **Downloading:** nothing downloads unasked (`autoDownload` is off). "Eidolon X.Y.Z is available"
+- **Downloading:** nothing downloads unasked (`autoDownload` is off). "LAPLACE Eidolon X.Y.Z is available"
   offers Download, the default, Later and Release Notes, which opens the GitHub Release of
   `laplace-eidolon-desktop@X.Y.Z` in the default browser, through the link policy. After Later or
   Release Notes, Check for Updates… shows the box again without checking. The download's progress
@@ -1293,8 +1293,8 @@ laplace-persona's updater does but in native boxes, and `test/update-flow.test.t
   the update to `autoInstallOnAppQuit` at the next quit, with no relaunch. Restart moves the state
   to installing first, so a second Restart does nothing: `quitAndInstall` twice asks Squirrel to
   relaunch twice, which leaves two copies running. Then it goes the way a [quit](#the-window) goes:
-  the quit check, whose "Restart Eidolon?" box names what a restart stops (on Windows the installer
-  kills any `Eidolon.exe` still running from the install folder, a CLI job's included) and, as the
+  the quit check, whose "Restart LAPLACE Eidolon?" box names what a restart stops (on Windows the installer
+  kills any `LAPLACE Eidolon.exe` still running from the install folder, a CLI job's included) and, as the
   quit's does, asks over the window's unsaved edits too; the latch, after which a close no longer
   hides the window; the backend's graceful stop; and only then `quitAndInstall(true, true)`, once.
   A Cancel there hands the state back to downloaded. None of it runs inside `before-quit`: on
@@ -1437,7 +1437,7 @@ Some files run only on Windows, where `ts.yml`'s Windows job runs them ([In CI](
 that touch the registry do it on scratch keys under `HKCU\Software\Eidolon Test`, which each
 deletes after, never the real `Environment`: `test/terminal-command-windows.test.ts` drives the
 real `Path` script there and runs the `.cmd` launcher against a stand-in install whose
-`Eidolon.exe` is a copy of Node, about 80 MB; and `test/registry-environment-windows.test.ts`
+`LAPLACE Eidolon.exe` is a copy of Node, about 80 MB; and `test/registry-environment-windows.test.ts`
 reads `REG_SZ`, `REG_EXPAND_SZ` and non-ASCII values there through the real registry read.
 
 ### The stage test
@@ -1532,7 +1532,7 @@ Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers
   or PowerShell's `Win32_Process` on Windows), recorded as it goes so a child that outlives its
   parent is still known, and stopped by pid at the end (`killTree` on Windows).
 - **`focus.ts`, the focus watch,** on macOS outside `--headful`: `lsappinfo front` every 50 ms. The
-  app in front, by name (Electron or Eidolon) or as a process the smoke started or one under it,
+  app in front, by name (Electron or LAPLACE Eidolon) or as a process the smoke started or one under it,
   fails the run, and so does a system prompt in front (SecurityAgent, UserNotificationCenter,
   CoreServicesUIAgent, universalAccessAuthWarn, the Open and Save panel), whoever raised it: one the
   owner opens during a run fails it too. The owner switching between their own apps is no failure.
@@ -1627,7 +1627,7 @@ Each step prints one line, made of the checks inside it:
     System Prompt, leaving the edit unsaved. It kills the backend: main.log says main let the page
     go and loaded the failure page, whose Try Again starts another backend and loads Home. With the
     edit typed again, `--quit` still ends main and the backend with exit 0. main.log says background
-    mode answered Quit to the quit's box, whose text is "Quit Eidolon? Your unsaved changes will be
+    mode answered Quit to the quit's box, whose text is "Quit LAPLACE Eidolon? Your unsaved changes will be
     lost.", then that main quit, hid the window, stopped the backend, let the page go and closed the
     window, in that order, and the quit leaves nothing running and no error line in either log but
     the failure the kill caused.
@@ -1647,7 +1647,7 @@ the 30 s the quit has.
 #### The packaged smoke
 
 `pnpm smoke:desktop [--headful]` smokes the fused app `pnpm package:desktop` left in
-`apps/desktop/.out`: on macOS `mac-arm64/Eidolon.app`, on Windows the NSIS setup, the only `.exe`
+`apps/desktop/.out`: on macOS `mac-arm64/LAPLACE Eidolon.app`, on Windows the NSIS setup, the only `.exe`
 there. It never builds or packages: with no build it says how to make one (`pnpm build:web &&
 pnpm build:desktop && pnpm package:desktop`) and exits 1 before starting anything.
 Playwright and CDP can't drive a fused build, so it calls the backend's API with the Bearer, as
@@ -1696,7 +1696,7 @@ main's forwarder does, and runs the app's binary in node mode beside it, as main
   error printed past its logger.
 
 On Windows it first installs the NSIS setup silently for the user (`/S`), and smokes the
-installed `%LOCALAPPDATA%\Programs\eidolon\Eidolon.exe`. After the quit it runs, with `/S`, the
+installed `%LOCALAPPDATA%\Programs\eidolon\LAPLACE Eidolon.exe`. After the quit it runs, with `/S`, the
 HKCU uninstall command that names the install folder's uninstaller, and none at all when no entry
 does, which fails the check, so another app's entry named Eidolon never runs. It then checks that
 the install folder and its entry are gone and the data homes are as they were, file for file by
@@ -1796,9 +1796,9 @@ other, in bash, within three hours:
      one's, named by putting the old version where the new one is.
    - **0.0.1 installed:** on macOS the DMG attached read-only and its app copied into the run's
      folder, since Squirrel.Mac replaces the bundle in place; on Windows the NSIS setup with `/S`
-     for the user, refusing where Eidolon is installed already. Its version is read back: the
+     for the user, refusing where LAPLACE Eidolon is installed already. Its version is read back: the
      bundle's `CFBundleShortVersionString` through `plutil`, or the uninstall entry's
-     `DisplayVersion` and `Eidolon.exe`'s `FileVersion`.
+     `DisplayVersion` and `LAPLACE Eidolon.exe`'s `FileVersion`.
    - **The update:** 0.0.1 starts in background mode with `EIDOLON_DESKTOP_UPDATE_TEST=1`, on a
      temporary home and profile and with no account (`appEnv()`), and main.log must show each
      [step's line](#updates) in order, from `updates are on in background mode` to `installing`,
@@ -1912,8 +1912,8 @@ fake microphone, or background mode denies it ([above](#driving-it-in-background
   runs it with its backend from source serving `apps/web/dist`; the `tail` drops the line the first
   `require` prints as it downloads the binary, which neither build fetches on macOS. Playwright's
   `_electron` drives it the same way.
-- **Packaged,** run `apps/desktop/.out/mac-arm64/Eidolon.app/Contents/MacOS/Eidolon
-  --user-data-dir=<profile>` (`.out\win-unpacked\Eidolon.exe` on Windows), and drive its backend
+- **Packaged,** run `"apps/desktop/.out/mac-arm64/LAPLACE Eidolon.app/Contents/MacOS/LAPLACE Eidolon"
+  --user-data-dir=<profile>` (`".out\win-unpacked\LAPLACE Eidolon.exe"` on Windows), and drive its backend
   once main.log says the window shows `eidolon-app://app/`:
 
   ```bash

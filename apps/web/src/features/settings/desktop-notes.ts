@@ -14,8 +14,8 @@ import type {
 const UNAVAILABLE_NOTES: Readonly<Record<Unavailable, MessageDescriptor>> = {
   background: msg`Background mode leaves this computer as it is.`,
   unpackaged: msg`Available in the installed app only.`,
-  "outside-applications": msg`Move Eidolon to the Applications folder to use this.`,
-  "not-installed": msg`Install Eidolon with its installer to use this.`,
+  "outside-applications": msg`Move LAPLACE Eidolon to the Applications folder to use this.`,
+  "not-installed": msg`Install LAPLACE Eidolon with its installer to use this.`,
 };
 
 /** A row's line under its description; a warning asks the owner to do something. */
@@ -31,7 +31,7 @@ export function loginItemNote(item: LoginItemState): Note | null {
       return { text: UNAVAILABLE_NOTES[item.reason], tone: "muted" };
     case "needs-approval":
       return {
-        text: msg`Waiting for your OK in System Settings: turn Eidolon on under General → Login Items.`,
+        text: msg`Waiting for your OK in System Settings: turn LAPLACE Eidolon on under General → Login Items.`,
         tone: "warning",
       };
     case "on":

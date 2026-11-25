@@ -53,10 +53,10 @@ describe("noticeText", () => {
     expect(noticeText({ ...notice, kind: "failed", goal: "  " }, en).body).toBe("The task failed");
   });
 
-  test("is titled Eidolon when her name is unknown", () => {
-    expect(noticeText({ ...notice, persona: null }, en).title).toBe("Eidolon");
-    expect(noticeText({ ...notice, persona: "" }, en).title).toBe("Eidolon");
-    expect(noticeText({ ...notice, persona: null }, zh).title).toBe("Eidolon");
+  test("is titled LAPLACE Eidolon when her name is unknown", () => {
+    expect(noticeText({ ...notice, persona: null }, en).title).toBe("LAPLACE Eidolon");
+    expect(noticeText({ ...notice, persona: "" }, en).title).toBe("LAPLACE Eidolon");
+    expect(noticeText({ ...notice, persona: null }, zh).title).toBe("LAPLACE Eidolon");
   });
 
   test("speaks the shell's language, her goal and name as they are", () => {

@@ -274,7 +274,7 @@ describe("where she stands", () => {
 describe("her window's options", () => {
   const common = {
     show: false,
-    title: "Eidolon",
+    title: "LAPLACE Eidolon",
     transparent: true,
     frame: false,
     hasShadow: false,

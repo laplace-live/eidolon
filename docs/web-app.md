@@ -481,15 +481,15 @@ the overlay gives as `env(titlebar-area-*)`:
 
 **What else differs:**
 
-- **Home's footer** names both versions, as in `Eidolon 0.1.0 · server 0.13.0`: the desktop app's
+- **Home's footer** names both versions, as in `LAPLACE Eidolon 0.1.0 · server 0.13.0`: the desktop app's
   own, from the bridge, and the server's, from status, which may be a terminal's server it attached
   to.
 - **Settings → Desktop** (`features/settings/desktop-card.tsx`), last before Advanced, shows only
   when the bridge has all four of `loginItem`, `setLoginItem`, `terminalCommand` and
   `setTerminalCommand`, or both of `companion` and `setCompanion`; elsewhere `?tab=desktop` leads to
-  the default section. Its Desktop App card, "What Eidolon can add to this computer, each only when
+  the default section. Its Desktop App card, "What LAPLACE Eidolon can add to this computer, each only when
   you choose it.", asks the bridge, never the server, and acts at once, its rows in this order, each
-  only when the bridge offers it: **Open at Login**'s switch, with a note to turn Eidolon on under
+  only when the bridge offers it: **Open at Login**'s switch, with a note to turn LAPLACE Eidolon on under
   System Settings → General → Login Items while macOS waits for that, read again every 3 s until it
   does; **Desktop Companion**'s switch, which shows and hides the [desktop
   companion](desktop.md#the-desktop-companion), **Show at Login**'s, which has a launch at login
@@ -509,7 +509,7 @@ the overlay gives as `env(titlebar-area-*)`:
 - **Pop Out,** on the video screen of a call the active persona is on, while the bridge has
   `popOut` (`features/call/video-call.tsx`), before Hang Up: it turns the desktop companion on and,
   once she is drawn, main hides the window and the call goes on in it, the screen mounted; her
-  menu's Open Eidolon, the Dock or the tray brings the window back.
+  menu's Open LAPLACE Eidolon, the Dock or the tray brings the window back.
 - **The desktop companion's page,** `/companion` (`features/companion/route.tsx`): a route of the
   same `index.html`, outside the app's shell and its root loader, which would send a fresh install
   to `/setup`, lazy, with `Nothing` and `CompanionError` static on the route, so a chunk that fails

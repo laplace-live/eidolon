@@ -25,8 +25,8 @@ const SHELL = resolve(import.meta.dirname, "../src/shell");
 
 const EN: ShellPageStrings = {
   lang: "en",
-  starting: "Starting Eidolon…",
-  waiting: "Waiting for Eidolon's server…",
+  starting: "Starting LAPLACE Eidolon…",
+  waiting: "Waiting for LAPLACE Eidolon's server…",
   tryAgain: "Try Again",
   showLogs: "Show Logs",
   quit: "Quit",
@@ -35,8 +35,8 @@ const EN: ShellPageStrings = {
 
 const ZH: ShellPageStrings = {
   lang: "zh-Hans",
-  starting: "正在启动 Eidolon…",
-  waiting: "正在等待 Eidolon 的服务器…",
+  starting: "正在启动 LAPLACE Eidolon…",
+  waiting: "正在等待 LAPLACE Eidolon 的服务器…",
   tryAgain: "重试",
   showLogs: "显示日志",
   quit: "退出",
@@ -44,8 +44,8 @@ const ZH: ShellPageStrings = {
 };
 
 const FAILURE: ShellFailure = {
-  title: "Eidolon Couldn't Start",
-  message: "Eidolon's server stopped with exit code 1.",
+  title: "LAPLACE Eidolon Couldn't Start",
+  message: "LAPLACE Eidolon's server stopped with exit code 1.",
   stderr: "eidolon: port 7860 is taken by another program; choose one with --port\n",
 };
 

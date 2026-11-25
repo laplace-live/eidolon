@@ -30,8 +30,8 @@ import {
 const DESKTOP = join(import.meta.dirname, "..");
 const en = STRINGS.en;
 const LOCAL = "C:\\Users\\t\\AppData\\Local";
-const INSTALLED = `${LOCAL}\\Programs\\eidolon\\Eidolon.exe`;
-const MAC_EXE = "Eidolon.app/Contents/MacOS/Eidolon";
+const INSTALLED = `${LOCAL}\\Programs\\eidolon\\LAPLACE Eidolon.exe`;
+const MAC_EXE = "LAPLACE Eidolon.app/Contents/MacOS/LAPLACE Eidolon";
 /** Where Gatekeeper runs a quarantined app it hasn't seen moved: a read-only mount of its folder. */
 const TRANSLOCATED =
   "/private/var/folders/q1/x7k2m9p40c1b0000gn/T/AppTranslocation/3F2A1C6E-8B9D-4E0F-A1B2-C3D4E5F60718/d";
@@ -73,7 +73,7 @@ describe("isUpdatableInstall", () => {
     expect(
       isUpdatableInstall(
         "win32",
-        "c:/users/t/appdata/local/programs/EIDOLON/eidolon.exe",
+        "c:/users/t/appdata/local/programs/EIDOLON/laplace eidolon.exe",
         `${LOCAL}\\`,
       ),
     ).toBe(true);
@@ -81,11 +81,11 @@ describe("isUpdatableInstall", () => {
 
   test("and nothing else there: Program Files, win-unpacked, another Programs folder, or no LOCALAPPDATA", () => {
     for (const exe of [
-      "C:\\Program Files\\Eidolon\\Eidolon.exe",
-      "D:\\builds\\win-unpacked\\Eidolon.exe",
-      `${LOCAL}\\Programs\\laplace-eidolon-desktop\\Eidolon.exe`,
-      `${LOCAL}\\Programs\\eidolon-old\\Eidolon.exe`,
-      `${LOCAL}\\Programs\\Eidolon.exe`,
+      "C:\\Program Files\\LAPLACE Eidolon\\LAPLACE Eidolon.exe",
+      "D:\\builds\\win-unpacked\\LAPLACE Eidolon.exe",
+      `${LOCAL}\\Programs\\laplace-eidolon-desktop\\LAPLACE Eidolon.exe`,
+      `${LOCAL}\\Programs\\eidolon-old\\LAPLACE Eidolon.exe`,
+      `${LOCAL}\\Programs\\LAPLACE Eidolon.exe`,
     ]) {
       expect([exe, isUpdatableInstall("win32", exe, LOCAL)]).toEqual([exe, false]);
     }
@@ -307,10 +307,10 @@ describe("updateBox", () => {
       updateBox({ kind: "available", version: "0.2.0", current: "0.1.0" }, en, "darwin"),
     ).toEqual({
       type: "info",
-      title: "Eidolon",
-      message: "Eidolon 0.2.0 is available",
+      title: "LAPLACE Eidolon",
+      message: "LAPLACE Eidolon 0.2.0 is available",
       detail:
-        "You have 0.1.0. Eidolon downloads the update in the background, then asks before restarting.",
+        "You have 0.1.0. LAPLACE Eidolon downloads the update in the background, then asks before restarting.",
       buttons: ["Download", "Later", "Release Notes"],
       defaultId: 0,
       cancelId: 1,
@@ -321,10 +321,10 @@ describe("updateBox", () => {
   test("downloaded: Restart, the default, and Later, which leaves it to install at the next quit", () => {
     expect(updateBox({ kind: "downloaded", version: "0.2.0" }, en, "win32")).toEqual({
       type: "none",
-      title: "Eidolon",
+      title: "LAPLACE Eidolon",
       message: "Restart to finish updating",
       detail:
-        "Eidolon 0.2.0 is downloaded. Restart now to install it, or it installs the next time you quit Eidolon.",
+        "LAPLACE Eidolon 0.2.0 is downloaded. Restart now to install it, or it installs the next time you quit LAPLACE Eidolon.",
       buttons: ["Restart", "Later"],
       defaultId: 0,
       cancelId: 1,
@@ -335,20 +335,20 @@ describe("updateBox", () => {
   test("up to date, a failed check and a failed download, the last with Try Again as its default", () => {
     expect(updateBox({ kind: "up-to-date", current: "0.1.0" }, en, "darwin")).toMatchObject({
       type: "info",
-      message: "Eidolon is up to date",
-      detail: "Eidolon 0.1.0 is the latest version.",
+      message: "LAPLACE Eidolon is up to date",
+      detail: "LAPLACE Eidolon 0.1.0 is the latest version.",
       buttons: ["OK"],
       defaultId: 0,
     });
     expect(updateBox({ kind: "check-failed" }, en, "darwin")).toMatchObject({
       type: "warning",
-      message: "Eidolon couldn't check for updates",
+      message: "LAPLACE Eidolon couldn't check for updates",
       detail: en.text.updateFailed,
       buttons: ["OK"],
     });
     expect(updateBox({ kind: "download-failed" }, en, "darwin")).toMatchObject({
       type: "warning",
-      message: "Eidolon couldn't download the update",
+      message: "LAPLACE Eidolon couldn't download the update",
       buttons: ["Try Again", "Later"],
       defaultId: 0,
       cancelId: 1,
@@ -373,7 +373,7 @@ describe("updateBox", () => {
         "win32",
       ),
     ).toMatchObject({
-      message: "Eidolon 0.2.0 已发布",
+      message: "LAPLACE Eidolon 0.2.0 已发布",
       buttons: ["下载", "稍后", "发行说明"],
     });
   });
@@ -381,17 +381,18 @@ describe("updateBox", () => {
   test("read-only: why this copy can't update itself and where to move it, with OK alone, in both languages", () => {
     expect(updateBox({ kind: "read-only" }, en, "darwin")).toEqual({
       type: "info",
-      title: "Eidolon",
-      message: "Eidolon can't update itself here",
+      title: "LAPLACE Eidolon",
+      message: "LAPLACE Eidolon can't update itself here",
       detail:
-        "Eidolon updates itself only from a folder it can write to. Move it to the Applications folder, then open it again.",
+        "LAPLACE Eidolon updates itself only from a folder it can write to. Move it to the Applications folder, then open it again.",
       buttons: ["OK"],
       defaultId: 0,
       noLink: true,
     });
     expect(updateBox({ kind: "read-only" }, STRINGS["zh-Hans"], "darwin")).toMatchObject({
-      message: "Eidolon 无法在当前位置更新",
-      detail: "Eidolon 只能从可写入的文件夹更新自己。请把它移到「应用程序」文件夹，然后重新打开。",
+      message: "LAPLACE Eidolon 无法在当前位置更新",
+      detail:
+        "LAPLACE Eidolon 只能从可写入的文件夹更新自己。请把它移到「应用程序」文件夹，然后重新打开。",
       buttons: ["确定"],
     });
   });
@@ -549,8 +550,8 @@ describe("UpdateFlow", () => {
     s.checks[3]?.reject(new Error("HTTP 503"));
     await settle();
     expect(messages(f.shown)).toEqual([
-      "Eidolon is up to date",
-      "Eidolon couldn't check for updates",
+      "LAPLACE Eidolon is up to date",
+      "LAPLACE Eidolon couldn't check for updates",
     ]);
     expect(f.lines).toEqual([
       "Eidolon: checking for updates",
@@ -574,7 +575,7 @@ describe("UpdateFlow", () => {
     expect(f.flow.state).toEqual({ phase: "checking" });
     s.checks[0]?.resolve(null);
     await settle();
-    expect(messages(f.shown)).toEqual(["Eidolon is up to date"]);
+    expect(messages(f.shown)).toEqual(["LAPLACE Eidolon is up to date"]);
   });
 
   test("an update found, even quietly, is offered: Later keeps it for Check for Updates…, Release Notes opens its Release", async () => {
@@ -585,13 +586,16 @@ describe("UpdateFlow", () => {
     s.checks[0]?.resolve(release("0.2.0"));
     expect(await found).toEqual({ outcome: "available", version: "0.2.0" });
     await settle();
-    expect(messages(f.shown)).toEqual(["Eidolon 0.2.0 is available"]);
+    expect(messages(f.shown)).toEqual(["LAPLACE Eidolon 0.2.0 is available"]);
     expect(f.flow.state).toEqual({ phase: "available", version: "0.2.0" });
     response = RELEASE_NOTES;
     f.flow.checkByHand();
     await settle();
     expect(s.checks).toHaveLength(1);
-    expect(messages(f.shown)).toEqual(["Eidolon 0.2.0 is available", "Eidolon 0.2.0 is available"]);
+    expect(messages(f.shown)).toEqual([
+      "LAPLACE Eidolon 0.2.0 is available",
+      "LAPLACE Eidolon 0.2.0 is available",
+    ]);
     expect(f.opened).toEqual([releaseNotesUrl("0.2.0")]);
     expect(f.flow.state).toEqual({ phase: "available", version: "0.2.0" });
     expect(s.downloads).toHaveLength(0);
@@ -638,7 +642,10 @@ describe("UpdateFlow", () => {
     await settle();
     expect(f.progress).toEqual([0, 0.12, 1, null]);
     expect(f.flow.state).toEqual({ phase: "downloaded", version: "0.2.0" });
-    expect(messages(f.shown)).toEqual(["Eidolon 0.2.0 is available", "Restart to finish updating"]);
+    expect(messages(f.shown)).toEqual([
+      "LAPLACE Eidolon 0.2.0 is available",
+      "Restart to finish updating",
+    ]);
     // Later: Check for Updates… asks again, and checks nothing.
     f.flow.checkByHand();
     await settle();
@@ -658,8 +665,8 @@ describe("UpdateFlow", () => {
     await settle();
     expect(f.progress).toEqual([0, 0.4, null, 0]);
     expect(messages(f.shown)).toEqual([
-      "Eidolon 0.2.0 is available",
-      "Eidolon couldn't download the update",
+      "LAPLACE Eidolon 0.2.0 is available",
+      "LAPLACE Eidolon couldn't download the update",
     ]);
     expect(f.states).toContain("error 0.2.0");
     expect(s.downloads).toHaveLength(2);
@@ -704,7 +711,7 @@ describe("UpdateFlow", () => {
     quitting = true;
     s.downloads[0]?.done.resolve();
     await settle();
-    expect(messages(f.shown)).toEqual(["Eidolon 0.2.0 is available"]);
+    expect(messages(f.shown)).toEqual(["LAPLACE Eidolon 0.2.0 is available"]);
     expect(f.flow.state).toEqual({ phase: "downloaded", version: "0.2.0" });
     expect(f.restarts).toEqual([]);
     expect(f.lines.at(-1)).toBe("Eidolon: no update box while quitting (downloaded 0.2.0)");
@@ -726,7 +733,7 @@ describe("UpdateFlow", () => {
     f.flow.checkByHand();
     f.flow.checkByHand();
     await settle();
-    expect(shown).toEqual(["Eidolon 0.2.0 is available"]);
+    expect(shown).toEqual(["LAPLACE Eidolon 0.2.0 is available"]);
     open.resolve({ response: LATER });
     await settle();
     f.flow.checkByHand();
@@ -862,7 +869,7 @@ describe("Restart", () => {
     // A Restart box still open offers Try Again instead.
     f.flow.install();
     await settle();
-    expect(messages(f.shown).at(-1)).toBe("Eidolon couldn't download the update");
+    expect(messages(f.shown).at(-1)).toBe("LAPLACE Eidolon couldn't download the update");
     expect(f.installs).toEqual([]);
   });
 
@@ -896,7 +903,7 @@ describe("Restart", () => {
     expect([quit.quitting, quit.closeHides()]).toEqual([false, true]);
     expect(f.installs).toEqual([]);
     expect(f.flow.state).toMatchObject({ phase: "error", version: "0.2.0" });
-    expect(messages(f.shown).at(-1)).toBe("Eidolon couldn't download the update");
+    expect(messages(f.shown).at(-1)).toBe("LAPLACE Eidolon couldn't download the update");
     expect(f.lines.slice(-2)).toEqual([
       "Eidolon: 0.2.0 can't be installed: Cannot update while running on a read-only volume",
       "Eidolon: not restarting, since 0.2.0 can't be installed",
@@ -1062,9 +1069,9 @@ describe("background mode's answers", () => {
       "downloaded 9.9.9",
     ]);
     expect(lines.filter((line) => line.includes("background mode answered"))).toEqual([
-      'Eidolon: background mode answered "Download" to a message box: Eidolon 9.9.9 is available You have 0.1.0. Eidolon downloads the update in the background, then asks before restarting.',
-      `Eidolon: background mode answered "Try Again" to a message box: Eidolon couldn't download the update ${en.text.updateFailed}`,
-      'Eidolon: background mode answered "Restart" to a message box: Restart to finish updating Eidolon 9.9.9 is downloaded. Restart now to install it, or it installs the next time you quit Eidolon.',
+      'Eidolon: background mode answered "Download" to a message box: LAPLACE Eidolon 9.9.9 is available You have 0.1.0. LAPLACE Eidolon downloads the update in the background, then asks before restarting.',
+      `Eidolon: background mode answered "Try Again" to a message box: LAPLACE Eidolon couldn't download the update ${en.text.updateFailed}`,
+      'Eidolon: background mode answered "Restart" to a message box: Restart to finish updating LAPLACE Eidolon 9.9.9 is downloaded. Restart now to install it, or it installs the next time you quit LAPLACE Eidolon.',
     ]);
     expect(lines).toContain(
       "Eidolon: mock update: Restart only logs, and 9.9.9 is back to downloaded in 1.5 s",

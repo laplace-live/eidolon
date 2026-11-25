@@ -286,7 +286,7 @@ export function companionWindowSetup(
   return {
     options: {
       show: false,
-      title: "Eidolon",
+      title: "LAPLACE Eidolon",
       transparent: true,
       frame: false,
       hasShadow: false,
