@@ -537,17 +537,34 @@ describe("a nod or a shake with no clip", () => {
     expect(held(model)).toEqual([
       { id: "ParamAngleY", value: -10.5, weight: expect.closeTo(0.146, 3) },
     ]);
-    clock.frame(1125);
-    clock.frame(1250);
+    for (const now of [1125, 1187.5, 1250]) clock.frame(now);
     expect(held(model)).toEqual([{ id: "ParamAngleY", value: -10.5, weight: 1 }]);
-    clock.frame(1375);
+    for (const now of [1312.5, 1375]) clock.frame(now);
     expect(held(model)).toEqual([
       { id: "ParamAngleY", value: -10.5, weight: expect.closeTo(0.5, 5) },
     ]);
-    clock.frame(1500);
+    for (const now of [1437.5, 1500]) clock.frame(now);
     expect(model.hold).toHaveBeenLastCalledWith([]);
-    expect(model.play).not.toHaveBeenCalledWith(expect.anything(), 2, expect.anything());
+    // The gesture layer is stopped, and no clip plays on it.
+    expect(model.play.mock.calls.filter(([, layer]) => layer === 2)).toEqual([[null, 2]]);
     expect(model.roleParameters.mock.calls).toEqual([["AngleY"]]);
+  });
+
+  test("a pause holds a nod where it is, as it holds her clips", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
+    for (const now of [0, 62.5, 125]) clock.frame(now);
+    const before = held(model);
+    stage.pause();
+    stage.resume();
+    clock.frame(60_000);
+    expect(held(model)).toEqual(before);
+    for (const now of [60_062.5, 60_125, 60_187.5, 60_250, 60_312.5]) clock.frame(now);
+    expect(held(model)).not.toEqual([]);
+    clock.frame(60_375);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
   });
 
   test("a shake turns her AngleX side to side twice in 0.7 s, then lets go", () => {
@@ -556,8 +573,16 @@ describe("a nod or a shake with no clip", () => {
     stage.show(model, CLIPLESS);
     stage.direct(direction({ gesture: { name: "shake", seq: 1 } }));
     clock.frame(0);
+    // Frames 87.5 ms apart, under the 0.1 s a frame steps her at most.
+    let time = 0;
+    const until = (now: number) => {
+      while (time < now) {
+        time = Math.min(time + 87.5, now);
+        clock.frame(time);
+      }
+    };
     const at = (now: number) => {
-      clock.frame(now);
+      until(now);
       const [hold] = held(model);
       return [hold?.id, Number(hold?.value.toFixed(2)), Number(hold?.weight.toFixed(3))];
     };
@@ -566,7 +591,7 @@ describe("a nod or a shake with no clip", () => {
     expect(at(262.5)).toEqual(["ParamAngleX", -10.5, 0.924]);
     expect(at(437.5)).toEqual(["ParamAngleX", 10.5, 0.924]);
     expect(at(612.5)).toEqual(["ParamAngleX", -10.5, 0.383]);
-    clock.frame(700);
+    until(700);
     expect(model.hold).toHaveBeenLastCalledWith([]);
   });
 
@@ -574,8 +599,11 @@ describe("a nod or a shake with no clip", () => {
     const stage = stageOf();
     const model = fakeModel();
     stage.show(model, CLIPLESS);
+    // A clip a page played on the gesture layer, as Studio's Test tab does, stops as well.
+    model.play("shake-id", 2, { priority: 2 });
     stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
     clock.frame(0);
+    expect(model.play).toHaveBeenLastCalledWith(null, 2);
     clock.frame(100);
     stage.direct(direction({ gesture: { name: "shake", seq: 2 } }));
     clock.frame(200);
@@ -603,9 +631,7 @@ describe("a nod or a shake with no clip", () => {
       moodParameters: { ...CLIPLESS.moodParameters, shy: [{ id: "ParamAngleY", value: -5 }] },
     });
     stage.direct(direction({ mood: ["shy"], gesture: { name: "nod", seq: 1 } }));
-    clock.frame(0);
-    clock.frame(100);
-    clock.frame(250);
+    for (const now of [0, 100, 200, 250]) clock.frame(now);
     expect(held(model)).toEqual([
       { id: "ParamAngleY", value: -5, weight: 1 },
       { id: "ParamAngleY", value: -10.5, weight: 1 },
