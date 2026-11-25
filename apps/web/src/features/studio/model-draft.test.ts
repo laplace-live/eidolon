@@ -94,6 +94,7 @@ describe("the draft", () => {
   test("holds the fields Studio edits, and nothing it doesn't", () => {
     expect(draftOf(SAVED)).toEqual({
       framing: { call: null, companion: null },
+      look: 1,
       moods: { happy: ["sad"] },
       gestures: { nod: "wave" },
       outfits: [SCHOOL],
@@ -120,6 +121,7 @@ describe("the draft", () => {
     expect(draftChanges(moved, SAVED)).toEqual({ framing: moved.framing });
     const worn = { ...draft, moods: { happy: ["sad"] }, outfit: "outfit-1" };
     expect(draftChanges(worn, SAVED)).toEqual({ outfit: "outfit-1" });
+    expect(draftChanges({ ...draft, look: 0.35 }, SAVED)).toEqual({ look: 0.35 });
   });
 
   test("outfits go with their names trimmed, so spaces typed around one change nothing", () => {
@@ -394,6 +396,7 @@ describe("a new file", () => {
     };
     const draft: ModelDraft = {
       framing: { call: { x: 1, y: 2, width: 3, height: 4 }, companion: null },
+      look: 0.5,
       moods: { happy: ["sad"], sad: ["sad", "smile"], thinking: [] },
       gestures: { nod: "wave", idle: "modifier:m32:6d6f74696f6e" },
       outfits: [
@@ -414,6 +417,7 @@ describe("a new file", () => {
     };
     expect(keptDraft(draft, rig)).toEqual({
       framing: draft.framing,
+      look: 0.5,
       // A mood left with none of its expressions goes back to its default; none chosen stays none.
       moods: { sad: ["smile"], thinking: [] },
       gestures: { idle: "modifier:m32:6d6f74696f6e" },

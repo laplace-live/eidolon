@@ -173,7 +173,12 @@ describe("outfitOf", () => {
 
 describe("setupOf", () => {
   const model = (moods: CharacterModel["moods"], gestures: CharacterModel["gestures"]) =>
-    setupOf({ inventory: INVENTORY, moods, gestures });
+    setupOf({ inventory: INVENTORY, moods, gestures, look: 1 });
+
+  test("turns her as far as her model's look says", () => {
+    expect(setupOf({ inventory: INVENTORY, moods: {}, gestures: {}, look: 0.25 }).look).toBe(0.25);
+    expect(model({}, {}).look).toBe(1);
+  });
 
   test("the owner's choices win, the rest are the defaults the model has", () => {
     const setup = model({ happy: ["sad"], thinking: ["sleepy"] }, { nod: "wave" });

@@ -1,5 +1,6 @@
-// What Studio edits of a model before Save: its call framing, its moods and gestures, and its
-// outfits. Save sends only the fields that changed, each in a shape the server's PATCH takes.
+// What Studio edits of a model before Save: its call framing, how far she turns, its moods and
+// gestures, and its outfits. Save sends only the fields that changed, each in a shape the server's
+// PATCH takes.
 import {
   type Box,
   type Gesture,
@@ -20,11 +21,12 @@ import type {
 
 export type ModelDraft = Pick<
   CharacterModel,
-  "framing" | "moods" | "gestures" | "outfits" | "outfit"
+  "framing" | "look" | "moods" | "gestures" | "outfits" | "outfit"
 >;
 
 const FIELDS = [
   "framing",
+  "look",
   "moods",
   "gestures",
   "outfits",
@@ -37,8 +39,8 @@ export const MAX_MOOD_EXPRESSIONS = 2;
 export const MAX_NAME = 64;
 
 export function draftOf(model: ModelDraft): ModelDraft {
-  const { framing, moods, gestures, outfits, outfit } = model;
-  return { framing, moods, gestures, outfits, outfit };
+  const { framing, look, moods, gestures, outfits, outfit } = model;
+  return { framing, look, moods, gestures, outfits, outfit };
 }
 
 /** Plain JSON compared by value, whatever order an object's keys are in. */

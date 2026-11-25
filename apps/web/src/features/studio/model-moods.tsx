@@ -9,7 +9,7 @@ import {
 } from "@laplace.live/eidolon-sdk/avatar";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { PlayIcon, RotateCcwIcon } from "lucide-react";
+import { PlayIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +23,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ModelInventory } from "@/lib/api";
 import { GESTURE_LABELS, MOOD_LABELS } from "./appearance-labels";
-import { ControlGroup, NEUTRAL, usePlayClip } from "./model-controls";
+import { ControlGroup, NEUTRAL, ResetButton, usePlayClip } from "./model-controls";
 import {
   gestureClip,
   MAX_MOOD_EXPRESSIONS,
@@ -34,23 +34,6 @@ import {
   withoutGesture,
   withoutMood,
 } from "./model-draft";
-
-function ResetButton({ name, onReset }: { readonly name: string; readonly onReset: () => void }) {
-  const { t } = useLingui();
-  const label = t`Reset ${ph({ name })} to Default`;
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      aria-label={label}
-      title={label}
-      onClick={onReset}
-    >
-      <RotateCcwIcon />
-    </Button>
-  );
-}
 
 function MoodRow({
   tag,
