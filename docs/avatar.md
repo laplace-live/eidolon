@@ -497,14 +497,14 @@ window, her menu and how main places and shows her, and
   going back to her own direction after a call replays none.
 - **What she adds.** A tap on her head lends her `shy` for 2 s with a nod, one on her body
   `surprised` for 2 s, and a tap within 0.5 s of her last reaction none; five taps within 3 s lend
-  her `pout` for 3 s with a shake, and she rests from taps for those 3 s. Her head is her rig's
-  head hit area (`headAreaOf`); a rig without one, as one converted from a Live2D model can be,
-  takes a tap within a quarter of her framing's drawn width of where her eyes are taken to be, a
-  sixth of the way down her framing, as on her head (`nearHead`, `gaze.ts`). Picking her up for a drag
-  lends her `surprised` for 1.5 s. After 5 minutes with no tap, drag, menu, reply, voice message or
-  call she dozes, her face `sleepy` (the `lazy` mood) and her eyes no longer on the cursor, until
-  any of those wakes her, a tap with `surprised`. Awake, with no call of hers, no press and no menu,
-  her model's eyes follow the cursor main sends her, a target set each 100 ms that the runtime eases
+  her `pout` for 3 s with a shake, and she rests from taps for those 3 s. Her head is her rig's head
+  hit area (`headAreaOf`); a rig without one, as one converted from a Live2D model can be, takes a
+  tap within a quarter of her framing's drawn width of where her eyes are taken to be, a sixth of
+  the way down her framing, as on her head (`nearHead`, `gaze.ts`). Picking her up for a drag lends
+  her `surprised` for 1.5 s. After 5 minutes with no tap, drag, menu, reply, voice message or call
+  she dozes, her face `sleepy` (the `lazy` mood) and her eyes no longer on the cursor, until any of
+  those wakes her, a tap with `surprised`. Awake, with no call of hers, no press and no menu, her
+  model's eyes follow the cursor main sends her, a target set each 100 ms that the runtime eases
   toward, and wander on their own again 4 s after it stops (`gaze.ts`).
 - **Her mouth.** On a call of hers the main window reads a second `MouthMeter` on the call's track
   (`CallSignals.feedMouth`: a meter's follower steps with each read, so the stages' meter and the
@@ -621,7 +621,8 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   inventory's 1 MiB, a long name within it kept whole, and on one whose load passes a deadline,
   ended there; `appearance.test.ts` the ids, the folder an import makes, the 200 MiB limit declared
   and streamed, the call refusal, the active model, every route, PATCH's checks of `look` and
-  `moodParameters`, a `model.json` written before them, and ids that try to leave their folder. `static.test.ts` pins the CSP, its `'wasm-unsafe-eval'` included, and the wasm's type.
+  `moodParameters`, a `model.json` written before them, and ids that try to leave their folder.
+  `static.test.ts` pins the CSP, its `'wasm-unsafe-eval'` included, and the wasm's type.
 - **The app's call** (`bun run test apps/web`), on Node with no browser: `target.test.ts` holds
   whom a call is with and how each page shows it, `signals.test.ts` what moves her and the tick,
   `stages.test.ts` her stages on fake parts, through a call's end into the next call and a group
@@ -645,10 +646,11 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   checks its preview draws under the app's CSP, that Use Microphone closes its audio while the
   browser still asks for the microphone, that a stage made anew ends a line tried on it, that a mood
   put back while its Save is out stays put back, and that Head Turn and a parameter added to a mood
-  save together, refuses a PNG and a cut-off rig, and makes the model active, then stops using it. Its video call makes the rig her active model again and calls
-  her: her stage ready, her mouth moving on the smoke's tone, the caption and her mood, Shrink and
-  Expand on one canvas, the call bar on another page, and a second call's stage; its task call
-  answers a task's question on the screen.
+  save together, refuses a PNG and a cut-off rig, and makes the model active, then stops using it.
+  Its video call makes the rig her active model again and calls her: her stage ready, her mouth
+  moving on the smoke's tone, the caption and her mood, Shrink and Expand on one canvas, the call
+  bar on another page, and a second call's stage; its task call answers a task's question on the
+  screen.
 - **The npm package:** `ci-install-check.ts` imports the test rig into the packed server on Linux
   and Windows CI, which proves the upload check finds its runtime under `EIDOLON_APP_ROOT`, and the
   package's and the desktop stage's tests hold `data/psd2live/` in place.
