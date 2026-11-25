@@ -1311,6 +1311,37 @@ async function themeAndLanguage(driven: Driven, step: Step) {
     `data-shell=${chrome.shell}; the strip ${chrome.strip}, ${chrome.height} px tall, its buttons ${chrome.control} from ${chrome.start} px (the overlay's area from ${chrome.lights}); the sidebar from ${chrome.sidebar}, the page from ${chrome.card}; ${chrome.rows} drag rows, ${chrome.below} below the strip`,
   );
   await step.shot(page, "chrome");
+
+  // The strip's Back and Forward, through the app's own pages and over an unsaved edit.
+  const path = (): string => new URL(page.url()).pathname;
+  const from = path();
+  await page.getByRole("link", { name: "Studio" }).first().click();
+  await page.waitForURL(`eidolon-app://app/personas/${PERSONA}`);
+  await page.getByRole("link", { name: "Prompt", exact: true }).click();
+  await page.waitForURL(`eidolon-app://app/personas/${PERSONA}/prompt`);
+  const area = page.getByLabel("System Prompt", { exact: true });
+  await area.click();
+  await area.pressSequentially(" unsaved");
+  await page.getByText("Unsaved changes", { exact: true }).waitFor();
+  const goBack = page.getByRole("button", { name: "Go Back" });
+  const box = page.getByRole("alertdialog");
+  await goBack.click();
+  await box.getByRole("button", { name: "Keep Editing" }).click();
+  await box.waitFor({ state: "hidden" });
+  const kept = path();
+  await goBack.click();
+  await box.getByRole("button", { name: "Discard Changes" }).click();
+  await page.waitForURL(`eidolon-app://app/personas/${PERSONA}`);
+  const left = await box.isHidden();
+  await goBack.click();
+  await page.waitForURL(`eidolon-app://app${from}`);
+  await page.getByRole("button", { name: "Go Forward" }).click();
+  await page.waitForURL(`eidolon-app://app/personas/${PERSONA}`);
+  step.check(
+    "the strip's Back and Forward walk the app's pages; over an unsaved edit, Keep Editing stays and Discard Changes leaves",
+    kept === `/personas/${PERSONA}/prompt` && left,
+    `${from} → the studio → its prompt, edited; Back, Keep Editing: ${kept}; Back, Discard Changes: the studio, the box ${left ? "gone" : "still up"}; Back: ${from}; Forward: ${path()}`,
+  );
 }
 
 /** Puts Settings' Restart banner up: a setting the server reads only when it starts. */

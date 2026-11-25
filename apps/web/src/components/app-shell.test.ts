@@ -11,7 +11,6 @@ import {
   createStaticHandler,
   createStaticRouter,
   MemoryRouter,
-  Outlet,
   Route,
   Routes,
   StaticRouterProvider,
@@ -27,11 +26,17 @@ vi.doMock("@/components/preferences", () => ({
   LanguageSwitch: () => null,
   ThemeMenu: () => null,
 }));
-const { PageLayout } = await import("./app-shell");
+// The call's engine and the sidebar's queries aren't what the frame's error checks.
+vi.doMock("@/features/call/call-provider", () => ({
+  CallProvider: ({ children }: { readonly children: ReactNode }) => children,
+}));
+vi.doMock("@/features/call/call-bar", () => ({ CallBar: () => null }));
+vi.doMock("@/components/app-sidebar", () => ({ AppSidebar: () => null }));
+const { AppShell, PageLayout } = await import("./app-shell");
 const { SidebarProvider } = await import("./ui/sidebar");
+const { TooltipProvider } = await import("./ui/tooltip");
 const { Component: Setup } = await import("@/features/setup/route");
 const { RouteError } = await import("./route-error");
-const { BelowTitleStrip } = await import("./window-drag-strip");
 
 function render(path: string, node: ReactNode): string {
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
@@ -102,8 +107,7 @@ test("an error in the frame gets no drag strip below the title strip, and one ou
       children: [
         { path: "outside", loader: fail, Component: () => null },
         {
-          // AppShell's card, around its Outlet.
-          Component: () => createElement(BelowTitleStrip, null, createElement(Outlet)),
+          Component: AppShell,
           children: [
             { path: "inside", loader: fail, Component: () => null, ErrorBoundary: RouteError },
           ],
@@ -120,12 +124,18 @@ test("an error in the frame gets no drag strip below the title strip, and one ou
       createElement(
         I18nProvider,
         { i18n },
-        createElement(StaticRouterProvider, { router, context, hydrate: false }),
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(StaticRouterProvider, { router, context, hydrate: false }),
+        ),
       ),
     );
   };
   const inside = await at("/inside");
   expect(inside).toContain("Something went wrong");
-  expect(inside).not.toContain("data-window-drag");
+  const rows = [...inside.matchAll(/<[^>]*data-window-drag[^>]*>/g)].map((row) => row[0]);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toContain("data-title-strip");
   expect(await at("/outside")).toContain("data-window-drag");
 });

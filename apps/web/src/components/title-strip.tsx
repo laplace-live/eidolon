@@ -32,7 +32,6 @@ export function traverse(direction: "back" | "forward"): void {
   result?.finished?.catch(() => undefined);
 }
 
-/** Names the button it holds, and shows the name in a tooltip below it. */
 function Labelled({
   label,
   children,

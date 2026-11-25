@@ -1570,7 +1570,8 @@ Each step prints one line, made of the checks inside it:
 3. **Theme and language:** the page's theme setting reaches `nativeTheme.themeSource` as it is, its
    language rebuilds the menus in it, and its `[data-shell]` strip drags while its buttons don't,
    clear of the traffic lights on macOS, with the sidebar and the page below it and no drag row
-   in them.
+   in them. The strip's Back and Forward walk from the chat to the studio's prompt and back, and
+   over an unsaved edit there Back asks: Keep Editing stays, Discard Changes leaves.
 4. **Settings' Restart,** from the banner a setting read at boot puts up: main holds requests, the
    backend exits 75 and comes back on the same port, and the page says it's back.
 5. **A call** on Chromium's fake microphone: her hearing gets the speech, her answer is in the
