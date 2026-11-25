@@ -190,10 +190,35 @@ describe("the keys the picks need", () => {
         provider: "openai",
         roles: ["hearing", "mind", "voice", "embeddings"],
         key: "required",
-        required: true,
+        tier: "required",
         set: true,
       },
     ]);
+  });
+
+  test("hearing and voice make an account recommended: only a call waits for its key", () => {
+    const needs = keyNeeds(
+      [
+        { role: "mind", account: "openrouter", call: true },
+        { role: "hearing", account: "soniox", call: true },
+        { role: "voice", account: "openai", call: true },
+        { role: "embeddings", account: "openai", call: false },
+        { role: "hearing", account: "lab", call: true },
+      ],
+      [account("lab", "openai-compatible")],
+    );
+    expect(needs.map(({ account, roles, tier }) => ({ account, roles, tier }))).toEqual([
+      { account: "openrouter", roles: ["mind"], tier: "required" },
+      { account: "soniox", roles: ["hearing"], tier: "recommended" },
+      { account: "openai", roles: ["voice", "embeddings"], tier: "recommended" },
+      // A server of your own may take no key, so none is recommended for it.
+      { account: "lab", roles: ["hearing"], tier: "optional" },
+    ]);
+  });
+
+  test("a realtime model's account is waited for, as the three it stands in for", () => {
+    const [need] = keyNeeds([{ role: "realtime", account: "xai", call: true }], []);
+    expect(need?.tier).toBe("required");
   });
 
   test("embeddings alone are optional; a server of your own asks for no key, Ollama none", () => {
@@ -207,11 +232,11 @@ describe("the keys the picks need", () => {
       [account("lab", "openai-compatible")],
     );
     expect(
-      needs.map(({ account, name, key, required, set }) => ({ account, name, key, required, set })),
+      needs.map(({ account, name, key, tier, set }) => ({ account, name, key, tier, set })),
     ).toEqual([
-      { account: "ollama", name: "Ollama", key: "none", required: false, set: true },
-      { account: "lab", name: "lab", key: "optional", required: false, set: false },
-      { account: "google", name: "Google Gemini", key: "required", required: false, set: false },
+      { account: "ollama", name: "Ollama", key: "none", tier: "optional", set: true },
+      { account: "lab", name: "lab", key: "optional", tier: "optional", set: false },
+      { account: "google", name: "Google Gemini", key: "required", tier: "optional", set: false },
     ]);
   });
 
@@ -225,9 +250,9 @@ describe("the keys the picks need", () => {
       ],
       [],
     );
-    expect(needs.map(({ account, roles, required }) => ({ account, roles, required }))).toEqual([
-      { account: "anthropic", roles: ["mind"], required: true },
-      { account: "openrouter", roles: ["gate", "rerank", "selfie"], required: false },
+    expect(needs.map(({ account, roles, tier }) => ({ account, roles, tier }))).toEqual([
+      { account: "anthropic", roles: ["mind"], tier: "required" },
+      { account: "openrouter", roles: ["gate", "rerank", "selfie"], tier: "optional" },
     ]);
   });
 
@@ -239,8 +264,8 @@ describe("the keys the picks need", () => {
       ],
       [],
     );
-    expect(needs.map(({ roles, required }) => ({ roles, required }))).toEqual([
-      { roles: ["embeddings", "mind"], required: true },
+    expect(needs.map(({ roles, tier }) => ({ roles, tier }))).toEqual([
+      { roles: ["embeddings", "mind"], tier: "required" },
     ]);
   });
 

@@ -54,17 +54,19 @@ function useRoles(need: KeyStatus): string {
   return listOf(need.roles.map((role) => t(ROLE_LABELS[role as RoleId])));
 }
 
+/** What setup asks of a key: Continue waits for a required one, and only recommends another. */
+export type KeyTier = "required" | "recommended" | "optional";
+
 export function AccountKeyField({
   need,
   keys,
-  optional = false,
+  tier,
   note,
   missing = [],
 }: {
   readonly need: KeyStatus;
   readonly keys: AccountKeys;
-  /** Continue doesn't wait for it. */
-  readonly optional?: boolean;
+  readonly tier: KeyTier;
   /** What goes without it, under the field. */
   readonly note?: ReactNode;
   /** The provider's own settings a save found missing, by field key. */
@@ -89,9 +91,11 @@ export function AccountKeyField({
     <Field className="max-w-xl">
       <div className="flex flex-wrap items-center gap-2">
         <FieldLabel htmlFor={id}>
-          {optional
+          {tier === "optional"
             ? t`${ph({ name: need.name })} API Key (Optional)`
-            : t`${ph({ name: need.name })} API Key`}
+            : tier === "recommended"
+              ? t`${ph({ name: need.name })} API Key (Recommended)`
+              : t`${ph({ name: need.name })} API Key`}
         </FieldLabel>
         <QuietBadge dot={shown.dot}>{t(shown.text)}</QuietBadge>
       </div>

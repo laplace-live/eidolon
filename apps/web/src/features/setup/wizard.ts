@@ -8,6 +8,7 @@ import {
 } from "@/components/settings-form/controls";
 import type { AccountView, CreatePersonaRequest, SettingRow, Status } from "@/lib/api";
 import { providerOfAccount, roleById } from "@/lib/providers";
+import { requiredKeyMissing } from "./first-run";
 
 export const STEPS = ["keys", "persona", "voice", "memory", "done"] as const;
 export type Step = (typeof STEPS)[number];
@@ -16,9 +17,12 @@ export function isStep(value: unknown): value is Step {
   return (STEPS as readonly unknown[]).includes(value);
 }
 
-/** Where the wizard opens: the keys while one is missing, else the step a link asked for. */
+/**
+ * Where the wizard opens: the keys while one the app waits for is missing, else the step a link
+ * asked for.
+ */
 export function firstStep(status: Pick<Status, "keys">, requested: string | null): Step {
-  if (status.keys.some((key) => !key.set)) return "keys";
+  if (requiredKeyMissing(status)) return "keys";
   return isStep(requested) ? requested : "keys";
 }
 

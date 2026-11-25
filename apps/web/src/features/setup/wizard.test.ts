@@ -30,19 +30,30 @@ import {
   voiceProvider,
 } from "./wizard";
 
-const keys = (fish: boolean) => ({
+const keys = (openrouter: boolean, fish = true) => ({
   keys: [
     { account: "soniox", name: "Soniox", provider: "soniox", roles: ["hearing"], set: true },
+    {
+      account: "openrouter",
+      name: "OpenRouter",
+      provider: "openrouter",
+      roles: ["mind"],
+      set: openrouter,
+    },
     { account: "fish", name: "Fish Audio", provider: "fish", roles: ["voice"], set: fish },
   ],
 });
 
 describe("steps", () => {
-  test("the wizard opens at the keys while one is missing, whatever the link asks", () => {
+  test("the wizard opens at the keys while one the app waits for is missing, whatever the link asks", () => {
     expect(firstStep(keys(false), "memory")).toBe("keys");
     expect(firstStep(keys(true), "memory")).toBe("memory");
     expect(firstStep(keys(true), "nonsense")).toBe("keys");
     expect(firstStep(keys(true), null)).toBe("keys");
+  });
+
+  test("a missing voice key, which only calls need, opens the step the link asks for", () => {
+    expect(firstStep(keys(true, false), "memory")).toBe("memory");
   });
 
   test("next and previous walk the order and stop at its ends", () => {

@@ -333,7 +333,7 @@ export function kindsStatus(ready: boolean): AssistantStatus["kinds"] {
 }
 
 /** The roles her calls run on; a realtime setting Eidolon can't use is the problem to report. */
-function statusRoles(): readonly RoleId[] {
+export function statusRoles(): readonly RoleId[] {
   try {
     return callRoles();
   } catch (error) {

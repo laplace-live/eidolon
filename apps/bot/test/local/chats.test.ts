@@ -18,7 +18,13 @@ import {
   summarize,
   viewOf,
 } from "@eidolon/chat";
-import { activePersona, dataHome, newId, readPersonaIdentity } from "@eidolon/config";
+import {
+  activePersona,
+  dataHome,
+  newId,
+  readPersonaIdentity,
+  resetSettings,
+} from "@eidolon/config";
 import { Director } from "@eidolon/context";
 import {
   type ChatRequest,
@@ -2393,6 +2399,43 @@ describe("a call in a chat", () => {
     (offered[0] as Offered).binding?.onEnded("hangup");
     await delay(20);
     expect((await log(id)).events).toHaveLength(4);
+  });
+
+  test("a read names the accounts that keep anyone in the chat from being called", async () => {
+    persona("beta", "贝塔");
+    writeFileSync(
+      join(dataHome(), "personas", "beta", "persona.yaml"),
+      "identity:\n  name: 贝塔\nhearing:\n  provider: openai\nvoice:\n  provider: openai\n",
+    );
+    // Another test's beta may linger in the settings scopes.
+    resetSettings();
+    process.env.OPENAI_API_KEY = "sk-openai-test";
+    try {
+      const alone = await greeted();
+      const both = await group("beta");
+      expect((await log(alone)).missingCallKeys).toEqual(["Soniox", "Fish Audio"]);
+      // Beta's calls have every key, so the group can still call her.
+      expect((await log(both)).missingCallKeys).toEqual([]);
+      delete process.env.OPENROUTER_API_KEY;
+      expect((await log(both)).missingCallKeys).toEqual(["Soniox", "OpenRouter", "Fish Audio"]);
+
+      // A realtime setting Eidolon can't resolve is her call's own error to report.
+      writeFileSync(
+        join(dataHome(), "personas", "beta", "persona.yaml"),
+        "identity:\n  name: 贝塔\nrealtime:\n  provider: nope\n",
+      );
+      resetSettings();
+      expect((await log(both)).missingCallKeys).toEqual([]);
+
+      process.env.OPENROUTER_API_KEY = "sk-or-test";
+      process.env.SONIOX_API_KEY = "soniox-test";
+      process.env.FISH_API_KEY = "fish-test";
+      expect((await log(alone)).missingCallKeys).toEqual([]);
+    } finally {
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.SONIOX_API_KEY;
+      delete process.env.FISH_API_KEY;
+    }
   });
 
   test("the call's own connection renegotiating opens nothing; another connection is another call", async () => {

@@ -310,30 +310,36 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 
 ## The setup wizard
 
-`/setup` runs five steps: keys, persona, voice, memory and done. While a key the active persona's
-calls need is missing, every page but Settings sends you to its first, except during a call, which
-opening setup would end (`firstRunRedirect`).
+`/setup` runs five steps: keys, persona, voice, memory and done. While a key it requires is missing
+(her mind's, or her realtime model's), every page but Settings sends you to its first, except
+during a call, which opening setup would end (`firstRunRedirect`). The keys only her calls need,
+her hearing's and her voice's, can wait: until they're added, `/call` and a chat's **Call** name
+them and place no call, a chat's microphone is off, and her replies are text.
 
-- **Keys** picks an account for each role a call needs (who hears, thinks and speaks) and for the
-  optional ones (embeddings, for every persona, and her retrieval gate's decision model), from each
-  provider in the catalog that offers the role ([providers.md](providers.md#roles)), its default
-  marked Recommended, and the other accounts Settings → Providers has. An OpenAI-compatible
+- **Keys** picks an account for each role, in three groups: Required Providers, her mind, which
+  every chat runs on; Recommended Providers, her hearing and voice, which calls and voice messages
+  need; and Optional Providers, embeddings, for every persona, and her retrieval gate's decision
+  model. Each offers every provider in the catalog that fills the role
+  ([providers.md](providers.md#roles)), its default marked Recommended, and the other accounts
+  Settings → Providers has. An OpenAI-compatible
   endpoint is listed once an account of it has an API base, and a pick with no default model asks
   for one. A role whose provider or model the environment sets is locked, naming the variable:
   the environment's model would go to whichever provider took the role. Then it asks for one key per account the picks name, and the accounts her reranking
   (unless turned off) and selfies (once she has an outfit) run on, saying what each is used for:
-  an account a call's role uses is required; any other is optional and says what stays off without
-  it. Ollama takes no key and MiniMax also takes its group id. Saving writes the picks to her
+  an account her mind uses is required, and listed first; one only her hearing or voice uses is
+  recommended, and says calls can't start without it; any other is optional and says what stays
+  off without it. Ollama takes no key and MiniMax also takes its group id. Saving writes the picks to her
   `persona.yaml` and `embeddings.provider` to `settings.yaml`, clears the models and voice the
   replaced providers owned, asks before another embedding provider on an install that isn't new,
   then saves and checks every key. A persona on a realtime model is asked for its account's key in
-  place of the three.
+  place of the three, as a required one.
 - **Persona** keeps the active persona, takes the demo, or creates one.
 - **Voice** offers the voices of the provider she speaks through: on Fish Audio, the voices of her
   account, private ones included, beside the public library, opening on hers once there are any;
   one of OpenAI's fixed set; or for another provider the id of a voice in its library. A new persona
   starts on the active persona's providers, so hers is that persona's voice provider, as it is in
-  **New Persona** outside the wizard.
+  **New Persona** outside the wizard. The library needs no key.
+- **Done** offers to call her, or **Start Chatting** while her calls lack a key.
 
 ## The local viewer and memory
 
@@ -675,7 +681,8 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   - **Call** in the header calls her in a chat of one; in a group it opens **Who to Call**. She
     needn't be the active persona. It is disabled while the chat is in a call, by this tab's word
     or by `ChatContents.call`, and unavailable, with a tooltip saying so, while this tab is on a
-    call anywhere else.
+    call anywhere else, or while no one in the chat can be called for want of a key, the tooltip
+    naming the accounts (`ChatContents.missingCallKeys`).
   - **The dock** above the composer shows her avatar, ringed while she speaks, the call's state
     line, the call's notices, the mic's mute toggle and **Hang Up**. Hanging up closes it. A call
     that ends any other way stays docked with why, **Call Again** and **Close**. With her model,

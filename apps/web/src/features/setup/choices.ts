@@ -1,5 +1,6 @@
 // The keys step's choices: what can fill each role it asks about, the model each would run, and
 // the keys the chosen accounts need.
+import type { KeyTier } from "@/components/settings-form/account-key-field";
 import {
   type AccountList,
   effectiveModel,
@@ -20,6 +21,7 @@ import {
   roleById,
   SETUP_ROLES,
 } from "@/lib/providers";
+import { RECOMMENDED_ROLES } from "./first-run";
 
 export type PickedRole = (typeof SETUP_ROLES)[number];
 
@@ -157,11 +159,17 @@ export interface KeyNeed {
   readonly roles: readonly RoleId[];
   /** Whether it takes a key: always, where its server asks for one, or never. */
   readonly key: "required" | "optional" | "none";
-  /** A role a call can't run without uses it, and it always takes a key: Continue waits for one. */
-  readonly required: boolean;
+  /**
+   * The most any role it serves asks of its key, when it always takes one: required for her mind
+   * or a realtime model, recommended for her hearing or voice; else optional.
+   */
+  readonly tier: KeyTier;
   /** Its key is set, wherever: saved, in credentials.json, or in the environment. */
   readonly set: boolean;
 }
+
+/** From the least a key's roles ask of it to the most. */
+const TIERS: readonly KeyTier[] = ["optional", "recommended", "required"];
 
 /** One role and the account the drafts give it; `call` when a call can't run without it. */
 export interface Picked {
@@ -178,7 +186,7 @@ export function keyNeeds(
   picked: readonly Picked[],
   accounts: readonly Pick<AccountView, "id" | "provider" | "name" | "key">[] | undefined,
 ): KeyNeed[] {
-  type Entry = Omit<KeyNeed, "roles" | "required"> & { roles: RoleId[]; required: boolean };
+  type Entry = Omit<KeyNeed, "roles" | "tier"> & { roles: RoleId[]; tier: KeyTier };
   const needs = new Map<string, Entry>();
   for (const { role, account, call } of picked) {
     if (account === null) continue;
@@ -187,10 +195,16 @@ export function keyNeeds(
     if (provider === undefined) continue;
     const key =
       provider.credential === null ? "none" : provider.keyOptional ? "optional" : "required";
+    const tier: KeyTier =
+      !call || key !== "required"
+        ? "optional"
+        : RECOMMENDED_ROLES.has(role)
+          ? "recommended"
+          : "required";
     const known = needs.get(account);
     if (known !== undefined) {
       known.roles.push(role);
-      known.required ||= call && key === "required";
+      if (TIERS.indexOf(tier) > TIERS.indexOf(known.tier)) known.tier = tier;
       continue;
     }
     const listed = accounts?.find((entry) => entry.id === account);
@@ -200,7 +214,7 @@ export function keyNeeds(
       provider: provider.id,
       roles: [role],
       key,
-      required: call && key === "required",
+      tier,
       set: key === "none" || (listed?.key.source ?? null) !== null,
     });
   }

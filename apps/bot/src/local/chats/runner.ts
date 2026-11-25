@@ -88,6 +88,7 @@ import {
   taskProgressNudge,
   taskWaitingNudge,
 } from "../tasks/tool.ts";
+import { missingCallKeys } from "./call-keys.ts";
 import { type GroupCallRefusal, groupCallRefusal } from "./group.ts";
 import { HearingFailed, hearingRefusal } from "./hearing.ts";
 import { LiveTurn } from "./live.ts";
@@ -394,6 +395,7 @@ export class ChatRunner {
       ...contents,
       lateTools,
       hearingRefusal: refusal,
+      missingCallKeys: missingCallKeys(participants),
       call,
       groupCall,
       defaultDisplay,
