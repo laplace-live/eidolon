@@ -30,6 +30,7 @@ import {
 } from "@eidolon/providers";
 import { DEFAULT_STYLE, STYLE_HINTS } from "@eidolon/tools";
 import type { EnvironmentVoiceStyle, SettingRow, SettingsResponse, VoiceStyles } from "../api.ts";
+import { readModel } from "../appearance.ts";
 import {
   editPersonaYaml,
   editSettingsYaml,
@@ -211,6 +212,12 @@ export function checkValue(field: SettingField, value: unknown, persona: string)
       if (!checked.ok || checked.value === null) return checked;
       if (field.env === "PERSONA_TIMEZONE" && !isValidTimeZone(checked.value as string)) {
         return invalid("The time zone is not an IANA zone name");
+      }
+      if (
+        field.env === "APPEARANCE_MODEL" &&
+        readModel(persona, checked.value as string) === null
+      ) {
+        return invalid("Not one of her models");
       }
       const role = ROLES.find((entry) => entry.providerEnv === field.env);
       if (role !== undefined) {

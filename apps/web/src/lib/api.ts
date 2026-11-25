@@ -80,7 +80,7 @@ export type Input<R extends Route> = ([ParamName<R>] extends [never]
   (Spec<R>["body"] extends undefined
     ? { readonly body?: undefined }
     : {
-        readonly body: Spec<R>["body"] extends Raw<"image" | "audio" | "text">
+        readonly body: Spec<R>["body"] extends Raw<"image" | "audio" | "text" | "model">
           ? Blob
           : Spec<R>["body"];
       }) & {
@@ -92,7 +92,9 @@ type Args<R extends Route> =
 
 /** Routes that answer with bytes or lines rather than JSON. */
 export type RawRoute = {
-  [R in Route]: Spec<R>["response"] extends Raw<"image" | "audio" | "ndjson" | "text"> ? R : never;
+  [R in Route]: Spec<R>["response"] extends Raw<"image" | "audio" | "ndjson" | "text" | "model">
+    ? R
+    : never;
 }[Route];
 export type JsonRoute = Exclude<Route, RawRoute>;
 
@@ -169,4 +171,18 @@ export async function stream<R extends RawRoute>(
   const response = await send(route, input);
   if (!response.body) throw new ApiError(response.status, "bad-response", "no body");
   return response.body;
+}
+
+/** A raw route's body whole, such as a character model's file for the stage. */
+export async function bytes<R extends RawRoute>(
+  route: R,
+  ...[input]: Args<R>
+): Promise<ArrayBuffer> {
+  const response = await send(route, input);
+  try {
+    return await response.arrayBuffer();
+  } catch (error) {
+    if (input?.signal?.aborted) throw error;
+    throw new ApiError(response.status, "bad-response", "the body stopped short");
+  }
 }

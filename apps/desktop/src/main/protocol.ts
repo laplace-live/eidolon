@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { app, ipcMain, protocol } from "electron";
 import { accepts, BRIDGE, SCHEME } from "../shared/bridge.ts";
 import type { SchemeRequest } from "./forwarder.ts";
+import { ipcSender } from "./senders.ts";
 import {
   type RenderedPage,
   renderFailedPage,
@@ -16,7 +17,6 @@ import {
   type ShellPageStrings,
   shellRoute,
 } from "./shell-pages.ts";
-import { ipcSender } from "./window.ts";
 
 export { SCHEME };
 export const LOADING_PAGE = `${SCHEME}://shell/loading`;

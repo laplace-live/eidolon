@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
+import { useCallPresence } from "@/features/call/call-context";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
 import { useActivatePersona } from "@/features/setup/personas";
 import { studioPath } from "@/lib/paths";
@@ -32,6 +33,7 @@ export function PersonaSwitcher({ side }: { readonly side: "bottom" | "right" })
   const studio = useMatch("/personas/:id/:tab?");
   const status = useQuery(statusQuery);
   const personas = useQuery(personasQuery);
+  const { up } = useCallPresence();
   const [creating, setCreating] = useState(false);
   // The dialog opens once the menu has closed: open together, the two focus traps fight, and the
   // first field loses focus at once, which shows its error before anything was typed.
@@ -84,6 +86,11 @@ export function PersonaSwitcher({ side }: { readonly side: "bottom" | "right" })
               }}
             >
               <DropdownMenuLabel>{t`Personas`}</DropdownMenuLabel>
+              {up && (
+                <p className="px-2 pb-1.5 text-muted-foreground text-xs">
+                  {t`A call is in progress: switch personas after it ends.`}
+                </p>
+              )}
               <DropdownMenuRadioGroup
                 value={activeId}
                 onValueChange={(id) => {
@@ -94,7 +101,7 @@ export function PersonaSwitcher({ side }: { readonly side: "bottom" | "right" })
                   <DropdownMenuRadioItem
                     key={persona.id}
                     value={persona.id}
-                    disabled={activate.isPending}
+                    disabled={activate.isPending || up}
                     className="gap-2 py-1.5"
                   >
                     <PersonaAvatar persona={persona} size="xs" />

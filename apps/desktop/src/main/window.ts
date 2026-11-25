@@ -1,9 +1,8 @@
-// The app's one window: no system title bar, its bounds kept across launches, closed only by
+// The app's main window: no system title bar, its bounds kept across launches, closed only by
 // a quit. Main keeps whether it shows itself: Electron reports an occluded window as hidden. In
 // background mode main keeps that state alone, and never puts the window on screen.
 import { join } from "node:path";
-import { app, BrowserWindow, type IpcMainEvent, nativeTheme, screen } from "electron";
-import type { IpcSender } from "../shared/bridge.ts";
+import { app, BrowserWindow, nativeTheme, screen } from "electron";
 import { backgroundWindowOptions, showCalls } from "./background.ts";
 import { background } from "./instance.ts";
 import { mainLog } from "./log.ts";
@@ -21,6 +20,8 @@ import {
 } from "./window-options.ts";
 
 const SAVE_AFTER_MS = 500;
+/** did-fail-load's code for a load that another replaced, such as main's own next page. */
+export const ERR_ABORTED = -3;
 
 let window: BrowserWindow | null = null;
 /**
@@ -32,6 +33,9 @@ let shown = false;
 let painted = false;
 /** The saved maximized state, for the window's first showing, which a hidden start puts off. */
 let maximizeAtFirstShow = false;
+/** onWindowShows' listener, and what it last heard. */
+let showsListener: ((shows: boolean) => void) | null = null;
+let reportedShows = false;
 
 /** Moves main's shown state; each change to what the window is goes to main.log, for the smokes. */
 function setShown(next: { readonly shown?: boolean; readonly painted?: boolean }): void {
@@ -40,6 +44,7 @@ function setShown(next: { readonly shown?: boolean; readonly painted?: boolean }
   painted = next.painted ?? painted;
   const after = shown && painted;
   if (after !== before) mainLog.info(`Eidolon: the window is ${after ? "shown" : "hidden"}`);
+  reportShows();
 }
 
 /** The window, while it exists: a page's window.close() destroys it, and a launch makes another. */
@@ -47,14 +52,25 @@ export function mainWindow(): BrowserWindow | null {
   return window !== null && !window.isDestroyed() ? window : null;
 }
 
-/** Who sent `event`, a message or an invoke, for the bridges' sender rule (bridge.ts's accepts). */
-export function ipcSender(event: Pick<IpcMainEvent, "sender" | "senderFrame">): IpcSender {
+/** Whether the window shows as main left it, painted and not minimized. */
+export function windowShows(): boolean {
   const win = mainWindow();
-  return {
-    window: win !== null && event.sender === win.webContents,
-    mainFrame: win !== null && event.senderFrame === win.webContents.mainFrame,
-    origin: event.senderFrame?.origin ?? null,
-  };
+  return win !== null && shown && painted && !win.isMinimized();
+}
+
+/**
+ * Called with windowShows() at each change: setShown's, the window's minimize and restore, and its
+ * close. One listener, kept here.
+ */
+export function onWindowShows(listener: (shows: boolean) => void): void {
+  showsListener = listener;
+}
+
+function reportShows(): void {
+  const shows = windowShows();
+  if (shows === reportedShows) return;
+  reportedShows = shows;
+  showsListener?.(shows);
 }
 
 function boundsFile(): string {
@@ -140,6 +156,8 @@ export function createWindow(hooks: WindowHooks, hidden = false): BrowserWindow 
   };
   win.on("resize", later);
   win.on("move", later);
+  win.on("minimize", reportShows);
+  win.on("restore", reportShows);
   win.on("close", (event) => {
     if (timer !== null) clearTimeout(timer);
     saveBounds(win, maximized());
@@ -154,12 +172,12 @@ export function createWindow(hooks: WindowHooks, hidden = false): BrowserWindow 
     window = null;
     painted = false;
     mainLog.info("Eidolon: the window is closed");
+    reportShows();
   });
 
   const contents = win.webContents;
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
-    // -3 is ERR_ABORTED: a load that another replaced, such as main's own next page.
-    if (!isMainFrame || code === -3) return;
+    if (!isMainFrame || code === ERR_ABORTED) return;
     hooks.failed(`${description} (${code}) loading ${loggedUrl(url)}`);
   });
   contents.on("preload-error", (_event, _path, error) => {

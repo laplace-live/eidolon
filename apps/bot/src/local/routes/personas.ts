@@ -1,12 +1,11 @@
 // /api/local/personas: listing, creating and switching personas, and each one's files. Every id,
 // kind and file name a path carries is checked before it touches the disk, and every write goes to
 // the user's copy in the data home; a template is only ever read.
-import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   activePersona,
-  dataHome,
   isPlainObject,
   isValidTimeZone,
   personaHomeDir,
@@ -15,7 +14,6 @@ import {
   readPersonaIdentity,
   resolvePersonaPath,
   sourceFolder,
-  templatesDir,
 } from "@eidolon/config";
 import { REFERENCE_EXTENSIONS } from "@eidolon/imagegen";
 import { transcribe } from "@eidolon/ingest";
@@ -32,6 +30,7 @@ import {
   type ReferenceKind,
   type VoiceStyle,
 } from "../api.ts";
+import { activeModel } from "../appearance.ts";
 import {
   AVATAR_STEM,
   editSettingsYaml,
@@ -43,6 +42,7 @@ import {
   listFacts,
   listReferences,
   personaRefusal,
+  personaSetting,
   promptFile,
   readIdentityFields,
   renamedFor,
@@ -61,11 +61,11 @@ import type { LocalApp, LocalRouteSpec } from "../router.ts";
 import {
   checkFileName,
   fileIn,
-  isInside,
   isPersonaId,
   personaWriteTarget,
   readPersonaFile,
   updatePersonaFile,
+  userFolder,
   WriteRefused,
   writeDataFile,
 } from "../write.ts";
@@ -110,21 +110,6 @@ async function readUpload(
     return localError(415, "unsupported-media-type", "Upload a PNG, JPEG or WebP image");
   }
   return { bytes, image };
-}
-
-/** A folder the app may delete in: really under the data home, and outside every template. */
-function userFolder(folder: string): boolean {
-  try {
-    // realpath(3) gives the letter case on disk; the JavaScript realpathSync keeps the case it was
-    // given, so a template spelled otherwise would pass for a user folder.
-    const real = realpathSync.native(folder);
-    return (
-      isInside(real, realpathSync.native(dataHome())) &&
-      !isInside(real, realpathSync.native(templatesDir()))
-    );
-  } catch {
-    return false;
-  }
 }
 
 function kindOf(raw: string): ReferenceKind | null {
@@ -201,6 +186,7 @@ function summaryOf(id: string): PersonaSummary {
     template: existsSync(personaTemplateDir(id)),
     own: existsSync(personaHomeDir(id)),
     avatar: findAvatar(id) !== null,
+    appearance: { model: activeModel(id, personaSetting(id, "APPEARANCE_MODEL")) },
   };
 }
 

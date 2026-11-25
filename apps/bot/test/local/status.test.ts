@@ -16,6 +16,8 @@ import {
 import type { MemoryAdmin } from "@eidolon/memory";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import manifest from "../../package.json" with { type: "json" };
+import { importModel } from "../../src/local/appearance.ts";
+import { checkRig } from "../../src/local/psd2live.ts";
 import { reinstallSettings } from "../../src/local/restart.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { statusRoutes } from "../../src/local/routes/status.ts";
@@ -148,6 +150,7 @@ describe("GET status", () => {
         id: "milky-green",
         name: "明前奶绿",
         shortName: "奶绿",
+        appearance: { model: null },
         voice: { id: null, source: "default", ok: null, provider: "fish" },
       },
       index: {
@@ -381,6 +384,25 @@ describe("GET status", () => {
       provider: "fish",
       account: "fish",
     });
+  });
+
+  test("her active model is the installed setting's, while she has that model", () => {
+    const rig = readFileSync(join(import.meta.dirname, "fixtures/psd2live/tml.p2lrt"));
+    const checked = checkRig(rig);
+    if (!checked.ok) throw new Error(checked.message);
+    const { sha256, updatedAt } = importModel("milky-green", "tml.p2lrt", rig, checked.inventory);
+    const { deps } = fakeDeps({});
+    // Written by hand, never installed: a poll reads no settings file, so she shows none yet.
+    const path = write("personas/milky-green/persona.yaml", "appearance:\n  model: tml\n");
+    expect(buildStatus(app, deps).persona.appearance).toEqual({ model: null });
+    reinstallSettings(app);
+    const active = { id: "tml", name: "tml", kind: "psd2live", sha256, updatedAt };
+    expect(buildStatus(app, deps).persona.appearance).toEqual({ model: active });
+    // Edited by hand since: the installed setting stands.
+    writeFileSync(path, "{}\n");
+    expect(buildStatus(app, deps).persona.appearance).toEqual({ model: active });
+    rmSync(join(personaHomeDir("milky-green"), "models"), { recursive: true });
+    expect(buildStatus(app, deps).persona.appearance).toEqual({ model: null });
   });
 
   test("probes Qdrant in the background, once per TTL, and reports the last answer", async () => {

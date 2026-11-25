@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { useCallPresence } from "@/features/call/call-context";
 import { accountsQuery } from "@/lib/accounts";
 import type { PersonaSummary } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
@@ -62,6 +63,9 @@ export function NewPersonaDialog({
   const [avatar, setAvatar] = useState<File | null>(null);
   const [pick, setPick] = useState<VoicePick | null>(null);
   const [activate, setActivate] = useState(true);
+  // The server refuses a switch during a call, which would toast right after she is created.
+  const { up } = useCallPresence();
+  const switching = activate && !up;
   const [showErrors, setShowErrors] = useState(false);
   const taken = personas.data?.personas.map((persona) => persona.id) ?? [];
   const rows = active.data?.settings;
@@ -82,7 +86,7 @@ export function NewPersonaDialog({
     onSuccess: async (made) => {
       toast.success(t`${ph({ name: made.name })} created.`);
       const created = avatar ? await addAvatar(made, avatar) : made;
-      if (activate) {
+      if (switching) {
         // She exists either way; a refused switch (a call is live) only leaves her inactive.
         await activatePersona(created.id).catch(toastError);
       }
@@ -119,9 +123,9 @@ export function NewPersonaDialog({
             <Field orientation="horizontal" className="w-auto">
               <Switch
                 id={switchId}
-                checked={activate}
+                checked={switching}
                 onCheckedChange={setActivate}
-                disabled={create.isPending}
+                disabled={create.isPending || up}
               />
               <FieldLabel htmlFor={switchId} className="font-normal">
                 {t`Switch to Her Now`}
@@ -136,6 +140,11 @@ export function NewPersonaDialog({
                 {t`Create`}
               </Button>
             </div>
+            {up && (
+              <p className="basis-full text-muted-foreground text-xs">
+                {t`A call is in progress: switch personas after it ends.`}
+              </p>
+            )}
           </DialogFooter>
         }
       >

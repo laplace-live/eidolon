@@ -1,6 +1,6 @@
 // Settings' Desktop App: what the desktop app can add to this computer, Open at Login and the
-// `eidolon` command for terminals. Each acts at once through the app's bridge, never the server, and
-// changes the computer only on the owner's click here.
+// `eidolon` command for terminals, each changing it only on the owner's click here, and the desktop
+// companion. Each acts at once through the app's bridge, never the server.
 
 import { Trans, useLingui } from "@lingui/react/macro";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,14 +19,28 @@ import {
 } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { desktop } from "@/lib/desktop";
+import { type CompanionChange, desktop } from "@/lib/desktop";
 import { toastError } from "@/lib/feedback";
+import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
-import { changeFailed, commandNote, loginItemNote, type Note } from "./desktop-notes";
-import { offersSystemOptions, type SystemOptions } from "./sections";
+import {
+  changeFailed,
+  commandNote,
+  companionNotes,
+  loginItemNote,
+  type Note,
+} from "./desktop-notes";
+import {
+  type CompanionOptions,
+  offersCompanion,
+  offersSystemOptions,
+  type SystemOptions,
+} from "./sections";
 
 /** How often Open at Login is read again while it waits for the owner's OK in System Settings. */
 const APPROVAL_POLL_MS = 3000;
+/** How often her state is read again while the card shows, since she is switched elsewhere too. */
+const COMPANION_POLL_MS = 2000;
 
 export function loginItemQuery(app: SystemOptions) {
   return queryOptions({
@@ -42,6 +56,14 @@ export function terminalCommandQuery(app: SystemOptions) {
   return queryOptions({
     queryKey: ["desktop", "terminal-command"],
     queryFn: () => app.terminalCommand(),
+  });
+}
+
+export function companionQuery(app: CompanionOptions) {
+  return queryOptions({
+    queryKey: ["desktop", "companion"],
+    queryFn: () => app.companion(),
+    refetchInterval: COMPANION_POLL_MS,
   });
 }
 
@@ -104,6 +126,74 @@ function LoginItemRow({ app }: { readonly app: SystemOptions }) {
   );
 }
 
+/** The desktop companion's switches: whether she shows, and whether a launch at login shows her. */
+function CompanionRows({ app }: { readonly app: CompanionOptions }) {
+  const { t } = useLingui();
+  const onId = useId();
+  const atLoginId = useId();
+  const queryClient = useQueryClient();
+  const options = companionQuery(app);
+  const companion = useQuery(options);
+  const hasModel = useQuery({
+    ...statusQuery,
+    select: (status) => status.persona.appearance.model !== null,
+  }).data;
+  const change = useMutation({
+    mutationFn: (asked: CompanionChange) => app.setCompanion(asked),
+    onSuccess: (state) => queryClient.setQueryData(options.queryKey, state),
+    onError: (error) => {
+      toastError(error);
+      void queryClient.invalidateQueries({ queryKey: options.queryKey });
+    },
+  });
+  const state = companion.data;
+  const pending = change.isPending ? change.variables : undefined;
+  const on = pending?.on ?? state?.on ?? false;
+  const atLogin = pending?.showAtLogin ?? state?.showAtLogin ?? false;
+  const notes = state === undefined ? [] : companionNotes(state, hasModel ?? true);
+  return (
+    <>
+      <Field orientation="horizontal" data-desktop-option="companion" className={ROW}>
+        <FieldContent>
+          <FieldLabel htmlFor={onId}>{t`Desktop Companion`}</FieldLabel>
+          <FieldDescription>
+            {t`Keep her on your desktop, above your other windows. Right-click her for her menu.`}
+          </FieldDescription>
+          {notes.map((note) => (
+            <NoteLine key={note.text.id} note={note} />
+          ))}
+          {companion.isError && <ErrorAlert error={companion.error} />}
+        </FieldContent>
+        <Switch
+          id={onId}
+          checked={on}
+          disabled={state === undefined || change.isPending}
+          onCheckedChange={(next) => change.mutate({ on: next })}
+        />
+      </Field>
+      <Field
+        orientation="horizontal"
+        data-desktop-option="companion-at-login"
+        data-disabled={!on}
+        className={ROW}
+      >
+        <FieldContent>
+          <FieldLabel htmlFor={atLoginId}>{t`Show at Login`}</FieldLabel>
+          <FieldDescription>
+            {t`When Eidolon opens at login, she shows too, before you open its window.`}
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          id={atLoginId}
+          checked={atLogin}
+          disabled={!on || state === undefined || change.isPending}
+          onCheckedChange={(next) => change.mutate({ showAtLogin: next })}
+        />
+      </Field>
+    </>
+  );
+}
+
 function CommandRow({ app }: { readonly app: SystemOptions }) {
   const { t } = useLingui();
   const titleId = useId();
@@ -162,15 +252,18 @@ function CommandRow({ app }: { readonly app: SystemOptions }) {
 export function DesktopCard() {
   const { t } = useLingui();
   const app = desktop();
-  if (!offersSystemOptions(app)) return null;
+  const system = offersSystemOptions(app);
+  const companion = offersCompanion(app);
+  if (!system && !companion) return null;
   return (
     <SectionCard
       title={t`Desktop App`}
-      description={t`What Eidolon can add to this computer, each only when you choose it here.`}
+      description={t`What Eidolon can add to this computer, each only when you choose it.`}
     >
       <div className="flex flex-col divide-y">
-        <LoginItemRow app={app} />
-        <CommandRow app={app} />
+        {system && <LoginItemRow app={app} />}
+        {companion && <CompanionRows app={app} />}
+        {system && <CommandRow app={app} />}
       </div>
     </SectionCard>
   );

@@ -1,9 +1,10 @@
 // Installs a packed @laplace.live/eidolon with npm, install scripts and all, as npx would, then runs
 // it on a new HOME and data home: its link, a sign-in with the link's code, the status with the
-// cookie and the proof, a CLI command's help, the eidolon command tasks run, the built-in skills,
-// sharp, LanceDB and onnxruntime-node as the bundles load them, and a clean exit on SIGTERM. CI runs
-// it on linux-x64 and win32-x64, where tasks' commands run in Git Bash and nothing sends SIGTERM:
-// there it also checks npm's .cmd for the command, and that the app ends with its launcher.
+// cookie and the proof, a character model checked by its PSD2Live runtime, a CLI command's help,
+// the eidolon command tasks run, the built-in skills, sharp, LanceDB and onnxruntime-node as the
+// bundles load them, and a clean exit on SIGTERM. CI runs it on linux-x64 and win32-x64, where
+// tasks' commands run in Git Bash and nothing sends SIGTERM: there it also checks npm's .cmd for
+// the command, and that the app ends with its launcher.
 import { type SpawnSyncOptions, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,6 +13,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { killTree, type Subprocess, spawnProcess, which } from "@eidolon/config";
 import { Output, READY_LINE } from "../../bot/scripts/output.ts";
 import {
+  type CharacterModel,
   type ErrorBody,
   PROOF_HEADER,
   type SessionGrant,
@@ -21,6 +23,8 @@ import {
 import { PLATFORMS } from "../src/launcher.ts";
 
 const WINDOWS = process.platform === "win32";
+/** The checkout's CC0 test rig, which the package's server loads in its own copy of the runtime. */
+const RIG = resolve(import.meta.dirname, "../../bot/test/local/fixtures/psd2live/tml.p2lrt");
 
 const USAGE = `usage: node apps/eidolon/scripts/ci-install-check.ts <tarball>
 
@@ -310,6 +314,21 @@ async function checkPackage(tarball: string, temp: string): Promise<void> {
         refused === "missing-key",
       `GET /api/local/chats: ${chats.status}, ${JSON.stringify(listed)}; a new chat without ` +
         `keys: ${create.status} ${refused ?? ""}`,
+    );
+    const imported = await fetch(
+      `${app.origin}/api/local/personas/milky-green/models?filename=tml.p2lrt`,
+      {
+        method: "POST",
+        headers: { ...session, "Content-Type": "application/octet-stream" },
+        body: new Blob([readFileSync(RIG)]),
+      },
+    );
+    const model = (await imported.json().catch(() => ({}))) as Partial<CharacterModel>;
+    check(
+      "character model",
+      imported.status === 201 && model.inventory?.generator === "psd2live 3.8.4",
+      `POST /api/local/personas/milky-green/models with the test rig: ${imported.status}, ` +
+        `${model.inventory?.generator ?? "nothing read of it"}`,
     );
     const help = await run([...eidolon, "search", "--help"], env, temp);
     check(

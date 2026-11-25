@@ -30,6 +30,10 @@ msgstr "(on the call)"
 msgid "(optional)"
 msgstr "(optional)"
 
+#: src/features/studio/model-controls.tsx
+msgid "[sleepy, teasing] Oh, you're back. [chuckling]"
+msgstr "[sleepy, teasing] Oh, you're back. [chuckling]"
+
 #: src/features/usage/tables.tsx
 msgid "{amount} min of audio"
 msgstr "{amount} min of audio"
@@ -67,6 +71,10 @@ msgstr "{count, plural, one {# batch is waiting; this downloads it.} other {# ba
 msgid "{count, plural, one {# character} other {# characters}}"
 msgstr "{count, plural, one {# character} other {# characters}}"
 
+#: src/features/studio/model-list.tsx
+msgid "{count, plural, one {# clip} other {# clips}}"
+msgstr "{count, plural, one {# clip} other {# clips}}"
+
 #: src/features/studio/videos-section.tsx
 msgid "{count, plural, one {# downloaded video has no upload date, so it waits until you give one in the table below.} other {# downloaded videos have no upload date, so they wait until you give one in the table below.}}"
 msgstr "{count, plural, one {# downloaded video has no upload date, so it waits until you give one in the table below.} other {# downloaded videos have no upload date, so they wait until you give one in the table below.}}"
@@ -74,6 +82,10 @@ msgstr "{count, plural, one {# downloaded video has no upload date, so it waits 
 #: src/features/jobs/parts.tsx
 msgid "{count, plural, one {# earlier line isn't shown.} other {# earlier lines aren't shown.}}"
 msgstr "{count, plural, one {# earlier line isn't shown.} other {# earlier lines aren't shown.}}"
+
+#: src/features/studio/model-list.tsx
+msgid "{count, plural, one {# expression} other {# expressions}}"
+msgstr "{count, plural, one {# expression} other {# expressions}}"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "{count, plural, one {# file changed since the last index.} other {# files changed since the last index.}}"
@@ -283,19 +295,34 @@ msgstr "{name} exists already."
 msgid "{name} forgot you."
 msgstr "{name} forgot you."
 
+#: src/features/studio/model-list.tsx
+msgid "{name} imported."
+msgstr "{name} imported."
+
 #: src/features/setup/voice-step.tsx
 msgid "{name} inherits <0>{env}</0> from the environment. Continue to keep it, or pick a voice of her own: it applies to her alone."
 msgstr "{name} inherits <0>{env}</0> from the environment. Continue to keep it, or pick a voice of her own: it applies to her alone."
+
+#: src/features/studio/model-list.tsx
+msgid "{name} is no longer her active model."
+msgstr "{name} is no longer her active model."
+
+#: src/features/studio/model-list.tsx
+msgid "{name} is now her active model."
+msgstr "{name} is now her active model."
 
 #: src/features/setup/personas.ts
 msgid "{name} is now the active persona."
 msgstr "{name} is now the active persona."
 
+#: src/features/call/call-bar.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/call-dock.tsx
 msgid "{name} is speaking"
 msgstr "{name} is speaking"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "{name} is thinking…"
 msgstr "{name} is thinking…"
@@ -308,6 +335,10 @@ msgstr "{name} isn't a usable file name. Rename the file without / \\ or :, so t
 msgid "{name} now speaks with the environment's voice."
 msgstr "{name} now speaks with the environment's voice."
 
+#: src/features/studio/model-list.tsx
+msgid "{name} now uses the new file."
+msgstr "{name} now uses the new file."
+
 #: src/features/call/call-notices.tsx
 msgid "{name} ran into an error"
 msgstr "{name} ran into an error"
@@ -317,11 +348,13 @@ msgid "{name} remembers your conversations between calls."
 msgstr "{name} remembers your conversations between calls."
 
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/model-list.tsx
 msgid "{name} removed."
 msgstr "{name} removed."
 
 #: src/features/settings/account-dialog.tsx
 #: src/features/studio/facts-editor.tsx
+#: src/features/studio/model-preview.tsx
 msgid "{name} saved."
 msgstr "{name} saved."
 
@@ -465,6 +498,10 @@ msgstr "12 Months"
 msgid "2024-05-01 她说……"
 msgstr "2024-05-01 她说……"
 
+#: src/features/studio/appearance-labels.ts
+msgid "2D Model · PSD2Live"
+msgstr "2D Model · PSD2Live"
+
 #: src/features/usage/route.tsx
 msgid "30 Days"
 msgstr "30 Days"
@@ -489,10 +526,19 @@ msgstr "A .txt file; .txt is added when you leave it out."
 msgid "A budget this key falls under is used up."
 msgstr "A budget this key falls under is used up."
 
+#: src/features/studio/model-controls.tsx
+msgid "A call fills the screen it's on: try her on a wide one and on a phone's."
+msgstr "A call fills the screen it's on: try her on a wide one and on a phone's."
+
+#: src/components/persona-switcher.tsx
 #: src/features/home/route.tsx
+#: src/features/setup/new-persona.tsx
+#: src/features/studio/route.tsx
 msgid "A call is in progress: switch personas after it ends."
 msgstr "A call is in progress: switch personas after it ends."
 
+#: src/features/settings/restart-button.tsx
+#: src/features/studio/model-list.tsx
 #: src/lib/labels.ts
 msgid "A call is in progress. Hang up first."
 msgstr "A call is in progress. Hang up first."
@@ -508,6 +554,10 @@ msgstr "A call needs a voice. Pick one for her first."
 #: src/features/studio/voice-section.tsx
 msgid "A call needs one: pick her voice below."
 msgstr "A call needs one: pick her voice below."
+
+#: src/features/studio/appearance-section.tsx
+msgid "A call with {name} is in progress: changes here show from her next call."
+msgstr "A call with {name} is in progress: changes here show from her next call."
 
 #: src/features/setup/persona-step.tsx
 msgid "A Chinese VTuber who runs a little flower shop with her cat. She comes with her prompt and outfits, ready to call."
@@ -540,6 +590,18 @@ msgstr "A link works for 10 minutes."
 #: src/features/chats/use-draft-files.ts
 msgid "A message holds up to {count} files"
 msgstr "A message holds up to {count} files"
+
+#: src/features/studio/model-list.tsx
+msgid "A model can be up to {max}."
+msgstr "A model can be up to {max}."
+
+#: src/features/studio/appearance-labels.ts
+msgid "A name can be up to {max} characters."
+msgstr "A name can be up to {max} characters."
+
+#: src/features/studio/appearance-labels.ts
+msgid "A name is one line."
+msgstr "A name is one line."
 
 #: src/components/voice-picker/library.tsx
 msgid "A name or a style, e.g. 温柔"
@@ -584,6 +646,7 @@ msgid "A review on the task's model lets routine actions through and asks you ab
 msgstr "A review on the task's model lets routine actions through and asks you about the rest. Each review bills the task."
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 msgid "A selfie from {name}"
 msgstr "A selfie from {name}"
 
@@ -624,6 +687,7 @@ msgid "Account"
 msgstr "Account"
 
 #: src/components/persona-badges.tsx
+#: src/features/studio/model-list.tsx
 msgid "Active"
 msgstr "Active"
 
@@ -647,6 +711,14 @@ msgstr "Add a {provider} Account"
 #: src/features/studio/references-section.tsx
 msgid "Add a Friend"
 msgstr "Add a Friend"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Add a Parameter"
+msgstr "Add a Parameter"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Add a parameter…"
+msgstr "Add a parameter…"
 
 #: src/features/studio/references-section.tsx
 msgid "Add a picture of someone she can take a selfie with, or drop one here."
@@ -693,6 +765,10 @@ msgstr "Add links above, and each video is listed here with where it stands."
 #: src/features/studio/voice-styles-card.tsx
 msgid "Add one, then ask her for it in a call."
 msgstr "Add one, then ask her for it in a call."
+
+#: src/features/studio/model-outfits.tsx
+msgid "Add Outfit"
+msgstr "Add Outfit"
 
 #: src/features/home/readiness-labels.ts
 msgid "Add Outfits"
@@ -876,10 +952,23 @@ msgstr "An image goes up to 50 MB, a text file up to 1 MB."
 msgid "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again."
 msgstr "An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again."
 
+#: src/features/studio/model-outfits.tsx
+msgid "An outfit hides parts of her, holds parameters at a value, or shows another pose. The one you edit shows on the preview."
+msgstr "An outfit hides parts of her, holds parameters at a value, or shows another pose. The one you edit shows on the preview."
+
 #: src/features/jobs/parts.tsx
 #: src/features/tasks/parts.tsx
 msgid "and {count} more"
 msgstr "and {count} more"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Angry"
+msgstr "Angry"
+
+#: src/features/studio/model-list.tsx
+msgid "Animated 2D models of her, made in PSD2Live. The one you make active is how she looks."
+msgstr "Animated 2D models of her, made in PSD2Live. The one you make active is how she looks."
 
 #: src/components/settings-form/labels.ts
 msgid "Anonymous Calls per Window"
@@ -945,6 +1034,10 @@ msgstr "API Key (If the Server Asks for One)"
 msgid "API Keys"
 msgstr "API Keys"
 
+#: src/features/studio/route.tsx
+msgid "Appearance"
+msgstr "Appearance"
+
 #: src/features/chats/labels.ts
 msgid "Approve for Me"
 msgstr "Approve for Me"
@@ -992,6 +1085,10 @@ msgstr "Approve for Me asks you: this runs code from the internet."
 #: src/features/usage/route.tsx
 msgid "As each provider reported it."
 msgstr "As each provider reported it."
+
+#: src/features/studio/model-outfits.tsx
+msgid "As Exported"
+msgstr "As Exported"
 
 #: src/features/chats/labels.ts
 msgid "Ask for Approval"
@@ -1113,6 +1210,10 @@ msgstr "Back to Home"
 msgid "Background mode leaves this computer as it is."
 msgstr "Background mode leaves this computer as it is."
 
+#: src/features/settings/desktop-notes.ts
+msgid "Background mode never shows her."
+msgstr "Background mode never shows her."
+
 #: src/features/studio/videos-section.tsx
 msgid "Billed"
 msgstr "Billed"
@@ -1222,6 +1323,7 @@ msgstr "Call ended · {duration}"
 msgid "Call her"
 msgstr "Call her"
 
+#: src/features/call/video-call.tsx
 #: src/features/chats/call-dock.tsx
 #: src/features/chats/call-line.ts
 msgid "Call with {name}"
@@ -1255,6 +1357,10 @@ msgstr "Calls can't start yet"
 msgid "Calls fail with a key the provider refuses. Fix the keys marked above, or continue and fix them later in Settings."
 msgstr "Calls fail with a key the provider refuses. Fix the keys marked above, or continue and fix them later in Settings."
 
+#: src/features/studio/model-controls.tsx
+msgid "Calls frame her head and shoulders until you frame her yourself."
+msgstr "Calls frame her head and shoulders until you frame her yourself."
+
 #: src/features/home/memory-panel.tsx
 msgid "Calls go on without memory meanwhile."
 msgstr "Calls go on without memory meanwhile."
@@ -1277,6 +1383,7 @@ msgstr "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and 
 #: src/features/settings/accounts-card.tsx
 #: src/features/settings/new-skill-dialog.tsx
 #: src/features/setup/new-persona.tsx
+#: src/features/studio/model-list.tsx
 #: src/features/studio/references-section.tsx
 #: src/features/studio/video-table.tsx
 #: src/features/studio/voice-styles-card.tsx
@@ -1308,6 +1415,10 @@ msgstr "Cancelled"
 msgid "Cancelled."
 msgstr "Cancelled."
 
+#: src/features/call/video-call.tsx
+msgid "Captions"
+msgstr "Captions"
+
 #: src/features/studio/videos-section.tsx
 msgid "Change"
 msgstr "Change"
@@ -1332,6 +1443,10 @@ msgstr "Changing it means building every persona's index again and a new memory 
 #: src/components/settings-form/labels.ts
 msgid "Changing it means building every persona's knowledge index again."
 msgstr "Changing it means building every persona's knowledge index again."
+
+#: src/components/settings-form/labels.ts
+msgid "Character Model"
+msgstr "Character Model"
 
 #: src/features/usage/route.tsx
 msgid "Chart"
@@ -1466,8 +1581,13 @@ msgstr "Clear"
 msgid "Client IP Header"
 msgstr "Client IP Header"
 
+#: src/features/studio/model-controls.tsx
+msgid "Clips"
+msgstr "Clips"
+
 #: src/components/ui/dialog.tsx
 #: src/components/ui/sheet.tsx
+#: src/features/call/call-bar.tsx
 #: src/features/chats/call-dock.tsx
 #: src/features/studio/facts-editor.tsx
 msgid "Close"
@@ -1664,6 +1784,7 @@ msgstr "Decision Models"
 #: src/components/settings-form/labels.ts
 #: src/components/settings-form/model-picker.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/studio/model-moods.tsx
 msgid "Default"
 msgstr "Default"
 
@@ -1722,6 +1843,10 @@ msgstr "Desktop"
 msgid "Desktop App"
 msgstr "Desktop App"
 
+#: src/features/settings/desktop-card.tsx
+msgid "Desktop Companion"
+msgstr "Desktop Companion"
+
 #: src/features/jobs/parts.tsx
 #: src/features/studio/add-videos.tsx
 msgid "Details"
@@ -1749,6 +1874,7 @@ msgstr "done"
 
 #: src/features/jobs/labels.ts
 #: src/features/setup/stepper.tsx
+#: src/features/studio/model-outfits.tsx
 #: src/features/tasks/labels.ts
 msgid "Done"
 msgstr "Done"
@@ -1794,6 +1920,10 @@ msgstr "Downloads use no cookies."
 msgid "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
 msgstr "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
 
+#: src/features/studio/model-controls.tsx
+msgid "Drag her on the preview to move her, and scroll or pinch to zoom."
+msgstr "Drag her on the preview to move her, and scroll or pinch to zoom."
+
 #: src/features/chats/attachments.tsx
 msgid "Drop to Attach"
 msgstr "Drop to Attach"
@@ -1823,6 +1953,10 @@ msgstr "Each link must be a full http or https URL."
 msgid "Each model, and the task it did for her."
 msgstr "Each model, and the task it did for her."
 
+#: src/features/studio/model-controls.tsx
+msgid "Each plays once over her idle."
+msgstr "Each plays once over her idle."
+
 #: src/features/chats/why-answered.tsx
 msgid "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
 msgstr "Each score runs from 0 to 1. Addressed: the line was for her. Interested: it touches what she cares about."
@@ -1842,6 +1976,7 @@ msgstr "Edit"
 #: src/features/settings/account-dialog.tsx
 #: src/features/settings/accounts-card.tsx
 #: src/features/studio/knowledge-section.tsx
+#: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Edit {name}"
 msgstr "Edit {name}"
@@ -1873,6 +2008,10 @@ msgstr "Eidolon calls paid services with your own keys. Keep the recommended pro
 #: src/features/tasks/cards.tsx
 msgid "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
 msgstr "Eidolon can't price what this task's model spends, so its spend pause can't work. Continuing turns its spend pause off."
+
+#: src/lib/labels.ts
+msgid "Eidolon can't use that model file."
+msgstr "Eidolon can't use that model file."
 
 #: src/features/usage/route.tsx
 msgid "Eidolon can't write its usage ledger at <0>{path}</0>. Set <1>EIDOLON_USAGE_DB</1> to a file it can write, then restart."
@@ -2033,6 +2172,10 @@ msgstr "Enter a whole number."
 msgid "Enter an amount of 0 or more."
 msgstr "Enter an amount of 0 or more."
 
+#: src/features/studio/model-outfits.tsx
+msgid "Entry {entry}"
+msgstr "Entry {entry}"
+
 #: src/components/settings-form/field.tsx
 msgid "environment"
 msgstr "environment"
@@ -2073,10 +2216,13 @@ msgstr "Every persona's memories of you live in Qdrant, and each change to them 
 msgid "Every video is downloaded."
 msgstr "Every video is downloaded."
 
+#: src/features/call/call-bar.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/call-dock.tsx
 msgid "Everyone"
 msgstr "Everyone"
 
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Everyone can hear you. Say something to start."
 msgstr "Everyone can hear you. Say something to start."
@@ -2085,6 +2231,10 @@ msgstr "Everyone can hear you. Say something to start."
 msgid "Everything the other sections don't show. Most installs never change these."
 msgstr "Everything the other sections don't show. Most installs never change these."
 
+#: src/features/chats/call-dock.tsx
+msgid "Expand"
+msgstr "Expand"
+
 #: src/components/app-sidebar.tsx
 msgid "Expand Sidebar"
 msgstr "Expand Sidebar"
@@ -2092,6 +2242,10 @@ msgstr "Expand Sidebar"
 #: src/features/studio/models-section.tsx
 msgid "Experimental, and not yet tried in a real call."
 msgstr "Experimental, and not yet tried in a real call."
+
+#: src/features/studio/model-controls.tsx
+msgid "Expressions"
+msgstr "Expressions"
 
 #: src/components/settings-form/labels.ts
 msgid "Fact Candidates"
@@ -2237,6 +2391,10 @@ msgstr "Folder"
 msgid "Folders every task may read and write besides its own, one per line."
 msgstr "Folders every task may read and write besides its own, one per line."
 
+#: src/features/studio/model-controls.tsx
+msgid "Follow Pointer"
+msgstr "Follow Pointer"
+
 #: src/features/studio/voice-by-id.tsx
 msgid "For a voice neither list shows, such as one shared with you by link: copy its ID from its page on fish.audio."
 msgstr "For a voice neither list shows, such as one shared with you by link: copy its ID from its page on fish.audio."
@@ -2265,6 +2423,10 @@ msgstr "Found {title}"
 msgid "Four short steps: your keys, who you'll talk to, her voice, and memory."
 msgstr "Four short steps: your keys, who you'll talk to, her voice, and memory."
 
+#: src/features/studio/model-preview.tsx
+msgid "Framing"
+msgstr "Framing"
+
 #: src/features/studio/videos-section.tsx
 msgid "Free"
 msgstr "Free"
@@ -2281,6 +2443,14 @@ msgstr "Friends"
 msgid "From <0>{variable}</0> in the environment."
 msgstr "From <0>{variable}</0> in the environment."
 
+#: src/features/studio/model-list.tsx
+msgid "From a File"
+msgstr "From a File"
+
+#: src/features/studio/model-list.tsx
+msgid "From a Folder"
+msgstr "From a Folder"
+
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/accounts-card.tsx
 msgid "From the environment"
@@ -2294,6 +2464,15 @@ msgstr "Full Access"
 msgid "General"
 msgstr "General"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Gentle"
+msgstr "Gentle"
+
+#: src/features/studio/model-moods.tsx
+msgid "Gestures"
+msgstr "Gestures"
+
 #: src/components/settings-form/account-key-field.tsx
 msgid "Get a key"
 msgstr "Get a key"
@@ -2306,9 +2485,18 @@ msgstr "Getting your microphone ready…"
 msgid "Give her facts, videos and outfits in the studio, so she knows who she is."
 msgstr "Give her facts, videos and outfits in the studio, so she knows who she is."
 
+#: src/features/studio/appearance-labels.ts
+msgid "Give it a name."
+msgstr "Give it a name."
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Give the style a name."
 msgstr "Give the style a name."
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Gloomy"
+msgstr "Gloomy"
 
 #: src/features/studio/glossary-section.tsx
 #: src/features/studio/route.tsx
@@ -2343,13 +2531,35 @@ msgstr "Group ID"
 msgid "Hang Up"
 msgstr "Hang Up"
 
+#: src/features/call/call-page.tsx
+msgid "Hang up the call in your chat to call {name} here."
+msgstr "Hang up the call in your chat to call {name} here."
+
 #: src/features/call/call-state.tsx
 msgid "Hanging up…"
 msgstr "Hanging up…"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Happy"
+msgstr "Happy"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "gesture"
+msgid "Head Shake"
+msgstr "Head Shake"
+
 #: src/features/setup/keys-step.tsx
 msgid "Hears you on calls and in voice messages."
 msgstr "Hears you on calls and in voice messages."
+
+#: src/features/studio/model-outfits.tsx
+msgid "Held at a value while she wears it."
+msgstr "Held at a value while she wears it."
+
+#: src/features/studio/model-controls.tsx
+msgid "Held on her until you take them off."
+msgstr "Held on her until you take them off."
 
 #: src/features/studio/identity-section.tsx
 msgid "Her avatar is built in. Upload one to use your own instead."
@@ -2374,6 +2584,18 @@ msgstr "Her full name, as the prompts say it."
 #: src/features/studio/models-section.tsx
 msgid "Her knowledge, archive and memories reach the model from the transcript of what you said, so they can trail a quick reply."
 msgstr "Her knowledge, archive and memories reach the model from the transcript of what you said, so they can trail a quick reply."
+
+#: src/features/studio/model-preview.tsx
+msgid "Her model can't show here"
+msgstr "Her model can't show here"
+
+#: src/features/studio/model-list.tsx
+msgid "Her Models"
+msgstr "Her Models"
+
+#: src/features/studio/model-controls.tsx
+msgid "Her mouth follows your voice, and her eyes follow your pointer. Nothing is recorded."
+msgstr "Her mouth follows your voice, and her eyes follow your pointer. Nothing is recorded."
 
 #: src/features/setup/persona-fields.tsx
 msgid "Her Name"
@@ -2403,6 +2625,10 @@ msgstr "Her own voice works with Fish Audio."
 msgid "Her providers take no key."
 msgstr "Her providers take no key."
 
+#: src/features/studio/model-moods.tsx
+msgid "Her replies' cues give her a mood, which shows as up to two of these expressions."
+msgstr "Her replies' cues give her a mood, which shows as up to two of these expressions."
+
 #: src/features/studio/advanced-section.tsx
 msgid "Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools."
 msgstr "Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools."
@@ -2426,6 +2652,10 @@ msgstr "Her voice ({id}) hasn't been checked with Fish Audio yet."
 #: src/features/settings/skills-card.tsx
 msgid "Hidden by the skill of the same name in {shadowedBy}."
 msgstr "Hidden by the skill of the same name in {shadowedBy}."
+
+#: src/features/studio/model-outfits.tsx
+msgid "Hidden Parts"
+msgstr "Hidden Parts"
 
 #: src/features/jobs/detail.tsx
 msgid "Hide"
@@ -2504,6 +2734,10 @@ msgstr "How Settings and the studio list it, such as “OpenAI (work)”."
 msgid "How she answers in chats. In a chat with several personas, a director decides who answers each line, and weighs her by her interests and talkativeness."
 msgstr "How she answers in chats. In a chat with several personas, a director decides who answers each line, and weighs her by her interests and talkativeness."
 
+#: src/features/studio/model-list.tsx
+msgid "How She Looks"
+msgstr "How She Looks"
+
 #: src/features/setup/stepper.tsx
 msgid "How she sounds"
 msgstr "How she sounds"
@@ -2524,6 +2758,11 @@ msgstr "Identity"
 msgid "Identity saved."
 msgstr "Identity saved."
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "gesture"
+msgid "Idle"
+msgstr "Idle"
+
 #: src/components/locked-screen.tsx
 msgid "If it happens again, Show Logs in the Help menu has the details."
 msgstr "If it happens again, Show Logs in the Help menu has the details."
@@ -2539,6 +2778,14 @@ msgstr "Images"
 #: src/features/chats/attachments.tsx
 msgid "Images and text files go with your next message."
 msgstr "Images and text files go with your next message."
+
+#: src/features/studio/model-list.tsx
+msgid "Import a .p2lrt from PSD2Live, or the folder or zip of its web export. You can drop one here too."
+msgstr "Import a .p2lrt from PSD2Live, or the folder or zip of its web export. You can drop one here too."
+
+#: src/features/studio/model-list.tsx
+msgid "Import a Model"
+msgstr "Import a Model"
 
 #: src/features/chats/composer.tsx
 msgid "In a call"
@@ -2741,6 +2988,10 @@ msgstr "It goes on below: scroll the box to read all of it."
 msgid "It has spent {spent}, and pauses each time its spend crosses another {each}."
 msgstr "It has spent {spent}, and pauses each time its spend crosses another {each}."
 
+#: src/features/studio/model-list.tsx
+msgid "It holds more than one .p2lrt model. Import the one you want on its own."
+msgstr "It holds more than one .p2lrt model. Import the one you want on its own."
+
 #: src/features/jobs/detail.tsx
 msgid "It keeps running when you close this page."
 msgstr "It keeps running when you close this page."
@@ -2834,6 +3085,14 @@ msgstr "It's {time} for her now."
 msgid "Its arguments couldn't be read, so it never ran."
 msgstr "Its arguments couldn't be read, so it never ran."
 
+#: src/features/studio/model-list.tsx
+msgid "Its file and settings are deleted from her folder."
+msgstr "Its file and settings are deleted from her folder."
+
+#: src/features/studio/model-list.tsx
+msgid "Its file and settings are deleted from her folder. It's her active model, so she shows her picture until you make another one active."
+msgstr "Its file and settings are deleted from her folder. It's her active model, so she shows her picture until you make another one active."
+
 #: src/features/settings/accounts-card.tsx
 msgid "Its key and settings are deleted from credentials.json. A key the environment sets stays."
 msgstr "Its key and settings are deleted from credentials.json. A key the environment sets stays."
@@ -2883,12 +3142,17 @@ msgstr "Jobs of a few minutes, such as a list or a few edits to a file. A cheape
 msgid "Keep Editing"
 msgstr "Keep Editing"
 
+#: src/features/settings/desktop-card.tsx
+msgid "Keep her on your desktop, above your other windows. Right-click her for her menu."
+msgstr "Keep her on your desktop, above your other windows. Right-click her for her menu."
+
 #: src/features/studio/voice-section.tsx
 msgid "Keep Hers"
 msgstr "Keep Hers"
 
 #: src/features/studio/facts-editor.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/studio/model-list.tsx
 #: src/features/tasks/task-card.tsx
 msgid "Keep It"
 msgstr "Keep It"
@@ -2971,6 +3235,11 @@ msgstr "Last Call"
 #: src/features/tasks/task-card.tsx
 msgid "Latest Step"
 msgstr "Latest Step"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Lazy"
+msgstr "Lazy"
 
 #: src/features/settings/account-dialog.tsx
 msgid "Leave it empty for the provider's own API, or point it at a proxy or another region."
@@ -3094,6 +3363,11 @@ msgid "Make {name} forget you?"
 msgstr "Make {name} forget you?"
 
 #: src/features/studio/route.tsx
+msgid "Make Active"
+msgstr "Make Active"
+
+#: src/features/studio/model-list.tsx
+msgctxt "model"
 msgid "Make Active"
 msgstr "Make Active"
 
@@ -3223,6 +3497,10 @@ msgstr "Message {name}"
 msgid "Message everyone"
 msgstr "Message everyone"
 
+#: src/features/studio/model-controls.tsx
+msgid "Microphone and Pointer"
+msgstr "Microphone and Pointer"
+
 #: src/features/studio/route.tsx
 msgid "Mind"
 msgstr "Mind"
@@ -3239,9 +3517,21 @@ msgstr "Missing: {names}. Calls can't start without them."
 msgid "Model"
 msgstr "Model"
 
+#: src/features/studio/model-list.tsx
+msgid "Model File"
+msgstr "Model File"
+
+#: src/features/studio/model-list.tsx
+msgid "Model Folder"
+msgstr "Model Folder"
+
 #: src/features/setup/keys-step.tsx
 msgid "Model ID"
 msgstr "Model ID"
+
+#: src/features/studio/model-list.tsx
+msgid "Model Options"
+msgstr "Model Options"
 
 #: src/features/setup/keys-step.tsx
 msgid "Model: <0>{model}</0>"
@@ -3260,9 +3550,34 @@ msgstr "Models by Kind"
 msgid "Month"
 msgstr "Month"
 
+#: src/features/studio/model-controls.tsx
+msgid "Mood: {moods}"
+msgstr "Mood: {moods}"
+
+#: src/features/studio/model-moods.tsx
+#: src/features/studio/model-preview.tsx
+msgid "Moods"
+msgstr "Moods"
+
+#: src/features/studio/model-controls.tsx
+msgid "Move Down"
+msgstr "Move Down"
+
 #: src/features/settings/desktop-notes.ts
 msgid "Move Eidolon to the Applications folder to use this."
 msgstr "Move Eidolon to the Applications folder to use this."
+
+#: src/features/studio/model-controls.tsx
+msgid "Move Left"
+msgstr "Move Left"
+
+#: src/features/studio/model-controls.tsx
+msgid "Move Right"
+msgstr "Move Right"
+
+#: src/features/studio/model-controls.tsx
+msgid "Move Up"
+msgstr "Move Up"
 
 #: src/features/call/call-controls.tsx
 msgid "Mute your mic"
@@ -3274,6 +3589,8 @@ msgstr "My Voices"
 
 #: src/features/settings/account-dialog.tsx
 #: src/features/settings/new-skill-dialog.tsx
+#: src/features/studio/model-list.tsx
+#: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Name"
 msgstr "Name"
@@ -3282,6 +3599,10 @@ msgstr "Name"
 msgctxt "persona's name"
 msgid "Name"
 msgstr "Name"
+
+#: src/features/studio/model-preview.tsx
+msgid "Name every outfit first."
+msgstr "Name every outfit first."
 
 #: src/components/settings-form/labels.ts
 msgid "Name patterns for the files in her facts folder, comma-separated. Default *.txt."
@@ -3405,6 +3726,18 @@ msgstr "No microphone found"
 msgid "No model by that name."
 msgstr "No model by that name."
 
+#: src/features/studio/model-list.tsx
+msgid "No models yet"
+msgstr "No models yet"
+
+#: src/features/studio/model-controls.tsx
+msgid "No mood found, so her face stays neutral."
+msgstr "No mood found, so her face stays neutral."
+
+#: src/features/studio/model-controls.tsx
+msgid "No mood found, so only her cues change her face."
+msgstr "No mood found, so only her cues change her face."
+
 #: src/features/home/readiness-labels.ts
 msgid "No outfit references, so she can't take selfies."
 msgstr "No outfit references, so she can't take selfies."
@@ -3412,6 +3745,10 @@ msgstr "No outfit references, so she can't take selfies."
 #: src/features/studio/references-section.tsx
 msgid "No outfits yet"
 msgstr "No outfits yet"
+
+#: src/features/studio/model-outfits.tsx
+msgid "No outfits yet: she wears the model as it was exported."
+msgstr "No outfits yet: she wears the model as it was exported."
 
 #: src/features/tasks/transcript-view.tsx
 msgid "No output."
@@ -3517,9 +3854,19 @@ msgstr "No Web"
 msgid "No words could be heard in it."
 msgstr "No words could be heard in it."
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "gesture"
+msgid "Nod"
+msgstr "Nod"
+
 #: src/components/settings-form/labels.ts
+#: src/features/studio/model-moods.tsx
 msgid "None"
 msgstr "None"
+
+#: src/features/studio/model-list.tsx
+msgid "None is active, so she shows her picture. Make one active to use it as her look."
+msgstr "None is active, so she shows her picture. Make one active to use it as her look."
 
 #: src/features/settings/commands-card.tsx
 msgid "None yet."
@@ -3687,6 +4034,10 @@ msgstr "One of her providers reported a problem. Check its key and credit in Set
 msgid "One per line, relative to her folder."
 msgstr "One per line, relative to her folder."
 
+#: src/features/call/call-bar.tsx
+msgid "Ongoing Call"
+msgstr "Ongoing Call"
+
 #: src/features/home/readiness-labels.ts
 msgid "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
 msgstr "Only {free} free on the data home's disk. Downloaded audio takes a lot of space."
@@ -3698,6 +4049,10 @@ msgstr "Only Add Programs You Trust"
 #: src/features/settings/skills-card.tsx
 msgid "Only When Named"
 msgstr "Only When Named"
+
+#: src/features/studio/model-list.tsx
+msgid "Only you see this name, here in the studio."
+msgstr "Only you see this name, here in the studio."
 
 #: src/components/locked-screen.tsx
 msgid "Open"
@@ -3810,10 +4165,16 @@ msgstr "Other Provider"
 msgid "Our house style for web pages. Use when making or editing any HTML page."
 msgstr "Our house style for web pages. Use when making or editing any HTML page."
 
+#: src/features/studio/model-outfits.tsx
+msgid "Outfit {count}"
+msgstr "Outfit {count}"
+
 #: src/features/home/readiness-labels.ts
 msgid "Outfit references: {count}."
 msgstr "Outfit references: {count}."
 
+#: src/features/studio/model-outfits.tsx
+#: src/features/studio/model-preview.tsx
 #: src/features/studio/references-section.tsx
 msgid "Outfits"
 msgstr "Outfits"
@@ -3826,6 +4187,10 @@ msgstr "Outfits you add stay on this computer: deploying {name} copies only her 
 #: src/features/studio/voice-section.tsx
 msgid "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
 msgstr "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
+
+#: src/features/studio/model-outfits.tsx
+msgid "Parameters"
+msgstr "Parameters"
 
 #: src/features/jobs/detail.tsx
 msgid "Part of the cost couldn't be priced."
@@ -3843,6 +4208,10 @@ msgstr "Passing it on to the task…"
 #: src/features/settings/account-dialog.tsx
 msgid "Paste a new key to replace it"
 msgstr "Paste a new key to replace it"
+
+#: src/features/studio/model-controls.tsx
+msgid "Paste a reply of hers, with its cues: she plays it as she would on a call, with no voice and nothing billed."
+msgstr "Paste a reply of hers, with its cues: she plays it as she would on a call, with no voice and nothing billed."
 
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
@@ -3890,6 +4259,10 @@ msgstr "Personas"
 #: src/features/setup/persona-fields.tsx
 msgid "Personas speak Mandarin, and the videos you build one from should be Mandarin streams."
 msgstr "Personas speak Mandarin, and the videos you build one from should be Mandarin streams."
+
+#: src/features/studio/model-list.tsx
+msgid "Pick a .p2lrt file from PSD2Live, or the folder or zip of its web export."
+msgstr "Pick a .p2lrt file from PSD2Live, or the folder or zip of its web export."
 
 #: src/features/chats/route.tsx
 msgid "Pick a chat, or start a new one"
@@ -3970,8 +4343,13 @@ msgid "Plan Again"
 msgstr "Plan Again"
 
 #: src/features/call/call-notices.tsx
+#: src/features/studio/model-controls.tsx
 msgid "Play"
 msgstr "Play"
+
+#: src/features/studio/model-moods.tsx
+msgid "Play {name}"
+msgstr "Play {name}"
 
 #: src/features/chats/voice-bubble.tsx
 msgid "Play Voice Message"
@@ -3980,6 +4358,27 @@ msgstr "Play Voice Message"
 #: src/features/chats/voice-bubble.tsx
 msgid "Playback Position"
 msgstr "Playback Position"
+
+#: src/features/call/video-call.tsx
+msgid "Pop Out"
+msgstr "Pop Out"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Pose Group {group}"
+msgstr "Pose Group {group}"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Poses"
+msgstr "Poses"
+
+#: src/features/studio/model-controls.tsx
+msgid "Position"
+msgstr "Position"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Pouting"
+msgstr "Pouting"
 
 #: src/components/voice-picker/parts.tsx
 msgid "Private"
@@ -4018,6 +4417,18 @@ msgstr "Provider Accounts"
 #: src/features/settings/route.tsx
 msgid "Providers"
 msgstr "Providers"
+
+#: src/features/studio/appearance-labels.ts
+msgid "PSD2Live's runtime couldn't read this model's file."
+msgstr "PSD2Live's runtime couldn't read this model's file."
+
+#: src/features/studio/appearance-labels.ts
+msgid "PSD2Live's runtime didn't start in this browser."
+msgstr "PSD2Live's runtime didn't start in this browser."
+
+#: src/features/studio/appearance-labels.ts
+msgid "PSD2Live's runtime stopped while it drew her model."
+msgstr "PSD2Live's runtime stopped while it drew her model."
 
 #: src/components/voice-picker/parts.tsx
 msgid "Public"
@@ -4213,7 +4624,13 @@ msgctxt "delete an account"
 msgid "Remove"
 msgstr "Remove"
 
+#: src/features/studio/model-list.tsx
+msgctxt "model"
+msgid "Remove"
+msgstr "Remove"
+
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove {name}"
 msgstr "Remove {name}"
@@ -4224,6 +4641,7 @@ msgid "Remove {name}"
 msgstr "Remove {name}"
 
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/model-list.tsx
 msgid "Remove {name}?"
 msgstr "Remove {name}?"
 
@@ -4248,6 +4666,7 @@ msgid "Remove the {name} style?"
 msgstr "Remove the {name} style?"
 
 #: src/features/chats/chat-menu.tsx
+#: src/features/studio/model-list.tsx
 msgid "Rename"
 msgstr "Rename"
 
@@ -4255,9 +4674,21 @@ msgstr "Rename"
 msgid "Rename Chat"
 msgstr "Rename Chat"
 
+#: src/features/studio/model-list.tsx
+msgid "Rename the Model"
+msgstr "Rename the Model"
+
+#: src/features/studio/model-list.tsx
+msgid "Renamed to {name}."
+msgstr "Renamed to {name}."
+
 #: src/features/setup/avatar-picker.tsx
 msgid "Replace"
 msgstr "Replace"
+
+#: src/features/studio/model-list.tsx
+msgid "Replace File"
+msgstr "Replace File"
 
 #: src/features/studio/identity-section.tsx
 msgid "Replace Her Avatar"
@@ -4354,6 +4785,14 @@ msgstr "Research tasks run on Assistant Mode's model for now"
 msgid "Reset"
 msgstr "Reset"
 
+#: src/features/studio/model-moods.tsx
+msgid "Reset {name} to Default"
+msgstr "Reset {name} to Default"
+
+#: src/features/studio/model-controls.tsx
+msgid "Reset Framing"
+msgstr "Reset Framing"
+
 #: src/features/home/readiness-labels.ts
 #: src/features/settings/notices.tsx
 #: src/features/settings/restart-button.tsx
@@ -4408,6 +4847,10 @@ msgstr "Retrieval Gate Provider"
 #: src/features/chats/chat-log.tsx
 msgid "Retry"
 msgstr "Retry"
+
+#: src/features/call/call-bar.tsx
+msgid "Return to Call"
+msgstr "Return to Call"
 
 #: src/features/studio/text-editor.tsx
 msgid "Revert"
@@ -4468,6 +4911,11 @@ msgstr "s1 (Retires 2026-12-31)"
 msgid "s2.1-pro-free (Free, under Fair Use)"
 msgstr "s2.1-pro-free (Free, under Fair Use)"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Sad"
+msgstr "Sad"
+
 #: src/components/settings-form/field.tsx
 msgid "Same as {role} ({value})"
 msgstr "Same as {role} ({value})"
@@ -4480,6 +4928,7 @@ msgstr "Same as Assistant Tasks"
 #: src/components/settings-form/settings-card.tsx
 #: src/features/chats/chat-menu.tsx
 #: src/features/settings/account-dialog.tsx
+#: src/features/studio/model-list.tsx
 #: src/features/studio/text-editor.tsx
 msgid "Save"
 msgstr "Save"
@@ -4503,6 +4952,7 @@ msgstr "Saved"
 
 #: src/components/settings-form/settings-card.tsx
 #: src/features/studio/identity-section.tsx
+#: src/features/studio/model-preview.tsx
 msgid "Saved for {name}"
 msgstr "Saved for {name}"
 
@@ -4546,6 +4996,10 @@ msgstr "Say what it does and when to use it."
 #: src/components/settings-form/labels.ts
 msgid "Scene Types Left Out of the Index"
 msgstr "Scene Types Left Out of the Index"
+
+#: src/features/studio/model-controls.tsx
+msgid "Screen"
+msgstr "Screen"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Search"
@@ -4724,6 +5178,11 @@ msgstr "Setup"
 msgid "Setup Steps"
 msgstr "Setup Steps"
 
+#: src/features/home/memory-panel.tsx
+#: src/features/home/readiness-list.tsx
+msgid "Setup would end the call. Hang up first."
+msgstr "Setup would end the call. Hang up first."
+
 #: src/features/usage/tables.tsx
 msgid "Share"
 msgstr "Share"
@@ -4792,6 +5251,10 @@ msgstr "She passed these on, and it reads them first when it goes on:"
 msgid "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 msgstr "She picks these up in your calls, and only she reads them: each persona remembers on her own."
 
+#: src/features/settings/desktop-notes.ts
+msgid "She shows as her picture until she has an active character model."
+msgstr "She shows as her picture until she has an active character model."
+
 #: src/features/studio/models-section.tsx
 msgid "She speaks in one of the realtime model's own voices, not the voice picked for her."
 msgstr "She speaks in one of the realtime model's own voices, not the voice picked for her."
@@ -4820,6 +5283,10 @@ msgstr "She talks without them, but remembers and recalls less."
 msgid "She uses it in calls. Leave it empty and she won't use a name."
 msgstr "She uses it in calls. Leave it empty and she won't use a name."
 
+#: src/features/studio/model-outfits.tsx
+msgid "She Wears"
+msgstr "She Wears"
+
 #: src/features/chats/labels.ts
 msgid "She's the only persona in this chat, so she answers every line."
 msgstr "She's the only persona in this chat, so she answers every line."
@@ -4845,6 +5312,10 @@ msgstr "Show All"
 #: src/features/home/memory-panel.tsx
 msgid "Show All {count}"
 msgstr "Show All {count}"
+
+#: src/features/settings/desktop-card.tsx
+msgid "Show at Login"
+msgstr "Show at Login"
 
 #: src/features/chats/labels.ts
 msgid "Show each task as one card"
@@ -4889,6 +5360,15 @@ msgstr "Show Transcript"
 #: src/components/settings-form/field.tsx
 msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
 msgstr "Shown only: set it in settings.yaml or with <0>{env}</0>."
+
+#: src/features/call/video-call.tsx
+msgid "Shrink"
+msgstr "Shrink"
+
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Shy"
+msgstr "Shy"
 
 #: src/components/ui/sidebar.tsx
 msgid "Sidebar"
@@ -5104,12 +5584,14 @@ msgid "Steps, rules and examples, in Markdown"
 msgstr "Steps, rules and examples, in Markdown"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Still waiting for {name}. If nothing comes, say it again."
 msgstr "Still waiting for {name}. If nothing comes, say it again."
 
 #: src/features/chats/composer.tsx
 #: src/features/studio/add-videos.tsx
+#: src/features/studio/model-controls.tsx
 #: src/features/tasks/stop-picker.tsx
 #: src/features/tasks/task-card.tsx
 msgid "Stop"
@@ -5131,6 +5613,10 @@ msgstr "Stop Task"
 #: src/features/tasks/task-card.tsx
 msgid "Stop this task?"
 msgstr "Stop this task?"
+
+#: src/features/studio/model-list.tsx
+msgid "Stop Using"
+msgstr "Stop Using"
 
 #: src/features/tasks/stop-picker.tsx
 msgid "Stop which task?"
@@ -5216,6 +5702,11 @@ msgstr "Such as 温柔/轻柔/柔一点"
 msgid "Summary"
 msgstr "Summary"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Surprised"
+msgstr "Surprised"
+
 #: src/features/setup/new-persona.tsx
 msgid "Switch to Her Now"
 msgstr "Switch to Her Now"
@@ -5257,9 +5748,18 @@ msgstr "Taking a selfie…"
 msgid "Talkativeness"
 msgstr "Talkativeness"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "gesture"
+msgid "Talking"
+msgstr "Talking"
+
 #: src/features/home/hero.tsx
 msgid "Talking to"
 msgstr "Talking to"
+
+#: src/features/studio/model-controls.tsx
+msgid "Tall"
+msgstr "Tall"
 
 #: src/features/usage/tables.tsx
 msgid "Task"
@@ -5317,6 +5817,11 @@ msgstr "Terminal Command"
 msgid "terms = [\"奶绿\", \"奶糖花\"]"
 msgstr "terms = [\"奶绿\", \"奶糖花\"]"
 
+#: src/features/studio/model-preview.tsx
+msgctxt "model"
+msgid "Test"
+msgstr "Test"
+
 #: src/features/chats/labels.ts
 msgctxt "reply mode"
 msgid "Text"
@@ -5341,6 +5846,14 @@ msgstr "That conflicts with what changed meanwhile. Reload and try again."
 #: src/lib/labels.ts
 msgid "That doesn't exist."
 msgstr "That doesn't exist."
+
+#: src/features/studio/model-list.tsx
+msgid "That file couldn't be read. Pick it again."
+msgstr "That file couldn't be read. Pick it again."
+
+#: src/features/studio/model-list.tsx
+msgid "That file isn't a PSD2Live model."
+msgstr "That file isn't a PSD2Live model."
 
 #: src/lib/labels.ts
 msgid "That file name isn't allowed."
@@ -5375,6 +5888,10 @@ msgid "That link has expired. Run the same command again for a fresh one."
 msgstr "That link has expired. Run the same command again for a fresh one."
 
 #: src/lib/labels.ts
+msgid "That model was removed. Reload to see her models."
+msgstr "That model was removed. Reload to see her models."
+
+#: src/lib/labels.ts
 msgid "That part of the file doesn't exist."
 msgstr "That part of the file doesn't exist."
 
@@ -5401,6 +5918,10 @@ msgstr "That task isn't waiting for an answer."
 #: src/lib/labels.ts
 msgid "That value isn't valid for this setting."
 msgstr "That value isn't valid for this setting."
+
+#: src/features/studio/model-list.tsx
+msgid "That zip can't be read here. Unzip it, then import the .p2lrt inside."
+msgstr "That zip can't be read here. Unzip it, then import the .p2lrt inside."
 
 #: src/features/tasks/cards.tsx
 msgid "That's the server's own claim."
@@ -5442,6 +5963,10 @@ msgstr "The app's navigation."
 msgid "The archive is built."
 msgstr "The archive is built."
 
+#: src/features/studio/appearance-labels.ts
+msgid "The browser stopped drawing her model to free up its graphics."
+msgstr "The browser stopped drawing her model to free up its graphics."
+
 #: src/components/settings-form/labels.ts
 msgid "The browser whose cookies yt-dlp uses for videos behind a login. Reading them may ask for your Keychain password."
 msgstr "The browser whose cookies yt-dlp uses for videos behind a login. Reading them may ask for your Keychain password."
@@ -5458,9 +5983,17 @@ msgstr "The call failed on Eidolon's side."
 msgid "The check couldn't run."
 msgstr "The check couldn't run."
 
+#: src/features/studio/model-moods.tsx
+msgid "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then."
+msgstr "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then."
+
 #: src/features/call/call-notices.tsx
 msgid "The connection dropped."
 msgstr "The connection dropped."
+
+#: src/features/studio/model-controls.tsx
+msgid "The dashed outline is what any call shows of her; a wider or taller screen shows more around it."
+msgstr "The dashed outline is what any call shows of her; a wider or taller screen shows more around it."
 
 #: src/features/studio/models-section.tsx
 msgid "The delivery cues in her prompt aren't performed: she's told to put them in her voice instead."
@@ -5594,6 +6127,10 @@ msgstr "The most context a task's requests carry, in tokens. Default 128000."
 #: src/features/jobs/list.tsx
 msgid "The offline work that builds each persona's knowledge. A job keeps running when you close this page."
 msgstr "The offline work that builds each persona's knowledge. A job keeps running when you close this page."
+
+#: src/features/studio/model-outfits.tsx
+msgid "The outfit she shows this model in."
+msgstr "The outfit she shows this model in."
 
 #: src/features/studio/identity-section.tsx
 msgid "The picture is deleted from her folder, and her initials show in its place."
@@ -5744,6 +6281,10 @@ msgstr "There is no such task."
 msgid "There may not be enough free space for this audio. Free some space first, or add fewer videos."
 msgstr "There may not be enough free space for this audio. Free some space first, or add fewer videos."
 
+#: src/features/studio/model-list.tsx
+msgid "There's no .p2lrt model in it."
+msgstr "There's no .p2lrt model in it."
+
 #: src/features/chats/chat-settings.tsx
 msgid "These apply to this chat alone."
 msgstr "These apply to this chat alone."
@@ -5764,6 +6305,11 @@ msgstr "They appear here when you index facts or add videos in a persona's studi
 msgid "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
 msgstr "They were deleted, or no longer match the patterns. Index facts again so she forgets them:"
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Thinking"
+msgstr "Thinking"
+
 #: src/features/setup/keys-step.tsx
 msgid "Thinks and writes her replies."
 msgstr "Thinks and writes her replies."
@@ -5779,6 +6325,10 @@ msgstr "This account has no key yet"
 #: src/features/studio/videos-section.tsx
 msgid "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
 msgstr "This bills your Soniox, OpenRouter and embedding accounts: about {usd} by the estimate."
+
+#: src/features/studio/appearance-labels.ts
+msgid "This browser can't draw her model: it needs WebGL."
+msgstr "This browser can't draw her model: it needs WebGL."
 
 #: src/features/chats/voice-recorder.tsx
 msgid "This browser can't record audio here."
@@ -5831,6 +6381,14 @@ msgstr "This job reported no progress."
 #: src/features/jobs/detail.tsx
 msgid "This job stopped without finishing"
 msgstr "This job stopped without finishing"
+
+#: src/features/studio/model-controls.tsx
+msgid "This model has no clips."
+msgstr "This model has no clips."
+
+#: src/features/studio/model-controls.tsx
+msgid "This model has no expressions."
+msgstr "This model has no expressions."
 
 #: src/components/settings-form/check-labels.ts
 msgid "This OpenRouter account never bought credits, so paid models will fail."
@@ -5977,6 +6535,10 @@ msgstr "Transcribing bills your Soniox account."
 msgid "Transcribing…"
 msgstr "Transcribing…"
 
+#: src/features/call/video-call.tsx
+msgid "Transcript"
+msgstr "Transcript"
+
 #: src/lib/labels.ts
 msgid "Transcript Refinement"
 msgstr "Transcript Refinement"
@@ -6014,11 +6576,28 @@ msgstr "Trigger Words"
 msgid "Trigger words: {words}"
 msgstr "Trigger words: {words}"
 
+#: src/features/studio/model-moods.tsx
+msgid "Try"
+msgstr "Try"
+
+#: src/features/studio/model-moods.tsx
+msgid "Try {name}"
+msgstr "Try {name}"
+
+#: src/features/studio/model-controls.tsx
+msgid "Try a Line"
+msgstr "Try a Line"
+
 #: src/components/locked-screen.tsx
 #: src/components/route-error.tsx
 #: src/features/home/memory-panel.tsx
+#: src/features/studio/model-preview.tsx
 msgid "Try Again"
 msgstr "Try Again"
+
+#: src/features/studio/model-preview.tsx
+msgid "Try her out, frame her for calls, and choose how she shows each mood and what she wears, then save."
+msgstr "Try her out, frame her for calls, and choose how she shows each mood and what she wears, then save."
 
 #: src/components/settings-form/labels.ts
 msgid "TURN Credential Lifetime"
@@ -6056,6 +6635,10 @@ msgstr "Turns a video's audio into a transcript with Soniox."
 msgid "Type /focus, /normal or /verbose to choose how much of her tasks this chat shows, or /stop to stop one."
 msgstr "Type /focus, /normal or /verbose to choose how much of her tasks this chat shows, or /stop to stop one."
 
+#: src/features/call/video-call.tsx
+msgid "Type a Message"
+msgstr "Type a Message"
+
 #: src/features/call/call-controls.tsx
 msgid "Type a message to {name}"
 msgstr "Type a message to {name}"
@@ -6075,6 +6658,10 @@ msgstr "Unlisted"
 #: src/features/call/call-controls.tsx
 msgid "Unmute your mic"
 msgstr "Unmute your mic"
+
+#: src/features/studio/model-outfits.tsx
+msgid "Unnamed"
+msgstr "Unnamed"
 
 #: src/features/studio/text-editor.tsx
 msgid "Unsaved changes"
@@ -6160,6 +6747,10 @@ msgstr "Use It"
 #: src/features/settings/new-skill-dialog.tsx
 msgid "Use lowercase letters, digits and single hyphens, 64 at most."
 msgstr "Use lowercase letters, digits and single hyphens, 64 at most."
+
+#: src/features/studio/model-controls.tsx
+msgid "Use Microphone"
+msgstr "Use Microphone"
 
 #: src/features/studio/voice-section.tsx
 msgid "Use the Environment's Voice"
@@ -6310,6 +6901,7 @@ msgstr "Waiting"
 msgid "Waiting for {name} to answer…"
 msgstr "Waiting for {name} to answer…"
 
+#: src/features/call/video-call.tsx
 #: src/features/chats/chat-log.tsx
 msgid "Waiting for a reply…"
 msgstr "Waiting for a reply…"
@@ -6419,8 +7011,8 @@ msgid "What each provider has cost, as calls, video jobs and MCP searches on thi
 msgstr "What each provider has cost, as calls, video jobs and MCP searches on this machine recorded it."
 
 #: src/features/settings/desktop-card.tsx
-msgid "What Eidolon can add to this computer, each only when you choose it here."
-msgstr "What Eidolon can add to this computer, each only when you choose it here."
+msgid "What Eidolon can add to this computer, each only when you choose it."
+msgstr "What Eidolon can add to this computer, each only when you choose it."
 
 #: src/features/settings/route.tsx
 msgid "What every persona knows about you."
@@ -6490,6 +7082,10 @@ msgstr "What you'd say to ask for it. Left empty, the model goes by the built-in
 msgid "What you'd say to ask for it. Left empty, the model goes by the name alone."
 msgstr "What you'd say to ask for it. Left empty, the model goes by the name alone."
 
+#: src/features/settings/desktop-card.tsx
+msgid "When Eidolon opens at login, she shows too, before you open its window."
+msgstr "When Eidolon opens at login, she shows too, before you open its window."
+
 #: src/features/studio/video-table.tsx
 msgid "When was it streamed?"
 msgstr "When was it streamed?"
@@ -6542,6 +7138,10 @@ msgstr "Who you'll talk to"
 msgid "Why {name} Answered"
 msgstr "Why {name} Answered"
 
+#: src/features/studio/model-controls.tsx
+msgid "Wide"
+msgstr "Wide"
+
 #: src/features/setup/memory-step.tsx
 msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
 msgstr "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
@@ -6562,6 +7162,10 @@ msgstr "Working…"
 msgid "Works out what the video pipeline would do and what it would cost, without running it."
 msgstr "Works out what the video pipeline would do and what it would cost, without running it."
 
+#: src/features/studio/model-outfits.tsx
+msgid "Worn"
+msgstr "Worn"
+
 #: src/features/settings/skills-card.tsx
 msgid "Write one here, or put a skill's folder, with its SKILL.md, in Eidolon's skills folder, or in the shared folder for your other agents too."
 msgstr "Write one here, or put a skill's folder, with its SKILL.md, in Eidolon's skills folder, or in the shared folder for your other agents too."
@@ -6570,12 +7174,18 @@ msgstr "Write one here, or put a skill's folder, with its SKILL.md, in Eidolon's
 msgid "Written as a SKILL.md in Eidolon's skills folder, where you can edit it later. Tasks see its name and description, and read the rest when the work calls for it."
 msgstr "Written as a SKILL.md in Eidolon's skills folder, where you can edit it later. Tasks see its name and description, and read the rest when the work calls for it."
 
+#: src/features/studio/appearance-labels.ts
+msgctxt "mood"
+msgid "Wry"
+msgstr "Wry"
+
 #: src/components/settings-form/labels.ts
 #: src/features/settings/route.tsx
 msgid "You"
 msgstr "You"
 
 #: src/features/call/transcript-view.tsx
+#: src/features/call/video-call.tsx
 msgctxt "call transcript speaker"
 msgid "You"
 msgstr "You"
@@ -6600,6 +7210,15 @@ msgstr "You denied it when it asked to start."
 #: src/features/setup/done-step.tsx
 msgid "You're all set"
 msgstr "You're all set"
+
+#: src/features/call/call-page.tsx
+#: src/features/chats/chat-view.tsx
+msgid "You're already in a call. Hang up first."
+msgstr "You're already in a call. Hang up first."
+
+#: src/features/call/call-page.tsx
+msgid "You're in a call"
+msgstr "You're in a call"
 
 #: src/features/setup/keys-step.tsx
 msgid "Your API Keys"
@@ -6660,6 +7279,10 @@ msgstr "Your server's OpenAI-compatible base, such as http://127.0.0.1:1234/v1."
 msgid "Your switches can't be read"
 msgstr "Your switches can't be read"
 
+#: src/features/studio/model-controls.tsx
+msgid "Your system asks for less motion, so she plays no clip by herself, not even her idle. A clip you play still plays."
+msgstr "Your system asks for less motion, so she plays no clip by herself, not even her idle. A clip you play still plays."
+
 #: src/features/studio/text-editor.tsx
 msgid "Your unsaved changes will be lost."
 msgstr "Your unsaved changes will be lost."
@@ -6698,6 +7321,14 @@ msgstr "yt-dlp is unavailable: {reason}"
 #: src/features/jobs/labels.ts
 msgid "yt-dlp isn't installed and couldn't be installed."
 msgstr "yt-dlp isn't installed and couldn't be installed."
+
+#: src/features/studio/model-controls.tsx
+msgid "Zoom In"
+msgstr "Zoom In"
+
+#: src/features/studio/model-controls.tsx
+msgid "Zoom Out"
+msgstr "Zoom Out"
 
 #: src/features/studio/prompt-section.tsx
 msgid "你是……"

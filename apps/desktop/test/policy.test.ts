@@ -2,9 +2,11 @@
 // packaged app's refusal of the switches that open CDP.
 import { describe, expect, test } from "vitest";
 import {
+  COMPANION_PAGE,
   checkAllows,
   DEBUGGING_SWITCHES,
   isAppOrigin,
+  isCompanionPage,
   leftTheApp,
   loggedText,
   loggedUrl,
@@ -114,6 +116,34 @@ describe("navigations", () => {
   });
 });
 
+describe("the desktop companion's page", () => {
+  test("is eidolon-app://app/companion exactly", () => {
+    expect(COMPANION_PAGE).toBe("eidolon-app://app/companion");
+    expect(isCompanionPage("eidolon-app://app/companion")).toBe(true);
+  });
+
+  test("and nothing else: another path, a query, a fragment, credentials, a host as written or another scheme", () => {
+    for (const url of [
+      "eidolon-app://app/companion/",
+      "eidolon-app://app/companion?x=1",
+      "eidolon-app://app/companion#a",
+      "eidolon-app://app/",
+      "eidolon-app://app/settings",
+      // Node keeps a custom scheme's host as written; Chromium hands main the registered one's
+      // lowercased, as pageAt and isAppOrigin compare it.
+      "eidolon-app://APP/companion",
+      "eidolon-app://shell/loading",
+      "eidolon-app://u@app/companion",
+      "https://app/companion",
+      "about:blank",
+      "not a url",
+      "",
+    ]) {
+      expect([url, isCompanionPage(url)]).toEqual([url, false]);
+    }
+  });
+});
+
 test("main.log names an address without its user name, password, query or fragment", () => {
   expect(loggedUrl("eidolon-app://app/chats/c1?tab=files#end")).toBe("eidolon-app://app/chats/c1");
   expect(loggedUrl("eidolon-app://shell/loading")).toBe("eidolon-app://shell/loading");
@@ -175,6 +205,19 @@ describe("permission requests", () => {
     );
     expect(requestAction("clipboard-sanitized-write", { ...microphone, mainFrame: false })).toBe(
       "deny",
+    );
+  });
+
+  test("the desktop companion's page (another webContents, at the app's own origin) gets neither the microphone nor clipboard writes", () => {
+    const her: PermissionAsker = { ...microphone, window: false, frameOrigin: "eidolon-app://app" };
+    expect(requestAction("media", her)).toBe("deny");
+    expect(requestAction("clipboard-sanitized-write", her)).toBe("deny");
+    // Her page's navigator.permissions.query reads these.
+    expect(checkAllows("media", "eidolon-app://app", { window: false, mediaType: "audio" })).toBe(
+      false,
+    );
+    expect(checkAllows("clipboard-sanitized-write", "eidolon-app://app", { window: false })).toBe(
+      false,
     );
   });
 

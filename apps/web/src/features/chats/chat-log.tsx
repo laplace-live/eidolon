@@ -24,6 +24,7 @@ import { QuietBadge } from "@/components/quiet-badge";
 import { AvatarGroup } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { BotText } from "@/features/call/bot-text";
+import { useShellCall } from "@/features/call/call-context";
 import { type BotRun, botRuns, userText } from "@/features/call/transcript";
 import { TaskCard } from "@/features/tasks/task-card";
 import { chatFilePath } from "@/lib/chats";
@@ -44,7 +45,7 @@ import {
 import { toolState } from "./labels";
 import { type ChatPersona, shortNameOf } from "./persona";
 import { type LiveRow, type LiveState, liveRows, type PendingLine, type VoiceClip } from "./stream";
-import { type AutoPlayEnd, useObjectUrl, VoiceBubble } from "./voice-bubble";
+import { type AutoPlayEnd, useObjectUrl, VoiceBubble, type VoiceBubbleFact } from "./voice-bubble";
 import { WhyAnswered } from "./why-answered";
 
 /** How long a card brought into view stays ringed. */
@@ -80,7 +81,7 @@ function UserBubble({
   onRetry,
 }: {
   readonly text: string;
-  /** On a call this page holds, the words still being heard, with their leading space. */
+  /** On the tab's call, the words still being heard, with their leading space. */
   readonly hearing?: string;
   /** Said on a call. */
   readonly call?: boolean;
@@ -243,6 +244,7 @@ function HerBubble({
   aside,
   autoPlay = false,
   onAutoPlayEnd,
+  fact,
 }: {
   readonly chatId: string;
   readonly name: string;
@@ -250,6 +252,8 @@ function HerBubble({
   readonly text: string;
   readonly images?: readonly Attachment[];
   readonly voice?: AudioAttachment | null;
+  /** Her voice message, for the desktop companion. */
+  readonly fact?: VoiceBubbleFact;
   /** Her voice couldn't be made, so her words came as text. */
   readonly sentAsText?: boolean;
   readonly interrupted?: boolean;
@@ -282,6 +286,7 @@ function HerBubble({
             transcript={shown === "" ? null : <BotText runs={runs} />}
             autoPlay={autoPlay}
             onAutoPlayEnd={onAutoPlayEnd}
+            fact={fact}
           />
         </div>
       )}
@@ -472,6 +477,17 @@ const Item = memo(function Item({
         text={item.text}
         images={item.images}
         voice={item.voice}
+        fact={
+          item.voice === null
+            ? undefined
+            : {
+                persona: item.persona,
+                chat: chatId,
+                seq: item.seq,
+                text: item.text,
+                file: item.voice.name,
+              }
+        }
         sentAsText={item.sentAsText}
         interrupted={item.interrupted}
         cutOff={item.cutOff !== null}
@@ -538,7 +554,7 @@ function ToolLine({ tool }: { readonly tool: string }) {
   );
 }
 
-/** A row of the call this page holds, memoized: only the one being said changes. */
+/** A row of the tab's call, memoized: only the one being said changes. */
 const LiveCallRow = memo(function LiveCallRow(
   props: CallRow & {
     readonly personaOf: (id: ParticipantId) => ChatPersona;
@@ -547,24 +563,30 @@ const LiveCallRow = memo(function LiveCallRow(
 ) {
   if (props.kind === "viewer") {
     const { said, hearing } = userText(props.entry);
-    return <UserBubble text={said} hearing={hearing} call />;
+    return (
+      <div data-live-call className="contents">
+        <UserBubble text={said} hearing={hearing} call />
+      </div>
+    );
   }
   const { entry } = props;
   const persona = props.personaOf(props.persona);
   const name = shortNameOf(persona);
   const runs = entry.kind === "bot" ? botRuns(entry) : [];
   return (
-    <Said persona={persona} group={props.group} first={props.first}>
-      {runs.length > 0 && <HerWords name={name} runs={runs} call />}
-      {entry.kind === "selfie" && <HerPhotos name={name} srcs={entry.paths} />}
-    </Said>
+    <div data-live-call className="contents">
+      <Said persona={persona} group={props.group} first={props.first}>
+        {runs.length > 0 && <HerWords name={name} runs={runs} call />}
+        {entry.kind === "selfie" && <HerPhotos name={name} srcs={entry.paths} />}
+      </Said>
+    </div>
   );
 });
 
 /**
- * The call this page holds as it is said, below its start, as the call page shows it: the viewer's
- * words as they are heard, hers as she says them, the rest dimmed until she has, her photos, and
- * the wait for her answer.
+ * The tab's call as it is said, below its start, as the call page shows it: the viewer's words as
+ * they are heard, hers as she says them, the rest dimmed until she has, her photos, and the wait
+ * for her answer. Only these rows render again with each of the call's events.
  */
 function LiveCallRows({
   call,
@@ -584,7 +606,8 @@ function LiveCallRows({
   readonly group: boolean;
 }) {
   const { t } = useLingui();
-  const rows = callRows(call.transcript, call.persona, before);
+  const { transcript, wait, phase } = useShellCall();
+  const rows = callRows(transcript, call.persona, before);
   const last = rows.at(-1);
   const thinker = next ?? (call.group ? null : call.persona);
   const everyone = call.group
@@ -596,19 +619,19 @@ function LiveCallRows({
         // Spread, so memo compares the entries the reducer keeps, not the rows callRows makes anew.
         <LiveCallRow key={row.entry.id} {...row} personaOf={personaOf} group={group} />
       ))}
-      {call.group && call.live && rows.length === 0 && (
+      {call.group && phase.name === "live" && rows.length === 0 && (
         <p className="text-balance text-center text-muted-foreground text-xs">
           {t`Everyone can hear you. Say something to start.`}
         </p>
       )}
-      {call.wait.thinking && !call.wait.stuck && (
+      {wait.thinking && !wait.stuck && (
         <ThinkingLine
           persona={thinker === null ? null : personaOf(thinker)}
           group={group}
           first={last === undefined || last.kind === "viewer" || last.persona !== thinker}
         />
       )}
-      {call.wait.stuck && (
+      {wait.stuck && (
         <p
           role="status"
           className="flex items-center justify-center gap-1.5 text-center text-muted-foreground text-xs"
@@ -644,6 +667,7 @@ export function ChatLog({
   focusTask,
   onFocused,
   footer,
+  inert = false,
 }: {
   readonly chatId: string;
   /** The chat's display, which opens task cards' steps; null while it isn't known. */
@@ -654,7 +678,7 @@ export function ChatLog({
   /** What the chat's display shows. */
   readonly items: readonly ChatItem[];
   readonly live: LiveState;
-  /** The call this page holds, until the chat has stored all of it: shown as it is said. */
+  /** The tab's call in this chat, until the chat has stored all of it: shown as it is said. */
   readonly call: LiveCall | null;
   /** Who a decision chose to answer next, before her turn starts. */
   readonly next: ParticipantId | null;
@@ -674,6 +698,8 @@ export function ChatLog({
   readonly onFocused: (task: string) => void;
   /** The message box and what sits above it, which the lines scroll under. */
   readonly footer: ReactNode;
+  /** Covered by the call's screen: nothing in it takes the focus or reaches a screen reader. */
+  readonly inert?: boolean;
 }) {
   const { t } = useLingui();
   // Each line names its persona once the chat holds more than one, now or in its lines.
@@ -751,6 +777,7 @@ export function ChatLog({
     <div
       ref={scrollRef}
       onScroll={onScroll}
+      inert={inert}
       className="absolute inset-0 flex flex-col overflow-y-auto"
     >
       <div className="flex shrink-0 grow flex-col px-4 pt-5 pb-2 sm:px-6">

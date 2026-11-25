@@ -146,6 +146,7 @@ export const RESERVED_IDS: ReadonlySet<string> = new Set([
   "credentials",
   "events",
   "facts",
+  "file",
   "files",
   "glossary",
   "identity",

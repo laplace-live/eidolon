@@ -17,8 +17,16 @@ import {
 import { basename, dirname, join, sep } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import type { ElectronApplication, Locator, Page } from "playwright-core";
-import type { Status, TaskSnapshot } from "../../bot/src/local/api.ts";
+import type {
+  CharacterModel,
+  CharacterModels,
+  Status,
+  TaskSnapshot,
+} from "../../bot/src/local/api.ts";
+import { COMPANION_FILE, COMPANION_LINES, feetOf } from "../src/main/companion.ts";
+import { COMPANION_PAGE } from "../src/main/policy.ts";
 import { STRINGS } from "../src/main/strings.ts";
+import type { Rectangle } from "../src/main/window-options.ts";
 import { BRIDGE } from "../src/shared/bridge.ts";
 import { buildApp, missingBuilds } from "./dev-smoke/build.ts";
 import { type Microphone, microphoneWav } from "./dev-smoke/speech.ts";
@@ -26,6 +34,8 @@ import { described, type Step, Steps, until, writeResults } from "./dev-smoke/st
 import { type WindowReport, watchWindows } from "./dev-smoke/windows.ts";
 import {
   CHAT_MESSAGE,
+  COMPANION_LINE,
+  COMPANION_REPLY,
   FILES_REPLY,
   GREETING,
   HEARD_REPLY,
@@ -89,6 +99,29 @@ const DESKTOP_NOTES = {
   background: "Background mode leaves this computer as it is.",
   unpackaged: "Available in the installed app only.",
 } as const;
+const MODEL_FIXTURE = join(ROOT, "apps/bot/test/local/fixtures/psd2live/tml.p2lrt");
+/** What Settings says under Desktop Companion in background mode. */
+const COMPANION_NOTE = "Background mode never shows her.";
+/** How main.log's line for a menu background mode closed with no pick starts, before its labels. */
+const MENU_LINE = "Eidolon: background mode didn't open a menu: ";
+/** Her menu with no call of hers up, the test rig her one model, which has no outfits. */
+const HER_MENU = "Call, Open Eidolon, Appearance, Size, Always on Top, Hide";
+/** How her menu starts while a call of hers is up. */
+const HER_CALL_MENU = "Hang Up, Mute Microphone, Open Eidolon";
+/** `window.eidolonCompanion`'s members, sorted. */
+const HER_BRIDGE = [
+  "drag",
+  "drawn",
+  "follow",
+  "hit",
+  "link",
+  "menu",
+  "onCursor",
+  "platform",
+  "shape",
+];
+/** Her reply's words, as the chat shows them after its direction. */
+const COMPANION_WORDS = COMPANION_REPLY.replace(/^\[[^\]]*\]\s*/, "");
 
 const { rest } = parseSmokeArgs(process.argv.slice(2));
 const unknown = rest.filter((arg) => !OWN_ARGS.includes(arg));
@@ -163,6 +196,287 @@ interface Walk {
   microphone: Microphone | null;
   persona: PersonaNames | null;
   chatId: string | null;
+}
+
+interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Her page's root's data attributes, by their dataset names. */
+type HerData = Readonly<Record<string, string | undefined>>;
+
+/** A mouse event for her window, at a point of it, or of the screen with `global`. */
+interface HerInput {
+  readonly type: "mouseMove" | "mouseDown" | "mouseUp";
+  readonly at: Point;
+  readonly global?: boolean;
+  readonly button?: "left" | "right";
+  /** The left button held, as through a drag. */
+  readonly held?: boolean;
+}
+
+/** What her page showed while a watch ran: data-speaking read true, and the widest data-mouth. */
+interface Heard {
+  readonly speaking: boolean;
+  readonly widest: number;
+}
+
+/** Her eyes in her window, `data-probe`'s `x,y`, or her picture's centre; null while she loads. */
+function probeOf(data: HerData): Point | null {
+  const [x, y] = (data.probe ?? "").split(",").map(Number);
+  return data.probe && Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function placed(bounds: Rectangle | null): string {
+  return bounds === null
+    ? "gone"
+    : `${bounds.width}×${bounds.height} at (${bounds.x}, ${bounds.y})`;
+}
+
+/**
+ * The desktop companion's window as the step drives it: her page, found by its address, and what
+ * it logged; input reaches it through sendInputEvent, never the system's cursor. Declared above
+ * the walk, which runs at the module's top level: a class, unlike a function, isn't hoisted.
+ */
+class Her {
+  /** Console errors and uncaught exceptions on her page, from its first load. */
+  readonly errors: string[] = [];
+  readonly #app: ElectronApplication;
+  readonly #watched = new WeakSet<Page>();
+  #page: Page | null = null;
+
+  constructor(app: ElectronApplication) {
+    this.#app = app;
+  }
+
+  get page(): Page {
+    if (this.#page === null) throw new Error("her page wasn't found");
+    return this.#page;
+  }
+
+  /** Her page, found again by its address, since her page loaded again may come as another Page. */
+  async find(timeoutMs = 15_000): Promise<Page> {
+    const page = await until(
+      `a window at ${COMPANION_PAGE}`,
+      () => this.#app.windows().find((candidate) => candidate.url() === COMPANION_PAGE),
+      timeoutMs,
+      100,
+    );
+    if (!this.#watched.has(page)) {
+      this.#watched.add(page);
+      page.setDefaultTimeout(15_000);
+      page.on("console", (message) => {
+        if (message.type() === "error") this.errors.push(message.text());
+      });
+      page.on("pageerror", (error) => this.errors.push(error.message));
+    }
+    this.#page = page;
+    return page;
+  }
+
+  data(): Promise<HerData> {
+    return this.page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>("[data-companion-root]");
+      return root === null ? {} : { ...root.dataset };
+    });
+  }
+
+  /** Her data once `done` holds for it; throws naming `what` at the timeout. */
+  when(what: string, done: (data: HerData) => boolean, timeoutMs: number): Promise<HerData> {
+    return until(
+      what,
+      async () => {
+        const data = await this.data();
+        return done(data) ? data : null;
+      },
+      timeoutMs,
+      50,
+    );
+  }
+
+  /** Her eyes in her window, once she is drawn. */
+  async probe(): Promise<Point> {
+    const point = probeOf(
+      await this.when("her eye point", (data) => probeOf(data) !== null, 10_000),
+    );
+    if (point === null) throw new Error("her page has no eye point");
+    return point;
+  }
+
+  /** Her window's bounds as main has them; null with no window at her page. */
+  bounds(): Promise<Rectangle | null> {
+    return this.#app.evaluate(
+      ({ BrowserWindow }, url) =>
+        BrowserWindow.getAllWindows()
+          .find((win) => win.webContents.getURL() === url)
+          ?.getBounds() ?? null,
+      COMPANION_PAGE,
+    );
+  }
+
+  /** One mouse event into her window, its screen point taken from her window's place now. */
+  async send(input: HerInput): Promise<void> {
+    const sent = await this.#app.evaluate(
+      ({ BrowserWindow }, { url, input }) => {
+        const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL() === url);
+        if (win === undefined) return false;
+        const place = win.getBounds();
+        const x = input.global === true ? input.at.x - place.x : input.at.x;
+        const y = input.global === true ? input.at.y - place.y : input.at.y;
+        win.webContents.sendInputEvent({
+          type: input.type,
+          x,
+          y,
+          globalX: place.x + x,
+          globalY: place.y + y,
+          ...(input.button === undefined ? {} : { button: input.button, clickCount: 1 }),
+          ...(input.held === true ? { modifiers: ["leftbuttondown" as const] } : {}),
+        });
+        return true;
+      },
+      { url: COMPANION_PAGE, input },
+    );
+    if (!sent) throw new Error("her window is gone");
+  }
+
+  /**
+   * A move her page must see, data-moves growing within 1 s, so a lost input never passes for a
+   * probe that read wrong.
+   */
+  async move(at: Point, drag: { readonly global?: boolean; readonly held?: boolean } = {}) {
+    const before = Number((await this.data()).moves ?? 0);
+    await this.send({ type: "mouseMove", at, ...drag });
+    const seen = await this.when("the move", (data) => Number(data.moves ?? 0) > before, 1000).then(
+      () => true,
+      () => false,
+    );
+    if (!seen) throw new Error("her page never saw the injected move");
+  }
+
+  /** A move onto `at`, which must find her there: her window takes clicks then. */
+  async hover(at: Point): Promise<void> {
+    await this.move(at);
+    await this.when("data-hit true over her", (data) => data.hit === "true", 2000);
+  }
+
+  async click(at: Point, button: "left" | "right"): Promise<void> {
+    await this.send({ type: "mouseDown", at, button });
+    await this.send({ type: "mouseUp", at, button });
+  }
+
+  /** Starts a watch in her page that reads her data every 50 ms. */
+  async watch(): Promise<void> {
+    await this.page.evaluate(() => {
+      const g = globalThis as { __devSmokeHeard?: { speaking: boolean; widest: number } };
+      const heard = { speaking: false, widest: 0 };
+      g.__devSmokeHeard = heard;
+      const timer = setInterval(() => {
+        if (g.__devSmokeHeard !== heard) clearInterval(timer);
+        const data = document.querySelector<HTMLElement>("[data-companion-root]")?.dataset;
+        if (data === undefined) return;
+        if (data.speaking === "true") heard.speaking = true;
+        heard.widest = Math.max(heard.widest, Number(data.mouth ?? 0));
+      }, 50);
+    });
+  }
+
+  /** What the watch saw since it started. */
+  heard(): Promise<Heard> {
+    return this.page.evaluate(() => {
+      const g = globalThis as { __devSmokeHeard?: { speaking: boolean; widest: number } };
+      return {
+        speaking: g.__devSmokeHeard?.speaking ?? false,
+        widest: g.__devSmokeHeard?.widest ?? 0,
+      };
+    });
+  }
+
+  /**
+   * Reads her data at each animation frame until data-speaking has read true and, with `mouth`,
+   * data-mouth has read above 0.2; what it saw, met or not.
+   */
+  async speaks(mouth: boolean, timeoutMs: number): Promise<Heard & { readonly met: boolean }> {
+    await this.page.evaluate(() => {
+      (globalThis as { __devSmokeSpeaks?: Heard }).__devSmokeSpeaks = {
+        speaking: false,
+        widest: 0,
+      };
+    });
+    const met = await this.page
+      .waitForFunction(
+        (mouth) => {
+          const seen = (globalThis as { __devSmokeSpeaks?: { speaking: boolean; widest: number } })
+            .__devSmokeSpeaks;
+          const data = document.querySelector<HTMLElement>("[data-companion-root]")?.dataset;
+          if (seen === undefined || data === undefined) return false;
+          if (data.speaking === "true") seen.speaking = true;
+          seen.widest = Math.max(seen.widest, Number(data.mouth ?? 0));
+          return seen.speaking && (!mouth || seen.widest > 0.2);
+        },
+        mouth,
+        { polling: "raf", timeout: timeoutMs },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+    const seen = await this.page.evaluate(
+      () =>
+        (globalThis as { __devSmokeSpeaks?: Heard }).__devSmokeSpeaks ?? {
+          speaking: false,
+          widest: 0,
+        },
+    );
+    return { met, ...seen };
+  }
+
+  /** The alpha of her window's own pixels at (2, 2) and at `point`, from a capture of it. */
+  capture(
+    point: Point,
+  ): Promise<{ readonly empty: boolean; readonly corner: number; readonly at: number }> {
+    return this.#app.evaluate(
+      async ({ BrowserWindow }, { url, point }) => {
+        const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL() === url);
+        if (win === undefined) throw new Error("her window is gone");
+        // With no stayHidden, her page counts as visible while the capture runs.
+        const image = await win.webContents.capturePage();
+        if (image.isEmpty()) return { empty: true, corner: -1, at: -1 };
+        const size = image.getSize();
+        const scale = size.width / win.getBounds().width;
+        const bitmap = image.toBitmap();
+        const alpha = (x: number, y: number) => {
+          const column = Math.min(size.width - 1, Math.round(x * scale));
+          const row = Math.min(size.height - 1, Math.round(y * scale));
+          return bitmap[(row * size.width + column) * 4 + 3] ?? -1;
+        };
+        return { empty: false, corner: alpha(2, 2), at: alpha(point.x, point.y) };
+      },
+      { url: COMPANION_PAGE, point },
+    );
+  }
+
+  /** Forces the dark scheme on her page, as the theme would, or puts back what it had. */
+  async dark(on: boolean): Promise<void> {
+    await this.page.evaluate((on) => {
+      const root = document.documentElement;
+      const g = globalThis as { __devSmokeScheme?: { scheme: string; dark: boolean } };
+      if (on) {
+        g.__devSmokeScheme = {
+          scheme: root.style.colorScheme,
+          dark: root.classList.contains("dark"),
+        };
+        root.style.colorScheme = "dark";
+        root.classList.add("dark");
+      } else if (g.__devSmokeScheme !== undefined) {
+        root.style.colorScheme = g.__devSmokeScheme.scheme;
+        root.classList.toggle("dark", g.__devSmokeScheme.dark);
+      }
+      return new Promise<void>((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => done())),
+      );
+    }, on);
+  }
 }
 
 const smoke = await startSmoke({ label: LABEL });
@@ -286,6 +600,14 @@ async function walkApp(walk: Walk): Promise<void> {
   await steps.run("Settings' Desktop App: both options left as they are", (step) =>
     desktopOptions(walk, first, step),
   );
+  if (walk.background) {
+    await steps.run(
+      "the desktop companion: never on screen, drawn and guarded, her mood and voice from the chat, her mouth from the call, Pop Out",
+      (step) => companion(walk, first, step),
+    );
+  } else {
+    console.log("(the desktop companion's step is off: --headful would show her and her menu)");
+  }
   await steps.run("a task that waits: the watch's notices of its start and its end", (step) =>
     waitingTask(walk, first, step),
   );
@@ -1342,6 +1664,679 @@ async function desktopOptions(walk: Walk, driven: Driven, step: Step) {
   }
   await step.shot(page, "desktop-options");
   step.check(`both say "${note}", their controls disabled`, pass, found.join("; "));
+}
+
+/** The test rig as her active model, imported through the API unless she has a model already. */
+async function activeRig(walk: Walk): Promise<string> {
+  const { smoke } = walk;
+  const listed = await smoke.api(`/api/local/personas/${PERSONA}/models`);
+  if (!listed.ok) throw new Error(`GET her models: ${listed.status}`);
+  const { models } = (await listed.json()) as CharacterModels;
+  let id = models[0]?.id;
+  if (id === undefined) {
+    const imported = await smoke.api(`/api/local/personas/${PERSONA}/models?filename=tml.p2lrt`, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: new Uint8Array(readFileSync(MODEL_FIXTURE)),
+    });
+    if (imported.status !== 201) throw new Error(`POST the test rig: ${imported.status}`);
+    id = ((await imported.json()) as CharacterModel).id;
+  }
+  await setModel(walk, id);
+  return id;
+}
+
+/** Her active model, or none with null, through the API. */
+async function setModel(walk: Walk, id: string | null): Promise<void> {
+  const put = await walk.smoke.api("/api/local/settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      scope: "persona",
+      persona: PERSONA,
+      values: { "appearance.model": id },
+    }),
+  });
+  await put.body?.cancel();
+  if (put.status !== 200) throw new Error(`PUT settings: ${put.status}`);
+}
+
+/** A pick from her menu for the call, sent to the main window as main sends it (`companion-pick`). */
+async function sendPick(driven: Driven, pick: "mute" | "unmute"): Promise<void> {
+  await driven.app.evaluate(
+    ({ BrowserWindow }, { url, channel, pick }) => {
+      const main = BrowserWindow.getAllWindows().find((win) => win.webContents.getURL() !== url);
+      main?.webContents.send(channel, pick);
+    },
+    { url: COMPANION_PAGE, channel: BRIDGE.companionPick, pick },
+  );
+}
+
+async function activeCalls(walk: Walk): Promise<number> {
+  const response = await walk.smoke.api("/api/local/status");
+  return ((await response.json()) as Partial<Status>).activeCalls ?? 0;
+}
+
+/** The feet companion.json keeps, or null for none, or for no file. */
+function savedFeet(walk: Walk): Point | null {
+  try {
+    const file = join(walk.smoke.run.profile, COMPANION_FILE);
+    const feet = (JSON.parse(readFileSync(file, "utf8")) as { feet?: Point | null }).feet;
+    return feet ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Settings → Desktop's Desktop Companion switch. */
+function companionSwitch(page: Page): Locator {
+  return page.locator('[data-desktop-option="companion"]').getByRole("switch");
+}
+
+/**
+ * The desktop companion, in background mode, which makes her and has her draw but never shows her:
+ * the test rig her active model, Settings' switch turns her on; her page, off screen, has her bridge
+ * alone, no permission, no other address and nothing painted around her; injected input hovers her,
+ * a tap moves her face, a drag moves her window and her menu is logged; her chat sets her mood and
+ * her voice message makes her speak; a call with her moves her mouth and Pop Out hides the window.
+ * Without WebGL she is her picture and the call docks, and what needs a stage is skipped.
+ */
+async function companion(walk: Walk, driven: Driven, step: Step) {
+  const model = await activeRig(walk);
+  const her = new Her(driven.app);
+  try {
+    const stage = await turnOn(walk, driven, her, model, step);
+    await checkOffScreen(walk, driven, step, "with her drawn");
+    await herBridge(her, step);
+    await noPermission(walk, her, step);
+    await lockedToHerPage(walk, her, step);
+    await transparent(her, stage, step);
+    await hoverAndTap(walk, her, stage, step);
+    await herDrag(walk, her, step);
+    const menu = await herMenu(walk, her);
+    step.check(
+      "her menu is logged as background mode closes it",
+      menu === `${MENU_LINE}${HER_MENU}`,
+      menu ?? "main.log has no menu line within 5 s",
+    );
+    await moodAndVoice(walk, driven, her, step);
+    const video = await callWithHer(walk, driven, her, stage, step);
+    if (video) await popOut(walk, driven, her, step);
+    else
+      step.check(
+        "Pop Out",
+        true,
+        "Pop Out skipped: the call docked, and Pop Out is the video screen's",
+      );
+    await checkOffScreen(walk, driven, step, "after her call");
+    await turnOff(walk, driven, her, step);
+    step.check(
+      "her page logged no console error",
+      her.errors.length === 0,
+      her.errors.length === 0
+        ? "her page logged no console error"
+        : her.errors.slice(0, 3).join(" | "),
+    );
+  } finally {
+    await putBack(walk, driven.page, step);
+  }
+}
+
+/** Settings → Desktop turns her on, and her page draws her off screen; whether as her model. */
+async function turnOn(walk: Walk, driven: Driven, her: Her, model: string, step: Step) {
+  const { smoke } = walk;
+  const { page } = driven;
+  await settingsSection(page, "Desktop", "desktop");
+  const noted = await page
+    .locator('[data-desktop-option="companion"]')
+    .getByText(COMPANION_NOTE, { exact: true })
+    .waitFor({ timeout: 15_000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  const toggle = companionSwitch(page);
+  await until("her switch, her state read", () => toggle.isEnabled(), 15_000);
+  const was = await toggle.getAttribute("aria-checked");
+  const from = smoke.log("main").length;
+  await toggle.click();
+  const on = await smoke
+    .waitForLine("main", COMPANION_LINES.on, { from, timeoutMs: 10_000 })
+    .catch(() => null);
+  step.check(
+    "Settings → Desktop's switch turns her on, the test rig her active model",
+    noted && was === "false" && on !== null,
+    `the test rig (${model}) made active through the API; her row ${noted ? "says" : "doesn't say"} "${COMPANION_NOTE}"; her switch read ${was}; ${on === null ? "main.log says nothing of her" : after(on)}`,
+  );
+  await her.find();
+  const drawn = await smoke.waitForLine("main", LINES.companionDrawn, { from, timeoutMs: 60_000 });
+  const offScreen = await smoke
+    .waitForLine("main", LINES.companionOffScreen, { from, timeoutMs: 10_000 })
+    .catch(() => null);
+  const { view } = await her.when(
+    "her view",
+    (data) => data.view === "model" || data.view === "picture",
+    10_000,
+  );
+  const shown = smoke.log("main").slice(from).includes(COMPANION_LINES.shown);
+  step.check(
+    "her page draws her, and background mode keeps her off screen",
+    LINES.companionDrawn.exec(drawn)?.[1] === view && offScreen !== null && !shown,
+    `${after(drawn)}; ${offScreen === null ? "no off-screen line" : after(offScreen)}${shown ? `, yet "${after(COMPANION_LINES.shown)}"` : ""}${view === "picture" ? "; her picture, with no WebGL here: what needs a stage is skipped" : ""}`,
+  );
+  return view === "model";
+}
+
+/** Her page has her bridge alone, and her mark, never the main window's. */
+async function herBridge(her: Her, step: Step) {
+  const seen = await her.page.evaluate(() => {
+    const g = globalThis as { eidolonDesktop?: unknown; eidolonCompanion?: object };
+    const root = document.documentElement;
+    return {
+      desktop: g.eidolonDesktop !== undefined,
+      members: g.eidolonCompanion === undefined ? null : Object.keys(g.eidolonCompanion).sort(),
+      marked: root.hasAttribute("data-companion"),
+      shell: root.hasAttribute("data-shell"),
+    };
+  });
+  step.check(
+    "her page has eidolonCompanion alone, and data-companion, never data-shell",
+    !seen.desktop &&
+      JSON.stringify(seen.members) === JSON.stringify(HER_BRIDGE) &&
+      seen.marked &&
+      !seen.shell,
+    `eidolonDesktop ${seen.desktop ? "is there" : "is undefined"}; eidolonCompanion ${seen.members === null ? "is undefined" : `has ${seen.members.join(", ")}`}; <html> ${seen.marked ? "has" : "lacks"} data-companion and ${seen.shell ? "has" : "lacks"} data-shell`,
+  );
+}
+
+/** Her page asks for the microphone and reads its permissions: main denies her everything. */
+async function noPermission(walk: Walk, her: Her, step: Step) {
+  const { smoke } = walk;
+  const from = smoke.log("main").length;
+  const asked = await her.page.evaluate(async () => {
+    const query = (name: string) =>
+      navigator.permissions.query({ name: name as PermissionName }).then(
+        (status) => status.state,
+        (error: Error) => `refused (${error.name})`,
+      );
+    const media = await navigator.mediaDevices.getUserMedia({ audio: true }).then(
+      (stream) => {
+        for (const track of stream.getTracks()) track.stop();
+        return "granted";
+      },
+      (error: Error) => error.name,
+    );
+    return {
+      media,
+      microphone: await query("microphone"),
+      clipboard: await query("clipboard-write"),
+    };
+  });
+  const denied = await smoke
+    .waitForLine("main", "Eidolon: denied the page media", { from, timeoutMs: 5000 })
+    .catch(() => null);
+  step.check(
+    "her page gets no permission: the microphone and clipboard writes denied",
+    asked.media === "NotAllowedError" &&
+      denied !== null &&
+      asked.microphone === "denied" &&
+      asked.clipboard === "denied",
+    `getUserMedia({audio}): ${asked.media}, ${denied === null ? "main.log says nothing" : `"${after(denied)}"`}; the microphone's permission ${asked.microphone}, clipboard-write's ${asked.clipboard}`,
+  );
+}
+
+/** Her window keeps her one page: a pushState loads it again, a navigation is cancelled, nothing opens. */
+async function lockedToHerPage(walk: Walk, her: Her, step: Step) {
+  const { smoke } = walk;
+  let from = smoke.log("main").length;
+  await her.page.evaluate(() => history.pushState(null, "", "/settings"));
+  const left = await smoke
+    .waitForLine("main", "the companion left its page", { from, timeoutMs: 5000 })
+    .catch(() => null);
+  const back = await her.find(5000).then(
+    () => true,
+    () => false,
+  );
+  const leftAt = left === null ? from : smoke.log("main").indexOf(left, from) + left.length;
+  const again = await smoke
+    .waitForLine("main", LINES.companionDrawn, { from: leftAt, timeoutMs: 30_000 })
+    .catch(() => null);
+  await her.find();
+  await her.when(
+    "her view again",
+    (data) => data.view === "model" || data.view === "picture",
+    10_000,
+  );
+
+  from = smoke.log("main").length;
+  await her.page.evaluate(() => {
+    location.assign("/settings");
+    return true;
+  });
+  const cancelled = await smoke
+    .waitForLine("main", "Eidolon: cancelled the companion's navigation to", {
+      from,
+      timeoutMs: 5000,
+    })
+    .catch(() => null);
+  await sleep(500);
+  const stayed = her.page.url() === COMPANION_PAGE;
+
+  from = smoke.log("main").length;
+  const none = await her.page.evaluate(() => window.open("https://example.com/") === null);
+  const refused = await smoke
+    .waitForLine("main", "Eidolon: the companion refused to open a window", {
+      from,
+      timeoutMs: 5000,
+    })
+    .catch(() => null);
+  step.check(
+    "her window keeps her one page: a pushState loads it again, a navigation is cancelled, no window opens",
+    left !== null &&
+      back &&
+      again !== null &&
+      cancelled !== null &&
+      stayed &&
+      none &&
+      refused !== null,
+    `pushState("/settings"): ${left === null ? "main.log says nothing" : after(left)}, ${back ? "back" : "not back"} at her page within 5 s, ${again === null ? "never drawn again" : "drawn again"}; location.assign: ${cancelled === null ? "not cancelled" : "cancelled"}, ${stayed ? "she stays" : `at ${her.page.url()}`}; window.open: ${none ? "null" : "a window"}, ${refused === null ? "main.log says nothing" : "refused"}`,
+  );
+}
+
+/** A capture of her hidden window: nothing painted at its corner, light or dark, and her eyes opaque. */
+async function transparent(her: Her, stage: boolean, step: Step) {
+  const name = "her window paints nothing around her, in the dark scheme too";
+  const probe = await her.probe();
+  const light = await her.capture(probe);
+  await her.dark(true);
+  const dark = await her.capture(probe).finally(() => her.dark(false));
+  if (light.empty || dark.empty) {
+    step.check(name, false, "an empty capture of the hidden window");
+    return;
+  }
+  step.check(
+    name,
+    light.corner === 0 && dark.corner === 0 && (!stage || light.at > 200),
+    `a capture's alpha at (2, 2) ${light.corner}, with the dark scheme forced ${dark.corner}; at her eyes ${stage ? light.at : "not read: her picture"}`,
+  );
+}
+
+/** Injected moves: over her eyes her window takes clicks, at her corner it doesn't; a tap on her head. */
+async function hoverAndTap(walk: Walk, her: Her, stage: boolean, step: Step) {
+  const probe = await her.probe();
+  await her.hover(probe);
+  await her.move({ x: 2, y: 2 });
+  const corner = await her.when(
+    "data-hit false at her corner",
+    (data) => data.hit === "false",
+    2000,
+  );
+  await her.hover(probe);
+  const moves = (await her.data()).moves;
+  step.check(
+    "injected moves reach her page: her eyes take clicks, her corner passes them",
+    corner.hit === "false",
+    `data-hit true at her eyes (${probe.x}, ${probe.y}), false at (2, 2), true again; ${moves} moves seen`,
+  );
+  if (!stage) {
+    step.check("a tap on her head", true, "a tap's area skipped: her picture is one area");
+    return;
+  }
+  const before = JSON.stringify(walk.smoke.fakes.counts());
+  await her.click(probe, "left");
+  const pulse = await her
+    .when("data-pulse shy", (data) => data.pulse === "shy", 2000)
+    .then(
+      () => true,
+      () => false,
+    );
+  const asked = JSON.stringify(walk.smoke.fakes.counts()) !== before;
+  step.check(
+    "a tap on her head lends her shy, with no model call",
+    pulse && !asked,
+    `data-pulse ${pulse ? "shy" : `never shy, but "${(await her.data()).pulse}"`}; the fakes' counts ${asked ? "changed" : "unchanged"}`,
+  );
+}
+
+/** A drag from her eyes, 60 px left and 40 up in four steps: her window follows, and her feet are kept. */
+async function herDrag(walk: Walk, her: Her, step: Step) {
+  const probe = await her.probe();
+  await her.hover(probe);
+  const start = await her.bounds();
+  if (start === null) throw new Error("her window is gone");
+  const grab = { x: start.x + probe.x, y: start.y + probe.y };
+  await her.send({ type: "mouseDown", at: probe, button: "left" });
+  for (let i = 1; i <= 4; i++) {
+    await her.move({ x: grab.x - 15 * i, y: grab.y - 10 * i }, { global: true, held: true });
+  }
+  await her.send({
+    type: "mouseUp",
+    at: { x: grab.x - 60, y: grab.y - 40 },
+    global: true,
+    button: "left",
+  });
+  // The drop saves her feet: wait for them, not the window, which the last move put there.
+  const dropped = await until(
+    "her feet kept where the drag left her",
+    async () => {
+      const bounds = await her.bounds();
+      const feet = savedFeet(walk);
+      if (bounds === null || feet === null) return null;
+      const own = feetOf(bounds);
+      return feet.x === own.x && feet.y === own.y ? bounds : null;
+    },
+    2000,
+    100,
+  ).catch(() => null);
+  const end = dropped ?? (await her.bounds());
+  const moved =
+    end !== null && Math.abs(end.x - start.x + 60) <= 2 && Math.abs(end.y - start.y + 40) <= 2;
+  step.check(
+    "a drag moves her window by the pointer's travel, and companion.json keeps her feet",
+    dropped !== null && moved,
+    `her window ${placed(start)} → ${placed(end)}; companion.json's feet ${JSON.stringify(savedFeet(walk))}`,
+  );
+}
+
+/** A right-click on her eyes; main.log's line for her menu, from "Eidolon: ", or null. */
+async function herMenu(walk: Walk, her: Her): Promise<string | null> {
+  const probe = await her.probe();
+  await her.hover(probe);
+  const from = walk.smoke.log("main").length;
+  await her.click(probe, "right");
+  return walk.smoke.waitForLine("main", MENU_LINE, { from, timeoutMs: 5000 }).then(
+    (line) => fromEidolon(line),
+    () => null,
+  );
+}
+
+/** Her reply in a new chat of hers sets her mood; her voice message, played, makes her speak. */
+async function moodAndVoice(walk: Walk, driven: Driven, her: Her, step: Step) {
+  const { smoke } = walk;
+  const { page } = driven;
+  const persona = walk.persona;
+  if (persona === null) throw new Error("it needs the chat step's persona");
+  const chat = await startChat(page, persona);
+  await chat.box.fill(COMPANION_LINE);
+  await chat.box.press("Enter");
+  await chat.log.getByText(COMPANION_WORDS).first().waitFor({ timeout: 30_000 });
+  const mood = await her
+    .when("data-mood happy", (data) => (data.mood ?? "").split(" ").includes("happy"), 15_000)
+    .then(
+      (data) => data.mood ?? "",
+      async () => `never happy, but "${(await her.data()).mood}"`,
+    );
+  step.check(
+    "her reply in the chat open in the main window sets her mood",
+    mood.split(" ").includes("happy"),
+    `"${COMPANION_REPLY}": data-mood ${mood}`,
+  );
+
+  const patched = await smoke.api(`/api/local/chats/${chat.id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ replyMode: "voice" }),
+  });
+  await patched.body?.cancel();
+  const bubbles = page.getByRole("button", { name: /^(Play|Pause) Voice Message$/ });
+  const before = await bubbles.count();
+  await her.watch();
+  await chat.box.fill(COMPANION_LINE);
+  await chat.box.press("Enter");
+  await until("her voice message", async () => (await bubbles.count()) > before, 30_000);
+  const arrived = Date.now();
+  // Playwright's page reads as focused, so her voice message plays as it arrives: that play ends
+  // before Play is pressed.
+  const own = await until(
+    "her voice message's own play to end",
+    async () => {
+      const playing = (await page.getByRole("button", { name: "Pause Voice Message" }).count()) > 0;
+      const heard = await her.heard();
+      const speaking = (await her.data()).speaking === "true";
+      if (playing || speaking || (!heard.speaking && Date.now() - arrived < 3000)) return null;
+      return heard;
+    },
+    20_000,
+    100,
+  );
+  await her.watch();
+  const pressed = Date.now();
+  await page.getByRole("button", { name: "Play Voice Message" }).last().click();
+  const played = await until(
+    "data-speaking true, then false",
+    async () => {
+      const heard = await her.heard();
+      return heard.speaking && (await her.data()).speaking === "false" ? heard : null;
+    },
+    5000,
+    50,
+  ).catch(() => null);
+  step.check(
+    "her voice message, played, makes her speak, then stop",
+    patched.ok && played !== null,
+    `PATCH replyMode voice ${patched.status}; as it arrived it played on its own (the page reads as focused under Playwright), ${own.speaking ? "and she spoke" : "yet she never spoke"}; Play Voice Message: ${played === null ? "data-speaking never read true, then false, within 5 s" : `she spoke and stopped within ${Date.now() - pressed} ms, her mouth's widest ${played.widest.toFixed(2)} on the fakes' silent file`}`,
+  );
+}
+
+/**
+ * A call in the chat open now, with her: the video screen, her mouth from the call's second meter,
+ * and her menu's call items; docked, without WebGL. Whether the video screen showed.
+ */
+async function callWithHer(walk: Walk, driven: Driven, her: Her, stage: boolean, step: Step) {
+  const { smoke } = walk;
+  const { page } = driven;
+  const persona = walk.persona;
+  if (persona === null) throw new Error("it needs the chat step's persona");
+  if (walk.microphone === null) throw new Error("there's no speech for the fake microphone");
+  const screen = page.locator("[data-call-screen]");
+  const dock = page.getByRole("region", { name: `Call with ${persona.shortName}` });
+  const from = smoke.log("main").length;
+  await page.getByRole("button", { name: "Call", exact: true }).click();
+  const speaks = her.speaks(stage, 60_000);
+  await screen.or(dock).first().waitFor({ timeout: 20_000 });
+  const video = (await screen.count()) > 0;
+  const unthrottled = await smoke
+    .waitForLine("main", COMPANION_LINES.unthrottled, { from, timeoutMs: 15_000 })
+    .catch(() => null);
+  const up = await her
+    .when("data-call up", (data) => data.call === "up", 10_000)
+    .then(
+      () => true,
+      () => false,
+    );
+  const heard = await speaks;
+  const shape = video ? "the video screen" : "docked";
+  step.check(
+    stage
+      ? "a call with her: the video screen, the window drawing on, her mouth from the call"
+      : "a call with her, docked without WebGL: the window drawing on, her speaking from the call",
+    video === stage && unthrottled !== null && up && heard.met,
+    `${shape}; ${unthrottled === null ? "no unthrottled line" : after(unthrottled)}; data-call ${up ? "up" : "never up"}; data-speaking ${heard.speaking ? "read true" : "never read true"}, ${stage ? `data-mouth's widest ${heard.widest.toFixed(2)}` : "her mouth skipped: her picture"}`,
+  );
+  const menu = await herMenu(walk, her);
+  step.check(
+    "her menu during her call starts with Hang Up and Mute Microphone",
+    menu?.startsWith(`${MENU_LINE}${HER_CALL_MENU}`) === true,
+    menu ?? "main.log has no menu line within 5 s",
+  );
+  // Background mode closes her menu with no pick, so the smoke hands the app page her Mute and
+  // Unmute as main does.
+  const micOn = page.getByRole("button", { name: "Mute your mic" }).first();
+  await until("the call live, its microphone on", () => micOn.isEnabled(), 30_000);
+  await sendPick(driven, "mute");
+  const muted = await page
+    .getByRole("button", { name: "Unmute your mic" })
+    .first()
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  await sendPick(driven, "unmute");
+  const unmuted = await micOn.waitFor({ timeout: 5000 }).then(
+    () => true,
+    () => false,
+  );
+  step.check(
+    "her menu's Mute and Unmute, handed to the app page from main, set the call's microphone",
+    muted && unmuted,
+    `companion-pick mute: ${muted ? "the microphone off" : "nothing changed"}; unmute: ${unmuted ? "on again" : "still off"}`,
+  );
+  if (video) return true;
+  const hangUp = smoke.log("main").length;
+  await dock.getByRole("button", { name: "Hang Up" }).click();
+  const throttled = await smoke
+    .waitForLine("main", COMPANION_LINES.throttled, { from: hangUp, timeoutMs: 15_000 })
+    .catch(() => null);
+  step.check(
+    "the dock's Hang Up ends her call, and the window's throttling is back on",
+    throttled !== null,
+    throttled === null ? "no throttled line" : after(throttled),
+  );
+  return false;
+}
+
+/** Pop Out hides the window while her call goes on; its Hang Up ends it; a launch shows it again. */
+async function popOut(walk: Walk, driven: Driven, her: Her, step: Step) {
+  const { smoke } = walk;
+  const { page } = driven;
+  const screen = page.locator("[data-call-screen]");
+  let from = smoke.log("main").length;
+  await screen.getByRole("button", { name: "Pop Out" }).click();
+  const popped = await smoke
+    .waitForLine("main", COMPANION_LINES.poppedOut, { from, timeoutMs: 15_000 })
+    .catch(() => null);
+  const hidden = await smoke
+    .waitForLine("main", "Eidolon: the window is hidden", { from, timeoutMs: 5000 })
+    .catch(() => null);
+  const calls = await activeCalls(walk);
+  step.check(
+    "Pop Out hides the window, and her call goes on",
+    popped !== null && hidden !== null && calls === 1,
+    `${hidden === null ? "the window isn't hidden" : after(hidden)}; ${popped === null ? "no popped-out line" : after(popped)}; ${calls} call(s) up`,
+  );
+  // Hidden, the window's page still runs for her feed, and its call's stage draws nothing.
+  const frames = () =>
+    page.evaluate(() =>
+      Number(
+        document.querySelector<HTMLElement>("[data-call-screen] [data-avatar][data-frames]")
+          ?.dataset.frames ?? Number.NaN,
+      ),
+    );
+  // The page hears it a few frames after main logs it: wait for its mark, and a frame more.
+  const marked = await page
+    .waitForSelector("html[data-window-hidden]", { state: "attached", timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  await sleep(250);
+  const before = await frames();
+  await sleep(1000);
+  const held = await frames();
+  step.check(
+    "hidden, the window's call draws no frame",
+    marked && Number.isFinite(before) && held === before,
+    `${marked ? "the page marked hidden" : "no data-window-hidden on the page"}; its stage's data-frames ${before}, and ${held} a second later`,
+  );
+  from = smoke.log("main").length;
+  await screen.getByRole("button", { name: "Hang Up" }).click();
+  const throttled = await smoke
+    .waitForLine("main", COMPANION_LINES.throttled, { from, timeoutMs: 15_000 })
+    .catch(() => null);
+  const idle = await her
+    .when("data-call idle", (data) => data.call === "idle", 10_000)
+    .then(
+      () => true,
+      () => false,
+    );
+  step.check(
+    "the hidden window's Hang Up ends her call, and its throttling is back on",
+    throttled !== null && idle,
+    `${throttled === null ? "no throttled line" : after(throttled)}; data-call ${idle ? "idle" : "not idle"}`,
+  );
+  from = smoke.log("main").length;
+  const second = smoke.launch("a launch after Pop Out", walk.launch, LANGUAGE_ARGS);
+  const exit = await Promise.race([second.exited, sleep(30_000).then(() => null)]);
+  if (exit === null) second.child.kill("SIGKILL");
+  const shown =
+    exit === null
+      ? null
+      : await smoke
+          .waitForLine("main", "Eidolon: the window is shown", { from, timeoutMs: 10_000 })
+          .catch(() => null);
+  step.check(
+    "a second launch shows the window again",
+    exit?.code === 0 && shown !== null,
+    `the launch ${exit === null ? "still ran after 30 s, so the smoke killed it" : `exited ${exit.code ?? exit.signal}`}; ${shown === null ? "the window isn't shown" : after(shown)}`,
+  );
+}
+
+/** Settings → Desktop's switch turns her off, and her window goes. */
+async function turnOff(walk: Walk, driven: Driven, her: Her, step: Step) {
+  const { smoke } = walk;
+  const { page } = driven;
+  await settingsSection(page, "Desktop", "desktop");
+  const toggle = companionSwitch(page);
+  await until(
+    "her switch reading on",
+    async () =>
+      (await toggle.isEnabled()) && (await toggle.getAttribute("aria-checked")) === "true",
+    15_000,
+  );
+  const from = smoke.log("main").length;
+  await toggle.click();
+  const off = await smoke
+    .waitForLine("main", COMPANION_LINES.off, { from, timeoutMs: 10_000 })
+    .catch(() => null);
+  const gone = await until(
+    "no window at her page",
+    async () => (await her.bounds()) === null,
+    10_000,
+  ).then(
+    () => true,
+    () => false,
+  );
+  step.check(
+    "Settings → Desktop's switch turns her off, and her window goes",
+    off !== null && gone,
+    `${off === null ? "no turned-off line" : after(off)}; ${gone ? "no window at her page" : "her window is still there after 10 s"}`,
+  );
+}
+
+/** What the steps after need: no call up, her off, and no active model. */
+async function putBack(walk: Walk, page: Page, step: Step) {
+  const left: string[] = [];
+  try {
+    if ((await activeCalls(walk)) > 0) {
+      await page.getByRole("button", { name: "Hang Up" }).first().click({ timeout: 10_000 });
+      await until("no call up", async () => (await activeCalls(walk)) === 0, 15_000, 250);
+    }
+  } catch (error) {
+    left.push(`a call is up: ${described(error)}`);
+  }
+  try {
+    await page.evaluate(async () => {
+      const app = (
+        globalThis as {
+          eidolonDesktop?: { setCompanion?: (change: { on: boolean }) => Promise<unknown> };
+        }
+      ).eidolonDesktop;
+      await app?.setCompanion?.({ on: false });
+    });
+  } catch (error) {
+    left.push(`she may be on: ${described(error)}`);
+  }
+  try {
+    await setModel(walk, null);
+  } catch (error) {
+    left.push(`the test rig may be active: ${described(error)}`);
+  }
+  step.check(
+    "put back for the steps after: no call up, her off, no active model",
+    left.length === 0,
+    left.length === 0 ? "put back: no call up, her off, no active model" : left.join("; "),
+  );
 }
 
 /** The task her start_task call made in chat `id`, once its `started` result is in the log. */

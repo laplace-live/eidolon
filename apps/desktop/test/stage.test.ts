@@ -159,6 +159,9 @@ for (const target of Object.keys(TARGETS) as Target[]) {
         "skills/persona-update/SKILL.md",
         "data/jieba/dict.txt",
         "data/resampler/resampler.wasm",
+        "data/psd2live/p2l_runtime.wasm",
+        "data/psd2live/LICENSE",
+        "data/psd2live/THIRD_PARTY_LICENSES.md",
         "data/models/silero_vad.onnx",
         "README.md",
         "LICENSE",
@@ -195,6 +198,8 @@ for (const target of Object.keys(TARGETS) as Target[]) {
         "data/models/THIRD_PARTY_LICENSES.md",
         "data/resampler/LICENSE",
         "data/resampler/THIRD_PARTY_LICENSES.md",
+        "data/psd2live/LICENSE",
+        "data/psd2live/THIRD_PARTY_LICENSES.md",
       ]) {
         expect([file, licenses.get(file)]).toEqual([
           file,

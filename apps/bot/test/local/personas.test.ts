@@ -172,6 +172,7 @@ describe("listing and creating", () => {
             template: true,
             own: false,
             avatar: false,
+            appearance: { model: null },
           },
         ],
       },
@@ -182,7 +183,15 @@ describe("listing and creating", () => {
     const created = await call("POST", "/personas", NEW_PERSONA);
     expect([created.status, created.body]).toEqual([
       201,
-      { id: "aria", name: "阿莉亚", shortName: "莉亚", template: false, own: true, avatar: false },
+      {
+        id: "aria",
+        name: "阿莉亚",
+        shortName: "莉亚",
+        template: false,
+        own: true,
+        avatar: false,
+        appearance: { model: null },
+      },
     ]);
     const yaml = parseYaml(readFileSync(join(personaHomeDir("aria"), "persona.yaml"), "utf8"));
     expect(yaml).toEqual({

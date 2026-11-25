@@ -11,6 +11,9 @@ personas/<id>/
   prompt.md             the system prompt — identity and hard rules, no code
   glossary.toml         Soniox transcription vocabulary (Soniox's StructuredContext)
   avatar.{png,jpg,webp} the avatar the web app shows; never a selfie reference
+  models/<model>/       her character models, in the data home's copy alone: each a model.json
+                        and its model.p2lrt, which the studio's Appearance imports;
+                        appearance.model picks one (avatar.md)
   references/outfits/   what take_selfie redraws; exactly one reaches a render
   references/friends/   one image per person she can be photographed with, named after them
   index/                what the ingests build; derived, rebuildable, never edited
@@ -25,8 +28,9 @@ Two copies of that folder exist. The repository ships each persona's template un
 and the user keeps their own under `<data home>/personas/<id>/`. Every file resolves from the
 user's folder first and the template second, and a folder's listing is the union of both. That
 is how one persona is split between what is published and what stays on a machine: 明前奶绿's
-template ships her prompt, `persona.yaml`, outfits and glossary, while her index and her friend
-images exist only in a data home.
+template ships her prompt, `persona.yaml`, outfits and glossary, while her index, her friend
+images and her models exist only in a data home. The app reads a persona's models from the data
+home alone, so a template holds none ([avatar.md](avatar.md#a-personas-models)).
 
 The active persona is `EIDOLON_PERSONA`, else `persona` in `settings.yaml`, else `milky-green`,
 else the first folder found.
@@ -261,6 +265,7 @@ is unset, and the other providers use `transcription.language`, else `zh`.
 | `chat.talkativeness` | `CHAT_TALKATIVENESS` | float | Chat talkativeness |
 | `chat.replyMode` | `CHAT_REPLY_MODE` | string | Chat reply mode |
 | `chat.maxRounds` | `CHAT_MAX_ROUNDS` | int | Chat reply rounds |
+| `appearance.model` | `APPEARANCE_MODEL` | string | Character model |
 
 `knowledge.facts.files` lists name patterns for the fact files in `sources/<id>/facts/` (default
 `*.txt`). A pattern matches a file name as Python's pathlib glob does: `*`, `?`, `[…]` and `[!…]`,
@@ -297,6 +302,12 @@ otherwise lets her call nothing. A task she starts there is followed by one more
 still says her line. A realtime call's model runs its own loop instead. The template's
 `persona.yaml` sets none, so a server's `CHAT_MAX_ROUNDS` decides there; 3 holds a reply to 4
 requests.
+
+`appearance.model` is which of her models the local app shows ([avatar.md](avatar.md)): the id of a
+folder in her `models/`, which the studio's Appearance section imports and picks from. Unset, or
+naming a model she doesn't have, she shows her avatar picture. The environment's
+`APPEARANCE_MODEL` is the default for every persona that sets none, so it suits only an id each of
+them has.
 
 ## settings.yaml
 
@@ -431,8 +442,10 @@ environment as before: the environment sets what her `persona.yaml` leaves unset
   home, so copying them would ship those edits to production; a copied `persona.yaml` would also
   override the environment for every setting it sets, a voice included. Remove any that an
   earlier copy of the whole folder left there.
-- **A persona of your own**: its whole `personas/<id>/` folder, the avatar at its root included.
-- **Never** `sources/`: the bot reads none of it.
+- **A persona of your own**: its whole `personas/<id>/` folder but `models/`, the avatar at its
+  root included.
+- **Never** `sources/`: the bot reads none of it. Nor her `models/`: only the local app shows a
+  model ([avatar.md](avatar.md)), and one can be up to 200 MiB.
 
 Copy the first time, and again after every re-ingest:
 
@@ -446,7 +459,7 @@ for folder in index references/friends; do
 done
 
 # a persona of your own
-rsync -a --checksum --delete-after --delay-updates \
+rsync -a --checksum --delete-after --delay-updates --exclude models/ \
   <data home>/personas/<id>/ <host>:<mounted path>/personas/<id>/
 ```
 

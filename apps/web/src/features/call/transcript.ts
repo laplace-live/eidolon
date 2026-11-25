@@ -93,8 +93,8 @@ export type TranscriptEvent =
   | { readonly type: "speaker"; readonly speaker: CallSpeaker }
   | { readonly type: "reset" };
 
-// Word and token output repeats the sentences, and backchannels and expressions sit outside a reply.
-const SKIPPED_OUTPUT = new Set([
+/** Word and token output repeats the sentences, and backchannels and expressions sit outside a reply. */
+export const SKIPPED_OUTPUT: ReadonlySet<string> = new Set([
   "word",
   "token",
   "backchannel",

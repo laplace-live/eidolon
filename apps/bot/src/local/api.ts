@@ -47,6 +47,12 @@ export const LOCAL_ROUTES = [
   "GET /api/local/personas/:id/avatar",
   "PUT /api/local/personas/:id/avatar",
   "DELETE /api/local/personas/:id/avatar",
+  "GET /api/local/personas/:id/models",
+  "POST /api/local/personas/:id/models",
+  "PUT /api/local/personas/:id/models/:model/file",
+  "PATCH /api/local/personas/:id/models/:model",
+  "DELETE /api/local/personas/:id/models/:model",
+  "GET /api/local/personas/:id/models/:model/file",
   "GET /api/local/personas/:id/facts",
   "GET /api/local/personas/:id/facts/:file",
   "PUT /api/local/personas/:id/facts/:file",
@@ -150,6 +156,8 @@ export const ERROR_CODES = [
   "linked-mcp-config",
   "unknown-skill",
   "skill-exists",
+  "invalid-model",
+  "unknown-model",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -166,8 +174,11 @@ export interface ErrorBody {
   };
 }
 
-/** A body or response that is not JSON: an upload's bytes, a job's NDJSON events, a log's text. */
-export interface Raw<Kind extends "image" | "audio" | "ndjson" | "text"> {
+/**
+ * A body or response that is not JSON: an upload's bytes, a job's NDJSON events, a log's text, a
+ * character model's file.
+ */
+export interface Raw<Kind extends "image" | "audio" | "ndjson" | "text" | "model"> {
   readonly raw: Kind;
 }
 
@@ -404,6 +415,8 @@ export interface Status {
     readonly shortName: string;
     /** As PersonaSummary's. */
     readonly avatar: boolean;
+    /** As PersonaSummary's, from the settings the server runs with. */
+    readonly appearance: PersonaAppearance;
     readonly voice: VoiceStatus;
   };
   readonly index: IndexStatus;
@@ -645,6 +658,7 @@ export interface PersonaSummary {
   readonly own: boolean;
   /** Has an avatar picture; without one the pages show her monogram and request none. */
   readonly avatar: boolean;
+  readonly appearance: PersonaAppearance;
 }
 
 export interface PersonasResponse {
@@ -703,6 +717,122 @@ export interface ReferencesResponse {
   readonly outfits: readonly ReferenceImage[];
   readonly friends: readonly ReferenceImage[];
   readonly avatar: ReferenceImage | null;
+}
+
+export const CHARACTER_MODEL_KINDS = ["psd2live"] as const;
+export type CharacterModelKind = (typeof CHARACTER_MODEL_KINDS)[number];
+
+/** The most a model upload may be. */
+export const MAX_MODEL_BYTES = 209_715_200;
+
+/** A region of the rig's canvas, in its pixels (y down). */
+export interface ModelBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface ModelClip {
+  readonly id: string;
+  readonly name: string;
+  readonly group: string;
+  readonly duration: number;
+  readonly looping: boolean;
+}
+
+export interface ModelNamed {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface ModelParameter {
+  readonly id: string;
+  readonly min: number;
+  readonly max: number;
+  readonly default: number;
+}
+
+/** What the runtime read from the file at import. */
+export interface ModelInventory {
+  /** p2l_version() of the runtime that read it. */
+  readonly runtime: string;
+  /** META generator + generator_version, e.g. "psd2live 3.8.4". */
+  readonly generator: string | null;
+  readonly canvas: { readonly width: number; readonly height: number };
+  readonly clips: readonly ModelClip[];
+  readonly expressions: readonly ModelNamed[];
+  readonly hitAreas: readonly ModelNamed[];
+  readonly parameters: readonly ModelParameter[];
+  readonly parts: readonly ModelNamed[];
+  /** Entries per group. */
+  readonly poseGroups: readonly number[];
+  /** The LipSync role names a parameter. */
+  readonly lipSync: boolean;
+  readonly textures: number;
+}
+
+export interface ModelOutfit {
+  readonly id: string;
+  readonly name: string;
+  readonly poses: readonly { readonly group: number; readonly entry: number }[];
+  readonly parameters: readonly { readonly id: string; readonly value: number }[];
+  readonly hiddenParts: readonly string[];
+}
+
+export interface CharacterModel {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: CharacterModelKind;
+  readonly size: number;
+  readonly sha256: string;
+  readonly importedAt: string;
+  readonly updatedAt: string;
+  readonly inventory: ModelInventory;
+  /** null: the SDK's default (Head hit area for a call, the character's bounds on the desktop). */
+  readonly framing: { readonly call: ModelBox | null; readonly companion: ModelBox | null };
+  /** The owner's overrides only: mood tag → up to 2 expression ids; the SDK fills the rest. */
+  readonly moods: Readonly<Record<string, readonly string[]>>;
+  /** The owner's overrides only: gesture → clip id. */
+  readonly gestures: Readonly<Record<string, string>>;
+  readonly outfits: readonly ModelOutfit[];
+  readonly outfit: string | null;
+}
+
+export interface CharacterModels {
+  readonly active: string | null;
+  readonly models: readonly CharacterModel[];
+}
+
+/**
+ * PATCH's fields, each checked against the model's inventory: a name of one line of 1 to 64
+ * characters; a mood or gesture key, and an outfit's id, a slug of up to 32 characters; up to 2
+ * expressions per mood; up to 32 outfits, each naming its pose groups' entries, parameters within
+ * their ranges and parts, each once; `outfit` one of the outfits, or null.
+ */
+export type CharacterModelPatch = Partial<
+  Pick<CharacterModel, "name" | "framing" | "moods" | "gestures" | "outfits" | "outfit">
+>;
+
+export interface CharacterModelUploadQuery {
+  readonly filename?: string;
+}
+
+export interface CharacterModelFileQuery {
+  readonly sha256: string;
+}
+
+export interface ActiveCharacterModel {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: CharacterModelKind;
+  readonly sha256: string;
+  readonly updatedAt: string;
+}
+
+export interface PersonaAppearance {
+  /** What her appearance.model names, while it is one of her models; else null. */
+  readonly model: ActiveCharacterModel | null;
 }
 
 export interface FactFile {
@@ -1026,6 +1156,49 @@ export interface LocalApi {
   "GET /api/local/personas/:id/avatar": Endpoint<undefined, Raw<"image">>;
   "PUT /api/local/personas/:id/avatar": Endpoint<Raw<"image">, ReferenceImage>;
   "DELETE /api/local/personas/:id/avatar": Endpoint<undefined, Ok>;
+  /**
+   * Her character models, which live only in her folder in the data home. Every
+   * personas/:id/models/:model route answers 400 bad-request for a malformed model id, which is
+   * never looked up, and 404 unknown-model for one she doesn't have.
+   */
+  "GET /api/local/personas/:id/models": Endpoint<undefined, CharacterModels>;
+  /**
+   * A .p2lrt, its bytes the body, kept under an id the server makes from `filename`; it never
+   * becomes her active model. 400 bad-request when empty; 413 payload-too-large past
+   * MAX_MODEL_BYTES; 415 unsupported-media-type for bytes that don't start as a .p2lrt does; 400
+   * invalid-model, with the reason, when PSD2Live's runtime refuses it, its textures aren't PNGs
+   * inside the file or its inventory passes 1 MiB; 409 call-active during a call.
+   */
+  "POST /api/local/personas/:id/models": Endpoint<
+    Raw<"model">,
+    CharacterModel,
+    CharacterModelUploadQuery
+  >;
+  /**
+   * A new file for the model, which keeps its id, name and settings, but for the moods, gestures
+   * and outfit entries naming what the new file lacks. Its errors are POST's.
+   */
+  "PUT /api/local/personas/:id/models/:model/file": Endpoint<
+    Raw<"model">,
+    CharacterModel,
+    CharacterModelUploadQuery
+  >;
+  /**
+   * Each field sent replaces the model's. 400 bad-request for a field of the wrong shape, or one
+   * naming what the model's file lacks.
+   */
+  "PATCH /api/local/personas/:id/models/:model": Endpoint<CharacterModelPatch, CharacterModel>;
+  /** Also clears her appearance.model when it names the model. */
+  "DELETE /api/local/personas/:id/models/:model": Endpoint<undefined, Ok>;
+  /**
+   * The model's .p2lrt while `sha256` is its file's, as immutable, which a browser caches for good.
+   * 400 bad-request without `sha256`; 404 not-found for any other.
+   */
+  "GET /api/local/personas/:id/models/:model/file": Endpoint<
+    undefined,
+    Raw<"model">,
+    CharacterModelFileQuery
+  >;
   "GET /api/local/personas/:id/facts": Endpoint<undefined, FactsResponse>;
   "GET /api/local/personas/:id/facts/:file": Endpoint<undefined, TextUpdate>;
   "PUT /api/local/personas/:id/facts/:file": Endpoint<TextUpdate, FactFile>;

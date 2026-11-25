@@ -5,7 +5,10 @@ import { personasQuery } from "@/components/settings-form/queries";
 import type { PersonaSummary } from "@/lib/api";
 import { listOf } from "@/lib/labels";
 
-export type ChatPersona = Pick<PersonaSummary, "id" | "name" | "shortName" | "avatar">;
+export type ChatPersona = Pick<
+  PersonaSummary,
+  "id" | "name" | "shortName" | "avatar" | "appearance"
+>;
 
 /** Looks a chat's persona up; one deleted since keeps her id, and a monogram of it. */
 export function usePersonaOf(): (id: ParticipantId) => ChatPersona {
@@ -17,6 +20,7 @@ export function usePersonaOf(): (id: ParticipantId) => ChatPersona {
         name: id,
         shortName: "",
         avatar: false,
+        appearance: { model: null },
       },
     [data],
   );

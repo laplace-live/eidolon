@@ -19,6 +19,8 @@ import {
 } from "../scripts/smoke/env.ts";
 import {
   CHAT_MESSAGE,
+  COMPANION_LINE,
+  COMPANION_REPLY,
   type Fakes,
   FILES_REPLY,
   GREETING,
@@ -465,6 +467,13 @@ describe("the fakes", () => {
     expect((await plain.json()).choices[0].message.content).toBe(REPLY.join(""));
     expect(served.streams.map((stream) => stream.cancelled)).toEqual([false, false, false]);
     expect(served.count("POST /v1/chat/completions")).toBe(4);
+  });
+
+  test("answer the desktop companion's line with her reply, whose direction her mood follows", async () => {
+    const asked = { stream: true, messages: [{ role: "user", content: COMPANION_LINE }] };
+    expect((await deltas(await post("/chat/completions", asked))).map((p) => p.text)).toEqual([
+      COMPANION_REPLY,
+    ]);
   });
 
   test("call take_selfie when asked for a selfie and offered it, then answer its result", async () => {

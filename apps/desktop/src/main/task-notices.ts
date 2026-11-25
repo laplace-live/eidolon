@@ -357,21 +357,10 @@ export function noticeText(notice: Notice, strings: Strings): { title: string; b
   };
 }
 
-const STATUS = "/api/local/status";
-const STATUS_TIMEOUT_MS = 2_000;
-
 /**
  * What a notice's click asks of the page once the window shows: the task in its chat, or the Tasks
- * page for one without a chat. Null while the server counts a live call, since a page that leaves a
- * call hangs it up. Rejects when the status can't be read.
+ * page for one without a chat. Throws unless its ids are ids.
  */
-export async function noticeCommand(
-  notice: Notice,
-  fetch: BackendFetch,
-): Promise<DesktopCommand | null> {
-  const response = await fetch(STATUS, { signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
-  if (!response.ok) throw new Error(`GET ${STATUS} answered ${response.status}`);
-  const { activeCalls } = ((await response.json()) ?? {}) as { activeCalls?: unknown };
-  if (activeCalls !== 0) return null;
+export function noticeCommand(notice: Notice): DesktopCommand {
   return notice.chat === null ? "tasks" : openTaskCommand(notice.chat, notice.task);
 }

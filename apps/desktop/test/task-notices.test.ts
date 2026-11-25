@@ -10,7 +10,7 @@ import type {
 } from "../../bot/src/local/api.ts";
 import type { NoticeHandle } from "../src/main/background.ts";
 import type { BackendState, ReadyState } from "../src/main/controller.ts";
-import type { BackendFetch, BackendResponse } from "../src/main/quit-check.ts";
+import type { BackendFetch } from "../src/main/quit-check.ts";
 import { STRINGS } from "../src/main/strings.ts";
 import {
   ENDED,
@@ -79,43 +79,15 @@ describe("noticeText", () => {
   });
 });
 
-/** A server whose status answers `body`, recording each path asked for. */
-function server(body: unknown, status = 200): { fetch: BackendFetch; paths: string[] } {
-  const paths: string[] = [];
-  return {
-    paths,
-    fetch: async (path): Promise<BackendResponse> => {
-      paths.push(path);
-      return { ok: status >= 200 && status < 300, status, json: async () => body };
-    },
-  };
-}
-
 describe("noticeCommand", () => {
-  test("opens the task in its chat, or the Tasks page for a task without one", async () => {
-    const { fetch, paths } = server({ activeCalls: 0 });
-    expect(await noticeCommand(notice, fetch)).toBe(`open-task:${CHAT}:${TASK}`);
-    expect(await noticeCommand({ ...notice, chat: null }, fetch)).toBe("tasks");
-    expect(paths).toEqual(["/api/local/status", "/api/local/status"]);
+  test("opens the task in its chat, or the Tasks page for a task without one", () => {
+    expect(noticeCommand(notice)).toBe(`open-task:${CHAT}:${TASK}`);
+    expect(noticeCommand({ ...notice, chat: null })).toBe("tasks");
   });
 
-  test("asks nothing of the page while a call is live, or when the status doesn't count calls", async () => {
-    for (const body of [{ activeCalls: 1 }, {}, { activeCalls: "0" }, null, []]) {
-      expect(await noticeCommand(notice, server(body).fetch)).toBeNull();
-    }
-  });
-
-  test("rejects when the status can't be read, or its ids aren't the server's", async () => {
-    await expect(noticeCommand(notice, server({}, 503).fetch)).rejects.toThrow(
-      "GET /api/local/status answered 503",
-    );
-    const failing: BackendFetch = async () => {
-      throw new Error("no server is ready");
-    };
-    await expect(noticeCommand(notice, failing)).rejects.toThrow("no server is ready");
-    await expect(
-      noticeCommand({ ...notice, task: "../settings" }, server({ activeCalls: 0 }).fetch),
-    ).rejects.toThrow();
+  test("throws when its ids aren't ids", () => {
+    expect(() => noticeCommand({ ...notice, task: "../settings" })).toThrow();
+    expect(() => noticeCommand({ ...notice, chat: "../settings" })).toThrow();
   });
 });
 
@@ -196,6 +168,7 @@ const MILKY: PersonaSummary = {
   template: true,
   own: true,
   avatar: false,
+  appearance: { model: null },
 };
 const RIN: PersonaSummary = { ...MILKY, id: "rin", name: "Rin", shortName: "Rin", template: false };
 

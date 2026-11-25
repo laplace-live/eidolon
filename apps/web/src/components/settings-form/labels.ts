@@ -115,6 +115,7 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "chat.talkativeness": msg`Talkativeness`,
   "chat.replyMode": msg`Reply Mode`,
   "chat.maxRounds": msg`Rounds per Reply`,
+  "appearance.model": msg`Character Model`,
 };
 
 /** The line under a row, for the rows that have one. */

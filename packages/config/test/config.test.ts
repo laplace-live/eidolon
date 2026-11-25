@@ -25,6 +25,7 @@ import {
   personaIds,
   personaTemplateDir,
   personaTimeZone,
+  psd2liveDir,
   pyIsoformatUtc,
   resamplerDir,
   resolveProjectPath,
@@ -259,6 +260,7 @@ describe("flags, raw values and paths", () => {
       cli: cliEntry(),
       jieba: jiebaDir(),
       resampler: resamplerDir(),
+      psd2live: psd2liveDir(),
       models: voiceModelsDir(),
     });
     expect(shipped()).toEqual({
@@ -268,6 +270,7 @@ describe("flags, raw values and paths", () => {
       cli: join(PROJECT_ROOT, "apps/cli/src/main.ts"),
       jieba: join(PROJECT_ROOT, "packages/retrieval/data/jieba"),
       resampler: join(PROJECT_ROOT, "packages/voice/src/dsp/resampler/wasm"),
+      psd2live: join(PROJECT_ROOT, "packages/sdk/src/avatar/psd2live/wasm"),
       models: join(PROJECT_ROOT, "packages/voice/models"),
     });
     for (const file of [
@@ -276,6 +279,7 @@ describe("flags, raw values and paths", () => {
       cliEntry(),
       join(jiebaDir(), "dict.txt"),
       join(resamplerDir(), "resampler.wasm"),
+      join(psd2liveDir(), "p2l_runtime.wasm"),
       join(voiceModelsDir(), "silero_vad.onnx"),
       join(voiceModelsDir(), "smart-turn-v3.2-cpu.onnx"),
     ]) {
@@ -292,6 +296,7 @@ describe("flags, raw values and paths", () => {
       cli: "/opt/eidolon/dist/cli.js",
       jieba: "/opt/eidolon/data/jieba",
       resampler: "/opt/eidolon/data/resampler",
+      psd2live: "/opt/eidolon/data/psd2live",
       models: "/opt/eidolon/data/models",
     });
     expect(personaTemplateDir("milky-green")).toBe("/opt/eidolon/personas/milky-green");

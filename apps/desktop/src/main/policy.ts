@@ -1,7 +1,10 @@
-// What the window may do: where a link opens and a navigation goes, which
-// permissions its page gets, and whether a packaged app may start with a debugging switch.
+// What the windows may do: where a link opens and a navigation goes, which
+// permissions a page gets, and whether a packaged app may start with a debugging switch.
 // Electron-free: navigation.ts and permissions.ts apply it.
 import { pageAt, SCHEME } from "../shared/bridge.ts";
+
+/** The desktop companion's one page. */
+export const COMPANION_PAGE = `${SCHEME}://app/companion`;
 
 /** What a link the page opens in a new window becomes; no window ever opens. */
 export type OpenAction = "browser" | "download" | "deny";
@@ -81,6 +84,14 @@ export function mayRedirect(url: string): boolean {
  */
 export function leftTheApp(url: string): boolean {
   return pageAt(url) === null;
+}
+
+/**
+ * Exactly her page: no other path, query, fragment or credentials. Node's URL keeps a custom
+ * scheme's host as written, and Chromium lowercases the registered scheme's, so main sees `app`.
+ */
+export function isCompanionPage(url: string): boolean {
+  return parse(url)?.href === COMPANION_PAGE;
 }
 
 /** `url` for main.log: no user name, password, query or fragment, which can hold secrets. */

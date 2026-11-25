@@ -163,6 +163,21 @@ export function checkFileName(raw: string, extensions: readonly string[]): strin
   return name;
 }
 
+/** A folder the app may delete in: really under the data home, and outside every template. */
+export function userFolder(folder: string): boolean {
+  try {
+    // realpath(3) gives the letter case on disk; the JavaScript realpathSync keeps the case it was
+    // given, so a template spelled otherwise would pass for a user folder.
+    const real = realpathSync.native(folder);
+    return (
+      isInside(real, realpathSync.native(dataHome())) &&
+      !isInside(real, realpathSync.native(templatesDir()))
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** `name` in `folder`, refused unless it names a file directly in the folder. */
 export function fileIn(folder: string, name: string): string {
   const root = resolve(folder);

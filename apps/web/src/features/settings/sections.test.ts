@@ -6,6 +6,7 @@ import type { EidolonDesktop } from "@/lib/desktop";
 import {
   CARDS,
   NAMED,
+  offersCompanion,
   offersSystemOptions,
   resolveSection,
   SECTIONS,
@@ -139,6 +140,11 @@ describe("the Desktop section", () => {
     setTerminalCommand: async () => ({ command: absent }),
   };
   const desktopApp: EidolonDesktop = { ...bridge, ...options };
+  const her = { on: false, showAtLogin: true, background: false };
+  const companion = {
+    companion: async () => her,
+    setCompanion: async () => her,
+  };
 
   test("shows in a desktop app that offers Open at Login and the terminal command, last before Advanced", () => {
     expect(offersSystemOptions(desktopApp)).toBe(true);
@@ -154,6 +160,14 @@ describe("the Desktop section", () => {
     ]);
   });
 
+  test("shows in a desktop app that offers the desktop companion alone", () => {
+    const companionApp: EidolonDesktop = { ...bridge, ...companion };
+    expect(offersSystemOptions(companionApp)).toBe(false);
+    expect(offersCompanion(companionApp)).toBe(true);
+    expect(offersCompanion({ ...desktopApp, ...companion })).toBe(true);
+    expect(shownSections(companionApp)).toEqual(SECTIONS);
+  });
+
   test("a browser, or an app whose bridge predates the options, shows every other section", () => {
     const others = SECTIONS.filter((id) => id !== "desktop");
     expect(shownSections(null)).toEqual(others);
@@ -162,6 +176,14 @@ describe("the Desktop section", () => {
     for (const member of Object.keys(options) as (keyof typeof options)[]) {
       const { [member]: _, ...withoutOne } = options;
       expect(offersSystemOptions({ ...bridge, ...withoutOne }), member).toBe(false);
+    }
+    expect(offersCompanion(null)).toBe(false);
+    expect(offersCompanion(desktopApp)).toBe(false);
+    for (const member of Object.keys(companion) as (keyof typeof companion)[]) {
+      const { [member]: _, ...withoutOne } = companion;
+      const app = { ...bridge, ...withoutOne };
+      expect(offersCompanion(app), member).toBe(false);
+      expect(shownSections(app), member).toEqual(others);
     }
   });
 

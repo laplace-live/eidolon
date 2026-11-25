@@ -1,7 +1,8 @@
-// The desktop app's bridge: its preload puts `eidolonDesktop` on the app's own page, and a browser
-// has none, so everything that differs in the desktop app asks `desktop()` first. The page can come
-// from a server of another version than the app's, so a member added since the first release is
-// optional, and asked for before it's used.
+// The desktop app's bridges: its preload puts `eidolonDesktop` on the app's own page and
+// `eidolonCompanion` on the desktop companion's, and a browser has neither, so everything that
+// differs in the desktop app asks `desktop()`, or on her page `companion()`, first. The page can
+// come from a server of another version than the app's, so a member added since the first release
+// is optional, and asked for before it's used.
 import { i18n } from "@lingui/core";
 import type { Lang } from "@/locales/i18n";
 import { onThemeChange, type Theme, themeSetting } from "./theme";
@@ -30,6 +31,80 @@ export interface CommandChange {
   readonly error?: "cancelled" | "failed";
 }
 
+export const COMPANION_SIZES = ["small", "medium", "large"] as const;
+export type CompanionSize = (typeof COMPANION_SIZES)[number];
+
+/** What Settings shows of the desktop companion. */
+export interface CompanionState {
+  readonly on: boolean;
+  /** At a launch at login she shows before the window does. */
+  readonly showAtLogin: boolean;
+  /** Background mode keeps her off screen in this run. */
+  readonly background: boolean;
+}
+
+export interface CompanionChange {
+  readonly on?: boolean;
+  readonly showAtLogin?: boolean;
+}
+
+/** What her window holds: her model, its framing `aspect` wide for its height, or her picture. */
+export type CompanionShape =
+  | { readonly kind: "model"; readonly aspect: number }
+  | { readonly kind: "picture" };
+export type CompanionDrawn = CompanionShape["kind"];
+
+export interface WindowSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** A drag of her window, the pointer's position in screen DIPs. */
+export interface CompanionDrag {
+  readonly phase: "start" | "move" | "end";
+  readonly x: number;
+  readonly y: number;
+}
+
+/** The cursor, relative to her window's top left, in DIPs; outside her window too. */
+export interface CompanionCursor {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface CompanionNamed {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface CompanionMenuState {
+  /** up: Hang Up and Mute act on the call; idle: Call places /call's call with her; open: Call opens /call. */
+  readonly call: "idle" | "open" | "up";
+  readonly live: boolean;
+  readonly micOn: boolean;
+  /** Her character models, the active one `model`. */
+  readonly models: readonly CompanionNamed[];
+  readonly model: string | null;
+  /** The active model's outfits, the one worn `outfit`. */
+  readonly outfits: readonly CompanionNamed[];
+  readonly outfit: string | null;
+}
+
+export type CompanionPick =
+  | "call"
+  | "hang-up"
+  | "mute"
+  | "unmute"
+  | "open"
+  | "always-on-top"
+  | "hide"
+  | `size:${CompanionSize}`
+  | `model:${string}`
+  | `outfit:${string}`;
+
+/** The picks main hands the app page's call; never the port's. */
+export type CompanionCallPick = "call" | "hang-up" | "mute" | "unmute";
+
 export interface EidolonDesktop {
   /** Node's name for the OS the app runs on: "darwin" or "win32". */
   readonly platform: string;
@@ -53,15 +128,57 @@ export interface EidolonDesktop {
   readonly setTerminalCommand?: (action: "install" | "remove") => Promise<CommandChange>;
   /** Whether the page holds unsaved edits, which the app's quit and restart boxes warn of. */
   readonly unsaved?: (held: boolean) => void;
+  /** The desktop companion, as Settings shows her. */
+  readonly companion?: () => Promise<CompanionState>;
+  readonly setCompanion?: (change: CompanionChange) => Promise<CompanionState>;
+  /** Turns her on and, once she is drawn, hides the window: she carries the call. */
+  readonly popOut?: () => Promise<CompanionState>;
+  /** Asks main for a port to the desktop companion's page; it arrives as a window message. */
+  readonly linkCompanion?: () => void;
+  /** Whether a call she is on is up here, which keeps the window drawing for her. */
+  readonly feedingCompanion?: (feeding: boolean) => void;
+  /** Hands `callback` each pick the owner clicked in her menu for the call. */
+  readonly onCompanionPick?: (callback: (pick: CompanionCallPick) => void) => void;
+  /**
+   * Hands `callback` whether the window shows, now and at each change: hidden while it feeds her, its
+   * page still runs, as throttling's off.
+   */
+  readonly onWindowShows?: (callback: (shows: boolean) => void) => void;
+}
+
+/** `window.eidolonCompanion`, on the desktop companion's page alone. */
+export interface EidolonCompanion {
+  readonly platform: string;
+  /** Asks main for a port to the app window; it arrives as a window message. */
+  readonly link: () => void;
+  readonly hit: (over: boolean) => void;
+  readonly drag: (drag: CompanionDrag) => void;
+  /** Her shape; main answers the size it gave her window. */
+  readonly shape: (shape: CompanionShape) => Promise<WindowSize>;
+  readonly drawn: (drawn: CompanionDrawn | null) => void;
+  readonly follow: (on: boolean) => void;
+  readonly onCursor: (callback: (cursor: CompanionCursor) => void) => void;
+  readonly menu: (state: CompanionMenuState) => Promise<CompanionPick | null>;
 }
 
 declare global {
   var eidolonDesktop: EidolonDesktop | undefined;
+  var eidolonCompanion: EidolonCompanion | undefined;
 }
 
 /** The bridge, or null in a browser. */
 export function desktop(): EidolonDesktop | null {
   return globalThis.eidolonDesktop ?? null;
+}
+
+/** The desktop companion's bridge: only her own page has one. */
+export function companion(): EidolonCompanion | null {
+  return globalThis.eidolonCompanion ?? null;
+}
+
+/** Whether the app offers Pop Out, which hands a call to the desktop companion. */
+export function offersPopOut(app: EidolonDesktop | null): boolean {
+  return app?.popOut !== undefined;
 }
 
 /** The editors holding unsaved edits now. */
@@ -84,6 +201,7 @@ export function holdUnsaved(): () => void {
 const COMMANDS = {
   settings: (navigate) => navigate("/settings"),
   tasks: (navigate) => navigate("/tasks"),
+  call: (navigate) => navigate("/call"),
 } satisfies Record<string, (navigate: (to: string) => void) => void>;
 
 /** A chat's or a task's id, as the server makes them. */
@@ -102,9 +220,36 @@ export function runCommand(command: string, navigate: (to: string) => void): voi
   if (chat !== undefined && task !== undefined) navigate(`/chats/${chat}?task=${task}`);
 }
 
+const pickListeners = new Set<(pick: CompanionCallPick) => void>();
+
+/** Hands `listener` each pick from her menu main sends for the call; the function it returns stops it. */
+export function subscribeCompanionPick(listener: (pick: CompanionCallPick) => void): () => void {
+  pickListeners.add(listener);
+  return () => {
+    pickListeners.delete(listener);
+  };
+}
+
+let shown = true;
+const showsListeners = new Set<() => void>();
+
+/** Whether the desktop app's window shows, as main last said; true in a browser. */
+export function windowShows(): boolean {
+  return shown;
+}
+
+/** Calls `listener` at each change of windowShows(); the function it returns stops it. */
+export function subscribeWindowShows(listener: () => void): () => void {
+  showsListeners.add(listener);
+  return () => {
+    showsListeners.delete(listener);
+  };
+}
+
 /**
- * Tells the desktop app the theme setting and the language, now and on every change, and runs its
- * commands through `navigate`. Nothing in a browser.
+ * Tells the desktop app the theme setting and the language, now and on every change, runs its
+ * commands through `navigate`, hands her menu's call picks to their subscribers, a pick with none
+ * being dropped, and keeps whether its window shows. Nothing in a browser.
  */
 export function connectDesktop(navigate: (to: string) => void): void {
   const app = desktop();
@@ -128,4 +273,30 @@ export function connectDesktop(navigate: (to: string) => void): void {
   reportLanguage();
   i18n.on("change", reportLanguage);
   app.onCommand((command) => runCommand(command, navigate));
+  app.onCompanionPick?.((pick) => {
+    for (const listener of [...pickListeners]) listener(pick);
+  });
+  app.onWindowShows?.((shows) => {
+    if (shows === shown) return;
+    shown = shows;
+    for (const listener of [...showsListeners]) listener();
+  });
+}
+
+/**
+ * Hands `callback` each port main pairs this page with the desktop companion (or her page with
+ * the app window): a window message from this window itself, tagged `{eidolon: "companion-port"}`,
+ * with one port. The function it returns stops listening.
+ */
+export function onCompanionPort(callback: (port: MessagePort) => void): () => void {
+  const listener = (event: MessageEvent) => {
+    if ((event.source as unknown) !== globalThis) return;
+    const data: unknown = event.data;
+    if (typeof data !== "object" || data === null) return;
+    if ((data as { readonly eidolon?: unknown }).eidolon !== "companion-port") return;
+    const [port, ...others] = event.ports;
+    if (port !== undefined && others.length === 0) callback(port);
+  };
+  globalThis.addEventListener("message", listener);
+  return () => globalThis.removeEventListener("message", listener);
 }

@@ -107,8 +107,8 @@ describe("files", () => {
     }
     expect(STATIC_HEADERS).toEqual({
       "content-security-policy":
-        "default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' " +
-        "'unsafe-inline'; img-src 'self' blob: data: https:; media-src 'self' blob: https:; " +
+        "default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; " +
+        "style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; media-src 'self' blob: https:; " +
         "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; " +
         "form-action 'self'",
       "x-frame-options": "DENY",
@@ -120,7 +120,17 @@ describe("files", () => {
   test("a file's type is its extension's, text in UTF-8, and anything else a download", () => {
     const build = mkdtempSync(join(tmpdir(), "eidolon-dist-"));
     try {
-      const names = ["index.html", "a.js", "b.css", "c.svg", "d.png", "e.woff2", "F.JS", "g.txt"];
+      const names = [
+        "index.html",
+        "a.js",
+        "b.css",
+        "c.svg",
+        "d.png",
+        "e.woff2",
+        "F.JS",
+        "g.txt",
+        "h.wasm",
+      ];
       for (const name of names) writeFileSync(join(build, name), "x");
       const site = loadStaticSite(build);
       const types = Object.fromEntries(
@@ -138,6 +148,7 @@ describe("files", () => {
         "e.woff2": "font/woff2",
         "F.JS": "text/javascript;charset=utf-8",
         "g.txt": "application/octet-stream",
+        "h.wasm": "application/wasm",
       });
     } finally {
       rmSync(build, { recursive: true, force: true });

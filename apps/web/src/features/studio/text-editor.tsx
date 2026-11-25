@@ -63,7 +63,7 @@ export function LeaveDialog({
  * Asks before a navigation, or a reload, would drop unsaved edits, and holds them for the desktop
  * app's quit and restart boxes.
  */
-function UnsavedGuard({ dirty }: { readonly dirty: boolean }) {
+export function UnsavedGuard({ dirty }: { readonly dirty: boolean }) {
   const blocker = useBlocker(dirty);
   useBeforeUnload((event) => {
     if (dirty) event.preventDefault();

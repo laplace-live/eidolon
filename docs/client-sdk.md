@@ -1,9 +1,10 @@
 # Client SDK (`@laplace.live/eidolon-sdk`)
 
 `@laplace.live/eidolon-sdk` (`packages/sdk`) is the browser TypeScript and React SDK for calling an
-Eidolon bot over SmallWebRTC and running stateless browser-stored chats against `/api/chat/*`.
+Eidolon bot over SmallWebRTC, running stateless browser-stored chats against `/api/chat/*`, and
+drawing a persona's PSD2Live model that moves with the call.
 
-Two entries ship in the npm package, licensed under `AGPL-3.0-only`:
+Three entries ship in the npm package, licensed under `AGPL-3.0-only`:
 
 - **`@laplace.live/eidolon-sdk`** (`.`): framework-agnostic `EidolonClient`, RTVI and offer payload
   contracts, `/api/ice-servers`, `/api/memories`, stateless chat protocol/client/session/view
@@ -15,6 +16,13 @@ Two entries ship in the npm package, licensed under `AGPL-3.0-only`:
   `useEidolonTransportState`, `useEidolonMicControl`, `useEidolonMediaState`,
   `useEidolonMediaTrack`, `useEidolonNetworkInfo`, `useEidolonWatchdog`, `useEidolonConversation`,
   `useEidolonAudioLevel`, and `useEidolonMicDevices`.
+- **`@laplace.live/eidolon-sdk/avatar`** (`./avatar`): `AvatarStage`, `loadPsd2liveModel`,
+  `inspectPsd2liveRig`, `resolveSetup`, the direction reducer (`direct`, `directionOf`,
+  `directionState`), the mood table (`moodTags`, `soundCueEffect`, `DEFAULT_MOOD_EXPRESSIONS`), the
+  mouth (`MouthMeter`, `mouthCurve`), framing (`bustBox`, `companionBox`, `viewFor`, `panBox`,
+  `zoomBox`) and the runtime's loader (`compilePsd2liveRuntime`, `psd2liveRuntimeUrl`). It
+  includes PSD2Live's web player, ported, and ships its runtime: both are MIT
+  ([Avatars](#avatars-eidolon-sdkavatar)).
 
 The SDK sits on top of `@pipecat-ai/client-js` and `@pipecat-ai/small-webrtc-transport` (exact
 versions in `packages/sdk/package.json`) and hides their transport quirks so downstream apps import
@@ -38,6 +46,10 @@ zero `@pipecat-ai/*` packages directly.
   `@eidolon/chat`, `@eidolon/access`, `@eidolon/runtime`, and `apps/bot/src/chat`. It also runs
   generated logs through `buildWindow` and the server's `windowOf`, which must keep the same
   events.
+- **The avatar entry stands alone.** `src/avatar/index.ts` is its only barrel, and nothing under
+  `src/index.ts` or `src/react/` imports it: each entry is bundled whole, so an avatar module
+  reached from another would carry the runtime's `new URL(…, import.meta.url)` into a folder with
+  no runtime beside it. It has no React bindings of its own.
 - **The local web app is a consumer.** `apps/web` calls through `EidolonClient` and takes the cue
   markup, the turn `Watchdog` and server-message parsing from the SDK, with no `@pipecat-ai/*`
   package of its own. Its call transcript, call phases and chat items stay in `apps/web`: they
@@ -211,10 +223,158 @@ is stored. Its store keeps the events as received, so the words come back once i
 
 ---
 
+## Avatars (`eidolon-sdk/avatar`)
+
+The entry draws a persona's PSD2Live model, a `.p2lrt` file, on a WebGL 1 canvas, and moves it with
+a call: her mood from the cues she writes, her mouth from her voice, her gaze and gestures from the
+call's turns. The local app's Studio previews a persona's models with it.
+
+### The runtime
+
+- **What runs:** PSD2Live's runtime, `src/avatar/psd2live/wasm/p2l_runtime.wasm`, vendored byte for
+  byte from PSD2Live's committed build ([its README](../packages/sdk/src/avatar/psd2live/README.md)
+  holds the commit, the SHA-256s and the refresh steps). It imports nothing and reaches nothing but
+  its own memory.
+- **How it loads:** `compilePsd2liveRuntime(source?)` fetches it and compiles it with
+  `WebAssembly.compile` once per URL, never `compileStreaming`, which needs `application/wasm`. By
+  default it is `psd2liveRuntimeUrl()`, `new URL("./wasm/p2l_runtime.wasm", import.meta.url)`, which
+  Vite and webpack 5 resolve and ship. A host can pass a URL, the bytes or a compiled
+  `WebAssembly.Module` instead; Node's `fetch` refuses `file:` URLs, so code on Node passes bytes.
+- **One instance per model.** Each model gets a runtime instance of its own, so a trap ends only
+  that model. An instance whose ABI isn't 1.2 or a later 1.x is refused (`AvatarError` `runtime`).
+- **The page's CSP** must allow `'wasm-unsafe-eval'` in `script-src`, which permits compiling
+  WebAssembly and nothing else; without it the load fails as `runtime`. The page runs no
+  JavaScript that came with a model.
+
+### Models
+
+- **`loadPsd2liveModel(canvas, bytes, {runtime?})`** loads a rig, checking every chunk's CRC,
+  uploads its texture pages and resolves to a `Psd2liveModel`, the stage's `AvatarModel`.
+  `model.rig` reaches what the stage doesn't drive: poses, parameters and part opacity.
+- **`inspectPsd2liveRig(bytes, {runtime?})`** reads the same file without WebGL into a
+  `ModelInventory`: the runtime's version, the generator, the canvas, the clips (id, name, group,
+  duration, looping), expressions, hit areas, parameters with their ranges, parts, pose groups,
+  whether a parameter has the LipSync role, and how many texture pages. Numbers are the runtime's
+  float32 values as read. The local server reads its own inventory from the same wasm, and a parity
+  test holds the two equal.
+- **Clips are matched by group, then name, then id.** PSD2Live's editor exports name clips
+  `modifier:m32:…` with the name and group `Idle`, so a lookup by id alone finds nothing.
+- **An id a rig lacks changes nothing.** `play` with an unknown clip leaves the layer playing, and
+  `setExpressions` with only unknown ids leaves the expressions playing, where the upstream
+  player's `-1` stopped the clip or faded every expression out.
+- **A clip played once above layer 0 stops as it ends** and fades out, so the layers below show
+  through again: the runtime holds a finished one-shot at its last frame, which would freeze her
+  idle under every nod. A clip authored to loop, which never ends by itself, stops after one
+  pass. With `loop`, a clip that ends by itself starts again instead.
+- **`resolveSetup(inventory, overrides?)`** turns a model's owner's choices into what the stage
+  plays: each mood's expressions (the owner's, else `DEFAULT_MOOD_EXPRESSIONS`, kept to the ids the
+  rig has, at most two) and each gesture's clip (`idle`, `talk`, `nod`, `shake`: the owner's clip,
+  else the clip whose group, name or id is `Idle`, `Talk`, `Nod` or `Shake`).
+- **Errors** are `AvatarError`s with a `code`: `runtime` (the runtime didn't load), `rig` (the file
+  isn't a rig it reads, with the runtime's reason), `webgl` (no WebGL 1, or a mesh past 65,535
+  vertices without `OES_element_index_uint`), `lost` (the browser took the context back) and
+  `trap` (the runtime failed while running).
+
+### The stage
+
+`new AvatarStage(canvas, {maxPixelRatio?, fps?, reducedMotion?, onError?, clock?})` owns the frame
+loop; the model has none of its own.
+
+- **`show(model, setup)`** disposes the model shown before; the same model shown again takes the new
+  setup in place, without starting over a clip the setup didn't change, and stops one it took
+  away. `frame(box)` frames a region of the rig's canvas, filling the element whatever its size;
+  until it is called the stage shows the whole canvas.
+- **The loop** runs on animation frames (`clock`, which tests replace), at `fps` at most when it is
+  above 0, stepping at most 0.1 s a frame. It pauses while the page is hidden, while an
+  IntersectionObserver says the canvas is off screen, and after `pause()`. The device pixel ratio
+  is capped at `maxPixelRatio` (2).
+- **`direct(direction)`** sets what the next frame applies, the latest winning: `idle` loops on clip
+  layer 0, `talk` plays on layer 1 while she speaks, each new gesture plays once on layer 2, and the
+  expressions are her mood's and a cue's lent mood's, the lent one first, at most two.
+- **`gaze(mode)`:** `"direction"` looks at the viewer while she listens, up and aside while she
+  thinks, and around the viewer (within 0.15, every 2 to 5 s) otherwise; `"pointer"` follows the
+  pointer; a pair `[x, y]` holds a point.
+- **`mouth(source)`** reads a `MouthSource` once a frame; `wear(outfit)` shows an outfit's pose
+  entries, holds its parameters and hides its parts.
+- **`reducedMotion`** keeps her face and mouth, and the blinking and breathing the runtime does by
+  itself, and leaves out every clip (idle, talking and gestures) and the wandering eyes.
+- **Errors:** a model that throws, or a lost WebGL context, is disposed and reported to `onError`
+  once, so the page can show her picture instead. `alphaAt(x, y)` resolves with the drawn alpha
+  under a page point after the next draw, read before the page composites the frame.
+
+### Direction
+
+`direct(state, event)` is a pure reducer over the call's events, each with `at` in milliseconds;
+`directionOf(state, persona?)` gives a `Direction` (mood, lent mood, speaking, listening,
+thinking, where she looks, the latest gesture). Both are plain data, so they cross a `MessagePort`.
+
+- **Events:** `user-started-speaking`, `user-stopped-speaking`, `user-words` (a transcript or a
+  typed line), `bot-llm-started`, `bot-started-speaking`, `bot-stopped-speaking`,
+  `bot-interrupted`, `bot-output` (`segment`, `text`, `status` and `spoken` from `botOutput`'s
+  `segment_id`, `text`, `spoken_status` and `spoken_progress.accumulated_text`'s length),
+  `function-call`, `speaker` (a group call), `tick` (send one every 100 ms or so), `reply` (a
+  chat reply no voice says) and `reset`.
+- **Her mood** comes from the `[direction]` a reply's first segment opens with, through
+  `moodTags`; a reply that opens with none is neutral, and its later segments keep its mood. A
+  reply starts at the first segment after the viewer's words (unless they came while she was still
+  speaking), an interruption, or a group call's `speaker`.
+- **Cues** such as `[chuckling]` lend a mood for a moment and may nod (`soundCueEffect`). One before
+  the segment's first word lands as the segment starts. The rest land as `spoken` passes them, for
+  a voice with word timings; Fish reports only `new` and then `completed`, so there they land at
+  her pace, 4.5 voiced letters a second from `new`, never later than `completed`.
+- **Listening and thinking:** she watches the viewer while they speak, nods once their words are
+  in, and thinks (looking away) until she speaks; `bot-llm-started` and `function-call` have her
+  thinking too. Speaking comes only from `bot-started-speaking` and `bot-stopped-speaking`: a
+  realtime model's `bot-output` arrives after its audio.
+- **Group calls:** `speaker` routes the bot events after it to that persona; the viewer's events
+  reach everyone. Word, token, backchannel and expression outputs are skipped.
+
+### Moods
+
+`moodTags(direction)` reads a direction such as `懒洋洋的，带点笑意` into at most two of
+`MOOD_TAGS` (happy, gentle, lazy, pout, wry, shy, sad, angry, surprised, thinking, gloom), in a
+fixed precedence: Chinese keywords match anywhere, except `哭` inside `哭笑不得`, `困` inside
+`困惑`, `困扰` and `困难`, and a keyword right after a negation (`不开心`, `没有生气`, `不太高兴`),
+and English ones as whole words. `DEFAULT_MOOD_EXPRESSIONS` maps each to
+the standard expression ids PSD2Live gives a generated rig (`smile`, `sleepy`, `angry`, `sad`,
+`shy`, `surprised`, `gloom`); lazy and happy together show sleepy and smile. `soundCueEffect(name)`
+decides every cue in `CUE_EMOJI`.
+
+### Mouth and framing
+
+- **`mouthCurve(dbFrames, o?)`** turns loudness into a mouth opening: a loudness map from -40 to
+  -10 dBFS, weighed against the last 0.25 s's peak and 0.12 s's dip so the mouth shuts between
+  syllables, then an attack and release envelope (`MOUTH_CURVE`). Tuned on her Fish voice, it shuts
+  the mouth on 25% of voiced frames, 1.5 times a second, where the loudness map alone gave 0.46
+  ([its benchmark](benchmarks/2026-11-23-mouth-curve/README.md)).
+- **`new MouthMeter(trackOrStream, {context?, curve?})`** reads a track through an AnalyserNode
+  that reaches no speaker, as float samples; the stage reads it each frame. An AudioContext made
+  outside a click starts suspended, so make it in the click that starts the call.
+- **Framing** works in the rig's canvas pixels: `bustBox(head, character)` (the head 42% of the
+  height, its centre 40% down, 4:5), `companionBox(character)` (all of her with 4% around),
+  `viewFor(box, rig, element)` (the player's view containing it), and `panBox` and `zoomBox` for
+  an editor.
+
+### Licenses and the pack
+
+- **PSD2Live's player is ported, its runtime vendored, both MIT.** `src/avatar/psd2live/rig.ts`
+  and `renderer.ts` are ported from PSD2Live's `p2l.js` and keep its MIT header; the SDK keeps
+  `LICENSE-psd2live` and `THIRD_PARTY.md`, and `NOTICE` names the holder. The bundle drops
+  comments, so the pack carries the license files whole. PSD2Live's editor is GPL-3.0 and none of
+  it is here.
+- **The pack** holds `dist/avatar/index.js` (one bundle, for browsers and Node alike),
+  `dist/avatar/index.d.ts`, `dist/avatar/wasm/` (`p2l_runtime.wasm`, its `LICENSE` and
+  `THIRD_PARTY_LICENSES.md`), and `LICENSE-psd2live` and `THIRD_PARTY.md` beside the AGPL
+  `LICENSE`. Bun keeps the runtime's `new URL` as written and copies nothing, so the build copies
+  `wasm/` beside the bundle, and `checkAssetUrls` fails a pack whose bundle names a file that
+  isn't there.
+
+---
+
 ## Building and releasing
 
 ```bash
-bun run build:sdk     # bundles dist/index.js + dist/react/index.js + .d.ts into packages/sdk/pack/
+bun run build:sdk     # bundles dist/index.js, dist/react/index.js, dist/avatar/index.js and its runtime + .d.ts into packages/sdk/pack/
 bun run pack:sdk      # stages packages/sdk/pack/ and packs laplace.live-eidolon-sdk-<version>.tgz
 ```
 

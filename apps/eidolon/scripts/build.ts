@@ -16,6 +16,7 @@ import {
   builtinSkillsDir,
   cliEntry,
   jiebaDir,
+  psd2liveDir,
   resamplerDir,
   serverEntry,
   templatesDir,
@@ -370,8 +371,8 @@ export function notices(dist: readonly Bundled[], web: readonly Bundled[]): stri
   return [
     "# Third-party notices\n",
     "The bundles in dist/ and the web app in web/ include the packages below, each with its",
-    "license. NOTICE covers the code ported from pipedog and pi-mono, and the data and the font",
-    "the package ships.\n",
+    "license. NOTICE covers the code ported from pipedog, pi-mono and PSD2Live, PSD2Live's",
+    "runtime, and the data and the font the package ships.\n",
     "## dist/\n",
     ...sections(dist),
     "## web/\n",
@@ -412,6 +413,7 @@ export async function stage(root: string): Promise<Manifest> {
   copyTracked(builtinSkillsDir(), inPackage(root, builtinSkillsDir));
   copyTracked(jiebaDir(), inPackage(root, jiebaDir));
   copyTracked(resamplerDir(), inPackage(root, resamplerDir));
+  copyTracked(psd2liveDir(), inPackage(root, psd2liveDir));
   copyTracked(voiceModelsDir(), inPackage(root, voiceModelsDir));
   writeFileSync(
     join(root, "THIRD_PARTY_NOTICES.md"),

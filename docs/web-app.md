@@ -1,9 +1,9 @@
 # The local web app
 
 Eidolon on your own computer, with a web app to set it up, build personas, and call or text them: a
-setup wizard, a persona studio (identity, prompt, voice, facts, videos, glossary, pictures), a call
-page, text chats, the tasks she runs on this computer when asked in a chat or on a call in one,
-settings, and the offline chain's commands run as jobs. It is a second entry
+setup wizard, a persona studio (identity, prompt, voice, appearance, facts, videos, glossary,
+pictures), a call page, text chats, the tasks she runs on this computer when asked in a chat or on a
+call in one, settings, and the offline chain's commands run as jobs. It is a second entry
 point beside the bot, `apps/bot/src/local/`, serving the built app from `apps/web/` (Vite, React,
 shadcn, Tailwind) on loopback only. The bot that `bun run start` and the Docker image run never
 loads it.
@@ -137,7 +137,9 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
     `Sec-Fetch-Site` other than `same-origin` or `none`, since every localhost port is the same
     site to a browser;
   - a change (any method but GET and HEAD) made with the cookie must carry `Origin`;
-  - HEAD on a GET API route gets 405, and `/api/local` answers are `Cache-Control: no-store`.
+  - HEAD on a GET API route gets 405, and `/api/local` answers are `Cache-Control: no-store`,
+    except a chat's files and a character model's file, served under their content's hash, which
+    are `private, max-age=31536000, immutable`.
 - **Listed origins.** `EIDOLON_LOCAL_ALLOWED_ORIGINS`, comma-separated and read at boot, lets
   another site's pages, such as one built on `@laplace.live/eidolon-sdk` at
   `http://localhost:3000`, call the bot's API: `/api/ice-servers`, `/api/offer`,
@@ -171,8 +173,10 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
   digests in constant time; the cookie alone is 401 `proof-missing`, and the page shows the
   sign-in screen, which asks for the link. The two pictures the page shows as `<img>`, which can't
   send a header, take the cookie alone: a persona's avatar and her reference images, and only to
-  read them. A Bearer token needs neither, and `/api/selfie/:id` stays gated by its own unguessable
-  id.
+  read them. A character model's file is not one of them: the page fetches it with the proof, so
+  a service on another port that holds the cookie can't read a model the owner may not
+  redistribute. A Bearer token needs neither, and `/api/selfie/:id` stays gated by its own
+  unguessable id.
 - **Bearer.** A CLI or a test that can read `local-token` sends it as `Authorization: Bearer
   <secret>`; a header can't ride along on a cross-site request, so it needs no `Origin`:
 
@@ -186,7 +190,10 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
 - **The app's own files** are read into memory from `apps/web/dist` once at boot. A request path
   is looked up in that map, never joined to a filesystem path; an unknown one gets `index.html`.
   Every page carries a strict `Content-Security-Policy` (`frame-ancestors 'none'`),
-  `X-Frame-Options: DENY`, `nosniff` and `Referrer-Policy: same-origin`.
+  `X-Frame-Options: DENY`, `nosniff` and `Referrer-Policy: same-origin`. Its `script-src` adds
+  `'wasm-unsafe-eval'` for PSD2Live's runtime, which lets a page compile WebAssembly and nothing
+  more: no `eval`, and no script from anywhere but the app. The page runs no JavaScript that came
+  with a model, only the runtime the app ships.
 - **What a request may name on disk.** Persona ids are slugs, `^[a-z0-9][a-z0-9_-]{0,63}$`; job
   ids are minted by the server and only looked up; a fact or picture name is one plain path
   segment with an allowed extension: `.txt` for a fact, `.png`, `.jpg`, `.jpeg` or `.webp` for an
@@ -195,6 +202,13 @@ the secret behind them, are the only boundary, so treat the link, the cookie, th
   and a rename. Uploads are recognized by their bytes (PNG, JPEG, WebP) and capped at 20 MiB, and
   only a picture whose bytes are one of the three is served. A persona's path settings must stay
   inside her folder, and `sources.ytDlp` can't be set through the API.
+- **Character models.** A model's id is a slug the server makes from the uploaded file's name,
+  and then its folder's name, never a path the request gives or a value its `model.json` holds;
+  every route checks one it is sent before looking it up. An upload is recognized by the `.p2lrt`
+  header, capped at 200 MiB counted as it streams, and loaded by the copy of PSD2Live's runtime
+  the app ships, every chunk's CRC checked and every texture a PNG inside the file, before
+  anything is written; the runtime's wasm imports nothing, so it touches only its own memory.
+  Models are kept only in the data home, and `appearance.model` takes only the id of one she has.
 - **Secrets at rest.** `credentials.json` is written 0600 from creation; no answer returns a key
   or quotes what a request sent; the data home, `jobs/`, `locks/` and `chats/` are created
   0700, and a chat's files 0600.
@@ -211,13 +225,14 @@ server log's line that holds what went wrong, and the app shows it beside the de
 | --- | --- | --- |
 | Session | `POST session`, `GET session` | Trades a link code for the cookie and the proof; GET says whether the caller is signed in, or with `?probe=` proves this server holds the secret, for a second start |
 | Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe: the keys her call roles need, each role's provider and model or what is wrong with them, her voice, and `assistant: { enabled, ready, problem, running, search, kinds }`, Assistant Mode's state, why it isn't ready, how many tasks run, whether tasks can search the web (`{ on, problem }`), and why each kind of task runs on Assistant Mode's own model, if it does; restart is refused during a call, or while one is connecting |
-| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); and her voice styles, with each one the environment sets and whether she inherits it, replaces it with one of hers, or ignores it while her voice isn't the environment's; PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, and written to `settings.yaml` or her `persona.yaml`; one that turns Assistant Mode off, as the environment and the file decide it, answers once every live task is cancelled |
+| Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); and her voice styles, with each one the environment sets and whether she inherits it, replaces it with one of hers, or ignores it while her voice isn't the environment's; PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, `appearance.model` against her character models, and written to `settings.yaml` or her `persona.yaml`; one that turns Assistant Mode off, as the environment and the file decide it, answers once every live task is cancelled |
 | Accounts | `GET`, `POST accounts`, `PUT`, `DELETE accounts/:id`, `POST accounts/check`, `GET accounts/:id/models?category=` | Every provider account: `credentials.json`'s, and each provider's default that the environment configures or her calls need, with where its key comes from and never the key, its API base and settings, and which settings name it; a new one takes its provider's id while that is free, else `<provider>-2` and on; an API base is refused for a provider without a base variable; DELETE is refused while a settings file names it; the check asks the provider about a typed or the saved key, where the catalog says how: a free listing, never a model call; models lists what the provider's API offers now ([providers.md](providers.md#model-lists)) |
 | Credentials | `GET`, `PUT credentials`, `POST credentials/check` | The secrets `credentials.json` keeps under variable names, `{NAME: {set, source}}`, never a value; the check is Qdrant's for the memory step and home |
 | Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice, the providers and models the active persona's `persona.yaml` sets for `hearing`, `mind`, `voice` and `knowledge.gate`, and a starter `prompt.md`), switch (refused during a call, or while one is connecting). A new persona's voice is her voice provider's: a Fish Audio voice id, or for another provider one line of text |
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
 | Voice styles | `PUT personas/:id/voice-styles` | `{styles}`: all of hers, in order, each with a name of its own, a voice and a hint, replacing her `persona.yaml`'s `voice.styles`; answers as `GET settings` does. Any name her file can hold passes, since a save sends back those a hand-written file gave her; the studio names a new style with a lowercase letter, then letters, digits or `_`, never `default` |
 | Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar` | Outfits and friends under `references/`, and the avatar, `avatar.*` at the root of her folder, where selfies never take it for an outfit; a template's pictures can't be deleted |
+| Character models | `GET`, `POST personas/:id/models?filename=`, `PUT personas/:id/models/:model/file`, `PATCH`, `DELETE personas/:id/models/:model`, `GET personas/:id/models/:model/file?sha256=` | Her PSD2Live models, each in `models/<model>/` of her folder in the data home, never a template's ([avatar.md](avatar.md)): POST takes a `.p2lrt`'s bytes, which PSD2Live's runtime loads before they are kept, under an id and a name made from `filename`, the name numbered past her other models' (`tml 2`), and never makes it the one she shows, which is `appearance.model`, set through `PUT settings`; GET's `active` is that model, while she has it. PUT puts a new file in place, keeping the model's settings that still name what it holds; PATCH replaces its name, framing, moods, gestures, outfits or outfit, each checked against what the file holds; DELETE also clears her `appearance.model` when it names the model. The file is served under its sha256 as immutable, which a browser keeps for good and the desktop app's page fetches again on each full load. An import or a new file is refused during a call, or while one is connecting (409 `call-active`). A persona's summary and status' `persona` carry `appearance.model`: the active model's id, name, kind, sha256 and `updatedAt`, or null |
 | Knowledge | `personas/:id/facts[/:file]`, `GET personas/:id/index` | Fact files with whether the patterns pick them and whether they changed since the last index; the index from its build records |
 | Videos | `POST personas/:id/batches` | `{urls}` → a new batch of the URLs her lists don't have yet |
 | Voices | `GET voices/search?q=&language=&page=`, `GET accounts/:id/voices?q=&visibility=&page=` | Fish Audio's public voices, searched without your key; a Fish account's own, private and unlisted ones included, newest first, listed with its key, and `status` saying when it has no key or Fish refuses it |
@@ -252,14 +267,14 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `method-not-allowed` | 405 | Another method, any `OPTIONS`, HEAD on a GET route; `Allow` names the right one |
 | `conflict` | 409 | A file that doesn't read as it should (`credentials.json`, a `persona.yaml`, a hand-made URL list, a `settings.yaml` an Always answer would write), a persona `EIDOLON_PERSONA` pins, a job an earlier server started |
 | `payload-too-large` | 413 | A body or upload over its cap |
-| `unsupported-media-type` | 415 | An upload that isn't one of the image or text types its route takes, by its bytes |
+| `unsupported-media-type` | 415 | An upload that isn't one of the image or text types its route takes, or a model that doesn't start as a `.p2lrt` does, by its bytes |
 | `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
 | `upstream-failed` | 502 | Mem0 or Fish Audio failed |
 | `internal` | 500 | A bug; the server log's line with the answer's `id` has the details |
 | `invalid-persona-id` | 400 | A persona id that isn't a slug |
 | `unknown-persona` | 404, 400 | No persona has that id; 400 in a job's body |
 | `persona-exists` | 409 | Creating a persona with an id in use |
-| `call-active` | 409 | Switching persona or restarting during a call, or while one is connecting |
+| `call-active` | 409 | Switching persona, restarting, or importing or replacing a character model during a call, or while one is connecting |
 | `unknown-setting` | 400 | A path no setting of that scope has |
 | `invalid-setting` | 400 | A value its setting's kind refuses, or a voice style without a name of its own or a voice |
 | `read-only-setting` | 400 | `sources.ytDlp` |
@@ -290,11 +305,14 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `unknown-mcp-server` | 404 | Changing a server `mcp.json` doesn't hold; the message never names what was sent |
 | `invalid-mcp-config` | 409 | Changing `mcp.json` from Settings, or answering Always on an MCP call's card, while it doesn't parse |
 | `linked-mcp-config` | 409 | The same, while `mcp.json` is a symbolic or hard link to another file, which a write would replace with a copy |
+| `invalid-model` | 400 | A `.p2lrt` PSD2Live's runtime refuses, such as a cut-off file or a chunk that fails its CRC, or one whose textures aren't PNGs inside the file or whose inventory passes 1 MiB; the message says why (the runtime's reason when it refused), without control characters, at most 200 characters |
+| `unknown-model` | 404 | No character model of hers has that id |
 
 ## The setup wizard
 
 `/setup` runs five steps: keys, persona, voice, memory and done. While a key the active persona's
-calls need is missing, every page but Settings sends you to its first.
+calls need is missing, every page but Settings sends you to its first, except during a call, which
+opening setup would end (`firstRunRedirect`).
 
 - **Keys** picks an account for each role a call needs (who hears, thinks and speaks) and for the
   optional ones (embeddings, for every persona, and her retrieval gate's decision model), from each
@@ -364,47 +382,76 @@ and `components/app-sidebar.tsx`, on shadcn's `Sidebar`):
   a chat's or the call's header, and following a link in it closes it.
 - **The page:** a chat, `/chats` and the call page fill the window beside it under their own
   headers; every other page scrolls in a column there, and the window itself never scrolls. A
-  layout that sits side by side when wide, such as the studio's and Settings' sections, goes by the
-  width it is given, through a container query, not the window's, which the sidebar shares.
+  layout that sits side by side when wide, such as the studio's and Settings' sections, or a model
+  beside its tabs in the studio's Appearance, goes by the width it is given, through a container
+  query, not the window's, which the sidebar shares.
+- **The call bar,** **Ongoing Call**, sits at the foot of the page while a call is up and nothing
+  on the page shows it (`features/call/call-bar.tsx`): whom the call is with, her picture ringed
+  while she speaks, the call's state line and timer, its notices, the mic's toggle, **Hang Up** and
+  **Return to Call**. A call that ended on its own keeps its reason there, with **Return to Call**
+  and **Close**, until **Close**; one the viewer hung up leaves nothing. It shows her picture, never
+  her model, and is never a drag row.
 
 ## In the desktop app
 
 The desktop app (`apps/desktop`) shows this same app in its own window, at `eidolon-app://app/`,
 and its main process adds the Bearer to every request, so the page never signs in
-([desktop.md](desktop.md) has the app itself). Its preload gives the page two things; a browser
-has neither, and without them nothing below happens.
+([desktop.md](desktop.md) has the app itself). Its preload gives the page three things; a browser
+has none of them, and without them nothing below happens.
 
 - **The bridge**, `window.eidolonDesktop` (`lib/desktop.ts`): `{platform, version, serverVersion,
   setTheme(setting), setLanguage(language), onCommand(callback)}`, `platform` being Node's name for
   the OS (`darwin`, `win32`). The page reports the theme *setting* (`light`, `dark` or `system`,
-  never the theme System resolves to) and the active language (`en`, `zh-Hans`) once at start and
-  on every change. `onCommand` hands it the menus' and the notifications' commands: `settings`
-  opens `/settings`, `tasks` `/tasks`, and `open-task:<chat>:<task>` `/chats/<chat>?task=<task>`
-  when both are ids; one it doesn't know is ignored (`runCommand` in `lib/desktop.ts`). The members
-  added since the first desktop release are optional, since a terminal's server can serve this
-  page to an older app, and the page looks for each before it uses it: `chooseFolder()`,
-  `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and `setTerminalCommand(action)`, each a
-  promise of main's answer ([desktop.md](desktop.md#the-window)), and `unsaved(held)`. A studio
-  text editor with unsaved edits holds them through `holdUnsaved()`, counted, so the app hears
-  `true` as the first hold starts and `false` as the last ends, for its quit and restart boxes.
+  never the theme System resolves to) and the active language (`en`, `zh-Hans`) once at start and on
+  every change. `onCommand` hands it the menus' and the notifications' commands: `settings` opens
+  `/settings`, `tasks` `/tasks`, `call` `/call`, and `open-task:<chat>:<task>`
+  `/chats/<chat>?task=<task>` when both are ids; one it doesn't know is ignored (`runCommand` in
+  `lib/desktop.ts`). The members added since the first desktop release are optional, since a
+  terminal's server can serve this page to an older app, and the page looks for each before it uses
+  it: `chooseFolder()`, `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and
+  `setTerminalCommand(action)`, each a promise of main's answer
+  ([desktop.md](desktop.md#the-window)); `unsaved(held)`; and the [desktop
+  companion](desktop.md#the-desktop-companion)'s: `companion()`, `setCompanion(change)` and
+  `popOut()`, each a promise of her state (`on`, `showAtLogin`, and `background`, true while
+  background mode keeps her off screen); `linkCompanion()`, which asks main for a port to her page,
+  and `feedingCompanion(feeding)`, whether a call she is on is up here; `onCompanionPick(callback)`,
+  which hands the page her menu's picks for the call, `call`, `hang-up`, `mute` or `unmute`; and
+  `onWindowShows(callback)`, whether the window shows, at once and at each change. `connectDesktop`
+  passes each pick to whoever listens through `subscribeCompanionPick` at that moment, and drops one
+  nobody does, and keeps the window's showing as a store (`windowShows()`, `subscribeWindowShows`),
+  true in a browser, by which the call's provider and Studio's preview hold their stages while the
+  window doesn't show, and `main.tsx` marks `<html>` with `data-window-hidden`, under which
+  `index.css` pauses every animation. A studio text editor or Appearance's model draft with unsaved
+  edits holds them through `holdUnsaved()`, counted, so the app hears `true` as the first hold
+  starts and `false` as the last ends, for its quit and restart boxes.
+- **The port** to her page, which isn't a bridge member, since the preload posts it: a window
+  message from this window itself, tagged `{eidolon: "companion-port"}`, with one port, which
+  `onCompanionPort` hands on. Main pairs the app page and hers once both have asked, and again
+  whenever either asks. Over it this page tells her the active persona, the call and her chat
+  ([avatar.md](avatar.md#the-desktop-companion)); the one thing her page asks of it is
+  `appearance`, after her menu changed her model or her outfit, which has this page read her
+  models, the personas and status again. Her menu's call picks never cross it: they come from main.
 - **The marks** on `<html>`: `data-shell`, `mac` or `win`, and on macOS `data-fullscreen` while the
   window is fullscreen. The preload sets `data-shell` as `<html>` is created, before the page's
   script runs and before its first paint, and `data-fullscreen` as the window enters and leaves
   fullscreen; nothing in the page depends on when a mark lands. The chrome they turn on is in
   `index.css`, at its end, and the `shell:` variant there styles a component only in the desktop
-  app.
+  app. The desktop companion's page gets `data-companion` instead, never `data-shell` or
+  `data-fullscreen`, and `window.eidolonCompanion` instead of `eidolonDesktop`, so `desktop()` is
+  null there and her page asks `companion()`.
 
 **The chrome.** The window has no title bar. A row marked `data-window-drag` stands in for it: the
 window drags by the row, while its links, buttons and fields keep their clicks. The rows are the
 sidebar's first row (the logo), each page's header (a chat's, the call's, setup's), and the bar
-above a page without one, `MobileBar`. A browser shows that bar only below `md`, with the sidebar's
-button and the logo; the desktop app keeps it from `md` up too, empty, 3.5rem tall: the height of a
-chat's header, and the height the window's caption buttons on Windows should take. The page
-scrolls in a box of its own below it, not in the frame (`PageLayout` in
-`components/app-shell.tsx`), as setup's page does below its header, so no row is in what scrolls;
-the skip link focuses that box, which the keys then scroll. An error, the sign-in screen and the
-loading spinner get a strip of their own (`WindowDragStrip`). The rows keep clear of the window's
-buttons, whose place the Window Controls Overlay gives as `env(titlebar-area-*)`:
+above a page without one, `MobileBar`; the call bar, at a page's foot, is never one. A browser
+shows `MobileBar` only below `md`, with the sidebar's button and the logo; the desktop app keeps it
+from `md` up too, empty, 3.5rem tall: the height of a chat's header, and the height the window's
+caption buttons on Windows should take. The page scrolls in a box of its own below it, not in the
+frame (`PageLayout` in `components/app-shell.tsx`), as setup's page does below its header, so no
+row is in what scrolls; the skip link focuses that box, which the keys then scroll. An error, the
+sign-in screen and the loading spinner get a strip of their own (`WindowDragStrip`). The rows keep
+clear of the window's buttons, whose place the Window Controls Overlay gives as
+`env(titlebar-area-*)`:
 
 - **macOS:** the traffic lights sit at the top left. A page's row starts after them, measured from
   the window's edge: at the edge while the sidebar is a sheet, beside the 3rem rail when collapsed.
@@ -425,16 +472,50 @@ buttons, whose place the Window Controls Overlay gives as `env(titlebar-area-*)`
   to.
 - **Settings → Desktop** (`features/settings/desktop-card.tsx`), last before Advanced, shows only
   when the bridge has all four of `loginItem`, `setLoginItem`, `terminalCommand` and
-  `setTerminalCommand`; elsewhere `?tab=desktop` leads to the default section. Its Desktop App card
-  asks the bridge, never the server, and acts at once: **Open at Login**'s switch, with a note to
-  turn Eidolon on under System Settings → General → Login Items while macOS waits for that, read
-  again every 3 s until it does; and **Terminal Command**'s Install or Remove, with where it goes or
-  is (on Windows a folder on the PATH, which a new terminal sees; on macOS a link, whose Install may
-  ask for a password), or that another `eidolon` is there, which disables Install. A copy that
-  can't offer them says why under each, its control disabled (`desktop-notes.ts`): background
-  mode, a build that isn't the installed app, or a Mac copy outside the Applications folder. A
-  failed change toasts where Show Logs is, and a cancelled password prompt says nothing
-  ([desktop.md](desktop.md#open-at-login), [the terminal command](desktop.md#the-terminal-command)).
+  `setTerminalCommand`, or both of `companion` and `setCompanion`; elsewhere `?tab=desktop` leads to
+  the default section. Its Desktop App card, "What Eidolon can add to this computer, each only when
+  you choose it.", asks the bridge, never the server, and acts at once, its rows in this order, each
+  only when the bridge offers it: **Open at Login**'s switch, with a note to turn Eidolon on under
+  System Settings → General → Login Items while macOS waits for that, read again every 3 s until it
+  does; **Desktop Companion**'s switch, which shows and hides the [desktop
+  companion](desktop.md#the-desktop-companion), and **Show at Login**'s, which has a launch at login
+  show her before the window, disabled while she is off; and **Terminal Command**'s Install or
+  Remove, with where it goes or is (on Windows a folder on the PATH, which a new terminal sees; on
+  macOS a link, whose Install may ask for a password), or that another `eidolon` is there, which
+  disables Install. A copy that can't offer Open at Login or the terminal command says why under
+  each, its control disabled (`desktop-notes.ts`): background mode, a build that isn't the installed
+  app, or a Mac copy outside the Applications folder. Under Desktop Companion it says when
+  background mode never shows her, and while status names no active model for her, that she shows
+  as her picture; her switches stay usable in background mode, where main keeps her off screen. The
+  card reads her again every 2 s while it shows, since her menu's Hide, the tray, the Window menu
+  and Pop Out switch her too. A failed change toasts where Show Logs is, and a cancelled password
+  prompt says nothing ([desktop.md](desktop.md#open-at-login), [the terminal
+  command](desktop.md#the-terminal-command)).
+- **Pop Out,** on the video screen of a call the active persona is on, while the bridge has
+  `popOut` (`features/call/video-call.tsx`), before Hang Up: it turns the desktop companion on and,
+  once she is drawn, main hides the window and the call goes on in it, the screen mounted; her
+  menu's Open Eidolon, the Dock or the tray brings the window back.
+- **The desktop companion's page,** `/companion` (`features/companion/route.tsx`): a route of the
+  same `index.html`, outside the app's shell and its root loader, which would send a fresh install
+  to `/setup`, lazy, with `Nothing` and `CompanionError` static on the route, so a chunk that fails
+  to load still has a boundary, which tells main she isn't drawn. In a browser it renders nothing.
+  In her window it paints nothing but her (`index.css`'s `html[data-companion]` rules: a transparent
+  page whose `color-scheme` stays normal over the theme's, never a dark backdrop), draws the active
+  persona's model, or her picture, and tells main when she is drawn
+  ([avatar.md](avatar.md#the-desktop-companion)).
+- **The desktop companion's feed,** `CompanionFeed` (`features/companion/feed.tsx`), in the shell's
+  `CallProvider`: it renders nothing, and runs only while the bridge has `linkCompanion` and
+  `feedingCompanion`. It asks for her port as it mounts, and over each new port tells her the active
+  persona with her active model's stamp, then the call. It passes on her messages as they reach the
+  open chat (`saidFacts` in `features/companion/chat-facts.ts`): only the active persona's, only
+  what extends the log the page held, so nothing the page read and nothing a replay repeats is
+  told, her words before a tool call included, a call's lines left to the call; and her voice
+  messages as their bubble plays, pauses and ends (`VoiceBubble`'s `fact`). While a call of hers is
+  up it tells main so (`feedingCompanion`), sends the call's direction as it changes, and reads a
+  second meter on the call's track for her mouth about 30 times a second, in a group call only while
+  her direction speaks. Her menu's call picks act here, as main hands them over: Call places
+  `/call`'s call with her when `/call` can call (`callBlocker`) and opens `/call`, Hang Up hangs up,
+  and Mute and Unmute set the microphone.
 - **Choose Folder,** under Settings → Assistant Mode's folders while the bridge has
   `chooseFolder`: the native folder dialog, whose pick joins the draft on a line of its own unless
   a line already holds it (`appendPath`); saving decides, as for a typed one. A pick the list
@@ -466,7 +547,8 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     lines in a centered column. With none open, `/chats` offers **New Chat**.
   - **The message box** floats at the foot of the column, with no bar behind it: the lines scroll
     under it and fade out above it, and the waiting bar, the call's dock and a reply that couldn't
-    start stack above it. Under the text is a row: the chat's permission picker
+    start stack above it, while a call with her model shows its screen over the column in the
+    dock's place. Under the text is a row: the chat's permission picker
     ([Tasks](#tasks)) or whom the line mentions, then **Stop** while a reply runs, and the
     microphone or **Send**. A press anywhere in the box off its buttons puts the caret in the text.
   - **New Chat**, in the sidebar or on `/chats`, ticks one to six personas, the active one listed
@@ -588,38 +670,66 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
   keeps running when the tab closes.
 - **A call in the chat** ([chat.md](chat.md#calls)):
   - **Call** in the header calls her in a chat of one; in a group it opens **Who to Call**. She
-    needn't be the active persona. It is disabled while the chat is in a call, by this page's word
-    or by `ChatContents.call`.
+    needn't be the active persona. It is disabled while the chat is in a call, by this tab's word
+    or by `ChatContents.call`, and unavailable, with a tooltip saying so, while this tab is on a
+    call anywhere else.
   - **The dock** above the composer shows her avatar, ringed while she speaks, the call's state
     line, the call's notices, the mic's mute toggle and **Hang Up**. Hanging up closes it. A call
-    that ends any other way stays docked with why, **Call Again** and **Close**.
+    that ends any other way stays docked with why, **Call Again** and **Close**. With her model,
+    its picture is her model live, and **Expand** opens the screen.
+  - **Her model:** when the persona called (anyone, on a group call) has an active model
+    ([avatar.md](avatar.md#the-call-screen)), the call opens as a video call over the chat's
+    column, named as the dock is: her model bust-up, or a tile per persona on a group call, the
+    speaker's lit and moving her mouth, her picture for anyone without one; her name and the timer
+    on top; a caption of the last thing said, dimmed once said, on or off as `localStorage`'s
+    `eidolon.call.captions` remembers; her latest photo; the mic's mute toggle, **Captions**,
+    **Shrink** and **Hang Up**; and the call's notices, the mic's pill and the waiting bar. The log
+    under it is inert. **Shrink** docks the call, and a call that ends docks as one without a model
+    does. A model that fails to load shows her picture, and the call goes on; when no one's model
+    draws, the call shows as one without a model.
   - **A group call** is answered as it connects, since no one greets on one: its state line never
     waits for an answer, and until the viewer speaks the log says everyone can hear them.
   - **The composer** waits, disabled and reading **In a call**, keeping any draft; Stop and the
     microphone are hidden, and a recording under way is thrown away. It takes the focus back when
-    the call ends.
-  - **What is said** shows as it is said, on the page that placed the call: below the call's start,
-    the call's own transcript (`call-live.ts`) stands in for its stored lines, the viewer's words
-    as they are heard and hers sentence by sentence as she says them, the rest dimmed until she
-    has, with the thinking dots and the stuck notice of `/call`. The chat stores a line only once
-    it is finished, her reply once all of it has played.
+    the call ends. In the tab's other chats during a call, text still sends, but the microphone is
+    hidden.
+  - **What is said** shows as it is said, on the chat's page, whenever it is open: below the call's
+    start, the call's own transcript (`call-live.ts`) stands in for its stored lines, the viewer's
+    words as they are heard and hers sentence by sentence as she says them, the rest dimmed until
+    she has, with the thinking dots and the stuck notice of `/call`. The chat stores a line only
+    once it is finished, her reply once all of it has played.
   - **What is stored** arrives through `GET chats/:id/live` as call lines, and takes the
     transcript's place once the call's end is stored after them: messages with a small phone mark,
     her cut-off ones marked **Interrupted**, with no Why She Answered, and her selfies as photos.
     The call's start and end are quiet centred lines, "Call with 奶绿 · 3:12" and "Call ended".
-  - **Voice messages** stay quiet, since the microphone would hear them: a call starting pauses the
-    one playing and drops those waiting to play on their own, and none plays on its own until the
-    call ends. Play still plays one.
+  - **Voice messages** stay quiet in every chat while any call is up in the tab, since the
+    microphone would hear them: a call starting pauses the one playing, and none plays on its own,
+    or waits to, until the call ends. Play still plays one.
   - **Another tab** that learns of the call from `ChatContents.call`, as a refused send rereads it,
     follows it too, and gets its composer back when the call ends.
   - **Her tasks on a call,** in a chat of hers alone: she starts, checks, steers and stops them by
     voice ([assistant.md](assistant.md#calls)). The card of a task she starts on the call is stored
-    at its place in the log, which while this page holds the call is under the call's separator,
-    above its transcript, and among the call's lines once its end is stored. The waiting bar sits
-    above the dock, with the card's buttons. A group call, a realtime one and `/call` have no
-    tasks.
-  - **Leaving the page,** or opening another chat, hangs up, as leaving `/call` does.
-  - `/call` stays the standalone call to the active persona, with no chat.
+    at its place in the log, which while the tab holds the call is under the call's separator,
+    above its transcript, and among the call's lines once its end is stored. The waiting bar, with
+    the card's buttons, sits above the dock, or in the video screen, where **Show Task**, or a link
+    to one of the chat's tasks, docks the call first. A group call, a realtime one and `/call` have
+    no tasks.
+  - **The call belongs to the app, not the page** (`features/call/call-provider.tsx`): opening
+    another chat or page keeps it, and the call bar brings it back. Hang Up, the call ending, a
+    reload, opening setup, or losing the session (the sign-in screen) end it. The server hears a
+    call end only over its connection, so a call hung up while it connects is muted at once and let
+    go once its connection comes up or fails, within 10 s (`features/call/hang-up.ts`): closed
+    sooner, it would leave the server's call, and the chat in it, up for about 30 s. The next call
+    waits for it to go. While a call is up, another chat's **Call** and `/call`'s are unavailable
+    and `/call` says you're in a call; the persona switcher, a persona card's **Make Active**, New
+    Persona's **Switch to Her Now**, **Restart**, and importing or replacing a character model wait
+    for its end, since the server refuses them during a call; Home's links into setup wait too,
+    since setup sits outside the app's frame and opening it ends the call. Studio's Appearance says
+    its changes show from her next call.
+  - `/call` stays the standalone call to the active persona, with no chat. With her model, it shows
+    the call's screen under its header, with the mic's mute toggle, **Type a Message**,
+    **Captions**, **Transcript** and **Hang Up**; **Transcript** opens its transcript beside the
+    call in a window at least 1024 px wide, or below it in a narrower one.
 - **Spend:** a chat's requests are recorded in the usage ledger with `source: "chat"`.
 
 ## Tasks
@@ -723,7 +833,8 @@ tools.
   many more wait, with the card's buttons, which share the card's model, web access and
   spend-pause field, and **Show Task**, which scrolls to the card. Above its buttons it lists her
   queued lines as the card does, since its Allow or Continue lets the task read them too. During a
-  call it sits above the dock. The Tasks list's waiting row says the same line.
+  call it sits above the dock, or in the video screen. The Tasks list's waiting row says the same
+  line.
 - **Her task tools** show in the page's log only as `start_task`'s card. While one runs, her
   reply's quiet line reads **Starting a task…**, **Passing it on to the task…**, **Stopping the
   task…** or **Checking on the task…**, each with its icon (`TOOL_STATES`,
@@ -919,6 +1030,14 @@ context `task kind`), **Run Once** 运行一次, **Always in This Folder** 在�
 (`features/tasks/state.ts`) is typed by the bot's constant, so changing one fails typecheck until
 the other follows.
 
+Her looks have words of their own, kept apart from her picture and her AI models: **Appearance** is
+形象, its card **How She Looks** 她的形象, and a model's kind **2D Model · PSD2Live** 2D 模型 ·
+PSD2Live. **Import a Model** is 导入模型, and a model's **Make Active** carries the context `model`
+(设为当前形象), apart from a persona's (设为当前人设); the setting it writes, `appearance.model`, is
+**Character Model** (当前形象). 头像 stays her picture, and 模型 alone (Mind's **Models**) her AI
+models. Her moods' labels carry the context `mood` and her gestures' `gesture`
+(`features/studio/appearance-labels.ts`).
+
 The English capitalizes as laplace-chat's does. A short label is Title Case, with articles,
 conjunctions and prepositions lowercased whatever their length and a phrasal verb's particle
 capitalized: a button, a menu item, a heading, a setting's name, a tab or column label, an
@@ -949,6 +1068,17 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   Providers, then picked for embeddings with a model from the server's own list;
 - `credentials.json` at 0600, each key in its account, and no answer or log line holding a key;
 - a saved prompt landing in the temporary home, with `personas/` byte-identical;
+- a model in the studio's Appearance: the CC0 test rig (`apps/bot/test/local/fixtures/psd2live/`)
+  picked for **Import a Model**, kept in her folder byte for byte with a `model.json` listing its
+  Idle, Nod and Talk clips, its seven expressions and `HitAreaHead`, at 0700 and 0600, and not made
+  active; the preview ready and drawing her under the app's CSP, which a screenshot of its canvas
+  alone shows, then an expression held and a clip played on it, **Use Microphone** turned off and
+  its tab left while the browser still asks for the microphone, which closes the audio its clicks
+  started, and a line tried on it, which a stage made anew mid-line, as reduced motion makes one,
+  ends at once; a mood put back while its Save is out, which stays put back once the answer comes;
+  a PNG refused with the page's own sentence before any upload, and the rig cut short refused
+  `invalid-model` with the app's, leaving no folder; then **Make Active**, which her summary and the
+  status name, and **Stop Using**, so the chat call after it meets her picture;
 - an `ingest-facts` job over two fact lines against that server, with the model picked, and the
   jobs page showing it done;
 - a text chat with milky-green, her mind pointed at that server's streaming `/chat/completions`:
@@ -970,11 +1100,28 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   own to its end, its file answering the player's `Range` request with a `206`, both bubbles after
   a reload, and the voice and hearing spend in the ledger;
 - a call inside a chat, on the same OpenAI account, whose realtime transcription session the
-  server accepts and hears nothing on, and whose speech it answers as a call's PCM: a line typed
+  server accepts and hears nothing on, and whose speech it answers as a call's PCM, a quiet tone
+  in syllables, four a second, which the walk's Chrome plays muted (`--mute-audio`): a line typed
   first, then **Call**, the dock, her greeting answering that line from the call's history and
   landing in the log with its phone mark under its separator, the composer waiting and a send
-  refused `chat-in-call`, then **Hang Up**, the log's `call-ended` with `hangup`, the separators
-  with the call's length, the composer back, and no server error during the call;
+  refused `chat-in-call`; mid-call, Home from the sidebar showing **Ongoing Call** at the window's
+  foot with **Hang Up** and **Return to Call** while the chat still holds the call and Home's setup
+  links wait, the persona switcher's other personas unavailable, another chat's **Call**
+  unavailable with its microphone hidden, `/call` saying you're in a call, and **Return to Call**
+  bringing back the dock and her greeting as the call's own line; then **Hang Up**, the log's
+  `call-ended` with `hangup`, the separators with the call's length, the composer back, and no
+  server error during the call; then a second **Call** hung up the moment its offer is out, which
+  the server ends within 10 s, storing its `call-ended`, the composer back;
+- a video call in a chat of hers, the test rig made her active model: **Call** opening the screen,
+  named as the dock is, her stage ready within 30 s; a line the fake hearing hears, answered
+  `[开心地] 看得到呀，你也在笑！`, her mouth opening on the tone while she speaks, her words as the
+  caption, her mood `happy`, and her mouth shut once she stops; **Shrink** docking the call with
+  **Expand** in focus and her stage's same canvas, and **Expand** bringing the screen back,
+  drawing again; Home showing **Ongoing Call** with no canvas in it, whose **Return to Call** brings
+  the screen back on the same stage, and whose **Hang Up** ends the call; then a second call, her
+  mouth moving on its greeting on the stage that call made. Its detail gives the longest
+  main-thread task from **Call** to her stage ready. Where WebGL is refused, the call docks with
+  her picture and no **Expand**, and the walk says so;
 - tasks in a new chat with milky-green, last, since her answers in a chat of one are offered
   `start_task` once the assistant has a model: Settings → Assistant Mode set to the OpenRouter
   account at that server and a model typed into its picker, and her greeting offered neither
@@ -1015,13 +1162,15 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
   - the Tasks list showing the first done and the second stopped, with no button or field, the
     first's row opening the chat with the card in view, in focus its card alone, until `/normal`
     brings every card back;
-  - a call in that chat, whose greeting holds none of the status blocks the chat stored, and no
-    task tool; a line its fake hearing hears (`say`), and her `start_task` for it, with the hint,
-    her next round reading the started result, and her call and its result stored in the chat
-    under the call's id, between the call's lines; the card, and the waiting bar above the dock,
-    asking to start it; **Allow Once** on the bar, then her pointer to the card at the path
-    question, answering the waiting nudge with no task tool and a block ending on the line for no
-    tools; **Allow Once** again, then her word on the end on the call, answering the ended nudge
+  - a call in that chat, whose greeting holds none of the status blocks the chat stored, and no task
+    tool, opening on the video screen since the walk makes the test rig her active model first; a
+    line its fake hearing hears (`say`), and her `start_task` for it, with the hint, her next round
+    reading the started result, and her call and its result stored in the chat under the call's id,
+    between the call's lines; the card, and the waiting bar inside the video screen, asking to start
+    it; **Allow Once** on the bar there, then her pointer to the card at the path question,
+    answering the waiting nudge with no task tool and a block ending on the line for no tools;
+    **Show Task** on the bar, docking the call with the card in focus and the bar above the dock;
+    **Allow Once** again, then her word on the end on the call, answering the ended nudge
     with the worker's report only in her call's `tool` message; and after **Hang Up**, the call's
     lines and her call's events in order, no turn telling it again, the page on disk, and the
     Tasks list showing it done;
@@ -1067,7 +1216,8 @@ temporary data home: it refuses to start when that `.env` sets `EIDOLON_HOME`, o
 shows (with a fake, silent microphone) and plays the bot through the speakers. The persona must be
 milky-green, whose template needs no index: recall is simply off. It checks:
 
-- the call connecting, the greeting in the transcript, and the bot's audio playing;
+- the call connecting, the greeting in the transcript, and the bot's audio playing in the call's
+  `<audio data-call>`;
 - a typed question and its reply, text and audio;
 - with `--selfie`, a same-origin `/api/selfie/` picture in its 3:4 box within 90 s;
 - Fish markup shown as chips and notes, never as `[…]` or `<tag>`;
