@@ -1,5 +1,11 @@
 # @laplace.live/eidolon-sdk
 
+## 0.3.0
+
+### Minor Changes
+
+- a4e22bc: Add the avatar entry, which draws a PSD2Live model and moves it with a call
+
 ## 0.2.0
 
 ### Minor Changes
