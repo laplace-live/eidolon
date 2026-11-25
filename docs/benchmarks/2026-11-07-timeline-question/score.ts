@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import {
   findDotenv,
+  installHttpDefaults,
   installSettings,
   loadDotenv,
   logToStderr,
@@ -45,6 +46,7 @@ interface Row {
 logToStderr();
 loadDotenv(findDotenv(import.meta.dirname), { override: true });
 installSettings();
+installHttpDefaults();
 const apiKey = process.env.OPENROUTER_API_KEY;
 if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 const model = process.env.RETRIEVAL_GATE_MODEL || DEFAULT_GATE_MODEL;
@@ -98,7 +100,7 @@ function summarize(rows: readonly Row[]) {
 }
 
 const here = import.meta.dirname;
-// apps/cli's TOML parser, which reads the retrieval gate's own turns.toml.
+// smol-toml is apps/cli's dependency, which pnpm links there and not at the root.
 const { parse: parseToml } = createRequire(join(here, "../../../apps/cli/package.json"))(
   "smol-toml",
 ) as typeof import("smol-toml");

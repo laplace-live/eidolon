@@ -257,9 +257,11 @@ const DTS_SPECIFIER = /\b(?:from|import)\s*\(?\s*["']([^"']+)["']\s*\)?/g;
 
 /** Emits `.d.ts` declarations into `${root}/dist` and normalizes relative specifiers to `.js`. */
 function emitTypes(root: string): void {
-  const tsc = join(ROOT, "node_modules", ".bin", "tsc");
+  // TypeScript's own entry, on this Node: node_modules/.bin/tsc is a shell script Windows can't run.
+  const tsc = join(ROOT, "node_modules", "typescript", "bin", "tsc");
   const outDir = join(root, "dist");
-  const proc = spawnSync(tsc, ["-p", join(HERE, "tsconfig.build.json"), "--outDir", outDir], {
+  const args = [tsc, "-p", join(HERE, "tsconfig.build.json"), "--outDir", outDir];
+  const proc = spawnSync(process.execPath, args, {
     cwd: ROOT,
     stdio: "inherit",
   });

@@ -2,8 +2,8 @@
 // by mode and turn by turn. It diffs their checks, their RTVI event sequences, stagesMs, latencyMs
 // and audible spans, then holds the candidate to the pass bar (docs/voice-engine.md, "Real
 // calls"). Reads reports only, so it scores recorded ones too.
-import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { LEVEL_INTERVAL_MS } from "./e2e/protocol.ts";
 import { pacingByTurn, type TimelineEntry, type Turn } from "./e2e/turns.ts";
 
@@ -398,6 +398,7 @@ async function main(): Promise<number> {
     out[mode] = { baseline: base.length, candidate: cand.length, stages, latency, spans, bar };
   }
   if (args.json !== null) {
+    await mkdir(dirname(args.json), { recursive: true });
     await writeFile(
       args.json,
       `${JSON.stringify({ baseline: baseline.files, candidate: candidate.files, pass, modes: out }, null, 2)}\n`,

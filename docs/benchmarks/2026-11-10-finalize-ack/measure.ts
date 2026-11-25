@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   activePersona,
@@ -971,6 +971,7 @@ async function main(): Promise<number> {
     },
     providers: reports,
   };
+  await mkdir(dirname(out), { recursive: true });
   await writeFile(out, `${JSON.stringify(document, null, 2)}\n`);
   console.log(`\nWrote ${out}`);
 

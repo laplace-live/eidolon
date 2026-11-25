@@ -582,9 +582,9 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   candidates with `raddr 0.0.0.0 rport 0`.
 - **Production.** On 2026-11-04 a text call to eidolon.vrp.moe over Cloudflare TURN went through
   relay-only (the browser's 12 LAN, CGNAT, Tailscale and ULA candidates dropped), with
-  offer→connected at 2.8 s. A logged-in call from China then validated its token through Workers,
-  and Mem0 read and wrote that viewer's memories; offer→connected took 2.5 s, 1.5 s of it ICE and
-  1 s the DTLS handshake.
+  offer→connected at 2.8 s. A logged-in call from China then validated its token through Workers
+  (the bot then ran on Bun, whose User-Agent Workers accepted), and Mem0 read and wrote that
+  viewer's memories; offer→connected took 2.5 s, 1.5 s of it ICE and 1 s the DTLS handshake.
 - **Transcripts.** All 1,697 real `.soniox.json` payloads re-render to their `.md` byte for byte,
   the 168 sliced ones included.
 - **Memory.** A full stream ingest peaks at 5.7 GB (7.9 GB RSS), mostly LanceDB serializing the

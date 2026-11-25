@@ -135,6 +135,17 @@ test("a call with no gaps between her sentences has gaps of none; one with no au
   expect((await bar(report(SMOOTH), report([])))["gap between sentences"]).toBe(false);
 });
 
+test("--json writes its file into a folder it makes", async () => {
+  const [base, out] = [join(dir, "base.json"), join(dir, "reports", "out.json")];
+  await writeFile(base, JSON.stringify(report(SMOOTH)));
+  const run = spawnProcess([process.execPath, SCRIPT, base, base, "--json", out], {
+    stdout: "ignore",
+    stderr: "inherit",
+  });
+  await run.exited;
+  expect(JSON.parse(await readFile(out, "utf8"))).toHaveProperty("modes.text");
+});
+
 test("bot-stopped-speaking may come early only by the recorder's sampling interval", async () => {
   const onTime = async (stoppedAfter: number) =>
     (await bar(report(SMOOTH), report(SMOOTH, stoppedAfter)))["stopped speaking on time"];

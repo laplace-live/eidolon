@@ -10,7 +10,11 @@ import "../../../apps/cli/src/load-env.ts";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseMentions } from "../../../packages/chat/src/index.ts";
-import { extractCostUsd, setLogLevel } from "../../../packages/config/src/index.ts";
+import {
+  extractCostUsd,
+  installHttpDefaults,
+  setLogLevel,
+} from "../../../packages/config/src/index.ts";
 import {
   ADDRESSED_THRESHOLD,
   DIRECTOR_TIMEOUT_SEC,
@@ -104,6 +108,7 @@ const argv = process.argv.slice(2);
 const check = argv.includes("--check");
 const cached = argv.includes("--cached");
 setLogLevel("WARNING");
+installHttpDefaults();
 
 const { personas, lines } = JSON.parse(await readFile(join(here, "lines.json"), "utf8")) as {
   personas: Record<string, Persona>;
@@ -298,10 +303,9 @@ const rows: Row[] = [];
 let costUsd: number | null = 0;
 if (cached) {
   const stored = new Map(
-    (JSON.parse(await readFile(join(here, "decisions.json"), "utf8")) as { lines: Row[] }).lines.map((row) => [
-      row.id,
-      row,
-    ]),
+    (
+      JSON.parse(await readFile(join(here, "decisions.json"), "utf8")) as { lines: Row[] }
+    ).lines.map((row) => [row.id, row]),
   );
   for (const line of lines) {
     const row = stored.get(line.id);

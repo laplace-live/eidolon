@@ -15,7 +15,7 @@ import {
   type ReviewVerdict,
   reviewPrompt,
 } from "../../../packages/assistant/src/index.ts";
-import { setLogLevel } from "../../../packages/config/src/index.ts";
+import { installHttpDefaults, setLogLevel } from "../../../packages/config/src/index.ts";
 import { completeText, createMind, type TaskBrief } from "../../../packages/engine/src/index.ts";
 import type { UsageRecord } from "../../../packages/providers/src/index.ts";
 
@@ -43,6 +43,7 @@ const check = argv.includes("--check");
 const at = argv.indexOf("--model");
 const named = at === -1 ? undefined : argv[at + 1];
 setLogLevel("WARNING");
+installHttpDefaults();
 
 const { briefs, cases } = JSON.parse(await readFile(join(here, "cases.json"), "utf8")) as {
   briefs: Record<string, TaskBrief>;

@@ -1471,6 +1471,8 @@ class Run {
     try {
       link = await stdout.waitFor(READY_LINE, child.exited, 60_000);
     } catch {
+      // A child that exited can still hold stderr in its pipe; one that hung never closes it.
+      await Promise.race([stderr.done, delay(1_000)]);
       checks.add("boot", false, `no link printed:\n${stderr.tail()}`);
       return null;
     }

@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { spawnProcess } from "@eidolon/config";
 import { type Browser, chromium, type Page } from "playwright-core";
@@ -474,7 +474,7 @@ async function call(
   } finally {
     closing = true;
     await browser?.close();
-    void server.stop();
+    await server.stop();
   }
   return stats;
 }
@@ -969,6 +969,7 @@ async function main(): Promise<number> {
   const capture = options.mode === "audio" ? `${micFile}%noloop` : micFile;
   const stats = await call(options, capture, bargeInWav, recorder);
   const report = analyze(options, micFile, bargeInWav, recorder, stats);
+  await mkdir(dirname(options.out), { recursive: true });
   await writeFile(options.out, `${JSON.stringify(report, null, 2)}\n`);
   printSummary(report, options.out);
   return report.pass ? 0 : 1;
