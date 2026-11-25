@@ -140,9 +140,19 @@ describe("tapArea", () => {
   };
 
   test("her head's hit area is her head; anywhere else on her, her body", () => {
-    expect(tapArea("HitAreaHead", inventory)).toBe("head");
-    expect(tapArea("HitAreaBody", inventory)).toBe("body");
-    expect(tapArea(null, inventory)).toBe("body");
-    expect(tapArea(null, { hitAreas: [] })).toBe("body");
+    expect(tapArea("HitAreaHead", inventory, false)).toBe("head");
+    expect(tapArea("HitAreaBody", inventory, false)).toBe("body");
+    expect(tapArea(null, inventory, false)).toBe("body");
+    // A rig with a head hit area goes by it alone.
+    expect(tapArea("HitAreaBody", inventory, true)).toBe("body");
+    expect(tapArea(null, inventory, true)).toBe("body");
+  });
+
+  test("with no head hit area, a tap near her head is on her head", () => {
+    const bodyOnly = { hitAreas: [{ id: "HitAreaBody", name: "Body" }] };
+    expect(tapArea("HitAreaBody", bodyOnly, true)).toBe("head");
+    expect(tapArea(null, bodyOnly, true)).toBe("head");
+    expect(tapArea("HitAreaBody", bodyOnly, false)).toBe("body");
+    expect(tapArea(null, { hitAreas: [] }, false)).toBe("body");
   });
 });

@@ -26,7 +26,7 @@ import {
 } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
 import { COMPANION_TICK_MS, CompanionDirector, type TapArea } from "./director";
-import { CURSOR_REST_MS, eyePoint, gazeToward } from "./gaze";
+import { CURSOR_REST_MS, eyePoint, gazeToward, nearHead } from "./gaze";
 import { handshake, SIZE_WAIT_MS } from "./handshake";
 import {
   type MenuTarget,
@@ -354,7 +354,8 @@ class Control {
   }
 
   #tapArea(event: PointerEvent): TapArea {
-    const model = this.#live.stage?.model ?? null;
+    const { stage, head, box } = this.#live;
+    const model = stage?.model ?? null;
     if (model === null) return "body";
     let hit: string | null = null;
     try {
@@ -362,7 +363,10 @@ class Control {
     } catch {
       // A model that traps is the stage's to report; the tap still lands on her.
     }
-    return tapArea(hit, model.inventory);
+    const point = { x: event.clientX, y: event.clientY };
+    const near =
+      box !== null && nearHead(point, head, box, { width: innerWidth, height: innerHeight });
+    return tapArea(hit, model.inventory, near);
   }
 
   #menu(models = this.#live.models): CompanionMenuState {

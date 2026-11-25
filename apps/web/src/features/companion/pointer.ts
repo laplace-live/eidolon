@@ -97,7 +97,16 @@ export class Press {
   }
 }
 
-/** A tap's area: her head's hit area (`headAreaOf`) is "head"; any other place on her "body". */
-export function tapArea(hit: string | null, inventory: Pick<ModelInventory, "hitAreas">): TapArea {
-  return hit !== null && hit === headAreaOf(inventory) ? "head" : "body";
+/**
+ * A tap's area: her head's hit area (`headAreaOf`) is "head", any other place on her "body"; on a
+ * rig with no head hit area, a tap `nearHead` is "head".
+ */
+export function tapArea(
+  hit: string | null,
+  inventory: Pick<ModelInventory, "hitAreas">,
+  nearHead: boolean,
+): TapArea {
+  const head = headAreaOf(inventory);
+  if (head === null) return nearHead ? "head" : "body";
+  return hit === head ? "head" : "body";
 }
