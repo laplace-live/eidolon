@@ -1332,7 +1332,11 @@ async function themeAndLanguage(driven: Driven, step: Step) {
   await goBack.click();
   await box.getByRole("button", { name: "Discard Changes" }).click();
   await page.waitForURL(`eidolon-app://app/personas/${PERSONA}`);
-  const left = await box.isHidden();
+  // The box fades out after the navigation goes on.
+  const left = await box.waitFor({ state: "hidden", timeout: 5000 }).then(
+    () => true,
+    () => false,
+  );
   await goBack.click();
   await page.waitForURL(`eidolon-app://app${from}`);
   await page.getByRole("button", { name: "Go Forward" }).click();
