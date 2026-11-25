@@ -13,11 +13,14 @@ export function MessageInput({
   name,
   onSend,
   autoFocus,
+  round = false,
 }: {
   readonly disabled: boolean;
   readonly name: string;
   readonly onSend: (text: string) => void;
   readonly autoFocus?: boolean;
+  /** Pill-shaped, for a pill-shaped bar. */
+  readonly round?: boolean;
 }) {
   const { t } = useLingui();
   const [text, setText] = useState("");
@@ -63,12 +66,13 @@ export function MessageInput({
         autoComplete="off"
         enterKeyHint="send"
         autoFocus={autoFocus}
-        className="h-9 bg-card"
+        className={cn("h-9 bg-card", round && "rounded-full px-4")}
       />
       <Button
         type="submit"
         variant="outline"
         size="icon-lg"
+        className={cn(round && "rounded-full")}
         disabled={disabled || text.trim() === ""}
         aria-label={t`Send`}
       >
@@ -79,7 +83,13 @@ export function MessageInput({
 }
 
 /** Mutes and unmutes the viewer's mic, once the call is live. */
-export function MicToggle({ call }: { readonly call: CallHandle }) {
+export function MicToggle({
+  call,
+  round = false,
+}: {
+  readonly call: CallHandle;
+  readonly round?: boolean;
+}) {
   const { t } = useLingui();
   const micLabel = call.micOn ? t`Mute your mic` : t`Unmute your mic`;
   return (
@@ -88,6 +98,7 @@ export function MicToggle({ call }: { readonly call: CallHandle }) {
         <Button
           variant={call.micOn ? "outline" : "destructive"}
           size="icon-lg"
+          className={cn(round && "rounded-full")}
           aria-label={micLabel}
           aria-pressed={!call.micOn}
           disabled={call.phase.name !== "live"}
@@ -101,13 +112,19 @@ export function MicToggle({ call }: { readonly call: CallHandle }) {
   );
 }
 
-export function HangUpButton({ call }: { readonly call: CallHandle }) {
+export function HangUpButton({
+  call,
+  round = false,
+}: {
+  readonly call: CallHandle;
+  readonly round?: boolean;
+}) {
   const { t } = useLingui();
   return (
     <Button
       variant="destructive"
       size="lg"
-      className="shrink-0 max-sm:w-9 max-sm:px-0"
+      className={cn("shrink-0 max-sm:w-9 max-sm:px-0", round && "rounded-full")}
       disabled={call.phase.name === "ending"}
       onClick={call.hangUp}
     >

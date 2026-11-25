@@ -70,6 +70,7 @@ function ScreenControl({
         <Button
           variant={pressed ? "secondary" : "outline"}
           size="icon-lg"
+          className="rounded-full"
           aria-label={label}
           aria-pressed={pressed}
           onClick={onClick}
@@ -292,12 +293,13 @@ export function VideoCall({
                 name={name}
                 onSend={call.sendText}
                 autoFocus
+                round
               />
             </div>
           )}
           {/* Each button is named, and the screen's label names the call: no group role. */}
           <div className="flex shrink-0 items-center gap-2 rounded-full border bg-card/90 p-1.5 shadow-lg backdrop-blur">
-            <MicToggle call={call} />
+            <MicToggle call={call} round />
             {typing && (
               <ScreenControl
                 label={t`Type a Message`}
@@ -336,7 +338,7 @@ export function VideoCall({
                 <PictureInPicture2Icon />
               </ScreenControl>
             )}
-            <HangUpButton call={call} />
+            <HangUpButton call={call} round />
           </div>
         </div>
       </div>
