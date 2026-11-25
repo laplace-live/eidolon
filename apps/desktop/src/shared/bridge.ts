@@ -114,6 +114,10 @@ export const BRIDGE = {
    * once she is drawn; then the CompanionState.
    */
   popOut: "eidolon:pop-out",
+  /** App page → main, invoked with nothing: stands her at her first place, saved; then the CompanionState. */
+  resetCompanionPlace: "eidolon:reset-companion-place",
+  /** App page → main, invoked with a ModelRef: shows the model's file in Finder or Explorer; whether it was there. */
+  revealModel: "eidolon:reveal-model",
   /** App page → main, with nothing: it listens for a port to the companion's page. */
   linkCompanion: "eidolon:link-companion",
   /** App page → main: a boolean, whether a call she is on is up. */
@@ -166,6 +170,8 @@ const SENDERS = {
   [BRIDGE.companion]: ["main", "app"],
   [BRIDGE.setCompanion]: ["main", "app"],
   [BRIDGE.popOut]: ["main", "app"],
+  [BRIDGE.resetCompanionPlace]: ["main", "app"],
+  [BRIDGE.revealModel]: ["main", "app"],
   [BRIDGE.linkCompanion]: ["main", "app"],
   [BRIDGE.feedingCompanion]: ["main", "app"],
   [BRIDGE.windowShows]: ["main", "app"],
@@ -336,6 +342,23 @@ export interface CompanionState {
 export interface CompanionChange {
   readonly on?: boolean;
   readonly showAtLogin?: boolean;
+}
+
+/** A persona's character model, by the ids the server gave them. */
+export interface ModelRef {
+  readonly persona: string;
+  readonly model: string;
+}
+
+/** A persona's or a model's id: a lowercase slug, never a path. */
+const ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+export function isModelRef(value: unknown): value is ModelRef {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const { persona, model } = value as Record<string, unknown>;
+  return (
+    typeof persona === "string" && ID.test(persona) && typeof model === "string" && ID.test(model)
+  );
 }
 
 /** What her window holds: her model, its framing `aspect` wide for its height, or her picture. */
@@ -562,6 +585,10 @@ export interface EidolonDesktop {
   readonly setCompanion: (change: CompanionChange) => Promise<CompanionState>;
   /** Turns her on to carry the call, and hides the window once she is drawn; then her state. */
   readonly popOut: () => Promise<CompanionState>;
+  /** Stands her at her first place, saved; then her state. */
+  readonly resetCompanionPlace: () => Promise<CompanionState>;
+  /** Shows a model's file in Finder or Explorer; false when it isn't there. */
+  readonly revealModel: (model: ModelRef) => Promise<boolean>;
   /** Asks main for a port to the companion's page; it arrives as a window message. */
   readonly linkCompanion: () => void;
   /** Whether a call she is on is up: main keeps the window drawing for her while she shows. */

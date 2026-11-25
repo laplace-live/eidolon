@@ -9,7 +9,6 @@ import {
   COMPANION_FILE,
   COMPANION_LINES,
   type CompanionSettings,
-  clampBounds,
   companionLine,
   companionSize,
   companionWindowSetup,
@@ -18,6 +17,7 @@ import {
   dragged,
   EDGE_DIP,
   feetOf,
+  keepShown,
   LABEL_CHARS,
   menuLabel,
   placement,
@@ -170,35 +170,38 @@ describe("where she stands", () => {
     expect(feetOf(placement(feet, size, areas, displays))).toEqual(feet);
   });
 
-  test("at her first place once her feet are on no display", () => {
+  test("at her first place once less than a quarter of her window, either way, would show on a display", () => {
     expect(placement({ x: 6000, y: 300 }, size, areas, displays)).toEqual(
       placement(null, size, areas, displays),
     );
     expect(placement({ x: 700, y: 2000 }, size, [laptop], [laptopDisplay])).toEqual(first);
   });
 
-  test("at her first place once the display under her feet is gone, though her window would reach onto one that stays", () => {
-    // A display to the laptop's left, unplugged: her feet were 10 DIP past their shared edge.
-    expect(placement({ x: -10, y: 900 }, size, [laptop], [laptopDisplay])).toEqual(first);
-    // A display below it, unplugged: her feet were on its top.
-    expect(placement({ x: 700, y: 1200 }, size, [laptop], [laptopDisplay])).toEqual(first);
+  test("partly off a display, where her feet were, while a quarter of her window shows each way", () => {
+    // Below the laptop's bottom edge, her head and shoulders showing.
+    expect(placement({ x: 700, y: 1150 }, size, [laptop], [laptopDisplay])).toEqual({
+      x: 599,
+      y: 670,
+      ...size,
+    });
+    // Past its left edge, 91 of her 202 DIP showing.
+    expect(placement({ x: -10, y: 900 }, size, [laptop], [laptopDisplay])).toEqual({
+      x: -111,
+      y: 420,
+      ...size,
+    });
+    // 41 DIP showing, less than a quarter: back to her first place.
+    expect(placement({ x: -60, y: 900 }, size, [laptop], [laptopDisplay])).toEqual(first);
+    // A display below the laptop, unplugged: a quarter of her doesn't reach up onto it.
+    expect(placement({ x: 700, y: 1400 }, size, [laptop], [laptopDisplay])).toEqual(first);
   });
 
-  test("a Dock or a taskbar that grew under her feet pushes her up onto its edge, where she stood", () => {
+  test("a Dock or a taskbar that grew under her feet leaves her where she stood", () => {
     // The Dock took 75 DIP more of the laptop's bottom since she was left standing on it.
     const shrunk = { ...laptop, height: laptop.height - 75 };
     const rect = placement({ x: 300, y: 900 }, size, [shrunk], [laptopDisplay]);
-    expect(rect).toEqual({ x: 199, y: 825 - size.height, ...size });
-    expect(feetOf(rect)).toEqual({ x: 300, y: 825 });
-  });
-
-  test("a window taller than the work area is held at its top", () => {
-    const tall = { width: 300, height: 1000 };
-    expect(placement({ x: 700, y: 900 }, tall, [laptop], [laptopDisplay])).toEqual({
-      x: 550,
-      y: 25,
-      ...tall,
-    });
+    expect(rect).toEqual({ x: 199, y: 420, ...size });
+    expect(feetOf(rect)).toEqual({ x: 300, y: 900 });
   });
 
   test("the work area holding a point, its right and bottom edges included, else the nearest", () => {
@@ -208,19 +211,50 @@ describe("where she stands", () => {
     expect(areaAt({ x: 5000, y: 0 }, [laptop, external])).toBe(external);
   });
 
-  test("clampBounds moves a window inside the work area under its centre, never resizing it", () => {
-    const rect = { x: 1400, y: 600, width: 202, height: 480 };
-    expect(clampBounds(rect, [laptop])).toEqual({ x: 1310, y: 420, width: 202, height: 480 });
-    const wide = { x: 100, y: -300, width: 2000, height: 480 };
-    expect(clampBounds(wide, [laptop])).toEqual({ x: 0, y: 25, width: 2000, height: 480 });
+  test("keepShown moves a window the least way that leaves a quarter of it, each way, on the display nearest its centre", () => {
+    const shown = { x: 1400, y: 600, ...size };
+    expect(keepShown(shown, [laptopDisplay])).toEqual(shown);
+    expect(keepShown({ x: 1480, y: 900, ...size }, [laptopDisplay])).toEqual({
+      x: 1512 - 51,
+      y: 982 - 120,
+      ...size,
+    });
+    expect(keepShown({ x: -500, y: -600, ...size }, [laptopDisplay])).toEqual({
+      x: -202 + 51,
+      y: -480 + 120,
+      ...size,
+    });
   });
 
-  test("a drag moves her by the pointer's travel, and stops at the work area's edge", () => {
+  test("a drag moves her by the pointer's travel, past a display's edge until a quarter of her shows", () => {
     const start = { window: { x: 1000, y: 300, ...size }, pointer: { x: 1100, y: 500 } };
-    expect(dragged(start, { x: 1040, y: 460 }, [laptop])).toEqual({ x: 940, y: 260, ...size });
-    expect(dragged(start, { x: 1900, y: 500 }, [laptop])).toEqual({
-      x: laptop.width - size.width,
+    expect(dragged(start, { x: 1040, y: 460 }, [laptopDisplay])).toEqual({
+      x: 940,
+      y: 260,
+      ...size,
+    });
+    // 112 of her 202 DIP past the right edge, the rest showing.
+    expect(dragged(start, { x: 1500, y: 500 }, [laptopDisplay])).toEqual({
+      x: 1400,
       y: 300,
+      ...size,
+    });
+    expect(dragged(start, { x: 1900, y: 500 }, [laptopDisplay])).toEqual({
+      x: 1512 - 51,
+      y: 300,
+      ...size,
+    });
+  });
+
+  test("a drag crosses onto the next display with the pointer, and is kept shown on the display under it", () => {
+    const displays = [laptopDisplay, externalDisplay];
+    const start = { window: { x: 1000, y: 300, ...size }, pointer: { x: 1100, y: 500 } };
+    expect(dragged(start, { x: 2200, y: 500 }, displays)).toEqual({ x: 2100, y: 300, ...size });
+    // Held by her head, down to the external display's bottom edge: a quarter of her stays on it.
+    const held = { window: { x: 2100, y: 300, ...size }, pointer: { x: 2200, y: 310 } };
+    expect(dragged(held, { x: 2200, y: 1214 }, displays)).toEqual({
+      x: 2100,
+      y: 1215 - 120,
       ...size,
     });
   });
@@ -228,9 +262,12 @@ describe("where she stands", () => {
   test("a drop within SNAP_DIP of the work area's bottom stands her on it; farther, where it fell", () => {
     const bottom = laptop.y + laptop.height;
     const near = { x: 500, y: bottom - 20 - size.height, ...size };
-    expect(settled(near, [laptop])).toEqual({ ...near, y: bottom - size.height });
+    expect(settled(near, [laptop], [laptopDisplay])).toEqual({ ...near, y: bottom - size.height });
     const far = { x: 500, y: bottom - 30 - size.height, ...size };
-    expect(settled(far, [laptop])).toEqual(far);
+    expect(settled(far, [laptop], [laptopDisplay])).toEqual(far);
+    // Past the Dock, half of her below the display's bottom: where it fell.
+    const below = { x: 500, y: 982 - 240, ...size };
+    expect(settled(below, [laptop], [laptopDisplay])).toEqual(below);
   });
 });
 
@@ -331,7 +368,7 @@ test("her log lines never read as the main window's, which the smokes match as s
     companionLine(false, false),
     companionLine(false, true),
   ];
-  expect(lines).toHaveLength(19);
+  expect(lines).toHaveLength(20);
   for (const line of lines) {
     for (const main of ["the window shows", "the window is shown", "the window is hidden"]) {
       expect(line).not.toContain(main);

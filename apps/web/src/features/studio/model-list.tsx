@@ -8,6 +8,7 @@ import {
   FileIcon,
   FileUpIcon,
   FolderOpenIcon,
+  FolderSearchIcon,
   PencilIcon,
   PersonStandingIcon,
   PowerOffIcon,
@@ -62,6 +63,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { UnavailableButton } from "@/components/unavailable-button";
 import { useCallPresence } from "@/features/call/call-context";
 import type { CharacterModel, CharacterModels, PersonaSummary } from "@/lib/api";
+import { desktop } from "@/lib/desktop";
+import { toastError } from "@/lib/feedback";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { type Lang, useLang } from "@/locales/i18n";
@@ -262,6 +265,7 @@ function ModelMenu({
   onReplace,
   onStop,
   onRemove,
+  reveal,
 }: {
   /** Active through her own setting, which clearing would change what she shows. */
   readonly stoppable: boolean;
@@ -272,6 +276,8 @@ function ModelMenu({
   readonly onReplace: () => void;
   readonly onStop: () => void;
   readonly onRemove: () => void;
+  /** The desktop app's Show in Finder or Explorer, as its label and action; null elsewhere. */
+  readonly reveal: { readonly label: string; readonly run: () => void } | null;
 }) {
   const { t } = useLingui();
   // A dialog opens once the menu has closed: open together, the two focus traps fight.
@@ -305,6 +311,12 @@ function ModelMenu({
         </DropdownMenuItem>
         {waiting !== null && (
           <p className="max-w-56 px-2 pb-1.5 text-muted-foreground text-xs">{waiting}</p>
+        )}
+        {reveal !== null && (
+          <DropdownMenuItem onSelect={reveal.run}>
+            <FolderSearchIcon />
+            {reveal.label}
+          </DropdownMenuItem>
         )}
         {stoppable && (
           <DropdownMenuItem onSelect={onStop}>
@@ -411,6 +423,19 @@ export function ModelListCard({
   const [over, setOver] = useState(false);
   const [renamed, setRenamed] = useState<CharacterModel | null>(null);
   const [removed, setRemoved] = useState<CharacterModel | null>(null);
+  const app = desktop();
+  const revealModel = app?.revealModel;
+  const revealOf = (model: CharacterModel) =>
+    revealModel === undefined
+      ? null
+      : {
+          label: app?.platform === "win32" ? t`Show in Explorer` : t`Show in Finder`,
+          run: () => {
+            revealModel({ persona: persona.id, model: model.id }).then((shown) => {
+              if (!shown) toast.error(t`The model's file wasn't found.`);
+            }, toastError);
+          },
+        };
   const busy =
     reading ||
     importing.isPending ||
@@ -562,6 +587,7 @@ export function ModelListCard({
                           })
                         }
                         onRemove={() => setRemoved(model)}
+                        reveal={revealOf(model)}
                       />
                     }
                   />

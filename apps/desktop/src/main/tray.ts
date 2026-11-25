@@ -1,27 +1,43 @@
-// Windows' notification-area icon: Windows has no Dock to bring a hidden window back, so
-// the icon stays for the whole run, opens the window on a click, and holds the items macOS's menu
-// bar has.
+// The tray's icon, for the whole run: Windows' notification-area icon, where Windows has no Dock to
+// bring a hidden window back, and macOS's menu bar icon. Both hold the items macOS's menu bar has; on
+// Windows a click opens the window, and on macOS a click opens the menu, as menu bar icons do.
 import { join } from "node:path";
 import { app, Menu, nativeImage, Tray } from "electron";
 import { type TrayActions, trayMenu, type UpdatesItem } from "./menus.ts";
 import type { Strings } from "./strings.ts";
 
-/** The icon's .ico, which `extraResources` ships beside the app; resources/ is never packed. */
+/** The icons' folder, which `extraResources` ships beside the app; resources/ is never packed. */
+function assets(): string {
+  return app.isPackaged ? join(process.resourcesPath, "assets") : join(app.getAppPath(), "assets");
+}
+
+/** Windows' .ico, which its message boxes and About panel take too. */
 export function trayIconPath(): string {
-  const assets = app.isPackaged
-    ? join(process.resourcesPath, "assets")
-    : join(app.getAppPath(), "assets");
-  return join(assets, "tray-icon.ico");
+  return join(assets(), "tray-icon.ico");
+}
+
+/** macOS's template image, black on transparency for the menu bar to tint; its @2x loads beside it. */
+function menuBarIconPath(): string {
+  return join(assets(), "trayTemplate.png");
 }
 
 export class AppTray {
   readonly #tray: Tray;
   readonly #actions: TrayActions;
 
-  constructor(strings: Strings, actions: TrayActions, updates: UpdatesItem, companion: boolean) {
-    this.#tray = new Tray(nativeImage.createFromPath(trayIconPath()));
+  constructor(
+    strings: Strings,
+    actions: TrayActions,
+    updates: UpdatesItem,
+    companion: boolean,
+    platform: NodeJS.Platform,
+  ) {
+    const mac = platform === "darwin";
+    const image = nativeImage.createFromPath(mac ? menuBarIconPath() : trayIconPath());
+    if (mac) image.setTemplateImage(true);
+    this.#tray = new Tray(image);
     this.#actions = actions;
-    this.#tray.on("click", () => actions.open());
+    if (!mac) this.#tray.on("click", () => actions.open());
     this.relabel(strings, updates, companion);
   }
 

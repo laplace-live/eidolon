@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { type CompanionChange, desktop } from "@/lib/desktop";
+import { type CompanionChange, type CompanionState, desktop } from "@/lib/desktop";
 import { toastError } from "@/lib/feedback";
 import { statusQuery } from "@/lib/query";
 import { cn } from "@/lib/utils";
@@ -190,7 +190,58 @@ function CompanionRows({ app }: { readonly app: CompanionOptions }) {
           onCheckedChange={(next) => change.mutate({ showAtLogin: next })}
         />
       </Field>
+      {app.resetCompanionPlace !== undefined && (
+        <PlaceRow
+          reset={app.resetCompanionPlace}
+          onReset={(next) => queryClient.setQueryData(options.queryKey, next)}
+        />
+      )}
     </>
+  );
+}
+
+/** Where she stands, which a drag sets, partly off the screen too; Reset Position brings her back. */
+function PlaceRow({
+  reset,
+  onReset,
+}: {
+  readonly reset: () => Promise<CompanionState>;
+  readonly onReset: (state: CompanionState) => void;
+}) {
+  const { t } = useLingui();
+  const titleId = useId();
+  const move = useMutation({
+    mutationFn: reset,
+    onSuccess: (state) => {
+      onReset(state);
+      toast.success(t`She's back at the bottom right of your main display.`);
+    },
+    onError: toastError,
+  });
+  return (
+    <Field
+      orientation="horizontal"
+      aria-labelledby={titleId}
+      data-desktop-option="companion-place"
+      className={ROW}
+    >
+      <FieldContent>
+        <FieldTitle id={titleId}>{t`Her Position`}</FieldTitle>
+        <FieldDescription>
+          {t`Drag her anywhere, even partly off the screen. Reset Position brings her back to the bottom right of your main display.`}
+        </FieldDescription>
+      </FieldContent>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={move.isPending}
+        onClick={() => move.mutate()}
+      >
+        {move.isPending && <Spinner />}
+        {t`Reset Position`}
+      </Button>
+    </Field>
   );
 }
 

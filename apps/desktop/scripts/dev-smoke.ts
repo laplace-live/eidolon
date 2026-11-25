@@ -23,7 +23,13 @@ import type {
   Status,
   TaskSnapshot,
 } from "../../bot/src/local/api.ts";
-import { COMPANION_FILE, COMPANION_LINES, feetOf } from "../src/main/companion.ts";
+import {
+  COMPANION_FILE,
+  COMPANION_LINES,
+  EDGE_DIP,
+  feetOf,
+  MIN_SHOWN,
+} from "../src/main/companion.ts";
 import { COMPANION_PAGE } from "../src/main/policy.ts";
 import { STRINGS } from "../src/main/strings.ts";
 import type { Rectangle } from "../src/main/window-options.ts";
@@ -1753,6 +1759,8 @@ async function companion(walk: Walk, driven: Driven, step: Step) {
     await transparent(her, stage, step);
     await hoverAndTap(walk, her, stage, step);
     await herDrag(walk, her, step);
+    await herPlace(walk, driven, her, step);
+    await modelShown(walk, driven, model, step);
     const menu = await herMenu(walk, her);
     step.check(
       "her menu is logged as background mode closes it",
@@ -2035,6 +2043,104 @@ async function herDrag(walk: Walk, her: Her, step: Step) {
     "a drag moves her window by the pointer's travel, and companion.json keeps her feet",
     dropped !== null && moved,
     `her window ${placed(start)} → ${placed(end)}; companion.json's feet ${JSON.stringify(savedFeet(walk))}`,
+  );
+}
+
+/**
+ * A drag far past her display's bottom right leaves a quarter of her window on it, which companion.json
+ * keeps; then Settings → Desktop's Reset Position stands her at her first place, saving no feet.
+ */
+async function herPlace(walk: Walk, driven: Driven, her: Her, step: Step) {
+  const probe = await her.probe();
+  await her.hover(probe);
+  const start = await her.bounds();
+  if (start === null) throw new Error("her window is gone");
+  const display = await driven.app.evaluate(
+    ({ screen }, at) => screen.getDisplayNearestPoint(at).bounds,
+    { x: Math.round(start.x + start.width / 2), y: Math.round(start.y + start.height / 2) },
+  );
+  const grab = { x: start.x + probe.x, y: start.y + probe.y };
+  const far = { x: grab.x + display.width, y: grab.y + display.height };
+  await her.send({ type: "mouseDown", at: probe, button: "left" });
+  for (let i = 1; i <= 4; i++) {
+    const at = {
+      x: Math.round(grab.x + ((far.x - grab.x) * i) / 4),
+      y: Math.round(grab.y + ((far.y - grab.y) * i) / 4),
+    };
+    await her.move(at, { global: true, held: true });
+  }
+  await her.send({ type: "mouseUp", at: far, global: true, button: "left" });
+  const kept = await until(
+    "her feet kept past the edge",
+    async () => {
+      const bounds = await her.bounds();
+      const feet = savedFeet(walk);
+      if (bounds === null || feet === null) return null;
+      const own = feetOf(bounds);
+      return feet.x === own.x && feet.y === own.y && bounds.x > start.x ? bounds : null;
+    },
+    3000,
+    100,
+  ).catch(() => null);
+  const right = display.x + display.width;
+  const bottom = display.y + display.height;
+  const past =
+    kept !== null &&
+    kept.x + kept.width > right &&
+    kept.y + kept.height > bottom &&
+    right - kept.x >= Math.ceil(kept.width * MIN_SHOWN) &&
+    bottom - kept.y >= Math.ceil(kept.height * MIN_SHOWN);
+  step.check(
+    "a drag takes her partly off the display, a quarter of her window still on it",
+    past,
+    `her window ${placed(start)} → ${placed(kept ?? (await her.bounds()))} on a display ${display.width}×${display.height} at (${display.x}, ${display.y}); companion.json's feet ${JSON.stringify(savedFeet(walk))}`,
+  );
+  const { page } = driven;
+  await settingsSection(page, "Desktop", "desktop");
+  const from = walk.smoke.log("main").length;
+  await page
+    .locator('[data-desktop-option="companion-place"]')
+    .getByRole("button", { name: "Reset Position", exact: true })
+    .click();
+  const reset = await walk.smoke
+    .waitForLine("main", COMPANION_LINES.placeReset, { from, timeoutMs: 5000 })
+    .catch(() => null);
+  const area = await driven.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
+  const back = await until(
+    "her window at her first place",
+    async () => {
+      const bounds = await her.bounds();
+      if (bounds === null) return null;
+      const edge = area.x + area.width - EDGE_DIP - (bounds.x + bounds.width);
+      const floor = area.y + area.height - (bounds.y + bounds.height);
+      return Math.abs(edge) <= 1 && Math.abs(floor) <= 1 ? bounds : null;
+    },
+    3000,
+    100,
+  ).catch(() => null);
+  step.check(
+    "Settings → Desktop's Reset Position stands her at her first place, saving no feet",
+    reset !== null && back !== null && savedFeet(walk) === null,
+    `${reset === null ? "main.log says nothing of a reset" : after(reset)}; her window ${placed(back ?? (await her.bounds()))} in a work area ${area.width}×${area.height} at (${area.x}, ${area.y}); companion.json's feet ${JSON.stringify(savedFeet(walk))}`,
+  );
+}
+
+/** Model Options' Show in Finder in Studio › Appearance, which background mode logs. */
+async function modelShown(walk: Walk, driven: Driven, model: string, step: Step) {
+  const { smoke } = walk;
+  const { page } = driven;
+  await page.goto(`eidolon-app://app/personas/${PERSONA}/appearance`);
+  const from = smoke.log("main").length;
+  await page.getByRole("button", { name: "Model Options", exact: true }).first().click();
+  const reveal = process.platform === "win32" ? "Show in Explorer" : "Show in Finder";
+  await page.getByRole("menuitem", { name: reveal, exact: true }).click();
+  const file = join(smoke.run.home, "personas", PERSONA, "models", model, "model.p2lrt");
+  const line = `Eidolon: background mode didn't show ${file} in the file manager`;
+  const shown = await smoke.waitForLine("main", line, { from, timeoutMs: 5000 }).catch(() => null);
+  step.check(
+    "Studio's Model Options shows her model's file in Finder, which background mode logs",
+    shown !== null,
+    shown === null ? `main.log never said "${after(line)}"` : after(shown),
   );
 }
 

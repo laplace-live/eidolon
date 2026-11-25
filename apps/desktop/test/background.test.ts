@@ -14,6 +14,7 @@ import {
   backgroundWindowOptions,
   chromiumSwitches,
   DownloadPaths,
+  hasHideNotice,
   hasTray,
   type NativeUi,
   nativeUi,
@@ -42,7 +43,7 @@ describe("backgroundMode", () => {
   });
 });
 
-test("off, the app is a regular one; on, it's an accessory on macOS, with no taskbar button or tray on Windows", () => {
+test("off, the app is a regular one; on, it's an accessory on macOS, with no taskbar button on Windows and no tray icon on either", () => {
   expect(activationPolicy("darwin", false)).toBeNull();
   expect(activationPolicy("darwin", true)).toBe("accessory");
   expect(activationPolicy("win32", true)).toBeNull();
@@ -51,7 +52,11 @@ test("off, the app is a regular one; on, it's an accessory on macOS, with no tas
   expect(backgroundWindowOptions("darwin", true)).toEqual({});
   expect(hasTray("win32", false)).toBe(true);
   expect(hasTray("win32", true)).toBe(false);
-  expect(hasTray("darwin", false)).toBe(false);
+  expect(hasTray("darwin", false)).toBe(true);
+  expect(hasTray("darwin", true)).toBe(false);
+  expect(hasHideNotice("win32", false)).toBe(true);
+  expect(hasHideNotice("win32", true)).toBe(false);
+  expect(hasHideNotice("darwin", false)).toBe(false);
 });
 
 test("on, the backend's first spawn asks for a free port, never 7860; off, the controller's own", () => {
@@ -151,6 +156,7 @@ describe("nativeUi", () => {
           calls.push(`openPath ${path}`);
           return "";
         },
+        showItemInFolder: (path) => void calls.push(`showItemInFolder ${path}`),
         aboutPanel: (panel) => void calls.push(`aboutPanel ${panel.applicationName}`),
         stealFocus: () => void calls.push("stealFocus"),
         popup: (menu) => void calls.push(`popup ${menu.length}`),
@@ -271,6 +277,7 @@ describe("nativeUi", () => {
       version: "Server 0.13.0",
     });
     on.aboutPanel({ applicationName: "Eidolon", applicationVersion: "0.1.0", credits: "" });
+    on.showItemInFolder("/tmp/home/personas/milky-green/models/tml/model.p2lrt");
     on.stealFocus();
     on.popup(
       [
@@ -287,6 +294,7 @@ describe("nativeUi", () => {
       "Eidolon: background mode didn't open /tmp/profile/logs",
       "Eidolon: background mode didn't show the About panel: Eidolon 0.0.0-dev (Server 0.13.0)",
       "Eidolon: background mode didn't show the About panel: Eidolon 0.1.0",
+      "Eidolon: background mode didn't show /tmp/home/personas/milky-green/models/tml/model.p2lrt in the file manager",
       "Eidolon: background mode didn't open a menu: Cut, Copy, Select All",
     ]);
   });

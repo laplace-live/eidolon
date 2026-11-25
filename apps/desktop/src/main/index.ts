@@ -4,6 +4,7 @@
 // environment and the backend, which the window, the desktop companion and the task notifications
 // follow.
 import "./instance.ts";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AboutPanelOptionsOptions,
@@ -16,7 +17,7 @@ import {
 import { BRIDGE, type Language, pageAt } from "../shared/bridge.ts";
 import { dataHome } from "./attach.ts";
 import { Backend, licensesFile } from "./backend.ts";
-import { BACKGROUND_LINE, backendPort, hasTray } from "./background.ts";
+import { BACKGROUND_LINE, backendPort, hasHideNotice, hasTray } from "./background.ts";
 import {
   dressWindow,
   handleAppBridge,
@@ -96,6 +97,8 @@ const TOAST_ACTIVATOR_CLSID = "{75F1E873-F478-41C1-9698-DBCAB1E2A111}";
 const DEV_SWITCH = "eidolon-dev-server";
 /** In userData: the Windows tray notice has shown. */
 const TRAY_NOTICE_MARKER = "tray-notice-shown";
+/** A model's rig in its folder, as the server names it (RIG_FILE in apps/bot/src/local/appearance.ts). */
+const MODEL_FILE = "model.p2lrt";
 
 function open(path: string): void {
   native.openPath(path).then(
@@ -453,6 +456,14 @@ function run(): void {
         companion: () => companionFlow.state(),
         setCompanion: (change) => companionFlow.change(change),
         popOut: () => companionFlow.popOut(),
+        resetCompanionPlace: () => companionFlow.resetPlace(),
+        revealModel: ({ persona, model }) => {
+          const home = backend.home ?? dataHome(process.env);
+          const file = join(home, "personas", persona, "models", model, MODEL_FILE);
+          if (!existsSync(file)) return false;
+          native.showItemInFolder(file);
+          return true;
+        },
         linkCompanion: () => link.appAsks(),
         feedingCompanion: (on) => companionFlow.feeding(on),
         windowShows,
@@ -476,7 +487,9 @@ function run(): void {
       setMenus();
       setAbout();
       if (hasTray(process.platform, background)) {
-        tray = new AppTray(strings(), actions, menuUpdates, companionFlow.on);
+        tray = new AppTray(strings(), actions, menuUpdates, companionFlow.on, process.platform);
+      }
+      if (hasHideNotice(process.platform, background)) {
         hideNotice = new HideNotice({
           marker: join(app.getPath("userData"), TRAY_NOTICE_MARKER),
           show: () => {

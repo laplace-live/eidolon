@@ -133,6 +133,13 @@ export interface EidolonDesktop {
   readonly setCompanion?: (change: CompanionChange) => Promise<CompanionState>;
   /** Turns her on and, once she is drawn, hides the window: she carries the call. */
   readonly popOut?: () => Promise<CompanionState>;
+  /** Stands her at her first place, saved; then her state. */
+  readonly resetCompanionPlace?: () => Promise<CompanionState>;
+  /** Shows a model's file in Finder or Explorer; false when it isn't there. */
+  readonly revealModel?: (model: {
+    readonly persona: string;
+    readonly model: string;
+  }) => Promise<boolean>;
   /** Asks main for a port to the desktop companion's page; it arrives as a window message. */
   readonly linkCompanion?: () => void;
   /** Whether a call she is on is up here, which keeps the window drawing for her. */

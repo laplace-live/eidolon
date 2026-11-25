@@ -18,7 +18,9 @@ import {
   type IpcSender,
   isCommandAction,
   isCompanionChange,
+  isModelRef,
   type LoginItemState,
+  type ModelRef,
   type PageChannel,
   type WindowSize,
 } from "../shared/bridge.ts";
@@ -33,6 +35,9 @@ export interface AppInvokes {
   readonly companion: () => CompanionState;
   readonly setCompanion: (change: CompanionChange) => CompanionState;
   readonly popOut: () => CompanionState;
+  readonly resetCompanionPlace: () => CompanionState;
+  /** Whether the model's file was there to show. */
+  readonly revealModel: (model: ModelRef) => boolean;
 }
 
 /** An invoke's answer to who sent it and its argument; throws for another sender or argument. */
@@ -73,6 +78,11 @@ export function appInvokes(actions: AppInvokes): readonly (readonly [PageChannel
       return actions.setCompanion(change);
     }),
     guarded(BRIDGE.popOut, () => actions.popOut()),
+    guarded(BRIDGE.resetCompanionPlace, () => actions.resetCompanionPlace()),
+    guarded(BRIDGE.revealModel, (model) => {
+      if (!isModelRef(model)) throw new Error("a model is a persona's id and a model's id");
+      return actions.revealModel({ persona: model.persona, model: model.model });
+    }),
   ];
 }
 

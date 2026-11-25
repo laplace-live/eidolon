@@ -19,6 +19,7 @@ import {
   isCompanionChange,
   isCompanionDrawn,
   isLanguage,
+  isModelRef,
   isThemeSetting,
   loginItemStateOf,
   pageAt,
@@ -91,6 +92,13 @@ export function desktopBridge(
         ? ipc.invoke(BRIDGE.setCompanion, change).then(companionStateOf)
         : Promise.reject(new Error("the desktop companion takes on or showAtLogin")),
     popOut: () => ipc.invoke(BRIDGE.popOut).then(companionStateOf),
+    resetCompanionPlace: () => ipc.invoke(BRIDGE.resetCompanionPlace).then(companionStateOf),
+    revealModel: (model) =>
+      isModelRef(model)
+        ? ipc
+            .invoke(BRIDGE.revealModel, { persona: model.persona, model: model.model })
+            .then((shown) => shown === true)
+        : Promise.reject(new Error("a model is a persona's id and a model's id")),
     linkCompanion: () => ipc.send(BRIDGE.linkCompanion),
     feedingCompanion: (feeding) => ipc.send(BRIDGE.feedingCompanion, feeding === true),
     onCompanionPick: (callback) => {

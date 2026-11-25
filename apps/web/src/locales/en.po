@@ -1920,6 +1920,10 @@ msgstr "Downloads use no cookies."
 msgid "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
 msgstr "Downloads, transcribes, refines and indexes her videos. Each step skips what's already done."
 
+#: src/features/settings/desktop-card.tsx
+msgid "Drag her anywhere, even partly off the screen. Reset Position brings her back to the bottom right of your main display."
+msgstr "Drag her anywhere, even partly off the screen. Reset Position brings her back to the bottom right of your main display."
+
 #: src/features/studio/model-controls.tsx
 msgid "Drag her on the preview to move her, and scroll or pinch to zoom."
 msgstr "Drag her on the preview to move her, and scroll or pinch to zoom."
@@ -2620,6 +2624,10 @@ msgstr "Her own voice is removed from her settings, and she speaks with the one 
 #: src/features/home/readiness-labels.ts
 msgid "Her own voice works with Fish Audio."
 msgstr "Her own voice works with Fish Audio."
+
+#: src/features/settings/desktop-card.tsx
+msgid "Her Position"
+msgstr "Her Position"
 
 #: src/features/home/readiness-labels.ts
 msgid "Her providers take no key."
@@ -4793,6 +4801,10 @@ msgstr "Reset {name} to Default"
 msgid "Reset Framing"
 msgstr "Reset Framing"
 
+#: src/features/settings/desktop-card.tsx
+msgid "Reset Position"
+msgstr "Reset Position"
+
 #: src/features/home/readiness-labels.ts
 #: src/features/settings/notices.tsx
 #: src/features/settings/restart-button.tsx
@@ -5287,6 +5299,10 @@ msgstr "She uses it in calls. Leave it empty and she won't use a name."
 msgid "She Wears"
 msgstr "She Wears"
 
+#: src/features/settings/desktop-card.tsx
+msgid "She's back at the bottom right of your main display."
+msgstr "She's back at the bottom right of your main display."
+
 #: src/features/chats/labels.ts
 msgid "She's the only persona in this chat, so she answers every line."
 msgstr "She's the only persona in this chat, so she answers every line."
@@ -5324,6 +5340,14 @@ msgstr "Show each task as one card"
 #: src/features/studio/video-table.tsx
 msgid "Show Finished"
 msgstr "Show Finished"
+
+#: src/features/studio/model-list.tsx
+msgid "Show in Explorer"
+msgstr "Show in Explorer"
+
+#: src/features/studio/model-list.tsx
+msgid "Show in Finder"
+msgstr "Show in Finder"
 
 #: src/features/tasks/cards.tsx
 msgid "Show Less"
@@ -6119,6 +6143,10 @@ msgstr "The microphone isn't available here"
 #: src/features/studio/models-section.tsx
 msgid "The model and voice {name} talks with. Her speech recognition, chat and voice settings don't apply while it's on."
 msgstr "The model and voice {name} talks with. Her speech recognition, chat and voice settings don't apply while it's on."
+
+#: src/features/studio/model-list.tsx
+msgid "The model's file wasn't found."
+msgstr "The model's file wasn't found."
 
 #: src/components/settings-form/labels.ts
 msgid "The most context a task's requests carry, in tokens. Default 128000."

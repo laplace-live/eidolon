@@ -26,7 +26,6 @@ import {
   dragged,
   feetOf,
   MENU_SETTLE_MS,
-  onDisplay,
   POP_TIMEOUT_MS,
   type Point,
   placement,
@@ -59,7 +58,7 @@ export interface CompanionIo {
   throttle(allowed: boolean): void;
   /** The displays' work areas, the primary's first (window-options.ts's workAreas). */
   areas(): readonly Rectangle[];
-  /** The displays' bounds: her feet on none of them send her to her first place. */
+  /** The displays' bounds: less than MIN_SHOWN of her window on any of them sends her to her first place. */
   displays(): readonly Rectangle[];
   save(settings: CompanionSettings): void;
   /** Pops `items` up over her window, at the cursor; resolves once the menu has closed. */
@@ -230,14 +229,14 @@ export class Companion {
       this.#dragAt = pointer;
     } else if (this.#dragStart !== null) {
       this.#dragAt = pointer;
-      const areas = this.#io.areas();
-      const moved = dragged(this.#dragStart, pointer, areas);
+      const displays = this.#io.displays();
+      const moved = dragged(this.#dragStart, pointer, displays);
       if (drag.phase === "move") {
         this.#io.setBounds(moved);
         // She stands where the drag has her, should she be reshaped before the drop.
         this.#feet = feetOf(moved);
       } else {
-        const dropped = settled(moved, areas);
+        const dropped = settled(moved, this.#io.areas(), displays);
         this.#io.setBounds(dropped);
         this.#dragStart = null;
         this.#feet = feetOf(dropped);
@@ -302,8 +301,20 @@ export class Companion {
     if (before === null) return;
     const { bounds } = this.#placed();
     this.#setBounds(bounds);
-    // A display that went, or a Dock that grew under her, moved her: she stands there now.
+    // A display that went from under her sent her to her first place: she stands there now.
     if (bounds.x !== before.x || bounds.y !== before.y) this.#feet = feetOf(bounds);
+  }
+
+  /** Settings' Reset Position: her first place, saved, and her window moved there if she has one. */
+  resetPlace(): CompanionState {
+    this.#feet = null;
+    // Before she is drawn, the shape her page then says stands her there afresh.
+    this.#firstPlace = this.#page !== "drawn";
+    this.#save({ feet: null });
+    if (this.#io.bounds() !== null) this.#setBounds(this.#placed().bounds);
+    this.#io.log.info(COMPANION_LINES.placeReset);
+    this.#sync();
+    return this.state();
   }
 
   popOut(): CompanionState {
@@ -373,11 +384,11 @@ export class Companion {
     if (this.#quitting) return;
     this.#page = "loading";
     // A new window stands where her settings left her; one loaded again keeps her place.
-    if (this.#io.bounds() === null) {
-      this.#feet = null;
-      this.#firstPlace = !onDisplay(this.#settings.feet, this.#io.displays());
-    }
-    this.#io.open(this.#placed().bounds);
+    const made = this.#io.bounds() === null;
+    if (made) this.#feet = null;
+    const placed = this.#placed();
+    if (made) this.#firstPlace = placed.first;
+    this.#io.open(placed.bounds);
     this.#io.passClicks(true);
     if (!this.#background) this.#io.setAlwaysOnTop(this.#settings.alwaysOnTop);
     this.#cancelDrawTimer();
@@ -387,15 +398,22 @@ export class Companion {
     });
   }
 
-  /** Her window's size and bounds as her settings and shape have them, standing where she stood. */
-  #placed(): { readonly size: WindowSize; readonly bounds: Rectangle } {
+  /**
+   * Her window's size and bounds as her settings and shape have them, standing where she stood, and
+   * whether that was her first place, too little of her showing where she stood.
+   */
+  #placed(): { readonly size: WindowSize; readonly bounds: Rectangle; readonly first: boolean } {
     const areas = this.#io.areas();
     const displays = this.#io.displays();
     const feet = this.#feet ?? this.#settings.feet;
     const area = feet === null ? areas[0] : areaAt(feet, areas);
     const size = companionSize(this.#settings.size, this.#shape, area);
     this.#feet = standing(feet, size, areas, displays);
-    return { size, bounds: placement(this.#feet, size, areas, displays) };
+    return {
+      size,
+      bounds: placement(this.#feet, size, areas, displays),
+      first: this.#feet !== feet,
+    };
   }
 
   /** Places her window; a drag under way goes on from there, at its size. */

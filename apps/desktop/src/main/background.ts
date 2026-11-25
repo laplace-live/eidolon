@@ -73,8 +73,13 @@ export function backgroundWindowOptions(
   return background && platform === "win32" ? { skipTaskbar: true } : {};
 }
 
-/** Windows' notification-area icon, and with it the notice the first hide shows. */
+/** The tray's icon: Windows' notification area, macOS's menu bar. */
 export function hasTray(platform: NodeJS.Platform, background: boolean): boolean {
+  return (platform === "win32" || platform === "darwin") && !background;
+}
+
+/** The notice the first hide shows, which tells of the tray where Windows has no Dock. */
+export function hasHideNotice(platform: NodeJS.Platform, background: boolean): boolean {
   return platform === "win32" && !background;
 }
 
@@ -165,6 +170,8 @@ export interface NativeUi {
   openExternal(url: string): Promise<void>;
   /** Resolves to the error, empty once it opened. */
   openPath(path: string): Promise<string>;
+  /** Shows `path` selected in Finder or Explorer. */
+  showItemInFolder(path: string): void;
   aboutPanel(panel: AboutPanelOptionsOptions): void;
   /** Makes the app active, over whichever app is. */
   stealFocus(): void;
@@ -204,6 +211,9 @@ export function nativeUi(background: boolean, electron: NativeUi, log: Log): Nat
     async openPath(path) {
       log.info(`Eidolon: background mode didn't open ${path}`);
       return "";
+    },
+    showItemInFolder(path) {
+      log.info(`Eidolon: background mode didn't show ${path} in the file manager`);
     },
     aboutPanel({ applicationName, applicationVersion, version, credits }) {
       const server = version || credits;
