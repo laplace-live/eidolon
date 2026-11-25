@@ -1,10 +1,18 @@
 // Upgrading from Eidolon (<appData>/Eidolon) to LAPLACE Eidolon (<appData>/LAPLACE Eidolon).
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { COMPANION_FILE, readCompanion, writeCompanion } from "../src/main/companion.ts";
-import { migrateLegacyProfile, TRAY_NOTICE_MARKER } from "../src/main/profile.ts";
+import { MIGRATED_MARKER, migrateLegacyProfile, TRAY_NOTICE_MARKER } from "../src/main/profile.ts";
 import { BOUNDS_FILE, readBounds, writeBounds } from "../src/main/window-options.ts";
 
 let appData: string;
@@ -33,6 +41,7 @@ function populateLegacy(legacy: string): void {
   writeFileSync(join(legacy, TRAY_NOTICE_MARKER), "");
   mkdirSync(join(legacy, "Local Storage", "leveldb"), { recursive: true });
   writeFileSync(join(legacy, "Local Storage", "leveldb", "000003.log"), "zh-Hans");
+  writeFileSync(join(legacy, "Local Storage", "leveldb", "LOCK"), "");
 }
 
 describe("migrateLegacyProfile", () => {
@@ -42,60 +51,46 @@ describe("migrateLegacyProfile", () => {
     expect(existsSync(userData)).toBe(false);
   });
 
-  test("moves <appData>/Eidolon whole when userData is absent or an empty folder", () => {
-    for (const precreate of [false, true]) {
-      const root = join(appData, precreate ? "empty" : "absent");
-      const legacy = join(root, "Eidolon");
-      const userData = join(root, "LAPLACE Eidolon");
-      populateLegacy(legacy);
-      if (precreate) mkdirSync(userData, { recursive: true });
-
-      migrateLegacyProfile(root, userData);
-
-      expect(existsSync(legacy)).toBe(false);
-      expect(readBounds(join(userData, BOUNDS_FILE))).toEqual({
-        x: 120,
-        y: 80,
-        width: 1400,
-        height: 900,
-        maximized: true,
-      });
-      expect(readCompanion(join(userData, COMPANION_FILE))).toEqual({
-        on: true,
-        showAtLogin: true,
-        alwaysOnTop: false,
-        size: "large",
-        feet: { x: 800, y: 900 },
-      });
-      expect(existsSync(join(userData, TRAY_NOTICE_MARKER))).toBe(true);
-      expect(readFileSync(join(userData, "Local Storage", "leveldb", "000003.log"), "utf8")).toBe(
-        "zh-Hans",
-      );
-    }
-  });
-
-  test("copies saved state and Local Storage when Electron already created Crashpad in userData", () => {
+  test("copies saved state and Local Storage while leaving <appData>/Eidolon and its locks in place", () => {
     const legacy = join(appData, "Eidolon");
     const userData = join(appData, "LAPLACE Eidolon");
     populateLegacy(legacy);
-    mkdirSync(join(userData, "Crashpad"), { recursive: true });
+    if (process.platform !== "win32") {
+      symlinkSync("host-12345", join(legacy, "SingletonLock"));
+    }
 
     migrateLegacyProfile(appData, userData);
 
-    expect(readCompanion(join(userData, COMPANION_FILE)).on).toBe(true);
-    expect(readBounds(join(userData, BOUNDS_FILE))?.width).toBe(1400);
+    expect(existsSync(legacy)).toBe(true);
+    expect(existsSync(join(userData, "SingletonLock"))).toBe(false);
+    expect(existsSync(join(userData, MIGRATED_MARKER))).toBe(true);
+    expect(readBounds(join(userData, BOUNDS_FILE))).toEqual({
+      x: 120,
+      y: 80,
+      width: 1400,
+      height: 900,
+      maximized: true,
+    });
+    expect(readCompanion(join(userData, COMPANION_FILE))).toEqual({
+      on: true,
+      showAtLogin: true,
+      alwaysOnTop: false,
+      size: "large",
+      feet: { x: 800, y: 900 },
+    });
     expect(existsSync(join(userData, TRAY_NOTICE_MARKER))).toBe(true);
     expect(readFileSync(join(userData, "Local Storage", "leveldb", "000003.log"), "utf8")).toBe(
       "zh-Hans",
     );
+    expect(existsSync(join(userData, "Local Storage", "leveldb", "LOCK"))).toBe(false);
   });
 
-  test("never overwrites or backfills an initialized LAPLACE Eidolon profile", () => {
+  test("retries when an earlier launch failed before writing the completion marker", () => {
     const legacy = join(appData, "Eidolon");
     const userData = join(appData, "LAPLACE Eidolon");
     populateLegacy(legacy);
     mkdirSync(userData, { recursive: true });
-    writeFileSync(join(userData, "Preferences"), "{}");
+    // Simulate a partial copy that wrote companion.json and was updated by the user, without the marker.
     writeCompanion(join(userData, COMPANION_FILE), {
       on: false,
       showAtLogin: true,
@@ -106,14 +101,25 @@ describe("migrateLegacyProfile", () => {
 
     migrateLegacyProfile(appData, userData);
 
-    expect(readCompanion(join(userData, COMPANION_FILE))).toEqual({
-      on: false,
-      showAtLogin: true,
-      alwaysOnTop: true,
-      size: "small",
-      feet: null,
-    });
+    expect(existsSync(join(userData, MIGRATED_MARKER))).toBe(true);
+    expect(readCompanion(join(userData, COMPANION_FILE)).on).toBe(false);
+    expect(readBounds(join(userData, BOUNDS_FILE))?.width).toBe(1400);
+    expect(readFileSync(join(userData, "Local Storage", "leveldb", "000003.log"), "utf8")).toBe(
+      "zh-Hans",
+    );
+  });
+
+  test("skips once the completion marker is present", () => {
+    const legacy = join(appData, "Eidolon");
+    const userData = join(appData, "LAPLACE Eidolon");
+    populateLegacy(legacy);
+    mkdirSync(userData, { recursive: true });
+    writeFileSync(join(userData, MIGRATED_MARKER), "");
+
+    migrateLegacyProfile(appData, userData);
+
     expect(existsSync(join(userData, BOUNDS_FILE))).toBe(false);
+    expect(existsSync(join(userData, COMPANION_FILE))).toBe(false);
     expect(existsSync(join(userData, TRAY_NOTICE_MARKER))).toBe(false);
   });
 });
