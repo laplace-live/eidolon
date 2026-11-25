@@ -3663,9 +3663,14 @@ async function chatCallWalk(walk: Walk): Promise<void> {
     const offerReleased = new Promise<void>((resolve) => {
       releaseOffer = resolve;
     });
-    const holdOffer = async (route: Route) => {
-      if (route.request().method() === "POST") await offerReleased;
-      await route.continue();
+    const passing: Promise<void>[] = [];
+    const holdOffer = (route: Route) => {
+      const pass = (async () => {
+        if (route.request().method() === "POST") await offerReleased;
+        await route.continue();
+      })();
+      passing.push(pass);
+      return pass;
     };
     await page.route("**/api/offer", holdOffer);
     let hungUpAt = 0;
@@ -3680,6 +3685,9 @@ async function chatCallWalk(walk: Walk): Promise<void> {
       hungUpAt = Date.now();
     } finally {
       releaseOffer();
+      // unroute doesn't wait for a handler still running: Playwright continues its route itself,
+      // and the handler's own continue then throws "Route is already handled!".
+      await Promise.allSettled(passing);
       await page.unroute("**/api/offer", holdOffer);
     }
     const calls = await poll(
