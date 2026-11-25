@@ -131,6 +131,7 @@ function MoodRow({
   const settings = moodParameters[tag] ?? [];
   const chosen = Object.hasOwn(moods, tag) || settings.length > 0;
   const held = new Set(settings.map(({ id }) => id));
+  const unheld = inventory.parameters.filter(({ id }) => !held.has(id));
   // A parameter edited shows on the preview at once, as she would show the mood.
   const hold = (id: string, value: number | null) => {
     onMoodParameters(withMoodParameter(inventory, moodParameters, tag, id, value));
@@ -228,10 +229,10 @@ function MoodRow({
           })}
         </ul>
       )}
-      {inventory.parameters.length > 0 && (
+      {unheld.length > 0 && (
         <ParameterPicker
           name={label}
-          parameters={inventory.parameters.filter(({ id }) => !held.has(id))}
+          parameters={unheld}
           disabled={settings.length >= MAX_MOOD_PARAMETERS}
           onPick={(parameter) => hold(parameter.id, parameter.default)}
         />
