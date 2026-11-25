@@ -13,6 +13,7 @@ import {
   type ModelBox,
   type ModelInventory,
   type ModelOutfit,
+  type ModelParameterSetting,
 } from "./api.ts";
 import { PERSONA_ID, userFolder, writeDataFile } from "./write.ts";
 
@@ -24,6 +25,7 @@ const MAX_ID = 64;
 const MAX_NAME = 64;
 const MAX_OUTFITS = 32;
 const MAX_MOOD_EXPRESSIONS = 2;
+const MAX_MOOD_PARAMETERS = 8;
 /** A mood's, a gesture's or an outfit's key. */
 const KEY = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -126,6 +128,15 @@ function recordOf(check: Check): Check {
   return (value) => isPlainObject(value) && Object.values(value).every(check);
 }
 
+/** A field model.json may lack, written before it existed. */
+function orAbsent(check: Check): Check {
+  return (value) => value === undefined || check(value);
+}
+
+function isLook(value: unknown): value is number {
+  return typeof value === "number" && value >= 0 && value <= 1;
+}
+
 /** An object with at least `fields`, each passing its check. */
 function shaped(fields: Record<string, Check>): Check {
   return (value) =>
@@ -133,6 +144,7 @@ function shaped(fields: Record<string, Check>): Check {
 }
 
 const NAMED = { id: isString, name: isString };
+const SETTING = { id: isString, value: isNumber };
 
 /** model.json's fields besides `format` and `file`, in the shapes this code writes them. */
 const isModelFields = shaped({
@@ -156,13 +168,15 @@ const isModelFields = shaped({
     textures: Number.isSafeInteger,
   }),
   framing: (framing) => framingOf(framing) !== null,
+  look: orAbsent(isLook),
   moods: recordOf(listOf(isString)),
+  moodParameters: orAbsent(recordOf(listOf(shaped(SETTING)))),
   gestures: recordOf(isString),
   outfits: listOf(
     shaped({
       ...NAMED,
       poses: listOf(shaped({ group: Number.isSafeInteger, entry: Number.isSafeInteger })),
-      parameters: listOf(shaped({ id: isString, value: isNumber })),
+      parameters: listOf(shaped(SETTING)),
       hiddenParts: listOf(isString),
     }),
   ),
@@ -189,6 +203,7 @@ export function readModel(persona: string, model: string): CharacterModel | null
   // Picked, never spread: an id written into the file would stand for another folder.
   const { name, kind, size, sha256, importedAt, updatedAt } = fields as ModelFields;
   const { inventory, framing, moods, gestures, outfits, outfit } = fields as ModelFields;
+  const { look = 1, moodParameters = {} } = fields as Partial<ModelFields>;
   return {
     id: model,
     name,
@@ -199,7 +214,9 @@ export function readModel(persona: string, model: string): CharacterModel | null
     updatedAt,
     inventory,
     framing,
+    look,
     moods,
+    moodParameters,
     gestures,
     outfits,
     outfit,
@@ -257,7 +274,9 @@ export function importModel(
     updatedAt: now,
     inventory,
     framing: { call: null, companion: null },
+    look: 1,
     moods: {},
+    moodParameters: {},
     gestures: {},
     outfits: [],
     outfit: null,
@@ -278,11 +297,16 @@ export function importModel(
 function kept(
   model: CharacterModel,
   inventory: ModelInventory,
-): Pick<CharacterModel, "moods" | "gestures" | "outfits"> {
+): Pick<CharacterModel, "moods" | "moodParameters" | "gestures" | "outfits"> {
   const expressions = new Set(inventory.expressions.map(({ id }) => id));
   const clips = new Set(inventory.clips.map(({ id }) => id));
   const parts = new Set(inventory.parts.map(({ id }) => id));
   const ranges = new Map(inventory.parameters.map((parameter) => [parameter.id, parameter]));
+  const inRange = (settings: readonly ModelParameterSetting[]) =>
+    settings.flatMap(({ id, value }) => {
+      const range = ranges.get(id);
+      return range ? [{ id, value: Math.min(range.max, Math.max(range.min, value)) }] : [];
+    });
   return {
     moods: Object.fromEntries(
       Object.entries(model.moods).flatMap(([mood, ids]) => {
@@ -291,14 +315,17 @@ function kept(
         return left.length > 0 || ids.length === 0 ? [[mood, left]] : [];
       }),
     ),
+    moodParameters: Object.fromEntries(
+      Object.entries(model.moodParameters).flatMap(([mood, settings]) => {
+        const left = inRange(settings);
+        return left.length > 0 ? [[mood, left]] : [];
+      }),
+    ),
     gestures: Object.fromEntries(Object.entries(model.gestures).filter(([, id]) => clips.has(id))),
     outfits: model.outfits.map((outfit) => ({
       ...outfit,
       poses: outfit.poses.filter(({ group, entry }) => entry < (inventory.poseGroups[group] ?? 0)),
-      parameters: outfit.parameters.flatMap(({ id, value }) => {
-        const range = ranges.get(id);
-        return range ? [{ id, value: Math.min(range.max, Math.max(range.min, value)) }] : [];
-      }),
+      parameters: inRange(outfit.parameters),
       hiddenParts: outfit.hiddenParts.filter((id) => parts.has(id)),
     })),
   };
@@ -383,7 +410,36 @@ function gesturesOf(value: unknown, inventory: ModelInventory): Record<string, s
 }
 
 type Pose = ModelOutfit["poses"][number];
-type Setting = ModelOutfit["parameters"][number];
+
+/** A check for {id, value}: one of the model's parameters, at a value within its range. */
+function settingCheck(inventory: ModelInventory) {
+  const ranges = new Map(inventory.parameters.map((parameter) => [parameter.id, parameter]));
+  return (setting: unknown): setting is ModelParameterSetting => {
+    if (!isPlainObject(setting) || !hasKeys(setting, ["id", "value"])) return false;
+    const range = typeof setting.id === "string" ? ranges.get(setting.id) : undefined;
+    const { value } = setting;
+    return (
+      range !== undefined && typeof value === "number" && value >= range.min && value <= range.max
+    );
+  };
+}
+
+function moodParametersOf(
+  value: unknown,
+  inventory: ModelInventory,
+): Record<string, ModelParameterSetting[]> | null {
+  if (!isPlainObject(value)) return null;
+  const isSetting = settingCheck(inventory);
+  const moods: Record<string, ModelParameterSetting[]> = {};
+  for (const [mood, settings] of Object.entries(value)) {
+    if (!KEY.test(mood) || !Array.isArray(settings) || settings.length > MAX_MOOD_PARAMETERS) {
+      return null;
+    }
+    if (!settings.every(isSetting) || !unique(settings.map(({ id }) => id))) return null;
+    moods[mood] = settings;
+  }
+  return moods;
+}
 
 /** An outfit whose poses, parameters in range and parts are the model's, each once. */
 function outfitOf(value: unknown, inventory: ModelInventory): ModelOutfit | null {
@@ -395,7 +451,6 @@ function outfitOf(value: unknown, inventory: ModelInventory): ModelOutfit | null
   if (!Array.isArray(poses) || !Array.isArray(parameters) || !Array.isArray(hiddenParts)) {
     return null;
   }
-  const ranges = new Map(inventory.parameters.map((parameter) => [parameter.id, parameter]));
   const parts = new Set(inventory.parts.map((part) => part.id));
   const isPose = (pose: unknown): pose is Pose => {
     if (!isPlainObject(pose) || !hasKeys(pose, ["group", "entry"])) return false;
@@ -405,14 +460,7 @@ function outfitOf(value: unknown, inventory: ModelInventory): ModelOutfit | null
       (entry as number) >= 0 && (entry as number) < (inventory.poseGroups[group as number] ?? 0)
     );
   };
-  const isSetting = (setting: unknown): setting is Setting => {
-    if (!isPlainObject(setting) || !hasKeys(setting, ["id", "value"])) return false;
-    const range = typeof setting.id === "string" ? ranges.get(setting.id) : undefined;
-    const { value } = setting;
-    return (
-      range !== undefined && typeof value === "number" && value >= range.min && value <= range.max
-    );
-  };
+  const isSetting = settingCheck(inventory);
   const isPart = (part: unknown): part is string => typeof part === "string" && parts.has(part);
   if (!poses.every(isPose) || !unique(poses.map((pose) => pose.group))) return null;
   if (!parameters.every(isSetting) || !unique(parameters.map((setting) => setting.id))) return null;
@@ -434,7 +482,9 @@ function outfitsOf(value: unknown, inventory: ModelInventory): ModelOutfit[] | n
 const PATCH_FIELDS: readonly string[] = [
   "name",
   "framing",
+  "look",
   "moods",
+  "moodParameters",
   "gestures",
   "outfits",
   "outfit",
@@ -454,8 +504,16 @@ export function checkPatch(model: CharacterModel, body: unknown): CharacterModel
   if (name === null) return "name is one line of 1 to 64 characters";
   const framing = has("framing") ? framingOf(body.framing) : undefined;
   if (framing === null) return "framing is {call, companion}, each a box of positive size or null";
+  const look = has("look") ? (isLook(body.look) ? body.look : null) : undefined;
+  if (look === null) return "look is a number from 0 to 1";
   const moods = has("moods") ? moodsOf(body.moods, inventory) : undefined;
   if (moods === null) return "moods map a mood to up to 2 of the model's expressions";
+  const moodParameters = has("moodParameters")
+    ? moodParametersOf(body.moodParameters, inventory)
+    : undefined;
+  if (moodParameters === null) {
+    return "moodParameters map a mood to up to 8 of the model's parameters, each once and in range";
+  }
   const gestures = has("gestures") ? gesturesOf(body.gestures, inventory) : undefined;
   if (gestures === null) return "gestures map a gesture to one of the model's clips";
   const outfits = has("outfits") ? outfitsOf(body.outfits, inventory) : undefined;
@@ -473,7 +531,7 @@ export function checkPatch(model: CharacterModel, body: unknown): CharacterModel
   } else if (model.outfit !== null && !owned.some(({ id }) => id === model.outfit)) {
     outfit = null;
   }
-  const patch = { name, framing, moods, gestures, outfits, outfit };
+  const patch = { name, framing, look, moods, moodParameters, gestures, outfits, outfit };
   return Object.fromEntries(
     Object.entries(patch).filter(([, value]) => value !== undefined),
   ) as CharacterModelPatch;

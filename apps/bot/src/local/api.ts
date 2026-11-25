@@ -772,11 +772,17 @@ export interface ModelInventory {
   readonly textures: number;
 }
 
+/** A parameter held at a value within its range. */
+export interface ModelParameterSetting {
+  readonly id: string;
+  readonly value: number;
+}
+
 export interface ModelOutfit {
   readonly id: string;
   readonly name: string;
   readonly poses: readonly { readonly group: number; readonly entry: number }[];
-  readonly parameters: readonly { readonly id: string; readonly value: number }[];
+  readonly parameters: readonly ModelParameterSetting[];
   readonly hiddenParts: readonly string[];
 }
 
@@ -791,8 +797,12 @@ export interface CharacterModel {
   readonly inventory: ModelInventory;
   /** null: the SDK's default (Head hit area for a call, the character's bounds on the desktop). */
   readonly framing: { readonly call: ModelBox | null; readonly companion: ModelBox | null };
+  /** How far her gaze turns her head, body and eyes, 0..1 of the runtime's turn; 1 when unset. */
+  readonly look: number;
   /** The owner's overrides only: mood tag → up to 2 expression ids; the SDK fills the rest. */
   readonly moods: Readonly<Record<string, readonly string[]>>;
+  /** The owner's choices only: mood tag → up to 8 parameters it holds at a value. */
+  readonly moodParameters: Readonly<Record<string, readonly ModelParameterSetting[]>>;
   /** The owner's overrides only: gesture → clip id. */
   readonly gestures: Readonly<Record<string, string>>;
   readonly outfits: readonly ModelOutfit[];
@@ -806,12 +816,16 @@ export interface CharacterModels {
 
 /**
  * PATCH's fields, each checked against the model's inventory: a name of one line of 1 to 64
- * characters; a mood or gesture key, and an outfit's id, a slug of up to 32 characters; up to 2
- * expressions per mood; up to 32 outfits, each naming its pose groups' entries, parameters within
- * their ranges and parts, each once; `outfit` one of the outfits, or null.
+ * characters; `look` from 0 to 1; a mood or gesture key, and an outfit's id, a slug of up to 32
+ * characters; up to 2 expressions per mood; up to 8 parameters per mood, each once and within its
+ * range; up to 32 outfits, each naming its pose groups' entries, parameters within their ranges and
+ * parts, each once; `outfit` one of the outfits, or null.
  */
 export type CharacterModelPatch = Partial<
-  Pick<CharacterModel, "name" | "framing" | "moods" | "gestures" | "outfits" | "outfit">
+  Pick<
+    CharacterModel,
+    "name" | "framing" | "look" | "moods" | "moodParameters" | "gestures" | "outfits" | "outfit"
+  >
 >;
 
 export interface CharacterModelUploadQuery {
