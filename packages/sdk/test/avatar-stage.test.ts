@@ -56,7 +56,12 @@ const INVENTORY: ModelInventory = {
   clips: ["Idle", "Talk", "Nod", "Shake"].map(clip),
   expressions: ["smile", "sleepy", "sad", "surprised"].map((id) => ({ id, name: id })),
   hitAreas: [{ id: "HitAreaHead", name: "Head" }],
-  parameters: [],
+  parameters: [
+    { id: "ParamAngleX", min: -30, max: 30, default: 0 },
+    { id: "ParamAngleY", min: -30, max: 30, default: 0 },
+    { id: "ParamMouthForm", min: -1, max: 1, default: 0 },
+    { id: "ParamEyeLSmile", min: -1, max: 1, default: 0 },
+  ],
   parts: [],
   poseGroups: [],
   lipSync: true,
@@ -73,7 +78,12 @@ function fakeModel() {
     play: vi.fn<AvatarModel["play"]>(),
     mouth: vi.fn<AvatarModel["mouth"]>(),
     lookAt: vi.fn<AvatarModel["lookAt"]>(),
+    lookStrength: vi.fn<AvatarModel["lookStrength"]>(),
+    roleParameters: vi.fn<AvatarModel["roleParameters"]>((role) =>
+      role === "AngleX" ? ["ParamAngleX"] : role === "AngleY" ? ["ParamAngleY"] : [],
+    ),
     wear: vi.fn<AvatarModel["wear"]>(),
+    hold: vi.fn<AvatarModel["hold"]>(),
     bounds: vi.fn<AvatarModel["bounds"]>(() => null),
     update: vi.fn<AvatarModel["update"]>(),
     draw: vi.fn<AvatarModel["draw"]>(),
@@ -389,6 +399,111 @@ describe("her direction", () => {
     expect(model.play.mock.calls).toEqual([[null, 1, { loop: true }]]);
   });
 
+  test("fades a mood's parameters in and out as PSD2Live fades expressions, over half a second", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    const mouth = (value: number) => ({ id: "ParamMouthForm", value });
+    stage.show(
+      model,
+      resolveSetup(INVENTORY, {
+        moodParameters: {
+          happy: [mouth(1)],
+          sad: [mouth(-0.8), { id: "ParamEyeLSmile", value: -1 }],
+        },
+      }),
+    );
+    clock.frame(0);
+    expect(model.hold).not.toHaveBeenCalled();
+    const held = () => model.hold.mock.lastCall?.[0] ?? [];
+    const weights = () => held().map((hold) => Number(hold.weight.toFixed(3)));
+
+    stage.direct(direction({ mood: ["happy"] }));
+    const rising: number[] = [];
+    for (const now of [100, 200, 300, 400, 500]) {
+      clock.frame(now);
+      rising.push(...weights());
+    }
+    // The runtime's ease, 0.5 - 0.5·cos(π·t/0.5 s), a frame every 0.1 s.
+    expect(rising).toEqual([0.095, 0.345, 0.655, 0.905, 1]);
+    expect(held()).toEqual([{ ...mouth(1), weight: 1 }]);
+    model.hold.mockClear();
+    clock.frame(600);
+    expect(model.hold).not.toHaveBeenCalled();
+
+    // Another mood moves what both hold from one value to the other, and fades in what it adds.
+    stage.direct(direction({ mood: ["sad"] }));
+    for (const now of [700, 800, 850]) clock.frame(now);
+    expect(held()).toEqual([
+      { id: "ParamMouthForm", value: expect.closeTo(0.1, 5), weight: 1 },
+      { id: "ParamEyeLSmile", value: -1, weight: expect.closeTo(0.5, 5) },
+    ]);
+    for (const now of [900, 1000, 1100]) clock.frame(now);
+    expect(held()).toEqual([
+      { id: "ParamMouthForm", value: -0.8, weight: 1 },
+      { id: "ParamEyeLSmile", value: -1, weight: 1 },
+    ]);
+
+    // A lent mood's come first: its value wins where both hold a parameter.
+    stage.direct(direction({ mood: ["sad"], pulse: "happy" }));
+    for (const now of [1200, 1300, 1400, 1500, 1600]) clock.frame(now);
+    expect(held()).toEqual([
+      { id: "ParamMouthForm", value: 1, weight: 1 },
+      { id: "ParamEyeLSmile", value: -1, weight: 1 },
+    ]);
+
+    // Neutral lets go of every one, fading out, and holds nothing once they have.
+    stage.direct(direction({}));
+    for (const now of [1700, 1800, 1850]) clock.frame(now);
+    expect(weights()).toEqual([0.5, 0.5]);
+    for (const now of [1900, 2000, 2100]) clock.frame(now);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+  });
+
+  test("a setup shown in place sets a mood's parameters at once, as the owner edits them", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    const happy = (value: number) =>
+      resolveSetup(INVENTORY, {
+        moodParameters: { happy: [{ id: "ParamMouthForm", value }] },
+      });
+    stage.show(model, happy(1));
+    stage.direct(direction({ mood: ["happy"] }));
+    clock.frame(0);
+    expect(model.hold).toHaveBeenLastCalledWith([{ id: "ParamMouthForm", value: 1, weight: 1 }]);
+    stage.show(model, happy(0.25));
+    clock.frame(16);
+    expect(model.hold).toHaveBeenLastCalledWith([{ id: "ParamMouthForm", value: 0.25, weight: 1 }]);
+    stage.show(model, resolveSetup(INVENTORY));
+    clock.frame(32);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+
+    // A model shown anew holds nothing until its first frame says so.
+    const next = fakeModel();
+    stage.show(next, happy(0.5));
+    clock.frame(48);
+    expect(next.hold.mock.calls).toEqual([[[{ id: "ParamMouthForm", value: 0.5, weight: 1 }]]]);
+  });
+
+  test("turns her as far as each setup's look says, applied once per setup shown", () => {
+    const stage = stageOf();
+    const first = fakeModel();
+    stage.show(first, resolveSetup(INVENTORY, { look: 0.4 }));
+    clock.frame(0);
+    clock.frame(16);
+    expect(first.lookStrength.mock.calls).toEqual([[0.4]]);
+
+    stage.show(first, resolveSetup(INVENTORY, { look: 0.4, moods: { happy: ["sad"] } }));
+    clock.frame(32);
+    stage.show(first, resolveSetup(INVENTORY));
+    clock.frame(48);
+    expect(first.lookStrength.mock.calls).toEqual([[0.4], [0.4], [1]]);
+
+    const second = fakeModel();
+    stage.show(second, resolveSetup(INVENTORY, { look: 0 }));
+    clock.frame(64);
+    expect(second.lookStrength.mock.calls).toEqual([[0]]);
+  });
+
   test("dresses each model shown in the outfit", () => {
     const stage = stageOf();
     const outfit = { poses: [{ group: 0, entry: 1 }], parameters: [], hiddenParts: [] };
@@ -404,6 +519,148 @@ describe("her direction", () => {
     stage.show(second, SETUP);
     clock.frame(32);
     expect(second.wear).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("a nod or a shake with no clip", () => {
+  const CLIPLESS = { ...SETUP, gestures: { ...SETUP.gestures, nod: null, shake: null } };
+  const held = (model: ReturnType<typeof fakeModel>) => model.hold.mock.lastCall?.[0] ?? [];
+
+  test("a nod dips her head's AngleY and brings it back in half a second, then lets go", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
+    clock.frame(1000);
+    expect(model.hold).not.toHaveBeenCalled();
+    clock.frame(1062.5);
+    expect(held(model)).toEqual([
+      { id: "ParamAngleY", value: -10.5, weight: expect.closeTo(0.146, 3) },
+    ]);
+    for (const now of [1125, 1187.5, 1250]) clock.frame(now);
+    expect(held(model)).toEqual([{ id: "ParamAngleY", value: -10.5, weight: 1 }]);
+    for (const now of [1312.5, 1375]) clock.frame(now);
+    expect(held(model)).toEqual([
+      { id: "ParamAngleY", value: -10.5, weight: expect.closeTo(0.5, 5) },
+    ]);
+    for (const now of [1437.5, 1500]) clock.frame(now);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+    // The gesture layer is stopped, and no clip plays on it.
+    expect(model.play.mock.calls.filter(([, layer]) => layer === 2)).toEqual([[null, 2]]);
+    expect(model.roleParameters.mock.calls).toEqual([["AngleY"]]);
+  });
+
+  test("a pause holds a nod where it is, as it holds her clips", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
+    for (const now of [0, 62.5, 125]) clock.frame(now);
+    const before = held(model);
+    stage.pause();
+    stage.resume();
+    clock.frame(60_000);
+    expect(held(model)).toEqual(before);
+    for (const now of [60_062.5, 60_125, 60_187.5, 60_250, 60_312.5]) clock.frame(now);
+    expect(held(model)).not.toEqual([]);
+    clock.frame(60_375);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+  });
+
+  test("a shake turns her AngleX side to side twice in 0.7 s, then lets go", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    stage.direct(direction({ gesture: { name: "shake", seq: 1 } }));
+    clock.frame(0);
+    // Frames 87.5 ms apart, under the 0.1 s a frame steps her at most.
+    let time = 0;
+    const until = (now: number) => {
+      while (time < now) {
+        time = Math.min(time + 87.5, now);
+        clock.frame(time);
+      }
+    };
+    const at = (now: number) => {
+      until(now);
+      const [hold] = held(model);
+      return [hold?.id, Number(hold?.value.toFixed(2)), Number(hold?.weight.toFixed(3))];
+    };
+    // A quarter turn's swing is the deepest; the turns at either end start and end softly.
+    expect(at(87.5)).toEqual(["ParamAngleX", 10.5, 0.383]);
+    expect(at(262.5)).toEqual(["ParamAngleX", -10.5, 0.924]);
+    expect(at(437.5)).toEqual(["ParamAngleX", 10.5, 0.924]);
+    expect(at(612.5)).toEqual(["ParamAngleX", -10.5, 0.383]);
+    until(700);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+  });
+
+  test("a new gesture replaces one still playing, a clip of the gesture layer included", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    // A clip a page played on the gesture layer, as Studio's Test tab does, stops as well.
+    model.play("shake-id", 2, { priority: 2 });
+    stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
+    clock.frame(0);
+    expect(model.play).toHaveBeenLastCalledWith(null, 2);
+    clock.frame(100);
+    stage.direct(direction({ gesture: { name: "shake", seq: 2 } }));
+    clock.frame(200);
+    clock.frame(300);
+    expect(held(model).map(({ id }) => id)).toEqual(["ParamAngleX"]);
+
+    // Her nod has a clip but her shake none: each ends the other.
+    stage.show(model, { ...SETUP, gestures: { ...SETUP.gestures, shake: null } });
+    stage.direct(direction({ gesture: { name: "nod", seq: 3 } }));
+    clock.frame(400);
+    expect(model.play).toHaveBeenLastCalledWith("nod-id", 2, { priority: 2 });
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+    stage.direct(direction({ gesture: { name: "shake", seq: 4 } }));
+    clock.frame(500);
+    expect(model.play).toHaveBeenLastCalledWith(null, 2);
+    clock.frame(600);
+    expect(held(model).map(({ id }) => id)).toEqual(["ParamAngleX"]);
+  });
+
+  test("goes over a mood that holds her head", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, {
+      ...CLIPLESS,
+      moodParameters: { ...CLIPLESS.moodParameters, shy: [{ id: "ParamAngleY", value: -5 }] },
+    });
+    stage.direct(direction({ mood: ["shy"], gesture: { name: "nod", seq: 1 } }));
+    for (const now of [0, 100, 200, 250]) clock.frame(now);
+    expect(held(model)).toEqual([
+      { id: "ParamAngleY", value: -5, weight: 1 },
+      { id: "ParamAngleY", value: -10.5, weight: 1 },
+    ]);
+  });
+
+  test("none of its own under reduced motion, but one a page asks for, clip or none", () => {
+    const stage = stageOf({ reducedMotion: true });
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
+    clock.frame(0);
+    clock.frame(100);
+    expect(model.hold).not.toHaveBeenCalled();
+
+    stage.gesture("shake");
+    clock.frame(200);
+    clock.frame(300);
+    expect(held(model).map(({ id }) => id)).toEqual(["ParamAngleX"]);
+    stage.show(model, SETUP);
+    stage.gesture("nod");
+    clock.frame(400);
+    expect(model.play).toHaveBeenLastCalledWith("nod-id", 2, { priority: 2 });
+    // The idle and talk gestures have no head movement to fall back on.
+    stage.show(model, { ...SETUP, gestures: { ...SETUP.gestures, idle: null } });
+    model.play.mockClear();
+    stage.gesture("idle");
+    clock.frame(500);
+    expect(model.play).not.toHaveBeenCalled();
   });
 });
 

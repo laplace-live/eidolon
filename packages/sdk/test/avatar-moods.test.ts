@@ -1,6 +1,11 @@
 // The mood table on prompt.md's published directions and others written in their style.
 import { describe, expect, test } from "vitest";
-import { type ModelInventory, moodExpressions, resolveSetup } from "../src/avatar/model.ts";
+import {
+  type ModelInventory,
+  moodExpressions,
+  moodSettings,
+  resolveSetup,
+} from "../src/avatar/model.ts";
 import {
   CUE_EFFECTS,
   DEFAULT_MOOD_EXPRESSIONS,
@@ -194,5 +199,66 @@ describe("a model's moods", () => {
       { gestures: { nod: "a", shake: "missing" } },
     );
     expect(setup.gestures).toEqual({ idle: "a", talk: "Talk", nod: "a", shake: null });
+  });
+
+  test("a mood holds the parameters the owner gave it that the rig has, each once, in range", () => {
+    const parameter = (id: string, min: number, max: number) => ({ id, min, max, default: 0 });
+    const rig = inventory({
+      expressions: [],
+      parameters: [
+        parameter("ParamEyeLSmile", -1, 1),
+        parameter("ParamMouthForm", -1, 1),
+        parameter("CheekPuff", 0, 1),
+        ...Array.from({ length: 10 }, (_, i) => parameter(`p${i}`, 0, 1)),
+      ],
+    });
+    const setup = resolveSetup(rig, {
+      moodParameters: {
+        happy: [
+          { id: "ParamEyeLSmile", value: 1 },
+          { id: "ParamMouthForm", value: 3 },
+          { id: "ParamGone", value: 0.5 },
+          { id: "ParamEyeLSmile", value: -1 },
+          { id: "CheekPuff", value: Number.NaN },
+        ],
+        sad: Array.from({ length: 10 }, (_, i) => ({ id: `p${i}`, value: 0.5 })),
+        custom: [{ id: "CheekPuff", value: 1 }],
+      },
+    });
+    expect(setup.moodParameters.happy).toEqual([
+      { id: "ParamEyeLSmile", value: 1 },
+      { id: "ParamMouthForm", value: 1 },
+    ]);
+    expect(setup.moodParameters.sad.map(({ id }) => id)).toEqual(
+      Array.from({ length: 8 }, (_, i) => `p${i}`),
+    );
+    expect(setup.moodParameters.gentle).toEqual([]);
+    expect(Object.keys(setup.moodParameters).sort()).toEqual([...MOOD_TAGS].sort());
+    expect(resolveSetup(rig).moodParameters.happy).toEqual([]);
+
+    // Two moods hold both moods' parameters, the first mood's value where both name one.
+    const two = resolveSetup(rig, {
+      moodParameters: {
+        lazy: [{ id: "ParamEyeLSmile", value: -0.5 }],
+        happy: [
+          { id: "ParamEyeLSmile", value: 1 },
+          { id: "ParamMouthForm", value: 1 },
+        ],
+      },
+    });
+    expect(moodSettings(two, ["lazy", "happy"])).toEqual([
+      { id: "ParamEyeLSmile", value: -0.5 },
+      { id: "ParamMouthForm", value: 1 },
+    ]);
+    expect(moodSettings(two, [])).toEqual([]);
+  });
+
+  test("her look is the owner's, kept within 0..1, and all of the runtime's turn without one", () => {
+    expect(resolveSetup(inventory()).look).toBe(1);
+    expect(resolveSetup(inventory(), { look: 0.35 }).look).toBe(0.35);
+    expect(resolveSetup(inventory(), { look: 0 }).look).toBe(0);
+    expect(resolveSetup(inventory(), { look: 1.5 }).look).toBe(1);
+    expect(resolveSetup(inventory(), { look: -0.2 }).look).toBe(0);
+    expect(resolveSetup(inventory(), { look: Number.NaN }).look).toBe(1);
   });
 });

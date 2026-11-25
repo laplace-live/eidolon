@@ -1,5 +1,5 @@
 // A model of hers on a live stage, with one draft of what Studio edits of it: tried in Test, framed
-// for calls in Framing, and set up in Moods and Outfits, all saved together.
+// for calls in Framing, and set up in Motion, Moods and Outfits, all saved together.
 import {
   AvatarError,
   type Box,
@@ -47,11 +47,12 @@ import {
   shownRect,
 } from "./model-draft";
 import { MoodsPanel } from "./model-moods";
+import { MotionPanel } from "./model-motion";
 import { OutfitsPanel } from "./model-outfits";
 import { useUpdateModel } from "./model-queries";
 import { UnsavedGuard } from "./text-editor";
 
-const TABS = ["test", "framing", "moods", "outfits"] as const;
+const TABS = ["test", "framing", "motion", "moods", "outfits"] as const;
 type PreviewTab = (typeof TABS)[number];
 
 const isTab = (value: string): value is PreviewTab => (TABS as readonly string[]).includes(value);
@@ -246,9 +247,10 @@ export function ModelPreviewCard({
   const size = useSize(surface);
 
   const { inventory } = model;
+  const { moods, moodParameters, gestures, look } = draft;
   const setup = useMemo(
-    () => resolveSetup(inventory, { moods: draft.moods, gestures: draft.gestures }),
-    [inventory, draft.moods, draft.gestures],
+    () => resolveSetup(inventory, { moods, moodParameters, gestures, look }),
+    [inventory, moods, moodParameters, gestures, look],
   );
   const worn = draft.outfits.find((outfit) => outfit.id === draft.outfit) ?? null;
   const shownOutfit =
@@ -303,7 +305,7 @@ export function ModelPreviewCard({
         // Not hidden: the stage sticks while long tabs scroll, which a clipping ancestor would stop.
         className="overflow-clip"
         title={model.name}
-        description={t`Try her out, frame her for calls, and choose how she shows each mood and what she wears, then save.`}
+        description={t`Try her out, frame her for calls, and choose how far she turns, how she shows each mood and what she wears, then save.`}
         note={
           problem !== null ? (
             <span className="text-destructive">{t`Name every outfit first.`}</span>
@@ -386,6 +388,7 @@ export function ModelPreviewCard({
               <TabsList className="w-full">
                 <TabsTrigger value="test">{t({ message: "Test", context: "model" })}</TabsTrigger>
                 <TabsTrigger value="framing">{t`Framing`}</TabsTrigger>
+                <TabsTrigger value="motion">{t`Motion`}</TabsTrigger>
                 <TabsTrigger value="moods">{t`Moods`}</TabsTrigger>
                 <TabsTrigger value="outfits">{t`Outfits`}</TabsTrigger>
               </TabsList>
@@ -419,13 +422,24 @@ export function ModelPreviewCard({
                   }
                 />
               </TabsContent>
+              <TabsContent value="motion">
+                <MotionPanel
+                  stage={ready?.stage ?? null}
+                  look={draft.look}
+                  onLook={(look) => setDraft((previous) => ({ ...previous, look }))}
+                />
+              </TabsContent>
               <TabsContent value="moods">
                 <MoodsPanel
                   stage={ready?.stage ?? null}
                   inventory={inventory}
                   moods={draft.moods}
+                  moodParameters={draft.moodParameters}
                   gestures={draft.gestures}
                   onMoods={(moods) => setDraft((previous) => ({ ...previous, moods }))}
+                  onMoodParameters={(moodParameters) =>
+                    setDraft((previous) => ({ ...previous, moodParameters }))
+                  }
                   onGestures={(gestures) => setDraft((previous) => ({ ...previous, gestures }))}
                 />
               </TabsContent>

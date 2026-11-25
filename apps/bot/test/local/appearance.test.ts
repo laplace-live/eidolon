@@ -173,7 +173,9 @@ describe("importing", () => {
       size: RIG.length,
       sha256: SHA256,
       framing: { call: null, companion: null },
+      look: 1,
       moods: {},
+      moodParameters: {},
       gestures: {},
       outfits: [],
       outfit: null,
@@ -334,7 +336,15 @@ describe("editing", () => {
     const patch = {
       name: "  奶绿的模型  ",
       framing: { call: { x: 640, y: 120, width: 760, height: 900 }, companion: null },
+      look: 0.4,
       moods: { happy: ["smile"], lazy: ["sleepy", "smile"], thinking: [] },
+      moodParameters: {
+        happy: [
+          { id: "ParamCheek", value: 1 },
+          { id: "ParamMouthForm", value: -0.5 },
+        ],
+        shy: [],
+      },
       gestures: { nod: NOD },
       outfits: [{ ...OUTFIT, hiddenParts: [part] }],
       outfit: "plain",
@@ -358,6 +368,32 @@ describe("editing", () => {
       { name: "a".repeat(65) },
       { framing: { call: { x: 0, y: 0, width: 0, height: 10 }, companion: null } },
       { framing: { call: null } },
+      { look: 1.5 },
+      { look: -0.1 },
+      { look: "1" },
+      { look: null },
+      { moodParameters: { happy: [{ id: "ParamCheek", value: 2 }] } },
+      { moodParameters: { happy: [{ id: "ParamNope", value: 0 }] } },
+      { moodParameters: { happy: [{ id: "ParamCheek", value: 1, weight: 1 }] } },
+      { moodParameters: { happy: [{ id: "ParamCheek" }] } },
+      {
+        moodParameters: {
+          happy: [
+            { id: "ParamCheek", value: 1 },
+            { id: "ParamCheek", value: 0 },
+          ],
+        },
+      },
+      {
+        moodParameters: {
+          happy: imported.inventory.parameters
+            .slice(0, 9)
+            .map(({ id, min }) => ({ id, value: min })),
+        },
+      },
+      { moodParameters: { Happy: [] } },
+      { moodParameters: { happy: { id: "ParamCheek", value: 1 } } },
+      { moodParameters: [] },
       { moods: { happy: ["grin"] } },
       { moods: { happy: ["smile", "sad", "angry"] } },
       { moods: { happy: ["smile", "smile"] } },
@@ -400,7 +436,15 @@ describe("editing", () => {
       JSON.stringify({
         ...manifest,
         framing,
+        look: 0.3,
         moods: { happy: ["smile", "grin"], wry: ["smirk"], thinking: [] },
+        moodParameters: {
+          happy: [
+            { id: "ParamCheek", value: 5 },
+            { id: "ParamGone", value: 1 },
+          ],
+          sad: [{ id: "ParamGone", value: 0 }],
+        },
         gestures: { nod: NOD, wave: "modifier:m99:gone" },
         outfits: [
           {
@@ -433,7 +477,9 @@ describe("editing", () => {
       sha256: createHash("sha256").update(other).digest("hex"),
       importedAt: imported.importedAt,
       framing,
+      look: 0.3,
       moods: { happy: ["smile"], thinking: [] },
+      moodParameters: { happy: [{ id: "ParamCheek", value: 1 }] },
       gestures: { nod: NOD },
       outfits: [
         {
@@ -656,6 +702,27 @@ describe("model ids that try to leave their folder", () => {
   });
 });
 
+describe("a model.json from before look and moodParameters", () => {
+  test("reads as all of the runtime's turn and moods of expressions alone, and saves them", async () => {
+    const {
+      id: _id,
+      look,
+      moodParameters,
+      ...fields
+    } = (await upload("tml.p2lrt")).body as CharacterModel;
+    expect([look, moodParameters]).toEqual([1, {}]);
+    writeFileSync(
+      join(folderOf("tml"), "model.json"),
+      JSON.stringify({ format: 1, file: "model.p2lrt", ...fields }),
+    );
+    const listed = (await call("GET", `/personas/${MILKY}/models`)).body.models;
+    expect(listed).toEqual([{ id: "tml", look: 1, moodParameters: {}, ...fields }]);
+    const renamed = await call("PATCH", `/personas/${MILKY}/models/tml`, { name: "Spring" });
+    expect([renamed.status, renamed.body.look, renamed.body.moodParameters]).toEqual([200, 1, {}]);
+    expect(manifestOf("tml")).toMatchObject({ name: "Spring", look: 1, moodParameters: {} });
+  });
+});
+
 describe("a model.json the app didn't write", () => {
   test("lists nothing, and no route reads its fields or changes the model", async () => {
     const { id: _id, ...fields } = (await upload("tml.p2lrt")).body as CharacterModel;
@@ -667,7 +734,13 @@ describe("a model.json the app didn't write", () => {
       { inventory: {} },
       { inventory: { ...inventory, clips: [{ id: NOD }] } },
       { framing: {} },
+      { look: 2 },
+      { look: "1" },
+      { look: null },
       { moods: { happy: "smile" } },
+      { moodParameters: { happy: "ParamCheek" } },
+      { moodParameters: { happy: [{ id: "ParamCheek" }] } },
+      { moodParameters: null },
       { gestures: { nod: [NOD] } },
       { outfits: [{}] },
       { outfits: [{ ...outfit, poses: [null] }] },

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
+import { directionOf, directionState } from "../src/avatar/direct.ts";
 import { AvatarError, resolveSetup } from "../src/avatar/model.ts";
 import { Psd2liveModel } from "../src/avatar/psd2live/model.ts";
 import type { Psd2liveRenderer } from "../src/avatar/psd2live/renderer.ts";
@@ -16,6 +17,7 @@ import {
   psd2liveRuntimeUrl,
   withCString,
 } from "../src/avatar/psd2live/runtime.ts";
+import { AvatarStage } from "../src/avatar/stage.ts";
 
 const FIXTURE = resolve(
   import.meta.dirname,
@@ -220,6 +222,15 @@ describe("the rig", () => {
     });
   });
 
+  test("names the parameters each role moves, and none for a role it lacks", () => {
+    const rig = load();
+    expect(rig.roleParameters("AngleX")).toEqual(["ParamAngleX"]);
+    expect(rig.roleParameters("AngleY")).toEqual(["ParamAngleY"]);
+    expect(rig.roleParameters("EyeBlink")).toEqual(["ParamEyeLOpen", "ParamEyeROpen"]);
+    expect(rig.roleParameters("Tail")).toEqual([]);
+    rig.dispose();
+  });
+
   test("lip sync opens and shuts the mouth through ParamMouthOpenY", () => {
     const rig = load();
     const mouth = rig.parameters.indexOf("ParamMouthOpenY");
@@ -362,6 +373,98 @@ describe("the model", () => {
     expect(after).toBeLessThan(1e-3);
     model.dispose();
     idleOnly.dispose();
+  });
+
+  test("on a stage, a nod with no clip dips her AngleY and leaves it where it was", () => {
+    const frames: ((now: number) => void)[] = [];
+    const angles = () => {
+      const rig = load();
+      const model = new Psd2liveModel(rig, {
+        dispose() {},
+        draw() {},
+      } as unknown as Psd2liveRenderer);
+      const stage = new AvatarStage(new EventTarget() as unknown as HTMLCanvasElement, {
+        clock: { request: (frame) => frames.push(frame), cancel: () => {} },
+      });
+      const setup = resolveSetup(model.inventory);
+      stage.show(model, { ...setup, gestures: { ...setup.gestures, idle: null, nod: null } });
+      stage.gaze([0, 0]);
+      return { stage, angle: () => rig.parameterValues()[rig.parameters.indexOf("ParamAngleY")] };
+    };
+    const nodding = angles();
+    // Her breathing sways her head the same on a twin that makes no gesture.
+    const still = angles();
+    nodding.stage.direct({ ...directionOf(directionState()), gesture: { name: "nod", seq: 1 } });
+    const apart: number[] = [];
+    for (let now = 0; now <= 1000; now += 1000 / 60) {
+      for (const frame of frames.splice(0)) frame(now);
+      apart.push((nodding.angle() ?? Number.NaN) - (still.angle() ?? Number.NaN));
+    }
+    expect(Math.min(...apart)).toBeCloseTo(-10.5, 1);
+    expect(apart.findIndex((angle) => angle < -10)).toBeGreaterThan(10);
+    expect(Math.max(...apart.slice(40).map(Math.abs))).toBeLessThan(1e-4);
+  });
+
+  test("holds layer over her outfit: where both set a parameter, it moves from the outfit's value", () => {
+    const rig = load();
+    const model = new Psd2liveModel(rig, { dispose() {} } as unknown as Psd2liveRenderer);
+    const value = (id: string) => rig.parameterValues()[rig.parameters.indexOf(id)] ?? Number.NaN;
+    const override = vi.spyOn(rig, "setParameterOverride");
+    model.wear({ poses: [], parameters: [{ id: "ParamCheek", value: 1 }], hiddenParts: [] });
+    model.hold([
+      { id: "ParamCheek", value: 0, weight: 0.25 },
+      { id: "ParamMouthForm", value: -1, weight: 0.5 },
+      { id: "ParamNope", value: 1, weight: 1 },
+    ]);
+    model.update(0.1);
+    expect(value("ParamCheek")).toBeCloseTo(0.75, 4);
+    expect(value("ParamMouthForm")).toBeCloseTo(-0.5, 4);
+
+    // A later hold goes over an earlier one: 0, then halfway to -1, then halfway from there to 1.
+    model.hold([
+      { id: "ParamMouthForm", value: -1, weight: 0.5 },
+      { id: "ParamMouthForm", value: 1, weight: 0.5 },
+    ]);
+    model.update(0.1);
+    expect(value("ParamMouthForm")).toBeCloseTo(0.25, 4);
+    expect(value("ParamCheek")).toBeCloseTo(1, 4);
+
+    // Only what changed reaches the runtime; what nothing holds any more is let go.
+    override.mockClear();
+    model.hold([
+      { id: "ParamMouthForm", value: -1, weight: 0.5 },
+      { id: "ParamMouthForm", value: 1, weight: 0.5 },
+    ]);
+    expect(override).not.toHaveBeenCalled();
+    model.hold([]);
+    model.wear(null);
+    model.update(0.1);
+    expect(override.mock.calls.sort()).toEqual([
+      ["ParamCheek", 0, 0],
+      ["ParamMouthForm", 0, 0],
+    ]);
+    expect([value("ParamCheek"), value("ParamMouthForm")]).toEqual([0, 0]);
+    model.dispose();
+  });
+
+  test("her look scales how far her gaze turns her head, and a negative one changes nothing", () => {
+    const turned = (strength: number) => {
+      const rig = load();
+      const model = new Psd2liveModel(rig, { dispose() {} } as unknown as Psd2liveRenderer);
+      // Gaze alone: breathing sways her head too.
+      rig.behaviors(4);
+      model.lookStrength(strength);
+      model.lookAt(1, 0);
+      for (let frame = 0; frame < 60; frame++) model.update(1 / 30);
+      const angle = rig.parameterValues()[rig.parameters.indexOf("ParamAngleX")] ?? Number.NaN;
+      model.dispose();
+      return angle;
+    };
+    // The rig turns ParamAngleX up to 45°, the top of its range.
+    expect(turned(1)).toBeCloseTo(45, 1);
+    expect(turned(0.4)).toBeCloseTo(18, 1);
+    expect(turned(0)).toBeCloseTo(0, 3);
+    expect(turned(-1)).toBeCloseTo(45, 1);
   });
 
   test("a clip authored to loop, played once as a gesture, ends after one pass", () => {

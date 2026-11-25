@@ -76,9 +76,13 @@ export function outfitOf(model: Pick<CharacterModel, "outfits" | "outfit">): Mod
   return model.outfits.find(({ id }) => id === model.outfit) ?? null;
 }
 
-/** Each mood's expressions and each gesture's clip: the owner's choices, then the defaults. */
+/**
+ * Each mood's expressions and each gesture's clip, the owner's choices, then the defaults; the
+ * parameters each mood holds; and how far her gaze turns her.
+ */
 export function setupOf(
-  model: Pick<CharacterModel, "inventory" | "moods" | "gestures">,
+  model: Pick<CharacterModel, "inventory" | "moods" | "moodParameters" | "gestures" | "look">,
 ): ResolvedSetup {
-  return resolveSetup(model.inventory, { moods: model.moods, gestures: model.gestures });
+  const { inventory, moods, moodParameters, gestures, look } = model;
+  return resolveSetup(inventory, { moods, moodParameters, gestures, look });
 }

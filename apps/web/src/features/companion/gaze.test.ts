@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { eyePoint, GAZE_REACH, gazeToward } from "./gaze";
+import { eyePoint, GAZE_REACH, gazeToward, HEAD_REACH, nearHead } from "./gaze";
 
 describe("gazeToward", () => {
   const eye = { x: 120, y: 80 };
@@ -47,5 +47,38 @@ describe("eyePoint", () => {
   test("with no head, a sixth of the way down, centred", () => {
     const box = { x: 50, y: 0, width: 300, height: 600 };
     expect(eyePoint(null, box, { width: 150, height: 300 })).toEqual({ x: 75, y: 50 });
+  });
+});
+
+describe("nearHead", () => {
+  // Drawn at half scale, 150 px wide: her eyes, with no head to go by, at (75, 50).
+  const box = { x: 50, y: 0, width: 300, height: 600 };
+  const size = { width: 150, height: 300 };
+  const reach = HEAD_REACH * 150;
+
+  test("within a quarter of her drawn width of her eyes, around them", () => {
+    expect(HEAD_REACH).toBe(0.25);
+    for (const [x, y] of [
+      [75, 50],
+      [75 + reach, 50],
+      [75, 50 + reach],
+      [75 - 0.7 * reach, 50 - 0.7 * reach],
+    ] as const) {
+      expect([x, y, nearHead({ x, y }, null, box, size)]).toEqual([x, y, true]);
+    }
+    for (const [x, y] of [
+      [75 + reach + 1, 50],
+      [75, 50 + reach + 1],
+      [75, 250],
+    ] as const) {
+      expect([x, y, nearHead({ x, y }, null, box, size)]).toEqual([x, y, false]);
+    }
+  });
+
+  test("around a head's centre where there is one, through the box's scale", () => {
+    const head = { x0: 160, y0: 300, x1: 240, y1: 380 };
+    // The head's centre (200, 340) is drawn at (75, 170).
+    expect(nearHead({ x: 75, y: 170 }, head, box, size)).toBe(true);
+    expect(nearHead({ x: 75, y: 50 }, head, box, size)).toBe(false);
   });
 });

@@ -193,6 +193,7 @@ export interface P2lExports {
   p2l_pose_group_size(rig: Handle, group: number): number;
   p2l_pose_show(rig: Handle, group: number, entry: number): number;
   p2l_pose_shown(rig: Handle, group: number): number;
+  p2l_behavior_strength(rig: Handle, sway: number, look: number, lookSpeed: number): number;
   p2l_look_at(rig: Handle, x: number, y: number): void;
   p2l_lip_sync(rig: Handle, level: number): void;
   p2l_update(rig: Handle, dt: number): void;

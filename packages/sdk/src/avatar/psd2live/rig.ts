@@ -336,6 +336,14 @@ export class Psd2liveRig {
     this.rt.p2l_behaviors(this.rig, flags);
   }
 
+  /**
+   * How strongly breathing sways her and gaze turns her head, body and eyes, and how quickly gaze
+   * follows, 1 each as loaded; false, changing nothing, for a negative one.
+   */
+  behaviorStrength(sway: number, look: number, lookSpeed: number): boolean {
+    return this.rt.p2l_behavior_strength(this.rig, sway, look, lookSpeed) !== 0;
+  }
+
   /** Frees the rig; it is unusable afterwards. */
   dispose(): void {
     if (!this.rig) return;
@@ -494,6 +502,19 @@ export class Psd2liveRig {
   setParameterOverride(id: string, value: number, weight: number): void {
     const i = this.parameters.indexOf(id);
     if (i >= 0) this.rt.p2l_set_parameter_override(this.rig, i, value, weight);
+  }
+
+  /** The ids of the parameters a role such as AngleX moves; none when the rig gives it none. */
+  roleParameters(role: string): string[] {
+    const rt = this.rt;
+    return withCString(rt, role, (name) => {
+      const n = rt.p2l_role_parameters(this.rig, name, 0, 0);
+      const out = rt.p2l_alloc(n * 4 + 4);
+      rt.p2l_role_parameters(this.rig, name, out, n);
+      const indices = Array.from(new Uint32Array(rt.memory.buffer, out, n));
+      rt.p2l_dealloc(out, n * 4 + 4);
+      return indices.flatMap((i) => this.parameters[i] ?? []);
+    });
   }
 
   update(dt: number): void {

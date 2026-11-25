@@ -1,6 +1,7 @@
 // The preview's controls that play her model without changing what is saved: the Test tab (her
 // expressions and clips, a line of hers, her mouth on the microphone, her eyes on the pointer) and
-// the Framing tab's buttons. Moods and Outfits, which edit the draft, have modules of their own.
+// the Framing tab's buttons. Motion, Moods and Outfits, which edit the draft, have modules of their
+// own.
 
 import { cueEmoji } from "@laplace.live/eidolon-sdk";
 import {
@@ -90,6 +91,30 @@ export function ControlGroup({
       )}
       {children}
     </section>
+  );
+}
+
+/** Puts a setting called `name` back to what she has without the owner's choice. */
+export function ResetButton({
+  name,
+  onReset,
+}: {
+  readonly name: string;
+  readonly onReset: () => void;
+}) {
+  const { t } = useLingui();
+  const label = t`Reset ${ph({ name })} to Default`;
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={label}
+      title={label}
+      onClick={onReset}
+    >
+      <RotateCcwIcon />
+    </Button>
   );
 }
 

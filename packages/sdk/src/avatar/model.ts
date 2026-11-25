@@ -1,6 +1,6 @@
-// What the stage asks of any kind of model, and how a model's setup (mood → expressions, gesture →
-// clip) resolves against what its file holds: the owner's choices first, then the standard names
-// PSD2Live gives a generated rig.
+// What the stage asks of any kind of model, and how a model's setup (mood → expressions and
+// parameters, gesture → clip) resolves against what its file holds: the owner's choices first, then
+// the standard names PSD2Live gives a generated rig.
 import type { Bounds, View } from "./framing.ts";
 import { DEFAULT_MOOD_EXPRESSIONS, MOOD_TAGS, type MoodTag } from "./moods.ts";
 
@@ -57,12 +57,23 @@ export interface ModelInventory {
   readonly textures: number;
 }
 
+/** A parameter held at a value, as an outfit or a mood holds it. */
+export interface ParameterSetting {
+  readonly id: string;
+  readonly value: number;
+}
+
+/** A parameter moved from what the layers below give it toward a value, by a weight 0..1. */
+export interface ParameterHold extends ParameterSetting {
+  readonly weight: number;
+}
+
 /** An outfit: pose entries shown, parameters held at a value, and parts hidden. */
 export interface ModelOutfit {
   readonly id: string;
   readonly name: string;
   readonly poses: readonly { readonly group: number; readonly entry: number }[];
-  readonly parameters: readonly { readonly id: string; readonly value: number }[];
+  readonly parameters: readonly ParameterSetting[];
   readonly hiddenParts: readonly string[];
 }
 
@@ -89,7 +100,17 @@ export interface AvatarModel {
   mouth(level: number): void;
   /** Where she looks, each axis -1..1 (x right, y up). */
   lookAt(x: number, y: number): void;
+  /** How far her gaze turns her head, body and eyes: 0 not at all, 1 as far as the runtime does. */
+  lookStrength(strength: number): void;
+  /** The ids of the parameters a role such as AngleX moves; none when the model gives it none. */
+  roleParameters(role: string): readonly string[];
   wear(outfit: ModelOutfitLike | null): void;
+  /**
+   * Holds parameters over her clips, expressions and outfit: each moves from what those give it
+   * toward its value by its weight, a later hold over an earlier one, and a parameter left out of
+   * the next call is let go.
+   */
+  hold(holds: readonly ParameterHold[]): void;
   /** A hit area's bounds, or with none every mesh drawn, at the last update; null for nothing. */
   bounds(area?: string | null): Bounds | null;
   update(dt: number): void;
@@ -125,19 +146,32 @@ export function avatarErrorOf(error: unknown, code: AvatarErrorCode): AvatarErro
   });
 }
 
-/** The owner's choices for a model: mood → expression ids, gesture → clip id. */
+/**
+ * The owner's choices for a model: mood → expression ids and parameters it holds, gesture → clip
+ * id, and how far she turns.
+ */
 export interface SetupOverrides {
   readonly moods?: Readonly<Record<string, readonly string[]>>;
+  readonly moodParameters?: Readonly<Record<string, readonly ParameterSetting[]>>;
   readonly gestures?: Readonly<Record<string, string>>;
+  /** How far her gaze turns her, 0..1; 1 unless given. */
+  readonly look?: number;
 }
 
-/** A model's setup against its file: the expressions each mood shows and the clip each gesture plays. */
+/**
+ * A model's setup against its file: the expressions each mood shows and the parameters it holds,
+ * the clip each gesture plays, and how far her gaze turns her.
+ */
 export interface ResolvedSetup {
   readonly moods: Readonly<Record<MoodTag, readonly string[]>>;
+  readonly moodParameters: Readonly<Record<MoodTag, readonly ParameterSetting[]>>;
   readonly gestures: Readonly<Record<Gesture, string | null>>;
+  /** 0..1 of the runtime's turn. */
+  readonly look: number;
 }
 
 const MAX_EXPRESSIONS = 2;
+const MAX_MOOD_PARAMETERS = 8;
 
 /** The clip a group, name or id names, tried in that order, whatever its case; null for none. */
 export function clipFor(clips: readonly ModelClip[], wanted: string): string | null {
@@ -151,7 +185,9 @@ export function clipFor(clips: readonly ModelClip[], wanted: string): string | n
 
 /**
  * Each mood's expressions, the owner's where they made a choice, else the defaults, kept to those
- * the file has; each gesture's clip, the owner's where the file has it, else the default it has.
+ * the file has, and the parameters the owner has it hold, kept to the file's within their ranges;
+ * each gesture's clip, the owner's where the file has it, else the default it has; and the owner's
+ * look, kept within 0..1.
  */
 export function resolveSetup(
   inventory: ModelInventory,
@@ -160,10 +196,27 @@ export function resolveSetup(
   const expressions = new Set(inventory.expressions.map(({ id }) => id));
   const known = (ids: readonly string[]) =>
     [...new Set(ids)].filter((id) => expressions.has(id)).slice(0, MAX_EXPRESSIONS);
+  const ranges = new Map(inventory.parameters.map((parameter) => [parameter.id, parameter]));
+  const held = (settings: readonly ParameterSetting[]) => {
+    const kept: ParameterSetting[] = [];
+    for (const { id, value } of settings) {
+      const range = ranges.get(id);
+      if (range === undefined || !Number.isFinite(value) || kept.some((each) => each.id === id)) {
+        continue;
+      }
+      kept.push({ id, value: Math.min(range.max, Math.max(range.min, value)) });
+    }
+    return kept.slice(0, MAX_MOOD_PARAMETERS);
+  };
   const moods = {} as Record<MoodTag, readonly string[]>;
+  const moodParameters = {} as Record<MoodTag, readonly ParameterSetting[]>;
   for (const tag of MOOD_TAGS) {
     const chosen = overrides.moods !== undefined && Object.hasOwn(overrides.moods, tag);
     moods[tag] = known(chosen ? (overrides.moods?.[tag] ?? []) : DEFAULT_MOOD_EXPRESSIONS[tag]);
+    const parameters = overrides.moodParameters;
+    moodParameters[tag] = held(
+      parameters !== undefined && Object.hasOwn(parameters, tag) ? (parameters[tag] ?? []) : [],
+    );
   }
   const clips = new Set(inventory.clips.map(({ id }) => id));
   const gestures = {} as Record<Gesture, string | null>;
@@ -177,7 +230,13 @@ export function resolveSetup(
         ? chosen
         : clipFor(inventory.clips, GESTURE_CLIPS[gesture]);
   }
-  return { moods, gestures };
+  const { look } = overrides;
+  return {
+    moods,
+    moodParameters,
+    gestures,
+    look: look !== undefined && Number.isFinite(look) ? Math.min(Math.max(look, 0), 1) : 1,
+  };
 }
 
 /** The expressions a set of moods shows: each one's in order, without repeats, at most two. */
@@ -189,4 +248,15 @@ export function moodExpressions(setup: ResolvedSetup, tags: readonly MoodTag[]):
     }
   }
   return ids;
+}
+
+/** The parameters a set of moods holds: each one's in order, a parameter at its first mood's value. */
+export function moodSettings(setup: ResolvedSetup, tags: readonly MoodTag[]): ParameterSetting[] {
+  const settings: ParameterSetting[] = [];
+  for (const tag of tags) {
+    for (const setting of setup.moodParameters[tag]) {
+      if (!settings.some(({ id }) => id === setting.id)) settings.push(setting);
+    }
+  }
+  return settings;
 }

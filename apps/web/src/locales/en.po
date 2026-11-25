@@ -774,6 +774,14 @@ msgstr "Add Outfit"
 msgid "Add Outfits"
 msgstr "Add Outfits"
 
+#: src/features/studio/model-moods.tsx
+msgid "Add Parameter"
+msgstr "Add Parameter"
+
+#: src/features/studio/model-moods.tsx
+msgid "Add Parameter to {name}"
+msgstr "Add Parameter to {name}"
+
 #: src/features/chats/participants.tsx
 msgid "Add Persona"
 msgstr "Add Persona"
@@ -2553,6 +2561,10 @@ msgctxt "gesture"
 msgid "Head Shake"
 msgstr "Head Shake"
 
+#: src/features/studio/model-motion.tsx
+msgid "Head Turn"
+msgstr "Head Turn"
+
 #: src/features/setup/keys-step.tsx
 msgid "Hears you on calls and in voice messages."
 msgstr "Hears you on calls and in voice messages."
@@ -2634,8 +2646,12 @@ msgid "Her providers take no key."
 msgstr "Her providers take no key."
 
 #: src/features/studio/model-moods.tsx
-msgid "Her replies' cues give her a mood, which shows as up to two of these expressions."
-msgstr "Her replies' cues give her a mood, which shows as up to two of these expressions."
+msgid "Her replies' cues give her a mood, which shows as up to two of these expressions and the parameters you add to it."
+msgstr "Her replies' cues give her a mood, which shows as up to two of these expressions and the parameters you add to it."
+
+#: src/features/studio/model-moods.tsx
+msgid "Her replies' cues give her a mood. This model has no expressions, so build each mood from its parameters."
+msgstr "Her replies' cues give her a mood. This model has no expressions, so build each mood from its parameters."
 
 #: src/features/studio/advanced-section.tsx
 msgid "Her settings the other sections don't show: where her prompt and index live, the ids Mem0 files her memories under, and how many rounds of a reply may call her tools."
@@ -2705,6 +2721,10 @@ msgstr "How {name} sounds. Choose from your own Fish Audio voices or the public 
 #: src/features/studio/knowledge-section.tsx
 msgid "How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her."
 msgstr "How a call searches what she knows: how many candidates each index offers, the reranker that orders them, and the gate that skips the search when a turn isn't about her."
+
+#: src/features/studio/model-motion.tsx
+msgid "How far she turns her head, body and eyes toward what she looks at. While this tab is open, she looks at your pointer on the preview."
+msgstr "How far she turns her head, body and eyes toward what she looks at. While this tab is open, she looks at your pointer on the preview."
 
 #: src/features/studio/videos-section.tsx
 msgid "How her videos become transcripts: the language and model Soniox transcribes with, and the model that refines them, with how many chunks it works on at once."
@@ -3567,6 +3587,10 @@ msgstr "Mood: {moods}"
 msgid "Moods"
 msgstr "Moods"
 
+#: src/features/studio/model-preview.tsx
+msgid "Motion"
+msgstr "Motion"
+
 #: src/features/studio/model-controls.tsx
 msgid "Move Down"
 msgstr "Move Down"
@@ -3761,6 +3785,10 @@ msgstr "No outfits yet: she wears the model as it was exported."
 #: src/features/tasks/transcript-view.tsx
 msgid "No output."
 msgstr "No output."
+
+#: src/features/studio/model-moods.tsx
+msgid "No parameter by that name."
+msgstr "No parameter by that name."
 
 #: src/features/studio/references-section.tsx
 msgid "No preview: only PNG, JPEG and WebP are shown here. Selfies still use it."
@@ -4638,6 +4666,7 @@ msgid "Remove"
 msgstr "Remove"
 
 #: src/features/settings/accounts-card.tsx
+#: src/features/studio/model-moods.tsx
 #: src/features/studio/model-outfits.tsx
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove {name}"
@@ -4793,7 +4822,7 @@ msgstr "Research tasks run on Assistant Mode's model for now"
 msgid "Reset"
 msgstr "Reset"
 
-#: src/features/studio/model-moods.tsx
+#: src/features/studio/model-controls.tsx
 msgid "Reset {name} to Default"
 msgstr "Reset {name} to Default"
 
@@ -5024,6 +5053,10 @@ msgstr "Search by name"
 #: src/components/settings-form/model-picker.tsx
 msgid "Search models"
 msgstr "Search models"
+
+#: src/features/studio/model-moods.tsx
+msgid "Search parameters"
+msgstr "Search parameters"
 
 #: src/features/settings/account-dialog.tsx
 msgid "Search providers"
@@ -6008,8 +6041,8 @@ msgid "The check couldn't run."
 msgstr "The check couldn't run."
 
 #: src/features/studio/model-moods.tsx
-msgid "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then."
-msgstr "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then."
+msgid "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then. Without a clip, she still nods and shakes her head."
+msgstr "The clip each plays: idle all the time, talking while she speaks, and a nod or a head shake now and then. Without a clip, she still nods and shakes her head."
 
 #: src/features/call/call-notices.tsx
 msgid "The connection dropped."
@@ -6624,8 +6657,8 @@ msgid "Try Again"
 msgstr "Try Again"
 
 #: src/features/studio/model-preview.tsx
-msgid "Try her out, frame her for calls, and choose how she shows each mood and what she wears, then save."
-msgstr "Try her out, frame her for calls, and choose how she shows each mood and what she wears, then save."
+msgid "Try her out, frame her for calls, and choose how far she turns, how she shows each mood and what she wears, then save."
+msgstr "Try her out, frame her for calls, and choose how far she turns, how she shows each mood and what she wears, then save."
 
 #: src/components/settings-form/labels.ts
 msgid "TURN Credential Lifetime"

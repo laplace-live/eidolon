@@ -29,6 +29,8 @@ export {
   type ModelOutfit,
   type ModelOutfitLike,
   type ModelParameter,
+  type ParameterHold,
+  type ParameterSetting,
   type ResolvedSetup,
   resolveSetup,
   type SetupOverrides,

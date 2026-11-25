@@ -68,8 +68,13 @@ send ([web-app.md](web-app.md#security)).
     a parameter has the LipSync role, and how many texture pages;
   - `framing`, `{call, companion}`, each a box of the rig's canvas or null for the SDK's default
     ([Framing and outfits](#framing-and-outfits));
-  - `moods` and `gestures`, the owner's choices alone: a mood to up to two expression ids, a
-    gesture to a clip id ([Moods](#moods));
+  - `look`, from 0 to 1, how far her gaze turns her head, body and eyes: 1, as far as the runtime
+    turns them, for a `model.json` written before it
+    ([Direction and behaviors](#direction-and-behaviors));
+  - `moods`, `moodParameters` and `gestures`, the owner's choices alone: a mood to up to two
+    expression ids, a mood to up to eight of the model's parameters, each once at a value within
+    its range (`{}` for a `model.json` written before it), and a gesture to a clip id
+    ([Moods](#moods));
   - `outfits`, up to 32, and `outfit`, the one she wears, or null.
 - **The active model** is her `appearance.model` (`APPEARANCE_MODEL`), set through
   `PUT /api/local/settings` with `{"appearance.model": id}` for her persona, which refuses an id
@@ -111,9 +116,10 @@ Importing one:
 - **Import never activates.** A new model has no settings of its own, and she shows what she showed
   before until the owner makes it hers.
 - **A new file** for a model (`PUT …/:model/file`) passes the same checks and keeps the model's id,
-  name and framing, and the moods, gestures and outfit entries that still name what the new file
-  holds. Outfit values are clamped into the new ranges, and a mood left with none of its
-  expressions goes back to its default.
+  name, framing and look, and the moods, mood parameters, gestures and outfit entries that still
+  name what the new file holds. Outfit and mood parameter values are clamped into the new ranges, a
+  mood left with none of its expressions goes back to its default, and one left with none of its
+  parameters holds none.
 - **The file** is served only under its current SHA-256 (`GET …/:model/file?sha256=`), as
   immutable, and only to the app's pages: it takes the session's cookie and proof, where her avatar
   picture takes the cookie alone. A browser keeps it for good, while the desktop app's page fetches
@@ -134,13 +140,23 @@ preview ([web-app.md](web-app.md)):
   holds Rename, Replace File and Remove, Stop Using when clearing her own `appearance.model` would
   change what she shows, and in the desktop app Show in Finder or Show in Explorer.
 - **The preview** draws the model on the SDK's stage, or her picture when it can't, with the tabs
-  **Test**, **Framing**, **Moods** and **Outfits**, which edit one draft that Save sends:
+  **Test**, **Framing**, **Motion**, **Moods** and **Outfits**, which edit one draft that Save
+  sends:
   - **Test:** expression chips and clip buttons; **Try a Line**, which reads a pasted reply's
     direction and cues with the SDK's moods and plays them on the preview, billing nothing; **Use
     Microphone**, which moves her mouth through the mouth meter; and **Follow Pointer**.
   - **Framing** edits the call framing, a box of the rig's canvas, with the pointer and the wheel.
-  - **Moods** sets the expressions each mood shows and the clip each gesture plays, and
-    **Outfits** her outfits and the one she wears.
+  - **Motion** sets **Head Turn**, the model's `look` from 0 to 100%, how far she turns her head,
+    body and eyes toward what she looks at; while the tab is open she looks at the pointer on the
+    preview, which shows how far.
+  - **Moods** sets the expressions each mood shows and the parameters it holds, and the clip each
+    gesture plays. **Add Parameter** searches the model's parameters for one to add to a mood, which
+    then has a slider within the parameter's range; editing a mood's parameters tries the mood on
+    the preview, as its **Try** does, and Reset takes away both its expressions and its parameters.
+    On a model with no expressions the Moods heading says so in place of the expression chips, and
+    a mood shows through its parameters alone. **Play** on a nod or a head shake with no clip plays
+    the stage's own ([Direction and behaviors](#direction-and-behaviors)).
+  - **Outfits** sets her outfits and the one she wears.
 - **Under reduced motion** the preview plays no clip by itself, her idle included, while a clip
   played from the Test tab still plays.
 
@@ -163,15 +179,16 @@ each frame the stage applies what it was given to the model, then updates and dr
   and draws the model. A model that fails is disposed and reported once, so the page can show her
   picture instead.
 - **The model adapter**, `AvatarModel`, is what the stage asks of a model: expressions, clips on
-  three layers, the mouth, gaze, an outfit, bounds, hit tests, an alpha read, and update, draw and
-  dispose. `loadPsd2liveModel` gives the PSD2Live one, on a runtime instance of its own, and
+  three layers, the mouth, gaze and how far it turns her, a role's parameters, parameters held over
+  the rest, an outfit, bounds, hit tests, an alpha read, and update, draw and dispose.
+  `loadPsd2liveModel` gives the PSD2Live one, on a runtime instance of its own, and
   `inspectPsd2liveRig` reads a file's inventory without WebGL.
 - **`direct()`** is a pure reducer from a call's events to a `DirectionState`, from which
   `directionOf()` reads her `Direction`. Both are plain data, so the reducer can run where the call
   runs and what it gives cross a `MessagePort` to where she is drawn.
 - **The moods:** `moodTags` reads a direction into mood tags, `soundCueEffect` a cue into a lent
-  mood and a gesture, and `resolveSetup` turns a model's `moods` and `gestures` into what the stage
-  plays.
+  mood and a gesture, and `resolveSetup` turns a model's `moods`, `moodParameters`, `gestures` and
+  `look` into what the stage plays.
 - **The mouth:** `MouthMeter` reads an audio track's loudness through `mouthCurve` into a mouth
   opening.
 
@@ -207,7 +224,16 @@ and ends lent moods. The stage applies the direction each frame:
   `completed` once heard, so her pace times her cues.
 - **An interruption** (`bot-interrupted`) ends her reply and drops the cues she never got to.
 - **Gestures:** each new gesture plays once on clip layer 2, over her idle and her talking, which
-  show through again as it ends; a looping clip picked for one plays a single pass.
+  show through again as it ends; a looping clip picked for one plays a single pass. A nod or a
+  head shake whose model has no clip for it turns her head instead, through the parameters
+  `p2l_role_parameters` gives the AngleY role for a nod and the AngleX role for a shake: a nod dips
+  them toward their minimum, 0.35 of the way from their default, and back up in 0.5 s, and a shake
+  turns them 0.35 of their half range side to side, twice, in 0.7 s, about as far as the Nod and
+  Shake clips PSD2Live generates turn the test rig. Each moves through the runtime's override
+  layer, weighted in from nothing and back out to it, so it starts softly and lets go of her head
+  where it found it. A new gesture replaces one still playing, a clip on the gesture layer
+  included, and `stage.gesture(name)` makes one outside her direction, under reduced motion too,
+  as Studio's **Play** does.
 - **A chat reply**, which no voice says (`reply`), sets her mood from its direction, and its cues
   land at her pace.
 - **Group calls:** a `speaker` event sends the bot events after it to that persona, while the
@@ -219,10 +245,15 @@ and ends lent moods. The stage applies the direction each frame:
 - **Gaze:** at the viewer, (0, 0), while she listens; up and to the side, (0.35, 0.45), drifting
   slowly, while she thinks; otherwise around the viewer, within 0.15 on each axis, moving every 2 to
   5 s (each axis -1..1, x right, y up). A page can instead have her follow the pointer or hold a
-  point (`gaze()`).
+  point (`gaze()`). PSD2Live's runtime turns her toward a point by a share of each role's half
+  range, so a point at the edge turns AngleX, AngleY and her eyes all the way and BodyAngleX a
+  third of it; the model's `look` scales all of it through `p2l_behavior_strength`, its sway and
+  speed left at 1, set each time a setup is shown, so Studio's preview, a call and the desktop
+  companion all turn her the same.
 - **Reduced motion** keeps her face, her mouth and where she looks, and the blinking and breathing
-  the runtime does by itself, and leaves out every clip (idle, talking and gestures), the drift and
-  the wandering eyes. A clip a page plays through `stage.model` still plays.
+  the runtime does by itself, and leaves out every clip (idle, talking and gestures), the nods and
+  shakes the stage makes itself, the drift and the wandering eyes. A clip a page plays through
+  `stage.model`, and a gesture it makes through `stage.gesture()`, still plays.
 
 ## Moods
 
@@ -267,6 +298,23 @@ clip whose group, name or id, tried in that order and whatever their case, is `I
 or `Shake`: PSD2Live's editor names clip ids `modifier:m32:…` under the name and group `Idle`, so an
 id alone finds nothing. An expression or clip id the rig lacks changes nothing, where the upstream
 player's `-1` stopped the clip playing or faded every expression out.
+
+**Moods built from parameters.** A model converted from a Live2D model to PSD2Live carries no
+expressions and no clips, so no default shows a mood on it, while its parameters often carry one
+(`ParamEyeLSmile`, `ParamMouthForm`, `CheekPuff`…). `moodParameters` gives a mood up to eight of
+the model's parameters, each held at a value within its range, and a mood with both shows both:
+
+- **Held over her outfit.** The stage holds a mood's parameters, a lent mood's included, through
+  the runtime's override layer, after clips and expressions and before behaviors: a parameter an
+  outfit holds too moves from the outfit's value toward the mood's by the mood's weight. The
+  runtime keeps one override a parameter, so the model writes the outfit's and the stage's holds on
+  each as the one that moves it alike.
+- **Faded.** Each parameter fades in, to a new value or out over 0.5 s, from wherever it is, with
+  the runtime's own expression ease, `0.5 − 0.5·cos(π·t)`: the half second PSD2Live's editor gives
+  the expressions it generates. Two moods hold both moods' parameters, the first's value where
+  both name one, as their expressions show in tag order.
+- **Edited live.** A setup shown in place, as Studio's edits are, sets them at once, so a slider
+  moves her as it moves.
 
 **Coverage.** The table's first draft, ten families before gloom joined, tagged 85 of 88 (97%) of
 the directions her replies opened with in the owner's local chats, two personas' and mostly text;
@@ -325,7 +373,8 @@ A model's `framing.call` of null takes `bustBox` of its `HitAreaHead`'s bounds, 
 
 **Outfits** are drawn from what the rig already holds. An outfit shows pose entries (one entry of
 each pose group it names, the others fading out), holds parameters at a value through the
-runtime's override layer, over clips and expressions, and hides parts. Taking it off lets the
+runtime's override layer, over clips and expressions and under a mood's parameters and a nod's or
+a shake's, and hides parts. Taking it off lets the
 parameters go, shows the parts again and puts each pose group back on the entry it showed at load.
 The server checks each outfit against the model's inventory: entries its pose groups have,
 parameters within their ranges and parts the rig has, each named once.
@@ -448,11 +497,14 @@ window, her menu and how main places and shows her, and
   going back to her own direction after a call replays none.
 - **What she adds.** A tap on her head lends her `shy` for 2 s with a nod, one on her body
   `surprised` for 2 s, and a tap within 0.5 s of her last reaction none; five taps within 3 s lend
-  her `pout` for 3 s with a shake, and she rests from taps for those 3 s. Picking her up for a drag
-  lends her `surprised` for 1.5 s. After 5 minutes with no tap, drag, menu, reply, voice message or
-  call she dozes, her face `sleepy` (the `lazy` mood) and her eyes no longer on the cursor, until
-  any of those wakes her, a tap with `surprised`. Awake, with no call of hers, no press and no menu,
-  her model's eyes follow the cursor main sends her, a target set each 100 ms that the runtime eases
+  her `pout` for 3 s with a shake, and she rests from taps for those 3 s. Her head is her rig's head
+  hit area (`headAreaOf`); a rig without one, as one converted from a Live2D model can be, takes a
+  tap within a quarter of her framing's drawn width of where her eyes are taken to be, a sixth of
+  the way down her framing, as on her head (`nearHead`, `gaze.ts`). Picking her up for a drag lends
+  her `surprised` for 1.5 s. After 5 minutes with no tap, drag, menu, reply, voice message or call
+  she dozes, her face `sleepy` (the `lazy` mood) and her eyes no longer on the cursor, until any of
+  those wakes her, a tap with `surprised`. Awake, with no call of hers, no press and no menu, her
+  model's eyes follow the cursor main sends her, a target set each 100 ms that the runtime eases
   toward, and wander on their own again 4 s after it stops (`gaze.ts`).
 - **Her mouth.** On a call of hers the main window reads a second `MouthMeter` on the call's track
   (`CallSignals.feedMouth`: a meter's follower steps with each read, so the stages' meter and the
@@ -549,10 +601,18 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   - `avatar-mouth.test.ts` pins `MOUTH_CURVE` and checks it on synthetic voices;
     [its benchmark](benchmarks/2026-11-23-mouth-curve/README.md) scores it on her voice messages.
   - `avatar-framing.test.ts`, and `avatar-stage.test.ts`, which drives the stage with a fake model
-    and a clock the test moves.
+    and a clock the test moves: among the rest, a setup's look applied once each time it is shown, a
+    mood's parameters faded in, to another mood's values and out on the runtime's ease, a lent
+    mood's first, and set at once by a setup shown in place, and a nod and a shake with no clip, on
+    their roles' parameters, replacing one still playing, a clip a page played on the gesture layer
+    included, held in place by a pause, over a mood's hold, and left out under reduced motion but
+    for `gesture()`.
   - `avatar-psd2live.test.ts` runs the vendored runtime on the test rig: its SHA-256, exports and
-    ABI; the rig's inventory; clips found by group; lip sync; two expressions at once; ids it lacks;
-    the head's bounds and a hit test; and refusals with the runtime's reasons.
+    ABI; the rig's inventory; clips found by group; a role's parameters; lip sync; two expressions
+    at once; ids it lacks; the head's bounds and a hit test; refusals with the runtime's reasons;
+    holds written over an outfit's parameters as one override; a look that scales how far she
+    turns; and on a stage, a nod with no clip that dips her AngleY and leaves it where it was.
+  - `avatar-moods.test.ts` also resolves a model's mood parameters and look.
   - `parity.test.ts` holds `inspectPsd2liveRig`'s inventory equal to the server's upload check on
     the test rig, and `build.test.ts` the pack: the avatar bundle, the wasm's SHA-256, the license
     files, every asset its bundle names, and a Node import that reads the rig with the packed wasm.
@@ -561,8 +621,9 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   version, on a texture page that isn't a PNG inside the file, and on rigs it rewrites past the
   inventory's 1 MiB, a long name within it kept whole, and on one whose load passes a deadline,
   ended there; `appearance.test.ts` the ids, the folder an import makes, the 200 MiB limit declared
-  and streamed, the call refusal, the active model, every route, and ids that try to leave their
-  folder. `static.test.ts` pins the CSP, its `'wasm-unsafe-eval'` included, and the wasm's type.
+  and streamed, the call refusal, the active model, every route, PATCH's checks of `look` and
+  `moodParameters`, a `model.json` written before them, and ids that try to leave their folder.
+  `static.test.ts` pins the CSP, its `'wasm-unsafe-eval'` included, and the wasm's type.
 - **The app's call** (`bun run test apps/web`), on Node with no browser: `target.test.ts` holds
   whom a call is with and how each page shows it, `signals.test.ts` what moves her and the tick,
   `stages.test.ts` her stages on fake parts, through a call's end into the next call and a group
@@ -570,22 +631,27 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   the tiles' and the screen's markup, `call-bar.test.ts` when the bar shows, hides and keeps an
   ending until Close, and `call-dock.test.ts` the dock's Expand, its focusable region, and a chat's
   Call waiting while the tab's call is elsewhere.
+- **Studio's Appearance** (`bun run test apps/web`): `model-draft.test.ts` holds the draft Save
+  sends, its look and mood parameters included, and what of it a new file keeps, and
+  `character-models.test.ts` the setup a model's settings resolve to.
 - **The desktop companion** (`bun run test apps/web apps/desktop`), on Node with no browser:
   `director.test.ts` holds her moods, taps, pokes, dozing, a call's direction and the gesture
-  numbering, `gaze.test.ts` her eyes, `mouths.test.ts` her mouth from the port and from a voice
-  message's file, `pointer.test.ts`, `menu.test.ts`, `handshake.test.ts`, `page-port.test.ts` and
+  numbering, `gaze.test.ts` her eyes and how near them a tap is on her head, `mouths.test.ts` her
+  mouth from the port and from a voice message's file, `pointer.test.ts` (a tap's area with and
+  without a head hit area included), `menu.test.ts`, `handshake.test.ts`, `page-port.test.ts` and
   `protocol.test.ts` her page's parts, and `chat-facts.test.ts` and `feed-link.test.ts` the main
   window's feed; main's side is `apps/desktop`'s ([desktop.md](desktop.md#the-vitest-project)). The
   dev smoke walks her whole in background mode ([desktop.md](desktop.md#the-dev-smoke)).
 - **The browser smoke** (`bun apps/bot/scripts/local-smoke.ts`,
   [web-app.md](web-app.md#the-browser-smoke-test)) imports the test rig in the studio's Appearance,
   checks its preview draws under the app's CSP, that Use Microphone closes its audio while the
-  browser still asks for the microphone, that a stage made anew ends a line tried on it, and that a
-  mood put back while its Save is out stays put back, refuses a PNG and a cut-off rig, and makes the
-  model active, then stops using it. Its video call makes the rig her active model again and calls
-  her: her stage ready, her mouth moving on the smoke's tone, the caption and her mood, Shrink and
-  Expand on one canvas, the call bar on another page, and a second call's stage; its task call
-  answers a task's question on the screen.
+  browser still asks for the microphone, that a stage made anew ends a line tried on it, that a mood
+  put back while its Save is out stays put back, and that Head Turn and a parameter added to a mood
+  save together, refuses a PNG and a cut-off rig, and makes the model active, then stops using it.
+  Its video call makes the rig her active model again and calls her: her stage ready, her mouth
+  moving on the smoke's tone, the caption and her mood, Shrink and Expand on one canvas, the call
+  bar on another page, and a second call's stage; its task call answers a task's question on the
+  screen.
 - **The npm package:** `ci-install-check.ts` imports the test rig into the packed server on Linux
   and Windows CI, which proves the upload check finds its runtime under `EIDOLON_APP_ROOT`, and the
   package's and the desktop stage's tests hold `data/psd2live/` in place.

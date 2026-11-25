@@ -1,5 +1,6 @@
-// What Studio edits of a model before Save: its call framing, its moods and gestures, and its
-// outfits. Save sends only the fields that changed, each in a shape the server's PATCH takes.
+// What Studio edits of a model before Save: its call framing, how far she turns, its moods and
+// gestures, and its outfits. Save sends only the fields that changed, each in a shape the server's
+// PATCH takes.
 import {
   type Box,
   type Gesture,
@@ -15,17 +16,20 @@ import type {
   ModelBox,
   ModelInventory,
   ModelOutfit,
+  ModelParameterSetting,
   SettingRow,
 } from "@/lib/api";
 
 export type ModelDraft = Pick<
   CharacterModel,
-  "framing" | "moods" | "gestures" | "outfits" | "outfit"
+  "framing" | "look" | "moods" | "moodParameters" | "gestures" | "outfits" | "outfit"
 >;
 
 const FIELDS = [
   "framing",
+  "look",
   "moods",
+  "moodParameters",
   "gestures",
   "outfits",
   "outfit",
@@ -34,11 +38,12 @@ const FIELDS = [
 /** The server's limits, as CharacterModelPatch's doc comment gives them. */
 export const MAX_OUTFITS = 32;
 export const MAX_MOOD_EXPRESSIONS = 2;
+export const MAX_MOOD_PARAMETERS = 8;
 export const MAX_NAME = 64;
 
 export function draftOf(model: ModelDraft): ModelDraft {
-  const { framing, moods, gestures, outfits, outfit } = model;
-  return { framing, moods, gestures, outfits, outfit };
+  const { framing, look, moods, moodParameters, gestures, outfits, outfit } = model;
+  return { framing, look, moods, moodParameters, gestures, outfits, outfit };
 }
 
 /** Plain JSON compared by value, whatever order an object's keys are in. */
@@ -108,6 +113,11 @@ export function keptDraft(draft: ModelDraft, inventory: ModelInventory): ModelDr
   const clips = new Set(inventory.clips.map(({ id }) => id));
   const parts = new Set(inventory.parts.map(({ id }) => id));
   const ranges = new Map(inventory.parameters.map((parameter) => [parameter.id, parameter]));
+  const inRange = (settings: readonly ModelParameterSetting[]) =>
+    settings.flatMap(({ id, value }) => {
+      const range = ranges.get(id);
+      return range ? [{ id, value: Math.min(range.max, Math.max(range.min, value)) }] : [];
+    });
   return {
     ...draft,
     moods: Object.fromEntries(
@@ -116,14 +126,17 @@ export function keptDraft(draft: ModelDraft, inventory: ModelInventory): ModelDr
         return left.length > 0 || ids.length === 0 ? [[mood, left]] : [];
       }),
     ),
+    moodParameters: Object.fromEntries(
+      Object.entries(draft.moodParameters).flatMap(([mood, settings]) => {
+        const left = inRange(settings);
+        return left.length > 0 ? [[mood, left]] : [];
+      }),
+    ),
     gestures: Object.fromEntries(Object.entries(draft.gestures).filter(([, id]) => clips.has(id))),
     outfits: draft.outfits.map((outfit) => ({
       ...outfit,
       poses: outfit.poses.filter(({ group, entry }) => entry < (inventory.poseGroups[group] ?? 0)),
-      parameters: outfit.parameters.flatMap(({ id, value }) => {
-        const range = ranges.get(id);
-        return range ? [{ id, value: Math.min(range.max, Math.max(range.min, value)) }] : [];
-      }),
+      parameters: inRange(outfit.parameters),
       hiddenParts: outfit.hiddenParts.filter((id) => parts.has(id)),
     })),
   };
@@ -200,10 +213,43 @@ export function withMood(
     : { ...rest, [tag]: chosen };
 }
 
-export function withoutMood(moods: ModelDraft["moods"], tag: string): ModelDraft["moods"] {
+/** `moods`, or a mood's parameters, with no choice for `tag`. */
+export function withoutMood<T>(
+  moods: Readonly<Record<string, T>>,
+  tag: string,
+): Readonly<Record<string, T>> {
   if (!Object.hasOwn(moods, tag)) return moods;
   const { [tag]: _, ...rest } = moods;
   return rest;
+}
+
+/**
+ * `moodParameters` with `tag` holding parameter `id` at `value`, kept within its range, or added
+ * while the mood holds fewer than MAX_MOOD_PARAMETERS; with null, letting it go. A mood left with
+ * none goes, as the server would keep it.
+ */
+export function withMoodParameter(
+  inventory: ModelInventory,
+  moodParameters: ModelDraft["moodParameters"],
+  tag: MoodTag,
+  id: string,
+  value: number | null,
+): ModelDraft["moodParameters"] {
+  const settings = moodParameters[tag] ?? [];
+  const range = inventory.parameters.find((parameter) => parameter.id === id);
+  const at = settings.findIndex((setting) => setting.id === id);
+  let next: ModelParameterSetting[];
+  if (value === null || range === undefined) {
+    next = settings.filter((setting) => setting.id !== id);
+  } else {
+    const held = { id, value: Math.min(range.max, Math.max(range.min, value)) };
+    if (at === -1 && settings.length >= MAX_MOOD_PARAMETERS) return moodParameters;
+    next =
+      at === -1
+        ? [...settings, held]
+        : settings.map((setting, index) => (index === at ? held : setting));
+  }
+  return next.length === 0 ? withoutMood(moodParameters, tag) : { ...moodParameters, [tag]: next };
 }
 
 /** `ids` with `id` taken out, or put in while there is room for it; null when there is none. */

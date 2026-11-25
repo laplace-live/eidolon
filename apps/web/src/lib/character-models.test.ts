@@ -33,7 +33,7 @@ const INVENTORY: ModelInventory = {
     { id: "HitAreaHead", name: "头部" },
     { id: "HitAreaBody", name: "身体" },
   ],
-  parameters: [],
+  parameters: [{ id: "ParamCheek", min: 0, max: 1, default: 0 }],
   parts: [],
   poseGroups: [],
   lipSync: true,
@@ -173,7 +173,21 @@ describe("outfitOf", () => {
 
 describe("setupOf", () => {
   const model = (moods: CharacterModel["moods"], gestures: CharacterModel["gestures"]) =>
-    setupOf({ inventory: INVENTORY, moods, gestures });
+    setupOf({ inventory: INVENTORY, moods, moodParameters: {}, gestures, look: 1 });
+
+  test("turns her as far as her model's look says, and holds each mood's parameters", () => {
+    const setup = setupOf({
+      inventory: INVENTORY,
+      moods: {},
+      moodParameters: { shy: [{ id: "ParamCheek", value: 1 }] },
+      gestures: {},
+      look: 0.25,
+    });
+    expect(setup.look).toBe(0.25);
+    expect(setup.moodParameters.shy).toEqual([{ id: "ParamCheek", value: 1 }]);
+    expect(setup.moodParameters.happy).toEqual([]);
+    expect(model({}, {}).look).toBe(1);
+  });
 
   test("the owner's choices win, the rest are the defaults the model has", () => {
     const setup = model({ happy: ["sad"], thinking: ["sleepy"] }, { nod: "wave" });
