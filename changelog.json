@@ -2,6 +2,76 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-25T00:23:40.774Z",
+      "versions": {
+        "laplace-eidolon": "0.16.0",
+        "@laplace.live/eidolon": "0.16.0",
+        "laplace-eidolon-desktop": "0.4.0",
+        "@laplace.live/eidolon-sdk": "0.3.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "See her model face to face when you call a persona that has one"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon-sdk"
+          ],
+          "text": "Add the avatar entry, which draws a PSD2Live model and moves it with a call"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Keep her on your desktop as a companion above your other windows"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Keep a call going while you move between the app's pages"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Import a persona's PSD2Live models in the studio's new Appearance section"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Hanging up as a call connects ends it within seconds, not about 30 s later"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Eidolon asks before a quit drops unsaved changes, which no longer leave it stuck"
+        }
+      ]
+    },
+    {
       "date": "2026-11-24T01:42:44.433Z",
       "versions": {
         "laplace-eidolon-desktop": "0.3.0",

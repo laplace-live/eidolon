@@ -1,5 +1,18 @@
 # @laplace.live/eidolon
 
+## 0.16.0
+
+### Minor Changes
+
+- a7c2c07: See her model face to face when you call a persona that has one
+- 7bfe18b: Keep her on your desktop as a companion above your other windows
+- a7c2c07: Keep a call going while you move between the app's pages
+- ef13210: Import a persona's PSD2Live models in the studio's new Appearance section
+
+### Patch Changes
+
+- 2521a5a: Hanging up as a call connects ends it within seconds, not about 30 s later
+
 ## 0.15.1
 
 ### Patch Changes
