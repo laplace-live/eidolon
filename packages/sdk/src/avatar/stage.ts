@@ -3,11 +3,12 @@
 // and reported once, so the page can show her picture instead.
 import type { Direction } from "./direct.ts";
 import { type Box, viewFor } from "./framing.ts";
-import { MoodHolds } from "./holds.ts";
+import { HEAD_GESTURES, type HeadGesture, headGestureHolds, MoodHolds } from "./holds.ts";
 import {
   AvatarError,
   type AvatarModel,
   avatarErrorOf,
+  type Gesture,
   type ModelOutfitLike,
   moodExpressions,
   moodSettings,
@@ -28,7 +29,10 @@ export interface AvatarStageOptions {
   readonly maxPixelRatio?: number;
   /** Frames a second at most; 0 (the default) draws every animation frame. */
   readonly fps?: number;
-  /** Plays no clip, idle included, and leaves out the eyes' saccades; her face and mouth still move. */
+  /**
+   * Plays no clip, idle included, and no nod or shake of its own, and leaves out the eyes' saccades;
+   * her face and mouth still move.
+   */
   readonly reducedMotion?: boolean;
   /** Called once a model fails, after the stage disposed it. */
   readonly onError?: (error: AvatarError) => void;
@@ -113,6 +117,14 @@ export class AvatarStage {
   /** What the model was last told to hold. */
   #held: readonly ParameterHold[] = [];
   #gestureSeq: number | null = null;
+  /** A gesture a page asked for, made at the next frame. */
+  #asked: Gesture | null = null;
+  /** A nod or a shake the stage plays through her head's parameters, from a time in ms. */
+  #motion: { readonly name: HeadGesture; readonly at: number } | null = null;
+  /** The stage played a gesture's clip last, which a nod or a shake of its own stops. */
+  #gestureClip = false;
+  /** The model's role parameters, as asked for. */
+  #roles = new Map<string, readonly string[]>();
   #mouth: MouthSource | null = null;
   #gaze: "direction" | "pointer" | readonly [number, number] = "direction";
   #pointer: readonly [number, number] | null = null;
@@ -170,6 +182,9 @@ export class AvatarStage {
       this.#last = null;
       this.#moods = new MoodHolds();
       this.#held = [];
+      this.#motion = null;
+      this.#gestureClip = false;
+      this.#roles = new Map();
     }
     this.#model = model;
     this.#setup = setup;
@@ -212,6 +227,14 @@ export class AvatarStage {
   wear(outfit: ModelOutfitLike | null): void {
     this.#outfit = outfit;
     this.#applied.outfit = false;
+  }
+
+  /**
+   * Makes a gesture at the next frame, outside her direction and under reduced motion too: its clip
+   * once over her idle and talking, or for a nod or a head shake with no clip, a turn of her head.
+   */
+  gesture(name: Gesture): void {
+    this.#asked = name;
   }
 
   /** The drawn alpha, 0..1, under a point of the page after the next draw; 0 without a model. */
@@ -355,13 +378,6 @@ export class AvatarStage {
       model.setExpressions(expressions);
       applied.expressions = key;
     }
-    this.#moods.set(moodSettings(setup, tags), this.#settle);
-    this.#settle = false;
-    const holds = this.#moods.step(dt);
-    if (!sameHolds(holds, this.#held)) {
-      model.hold(holds);
-      this.#held = holds;
-    }
     const talk = direction.speaking && !this.#reducedMotion ? setup.gestures.talk : null;
     if (talk !== applied.talk) {
       model.play(talk, TALK, { loop: true });
@@ -370,11 +386,60 @@ export class AvatarStage {
     const gesture = direction.gesture;
     if (gesture !== null && gesture.seq !== this.#gestureSeq) {
       this.#gestureSeq = gesture.seq;
-      const clip = setup.gestures[gesture.name];
-      if (!this.#reducedMotion && clip !== null) model.play(clip, GESTURE, { priority: 2 });
+      if (!this.#reducedMotion) this.#make(model, setup, gesture.name, now);
+    }
+    if (this.#asked !== null) {
+      this.#make(model, setup, this.#asked, now);
+      this.#asked = null;
+    }
+    this.#moods.set(moodSettings(setup, tags), this.#settle);
+    this.#settle = false;
+    // The head's turn goes over a mood that holds the same parameter.
+    const holds = [...this.#moods.step(dt), ...this.#motionHolds(model, now)];
+    if (!sameHolds(holds, this.#held)) {
+      model.hold(holds);
+      this.#held = holds;
     }
     const [x, y] = this.#lookTarget(direction, now);
     model.lookAt(x, y);
+  }
+
+  /**
+   * A gesture's clip once on the gesture layer, or for a nod or a head shake with no clip, a turn of
+   * her head; either replaces a gesture still playing.
+   */
+  #make(model: AvatarModel, setup: ResolvedSetup, name: Gesture, now: number): void {
+    const clip = setup.gestures[name];
+    if (clip !== null) {
+      this.#motion = null;
+      this.#gestureClip = true;
+      model.play(clip, GESTURE, { priority: 2 });
+      return;
+    }
+    if (name !== "nod" && name !== "shake") return;
+    if (this.#gestureClip) model.play(null, GESTURE);
+    this.#gestureClip = false;
+    this.#motion = { name, at: now };
+  }
+
+  /** What the nod or shake under way holds now on her head's parameters; none once it is over. */
+  #motionHolds(model: AvatarModel, now: number): ParameterHold[] {
+    const motion = this.#motion;
+    if (motion === null) return [];
+    const { role, seconds } = HEAD_GESTURES[motion.name];
+    const t = (now - motion.at) / (seconds * 1000);
+    if (!(t < 1)) {
+      this.#motion = null;
+      return [];
+    }
+    let ids = this.#roles.get(role);
+    if (ids === undefined) {
+      ids = model.roleParameters(role);
+      this.#roles.set(role, ids);
+    }
+    const turned = new Set(ids);
+    const parameters = model.inventory.parameters.filter(({ id }) => turned.has(id));
+    return headGestureHolds(motion.name, t, parameters).filter(({ weight }) => weight > 0);
   }
 
   #lookTarget(direction: Direction, now: number): readonly [number, number] {

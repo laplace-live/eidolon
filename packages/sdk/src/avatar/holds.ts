@@ -1,6 +1,6 @@
 // Parameters the stage holds over her model's own motion: a mood's, faded in and out as PSD2Live
-// fades its expressions.
-import type { ParameterHold, ParameterSetting } from "./model.ts";
+// fades its expressions, and a nod or a head shake for a model with no clip for one.
+import type { ModelParameter, ParameterHold, ParameterSetting } from "./model.ts";
 
 /**
  * Seconds a mood's parameters take to fade in or out: the half second PSD2Live's editor gives the
@@ -89,4 +89,42 @@ export class MoodHolds {
     }
     return holds;
   }
+}
+
+/** A nod dips her head and brings it back up; a head shake turns it side to side, twice. */
+export const HEAD_GESTURES = {
+  nod: { role: "AngleY", seconds: 0.5 },
+  shake: { role: "AngleX", seconds: 0.7 },
+} as const;
+
+export type HeadGesture = keyof typeof HEAD_GESTURES;
+
+/**
+ * How far a nod or a shake turns her head, as a share of each parameter's half range: about as far
+ * as the clips PSD2Live generates, whose Nod dips the test rig's AngleY by 0.29 of it and whose
+ * Shake turns its AngleX by 0.18 one way and 0.31 the other.
+ */
+const NOD_DEPTH = 0.35;
+const SHAKE_DEPTH = 0.35;
+const SHAKE_TURNS = 2;
+
+/**
+ * What a nod or a shake holds `t` of the way through (0..1), on its role's `parameters`: each moved
+ * from its default toward the turn and back, weighted to nothing at both ends so it eases in and
+ * lets go where it started.
+ */
+export function headGestureHolds(
+  name: HeadGesture,
+  t: number,
+  parameters: readonly ModelParameter[],
+): ParameterHold[] {
+  const envelope = Math.sin(Math.PI * Math.min(Math.max(t, 0), 1));
+  return parameters.map(({ id, min, max, default: rest }) => {
+    if (name === "nod") {
+      return { id, value: rest - NOD_DEPTH * (rest - min), weight: envelope ** 2 };
+    }
+    const swing = Math.sin(2 * Math.PI * SHAKE_TURNS * t);
+    const half = swing >= 0 ? max - rest : rest - min;
+    return { id, value: rest + SHAKE_DEPTH * half * swing, weight: envelope };
+  });
 }

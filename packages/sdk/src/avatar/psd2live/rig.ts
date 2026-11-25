@@ -504,6 +504,19 @@ export class Psd2liveRig {
     if (i >= 0) this.rt.p2l_set_parameter_override(this.rig, i, value, weight);
   }
 
+  /** The ids of the parameters a role such as AngleX moves; none when the rig gives it none. */
+  roleParameters(role: string): string[] {
+    const rt = this.rt;
+    return withCString(rt, role, (name) => {
+      const n = rt.p2l_role_parameters(this.rig, name, 0, 0);
+      const out = rt.p2l_alloc(n * 4 + 4);
+      rt.p2l_role_parameters(this.rig, name, out, n);
+      const indices = Array.from(new Uint32Array(rt.memory.buffer, out, n));
+      rt.p2l_dealloc(out, n * 4 + 4);
+      return indices.flatMap((i) => this.parameters[i] ?? []);
+    });
+  }
+
   update(dt: number): void {
     this.rt.p2l_update(this.rig, dt);
   }

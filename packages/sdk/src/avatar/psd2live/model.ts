@@ -105,6 +105,10 @@ export class Psd2liveModel implements AvatarModel {
     this.#run(() => this.rig.behaviorStrength(1, strength, 1));
   }
 
+  roleParameters(role: string): readonly string[] {
+    return this.#run(() => this.rig.roleParameters(role));
+  }
+
   wear(outfit: ModelOutfitLike | null): void {
     this.#run(() => {
       const worn = this.#worn;

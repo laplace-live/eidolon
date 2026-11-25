@@ -79,6 +79,9 @@ function fakeModel() {
     mouth: vi.fn<AvatarModel["mouth"]>(),
     lookAt: vi.fn<AvatarModel["lookAt"]>(),
     lookStrength: vi.fn<AvatarModel["lookStrength"]>(),
+    roleParameters: vi.fn<AvatarModel["roleParameters"]>((role) =>
+      role === "AngleX" ? ["ParamAngleX"] : role === "AngleY" ? ["ParamAngleY"] : [],
+    ),
     wear: vi.fn<AvatarModel["wear"]>(),
     hold: vi.fn<AvatarModel["hold"]>(),
     bounds: vi.fn<AvatarModel["bounds"]>(() => null),
@@ -516,6 +519,122 @@ describe("her direction", () => {
     stage.show(second, SETUP);
     clock.frame(32);
     expect(second.wear).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("a nod or a shake with no clip", () => {
+  const CLIPLESS = { ...SETUP, gestures: { ...SETUP.gestures, nod: null, shake: null } };
+  const held = (model: ReturnType<typeof fakeModel>) => model.hold.mock.lastCall?.[0] ?? [];
+
+  test("a nod dips her head's AngleY and brings it back in half a second, then lets go", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
+    clock.frame(1000);
+    expect(model.hold).not.toHaveBeenCalled();
+    clock.frame(1062.5);
+    expect(held(model)).toEqual([
+      { id: "ParamAngleY", value: -10.5, weight: expect.closeTo(0.146, 3) },
+    ]);
+    clock.frame(1125);
+    clock.frame(1250);
+    expect(held(model)).toEqual([{ id: "ParamAngleY", value: -10.5, weight: 1 }]);
+    clock.frame(1375);
+    expect(held(model)).toEqual([
+      { id: "ParamAngleY", value: -10.5, weight: expect.closeTo(0.5, 5) },
+    ]);
+    clock.frame(1500);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+    expect(model.play).not.toHaveBeenCalledWith(expect.anything(), 2, expect.anything());
+    expect(model.roleParameters.mock.calls).toEqual([["AngleY"]]);
+  });
+
+  test("a shake turns her AngleX side to side twice in 0.7 s, then lets go", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    stage.direct(direction({ gesture: { name: "shake", seq: 1 } }));
+    clock.frame(0);
+    const at = (now: number) => {
+      clock.frame(now);
+      const [hold] = held(model);
+      return [hold?.id, Number(hold?.value.toFixed(2)), Number(hold?.weight.toFixed(3))];
+    };
+    // A quarter turn's swing is the deepest; the turns at either end start and end softly.
+    expect(at(87.5)).toEqual(["ParamAngleX", 10.5, 0.383]);
+    expect(at(262.5)).toEqual(["ParamAngleX", -10.5, 0.924]);
+    expect(at(437.5)).toEqual(["ParamAngleX", 10.5, 0.924]);
+    expect(at(612.5)).toEqual(["ParamAngleX", -10.5, 0.383]);
+    clock.frame(700);
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+  });
+
+  test("a new gesture replaces one still playing, a clip of the gesture layer included", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
+    clock.frame(0);
+    clock.frame(100);
+    stage.direct(direction({ gesture: { name: "shake", seq: 2 } }));
+    clock.frame(200);
+    clock.frame(300);
+    expect(held(model).map(({ id }) => id)).toEqual(["ParamAngleX"]);
+
+    // Her nod has a clip but her shake none: each ends the other.
+    stage.show(model, { ...SETUP, gestures: { ...SETUP.gestures, shake: null } });
+    stage.direct(direction({ gesture: { name: "nod", seq: 3 } }));
+    clock.frame(400);
+    expect(model.play).toHaveBeenLastCalledWith("nod-id", 2, { priority: 2 });
+    expect(model.hold).toHaveBeenLastCalledWith([]);
+    stage.direct(direction({ gesture: { name: "shake", seq: 4 } }));
+    clock.frame(500);
+    expect(model.play).toHaveBeenLastCalledWith(null, 2);
+    clock.frame(600);
+    expect(held(model).map(({ id }) => id)).toEqual(["ParamAngleX"]);
+  });
+
+  test("goes over a mood that holds her head", () => {
+    const stage = stageOf();
+    const model = fakeModel();
+    stage.show(model, {
+      ...CLIPLESS,
+      moodParameters: { ...CLIPLESS.moodParameters, shy: [{ id: "ParamAngleY", value: -5 }] },
+    });
+    stage.direct(direction({ mood: ["shy"], gesture: { name: "nod", seq: 1 } }));
+    clock.frame(0);
+    clock.frame(100);
+    clock.frame(250);
+    expect(held(model)).toEqual([
+      { id: "ParamAngleY", value: -5, weight: 1 },
+      { id: "ParamAngleY", value: -10.5, weight: 1 },
+    ]);
+  });
+
+  test("none of its own under reduced motion, but one a page asks for, clip or none", () => {
+    const stage = stageOf({ reducedMotion: true });
+    const model = fakeModel();
+    stage.show(model, CLIPLESS);
+    stage.direct(direction({ gesture: { name: "nod", seq: 1 } }));
+    clock.frame(0);
+    clock.frame(100);
+    expect(model.hold).not.toHaveBeenCalled();
+
+    stage.gesture("shake");
+    clock.frame(200);
+    clock.frame(300);
+    expect(held(model).map(({ id }) => id)).toEqual(["ParamAngleX"]);
+    stage.show(model, SETUP);
+    stage.gesture("nod");
+    clock.frame(400);
+    expect(model.play).toHaveBeenLastCalledWith("nod-id", 2, { priority: 2 });
+    // The idle and talk gestures have no head movement to fall back on.
+    stage.show(model, { ...SETUP, gestures: { ...SETUP.gestures, idle: null } });
+    model.play.mockClear();
+    stage.gesture("idle");
+    clock.frame(500);
+    expect(model.play).not.toHaveBeenCalled();
   });
 });
 

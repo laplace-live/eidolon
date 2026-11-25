@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
+import { directionOf, directionState } from "../src/avatar/direct.ts";
 import { AvatarError, resolveSetup } from "../src/avatar/model.ts";
 import { Psd2liveModel } from "../src/avatar/psd2live/model.ts";
 import type { Psd2liveRenderer } from "../src/avatar/psd2live/renderer.ts";
@@ -16,6 +17,7 @@ import {
   psd2liveRuntimeUrl,
   withCString,
 } from "../src/avatar/psd2live/runtime.ts";
+import { AvatarStage } from "../src/avatar/stage.ts";
 
 const FIXTURE = resolve(
   import.meta.dirname,
@@ -220,6 +222,15 @@ describe("the rig", () => {
     });
   });
 
+  test("names the parameters each role moves, and none for a role it lacks", () => {
+    const rig = load();
+    expect(rig.roleParameters("AngleX")).toEqual(["ParamAngleX"]);
+    expect(rig.roleParameters("AngleY")).toEqual(["ParamAngleY"]);
+    expect(rig.roleParameters("EyeBlink")).toEqual(["ParamEyeLOpen", "ParamEyeROpen"]);
+    expect(rig.roleParameters("Tail")).toEqual([]);
+    rig.dispose();
+  });
+
   test("lip sync opens and shuts the mouth through ParamMouthOpenY", () => {
     const rig = load();
     const mouth = rig.parameters.indexOf("ParamMouthOpenY");
@@ -362,6 +373,36 @@ describe("the model", () => {
     expect(after).toBeLessThan(1e-3);
     model.dispose();
     idleOnly.dispose();
+  });
+
+  test("on a stage, a nod with no clip dips her AngleY and leaves it where it was", () => {
+    const frames: ((now: number) => void)[] = [];
+    const angles = () => {
+      const rig = load();
+      const model = new Psd2liveModel(rig, {
+        dispose() {},
+        draw() {},
+      } as unknown as Psd2liveRenderer);
+      const stage = new AvatarStage(new EventTarget() as unknown as HTMLCanvasElement, {
+        clock: { request: (frame) => frames.push(frame), cancel: () => {} },
+      });
+      const setup = resolveSetup(model.inventory);
+      stage.show(model, { ...setup, gestures: { ...setup.gestures, idle: null, nod: null } });
+      stage.gaze([0, 0]);
+      return { stage, angle: () => rig.parameterValues()[rig.parameters.indexOf("ParamAngleY")] };
+    };
+    const nodding = angles();
+    // Her breathing sways her head the same on a twin that makes no gesture.
+    const still = angles();
+    nodding.stage.direct({ ...directionOf(directionState()), gesture: { name: "nod", seq: 1 } });
+    const apart: number[] = [];
+    for (let now = 0; now <= 1000; now += 1000 / 60) {
+      for (const frame of frames.splice(0)) frame(now);
+      apart.push((nodding.angle() ?? Number.NaN) - (still.angle() ?? Number.NaN));
+    }
+    expect(Math.min(...apart)).toBeCloseTo(-10.5, 1);
+    expect(apart.findIndex((angle) => angle < -10)).toBeGreaterThan(10);
+    expect(Math.max(...apart.slice(40).map(Math.abs))).toBeLessThan(1e-4);
   });
 
   test("holds layer over her outfit: where both set a parameter, it moves from the outfit's value", () => {

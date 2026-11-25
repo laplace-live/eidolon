@@ -102,6 +102,8 @@ export interface AvatarModel {
   lookAt(x: number, y: number): void;
   /** How far her gaze turns her head, body and eyes: 0 not at all, 1 as far as the runtime does. */
   lookStrength(strength: number): void;
+  /** The ids of the parameters a role such as AngleX moves; none when the model gives it none. */
+  roleParameters(role: string): readonly string[];
   wear(outfit: ModelOutfitLike | null): void;
   /**
    * Holds parameters over her clips, expressions and outfit: each moves from what those give it

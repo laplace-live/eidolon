@@ -105,6 +105,7 @@ describe("directLine", () => {
       mouth: () => {},
       lookAt: () => {},
       lookStrength: () => {},
+      roleParameters: () => [],
       wear: () => {},
       hold: () => {},
       bounds: () => null,
