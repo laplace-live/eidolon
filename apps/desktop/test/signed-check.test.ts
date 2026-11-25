@@ -9,6 +9,7 @@ import {
   authenticodeScript,
   codeSignature,
   designatedRequirement,
+  ensureNoWindowsInstall,
   gatekeeperCheck,
   nativeCheck,
   parseAuthenticode,
@@ -437,5 +438,13 @@ describe("Windows", () => {
       pass: false,
       detail: "missing: Uninstall LAPLACE Eidolon.exe",
     });
+  });
+
+  test("refuses to run when the per-user install folder already exists, even with an older executable", () => {
+    const present = new Set([INSTALL, `${INSTALL}\\Eidolon.exe`]);
+    expect(() => ensureNoWindowsInstall(INSTALL, (path) => present.has(path))).toThrow(
+      `LAPLACE Eidolon is already installed for this user in ${INSTALL}`,
+    );
+    expect(() => ensureNoWindowsInstall(INSTALL, () => false)).not.toThrow();
   });
 });

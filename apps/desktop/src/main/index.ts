@@ -46,6 +46,7 @@ import {
   WindowPages,
 } from "./pages.ts";
 import { guardPermissions } from "./permissions.ts";
+import { TRAY_NOTICE_MARKER } from "./profile.ts";
 import {
   FAILED_PAGE,
   handleScheme,
@@ -95,8 +96,6 @@ const APP_USER_MODEL_ID = "live.laplace.eidolon";
 const TOAST_ACTIVATOR_CLSID = "{75F1E873-F478-41C1-9698-DBCAB1E2A111}";
 /** dev.ts's switch: Vite serves every path but the backend's. Unpackaged runs only. */
 const DEV_SWITCH = "eidolon-dev-server";
-/** In userData: the Windows tray notice has shown. */
-const TRAY_NOTICE_MARKER = "tray-notice-shown";
 /** A model's rig in its folder, as the server names it (RIG_FILE in apps/bot/src/local/appearance.ts). */
 const MODEL_FILE = "model.p2lrt";
 

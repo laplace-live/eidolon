@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { app } from "electron";
 import { activationPolicy, backgroundMode, chromiumSwitches } from "./background.ts";
 import { refuseDebugging } from "./navigation.ts";
+import { migrateLegacyProfile } from "./profile.ts";
 
 /** EIDOLON_DESKTOP_BACKGROUND: nothing this run does shows on screen or takes the focus. */
 export const background = backgroundMode(process.env);
@@ -35,8 +36,12 @@ export const refused = refuseDebugging();
 if (!refused) {
   // productName's profile, and the lock it scopes, are the installed app's. A launch given
   // --user-data-dir (the smokes) keeps it: setPath would replace it.
-  if (!app.isPackaged && !app.commandLine.hasSwitch("user-data-dir")) {
-    app.setPath("userData", join(app.getPath("appData"), "LAPLACE Eidolon Dev"));
+  if (!app.commandLine.hasSwitch("user-data-dir")) {
+    if (app.isPackaged) {
+      migrateLegacyProfile(app.getPath("appData"), app.getPath("userData"));
+    } else {
+      app.setPath("userData", join(app.getPath("appData"), "LAPLACE Eidolon Dev"));
+    }
   }
   // On macOS the logs folder is ~/Library/Logs/<productName> whatever the profile, so a dev or smoke
   // run would append to the installed app's logs.

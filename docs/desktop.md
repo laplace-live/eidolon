@@ -121,7 +121,10 @@ the app is in [background mode](#background-mode).
    50–150 ms by then.
 2. A packaged launch with `--remote-debugging-port` or `--remote-debugging-pipe`, which no fuse
    covers, exits 1 before the profile, the logs and the lock exist.
-3. Unpackaged, the profile (userData) becomes `<appData>/LAPLACE Eidolon Dev`, unless the launch passes
+3. Packaged without `--user-data-dir`, an install upgraded from `<appData>/Eidolon` moves its
+   profile to `<appData>/LAPLACE Eidolon` (or copies `window-bounds.json`, `companion.json`,
+   `tray-notice-shown` and `Local Storage` if Electron already created the folder non-empty).
+   Unpackaged, the profile (userData) becomes `<appData>/LAPLACE Eidolon Dev`, unless the launch passes
    `--user-data-dir`, as a test run does. Whenever the profile isn't the default, the logs move
    into `<profile>/logs`: on macOS `app.getPath("logs")` is `~/Library/Logs/LAPLACE Eidolon` whatever the
    profile, so a test would append to the installed app's logs.

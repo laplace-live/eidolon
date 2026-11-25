@@ -349,16 +349,24 @@ async function uninstall(folder: string): Promise<Check> {
   };
 }
 
-async function checkWindows(record: (check: Check) => void): Promise<void> {
-  const setup = installer("win32");
-  const binary = installedBinary();
-  const folder = dirname(binary);
-  if (existsSync(binary)) {
+/** Refuses to overwrite and uninstall an install already in `folder`, whatever executable name it holds. */
+export function ensureNoWindowsInstall(
+  folder: string,
+  exists: (path: string) => boolean = existsSync,
+): void {
+  if (exists(folder)) {
     throw new Error(
       `LAPLACE Eidolon is already installed for this user in ${folder}. signed-check installs the release ` +
         "there and uninstalls it after, so it runs only where none is, such as a CI runner",
     );
   }
+}
+
+async function checkWindows(record: (check: Check) => void): Promise<void> {
+  const setup = installer("win32");
+  const binary = installedBinary();
+  const folder = dirname(binary);
+  ensureNoWindowsInstall(folder);
   const listed: string[] = JSON.parse(
     readFileSync(join(stageDir("win32-x64"), UNSIGNED_PE_FILE), "utf8"),
   );
