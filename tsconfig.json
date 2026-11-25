@@ -6,10 +6,6 @@
     "moduleResolution": "Bundler",
     "moduleDetection": "force",
     "types": ["node"],
-    "paths": {
-      "bun": ["./tsconfig.no-bun.d.ts"],
-      "bun:*": ["./tsconfig.no-bun.d.ts"]
-    },
     "strict": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
@@ -25,12 +21,14 @@
   "include": [
     "apps/*/src",
     "apps/*/test",
+    "apps/bot/scripts",
     "apps/desktop/scripts",
     "apps/eidolon/scripts",
     "packages/*/src",
     "packages/*/test",
+    "packages/sdk/scripts",
     "scripts",
     "vitest.config.ts"
   ],
-  "exclude": ["apps/web", "packages/sdk"]
+  "exclude": ["apps/web", "packages/sdk/src", "packages/sdk/test"]
 }

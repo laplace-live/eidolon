@@ -38,7 +38,7 @@ else the first folder found.
 ## The data home
 
 `EIDOLON_HOME`, or `~/.laplace/eidolon`. A deployment mounts it as a volume: both Docker images
-set `EIDOLON_HOME=/data`. On one computer `bun run app`, npx and the desktop app share it, one
+set `EIDOLON_HOME=/data`. On one computer `pnpm app`, npx and the desktop app share it, one
 server at a time ([desktop.md](desktop.md#attaching-to-a-server-already-on-the-data-home)).
 
 ```text
@@ -78,7 +78,7 @@ copies it, and it never goes in a repository.
   eval/                 queries.toml and baseline.json for laplace-eval-retrieval
 ```
 
-The offline commands (`bun run laplace-*`, [typescript.md](typescript.md#the-offline-chain)) take
+The offline commands (`pnpm laplace-*`, [typescript.md](typescript.md#the-offline-chain)) take
 `--persona <id>`, default to these folders and to the persona's `index/`, and accept a path flag
 for each. `laplace-pipeline <list>` downloads a list's videos into `vods/`, transcribes and
 refines whatever in `vods/` and `streams/` still needs it, then rebuilds `stream_chunks` from
@@ -377,7 +377,7 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `chats.display` | `CHAT_DISPLAY` | string | Task display |
 
 `local.viewerName` is what the persona calls you in the local web app's calls; the bot that
-`bun run start` and the Docker image run never reads it.
+`pnpm start` and the Docker image run never reads it.
 `sources.ytDlp` replaces the yt-dlp the tools install and update under `<data home>/bin/`.
 `sources.cookiesFromBrowser` defaults to `chrome`; `none` reads no browser's cookies. yt-dlp writes
 the merged cookie jar back into `sources.cookiesFile`. `usage.db` is the SQLite file every call,
@@ -508,4 +508,4 @@ mv data/mem0-cloud-export.json "$home/mem0/cloud-export.json"   # if you have on
 
 `*` skips dotfiles, so each folder's tracked `.gitignore` stays. On one volume each `mv` is
 instant; the cache moves with its `-wal` and `-shm` once checkpointed. Then
-`bun run laplace-pipeline --persona <id> --dry-run` should find every transcript already done.
+`pnpm laplace-pipeline --persona <id> --dry-run` should find every transcript already done.

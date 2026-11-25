@@ -80,7 +80,7 @@ with `stop_task`. The owner chooses how much of it each chat shows ([Display](#d
 - **A command, and an MCP server's process, get a cut environment** (`shellEnv`, `shell.ts`):
   `HOME`, `USER`, `SHELL`, `LANG`, `TMPDIR`, every `LC_*`, `SSH_AUTH_SOCK` and the proxy variables
   in both cases, `TERM=dumb`, and a `PATH` without a folder the task may write (an MCP server's as
-  the task's first run found it), a `node_modules/.bin` or Bun's node shim (`/usr/bin:/bin` when
+  the task's first run found it) or a `node_modules/.bin` (`/usr/bin:/bin` when
   nothing is left, since bash runs a program from the folder it starts in on an empty one). No key
   the `.env` put in the server's environment reaches either, unless an mcp.json entry names it.
   A command's `PATH` starts with `<data home>/bin`, Eidolon's `eidolon` command and the managed
@@ -1389,7 +1389,7 @@ are JSON under 16 KB, but a new skill's, under 512 KB.
 The tests script every mind, and `local-smoke` walks tasks in a chat, in each display and on a
 call with a fake mind, then a coding task's skill and commands, two tasks' calls to a fake MCP
 server, and two tasks under the chat's Approve for Me, with a fake review, and Full Access
-([web-app.md](web-app.md#the-browser-smoke-test)). `bun run review-decisions` scores the review
+([web-app.md](web-app.md#the-browser-smoke-test)). `pnpm review-decisions` scores the review
 itself on a real model ([its benchmark](benchmarks/2026-11-19-approve-for-me/README.md)). `packages/assistant`'s tests spawn real
 processes for `bash` and the MCP client, in temporary folders, and kill only what they started.
 Whether a real model follows her hint, her tools' descriptions, the status block and her nudges
@@ -1409,7 +1409,7 @@ OpenRouter key exported, so Mem0 stays out. In one chat with milky-green:
 7. Start a second task, then say 算了别做了: she calls `stop_task`, and it ends cancelled.
 8. With commands on, Web Search Provider set to the OpenRouter account, and a model under Models
    by Kind for coding, ask for a small program that needs a lookup and a run, such as
-   查一下 Bun 最新版本，在新文件夹里写个 hello.ts，用 bun 跑一下: she names a kind, which the card
+   查一下 Node 最新版本，在新文件夹里写个 hello.ts，用 node 跑一下: she names a kind, which the card
    shows; the task runs on that kind's model; its command waits on the card (Run Once); the worker
    searches the web, about $0.007 a search, which the Usage page counts.
 9. With a skill in the data home, say `house-style` (Settings' **Add Skill** writes one), ask for
@@ -1418,7 +1418,7 @@ OpenRouter key exported, so Mem0 stays out. In one chat with milky-green:
    skill, and no task starts. Ask for a page and name no skill: `skills` is left out.
 
 **A call, by hand,** with the owner's go-ahead, since it bills Soniox and Fish besides OpenRouter:
-`bun run app` with the `.env`'s keys, a chat with milky-green alone, then Call.
+`pnpm app` with the `.env`'s keys, a chat with milky-green alone, then Call.
 
 1. Ask aloud for a page in a new folder outside `assistant.folders`: she calls `start_task`, and her
    line mentions the card's Allow.
@@ -1439,9 +1439,9 @@ A change to the voice loop also needs its real calls
 ## `laplace-task`
 
 ```bash
-bun run laplace-task --folder <path> [--allow <path>]... [--web any|off] \
+pnpm laplace-task --folder <path> [--allow <path>]... [--web any|off] \
   [--model <account>/<model>] [--deliverable <text>] [--check <text>] [--json] "<goal>"
-bun run laplace-task --resume <id> [--model <account>/<model>] [--web any|off] [--json]
+pnpm laplace-task --resume <id> [--model <account>/<model>] [--web any|off] [--json]
 ```
 
 - **One task in the foreground,** on the assistant role's model unless `--model` names another,
@@ -1482,6 +1482,6 @@ bun run laplace-task --resume <id> [--model <account>/<model>] [--web any|off] [
   `--resume` of it exits 1.
 - **An app task** (its `task.json` has `chat`) is refused: `--resume` exits 2 before it takes the
   lock, saying the task goes on from its card in its chat.
-- **It is A's billed check:** `bun run laplace-task --folder <tmp>/mg-react-todomvc "写一个 React
+- **It is A's billed check:** `pnpm laplace-task --folder <tmp>/mg-react-todomvc "写一个 React
   TodoMVC，单文件 index.html"` on a model you pick, then open the page and try adding, ticking,
   deleting and the three filters.

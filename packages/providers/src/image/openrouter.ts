@@ -18,8 +18,7 @@ import type { GeneratedImage, Generation, ImageModel, ImageModelOptions } from "
 const OPENROUTER_IMAGES_URL = "https://openrouter.ai/api/v1/images";
 
 // A max-quality render runs for minutes, and fetch gives up on headers or a body idle for 5 minutes
-// by default; Bun's fetch ignores the dispatcher that lifts it. The bot bounds itself far lower,
-// through the tool timeout.
+// unless a dispatcher lifts it. The bot bounds itself far lower, through the tool timeout.
 const IMAGE_REQUEST_IDLE_TIMEOUT_MS = 600_000;
 
 /** The images route under an API base. */

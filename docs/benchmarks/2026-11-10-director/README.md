@@ -214,9 +214,9 @@ From the repository root, with the gate role's key (`OPENROUTER_API_KEY` by defa
 the environment:
 
 ```sh
-bun run director-decisions
-bun docs/benchmarks/2026-11-10-director/score.ts
-bun docs/benchmarks/2026-11-10-director/score.ts --cached
+pnpm director-decisions
+node docs/benchmarks/2026-11-10-director/score.ts
+node docs/benchmarks/2026-11-10-director/score.ts --cached
 ```
 
 - **`director-decisions`** runs `score.ts --check`. It asks Jev about every line, writes

@@ -7,6 +7,7 @@
 
 // Must stay the first import: the .env and settings files, as the laplace-* commands load them.
 import "../../../apps/cli/src/load-env.ts";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseMentions } from "../../../packages/chat/src/index.ts";
 import { extractCostUsd, setLogLevel } from "../../../packages/config/src/index.ts";
@@ -98,13 +99,13 @@ interface Point {
   readonly positive: boolean;
 }
 
-const here = import.meta.dir;
-const argv = Bun.argv.slice(2);
+const here = import.meta.dirname;
+const argv = process.argv.slice(2);
 const check = argv.includes("--check");
 const cached = argv.includes("--cached");
 setLogLevel("WARNING");
 
-const { personas, lines } = (await Bun.file(join(here, "lines.json")).json()) as {
+const { personas, lines } = JSON.parse(await readFile(join(here, "lines.json"), "utf8")) as {
   personas: Record<string, Persona>;
   lines: Line[];
 };
@@ -297,7 +298,7 @@ const rows: Row[] = [];
 let costUsd: number | null = 0;
 if (cached) {
   const stored = new Map(
-    ((await Bun.file(join(here, "decisions.json")).json()) as { lines: Row[] }).lines.map((row) => [
+    (JSON.parse(await readFile(join(here, "decisions.json"), "utf8")) as { lines: Row[] }).lines.map((row) => [
       row.id,
       row,
     ]),
@@ -506,7 +507,7 @@ const result = {
   ),
   lines: rows,
 };
-await Bun.write(join(here, "decisions.json"), `${JSON.stringify(result, null, 1)}\n`);
+await writeFile(join(here, "decisions.json"), `${JSON.stringify(result, null, 1)}\n`);
 
 const fixed = (value: number | null) => (value === null ? "-" : value.toFixed(2));
 const range = ({ n, min, median, max }: ReturnType<typeof stats>) =>

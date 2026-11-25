@@ -19,7 +19,7 @@ remain represented in the broadcast overview even though the detailed LanceDB
 index excludes them by default. Missing refinement is recorded. Missing
 archive coverage never establishes that the streamer did not broadcast.
 
-Run `bun run laplace-build-stream-catalog` after adding or refining transcripts.
+Run `pnpm laplace-build-stream-catalog` after adding or refining transcripts.
 Use `--streams-dir` and `--db-path` for another archive. The normal
 `laplace-pipeline` command rebuilds the catalog after a successful ingest.
 Standalone `laplace-ingest-streams` users must run the catalog builder separately.
@@ -106,7 +106,7 @@ in [recall-gaps.md](recall-gaps.md).
 
 ## Validation
 
-`bun run laplace-search --recall --today 2026-09-09 '你上周直播都播了什么？'`
+`pnpm laplace-search --recall --today 2026-09-09 '你上周直播都播了什么？'`
 exercises the same overview lookup with a reproducible clock. Existing search
 output remains the default without `--recall`.
 

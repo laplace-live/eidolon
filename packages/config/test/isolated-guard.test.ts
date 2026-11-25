@@ -110,7 +110,6 @@ describe("isolated-guard.ts", () => {
     expect(flagged("let dir = '';\ndir = mkdtempSync(join(tmpdir(), 'x'));\nrmSync(dir);")).toBe(
       false,
     );
-    expect(flagged("Bun.spawn(['rm', '-rf', binDir()]);")).toBe(true);
     expect(flagged("spawnProcess(['rm', '-rf', binDir()]);")).toBe(true);
     expect(flagged("spawnSync('rm', ['-rf', binDir()]);")).toBe(true);
     expect(flagged("// rmSync(dataHome());\nrmSync(work);")).toBe(false);

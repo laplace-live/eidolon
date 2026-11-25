@@ -597,7 +597,7 @@ interface Report {
 
 /** The command that resumes task `id`, as this install runs it. */
 function resumeCommand(id: string): string {
-  return `${envOptional("EIDOLON_APP_ROOT") ? "eidolon task" : "bun run laplace-task"} --resume ${id}`;
+  return `${envOptional("EIDOLON_APP_ROOT") ? "eidolon task" : "pnpm laplace-task"} --resume ${id}`;
 }
 
 function firstLine(text: string): string {

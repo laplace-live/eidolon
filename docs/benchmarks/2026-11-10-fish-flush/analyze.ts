@@ -275,7 +275,7 @@ export function wavFile(pcm: readonly Int16Array[]): Uint8Array {
   ascii(36, "data");
   view.setUint32(40, bytes, true);
   let at = 44;
-  // Typed arrays use the host's byte order; every host Bun ships for is little-endian, as WAV is.
+  // Typed arrays use the host's byte order, little-endian on x64 and arm64, as WAV is.
   for (const chunk of pcm) {
     out.set(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength), at);
     at += chunk.byteLength;

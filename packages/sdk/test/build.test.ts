@@ -1,4 +1,3 @@
-// The SDK's build script runs on Bun, so these tests drive it through `bun`.
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -16,26 +15,29 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { checkAssetUrls, checkDistImports, type SdkManifest, stage } from "../scripts/build.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const SDK_NODE_MODULES = resolve(import.meta.dirname, "../node_modules");
-const SCRIPT = resolve(import.meta.dirname, "../scripts/build.ts");
 const FIXTURE = resolve(ROOT, "apps/bot/test/local/fixtures/psd2live/tml.p2lrt");
 const WASM_SHA256 = "d8bbff52f27aebd40baca94139f9eca5af0f9d2a07c1c70fc5c15633121862a7";
 
-/** Runs `code` on Bun, with the build script's exports as `build`. */
-function onBun(code: string) {
-  const source = `const build = await import(${JSON.stringify(SCRIPT)});\n${code}`;
-  return spawnSync("bun", ["--no-env-file", "-e", source], { cwd: ROOT, encoding: "utf8" });
+/** What `check` threw, or "ok". */
+function outcome(check: () => void): string {
+  try {
+    check();
+    return "ok";
+  } catch (error) {
+    return (error as Error).message;
+  }
 }
 
 let stagedDir: string;
 let manifest: Record<string, unknown>;
 
-beforeAll(() => {
+beforeAll(async () => {
   stagedDir = mkdtempSync(join(tmpdir(), "eidolon-sdk-pack-"));
-  const staged = onBun(`await build.stage(${JSON.stringify(stagedDir)});`);
-  if (staged.status !== 0) throw new Error(`stage exited ${staged.status}:\n${staged.stderr}`);
+  await stage(stagedDir);
   manifest = JSON.parse(readFileSync(join(stagedDir, "package.json"), "utf8"));
 }, 60_000);
 
@@ -66,6 +68,8 @@ describe("@laplace.live/eidolon-sdk package build", () => {
       expect([rel, existsSync(join(stagedDir, rel))]).toEqual([rel, true]);
     }
     expect(existsSync(join(stagedDir, "dist/avatar/index.node.js"))).toBe(false);
+    // Without it, pnpm publish would leave dist/ out by the checkout's .gitignore.
+    expect(readFileSync(join(stagedDir, ".npmignore"), "utf8")).toBe("");
 
     const workspacePkg = JSON.parse(
       readFileSync(resolve(import.meta.dirname, "../package.json"), "utf8"),
@@ -79,10 +83,13 @@ describe("@laplace.live/eidolon-sdk package build", () => {
     expect(workspacePkg.private).toBeUndefined();
     // The app bundles the workspace package: without it, a page that reads her moods carries the renderer.
     expect(workspacePkg.sideEffects).toBe(false);
+    // pnpm links the workspace package from its own folder, not from pack/, which the app's typecheck
+    // and build would otherwise need staged.
     expect(workspacePkg.publishConfig).toEqual({
       access: "public",
       provenance: true,
       directory: "pack",
+      linkDirectory: false,
     });
 
     expect(manifest).toMatchObject({
@@ -167,24 +174,17 @@ describe("@laplace.live/eidolon-sdk package build", () => {
         join(broken, "dist", "react", "index.js"),
         'import { jsxDEV } from "react/jsx-dev-runtime";\nexport const el = jsxDEV("div", {});\n',
       );
-      const check = onBun(
-        `try { build.checkDistImports(${JSON.stringify(broken)}, ${JSON.stringify(manifest)}); }\n` +
-          "catch (error) { console.log(error.message); }",
-      );
-      expect(check.stdout).toMatch(/unrewritten TypeScript[\s\S]*undeclared import left-pad/);
-      expect(check.stdout).toMatch(/development JSX runtime react\/jsx-dev-runtime/);
+      const check = outcome(() => checkDistImports(broken, manifest as unknown as SdkManifest));
+      expect(check).toMatch(/unrewritten TypeScript[\s\S]*undeclared import left-pad/);
+      expect(check).toMatch(/development JSX runtime react\/jsx-dev-runtime/);
     } finally {
       rmSync(broken, { recursive: true, force: true });
     }
   });
 
   test("checkAssetUrls rejects a bundle naming a file the stage didn't copy", () => {
-    const check = (root: string) =>
-      onBun(
-        `try { build.checkAssetUrls(${JSON.stringify(root)}); console.log("ok"); }\n` +
-          "catch (error) { console.log(error.message); }",
-      );
-    expect(check(stagedDir).stdout.trim()).toBe("ok");
+    const check = (root: string) => outcome(() => checkAssetUrls(root));
+    expect(check(stagedDir)).toBe("ok");
     const broken = mkdtempSync(join(tmpdir(), "eidolon-sdk-assets-"));
     try {
       mkdirSync(join(broken, "dist", "avatar", "wasm"), { recursive: true });
@@ -197,8 +197,8 @@ describe("@laplace.live/eidolon-sdk package build", () => {
           'export const c = () => new URL("https://example.test/x.wasm", import.meta.url);',
         ].join("\n"),
       );
-      expect(check(broken).stdout).toMatch(
-        /^Missing assets in .*\navatar\/index\.js: \.\/wasm\/p2l_runtime\.wasm\n$/,
+      expect(check(broken)).toMatch(
+        /^Missing assets in .*\navatar\/index\.js: \.\/wasm\/p2l_runtime\.wasm$/,
       );
     } finally {
       rmSync(broken, { recursive: true, force: true });

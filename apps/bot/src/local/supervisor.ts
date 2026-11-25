@@ -1,4 +1,4 @@
-// `bun run local` keeps the server in a child process: when the server exits 75, it asks for a
+// `pnpm local` keeps the server in a child process: when the server exits 75, it asks for a
 // fresh one, which is how settings read once at boot take effect. Otherwise this process exits with
 // the child's code. The child gets its own process group, so a terminal's Ctrl-C reaches it once,
 // through here, and an IPC channel ends it if this process is killed outright. On Windows it shares

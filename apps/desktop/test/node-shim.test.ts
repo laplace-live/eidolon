@@ -76,7 +76,7 @@ describe("the shim the stage writes", () => {
     ["darwin", "arm64", "@reflink/reflink-darwin-arm64"],
     ["win32", "x64", "@reflink/reflink-win32-x64-msvc"],
   ] as const)(
-    "for %s/%s: the checkout's launchers in a node_modules/.bin, sh's executable, and pnpm at their ../node_modules/pnpm, pruned, without its bundled packages' .bin or any .exe",
+    "for %s/%s: the checkout's launchers in a node_modules/.bin, sh's executable, and pnpm at their ../node_modules/pnpm, pruned, without the install's links to its commands, its bundled packages' .bin or any .exe",
     (os, cpu, native) => {
       const payload = temp();
       stageNodeShim(payload, { os, cpu });
@@ -100,6 +100,7 @@ describe("the shim the stage writes", () => {
       }
       const pnpm = shimPnpm(payload);
       expect(pnpm).toBe(join(bin, "..", "node_modules", "pnpm"));
+      expect(readdirSync(pnpm)).not.toContain("node_modules");
       const { devDependencies } = JSON.parse(
         readFileSync(join(LAUNCHER_SOURCES, "..", "package.json"), "utf8"),
       );

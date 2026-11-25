@@ -26,10 +26,9 @@ on:
       - ".github/workflows/ts.yml"
       - ".github/workflows/release.yml"
       - "vitest.config.ts"
-      - "tsconfig.scripts.json"
-      - "tsconfig.no-bun.d.ts"
+      - "tsconfig.json"
       # The bot never runs these. The image copies nothing from apps/cli, apps/web, apps/eidolon or
-      # apps/desktop but their manifests, whose dependency changes also reach bun.lock, nor
+      # apps/desktop but their manifests, whose dependency changes also reach pnpm-lock.yaml, nor
       # .env.example, and leaves apps/bot/src/local out. packages/ingest, packages/assistant and
       # packages/sdk hold only while nothing the bot image loads imports @eidolon/ingest,
       # @eidolon/assistant or @laplace.live/eidolon-sdk, which Biome rules enforce, and apps/desktop
@@ -64,8 +63,7 @@ on:
       - ".github/workflows/ts.yml"
       - ".github/workflows/release.yml"
       - "vitest.config.ts"
-      - "tsconfig.scripts.json"
-      - "tsconfig.no-bun.d.ts"
+      - "tsconfig.json"
       - "apps/cli/**"
       - "apps/web/**"
       - "apps/eidolon/**"

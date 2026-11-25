@@ -146,7 +146,7 @@ describe("a run", () => {
     expect(logs.records.at(-1)).toEqual([
       "INFO",
       "Next: hand-edit the H2 headings to be more descriptive, then run:\n" +
-        "    bun run laplace-ingest-streams --persona milky-green",
+        "    pnpm laplace-ingest-streams --persona milky-green",
     ]);
   });
 

@@ -16,6 +16,6 @@ test.skipIf(which("bun") === null)("it exits on Bun, saying how to start the app
   const run = spawnSync("bun", ["--no-env-file", ENVIRON], { encoding: "utf8" });
   expect([run.status, run.stderr]).toEqual([
     1,
-    "eidolon: the local app runs on Node 24 or later: start it with `bun run app` or `node apps/bot/src/local/main.ts`.\n",
+    "eidolon: the local app runs on Node 24 or later: start it with `pnpm app` or `node apps/bot/src/local/main.ts`.\n",
   ]);
 });

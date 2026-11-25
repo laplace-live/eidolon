@@ -1,6 +1,6 @@
 // Writes changelog.json, every released package's changes in one file, which the website reads and
 // the desktop's update manifest carries: a CHANGELOG.md drops a change's kind and the other packages
-// it touched. `sync` records what `changeset version` just released (`bun run version`), `backfill`
+// it touched. `sync` records what `changeset version` just released (`pnpm run version`), `backfill`
 // rebuilds the history from the release tags, and `manifest` prints the manifest's line.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";

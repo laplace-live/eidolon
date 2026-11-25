@@ -12,7 +12,7 @@ function tool(path: string, mode: number): string {
 
 // POSIX's file modes, and its extensionless programs.
 test.skipIf(process.platform === "win32")(
-  "which finds the first executable file on the path it is given, as Bun.which did",
+  "which finds the first executable file on the path it is given",
   () => {
     const work = mkdtempSync(join(tmpdir(), "eidolon-which-"));
     const [folder, plain, runnable] = ["folder", "plain", "runnable"].map((name) => {

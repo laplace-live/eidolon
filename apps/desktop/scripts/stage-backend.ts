@@ -1,9 +1,9 @@
 // Stages the backend the desktop app ships for one target, in apps/desktop/.stage/<target>/eidolon
 // (`node apps/desktop/scripts/stage-backend.ts [--target darwin-arm64|win32-x64]`, this machine's by
 // default): what the npm package stages, plus its dependencies installed by npm for the target,
-// pinned to bun.lock and pruned, and the node shim (node-shim.ts). On Windows the natives also get
-// the VC++ runtime beside them, and .stage/win32-x64/unsigned-pe.json lists the PE files the release
-// signs.
+// pinned to pnpm-lock.yaml and pruned, and the node shim (node-shim.ts). On Windows the natives
+// also get the VC++ runtime beside them, and .stage/win32-x64/unsigned-pe.json lists the PE files
+// the release signs.
 import { type SpawnSyncOptionsWithStringEncoding, spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -25,7 +25,7 @@ import {
   stage,
 } from "../../eidolon/scripts/build.ts";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
-import { type LsNode, lockDrift, lockedTree, pinOverrides, readBunLock } from "./lockfile.ts";
+import { type LsNode, lockDrift, lockedTree, pinOverrides, readPnpmLock } from "./lockfile.ts";
 import { NODE_SHIM, shimPnpm, stageNodeShim } from "./node-shim.ts";
 import { compareVersions, type Pe, readPe } from "./pe.ts";
 import { readZip } from "./zip.ts";
@@ -486,7 +486,7 @@ export async function stageBackend(
   try {
     rmSync(stageDir(target), { recursive: true, force: true });
     const manifest = await stage(payload);
-    const lock = readBunLock(join(ROOT, "bun.lock"));
+    const lock = readPnpmLock(join(ROOT, "pnpm-lock.yaml"));
     const roots = { ...manifest.dependencies, ...manifest.optionalDependencies };
     const overrides = pinOverrides(lockedTree(lock, roots).values());
     writeFileSync(
@@ -507,7 +507,7 @@ export async function stageBackend(
     if (npm(install, payload).status !== 0) throw new Error("npm install failed");
     const drift = lockDrift(npmLs(payload), lock, roots, { os, cpu });
     if (drift.length > 0) {
-      throw new Error(`npm installed what bun.lock doesn't:\n${drift.join("\n")}`);
+      throw new Error(`npm installed what pnpm-lock.yaml doesn't:\n${drift.join("\n")}`);
     }
     // npm's links to the packages' commands, which nothing runs, and its record of the install.
     const links = readdirSync(modules, { recursive: true, withFileTypes: true }).filter(

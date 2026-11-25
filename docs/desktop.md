@@ -2,13 +2,13 @@
 
 Eidolon, the desktop app (`apps/desktop`, the private package `laplace-eidolon-desktop`), is the
 local app in a window that starts its own backend, on macOS (Apple silicon) and Windows (x64): no
-terminal, no Node or Bun to install, and no link to sign in with. The window shows `apps/web` as it
-is, served by the same local server `bun run app` and `npx @laplace.live/eidolon` run, in local
+terminal, no Node to install, and no link to sign in with. The window shows `apps/web` as it
+is, served by the same local server `pnpm app` and `npx @laplace.live/eidolon` run, in local
 mode only, so production never sees it. Electron's own binary runs that server as Node, so the app
 ships no other runtime. A release is signed and notarized in CI from its
 `laplace-eidolon-desktop@<version>` tag and served from `https://downloads.vrp.moe/eidolon`, where
 the app's updater finds the next one ([Releasing](#releasing), [Updates](#updates));
-`bun run package:desktop` builds it locally, unsigned.
+`pnpm package:desktop` builds it locally, unsigned.
 
 ```text
 Eidolon (main process)
@@ -70,11 +70,11 @@ apps/desktop/
 
 | Command | What it runs |
 | --- | --- |
-| `bun run dev:desktop` | `scripts/dev.ts`: watch-builds main, the preload and the shell pages, serves `apps/web` from Vite on `127.0.0.1:5173`, and runs the unpackaged app with `--eidolon-dev-server`, its backend from source. It builds `apps/web/dist` first when there is none, since that backend won't start without one. Arguments after it go to Electron, such as `--user-data-dir=<folder>` |
-| `bun run build:desktop` | `scripts/build.ts`: stages this machine's backend in `apps/desktop/.stage/<target>/eidolon` ([The payload](#the-payload)), then Vite-builds `apps/desktop/dist`: main as one ES module with every dependency but `electron` inlined, the preload as CommonJS (a sandboxed preload can't be a module), and the shell pages |
-| `bun run package:desktop` | `scripts/package.ts`: electron-builder on `dist/` and this machine's stage, into `apps/desktop/.out`, unsigned, at version `0.0.0-dev` ([Packaging](#packaging)). Arguments after it go to electron-builder, such as `-c.compression=store` |
-| `bun run smoke:desktop:dev` | `scripts/dev-smoke.ts`, the dev smoke, on macOS: builds `apps/web/dist` and `apps/desktop/dist` (`--no-build` runs on what is there), then walks the unpackaged app under Playwright on a temporary home and profile with its providers faked, in background mode unless `--headful`, a line per step ([The dev smoke](#the-dev-smoke)). `--keep` keeps its screenshots and results after a pass |
-| `bun run smoke:desktop` | `scripts/smoke.ts`, the packaged smoke: the app `package:desktop` left in `apps/desktop/.out`, on a temporary home and profile with its providers faked, in background mode unless `--headful`, driven through its backend's API; on Windows it installs the NSIS setup first and uninstalls it after ([The packaged smoke](#the-packaged-smoke)). It never builds or packages |
+| `pnpm dev:desktop` | `scripts/dev.ts`: watch-builds main, the preload and the shell pages, serves `apps/web` from Vite on `127.0.0.1:5173`, and runs the unpackaged app with `--eidolon-dev-server`, its backend from source. It builds `apps/web/dist` first when there is none, since that backend won't start without one. Arguments after it go to Electron, such as `--user-data-dir=<folder>` |
+| `pnpm build:desktop` | `scripts/build.ts`: stages this machine's backend in `apps/desktop/.stage/<target>/eidolon` ([The payload](#the-payload)), then Vite-builds `apps/desktop/dist`: main as one ES module with every dependency but `electron` inlined, the preload as CommonJS (a sandboxed preload can't be a module), and the shell pages |
+| `pnpm package:desktop` | `scripts/package.ts`: electron-builder on `dist/` and this machine's stage, into `apps/desktop/.out`, unsigned, at version `0.0.0-dev` ([Packaging](#packaging)). Arguments after it go to electron-builder, such as `-c.compression=store` |
+| `pnpm smoke:desktop:dev` | `scripts/dev-smoke.ts`, the dev smoke, on macOS: builds `apps/web/dist` and `apps/desktop/dist` (`--no-build` runs on what is there), then walks the unpackaged app under Playwright on a temporary home and profile with its providers faked, in background mode unless `--headful`, a line per step ([The dev smoke](#the-dev-smoke)). `--keep` keeps its screenshots and results after a pass |
+| `pnpm smoke:desktop` | `scripts/smoke.ts`, the packaged smoke: the app `package:desktop` left in `apps/desktop/.out`, on a temporary home and profile with its providers faked, in background mode unless `--headful`, driven through its backend's API; on Windows it installs the NSIS setup first and uninstalls it after ([The packaged smoke](#the-packaged-smoke)). It never builds or packages |
 
 Closing the window only hides it. Quit from the menus, ⌘Q, the tray, or a second launch with
 `--quit` (and the run's `--user-data-dir`, if it had one), which `dev:desktop` follows by closing
@@ -87,7 +87,7 @@ Vite and exiting:
 `require("electron")` from `apps/desktop` gives the path to Electron's binary, which its package
 downloads on first use, after printing a line of its own to stdout: hence the `tail`. Unpackaged,
 the profile is `Eidolon Dev`, never the installed app's, and the dev backend uses the normal data
-home: a `bun run app` or `dev:local` already serving it is
+home: a `pnpm app` or `dev:local` already serving it is
 [attached to](#attaching-to-a-server-already-on-the-data-home), not replaced. Every test run of
 the app is in [background mode](#background-mode).
 
@@ -139,7 +139,7 @@ and starts the controller. The window moves to `eidolon-app://app/` once the bac
 While the [desktop companion](#the-desktop-companion) is on, her window is made only then, as the
 window first shows the app page: the main window is always the app's first.
 The data home is `EIDOLON_HOME` from that environment, else `~/.laplace/eidolon`
-(`%USERPROFILE%\.laplace\eidolon`), the one npx and `bun run app` use; the backend gets it as its
+(`%USERPROFILE%\.laplace\eidolon`), the one npx and `pnpm app` use; the backend gets it as its
 `EIDOLON_HOME`, so the two never read different homes.
 
 ### The backend
@@ -268,7 +268,7 @@ proof, nor the token.
 
 ## Attaching to a server already on the data home
 
-A data home runs one server, whichever started it: the desktop app, `bun run app` or npx
+A data home runs one server, whichever started it: the desktop app, `pnpm app` or npx
 ([web-app.md](web-app.md#running-it)). The app uses a server that already holds its data home,
 and leaves it running when it quits.
 
@@ -292,7 +292,7 @@ and leaves it running when it quits.
   naming the holder, with Try Again. A holder can keep the lock without answering (a server whose
   listener closed while its jobs stop, or one whose `local-token` was deleted under it), and
   respawning in a loop would boot a whole backend each round, or take the lock from a terminal
-  supervisor's next child, which would then exit 2 and end `bun run app`.
+  supervisor's next child, which would then exit 2 and end `pnpm app`.
 - **While attached,** quitting leaves the server running, and asks only over the window's unsaved
   edits ([Quit](#the-window)). A refused or unproven connection, a forwarded restart answering 2xx,
   or one of the page's connections to it closing starts a grace period, never a takeover: requests
@@ -817,7 +817,7 @@ The backend runs on the environment main reads, plus four variables of its own, 
 ## The payload
 
 `scripts/stage-backend.ts` stages the backend in `apps/desktop/.stage/<target>/eidolon`, for
-`darwin-arm64` or `win32-x64`: `bun run build:desktop` stages this machine's, and
+`darwin-arm64` or `win32-x64`: `pnpm build:desktop` stages this machine's, and
 `node apps/desktop/scripts/stage-backend.ts --target <target>` names one. A failed stage leaves
 none, and `win32-x64` stages only on Windows, whose Visual Studio redistributable supplies its
 VC++ copies.
@@ -829,13 +829,15 @@ VC++ copies.
   the target's LanceDB binary, whose JS is inlined in `dist/`; and, which the npm package never
   holds, the [node shim](#the-node-shim) in `node-shim/`. Main runs `dist/server.js` with
   `EIDOLON_APP_ROOT` set to the payload, so `shippedPath` finds everything in it.
-- **Pinned to bun.lock.** The payload's `package.json` is the npm package's manifest plus
-  `overrides` for every package its dependencies reach in `bun.lock`, nested where bun.lock nests a
-  second version. `npm install --omit=dev --ignore-scripts --no-audit --no-fund --no-package-lock
-  --os=<os> --cpu=<cpu>` installs it for the target, and the stage fails unless `npm ls --all
-  --json` shows exactly bun.lock's tree, the target's LanceDB binary included: npm skips an
-  optional dependency it fails to fetch and still exits 0. An npx install resolves afresh, and
-  drifts from what the tests ran. `--ignore-scripts` loses nothing on macOS or Windows.
+- **Pinned to pnpm-lock.yaml.** The payload's `package.json` is the npm package's manifest plus
+  `overrides` for every package its dependencies reach in `pnpm-lock.yaml`: each at the version
+  most of its dependents there take, and another nested under the dependent that takes it.
+  `npm install --omit=dev --ignore-scripts --no-audit --no-fund --no-package-lock --os=<os>
+  --cpu=<cpu>` installs it for the target, and the stage fails unless `npm ls --all --json` shows
+  exactly the lockfile's tree, each dependency at the version the lockfile gives its dependent and
+  the target's LanceDB binary included: npm skips an optional dependency it fails to fetch and
+  still exits 0. An npx install resolves afresh, and drifts from what the tests ran.
+  `--ignore-scripts` loses nothing on macOS or Windows.
 - **Pruned:** npm's `.bin` links and its record of the install, and onnxruntime-node down to the
   target's binding and the one library it loads: on darwin-arm64 `libonnxruntime.1.dylib`, without
   a second, identical copy; on win32-x64 `onnxruntime.dll`, without DirectML's DLLs, which CPU
@@ -884,8 +886,8 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   `PATH`, from npm-normalize-package-bin, @npmcli/package-json, libnpmexec and @npmcli/run-script)
   and `npm-checks.mjs` (a project's devEngines, from npm-install-checks); in
   `node_modules/node_modules/pnpm`, the launchers' `../node_modules/pnpm`, the pnpm `apps/desktop`
-  pins as an exact dev dependency, so `bun.lock` pins it as it pins the rest. The launchers sit in
-  a `node_modules/.bin` because cross-spawn, which starts an MCP server, escapes the words of a
+  pins as an exact dev dependency, so `pnpm-lock.yaml` pins it as it pins the rest. The launchers
+  sit in a `node_modules/.bin` because cross-spawn, which starts an MCP server, escapes the words of a
   `.cmd` there twice: it takes one for a cmd-shim, whose `%*` cmd.exe reads a second time, and a
   launcher's `%*` is read again the same way. A `.cmd` anywhere else gets its words escaped once,
   so cmd.exe acts on a word holding a quote and one of `&`, `|`, `<`, `>` or
@@ -974,12 +976,13 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   Node's ABI alone looks for an Electron build; and macOS shows a shim-run server's permission
   prompts in Eidolon's name.
 - **A pnpm bump** is an exact pin in `apps/desktop/package.json`, under the same 14-day gate as
-  [Electron's](#bumping-electron); `bun install` rewrites `bun.lock`, which `docker.yml` doesn't
-  skip, so merging it restarts production. Stage and package the app, then run the stage test.
+  [Electron's](#bumping-electron); `pnpm install` rewrites `pnpm-lock.yaml`, which `docker.yml`
+  doesn't skip, so merging it restarts production. Stage and package the app, then run the stage
+  test.
 
 ## Packaging
 
-`bun run package:desktop` runs electron-builder with `--publish never`, `-c.mac.identity=-` and
+`pnpm package:desktop` runs electron-builder with `--publish never`, `-c.mac.identity=-` and
 `-c.extraMetadata.version=0.0.0-dev`, and with `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never
 signs with an identity from the keychain or asks for one. It needs `dist/` and warns when there is
 no stage. On macOS it writes `.out/mac-arm64/Eidolon.app`, a DMG and a zip; on Windows an NSIS setup
@@ -1201,9 +1204,9 @@ In the signed package step:
 
 Those are the org's secrets. The upload and the index take the repository's own:
 `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, and `CLOUDFLARE_ACCOUNT_ID` for the endpoint. Before
-the signed package step nothing runs that the run fetched, but the toolchain and what `bun.lock`
-pins, and no package's install script, which could rewrite the electron-builder the step runs with
-the secrets. In that step electron-builder installs Azure's TrustedSigning module from the
+the signed package step nothing runs that the run fetched, but the toolchain and what
+`pnpm-lock.yaml` pins, and no package's install script, which could rewrite the electron-builder
+the step runs with the secrets. In that step electron-builder installs Azure's TrustedSigning module from the
 PowerShell Gallery, at its newest version, to sign with.
 
 Only a run proves the release: the overlay and the checks' verdicts have their tests, but signing
@@ -1369,7 +1372,7 @@ that could show something through it.
 - **Never port 7860:** the backend's first spawn asks for a free port (`--port 0`), and a restart
   keeps it. The owner's own Eidolon serves on 7860, and while it restarts the port is free for a
   moment: a test run that took it then would leave the owner's next server exiting on a taken port,
-  and their `bun run app` with it.
+  and their `pnpm app` with it.
 - **The menus:** macOS's About item is the app's own action, which logs the panel, and Toggle
   Developer Tools, which opens a window, isn't offered unpackaged either. A popup menu, the
   desktop companion's included, is logged with its labels (`Eidolon: background mode didn't open a
@@ -1398,7 +1401,7 @@ that could show something through it.
 
 ### The Vitest project
 
-`bun run test apps/desktop` runs the `desktop` project (`vitest.config.ts`): main's Electron-free
+`pnpm test apps/desktop` runs the `desktop` project (`vitest.config.ts`): main's Electron-free
 modules, the preload's bridges and the scripts' parts. Nothing it runs loads `electron`, whose
 package gives Node the binary's path, not its API: a decision lives in a module that doesn't import
 it, with its test, and the Electron code stays a thin layer over it. It covers the controller's
@@ -1438,26 +1441,26 @@ reads `REG_SZ`, `REG_EXPAND_SZ` and non-ASCII values there through the real regi
 ### The stage test
 
 `test/stage.test.ts`, in the same project, checks a real stage: its files and manifest, its tree
-against `bun.lock`, the pruning, its natives loading from it (a LanceDB table, an onnxruntime
+against `pnpm-lock.yaml`, the pruning, its natives loading from it (a LanceDB table, an onnxruntime
 session and sharp, through `scripts/natives.ts`, with every native library and VC++ DLL the
 process mapped coming from the payload: `payloadLibraries()` picks them by file name, so Windows'
 own `msvcp_win.dll`, mapped in every process with a window, isn't one), the node shim (its
 launchers in `node-shim/node_modules/.bin`, the payload's one `.bin`, equal to their sources in
-`apps/desktop/node-shim`, the sh ones executable, and its pnpm at `bun.lock`'s pin, licensed,
+`apps/desktop/node-shim`, the sh ones executable, and its pnpm at `pnpm-lock.yaml`'s pin, licensed,
 pruned to the target's natives and with no `.exe`), on a Windows stage the VC++ copies and the
 signers, and, once the app was packaged after the stage, that the packaged payload holds the same
 files. A target with no stage skips, and so does one staged from another
-version or `bun.lock`, whose title then says to run `bun run build:desktop`.
+version or `pnpm-lock.yaml`, whose title then says to run `pnpm build:desktop`.
 `EIDOLON_REQUIRE_STAGE=1` requires this machine's stage, current, and fails with that hint when it
 isn't:
 
 ```bash
-bun run build:desktop && EIDOLON_REQUIRE_STAGE=1 bun run test apps/desktop/test/stage.test.ts
+pnpm build:desktop && EIDOLON_REQUIRE_STAGE=1 pnpm test apps/desktop/test/stage.test.ts
 ```
 
 ### The Electron lane
 
-The backend runs on Electron's Node, not the Node `bun run test` uses, so after an Electron bump,
+The backend runs on Electron's Node, not the Node `pnpm test` uses, so after an Electron bump,
 a change to `jsRuntime()`, or a test that spawns `process.execPath` with an environment of its
 own, the backend suite runs there too. From the repository root:
 
@@ -1479,9 +1482,9 @@ servers as `node` and `npx` through the [node shim](#the-node-shim)'s launchers.
 ### The smokes
 
 Two smokes run the app end to end on a temporary data home and profile, every provider it reaches
-faked on loopback, so they bill nothing. `bun run smoke:desktop:dev` (`scripts/dev-smoke.ts`, [the
+faked on loopback, so they bill nothing. `pnpm smoke:desktop:dev` (`scripts/dev-smoke.ts`, [the
 dev smoke](#the-dev-smoke)) walks the unpackaged app as its owner would, under Playwright;
-`bun run smoke:desktop` (`scripts/smoke.ts`, [the packaged smoke](#the-packaged-smoke)) checks what
+`pnpm smoke:desktop` (`scripts/smoke.ts`, [the packaged smoke](#the-packaged-smoke)) checks what
 packaging made of the fused app, through its backend's API. Each runs on Node from the repository
 root, prints a `PASS` or `FAIL` line for each check with what decided it, and exits 0 only when
 every check passed.
@@ -1537,7 +1540,7 @@ Both build on the kit in `scripts/smoke/`, which `test/smoke-kit.test.ts` covers
 
 #### The dev smoke
 
-`bun run smoke:desktop:dev [--no-build] [--keep] [--headful]` runs on macOS: its call speaks through
+`pnpm smoke:desktop:dev [--no-build] [--keep] [--headful]` runs on macOS: its call speaks through
 `say` and `afconvert`, and its window watch reads macOS's window server. It first builds
 `apps/web/dist` and `apps/desktop/dist`'s main, preload and shell pages with Vite, in about half a
 second, so it never walks a stale build (`--no-build` runs on what is there, and refuses when a
@@ -1639,10 +1642,10 @@ the 30 s the quit has.
 
 #### The packaged smoke
 
-`bun run smoke:desktop [--headful]` smokes the fused app `bun run package:desktop` left in
+`pnpm smoke:desktop [--headful]` smokes the fused app `pnpm package:desktop` left in
 `apps/desktop/.out`: on macOS `mac-arm64/Eidolon.app`, on Windows the NSIS setup, the only `.exe`
-there. It never builds or packages: with no build it says how to make one (`bun run build:web &&
-bun run build:desktop && bun run package:desktop`) and exits 1 before starting anything.
+there. It never builds or packages: with no build it says how to make one (`pnpm build:web &&
+pnpm build:desktop && pnpm package:desktop`) and exits 1 before starting anything.
 Playwright and CDP can't drive a fused build, so it calls the backend's API with the Bearer, as
 main's forwarder does, and runs the app's binary in node mode beside it, as main runs the backend:
 
@@ -1705,7 +1708,7 @@ on macOS.
 
 ### In CI
 
-`ts.yml` runs the Vitest project with the rest of `bun run test`, where the stage test skips, and
+`ts.yml` runs the Vitest project with the rest of `pnpm test`, where the stage test skips, and
 its Windows job the project's Windows-only tests: `terminal-command-windows.test.ts` (the PATH
 script on a scratch key under HKCU, and the eidolon command's `.cmd`),
 `registry-environment-windows.test.ts` (the registry read, on scratch keys),
@@ -1717,19 +1720,19 @@ with the words cmd.exe treats specially, and a folder's bin through pnpm's cmd-s
 `node.cmd`).
 `.github/workflows/desktop.yml`, which `docker.yml` skips, builds and checks the app on every pull
 request that changes more than docs, on a dispatch, and from a release's tag
-([Releasing](#releasing)): the payload comes from `bun.lock` and the backend's packages, so a filter
-on `apps/desktop` would miss the changes it checks. Its build runs on `macos-latest` (macOS
-arm64) and `windows-latest` (Windows x64), neither cancelling the other, in bash on both, with Bun
+([Releasing](#releasing)): the payload comes from `pnpm-lock.yaml` and the backend's packages, so a
+filter on `apps/desktop` would miss the changes it checks. Its build runs on `macos-latest` (macOS
+arm64) and `windows-latest` (Windows x64), neither cancelling the other, in bash on both, with pnpm
 from `package.json` and Node 24. The steps are `desktop-build.yml`'s, which `desktop.yml` calls
 unsigned for a pull request or a dispatch and signed for a tag or a `sign` dispatch, one job per
 platform with its secrets alone ([Secrets](#secrets)):
 
 1. **The checks before anything installs:** a tag's ([Releasing](#releasing)), or a dispatch's
    inputs ([Dispatches](#dispatches)), the latter in `desktop.yml`'s `inputs` job.
-2. **Install:** `bun install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
+2. **Install:** `pnpm install --frozen-lockfile --ignore-scripts`, as `release.yml` installs: no
    build step needs a package's install script, and the signing step must follow none.
-3. **Build:** `bun run build:desktop` stages the runner's backend and builds `dist/`.
-4. **Package:** unsigned, `bun run package:desktop -c.compression=store`, at `0.0.0-dev`, ad hoc on
+3. **Build:** `pnpm build:desktop` stages the runner's backend and builds `dist/`.
+4. **Package:** unsigned, `pnpm package:desktop -c.compression=store`, at `0.0.0-dev`, ad hoc on
    macOS and never with a keychain identity, an NSIS setup on Windows, stored uncompressed, which
    packs faster. From a tag or a `sign` dispatch, signed instead: electron-builder with the release
    overlay and that leg's secrets ([Secrets](#secrets)), then [the signed build's
@@ -1900,7 +1903,7 @@ shared skills stay out too ([The environment](#the-environment)): `appEnv()` in
 itself alone: it isn't paths-ignored, so a change to it deploys production. A call needs Chromium's
 fake microphone, or background mode denies it ([above](#driving-it-in-background-mode)).
 
-- **Unpackaged,** after `bun run build:desktop` (or only its Vite builds) and `bun run build:web`,
+- **Unpackaged,** after `pnpm build:desktop` (or only its Vite builds) and `pnpm build:web`,
   `"$(cd apps/desktop && node -p 'require("electron")' | tail -n 1)" apps/desktop --user-data-dir=<profile>`
   runs it with its backend from source serving `apps/web/dist`; the `tail` drops the line the first
   `require` prints as it downloads the binary, which neither build fetches on macOS. Playwright's
@@ -1924,13 +1927,13 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
 1. Change `electron` in `apps/desktop/package.json`, an exact pin, and `electronVersion` in
    `electron-builder.yml` together: a Windows stage refuses Electron's zip when they differ.
    `packages/config/test/electron.ts` names the version `asElectron()` reports.
-2. `bunfig.toml`'s `minimumReleaseAge` holds back any release younger than 14 days: give the new one
-   an exact `minimumReleaseAgeExcludes` entry (`electron@<version>`), and drop it, and any old one,
-   once the gate passes it. Add no `trustedDependencies`: Electron's package has no install script
-   (the binary downloads on the first `require("electron")`, or through electron-builder when
-   packaging), and the field would replace Bun's default list.
-3. `bun install` rewrites `bun.lock`, which `docker.yml` doesn't skip, so merging any Electron or
-   electron-builder bump restarts production: merge it at a quiet time.
+2. `pnpm-workspace.yaml`'s `minimumReleaseAge` holds back any release younger than 14 days, at
+   install as well as at resolution: give the new one an exact `minimumReleaseAgeExclude` entry
+   (`electron@<version>`), and drop it, and any old one, once the gate passes it. Add no
+   `allowBuilds` entry: Electron's package has no install script (the binary downloads on the first
+   `require("electron")`, or through electron-builder when packaging).
+3. `pnpm install` rewrites `pnpm-lock.yaml`, which `docker.yml` doesn't skip, so merging any
+   Electron or electron-builder bump restarts production: merge it at a quiet time.
 4. Recheck what Electron decides for the app:
    - its Local Network Access exemption: a call still connects, and Vite's HMR still reaches the
      page in dev, with no permission asked;
@@ -1943,9 +1946,9 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
    - its Node's major, which Vite's `node24` target (`scripts/vite-common.ts`) and the repo's Node
      24 assume, and its system minimums, which this doc restates;
    - on Windows, the unsigned-PE list, which takes Electron's own DLLs from its zip.
-5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `bun run test
+5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `pnpm test
    apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test) and both
-   [smokes](#the-smokes), `bun run smoke:desktop` and, on macOS, `bun run smoke:desktop:dev`.
+   [smokes](#the-smokes), `pnpm smoke:desktop` and, on macOS, `pnpm smoke:desktop:dev`.
    Then let `desktop.yml` run on the pull request: the system CA proof runs only there, and so does
    the packaged smoke on Windows, with its install and uninstall.
 

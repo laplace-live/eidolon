@@ -1,11 +1,21 @@
-// Builds the npm package @laplace.live/eidolon-sdk in packages/sdk/pack/ (`bun run build:sdk`),
-// and with --pack, packs it beside that folder (`bun run pack:sdk`).
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// Builds the npm package @laplace.live/eidolon-sdk in packages/sdk/pack/ (`pnpm build:sdk`),
+// and with --pack, packs it beside that folder (`pnpm pack:sdk`).
+import { spawnSync } from "node:child_process";
+import {
+  cpSync,
+  existsSync,
+  globSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import type { BunPlugin } from "bun";
+import { type Plugin, rolldown } from "rolldown";
+import { parseAst } from "rolldown/parseAst";
 
-const ROOT = resolve(import.meta.dir, "../../..");
-const HERE = resolve(import.meta.dir, "..");
+const ROOT = resolve(import.meta.dirname, "../../..");
+const HERE = resolve(import.meta.dirname, "..");
 const PACK_DIR = join(HERE, "pack");
 
 const CORE_EXTERNAL = ["@pipecat-ai/client-js", "@pipecat-ai/small-webrtc-transport"] as const;
@@ -15,21 +25,19 @@ const REACT_EXTERNAL = ["react", "react/*"] as const;
 // @pipecat-ai/small-webrtc-transport's ESM build imports "lodash/cloneDeep" without an extension,
 // which fails Node's native ESM resolver; its CJS build resolves cleanly through createRequire:
 // https://github.com/pipecat-ai/pipecat-client-web-transports/blob/main/transports/small-webrtc-transport/src/smallWebRTCTransport.ts
-const nodeTransportCjsPlugin: BunPlugin = {
+const TRANSPORT_CJS = "\0transport-cjs";
+const nodeTransportCjsPlugin: Plugin = {
   name: "transport-cjs",
-  setup(build) {
-    build.onResolve({ filter: /^@pipecat-ai\/small-webrtc-transport$/ }, () => ({
-      path: "@pipecat-ai/small-webrtc-transport",
-      namespace: "transport-cjs",
-    }));
-    build.onLoad({ filter: /.*/, namespace: "transport-cjs" }, () => ({
-      loader: "js",
-      contents: [
-        'import { createRequire } from "node:module";',
-        'const cjs = createRequire(import.meta.url)("@pipecat-ai/small-webrtc-transport");',
-        "export const { DailyMediaManager, SmallWebRTCTransport, WavMediaManager } = cjs;",
-      ].join("\n"),
-    }));
+  resolveId(source) {
+    return source === "@pipecat-ai/small-webrtc-transport" ? TRANSPORT_CJS : null;
+  },
+  load(id) {
+    if (id !== TRANSPORT_CJS) return null;
+    return [
+      'import { createRequire } from "node:module";',
+      'const cjs = createRequire(import.meta.url)("@pipecat-ai/small-webrtc-transport");',
+      "export const { DailyMediaManager, SmallWebRTCTransport, WavMediaManager } = cjs;",
+    ].join("\n");
   },
 };
 
@@ -99,7 +107,14 @@ function owningPackage(path: string): string | null {
 }
 
 function walkFiles(dir: string, suffix: string): string[] {
-  return Array.from(new Bun.Glob(`**/*${suffix}`).scanSync({ cwd: dir, absolute: true }));
+  return globSync(`**/*${suffix}`, { cwd: dir }).map((file) => join(dir, file));
+}
+
+/** Whether `id` is among `externals`: a package's name, or a `name/*` that takes its subpaths. */
+function isExternal(id: string, externals: readonly string[]): boolean {
+  return externals.some((name) =>
+    name.endsWith("/*") ? id.startsWith(name.slice(0, -1)) : id === name,
+  );
 }
 
 export function packageManifest(): SdkManifest {
@@ -202,24 +217,31 @@ async function bundle(root: string): Promise<void> {
   await Promise.all(
     targets.map(async ({ entry, output, node, react }) => {
       const baseExternal = node ? CORE_NODE_EXTERNAL : CORE_EXTERNAL;
-      const result = await Bun.build({
-        entrypoints: [entry],
-        target: node ? "node" : "browser",
-        format: "esm",
-        outdir: dirname(output),
-        naming: basename(output),
-        external: react ? [...baseExternal, ...REACT_EXTERNAL] : [...baseExternal],
+      const externals = react ? [...baseExternal, ...REACT_EXTERNAL] : [...baseExternal];
+      const build = await rolldown({
+        input: entry,
+        platform: node ? "node" : "browser",
+        external: (id) => isExternal(id, externals),
         plugins: node ? [nodeTransportCjsPlugin] : [],
-        // Bun emits jsxDEV from react/jsx-dev-runtime unless told otherwise, and React's production
-        // build of that module exports jsxDEV as undefined, so consumers' production renders throw.
-        jsx: { runtime: "automatic", development: false },
-        // The React entry calls createContext at import, which React Server Components lack.
-        ...(react ? { banner: '"use client";' } : {}),
-        metafile: true,
+        // jsxDEV, from react/jsx-dev-runtime, is undefined in React's production build of that
+        // module, so consumers' production renders would throw.
+        transform: { jsx: { runtime: "automatic", development: false } },
       });
-      if (!result.success) throw new AggregateError(result.logs, `bun build ${entry} failed`);
-      const inlined = Object.keys(result.metafile?.inputs ?? {})
-        .map((input) => owningPackage(resolve(input)))
+      let moduleIds: readonly string[];
+      try {
+        const { output: chunks } = await build.write({
+          file: output,
+          format: "es",
+          codeSplitting: false,
+          // The React entry calls createContext at import, which React Server Components lack.
+          ...(react ? { banner: '"use client";' } : {}),
+        });
+        moduleIds = chunks.flatMap((chunk) => (chunk.type === "chunk" ? chunk.moduleIds : []));
+      } finally {
+        await build.close();
+      }
+      const inlined = moduleIds
+        .map((id) => owningPackage(id))
         .filter((pkg): pkg is string => pkg !== null);
       if (inlined.length > 0) {
         throw new Error(
@@ -232,19 +254,16 @@ async function bundle(root: string): Promise<void> {
 
 const RELATIVE_TS_SPECIFIER = /((\bfrom\s+|\bimport\s*\(\s*)["']\.\.?\/[^"']+)\.tsx?(["'])/g;
 const DTS_SPECIFIER = /\b(?:from|import)\s*\(?\s*["']([^"']+)["']\s*\)?/g;
-const JS_TRANSPILER = new Bun.Transpiler({ loader: "js" });
 
 /** Emits `.d.ts` declarations into `${root}/dist` and normalizes relative specifiers to `.js`. */
-async function emitTypes(root: string): Promise<void> {
+function emitTypes(root: string): void {
   const tsc = join(ROOT, "node_modules", ".bin", "tsc");
   const outDir = join(root, "dist");
-  const proc = Bun.spawn([tsc, "-p", join(HERE, "tsconfig.build.json"), "--outDir", outDir], {
+  const proc = spawnSync(tsc, ["-p", join(HERE, "tsconfig.build.json"), "--outDir", outDir], {
     cwd: ROOT,
-    stderr: "inherit",
-    stdout: "inherit",
+    stdio: "inherit",
   });
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) throw new Error(`tsc exited ${exitCode}`);
+  if (proc.status !== 0) throw new Error(`tsc exited ${proc.status}`);
   for (const file of walkFiles(outDir, ".d.ts")) {
     const text = readFileSync(file, "utf8");
     const rewritten = text.replace(RELATIVE_TS_SPECIFIER, "$1.js$3");
@@ -252,13 +271,28 @@ async function emitTypes(root: string): Promise<void> {
   }
 }
 
+/** Every specifier a module imports or re-exports, statically or through import(). */
+function jsSpecifiers(node: unknown, found: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const item of node) jsSpecifiers(item, found);
+    return;
+  }
+  if (typeof node !== "object" || node === null) return;
+  const { type, source } = node as { type?: unknown; source?: { value?: unknown } | null };
+  const importing =
+    type === "ImportDeclaration" ||
+    type === "ImportExpression" ||
+    type === "ExportNamedDeclaration" ||
+    type === "ExportAllDeclaration";
+  if (importing && typeof source?.value === "string") found.add(source.value);
+  for (const value of Object.values(node)) jsSpecifiers(value, found);
+}
+
 function moduleSpecifiers(file: string): Set<string> {
   const source = readFileSync(file, "utf8");
   const found = new Set<string>();
   if (file.endsWith(".js")) {
-    for (const { path } of JS_TRANSPILER.scanImports(source)) {
-      found.add(path);
-    }
+    jsSpecifiers(parseAst(source), found);
   } else {
     for (const [, spec] of source.matchAll(DTS_SPECIFIER)) {
       if (spec !== undefined) found.add(spec);
@@ -303,7 +337,7 @@ export function checkDistImports(root: string, manifest: SdkManifest): void {
   }
 }
 
-// Bun.build keeps `new URL("./…", import.meta.url)` as written and copies nothing it names: the
+// rolldown keeps `new URL("./…", import.meta.url)` as written and copies nothing it names: the
 // stage copies each file there, beside the bundle that names it.
 const ASSET_URL = /new\s+URL\(\s*(["'`])(\.{1,2}\/[^"'`]+)\1\s*,\s*import\.meta\.url\s*\)/g;
 
@@ -327,7 +361,8 @@ export async function stage(outDir: string = PACK_DIR): Promise<SdkManifest> {
   const manifest = packageManifest();
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
-  await Promise.all([bundle(outDir), emitTypes(outDir)]);
+  emitTypes(outDir);
+  await bundle(outDir);
   cpSync(join(HERE, "src/avatar/psd2live/wasm"), join(outDir, "dist/avatar/wasm"), {
     recursive: true,
     filter: (source) => !basename(source).startsWith("."),
@@ -336,23 +371,27 @@ export async function stage(outDir: string = PACK_DIR): Promise<SdkManifest> {
   checkAssetUrls(outDir);
   cpSync(join(HERE, "README.md"), join(outDir, "README.md"));
   cpSync(join(ROOT, "LICENSE"), join(outDir, "LICENSE"));
-  // The avatar bundle carries PSD2Live's MIT code without its header, which Bun drops.
+  // The avatar bundle carries PSD2Live's MIT code without its header, which the bundler drops.
   cpSync(join(HERE, "LICENSE-psd2live"), join(outDir, "LICENSE-psd2live"));
   cpSync(join(HERE, "THIRD_PARTY.md"), join(outDir, "THIRD_PARTY.md"));
   if (existsSync(join(HERE, "CHANGELOG.md"))) {
     cpSync(join(HERE, "CHANGELOG.md"), join(outDir, "CHANGELOG.md"));
   }
+  // pnpm publish packs the folder by the checkout's .gitignore, whose dist/ would leave the bundles
+  // out, unless the folder has an .npmignore of its own.
+  writeFileSync(join(outDir, ".npmignore"), "");
   writeFileSync(join(outDir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }
 
 function pack(): string {
-  const packed = Bun.spawnSync(["npm", "pack", "--json", "--pack-destination", HERE], {
+  const packed = spawnSync("npm", ["pack", "--json", "--pack-destination", HERE], {
     cwd: PACK_DIR,
-    stderr: "inherit",
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
   });
-  if (packed.exitCode !== 0) throw new Error(`npm pack exited ${packed.exitCode}`);
-  const [result] = JSON.parse(packed.stdout.toString()) as { filename: string }[];
+  if (packed.status !== 0) throw new Error(`npm pack exited ${packed.status}`);
+  const [result] = JSON.parse(packed.stdout) as { filename: string }[];
   if (result === undefined) throw new Error("npm pack reported no tarball");
   return join(HERE, result.filename);
 }
@@ -360,5 +399,5 @@ function pack(): string {
 if (import.meta.main) {
   const manifest = await stage();
   console.log(`${manifest.name}@${manifest.version} staged in ${relative(ROOT, PACK_DIR)}`);
-  if (Bun.argv.includes("--pack")) console.log(pack());
+  if (process.argv.includes("--pack")) console.log(pack());
 }

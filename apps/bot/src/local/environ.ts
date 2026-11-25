@@ -7,7 +7,7 @@
 // folders they start in (a task's command, the data home), and web_fetch couldn't pin an address.
 if (process.versions.bun !== undefined) {
   process.stderr.write(
-    "eidolon: the local app runs on Node 24 or later: start it with `bun run app` or `node apps/bot/src/local/main.ts`.\n",
+    "eidolon: the local app runs on Node 24 or later: start it with `pnpm app` or `node apps/bot/src/local/main.ts`.\n",
   );
   process.exit(1);
 }

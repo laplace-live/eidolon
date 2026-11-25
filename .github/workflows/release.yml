@@ -1,11 +1,12 @@
 name: Release
 
 # Changesets flow (docs/releasing.md): while changesets exist on master, keep a
-# "chore: version packages" PR open. Once it merges, `bun run release` stages
+# "chore: version packages" PR open. Once it merges, `pnpm release` stages
 # @laplace.live/eidolon and @laplace.live/eidolon-sdk into their pack/ folders
-# and runs `changeset publish`, which publishes unpublished packages to npm via
-# OIDC trusted publishing (publishConfig.directory) and tags every release
-# including private laplace-eidolon@<version> (firing docker.yml's images).
+# and runs `changeset publish`, which publishes unpublished packages to npm with
+# `pnpm publish` (publishConfig.directory) over OIDC trusted publishing, and
+# tags every release including private laplace-eidolon@<version> (firing
+# docker.yml's images).
 #
 # A GitHub App token (not the default GITHUB_TOKEN) authenticates the action:
 # events caused by GITHUB_TOKEN don't start other workflows, so the tag would
@@ -31,16 +32,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
+      - uses: pnpm/action-setup@v6
 
-      # Node 24 builds the npm package, and ships the npm 11.5.1 or later trusted publishing needs.
+      # Node 24 builds the npm packages.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
 
-      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: pnpm install --frozen-lockfile --ignore-scripts
 
       # Requires the laplace-release-bot GitHub App installed on this repo with
       # Contents and Pull requests read & write, its Client ID and private key
@@ -57,8 +56,8 @@ jobs:
 
       - uses: changesets/action@v2
         with:
-          version-script: bun run version
-          publish-script: bun run release
+          version-script: pnpm run version
+          publish-script: pnpm release
           # No [skip ci]: the version PR runs the full CI, so a bump that breaks a
           # test is caught before it merges.
           commit-message: "chore: version packages"

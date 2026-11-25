@@ -152,7 +152,7 @@ export interface AppLaunch {
   readonly args: readonly string[];
 }
 
-/** The unpackaged app: Electron on apps/desktop, its backend from source (bun run build:desktop). */
+/** The unpackaged app: Electron on apps/desktop, its backend from source (pnpm build:desktop). */
 export function devApp(run: Run): AppLaunch {
   return { command: electronBinary(), args: [DESKTOP, `--user-data-dir=${run.profile}`] };
 }

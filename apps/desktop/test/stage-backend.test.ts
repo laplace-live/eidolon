@@ -1,6 +1,6 @@
-// stage-backend's parts, on made-up lockfiles, folders, PE files and zips: the pinning to bun.lock,
-// what is pruned, where the VC++ runtime goes, the unsigned-PE list and the license texts. The
-// staged payload itself is stage.test.ts's.
+// stage-backend's parts, on made-up lockfiles, folders, PE files and zips: the pinning to
+// pnpm-lock.yaml, what is pruned, where the VC++ runtime goes, the unsigned-PE list and the license
+// texts. The staged payload itself is stage.test.ts's.
 import {
   type Dirent,
   existsSync,
@@ -16,15 +16,13 @@ import { crc32, deflateRawSync } from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
 import { packageManifest } from "../../eidolon/scripts/build.ts";
 import {
-  type BunLock,
   type LsNode,
   lockDrift,
   lockedTree,
-  type Overrides,
-  parseBunLock,
+  type PnpmLock,
+  parsePnpmLock,
   pinOverrides,
-  readBunLock,
-  resolveFrom,
+  readPnpmLock,
   supports,
 } from "../scripts/lockfile.ts";
 import { NODE_SHIM } from "../scripts/node-shim.ts";
@@ -291,59 +289,180 @@ function zip(entries: readonly { name: string; data: Buffer; deflate: boolean }[
   return Buffer.concat([...parts, listing, end]);
 }
 
-// a nests its own b, which nests its own c; d takes the top-level b. One optional package is for
-// macOS on Apple silicon, one for Windows x64, one for anything but Windows; q is an optional peer.
-// bin-mac and bin-win are a manifest's own optional binaries, as LanceDB's are the payload's.
-const LOCK = `{
-  "lockfileVersion": 1,
-  "workspaces": { "": { "name": "a, ] and } in a string", "dependencies": { "a": "1.0.0", }, }, },
-  "packages": {
-    "a": ["a@1.0.0", "", { "dependencies": { "b": "^1", "c": "^2", }, "optionalDependencies": { "mac-only": "1.0.0", "win-only": "1.0.0", }, "peerDependencies": { "p": "*", "q": "*", }, "optionalPeers": ["q",], }, "sha512-a"],
-    "a/b": ["b@1.1.0", "", { "dependencies": { "c": "^1", }, }, "sha512-ab"],
-    "a/b/c": ["c@1.0.0", "", {}, "sha512-abc"],
-    "b": ["b@2.0.0", "", {}, "sha512-b"],
-    "bin-mac": ["bin-mac@1.0.0", "", { "os": "darwin", "cpu": "arm64", }, "sha512-bm"],
-    "bin-win": ["bin-win@1.0.0", "", { "os": "win32", "cpu": "x64", }, "sha512-bw"],
-    "c": ["c@2.0.0", "", {}, "sha512-c"],
-    "d": ["d@1.0.0", "", { "dependencies": { "b": "^2", }, "optionalDependencies": { "not-win": "1.0.0", }, }, "sha512-d"],
-    "mac-only": ["mac-only@1.0.0", "", { "os": "darwin", "cpu": "arm64", }, "sha512-m"],
-    "not-win": ["not-win@1.0.0", "", { "os": ["!win32",], }, "sha512-n"],
-    "p": ["p@1.0.0", "", {}, "sha512-p"],
-    "q": ["q@1.0.0", "", {}, "sha512-q"],
-    "win-only": ["win-only@1.0.0", "", { "os": ["win32",], "cpu": ["x64",], }, "sha512-w"],
-  },
-}
+// a takes b@1.1.0, and d and e take b@2.0.0; a's peers are p and q, an optional one, and b@2.0.0
+// resolved q, its own optional peer, for d alone. One optional package is for macOS on Apple
+// silicon, one for Windows x64, one for anything but Windows. bin-mac and bin-win are a manifest's
+// own optional binaries, as LanceDB's are the payload's. pnpm writes its own document first.
+const LOCK = `---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    packageManagerDependencies:
+      pnpm:
+        specifier: 12.19.0
+        version: 12.19.0
+
+packages:
+
+  pnpm@12.19.0:
+    resolution: {integrity: sha512-pnpm}
+
+snapshots:
+
+  pnpm@12.19.0: {}
+
+---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      a:
+        specifier: 1.0.0
+        version: 1.0.0(p@1.0.0)(q@1.0.0)
+
+packages:
+
+  a@1.0.0:
+    resolution: {integrity: sha512-a}
+    peerDependencies:
+      p: '*'
+      q: '*'
+    peerDependenciesMeta:
+      q:
+        optional: true
+
+  b@1.1.0:
+    resolution: {integrity: sha512-b1}
+
+  b@2.0.0:
+    resolution: {integrity: sha512-b2}
+    peerDependencies:
+      q: '*'
+    peerDependenciesMeta:
+      q:
+        optional: true
+
+  bin-mac@1.0.0:
+    resolution: {integrity: sha512-bm}
+    cpu: [arm64]
+    os: [darwin]
+
+  bin-win@1.0.0:
+    resolution: {integrity: sha512-bw}
+    cpu: [x64]
+    os: [win32]
+
+  c@2.0.0:
+    resolution: {integrity: sha512-c}
+
+  d@1.0.0:
+    resolution: {integrity: sha512-d}
+
+  e@1.0.0:
+    resolution: {integrity: sha512-e}
+
+  mac-only@1.0.0:
+    resolution: {integrity: sha512-m}
+    cpu: [arm64]
+    os: [darwin]
+
+  not-win@1.0.0:
+    resolution: {integrity: sha512-n}
+    os: ['!win32']
+
+  p@1.0.0:
+    resolution: {integrity: sha512-p}
+
+  q@1.0.0:
+    resolution: {integrity: sha512-q}
+
+  win-only@1.0.0:
+    resolution: {integrity: sha512-w}
+    cpu: [x64]
+    os: [win32]
+
+snapshots:
+
+  a@1.0.0(p@1.0.0)(q@1.0.0):
+    dependencies:
+      b: 1.1.0
+      c: 2.0.0
+      p: 1.0.0
+      q: 1.0.0
+    optionalDependencies:
+      mac-only: 1.0.0
+      win-only: 1.0.0
+
+  b@1.1.0:
+    dependencies:
+      c: 2.0.0
+
+  b@2.0.0: {}
+
+  b@2.0.0(q@1.0.0):
+    dependencies:
+      q: 1.0.0
+
+  bin-mac@1.0.0:
+    optional: true
+
+  bin-win@1.0.0:
+    optional: true
+
+  c@2.0.0: {}
+
+  d@1.0.0:
+    dependencies:
+      b: 2.0.0(q@1.0.0)
+    optionalDependencies:
+      not-win: 1.0.0
+
+  e@1.0.0:
+    dependencies:
+      b: 2.0.0
+
+  mac-only@1.0.0:
+    optional: true
+
+  not-win@1.0.0:
+    optional: true
+
+  p@1.0.0: {}
+
+  q@1.0.0: {}
+
+  win-only@1.0.0:
+    optional: true
 `;
-const ROOTS = { a: "1.0.0", d: "1.0.0" };
+const ROOTS = { a: "1.0.0", d: "1.0.0", e: "1.0.0" };
 const DARWIN = { os: "darwin", cpu: "arm64" };
 const WIN32 = { os: "win32", cpu: "x64" };
 
-describe("bun.lock", () => {
-  const lock: BunLock = parseBunLock(LOCK);
+describe("pnpm-lock.yaml", () => {
+  const lock: PnpmLock = parsePnpmLock(LOCK);
 
-  test("reads its trailing commas as JSON, and leaves the ones inside strings", () => {
+  test("reads the workspace's document, after the package manager's own", () => {
     expect(Object.keys(lock.packages)).toHaveLength(13);
-    expect(parseBunLock(LOCK)).toMatchObject({
-      workspaces: { "": { name: "a, ] and } in a string" } },
-    });
-    expect(parseBunLock('["a\\", ]",]')).toEqual(['a", ]']);
-  });
-
-  test("resolves a dependency from the nearest folder above, as Node does", () => {
-    expect(resolveFrom(lock, ["a"], "b")?.version).toBe("1.1.0");
-    expect(resolveFrom(lock, ["a", "b"], "c")?.version).toBe("1.0.0");
-    expect(resolveFrom(lock, ["a"], "c")?.version).toBe("2.0.0");
-    expect(resolveFrom(lock, ["d"], "b")?.version).toBe("2.0.0");
-    expect(resolveFrom(lock, ["d"], "zzz")).toBeNull();
+    expect(lock.packages["pnpm@12.19.0"]).toBeUndefined();
+    expect(lock.importers["."]?.dependencies?.a?.version).toBe("1.0.0(p@1.0.0)(q@1.0.0)");
   });
 
   test("follows dependencies, required peers, and the optional ones a platform supports", () => {
     const keys = (platform?: { os: string; cpu: string }) =>
       [...lockedTree(lock, ROOTS, platform).keys()].sort();
-    const always = ["a", "a/b", "a/b/c", "b", "c", "d", "p"];
-    expect(keys()).toEqual([...always, "mac-only", "not-win", "win-only"].sort());
-    expect(keys(DARWIN)).toEqual([...always, "mac-only", "not-win"].sort());
-    expect(keys(WIN32)).toEqual([...always, "win-only"].sort());
+    const always = ["a@1.0.0", "b@1.1.0", "b@2.0.0", "c@2.0.0", "d@1.0.0", "e@1.0.0", "p@1.0.0"];
+    const optional = ["mac-only@1.0.0", "not-win@1.0.0", "win-only@1.0.0"];
+    expect(keys()).toEqual([...always, ...optional].sort());
+    expect(keys(DARWIN)).toEqual([...always, "mac-only@1.0.0", "not-win@1.0.0"].sort());
+    expect(keys(WIN32)).toEqual([...always, "win-only@1.0.0"].sort());
+    expect(lockedTree(lock, ROOTS).get("d@1.0.0")?.dependencies).toEqual({
+      b: "2.0.0",
+      "not-win": "1.0.0",
+    });
     expect([
       supports(["!win32"], "linux"),
       supports("none", "x64"),
@@ -351,18 +470,22 @@ describe("bun.lock", () => {
     ]).toEqual([true, false, true]);
   });
 
-  test("refuses a root bun.lock has at another version", () => {
-    expect(() => lockedTree(lock, { a: "1.0.1" })).toThrow(
-      "bun.lock has a at 1.0.0, not 1.0.1: run bun install",
+  test("refuses a root pnpm-lock.yaml has at another version, or not at all", () => {
+    expect(() => lockedTree(lock, { b: "1.0.0" })).toThrow(
+      "pnpm-lock.yaml has b at 1.1.0, 2.0.0, not 1.0.0: run pnpm install",
+    );
+    expect(() => lockedTree(lock, { z: "1.0.0" })).toThrow(
+      "pnpm-lock.yaml has z at no version, not 1.0.0: run pnpm install",
     );
   });
 
-  test("pins each package where bun.lock puts it, nesting its second versions", () => {
+  test("pins each package at the version most of its dependents take, nesting the others", () => {
     expect(pinOverrides(lockedTree(lock, ROOTS).values())).toEqual({
-      a: { ".": "1.0.0", b: { ".": "1.1.0", c: "1.0.0" } },
+      a: { ".": "1.0.0", b: "1.1.0" },
       b: "2.0.0",
       c: "2.0.0",
       d: "1.0.0",
+      e: "1.0.0",
       "mac-only": "1.0.0",
       "not-win": "1.0.0",
       p: "1.0.0",
@@ -372,21 +495,23 @@ describe("bun.lock", () => {
 
   test("pins every package the externals reach, those npx drifted on among them, and none of LanceDB's own", () => {
     const manifest = packageManifest();
-    const tree = lockedTree(readBunLock(join(ROOT, "bun.lock")), {
-      ...manifest.dependencies,
-      ...manifest.optionalDependencies,
-    });
+    const roots = { ...manifest.dependencies, ...manifest.optionalDependencies };
+    const tree = lockedTree(readPnpmLock(join(ROOT, "pnpm-lock.yaml")), roots);
     const overrides = pinOverrides(tree.values());
-    const pinned = (path: readonly string[]): string | undefined => {
-      let at: string | Overrides | undefined = overrides;
-      for (const name of path) at = typeof at === "object" ? at[name] : undefined;
+    const own = (name: string): string | undefined => {
+      const at = overrides[name];
       return typeof at === "object" ? (at["."] as string) : at;
     };
+    for (const [name, version] of Object.entries(roots)) {
+      expect([name, own(name)]).toEqual([name, version]);
+    }
     for (const locked of tree.values()) {
-      expect([locked.path.join("/"), pinned(locked.path)]).toEqual([
-        locked.path.join("/"),
-        locked.version,
-      ]);
+      const under = overrides[locked.name];
+      for (const [name, version] of Object.entries(locked.dependencies)) {
+        const nested = typeof under === "object" ? (under[name] as string | undefined) : undefined;
+        const edge = `${locked.name} > ${name}`;
+        expect([edge, nested ?? own(name)]).toEqual([edge, version]);
+      }
     }
     const names = new Set([...tree.values()].map((locked) => locked.name));
     for (const name of ["mediabunny", "global-agent", "@lancedb/lancedb-win32-x64-msvc"]) {
@@ -398,14 +523,14 @@ describe("bun.lock", () => {
   });
 });
 
-describe("an install against bun.lock", () => {
-  const lock = parseBunLock(LOCK);
+describe("an install against pnpm-lock.yaml", () => {
+  const lock = parsePnpmLock(LOCK);
   const darwin = (): LsNode => ({
     dependencies: {
       a: {
         version: "1.0.0",
         dependencies: {
-          b: { version: "1.1.0", dependencies: { c: { version: "1.0.0" } } },
+          b: { version: "1.1.0", dependencies: { c: { version: "2.0.0" } } },
           c: { version: "2.0.0" },
           "mac-only": { version: "1.0.0" },
           "win-only": {},
@@ -416,31 +541,34 @@ describe("an install against bun.lock", () => {
         version: "1.0.0",
         dependencies: { b: { version: "2.0.0" }, "not-win": { version: "1.0.0" } },
       },
+      e: { version: "1.0.0", dependencies: { b: { version: "2.0.0" } } },
     },
   });
 
-  test("agrees when npm installed bun.lock's tree, the platform's skips aside", () => {
+  test("agrees when npm installed pnpm-lock.yaml's tree, the platform's skips aside", () => {
     expect(lockDrift(darwin(), lock, ROOTS, DARWIN)).toEqual([]);
   });
 
   test("names a version npm resolved otherwise, what either side lacks, and npm's problems", () => {
     const ls = darwin() as { dependencies: Record<string, LsNode> };
     const a = ls.dependencies.a as { dependencies: Record<string, LsNode> };
-    a.dependencies.b = { version: "1.1.0", dependencies: { c: { version: "1.0.1" } } };
+    a.dependencies.b = { version: "1.1.0", dependencies: { c: { version: "2.0.1" } } };
+    a.dependencies["win-only"] = { version: "1.0.0" };
     delete a.dependencies.p;
     ls.dependencies.d = {
       version: "1.0.0",
       dependencies: { b: { version: "2.0.0" }, x: { version: "9.0.0" }, "not-win": {} },
     };
-    expect(lockDrift({ ...ls, problems: ["invalid: c@1.0.1"] }, lock, ROOTS, DARWIN)).toEqual([
-      "invalid: c@1.0.1",
-      "a > b > c: npm installed 1.0.1, bun.lock has 1.0.0",
-      "d > x@9.0.0: not in bun.lock",
-      "p@1.0.0 (p): not installed",
-      "not-win@1.0.0 (not-win): not installed",
+    expect(lockDrift({ ...ls, problems: ["invalid: c@2.0.1"] }, lock, ROOTS, DARWIN)).toEqual([
+      "invalid: c@2.0.1",
+      "a > b > c: npm installed 2.0.1, pnpm-lock.yaml has 2.0.0",
+      "d > x@9.0.0: not in pnpm-lock.yaml",
+      "p@1.0.0: not installed",
+      "not-win@1.0.0: not installed",
+      "win-only@1.0.0: installed, but not in pnpm-lock.yaml's tree for it",
     ]);
     expect(lockDrift(darwin(), lock, { ...ROOTS, a: "1.0.1" }, DARWIN)).toEqual([
-      "bun.lock has a at 1.0.0, not 1.0.1: run bun install",
+      "pnpm-lock.yaml has a at 1.0.0, not 1.0.1: run pnpm install",
     ]);
   });
 
@@ -450,9 +578,7 @@ describe("an install against bun.lock", () => {
       dependencies: { ...darwin().dependencies, "bin-mac": binary, "bin-win": {} },
     });
     expect(lockDrift(ls({ version: "1.0.0" }), lock, roots, DARWIN)).toEqual([]);
-    expect(lockDrift(ls({}), lock, roots, DARWIN)).toEqual([
-      "bin-mac@1.0.0 (bin-mac): not installed",
-    ]);
+    expect(lockDrift(ls({}), lock, roots, DARWIN)).toEqual(["bin-mac@1.0.0: not installed"]);
   });
 });
 

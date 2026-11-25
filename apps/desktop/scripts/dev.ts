@@ -1,4 +1,4 @@
-// `bun run dev:desktop`: watch-builds main, the preload and the shell pages, serves apps/web from
+// `pnpm dev:desktop`: watch-builds main, the preload and the shell pages, serves apps/web from
 // Vite's dev server on 127.0.0.1:5173, and runs the unpackaged app on it. Arguments after it go to
 // Electron, such as `--user-data-dir=<folder>` for a profile of its own.
 import { spawn } from "node:child_process";
@@ -13,7 +13,7 @@ const DESKTOP = resolve(import.meta.dirname, "..");
 const WEB = resolve(DESKTOP, "../web");
 
 // The backend, run from the checkout, won't start without a web build, even though Vite serves the
-// pages here; `bun run app` builds it the same way.
+// pages here; `pnpm app` builds it the same way.
 if (!existsSync(join(WEB, "dist", "index.html"))) {
   await build({ root: WEB, configFile: join(WEB, "vite.config.ts"), envDir: false });
 }

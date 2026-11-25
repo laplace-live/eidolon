@@ -51,7 +51,7 @@ type HandledSignal = keyof typeof SIGNALS;
 export const CLEANUP_LIMIT_MS = 10_000;
 
 /**
- * A signal this soon after the first is that one delivered twice, a few ms apart: `bun run` passes
+ * A signal this soon after the first is that one delivered twice, a few ms apart: `npm run` passes
  * Ctrl-C on to its script, and a SIGTERM to the npm launcher's process group reaches the CLI
  * directly and through the launcher.
  */

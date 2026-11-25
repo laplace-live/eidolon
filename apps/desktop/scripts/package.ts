@@ -1,4 +1,4 @@
-// `bun run package:desktop`: electron-builder on dist/ and the staged backend, for this machine, into
+// `pnpm package:desktop`: electron-builder on dist/ and the staged backend, for this machine, into
 // apps/desktop/.out. Unsigned: ad hoc on macOS, never a keychain identity, at version 0.0.0-dev.
 // Arguments after it go to electron-builder, such as `-c.compression=store`.
 import { spawnSync } from "node:child_process";
@@ -10,9 +10,7 @@ const DESKTOP = resolve(import.meta.dirname, "..");
 const PAYLOAD = join(".stage", `${process.platform}-${process.arch}`, "eidolon");
 
 if (!existsSync(join(DESKTOP, "dist", "main", "index.js"))) {
-  console.error(
-    "package:desktop: apps/desktop/dist has no build; run `bun run build:desktop` first",
-  );
+  console.error("package:desktop: apps/desktop/dist has no build; run `pnpm build:desktop` first");
   process.exit(1);
 }
 if (!existsSync(join(DESKTOP, PAYLOAD))) {

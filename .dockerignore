@@ -40,5 +40,5 @@ data/mem0-cloud-export.json
 .git/
 .gitignore
 
-# TypeScript workspace
-node_modules/
+# TypeScript workspace: pnpm puts a node_modules in each package too
+**/node_modules/

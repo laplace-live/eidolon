@@ -87,8 +87,8 @@ export function openRouterDecisions(options: OpenRouterDecisionsOptions): Decisi
     async decide(state, questions, signal): Promise<DecisionAnswers> {
       const timeout = AbortSignal.timeout(options.timeoutSec * 1000);
       // The connection must outlive the gap between turns: with httpx's 5 s keep-alive, turns
-      // 15-40 s apart paid a fresh TLS session each, ~1.4 s a call instead of ~0.5 s. Bun's
-      // fetch pools sockets process-wide and reused an idle one after 90 s when measured.
+      // 15-40 s apart paid a fresh TLS session each, ~1.4 s a call instead of ~0.5 s.
+      // installHttpDefaults keeps fetch's sockets 90 s.
       const response = await post(url, {
         method: "POST",
         headers,

@@ -29,7 +29,7 @@ packages/access/src/chat.ts                  production's chat quotas and served
 `@eidolon/chat`'s main entry, but only `apps/bot/src/local` imports the JSONL store (and only tests
 the store contract): a Biome rule forbids `@eidolon/chat/jsonl` and `@eidolon/chat/contract` in the
 rest of `apps/bot/src`, and `boundaries.test.ts` follows `main.ts`'s imports to prove it.
-`@eidolon/chat` itself imports no other package, and nothing from Bun or Node outside
+`@eidolon/chat` itself imports no other package, and nothing from Node outside
 `src/jsonl.ts`, because `apps/web` bundles it and laplace's client will too.
 
 ## The format
@@ -487,9 +487,9 @@ director calls.
 
 - **Every group decision is a `decision` event with its scores,** so real logs can become the
   labelled lines.
-- **`bun run director-decisions`** asks Jev about every labelled line, for about $0.003, and exits
+- **`pnpm director-decisions`** asks Jev about every labelled line, for about $0.003, and exits
   non-zero when any is decided wrong.
-- **`bun docs/benchmarks/2026-11-10-director/score.ts --cached`** replays the stored scores through
+- **`node docs/benchmarks/2026-11-10-director/score.ts --cached`** replays the stored scores through
   the director for free, after a threshold or a label changes.
 
 ## Voice messages
@@ -940,10 +940,10 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   stored, or when the answer threw outside any turn, as when reading the log fails.
 
 **Checks:**
-- `bun run test packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
+- `pnpm test packages/chat packages/engine packages/context packages/runtime apps/bot/test/local`.
   `packages/runtime/test/native/binding.test.ts` runs a bound call on scripted hearing, mind and
   voice, and once over a real werift peer.
-- `bun apps/bot/scripts/local-smoke.ts --headful`. It walks the chats below against its fake
+- `node apps/bot/scripts/local-smoke.ts --headful`. It walks the chats below against its fake
   OpenAI-compatible server, which also answers the director's Decisions route, OpenAI's speech and
   transcriptions, a call's realtime transcription session, and a task's worker. It bills nothing.
   - **A chat of one:** New Chat and the greeting, a reply that streams in with its cue as a chip,
@@ -982,7 +982,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
     for a line the fake hearing hears, stored in the chat among the call's lines, her pointer to the
     card when the task pauses, the end she speaks on the call, and no report in text after it
     ([web-app.md](web-app.md#the-browser-smoke-test)).
-- `bun run director-decisions` after changing the director's questions, state or thresholds
+- `pnpm director-decisions` after changing the director's questions, state or thresholds
   ([Calibrating](#calibrating)).
 - **By hand, billed:** a chat with milky-green on OpenRouter. Ask a recall question (it must call
   `recall_streams` or get archive context), and ask for a selfie, which must still show after
@@ -1302,7 +1302,7 @@ The browser's side is in
 
 ### Checks
 
-- `bun run test apps/bot/test/chat packages/access/test/chat.test.ts
+- `pnpm test apps/bot/test/chat packages/access/test/chat.test.ts
   packages/providers/test/speech/batch/recording.test.ts apps/bot/test/local/boundaries.test.ts
   apps/bot/test/local/production.test.ts`. The recordings measured are tones in
   `packages/providers/test/speech/batch/fixtures/`, one as Chrome's MediaRecorder wrote it.

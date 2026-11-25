@@ -164,14 +164,13 @@ describe("shellEnv", () => {
     expect(Object.keys(await shellEnv(undefined, from, "linux"))).toEqual(["PATH", "TERM"]);
   });
 
-  test("drops empty and relative PATH entries, node_modules/.bin, Bun's node shim and repeats", async () => {
+  test("drops empty and relative PATH entries, node_modules/.bin and repeats", async () => {
     const path = [
       "",
       ".",
       "bin",
       "/Users/owner/proj/node_modules/.bin",
       "/Users/owner/node_modules/.bin/",
-      "/private/tmp/bun-node-501-38afee6c8",
       "/opt/homebrew/bin",
       "/usr/bin",
       "/opt/homebrew/bin",

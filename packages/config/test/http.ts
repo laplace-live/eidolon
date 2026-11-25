@@ -1,4 +1,4 @@
-// A loopback HTTP server for a test's fakes: what Bun.serve({ fetch }) stood up, through srvx.
+// A loopback HTTP server for a test's fakes, through srvx.
 import { serve } from "srvx";
 
 export interface ServedFetch {

@@ -1,4 +1,4 @@
-// `bun run build:desktop`: stages the backend for this machine's target in apps/desktop/.stage, then
+// `pnpm build:desktop`: stages the backend for this machine's target in apps/desktop/.stage, then
 // builds main, the preload and the shell pages into apps/desktop/dist.
 import { build } from "vite";
 import { describeStage, hostTarget, stageBackend } from "./stage-backend.ts";

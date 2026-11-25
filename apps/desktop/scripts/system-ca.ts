@@ -1,4 +1,4 @@
-// `node apps/desktop/scripts/system-ca.ts`, on a CI runner after `bun run package:desktop`: proves
+// `node apps/desktop/scripts/system-ca.ts`, on a CI runner after `pnpm package:desktop`: proves
 // that the packaged binary in node mode reaches an https host whose CA only the OS trust store holds
 // with --use-system-ca, and not without it, in the backend and in a job the backend runs. Node mode
 // drops NODE_EXTRA_CA_CERTS, so that store is how a corporate CA reaches the desktop's backend.
@@ -547,8 +547,8 @@ if (import.meta.main) {
   const app = packagedApp();
   if (!existsSync(app.binary) || !existsSync(join(app.payload, "dist", "server.js"))) {
     console.error(
-      `system-ca: no packaged app at ${relative(ROOT, app.binary)}: run bun run build:desktop, ` +
-        "then bun run package:desktop",
+      `system-ca: no packaged app at ${relative(ROOT, app.binary)}: run pnpm build:desktop, ` +
+        "then pnpm package:desktop",
     );
     process.exit(2);
   }

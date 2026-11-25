@@ -54,7 +54,7 @@ From the repository root, with `OPENROUTER_API_KEY` in `.env` or the
 environment:
 
 ```sh
-bun docs/benchmarks/2026-11-07-timeline-question/score.ts
+node docs/benchmarks/2026-11-07-timeline-question/score.ts
 ```
 
 It costs about $0.001, writes `results.json`, and exits non-zero if any

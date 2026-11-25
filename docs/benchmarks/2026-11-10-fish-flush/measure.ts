@@ -2,7 +2,7 @@
 // audio has gone quiet come back as one burst and then silence, and how long must that silence
 // last before it is the end (FISH_SEGMENT_IDLE_MS)? Billed per byte: it prints the cost first.
 //
-//   bun docs/benchmarks/2026-11-10-fish-flush/measure.ts --wav <path>
+//   node docs/benchmarks/2026-11-10-fish-flush/measure.ts --wav <path>
 
 // Must stay the first import: the .env and settings files, as the laplace-* commands load them.
 import "../../../apps/cli/src/load-env.ts";
@@ -101,7 +101,7 @@ const PIPELINED: readonly Line[] = SENTENCES.slice(0, 4);
 /** The most the run may send, both runs together, in characters. */
 const MAX_CHARACTERS = 600;
 
-const USAGE = `usage: bun docs/benchmarks/2026-11-10-fish-flush/measure.ts [options]
+const USAGE = `usage: node docs/benchmarks/2026-11-10-fish-flush/measure.ts [options]
 
   --wav <path>      the serial run's audio (default: serial.wav beside this script); the
                     pipelined run's goes beside it as <name>-pipelined.wav

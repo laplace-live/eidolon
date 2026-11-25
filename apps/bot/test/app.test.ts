@@ -282,7 +282,7 @@ describe("fallback", () => {
       });
       expect(response.status).toBe(404);
       expect(body).toBe("");
-      // Bun.serve sends Content-Length: 0; srvx on Node sends no length, the empty body chunked.
+      // srvx sends no length for the empty body, which it chunks.
       expect(response.headers.get("content-length") ?? "0").toBe("0");
       expect(response.headers.get("content-type")).toBeNull();
       expect(response.headers.get("x-fake-cors")).toBe(ORIGIN);
@@ -403,7 +403,7 @@ describe("route wrapper", () => {
       });
       expect(response.status).toBe(405);
       expect(response.headers.get("allow")).toBe("GET");
-      // Bun.serve sends the GET body's length; srvx on Node sends a HEAD no length.
+      // srvx sends a HEAD no length.
       expect(response.headers.get("content-length") ?? "31").toBe("31");
       expect(body).toBe("");
       expect(response.headers.get("x-fake-cors")).toBe(ORIGIN);

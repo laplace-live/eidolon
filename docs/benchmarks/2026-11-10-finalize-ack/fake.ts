@@ -1,7 +1,11 @@
 // Soniox and Deepgram played on 127.0.0.1 for `measure.ts --fake`. Each finalize is answered after
 // a delay scripted by what the audio since the previous one held, so the run's numbers can be
 // checked against the script.
-import type { Server, ServerWebSocket } from "bun";
+import {
+  type Listening,
+  messageOf,
+  serveWs,
+} from "../../../packages/providers/test/ws-server.ts";
 
 export type Dialect = "soniox" | "deepgram";
 export type Heard = "speech" | "cough" | "silence";
@@ -31,6 +35,12 @@ export function scriptedDelay(dialect: Dialect, heard: Heard, k: number): number
   return base + step * (k % 5) + (dialect === "deepgram" ? 40 : 0);
 }
 
+/** What a fake answers a client through. */
+interface Socket {
+  send(data: string): void;
+  close(code: number): void;
+}
+
 interface Peer {
   readonly dialect: Dialect;
   configured: boolean;
@@ -39,57 +49,56 @@ interface Peer {
   readonly counts: Record<Heard, number>;
 }
 
+function dialectOf(path: string): Dialect | null {
+  return path === "/transcribe-websocket" ? "soniox" : path === "/v1/listen" ? "deepgram" : null;
+}
+
 export class FakeRecognizers {
   readonly scripted: Scripted[] = [];
   /** Protocol errors the fake saw, which fail the check. */
   readonly problems: string[] = [];
-  readonly #server: Server<Peer>;
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
+  #server: Listening | null = null;
 
-  constructor() {
-    this.#server = Bun.serve<Peer>({
-      // Bound to every address, the port can be shared with another process's 127.0.0.1 listener.
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: (request, server) => {
-        const path = new URL(request.url).pathname;
-        const dialect =
-          path === "/transcribe-websocket" ? "soniox" : path === "/v1/listen" ? "deepgram" : null;
-        if (dialect === null) return new Response("not found", { status: 404 });
-        if (!request.headers.get("authorization")) {
-          return new Response("no key", { status: 401 });
-        }
-        const data: Peer = {
+  /** The fakes, listening on a free port. */
+  static async start(): Promise<FakeRecognizers> {
+    const fakes = new FakeRecognizers();
+    fakes.#server = await serveWs({
+      handshake: ({ url, headers }) => {
+        if (dialectOf(url.pathname) === null) return new Response("not found", { status: 404 });
+        if (!headers.get("authorization")) return new Response("no key", { status: 401 });
+        return undefined;
+      },
+      open: (ws, { url }) => {
+        const dialect = dialectOf(url.pathname) as Dialect;
+        const peer: Peer = {
           dialect,
           configured: dialect === "deepgram",
           loudMs: 0,
           interimSent: false,
           counts: { speech: 0, cough: 0, silence: 0 },
         };
-        if (server.upgrade(request, { data })) return undefined;
-        return new Response("no upgrade", { status: 400 });
-      },
-      websocket: {
-        message: (ws, data) => {
-          if (typeof data === "string") this.#text(ws, data);
-          else this.#audio(ws, data);
-        },
+        ws.on("message", (data, isBinary) => {
+          const message = messageOf(data, isBinary);
+          if (typeof message === "string") fakes.#text(ws, peer, message);
+          else fakes.#audio(ws, peer, message);
+        });
       },
     });
+    return fakes;
   }
 
   /** The HTTP origin, as an account's API base names it. */
   get base(): string {
-    return `http://127.0.0.1:${this.#server.port}`;
+    return `http://127.0.0.1:${this.#server?.port}`;
   }
 
   stop(): void {
     for (const timer of this.#timers) clearTimeout(timer);
-    this.#server.stop(true);
+    void this.#server?.stop();
   }
 
-  #audio(ws: ServerWebSocket<Peer>, data: Buffer): void {
-    const peer = ws.data;
+  #audio(ws: Socket, peer: Peer, data: Uint8Array): void {
     if (!peer.configured) this.problems.push("Soniox audio came before its config");
     // A copy: the Buffer's offset may not be even.
     const pcm = new Int16Array(new Uint8Array(data).buffer);
@@ -112,8 +121,7 @@ export class FakeRecognizers {
     }
   }
 
-  #text(ws: ServerWebSocket<Peer>, text: string): void {
-    const peer = ws.data;
+  #text(ws: Socket, peer: Peer, text: string): void {
     if (!peer.configured) {
       const config = JSON.parse(text) as { model?: unknown; sample_rate?: unknown };
       if (typeof config.model !== "string" || config.sample_rate !== 16000) {

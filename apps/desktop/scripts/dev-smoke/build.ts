@@ -1,6 +1,6 @@
 // What the unpackaged app runs on, built afresh before each dev smoke unless it's told not to:
 // apps/web/dist, which its backend serves from the checkout, and apps/desktop/dist's main, preload
-// and shell pages, as `bun run build:web` and `bun run build:desktop` build them. The backend's
+// and shell pages, as `pnpm build:web` and `pnpm build:desktop` build them. The backend's
 // stage isn't one of them: unpackaged, the backend runs from source.
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";

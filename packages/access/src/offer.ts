@@ -173,8 +173,7 @@ export async function admitOffer(
   return { allowed: true, user, token, body, requestData, opusBitrateBps, clientIp, quota: result };
 }
 
-// Starlette's JSONResponse bytes: compact JSON and a bare `application/json`, where Bun's
-// Response.json() would add `;charset=utf-8`.
+// Starlette's JSONResponse bytes: compact JSON and a bare `application/json`.
 function starletteJson(
   content: JsonObject,
   status = 200,

@@ -2,6 +2,7 @@
 // by mode and turn by turn. It diffs their checks, their RTVI event sequences, stagesMs, latencyMs
 // and audible spans, then holds the candidate to the pass bar (docs/voice-engine.md, "Real
 // calls"). Reads reports only, so it scores recorded ones too.
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { LEVEL_INTERVAL_MS } from "./e2e/protocol.ts";
 import { pacingByTurn, type TimelineEntry, type Turn } from "./e2e/turns.ts";
@@ -13,8 +14,8 @@ const STOPPED_AFTER_AUDIO_MS = 500;
 /** How long before it: a level sample stamps the end of its window, so her audio ended within one. */
 const STOPPED_BEFORE_AUDIO_MS = LEVEL_INTERVAL_MS;
 
-const USAGE = `usage: bun apps/bot/scripts/e2e-compare.ts <baseline.json> <candidate.json>
-       bun apps/bot/scripts/e2e-compare.ts <baseline.json>... --vs <candidate.json>...
+const USAGE = `usage: node apps/bot/scripts/e2e-compare.ts <baseline.json> <candidate.json>
+       node apps/bot/scripts/e2e-compare.ts <baseline.json>... --vs <candidate.json>...
 
   Reports of the same mode are compared: medians across each side's runs, and the event sequence
   of each side's first run. The candidate passes when every check of every run passes, I1-I10
@@ -94,7 +95,7 @@ function parseArgs(argv: string[]): {
 
 async function load(files: string[], fallback: string): Promise<Side> {
   const reports = await Promise.all(
-    files.map(async (file) => (await Bun.file(file).json()) as Report),
+    files.map(async (file) => JSON.parse(await readFile(file, "utf8")) as Report),
   );
   const engines = [...new Set(reports.map((r) => r.harness.engine).filter(Boolean))];
   return { label: engines.length === 1 ? String(engines[0]) : fallback, files, reports };
@@ -342,7 +343,7 @@ function checkRows(base: Report[], cand: Report[]): string[] {
 }
 
 async function main(): Promise<number> {
-  const argv = Bun.argv.slice(2);
+  const argv = process.argv.slice(2);
   if (argv.includes("--help") || argv.includes("-h")) {
     console.log(USAGE);
     return 0;
@@ -397,7 +398,7 @@ async function main(): Promise<number> {
     out[mode] = { baseline: base.length, candidate: cand.length, stages, latency, spans, bar };
   }
   if (args.json !== null) {
-    await Bun.write(
+    await writeFile(
       args.json,
       `${JSON.stringify({ baseline: baseline.files, candidate: candidate.files, pass, modes: out }, null, 2)}\n`,
     );

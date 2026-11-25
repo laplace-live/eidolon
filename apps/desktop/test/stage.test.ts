@@ -1,8 +1,8 @@
-// The payloads staged in apps/desktop/.stage (`bun run build:desktop` stages this machine's): what
-// each holds, pinned to bun.lock and pruned, its natives loading from it, its node shim, on Windows
-// the VC++ runtime and the signatures, and the packaged app holding it file for file. A target with
-// no stage, or one staged from another version or bun.lock, skips, unless EIDOLON_REQUIRE_STAGE=1
-// and it is this machine's.
+// The payloads staged in apps/desktop/.stage (`pnpm build:desktop` stages this machine's): what
+// each holds, pinned to pnpm-lock.yaml and pruned, its natives loading from it, its node shim, on
+// Windows the VC++ runtime and the signatures, and the packaged app holding it file for file. A
+// target with no stage, or one staged from another version or pnpm-lock.yaml, skips, unless
+// EIDOLON_REQUIRE_STAGE=1 and it is this machine's.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
@@ -14,8 +14,7 @@ import {
   lockDrift,
   lockedTree,
   pinOverrides,
-  readBunLock,
-  resolveFrom,
+  readPnpmLock,
   supports,
 } from "../scripts/lockfile.ts";
 import { checkNatives } from "../scripts/natives.ts";
@@ -51,13 +50,15 @@ const PACKAGED: Record<Target, string> = {
   "darwin-arm64": join(DESKTOP, ".out", "mac-arm64", "Eidolon.app", "Contents", "Resources"),
   "win32-x64": join(DESKTOP, ".out", "win-unpacked", "resources"),
 };
-const STALE = "the stage is from another version or bun.lock: run bun run build:desktop";
+const STALE = "the stage is from another version or pnpm-lock.yaml: run pnpm build:desktop";
 
-/** The package.json a stage of this checkout holds: the npm package's, pinned to bun.lock. */
+/** The package.json a stage of this checkout holds: the npm package's, pinned to pnpm-lock.yaml. */
 function currentManifest(): Record<string, unknown> {
   const npm = packageManifest();
   const roots = { ...npm.dependencies, ...npm.optionalDependencies };
-  const overrides = pinOverrides(lockedTree(readBunLock(join(ROOT, "bun.lock")), roots).values());
+  const overrides = pinOverrides(
+    lockedTree(readPnpmLock(join(ROOT, "pnpm-lock.yaml")), roots).values(),
+  );
   return { ...npm, overrides };
 }
 
@@ -145,7 +146,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
 
   describe.skipIf(!current && !(REQUIRED && target === HOST))(title, () => {
     test("holds what the npm package does, its node_modules and their licenses, and no links", () => {
-      expect(staged, `no stage at ${payload}: run bun run build:desktop`).toBe(true);
+      expect(staged, `no stage at ${payload}: run pnpm build:desktop`).toBe(true);
       expect(readManifest(payload), STALE).toEqual(currentManifest());
       const { files, links } = listing(payload);
       // What main runs, and what the resolvers find under EIDOLON_APP_ROOT.
@@ -237,7 +238,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       );
     });
 
-    test("holds the node shim: the checkout's launchers, sh's executable, and the pnpm bun.lock pins", () => {
+    test("holds the node shim: the checkout's launchers, sh's executable, and the pnpm the lockfile pins", () => {
       const bin = shimLaunchers(payload);
       for (const file of LAUNCHER_FILES) {
         expect([file, readFileSync(join(bin, file), "utf8")], STALE).toEqual([
@@ -253,7 +254,8 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       const { version } = manifestOf(pnpm);
       const { devDependencies } = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8"));
       expect(version).toBe(devDependencies.pnpm);
-      expect(resolveFrom(readBunLock(join(ROOT, "bun.lock")), [], "pnpm")?.version).toBe(version);
+      const { importers } = readPnpmLock(join(ROOT, "pnpm-lock.yaml"));
+      expect(importers["apps/desktop"]?.devDependencies?.pnpm?.version).toBe(version);
       // With what the shim's npx takes from pnpm's dist: npm's semver, and node-gyp's bin for
       // npm's PATH.
       for (const file of [
@@ -281,10 +283,10 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       }
     });
 
-    test("is the tree bun.lock pins, as npm ls shows it", () => {
+    test("is the tree pnpm-lock.yaml pins, as npm ls shows it", () => {
       const { dependencies, optionalDependencies } = readManifest(payload);
       const roots = { ...dependencies, ...optionalDependencies };
-      const lock = readBunLock(join(ROOT, "bun.lock"));
+      const lock = readPnpmLock(join(ROOT, "pnpm-lock.yaml"));
       expect(lockDrift(npmLs(payload), lock, roots, { os, cpu })).toEqual([]);
     }, 60_000);
 

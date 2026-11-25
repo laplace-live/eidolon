@@ -34,7 +34,7 @@ zero `@pipecat-ai/*` packages directly.
 
 `packages/sdk` is a standalone browser package:
 
-- **`packages/sdk/src/` imports no `@eidolon/*`, `node:*`, or `bun:*` modules.** Biome enforces
+- **`packages/sdk/src/` imports no `@eidolon/*` or `node:*` modules.** Biome enforces
   this, and `packages/sdk/scripts/build.ts` verifies that `dist/` inlines zero `node_modules`
   packages and imports only declared `dependencies` and `peerDependencies`.
 - **The server never imports `@laplace.live/eidolon-sdk`.** Biome forbids it across `apps/bot`,
@@ -55,9 +55,9 @@ zero `@pipecat-ai/*` packages directly.
   package of its own. Its call transcript, call phases and chat items stay in `apps/web`: they
   carry group calls' speakers, selfies by persona and the director's reasons, which
   `useEidolonConversation` and `eventItems` don't model.
-- **A host app on another origin needs a bot that answers it.** A production-mode bot (`bun run
-  dev`, `bun run start` or the image) allows every origin unless `PIPECAT_ALLOWED_ORIGINS` narrows
-  it. The local app (`bun run app`, `bun run local`, `eidolon`, the desktop app) answers only its
+- **A host app on another origin needs a bot that answers it.** A production-mode bot (`pnpm
+  dev`, `pnpm start` or the image) allows every origin unless `PIPECAT_ALLOWED_ORIGINS` narrows
+  it. The local app (`pnpm app`, `pnpm local`, `eidolon`, the desktop app) answers only its
   own pages until `EIDOLON_LOCAL_ALLOWED_ORIGINS` lists the host's origin, and then serves it the
   bot's API as a deployment would, never as the local viewer ([web-app.md](web-app.md#security)).
   The desktop app's server reads it from the environment the app gives it, on macOS the login
@@ -383,17 +383,17 @@ decides every cue in `CUE_EMOJI`.
 - **The pack** holds `dist/avatar/index.js` (one bundle, for browsers and Node alike),
   `dist/avatar/index.d.ts`, `dist/avatar/wasm/` (`p2l_runtime.wasm`, its `LICENSE` and
   `THIRD_PARTY_LICENSES.md`), and `LICENSE-psd2live` and `THIRD_PARTY.md` beside the AGPL
-  `LICENSE`. Bun keeps the runtime's `new URL` as written and copies nothing, so the build copies
-  `wasm/` beside the bundle, and `checkAssetUrls` fails a pack whose bundle names a file that
-  isn't there.
+  `LICENSE`. rolldown keeps the runtime's `new URL` as written and copies nothing, so the build
+  copies `wasm/` beside the bundle, and `checkAssetUrls` fails a pack whose bundle names a file
+  that isn't there.
 
 ---
 
 ## Building and releasing
 
 ```bash
-bun run build:sdk     # bundles dist/index.js, dist/react/index.js, dist/avatar/index.js and its runtime + .d.ts into packages/sdk/pack/
-bun run pack:sdk      # stages packages/sdk/pack/ and packs laplace.live-eidolon-sdk-<version>.tgz
+pnpm build:sdk        # bundles dist/index.js, dist/react/index.js, dist/avatar/index.js and its runtime + .d.ts into packages/sdk/pack/
+pnpm pack:sdk         # stages packages/sdk/pack/ and packs laplace.live-eidolon-sdk-<version>.tgz
 ```
 
 `@laplace.live/eidolon-sdk` is versioned and tagged independently from the `laplace-eidolon` /

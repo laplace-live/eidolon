@@ -61,9 +61,9 @@ export async function openTable(dbPath: string, tableName: string): Promise<lanc
 }
 
 /** How a checkout runs the CLI commands that hints name. */
-export const CLI_LAUNCHER = "bun run";
+export const CLI_LAUNCHER = "pnpm";
 
-/** `bun run <command> --persona <id>`: what a message tells the user to run. */
+/** `pnpm <command> --persona <id>`: what a message tells the user to run. */
 export function ingestHint(command: string, persona: string = activePersona().id): string {
   return `${CLI_LAUNCHER} ${command} --persona ${persona}`;
 }

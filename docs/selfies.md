@@ -147,7 +147,7 @@ so the file names are for the code and for whoever reads this — only
 To force one, name it explicitly — that path bypasses the clock:
 
 ```bash
-bun run laplace-generate-image -i personas/milky-green/references/outfits/night.png
+pnpm laplace-generate-image -i personas/milky-green/references/outfits/night.png
 ```
 
 ## Friends
@@ -173,8 +173,8 @@ order the prompt tells the model to expect.
 To see what a change actually produces, without a WebRTC call:
 
 ```bash
-bun run laplace-generate-image -o /tmp/out.png
-bun run laplace-generate-image --friend 七海Nana7mi -o /tmp/group.png
+pnpm laplace-generate-image -o /tmp/out.png
+pnpm laplace-generate-image --friend 七海Nana7mi -o /tmp/group.png
 ```
 
 With no arguments it uses the same bundled references and the same built-in

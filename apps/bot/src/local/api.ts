@@ -1,6 +1,6 @@
 // The local web app's admin API on the wire, under /api/local: what apps/bot/src/local serves and
 // apps/web imports with `import type`. Its only import is @eidolon/chat's types, which are
-// browser-safe and erased, so the SPA's typecheck sees no Bun or Node.
+// browser-safe and erased, so the SPA's typecheck sees no Node.
 import type {
   Attachment,
   ChatDisplay,

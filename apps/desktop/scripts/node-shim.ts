@@ -46,7 +46,7 @@ export function shimPnpm(payload: string): string {
   return join(payload, NODE_SHIM, "node_modules", "node_modules", "pnpm");
 }
 
-/** The folder of the pnpm package apps/desktop pins, as bun installed it. */
+/** The folder of the pnpm package apps/desktop pins, as the workspace's pnpm installed it. */
 export function pnpmPackage(): string {
   // Its exports map "." to its package.json, and nothing else.
   return dirname(createRequire(join(DESKTOP, "package.json")).resolve("pnpm"));
@@ -81,7 +81,13 @@ export function stageNodeShim(payload: string, platform: Platform): void {
   // A checkout's modes follow the umask it was made under.
   for (const name of POSIX_LAUNCHERS) chmodSync(join(bin, name), 0o755);
   const pnpm = shimPnpm(payload);
-  cpSync(pnpmPackage(), pnpm, { recursive: true, dereference: true });
+  const source = pnpmPackage();
+  // Its own node_modules holds only the links the workspace's install made to its commands.
+  cpSync(source, pnpm, {
+    recursive: true,
+    dereference: true,
+    filter: (path) => path !== join(source, "node_modules"),
+  });
   prunePnpmForeignNativePackages(pnpm, platform.os, platform.cpu);
   // The bundled packages' commands, which pnpm never runs: node-gyp's is in dist/node-gyp-bin.
   rmSync(join(pnpm, "dist", "node_modules", ".bin"), { recursive: true, force: true });

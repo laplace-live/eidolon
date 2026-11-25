@@ -2,8 +2,8 @@ import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 const root = import.meta.dirname;
-// Every test file runs against the repo's persona templates and an empty data home, with Bun's
-// toStartWith, toEndWith and toBeNumber.
+// Every test file runs against the repo's persona templates and an empty data home, with the
+// matchers toStartWith, toEndWith and toBeNumber.
 const setupFiles = [
   resolve(root, "packages/config/test/isolated-home.ts"),
   resolve(root, "packages/config/test/matchers.ts"),
@@ -13,7 +13,7 @@ export default defineConfig({
   // No .env reaches a test: load-env.ts is the only reader, and tests never import it.
   envDir: false,
   test: {
-    // A mock keeps its calls until the test resets it, as under bun:test.
+    // A mock keeps its calls until the test resets it.
     clearMocks: false,
     // Test files run side by side, one per core, so a test's time includes the others' load: tests
     // that take 1–2 s alone (bash output, 2,000 skill folders, a tokenizer parity sample) passed

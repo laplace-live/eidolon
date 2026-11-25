@@ -200,7 +200,7 @@ describe("the local entries", () => {
 });
 
 describe("the SPA's leaves", () => {
-  test("import nothing, so the browser build sees no Bun or Node", () => {
+  test("import nothing, so the browser build sees no Node", () => {
     for (const leaf of ["packages/ingest/src/progress.ts", "apps/cli/src/job.ts"]) {
       const text = readFileSync(join(ROOT, leaf), "utf8");
       expect([leaf, scan(join(ROOT, leaf)), /^\s*import\s/m.test(text)]).toEqual([leaf, [], false]);

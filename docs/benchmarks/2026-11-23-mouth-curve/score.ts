@@ -4,7 +4,7 @@
 // of voiced frames that leave her mouth shut and its closures a second, averaged over the files.
 // Each file is decoded by ffmpeg, which must be on PATH.
 //
-//   bun docs/benchmarks/2026-11-23-mouth-curve/score.ts <audio file>…
+//   node docs/benchmarks/2026-11-23-mouth-curve/score.ts <audio file>…
 import { spawnSync } from "node:child_process";
 import {
   loudnessOf,
@@ -67,7 +67,7 @@ function scoreOf(frames: readonly number[], openings: readonly number[]) {
 
 const files = process.argv.slice(2);
 if (files.length === 0) {
-  console.error("usage: bun docs/benchmarks/2026-11-23-mouth-curve/score.ts <audio file>…");
+  console.error("usage: node docs/benchmarks/2026-11-23-mouth-curve/score.ts <audio file>…");
   process.exit(2);
 }
 const curves = { MOUTH_CURVE, "loudness map alone": PLAIN };

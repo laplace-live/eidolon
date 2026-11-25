@@ -2,7 +2,9 @@
 // state builder, questions, model and threshold. Writes results.json and exits 1 when any labeled
 // turn lands on the wrong side of the threshold. About $0.001 of Jev calls.
 //
-//   bun docs/benchmarks/2026-11-07-timeline-question/score.ts
+//   node docs/benchmarks/2026-11-07-timeline-question/score.ts
+import { readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import {
   findDotenv,
@@ -41,7 +43,7 @@ interface Row {
 }
 
 logToStderr();
-loadDotenv(findDotenv(import.meta.dir), { override: true });
+loadDotenv(findDotenv(import.meta.dirname), { override: true });
 installSettings();
 const apiKey = process.env.OPENROUTER_API_KEY;
 if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
@@ -95,8 +97,12 @@ function summarize(rows: readonly Row[]) {
   };
 }
 
-const here = import.meta.dir;
-const { turn: turns } = Bun.TOML.parse(await Bun.file(join(here, "turns.toml")).text()) as {
+const here = import.meta.dirname;
+// apps/cli's TOML parser, which reads the retrieval gate's own turns.toml.
+const { parse: parseToml } = createRequire(join(here, "../../../apps/cli/package.json"))(
+  "smol-toml",
+) as typeof import("smol-toml");
+const { turn: turns } = parseToml(await readFile(join(here, "turns.toml"), "utf8")) as unknown as {
   turn: Turn[];
 };
 await ask({ text: "你好" }); // opens the connection, as a live session has
@@ -117,7 +123,7 @@ const result = {
   },
   turns: rows.map(({ ms: _ms, model: _model, ...row }) => row),
 };
-await Bun.write(join(here, "results.json"), `${JSON.stringify(result, null, 1)}\n`);
+await writeFile(join(here, "results.json"), `${JSON.stringify(result, null, 1)}\n`);
 
 console.log(`model ${result.model.join(", ")}, threshold ${TIMELINE_THRESHOLD}`);
 for (const [name, summary] of Object.entries(result.sets)) console.log(name, summary);

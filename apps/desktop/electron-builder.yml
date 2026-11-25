@@ -1,4 +1,4 @@
-# The base config. `bun run package:desktop` builds from it unsigned, at version 0.0.0-dev
+# The base config. `pnpm package:desktop` builds from it unsigned, at version 0.0.0-dev
 # (scripts/package.ts).
 appId: live.laplace.eidolon
 productName: Eidolon

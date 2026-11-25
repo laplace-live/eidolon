@@ -101,9 +101,15 @@ async function bar(
   const files = ["base.json", "cand.json", "out.json"].map((name) => join(dir, name));
   await writeFile(files[0] as string, JSON.stringify(baseline));
   await writeFile(files[1] as string, JSON.stringify(candidate));
-  // e2e-compare.ts is a Bun script.
   const run = spawnProcess(
-    ["bun", SCRIPT, files[0] as string, files[1] as string, "--json", files[2] as string],
+    [
+      process.execPath,
+      SCRIPT,
+      files[0] as string,
+      files[1] as string,
+      "--json",
+      files[2] as string,
+    ],
     { stdout: "ignore", stderr: "inherit" },
   );
   await run.exited;

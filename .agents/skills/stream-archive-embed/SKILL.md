@@ -33,11 +33,11 @@ The index the bot reads is `<home>/personas/milky-green/index/`, unless
 ## 1. Inspect local state
 
 - Read `AGENTS.md`, `docs/personas.md`, and the help of each command used below
-  (`bun run laplace-pipeline --help`).
+  (`pnpm laplace-pipeline --help`).
 - A batch in `lists/batches/` without its `<stem>.done.json` is unfinished work,
   even if it has downloads or transcripts. Keep its original path and retry it
   before the newly collected batch. Only the pipeline writes `.done.json`.
-- Run `bun install` when `node_modules/` is missing. The tools need no Python.
+- Run `pnpm install` when `node_modules/` is missing. The tools need no Python.
 - Check `ffmpeg` and `ffprobe`. Audio longer than Soniox's 300-minute limit is
   sliced with ffmpeg and fails without it; without ffprobe, durations come from
   the `.info.json`. yt-dlp needs no setup: the tools install and update their own
@@ -64,7 +64,7 @@ List the series with yt-dlp into a capture file outside `lists/`, where every
 
 ```bash
 capture="${TMPDIR:-/tmp}/stream-archive-ids.txt"
-bun run laplace-download --persona milky-green \
+pnpm laplace-download --persona milky-green \
   --expand 'https://space.bilibili.com/2132180406/lists/2484684?type=series' > "$capture"
 ```
 
@@ -108,7 +108,7 @@ Run `laplace-prepare-batch` with the complete capture and the actual displayed
 total:
 
 ```bash
-bun run laplace-prepare-batch --persona milky-green "$capture" \
+pnpm laplace-prepare-batch --persona milky-green "$capture" \
   --expected-count <displayed-total> \
   --source 'https://space.bilibili.com/2132180406/lists/2484684?type=series'
 ```
@@ -143,7 +143,7 @@ export `DB` as `knowledge.index` when that is set and `LANCEDB_PATH` is not.
 ```bash
 home="${EIDOLON_HOME:-$HOME/.laplace/eidolon}"; home="${home/#\~/$HOME}"
 DB="${DB:-${LANCEDB_PATH:-$home/personas/milky-green/index}}"; DB="${DB/#\~/$HOME}"
-DB="$DB" STREAMS="$home/sources/milky-green/streams" bun -e '
+DB="$DB" STREAMS="$home/sources/milky-green/streams" node --input-type=module -e '
 import { iterStreams } from "./packages/ingest/src/index.ts";
 import { openTable } from "./packages/retrieval/src/index.ts";
 const { DB, STREAMS } = process.env;
@@ -177,7 +177,7 @@ from step 3:
 set -o pipefail
 home="${EIDOLON_HOME:-$HOME/.laplace/eidolon}"; home="${home/#\~/$HOME}"
 batch_path="$home/sources/milky-green/lists/batches/videos-2026-09-08-093000.txt"
-bun run laplace-pipeline --persona milky-green "$batch_path" --abort-on-error 2>&1 \
+pnpm laplace-pipeline --persona milky-green "$batch_path" --abort-on-error 2>&1 \
   | tee -a "${batch_path%.txt}.log"
 ```
 
@@ -217,7 +217,7 @@ hold no speech. Exit zero without it means something is missing.
 Check each BV, part by part, with a dry run, which only reads:
 
 ```bash
-bun run laplace-pipeline --persona milky-green "$batch_path" --dry-run --json \
+pnpm laplace-pipeline --persona milky-green "$batch_path" --dry-run --json \
   | jq -c --arg b "$(basename "$batch_path" .txt)" \
     'select(.type == "plan" and .video.batch == $b) | .video
      | {id, download, transcribe, refine, indexed}'

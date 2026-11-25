@@ -77,10 +77,8 @@ jobs:
             exit 1
           fi
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: pnpm/action-setup@v6
         timeout-minutes: 5
-        with:
-          bun-version-file: package.json
 
       - uses: actions/setup-node@v7
         timeout-minutes: 5
@@ -91,20 +89,20 @@ jobs:
       # rewrite the electron-builder the signing step runs with the secrets.
       - id: install
         timeout-minutes: 10
-        run: bun install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       # Stages this target's backend in apps/desktop/.stage, then builds main, the preload and the
       # shell pages.
       - id: build
         timeout-minutes: 20
-        run: bun run build:desktop
+        run: pnpm build:desktop
 
       # Unsigned, at 0.0.0-dev: ad hoc on macOS and never with a keychain identity
       # (scripts/package.ts), NSIS on Windows.
       - id: package
         if: env.SIGNED != 'true'
         timeout-minutes: 20
-        run: bun run package:desktop -c.compression=store
+        run: pnpm package:desktop -c.compression=store
 
       # electron-builder's notarization reads the App Store Connect key from a file.
       - name: Materialize the App Store Connect key
@@ -154,13 +152,13 @@ jobs:
         timeout-minutes: 15
         run: node apps/desktop/scripts/signed-check.ts
 
-      # What the payload holds, pinned to bun.lock; its natives loading from it; on Windows the VC++
-      # runtime beside them and every DLL signed by Microsoft or listed to sign; and, packaged after
-      # it, the app holding it file for file.
+      # What the payload holds, pinned to pnpm-lock.yaml; its natives loading from it; on Windows the
+      # VC++ runtime beside them and every DLL signed by Microsoft or listed to sign; and, packaged
+      # after it, the app holding it file for file.
       - name: The staged payload
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 15
-        run: bun run test apps/desktop/test/stage.test.ts
+        run: pnpm test apps/desktop/test/stage.test.ts
         env:
           EIDOLON_REQUIRE_STAGE: "1"
 
@@ -192,7 +190,7 @@ jobs:
         name: The packaged smoke
         if: ${{ !cancelled() && (steps.package.outcome == 'success' || steps.signed.outcome == 'success') }}
         timeout-minutes: 20
-        run: bun run smoke:desktop
+        run: pnpm smoke:desktop
         env:
           EIDOLON_DESKTOP_BACKGROUND: "1"
 

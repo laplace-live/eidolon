@@ -41,7 +41,7 @@ afterEach(async () => {
 const environment = (): NodeJS.ProcessEnv => environmentIn(dir);
 const runs = () => runsOn(home);
 
-/** A terminal's server on the data home, as `bun run app` runs it, which records where it listens. */
+/** A terminal's server on the data home, as `pnpm app` runs it, which records where it listens. */
 const terminalServer = (port: number, keepAliveMs?: number) =>
   terminalServerOn({ script, home, dir, port, keepAliveMs }, cleanups);
 

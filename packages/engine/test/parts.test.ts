@@ -326,8 +326,8 @@ describe("personaParts", () => {
     }
     expect(calls.gate).toBe(0);
     expect(messages("INFO").filter((line) => line.includes("no LanceDB index"))).toEqual([
-      `Stream archive disabled: no LanceDB index at /index/${PERSONA}. Run \`bun run laplace-ingest-streams --persona ${PERSONA}\` to build it.`,
-      `Persona facts disabled: no LanceDB index at /index/${PERSONA}. Run \`bun run laplace-ingest-facts --persona ${PERSONA}\` to build it.`,
+      `Stream archive disabled: no LanceDB index at /index/${PERSONA}. Run \`pnpm laplace-ingest-streams --persona ${PERSONA}\` to build it.`,
+      `Persona facts disabled: no LanceDB index at /index/${PERSONA}. Run \`pnpm laplace-ingest-facts --persona ${PERSONA}\` to build it.`,
     ]);
 
     exists = true;

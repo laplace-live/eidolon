@@ -120,7 +120,7 @@ describe("selfieResponse", () => {
         : selfieResponse(decodeURIComponent(id), store);
     });
     try {
-      // Bun.serve sends a byte body's length; srvx on Node sends no length, the body chunked.
+      // srvx sends no length for a byte body, which it chunks.
       const hit = await fetch(`${server.url}/api/selfie/abc.png`);
       expect([
         hit.status,

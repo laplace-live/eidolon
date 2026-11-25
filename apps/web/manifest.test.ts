@@ -1,4 +1,4 @@
-// The image runs `bun install --production`, which installs every workspace's `dependencies`: the
+// The image runs `pnpm install --prod`, which installs every workspace's `dependencies`: the
 // web app's whole toolchain stays in devDependencies, so none of it ships.
 import { expect, test } from "vitest";
 import manifest from "./package.json";
