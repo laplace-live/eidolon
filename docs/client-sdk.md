@@ -273,11 +273,11 @@ call's turns. The local app's Studio previews a persona's models with it.
   (`idle`, `talk`, `nod`, `shake`: the owner's clip, else the clip whose group, name or id is
   `Idle`, `Talk`, `Nod` or `Shake`), and `look`, how far her gaze turns her (0 to 1, 1 unless
   given).
-- **A model of another kind** implements `AvatarModel`, which besides drawing and playing scales
-  how far gaze turns her (`lookStrength`), names the parameters a role such as `AngleX` moves
-  (`roleParameters`), and holds parameters over its clips, expressions and outfit (`hold`, each
-  `ParameterHold` moving one from what the layers below give it toward a value by a weight, a later
-  hold over an earlier one).
+- **`AvatarModel`**, the adapter the stage drives, whose one kind is `psd2live`, besides drawing
+  and playing scales how far gaze turns her (`lookStrength`), names the parameters a role such as
+  `AngleX` moves (`roleParameters`), and holds parameters over its clips, expressions and outfit
+  (`hold`, each `ParameterHold` moving one from what the layers below give it toward a value by a
+  weight, a later hold over an earlier one).
 - **Errors** are `AvatarError`s with a `code`: `runtime` (the runtime didn't load), `rig` (the file
   isn't a rig it reads, with the runtime's reason), `webgl` (no WebGL 1, or a mesh past 65,535
   vertices without `OES_element_index_uint`), `lost` (the browser took the context back) and

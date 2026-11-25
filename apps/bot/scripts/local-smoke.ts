@@ -3685,8 +3685,9 @@ async function chatCallWalk(walk: Walk): Promise<void> {
       hungUpAt = Date.now();
     } finally {
       releaseOffer();
-      // unroute doesn't wait for a handler still running: Playwright continues its route itself,
-      // and the handler's own continue then throws "Route is already handled!".
+      // unroute doesn't wait for a handler still running (the "default" behavior of
+      // https://playwright.dev/docs/api/class-page#page-unroute-all): Playwright continues its
+      // route itself, and the handler's own continue then throws "Route is already handled!".
       await Promise.allSettled(passing);
       await page.unroute("**/api/offer", holdOffer);
     }

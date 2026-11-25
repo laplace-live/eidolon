@@ -601,11 +601,12 @@ therefore refused at import, as `invalid-model` with that reason, and a refresh 
   - `avatar-mouth.test.ts` pins `MOUTH_CURVE` and checks it on synthetic voices;
     [its benchmark](benchmarks/2026-11-23-mouth-curve/README.md) scores it on her voice messages.
   - `avatar-framing.test.ts`, and `avatar-stage.test.ts`, which drives the stage with a fake model
-    and a clock the test moves: among the rest, a setup's look applied once each time it is shown,
-    a mood's parameters faded in, to another mood's values and out on the runtime's ease, a lent
+    and a clock the test moves: among the rest, a setup's look applied once each time it is shown, a
+    mood's parameters faded in, to another mood's values and out on the runtime's ease, a lent
     mood's first, and set at once by a setup shown in place, and a nod and a shake with no clip, on
-    their roles' parameters, replacing one still playing, over a mood's hold, and left out under
-    reduced motion but for `gesture()`.
+    their roles' parameters, replacing one still playing, a clip a page played on the gesture layer
+    included, held in place by a pause, over a mood's hold, and left out under reduced motion but
+    for `gesture()`.
   - `avatar-psd2live.test.ts` runs the vendored runtime on the test rig: its SHA-256, exports and
     ABI; the rig's inventory; clips found by group; a role's parameters; lip sync; two expressions
     at once; ids it lacks; the head's bounds and a hit test; refusals with the runtime's reasons;
