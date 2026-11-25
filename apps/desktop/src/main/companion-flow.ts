@@ -308,6 +308,8 @@ export class Companion {
   /** Settings' Reset Position: her first place, saved, and her window moved there if she has one. */
   resetPlace(): CompanionState {
     this.#feet = null;
+    // Before she is drawn, the shape her page then says stands her there afresh.
+    this.#firstPlace = this.#page !== "drawn";
     this.#save({ feet: null });
     if (this.#io.bounds() !== null) this.#setBounds(this.#placed().bounds);
     this.#io.log.info(COMPANION_LINES.placeReset);

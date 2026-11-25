@@ -526,10 +526,11 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
   pointer, let clicks through again.
 - **A drag** is a left press on her that moves past 4 px: main moves her window by the pointer's
   travel since the press, from the screen points her page sends (`drag`), never by polling the
-  cursor, and keeps `MIN_SHOWN` of it on the display the drag started on. A drop sets and saves her
-  feet; one with her feet within 24 DIP of the work area's bottom stands her on it. A new size or
-  shape during a drag stands her under the pointer, and the rest of the drag keeps her new size. A
-  shorter press is a tap, which her page alone answers.
+  cursor, and keeps `MIN_SHOWN` of it on the display under the pointer, so she crosses from one
+  display to the next with it. A drop sets and saves her feet; one with her feet within 24 DIP of
+  the work area's bottom stands her on it. A new size or shape during a drag stands her under the
+  pointer, and the rest of the drag keeps her new size. A shorter press is a tap, which her page
+  alone answers.
 - **Her menu**, on a right-click on her, is main's own native menu at the cursor
   (`companionMenu` in `menus.ts`, in the shell's language), from the state her page gives it:
   **Call**, or **Hang Up** and **Mute Microphone** (**Unmute Microphone** while it is off) while a

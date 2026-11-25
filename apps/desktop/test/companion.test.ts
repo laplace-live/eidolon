@@ -246,6 +246,19 @@ describe("where she stands", () => {
     });
   });
 
+  test("a drag crosses onto the next display with the pointer, and is kept shown on the display under it", () => {
+    const displays = [laptopDisplay, externalDisplay];
+    const start = { window: { x: 1000, y: 300, ...size }, pointer: { x: 1100, y: 500 } };
+    expect(dragged(start, { x: 2200, y: 500 }, displays)).toEqual({ x: 2100, y: 300, ...size });
+    // Held by her head, down to the external display's bottom edge: a quarter of her stays on it.
+    const held = { window: { x: 2100, y: 300, ...size }, pointer: { x: 2200, y: 310 } };
+    expect(dragged(held, { x: 2200, y: 1214 }, displays)).toEqual({
+      x: 2100,
+      y: 1215 - 120,
+      ...size,
+    });
+  });
+
   test("a drop within SNAP_DIP of the work area's bottom stands her on it; farther, where it fell", () => {
     const bottom = laptop.y + laptop.height;
     const near = { x: 500, y: bottom - 20 - size.height, ...size };

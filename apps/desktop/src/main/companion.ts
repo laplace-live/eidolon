@@ -236,7 +236,7 @@ export function keepShown(
 
 /**
  * Her window as a drag leaves it: moved by the pointer's travel since the drag's start, kept shown on
- * the display it started on.
+ * the display under the pointer, so that she crosses from one display to the next with it.
  */
 export function dragged(
   start: { readonly window: Rectangle; readonly pointer: Point },
@@ -250,7 +250,7 @@ export function dragged(
       y: Math.round(start.window.y + pointer.y - start.pointer.y),
     },
     displays,
-    displayOf(start.window, displays),
+    areaAt(pointer, displays),
   );
 }
 

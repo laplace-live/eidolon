@@ -116,7 +116,7 @@ export const BRIDGE = {
   popOut: "eidolon:pop-out",
   /** App page → main, invoked with nothing: stands her at her first place, saved; then the CompanionState. */
   resetCompanionPlace: "eidolon:reset-companion-place",
-  /** App page → main, invoked with a ModelRef: true once the model's file is shown in Finder or Explorer. */
+  /** App page → main, invoked with a ModelRef: shows the model's file in Finder or Explorer; whether it was there. */
   revealModel: "eidolon:reveal-model",
   /** App page → main, with nothing: it listens for a port to the companion's page. */
   linkCompanion: "eidolon:link-companion",

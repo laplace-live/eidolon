@@ -399,11 +399,12 @@ describe("her window", () => {
 
   test("a drag goes past a display's edge until a quarter of her shows, and the drop keeps her there", () => {
     const { flow, values } = shownCompanion();
-    flow.drag({ phase: "start", x: 1387, y: 600 });
-    flow.drag({ phase: "move", x: 1387, y: 1000 });
-    flow.drag({ phase: "end", x: 1387, y: 1300 });
+    // Held by her head, to the laptop's bottom edge.
+    flow.drag({ phase: "start", x: 1387, y: 430 });
+    flow.drag({ phase: "move", x: 1387, y: 800 });
+    flow.drag({ phase: "end", x: 1387, y: 981 });
     const below = { x: 1286, y: 982 - 120, width: 202, height: 480 };
-    expect(values("setBounds")).toEqual([{ ...FIRST, y: 820 }, below]);
+    expect(values("setBounds")).toEqual([{ ...FIRST, y: 790 }, below]);
     expect(values("save").at(-1)).toEqual({
       ...DEFAULT_COMPANION,
       on: true,
@@ -423,6 +424,19 @@ describe("her window", () => {
     const off = companion({ feet: { x: 300, y: 900 } });
     off.flow.resetPlace();
     expect(off.calls).toEqual([["save", { ...DEFAULT_COMPANION, feet: null }]]);
+  });
+
+  test("Reset Position before she is drawn stands her at her first place for the shape her page then says", () => {
+    const { flow, values } = companion({ on: true, feet: { x: 300, y: 900 } });
+    flow.appPage();
+    flow.resetPlace();
+    flow.shape({ kind: "model", aspect: 1 });
+    expect(values("setBounds").at(-1)).toEqual({
+      x: 1512 - 24 - 480,
+      y: 420,
+      width: 480,
+      height: 480,
+    });
   });
 
   test("a drag moves her with the pointer, and a drop near the bottom stands her on it and keeps her feet", () => {

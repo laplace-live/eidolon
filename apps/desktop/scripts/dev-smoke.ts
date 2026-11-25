@@ -2132,7 +2132,8 @@ async function modelShown(walk: Walk, driven: Driven, model: string, step: Step)
   await page.goto(`eidolon-app://app/personas/${PERSONA}/appearance`);
   const from = smoke.log("main").length;
   await page.getByRole("button", { name: "Model Options", exact: true }).first().click();
-  await page.getByRole("menuitem", { name: "Show in Finder", exact: true }).click();
+  const reveal = process.platform === "win32" ? "Show in Explorer" : "Show in Finder";
+  await page.getByRole("menuitem", { name: reveal, exact: true }).click();
   const file = join(smoke.run.home, "personas", PERSONA, "models", model, "model.p2lrt");
   const line = `Eidolon: background mode didn't show ${file} in the file manager`;
   const shown = await smoke.waitForLine("main", line, { from, timeoutMs: 5000 }).catch(() => null);
