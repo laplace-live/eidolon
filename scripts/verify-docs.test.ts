@@ -98,24 +98,18 @@ describe("verifyDocs", () => {
 
   test("normalizes CRLF line endings when parsing fences, headings, links, and changesets", () => {
     const root = makeFixtureRepo();
-    writeFixture(
-      root,
-      "README.md",
-      "# Fixture\r\n\r\n<!-- Electron 45 floors -->\r\n\r\n- macOS 13+\r\n",
-    );
-    writeFixture(
-      root,
-      "AGENTS.md",
-      [
-        "# AGENTS.md",
-        "",
-        "## Index",
-        "",
-        "- guide → [guide.md](docs/guide.md#details)",
-        "- desktop: `apps/desktop`, `pnpm test`, `pnpm doc-check`",
-        "",
-      ].join("\r\n"),
-    );
+    const readmeCrlf = "# Fixture\r\n\r\n<!-- Electron 45 floors -->\r\n\r\n- macOS 13+\r\n";
+    const agentsCrlf = [
+      "# AGENTS.md",
+      "",
+      "## Index",
+      "",
+      "- guide → [guide.md](docs/guide.md#details)",
+      "- desktop: `apps/desktop`, `pnpm test`, `pnpm doc-check`",
+      "",
+    ].join("\r\n");
+    writeFixture(root, "README.md", readmeCrlf);
+    writeFixture(root, "AGENTS.md", agentsCrlf);
     writeFixture(
       root,
       ".changeset/good-fix.md",
@@ -137,7 +131,10 @@ describe("verifyDocs", () => {
         "",
       ].join("\r\n"),
     );
-    expect(verifyDocs(root).failures).toEqual([
+    const result = verifyDocs(root);
+    expect(result.agentsBytes).toBe(Buffer.byteLength(agentsCrlf));
+    expect(result.readmeBytes).toBe(Buffer.byteLength(readmeCrlf));
+    expect(result.failures).toEqual([
       "docs/guide.md: link target does not exist → docs/still-caught.md",
     ]);
   });

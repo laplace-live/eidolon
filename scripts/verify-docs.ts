@@ -118,7 +118,8 @@ export function verifyDocs(root: string): VerifyDocsResult {
   const warnings: string[] = [];
   const fail = (msg: string) => failures.push(msg);
   const warn = (msg: string) => warnings.push(msg);
-  const read = (rel: string) => readFileSync(join(root, rel), "utf8").replace(/\r\n/g, "\n");
+  const readRaw = (rel: string) => readFileSync(join(root, rel), "utf8");
+  const read = (rel: string) => readRaw(rel).replace(/\r\n/g, "\n");
 
   const docsDir = join(root, "docs");
   const docsEntries = existsSync(docsDir)
@@ -131,8 +132,9 @@ export function verifyDocs(root: string): VerifyDocsResult {
   const agentCorpus = ["AGENTS.md", ...docsEntries].map(read).join("\n");
 
   // 1. Size budgets. Report the fattest sections of AGENTS.md so overflow points to what to extract.
-  const agentsMd = read("AGENTS.md");
-  const agentsBytes = Buffer.byteLength(agentsMd);
+  const agentsRaw = readRaw("AGENTS.md");
+  const agentsMd = agentsRaw.replace(/\r\n/g, "\n");
+  const agentsBytes = Buffer.byteLength(agentsRaw);
   if (agentsBytes > AGENTS_BUDGET) {
     const sections: { heading: string; bytes: number }[] = [];
     for (const line of agentsMd.split("\n")) {
@@ -152,8 +154,9 @@ export function verifyDocs(root: string): VerifyDocsResult {
     );
   }
 
-  const readmeMd = read("README.md");
-  const readmeBytes = Buffer.byteLength(readmeMd);
+  const readmeRaw = readRaw("README.md");
+  const readmeMd = readmeRaw.replace(/\r\n/g, "\n");
+  const readmeBytes = Buffer.byteLength(readmeRaw);
   if (readmeBytes > README_BUDGET) {
     fail(
       `README.md is ${readmeBytes} B, over the ${README_BUDGET} B budget. Move detail into docs/.`,
