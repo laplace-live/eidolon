@@ -222,6 +222,8 @@ class TaskRun {
   #ceiling: number;
   /** Ceiling learned from an overflow on this run/model (never from static config). */
   #learned: number | null = null;
+  /** An overflowed request that paused before compacting, so Continue compacts first. */
+  #pendingCompact: { readonly inputTokens: number } | null = null;
   /** The last request's input as its provider counted it, and as estimated. */
   #counted: { readonly reported: number; readonly estimated: number } | null = null;
 
@@ -254,9 +256,25 @@ class TaskRun {
       if (this.#left.aborted) return { status: "cancelled" };
       outcome = { status: "cancelled" };
     }
+    const model = this.#modelId();
     await this.#append(
       outcome.status === "paused"
-        ? { type: "pause", reason: outcome.reason, detail: outcome.detail }
+        ? {
+            type: "pause",
+            reason: outcome.reason,
+            detail: outcome.detail,
+            ...(this.#learned !== null && model !== undefined
+              ? { learned: { tokens: this.#learned, model } }
+              : {}),
+            ...(this.#pendingCompact !== null
+              ? {
+                  compact: {
+                    inputTokens: this.#pendingCompact.inputTokens,
+                    ...(model === undefined ? {} : { model }),
+                  },
+                }
+              : {}),
+          }
         : { type: "end", outcome },
       true,
     );
@@ -268,16 +286,24 @@ class TaskRun {
     const stored = await this.#request.store.entries();
     if (stored.length === 0) throw new Error(`Task ${this.#request.id} has no brief`);
     this.#entries.push(...stored);
-    const currentModel = this.#request.meter.modelId?.();
-    if (
-      this.#request.limits.contextTokens <= 0 &&
-      currentModel !== undefined &&
-      currentModel !== ""
-    ) {
-      for (const entry of this.#entries) {
-        if (entry.type === "compaction" && entry.learned?.model === currentModel) {
-          this.#recordCeiling(entry.learned.tokens);
-        }
+    const currentModel = this.#modelId();
+    for (const entry of this.#entries) {
+      if (
+        this.#request.limits.contextTokens <= 0 &&
+        currentModel !== undefined &&
+        (entry.type === "compaction" || entry.type === "pause") &&
+        entry.learned?.model === currentModel
+      ) {
+        this.#recordCeiling(entry.learned.tokens);
+      }
+      if (entry.type === "compaction" || entry.type === "assistant") {
+        this.#pendingCompact = null;
+      } else if (
+        entry.type === "pause" &&
+        entry.compact !== undefined &&
+        entry.compact.model === currentModel
+      ) {
+        this.#pendingCompact = { inputTokens: entry.compact.inputTokens };
       }
     }
     this.#turns = stored.filter((entry) => entry.type === "assistant").length;
@@ -515,14 +541,21 @@ class TaskRun {
   async #ask(): Promise<Reply | TaskOutcome> {
     let view = this.#view();
     const pendingSlice = taskContext(this.#entries).compaction?.slice !== undefined;
+    const forcedCompact = this.#pendingCompact;
     if (
       pendingSlice ||
+      forcedCompact !== null ||
       (Number.isFinite(this.#ceiling) && view.sized > compactAbove(this.#ceiling))
     ) {
-      if (await this.#compact(view.sized)) {
+      const targetTokens =
+        forcedCompact === null ? view.sized : Math.max(view.sized, forcedCompact.inputTokens);
+      if (await this.#compact(targetTokens)) {
         const held = this.#held();
         if (held !== null) return held;
         view = this.#view();
+      } else if (forcedCompact !== null && !pendingSlice) {
+        this.#pendingCompact = null;
+        return { status: "failed", error: "The model's context window was exceeded" };
       }
     }
     let compacted = false;
@@ -541,9 +574,11 @@ class TaskRun {
           const output = this.#request.meter.lastOutputTokens?.() ?? null;
           const total = input + (output !== null && output > 0 ? output : 0);
           this.#recordCeiling(total);
+          this.#pendingCompact = { inputTokens: input };
           const heldBefore = this.#held();
           if (heldBefore !== null) return heldBefore;
           if (compacted || !(await this.#compact(input))) {
+            this.#pendingCompact = null;
             return { status: "failed", error: "The model's context window was exceeded" };
           }
           compacted = true;
@@ -557,7 +592,11 @@ class TaskRun {
         if (this.#signal.aborted || compacted || !isContextOverflow(error)) throw error;
         compacted = true;
         this.#recordCeiling(overflowTokens(error) ?? view.sized);
-        if (!(await this.#compact(view.sized))) throw error;
+        this.#pendingCompact = { inputTokens: view.sized };
+        if (!(await this.#compact(view.sized))) {
+          this.#pendingCompact = null;
+          throw error;
+        }
         const held = this.#held();
         if (held !== null) return held;
         view = this.#view();
@@ -610,6 +649,11 @@ class TaskRun {
     return reply;
   }
 
+  #modelId(): string | undefined {
+    const raw = this.#request.meter.modelId?.();
+    return raw !== undefined && raw !== "" ? raw : undefined;
+  }
+
   #recordCeiling(tokens: number): void {
     if (!(tokens > 0) || !Number.isFinite(tokens)) return;
     this.#ceiling = Math.min(this.#ceiling, tokens);
@@ -627,8 +671,7 @@ class TaskRun {
       context.blocks[0]?.seq === context.compaction.firstKeptSeq
         ? context.compaction.slice
         : undefined;
-    const rawModel = this.#request.meter.modelId?.();
-    const nonEmptyModel = rawModel !== undefined && rawModel !== "" ? rawModel : undefined;
+    const nonEmptyModel = this.#modelId();
     const window =
       Number.isFinite(this.#ceiling) && this.#ceiling > 0 ? this.#ceiling : tokensBefore;
     const first = Math.max(
@@ -738,6 +781,7 @@ class TaskRun {
           : {}),
       });
       this.#counted = null;
+      this.#pendingCompact = null;
       start = chunk.end;
       offset = chunk.nextOffset;
     }

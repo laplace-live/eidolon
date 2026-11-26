@@ -743,4 +743,94 @@ describe("runTask's unpriced pause", () => {
     expect(switchedOutcome.outcome).toEqual({ status: "succeeded", report: "done" });
     expect(switchedModelMind.summaryRequests).toHaveLength(0);
   });
+
+  test("persists learned ceiling and pending compaction when model_context_window_exceeded pauses before compacting", async () => {
+    const cut: readonly MindChunk[] = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ];
+    // Part A: overflow + spend pause on same turn; view.sized (30k) <= compactAbove(50k) = 37.5k,
+    // so Continue must still honor compact before resending, then compact proactively from 50k.
+    const storeA = history();
+    const meterA = meter(0);
+    let step = 0;
+    const mind = new ScriptedMind(
+      [cut, calls([call("c-d", "read", { value: "d" })]), says("done")],
+      {
+        summaries: [says("SUMMARY-1"), says("SUMMARY-2")],
+        after: () => {
+          step++;
+          if (step === 1) {
+            meterA.tap(record(1.0, { inputTokens: 30_000, outputTokens: 20_000 }));
+          } else {
+            meterA.tap(record(0.1, {}));
+          }
+        },
+      },
+    );
+    const reader = tool("read", async () => result("x".repeat(80_000)));
+    const limitsUnlimited = { contextTokens: 0, spendPauseUsd: 1, maskAfterTokens: 1e9 };
+
+    const pause1 = await drain(
+      taskRequest(mind, { store: storeA, tools: [reader], meter: meterA, limits: limitsUnlimited }),
+    );
+    expect(pause1.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.00; it pauses at every $1.00.",
+    });
+    expect(mind.summaryRequests).toHaveLength(0);
+    expect(storeA.of("pause").at(-1)).toMatchObject({
+      learned: { tokens: 50_000, model: "openrouter/test/model" },
+      compact: { inputTokens: 30_000, model: "openrouter/test/model" },
+    });
+
+    const resumed = await drain(
+      taskRequest(mind, { store: storeA, tools: [reader], meter: meterA, limits: limitsUnlimited }),
+    );
+    expect(resumed.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(mind.summaryRequests).toHaveLength(2);
+    expect(
+      String((mind.requests[1]?.messages[0] as { content?: string } | undefined)?.content),
+    ).toContain("<summary>\nSUMMARY-1");
+
+    // Part B: uncompactable Turn 1 pauses on spend; same-model resume fails immediately without
+    // resending the failing request, while switching models retries cleanly.
+    const storeB = new MemoryStore({ type: "brief", brief: BRIEF });
+    const meterB = meter(0);
+    const mindB1 = new ScriptedMind([cut], {
+      after: () => meterB.tap(record(1.0, { inputTokens: 1_000, outputTokens: 1_000 })),
+    });
+    const pauseB = await drain(
+      taskRequest(mindB1, { store: storeB, meter: meterB, limits: limitsUnlimited }),
+    );
+    expect(pauseB.outcome).toMatchObject({ status: "paused", reason: "spend" });
+
+    const sameModelStore = new MemoryStore(...storeB.list);
+    const sameModelMind = new ScriptedMind([says("should-not-send")]);
+    const sameFailed = await drain(
+      taskRequest(sameModelMind, {
+        store: sameModelStore,
+        meter: meter(1.0),
+        limits: { contextTokens: 0, spendPauseUsd: 0 },
+      }),
+    );
+    expect(sameFailed.outcome).toEqual({
+      status: "failed",
+      error: "The model's context window was exceeded",
+    });
+    expect(sameModelMind.requests).toHaveLength(0);
+
+    const switchedStore = new MemoryStore(...storeB.list);
+    const switchedMind = new ScriptedMind([says("done")]);
+    const switchedOk = await drain(
+      taskRequest(switchedMind, {
+        store: switchedStore,
+        meter: new UsageMeter({ account: "openrouter", model: "large-200k", spentUsd: 1.0 }),
+        limits: { contextTokens: 0, spendPauseUsd: 0 },
+      }),
+    );
+    expect(switchedOk.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(switchedMind.requests).toHaveLength(1);
+  });
 });
