@@ -54,6 +54,7 @@ export function VoiceBubble({
   autoPlay = false,
   onAutoPlayEnd,
   fact,
+  aside,
 }: {
   readonly src: string | null;
   /** As stored or recorded; null reads it from the file. */
@@ -68,6 +69,8 @@ export function VoiceBubble({
   readonly onAutoPlayEnd?: AutoPlayEnd;
   /** Her voice message, which the desktop companion's mouth follows; absent for the viewer's own. */
   readonly fact?: VoiceBubbleFact;
+  /** Beside her player bubble, above the transcript. */
+  readonly aside?: ReactNode;
 }) {
   const { t } = useLingui();
   const ref = useRef<HTMLAudioElement>(null);
@@ -168,8 +171,14 @@ export function VoiceBubble({
       : duration === null
         ? ""
         : formatDuration(duration / 1000);
+  const hasAside = !mine && aside !== undefined && aside !== null && aside !== false;
   return (
-    <div className={cn("flex w-64 max-w-full flex-col gap-1", mine ? "items-end" : "items-start")}>
+    <div
+      className={cn(
+        "grid max-w-full gap-y-1",
+        hasAside ? "grid-cols-[minmax(0,16rem)_auto] gap-x-0.5" : "grid-cols-[minmax(0,16rem)]",
+      )}
+    >
       <div
         className={cn(
           "flex w-full items-center gap-2 rounded-2xl py-1.5 pr-3 pl-1.5",
@@ -238,6 +247,7 @@ export function VoiceBubble({
           onError={onStopped}
         />
       </div>
+      {hasAside && <div className="flex self-end">{aside}</div>}
       {transcript !== null && <Transcript mine={mine}>{transcript}</Transcript>}
     </div>
   );
@@ -250,7 +260,10 @@ function Transcript({ mine, children }: { readonly mine: boolean; readonly child
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn("flex w-full flex-col gap-1", mine ? "items-end" : "items-start")}
+      className={cn(
+        "col-start-1 flex w-full min-w-0 flex-col gap-1",
+        mine ? "items-end" : "items-start",
+      )}
     >
       <CollapsibleTrigger asChild>
         <Button variant="link" size="xs" className="h-auto p-0 text-muted-foreground">
