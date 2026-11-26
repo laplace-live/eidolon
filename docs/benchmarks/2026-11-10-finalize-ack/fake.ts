@@ -1,11 +1,7 @@
 // Soniox and Deepgram played on 127.0.0.1 for `measure.ts --fake`. Each finalize is answered after
 // a delay scripted by what the audio since the previous one held, so the run's numbers can be
 // checked against the script.
-import {
-  type Listening,
-  messageOf,
-  serveWs,
-} from "../../../packages/providers/test/ws-server.ts";
+import { type Listening, messageOf, serveWs } from "../../../packages/providers/test/ws-server.ts";
 
 export type Dialect = "soniox" | "deepgram";
 export type Heard = "speech" | "cough" | "silence";

@@ -1210,7 +1210,7 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
     while it runs, whose end's notice wakes the worker, who reads it with `bash_output`. **Show
     Steps** lists the skill, the commands and the notice; Settings' **Allowed Commands** lists the
     one allowed for good, whose **Remove** empties `allowed-commands.json`;
-  - an `mcp.json` naming `packages/assistant/test/fixtures/mcp-server.mjs`, run on the smoke's
+  - an `mcp.json` naming `packages/assistant/test/fixtures/mcp-server.ts`, run on the smoke's
     Node with `echo` its one tool: a task whose worker calls it twice, its card naming the tool, the
     server, the server's read-only hint and the argument with its size, answered **Run Once**, then
     **Always Allow This Tool**, which `mcp.json` keeps at 0600, the server's process gone once the

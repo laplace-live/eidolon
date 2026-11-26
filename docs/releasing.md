@@ -39,7 +39,7 @@ lists only the changesets that name its own package. A changeset that names only
 other's release notes without that line, or saying "No changes in this release." when it was the
 only one. `--minor`, `--patch` and the summary's form are in
 [AGENTS.md](../AGENTS.md#shipping-a-change). The summary's prefix is its kind in
-[changelog.json](#changelogjson), and `.changeset/changelog.mjs` leaves it out of `CHANGELOG.md`.
+[changelog.json](#changelogjson), and `.changeset/changelog.ts` leaves it out of `CHANGELOG.md`.
 
 ## The version PR
 

@@ -19,11 +19,15 @@
     "useDefineForClassFields": true
   },
   "include": [
+    ".changeset/*.ts",
     "apps/*/src",
     "apps/*/test",
     "apps/bot/scripts",
+    "apps/desktop/*.ts",
+    "apps/desktop/node-shim",
     "apps/desktop/scripts",
     "apps/eidolon/scripts",
+    "docs/benchmarks",
     "packages/*/src",
     "packages/*/test",
     "packages/sdk/scripts",

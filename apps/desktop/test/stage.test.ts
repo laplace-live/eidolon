@@ -23,6 +23,7 @@ import {
   LAUNCHER_SOURCES,
   NODE_SHIM,
   POSIX_LAUNCHERS,
+  SHIM_MODULES,
   shimLaunchers,
   shimPnpm,
 } from "../scripts/node-shim.ts";
@@ -249,6 +250,12 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       const bin = shimLaunchers(payload);
       for (const file of LAUNCHER_FILES) {
         expect([file, readFileSync(join(bin, file), "utf8")], STALE).toEqual([
+          file,
+          readFileSync(join(LAUNCHER_SOURCES, file), "utf8"),
+        ]);
+      }
+      for (const file of SHIM_MODULES) {
+        expect([file, readFileSync(join(payload, NODE_SHIM, file), "utf8")], STALE).toEqual([
           file,
           readFileSync(join(LAUNCHER_SOURCES, file), "utf8"),
         ]);

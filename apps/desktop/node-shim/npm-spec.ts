@@ -14,8 +14,17 @@ const URL_SPEC = /^(?:git\+)?[a-z]+:/i;
 const SCP_GIT_SPEC = /^[^@]+@[^:.]+\.[^:]+:.+$/i;
 export const TARBALL = /[.](?:tgz|tar\.gz|tar)$/i;
 
+export type ParsedSpec =
+  | { readonly type: "alias" | "remote" | "registry"; readonly name: string | undefined }
+  | { readonly type: "git"; readonly name: string | undefined; readonly saveSpec: string }
+  | {
+      readonly type: "file" | "directory";
+      readonly name: string | undefined;
+      readonly path: string;
+    };
+
 /** Whether npm takes `name` for a package's, as validate-npm-package-name's validForOldPackages. */
-function validName(name) {
+function validName(name: string): boolean {
   if (/^[.\-_]/.test(name) || name.trim() !== name || name === "") return false;
   if (["node_modules", "favicon.ico"].includes(name.toLowerCase())) return false;
   if (encodeURIComponent(name) === name) return true;
@@ -29,9 +38,21 @@ function validName(name) {
   );
 }
 
+interface ExtractedGit {
+  readonly user: string | null;
+  readonly project: string;
+  readonly committish: string | undefined;
+}
+
+interface GitHost {
+  readonly domain: string;
+  readonly protocols: readonly string[];
+  extract(url: URL): ExtractedGit | undefined;
+}
+
 // The git hosts hosted-git-info knows, each with the protocols it takes for one and how it reads a
 // URL's path.
-const GIT_HOSTS = {
+const GIT_HOSTS: Readonly<Record<string, GitHost>> = {
   github: {
     domain: "github.com",
     protocols: ["git:", "http:", "git+ssh:", "git+https:", "ssh:", "https:"],
@@ -60,7 +81,7 @@ const GIT_HOSTS = {
       const whole = url.pathname.slice(1);
       if (whole.includes("/-/") || whole.includes("/archive.tar.gz")) return undefined;
       const segments = whole.split("/");
-      let project = segments.pop();
+      let project = segments.pop() ?? "";
       if (project.endsWith(".git")) project = project.slice(0, -4);
       const user = segments.join("/");
       return user && project ? { user, project, committish: url.hash.slice(1) } : undefined;
@@ -70,8 +91,9 @@ const GIT_HOSTS = {
     domain: "gist.github.com",
     protocols: ["git:", "git+ssh:", "git+https:", "ssh:", "https:"],
     extract(url) {
-      let [, user, project, aux] = url.pathname.split("/", 4);
+      let [, rawUser, project, aux] = url.pathname.split("/", 4);
       if (aux === "raw") return undefined;
+      let user: string | null = rawUser ?? null;
       if (!project) {
         if (!user) return undefined;
         project = user;
@@ -92,33 +114,26 @@ const GIT_HOSTS = {
     },
   },
 };
-const GIT_PROTOCOLS = {
-  "git+ssh:": { name: "sshurl" },
-  "ssh:": { name: "sshurl" },
-  "git+https:": { name: "https", auth: true },
-  "git:": { auth: true },
-  "http:": { auth: true },
-  "https:": { auth: true },
-  "git+http:": { auth: true },
-  ...Object.fromEntries(Object.keys(GIT_HOSTS).map((type) => [`${type}:`, { name: type }])),
-};
-
-const parseUrl = (text) => {
-  try {
-    return new URL(text);
-  } catch {
-    return undefined;
-  }
-};
+const GIT_PROTOCOLS: Readonly<Record<string, { readonly name?: string; readonly auth?: boolean }>> =
+  {
+    "git+ssh:": { name: "sshurl" },
+    "ssh:": { name: "sshurl" },
+    "git+https:": { name: "https", auth: true },
+    "git:": { auth: true },
+    "http:": { auth: true },
+    "https:": { auth: true },
+    "git+http:": { auth: true },
+    ...Object.fromEntries(Object.keys(GIT_HOSTS).map((type) => [`${type}:`, { name: type }])),
+  };
 
 /** The last `char` in `text` before the first `before`, as hosted-git-info looks for one. */
-const lastBefore = (text, char, before) => {
+const lastBefore = (text: string, char: string, before: string): number => {
   const end = text.indexOf(before);
   return text.lastIndexOf(char, end > -1 ? end : Number.POSITIVE_INFINITY);
 };
 
 /** A git URL as hosted-git-info parses one, an scp-like `host:path` turned into a URL's path. */
-function parseGitUrl(giturl) {
+function parseGitUrl(giturl: string): URL | null {
   let withProtocol = giturl;
   const colon = giturl.indexOf(":");
   const at = giturl.indexOf("@");
@@ -139,15 +154,15 @@ function parseGitUrl(giturl) {
   if (lastBefore(corrected, ":", "#") === -1 && !corrected.includes("//")) {
     corrected = `git+ssh://${corrected}`;
   }
-  return parseUrl(withProtocol) ?? parseUrl(corrected);
+  return URL.parse(withProtocol) ?? URL.parse(corrected);
 }
 
 /** Whether `arg` is GitHub's user/repo shorthand, as hosted-git-info tells it from a path. */
-function isGitHubShorthand(arg) {
+function isGitHubShorthand(arg: string): boolean {
   const hash = arg.indexOf("#");
   const slash = arg.indexOf("/");
   const second = arg.indexOf("/", slash + 1);
-  const afterHash = (at) => at === -1 || (hash > -1 && at > hash);
+  const afterHash = (at: number) => at === -1 || (hash > -1 && at > hash);
   return (
     afterHash(/\s/.exec(arg)?.index ?? -1) &&
     slash > 0 &&
@@ -163,23 +178,28 @@ function isGitHubShorthand(arg) {
  * The spec npm-package-arg saves for the repo `giturl` names on a host hosted-git-info knows, in
  * the form it was given in but with its password shown as `***`; undefined for anything else.
  */
-function hostedGit(giturl) {
+function hostedGit(giturl: string): string | undefined {
   const parsed = parseGitUrl(isGitHubShorthand(giturl) ? `github:${giturl}` : giturl);
-  if (parsed === undefined) return undefined;
+  if (parsed === null) return undefined;
   const hostname = parsed.hostname.replace(/^www\./, "");
   const shortcut = parsed.protocol.slice(0, -1);
   const type = Object.hasOwn(GIT_HOSTS, shortcut)
     ? shortcut
-    : Object.keys(GIT_HOSTS).find((name) => GIT_HOSTS[name].domain === hostname);
+    : Object.keys(GIT_HOSTS).find((name) => GIT_HOSTS[name]?.domain === hostname);
   if (type === undefined) return undefined;
-  const { domain, protocols, extract } = GIT_HOSTS[type];
+  const { domain, protocols, extract } = GIT_HOSTS[type] as GitHost;
   // npx only prints this spec, and hides the password as npm's log does: an MCP server's stderr
   // reaches the task. npm prints this one as it was given.
   const auth =
     GIT_PROTOCOLS[parsed.protocol]?.auth && (parsed.username || parsed.password)
       ? `${parsed.username}${parsed.password ? ":***" : ""}`
       : null;
-  let repo;
+  let repo: {
+    user: string | null;
+    project: string;
+    committish: string | null;
+    form: string;
+  };
   try {
     if (type === shortcut) {
       let pathname = parsed.pathname.replace(/^\//, "");
@@ -196,9 +216,9 @@ function hostedGit(giturl) {
       const segments = protocols.includes(parsed.protocol) ? extract(parsed) : undefined;
       if (segments === undefined) return undefined;
       repo = {
-        user: segments.user && decodeURIComponent(segments.user),
+        user: segments.user ? decodeURIComponent(segments.user) : segments.user,
         project: decodeURIComponent(segments.project),
-        committish: decodeURIComponent(segments.committish),
+        committish: decodeURIComponent(segments.committish ?? ""),
         form: GIT_PROTOCOLS[parsed.protocol]?.name || parsed.protocol.slice(0, -1),
       };
     }
@@ -219,7 +239,7 @@ function hostedGit(giturl) {
 }
 
 /** The characters npm-package-arg encodes in a path it makes a file: URL of. */
-const FILE_URL_CHARS = {
+const FILE_URL_CHARS: Readonly<Record<string, string>> = {
   "\0": "%00",
   "\t": "%09",
   "\n": "%0A",
@@ -237,10 +257,10 @@ const FILE_URL_CHARS = {
 };
 
 /** `text` as a file: URL, as npm-package-arg makes one of a path. */
-function fileUrl(text, windows) {
+function fileUrl(text: string, windows: boolean): string {
   let url = "";
   for (let at = 0; at < text.length; at++) {
-    const char = text[at];
+    const char = text[at] as string;
     url += char === "\\" ? (windows ? "/" : "%5C") : (FILE_URL_CHARS[char] ?? char);
   }
   return url.startsWith("file:") ? url : `file:${url}`;
@@ -251,12 +271,17 @@ function fileUrl(text, windows) {
  * `directory`, `alias` or `registry`), the name it gives, the spec npm saves for a git one, and the
  * path of a file or folder; undefined where npm-package-arg throws.
  */
-export function npmSpec(arg, where, home, platform = process.platform) {
+export function npmSpec(
+  arg: string,
+  where: string,
+  home: string,
+  platform: string = process.platform,
+): ParsedSpec | undefined {
   const windows = platform === "win32";
   const slashes = windows ? /\\|[/]/ : /[/]/;
   const nameEndsAt = arg.indexOf("@", 1);
   const namePart = nameEndsAt > 0 ? arg.slice(0, nameEndsAt) : arg;
-  let name;
+  let name: string | undefined;
   let spec = arg;
   if (URL_SPEC.test(arg)) {
     // A URL, or a Windows path with its drive.
@@ -283,9 +308,9 @@ export function npmSpec(arg, where, home, platform = process.platform) {
       const scp = spec.startsWith("git+ssh:")
         ? /^git\+ssh:\/\/([^:#]+:[^#]+(?:\.git)?)(?:#(.*))?$/i.exec(spec)
         : null;
-      const url = parseUrl(spec.startsWith("git+file://") ? spec.replace(/\\/g, "/") : spec);
+      const url = URL.parse(spec.startsWith("git+file://") ? spec.replace(/\\/g, "/") : spec);
       if (
-        (scp !== null && !/:[0-9]+(\/|$)/.test(scp[1])) ||
+        (scp !== null && !/:[0-9]+(\/|$)/.test(scp[1] as string)) ||
         /^git(?:\+(?:https?|rsync|ftp|file|ssh))?:$/.test(url?.protocol ?? "")
       ) {
         // Its password hidden, as a hosted one's.

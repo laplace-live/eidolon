@@ -1,4 +1,4 @@
-// A task's MCP servers against a fake server on stdio (fixtures/mcp-server.mjs), run on this Node.
+// A task's MCP servers against a fake server on stdio (fixtures/mcp-server.ts), run on this Node.
 // Every server a case starts is closed after it, and every pid a case checks is one it started.
 import { readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -23,8 +23,8 @@ import {
 } from "../src/mcp/tools.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
 
-const FIXTURE = join(import.meta.dirname, "fixtures/mcp-server.mjs");
-const DAEMON = join(import.meta.dirname, "fixtures/mcp-daemon-server.mjs");
+const FIXTURE = join(import.meta.dirname, "fixtures/mcp-server.ts");
+const DAEMON = join(import.meta.dirname, "fixtures/mcp-daemon-server.ts");
 const TOKEN = "EIDOLON_MCP_TEST_TOKEN";
 const SECRET = "EIDOLON_MCP_TEST_SECRET";
 

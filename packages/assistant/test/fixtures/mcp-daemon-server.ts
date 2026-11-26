@@ -17,7 +17,7 @@ if (pidfile !== -1) writeFileSync(argv[pidfile + 1], JSON.stringify([process.pid
 
 const lines = createInterface({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY });
 lines.on("line", (line) => {
-  const message = JSON.parse(line);
+  const message = JSON.parse(line) as { id?: unknown; method?: string };
   if (argv.includes("--hang") || message.method !== "initialize") return;
   const result = {
     protocolVersion: "2025-06-18",

@@ -4,13 +4,19 @@
 // Ported from pi-mono packages/mcp/test/fixtures/stdio-server.mjs@ac78a60
 import { createInterface } from "node:readline";
 
+interface RpcRequest {
+  readonly id?: unknown;
+  readonly method?: string;
+  readonly params: { readonly arguments: { readonly text: unknown } };
+}
+
 console.error("stdio fixture ready");
 const lines = createInterface({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY });
 
 for await (const line of lines) {
-  const message = JSON.parse(line);
+  const message = JSON.parse(line) as RpcRequest;
   if (!("id" in message)) continue;
-  let result;
+  let result: Record<string, unknown>;
   if (message.method === "initialize") {
     result = {
       protocolVersion: "2025-06-18",

@@ -31,7 +31,7 @@ import { type ServedRoutes, serveRoutes } from "../serve.ts";
 
 const FIXTURE = join(
   import.meta.dirname,
-  "../../../../packages/assistant/test/fixtures/mcp-server.mjs",
+  "../../../../packages/assistant/test/fixtures/mcp-server.ts",
 );
 const AUTH = "Bearer test-secret";
 

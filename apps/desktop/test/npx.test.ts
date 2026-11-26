@@ -13,100 +13,19 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, test } from "vitest";
-import { LAUNCHER_SOURCES } from "../scripts/node-shim.ts";
+import * as cross from "../node-shim/cross-spawn.ts";
+import type { CurrentEnv } from "../node-shim/npm-checks.ts";
+import {
+  type ConfigSource,
+  envReplace,
+  invalidConfig,
+  npmConfig,
+} from "../node-shim/npm-config.ts";
+import { binOf, binsOf, type Env, localBin, npmPath, pathOf } from "../node-shim/npm-exec.ts";
+import { npmSpec } from "../node-shim/npm-spec.ts";
+import * as npx from "../node-shim/npx.ts";
 
-type Env = Record<string, string | undefined>;
-type Source = Record<string, string | string[]>;
-type Installed = { dir: string; manifest: { name: string; version?: string } };
-type Plan = (
-  | { error: string; code?: number }
-  | { install?: string[]; command?: string; args: string[]; bins: string[]; runPath: string }
-) & { warnings?: string[] };
-type Current = Record<string, { name?: string; version?: string }>;
-interface NpmConfig {
-  envReplace(text: string, env: Env): string;
-  npmConfig(env: Env, prefix: string, home: string): Source[];
-  invalidConfig(sources: readonly Source[]): string | undefined;
-}
-interface NpmSpec {
-  npmSpec(
-    spec: string,
-    where: string,
-    home: string,
-    platform?: string,
-  ): { type: string; name?: string; saveSpec?: string; path?: string } | undefined;
-}
-interface NpmExec {
-  binsOf(manifest: object, dir: string): Record<string, string>;
-  binOf(manifest: object, dir: string): string | undefined;
-  localBin(start: string, name: string): string | undefined;
-  pathOf(env: Env, delimiter?: string): string;
-  npmPath(bins: readonly string[], runPath: string, nodeGyp: string, rest: string): string;
-}
-interface Npx {
-  pnpmNpmrc(sources: readonly Source[], cwd: string, home: string): string;
-  pnpmNetworkEnv(sources: readonly Source[]): Record<string, string>;
-  npxSettings(sources: readonly Source[], now?: number): string[] | { error: string };
-  devEngines(
-    manifest: unknown,
-    force: boolean,
-    current: Current,
-  ): { warnings: string[]; error?: string };
-  refusal(
-    specs: readonly string[],
-    sources: readonly Source[],
-    cwd: string,
-    home: string,
-  ): string | undefined;
-  readNpx(args: readonly string[]): { packages: string[]; command: string[] } | { error: string };
-  npxToPnpm(
-    packages: readonly string[],
-    settings: readonly string[],
-    cwd: string,
-    home: string,
-    platform?: string,
-  ): string[];
-  localSpec(
-    spec: string,
-    cwd: string,
-    home: string,
-    platform?: string,
-  ): { path: string; tarball: boolean } | undefined;
-  npmPrefix(cwd: string): { prefix: string; workspace?: string };
-  treePackages(prefix: string): Installed[];
-  inTree(packages: readonly Installed[], spec: string): Installed | undefined;
-  plan(args: readonly string[], cwd: string, home?: string, env?: Env, current?: Current): Plan;
-  commandEnv(env: Env, value: string): Env;
-  which(
-    command: string,
-    options: { pathEnv: string; cwd: string; platform?: string; pathext?: string },
-  ): string | undefined;
-  spawnArgs(
-    file: string,
-    args: readonly string[],
-    options?: { platform?: string; env?: Env },
-  ): { command: string; args: string[]; verbatim: boolean };
-  relay(child: { kill(signal: string): void }, platform?: string): () => void;
-}
-interface CrossSpawn {
-  escapeCommand(command: string): string;
-  escapeArgument(arg: string, doubleEscape: boolean): string;
-}
-const npx: Npx = await import(pathToFileURL(join(LAUNCHER_SOURCES, "npx.mjs")).href);
-const { envReplace, invalidConfig, npmConfig }: NpmConfig = await import(
-  pathToFileURL(join(LAUNCHER_SOURCES, "npm-config.mjs")).href
-);
-const { npmSpec }: NpmSpec = await import(
-  pathToFileURL(join(LAUNCHER_SOURCES, "npm-spec.mjs")).href
-);
-const { binsOf, binOf, localBin, pathOf, npmPath }: NpmExec = await import(
-  pathToFileURL(join(LAUNCHER_SOURCES, "npm-exec.mjs")).href
-);
-const cross: CrossSpawn = await import(
-  pathToFileURL(join(LAUNCHER_SOURCES, "cross-spawn.mjs")).href
-);
 /** pnpm's settings under npm's default config. */
 const DEFAULTS = npx.npxSettings([]) as string[];
 
@@ -266,7 +185,7 @@ describe("pnpm's arguments", () => {
 
 describe("npm's config, which npx installs by", () => {
   const NOW = Date.parse("2026-11-23T12:00:00Z");
-  const settingsOf = (...sources: Source[]) => npx.npxSettings(sources, NOW);
+  const settingsOf = (...sources: ConfigSource[]) => npx.npxSettings(sources, NOW);
 
   test("runs no install script under ignore-scripts, read as npm reads a boolean", () => {
     for (const value of ["true", "1", "yes"]) {
@@ -452,7 +371,7 @@ describe("npm's config, which npx installs by", () => {
 
   test("gives pnpm the project's registries, their credentials and certificates, as npm", () => {
     const cwd = tree({ "certs/client.pem": "cert", "certs/client.key": "key" });
-    const project: Source = {
+    const project: ConfigSource = {
       registry: "https://npm.corp.test/",
       "@corp:registry": "https://corp.test/npm/",
       "//corp.test/npm/:_authToken": 'to"k;en=',
@@ -490,7 +409,7 @@ describe("npm's config, which npx installs by", () => {
   test("keeps a value whose variable is unset as npm has it, which pnpm would ignore", () => {
     // npm then fails on an invalid URL or a wrong token; pnpm would take the user's registry.
     const host = `\${HOST}`;
-    const project: Source = {
+    const project: ConfigSource = {
       "@corp:registry": `\${CORP_REGISTRY}`,
       registry: `http://${host}/npm/`,
       "//corp.test/:_authToken": `a\${TOKEN}{b}$c`,
@@ -583,7 +502,7 @@ describe("npm's config it runs no command under", () => {
 });
 
 describe("a project's devEngines, as npm checks it before any command", () => {
-  const current: Current = {
+  const current: CurrentEnv = {
     cpu: { name: "arm64" },
     libc: { name: undefined },
     os: { name: "darwin", version: "27.2.0" },
@@ -1429,14 +1348,14 @@ describe("starting a command", () => {
   });
 
   test("escapes a word for cmd.exe as cross-spawn does, a run of backslashes doubled whole", () => {
-    expect(cross.escapeArgument("", false)).toBe('^"^"');
-    expect(cross.escapeArgument('q"x', false)).toBe('^"q\\^"x^"');
-    expect(cross.escapeArgument("C:\\dir\\", false)).toBe('^"C:\\dir\\\\^"');
-    expect(cross.escapeArgument('a\\"b', false)).toBe('^"a\\\\\\^"b^"');
-    expect(cross.escapeArgument("C:\\dir\\\\", false)).toBe('^"C:\\dir\\\\\\\\^"');
-    expect(cross.escapeArgument('a\\\\"b\\\\\\', false)).toBe('^"a\\\\\\\\\\^"b\\\\\\\\\\\\^"');
-    expect(cross.escapeArgument("100%!^<>|", false)).toBe('^"100^%^!^^^<^>^|^"');
-    expect(cross.escapeArgument("&", true)).toBe('^^^"^^^&^^^"');
+    expect(cross.escapeArgument("", 0)).toBe('^"^"');
+    expect(cross.escapeArgument('q"x', 0)).toBe('^"q\\^"x^"');
+    expect(cross.escapeArgument("C:\\dir\\", 0)).toBe('^"C:\\dir\\\\^"');
+    expect(cross.escapeArgument('a\\"b', 0)).toBe('^"a\\\\\\^"b^"');
+    expect(cross.escapeArgument("C:\\dir\\\\", 0)).toBe('^"C:\\dir\\\\\\\\^"');
+    expect(cross.escapeArgument('a\\\\"b\\\\\\', 0)).toBe('^"a\\\\\\\\\\^"b\\\\\\\\\\\\^"');
+    expect(cross.escapeArgument("100%!^<>|", 0)).toBe('^"100^%^!^^^<^>^|^"');
+    expect(cross.escapeArgument("&", 1)).toBe('^^^"^^^&^^^"');
     expect(cross.escapeCommand("C:\\Program Files (x86)\\x.cmd")).toBe(
       "C:\\Program^ Files^ ^(x86^)\\x.cmd",
     );

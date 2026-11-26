@@ -16,11 +16,11 @@ import { McpClient } from "../src/mcp/client.ts";
 import { StdioTransport } from "../src/mcp/transports/stdio.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures");
-const fixture = join(FIXTURES, "mcp-stdio-server.mjs");
-const stubborn = join(FIXTURES, "mcp-stubborn-server.mjs");
-const exitingParent = join(FIXTURES, "mcp-exiting-parent-server.mjs");
-const daemon = join(FIXTURES, "mcp-daemon-server.mjs");
-const leftover = join(FIXTURES, "mcp-leftover-server.mjs");
+const fixture = join(FIXTURES, "mcp-stdio-server.ts");
+const stubborn = join(FIXTURES, "mcp-stubborn-server.ts");
+const exitingParent = join(FIXTURES, "mcp-exiting-parent-server.ts");
+const daemon = join(FIXTURES, "mcp-daemon-server.ts");
+const leftover = join(FIXTURES, "mcp-leftover-server.ts");
 const STDIO = join(import.meta.dirname, "../src/mcp/transports/stdio.ts");
 
 function isAlive(pid: number): boolean {
