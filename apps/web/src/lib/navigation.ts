@@ -95,6 +95,7 @@ export function createBrowserHistory(
   let blockerState: Blocker = IDLE_BLOCKER;
   let unblockPop: (() => void) | null = null;
   let allowNextPop = false;
+  let proceedToken = 0;
 
   const notifyLocation = () => {
     for (const listener of [...locationListeners]) listener();
@@ -143,10 +144,12 @@ export function createBrowserHistory(
       const state = { usr: options?.state ?? null, idx: index };
       win.history[replace ? "replaceState" : "pushState"](state, "", href);
     }
+    proceedToken += 1;
     allowNextPop = false;
     inflightReturn = 0;
     restoreTargetIdx = null;
     blockedTargetIdx = null;
+    if (blockerState.state !== "unblocked") setBlocker(IDLE_BLOCKER);
     if (unblockPop !== null) {
       const resolve = unblockPop;
       unblockPop = null;
@@ -166,9 +169,15 @@ export function createBrowserHistory(
     const nextHref = `${url.pathname}${url.search}${url.hash}`;
 
     if ((nextPath !== pathname || nextSearch !== search) && shouldBlock()) {
+      proceedToken += 1;
+      allowNextPop = false;
+      blockedTargetIdx = null;
       setBlocker({
         state: "blocked",
-        reset: () => setBlocker(IDLE_BLOCKER),
+        reset: () => {
+          proceedToken += 1;
+          setBlocker(IDLE_BLOCKER);
+        },
         proceed: () => {
           setBlocker(IDLE_BLOCKER);
           commitNavigation(nextHref, nextPath, nextSearch, options);
@@ -228,6 +237,7 @@ export function createBrowserHistory(
       shouldBlock()
     ) {
       // Restore the browser's current entry before prompting so TitleStrip Back/Forward stay aligned.
+      proceedToken += 1;
       lastBrowserIdx = rawIdx!;
       blockedTargetIdx = rawIdx!;
       restoreTargetIdx = index;
@@ -238,12 +248,19 @@ export function createBrowserHistory(
       win.history.go(-delta);
       setBlocker({
         state: "blocked",
-        reset: () => setBlocker(IDLE_BLOCKER),
+        reset: () => {
+          proceedToken += 1;
+          setBlocker(IDLE_BLOCKER);
+        },
         proceed: () => {
           const target = blockedTargetIdx;
+          const token = ++proceedToken;
           setBlocker({ state: "proceeding" });
           void restored.then(() => {
-            if (target === null || blockedTargetIdx !== target) return;
+            if (target === null || token !== proceedToken) {
+              if (blockerState.state === "proceeding") setBlocker(IDLE_BLOCKER);
+              return;
+            }
             const current = historyIndex(win.history.state) ?? index;
             const step = target - current;
             if (step === 0) {
@@ -258,6 +275,7 @@ export function createBrowserHistory(
       return;
     }
 
+    proceedToken += 1;
     allowNextPop = false;
     blockedTargetIdx = null;
     if (rawIdx !== null) {
@@ -304,6 +322,7 @@ export function createBrowserHistory(
     navigate,
     dispose: () => {
       win?.removeEventListener("popstate", onPopState);
+      proceedToken += 1;
       unblockPop = null;
       allowNextPop = false;
       inflightReturn = 0;

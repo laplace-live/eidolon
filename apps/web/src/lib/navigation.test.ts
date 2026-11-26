@@ -224,16 +224,31 @@ describe("createBrowserHistory", () => {
     await fake.flush();
     expect(fake.win.location.pathname).toBe("/settings");
 
-    // Calling navigate() after proceed() while restoration is still in flight cancels the stale
-    // proceed continuation rather than undoing the newly committed navigation.
+    // Calling navigate() while dirty supersedes a pending proceed() with a new block (preserving
+    // "blocked" rather than clearing it to "unblocked" or running the stale continuation).
+    history.setBlockerDirty(id, true);
+    fake.win.history.go(-1);
+    await Promise.resolve();
+    history.getBlocker().proceed?.();
+    history.navigate("/usage");
+    await fake.flush();
+    expect(history.getBlocker().state).toBe("blocked");
+    history.getBlocker().proceed?.();
+    expect(fake.win.location.pathname).toBe("/usage");
+    expect(history.getBlocker().state).toBe("unblocked");
+
+    // Calling navigate() cleanly after proceed() while restoration is still in flight cancels the
+    // stale proceed continuation and resets "proceeding" back to "unblocked".
     history.setBlockerDirty(id, true);
     fake.win.history.go(-1);
     await Promise.resolve();
     history.getBlocker().proceed?.();
     history.setBlockerDirty(id, false);
     history.navigate("/jobs");
+    expect(history.getBlocker().state).toBe("unblocked");
     await fake.flush();
     expect(fake.win.location.pathname).toBe("/jobs");
+    expect(history.getBlocker().state).toBe("unblocked");
 
     history.setBlockerDirty(id, true);
     fake.win.history.go(-1);
