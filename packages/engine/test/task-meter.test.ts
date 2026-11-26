@@ -125,6 +125,16 @@ describe("UsageMeter", () => {
     expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([null, 5]);
   });
 
+  test("requestStarted clears per-attempt input, output, and record count without losing spend", () => {
+    const counted = meter(0.5);
+    counted.tap(record(0.25, { inputTokens: 1_000, outputTokens: 500 }));
+    counted.requestStarted();
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([null, null]);
+    counted.requestEnded();
+    expect(counted.unpriced()).toBe(UNREPORTED);
+    expect(counted.spentUsd()).toBeCloseTo(0.75, 10);
+  });
+
   test("a request that ended with no usage record is one it can't count, its input unknown", () => {
     const counted = meter(0.5);
     counted.tap(record(0.25, { inputTokens: 40, outputTokens: 12 }));
@@ -487,5 +497,45 @@ describe("runTask's unpriced pause", () => {
     expect(mind.summaryRequests).toHaveLength(1);
     expect(mind.requests).toHaveLength(0);
     expect(store.of("compaction")).toMatchObject([{ summary: "SUMMARY-1" }]);
+  });
+
+  test("does not leak outputTokens from a failed attempt into a retry's model_context_window_exceeded ceiling", async () => {
+    const counted = meter();
+    const reader = tool("read", async () => result("x".repeat(40_000)));
+    const cut: readonly MindChunk[] = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ];
+    const mind = new ScriptedMind(
+      [
+        calls([call("c-a", "read", { value: "a" })]),
+        calls([call("c-b", "read", { value: "b" })]),
+        () => {
+          counted.tap(record(0.01, { inputTokens: 20_000, outputTokens: 20_000 }));
+          throw new TypeError("fetch failed");
+        },
+        cut,
+        calls([call("c-c", "read", { value: "c" })]),
+        says("done"),
+      ],
+      {
+        summaries: [says("SUMMARY-1"), says("SUMMARY-2")],
+        after: (req) => {
+          if (req.system === "You summarize.") counted.tap(record(0.01, { inputTokens: 500 }));
+        },
+      },
+    );
+    const { outcome } = await drain(
+      taskRequest(mind, {
+        tools: [reader],
+        meter: counted,
+        sleep: async () => {},
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    // Retry emitted no usage, so #ceiling came from view.sized (~20k) without Attempt 1's 20k
+    // output tokens -> compactAbove (~15k) triggers proactive SUMMARY-2 before c-c's follow-up.
+    expect(mind.summaryRequests).toHaveLength(2);
   });
 });

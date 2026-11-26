@@ -161,6 +161,11 @@ export class FakeMeter implements TaskMeter {
     return this.uncounted;
   }
 
+  requestStarted(): void {
+    this.input = null;
+    this.output = null;
+  }
+
   requestEnded(): void {
     this.ended++;
   }

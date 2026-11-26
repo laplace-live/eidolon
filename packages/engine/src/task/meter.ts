@@ -49,6 +49,12 @@ export class UsageMeter implements TaskMeter {
     else this.#cannotCount(`No price is known for ${record.model} at ${record.provider}`);
   };
 
+  requestStarted(): void {
+    this.#records = 0;
+    this.#input = null;
+    this.#output = null;
+  }
+
   requestEnded(): void {
     // A server may ignore the request for usage (stream_options.include_usage).
     if (this.#records === 0) {
