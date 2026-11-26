@@ -3220,6 +3220,10 @@ describe("unread counts and live state", () => {
       const listed = await coldListRunner.list();
       expect(listed.find((entry) => entry.id === brokenId)?.unread).toBe(0);
       expect(listed.find((entry) => entry.id === healthyId)?.unread).toBe(1);
+      // Restoring the temporarily unreadable log must recover its unread badge (not cached as 0).
+      writeFileSync(logPath, validBytes);
+      const recovered = await coldListRunner.list();
+      expect(recovered.find((entry) => entry.id === brokenId)?.unread).toBe(1);
     } finally {
       await coldListRunner.shutdown();
     }

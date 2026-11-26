@@ -29,6 +29,14 @@ const { useChat } = await import("./use-chat");
 
 const CHAT_ID = "01900000-0000-7000-8000-000000000099";
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 const msg = (seq: number, kind: "user" | "persona", text: string): ChatEvent => ({
   seq,
   at: 1000 + seq,
@@ -94,16 +102,23 @@ describe("useChat background recovery", () => {
   test("rejoins live stream while serverActive stays true after initial 204", async () => {
     vi.useFakeTimers();
     let liveCalls = 0;
+    let rereadCalls = 0;
+    const postReread = deferred<ChatContents>();
+    const initial = contents([msg(1, "user", "hi")]);
     const reply = msg(2, "persona", "转完之后回复啦");
     followImpl = async function* () {
       liveCalls += 1;
       if (liveCalls === 1) return;
       yield { type: "events", events: [reply] };
     };
-    readImpl = async () => contents([msg(1, "user", "hi"), reply]);
+    // Initial reads omit reply; post-stream reread stays pending until stream merge is verified.
+    readImpl = async () => {
+      rereadCalls += 1;
+      return liveCalls < 2 ? initial : postReread.promise;
+    };
 
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(chatQuery(CHAT_ID).queryKey, contents([msg(1, "user", "hi")]));
+    client.setQueryData(chatQuery(CHAT_ID).queryKey, initial);
 
     mounted = await mountFakeDom(
       createElement(
@@ -116,6 +131,7 @@ describe("useChat background recovery", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(liveCalls).toBe(1);
+    expect(rereadCalls).toBeGreaterThanOrEqual(1);
 
     await mounted.act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
@@ -126,6 +142,103 @@ describe("useChat background recovery", () => {
       msg(1, "user", "hi"),
       reply,
     ]);
+    await mounted.act(async () => {
+      postReread.resolve(contents([msg(1, "user", "hi"), reply]));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  });
+
+  test("rereads an empty loaded chat when serverLastSeq advances while idle", async () => {
+    const empty = contents([]);
+    const updated = contents([msg(1, "user", "hi"), msg(2, "persona", "群聊第一条")]);
+    let current = empty;
+    followImpl = async function* () {};
+    readImpl = async () => current;
+
+    client = new QueryClient({
+      defaultOptions: { queries: { retry: false, refetchIntervalInBackground: false } },
+    });
+    client.setQueryData(chatQuery(CHAT_ID).queryKey, empty);
+
+    mounted = await mountFakeDom(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(Harness, { serverActive: false, serverLastSeq: 0 }),
+      ),
+    );
+    await mounted.act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+
+    current = updated;
+    await mounted.act(async () => {
+      await mounted!.render(
+        createElement(
+          QueryClientProvider,
+          { client: client! },
+          createElement(Harness, { serverActive: false, serverLastSeq: 2 }),
+        ),
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+    await vi.waitFor(() => {
+      expect(client!.getQueryData(chatQuery(CHAT_ID).queryKey)?.events.at(-1)?.seq).toBe(2);
+    });
+  });
+
+  test("retries idle catch-up reread after a transient read failure", async () => {
+    vi.useFakeTimers();
+    const initial = contents([msg(1, "user", "hi")]);
+    const updated = contents([msg(1, "user", "hi"), msg(2, "persona", "恢复了")]);
+    let phase: "idle" | "fail" | "ok" = "idle";
+    let failedOnce = false;
+    followImpl = async function* () {};
+    readImpl = async () => {
+      if (phase === "idle") return initial;
+      if (phase === "fail" && !failedOnce) {
+        failedOnce = true;
+        throw new Error("temporary read error");
+      }
+      return updated;
+    };
+
+    client = new QueryClient({
+      defaultOptions: { queries: { retry: false, refetchIntervalInBackground: false } },
+    });
+    client.setQueryData(chatQuery(CHAT_ID).queryKey, initial);
+
+    mounted = await mountFakeDom(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(Harness, { serverActive: false, serverLastSeq: 1 }),
+      ),
+    );
+    await mounted.act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    phase = "fail";
+    await mounted.act(async () => {
+      await mounted!.render(
+        createElement(
+          QueryClientProvider,
+          { client: client! },
+          createElement(Harness, { serverActive: false, serverLastSeq: 2 }),
+        ),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(failedOnce).toBe(true);
+    expect(client.getQueryData(chatQuery(CHAT_ID).queryKey)?.events.at(-1)?.seq).toBe(1);
+
+    phase = "ok";
+    await mounted.act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(client.getQueryData(chatQuery(CHAT_ID).queryKey)?.events.at(-1)?.seq).toBe(2);
   });
 
   test("rereads log when serverLastSeq advances while idle", async () => {

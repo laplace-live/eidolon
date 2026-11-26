@@ -247,15 +247,46 @@ export function useChat(
   }, [serverActive, calling, awaitingReport, id, follow]);
 
   const caughtUp = useRef({ id, seq: 0 });
+  const catchUpActive = useRef(id);
+  const catchUpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [catchUpRetry, setCatchUpRetry] = useState(0);
+
   useEffect(() => {
-    if (streams.current.size > 0) return;
-    const localSeq = queryClient.getQueryData(chatQuery(id).queryKey)?.events.at(-1)?.seq;
-    if (localSeq === undefined || serverLastSeq <= localSeq) return;
+    catchUpActive.current = id;
+    return () => {
+      catchUpActive.current = "";
+      if (catchUpTimer.current !== null) {
+        clearTimeout(catchUpTimer.current);
+        catchUpTimer.current = null;
+      }
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (catchUpRetry < 0 || streams.current.size > 0) return;
+    const cached = queryClient.getQueryData(chatQuery(id).queryKey);
+    if (cached === undefined) return;
+    const localSeq = cached.events.at(-1)?.seq ?? 0;
+    if (serverLastSeq <= localSeq) return;
     const prev = caughtUp.current.id === id ? caughtUp.current.seq : 0;
     if (serverLastSeq <= prev) return;
     caughtUp.current = { id, seq: serverLastSeq };
-    void reread(queryClient, chatQuery(id).queryKey);
-  }, [id, serverLastSeq, queryClient]);
+    const key = chatQuery(id).queryKey;
+    const scheduleRetry = () => {
+      if (caughtUp.current.id === id && caughtUp.current.seq === serverLastSeq) {
+        caughtUp.current = { id, seq: prev };
+      }
+      if (catchUpActive.current !== id) return;
+      if (catchUpTimer.current !== null) clearTimeout(catchUpTimer.current);
+      catchUpTimer.current = setTimeout(() => {
+        catchUpTimer.current = null;
+        setCatchUpRetry((count) => count + 1);
+      }, CALL_FEED_RETRY_MS);
+    };
+    void reread(queryClient, key).then(() => {
+      if (queryClient.getQueryState(key)?.status === "error") scheduleRetry();
+    }, scheduleRetry);
+  }, [id, serverLastSeq, catchUpRetry, queryClient]);
 
   const send = useCallback(
     (text: string, files: readonly Attachment[] = []) => {

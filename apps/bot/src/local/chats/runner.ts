@@ -379,16 +379,19 @@ export class ChatRunner {
     return Promise.all(
       summaries.map(async (summary) => ({
         ...summary,
-        unread: await this.#reads.count(summary, async (id, afterSeq) => {
-          try {
-            return (await this.store.read(id, { afterSeq })).events;
-          } catch (error) {
-            if (!(error instanceof ChatStoreError && error.code === "not-found")) {
-              logger.warning(`Chat ${id} unread skipped: ${errorText(error)}`);
+        unread: await this.#reads
+          .count(summary, async (id, afterSeq) => {
+            try {
+              return (await this.store.read(id, { afterSeq })).events;
+            } catch (error) {
+              if (error instanceof ChatStoreError && error.code === "not-found") return [];
+              throw error;
             }
-            return [];
-          }
-        }),
+          })
+          .catch((error: unknown) => {
+            logger.warning(`Chat ${summary.id} unread skipped: ${errorText(error)}`);
+            return 0;
+          }),
         active: this.#isActive(summary.id),
       })),
     );
