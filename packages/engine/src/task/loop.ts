@@ -299,7 +299,6 @@ class TaskRun {
     const currentModel = this.#modelId();
     for (const entry of this.#entries) {
       if (
-        this.#request.limits.contextTokens <= 0 &&
         currentModel !== undefined &&
         (entry.type === "compaction" || entry.type === "pause") &&
         entry.learned?.model === currentModel

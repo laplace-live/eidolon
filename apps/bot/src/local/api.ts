@@ -1828,14 +1828,14 @@ export type TaskEntry = { readonly seq: number; readonly at: number } & (
         readonly shrunk?: boolean;
         readonly model?: string;
       };
-      /** Context ceiling learned from an overflow on `model`, so same-model unlimited resumes keep it. */
+      /** Context ceiling learned from an overflow on `model`, so same-model resumes keep it. */
       readonly learned?: { readonly tokens: number; readonly model: string };
     }
   | {
       readonly type: "pause";
       readonly reason: TaskPauseReason;
       readonly detail: string;
-      /** Context ceiling learned before this pause, so same-model unlimited resumes keep it. */
+      /** Context ceiling learned before this pause, so same-model resumes keep it. */
       readonly learned?: { readonly tokens: number; readonly model: string };
       /** Overflowed request that paused before compacting, so same-model Continue compacts first. */
       readonly compact?: {

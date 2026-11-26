@@ -743,6 +743,43 @@ describe("runTask's unpriced pause", () => {
     );
     expect(switchedOutcome.outcome).toEqual({ status: "succeeded", report: "done" });
     expect(switchedModelMind.summaryRequests).toHaveLength(0);
+
+    // Part C: positive contextTokens exceeding the model's real window restores the same-model
+    // learned ceiling across Continue so compaction summarizes older turns rather than failing.
+    const capStore = history(["a", "b"], 10_000);
+    const countedCap = meter(0);
+    const capCut: readonly MindChunk[] = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ];
+    const capOverflowMind = new ScriptedMind([capCut], {
+      after: () => countedCap.tap(record(1.0, { inputTokens: 5_000, outputTokens: 3_192 })),
+    });
+    const capPause = await drain(
+      taskRequest(capOverflowMind, {
+        store: capStore,
+        meter: countedCap,
+        limits: { contextTokens: 128_000, spendPauseUsd: 1, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(capPause.outcome).toMatchObject({ status: "paused", reason: "spend" });
+    expect(capStore.of("pause").at(-1)).toMatchObject({
+      learned: { tokens: 8_192, model: "openrouter/test/model" },
+      compact: { inputTokens: 5_000, model: "openrouter/test/model" },
+    });
+
+    const capResumedMind = new ScriptedMind([says("done")], {
+      summaries: [says("SUMMARY-POS-CAP")],
+    });
+    const capResumedOutcome = await drain(
+      taskRequest(capResumedMind, {
+        store: capStore,
+        meter: meter(1.0),
+        limits: { contextTokens: 128_000, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(capResumedOutcome.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(capResumedMind.summaryRequests).toHaveLength(1);
   });
 
   test("persists learned ceiling and pending compaction when model_context_window_exceeded pauses before compacting", async () => {
