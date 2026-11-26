@@ -165,7 +165,6 @@ export class NotificationAvatarCache {
 
   async #pruneFolderOnce(): Promise<void> {
     if (this.#pruned) return;
-    this.#pruned = true;
     await mkdir(this.#options.folder, { recursive: true });
     const entries = await readdir(this.#options.folder, { withFileTypes: true });
     const pngs: { readonly path: string; readonly mtimeMs: number }[] = [];
@@ -182,6 +181,7 @@ export class NotificationAvatarCache {
     await Promise.all(temps.map((path) => rm(path, { force: true }).catch(() => {})));
     pngs.sort((a, b) => a.mtimeMs - b.mtimeMs);
     for (const item of pngs) this.#staleFiles.push(item.path);
+    this.#pruned = true;
   }
 
   async #commit(key: string, bytes: Uint8Array): Promise<string> {
@@ -192,7 +192,10 @@ export class NotificationAvatarCache {
       const staleIndex = this.#staleFiles.indexOf(filePath);
       if (staleIndex !== -1) this.#staleFiles.splice(staleIndex, 1);
 
-      if (!(await fileExists(filePath))) await writeAtomic(filePath, bytes);
+      if (!(await fileExists(filePath))) {
+        await mkdir(this.#options.folder, { recursive: true });
+        await writeAtomic(filePath, bytes);
+      }
 
       const previous = this.#paths.get(key);
       this.#paths.delete(key);

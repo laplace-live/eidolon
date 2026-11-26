@@ -326,6 +326,12 @@ static napi_value js_show(napi_env env, napi_callback_info info) {
       return undef;
     }
 
+    // Eagerly read avatar bytes before async permission prompts or cache eviction can unlink the file.
+    NSData* avatarData =
+        (senderName.length > 0 && avatarPath.length > 0)
+            ? [NSData dataWithContentsOfFile:avatarPath]
+            : nil;
+
     @try {
       @synchronized(notification_state_lock()) {
         [g_cancelled removeObject:noticeId];
@@ -362,11 +368,7 @@ static napi_value js_show(napi_env env, napi_callback_info info) {
 
           UNNotificationContent* finalContent = base;
           if (senderName.length > 0) {
-            INImage* img = nil;
-            if (avatarPath.length > 0) {
-              NSData* data = [NSData dataWithContentsOfFile:avatarPath];
-              if (data.length > 0) img = [INImage imageWithImageData:data];
-            }
+            INImage* img = avatarData.length > 0 ? [INImage imageWithImageData:avatarData] : nil;
             NSString* handleVal = senderId.length > 0 ? senderId : senderName;
             INPersonHandle* handle = [[INPersonHandle alloc]
                 initWithValue:handleVal

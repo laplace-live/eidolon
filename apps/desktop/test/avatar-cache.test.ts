@@ -64,6 +64,11 @@ describe("NotificationAvatarCache", () => {
     expect(updated).not.toBe(single);
     expect(existsSync(single as string)).toBe(false);
     expect(existsSync(updated as string)).toBe(true);
+    // Recreates the cache folder on later writes if cleared mid-session.
+    rmSync(folder, { recursive: true, force: true });
+    responses.set("/api/local/personas/milky-green/notification-avatar", pngBytes("milky-v3"));
+    const recreated = await cache.resolve("milky-green");
+    expect(existsSync(recreated as string)).toBe(true);
     expect(lines).toEqual([]);
   });
 
@@ -164,8 +169,12 @@ describe("NotificationAvatarCache", () => {
     expect(readdirSync(folder)).toHaveLength(2);
   });
 
-  test("coordinates concurrent same-hash fetches and evictions without deleting returned files", async () => {
+  test("coordinates concurrent eviction and same-hash reuse without deleting returned files", async () => {
     const shared = pngBytes("shared");
+    let releaseD: (() => void) | undefined;
+    const dGate = new Promise<void>((resolve) => {
+      releaseD = resolve;
+    });
     const bodies = new Map([
       ["/api/local/personas/a/notification-avatar", shared],
       ["/api/local/personas/b/notification-avatar", pngBytes("b")],
@@ -175,15 +184,33 @@ describe("NotificationAvatarCache", () => {
     const cache = new NotificationAvatarCache({
       folder,
       maxEntries: 2,
-      fetch: async (path) => new Response(Buffer.from(bodies.get(path) ?? shared), { status: 200 }),
+      fetch: async (path) => {
+        if (path === "/api/local/personas/d/notification-avatar") await dGate;
+        return new Response(Buffer.from(bodies.get(path) ?? shared), { status: 200 });
+      },
       log: { info: () => {}, warn: () => {} },
     });
 
     await cache.resolve("a");
     await cache.resolve("b");
-    const [pathC, pathD] = await Promise.all([cache.resolve("c"), cache.resolve("d")]);
+    const pendingD = cache.resolve("d");
+    const pathC = await cache.resolve("c");
+    releaseD?.();
+    const pathD = await pendingD;
     expect(existsSync(pathC as string)).toBe(true);
     expect(existsSync(pathD as string)).toBe(true);
     expect(readdirSync(folder)).toHaveLength(2);
+
+    // Concurrent same-hash fetches that evict the first key keep the shared file on disk.
+    const twinCache = new NotificationAvatarCache({
+      folder: join(folder, "twin"),
+      maxEntries: 1,
+      fetch: async () => new Response(Buffer.from(shared), { status: 200 }),
+      log: { info: () => {}, warn: () => {} },
+    });
+    const [pathE, pathF] = await Promise.all([twinCache.resolve("e"), twinCache.resolve("f")]);
+    expect(pathE).toBe(pathF);
+    expect(existsSync(pathE as string)).toBe(true);
+    expect(readdirSync(join(folder, "twin"))).toHaveLength(1);
   });
 });
