@@ -22,6 +22,8 @@ import type {
 import type { Mind, MindRequest, MindToolCall } from "../types.ts";
 import {
   argumentsHead,
+  type Block,
+  boundedSummaryPrompt,
   type ContextMessage,
   contextMessages,
   cutOff,
@@ -516,16 +518,21 @@ class TaskRun {
         );
         const reported = this.#request.meter.lastInputTokens();
         this.#counted = reported === null ? null : { reported, estimated: view.tokens };
-        if (reply.finishReason === "model_context_window_exceeded" && !compacted) {
-          const sized = reported !== null && reported > 0 ? reported : view.sized;
-          compacted = true;
-          if (sized > 0) this.#ceiling = Math.min(this.#ceiling, sized);
-          if (await this.#compact(sized)) {
-            const held = this.#held();
-            if (held !== null) return held;
-            view = this.#view();
-            continue;
+        if (reply.finishReason === "model_context_window_exceeded") {
+          const input = reported !== null && reported > 0 ? reported : view.sized;
+          const output = this.#request.meter.lastOutputTokens?.() ?? null;
+          const total = input + (output !== null && output > 0 ? output : 0);
+          if (total > 0) this.#ceiling = Math.min(this.#ceiling, total);
+          const heldBefore = this.#held();
+          if (heldBefore !== null) return heldBefore;
+          if (compacted || !(await this.#compact(input))) {
+            return { status: "failed", error: "The model's context window was exceeded" };
           }
+          compacted = true;
+          const heldAfter = this.#held();
+          if (heldAfter !== null) return heldAfter;
+          view = this.#view();
+          continue;
         }
         return reply;
       } catch (error) {
@@ -596,24 +603,103 @@ class TaskRun {
     const first = firstKept(context.blocks, keepTokens(window));
     const kept = context.blocks[first];
     if (first === 0 || kept === undefined) return false;
-    const files = filesBefore(this.#entries, kept.seq);
     const { system, instructions } = this.#request.compaction;
+    const systemTokens = estimateTokens(system);
+    let budget = Math.max(256, compactAbove(window) - systemTokens);
     const older = context.blocks.slice(0, first);
-    const prompt = summaryPrompt(older, context.compaction?.summary ?? null, files, instructions);
-    const reply = await this.#send(system, [{ role: "user", content: prompt }], [], false);
-    const why = unfinished(reply.finishReason);
-    if (why !== null) throw new Error(`Compaction failed. ${why.error}`);
-    const summary = reply.text.trim();
-    if (summary === "") throw new Error("Compaction returned no summary");
-    await this.#append({
-      type: "compaction",
-      summary,
-      firstKeptSeq: kept.seq,
-      files,
-      tokensBefore,
-    });
-    this.#counted = null;
+    let summary = context.compaction?.summary ?? null;
+    let start = 0;
+    let overflows = 0;
+    while (start < older.length) {
+      if (start > 0 && this.#held() !== null) return true;
+      const chunk = this.#nextSummaryChunk(older, start, kept.seq, summary, instructions, budget);
+      let reply: Reply;
+      try {
+        reply = await this.#send(system, [{ role: "user", content: chunk.prompt }], [], false);
+      } catch (error) {
+        if (this.#signal.aborted || !isContextOverflow(error) || overflows >= 2) throw error;
+        overflows++;
+        const learned = overflowTokens(error);
+        if (learned !== null && learned > 0) this.#ceiling = Math.min(this.#ceiling, learned);
+        const learnedBudget =
+          learned !== null && learned > 0 ? compactAbove(learned) - systemTokens : budget;
+        const shrunk = Math.max(
+          256,
+          Math.floor(Math.min(budget, learnedBudget, estimateTokens(chunk.prompt)) * 0.6),
+        );
+        if (shrunk >= budget && chunk.end === start + 1) throw error;
+        budget = shrunk;
+        continue;
+      }
+      const why = unfinished(reply.finishReason);
+      if (why !== null) throw new Error(`Compaction failed. ${why.error}`);
+      const nextSummary = reply.text.trim();
+      if (nextSummary === "") throw new Error("Compaction returned no summary");
+      summary = nextSummary;
+      await this.#append({
+        type: "compaction",
+        summary,
+        firstKeptSeq: chunk.nextSeq,
+        files: chunk.files,
+        tokensBefore,
+      });
+      this.#counted = null;
+      start = chunk.end;
+    }
     return true;
+  }
+
+  #nextSummaryChunk(
+    older: readonly Block[],
+    start: number,
+    keptSeq: number,
+    summary: string | null,
+    instructions: string,
+    budget: number,
+  ): {
+    readonly end: number;
+    readonly nextSeq: number;
+    readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
+    readonly prompt: string;
+  } {
+    const chunkFiles = (nextSeq: number) => filesBefore(this.#entries, nextSeq);
+    const fullFiles = chunkFiles(keptSeq);
+    const fullPrompt = summaryPrompt(older.slice(start), summary, fullFiles, instructions);
+    if (estimateTokens(fullPrompt) <= budget) {
+      return { end: older.length, nextSeq: keptSeq, files: fullFiles, prompt: fullPrompt };
+    }
+    const seqAfter = (end: number): number =>
+      end < older.length ? (older[end] as Block).seq : keptSeq;
+    const singleSeq = seqAfter(start + 1);
+    const singleFiles = chunkFiles(singleSeq);
+    const singleSlice = older.slice(start, start + 1);
+    const singlePrompt = summaryPrompt(singleSlice, summary, singleFiles, instructions);
+    if (estimateTokens(singlePrompt) > budget) {
+      return {
+        end: start + 1,
+        nextSeq: singleSeq,
+        files: singleFiles,
+        prompt: boundedSummaryPrompt(singleSlice, summary, singleFiles, instructions, budget),
+      };
+    }
+    let lo = start + 1;
+    let hi = older.length - 1;
+    let bestPrompt = singlePrompt;
+    let bestFiles = singleFiles;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      const nextSeq = seqAfter(mid);
+      const files = chunkFiles(nextSeq);
+      const prompt = summaryPrompt(older.slice(start, mid), summary, files, instructions);
+      if (estimateTokens(prompt) <= budget) {
+        lo = mid;
+        bestPrompt = prompt;
+        bestFiles = files;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return { end: lo, nextSeq: seqAfter(lo), files: bestFiles, prompt: bestPrompt };
   }
 
   #tool(name: string): TaskTool | undefined {

@@ -568,7 +568,7 @@ What it adds to pi:
   ~20,000 tokens whole (half the threshold, where that is less); a summary that was cut off or
   stopped fails the task. A provider's context-overflow error or a reply cut off at
   `model_context_window_exceeded` compacts once, remembers that ceiling for the rest of the run, and
-  retries.
+  retries when older turns exist to summarize; otherwise the task fails.
 - **Thinking, on Anthropic,** goes back with a reply only while everything before it is as it
   was ([prefix checks](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/prefix-checks)),
   so a masking step or a compaction drops the thinking of the replies before it.

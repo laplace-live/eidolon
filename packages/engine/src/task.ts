@@ -136,6 +136,8 @@ export interface TaskMeter {
   spentUsd(): number;
   /** The last request's input tokens, when its provider reported them. */
   lastInputTokens(): number | null;
+  /** The last request's output tokens (reasoning included), when its provider reported them. */
+  lastOutputTokens?(): number | null;
   /**
    * Why the first request it couldn't count went uncounted ("No price is known for <model> at
    * <provider>", "No usage was reported for <model> at <account>"), or null.

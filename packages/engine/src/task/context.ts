@@ -330,9 +330,10 @@ function serialized(blocks: readonly Block[]): string {
     if (text !== "") parts.push(`[Assistant]: ${text}`);
     if (calls.length > 0) {
       const listed = calls.map(({ name, arguments: args }) => {
-        const fields = Object.entries(args).map(
-          ([key, value]) => `${key}=${JSON.stringify(value)}`,
-        );
+        const fields = Object.entries(args).map(([key, value]) => {
+          const raw = JSON.stringify(value) ?? "undefined";
+          return `${key}=${truncated(raw, SUMMARY_RESULT_CHARS)}`;
+        });
         return `${name}(${fields.join(", ")})`;
       });
       parts.push(`[Assistant tool calls]: ${listed.join("; ")}`);
@@ -364,6 +365,53 @@ export function filesBefore(
   };
 }
 
+function summaryTail(
+  previous: string | null,
+  files: { readonly read: readonly string[]; readonly written: readonly string[] },
+  instructions: string,
+): string {
+  let tail = "";
+  if (previous !== null) tail += `<previous-summary>\n${previous}\n</previous-summary>\n\n`;
+  const lists = fileLists(files);
+  if (lists !== "") tail += `${lists}\n\n`;
+  return tail + instructions;
+}
+
+function wrapSummaryPrompt(conversation: string, tail: string): string {
+  return `<conversation>\n${conversation}\n</conversation>\n\n${tail}`;
+}
+
+function fitTextToTokens(text: string, maxTokens: number): string {
+  if (text === "" || maxTokens <= 0) return "";
+  if (estimateTokens(text) <= maxTokens) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (estimateTokens(truncated(text, mid)) <= maxTokens) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo > 0 ? truncated(text, lo) : "";
+}
+
+function fitWrappedConversation(conversation: string, tail: string, maxTokens: number): string {
+  const empty = wrapSummaryPrompt("", tail);
+  if (conversation === "" || estimateTokens(empty) > maxTokens) return empty;
+  const full = wrapSummaryPrompt(conversation, tail);
+  if (estimateTokens(full) <= maxTokens) return full;
+  let lo = 0;
+  let hi = conversation.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (estimateTokens(wrapSummaryPrompt(truncated(conversation, mid), tail)) <= maxTokens) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo > 0 ? wrapSummaryPrompt(truncated(conversation, lo), tail) : empty;
+}
+
 /** The summary request's one message: what pi's generateSummary sends, file lists added. */
 export function summaryPrompt(
   older: readonly Block[],
@@ -371,9 +419,44 @@ export function summaryPrompt(
   files: { readonly read: readonly string[]; readonly written: readonly string[] },
   instructions: string,
 ): string {
-  let prompt = `<conversation>\n${serialized(older)}\n</conversation>\n\n`;
-  if (previous !== null) prompt += `<previous-summary>\n${previous}\n</previous-summary>\n\n`;
-  const lists = fileLists(files);
-  if (lists !== "") prompt += `${lists}\n\n`;
-  return prompt + instructions;
+  return wrapSummaryPrompt(serialized(older), summaryTail(previous, files, instructions));
+}
+
+/**
+ * Builds a summary prompt for `older` bounded to `maxTokens` (estimated), binary-searching
+ * `<conversation>` (and shrinking `<previous-summary>` or file lists first if they alone crowd it).
+ */
+export function boundedSummaryPrompt(
+  older: readonly Block[],
+  previous: string | null,
+  files: { readonly read: readonly string[]; readonly written: readonly string[] },
+  instructions: string,
+  maxTokens: number,
+): string {
+  const conversation = serialized(older);
+  let tail = summaryTail(previous, files, instructions);
+  const full = wrapSummaryPrompt(conversation, tail);
+  if (estimateTokens(full) <= maxTokens) return full;
+
+  if (estimateTokens(wrapSummaryPrompt("", tail)) + 64 <= maxTokens) {
+    return fitWrappedConversation(conversation, tail, maxTokens);
+  }
+
+  let activeFiles = files;
+  let noPrevTail = summaryTail(null, activeFiles, instructions);
+  if (estimateTokens(wrapSummaryPrompt("", noPrevTail)) + 64 > maxTokens) {
+    activeFiles = { read: [], written: [] };
+    noPrevTail = instructions;
+  }
+
+  let activePrev: string | null = null;
+  if (previous !== null) {
+    const spare = maxTokens - estimateTokens(wrapSummaryPrompt("", noPrevTail)) - 64;
+    if (spare > 32) {
+      const trimmedPrev = fitTextToTokens(previous, Math.floor(spare / 2));
+      if (trimmedPrev !== "") activePrev = trimmedPrev;
+    }
+  }
+  tail = summaryTail(activePrev, activeFiles, instructions);
+  return fitWrappedConversation(conversation, tail, maxTokens);
 }

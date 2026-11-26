@@ -67,16 +67,27 @@ describe("overflowTokens", () => {
     ["input token count (1,200,000) exceeds the maximum allowed (1,048,576)", 1_048_576],
     ["maximum prompt length is 131072", 131_072],
     ["exceeds the limit of 200000 tokens", 200_000],
+    ["prompt token count exceeds the limit of 128000", 128_000],
+    ["input exceeds the limit of 128,000 tokens", 128_000],
+    [
+      "The input token count (1196265) exceeds the maximum number of tokens allowed (1048576).",
+      1_048_576,
+    ],
     ["too large for model with 131072 maximum context length", 131_072],
   ])("extracts %s -> %s", (message, expected) => {
     expect(overflowTokens(http(400, message))).toBe(expected);
   });
 
-  test("returns null when the message names only excess tokens, generic 413, or non-overflow errors", () => {
+  test("returns null when the message names only excess tokens, byte/size limits, generic 413, or non-overflow errors", () => {
     expect(
       overflowTokens(http(400, "`prompt too long; exceeded max context length by 100918 tokens`")),
     ).toBeNull();
     expect(overflowTokens(http(413, "Payload Too Large"))).toBeNull();
+    expect(overflowTokens(http(413, "request exceeds the limit of 10485760 bytes"))).toBeNull();
+    expect(overflowTokens(http(413, "request body exceeds the limit of 10485760"))).toBeNull();
+    expect(
+      overflowTokens(http(413, "request size exceeds the maximum allowed (10485760)")),
+    ).toBeNull();
     expect(overflowTokens(http(429, "maximum context length is 131072 tokens"))).toBeNull();
     expect(
       overflowTokens(new Error("prompt is too long: 213462 tokens > 200000 maximum")),

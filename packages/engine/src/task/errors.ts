@@ -51,11 +51,11 @@ const OVERFLOW_LIMITS: readonly RegExp[] = [
   /tokens > ([\d,]+) maximum/i,
   /maximum context length (?:is|of) ([\d,]+)/i,
   /maximum context length\s*\(([\d,]+)\)/i,
-  /exceeds the maximum[^()]*\(([\d,]+)\)/i,
+  /(?:\btokens?\b[^.\n]*exceeds the maximum[^()\n]*\(([\d,]+)|exceeds the maximum (?:number of )?tokens\b[^()\n]*\(([\d,]+)|exceeds the maximum[^()\n]*\(([\d,]+)\s*tokens?\))/i,
   /maximum prompt length is ([\d,]+)/i,
   /maximum allowed input length of ([\d,]+)/i,
   /model'?s context length \(([\d,]+) tokens\)/i,
-  /exceeds the limit of ([\d,]+)/i,
+  /(?:\btokens?\b[^.\n]*exceeds the limit of ([\d,]+)|exceeds the limit of ([\d,]+)\s*tokens?\b)/i,
   /for model with ([\d,]+) maximum context length/i,
   /configured context size is ([\d,]+)/i,
 ];
@@ -84,7 +84,10 @@ export function isContextOverflow(error: unknown): boolean {
 export function overflowTokens(error: unknown): number | null {
   if (!(error instanceof ProviderHttpError) || !isContextOverflow(error)) return null;
   for (const pattern of OVERFLOW_LIMITS) {
-    const raw = pattern.exec(error.message)?.[1];
+    const raw = pattern
+      .exec(error.message)
+      ?.slice(1)
+      .find((group) => group !== undefined);
     if (raw === undefined) continue;
     const limit = Number(raw.replaceAll(",", ""));
     if (Number.isSafeInteger(limit) && limit >= 1024) return limit;

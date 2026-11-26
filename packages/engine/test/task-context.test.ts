@@ -2,6 +2,7 @@
 // the context's threshold, and a provider's overflow compacted and retried.
 import { ProviderHttpError } from "@eidolon/providers";
 import { describe, expect, test } from "vitest";
+import { estimateTokens } from "../src/task/context.ts";
 import type { TaskEntryDraft, TaskEvent, TaskTool } from "../src/task.ts";
 import type { MindChunk, MindRequest } from "../src/types.ts";
 import {
@@ -504,5 +505,134 @@ describe("unlimited context (contextTokens: 0)", () => {
       },
     ]);
     expect(toolMessages(mind.requests[5]).map(([id]) => id)).toEqual(["c-c", "c-d"]);
+  });
+
+  test("fails immediately on model_context_window_exceeded with partial tool calls and nothing to compact", async () => {
+    const mind = new ScriptedMind([
+      [
+        ...calls([call("c-1", "read", { value: "a" })]),
+        { type: "done", finishReason: "model_context_window_exceeded" },
+      ],
+      says("should not retry"),
+    ]);
+    const { outcome } = await drain(
+      taskRequest(mind, {
+        tools: [reader(10)],
+        limits: { contextTokens: 0, spendPauseUsd: 0 },
+      }),
+    );
+    expect(outcome).toEqual({
+      status: "failed",
+      error: "The model's context window was exceeded",
+    });
+    expect(mind.requests).toHaveLength(1);
+    expect(mind.summaryRequests).toHaveLength(0);
+  });
+
+  test("counts output tokens alongside input when learning ceiling on model_context_window_exceeded", async () => {
+    const meter = new FakeMeter();
+    let seen = 0;
+    const mind = new ScriptedMind(
+      [
+        calls([call("c-a", "read", { value: "a" })]),
+        calls([call("c-b", "read", { value: "b" })]),
+        [
+          { type: "text", text: "partial" },
+          { type: "done", finishReason: "model_context_window_exceeded" },
+        ],
+        calls([call("c-c", "read", { value: "c" })]),
+        calls([call("c-d", "read", { value: "d" })]),
+        says("done"),
+      ],
+      {
+        summaries: [says("SUMMARY-1"), says("SUMMARY-2")],
+        after: () => {
+          seen++;
+          meter.input = seen === 3 ? 40_000 : null;
+          meter.output = seen === 3 ? 10_000 : null;
+        },
+      },
+    );
+    const { outcome } = await drain(
+      taskRequest(mind, {
+        tools: [reader(40_000)],
+        meter,
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    // Ceiling learned as 40_000 + 10_000 = 50_000 (compactAbove = 37_500): c-c pushes to ~30_000
+    // so request 4 runs uncompacted; c-d pushes past 37_500 so request 5 compacts proactively.
+    expect(mind.summaryRequests).toHaveLength(2);
+    expect(toolMessages(mind.requests[4]).map(([id]) => id)).toEqual(["c-a", "c-b", "c-c"]);
+    expect(opening(mind.requests[5])).toStartWith(`${SUMMARY_OPENING}SUMMARY-2`);
+  });
+
+  test("truncates large tool-call arguments and chunks masked history to keep summary requests within the window", async () => {
+    const values = Array.from({ length: 16 }, (_, n) => `n${n}`);
+    const writer = tool("write", async (args) =>
+      result(`wrote ${String(args.value).length}`, {
+        files: { written: [`/tmp/todo/${String(args.value).slice(0, 4)}.txt`] },
+      }),
+    );
+    const mind = new ScriptedMind(
+      [
+        calls([call("c-write", "write", { value: "w".repeat(12_000) })]),
+        ...values.map((value) => calls([call(`c-${value}`, "read", { value })])),
+        new ProviderHttpError("anthropic", 400, "prompt is too long: 9000 tokens > 8192 maximum"),
+        says("done"),
+      ],
+      { summaries: values.map((_, n) => says(`SUMMARY-${n + 1}`)) },
+    );
+    const request = taskRequest(mind, {
+      tools: [writer, reader(8_000)],
+      limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1_000 },
+    });
+    const { outcome } = await drain(request);
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(mind.summaryRequests.length).toBeGreaterThan(1);
+    expect(opening(mind.summaryRequests[0])).not.toContain("w".repeat(2_500));
+    for (const summaryReq of mind.summaryRequests) {
+      const prompt = String((summaryReq.messages[0] as { content: string }).content);
+      expect(estimateTokens(summaryReq.system) + estimateTokens(prompt)).toBeLessThanOrEqual(6_144);
+    }
+    expect(opening(mind.requests.at(-1))).toStartWith(
+      `${SUMMARY_OPENING}SUMMARY-${mind.summaryRequests.length}`,
+    );
+  });
+
+  test("bounds a single oversized block and retries compaction at a smaller budget on summary overflow", async () => {
+    const mind = new ScriptedMind(
+      [
+        calls([call("c-a", "read", { value: "a" })], "A".repeat(40_000)),
+        calls([call("c-b", "read", { value: "b" })]),
+        new ProviderHttpError("anthropic", 400, "prompt is too long: 16000 tokens > 8192 maximum"),
+        says("done"),
+      ],
+      {
+        summaries: [
+          says("SUMMARY-1"),
+          new ProviderHttpError("anthropic", 400, "prompt is too long: 7000 tokens > 4096 maximum"),
+          says("SUMMARY-2"),
+        ],
+      },
+    );
+    const { outcome } = await drain(
+      taskRequest(mind, {
+        tools: [reader(20_000)],
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(mind.summaryRequests).toHaveLength(3);
+    const chunk2FirstAttempt = String(
+      (mind.summaryRequests[1]?.messages[0] as { content?: string } | undefined)?.content,
+    );
+    const chunk2Retry = String(
+      (mind.summaryRequests[2]?.messages[0] as { content?: string } | undefined)?.content,
+    );
+    expect(estimateTokens(chunk2FirstAttempt)).toBeLessThanOrEqual(6_144);
+    expect(estimateTokens(chunk2Retry)).toBeLessThanOrEqual(2_000);
+    expect(opening(mind.requests.at(-1))).toStartWith(`${SUMMARY_OPENING}SUMMARY-2`);
   });
 });

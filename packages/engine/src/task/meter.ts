@@ -17,6 +17,7 @@ export class UsageMeter implements TaskMeter {
   readonly #model: string;
   #spent: number;
   #input: number | null = null;
+  #output: number | null = null;
   /** Records since the last request ended. */
   #records = 0;
   #uncounted: string | null = null;
@@ -32,9 +33,10 @@ export class UsageMeter implements TaskMeter {
     if (record.costUsd !== null) this.#spent += record.costUsd;
     else this.#cannotCount(`No price is known for ${record.model} at ${record.provider}`);
     // The context's size: what the provider read from its cache counts as much as the rest.
-    const { inputTokens, cachedTokens, cacheWriteTokens } = record.units;
+    const { inputTokens, cachedTokens, cacheWriteTokens, outputTokens } = record.units;
     const counted = [inputTokens, cachedTokens, cacheWriteTokens].filter((n) => n !== undefined);
     this.#input = counted.length === 0 ? null : counted.reduce((sum, n) => sum + n, 0);
+    this.#output = outputTokens ?? null;
   };
 
   /**
@@ -51,6 +53,7 @@ export class UsageMeter implements TaskMeter {
     // A server may ignore the request for usage (stream_options.include_usage).
     if (this.#records === 0) {
       this.#input = null;
+      this.#output = null;
       this.#unreported();
     }
     this.#records = 0;
@@ -70,6 +73,10 @@ export class UsageMeter implements TaskMeter {
 
   lastInputTokens(): number | null {
     return this.#input;
+  }
+
+  lastOutputTokens(): number | null {
+    return this.#output;
   }
 
   unpriced(): string | null {

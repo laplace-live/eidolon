@@ -114,25 +114,33 @@ describe("UsageMeter", () => {
     expect(warnings()).toEqual([`${UNPRICED}, so the task's spend pauses can't count it`]);
   });
 
-  test("counts the last request's whole input, what its provider cached included", () => {
+  test("counts the last request's whole input, what its provider cached included, plus output tokens", () => {
     const counted = meter();
-    expect(counted.lastInputTokens()).toBeNull();
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([null, null]);
     counted.tap(record(0, { inputTokens: 300, cachedTokens: 9000, cacheWriteTokens: 700 }));
-    expect(counted.lastInputTokens()).toBe(10_000);
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([10_000, null]);
     counted.tap(record(0, { inputTokens: 40, outputTokens: 5 }));
-    expect(counted.lastInputTokens()).toBe(40);
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([40, 5]);
     counted.tap(record(0, { outputTokens: 5 }));
-    expect(counted.lastInputTokens()).toBeNull();
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([null, 5]);
   });
 
   test("a request that ended with no usage record is one it can't count, its input unknown", () => {
     const counted = meter(0.5);
-    counted.tap(record(0.25, { inputTokens: 40 }));
+    counted.tap(record(0.25, { inputTokens: 40, outputTokens: 12 }));
     counted.requestEnded();
-    expect([counted.unpriced(), counted.lastInputTokens()]).toEqual([null, 40]);
+    expect([counted.unpriced(), counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([
+      null,
+      40,
+      12,
+    ]);
     // A server that ignores stream_options.include_usage.
     counted.requestEnded();
-    expect([counted.unpriced(), counted.lastInputTokens()]).toEqual([UNREPORTED, null]);
+    expect([counted.unpriced(), counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([
+      UNREPORTED,
+      null,
+      null,
+    ]);
     // The first it couldn't count says why.
     counted.tap(record(null));
     counted.requestEnded();
@@ -391,5 +399,93 @@ describe("runTask's unpriced pause", () => {
     // The overflow, the summary, a network error, a reply with no finish reason, the calls, the report.
     expect(seen).toEqual([0, 0, 1, 1, 1, 2]);
     expect(counted.ended).toBe(3);
+  });
+
+  test("pauses before compacting when a model_context_window_exceeded reply crosses spend pause or goes unpriced", async () => {
+    const cut = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ] satisfies MindChunk[];
+
+    const spend = meter(0.95);
+    const overSpend = billed(spend, 0.1, [cut, says("done")], [says("SUMMARY")]);
+    const spendOutcome = (
+      await drain(
+        taskRequest(overSpend, { store: history(), tools: [tool("read")], meter: spend, limits }),
+      )
+    ).outcome;
+    expect(spendOutcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.05; it pauses at every $1.00.",
+    });
+    expect(overSpend.summaryRequests).toHaveLength(0);
+
+    const missing = meter();
+    const unpriced = billed(missing, "none", [cut, says("done")], [says("SUMMARY")]);
+    const unpricedOutcome = (
+      await drain(
+        taskRequest(unpriced, {
+          store: history(),
+          tools: [tool("read")],
+          meter: missing,
+          limits,
+        }),
+      )
+    ).outcome;
+    expect(unpricedOutcome).toEqual({
+      status: "paused",
+      reason: "unpriced",
+      detail: detail(UNREPORTED),
+    });
+    expect(unpriced.summaryRequests).toHaveLength(0);
+  });
+
+  test("pauses between summary chunks once the first chunk crosses the spend pause", async () => {
+    const drafts: TaskEntryDraft[] = [{ type: "brief", brief: BRIEF }];
+    for (let i = 0; i < 60; i++) {
+      const id = `c-${i}`;
+      drafts.push(
+        { type: "assistant", text: "", calls: [call(id, "read", { value: String(i) })] },
+        { type: "tool-start", callId: id, name: "read" },
+        {
+          type: "tool-result",
+          callId: id,
+          name: "read",
+          content: "x".repeat(8_000),
+          isError: false,
+        },
+      );
+    }
+    const store = new MemoryStore(...drafts);
+    const counted = meter(0);
+    let summaries = 0;
+    const mind = new ScriptedMind([says("done")], {
+      summaries: [says("SUMMARY-1"), says("SUMMARY-2"), says("SUMMARY-3")],
+      after: (req) => {
+        if (req.system === "You summarize.") {
+          summaries++;
+          counted.tap(record(summaries === 1 ? 1.0 : 0.1));
+        }
+      },
+    });
+    const outcome = (
+      await drain(
+        taskRequest(mind, {
+          store,
+          tools: [tool("read")],
+          meter: counted,
+          limits: { contextTokens: 4_096, spendPauseUsd: 1, maskAfterTokens: 1_000 },
+        }),
+      )
+    ).outcome;
+    expect(outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.00; it pauses at every $1.00.",
+    });
+    expect(mind.summaryRequests).toHaveLength(1);
+    expect(mind.requests).toHaveLength(0);
+    expect(store.of("compaction")).toMatchObject([{ summary: "SUMMARY-1" }]);
   });
 });
