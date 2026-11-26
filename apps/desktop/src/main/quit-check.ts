@@ -24,6 +24,7 @@ export type BackendFetch = (
 export interface BackendResponse {
   readonly ok: boolean;
   readonly status: number;
+  readonly headers?: { get(name: string): string | null };
   json(): Promise<unknown>;
 }
 

@@ -32,7 +32,7 @@ export default defineConfig({
         test: {
           name: "node",
           include: [
-            "apps/{bot,cli,eidolon}/test/**/*.test.ts",
+            "apps/{bot,cli,eidolon,relay}/test/**/*.test.ts",
             "packages/*/test/**/*.test.ts",
             "docs/benchmarks/**/*.test.ts",
             "scripts/**/*.test.ts",

@@ -66,6 +66,8 @@ export const SETTING_TITLES: Readonly<Record<string, MessageDescriptor>> = {
   "assistant.search.provider": msg`Web Search Provider`,
   "assistant.search.model": msg`Web Search Engine`,
   "chats.display": msg`Task Display`,
+  "subspace.relayUrl": msg`Subspace Relay URL`,
+  "subspace.authUrl": msg`Subspace Auth URL`,
   prompt: msg`System Prompt File`,
   "identity.timezone": msg`Time Zone`,
   "voice.provider": msg`Voice Provider`,
@@ -144,6 +146,8 @@ export const SETTING_HELP: Readonly<Record<string, MessageDescriptor>> = {
   "assistant.spendPauseUsd": msg`A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1.`,
   "assistant.contextTokens": msg`The most context a task's requests carry, in tokens. Default 128000.`,
   "chats.display": msg`How much of her tasks each chat shows, until the chat picks its own with /focus, /normal or /verbose. Focus hides task cards, and Verbose opens her newest running task's steps and, on a call, has her say how far a task's plan has got, which costs a reply each time. Default Normal.`,
+  "subspace.relayUrl": msg`The Subspace Relay server used to pair and connect across networks when Direct Connect isn't reachable.`,
+  "subspace.authUrl": msg`The LAPLACE ID or OIDC server used to sign in when pairing through the Subspace Relay.`,
   prompt: msg`Relative to her folder. Default prompt.md.`,
   "voice.model": msg`Fish Audio's drama-3 performs every delivery cue in her prompt. With other models, Eidolon takes out the cues they can't read before they're spoken.`,
   "hearing.language": msg`The language you speak in calls, as a two-letter code. Default zh.`,
@@ -193,6 +197,7 @@ export const GROUP_LABELS: Readonly<Record<string, MessageDescriptor>> = {
   sources: msg`Downloads`,
   usage: msg`Usage`,
   production: msg`Public Deployment`,
+  subspace: msg`Subspace`,
   other: msg`Other`,
 };
 

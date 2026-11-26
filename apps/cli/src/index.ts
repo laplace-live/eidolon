@@ -77,6 +77,7 @@ export { ingestFactsMain } from "./ingest_facts.ts";
 export { ingestStreamsMain } from "./ingest_streams.ts";
 export { type CliIo, type CommandDeps, printer, resolveIo } from "./io.ts";
 export { jobArgv } from "./job.ts";
+export { PAIR_PARSER, pairMain } from "./pair.ts";
 export { personaArg } from "./persona-arg.ts";
 export { pipelineMain } from "./pipeline.ts";
 export { prepareBatchMain } from "./prepare_batch.ts";
@@ -97,6 +98,11 @@ export {
   searchMain,
   UNRESOLVED_PERIOD_NOTE,
 } from "./search.ts";
+export {
+  probeRunningLocalServer,
+  SUBSPACE_PARSER,
+  subspaceMain,
+} from "./subspace.ts";
 export {
   type Confirm,
   type ModelChoice,

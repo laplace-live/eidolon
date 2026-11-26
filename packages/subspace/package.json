@@ -1,0 +1,19 @@
+{
+  "name": "@eidolon/subspace",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/protocol/index.ts",
+    "./relay-contract": "./src/relay-contract.ts"
+  },
+  "dependencies": {
+    "@eidolon/config": "workspace:*",
+    "uqr": "0.1.3",
+    "ws": "8.23.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2"
+  }
+}

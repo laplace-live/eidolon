@@ -36,3 +36,9 @@ apps/eidolon/*
 # The desktop app never ships: production never runs it. Its manifest stays for --frozen-lockfile.
 apps/desktop/*
 !apps/desktop/package.json
+
+# The Subspace relay never ships in the bot image. Its manifest stays for --frozen-lockfile.
+apps/relay/*
+!apps/relay/package.json
+packages/subspace/*
+!packages/subspace/package.json

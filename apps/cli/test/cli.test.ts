@@ -20,11 +20,13 @@ import {
   ingestFactsMain,
   ingestStreamsMain,
   jobArgv,
+  pairMain,
   personaArg,
   pipelineMain,
   prepareBatchMain,
   refineMain,
   runCli,
+  subspaceMain,
   taskMain,
   transcribeMain,
 } from "../src/index.ts";
@@ -56,6 +58,8 @@ const NEW_COMMANDS = {
   "prepare-batch": prepareBatchMain,
   discover: discoverMain,
   task: taskMain,
+  pair: pairMain,
+  subspace: subspaceMain,
 };
 
 test("one command per Python CLI, laplace-discover and laplace-task, each run by its own module", () => {

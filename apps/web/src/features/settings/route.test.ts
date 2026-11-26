@@ -70,7 +70,16 @@ const tabs = (markup: string) =>
   [...markup.matchAll(/href="[^"]*\?tab=([a-z]+)"/g)].map((m) => m[1]);
 
 test("the nav lists Desktop, before Advanced, only in a desktop app that offers its options", () => {
-  const others = ["providers", "general", "memory", "downloads", "assistant", "skills", "advanced"];
+  const others = [
+    "providers",
+    "general",
+    "memory",
+    "downloads",
+    "assistant",
+    "skills",
+    "subspace",
+    "advanced",
+  ];
   expect(tabs(render("/settings?tab=general", undefined).html)).toEqual(others);
   expect(tabs(render("/settings?tab=general", older).html)).toEqual(others);
   expect(tabs(render("/settings?tab=general", current).html)).toEqual([

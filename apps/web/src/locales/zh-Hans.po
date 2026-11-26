@@ -353,6 +353,7 @@ msgstr "{name}会在通话之间记住你们聊过的内容。"
 
 #: src/features/settings/accounts-card.tsx
 #: src/features/studio/model-list.tsx
+#: src/features/subspace/servers-card.tsx
 msgid "{name} removed."
 msgstr "已删除{name}。"
 
@@ -541,6 +542,11 @@ msgstr "通话会铺满所在的屏幕：在宽屏和手机屏幕上都看看她
 msgid "A call is in progress: switch personas after it ends."
 msgstr "正在通话中：请在通话结束后切换人设。"
 
+#: src/components/subspace-switcher.tsx
+#: src/features/subspace/add-server-dialog.tsx
+msgid "A call is in progress: switch servers after it ends."
+msgstr "正在通话中：请在通话结束后切换服务器。"
+
 #: src/features/settings/restart-button.tsx
 #: src/features/studio/model-list.tsx
 #: src/lib/labels.ts
@@ -697,6 +703,7 @@ msgstr "账号"
 
 #: src/components/persona-badges.tsx
 #: src/features/studio/model-list.tsx
+#: src/features/subspace/servers-card.tsx
 msgid "Active"
 msgstr "当前"
 
@@ -708,6 +715,14 @@ msgstr "当前人设"
 #: src/components/persona-switcher.tsx
 msgid "Active Persona: {name}"
 msgstr "当前人设：{name}"
+
+#: src/components/subspace-switcher.tsx
+msgid "Active Subspace Server: {name}"
+msgstr "当前亚空间服务器：{name}"
+
+#: src/components/subspace-switcher.tsx
+msgid "Active Subspace Server: This Computer"
+msgstr "当前亚空间服务器：此电脑"
 
 #: src/features/studio/knowledge-section.tsx
 msgid "Add a .txt file of what she knows about herself, then index it. Files matching {patterns} are indexed."
@@ -1056,6 +1071,10 @@ msgstr "API 密钥"
 msgid "Appearance"
 msgstr "形象"
 
+#: src/features/subspace/share-card.tsx
+msgid "Apply"
+msgstr "应用"
+
 #: src/features/chats/labels.ts
 msgid "Approve for Me"
 msgstr "自动审批"
@@ -1099,6 +1118,10 @@ msgstr "自动审批要你来定：这会影响这台电脑以外的东西，比
 #: src/features/tasks/labels.ts
 msgid "Approve for Me asks you: this runs code from the internet."
 msgstr "自动审批要你来定：这会运行从网上下载的代码。"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Approve this computer in your browser by entering the verification code below:"
+msgstr "请在浏览器中输入下方的验证码以授权此电脑："
 
 #: src/features/usage/route.tsx
 msgid "As each provider reported it."
@@ -1188,6 +1211,10 @@ msgstr "附件"
 #: src/features/jobs/labels.ts
 msgid "Audio over 5 hours needs ffmpeg to split it. Install ffmpeg and try again."
 msgstr "超过 5 小时的音频需要 ffmpeg 来切分，请安装 ffmpeg 后重试。"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Auth: {auth} · Relay: {relay}"
+msgstr "认证：{auth} · 中继：{relay}"
 
 #: src/features/chats/labels.ts
 msgctxt "reply mode"
@@ -1399,6 +1426,10 @@ msgstr "无法连接 Eidolon，请确认它仍在终端中运行。"
 msgid "Can't reach Eidolon's server. If it doesn't come back, quit Eidolon and open it again."
 msgstr "无法连接 Eidolon 的服务器。如果它一直没有恢复，请退出 Eidolon 再重新打开。"
 
+#: src/lib/labels.ts
+msgid "Can't reach that Subspace server. Check that it's running and connected."
+msgstr "无法连接该亚空间服务器。请检查它是否正在运行并保持连接。"
+
 #: src/components/settings-form/reindex-dialog.tsx
 #: src/features/chats/chat-menu.tsx
 #: src/features/jobs/parts.tsx
@@ -1409,6 +1440,9 @@ msgstr "无法连接 Eidolon 的服务器。如果它一直没有恢复，请退
 #: src/features/studio/references-section.tsx
 #: src/features/studio/video-table.tsx
 #: src/features/studio/voice-styles-card.tsx
+#: src/features/subspace/add-server-dialog.tsx
+#: src/features/subspace/relay-account-card.tsx
+#: src/features/subspace/servers-card.tsx
 #: src/features/tasks/stop-picker.tsx
 msgid "Cancel"
 msgstr "取消"
@@ -1648,6 +1682,26 @@ msgstr "请连接麦克风，然后再次呼叫。"
 msgid "Connect a microphone, then try again."
 msgstr "请连接麦克风，然后再试一次。"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Connected"
+msgstr "已连接"
+
+#: src/features/subspace/share-card.tsx
+msgid "Connected to Subspace Relay with end-to-end encryption."
+msgstr "已通过端到端加密连接到亚空间中继。"
+
+#: src/features/subspace/share-card.tsx
+msgid "Connecting to Subspace Relay…"
+msgstr "正在连接到亚空间中继…"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Connecting…"
+msgstr "正在连接…"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Connection Error"
+msgstr "连接出错"
+
 #: src/features/setup/memory-step.tsx
 #: src/features/setup/persona-step.tsx
 #: src/features/setup/voice-step.tsx
@@ -1684,6 +1738,19 @@ msgstr "Cookie 来自文件 {file}。"
 msgid "Cookies File"
 msgstr "Cookie 文件"
 
+#: src/features/subspace/relay-account-card.tsx
+#: src/features/subspace/share-card.tsx
+msgid "Copied"
+msgstr "已复制"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Copy Code"
+msgstr "复制验证码"
+
+#: src/features/subspace/share-card.tsx
+msgid "Copy Link"
+msgstr "复制链接"
+
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
 msgid "Cost"
@@ -1696,6 +1763,10 @@ msgstr "目前费用"
 #: src/features/call/call-notices.tsx
 msgid "Couldn't connect the call."
 msgstr "无法接通通话。"
+
+#: src/features/subspace/queries.ts
+msgid "Couldn't copy to clipboard."
+msgstr "无法复制到剪贴板。"
 
 #: src/features/call/call-notices.tsx
 msgid "Couldn't get the connection settings for the call."
@@ -1757,6 +1828,18 @@ msgstr "剩余余额：{amount}"
 #: src/components/voice-picker/parts.tsx
 msgid "Current voice:"
 msgstr "当前声音："
+
+#: src/components/route-error.tsx
+msgid "Currently targeting remote Subspace server {name}."
+msgstr "当前正在访问远程亚空间服务器 {name}。"
+
+#: src/features/subspace/share-card.tsx
+msgid "Custom Address"
+msgstr "自定义地址"
+
+#: src/features/subspace/share-card.tsx
+msgid "Custom Host or IP"
+msgstr "自定义主机名或 IP"
 
 #: src/features/studio/voice-styles-card.tsx
 msgid "Customize"
@@ -1850,6 +1933,19 @@ msgstr "桌面形象"
 msgid "Details"
 msgstr "详情"
 
+#: src/features/subspace/servers-card.tsx
+#: src/features/subspace/share-card.tsx
+msgid "Direct"
+msgstr "直连"
+
+#: src/features/subspace/share-card.tsx
+msgid "Direct and Relay Subspace access is turned off for new pairings."
+msgstr "直连与中继亚空间新配对已关闭。"
+
+#: src/features/subspace/share-card.tsx
+msgid "Direct Network"
+msgstr "直接网络"
+
 #: src/components/settings-form/settings-card.tsx
 msgid "Discard"
 msgstr "放弃修改"
@@ -1857,6 +1953,10 @@ msgstr "放弃修改"
 #: src/features/studio/text-editor.tsx
 msgid "Discard Changes"
 msgstr "放弃修改"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Disconnect"
+msgstr "断开连接"
 
 #: src/features/home/readiness-labels.ts
 msgid "Disk Space"
@@ -1983,6 +2083,14 @@ msgstr "编辑"
 msgid "Edit {name}"
 msgstr "编辑 {name}"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Edit Server"
+msgstr "编辑服务器"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Edit Subspace Server"
+msgstr "编辑亚空间服务器"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Edit the {name} Style"
 msgstr "编辑风格 {name}"
@@ -1994,6 +2102,10 @@ msgstr "Eidolon"
 #: src/features/home/route.tsx
 msgid "Eidolon {version}"
 msgstr "Eidolon {version}"
+
+#: src/features/home/route.tsx
+msgid "Eidolon {version} · {host}"
+msgstr "Eidolon {version} · {host}"
 
 #: src/lib/labels.ts
 msgid "Eidolon answers only at localhost or 127.0.0.1. Open it at one of those."
@@ -2462,6 +2574,10 @@ msgstr "完全权限"
 msgid "General"
 msgstr "通用"
 
+#: src/features/subspace/share-card.tsx
+msgid "Generate Pairing Code"
+msgstr "生成配对码"
+
 #: src/features/studio/appearance-labels.ts
 msgctxt "mood"
 msgid "Gentle"
@@ -2702,6 +2818,18 @@ msgstr "说话时按住麦克风按钮，或者点一下开始、再点一下发
 #: src/components/app-sidebar.tsx
 msgid "Home"
 msgstr "首页"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Host"
+msgstr "主机"
+
+#: src/features/subspace/share-card.tsx
+msgid "Host Name"
+msgstr "主机名称"
+
+#: src/features/subspace/share-card.tsx
+msgid "Host name updated."
+msgstr "主机名称已更新。"
 
 #: src/features/setup/voice-step.tsx
 msgid "How {name} sounds."
@@ -3183,6 +3311,10 @@ msgstr "别把密钥写进 mcp.json：在要填密钥的地方写 {reference}，
 msgid "Keep Running"
 msgstr "继续运行"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Keep Server"
+msgstr "保留服务器"
+
 #: src/features/setup/persona-step.tsx
 msgid "Keep talking to her."
 msgstr "继续和她聊天。"
@@ -3234,6 +3366,10 @@ msgstr "知识"
 msgid "Knowledge Index"
 msgstr "知识索引"
 
+#: src/features/subspace/share-card.tsx
+msgid "LAN"
+msgstr "局域网"
+
 #: src/components/preferences.tsx
 msgid "Language"
 msgstr "语言"
@@ -3242,6 +3378,10 @@ msgstr "语言"
 msgid "LAPLACE Eidolon {version} · server {server}"
 msgstr "LAPLACE Eidolon {version} · 服务器 {server}"
 
+#: src/features/home/route.tsx
+msgid "LAPLACE Eidolon {version} · server {server} · {host}"
+msgstr "LAPLACE Eidolon {version} · 服务器 {server} · {host}"
+
 #: src/components/settings-form/labels.ts
 msgid "LAPLACE Workers URL"
 msgstr "LAPLACE Workers 地址"
@@ -3249,6 +3389,10 @@ msgstr "LAPLACE Workers 地址"
 #: src/features/home/readiness-labels.ts
 msgid "Last Call"
 msgstr "上一次通话"
+
+#: src/features/subspace/share-card.tsx
+msgid "Last connected {time}"
+msgstr "上次连接：{time}"
 
 #: src/features/tasks/task-card.tsx
 msgid "Latest Step"
@@ -3275,6 +3419,10 @@ msgstr "不保存就离开？"
 #: src/features/studio/video-table.tsx
 msgid "Length"
 msgstr "时长"
+
+#: src/features/subspace/share-card.tsx
+msgid "Let another LAPLACE Eidolon app connect to this computer over your local network, Tailscale, or Subspace Relay."
+msgstr "允许另一台设备上的 LAPLACE Eidolon 通过局域网、Tailscale 或亚空间中继连接到此电脑。"
 
 #: src/features/chats/voice-recorder.tsx
 msgid "Let go to send, or slide off the button to cancel."
@@ -3328,6 +3476,10 @@ msgstr "已检查的链接"
 msgid "Links to"
 msgstr "链接到"
 
+#: src/features/subspace/share-card.tsx
+msgid "Listening directly on port {port} without a Relay account."
+msgstr "正在端口 {port} 上直接监听，无需中继账号。"
+
 #: src/features/call/call-controls.tsx
 msgid "Listening…"
 msgstr "正在聆听…"
@@ -3343,6 +3495,18 @@ msgstr "正在聆听…"
 #: src/features/tasks/transcript-view.tsx
 msgid "Loading…"
 msgstr "加载中…"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Local"
+msgstr "本地"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Local LAPLACE Eidolon server on this computer."
+msgstr "此电脑上的本地 LAPLACE Eidolon 服务器。"
+
+#: src/components/subspace-switcher.tsx
+msgid "Local Server"
+msgstr "本地服务器"
 
 #: src/features/jobs/detail.tsx
 msgid "Log"
@@ -3674,6 +3838,10 @@ msgstr "需要 ffmpeg"
 msgid "Needs prepaid credit."
 msgstr "需要预付余额。"
 
+#: src/features/subspace/share-card.tsx
+msgid "Network Address"
+msgstr "网络地址"
+
 #: src/components/app-sidebar.tsx
 #: src/features/chats/route.tsx
 msgid "New Chat"
@@ -3686,6 +3854,10 @@ msgstr "新建资料文件"
 #: src/features/studio/knowledge-section.tsx
 msgid "New File"
 msgstr "新建文件"
+
+#: src/features/subspace/share-card.tsx
+msgid "New Pairing Code"
+msgstr "重新生成配对码"
 
 #: src/components/persona-switcher.tsx
 #: src/features/home/persona-grid.tsx
@@ -3995,6 +4167,7 @@ msgstr "暂无内容。"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
+#: src/features/subspace/share-card.tsx
 msgid "Off"
 msgstr "关"
 
@@ -4017,6 +4190,10 @@ msgstr "已关闭：她不会在多次通话之间记得你。"
 #: src/components/settings-form/labels.ts
 msgid "Off: Three Models"
 msgstr "关闭：使用三个模型"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Offline"
+msgstr "离线"
 
 #: src/components/settings-form/field.tsx
 #: src/components/settings-form/labels.ts
@@ -4114,6 +4291,14 @@ msgstr "打开人设的工作室来完善她，或把另一个人设设为通话
 msgid "Open Settings"
 msgstr "打开设置"
 
+#: src/features/subspace/relay-account-card.tsx
+msgid "Open Sign-In Page"
+msgstr "打开登录页面"
+
+#: src/components/route-error.tsx
+msgid "Open Subspace Settings"
+msgstr "打开亚空间设置"
+
 #: src/features/settings/assistant.tsx
 msgid "Open Tasks"
 msgstr "打开任务"
@@ -4150,6 +4335,7 @@ msgid "OpenRouter App URL"
 msgstr "OpenRouter 应用网址"
 
 #: src/features/setup/stepper.tsx
+#: src/features/subspace/add-server-dialog.tsx
 msgid "Optional"
 msgstr "可选"
 
@@ -4222,6 +4408,52 @@ msgstr "你添加的服装只保存在这台电脑上：部署{name}时只会复
 msgid "Overrides <0>{env}</0> in the environment, which sets <1>{value}</1>."
 msgstr "覆盖了环境变量 <0>{env}</0>，它设为 <1>{value}</1>。"
 
+#: src/components/subspace-switcher.tsx
+#: src/features/subspace/add-server-dialog.tsx
+#: src/features/subspace/servers-card.tsx
+msgid "Pair a Server"
+msgstr "配对服务器"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Pair Server"
+msgstr "配对服务器"
+
+#: src/features/subspace/share-card.tsx
+msgid "Paired {time}"
+msgstr "配对于 {time}"
+
+#: src/features/subspace/share-card.tsx
+msgid "Paired Devices"
+msgstr "已配对设备"
+
+#: src/features/subspace/subspace-section.tsx
+msgid "Paired servers, sharing, and your Relay account here are stored on this computer. Other Settings sections—and the Subspace Relay URL card below—configure {name}."
+msgstr "此处列出的已配对服务器、共享设置与中继账号保存在此电脑上。其他设置分区以及下方的亚空间中继地址卡片用于配置 {name}。"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Paired with {name}."
+msgstr "已与 {name} 配对。"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Paired with the remote server."
+msgstr "已与远程服务器配对。"
+
+#: src/features/subspace/share-card.tsx
+msgid "Pairing Link"
+msgstr "配对链接"
+
+#: src/features/subspace/share-card.tsx
+msgid "Pairing link copied."
+msgstr "配对链接已复制。"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Pairing Link or Code"
+msgstr "配对链接或配对码"
+
+#: src/lib/labels.ts
+msgid "Pairing with the Subspace server failed."
+msgstr "与亚空间服务器配对失败。"
+
 #: src/features/studio/model-outfits.tsx
 msgid "Parameters"
 msgstr "参数"
@@ -4246,6 +4478,10 @@ msgstr "粘贴新密钥即可替换"
 #: src/features/studio/model-controls.tsx
 msgid "Paste a reply of hers, with its cues: she plays it as she would on a call, with no voice and nothing billed."
 msgstr "粘贴一句她的回复，带上提示：她会像通话时那样演出来，没有声音，也不产生费用。"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Paste a Subspace pairing link or code from another LAPLACE Eidolon computer or CLI."
+msgstr "粘贴来自另一台 LAPLACE Eidolon 电脑或命令行工具的亚空间配对链接或配对码。"
 
 #: src/components/settings-form/account-key-field.tsx
 #: src/features/settings/account-dialog.tsx
@@ -4397,6 +4633,10 @@ msgstr "播放进度"
 msgid "Pop Out"
 msgstr "弹出到桌面"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Port"
+msgstr "端口"
+
 #: src/features/studio/model-outfits.tsx
 msgid "Pose Group {group}"
 msgstr "姿势组 {group}"
@@ -4465,6 +4705,7 @@ msgid "PSD2Live's runtime stopped while it drew her model."
 msgstr "PSD2Live 运行时在绘制她的模型时停止了。"
 
 #: src/components/voice-picker/parts.tsx
+#: src/features/subspace/share-card.tsx
 msgid "Public"
 msgstr "公开"
 
@@ -4564,6 +4805,10 @@ msgstr "推荐"
 msgid "Recommended Providers"
 msgstr "推荐服务商"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Reconnect"
+msgstr "重新连接"
+
 #: src/features/chats/voice-recorder.tsx
 msgid "Record Voice Message"
 msgstr "录制语音消息"
@@ -4615,11 +4860,25 @@ msgstr "刷新"
 msgid "Relative to her folder. Default prompt.md."
 msgstr "相对于她的文件夹。默认 prompt.md。"
 
+#: src/features/subspace/servers-card.tsx
+#: src/features/subspace/share-card.tsx
+msgid "Relay"
+msgstr "中继"
+
+#: src/features/subspace/share-card.tsx
+msgid "Relay error: {error}"
+msgstr "中继错误：{error}"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Relay sign-in failed."
+msgstr "中继账号登录失败。"
+
 #: src/features/settings/commands-card.tsx
 #: src/features/settings/desktop-card.tsx
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/identity-section.tsx
 #: src/features/studio/voice-styles-card.tsx
+#: src/features/subspace/servers-card.tsx
 msgid "Remove"
 msgstr "移除"
 
@@ -4647,6 +4906,7 @@ msgstr "移除 {name}"
 
 #: src/features/settings/accounts-card.tsx
 #: src/features/studio/model-list.tsx
+#: src/features/subspace/servers-card.tsx
 msgid "Remove {name}?"
 msgstr "删除{name}吗？"
 
@@ -4669,6 +4929,10 @@ msgstr "移除人设"
 #: src/features/studio/voice-styles-card.tsx
 msgid "Remove the {name} style?"
 msgstr "移除风格 {name}？"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Removing the active server switches this app back to This Computer. You will need a new pairing link to connect again."
+msgstr "移除当前正在使用的服务器后，应用会切换回“此电脑”。以后需要新的配对链接才能重新连接。"
 
 #: src/features/chats/chat-menu.tsx
 #: src/features/studio/model-list.tsx
@@ -4865,6 +5129,10 @@ msgstr "回到通话"
 msgid "Revert"
 msgstr "还原"
 
+#: src/features/subspace/share-card.tsx
+msgid "Revoke"
+msgstr "撤销"
+
 #: src/components/settings-form/labels.ts
 msgid "Rounds per Reply"
 msgstr "每次回复轮数"
@@ -4935,6 +5203,8 @@ msgstr "与助手任务相同"
 #: src/features/settings/account-dialog.tsx
 #: src/features/studio/model-list.tsx
 #: src/features/studio/text-editor.tsx
+#: src/features/subspace/servers-card.tsx
+#: src/features/subspace/share-card.tsx
 msgid "Save"
 msgstr "保存"
 
@@ -4954,6 +5224,10 @@ msgstr "保存风格"
 #: src/features/settings/accounts-card.tsx
 msgid "Saved"
 msgstr "已保存"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Saved changes to {name}."
+msgstr "已保存对 {name} 的更改。"
 
 #: src/components/settings-form/settings-card.tsx
 #: src/features/studio/identity-section.tsx
@@ -5122,6 +5396,15 @@ msgstr "已改用文字发送"
 msgid "Sent by you"
 msgstr "你发送的"
 
+#: src/features/subspace/add-server-dialog.tsx
+#: src/features/subspace/servers-card.tsx
+msgid "Server Name"
+msgstr "服务器名称"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Server Options"
+msgstr "服务器选项"
+
 #: src/features/settings/account-dialog.tsx
 msgid "Set by {env} in settings.yaml; a value saved here replaces it."
 msgstr "由 settings.yaml 中的 {env} 设置；在这里保存的值会替代它。"
@@ -5192,6 +5475,10 @@ msgstr "打开设置向导会结束通话，请先挂断。"
 msgid "Share"
 msgstr "占比"
 
+#: src/features/subspace/share-card.tsx
+msgid "Share This Computer"
+msgstr "共享此电脑"
+
 #: src/features/settings/skills-card.tsx
 msgid "Shared"
 msgstr "共享"
@@ -5203,6 +5490,10 @@ msgstr "共享文件夹"
 #: src/features/settings/skills-card.tsx
 msgid "Shared folder:"
 msgstr "共享文件夹："
+
+#: src/features/subspace/share-card.tsx
+msgid "Sharing Mode"
+msgstr "共享模式"
 
 #: src/features/chats/why-answered.tsx
 msgid "She answered {name}'s line."
@@ -5374,6 +5665,10 @@ msgstr "查看任务"
 msgid "Show Transcript"
 msgstr "显示文字"
 
+#: src/features/subspace/share-card.tsx
+msgid "Shown in the Subspace switcher on paired devices."
+msgstr "会显示在已配对设备的亚空间切换器中。"
+
 #: src/components/settings-form/field.tsx
 msgid "Shown only: set it in settings.yaml or with <0>{env}</0>."
 msgstr "仅供查看：请在 settings.yaml 中或用 <0>{env}</0> 设置。"
@@ -5391,9 +5686,33 @@ msgstr "害羞"
 msgid "Sidebar"
 msgstr "侧边栏"
 
+#: src/features/subspace/share-card.tsx
+msgid "Sign in to your Subspace Relay account below to share outside your LAN or Tailscale."
+msgstr "在下方登录你的亚空间中继账号，即可在局域网和 Tailscale 之外共享此电脑。"
+
+#: src/lib/labels.ts
+msgid "Sign in to your Subspace Relay account first."
+msgstr "请先登录你的亚空间中继账号。"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Sign In with Browser"
+msgstr "在浏览器中登录"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Sign in with your LAPLACE ID in your browser to pair and reach your servers through the Subspace Relay without opening ports."
+msgstr "在浏览器中使用你的 LAPLACE ID 登录，即可通过亚空间中继配对并访问你的服务器，无需开放端口。"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Sign Out"
+msgstr "退出登录"
+
 #: src/features/usage/route.tsx
 msgid "since recording began"
 msgstr "开始记录以来"
+
+#: src/features/subspace/share-card.tsx
+msgid "Single-use link expires at {time}. Generating a new code invalidates this one."
+msgstr "一次性链接将于 {time} 过期。生成新配对码会使当前链接失效。"
 
 #: src/features/settings/route.tsx
 #: src/features/settings/skills-card.tsx
@@ -5577,6 +5896,10 @@ msgstr "{time} 开始"
 msgid "Starting a task…"
 msgstr "正在开始任务…"
 
+#: src/features/subspace/share-card.tsx
+msgid "Starting direct listener…"
+msgstr "正在启动直连监听…"
+
 #: src/features/jobs/detail.tsx
 msgid "Starting…"
 msgstr "正在启动…"
@@ -5707,6 +6030,42 @@ msgstr "工作室"
 msgid "STUN URL"
 msgstr "STUN 地址"
 
+#: src/components/settings-form/labels.ts
+#: src/components/subspace-switcher.tsx
+#: src/features/settings/route.tsx
+msgid "Subspace"
+msgstr "亚空间"
+
+#: src/components/settings-form/labels.ts
+msgid "Subspace Auth URL"
+msgstr "亚空间认证地址"
+
+#: src/features/subspace/share-card.tsx
+msgid "Subspace Pairing QR Code"
+msgstr "亚空间配对二维码"
+
+#: src/features/settings/route.tsx
+#: src/features/subspace/servers-card.tsx
+#: src/features/subspace/share-card.tsx
+msgid "Subspace Relay"
+msgstr "亚空间中继"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Subspace Relay Account"
+msgstr "亚空间中继账号"
+
+#: src/components/settings-form/labels.ts
+msgid "Subspace Relay URL"
+msgstr "亚空间中继 URL"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Subspace Servers"
+msgstr "亚空间服务器"
+
+#: src/components/subspace-switcher.tsx
+msgid "Subspace Settings"
+msgstr "亚空间设置"
+
 #: src/features/studio/voice-styles-card.tsx
 msgid "Such as 温柔/轻柔/柔一点"
 msgstr "比如 温柔/轻柔/柔一点"
@@ -5721,9 +6080,29 @@ msgctxt "mood"
 msgid "Surprised"
 msgstr "惊讶"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Switch between this computer and remote Eidolon servers you've paired with."
+msgstr "在此电脑与已配对的远程 Eidolon 服务器之间切换。"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Switch Here"
+msgstr "切换到此"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Switch the app to use this server as soon as pairing finishes."
+msgstr "配对完成后立即切换应用以使用该服务器。"
+
 #: src/features/setup/new-persona.tsx
 msgid "Switch to Her Now"
 msgstr "立即切换到她"
+
+#: src/features/subspace/add-server-dialog.tsx
+msgid "Switch to Server Now"
+msgstr "配对后立即切换"
+
+#: src/components/route-error.tsx
+msgid "Switch to This Computer"
+msgstr "切换回此电脑"
 
 #: src/features/settings/skills-card.tsx
 msgid "Switched Off"
@@ -5749,6 +6128,10 @@ msgstr "表格"
 msgctxt "index storage"
 msgid "Table"
 msgstr "表"
+
+#: src/features/subspace/share-card.tsx
+msgid "Tailscale"
+msgstr "Tailscale"
 
 #: src/features/settings/accounts-card.tsx
 msgid "Takes no key"
@@ -5906,6 +6289,18 @@ msgid "That model was removed. Reload to see her models."
 msgstr "该形象模型已被移除，请刷新后查看她的形象模型。"
 
 #: src/lib/labels.ts
+msgid "That paired device is no longer listed."
+msgstr "找不到该已配对设备。"
+
+#: src/lib/labels.ts
+msgid "That pairing link has expired. Generate a fresh one on the host."
+msgstr "该配对链接已过期。请在主机上重新生成一个。"
+
+#: src/lib/labels.ts
+msgid "That pairing link or code isn't valid."
+msgstr "该配对链接或配对码无效。"
+
+#: src/lib/labels.ts
 msgid "That part of the file doesn't exist."
 msgstr "文件中没有这一部分。"
 
@@ -5916,6 +6311,10 @@ msgstr "该服务暂时不可用。"
 #: src/lib/labels.ts
 msgid "That setting doesn't exist."
 msgstr "没有这项设置。"
+
+#: src/lib/labels.ts
+msgid "That Subspace server is no longer saved."
+msgstr "找不到该已保存的亚空间服务器。"
 
 #: src/lib/labels.ts
 msgid "That task is waiting for an approval. Answer it first."
@@ -6098,6 +6497,10 @@ msgid "The language you speak in calls, as a two-letter code. Default zh."
 msgstr "你在通话中说的语言，用两个字母的代码表示。默认 zh。"
 
 #: src/components/settings-form/labels.ts
+msgid "The LAPLACE ID or OIDC server used to sign in when pairing through the Subspace Relay."
+msgstr "通过亚空间中继配对时用于登录的 LAPLACE ID 或 OIDC 服务地址。"
+
+#: src/components/settings-form/labels.ts
 msgid "The largest allowed value is {max}."
 msgstr "最大值为 {max}。"
 
@@ -6202,6 +6605,10 @@ msgstr "服务商拒绝了这个密钥。"
 msgid "The provider sent an answer the check doesn't recognize."
 msgstr "服务商返回了无法识别的结果。"
 
+#: src/features/settings/route.tsx
+msgid "The relay server used for account-based Subspace pairing and connections."
+msgstr "用于账号配对和跨网连接的亚空间中继服务器。"
+
 #: src/features/jobs/labels.ts
 msgid "The request got no answer. Check the network connection."
 msgstr "请求没有收到响应，请检查网络连接。"
@@ -6223,6 +6630,10 @@ msgstr "请求无效。"
 msgid "The same steps came three turns running, so it paused. Continue lets it try again."
 msgstr "它连续三轮重复了相同的步骤，所以暂停了。继续会让它再试一次。"
 
+#: src/features/subspace/servers-card.tsx
+msgid "The saved pairing key and device token will be removed from this computer."
+msgstr "此电脑上保存的配对密钥与设备令牌将被移除。"
+
 #: src/features/tasks/labels.ts
 msgid "The server says this tool can change or delete things."
 msgstr "服务器说这个工具会修改或删除东西。"
@@ -6238,6 +6649,10 @@ msgstr "网站拒绝了 yt-dlp 的请求，通常是因为 yt-dlp 版本过旧�
 #: src/components/settings-form/labels.ts
 msgid "The smallest allowed value is {min}."
 msgstr "最小值为 {min}。"
+
+#: src/components/settings-form/labels.ts
+msgid "The Subspace Relay server used to pair and connect across networks when Direct Connect isn't reachable."
+msgstr "无法直连时用于跨网络配对和连接的亚空间中继服务器。"
 
 #: src/features/studio/prompt-section.tsx
 msgid "The system prompt: who she is, how she talks and the rules she keeps. Calls that start after you save use it."
@@ -6367,6 +6782,11 @@ msgstr "这个聊天正在通话中，请先挂断。"
 #: src/components/settings-form/check-result.tsx
 msgid "This checked the key from the environment, which wins over the one saved here."
 msgstr "检查的是环境变量中的密钥，它优先于这里保存的密钥。"
+
+#: src/components/subspace-switcher.tsx
+#: src/features/subspace/servers-card.tsx
+msgid "This Computer"
+msgstr "此电脑"
 
 #: src/lib/labels.ts
 msgid "This file ships with Eidolon and can't be changed or deleted."
@@ -6703,6 +7123,14 @@ msgstr "在你选择之前，这个聊天跟随设置：{level}。"
 msgid "Until you choose, this chat follows Settings."
 msgstr "在你选择之前，这个聊天跟随设置。"
 
+#: src/features/subspace/servers-card.tsx
+msgid "Update the display name for this Relay server."
+msgstr "更新此中继服务器的显示名称。"
+
+#: src/features/subspace/servers-card.tsx
+msgid "Update the display name or direct network endpoint for this server."
+msgstr "更新此服务器的显示名称或直连网络地址。"
+
 #: src/features/setup/avatar-picker.tsx
 #: src/features/studio/references-section.tsx
 msgid "Upload"
@@ -6801,6 +7229,10 @@ msgstr "详细"
 msgid "Verbose is on for this chat"
 msgstr "这个聊天已切换到详细"
 
+#: src/features/subspace/relay-account-card.tsx
+msgid "Verification code copied."
+msgstr "验证码已复制。"
+
 #: src/features/settings/yt-dlp-state.tsx
 msgid "Version {tag}"
 msgstr "版本 {tag}"
@@ -6841,6 +7273,10 @@ msgstr "视图"
 #: src/components/settings-form/labels.ts
 msgid "Viewer Memory"
 msgstr "观众记忆"
+
+#: src/features/subspace/subspace-section.tsx
+msgid "Viewing a Remote Server"
+msgstr "正在查看远程服务器"
 
 #: src/components/voice-picker/mine.tsx
 msgid "Visibility"
@@ -6929,6 +7365,10 @@ msgstr "等待{name}接听…"
 #: src/features/chats/chat-log.tsx
 msgid "Waiting for a reply…"
 msgstr "等待回复…"
+
+#: src/features/subspace/relay-account-card.tsx
+msgid "Waiting for browser sign-in…"
+msgstr "正在等待浏览器完成登录…"
 
 #: src/features/tasks/waiting-bar.tsx
 msgid "Waiting for You"

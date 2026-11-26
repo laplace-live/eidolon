@@ -31,6 +31,7 @@ import {
   plainText,
 } from "./responses.ts";
 import {
+  type Fallback,
   type MethodRoutes,
   matchSegments,
   type RouteHandler,
@@ -69,7 +70,7 @@ export interface BotApp {
   /** routeRequest's routes; every handler is wrapped. */
   readonly routes: Record<string, RouteHandler | MethodRoutes>;
   /** routeRequest's fallback: CORS preflights, demo-path 404s, then 405 or 404. */
-  readonly fallback: (request: Request, server?: RouteServer) => Response;
+  readonly fallback: Fallback;
   /** listen's onError, a last resort only: it gets no request, so no CORS. */
   readonly onError: (error: unknown) => Response;
 }

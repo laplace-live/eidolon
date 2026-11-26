@@ -170,10 +170,17 @@ function personasOf(answer: unknown): Map<string, PersonaNames> {
   );
 }
 
-async function read(fetch: BackendFetch, path: string, signal: AbortSignal): Promise<unknown> {
+async function read(
+  fetch: BackendFetch,
+  path: string,
+  signal: AbortSignal,
+): Promise<{ readonly data: unknown; readonly host: string | null }> {
   const response = await fetch(path, { signal });
   if (!response.ok) throw new Error(`GET ${path} answered ${response.status}`);
-  return await response.json();
+  return {
+    data: await response.json(),
+    host: response.headers?.get("x-eidolon-subspace-host") ?? null,
+  };
 }
 
 function aborted(signal: AbortSignal): Promise<never> {
@@ -236,6 +243,8 @@ export class ChatWatch {
   readonly #requests = new Set<AbortController>();
   #seen = new Map<string, number>();
   #chats = new Map<string, ChatSummary>();
+  /** Which host supplied the previous poll (`"local"` or Subspace server id). */
+  #host: string | null = null;
   #baseline = false;
   #personas: ReadonlyMap<string, PersonaNames> | null = null;
   /** Retain recent handles so Electron does not GC click callbacks while banners are visible. */
@@ -245,6 +254,10 @@ export class ChatWatch {
   constructor(options: ChatWatchOptions) {
     this.#options = options;
     this.#timers = options.timers ?? globalThis;
+  }
+
+  get host(): string | null {
+    return this.#host;
   }
 
   /** A server is ready (owned or attached): a new baseline, then polls. */
@@ -295,11 +308,21 @@ export class ChatWatch {
 
   async #poll(run: object): Promise<void> {
     try {
-      const list = chatsOf(await this.#get(CHATS));
+      const { data, host } = await this.#get(CHATS);
+      const list = chatsOf(data);
       if (this.#failing) {
         this.#failing = false;
         this.#options.log.info("Eidolon: chat notifications read the chats again");
       }
+      if (host !== null && this.#host !== null && host !== this.#host) {
+        for (const handle of this.#shown.values()) handle.close();
+        this.#shown.clear();
+        this.#seen = new Map();
+        this.#chats.clear();
+        this.#personas = null;
+        this.#baseline = true;
+      }
+      if (host !== null) this.#host = host;
       await this.#take(run, list);
     } catch (error) {
       if (this.#run !== run) return;
@@ -333,7 +356,7 @@ export class ChatWatch {
       advanced.map(async (chat) => {
         const prev = this.#seen.get(chat.id) ?? 0;
         const path = `${CHATS}/${encodeURIComponent(chat.id)}?afterSeq=${prev}`;
-        return { chat, events: eventsOf(await this.#get(path), path) };
+        return { chat, events: eventsOf((await this.#get(path)).data, path) };
       }),
     );
     if (this.#run !== run) return;
@@ -427,7 +450,7 @@ export class ChatWatch {
     const known = this.#personas;
     if (ids.every((id) => known?.has(id) === true)) return known;
     try {
-      this.#personas = personasOf(await this.#get(PERSONAS));
+      this.#personas = personasOf((await this.#get(PERSONAS)).data);
     } catch (error) {
       if (this.#run === run) {
         this.#options.log.warn(
@@ -438,7 +461,7 @@ export class ChatWatch {
     return this.#personas;
   }
 
-  async #get(path: string): Promise<unknown> {
+  async #get(path: string): Promise<{ readonly data: unknown; readonly host: string | null }> {
     const request = new AbortController();
     this.#requests.add(request);
     const timer = this.#timers.setTimeout(

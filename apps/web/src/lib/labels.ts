@@ -110,6 +110,13 @@ const ERRORS: Readonly<Record<ErrorCode | ClientErrorCode | "unknown", MessageDe
   "skill-exists": msg`Eidolon's skills folder already has a skill by that name.`,
   "invalid-model": msg`Eidolon can't use that model file.`,
   "unknown-model": msg`That model was removed. Reload to see her models.`,
+  "subspace-unreachable": msg`Can't reach that Subspace server. Check that it's running and connected.`,
+  "invalid-pairing-code": msg`That pairing link or code isn't valid.`,
+  "pairing-expired": msg`That pairing link has expired. Generate a fresh one on the host.`,
+  "pairing-failed": msg`Pairing with the Subspace server failed.`,
+  "relay-auth-required": msg`Sign in to your Subspace Relay account first.`,
+  "unknown-subspace-server": msg`That Subspace server is no longer saved.`,
+  "unknown-subspace-grant": msg`That paired device is no longer listed.`,
 };
 
 /** The desktop app's own, for the sentences that send the viewer to a terminal it doesn't have. */

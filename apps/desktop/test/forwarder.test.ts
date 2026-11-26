@@ -447,6 +447,20 @@ describe("reports to the controller", () => {
     ]);
   });
 
+  test("a 2xx to POST /api/local/restart carrying X-Eidolon-Subspace: remote does not report a local restart", async () => {
+    const backend = new FakeBackend();
+    const up = await upstream((_request, response) => {
+      response
+        .writeHead(200, { "content-type": "application/json", "x-eidolon-subspace": "remote" })
+        .end("{}");
+    });
+    backend.ready(up.origin);
+    const forward = forwarder(backend);
+    const res = await forward.handle(app("/api/local/restart", { method: "POST" }));
+    expect(res.status).toBe(200);
+    expect(backend.reports.filter((report) => report.startsWith("restarted"))).toEqual([]);
+  });
+
   test("a refused connection, held the same way until a server is ready again", async () => {
     const backend = new FakeBackend();
     const gone = await closedOrigin();
@@ -626,6 +640,16 @@ describe("main's own requests", () => {
     expect(
       up.seen.map(({ url, headers, afterProbe }) => [url, headers.authorization, afterProbe]),
     ).toEqual([["/api/local/status?x=1", `Bearer ${SECRET}`, true]]);
+  });
+
+  test("{ local: true } sets X-Eidolon-Target: local so quit/version probes reach the local server", async () => {
+    const backend = new FakeBackend();
+    const up = await upstream((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" }).end('{"version":"0.14.0"}');
+    });
+    backend.ready(up.origin);
+    await forwarder(backend).get("/api/local/status", AbortSignal.timeout(5000), { local: true });
+    expect(up.seen[0]?.headers["x-eidolon-target"]).toBe("local");
   });
 
   test("tell the controller nothing when their connections close, unlike the page's", async () => {

@@ -68,7 +68,7 @@ function canonicalPeers(speakerId: string, groupPeers: readonly string[]): strin
 export class NotificationAvatarCache {
   readonly #options: AvatarCacheOptions;
   readonly #maxEntries: number;
-  /** Query key (`speaker|peer1,peer2`) → cached PNG file path, oldest-used first. */
+  /** Query key (`host|speaker|peer1,peer2`) → cached PNG file path, oldest-used first. */
   readonly #paths = new Map<string, string>();
   readonly #inflight = new Map<string, Promise<string | null>>();
   /** Pre-existing `.png` paths from prior launches, oldest mtime first, not yet in `#paths`. */
@@ -84,19 +84,21 @@ export class NotificationAvatarCache {
 
   /**
    * Fetches and caches the 256x256 circular PNG for `speakerId` (and up to two `groupPeers`),
-   * returning a local `.png` path or null when unavailable. Fails open and logs once per streak.
+   * scoped by optional `host`, returning a local `.png` path or null when unavailable. Fails open
+   * and logs once per streak.
    */
   async resolve(
     speakerId: string,
     groupPeers: readonly string[] = [],
     signal?: AbortSignal,
+    host?: string | null,
   ): Promise<string | null> {
     if (!SLUG_PATTERN.test(speakerId)) return null;
     const peers = canonicalPeers(speakerId, groupPeers);
     if (peers === null) return null;
     if (signal?.aborted) return null;
 
-    const key = `${speakerId}|${peers.join(",")}`;
+    const key = `${host ?? "local"}|${speakerId}|${peers.join(",")}`;
     let pending = this.#inflight.get(key);
     if (pending === undefined) {
       pending = this.#fetchAndStore(key, speakerId, peers).finally(() => {

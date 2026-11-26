@@ -14,6 +14,7 @@ apps/web/             local web app (Vite, React, shadcn), served by apps/bot/sr
 apps/cli/             laplace-* offline, query, eval, and task commands
 apps/eidolon/         npm package @laplace.live/eidolon (launcher + bundled local app & CLI)
 apps/desktop/         Electron app LAPLACE Eidolon (apps/web + staged backend on Electron's Node)
+apps/relay/           Subspace E2EE pairing relay
 packages/             workspace subsystems (@eidolon/* and @laplace.live/eidolon-sdk; docs/typescript.md)
 laplace_eidolon/      the Python, with tests/: for human readers only ("The Python" under Rules)
 personas/<id>/        committed persona templates (prompt.md, persona.yaml, glossary.toml, outfits/)
@@ -44,6 +45,7 @@ Read the entry for what you are about to touch. **Adding a subsystem means addin
 - Stream catalog, date-scoped recall, timeline queries, unbuilt recall gaps → [stream-recall.md](docs/stream-recall.md) · [recall-gaps.md](docs/recall-gaps.md)
 - `take_selfie`, outfit exclusivity, `/api/selfie` → [selfies.md](docs/selfies.md)
 - Client SDK (`@laplace.live/eidolon-sdk`) → [client-sdk.md](docs/client-sdk.md)
+- Subspace remote pairing, host switching, E2EE relay → [subspace.md](docs/subspace.md)
 - Avatars, PSD2Live models, Studio Appearance, call screen, companion stage, vendored wasm → [avatar.md](docs/avatar.md)
 - Per-viewer affection / XP tiers (design only, unbuilt) → [affection-system.md](docs/affection-system.md)
 - Changesets, version PR, `changelog.json`, tags, npm publishing → [releasing.md](docs/releasing.md)

@@ -15,6 +15,7 @@
     "@eidolon/ingest": "workspace:*",
     "@eidolon/providers": "workspace:*",
     "@eidolon/retrieval": "workspace:*",
+    "@eidolon/subspace": "workspace:*",
     "@eidolon/usage": "workspace:*",
     "smol-toml": "1.9.1"
   }

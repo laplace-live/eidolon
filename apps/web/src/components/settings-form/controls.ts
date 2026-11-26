@@ -96,6 +96,8 @@ const BY_PATH: Readonly<Record<string, Control>> = {
     fallback: DEFAULT_PERMISSIONS,
   },
   "chats.display": { type: "select", options: CHAT_DISPLAYS, fallback: DEFAULT_DISPLAY },
+  "subspace.relayUrl": { type: "text", placeholder: "https://eidolon-relay.vrp.moe" },
+  "subspace.authUrl": { type: "text", placeholder: "https://id.laplace.live" },
 };
 
 function byKind(kind: SettingKind, scope: SettingScope): Control {
@@ -472,6 +474,7 @@ export const GROUPS = [
   "sources",
   "usage",
   "production",
+  "subspace",
   "other",
 ] as const;
 
@@ -503,6 +506,7 @@ const GROUP_OF: Readonly<Record<string, Group>> = {
   network: "production",
   audio: "production",
   mcp: "production",
+  subspace: "subspace",
 };
 
 export function groupOf(path: string, scope: SettingScope): Group {

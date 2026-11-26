@@ -31,6 +31,7 @@
     "@eidolon/assistant": "workspace:*",
     "@eidolon/cli": "workspace:*",
     "@eidolon/ingest": "workspace:*",
+    "@eidolon/subspace": "workspace:*",
     "@pipecat-ai/client-js": "1.17.0",
     "@pipecat-ai/small-webrtc-transport": "1.11.3",
     "playwright-core": "1.65.1",

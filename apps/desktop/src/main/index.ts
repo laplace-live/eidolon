@@ -255,7 +255,7 @@ function run(): void {
       ...(senderId !== null ? { sender: { id: senderId, name: senderName, ...withAvatar } } : {}),
     };
   };
-  const chatWatch = notifies
+  const chatWatch: ChatWatch | null = notifies
     ? new ChatWatch({
         fetch: backendFetch,
         focused: () => mainWindow()?.isFocused() === true,
@@ -273,10 +273,11 @@ function run(): void {
               avatarPath,
             });
           if (avatarCache === null) return native.notify(toDesktopNotice(null), events);
+          const noticeHost = chatWatch?.host;
           return showAsyncNotice(
             async (signal) =>
               toDesktopNotice(
-                await avatarCache.resolve(notice.speakerId, notice.groupPeers, signal),
+                await avatarCache.resolve(notice.speakerId, notice.groupPeers, signal, noticeHost),
               ),
             events,
           );
@@ -284,7 +285,7 @@ function run(): void {
         log: mainLog,
       })
     : null;
-  const watch = notifies
+  const watch: TaskWatch | null = notifies
     ? new TaskWatch({
         fetch: backendFetch,
         focused: () => mainWindow()?.isFocused() === true,
@@ -308,6 +309,7 @@ function run(): void {
             );
           }
           const personaId = notice.personaId;
+          const noticeHost = watch?.host;
           return showAsyncNotice(async (signal) => {
             const groupInfo =
               notice.chat !== null
@@ -317,6 +319,7 @@ function run(): void {
               personaId,
               groupInfo?.groupPeers ?? [],
               signal,
+              noticeHost,
             );
             return toDesktopNotice(groupInfo?.groupTitle ?? null, avatarPath);
           }, events);

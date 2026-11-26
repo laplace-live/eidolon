@@ -71,6 +71,7 @@ function chatServer() {
     chats: [] as ChatSummary[],
     events: new Map<string, ChatEvent[]>(),
     personas: [MILKY, RIN, KURO] as PersonaSummary[],
+    host: "local" as string | null,
     fails: new Map<string, number | "never">(),
     holds: new Map<string, () => Promise<void>>(),
     requests: [] as { readonly path: string; readonly signal: AbortSignal }[],
@@ -94,7 +95,14 @@ function chatServer() {
       const events = (state.events.get(id as string) ?? []).filter((event) => event.seq > after);
       body = { events };
     }
-    return { ok: status === 200, status, json: async () => body };
+    return {
+      ok: status === 200,
+      status,
+      headers: state.host
+        ? { get: (name) => (name === "x-eidolon-subspace-host" ? state.host : null) }
+        : undefined,
+      json: async () => body,
+    };
   };
   return Object.assign(state, {
     fetch,
@@ -413,6 +421,58 @@ describe("ChatWatch", () => {
     ]);
 
     expect(chatNoticeCommand({ chat: CHAT_1 })).toBe(openChatCommand(CHAT_1));
+    watch.stop();
+  });
+
+  test("changing X-Eidolon-Subspace-Host closes open handles, clears cached personas, and treats the new host as a baseline", async () => {
+    const time = clock();
+    const backend = chatServer();
+    const events: string[] = [];
+    const watch = new ChatWatch({
+      fetch: backend.fetch,
+      focused: () => false,
+      strings: () => STRINGS.en,
+      show: (notice): NoticeHandle => {
+        events.push(`show:${notice.speakerName}:${notice.body}`);
+        return {
+          close: () => events.push(`close:${notice.chat}:${notice.seq}`),
+        };
+      },
+      log: { info: () => {}, warn: () => {} },
+      timers: time.timers,
+    });
+
+    backend.chats = [summary(CHAT_1, { lastSeq: 1 })];
+    watch.ready();
+    await time.advance(0);
+    expect(watch.host).toBe("local");
+
+    backend.chats = [summary(CHAT_1, { lastSeq: 2 })];
+    backend.events.set(CHAT_1, [message(2, { text: "Local message" })]);
+    await time.advance(2_000);
+    expect(events).toEqual(["show:明前奶绿:Local message"]);
+
+    // Switching to remote host closes the prior host's handle and skips stale seq > 0 messages.
+    backend.host = "sub_remote_1";
+    backend.personas = [{ ...MILKY, name: "Remote Milky", shortName: "Remote" }];
+    backend.chats = [summary(CHAT_2, { lastSeq: 5 })];
+    backend.events.set(CHAT_2, [message(5, { text: "Existing remote message" })]);
+    await time.advance(2_000);
+    expect(watch.host).toBe("sub_remote_1");
+    expect(events).toEqual(["show:明前奶绿:Local message", `close:${CHAT_1}:2`]);
+
+    // A genuinely new message on the remote host uses its refreshed persona name.
+    backend.chats = [summary(CHAT_2, { lastSeq: 6 })];
+    backend.events.set(CHAT_2, [
+      message(5, { text: "Existing remote message" }),
+      message(6, { text: "Fresh remote message" }),
+    ]);
+    await time.advance(2_000);
+    expect(events).toEqual([
+      "show:明前奶绿:Local message",
+      `close:${CHAT_1}:2`,
+      "show:Remote Milky:Fresh remote message",
+    ]);
     watch.stop();
   });
 });

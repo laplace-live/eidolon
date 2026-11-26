@@ -2,6 +2,7 @@
 // files or a folder, or dropped on the card.
 import { ph, plural, t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
+import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDownIcon,
   EllipsisIcon,
@@ -62,6 +63,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { UnavailableButton } from "@/components/unavailable-button";
 import { useCallPresence } from "@/features/call/call-context";
+import { subspaceQuery } from "@/features/subspace/queries";
 import type { CharacterModel, CharacterModels, PersonaSummary } from "@/lib/api";
 import { desktop } from "@/lib/desktop";
 import { toastError } from "@/lib/feedback";
@@ -424,7 +426,9 @@ export function ModelListCard({
   const [renamed, setRenamed] = useState<CharacterModel | null>(null);
   const [removed, setRemoved] = useState<CharacterModel | null>(null);
   const app = desktop();
-  const revealModel = app?.revealModel;
+  const remote =
+    useQuery({ ...subspaceQuery, select: (state) => state.activeHostId != null }).data ?? false;
+  const revealModel = remote ? undefined : app?.revealModel;
   const revealOf = (model: CharacterModel) =>
     revealModel === undefined
       ? null

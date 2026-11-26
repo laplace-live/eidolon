@@ -7,6 +7,7 @@ import { SectionCardSkeleton } from "@/components/section-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCallPresence } from "@/features/call/call-context";
 import { NewPersonaDialog } from "@/features/setup/new-persona";
+import { activeSubspaceServer, subspaceQuery } from "@/features/subspace/queries";
 import { desktop } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
 import { useLang } from "@/locales/i18n";
@@ -42,6 +43,11 @@ export function Component() {
   const lang = useLang();
   const formats = useMemo(() => formatsFor(lang), [lang]);
   const status = useQuery({ ...statusQuery, refetchInterval: POLL_MS });
+  const activeHostName =
+    useQuery({
+      ...subspaceQuery,
+      select: (state) => activeSubspaceServer(state)?.name ?? null,
+    }).data ?? null;
   const { up } = useCallPresence();
   const [pickingVoice, setPickingVoice] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -84,8 +90,12 @@ export function Component() {
 
       <p className="text-muted-foreground text-xs">
         {app === null
-          ? t`Eidolon ${ph({ version: status.data.version })}`
-          : t`LAPLACE Eidolon ${ph({ version: app.version })} · server ${ph({ server: status.data.version })}`}
+          ? activeHostName === null
+            ? t`Eidolon ${ph({ version: status.data.version })}`
+            : t`Eidolon ${ph({ version: status.data.version })} · ${ph({ host: activeHostName })}`
+          : activeHostName === null
+            ? t`LAPLACE Eidolon ${ph({ version: app.version })} · server ${ph({ server: status.data.version })}`
+            : t`LAPLACE Eidolon ${ph({ version: app.version })} · server ${ph({ server: status.data.version })} · ${ph({ host: activeHostName })}`}
       </p>
 
       <VoiceDialog

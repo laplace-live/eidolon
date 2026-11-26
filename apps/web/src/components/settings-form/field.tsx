@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { subspaceQuery } from "@/features/subspace/queries";
 import { accountsQuery } from "@/lib/accounts";
 import type { SettingRow } from "@/lib/api";
 import { desktop } from "@/lib/desktop";
@@ -266,6 +267,51 @@ function SliderInput({
   );
 }
 
+function FolderPathsControl({
+  textarea,
+  draft,
+  locked,
+  onDraft,
+}: {
+  readonly textarea: ReactNode;
+  readonly draft: string;
+  readonly locked: boolean;
+  readonly onDraft: (draft: string) => void;
+}) {
+  const { t } = useLingui();
+  const remote =
+    useQuery({ ...subspaceQuery, select: (state) => state.activeHostId != null }).data ?? false;
+  const choose = !remote ? desktop()?.chooseFolder : undefined;
+  if (choose === undefined) return textarea;
+  return (
+    <div className="flex flex-col items-start gap-2">
+      {textarea}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={locked}
+        // The dialog is modal to the window, so the draft can't change while it's open.
+        onClick={() =>
+          choose().then((folder) => {
+            if (folder === null) return;
+            const next = appendPath(draft, folder);
+            if (next !== null) onDraft(next);
+            else {
+              toast.error(t`This folder can't be added.`, {
+                description: t`Its path has a comma, a line break or a space at an end. Rename the folder, or use Allow Once when a task asks for it.`,
+              });
+            }
+          }, toastError)
+        }
+      >
+        <FolderPlusIcon />
+        {t`Choose Folder`}
+      </Button>
+    </div>
+  );
+}
+
 function ControlInput({
   id,
   row,
@@ -478,34 +524,9 @@ function ControlInput({
           onChange={(event) => onDraft(event.target.value)}
         />
       );
-      const choose = control.folders ? desktop()?.chooseFolder : undefined;
-      if (choose === undefined) return textarea;
+      if (!control.folders) return textarea;
       return (
-        <div className="flex flex-col items-start gap-2">
-          {textarea}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={locked}
-            // The dialog is modal to the window, so the draft can't change while it's open.
-            onClick={() =>
-              choose().then((folder) => {
-                if (folder === null) return;
-                const next = appendPath(draft, folder);
-                if (next !== null) onDraft(next);
-                else {
-                  toast.error(t`This folder can't be added.`, {
-                    description: t`Its path has a comma, a line break or a space at an end. Rename the folder, or use Allow Once when a task asks for it.`,
-                  });
-                }
-              }, toastError)
-            }
-          >
-            <FolderPlusIcon />
-            {t`Choose Folder`}
-          </Button>
-        </div>
+        <FolderPathsControl textarea={textarea} draft={draft} locked={locked} onDraft={onDraft} />
       );
     }
     default:

@@ -102,6 +102,7 @@ describe("?tab=", () => {
     expect(resolve("tab=providers")).toEqual({ section: "providers" });
     expect(resolve("tab=memory")).toEqual({ section: "memory" });
     expect(resolve("tab=assistant")).toEqual({ section: "assistant" });
+    expect(resolve("tab=subspace")).toEqual({ section: "subspace" });
     expect(resolve("tab=advanced")).toEqual({ section: "advanced" });
   });
 
@@ -155,6 +156,7 @@ describe("the Desktop section", () => {
       "downloads",
       "assistant",
       "skills",
+      "subspace",
       "desktop",
       "advanced",
     ]);

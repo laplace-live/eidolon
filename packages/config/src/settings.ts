@@ -255,6 +255,8 @@ export const SETTINGS: readonly SettingField[] = [
     provider: "ASSISTANT_SEARCH_PROVIDER",
   }),
   field("app", "chats.display", "CHAT_DISPLAY", "string", "Task display"),
+  field("app", "subspace.relayUrl", "EIDOLON_SUBSPACE_RELAY_URL", "string", "Subspace relay URL"),
+  field("app", "subspace.authUrl", "EIDOLON_SUBSPACE_AUTH_URL", "string", "Subspace auth URL"),
 
   field("persona", "prompt", "PERSONA_FILE", "path", "System prompt file"),
   field("persona", "identity.timezone", "PERSONA_TIMEZONE", "string", "Time zone"),
