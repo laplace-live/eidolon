@@ -221,7 +221,7 @@ p90 and 503 ms at most. **All 106 lines were decided right and all 24 `voice_mom
 answered in the right mode:**
 
 - **`everyone`** separated roll-calls (`group-02` at 0.56, `group-04` at 0.81) from all 89
-  non-mention, non-`others` lines (max 0.19), with 0 wrong across `0.2`–`0.56`.
+  non-roll-call lines without mentions or `others` (max 0.19), with 0 wrong across `0.2`–`0.56`.
 - **`others`** separated silent-member prompts (`group-05` at 0.95, `group-06` at 0.97, `persona-36`
   at 0.85 after the hop raise) from all 56 non-`others` lines with recent speakers (max 0.51 on
   `persona-10` after the hop raise), with 0 wrong across `0.52`–`0.85`.
