@@ -56,6 +56,8 @@ describe("enablement", () => {
       expect(isMemoryConfigured()).toBe(true);
       setEnv({ MEM0_QDRANT_HOST: " \t　" });
       expect(isMemoryConfigured()).toBe(false);
+      setEnv({ MEM0_ENABLED: " \t　" });
+      expect(isMemoryConfigured()).toBe(false);
     } finally {
       resetSettings();
     }

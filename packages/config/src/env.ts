@@ -1,7 +1,7 @@
 // dotenv parses `KEY=` as "", so a plain .env.example copy sets every key to the empty string.
 // Every reader here treats empty as unset.
 import { logger } from "./logger.ts";
-import { pyParseFloat, pyParseInt, pyRepr } from "./py.ts";
+import { pyParseFloat, pyParseInt, pyRepr, pyStrip } from "./py.ts";
 import { type FileLayer, personaScopes } from "./scope.ts";
 
 // What settings.yaml, persona.yaml and credentials.json set, keyed by the variable each setting
@@ -86,11 +86,15 @@ const FLAG_ON = new Set(["true", "1", "yes", "on"]);
 
 /**
  * A default-on flag turns off only for false/0/no/off; a default-off flag turns on only for
- * true/1/yes/on. Case and surrounding whitespace are ignored.
+ * true/1/yes/on. Case and surrounding whitespace are ignored; whitespace-only in the environment
+ * yields to the settings file or `fallback`.
  */
 export function envFlag(name: string, fallback: boolean): boolean {
-  const raw = envOptional(name)?.trim().toLowerCase();
-  if (raw === undefined) return fallback;
+  const layer = currentLayer();
+  const own = fromEnvironment(layer, name);
+  const picked = own !== undefined && pyStrip(own) !== "" ? own : (layer.values.get(name) ?? own);
+  const raw = picked === undefined ? "" : pyStrip(picked).toLowerCase();
+  if (raw === "") return fallback;
   return fallback ? !FLAG_OFF.has(raw) : FLAG_ON.has(raw);
 }
 

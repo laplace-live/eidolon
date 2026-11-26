@@ -3240,6 +3240,7 @@ describe("profiles", () => {
 
   test("a kind whose own settings can't run starts on Assistant Mode's model, with a warning saying why", async () => {
     settings = { ...settings, folders: [work] };
+    setEnv("ANTHROPIC_API_KEY", "");
     setEnv("ASSISTANT_RESEARCH_PROVIDER", "anthropic");
     const tasks = await booted();
     const research = await tasks.start(
