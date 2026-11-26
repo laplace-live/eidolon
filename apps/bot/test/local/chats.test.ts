@@ -1544,10 +1544,12 @@ describe("a group chat", () => {
     const id = await greeted();
     const patch = (body: unknown) => server.call("PATCH", `/chats/${id}`, body);
     expect(await json(await patch({ chainLimit: 0 }))).toEqual({ ok: true });
+    expect(await json(await patch({ chainLimit: 6 }))).toEqual({ ok: true });
     expect(await json(await patch({ chainLimit: 100 }))).toEqual({ ok: true });
     expect((await log(id)).events.slice(2)).toMatchObject([
       { seq: 3, type: "settings", chainLimit: 0 },
-      { seq: 4, type: "settings", chainLimit: 100 },
+      { seq: 4, type: "settings", chainLimit: 6 },
+      { seq: 5, type: "settings", chainLimit: 100 },
     ]);
     for (const body of [
       { chainLimit: -1 },
@@ -1560,7 +1562,7 @@ describe("a group chat", () => {
     ]) {
       expect([body, await errorCode(await patch(body))]).toEqual([body, [400, "bad-request"]]);
     }
-    expect((await log(id)).events).toHaveLength(4);
+    expect((await log(id)).events).toHaveLength(5);
     expect(
       await errorCode(
         await server.call("PATCH", `/chats/${crypto.randomUUID()}`, { chainLimit: 1 }),

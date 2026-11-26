@@ -286,9 +286,10 @@ function choose(
   const unheard = unheardOf(input.lines, ranked);
   const callOthers = unheard.length > 0 && (scores.others as number) >= OTHERS_THRESHOLD + raise;
   const callEveryone = (scores.everyone as number) >= EVERYONE_THRESHOLD + raise;
+  const onlyUnheard = !toViewer ? callEveryone || callOthers : callOthers && !callEveryone;
   const unheardIds = new Set(unheard.map(({ p }) => p.id));
   const addressed = candidates
-    .filter((p) => !callOthers || unheardIds.has(p.id))
+    .filter((p) => !onlyUnheard || unheardIds.has(p.id))
     .map((p) => ({ id: p.id, score: scores[`addressed_${p.id}`] as number }))
     .filter(({ score }) => score >= ADDRESSED_THRESHOLD + raise)
     .sort((a, b) => b.score - a.score)
@@ -301,17 +302,21 @@ function choose(
     };
   }
   if (callEveryone) {
-    const pool = !toViewer && unheard.length > 0 ? unheard : ranked;
+    if (!toViewer && unheard.length === 0) return { ids: [], source: "model" };
+    const pool = toViewer ? ranked : unheard;
     return {
       ids: [...new Set([...addressed, ...willingIds(pool)])],
       source: "model",
     };
   }
+  if (callOthers) {
+    return {
+      ids: [...new Set([...addressed, ...willingIds(unheard)])],
+      source: "model",
+    };
+  }
   if (addressed.length > 0) {
     return { ids: addressed.slice(0, cap), source: "model" };
-  }
-  if (callOthers) {
-    return { ids: willingIds(unheard), source: "model" };
   }
   const keen = ranked.filter(({ score }) => score >= INTEREST_THRESHOLD + raise);
   if (keen.length > 0) return { ids: keen.slice(0, cap).map(({ p }) => p.id), source: "model" };

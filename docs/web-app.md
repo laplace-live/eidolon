@@ -581,8 +581,9 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
     of her tasks the chat shows ([Tasks](#tasks)), which until it is chosen names the display
     Settings gives it; **Task Permissions** (Ask for Approval, Approve for Me or Full Access), what
     her tasks there may do without asking ([Tasks](#tasks)), which until it is chosen names the
-    level Settings gives it; and **Replies between Personas**, 0, 1, 5, 10 or 100, the chain limit. Task
-    Display shows in every chat, and is the one way to change it during a call.
+    level Settings gives it; and **Replies between Personas**, 0, 1, 5, 10 or 100 (keeping an older
+    custom value visible until changed), the chain limit. Task Display shows in every chat, and is
+    the one way to change it during a call.
 - **Commands:** the composer runs `/focus`, `/normal`, `/verbose` and `/stop` typed alone, in any
   case, after `/` or `／` ([Tasks](#tasks)). A command is never sent to her: a display command
   stores the chat's display, with a toast, and starts no reply, and one for the display the chat

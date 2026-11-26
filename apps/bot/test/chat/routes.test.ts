@@ -446,13 +446,18 @@ describe("POST /api/chat/turn", () => {
       const { url, record } = await start({
         engine: { choose: (input, call) => [input.participants[(call - 1) % 2]?.id as string] },
       });
-      const response = await postTurn(url, {
-        chat: { header: GROUP, events },
-        text: "你们聊",
-      });
-      await linesOf(response);
-      expect(record.minds.map((mind) => mind.persona)).toEqual([MILKY, BEA, MILKY, BEA]);
-      expect(record.decisions.map((decision) => decision.hop)).toEqual([0, 1, 2, 3]);
+      try {
+        const response = await postTurn(url, {
+          chat: { header: GROUP, events },
+          text: "你们聊",
+        });
+        await linesOf(response);
+        expect(record.minds.map((mind) => mind.persona)).toEqual([MILKY, BEA, MILKY, BEA]);
+        expect(record.decisions.map((decision) => decision.hop)).toEqual([0, 1, 2, 3]);
+      } finally {
+        await served?.stop();
+        served = null;
+      }
     }
   });
 

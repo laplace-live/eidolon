@@ -438,7 +438,7 @@ describe("after the viewer's line", () => {
       await who({ others: OTHERS_THRESHOLD, addressed_a: 0.9, addressed_c: 0.8 }, afterA, {
         participants: four,
       }),
-    ).toEqual(["c"]);
+    ).toEqual(["c", "b"]);
     expect(
       await who({ others: OTHERS_THRESHOLD, addressed_a: 0.9, interested_b: 0.6 }, afterA, {
         participants: four,
@@ -570,6 +570,39 @@ describe("after a persona's line", () => {
         participants: four,
       }),
     ).toEqual([]);
+    // Once everyone has already spoken, a persona-line `everyone` handoff does not re-wake them.
+    const allHeard = [
+      viewer("都介绍一下"),
+      from("a", "A"),
+      from("b", "B"),
+      from("c", "C"),
+      from("d", "都说完了，大家还有补充吗"),
+    ];
+    expect(
+      await who({ invites_reply: 1, everyone: 1, addressed_a: 1 }, allHeard, {
+        hop: 1,
+        participants: four,
+      }),
+    ).toEqual([]);
+    // With partial unheard, persona `everyone` ignores already-heard `addressed` speakers.
+    const partial = [viewer("都介绍一下"), from("a", "我是A"), from("b", "我是B，大家继续说呀")];
+    expect(
+      await who({ invites_reply: 1, everyone: 1, addressed_a: 1, addressed_d: 1 }, partial, {
+        hop: 2,
+        participants: four,
+      }),
+    ).toEqual(["d", "c"]);
+    // `others` wakes all willing unheard candidates even when one unheard candidate is addressed.
+    expect(
+      await who(
+        { invites_reply: 1, others: OTHERS_THRESHOLD + HOP_STEP, addressed_d: 1 },
+        handoff,
+        {
+          hop: 1,
+          participants: four,
+        },
+      ),
+    ).toEqual(["d", "b", "c"]);
   });
 });
 

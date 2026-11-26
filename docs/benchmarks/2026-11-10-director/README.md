@@ -4,12 +4,14 @@ In a group chat, the director asks Jev about every new line, the viewer's and ea
 picks who answers from the scores ([chat.md](../../chat.md)). This benchmark scores its questions
 on labelled lines, and checks its thresholds against them.
 
-**The lines are synthetic.** All 100 were written by hand for this benchmark, because no group chat
+**The lines are synthetic.** The initial 100 lines were written by hand for this benchmark (with 6
+more added in [The group-trigger run](#the-group-trigger-run-106-lines)), because no group chat
 has run yet. Real `decision` events from group chats replace them once there are enough of them.
 
 ## The lines
 
-`lines.json` holds four personas and 100 situations, each among two to four of them:
+`lines.json` holds four personas and 106 situations (100 in the initial set below, plus 6 added
+for group triggers), each among two to four of them:
 
 | Persona | `chat.interests` | `chat.talkativeness` |
 | --- | --- | ---: |
@@ -218,8 +220,8 @@ A third run raised `MAX_REPLIES_TO_USER` to 3, added uncapped explicit `@`-menti
 p90 and 503 ms at most. **All 106 lines were decided right and all 24 `voice_moment` labels
 answered in the right mode:**
 
-- **`everyone`** separated roll-calls (`group-02` at 0.56, `group-04` at 0.81) from every non-roll-call
-  line outside full-room mentions and group handoffs (max 0.45 on `group-06`, 0.43 on `mention-08`).
+- **`everyone`** separated roll-calls (`group-02` at 0.56, `group-04` at 0.81) from all 89
+  non-mention, non-`others` lines (max 0.19), with 0 wrong across `0.2`–`0.56`.
 - **`others`** separated silent-member prompts (`group-05` at 0.95, `group-06` at 0.97, `persona-36`
   at 0.85 after the hop raise) from all 56 non-`others` lines with recent speakers (max 0.51 on
   `persona-10` after the hop raise), with 0 wrong across `0.52`–`0.85`.

@@ -170,18 +170,18 @@
     "max": 0.81
    },
    "labelled_no": {
-    "n": 104,
+    "n": 89,
     "min": -0.29,
     "median": 0.02,
-    "max": 0.86
+    "max": 0.19
    },
-   "wrong": 3,
+   "wrong": 0,
    "suggests": {
-    "threshold": 0.94,
-    "wrong": 2,
+    "threshold": 0.38,
+    "wrong": 0,
     "range": [
-     0.87,
-     1
+     0.2,
+     0.56
     ]
    }
   },

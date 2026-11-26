@@ -476,12 +476,14 @@ for (const row of rows) {
       positive: line.invites_reply,
     });
   }
-  everyone.push({
-    id: row.id,
-    persona: null,
-    score: round((row.scores.everyone as number) - raise),
-    positive: line.everyone ?? false,
-  });
+  if (row.mentions.length === 0 && !line.others) {
+    everyone.push({
+      id: row.id,
+      persona: null,
+      score: round((row.scores.everyone as number) - raise),
+      positive: line.everyone ?? false,
+    });
+  }
   const hadPersona = saidOf(line)
     .slice(-10)
     .some(([speaker]) => speaker !== VIEWER);

@@ -107,7 +107,7 @@ export async function renameChat(id: string, title: string): Promise<void> {
   await call("PATCH /api/local/chats/:id", { params: { id }, body: { title } });
 }
 
-/** How many times personas may answer each other after each of the viewer's lines, 0 to 6. */
+/** How many times personas may answer each other after each of the viewer's lines, 0 to 100. */
 export async function setChainLimit(id: string, chainLimit: number): Promise<void> {
   await call("PATCH /api/local/chats/:id", { params: { id }, body: { chainLimit } });
 }
