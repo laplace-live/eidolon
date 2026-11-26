@@ -20,16 +20,22 @@ export const NODE_SHIM = "node-shim";
 export const LAUNCHER_SOURCES = join(DESKTOP, "node-shim");
 /** The launchers sh runs. */
 export const POSIX_LAUNCHERS: readonly string[] = ["node", "npx", "pnpm", "pnpx"];
-/** Every file of the launchers' folder: the POSIX ones, Windows' .cmd ones and the JS npx runs. */
+/** Every file of the launchers' folder: the POSIX ones and Windows' .cmd ones. */
 export const LAUNCHER_FILES: readonly string[] = [
   ...POSIX_LAUNCHERS,
   ...POSIX_LAUNCHERS.map((name) => `${name}.cmd`),
-  "npx.mjs",
-  "cross-spawn.mjs",
-  "npm-checks.mjs",
-  "npm-config.mjs",
-  "npm-exec.mjs",
-  "npm-spec.mjs",
+];
+/**
+ * The TypeScript modules npx runs, staged in `node-shim/` itself rather than `node_modules/.bin`:
+ * Node refuses to strip types for paths under `node_modules`.
+ */
+export const SHIM_MODULES: readonly string[] = [
+  "npx.ts",
+  "cross-spawn.ts",
+  "npm-checks.ts",
+  "npm-config.ts",
+  "npm-exec.ts",
+  "npm-spec.ts",
 ];
 
 /**
@@ -75,9 +81,11 @@ export function prunePnpmForeignNativePackages(pnpm: string, platform: string, a
 
 /** Writes the shim into `payload`, its pnpm pruned to `platform`'s natives. */
 export function stageNodeShim(payload: string, platform: Platform): void {
+  const shim = join(payload, NODE_SHIM);
   const bin = shimLaunchers(payload);
   mkdirSync(bin, { recursive: true });
   for (const file of LAUNCHER_FILES) cpSync(join(LAUNCHER_SOURCES, file), join(bin, file));
+  for (const file of SHIM_MODULES) cpSync(join(LAUNCHER_SOURCES, file), join(shim, file));
   // A checkout's modes follow the umask it was made under.
   for (const name of POSIX_LAUNCHERS) chmodSync(join(bin, name), 0o755);
   const pnpm = shimPnpm(payload);

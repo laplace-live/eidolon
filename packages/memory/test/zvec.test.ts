@@ -1,10 +1,13 @@
+import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { jsRuntime } from "@eidolon/config";
 import { type Selection, select } from "@eidolon/providers";
 import { afterEach, describe, expect, test } from "vitest";
 import { openMemoryEngine, SharedEngine } from "../src/engine.ts";
 import { closeMemoryStores, ZvecVectorStore } from "../src/zvec.ts";
-import { tempPath } from "./support.ts";
+import { resetEnv, setEnv, tempPath } from "./support.ts";
 
 const createdDirs: string[] = [];
 
@@ -16,6 +19,7 @@ function storeDir(): string {
 
 afterEach(() => {
   closeMemoryStores();
+  resetEnv();
   for (const dir of createdDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -218,5 +222,171 @@ describe("ZvecVectorStore", () => {
     expect(
       (await bob.getAll({ filters: { userId: "u1", agentId: "bob" } })).map((m) => m.memory),
     ).toEqual(["用户喝茶"]);
+    shared.close();
+  });
+
+  test("scopes collections by embedding model and wipes a viewer across all retained collections", async () => {
+    const dir = storeDir();
+    const store4 = new ZvecVectorStore({ dir, vectorSize: 4, embedModel: "openrouter:model-a" });
+    const store4b = new ZvecVectorStore({ dir, vectorSize: 4, embedModel: "openrouter:model-b" });
+    const store8 = new ZvecVectorStore({ dir, vectorSize: 8, embedModel: "openrouter:model-c" });
+
+    await store4.insert([
+      { id: "m-a1", vector: [1, 0, 0, 0], payload: { user_id: "u1", data: "from model a" } },
+      { id: "m-a2", vector: [1, 0, 0, 0], payload: { user_id: "u2", data: "u2 in model a" } },
+    ]);
+    await store4b.insert([
+      { id: "m-b1", vector: [0, 1, 0, 0], payload: { user_id: "u1", data: "from model b" } },
+    ]);
+    await store8.insert([
+      {
+        id: "m-c1",
+        vector: [1, 0, 0, 0, 0, 0, 0, 0],
+        payload: { user_id: "u1", data: "from 8d model" },
+      },
+    ]);
+
+    // Same dimension, different embedding models do not mix vectors.
+    expect((await store4.list({ user_id: "u1" }, 10)).map((p) => p.payload.data)).toEqual([
+      "from model a",
+    ]);
+    expect((await store4b.list({ user_id: "u1" }, 10)).map((p) => p.payload.data)).toEqual([
+      "from model b",
+    ]);
+
+    // Wiping u1 from the active store removes u1 from every retained collection while keeping u2.
+    const removed = await store8.deleteScope({ user_id: "u1" });
+    expect(removed.map((p) => p.id).sort()).toEqual(["m-a1", "m-b1", "m-c1"]);
+    expect(await store4.list({ user_id: "u1" }, 10)).toEqual([]);
+    expect(await store4b.list({ user_id: "u1" }, 10)).toEqual([]);
+    expect(await store8.list({ user_id: "u1" }, 10)).toEqual([]);
+    expect((await store4.list({ user_id: "u2" }, 10)).map((p) => p.id)).toEqual(["m-a2"]);
+  });
+
+  test("imports legacy Qdrant memories once when MEM0_QDRANT_HOST is set on an empty Zvec store", async () => {
+    const dir = storeDir();
+    const historyDbPath = tempPath("qdrant-migrate-history.db");
+    createdDirs.push(dirname(historyDbPath));
+    setEnv({
+      MEM0_QDRANT_HOST: "qdrant.internal",
+      MEM0_QDRANT_PORT: "6333",
+      MEM0_QDRANT_COLLECTION: "legacy_mem",
+    });
+
+    const settings: Readonly<Record<string, string>> = {
+      EMBED_PROVIDER: "openai-compatible",
+      EMBED_MODEL: "embed-model",
+      OPENAI_COMPATIBLE_API_KEY: "sk-embed",
+      OPENAI_COMPATIBLE_BASE_URL: "https://embed.test/v1",
+    };
+    const selection = select("embeddings", (name) => settings[name]) as Selection;
+    let scrollCalls = 0;
+    const fetch = (async (url: string, init?: RequestInit) => {
+      if (url === "http://qdrant.internal:6333/collections/legacy_mem/points/scroll") {
+        scrollCalls++;
+        const body = JSON.parse(String(init?.body ?? "{}")) as { offset?: string };
+        if (!body.offset) {
+          return Response.json({
+            result: {
+              points: [
+                {
+                  id: "q-1",
+                  vector: [1, 0, 0, 0],
+                  payload: {
+                    user_id: "u-legacy",
+                    data: "旧Qdrant记忆一",
+                    created_at: "2026-05-01T00:00:00+00:00",
+                  },
+                },
+                {
+                  id: "q-wrong-dim",
+                  vector: [1, 0],
+                  payload: { user_id: "u-legacy", data: "wrong dim" },
+                },
+              ],
+              next_page_offset: "page-2",
+            },
+          });
+        }
+        return Response.json({
+          result: {
+            points: [
+              {
+                id: "q-2",
+                vector: [0, 1, 0, 0],
+                payload: {
+                  user_id: "u-legacy",
+                  data: "旧Qdrant记忆二",
+                  created_at: "2026-05-02T00:00:00+00:00",
+                },
+              },
+            ],
+            next_page_offset: null,
+          },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as unknown as typeof globalThis.fetch;
+
+    const cfg = {
+      store: { dir, vectorSize: 4, embedModel: "openai-compatible:embed-model" },
+      embedder: { selection, dims: 4 },
+      llm: {
+        provider: "openai-compatible",
+        model: "chat",
+        apiKey: "sk-llm",
+        baseUrl: "https://llm.test/v1",
+        keyMissing: null,
+      },
+      historyDbPath,
+    };
+
+    const first = await openMemoryEngine(cfg, { http: { fetch } });
+    try {
+      expect(scrollCalls).toBe(2);
+      const items = await first.getAll({ filters: { userId: "u-legacy" } });
+      expect(items.map((m) => m.memory)).toEqual(["旧Qdrant记忆一", "旧Qdrant记忆二"]);
+    } finally {
+      first.close();
+    }
+
+    closeMemoryStores();
+    const second = await openMemoryEngine(cfg, { http: { fetch } });
+    try {
+      expect(scrollCalls).toBe(2);
+      const items = await second.getAll({ filters: { userId: "u-legacy" } });
+      expect(items.map((m) => m.memory)).toEqual(["旧Qdrant记忆一", "旧Qdrant记忆二"]);
+    } finally {
+      second.close();
+    }
+  });
+
+  test("persists inserts and deletes across a real child-process exit without closeMemoryStores()", async () => {
+    const dir = storeDir();
+    const zvecModuleUrl = pathToFileURL(join(import.meta.dirname, "..", "src", "zvec.ts")).href;
+    const runtime = jsRuntime();
+    const script = `
+      import { ZvecVectorStore } from ${JSON.stringify(zvecModuleUrl)};
+      const store = new ZvecVectorStore({ dir: ${JSON.stringify(dir)}, vectorSize: 4, embedModel: "test:child" });
+      await store.insert([
+        { id: "keep-1", vector: [1, 0, 0, 0], payload: { user_id: "u1", data: "kept" } },
+        { id: "drop-1", vector: [0, 1, 0, 0], payload: { user_id: "u1", data: "dropped" } },
+      ]);
+      await store.delete("drop-1");
+    `;
+    const child = spawnSync(
+      runtime.command,
+      [...runtime.args, "--input-type=module", "-e", script],
+      {
+        encoding: "utf8",
+        env: { ...process.env, ...runtime.env },
+      },
+    );
+    expect([child.status, child.stderr]).toEqual([0, ""]);
+
+    const reopened = new ZvecVectorStore({ dir, vectorSize: 4, embedModel: "test:child" });
+    const listed = await reopened.list({ user_id: "u1" }, 10);
+    expect(listed.map((p) => [p.id, p.payload.data])).toEqual([["keep-1", "kept"]]);
+    expect(await reopened.get("drop-1")).toBeNull();
   });
 });

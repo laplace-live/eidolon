@@ -496,7 +496,7 @@ describe("pnpm run version", () => {
       repo,
       ".changeset/config.json",
       JSON.stringify({
-        changelog: "./changelog.mjs",
+        changelog: "./changelog.ts",
         commit: false,
         fixed: [],
         linked: [],
@@ -508,7 +508,7 @@ describe("pnpm run version", () => {
       }),
     );
     for (const file of [
-      ".changeset/changelog.mjs",
+      ".changeset/changelog.ts",
       "scripts/changelog.ts",
       "apps/desktop/src/shared/release-notes.ts",
     ]) {

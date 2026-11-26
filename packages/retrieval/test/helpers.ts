@@ -165,7 +165,16 @@ export const REAL_INDEX = join(
 
 export async function realTable(name: string): Promise<ZvecTable | null> {
   try {
-    return await openTable(REAL_INDEX, name);
+    const table = await openTable(REAL_INDEX, name);
+    if (table === null) return null;
+    try {
+      // Probe one row so a stub/manifest-only directory returns null instead of failing parity tests.
+      table.readAll({ limit: 1 });
+      return table;
+    } catch {
+      closeReadTablesUnder(REAL_INDEX);
+      return null;
+    }
   } catch {
     return null;
   }

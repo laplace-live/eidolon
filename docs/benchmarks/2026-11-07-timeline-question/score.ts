@@ -74,7 +74,10 @@ async function ask(turn: Pick<Turn, "text" | "before">): Promise<Omit<Row, "set"
   });
   const ms = Math.round(performance.now() - started);
   if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
-  const body = (await response.json()) as { model: string; answers: Record<string, { noul: number }> };
+  const body = (await response.json()) as {
+    model: string;
+    answers: Record<string, { noul: number }>;
+  };
   const nouls = Object.fromEntries(Object.entries(body.answers).map(([k, v]) => [k, v.noul]));
   const max = (keys: string[]) => Math.max(...keys.map((key) => nouls[key] as number));
   return {
@@ -103,10 +106,8 @@ const here = import.meta.dirname;
 // smol-toml is apps/cli's dependency, which pnpm links there and not at the root.
 const { parse: parseToml } = createRequire(join(here, "../../../apps/cli/package.json"))(
   "smol-toml",
-) as typeof import("smol-toml");
-const { turn: turns } = parseToml(await readFile(join(here, "turns.toml"), "utf8")) as unknown as {
-  turn: Turn[];
-};
+) as { parse(toml: string): { turn: Turn[] } };
+const { turn: turns } = parseToml(await readFile(join(here, "turns.toml"), "utf8"));
 await ask({ text: "你好" }); // opens the connection, as a live session has
 const rows: Row[] = [];
 for (const turn of turns) {

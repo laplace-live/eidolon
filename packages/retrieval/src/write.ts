@@ -223,13 +223,15 @@ export async function writeTable(
   mkdirSync(root, { recursive: true });
 
   const dim = schema.vectorDim;
-  const col = ZVecCreateAndOpen(buildPath, buildZvecSchema(name, schema), {
-    readOnly: false,
-    enableMMAP: true,
-  });
+  let col: ReturnType<typeof ZVecCreateAndOpen> | null = null;
   let closed = false;
   try {
+    col = ZVecCreateAndOpen(buildPath, buildZvecSchema(name, schema), {
+      readOnly: false,
+      enableMMAP: true,
+    });
     for (let start = 0; start < validated.length; start += WRITE_BATCH) {
+      options.signal?.throwIfAborted();
       const end = Math.min(validated.length, start + WRITE_BATCH);
       const batch: ZVecDocInput[] = [];
       for (let i = start; i < end; i++) {
@@ -247,11 +249,12 @@ export async function writeTable(
       }
     }
     await col.optimize();
+    options.signal?.throwIfAborted();
     col.closeSync();
     closed = true;
     writePointerAtomic(root, buildId);
   } catch (error) {
-    if (!closed) {
+    if (col !== null && !closed) {
       try {
         col.closeSync();
       } catch {

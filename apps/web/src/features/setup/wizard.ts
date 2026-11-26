@@ -80,14 +80,20 @@ export function inheritedValue(
 }
 
 /**
- * Whether a flag row is on: her file's value, else the environment's, else `fallback`, as the
- * bot reads it.
+ * Whether a flag row is on: the environment's value when it overrides an app row, else her file's
+ * value, else the environment's, else `fallback`, as the bot reads it.
  */
 export function flagOn(
-  row: Pick<SettingRow, "value" | "envValue"> | undefined,
+  row:
+    | (Pick<SettingRow, "value" | "envValue"> & Partial<Pick<SettingRow, "envOverride">>)
+    | undefined,
   fallback: boolean,
 ): boolean {
   const control = { type: "flag" } as const;
+  if (row?.envOverride) {
+    const env = draftOf(row.envValue, control);
+    return env === "" ? fallback : env === "on";
+  }
   const own = draftOf(row?.value ?? null, control);
   const set = own === "" ? draftOf(row?.envValue ?? null, control) : own;
   return set === "" ? fallback : set === "on";

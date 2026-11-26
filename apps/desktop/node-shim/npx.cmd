@@ -5,4 +5,9 @@ if not defined EIDOLON_NODE (
   exit /b 1
 )
 set ELECTRON_RUN_AS_NODE=1
-"%EIDOLON_NODE%" --disable-sigusr1 --use-system-ca "%~dp0npx.mjs" %*
+if exist "%~dp0npx.ts" goto checkout
+"%EIDOLON_NODE%" --disable-sigusr1 --use-system-ca "%~dp0..\..\npx.ts" %*
+exit /b %ERRORLEVEL%
+:checkout
+"%EIDOLON_NODE%" --disable-sigusr1 --use-system-ca "%~dp0npx.ts" %*
+exit /b %ERRORLEVEL%

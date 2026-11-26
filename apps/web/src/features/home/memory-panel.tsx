@@ -88,7 +88,7 @@ function MemoryHelp({
         }
       >
         <p className="text-sm">
-          {t`Memory is on, but it needs an embedding key and a memory-extraction key before she can remember or recall anything.`}
+          {t`Memory is on, but its provider settings or API keys need attention before she can remember or recall anything.`}
         </p>
         {problem && (
           <p className="break-words font-mono text-muted-foreground text-xs">{problem}</p>
@@ -100,10 +100,15 @@ function MemoryHelp({
     <SectionCard
       note={t`Calls go on without memory meanwhile.`}
       actions={
-        <Button disabled={retrying} onClick={onRetry}>
-          {retrying && <Spinner />}
-          {t`Try Again`}
-        </Button>
+        <>
+          <Button variant="outline" asChild>
+            <Link to="/settings?tab=memory">{t`Memory Settings`}</Link>
+          </Button>
+          <Button disabled={retrying} onClick={onRetry}>
+            {retrying && <Spinner />}
+            {t`Try Again`}
+          </Button>
+        </>
       }
     >
       <p className="text-sm">

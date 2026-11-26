@@ -276,7 +276,6 @@ export function SettingsCard({
       </SectionCard>
       <ReindexDialog
         open={confirming !== null}
-        dimensionChanged={confirming !== null && "embeddings.dim" in confirming}
         onCancel={() => setConfirming(null)}
         onConfirm={() => {
           if (confirming) void ask(confirming);

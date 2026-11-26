@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@4.0.0/schema.json",
-  "changelog": "./changelog.mjs",
+  "changelog": "./changelog.ts",
   "commit": false,
   "fixed": [["laplace-eidolon", "@laplace.live/eidolon"]],
   "linked": [],

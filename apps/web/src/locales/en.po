@@ -2203,12 +2203,8 @@ msgid "Every persona"
 msgstr "Every persona"
 
 #: src/components/settings-form/reindex-dialog.tsx
-msgid "Every persona's knowledge index needs to be built again, and existing viewer memories must be cleared so old and new vectors aren't mixed."
-msgstr "Every persona's knowledge index needs to be built again, and existing viewer memories must be cleared so old and new vectors aren't mixed."
-
-#: src/components/settings-form/reindex-dialog.tsx
-msgid "Every persona's knowledge index needs to be built again, and memory starts a new collection for the new dimension."
-msgstr "Every persona's knowledge index needs to be built again, and memory starts a new collection for the new dimension."
+msgid "Every persona's knowledge index needs to be built again, and memory starts a new collection for the new embedding settings."
+msgstr "Every persona's knowledge index needs to be built again, and memory starts a new collection for the new embedding settings."
 
 #: src/features/settings/route.tsx
 msgid "Every persona's memories of you live in a local Zvec index in your data home, and each change to them is logged to a SQLite file."
@@ -3484,16 +3480,16 @@ msgid "Memory is off. Turn it on in Settings so {name} remembers your calls."
 msgstr "Memory is off. Turn it on in Settings so {name} remembers your calls."
 
 #: src/features/home/memory-panel.tsx
-msgid "Memory is on, but it needs an embedding key and a memory-extraction key before she can remember or recall anything."
-msgstr "Memory is on, but it needs an embedding key and a memory-extraction key before she can remember or recall anything."
+msgid "Memory is on, but its provider settings or API keys need attention before she can remember or recall anything."
+msgstr "Memory is on, but its provider settings or API keys need attention before she can remember or recall anything."
 
 #: src/features/setup/memory-step.tsx
 msgid "Memory is on."
 msgstr "Memory is on."
 
 #: src/features/call/call-page.tsx
-msgid "Memory needs API keys in Settings before {name} can remember this call."
-msgstr "Memory needs API keys in Settings before {name} can remember this call."
+msgid "Memory needs its keys or settings fixed in Settings before {name} can remember this call."
+msgstr "Memory needs its keys or settings fixed in Settings before {name} can remember this call."
 
 #: src/features/call/call-page.tsx
 msgid "Memory off"
@@ -3506,6 +3502,10 @@ msgstr "Memory on"
 #: src/components/settings-form/labels.ts
 msgid "Memory Score Threshold"
 msgstr "Memory Score Threshold"
+
+#: src/features/home/memory-panel.tsx
+msgid "Memory Settings"
+msgstr "Memory Settings"
 
 #: src/components/settings-form/labels.ts
 msgid "Memory Vector Store"
@@ -6644,8 +6644,8 @@ msgid "TURN Username"
 msgstr "TURN Username"
 
 #: src/features/home/readiness-labels.ts
-msgid "Turned on, but missing a key it needs."
-msgstr "Turned on, but missing a key it needs."
+msgid "Turned on, but needs its keys or settings fixed."
+msgstr "Turned on, but needs its keys or settings fixed."
 
 #: src/features/jobs/labels.ts
 msgid "Turns a video's audio into a transcript with Soniox."

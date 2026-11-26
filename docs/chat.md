@@ -200,8 +200,8 @@ aborts the turn. The engine never rejects for the turn's own failures.
      `period: "selected"` still works. It doesn't when a recall block came after that call: the
      archive's own recall may have moved the scope, and the log doesn't record where.
    - **What fails:** a missing index or a failed Mem0 store is logged once per chat and skipped.
-     An index is tried again next turn, and Mem0 a minute later, since an embedding call can wait
-     out its timeout.
+     An index is tried again next turn, and Mem0 a minute later after a failed open, since opening
+     it can wait out a request timeout.
    - **The system instruction** is rebuilt every turn, since it carries the clock:
      `buildSystemInstruction`, with `voicePromptHint` in a voice reply alone, and in a group the
      line naming the others ([below](#what-each-persona-sees)).

@@ -22,9 +22,12 @@ import {
   DEFAULT_EMBED_MODEL,
   EmbedCache,
   embeddingSelection,
+  hybridSearch,
   openTable,
   personaFactsSchema,
   resetEmbeddingModel,
+  tokenizeZhQuery,
+  vectorSearch,
   type ZvecTable,
 } from "@eidolon/retrieval";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -149,6 +152,19 @@ test.skipIf(!present && !REQUIRED)(
       expectedVectors.set(cachedMap.get(i) as Float32Array, i * DIM);
     }
     expectVectorsClose(mine.vectors, expectedVectors);
+
+    const probeRow = expectedLoaded.rows[0]!;
+    const probeVec = mine.vectors.subarray(0, DIM);
+    const vecHits = await vectorSearch(table, { vector: probeVec, limit: 5 });
+    expect(vecHits[0]?.id).toBe(probeRow.id);
+    const hybHits = await hybridSearch(table, {
+      vector: probeVec,
+      queryText: tokenizeZhQuery(probeRow.text) || probeRow.text,
+      candidates: 30,
+      finalK: 8,
+      rerank: false,
+    });
+    expect(hybHits.map((r) => r.id)).toContain(probeRow.id);
 
     const meta = JSON.parse(readFileSync(join(db, "persona_facts.meta.json"), "utf8"));
     expect(meta).toEqual({

@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ZVecDataType } from "@zvec/zvec";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   closeAllReadTables,
@@ -42,6 +43,23 @@ function vectorsOf(rows: readonly Record<string, unknown>[]): Float32Array {
   return Float32Array.from(rows.flatMap((row) => row.vector as number[]));
 }
 
+function persistedSchema(table: ZvecTable): ReturnType<typeof describeSchema> {
+  const kindOf = (dt: ZVecDataType): string => {
+    if (dt === ZVecDataType.STRING) return "string";
+    if (dt === ZVecDataType.INT32) return "int32";
+    if (dt === ZVecDataType.BOOL) return "bool";
+    return String(dt);
+  };
+  const vec = table.collection.schema.vector("vector");
+  return {
+    metadata: {},
+    fields: [
+      ...table.collection.schema.fields().map((f) => [f.name, kindOf(f.dataType), f.nullable]),
+      ["vector", `fixed_size_list<item: float>[${vec.dimension}]`, true, "item", "float", true],
+    ],
+  };
+}
+
 test.each(Object.keys(SCHEMAS) as (keyof typeof SCHEMAS)[])(
   "%s has the golden's columns, types and nullability",
   (name) => {
@@ -58,8 +76,7 @@ describe.each(Object.keys(SCHEMAS) as (keyof typeof SCHEMAS)[])("writing %s", (n
     await writeTable(dir, name, golden.rows, SCHEMAS[name](GOLDEN_DIM), vectorsOf(golden.rows));
     const table = (await openTable(dir, name)) as ZvecTable;
     const back = table.readAll({ includeVectors: true });
-    expect(table.columnNames).toEqual(SCHEMAS[name](GOLDEN_DIM).fields.map((f) => f.name));
-    expect(table.vectorDim).toBe(GOLDEN_DIM);
+    expect(persistedSchema(table)).toEqual(describeSchema(SCHEMAS[name](GOLDEN_DIM)));
     expect(back.rows).toEqual(golden.read_back);
     expectVectorsClose(back.vectors, vectorsOf(golden.rows));
 
@@ -129,6 +146,24 @@ describe("a write that can't complete leaves the old table in place", () => {
     const table = (await openTable(dir, "persona_facts")) as ZvecTable;
     expect(await table.countRows()).toBe(good.length);
     expect(readCurrentBuildId(dir, "persona_facts")).toBe(beforeBuild);
+  });
+
+  test("a signal aborted during Zvec optimize cleans up the partial build and keeps CURRENT", async () => {
+    await writeTable(dir, "persona_facts", good, schema, vectorsOf(good));
+    const beforeBuild = readCurrentBuildId(dir, "persona_facts") as string;
+    const controller = new AbortController();
+    const pending = writeTable(dir, "persona_facts", one({}), schema, vectorsOf(one({})), {
+      signal: controller.signal,
+    });
+    // `writeTable` runs synchronously into `await col.optimize()`, so aborting now cancels post-open.
+    controller.abort(new DOMException("stop-after-open", "AbortError"));
+    await expect(pending).rejects.toThrow("stop-after-open");
+    const table = (await openTable(dir, "persona_facts")) as ZvecTable;
+    expect(await table.countRows()).toBe(good.length);
+    expect(readCurrentBuildId(dir, "persona_facts")).toBe(beforeBuild);
+    expect(readdirSync(join(dir, "persona_facts.zvec")).sort()).toEqual(
+      [CURRENT_FILE, beforeBuild].sort(),
+    );
   });
 
   test("a bool column refuses a number", async () => {

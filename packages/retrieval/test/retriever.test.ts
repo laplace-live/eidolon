@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -272,6 +272,7 @@ describe("ZvecRetriever", () => {
 
   test("keeps serving the previous build while rsync --delay-updates stages a new CURRENT, and rotates sibling retrievers", async () => {
     const dir = mkdtempSync(join(tmpdir(), "retrieval-rsync-"));
+    const stagedSrc = mkdtempSync(join(tmpdir(), "retrieval-rsync-src-"));
     try {
       const schema = personaFactsSchema(4);
       await writeTable(
@@ -298,23 +299,39 @@ describe("ZvecRetriever", () => {
 
       // Simulate rsync renaming CURRENT before moving `<newBuildId>/.~tmp~/*`.
       const tableRoot = join(dir, "persona_facts.zvec");
-      mkdirSync(join(tableRoot, "staging-build"));
+      const stagingPath = join(tableRoot, "staging-build");
+      mkdirSync(stagingPath);
       writeFileSync(join(tableRoot, "CURRENT"), "staging-build\n");
       records.length = 0;
+
+      // A pre-aborted signal rejects before attempting to reopen CURRENT.
+      const preAborted = new AbortController();
+      const abortReason = new Error("caller-cancelled");
+      preAborted.abort(abortReason);
+      await expect(
+        primary.search("坚果体重", { candidates: 5, topK: 3, signal: preAborted.signal }),
+      ).rejects.toBe(abortReason);
+      expect(records).toEqual([]);
 
       const duringStage = await primary.search("坚果体重", { candidates: 5, topK: 3 });
       expect(duringStage.length).toBe(3);
       expect(primary.hasTable).toBe(true);
 
-      // Once the new build finishes landing, both retrievers switch cleanly to it.
+      // Build the 2-row index in a separate directory and populate `staging-build` directly so
+      // `writeTable` never touches `dir`'s in-process handles and CURRENT stays `staging-build`.
       const subset = FACT_ROWS.slice(0, 2);
       await writeTable(
-        dir,
+        stagedSrc,
         "persona_facts",
         subset,
         schema,
         Float32Array.from(subset.flatMap((r) => r.vector)),
       );
+      const srcRoot = join(stagedSrc, "persona_facts.zvec");
+      const srcBuild = readdirSync(srcRoot).find((entry) => entry !== "CURRENT") as string;
+      for (const entry of readdirSync(join(srcRoot, srcBuild))) {
+        cpSync(join(srcRoot, srcBuild, entry), join(stagingPath, entry), { recursive: true });
+      }
       expect(
         (await primary.search("坚果体重", { candidates: 5, topK: 3 })).map((r) => r.id),
       ).toEqual(["f0", "f1"]);
@@ -325,6 +342,7 @@ describe("ZvecRetriever", () => {
     } finally {
       closeAllReadTables();
       rmSync(dir, { recursive: true, force: true });
+      rmSync(stagedSrc, { recursive: true, force: true });
     }
   });
 });

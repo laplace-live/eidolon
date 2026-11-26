@@ -25,6 +25,7 @@ on:
       - "CLAUDE.md"
       - ".github/workflows/ts.yml"
       - ".github/workflows/release.yml"
+      - ".github/workflows/docs.yml"
       - "vitest.config.ts"
       - "tsconfig.json"
       # The bot never runs these. The image copies nothing from apps/cli, apps/web, apps/eidolon or
@@ -62,6 +63,7 @@ on:
       - "CLAUDE.md"
       - ".github/workflows/ts.yml"
       - ".github/workflows/release.yml"
+      - ".github/workflows/docs.yml"
       - "vitest.config.ts"
       - "tsconfig.json"
       - "apps/cli/**"

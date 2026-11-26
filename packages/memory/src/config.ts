@@ -97,7 +97,11 @@ export function buildMemoryConfig(): MemoryConfig {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const dims = embedDim();
   return {
-    store: { dir, vectorSize: dims },
+    store: {
+      dir,
+      vectorSize: dims,
+      embedModel: `${embeddings.provider.id}:${embeddings.model}`,
+    },
     embedder: { selection: embeddings, dims },
     llm: llmSettings(),
     historyDbPath,

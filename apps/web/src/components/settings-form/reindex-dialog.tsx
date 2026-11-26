@@ -13,12 +13,10 @@ import {
 /** Asks before a save of REINDEX_PATHS or embedding provider, which requires rebuilding indexes. */
 export function ReindexDialog({
   open,
-  dimensionChanged = false,
   onCancel,
   onConfirm,
 }: {
   readonly open: boolean;
-  readonly dimensionChanged?: boolean;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) {
@@ -29,9 +27,7 @@ export function ReindexDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>{t`Change the embedding model?`}</AlertDialogTitle>
           <AlertDialogDescription>
-            {dimensionChanged
-              ? t`Every persona's knowledge index needs to be built again, and memory starts a new collection for the new dimension.`
-              : t`Every persona's knowledge index needs to be built again, and existing viewer memories must be cleared so old and new vectors aren't mixed.`}
+            {t`Every persona's knowledge index needs to be built again, and memory starts a new collection for the new embedding settings.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

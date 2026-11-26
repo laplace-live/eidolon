@@ -27,6 +27,7 @@ import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "./extraction-p
 import { type HistoryEntry, HistoryStore } from "./history.ts";
 import { type Embedder, type ExtractionLlm, Mem0Embedder, OpenAICompatibleChat } from "./openai.ts";
 import { generateAdditiveExtractionPrompt } from "./prompts.ts";
+import { migrateLegacyQdrantIfNeeded } from "./qdrant-import.ts";
 import { buildSessionScope, type MemoryScope, scopeFilters } from "./scope.ts";
 import { md5Hex, parseExtraction, parseMessages } from "./text.ts";
 import { normalizeIsoTimestampToUtc, parseIsoDate, parseIsoDatetime } from "./time.ts";
@@ -158,6 +159,10 @@ export class MemoryEngine {
 
   ensureCollection(): Promise<void> {
     return this.#store.ensureCollection();
+  }
+
+  close(): void {
+    this.#history.close();
   }
 
   /**
@@ -385,6 +390,11 @@ export class MemoryEngine {
         "At least one filter is required to delete all memories. If you want to delete all memories, use the `reset()` method.",
       );
     }
+    if (this.#store.deleteScope) {
+      const removed = await this.#store.deleteScope(filters);
+      for (const point of removed) this.#recordDeleted(point.id, point.payload);
+      return removed.length;
+    }
     let deleted = 0;
     const seen = new Set<string>();
     for (;;) {
@@ -402,19 +412,10 @@ export class MemoryEngine {
     return deleted;
   }
 
-  async #deleteMemory(id: string): Promise<void> {
-    const existing = await this.#store.get(id);
-    if (!existing) {
-      throw pyError(
-        "ValueError",
-        `Memory with id ${id} not found. Please provide a valid 'memory_id'`,
-      );
-    }
-    const payload = existing.payload;
+  #recordDeleted(id: string, payload: Readonly<Record<string, unknown>>): void {
     const oldMemory = get(payload, "data", "");
     const createdAt = normalizeIsoTimestampToUtc(get(payload, "created_at"));
     const updatedAt = pyIsoformatUtc(this.#clock());
-    await this.#store.delete(id);
     this.#history.addHistory({
       memoryId: id,
       oldMemory,
@@ -426,6 +427,18 @@ export class MemoryEngine {
       role: get(payload, "role"),
       isDeleted: 1,
     });
+  }
+
+  async #deleteMemory(id: string): Promise<void> {
+    const existing = await this.#store.get(id);
+    if (!existing) {
+      throw pyError(
+        "ValueError",
+        `Memory with id ${id} not found. Please provide a valid 'memory_id'`,
+      );
+    }
+    await this.#store.delete(id);
+    this.#recordDeleted(id, existing.payload);
   }
 }
 
@@ -446,6 +459,9 @@ export async function openMemoryEngine(
   const embedder = new Mem0Embedder(model, embedding.dims);
   const store = options.store ?? new ZvecVectorStore(config.store);
   await store.ensureCollection();
+  if (options.store === undefined && store instanceof ZvecVectorStore) {
+    await migrateLegacyQdrantIfNeeded(store, embedding.dims, fetch);
+  }
   const llmClient = jsonPoster(
     { provider: chat.provider, baseUrl: chat.baseUrl, apiKey: requireLlmKey(chat) },
     options.http,
@@ -488,6 +504,11 @@ export class SharedEngine {
       this.#opening.set(key, opening);
     }
     return { engine: await opening, fresh: true };
+  }
+
+  close(): void {
+    for (const engine of this.#engines.values()) engine.close();
+    this.#engines.clear();
   }
 }
 

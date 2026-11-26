@@ -104,17 +104,21 @@ test.skipIf((!haveStreams || !existsSync(CACHE)) && !REQUIRED)(
     expect(diffs.slice(0, 10), `${diffs.length} cells differ`).toEqual([]);
 
     const cache = new EmbedCache(clone);
-    const cachedMap = cache.getMany(
-      DEFAULT_EMBED_MODEL,
-      DIM,
-      expectedRows.slice(0, 256).map((r) => r.embed_input),
-    );
-    cache.close();
-    const expectedSampleVecs = new Float32Array(256 * DIM);
-    for (let i = 0; i < 256; i++) {
-      expectedSampleVecs.set(cachedMap.get(i) as Float32Array, i * DIM);
+    const expectedAllVecs = new Float32Array(expectedRows.length * DIM);
+    for (let start = 0; start < expectedRows.length; start += 512) {
+      const end = Math.min(expectedRows.length, start + 512);
+      const sliceMap = cache.getMany(
+        DEFAULT_EMBED_MODEL,
+        DIM,
+        expectedRows.slice(start, end).map((r) => r.embed_input),
+      );
+      expect(sliceMap.size).toBe(end - start);
+      for (let j = 0; j < end - start; j++) {
+        expectedAllVecs.set(sliceMap.get(j) as Float32Array, (start + j) * DIM);
+      }
     }
-    expectVectorsClose(got.vectors.subarray(0, 256 * DIM), expectedSampleVecs);
+    cache.close();
+    expectVectorsClose(got.vectors, expectedAllVecs);
 
     const probeVec = got.vectors.subarray(0, DIM);
     const vecHits = await vectorSearch(mine, { vector: probeVec, limit: 5 });

@@ -6,7 +6,7 @@
 import { constants, copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { pyLstrip, pyStrip } from "@eidolon/config";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import {
   closeAllReadTables,
@@ -15,6 +15,7 @@ import {
   embedInBatches,
   hybridSearch,
   openTable,
+  PyPattern,
   personaFactsSchema,
   streamChunksSchema,
   tokenizeZh,
@@ -34,17 +35,9 @@ const SAMPLE_SIZE = 600;
 const records = captureLogs();
 
 let dir = "";
-let clone = "";
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "retrieval-write-real-"));
-  if (existsSync(REAL_CACHE)) {
-    clone = join(dir, "embed_cache.db");
-    copyFileSync(REAL_CACHE, clone, constants.COPYFILE_FICLONE);
-    if (existsSync(`${REAL_CACHE}-wal`)) {
-      copyFileSync(`${REAL_CACHE}-wal`, `${clone}-wal`, constants.COPYFILE_FICLONE);
-    }
-  }
-}, 60_000);
+});
 afterAll(() => {
   closeAllReadTables();
   rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
@@ -52,37 +45,72 @@ afterAll(() => {
 
 interface CachedRow {
   readonly text: string;
+  readonly embedInput: string;
   readonly vector: Float32Array;
 }
 
-function readCachedSample(limit: number): CachedRow[] {
-  const texts: string[] = [];
+const FLOOR_RE = new PyPattern(String.raw`^\s*第(\d+)楼\s*[:：]\s*`);
+const BV_RE = new PyPattern(String.raw`^\s*BV[0-9A-Za-z]+\s*[/、,，]\s*`);
+const DATE_RE = new PyPattern(
+  String.raw`^\s*(?:(\d{4})年(\d{1,2})月(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?(?=\D|$))\s*[/、,，]?\s*`,
+);
+const SUBJECT_PREFIX = new PyPattern(
+  "^(?:明前奶[绿黑])(?:声称是|声称|声明|强调|认为|觉得|说过|说|解释|讨论|吐槽|抱怨|提到|表示|回应|喜欢|讨厌|希望|担心|模仿|询问|评价|介绍|分享|多次)?[，。、,.;；:：\\s]*",
+);
+
+function parseFactEmbedInput(raw: string): { text: string; embedInput: string } | null {
+  let line = pyStrip(raw);
+  if (!line) return null;
+  const floor = FLOOR_RE.match(line);
+  if (floor) line = pyLstrip(line.slice(floor.index + floor[0].length));
+  line = BV_RE.sub("", line, { count: 1 });
+  let isoDate = "";
+  const date = DATE_RE.match(line);
+  if (date) {
+    const [year, month, day] = (date[1] !== undefined ? date.slice(1, 4) : date.slice(4, 7)).map(
+      (digits) => Number(digits),
+    ) as [number, number, number];
+    isoDate = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    line = pyLstrip(line.slice(date.index + date[0].length));
+  }
+  if (line.length < 4) return null;
+  const body = SUBJECT_PREFIX.sub("", line, { count: 1 }) || line;
+  const embedInput = isoDate ? `${isoDate}：${body}` : body;
+  return { text: line, embedInput };
+}
+
+function readCachedSample(clonePath: string, limit: number): CachedRow[] {
+  const candidates: { text: string; embedInput: string }[] = [];
   const seen = new Set<string>();
   for (const name of ["店长坚果设定集.txt", "明前奶绿设定集.txt", "明前奶绿事件集.txt"]) {
     const file = join(REAL_FACTS, name);
     if (!existsSync(file)) continue;
     for (const raw of readFileSync(file, "utf8").split(/\r?\n/)) {
-      const text = raw.replace(/^\uFEFF/, "").trim();
-      if (text.length < 6 || seen.has(text)) continue;
-      seen.add(text);
-      texts.push(text);
-      if (texts.length >= limit) break;
+      const parsed = parseFactEmbedInput(raw);
+      if (!parsed || seen.has(parsed.text)) continue;
+      seen.add(parsed.text);
+      candidates.push(parsed);
+      if (candidates.length >= limit * 2) break;
     }
-    if (texts.length >= limit) break;
+    if (candidates.length >= limit * 2) break;
   }
-  const db = new DatabaseSync(clone, { readOnly: true });
+  const cache = new EmbedCache(clonePath);
   try {
-    const blobs = db
-      .prepare("SELECT vector FROM embed_cache WHERE length(vector) = ? ORDER BY key LIMIT ?")
-      .all(DIM * 4, texts.length) as { vector: Uint8Array }[];
-    return blobs.map((row, i) => {
-      const aligned = new Float32Array(DIM);
-      const view = new DataView(row.vector.buffer, row.vector.byteOffset, row.vector.byteLength);
-      for (let j = 0; j < DIM; j++) aligned[j] = view.getFloat32(j * 4, true);
-      return { text: texts[i] as string, vector: aligned };
-    });
+    const cachedMap = cache.getMany(
+      DEFAULT_EMBED_MODEL,
+      DIM,
+      candidates.map((c) => c.embedInput),
+    );
+    const out: CachedRow[] = [];
+    for (const [i, candidate] of candidates.entries()) {
+      const vector = cachedMap.get(i);
+      if (!vector) continue;
+      out.push({ text: candidate.text, embedInput: candidate.embedInput, vector });
+      if (out.length >= limit) break;
+    }
+    return out;
   } finally {
-    db.close();
+    cache.close();
   }
 }
 
@@ -91,7 +119,12 @@ test.skipIf((!existsSync(REAL_CACHE) || !existsSync(REAL_FACTS)) && !REQUIRED)(
   async () => {
     expect(existsSync(REAL_CACHE), `no embedding cache at ${REAL_CACHE}`).toBe(true);
     expect(existsSync(REAL_FACTS), `no fact files at ${REAL_FACTS}`).toBe(true);
-    const sample = readCachedSample(SAMPLE_SIZE);
+    const clone = join(dir, "embed_cache.db");
+    copyFileSync(REAL_CACHE, clone, constants.COPYFILE_FICLONE);
+    if (existsSync(`${REAL_CACHE}-wal`)) {
+      copyFileSync(`${REAL_CACHE}-wal`, `${clone}-wal`, constants.COPYFILE_FICLONE);
+    }
+    const sample = readCachedSample(clone, SAMPLE_SIZE);
     expect(sample.length).toBe(SAMPLE_SIZE);
 
     const vectors = new Float32Array(sample.length * DIM);
@@ -147,13 +180,8 @@ test.skipIf((!existsSync(REAL_CACHE) || !existsSync(REAL_FACTS)) && !REQUIRED)(
     expectVectorsClose(chunksBack.vectors, vectors);
 
     records.length = 0;
-    const inputs = sample.map((entry) => entry.text);
-    const cache = new EmbedCache(join(dir, "batch_cache.db"));
-    cache.putMany(
-      DEFAULT_EMBED_MODEL,
-      DIM,
-      sample.map((entry) => [entry.text, entry.vector] as const),
-    );
+    const inputs = sample.map((entry) => entry.embedInput);
+    const cache = new EmbedCache(clone);
     const report = await embedInBatches(inputs, {
       batchSize: 64,
       noun: "chunks",
@@ -173,5 +201,5 @@ test.skipIf((!existsSync(REAL_CACHE) || !existsSync(REAL_FACTS)) && !REQUIRED)(
       "All embeddings served from cache; nothing to embed.",
     ]);
   },
-  120_000,
+  300_000,
 );

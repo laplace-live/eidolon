@@ -120,7 +120,7 @@ jobs:
         timeout-minutes: 45
         working-directory: apps/desktop
         run: |
-          args=(--publish never --config electron-builder.release.mjs)
+          args=(--publish never --config electron-builder.release.ts)
           if [[ $GITHUB_EVENT_NAME == workflow_dispatch ]]; then args+=(-c.extraMetadata.version=0.0.0-dev); fi
           node node_modules/electron-builder/cli.js "${args[@]}"
         env:
@@ -131,7 +131,7 @@ jobs:
           APPLE_API_KEY: ${{ runner.os == 'macOS' && format('{0}/apple-api-key.p8', runner.temp) || '' }}
           APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
           APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
-          # Windows: Azure Trusted Signing (electron-builder.release.mjs).
+          # Windows: Azure Trusted Signing (electron-builder.release.ts).
           AZURE_TENANT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_TENANT_ID || '' }}
           AZURE_CLIENT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_ID || '' }}
           AZURE_CLIENT_SECRET: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_SECRET || '' }}

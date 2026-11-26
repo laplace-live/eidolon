@@ -43,7 +43,7 @@ export const READY_TEXT = {
   "home.ready.voice.provider": msg`{provider} speaks with voice {id}.`,
   "home.ready.voice.providerNone": msg`{provider} needs a voice for her, so calls can't start.`,
   "home.ready.memory.off": msg`Off: she won't remember you between calls.`,
-  "home.ready.memory.notReady": msg`Turned on, but missing a key it needs.`,
+  "home.ready.memory.notReady": msg`Turned on, but needs its keys or settings fixed.`,
   "home.ready.memory.on": msg`On: she remembers you from one call to the next.`,
   "home.ready.facts.none": msg`No index yet: she knows only her prompt.`,
   "home.ready.facts.stale": msg`Built with other embedding settings: build it again.`,

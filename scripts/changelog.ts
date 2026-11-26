@@ -45,7 +45,7 @@ const KIND_BY_PREFIX = new Map<string, ChangeKind>([
 
 /**
  * A changeset summary's kind, from its `feat:` or `fix(scope)!:` prefix, and its text without the
- * prefix, which .changeset/changelog.mjs writes to CHANGELOG.md. With no prefix it knows, `other`.
+ * prefix, which .changeset/changelog.ts writes to CHANGELOG.md. With no prefix it knows, `other`.
  */
 export function classify(summary: string): { kind: ChangeKind; text: string } {
   const trimmed = summary.trim();

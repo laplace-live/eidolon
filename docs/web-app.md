@@ -83,8 +83,15 @@ reach the launcher, the supervisor and the server alike, and the first two wait 
 own stop; Windows ends them all some seconds after the window closes. A process the app spawns
 without `detached` sits in its parent's job object, which ends it when the parent ends, however
 it ends: killing the launcher takes the supervisor and the server with it, without their stop.
-The launcher refuses to start without the Visual C++ runtime that onnxruntime-node
-loads (`VC_RUNTIME_DLLS`), and points to its installer.
+The launcher refuses to start without the Visual C++ runtime that Zvec and onnxruntime-node
+load (`VC_RUNTIME_DLLS`), and points to its installer. Assistant tasks' commands on Windows need
+Git Bash (from Git for Windows) or Cygwin's / MSYS2's bash on `PATH`.
+
+The first `npx @laplace.live/eidolon` run downloads the bundle plus Zvec and ONNX Runtime for the
+platform. On Linux x64, npm 11 runs `onnxruntime-node`'s install script, which tries to fetch
+~240 MB of unused CUDA libraries from NuGet; skip it with
+`ONNXRUNTIME_NODE_INSTALL_CUDA=skip npx @laplace.live/eidolon` (npm 12 skips dependency install
+scripts unless allowed).
 
 ## What stays out of production
 
@@ -390,6 +397,13 @@ corner, 0.5rem down in a browser and below the title strip in the desktop app
   **Return to Call**. A call that ended on its own keeps its reason there, with **Return to Call**
   and **Close**, until **Close**; one the viewer hung up leaves nothing. It shows her picture, never
   her model, and is never a drag row.
+- **The app's one call belongs to its shell.** `CallProvider` (`features/call/call-provider.tsx`)
+  inside `AppShell` owns the call and its `<audio data-call>`: pages read it via `useShellCall()`
+  and `useCallPresence()`, never call `useCall()` or mount another call audio element, so
+  navigating never hangs up. Stage views register via `useShowsCall()` so the non-WebGL call bar
+  shows everywhere else (each stage view keeps its own error boundary so a WebGL throw never hits
+  `AppShell` and drops the call). Actions that would break or be refused during a call (setup
+  links, restart, persona switch, model import) wait while a call is up.
 
 ## In the desktop app
 
@@ -1016,12 +1030,15 @@ fails to compile when the union grows without it.
 `pnpm i18n` (`lingui extract --clean`) writes every message into
 `apps/web/src/locales/en.po` and `zh-Hans.po`; each new one then needs its `msgstr` in
 `zh-Hans.po`, or it shows in English. A message's id is its English text, with any `context` that
-sets two meanings of one word apart (`t({ message: "Done", context: "job status" })`), so a reworded
-string loses its translation unless `zh-Hans.po` is changed with it. Nothing compiles the catalogs
-by hand: the Vite plugin turns `.po` imports into one chunk per language, and `locales/i18n.ts`
-loads the one in use before the first render. The language is the one the viewer last picked in
-this browser (`localStorage`'s `eidolon.lang`), else the first Chinese or English entry in the
-browser's languages, else English.
+sets two meanings of one word apart (`t({ message: "Done", context: "job status" })`), so renaming
+a string orphans its translation unless you update its `msgid` in `zh-Hans.po` across every call
+site before re-extracting. **Never nest a `t` inside another `t`'s placeholder** — the native macro
+transform leaves the inner one uncompiled and renders nothing
+([lingui/swc-plugin#284](https://github.com/lingui/swc-plugin/issues/284)); hoist it into a
+variable first. Nothing compiles the catalogs by hand: the Vite plugin turns `.po` imports into
+one chunk per language, and `locales/i18n.ts` loads the one in use before the first render. The
+language is the one the viewer last picked in this browser (`localStorage`'s `eidolon.lang`), else
+the first Chinese or English entry in the browser's languages, else English.
 
 `src/locales/catalog.test.ts` checks that both catalogs hold the same messages, none obsolete, and
 that every Chinese one has the English one's placeholders and tags.
@@ -1054,8 +1071,10 @@ every label by where it is written, through `apps/web/scripts/title-case.ts`: th
 that take one, `label:` keys, and the `*_LABELS`, `*_TITLES` and `*_NAMES` maps, where an entry's
 `body`, `help`, `hint`, `note` or `description` is prose (a map of sentences or statuses is named
 otherwise: `EVENT_REASONS`, `OUTCOME_TEXT`). A heading phrased as a sentence with nothing in its
-text to say so is listed in the test. A module whose test can't avoid
-a macro stubs `@lingui/core/macro` with `src/test/lingui-macro.ts`, which gives the English text.
+text to say so is listed in the test. The test files that need a macro stub `@lingui/core/macro` with `src/test/lingui-macro.ts` via
+`vi.doMock` in that test file alone (never in a setup file), because Vitest's `web` project omits
+Lingui's macro plugin and uncompiled macros throw when executed; keep macros out of modules
+imported by tests.
 
 ## The browser smoke test
 
@@ -1199,7 +1218,7 @@ walks the app in Chrome: `EIDOLON_CHROME` if it names a browser, else Google Chr
     while it runs, whose end's notice wakes the worker, who reads it with `bash_output`. **Show
     Steps** lists the skill, the commands and the notice; Settings' **Allowed Commands** lists the
     one allowed for good, whose **Remove** empties `allowed-commands.json`;
-  - an `mcp.json` naming `packages/assistant/test/fixtures/mcp-server.mjs`, run on the smoke's
+  - an `mcp.json` naming `packages/assistant/test/fixtures/mcp-server.ts`, run on the smoke's
     Node with `echo` its one tool: a task whose worker calls it twice, its card naming the tool, the
     server, the server's read-only hint and the argument with its size, answered **Run Once**, then
     **Always Allow This Tool**, which `mcp.json` keeps at 0600, the server's process gone once the
@@ -1263,8 +1282,9 @@ else.
   port the message names. Use that one, or stop it first.
 - **Keys, or a data home, you didn't expect**: a `.env` further up was applied. Set
   `EIDOLON_NO_DOTENV=1`.
-- **Memory is off, or 503 `unavailable`**: `memory.enabled` is off, or an embedding or
-  memory-extraction key is missing; turn it on and set the keys in Settings → Memory.
+- **Memory is off, or 503 `unavailable`**: `memory.enabled` is off, an embedding or
+  memory-extraction key is missing, or the local memory store cannot be opened; turn it on, set the
+  keys in Settings → Providers, and ensure `memory.dir` is writable.
 - **A restart banner**: a saved value is read only at boot. Restart from Home or Settings; it is
   refused during a call, or while one is connecting, and it interrupts running jobs, after asking.
   Setting the value back doesn't clear it: a call may have read the changed one.

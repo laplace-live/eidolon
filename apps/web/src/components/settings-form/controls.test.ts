@@ -260,11 +260,13 @@ describe("numbers parse as Python's int() and float() do", () => {
   });
 
   test("bounds, and integers past 2^53", () => {
-    const port = { type: "integer", min: 1, max: 65535 } as const;
-    expect(parseDraft("6333", port)).toEqual({ ok: true, value: 6333 });
-    expect(parseDraft("0", port)).toEqual({ ok: false, error: "settings.form.invalid.min" });
-    expect(parseDraft("65536", port)).toEqual({ ok: false, error: "settings.form.invalid.max" });
-    expect(parseDraft("9007199254740993", { type: "integer" }).ok).toBe(false);
+    const dim = control("embeddings.dim");
+    expect(dim).toEqual({ type: "integer", min: 1 });
+    expect(parseDraft("3072", dim)).toEqual({ ok: true, value: 3072 });
+    expect(parseDraft("0", dim)).toEqual({ ok: false, error: "settings.form.invalid.min" });
+    const bounded = { type: "integer", min: 1, max: 65535 } as const;
+    expect(parseDraft("65536", bounded)).toEqual({ ok: false, error: "settings.form.invalid.max" });
+    expect(parseDraft("9007199254740993", dim).ok).toBe(false);
   });
 
   test("an empty draft removes the key", () => {

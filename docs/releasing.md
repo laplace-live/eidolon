@@ -37,9 +37,12 @@ desktop app. Its version line is its own, so 0.1.0 can ship beside the npm packa
 The fixed group bumps both packages whichever one a changeset names, but each `CHANGELOG.md`
 lists only the changesets that name its own package. A changeset that names only one leaves the
 other's release notes without that line, or saying "No changes in this release." when it was the
-only one. `--minor`, `--patch` and the summary's form are in
-[AGENTS.md](../AGENTS.md#shipping-a-change). The summary's prefix is its kind in
-[changelog.json](#changelogjson), and `.changeset/changelog.mjs` leaves it out of `CHANGELOG.md`.
+only one. Use `--minor` for features and substantial behavior changes and `--patch` for fixes and
+small changes; skip changesets for CI, docs, tests, dev-only tooling, or invisible refactors. Each
+summary starts with `feat:`/`fix:`/`perf:`/`chore:` followed by one capitalized plain sentence under
+~80 chars written for users (see [AGENTS.md](../AGENTS.md#shipping-a-change); enforced by
+`pnpm doc-check`). The summary's prefix becomes its kind in
+[changelog.json](#changelogjson), and `.changeset/changelog.ts` strips it from `CHANGELOG.md`.
 
 ## The version PR
 

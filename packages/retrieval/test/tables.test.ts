@@ -123,7 +123,19 @@ describe("openTable / listTableNames", () => {
       });
       const inFlight = first.run(async (col) => {
         await gate;
-        return col.stats.docCount;
+        const fetched = col.fetchSync({ ids: ["4"], outputFields: ["id", "text"] });
+        const queried = await col.query({
+          fieldName: "vector",
+          vector: Float32Array.from(FACT_ROWS[4]!.vector),
+          topk: 2,
+          outputFields: ["id"],
+        });
+        return {
+          docCount: col.stats.docCount,
+          fetchedId: fetched["4"]?.fields.id,
+          fetchedText: fetched["4"]?.fields.text,
+          topHitId: queried[0]?.fields.id,
+        };
       });
 
       setModes(dir, 0o755, 0o644);
@@ -140,9 +152,14 @@ describe("openTable / listTableNames", () => {
       const second = (await openTable(dir, "persona_facts"))!;
       expect(first.isClosed).toBe(true);
       expect(second.buildId).not.toBe(first.buildId);
-      // Still usable by the already-running read until it settles.
+      // Still usable by the already-running read until it settles, even after the old build is gone.
       releaseRead();
-      expect(await inFlight).toBe(5);
+      expect(await inFlight).toEqual({
+        docCount: 5,
+        fetchedId: "f4",
+        fetchedText: FACT_ROWS[4]!.text,
+        topHitId: "f4",
+      });
       expect(await second.countRows()).toBe(2);
 
       const uid = process.getuid?.() ?? "user";

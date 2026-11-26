@@ -87,7 +87,7 @@ jobs:
         working-directory: apps/desktop
         run: |
           package() {
-            node node_modules/electron-builder/cli.js --publish never --config electron-builder.release.mjs \
+            node node_modules/electron-builder/cli.js --publish never --config electron-builder.release.ts \
               "-c.extraMetadata.version=$1" "-c.publish.url=$FEED_URL"
           }
           package 0.0.1

@@ -27,14 +27,18 @@ const POSIX = process.platform !== "win32";
 test("each launcher, sh and .cmd, runs EIDOLON_NODE with the backend's runtime flags first", () => {
   for (const file of [...POSIX_LAUNCHERS, ...POSIX_LAUNCHERS.map((name) => `${name}.cmd`)]) {
     const text = readFileSync(join(LAUNCHER_SOURCES, file), "utf8");
-    const words = (/^(?:exec )?"(?:\$EIDOLON_NODE|%EIDOLON_NODE%)" (.*)$/m.exec(text)?.[1] ?? "")
-      .trimEnd()
-      .split(" ");
-    const end = words.findIndex((word) => !word.startsWith("-"));
-    expect([file, end === -1 ? words : words.slice(0, end)]).toEqual([
-      file,
-      [...BACKEND_RUNTIME_ARGS],
-    ]);
+    const matches = [
+      ...text.matchAll(/^(?: {2})?(?:exec )?"(?:\$EIDOLON_NODE|%EIDOLON_NODE%)" (.*)$/gm),
+    ];
+    expect([file, matches.length > 0]).toEqual([file, true]);
+    for (const [, tail = ""] of matches) {
+      const words = tail.trimEnd().split(" ");
+      const end = words.findIndex((word) => !word.startsWith("-"));
+      expect([file, end === -1 ? words : words.slice(0, end)]).toEqual([
+        file,
+        [...BACKEND_RUNTIME_ARGS],
+      ]);
+    }
   }
 });
 
@@ -85,7 +89,7 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
       "package.json": JSON.stringify({ name: "eidolon-shim-project", version: "1.0.0" }),
       "node_modules/.bin/eidolon-shim-local": [
         "#!/bin/sh",
-        `printf '%s\\n' "$(pwd)" "\${PATH%%:*}" "\${ELECTRON_RUN_AS_NODE-unset}"`,
+        `printf '%s\\n' "$(pwd)" "\${PATH%%:*}" "\${ELECTRON_RUN_AS_NODE-unset}" "\${script-unset}"`,
         'for a in "$@"; do printf "[%s]\\n" "$a"; done',
         'if [ -n "$KILL" ]; then kill -"$KILL" $$; fi',
         "exit $((EXIT + 0))",
@@ -144,12 +148,18 @@ describe.skipIf(!POSIX)("the launchers, on this Node", () => {
 
   test("npx runs a bin in a node_modules/.bin above the folder, never a registry's", () => {
     const args = ["a b", "", 'q"x', "$HOME", "*", "-y"];
-    const ran = run("npx", ["eidolon-shim-local", ...args], undefined, below);
+    const ran = run(
+      "npx",
+      ["eidolon-shim-local", ...args],
+      { EIDOLON_NODE: process.execPath, script: "caller" },
+      below,
+    );
     expect([ran.status, ran.stderr]).toEqual([0, ""]);
     expect(ran.stdout.split("\n")).toEqual([
       below,
       join(project, "node_modules", ".bin"),
       "unset",
+      "caller",
       ...args.map((arg) => `[${arg}]`),
       "",
     ]);

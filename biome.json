@@ -2,7 +2,9 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "files": {
     "includes": [
+      ".changeset/*.ts",
       "apps/**",
+      "docs/benchmarks/**/*.ts",
       "packages/**",
       "scripts/**",
       "*.json",

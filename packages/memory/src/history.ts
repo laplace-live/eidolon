@@ -106,6 +106,7 @@ export class HistoryStore {
   readonly #insertMessage: StatementSync;
   readonly #evictMessages: StatementSync;
   readonly #lastMessages: StatementSync;
+  #closed = false;
 
   /** Opens (creating) the file; like sqlite3, it raises rather than create missing parents. */
   constructor(path: string, options: { newId?: () => string; clock?: Clock } = {}) {
@@ -215,6 +216,8 @@ export class HistoryStore {
   }
 
   close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
     this.#db.close();
   }
 }

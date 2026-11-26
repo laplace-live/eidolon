@@ -90,8 +90,15 @@ export class ZvecRetriever implements Retriever {
   }
 
   async rowCount(): Promise<number> {
-    if (this.#table?.isClosed && this.#options.open === undefined) {
-      await this.#reopen();
+    if (
+      this.#table !== null &&
+      this.#options.open === undefined &&
+      (this.#table.isClosed ||
+        readCurrentBuildId(this.#options.dbPath, this.#options.tableName) !== this.#table.buildId)
+    ) {
+      await this.#reopen({
+        keepCurrentIfOpen: !this.#table.isClosed && existsSync(this.#table.buildPath),
+      });
     }
     return this.#table === null ? 0 : this.#table.countRows();
   }
@@ -99,6 +106,7 @@ export class ZvecRetriever implements Retriever {
   async search(query: string, options: SearchOptions): Promise<SearchRow[]> {
     const { label, dateColumn, dbPath, tableName } = this.#options;
     const { signal } = options;
+    signal?.throwIfAborted();
     if (this.#table === null) {
       logger.warning(`${label} search skipped: no table loaded`);
       return [];

@@ -32,6 +32,8 @@ describe("enablement", () => {
   test("unset or empty is off", () => {
     setEnv({ MEM0_ENABLED: undefined, MEM0_QDRANT_HOST: undefined });
     expect(isMemoryConfigured()).toBe(false);
+    setEnv({ MEM0_ENABLED: "" });
+    expect(isMemoryConfigured()).toBe(false);
     setEnv({ MEM0_ENABLED: " \t　" });
     expect(isMemoryConfigured()).toBe(false);
   });
@@ -68,6 +70,7 @@ describe("buildMemoryConfig", () => {
     expect(config.store).toEqual({
       dir: join(dataHome(), "mem0", "vectors"),
       vectorSize: 3072,
+      embedModel: "openrouter:google/gemini-embedding-2-preview",
     });
     expect(embedder(config.embedder)).toEqual({
       provider: "openrouter",
@@ -121,6 +124,7 @@ describe("buildMemoryConfig", () => {
       dims: 8,
     });
     expect(config.store.vectorSize).toBe(8);
+    expect(config.store.embedModel).toBe("openrouter:m");
     expect(config.llm.apiKey).toBe("sk-or");
   });
 

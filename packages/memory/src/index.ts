@@ -5,6 +5,7 @@ import { isMemoryConfigured } from "./config.ts";
 import { SharedEngine } from "./engine.ts";
 import { openMemoryProvider } from "./provider.ts";
 import type { MemoryAdmin, MemoryProvider } from "./types.ts";
+import { closeMemoryStores as closeZvecStores } from "./zvec.ts";
 
 export { isMemoryConfigured } from "./config.ts";
 export { MEM0_LABEL, MEM0_STORE_KEY } from "./provider.ts";
@@ -15,9 +16,14 @@ export type {
   MemoryProvider,
   MemorySummary,
 } from "./types.ts";
-export { closeMemoryStores } from "./zvec.ts";
 
 const engines = new SharedEngine();
+
+/** Closes every cached writable memory collection and shared history DB in this process. */
+export function closeMemoryStores(): void {
+  engines.close();
+  closeZvecStores();
+}
 
 /**
  * The provider for one logged-in viewer. `userId` is `String(mid)`. Reads MEM0_AGENT_ID,

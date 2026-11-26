@@ -9,8 +9,8 @@ import { writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 const argv = process.argv.slice(2);
-const flag = (name) => argv.includes(name);
-const option = (name) => {
+const flag = (name: string): boolean => argv.includes(name);
+const option = (name: string): string | undefined => {
   const at = argv.indexOf(name);
   return at === -1 ? undefined : argv[at + 1];
 };
@@ -21,7 +21,7 @@ const child = flag("--child")
   : undefined;
 const pidfile = option("--pidfile");
 if (pidfile !== undefined) writeFileSync(pidfile, JSON.stringify([process.pid, child?.pid]));
-const trail = () => {
+const trail = (): void => {
   const count = Number(option("--trail") ?? 0);
   if (count > 0) console.error("y".repeat(count));
 };
@@ -34,7 +34,14 @@ if (printed !== undefined) {
 // Keeps the process alive once stdin closes, as a server busy at startup is.
 if (flag("--hang")) setInterval(() => {}, 1000);
 
-const object = (properties = {}, required = []) => ({ type: "object", properties, required });
+const object = (
+  properties: Record<string, unknown> = {},
+  required: readonly string[] = [],
+): { type: "object"; properties: Record<string, unknown>; required: readonly string[] } => ({
+  type: "object",
+  properties,
+  required,
+});
 const named = (option("--name") ?? "").split(",").filter(Boolean);
 const extra = Number(option("--tools") ?? 0);
 const pad = "x".repeat(Number(option("--pad") ?? 0));
@@ -104,25 +111,31 @@ const TOOLS = [
 // V8's JSON.stringify overflows its stack on a value nested that deep, so its text goes in whole.
 const DEEP = `${'{"a":'.repeat(deep)}{}${"}".repeat(deep)}`;
 
-const cancelled = [];
-const waiting = new Map();
-const asked = new Map();
+type RequestId = string | number;
+
+const cancelled: RequestId[] = [];
+const waiting = new Map<RequestId, (value: null) => void>();
+const asked = new Map<string, (value: unknown) => void>();
 let nextAsk = 1;
 
-const send = (message) =>
+const send = (message: Record<string, unknown>): boolean =>
   process.stdout.write(
     `${JSON.stringify({ jsonrpc: "2.0", ...message }).replace('"x":"DEEP"', `"x":${DEEP}`)}\n`,
   );
-const text = (value) => ({ content: [{ type: "text", text: value }] });
+const text = (value: string) => ({ content: [{ type: "text", text: value }] });
 const PIXEL = Buffer.from("not really a png").toString("base64");
 
-function ask(method, params) {
+function ask(method: string, params?: Record<string, unknown>): Promise<unknown> {
   const id = `ask-${nextAsk++}`;
   send({ id, method, params });
   return new Promise((resolve) => asked.set(id, resolve));
 }
 
-async function call(id, name, args) {
+async function call(
+  id: RequestId,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
   switch (name) {
     case "echo":
       return text(String(args.text));
@@ -175,16 +188,16 @@ async function call(id, name, args) {
       return new Promise((resolve) => waiting.set(id, resolve));
     case "cancelled":
       return text(JSON.stringify(cancelled));
-    case "env":
+    case "env": {
+      const requested = Array.isArray(args.values) ? (args.values as string[]) : [];
       return text(
         JSON.stringify({
           names: Object.keys(process.env).sort(),
           cwd: process.cwd(),
-          values: Object.fromEntries(
-            (args.values ?? []).map((key) => [key, process.env[key] ?? null]),
-          ),
+          values: Object.fromEntries(requested.map((key) => [key, process.env[key] ?? null])),
         }),
       );
+    }
     case "roots":
       return text(JSON.stringify(await ask("roots/list")));
     case "crash":
@@ -197,19 +210,36 @@ async function call(id, name, args) {
   }
 }
 
+interface RpcMessage {
+  readonly id?: RequestId;
+  readonly method?: string;
+  readonly params?: {
+    readonly requestId?: RequestId;
+    readonly name?: string;
+    readonly arguments?: Record<string, unknown>;
+  };
+  readonly result?: unknown;
+  readonly error?: unknown;
+}
+
 const lines = createInterface({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY });
 lines.on("line", async (line) => {
-  const message = JSON.parse(line);
+  const message = JSON.parse(line) as RpcMessage;
   if (message.method === "notifications/cancelled") {
-    cancelled.push(message.params.requestId);
-    waiting.get(message.params.requestId)?.(null);
+    const requestId = message.params?.requestId;
+    if (requestId !== undefined) {
+      cancelled.push(requestId);
+      waiting.get(requestId)?.(null);
+    }
     return;
   }
   if (!("method" in message)) {
-    asked.get(message.id)?.(message.result ?? message.error);
+    if (typeof message.id === "string") {
+      asked.get(message.id)?.(message.result ?? message.error);
+    }
     return;
   }
-  if (!("id" in message)) return;
+  if (message.id === undefined) return;
   if (message.method === "initialize") {
     if (flag("--hang")) return;
     send({
@@ -223,7 +253,11 @@ lines.on("line", async (line) => {
   } else if (message.method === "tools/list") {
     send({ id: message.id, result: { tools: TOOLS } });
   } else if (message.method === "tools/call") {
-    const result = await call(message.id, message.params.name, message.params.arguments ?? {});
+    const result = await call(
+      message.id,
+      message.params?.name ?? "",
+      message.params?.arguments ?? {},
+    );
     // A cancelled call gets no answer, as the spec asks.
     if (result !== null) send({ id: message.id, result });
   } else if (message.method === "ping") {

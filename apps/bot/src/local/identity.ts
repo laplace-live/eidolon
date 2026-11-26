@@ -100,10 +100,10 @@ export function memoryFailure(
     return localFailure(
       503,
       "unavailable",
-      "Memory is unavailable: the local vector store could not be opened",
+      "Memory is unavailable: the local memory store could not be initialized",
       (id) =>
         logger.error(
-          `[memory-admin] Could not open the Mem0 vector store (error ${id}): ${detail}`,
+          `[memory-admin] Could not initialize the Mem0 memory store (error ${id}): ${detail}`,
         ),
     );
   }

@@ -362,7 +362,7 @@ export type YtDlpStatus =
   | { readonly state: "unavailable"; readonly reason: string };
 
 export interface MemoryStatus {
-  /** MEM0_ENABLED is on. */
+  /** Viewer memory is enabled (`MEM0_ENABLED`, or legacy `MEM0_QDRANT_HOST` when unset). */
   readonly configured: boolean;
   /** The embeddings and memory-extraction roles have usable models and keys. */
   readonly ready: boolean;

@@ -170,7 +170,7 @@ test("a voice picked from one provider is dropped once she speaks through anothe
   expect(pickedVoice(null, "fish")).toBeNull();
 });
 
-test("a flag reads her value, else the environment's, else its default", () => {
+test("a flag reads an active env override first, else her value, else the environment's, else its default", () => {
   const flag = (patch: Partial<SettingRow>) =>
     setting("knowledge.rerank.enabled", { env: "RERANK_ENABLED", kind: "flag", ...patch });
   expect(flagOn(undefined, true)).toBe(true);
@@ -178,6 +178,12 @@ test("a flag reads her value, else the environment's, else its default", () => {
   expect(flagOn(flag({ value: false, source: "persona" }), true)).toBe(false);
   expect(flagOn(flag({ envValue: "off" }), true)).toBe(false);
   expect(flagOn(flag({ value: true, source: "persona", envValue: "0" }), false)).toBe(true);
+  expect(
+    flagOn(flag({ value: true, source: "app", envValue: "false", envOverride: true }), false),
+  ).toBe(false);
+  expect(
+    flagOn(flag({ value: false, source: "app", envValue: "1", envOverride: true }), false),
+  ).toBe(true);
 });
 
 describe("creating a persona", () => {

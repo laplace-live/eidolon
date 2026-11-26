@@ -442,9 +442,8 @@ export function optionsOf(control: Control & { type: "select" }, current: string
 }
 
 /**
- * Changing either needs every index re-ingested (a new dimension opens a new memory collection,
- * while another model or provider at the same dimension needs memories cleared); another account of
- * the same provider doesn't.
+ * Changing either needs every index re-ingested and starts a fresh memory collection for the new
+ * embedding space; another account of the same provider doesn't.
  */
 export const REINDEX_PATHS: readonly string[] = ["embeddings.model", "embeddings.dim"];
 

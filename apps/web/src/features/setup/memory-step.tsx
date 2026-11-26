@@ -39,7 +39,9 @@ export function MemoryStep({
 
   const enabledRow = settings.data.settings.find((row) => row.path === ENABLED);
   const fromEnv = Boolean(enabledRow?.envOverride);
-  const on = flagOn(enabledRow, false) || status.data?.memory.configured === true;
+  const on = fromEnv
+    ? flagOn(enabledRow, false)
+    : flagOn(enabledRow, false) || status.data?.memory.configured === true;
   const action = memoryStepAction({ on, fromEnv });
 
   async function turnOn() {

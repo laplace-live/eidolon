@@ -8,8 +8,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, win32 } from "node:path";
-import { pathToFileURL } from "node:url";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
+import { PUBLISHER_NAMES } from "../electron-builder.release.ts";
 import { readPe } from "./pe.ts";
 import { DESKTOP, installedBinary, installer, runsFolder, sleep } from "./smoke/kit.ts";
 import { namesUninstaller, silentUninstall, UNINSTALLER, uninstallEntries } from "./smoke/nsis.ts";
@@ -370,9 +370,6 @@ async function checkWindows(record: (check: Check) => void): Promise<void> {
   const listed: string[] = JSON.parse(
     readFileSync(join(stageDir("win32-x64"), UNSIGNED_PE_FILE), "utf8"),
   );
-  const { PUBLISHER_NAMES } = (await import(
-    pathToFileURL(join(DESKTOP, "electron-builder.release.mjs")).href
-  )) as { PUBLISHER_NAMES: readonly string[] };
   const started = Date.now();
   const installed = spawnSync(setup, ["/S"], { timeout: INSTALL_MS, windowsHide: true });
   const entry = (await uninstallEntries()).find((candidate) => namesUninstaller(candidate, folder));

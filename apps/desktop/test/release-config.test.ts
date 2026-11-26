@@ -1,25 +1,16 @@
-// electron-builder.release.mjs, the signing overlay desktop.yml packages a release with: what it
+// electron-builder.release.ts, the signing overlay desktop.yml packages a release with: what it
 // computes for each platform, and what electron-builder's own loader and schema make of it over the
 // base config, with a signed dispatch's version and feed on the command line.
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, test } from "vitest";
+import * as overlay from "../electron-builder.release.ts";
 
 const DESKTOP = resolve(import.meta.dirname, "..");
 
 type Config = Record<string, any>;
-
-interface Overlay {
-  releaseConfig(options?: {
-    platform?: NodeJS.Platform;
-    env?: NodeJS.ProcessEnv;
-    unsignedPe?: string;
-  }): Config;
-  default(): Config;
-}
 
 /** electron-builder's config loading, found through its package as its CLI loads it. */
 interface Loader {
@@ -31,10 +22,6 @@ interface Loader {
   doMergeConfigs(configs: Config[]): Config;
   validateConfiguration(config: Config, debugLogger: { isEnabled: boolean }): Promise<void>;
 }
-
-const overlay: Overlay = await import(
-  pathToFileURL(join(DESKTOP, "electron-builder.release.mjs")).href
-);
 
 function loader(): Loader {
   const builder = createRequire(join(DESKTOP, "package.json")).resolve(
@@ -105,7 +92,7 @@ describe("the release overlay", () => {
       env: AZURE,
       unsignedPe: unsignedList([]),
     });
-    expect(win.signExts).toEqual([]);
+    expect(win?.signExts).toEqual([]);
   });
 
   test("on Windows, fails without the stage's list, naming it and how to make it", () => {
@@ -146,7 +133,7 @@ describe("electron-builder's loader", () => {
     "merges a dispatch's version and feed over the overlay and the base, and passes the schema",
     async () => {
       const { getConfig, validateConfiguration } = loader();
-      const config = await getConfig(DESKTOP, "electron-builder.release.mjs", {
+      const config = await getConfig(DESKTOP, "electron-builder.release.ts", {
         extraMetadata: { version: "0.0.1" },
         publish: { url: "http://127.0.0.1:8765/" },
       });

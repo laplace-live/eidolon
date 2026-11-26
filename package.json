@@ -42,6 +42,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
+    "doc-check": "node scripts/verify-docs.ts",
     "version": "changeset status --output=.changeset/.status.json && changeset version && node apps/bot/scripts/sync-version.ts && node scripts/changelog.ts sync",
     "changelog:backfill": "node scripts/changelog.ts backfill",
     "release": "pnpm build:npm && pnpm build:sdk && changeset publish"

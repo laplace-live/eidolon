@@ -11,6 +11,7 @@ import {
   ZH_QUERY_STOPWORDS,
 } from "../src/index.ts";
 import { lnExact } from "../src/jieba.ts";
+import { materializeRow } from "../src/tables.ts";
 import { chunkFtsText, FTS_COLUMNS, factFtsText } from "./fts_text.ts";
 import { realTable } from "./helpers.ts";
 
@@ -176,12 +177,29 @@ describe("parity with the stored tokens column", () => {
   });
 
   test.skipIf(chunks === null)("stream_chunks rows whose id ends in 7", () => {
-    const rows = (chunks?.readAll({ columns: [...FTS_COLUMNS.stream_chunks] }).rows ?? []).filter(
-      (r) => String(r.id).endsWith("7"),
-    );
-    const mismatched = rows.filter((r) => tokenizeZh(chunkFtsText(r)) !== r.tokens);
-    expect(rows.length).toBeGreaterThan(1000);
-    expect(mismatched.map((r) => r.id)).toEqual([]);
+    const cols = [...FTS_COLUMNS.stream_chunks];
+    const total = chunks?.collection.stats.docCount ?? 0;
+    let sampled = 0;
+    const mismatched: unknown[] = [];
+    for (let start = 0; start < total; start += 1_000) {
+      const end = Math.min(total, start + 1_000);
+      const ids: string[] = [];
+      for (let i = start; i < end; i++) ids.push(String(i));
+      const fetched = chunks!.collection.fetchSync({
+        ids,
+        outputFields: cols,
+        includeVector: false,
+      });
+      for (const id of ids) {
+        const doc = fetched[id];
+        if (!doc || !String(doc.fields.id ?? "").endsWith("7")) continue;
+        sampled++;
+        const row = materializeRow(cols, doc);
+        if (tokenizeZh(chunkFtsText(row)) !== row.tokens) mismatched.push(row.id);
+      }
+    }
+    expect(sampled).toBeGreaterThan(1000);
+    expect(mismatched).toEqual([]);
   });
 });
 

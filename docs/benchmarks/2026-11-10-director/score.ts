@@ -16,6 +16,11 @@ import {
   setLogLevel,
 } from "../../../packages/config/src/index.ts";
 import {
+  VOICE_THRESHOLD,
+  VOICE_THRESHOLD_AFTER_VOICE,
+  voiceThreshold,
+} from "../../../packages/context/src/director.ts";
+import {
   ADDRESSED_THRESHOLD,
   DIRECTOR_TIMEOUT_SEC,
   Director,
@@ -29,11 +34,6 @@ import {
   JUST_SPOKE_PENALTY,
   MAX_REPLIES_TO_USER,
 } from "../../../packages/context/src/index.ts";
-import {
-  VOICE_THRESHOLD,
-  VOICE_THRESHOLD_AFTER_VOICE,
-  voiceThreshold,
-} from "../../../packages/context/src/director.ts";
 import { type DecisionModel, gateDecisionModel } from "../../../packages/providers/src/index.ts";
 
 const VIEWER = "viewer";

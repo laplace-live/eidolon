@@ -6,6 +6,7 @@ import {
   chmodSync,
   constants,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -319,6 +320,25 @@ function hasUnwritableProxima(dir: string): boolean {
   return false;
 }
 
+function makeCopiedWritable(target: string): void {
+  try {
+    chmodSync(target, 0o700);
+  } catch {
+    return;
+  }
+  for (const entry of readdirSync(target, { withFileTypes: true })) {
+    const child = join(target, entry.name);
+    if (entry.isDirectory()) makeCopiedWritable(child);
+    else {
+      try {
+        chmodSync(child, 0o600);
+      } catch {
+        // Best-effort on filesystems without POSIX modes.
+      }
+    }
+  }
+}
+
 function mirrorProximaWritable(src: string, dst: string): void {
   mkdirSync(dst, { recursive: true, mode: 0o700 });
   for (const entry of readdirSync(src, { withFileTypes: true })) {
@@ -326,7 +346,12 @@ function mirrorProximaWritable(src: string, dst: string): void {
     const targetPath = join(dst, entry.name);
     if (entry.isDirectory()) {
       if (entry.name.endsWith(".rocksdb") || entry.name.startsWith("idmap.")) {
-        symlinkSync(sourcePath, targetPath, "dir");
+        try {
+          symlinkSync(sourcePath, targetPath, process.platform === "win32" ? "junction" : "dir");
+        } catch {
+          cpSync(sourcePath, targetPath, { recursive: true });
+          makeCopiedWritable(targetPath);
+        }
       } else {
         mirrorProximaWritable(sourcePath, targetPath);
       }
@@ -334,7 +359,12 @@ function mirrorProximaWritable(src: string, dst: string): void {
       copyFileSync(sourcePath, targetPath);
       chmodSync(targetPath, 0o600);
     } else {
-      symlinkSync(sourcePath, targetPath, "file");
+      try {
+        symlinkSync(sourcePath, targetPath, "file");
+      } catch {
+        copyFileSync(sourcePath, targetPath);
+        chmodSync(targetPath, 0o600);
+      }
     }
   }
 }

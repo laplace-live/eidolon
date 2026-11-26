@@ -55,7 +55,7 @@ services:
       # Fixed here: a blank or host-side EIDOLON_HOME in .env would point it away from the mount.
       EIDOLON_HOME: /data
       # Its own viewer memory vectors and change log, beside the read-only data home.
-      MEM0_ENABLED: "true"
+      MEM0_ENABLED: ${MEM0_ENABLED:-true}
       MEM0_DIR: /var/lib/eidolon/mem0/vectors
       MEM0_HISTORY_DB_PATH: /var/lib/eidolon/mem0/history.db
     volumes:

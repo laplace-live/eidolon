@@ -31,7 +31,8 @@ function MemoryChip({ memory, name }: { readonly memory: MemoryStatus; readonly 
   const hint = !memory.configured
     ? t`Memory is off. Turn it on in Settings so ${name} remembers your calls.`
     : !memory.ready
-      ? t`Memory needs API keys in Settings before ${name} can remember this call.`
+      ? (memory.problem ??
+        t`Memory needs its keys or settings fixed in Settings before ${name} can remember this call.`)
       : t`${name} remembers your conversations between calls.`;
   return (
     <Tooltip>

@@ -2203,12 +2203,8 @@ msgid "Every persona"
 msgstr "所有人设"
 
 #: src/components/settings-form/reindex-dialog.tsx
-msgid "Every persona's knowledge index needs to be built again, and existing viewer memories must be cleared so old and new vectors aren't mixed."
-msgstr "每位人设的知识索引都需要重新构建，已有的观众记忆也需要清空，以免混用新旧向量。"
-
-#: src/components/settings-form/reindex-dialog.tsx
-msgid "Every persona's knowledge index needs to be built again, and memory starts a new collection for the new dimension."
-msgstr "每位人设的知识索引都需要重新构建，记忆功能也将针对新维度启用新的集合。"
+msgid "Every persona's knowledge index needs to be built again, and memory starts a new collection for the new embedding settings."
+msgstr "每位人设的知识索引都需要重新构建，记忆功能也将针对新的向量嵌入设置启用新的集合。"
 
 #: src/features/settings/route.tsx
 msgid "Every persona's memories of you live in a local Zvec index in your data home, and each change to them is logged to a SQLite file."
@@ -3484,16 +3480,16 @@ msgid "Memory is off. Turn it on in Settings so {name} remembers your calls."
 msgstr "记忆功能未开启。请在设置中开启，以便{name}记住你们的通话。"
 
 #: src/features/home/memory-panel.tsx
-msgid "Memory is on, but it needs an embedding key and a memory-extraction key before she can remember or recall anything."
-msgstr "记忆功能已开启，但还需要配置向量嵌入密钥与记忆提取密钥，她才能记住或回忆内容。"
+msgid "Memory is on, but its provider settings or API keys need attention before she can remember or recall anything."
+msgstr "记忆功能已开启，但还需要检查其服务商设置或 API 密钥，她才能记住或回忆内容。"
 
 #: src/features/setup/memory-step.tsx
 msgid "Memory is on."
 msgstr "记忆已开启。"
 
 #: src/features/call/call-page.tsx
-msgid "Memory needs API keys in Settings before {name} can remember this call."
-msgstr "需要先在设置中配置 API 密钥，{name}才能记住这次通话。"
+msgid "Memory needs its keys or settings fixed in Settings before {name} can remember this call."
+msgstr "需要先在设置中修复记忆功能的密钥或设置，{name}才能记住这次通话。"
 
 #: src/features/call/call-page.tsx
 msgid "Memory off"
@@ -3506,6 +3502,10 @@ msgstr "记忆已开启"
 #: src/components/settings-form/labels.ts
 msgid "Memory Score Threshold"
 msgstr "记忆相关度阈值"
+
+#: src/features/home/memory-panel.tsx
+msgid "Memory Settings"
+msgstr "记忆设置"
 
 #: src/components/settings-form/labels.ts
 msgid "Memory Vector Store"
@@ -6644,8 +6644,8 @@ msgid "TURN Username"
 msgstr "TURN 用户名"
 
 #: src/features/home/readiness-labels.ts
-msgid "Turned on, but missing a key it needs."
-msgstr "已开启，但缺少所需的密钥。"
+msgid "Turned on, but needs its keys or settings fixed."
+msgstr "已开启，但需要修复其密钥或设置。"
 
 #: src/features/jobs/labels.ts
 msgid "Turns a video's audio into a transcript with Soniox."

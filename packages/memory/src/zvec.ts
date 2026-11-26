@@ -1,6 +1,7 @@
 // Per-viewer memory vectors on Zvec: an in-process flat cosine index with inverted scalar indexes
 // on the four mem0 scope columns and the full mem0 payload preserved verbatim as JSON.
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   type ZVecCollection,
@@ -33,6 +34,8 @@ export interface NewPoint {
 export interface ZvecSettings {
   readonly dir: string;
   readonly vectorSize: number;
+  /** Embedding identity (`provider:model`); scopes the collection folder so model switches never mix vectors. */
+  readonly embedModel?: string;
 }
 
 export interface VectorStore {
@@ -42,12 +45,16 @@ export interface VectorStore {
   list(filters: ScopeFilters, limit: number): Promise<StoredPoint[]>;
   get(id: string): Promise<StoredPoint | null>;
   delete(id: string): Promise<void>;
+  /** Deletes every point matching `filters` across all retained collections and returns them for history logging. */
+  deleteScope?(filters: ScopeFilters): Promise<StoredPoint[]>;
 }
 
 const INDEXED_FIELDS = ["user_id", "agent_id", "run_id", "actor_id"] as const;
-const MAX_LIST_FETCH = 50_000;
-// Zvec rejects upsertSync batches above 1024 docs.
+// Zvec's native query topk ceiling is 100,000; upsertSync rejects batches above 1,024 docs.
+const ZVEC_MAX_TOPK = 100_000;
 const WRITE_BATCH = 512;
+const FETCH_BATCH = 1_000;
+const QDRANT_MIGRATED_MARKER = ".qdrant-migrated";
 const INIT_KEY = Symbol.for("eidolon.zvec.initialized");
 const STORES_KEY = Symbol.for("eidolon.zvec.memoryStores");
 
@@ -78,6 +85,12 @@ function memorySchema(vectorSize: number): ZVecCollectionSchema {
         nullable: true,
         indexParams: { indexType: ZVecIndexType.INVERT, enableRangeOptimization: false },
       })),
+      {
+        name: "point_id",
+        dataType: ZVecDataType.STRING,
+        nullable: false,
+        indexParams: { indexType: ZVecIndexType.INVERT, enableRangeOptimization: true },
+      },
       { name: "payload_json", dataType: ZVecDataType.STRING, nullable: false },
     ],
     vectors: [
@@ -97,6 +110,16 @@ function scopeToken(value: string): string {
   return encodeURIComponent(value).replaceAll("'", "%27");
 }
 
+// Order-isomorphic UTF-16 hex encoding ([0-9a-f] only) so Zvec range pagination (`point_id > ...`)
+// matches JavaScript's `<` / `>` string order for arbitrary IDs without filter escaping.
+function idOrderKey(id: string): string {
+  let out = "";
+  for (let i = 0; i < id.length; i++) {
+    out += id.charCodeAt(i).toString(16).padStart(4, "0");
+  }
+  return out;
+}
+
 function filterFor(filters: ScopeFilters): string | undefined {
   const clauses = Object.entries(filters)
     .filter((entry): entry is [string, string] => typeof entry[1] === "string")
@@ -112,6 +135,60 @@ function scopeValue(payload: Readonly<Record<string, unknown>>, key: string): st
 function parsePayload(raw: unknown): Readonly<Record<string, unknown>> {
   if (typeof raw !== "string" || !raw) return {};
   return JSON.parse(raw) as Record<string, unknown>;
+}
+
+function hasZvecFiles(path: string): boolean {
+  if (!existsSync(path)) return false;
+  return readdirSync(path).some((name) => name !== QDRANT_MIGRATED_MARKER);
+}
+
+async function queryMatchingIds(
+  col: ZVecCollection,
+  filter: string | undefined,
+): Promise<string[]> {
+  const hasPointId = col.schema.fields().some((field) => field.name === "point_id");
+  const allIds: string[] = [];
+  let cursorKey: string | null = null;
+  for (;;) {
+    const pageFilter =
+      cursorKey === null
+        ? filter
+        : filter
+          ? `(${filter}) AND point_id > '${cursorKey}'`
+          : `point_id > '${cursorKey}'`;
+    const docs = await col.query({
+      topk: ZVEC_MAX_TOPK,
+      ...(pageFilter ? { filter: pageFilter } : {}),
+      outputFields: [],
+    });
+    if (docs.length === 0) break;
+    let maxId = "";
+    for (const doc of docs) {
+      allIds.push(doc.id);
+      if (maxId === "" || doc.id > maxId) maxId = doc.id;
+    }
+    if (!hasPointId || docs.length < ZVEC_MAX_TOPK) break;
+    cursorKey = idOrderKey(maxId);
+  }
+  allIds.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return allIds;
+}
+
+function fetchStoredPoints(col: ZVecCollection, ids: readonly string[]): StoredPoint[] {
+  const points: StoredPoint[] = [];
+  for (let start = 0; start < ids.length; start += FETCH_BATCH) {
+    const slice = ids.slice(start, start + FETCH_BATCH);
+    const fetched = col.fetchSync({
+      ids: slice,
+      outputFields: ["payload_json"],
+      includeVector: false,
+    });
+    for (const id of slice) {
+      const doc = fetched[id];
+      if (doc) points.push({ id: doc.id, payload: parsePayload(doc.fields.payload_json) });
+    }
+  }
+  return points;
 }
 
 /** Closes every cached writable memory collection in this process; for tests and shutdown. */
@@ -130,24 +207,27 @@ export function closeMemoryStores(): void {
 export class ZvecVectorStore implements VectorStore {
   readonly #dir: string;
   readonly #vectorSize: number;
+  readonly #embedModel: string;
 
   constructor(settings: ZvecSettings) {
     this.#dir = resolve(settings.dir);
     this.#vectorSize = settings.vectorSize;
+    this.#embedModel = settings.embedModel?.trim() ?? "";
   }
 
   #collectionPath(): string {
-    // Dimension is fixed per collection; scoping the folder by dimension lets EMBED_DIM change
-    // without failing on vectors of the old width.
-    return join(this.#dir, `v1_${this.#vectorSize}`);
+    // Dimension and embedding model are fixed per vector space; scoping the folder by both lets
+    // EMBED_DIM or EMBED_MODEL change cleanly without mixing incompatible vectors.
+    if (!this.#embedModel) return join(this.#dir, `v1_${this.#vectorSize}`);
+    const hash = createHash("sha256").update(this.#embedModel).digest("hex").slice(0, 12);
+    return join(this.#dir, `v1_${this.#vectorSize}_${hash}`);
   }
 
-  #open(): ZVecCollection {
+  #openExisting(path: string): ZVecCollection | null {
     initZvecOnce();
-    const path = this.#collectionPath();
     const stores = openStores();
     const cached = stores.get(path);
-    if (cached && existsSync(path)) return cached;
+    if (cached && hasZvecFiles(path)) return cached;
     if (cached) {
       try {
         cached.closeSync();
@@ -156,15 +236,40 @@ export class ZvecVectorStore implements VectorStore {
       }
       stores.delete(path);
     }
-    mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
-    const options = { readOnly: false, enableMMAP: true } as const;
-    const populated = existsSync(path) && readdirSync(path).length > 0;
-    if (!populated && existsSync(path)) rmSync(path, { recursive: true, force: true });
-    const col = populated
-      ? ZVecOpen(path, options)
-      : ZVecCreateAndOpen(path, memorySchema(this.#vectorSize), options);
+    if (!hasZvecFiles(path)) return null;
+    const col = ZVecOpen(path, { readOnly: false, enableMMAP: true });
     stores.set(path, col);
     return col;
+  }
+
+  #open(): ZVecCollection {
+    const path = this.#collectionPath();
+    const existing = this.#openExisting(path);
+    if (existing) return existing;
+    mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
+    const migrated = this.hasQdrantMigrationMarker();
+    if (existsSync(path)) rmSync(path, { recursive: true, force: true });
+    const col = ZVecCreateAndOpen(path, memorySchema(this.#vectorSize), {
+      readOnly: false,
+      enableMMAP: true,
+    });
+    if (migrated) this.markQdrantMigrated();
+    openStores().set(path, col);
+    return col;
+  }
+
+  hasQdrantMigrationMarker(): boolean {
+    return existsSync(join(this.#collectionPath(), QDRANT_MIGRATED_MARKER));
+  }
+
+  markQdrantMigrated(): void {
+    const path = this.#collectionPath();
+    if (!existsSync(path)) mkdirSync(path, { recursive: true, mode: 0o700 });
+    writeFileSync(join(path, QDRANT_MIGRATED_MARKER), "1\n", { mode: 0o600 });
+  }
+
+  docCount(): number {
+    return this.#open().stats.docCount;
   }
 
   async ensureCollection(): Promise<void> {
@@ -180,6 +285,7 @@ export class ZvecVectorStore implements VectorStore {
         slice.map((point) => {
           // Zvec represents NULL on a nullable column by omitting the field from `fields`.
           const fields: Record<string, string> = {
+            point_id: idOrderKey(point.id),
             payload_json: JSON.stringify(point.payload),
           };
           for (const key of INDEXED_FIELDS) {
@@ -224,22 +330,12 @@ export class ZvecVectorStore implements VectorStore {
     }));
   }
 
-  /** Up to `limit` points in scope, ordered by point id. */
+  /** Up to `limit` points in scope, ordered globally by point id. */
   async list(filters: ScopeFilters, limit: number): Promise<StoredPoint[]> {
     if (limit <= 0) return [];
     const col = this.#open();
-    const filter = filterFor(filters);
-    const topk = Math.min(Math.max(limit, col.stats.docCount, 1), MAX_LIST_FETCH);
-    const docs = await col.query({
-      topk,
-      ...(filter ? { filter } : {}),
-      outputFields: ["payload_json"],
-    });
-    docs.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    return docs.slice(0, limit).map((doc) => ({
-      id: doc.id,
-      payload: parsePayload(doc.fields.payload_json),
-    }));
+    const ids = await queryMatchingIds(col, filterFor(filters));
+    return fetchStoredPoints(col, ids.slice(0, limit));
   }
 
   async get(id: string): Promise<StoredPoint | null> {
@@ -255,5 +351,29 @@ export class ZvecVectorStore implements VectorStore {
     if (!status.ok && status.code !== "ZVEC_NOT_FOUND") {
       throw new Error(`Zvec delete failed (${status.code}): ${status.message}`);
     }
+  }
+
+  async deleteScope(filters: ScopeFilters): Promise<StoredPoint[]> {
+    const filter = filterFor(filters);
+    if (!filter) return [];
+    this.#open();
+    if (!existsSync(this.#dir)) return [];
+    const removed: StoredPoint[] = [];
+    for (const entry of readdirSync(this.#dir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !entry.name.startsWith("v1_")) continue;
+      const col = this.#openExisting(join(this.#dir, entry.name));
+      if (!col) continue;
+      const ids = await queryMatchingIds(col, filter);
+      if (ids.length === 0) continue;
+      const points = fetchStoredPoints(col, ids);
+      for (const id of ids) {
+        const status = col.deleteSync(id);
+        if (!status.ok && status.code !== "ZVEC_NOT_FOUND") {
+          throw new Error(`Zvec delete failed (${status.code}): ${status.message}`);
+        }
+      }
+      removed.push(...points);
+    }
+    return removed;
   }
 }
