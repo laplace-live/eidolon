@@ -4,7 +4,7 @@
 // to install as npm does. The command then runs here, on npm's PATH and in npm's folder, and npx
 // ends as it did. pnpm reports on stderr, so the server's stdout, which the MCP protocol owns,
 // holds only what the server prints.
-import { spawn } from "node:child_process";
+import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   accessSync,
@@ -15,19 +15,43 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  type Stats,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatWithOptions } from "node:util";
-import { cmdLine } from "./cross-spawn.mjs";
-import { currentEnv, devEngineFailures } from "./npm-checks.mjs";
-import { invalidConfig, npmConfig, settingOf, settingPath, userConfig } from "./npm-config.mjs";
-import { binOf, binsOf, isFile, localBin, npmPath, pathOf } from "./npm-exec.mjs";
-import { npmSpec, TARBALL } from "./npm-spec.mjs";
+import { cmdLine } from "./cross-spawn.ts";
+import {
+  type CurrentEnv,
+  currentEnv,
+  type DevEngineFailure,
+  devEngineFailures,
+  semver,
+} from "./npm-checks.ts";
+import {
+  type ConfigSource,
+  type ConfigValue,
+  invalidConfig,
+  npmConfig,
+  settingOf,
+  settingPath,
+  userConfig,
+} from "./npm-config.ts";
+import {
+  binOf,
+  binsOf,
+  type Env,
+  isFile,
+  localBin,
+  npmPath,
+  type PackageManifest,
+  pathOf,
+  SHIM_BIN,
+} from "./npm-exec.ts";
+import { npmSpec, type ParsedSpec, TARBALL } from "./npm-spec.ts";
 
 const DROPPED = new Set(["-y", "--yes", "-q", "--quiet"]);
 
@@ -44,21 +68,26 @@ const REGISTRY_SETTING = new RegExp(
  * credentials and certificates of its project config, each file they name as npm finds it from
  * `cwd`; empty with none.
  */
-export function pnpmNpmrc([variables = {}, project = {}], cwd, home, platform = process.platform) {
+export function pnpmNpmrc(
+  [variables = {}, project = {}]: readonly ConfigSource[],
+  cwd: string,
+  home: string,
+  platform: string = process.platform,
+): string {
   // npm ranks its variables over its project config. pnpm would take their registries only on
   // its command line, which any process can read, and a registry's URL can hold its token.
-  const settings = { ...project };
+  const settings: ConfigSource = { ...project };
   for (const [key, value] of Object.entries(variables)) {
     if (key === "registry" || /^@[^:/]+:registry$/.test(key)) settings[key] = value;
   }
-  const lines = [];
+  const lines: string[] = [];
   // npm takes a ${VAR} it left, VAR being unset, as written. pnpm ignores a registry or
   // credential holding one in a project's .npmrc, so the user's would serve in its place, and
   // expands any other again: percent-encoded, it reaches pnpm as npm has it, an invalid URL or a
   // wrong token. A key holding one names no registry. npm takes an empty value as none. Of these
   // settings only ca is a list.
   const placeholder = /\$\{[^}]+\}/;
-  const asWritten = (text) =>
+  const asWritten = (text: string): string =>
     placeholder.test(text) ? text.replace(/[${}]/g, (char) => encodeURIComponent(char)) : text;
   for (const [key, value] of Object.entries(settings)) {
     if (!REGISTRY_SETTING.test(key) || /[=\r\n]/.test(key) || placeholder.test(key)) continue;
@@ -66,14 +95,14 @@ export function pnpmNpmrc([variables = {}, project = {}], cwd, home, platform = 
     const client = /^(.*):(?:certfile|keyfile)$/.exec(key)?.[1];
     // npm presents a client certificate only with both files there; pnpm ends on a missing one.
     const pair = [settings[`${client}:certfile`], settings[`${client}:keyfile`]];
-    const there = (file) =>
+    const there = (file: ConfigValue | undefined): boolean =>
       typeof file === "string" &&
       file !== "" &&
       stat(path.resolve(cwd, asWritten(file))) !== undefined;
     if (client !== undefined && !pair.every(there)) continue;
     for (const text of [value]
       .flat()
-      .filter((text) => text !== "")
+      .filter((item): item is string => typeof item === "string" && item !== "")
       .map(asWritten)) {
       let file = text;
       if (key === "cafile") {
@@ -98,8 +127,8 @@ const NETWORK_SETTINGS = ["proxy", "https-proxy", "noproxy", "strict-ssl"];
  * pnpm's variables for npm's network settings in its config `sources`, as npmConfig reads them,
  * each from the highest source that gives it, as npm ranks them.
  */
-export function pnpmNetworkEnv(sources) {
-  const env = {};
+export function pnpmNetworkEnv(sources: readonly ConfigSource[]): Record<string, string> {
+  const env: Record<string, string> = {};
   for (const key of NETWORK_SETTINGS) {
     const value = settingOf(sources, key);
     if (value === undefined || value === "") continue;
@@ -110,7 +139,7 @@ export function pnpmNetworkEnv(sources) {
 }
 
 /** A boolean setting as npm reads one: a number unless 0, any other word unless false or null. */
-function flag(value) {
+function flag(value: ConfigValue | undefined): boolean {
   if (value === undefined) return false;
   const number = Number(value);
   return Number.isNaN(number) ? value !== "false" && value !== "null" : number !== 0;
@@ -120,9 +149,9 @@ function flag(value) {
  * The minutes npm's `before` or `min-release-age` holds a version back, from the highest source
  * that gives either, `before` first within one.
  */
-function releaseAge(sources, now) {
+function releaseAge(sources: readonly ConfigSource[], now: number): number {
   for (const source of sources) {
-    const before = Date.parse(source.before ?? "");
+    const before = Date.parse(String(source.before ?? ""));
     if (!Number.isNaN(before)) return Math.max(0, Math.ceil((now - before) / 60_000));
     const days = Number(source["min-release-age"] ?? Number.NaN);
     if (!Number.isNaN(days)) return Math.max(0, Math.ceil(days * 1440));
@@ -133,10 +162,12 @@ function releaseAge(sources, now) {
 /**
  * pnpm's settings that make its dlx install what npm's npx would, as npx would, under npm's config
  * `sources` as npmConfig reads them, its variables first; or why it can't.
- * @returns {string[] | { error: string }}
  */
-export function npxSettings(sources, now = Date.now()) {
-  const setting = (key) => settingOf(sources, key);
+export function npxSettings(
+  sources: readonly ConfigSource[],
+  now: number = Date.now(),
+): string[] | { error: string } {
+  const setting = (key: string) => settingOf(sources, key);
   const ignoreScripts = flag(setting("ignore-scripts"));
   // npm then fails an install holding a package with install scripts allow-scripts doesn't name,
   // before it runs any. pnpm's dlx runs the scripts of the packages it was asked for unasked, and
@@ -174,15 +205,15 @@ export function npxSettings(sources, now = Date.now()) {
  * npx's arguments: the packages its -p and --package options name, then the command and the words
  * after it, which are the command's. An option this npx doesn't take is an error, named without
  * its value.
- * @param {readonly string[]} args
- * @returns {{ packages: string[], command: string[] } | { error: string }}
  */
-export function readNpx(args) {
-  const packages = [];
+export function readNpx(
+  args: readonly string[],
+): { packages: string[]; command: string[] } | { error: string } {
+  const packages: string[] = [];
   for (let at = 0; at < args.length; at++) {
-    const arg = args[at];
+    const arg = args[at] as string;
     if (DROPPED.has(arg)) continue;
-    const option = arg.split("=", 1)[0];
+    const option = arg.split("=", 1)[0] as string;
     if (option === "-p" || option === "--package") {
       const name = option === arg ? args[++at] : arg.slice(option.length + 1);
       if (!name) return { error: `${option} needs a package` };
@@ -202,13 +233,18 @@ export function readNpx(args) {
  * The folder or tarball file `spec` names, as npm-package-arg tells them from a git repo, a URL or
  * a registry package; undefined for anything else.
  */
-export function localSpec(spec, cwd, home, platform = process.platform) {
+export function localSpec(
+  spec: string,
+  cwd: string,
+  home: string,
+  platform: string = process.platform,
+): { path: string; tarball: boolean } | undefined {
   const parsed = npmSpec(spec, cwd, home, platform);
   if (parsed?.type !== "file" && parsed?.type !== "directory") return undefined;
   return { path: parsed.path, tarball: parsed.type === "file" };
 }
 
-const ALLOWS = {
+const ALLOWS: Partial<Record<ParsedSpec["type"], string>> = {
   git: "allow-git",
   remote: "allow-remote",
   file: "allow-file",
@@ -220,15 +256,25 @@ const ALLOWS = {
  * allow-file or allow-directory setting in `sources` is none, if any. Those npx asks for are the
  * root's, which root lets through.
  */
-export function refusal(specs, sources, cwd, home, platform = process.platform) {
+export function refusal(
+  specs: readonly string[],
+  sources: readonly ConfigSource[],
+  cwd: string,
+  home: string,
+  platform: string = process.platform,
+): string | undefined {
   for (const spec of specs) {
-    const { type, name, saveSpec } = npmSpec(spec, cwd, home, platform) ?? {};
-    if (!Object.hasOwn(ALLOWS, type) || settingOf(sources, ALLOWS[type]) !== "none") continue;
+    const parsed = npmSpec(spec, cwd, home, platform);
+    if (parsed === undefined) continue;
+    const allow = ALLOWS[parsed.type];
+    if (allow === undefined || settingOf(sources, allow) !== "none") continue;
     const lines = [
-      `code EALLOW${type.toUpperCase()}`,
-      `Fetching packages of type "${type}" have been disabled`,
+      `code EALLOW${parsed.type.toUpperCase()}`,
+      `Fetching packages of type "${parsed.type}" have been disabled`,
     ];
-    if (type === "git") lines.push(`Refusing to fetch "${name ? `${name}@` : ""}${saveSpec}"`);
+    if (parsed.type === "git") {
+      lines.push(`Refusing to fetch "${parsed.name ? `${parsed.name}@` : ""}${parsed.saveSpec}"`);
+    }
     return lines.join("\n");
   }
   return undefined;
@@ -241,11 +287,14 @@ export function refusal(specs, sources, cwd, home, platform = process.platform) 
  * absolute, and without the name a spec gives it: npm runs the package's own bins whatever the
  * name, where pnpm's dlx makes a named one's path relative to the folder it runs in, which from
  * the cache folder it installs in points nowhere.
- * @param {readonly string[]} packages
- * @param {readonly string[]} settings
- * @returns {string[]}
  */
-export function npxToPnpm(packages, settings, cwd, home, platform = process.platform) {
+export function npxToPnpm(
+  packages: readonly string[],
+  settings: readonly string[],
+  cwd: string,
+  home: string,
+  platform: string = process.platform,
+): string[] {
   const specs = packages.map((spec) => {
     const local = localSpec(spec, cwd, home, platform);
     return local === undefined ? spec : `${local.tarball ? "file" : "link"}:${local.path}`;
@@ -263,7 +312,7 @@ export function npxToPnpm(packages, settings, cwd, home, platform = process.plat
   ];
 }
 
-function stat(file) {
+function stat(file: string): Stats | undefined {
   try {
     return statSync(file, { throwIfNoEntry: false });
   } catch {
@@ -271,27 +320,32 @@ function stat(file) {
   }
 }
 
-function readJson(file) {
+function readJson(file: string): PackageManifest | undefined {
   try {
-    return JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
+    return JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, "")) as PackageManifest;
   } catch {
     return undefined;
   }
 }
 
 /** npm's reading of `pattern` as a glob, for workspaces' paths. */
-const matches = (relative, pattern) =>
+const matches = (relative: string, pattern: string): boolean =>
   path.posix.matchesGlob(relative, pattern.replace(/\/+$/, ""));
 
+function workspacePatterns(declared: unknown): unknown[] | undefined {
+  if (Array.isArray(declared)) return declared;
+  const packages = (declared as { packages?: unknown } | null | undefined)?.packages;
+  return Array.isArray(packages) ? packages : undefined;
+}
+
 /** Whether `dir` is one of the workspaces the package.json in `root` declares, as npm maps them. */
-function isWorkspace(root, dir) {
-  const declared = readJson(path.join(root, "package.json"))?.workspaces;
-  const list = Array.isArray(declared?.packages) ? declared.packages : declared;
-  if (!Array.isArray(list) || !isFile(path.join(dir, "package.json"))) return false;
+function isWorkspace(root: string, dir: string): boolean {
+  const list = workspacePatterns(readJson(path.join(root, "package.json"))?.workspaces);
+  if (list === undefined || !isFile(path.join(dir, "package.json"))) return false;
   const relative = path.relative(root, dir).split(path.sep).join("/");
   if (relative.split("/").includes("node_modules")) return false;
-  const patterns = [];
-  let negated = [];
+  const patterns: string[] = [];
+  let negated: string[] = [];
   for (const entry of list) {
     if (typeof entry !== "string") continue;
     const bangs = /^!+/.exec(entry)?.[0].length ?? 0;
@@ -318,8 +372,8 @@ function isWorkspace(root, dir) {
  * npm's local prefix from `cwd`: the first folder up with a package.json or a node_modules, or
  * the root of the workspaces it is one of, with `workspace` then that first folder.
  */
-export function npmPrefix(cwd) {
-  let found;
+export function npmPrefix(cwd: string): { prefix: string; workspace: string | undefined } {
+  let found: string | undefined;
   for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
     const hasManifest = isFile(path.join(dir, "package.json"));
     if (found === undefined) {
@@ -333,11 +387,10 @@ export function npmPrefix(cwd) {
 }
 
 /** The workspaces the package.json in `root` declares, as npm maps them. */
-function workspacesOf(root) {
-  const declared = readJson(path.join(root, "package.json"))?.workspaces;
-  const list = Array.isArray(declared?.packages) ? declared.packages : declared;
-  if (!Array.isArray(list)) return [];
-  const found = new Set();
+function workspacesOf(root: string): string[] {
+  const list = workspacePatterns(readJson(path.join(root, "package.json"))?.workspaces);
+  if (list === undefined) return [];
+  const found = new Set<string>();
   for (const entry of list) {
     if (typeof entry !== "string" || (/^!+/.exec(entry)?.[0].length ?? 0) % 2 === 1) continue;
     const pattern = entry
@@ -345,7 +398,7 @@ function workspacesOf(root) {
       .replace(/^\.?\/+/, "")
       .replace(/\\/g, "/")
       .replace(/\/+$/, "");
-    let dirs = [];
+    let dirs: string[] = [];
     try {
       dirs = globSync(pattern, {
         cwd: root,
@@ -359,8 +412,8 @@ function workspacesOf(root) {
 }
 
 /** The package folders in the node_modules `dir`, scoped ones too, as Arborist reads them. */
-function packagesIn(dir) {
-  const names = (folder) => {
+function packagesIn(dir: string): string[] {
+  const names = (folder: string): string[] => {
     try {
       return readdirSync(folder).filter((name) => !name.startsWith("."));
     } catch {
@@ -374,16 +427,21 @@ function packagesIn(dir) {
   );
 }
 
+export interface InstalledPackage {
+  readonly dir: string;
+  readonly manifest: PackageManifest & { readonly name: string; readonly version?: string };
+}
+
 /**
  * npm's local tree at `prefix`, as Arborist loads it: the project, its workspaces, and every
  * package in a node_modules below them, a link's target too, nearest first.
  */
-export function treePackages(prefix) {
-  const packages = [];
-  const seen = new Set();
+export function treePackages(prefix: string): InstalledPackage[] {
+  const packages: InstalledPackage[] = [];
+  const seen = new Set<string>();
   const queue = [prefix, ...workspacesOf(prefix)];
   for (const dir of queue) {
-    let real;
+    let real: string;
     try {
       real = realpathSync(dir);
     } catch {
@@ -392,17 +450,15 @@ export function treePackages(prefix) {
     if (seen.has(real)) continue;
     seen.add(real);
     const manifest = readJson(path.join(real, "package.json"));
-    if (typeof manifest?.name === "string") packages.push({ dir: real, manifest });
+    if (typeof manifest?.name === "string") {
+      packages.push({
+        dir: real,
+        manifest: manifest as InstalledPackage["manifest"],
+      });
+    }
     queue.push(...packagesIn(path.join(real, "node_modules")));
   }
   return packages;
-}
-
-let loadedSemver;
-/** npm's semver, which the pnpm here carries for node-gyp. */
-function semver() {
-  loadedSemver ??= createRequire(import.meta.url)("../node_modules/pnpm/dist/node_modules/semver");
-  return loadedSemver;
 }
 
 const PACKAGE_NAME = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/i;
@@ -413,7 +469,10 @@ const PACKAGE_NAME = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/i
  * for a name alone, or one the version or range allows. A tag, an alias, or a spec that isn't a
  * registry's, it never finds there.
  */
-export function inTree(packages, spec) {
+export function inTree<T extends { dir: string; manifest: { name: string; version?: unknown } }>(
+  packages: readonly T[],
+  spec: string,
+): T | undefined {
   const at = spec.indexOf("@", 1);
   const name = at > 0 ? spec.slice(0, at) : spec;
   const wanted = at > 0 ? spec.slice(at + 1) || "*" : "*";
@@ -421,10 +480,10 @@ export function inTree(packages, spec) {
   const named = packages.filter(({ manifest }) => manifest.name === name);
   if (wanted === "*") return named[0];
   if (named.length === 0 || semver().validRange(wanted.trim(), true) === null) return undefined;
-  return named.find(
-    ({ manifest }) =>
-      `${name}@${manifest.version}` === spec || semver().satisfies(manifest.version, wanted),
-  );
+  return named.find(({ manifest }) => {
+    const version = typeof manifest.version === "string" ? manifest.version : "";
+    return `${name}@${version}` === spec || semver().satisfies(version, wanted);
+  });
 }
 
 // The npm whose npx this one behaves as, the package manager a project's devEngines checks.
@@ -434,26 +493,32 @@ const NPM_VERSION = "11.19.1";
  * What npm makes of the devEngines in the package.json `manifest` at its local prefix, against
  * `current`, before any command: the lines it warns with, and those it ends on, each as it prints
  * them; under `force`, every failure only warns.
- * @returns {{ warnings: string[], error?: string }}
  */
-export function devEngines(manifest, force, current) {
-  const wanted = manifest?.devEngines;
+export function devEngines(
+  manifest: unknown,
+  force: boolean,
+  current: CurrentEnv,
+): { warnings: string[]; error?: string } {
+  const wanted = (manifest as { devEngines?: unknown } | null | undefined)?.devEngines;
   if (wanted === undefined) return { warnings: [] };
-  let failures;
+  let failures: DevEngineFailure[];
   try {
     failures = devEngineFailures(wanted, current);
   } catch (error) {
-    return { warnings: [], error: error.message };
+    return { warnings: [], error: (error as Error).message };
   }
   // npm's log puts the code before each line of a message, or of an object as inspect shows it.
-  const logged = (value) =>
+  const logged = (value: unknown): string[] =>
     formatWithOptions({ colors: false }, value)
       .split(/\r?\n/)
       .map((line) => (line ? `EBADDEVENGINES ${line}` : "EBADDEVENGINES"));
   const header = "The developer of this package has specified the following through devEngines";
-  const printed = ({ engine, errors, current, required }, first) => {
+  const printed = (
+    { engine, errors, current: now, required }: DevEngineFailure,
+    first: boolean,
+  ): string[] => {
     const message = [...(first ? [header] : []), `Invalid devEngines.${engine}`, ...errors];
-    return [...logged(message.join("\n")), ...logged({ current, required })];
+    return [...logged(message.join("\n")), ...logged({ current: now, required })];
   };
   const ending = failures.filter(({ onFail }) => onFail === "error");
   const warned = failures.filter(({ onFail }) => onFail === "warn");
@@ -463,8 +528,23 @@ export function devEngines(manifest, force, current) {
     printed(failure, at === 0).map((line) => `warn ${line}`),
   );
   if (force || ending.length === 0) return { warnings };
-  return { warnings, error: ["code EBADDEVENGINES", ...printed(ending[0], true)].join("\n") };
+  return {
+    warnings,
+    error: ["code EBADDEVENGINES", ...printed(ending[0] as DevEngineFailure, true)].join("\n"),
+  };
 }
+
+export type NpxDecision =
+  | { error: string; code?: number }
+  | {
+      install?: string[];
+      command?: string;
+      args: string[];
+      bins: string[];
+      runPath: string;
+    };
+
+export type NpxPlan = NpxDecision & { warnings?: string[] };
 
 /**
  * What npx does with `args` from `cwd`, as libnpmexec decides it: the command, `undefined` for
@@ -474,12 +554,12 @@ export function devEngines(manifest, force, current) {
  * computer a project's devEngines is checked against.
  */
 export function plan(
-  args,
-  cwd,
-  home = homedir(),
-  env = process.env,
-  current = currentEnv(NPM_VERSION),
-) {
+  args: readonly string[],
+  cwd: string,
+  home: string = homedir(),
+  env: Env = process.env,
+  current: CurrentEnv = currentEnv(NPM_VERSION),
+): NpxPlan {
   const { prefix, workspace } = npmPrefix(cwd);
   const sources = npmConfig(env, prefix, home);
   // npm refuses such config, then a project whose devEngines this computer misses, before it
@@ -492,25 +572,33 @@ export function plan(
     force,
     current,
   );
-  const decided =
+  const decided: NpxDecision =
     error === undefined ? decide(args, cwd, home, sources, prefix, workspace) : { error, code: 1 };
   return warnings.length > 0 ? { ...decided, warnings } : decided;
 }
 
 /** plan's decision once npm's config lets npx run. */
-function decide(args, cwd, home, sources, prefix, workspace) {
+function decide(
+  args: readonly string[],
+  cwd: string,
+  home: string,
+  sources: readonly ConfigSource[],
+  prefix: string,
+  workspace: string | undefined,
+): NpxDecision {
   const read = readNpx(args);
   if ("error" in read) return read;
   const runPath = workspace ?? cwd;
-  const trees = workspace === undefined ? [prefix] : [workspace, prefix];
-  let tree;
-  const inLocalTree = (spec) => {
+  const trees: [string, ...string[]] = workspace === undefined ? [prefix] : [workspace, prefix];
+  let tree: InstalledPackage[] | undefined;
+  const inLocalTree = (spec: string) => {
     tree ??= treePackages(prefix);
     return inTree(tree, spec);
   };
-  let [command, ...rest] = read.command;
+  const [command, ...rest] = read.command as [string, ...string[]];
+  let chosen: string | undefined = command;
   let packages = read.packages;
-  let own;
+  let own: string | undefined;
   if (packages.length === 0) {
     own = trees.find((dir) => {
       const manifest = readJson(path.join(dir, "package.json"));
@@ -529,7 +617,7 @@ function decide(args, cwd, home, sources, prefix, workspace) {
         return { command: name, args: rest, bins: [], runPath };
       }
       packages = [command];
-      command = undefined;
+      chosen = undefined;
     }
   }
   // npm refuses one before it looks for it in the local tree.
@@ -544,11 +632,18 @@ function decide(args, cwd, home, sources, prefix, workspace) {
     try {
       readFileSync(local.tarball ? local.path : path.join(local.path, "package.json"));
     } catch (error) {
+      const err = error as NodeJS.ErrnoException;
       const what = local.tarball ? "the tarball" : "package.json";
-      return { error: `could not read ${what}: ${error.message}`, code: error.errno ?? 1 };
+      return { error: `could not read ${what}: ${err.message}`, code: err.errno ?? 1 };
     }
   }
-  return { ...(install.length > 0 ? { install } : {}), command, args: rest, bins: [], runPath };
+  return {
+    ...(install.length > 0 ? { install } : {}),
+    command: chosen,
+    args: rest,
+    bins: [],
+    runPath,
+  };
 }
 
 /**
@@ -556,7 +651,7 @@ function decide(args, cwd, home, sources, prefix, workspace) {
  * ELECTRON_RUN_AS_NODE, which npm doesn't set: the launchers set it again for what they run on
  * Eidolon's binary, and anything else, VS Code's `code` say, would run as Node with it.
  */
-export function commandEnv(env, value) {
+export function commandEnv(env: Env, value: string): Record<string, string | undefined> {
   const kept = Object.entries(env).filter(([key]) => key.toUpperCase() !== "ELECTRON_RUN_AS_NODE");
   const keys = kept.map(([key]) => key).filter((key) => /^path$/i.test(key));
   return {
@@ -565,14 +660,25 @@ export function commandEnv(env, value) {
   };
 }
 
-const envValue = (env, name) =>
+const envValue = (env: Env, name: string): string | undefined =>
   Object.entries(env).find(([key]) => key.toUpperCase() === name.toUpperCase())?.[1];
 
 /** `env` with `variables` set, each in place of every spelling of its name `env` has. */
-function withVariables(env, variables) {
+function withVariables(
+  env: Env,
+  variables: Readonly<Record<string, string>>,
+): Record<string, string | undefined> {
   const names = new Set(Object.keys(variables).map((name) => name.toUpperCase()));
   const kept = Object.entries(env).filter(([key]) => !names.has(key.toUpperCase()));
   return { ...Object.fromEntries(kept), ...variables };
+}
+
+export interface WhichOptions {
+  readonly pathEnv: string;
+  readonly cwd: string;
+  readonly platform?: string;
+  readonly pathext?: string;
+  readonly cwdFirst?: boolean;
 }
 
 /**
@@ -581,7 +687,10 @@ function withVariables(env, variables) {
  * through PATHEXT, but in the working folder first only with `cwdFirst`, as cmd.exe looks up a
  * name a batch file runs.
  */
-export function which(command, { pathEnv, cwd, platform = process.platform, pathext, cwdFirst }) {
+export function which(
+  command: string,
+  { pathEnv, cwd, platform = process.platform, pathext, cwdFirst }: WhichOptions,
+): string | undefined {
   const windows = platform === "win32";
   const dirs = windows
     ? pathEnv
@@ -630,15 +739,15 @@ const NPM_CMD_SHIM =
  * beside it, else on a bare `node`, with `lessJs` when cmd.exe looks that up with .JS out of
  * PATHEXT; undefined for any other.
  */
-export function nodeCmdShim(text) {
+export function nodeCmdShim(text: string): { lessJs: boolean } | undefined {
   if (PNPM_CMD_SHIM.test(text)) return { lessJs: true };
   const npm = NPM_CMD_SHIM.exec(text);
   return npm === null ? undefined : { lessJs: npm[1] === undefined };
 }
 
 /** Whether `a` and `b` name one file as Windows compares them: links followed, without case. */
-function sameFile(a, b) {
-  const real = (file) => {
+function sameFile(a: string, b: string): boolean {
+  const real = (file: string): string => {
     try {
       return realpathSync.native(file);
     } catch {
@@ -649,7 +758,13 @@ function sameFile(a, b) {
 }
 
 /** This shim's node.cmd, which hands its words on through `%*`. */
-const NODE_CMD = fileURLToPath(new URL("node.cmd", import.meta.url));
+const NODE_CMD = fileURLToPath(new URL("node.cmd", SHIM_BIN));
+
+export interface RereadsOptions {
+  readonly env: Env;
+  readonly cwd: string;
+  readonly nodeCmd?: string;
+}
 
 /**
  * How many times more than once cmd.exe reads the words npx starts the Windows `file` with: none
@@ -660,7 +775,7 @@ const NODE_CMD = fileURLToPath(new URL("node.cmd", import.meta.url));
  * all, empty too: Windows checks only that it exists
  * (https://learn.microsoft.com/windows/win32/api/processenv/nf-processenv-needcurrentdirectoryforexepathw).
  */
-export function rereads(file, { env, cwd, nodeCmd = NODE_CMD }) {
+export function rereads(file: string, { env, cwd, nodeCmd = NODE_CMD }: RereadsOptions): number {
   if (!/\.(?:cmd|bat)$/i.test(file)) return 0;
   let text = "";
   try {
@@ -680,17 +795,29 @@ export function rereads(file, { env, cwd, nodeCmd = NODE_CMD }) {
   return node !== undefined && sameFile(node, nodeCmd) ? 2 : 1;
 }
 
+export interface SpawnArgsOptions {
+  readonly platform?: string;
+  readonly env?: Env;
+  readonly cwd?: string;
+  readonly nodeCmd?: string;
+}
+
 /**
  * How to start `file` from `cwd` without a shell: on Windows a .exe or .com directly, anything
  * else through cmd.exe, each word escaped once for each time cmd.exe reads it (rereads).
  */
 export function spawnArgs(
-  file,
-  args,
-  { platform = process.platform, env = process.env, cwd = process.cwd(), nodeCmd } = {},
-) {
+  file: string,
+  args: readonly string[],
+  {
+    platform = process.platform,
+    env = process.env,
+    cwd = process.cwd(),
+    nodeCmd,
+  }: SpawnArgsOptions = {},
+): { command: string; args: string[]; verbatim: boolean } {
   if (platform !== "win32" || /\.(?:exe|com)$/i.test(file)) {
-    return { command: file, args, verbatim: false };
+    return { command: file, args: [...args], verbatim: false };
   }
   const comspec = envValue(env, "ComSpec") ?? "cmd.exe";
   return { ...cmdLine(comspec, file, args, rereads(file, { env, cwd, nodeCmd })), verbatim: true };
@@ -701,8 +828,12 @@ export function spawnArgs(
  * Windows only waits for it: kill() there is TerminateProcess, and a console's Ctrl-C reaches the
  * child itself.
  */
-export function relay(child, platform = process.platform) {
-  const forward = platform === "win32" ? () => {} : (signal) => child.kill(signal);
+export function relay(
+  child: { kill(signal: NodeJS.Signals): void },
+  platform: string = process.platform,
+): () => void {
+  const forward: NodeJS.SignalsListener =
+    platform === "win32" ? () => {} : (signal) => child.kill(signal);
   process.on("SIGINT", forward);
   process.on("SIGTERM", forward);
   return () => {
@@ -712,7 +843,7 @@ export function relay(child, platform = process.platform) {
 }
 
 /** Ends as the child did: npm raises its signal again on itself, or exits with its code. */
-function end(code, signal) {
+function end(code: number | null, signal: NodeJS.Signals | null): void {
   if (signal !== null && process.platform !== "win32") {
     process.kill(process.pid, signal);
     setTimeout(() => process.exit(1), 500);
@@ -721,13 +852,13 @@ function end(code, signal) {
   process.exit(code ?? 1);
 }
 
-function fail(message, code = 1) {
+function fail(message: string, code = 1): never {
   console.error(message.replace(/^/gm, "npx: "));
   process.exit(code);
 }
 
 /** The interpreter the #! line `file` starts with names, if it has one. */
-function interpreterOf(file) {
+function interpreterOf(file: string): string | undefined {
   try {
     return /^#!\s*(\S+)/.exec(readFileSync(file, "latin1"))?.[1];
   } catch {
@@ -740,7 +871,7 @@ const REPORT =
   'require("node:fs").writeFileSync(process.env.EIDOLON_NPX_REPORT, process.env.PATH ?? "")';
 
 /** Installs `packages` in pnpm's dlx cache, resolving to its node_modules/.bin, or ends as pnpm. */
-function install(packages) {
+function install(packages: readonly string[]): Promise<string> {
   const sources = npmConfig(process.env, npmPrefix(process.cwd()).prefix, homedir());
   const settings = npxSettings(sources);
   if ("error" in settings) fail(settings.error);
@@ -753,7 +884,7 @@ function install(packages) {
   const npmrc = pnpmNpmrc(sources, process.cwd(), homedir());
   if (npmrc) writeFileSync(path.join(scratch, ".npmrc"), `${npmrc}\n`, { mode: 0o600 });
   const report = path.join(scratch, "path");
-  const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", import.meta.url));
+  const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", SHIM_BIN));
   const args = [
     ...process.execArgv,
     pnpm,
@@ -769,9 +900,11 @@ function install(packages) {
   // pnpm's stdout goes to stderr with its own, and it never reads the server's stdin. Its
   // variables carry npm's network settings, which a proxy's URL can hold credentials in: only the
   // owner's processes read them. A relative userconfig pnpm would read from its own folder.
-  const userconfig = sources[0].userconfig && {
-    npm_config_userconfig: userConfig(sources[0], homedir()),
-  };
+  const variables = sources[0] ?? {};
+  const userconfig =
+    typeof variables.userconfig === "string" && variables.userconfig
+      ? { npm_config_userconfig: userConfig(variables, homedir()) }
+      : undefined;
   const child = spawn(process.execPath, args, {
     cwd: scratch,
     stdio: ["ignore", 2, 2],
@@ -779,7 +912,7 @@ function install(packages) {
       ...pnpmNetworkEnv(sources),
       ...userconfig,
       EIDOLON_NPX_REPORT: report,
-    }),
+    }) as NodeJS.ProcessEnv,
     windowsHide: true,
   });
   const undo = relay(child);
@@ -787,7 +920,7 @@ function install(packages) {
     child.on("error", (error) => fail(`couldn't start pnpm: ${error.message}`));
     child.on("exit", (code, signal) => {
       undo();
-      let bin;
+      let bin: string | undefined;
       try {
         bin = readFileSync(report, "utf8").split(path.delimiter)[0];
       } catch {}
@@ -799,9 +932,11 @@ function install(packages) {
 }
 
 /** The packages npx installed in the dlx folder whose node_modules/.bin is `bin`, in order. */
-function installed(bin) {
+function installed(bin: string): { dir: string; manifest: PackageManifest }[] {
   const dir = path.dirname(path.dirname(bin));
-  const names = Object.keys(readJson(path.join(dir, "package.json"))?.dependencies ?? {});
+  const dependencies = readJson(path.join(dir, "package.json"))?.dependencies;
+  const names =
+    typeof dependencies === "object" && dependencies !== null ? Object.keys(dependencies) : [];
   return names.flatMap((name) => {
     const packageDir = path.join(dir, "node_modules", name);
     const manifest = readJson(path.join(packageDir, "package.json"));
@@ -813,14 +948,12 @@ if (import.meta.main) {
   const decided = plan(process.argv.slice(2), process.cwd());
   for (const line of decided.warnings ?? []) console.error(`npx: ${line}`);
   if ("error" in decided) fail(decided.error, decided.code);
-  let { command, bins } = decided;
-  if (decided.install !== undefined) {
-    const bin = await install(decided.install);
-    bins = [bin];
-    const packages = installed(bin);
-    // With no command named, npm picks the bin of the package installed: see binOf.
-    command ??= packages[0] && binOf(packages[0].manifest, packages[0].dir);
-    if (command === undefined) fail("could not determine executable to run");
+  const bin = decided.install !== undefined ? await install(decided.install) : undefined;
+  const packages = bin !== undefined ? installed(bin) : [];
+  // With no command named, npm picks the bin of the package installed: see binOf.
+  const command = decided.command ?? (packages[0] && binOf(packages[0].manifest, packages[0].dir));
+  if (command === undefined) fail("could not determine executable to run");
+  if (bin !== undefined) {
     // pnpm links no bin whose name or path it won't take, which npm names and links as binsOf
     // does: a program of that name further down PATH would run in its place.
     const theirs = packages.some(({ manifest, dir }) =>
@@ -830,7 +963,8 @@ if (import.meta.main) {
       fail(`${command}: pnpm doesn't link a bin by this name`, 127);
     }
   }
-  const nodeGyp = fileURLToPath(new URL("../node_modules/pnpm/dist/node-gyp-bin", import.meta.url));
+  const bins = bin !== undefined ? [bin] : decided.bins;
+  const nodeGyp = fileURLToPath(new URL("../node_modules/pnpm/dist/node-gyp-bin", SHIM_BIN));
   const env = commandEnv(process.env, npmPath(bins, decided.runPath, nodeGyp, pathOf(process.env)));
   const file = which(command, {
     pathEnv: pathOf(env),
@@ -843,29 +977,30 @@ if (import.meta.main) {
     fail(`${command}: command not found`, 127);
   }
   const start = spawnArgs(file, decided.args, { env, cwd: decided.runPath });
-  const options = {
+  const options: SpawnOptions = {
     cwd: decided.runPath,
-    env,
+    env: env as NodeJS.ProcessEnv,
     stdio: "inherit",
     windowsHide: true,
     windowsVerbatimArguments: start.verbatim,
   };
-  let child;
+  let child: ChildProcess | undefined;
   // Listening before the command starts: a signal npx gets once it runs would otherwise end npx
   // alone, as nothing listened yet, and leave the command running. Node calls the listener only
   // after this block, when child is set.
-  const undo = relay({ kill: (signal) => child.kill(signal) });
+  const undo = relay({ kill: (signal) => child?.kill(signal) });
   try {
     child = spawn(start.command, start.args, options);
   } catch (error) {
+    const err = error as NodeJS.ErrnoException;
     // Node throws ENOEXEC rather than emit it. sh runs a file the system can't, one without a #!
     // line, as a script of its own.
-    if (error.code !== "ENOEXEC" || process.platform === "win32") {
-      fail(`${command}: ${error.message}`, 126);
+    if (err.code !== "ENOEXEC" || process.platform === "win32") {
+      fail(`${command}: ${err.message}`, 126);
     }
     child = spawn("/bin/sh", [file, ...decided.args], options);
   }
-  child.on("error", (error) => {
+  child.on("error", (error: NodeJS.ErrnoException) => {
     // spawn reports a script whose #! interpreter isn't there as the script missing; sh names the
     // interpreter and ends 126.
     const interpreter =

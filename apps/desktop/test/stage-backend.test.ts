@@ -922,7 +922,7 @@ describe("THIRD_PARTY_LICENSES.txt", () => {
     const root = payload();
     const pnpm = join(root, "node-shim", "node_modules", "node_modules", "pnpm");
     manifest(pnpm, { name: "pnpm", version: "11.0.0", license: "MIT" });
-    put(join(root, "node-shim", "node_modules", ".bin", "npx.mjs"));
+    put(join(root, "node-shim", "npx.ts"));
     put(join(pnpm, "LICENSE"), "Copyright (c) pnpm contributors\n");
     const bundled = join(pnpm, "dist", "node_modules");
     manifest(join(bundled, "tar"), { name: "tar", version: "7.0.0", license: "BlueOak-1.0.0" });

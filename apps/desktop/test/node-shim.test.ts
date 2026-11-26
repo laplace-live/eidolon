@@ -26,6 +26,7 @@ import {
   NODE_SHIM,
   POSIX_LAUNCHERS,
   prunePnpmForeignNativePackages,
+  SHIM_MODULES,
   shimLaunchers,
   shimPnpm,
   stageNodeShim,
@@ -80,7 +81,9 @@ describe("the shim the stage writes", () => {
     (os, cpu, native) => {
       const payload = temp();
       stageNodeShim(payload, { os, cpu });
-      expect(readdirSync(join(payload, NODE_SHIM))).toEqual(["node_modules"]);
+      expect(readdirSync(join(payload, NODE_SHIM)).sort()).toEqual(
+        ["node_modules", ...SHIM_MODULES].sort(),
+      );
       expect(readdirSync(join(payload, NODE_SHIM, "node_modules")).sort()).toEqual([
         ".bin",
         "node_modules",
@@ -89,6 +92,12 @@ describe("the shim the stage writes", () => {
       expect(readdirSync(bin).sort()).toEqual([...LAUNCHER_FILES].sort());
       for (const file of LAUNCHER_FILES) {
         expect([file, readFileSync(join(bin, file), "utf8")]).toEqual([
+          file,
+          readFileSync(join(LAUNCHER_SOURCES, file), "utf8"),
+        ]);
+      }
+      for (const file of SHIM_MODULES) {
+        expect([file, readFileSync(join(payload, NODE_SHIM, file), "utf8")]).toEqual([
           file,
           readFileSync(join(LAUNCHER_SOURCES, file), "utf8"),
         ]);
@@ -120,10 +129,10 @@ describe("the shim the stage writes", () => {
     },
   );
 
-  test("holds each module npx.mjs imports, so the staged one loads", async () => {
+  test("holds each module npx.ts imports, so the staged one loads", async () => {
     const payload = temp();
     stageNodeShim(payload, { os: process.platform, cpu: process.arch });
-    const npx = await import(pathToFileURL(join(shimLaunchers(payload), "npx.mjs")).href);
+    const npx = await import(pathToFileURL(join(payload, NODE_SHIM, "npx.ts")).href);
     expect(npx.plan).toBeTypeOf("function");
   });
 });

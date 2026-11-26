@@ -1,7 +1,8 @@
 // The desktop app's node shim in a server's environment: serverEnv with a made-up shim, nodeShim on
 // this runtime, and on Electron's Node (test-on-electron.ts) servers started as `node` and as `npx`
 // through the checkout's launchers, on a PATH where only they offer either.
-import { chmod, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { stripTypeScriptTypes } from "node:module";
 import { delimiter, join } from "node:path";
 import { PROJECT_ROOT } from "@eidolon/config";
 import { afterEach, describe, expect, test } from "vitest";
@@ -10,7 +11,7 @@ import { McpSession, nodeShim, serverEnv } from "../src/mcp/session.ts";
 import { shellEnv } from "../src/tools/shell.ts";
 import { folderGuard, removeTempFolders, tempFolder, toolContext } from "./tool-folder.ts";
 
-const FIXTURE = join(import.meta.dirname, "fixtures/mcp-server.mjs");
+const FIXTURE = join(import.meta.dirname, "fixtures/mcp-server.ts");
 const ELECTRON = process.versions.electron !== undefined;
 const SOURCES = join(PROJECT_ROOT, "apps", "desktop", "node-shim");
 
@@ -157,8 +158,9 @@ describe.skipIf(!ELECTRON || process.platform === "win32")(
         join(pkg, "package.json"),
         JSON.stringify({ name: "eidolon-fake-mcp", version: "1.0.0", bin: "server.mjs" }),
       );
-      await copyFile(FIXTURE, server);
-      await writeFile(server, `#!/usr/bin/env node\n${await readFile(server, "utf8")}`);
+      // Installed into dlx's node_modules, where Node refuses to strip types from .ts.
+      const js = stripTypeScriptTypes(await readFile(FIXTURE, "utf8"));
+      await writeFile(server, `#!/usr/bin/env node\n${js}`);
       await chmod(server, 0o755);
       const session = await open({
         command: "npx",

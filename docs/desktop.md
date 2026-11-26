@@ -32,7 +32,7 @@ LAPLACE Eidolon (main process)
 ```text
 apps/desktop/
   electron-builder.yml   the packaging config: fuses, targets, the payload as an extra resource
-  electron-builder.release.mjs
+  electron-builder.release.ts
                          the release overlay: notarization, the requirement, Windows' Azure signing
   resources/             build resources: entitlements, installer.nsh, the icon, and the designated
                          requirement release builds carry (designated-requirement.mac)
@@ -885,12 +885,13 @@ on a computer with no Node: the payload holds launchers that run each on the app
 Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs wins.
 
 - **Its files,** in the payload's `node-shim/`: in `node_modules/.bin/`, `node`, `npx`, `pnpm` and
-  `pnpx` (sh, 0755), their `.cmd` twins (CRLF, each under `setlocal`), `npx.mjs`, `cross-spawn.mjs`
-  and the modules `npx.mjs` imports that are ported from npm's own packages: `npm-config.mjs`
-  (npm's config, from @npmcli/config and ini), `npm-spec.mjs` (a package spec, from npm-package-arg,
-  validate-npm-package-name and hosted-git-info), `npm-exec.mjs` (a package's bins and npm's
+  `pnpx` (sh, 0755) and their `.cmd` twins (CRLF, each under `setlocal`); in `node-shim/` itself
+  (outside `node_modules`, where Node refuses to strip types), `npx.ts`, `cross-spawn.ts` and the
+  modules `npx.ts` imports that are ported from npm's own packages: `npm-config.ts`
+  (npm's config, from @npmcli/config and ini), `npm-spec.ts` (a package spec, from npm-package-arg,
+  validate-npm-package-name and hosted-git-info), `npm-exec.ts` (a package's bins and npm's
   `PATH`, from npm-normalize-package-bin, @npmcli/package-json, libnpmexec and @npmcli/run-script)
-  and `npm-checks.mjs` (a project's devEngines, from npm-install-checks); in
+  and `npm-checks.ts` (a project's devEngines, from npm-install-checks); in
   `node_modules/node_modules/pnpm`, the launchers' `../node_modules/pnpm`, the pnpm `apps/desktop`
   pins as an exact dev dependency, so `pnpm-lock.yaml` pins it as it pins the rest. The launchers
   sit in a `node_modules/.bin` because cross-spawn, which starts an MCP server, escapes the words of a
@@ -918,7 +919,7 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   and `pnpx` run the bundled pnpm's own. The server inherits the variable, so one that starts Node
   as `process.execPath` runs Eidolon's binary as Node too. On Windows the launchers are `.cmd`
   files, which a shell or cross-spawn runs, cross-spawn escaping the payload's words twice.
-- **npx** runs `npx.mjs`, which decides as npm's npx does on npm's default config (`plan`). With no
+- **npx** runs `npx.ts`, which decides as npm's npx does on npm's default config (`plan`). With no
   `--package`, the project's own bin, a bin in a `node_modules/.bin` from npm's local prefix up, or
   a package npm's local tree holds at a version the spec allows, by npm's semver, which pnpm's
   `dist/` carries, runs as it is, from the workspace's folder in an npm workspace. Anything else the
@@ -962,11 +963,11 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   runs in or a `~/` from the home, and keeps its store and caches under the owner's home, where its
   dlx cache holds npx's installs apart from those of pnpx and `pnpm dlx`, which install as pnpm
   does, and from npx's under other settings or registries, each for a day.
-- **The command** then runs from `npx.mjs` on npm's `PATH`: the bins it installed or found, each
+- **The command** then runs from `npx.ts` on npm's `PATH`: the bins it installed or found, each
   `node_modules/.bin` from the folder it runs in up, pnpm's `node-gyp-bin`, then the server's own.
   On macOS it starts without a shell, a file with no `#!` line through sh, as npm's sh runs it; on
   Windows an `.exe` or `.com` starts directly and anything else through cmd.exe, each word escaped
-  once for each time cmd.exe will read it (`rereads`, with `cross-spawn.mjs`, ported from
+  once for each time cmd.exe will read it (`rereads`, with `cross-spawn.ts`, ported from
   cross-spawn): one escape fewer lets cmd.exe act on a word, one more leaves carets in it. A batch
   file's words are escaped twice, as npm escapes them, and three times for a cmd-shim, npm's or
   pnpm's, with no `node.exe` beside it, whose bare `node` cmd.exe would find to be the shim's own
@@ -1032,7 +1033,7 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
 - **`publish`** names the update feed, which electron-builder writes into the app's
   `app-update.yml` for the [updater](#updates); electron-builder uploads nothing (`--publish never`).
 
-`electron-builder.release.mjs`, the release overlay, extends it with the signing; only
+`electron-builder.release.ts`, the release overlay, extends it with the signing; only
 `desktop.yml`'s signed builds load it, and `test/release-config.test.ts` checks what it computes and
 what electron-builder's own loader and schema make of it:
 

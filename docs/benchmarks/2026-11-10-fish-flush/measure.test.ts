@@ -1,7 +1,5 @@
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { type AddressInfo, createServer } from "node:http";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -10,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { jsRuntime } from "../../../packages/config/src/index.ts";
 import { costOf, priceOf } from "../../../packages/providers/src/index.ts";
 import { packMsg, unpackMsg } from "../../../packages/providers/src/speech/stream/msgpack.ts";
+import { messageOf, serveWs } from "../../../packages/providers/test/ws-server.ts";
 import {
   type Arrival,
   type FlushRecord,
@@ -209,62 +208,47 @@ interface Peer {
   chain: Promise<void>;
 }
 
-// The socket server comes from the package the script's Fish client uses: nothing here installs it.
-const { WebSocketServer } = createRequire(join(ROOT, "packages/providers/package.json"))(
-  "ws",
-) as typeof import("ws");
-
 /** Fish's live socket as the script drives it: a flush's audio comes in order after the last's. */
 async function fakeFish() {
   const peers: Peer[] = [];
-  const server = createServer((_request, response) => {
-    response.writeHead(400).end("no upgrade");
-  });
-  const sockets = new WebSocketServer({ server });
-  sockets.on("connection", (ws, request) => {
-    const headers = new Headers();
-    for (let i = 0; i < request.rawHeaders.length; i += 2) {
-      headers.append(request.rawHeaders[i] as string, request.rawHeaders[i + 1] as string);
-    }
-    const peer: Peer = {
-      path: new URL(request.url ?? "/", "http://127.0.0.1").pathname,
-      headers,
-      received: [],
-      lastAudio: [],
-      flushes: 0,
-      chain: Promise.resolve(),
-    };
-    peers.push(peer);
-    ws.on("message", (data: Buffer) => {
-      const message = unpackMsg(data) as Record<string, unknown>;
-      peer.received.push({ t: performance.now(), message });
-      if (message.event === "flush") {
-        const n = peer.flushes++;
-        peer.chain = peer.chain.then(async () => {
-          await delay(FIRST_MS);
-          for (let i = 0; i < chunksOf(n); i++) {
-            if (i > 0) await delay(GAP_MS[i % 2] as number);
-            ws.send(packMsg({ event: "audio", audio: new Uint8Array(TENTH) }));
-          }
-          peer.lastAudio[n] = performance.now();
-        });
-      } else if (message.event === "stop") {
-        peer.chain = peer.chain.then(() => {
-          ws.send(packMsg({ event: "finish", reason: "stop" }));
-        });
-      }
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
-  return {
-    base: `http://127.0.0.1:${port}`,
-    peers,
-    stop() {
-      for (const ws of sockets.clients) ws.terminate();
-      sockets.close();
-      server.close();
+  const server = await serveWs({
+    open(ws, { url, headers }) {
+      const peer: Peer = {
+        path: url.pathname,
+        headers,
+        received: [],
+        lastAudio: [],
+        flushes: 0,
+        chain: Promise.resolve(),
+      };
+      peers.push(peer);
+      ws.on("message", (data, isBinary) => {
+        const bytes = messageOf(data, isBinary);
+        if (typeof bytes === "string") return;
+        const message = unpackMsg(bytes) as Record<string, unknown>;
+        peer.received.push({ t: performance.now(), message });
+        if (message.event === "flush") {
+          const n = peer.flushes++;
+          peer.chain = peer.chain.then(async () => {
+            await delay(FIRST_MS);
+            for (let i = 0; i < chunksOf(n); i++) {
+              if (i > 0) await delay(GAP_MS[i % 2] as number);
+              ws.send(packMsg({ event: "audio", audio: new Uint8Array(TENTH) }));
+            }
+            peer.lastAudio[n] = performance.now();
+          });
+        } else if (message.event === "stop") {
+          peer.chain = peer.chain.then(() => {
+            ws.send(packMsg({ event: "finish", reason: "stop" }));
+          });
+        }
+      });
     },
+  });
+  return {
+    base: `http://127.0.0.1:${server.port}`,
+    peers,
+    stop: () => server.stop(),
   };
 }
 
@@ -284,8 +268,8 @@ describe("the script against a fake Fish", () => {
     );
   });
 
-  afterAll(() => {
-    fake.stop();
+  afterAll(async () => {
+    await fake.stop();
     rmSync(home, { recursive: true, force: true });
   });
 

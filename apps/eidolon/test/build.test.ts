@@ -213,7 +213,7 @@ describe("the third-party notices", () => {
       ["ISC", new Set()],
       ["MIT", new Set()],
     ]);
-    const ported = ["{apps,packages}/*/src/**/*.ts", "apps/desktop/node-shim/*.mjs"];
+    const ported = ["{apps,packages}/*/src/**/*.ts", "apps/desktop/node-shim/*.ts"];
     for (const file of globSync(ported, { cwd: ROOT })) {
       const source = readFileSync(join(ROOT, file), "utf8");
       const license = /^\/\/ SPDX-License-Identifier: (BSD-2-Clause|ISC|MIT)$/m.exec(source)?.[1];

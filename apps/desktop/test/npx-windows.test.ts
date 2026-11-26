@@ -17,36 +17,15 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { cmdLine, escapeCommand } from "../node-shim/cross-spawn.ts";
+import * as npx from "../node-shim/npx.ts";
 import { LAUNCHER_SOURCES, POSIX_LAUNCHERS } from "../scripts/node-shim.ts";
 import { osVariables } from "../scripts/smoke/env.ts";
 import { closedPort, nodesIn, systemFolders, withVariables } from "../scripts/smoke/packaged.ts";
 
 const WINDOWS = process.platform === "win32";
 type Env = Record<string, string>;
-interface CrossSpawn {
-  escapeCommand(command: string): string;
-  cmdLine(
-    comspec: string,
-    file: string,
-    args: readonly string[],
-    rereads: number,
-  ): { command: string; args: string[] };
-}
-interface Npx {
-  nodeCmdShim(text: string): { lessJs: boolean } | undefined;
-  rereads(file: string, options: { env: Env; cwd: string; nodeCmd?: string }): number;
-  spawnArgs(
-    file: string,
-    args: readonly string[],
-    options: { platform: string; env: Env; cwd: string; nodeCmd?: string },
-  ): { command: string; args: string[]; verbatim: boolean };
-}
-const { cmdLine, escapeCommand }: CrossSpawn = await import(
-  pathToFileURL(join(LAUNCHER_SOURCES, "cross-spawn.mjs")).href
-);
-const npx: Npx = await import(pathToFileURL(join(LAUNCHER_SOURCES, "npx.mjs")).href);
 
 const AWKWARD = [
   "a b",

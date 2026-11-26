@@ -8,10 +8,12 @@ import { withoutComments } from "./code.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const CODE_DIRS = [
+  ".changeset",
   "apps/bot/src",
   "apps/bot/scripts",
   "apps/cli/src",
   "apps/desktop/src",
+  "apps/desktop/node-shim",
   "apps/desktop/scripts",
   "apps/eidolon/src",
   "apps/eidolon/scripts",

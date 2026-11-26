@@ -42,7 +42,7 @@ import { type CapturedLogs, captureLogs, deferred } from "../fakes.ts";
 
 const FIXTURE = join(
   import.meta.dirname,
-  "../../../../packages/assistant/test/fixtures/mcp-server.mjs",
+  "../../../../packages/assistant/test/fixtures/mcp-server.ts",
 );
 
 type Turn = readonly MindChunk[] | ((request: MindRequest) => AsyncIterable<MindChunk>);

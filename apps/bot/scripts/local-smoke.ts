@@ -465,7 +465,7 @@ const COMMAND_ENDED = /\[Command (\d+) ended with code 0/;
  * tool tasks get; the tool's name as the worker calls it.
  */
 const MCP_SERVER = "smoke";
-const MCP_FIXTURE = "packages/assistant/test/fixtures/mcp-server.mjs";
+const MCP_FIXTURE = "packages/assistant/test/fixtures/mcp-server.ts";
 const MCP_TOOL = "echo";
 const MCP_CALL_NAME = `mcp__${MCP_SERVER}__${MCP_TOOL}`;
 /** Two tasks whose workers call it: the first twice, for Run Once then Always; the second once. */
