@@ -378,6 +378,65 @@ describe("MuxEndpoint", () => {
     }
   });
 
+  test("cancels unread unlocked request body immediately after onHttpRequest returns before long-lived response ends", async () => {
+    let cancelledOnClient = false;
+    let releaseResponse: (() => void) | null = null;
+    const { clientMux, hostMux } = await wiredMuxPair(async (head) => {
+      if (head.path === "/early-stream") {
+        // Deliberately ignore request `body` and return an open SSE stream.
+        const responseBody = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(utf8Encode("data: open\n\n"));
+            releaseResponse = () => controller.close();
+          },
+        });
+        return {
+          status: 200,
+          statusText: "OK",
+          headers: [["content-type", "text/event-stream"]],
+          body: responseBody,
+        };
+      }
+      return { status: 404, statusText: "Not Found", headers: [], body: null };
+    });
+
+    try {
+      let produced = 0;
+      const uploadBody = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (produced >= 48) {
+            controller.close();
+            return;
+          }
+          produced += 1;
+          controller.enqueue(new Uint8Array(256 * 1024));
+        },
+        cancel() {
+          cancelledOnClient = true;
+        },
+      });
+      const res = await clientMux.request({
+        method: "POST",
+        path: "/early-stream",
+        headers: [],
+        body: uploadBody,
+      });
+      expect(res.status).toBe(200);
+      const reader = res.body!.getReader();
+      expect(utf8Decode((await reader.read()).value!)).toBe("data: open\n\n");
+
+      // REQ_STOP must cancel the client upload BEFORE the SSE response finishes!
+      await vi.waitFor(() => {
+        expect(cancelledOnClient).toBe(true);
+      });
+      releaseResponse!();
+      expect((await reader.read()).done).toBe(true);
+    } finally {
+      clientMux.close();
+      hostMux.close();
+    }
+  });
+
   test("isolates STREAM_CREDIT by direction so RES_BODY credits cannot replenish REQ_BODY uploads", async () => {
     let seenReqChunks = 0;
     const sentTypes: number[] = [];
@@ -562,6 +621,9 @@ describe("WebRTC SDP rewrite & UDP call bridge", () => {
     const hostEcho = createSocket("udp4");
     await new Promise<void>((resolve) => hostEcho.bind(0, "127.0.0.1", () => resolve()));
     const hostPort = hostEcho.address().port;
+    hostEcho.on("message", (msg, rinfo) => {
+      hostEcho.send(Buffer.from(`echo:${msg.toString("utf8")}`), rinfo.port, rinfo.address);
+    });
 
     const { clientMux, hostMux } = await wiredMuxPair(async () => ({
       status: 404,
@@ -583,14 +645,20 @@ describe("WebRTC SDP rewrite & UDP call bridge", () => {
       const { sdp: rewritten } = (await adapted.json()) as { sdp: string };
       const bridgePort = extractHostUdpPort(rewritten)!;
 
-      // Plaintext epoch-0 DTLS warning alert (level=1, desc=100) must NOT tear down the bridge.
+      // Plaintext epoch-0 DTLS warning alert (level=1, desc=100) must NOT tear down the bridge
+      // even well past DTLS_ALERT_CLOSE_DELAY_MS (200 ms).
       const warnAlert = new Uint8Array(15);
       warnAlert[0] = 21;
       warnAlert[13] = 1;
       warnAlert[14] = 100;
       browserSock.send(warnAlert, bridgePort, "127.0.0.1");
-      await new Promise((r) => setTimeout(r, 40));
+      await new Promise((r) => setTimeout(r, 260));
       expect(pool.activeCount).toBe(1);
+      const stillAlive = new Promise<string>((resolve) => {
+        browserSock.once("message", (msg) => resolve(msg.toString("utf8")));
+      });
+      browserSock.send(Buffer.from("still-alive"), bridgePort, "127.0.0.1");
+      expect(await stillAlive).toBe("echo:still-alive");
 
       // Fatal alert (level=2) on epoch 0 DOES tear down the bridge.
       const fatalAlert = new Uint8Array(15);

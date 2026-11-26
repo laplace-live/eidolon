@@ -1,4 +1,5 @@
 import "../../../../packages/config/test/isolated-guard.ts";
+import { createSocket } from "node:dgram";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -277,6 +278,54 @@ describe("Local server Subspace proxy & host switching", () => {
     });
     expect(proxied404.status).toBe(404);
     expect(await proxied404.json()).toEqual({ detail: "Not Found" });
+
+    // 4f. Active tunneled calls keep local GET /api/local/status activeCalls === 1 (for desktop quitCheck)
+    //     and block host switching until a fatal DTLS alert tears down the UDP bridge.
+    const tunneledOfferRes = await fetch(`${local.base}/api/offer`, {
+      method: "POST",
+      headers: { ...local.session, "content-type": "application/json" },
+      body: JSON.stringify({ sdp: "v=0\r\n", type: "offer" }),
+    });
+    expect(tunneledOfferRes.status).toBe(200);
+    const { sdp: rewrittenSdp } = (await tunneledOfferRes.json()) as { sdp: string };
+    const bridgeMatch = /a=candidate:subspace 1 udp \d+ 127\.0\.0\.1 (\d+) typ host/.exec(
+      rewrittenSdp,
+    );
+    const bridgePort = bridgeMatch ? Number(bridgeMatch[1]) : null;
+    expect(bridgePort).toBeNumber();
+
+    const activeStatusRes = await fetch(`${local.base}/api/local/status`, {
+      headers: { ...local.session, "x-eidolon-target": "local" },
+    });
+    expect(activeStatusRes.status).toBe(200);
+    expect(await activeStatusRes.json()).toMatchObject({ activeCalls: 1 });
+
+    const blockedSwitchRes = await fetch(`${local.base}/api/local/subspace/active`, {
+      method: "POST",
+      headers: { ...local.session, "content-type": "application/json" },
+      body: JSON.stringify({ hostId: null }),
+    });
+    expect(blockedSwitchRes.status).toBe(409);
+    expect(await blockedSwitchRes.json()).toMatchObject({ error: { code: "call-active" } });
+
+    const dtlsAlert = new Uint8Array(15);
+    dtlsAlert[0] = 21;
+    dtlsAlert[13] = 2;
+    const alertSock = createSocket("udp4");
+    await new Promise<void>((resolve) =>
+      alertSock.send(dtlsAlert, bridgePort!, "127.0.0.1", () => {
+        alertSock.close();
+        resolve();
+      }),
+    );
+    await expect
+      .poll(async () => {
+        const res = await fetch(`${local.base}/api/local/status`, {
+          headers: { ...local.session, "x-eidolon-target": "local" },
+        });
+        return ((await res.json()) as { activeCalls: number }).activeCalls;
+      })
+      .toBe(0);
 
     // 5. Switching activeHostId back to null returns local chats and x-eidolon-subspace-host: local,
     //    while stale clients expecting the remote host receive 409 conflict without mutating local state.

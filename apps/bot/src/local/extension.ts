@@ -245,11 +245,12 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         isTunneledRequest: (request) => tunneledRequests.has(request),
       });
       let listedOffers = 0;
+      const localActiveCalls = () =>
+        context.signalling.activeSessions + identity.pendingOffers() + listedOffers;
       const app: LocalApp = {
         port: context.port,
-        // A connecting offer is a call already: a switch or restart now would cut it off.
-        activeCalls: () =>
-          context.signalling.activeSessions + identity.pendingOffers() + listedOffers,
+        // Include tunneled Relay/Direct calls so quit/restart guards never cut active UDP bridges.
+        activeCalls: () => localActiveCalls() + (subspaceManager?.activeCallCount ?? 0),
         restart: options.restart,
         onStop,
         memoryAdmin: options.memoryAdmin,
@@ -260,7 +261,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
       const subspace = new SubspaceManager({
         dataHome: dataHome(),
         serverVersion: () => manifest.version,
-        activeCalls: () => app.activeCalls(),
+        activeCalls: localActiveCalls,
         dispatchLocal: async (request) => {
           if (dispatchInProcess === null) {
             return localError(503, "unavailable", "Local routes are not initialized");

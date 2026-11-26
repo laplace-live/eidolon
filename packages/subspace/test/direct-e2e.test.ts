@@ -250,7 +250,7 @@ describe("Direct WebSocket SubspaceHost <-> SubspaceClient", () => {
     expect(events).not.toContain("device-connected");
   });
 
-  test("binds dual-stack :: so Direct clients pairing over ::1 IPv6 loopback connect", async () => {
+  test("binds dual-stack :: so Direct clients pairing over ::1 IPv6 loopback connect", async (ctx) => {
     const probe = createServer();
     const hasIpv6Loopback = await new Promise<boolean>((resolve) => {
       probe.once("error", () => resolve(false));
@@ -258,7 +258,10 @@ describe("Direct WebSocket SubspaceHost <-> SubspaceClient", () => {
         probe.close(() => resolve(true));
       });
     });
-    if (!hasIpv6Loopback) return;
+    if (!hasIpv6Loopback) {
+      ctx.skip();
+      return;
+    }
 
     const dir = mkdtempSync(join(tmpdir(), "subspace-ipv6-e2e-"));
     cleanups.push(() => rmSync(dir, { recursive: true, force: true }));

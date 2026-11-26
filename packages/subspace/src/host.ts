@@ -436,16 +436,7 @@ export class SubspaceHost {
       };
     }
 
-    if (
-      this.#stopped ||
-      offerEpoch !== this.#shareEpoch ||
-      (options.mode === "relay" && !this.#relayWanted)
-    ) {
-      throw new SubspaceConnectError(
-        "pairing-failed",
-        "Share settings changed while creating pairing offer",
-      );
-    }
+    this.#assertOfferActive(offerEpoch, options.mode);
 
     const currentIdentity = await this.#ensureIdentity();
     if (currentIdentity.shareMode !== options.mode) {
@@ -490,7 +481,25 @@ export class SubspaceHost {
         });
       }
     }
+    this.#assertOfferActive(offerEpoch, options.mode, inviteId);
     return offer;
+  }
+
+  #assertOfferActive(offerEpoch: number, mode: "direct" | "relay", inviteId?: string): void {
+    if (
+      this.#stopped ||
+      offerEpoch !== this.#shareEpoch ||
+      (mode === "relay" && !this.#relayWanted)
+    ) {
+      if (inviteId !== undefined) {
+        this.#invites.delete(inviteId);
+        this.#inviteAckWaiters.delete(inviteId);
+      }
+      throw new SubspaceConnectError(
+        "pairing-failed",
+        "Share settings changed while creating pairing offer",
+      );
+    }
   }
 
   revokeGrant(grantId: string): boolean {
@@ -638,8 +647,18 @@ export class SubspaceHost {
     const identity = await this.#ensureIdentity();
     const privateKey = this.#privateKey!;
     const relayHostId = await deriveRelayHostId(base64ToBytes(identity.publicKeyB64));
-    const url = httpToWsUrl(this.#deps.relayUrl(), RELAY_PATHS.HOST_CONTROL);
-    const ws = new WebSocket(url, { headers: { authorization: `Bearer ${jwt}` } });
+    let url: string;
+    let ws: WebSocket;
+    try {
+      url = httpToWsUrl(this.#deps.relayUrl(), RELAY_PATHS.HOST_CONTROL);
+      ws = new WebSocket(url, { headers: { authorization: `Bearer ${jwt}` } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid Relay URL";
+      logger.warning(`[subspace] Relay control URL error: ${message}`);
+      this.#setRelayState(false, message);
+      this.#scheduleRelayReconnect();
+      return;
+    }
     guardWsErrors(ws);
     this.#relayWs = ws;
 

@@ -24,10 +24,14 @@ import {
   type SubspacePairingOffer,
 } from "./protocol/index.ts";
 import { renderPairingQrSvg } from "./qr.ts";
-import { subspaceAuthUrl, subspaceRelayUrl } from "./settings.ts";
+import {
+  DEFAULT_SUBSPACE_AUTH_URL,
+  DEFAULT_SUBSPACE_RELAY_URL,
+  subspaceAuthUrl,
+  subspaceRelayUrl,
+} from "./settings.ts";
 import {
   type SubspaceGrantRecord,
-  type SubspaceRelayAuthRecord,
   type SubspaceSavedServer,
   type SubspaceServersFile,
   type SubspaceShareMode,
@@ -165,6 +169,12 @@ export class SubspaceManager {
     return this.store.readServers().activeHostId;
   }
 
+  get activeCallCount(): number {
+    let total = 0;
+    for (const client of this.#clients.values()) total += client.activeCallCount;
+    return total;
+  }
+
   async boot(): Promise<void> {
     if (this.#stopped) return;
     try {
@@ -197,6 +207,25 @@ export class SubspaceManager {
       identity.shareMode === "off"
         ? null
         : this.#offerSnapshot(this.host.activeOffer(identity.shareMode));
+    const needsRelay = identity.shareMode === "relay" || grants.some((g) => g.mode === "relay");
+    let relayUrl = DEFAULT_SUBSPACE_RELAY_URL;
+    let authUrl = relayAuth?.authUrl ?? DEFAULT_SUBSPACE_AUTH_URL;
+    let configRelayError: string | null = null;
+    try {
+      relayUrl = withoutTrailingSlashes(this.#relayUrlFn());
+    } catch (error) {
+      configRelayError = error instanceof Error ? error.message : String(error);
+    }
+    if (relayAuth?.authUrl === undefined) {
+      try {
+        authUrl =
+          this.#authUrlFn !== undefined
+            ? withoutTrailingSlashes(this.#authUrlFn())
+            : subspaceAuthUrl();
+      } catch (error) {
+        configRelayError ??= error instanceof Error ? error.message : String(error);
+      }
+    }
 
     return {
       activeHostId,
@@ -225,7 +254,7 @@ export class SubspaceManager {
         listening: this.host.listening,
         listeningPort: this.host.directPort,
         relayConnected: this.host.relayConnected,
-        relayError: this.host.relayError,
+        relayError: this.host.relayError ?? (needsRelay ? configRelayError : null),
         activeOffer,
         grants: grants.map((g) => ({
           id: g.id,
@@ -236,12 +265,8 @@ export class SubspaceManager {
         })),
       },
       relayAuth: {
-        authUrl:
-          relayAuth?.authUrl ??
-          (this.#authUrlFn !== undefined
-            ? withoutTrailingSlashes(this.#authUrlFn())
-            : subspaceAuthUrl()),
-        relayUrl: this.#relayUrlFn(),
+        authUrl,
+        relayUrl,
         status:
           relayAuth !== null
             ? "signed-in"
@@ -501,15 +526,24 @@ export class SubspaceManager {
   }
 
   async startRelayAuth(): Promise<SubspaceStateSnapshot> {
-    const relayUrl = this.#relayUrlFn();
     this.#devicePollAbort?.abort();
     const abort = new AbortController();
     this.#devicePollAbort = abort;
 
-    const authUrl =
-      this.#authUrlFn !== undefined
-        ? withoutTrailingSlashes(this.#authUrlFn())
-        : await discoverRelayAuthUrl(relayUrl, abort.signal);
+    let relayUrl: string;
+    let authUrl: string;
+    try {
+      relayUrl = withoutTrailingSlashes(this.#relayUrlFn());
+      authUrl =
+        this.#authUrlFn !== undefined
+          ? withoutTrailingSlashes(this.#authUrlFn())
+          : await discoverRelayAuthUrl(relayUrl, abort.signal);
+    } catch (error) {
+      throw codedError(
+        "bad-request",
+        error instanceof Error ? error.message : "Invalid Subspace URL",
+      );
+    }
     let started: DeviceAuthStart;
     try {
       started = await startDeviceAuthorization(authUrl, abort.signal);
@@ -540,16 +574,19 @@ export class SubspaceManager {
     this.#devicePollAbort?.abort();
     this.#devicePollAbort = null;
     this.#deviceFlow = IDLE_FLOW;
-    let current: SubspaceRelayAuthRecord | null = null;
-    try {
-      current = this.store.readRelayAuth();
-    } catch {
-      // Explicit sign-out must still clear an unreadable credential file.
-    }
+    const logoutRecord = this.store.readRelayAuthForLogout();
     this.store.saveRelayAuth(null);
     this.host.clearRelayInvites();
     this.host.stopRelay();
-    if (current !== null) await signOutRelaySession(current.authUrl, current.token);
+    if (logoutRecord !== null) {
+      if (logoutRecord.corrupt) {
+        logger.warning(
+          "[subspace] relay-auth.json was corrupted; cleared local credentials without revoking remote session",
+        );
+      } else {
+        await signOutRelaySession(logoutRecord.authUrl, logoutRecord.token);
+      }
+    }
     const identity = await this.store.loadOrCreateIdentity();
     if (identity.shareMode === "relay") {
       this.store.saveIdentity({ ...identity, shareMode: "off" });
@@ -582,9 +619,7 @@ export class SubspaceManager {
   }
 
   #totalActiveCalls(): number {
-    let total = this.#deps.activeCalls();
-    for (const client of this.#clients.values()) total += client.activeCallCount;
-    return total;
+    return this.#deps.activeCalls() + this.activeCallCount;
   }
 
   #offerSnapshot(offer: SubspacePairingOffer | null): SubspaceOfferSnapshot | null {

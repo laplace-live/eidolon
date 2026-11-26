@@ -759,7 +759,7 @@ describe("Subspace web UI regressions", () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    await send("POST /api/local/settings", { body: {} });
+    await send("PUT /api/local/settings", { body: {} });
     const reqInit = fetchSpy.mock.calls[0]?.[1];
     expect(
       (reqInit?.headers as Record<string, string> | undefined)?.["X-Eidolon-Expected-Host"],

@@ -723,6 +723,9 @@ export class MuxEndpoint {
   ): Promise<void> {
     try {
       const res = await host.onHttpRequest(head, body, signal);
+      if (body !== null && !body.locked) {
+        void body.cancel().catch(() => {});
+      }
       if (signal.aborted || this.#closed) {
         await res.body?.cancel().catch(() => {});
         return;

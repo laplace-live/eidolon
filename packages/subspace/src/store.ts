@@ -1,11 +1,12 @@
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, join } from "node:path";
-import { newId } from "@eidolon/config";
+import { newId, withoutTrailingSlashes } from "@eidolon/config";
 import { z } from "zod";
 import {
   constantTimeEqual,
   generateX25519KeyPair,
+  isAllowedRelayUrl,
   sha256Hex,
   utf8Encode,
 } from "./protocol/index.ts";
@@ -269,6 +270,37 @@ export class SubspaceStore {
 
   readRelayAuth(): SubspaceRelayAuthRecord | null {
     return readJsonFile(this.#relayAuthPath, RelayAuthRecordSchema.nullable());
+  }
+
+  /**
+   * Reads `relay-auth.json` for logout: falls back to recovering `authUrl` and `token` from
+   * partially corrupt JSON so the remote session can still be revoked, or reports `corrupt: true`
+   * when unparseable.
+   */
+  readRelayAuthForLogout():
+    | { readonly authUrl: string; readonly token: string; readonly corrupt: false }
+    | { readonly corrupt: true }
+    | null {
+    try {
+      const auth = this.readRelayAuth();
+      if (auth === null) return null;
+      return { authUrl: auth.authUrl, token: auth.token, corrupt: false };
+    } catch {
+      try {
+        const raw = JSON.parse(readFileSync(this.#relayAuthPath, "utf8")) as {
+          authUrl?: unknown;
+          token?: unknown;
+        } | null;
+        const authUrl = typeof raw?.authUrl === "string" ? raw.authUrl.trim() : "";
+        const token = typeof raw?.token === "string" ? raw.token.trim() : "";
+        if (authUrl && isAllowedRelayUrl(authUrl) && token) {
+          return { authUrl: withoutTrailingSlashes(authUrl), token, corrupt: false };
+        }
+      } catch {
+        // Unparseable JSON; caller warns before clearing the file.
+      }
+      return { corrupt: true };
+    }
   }
 
   saveRelayAuth(auth: SubspaceRelayAuthRecord | null): void {

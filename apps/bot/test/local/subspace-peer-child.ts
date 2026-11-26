@@ -29,7 +29,22 @@ const modules: LocalModules = {
     configureLogging: () => {},
     warmAudioModels: async () => {},
     createSignallingServer: () => ({
-      offer: async () => ({ status: 200, body: { sdp: "", type: "answer", pc_id: "peer" } }),
+      offer: async () => ({
+        status: 200,
+        body: {
+          sdp: [
+            "v=0",
+            "o=- 1 1 IN IP4 127.0.0.1",
+            "s=-",
+            "t=0 0",
+            "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+            "a=candidate:1 1 udp 2122260223 127.0.0.1 45678 typ host generation 0",
+            "",
+          ].join("\r\n"),
+          type: "answer",
+          pc_id: "peer",
+        },
+      }),
       patch: async () => ({ status: 200, body: { status: "success" } }),
       close: async () => {},
       activeSessions: 0,

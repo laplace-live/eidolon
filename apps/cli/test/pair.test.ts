@@ -6,12 +6,13 @@ import { dirname, join } from "node:path";
 import { dataHome } from "@eidolon/config";
 import { lockInfoPath } from "@eidolon/config/lock";
 import { SubspaceStore } from "@eidolon/subspace";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { pairMain, startHeadlessServer } from "../src/pair.ts";
 import { probeRunningLocalServer, subspaceMain } from "../src/subspace.ts";
 import { captureIo } from "./helpers.ts";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   rmSync(dataHome(), { recursive: true, force: true });
 });
 
@@ -105,6 +106,28 @@ describe("laplace-pair and laplace-subspace", () => {
     const corruptLogoutIo = captureIo();
     expect(await subspaceMain(["logout", "--json"], corruptLogoutIo.io)).toBe(0);
     expect(JSON.parse(corruptLogoutIo.stdout())).toEqual({ status: "signed-out" });
+    expect(corruptLogoutIo.stderr()).toContain("corrupted");
+    expect(store.readRelayAuth()).toBeNull();
+
+    // Partially corrupt relay-auth.json with valid authUrl + token still revokes the remote session.
+    const signOutFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    writeFileSync(
+      join(store.dir, "relay-auth.json"),
+      JSON.stringify({ authUrl: "http://127.0.0.1:4321/", token: "recover-tok", user: "bad" }),
+      "utf8",
+    );
+    const partialLogoutIo = captureIo();
+    expect(await subspaceMain(["logout", "--json"], partialLogoutIo.io)).toBe(0);
+    expect(partialLogoutIo.stderr()).toBe("");
+    expect(signOutFetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:4321/api/auth/sign-out",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ authorization: "Bearer recover-tok" }),
+      }),
+    );
     expect(store.readRelayAuth()).toBeNull();
 
     // Non-loopback plaintext relay/auth URLs must be rejected before talking to any server.

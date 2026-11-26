@@ -490,10 +490,14 @@ function CompanionPage({ bridge }: { readonly bridge: EidolonCompanion }) {
     if (activeHostId === undefined) return;
     setExpectedSubspaceHost(activeHostId);
     if (previousHostId.current !== undefined && previousHostId.current !== activeHostId) {
+      const nonSubspace = (query: { readonly queryKey: readonly unknown[] }) =>
+        query.queryKey[0] !== "subspace";
       avatarsResetForHost();
-      void queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] !== "subspace",
-      });
+      void (async () => {
+        await queryClient.cancelQueries({ predicate: nonSubspace });
+        queryClient.removeQueries({ predicate: nonSubspace, type: "inactive" });
+        await queryClient.resetQueries({ predicate: nonSubspace });
+      })();
     }
     previousHostId.current = activeHostId;
   }, [activeHostId, queryClient]);

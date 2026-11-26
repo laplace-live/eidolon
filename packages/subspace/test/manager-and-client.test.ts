@@ -24,12 +24,14 @@ import {
   SubspaceStore,
   sha256Hex,
   startClientHandshake,
+  subspaceRelayUrl,
   utf8Encode,
 } from "../src/index.ts";
 
 const cleanups: (() => Promise<void> | void)[] = [];
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   for (const fn of cleanups.splice(0).reverse()) await fn();
 });
@@ -843,6 +845,8 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     const inviteCreates: string[] = [];
     const ackEntered = Promise.withResolvers<void>();
     const releaseAck = Promise.withResolvers<void>();
+    const inviteEntered = Promise.withResolvers<void>();
+    const releaseInvite = Promise.withResolvers<void>();
 
     const httpServer = createServer((req, res) => {
       if (req.url === "/api/auth/token") {
@@ -890,6 +894,8 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
           ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
         } else if (msg.type === "invite_create") {
           inviteCreates.push(String(msg.inviteId));
+          inviteEntered.resolve();
+          await releaseInvite.promise;
           ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
         }
       });
@@ -931,5 +937,60 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     expect(inviteCreates).toEqual([]);
     expect(host.activeOffer()).toBeNull();
     expect((await store.loadOrCreateIdentity()).shareMode).toBe("off");
+
+    // Also test share state change during the invite_created ACK wait itself.
+    const offerDuringAck = host.createPairingOffer({ mode: "relay" });
+    await inviteEntered.promise;
+    host.clearInvites();
+    releaseInvite.resolve();
+
+    await expect(offerDuringAck).rejects.toMatchObject({ code: "pairing-failed" });
+    expect(host.activeOffer()).toBeNull();
+  });
+
+  test("invalid EIDOLON_SUBSPACE_RELAY_URL does not break getState or Direct mode and records relayError safely", async () => {
+    vi.stubEnv("EIDOLON_SUBSPACE_RELAY_URL", "http://evil.example.com");
+    const dir = tempDir("subspace-bad-relay-env-");
+    const store = new SubspaceStore(dir);
+    const mgr = new SubspaceManager({
+      dataHome: dir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => mgr.stop());
+
+    const initialState = await mgr.getState();
+    expect(initialState.share.relayError).toBeNull();
+
+    // Direct pairing must continue working even when EIDOLON_SUBSPACE_RELAY_URL is misconfigured.
+    const offerSnap = await mgr.createShareOffer({ mode: "direct", address: "127.0.0.1", port: 0 });
+    expect(offerSnap.state.share.activeOffer?.mode).toBe("direct");
+
+    // Bad relay URL surfaces bad-request on startRelayAuth and records relayError on relay connect.
+    await expect(mgr.startRelayAuth()).rejects.toMatchObject({ code: "bad-request" });
+
+    store.saveRelayAuth({
+      authUrl: "https://id.laplace.live",
+      relayUrl: "http://evil.example.com",
+      token: "tok",
+      user: { id: "u1", name: "User", email: "user@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const relayHost = new SubspaceHost({
+      store,
+      serverVersion: () => "0.19.0",
+      relayUrl: () => subspaceRelayUrl(),
+      dispatch: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => relayHost.stop());
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ token: "h.p.s", expiresAt: Date.now() + 60_000 }),
+    );
+    relayHost.startRelay();
+    await vi.waitFor(() => {
+      expect(relayHost.relayError).toContain("https/wss or loopback");
+    });
   });
 });

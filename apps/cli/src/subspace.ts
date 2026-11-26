@@ -12,6 +12,8 @@ import {
 import { lockInfoPath } from "@eidolon/config/lock";
 import {
   completeDeviceAuthorization,
+  DEFAULT_SUBSPACE_AUTH_URL,
+  DEFAULT_SUBSPACE_RELAY_URL,
   discoverRelayAuthUrl,
   isAllowedRelayUrl,
   listShareableAddresses,
@@ -293,8 +295,22 @@ export async function subspaceMain(
     } catch {
       // Corrupt relay-auth.json should not block inspecting Subspace status offline.
     }
-    const authUrl = relayAuth?.authUrl ?? subspaceAuthUrl();
-    const relayUrl = relayAuth?.relayUrl ?? subspaceRelayUrl();
+    let authUrl = relayAuth?.authUrl ?? DEFAULT_SUBSPACE_AUTH_URL;
+    if (relayAuth?.authUrl === undefined) {
+      try {
+        authUrl = subspaceAuthUrl();
+      } catch {
+        // Show default auth URL in offline status when env override is invalid.
+      }
+    }
+    let relayUrl = relayAuth?.relayUrl ?? DEFAULT_SUBSPACE_RELAY_URL;
+    if (relayAuth?.relayUrl === undefined) {
+      try {
+        relayUrl = subspaceRelayUrl();
+      } catch {
+        // Show default relay URL in offline status when env override is invalid.
+      }
+    }
     const snapshot = {
       running: false,
       activeHostId: servers.activeHostId,
@@ -399,14 +415,17 @@ export async function subspaceMain(
         return 1;
       }
     } else {
-      let current = null;
-      try {
-        current = store.readRelayAuth();
-      } catch {
-        // Explicit sign-out must still clear an unreadable credential file.
-      }
+      const logoutRecord = store.readRelayAuthForLogout();
       store.saveRelayAuth(null);
-      if (current !== null) await signOutRelaySession(current.authUrl, current.token);
+      if (logoutRecord !== null) {
+        if (logoutRecord.corrupt) {
+          err(
+            "Warning: relay-auth.json was corrupted; cleared local credentials without revoking remote session.",
+          );
+        } else {
+          await signOutRelaySession(logoutRecord.authUrl, logoutRecord.token);
+        }
+      }
       const identity = await store.loadOrCreateIdentity();
       if (identity.shareMode === "relay") {
         store.saveIdentity({ ...identity, shareMode: "off" });
