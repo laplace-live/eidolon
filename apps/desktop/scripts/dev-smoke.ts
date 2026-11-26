@@ -1010,6 +1010,7 @@ async function chat(walk: Walk, driven: Driven, step: Step) {
     },
     { first: REPLY[0].slice(0, 4), rest: REPLY[1].slice(0, 6) },
   );
+  const replyFrom = smoke.log("main").length;
   await box.fill(CHAT_MESSAGE);
   await page.evaluate(() => {
     const seen = (globalThis as { __devSmokeStream?: { sentAt: number } }).__devSmokeStream;
@@ -1042,6 +1043,17 @@ async function chat(walk: Walk, driven: Driven, step: Step) {
       !record.cancelled,
     `first part shown ${Math.round(firstMs)} ms after sending, the rest ${Math.round(gapMs)} ms later (the fake held ${fakes.replyHoldMs} ms)`,
   );
+  if (walk.background) {
+    const expectedChatNotice = `${NOTICE}${persona.name}: ${REPLY.join("")}`;
+    const chatNotice = await smoke
+      .waitForLine("main", expectedChatNotice, { from: replyFrom, timeoutMs: 15_000 })
+      .catch(() => null);
+    step.check(
+      "the chat watch tells of her reply",
+      chatNotice !== null && fromEidolon(chatNotice) === expectedChatNotice,
+      chatNotice === null ? "main.log has no chat notice within 15 s" : after(chatNotice),
+    );
+  }
   await step.shot(page, "chat");
 
   // A picture and a text file, set on the composer's input (never a click on it, which opens the
@@ -2583,12 +2595,13 @@ async function waitingTask(walk: Walk, driven: Driven, step: Step) {
   // Main's words follow the page's language, English here.
   const { notice } = STRINGS.en;
   if (walk.background) {
+    const startLine = noticeLine(persona.name, notice.start);
     const shown = await smoke
-      .waitForLine("main", NOTICE, { from, timeoutMs: 60_000 })
+      .waitForLine("main", startLine, { from, timeoutMs: 60_000 })
       .catch(() => null);
     step.check(
       "the watch tells of the wait: her name, the start's words and her goal",
-      shown !== null && fromEidolon(shown) === noticeLine(persona.name, notice.start),
+      shown !== null && fromEidolon(shown) === startLine,
       shown === null ? "main.log has no notice within 60 s" : after(shown),
     );
   }
@@ -2610,20 +2623,20 @@ async function waitingTask(walk: Walk, driven: Driven, step: Step) {
     ended === null ? "the task didn't stop within 15 s" : `task ${task} cancelled by Deny`,
   );
   if (walk.background) {
+    const endLine = noticeLine(persona.name, notice.cancelled);
     const shown = await smoke
-      .waitForLine("main", NOTICE, { from: denied, timeoutMs: 45_000 })
+      .waitForLine("main", endLine, { from: denied, timeoutMs: 45_000 })
       .catch(() => null);
+    const taskGoalSuffix = ` / ${TASK_GOAL}`;
     const notices = smoke
       .log("main")
       .slice(from)
       .split(/\r?\n/)
-      .filter((line) => line.includes(NOTICE)).length;
+      .filter((line) => line.includes(NOTICE) && line.endsWith(taskGoalSuffix)).length;
     step.check(
       "the watch tells of its end, and of each once",
-      shown !== null &&
-        fromEidolon(shown) === noticeLine(persona.name, notice.cancelled) &&
-        notices === 2,
-      `${shown === null ? "main.log has no notice within 45 s of Deny" : after(shown)}; ${notices} notice(s) since the line`,
+      shown !== null && fromEidolon(shown) === endLine && notices === 2,
+      `${shown === null ? "main.log has no notice within 45 s of Deny" : after(shown)}; ${notices} task notice(s) since the line`,
     );
   }
 }

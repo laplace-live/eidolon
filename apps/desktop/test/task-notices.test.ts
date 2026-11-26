@@ -31,6 +31,7 @@ const TASK = "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a";
 const notice: Notice = {
   task: TASK,
   chat: CHAT,
+  personaId: "milky-green",
   persona: "Milky Green",
   kind: "start",
   goal: "Write a React TodoMVC in one index.html",
@@ -354,8 +355,22 @@ describe("TaskWatch", () => {
     backend.tasks = [snapshot(TASK, RUN_TESTS), snapshot(TASK_B, START)];
     await time.advance(3_000);
     expect(shown.map((entry) => entry.notice)).toEqual([
-      { task: TASK, chat: CHAT, persona: "明前奶绿", kind: "command", goal: GOAL },
-      { task: TASK_B, chat: CHAT, persona: "明前奶绿", kind: "start", goal: GOAL },
+      {
+        task: TASK,
+        chat: CHAT,
+        personaId: MILKY.id,
+        persona: "明前奶绿",
+        kind: "command",
+        goal: GOAL,
+      },
+      {
+        task: TASK_B,
+        chat: CHAT,
+        personaId: MILKY.id,
+        persona: "明前奶绿",
+        kind: "start",
+        goal: GOAL,
+      },
     ]);
     await time.advance(30_000);
     expect(told(shown)).toEqual(["A command", "B start"]);
@@ -394,7 +409,7 @@ describe("TaskWatch", () => {
       const { notices } = await afterChange(change);
       expect([kind, notices]).toEqual([
         kind,
-        [{ task: TASK, chat: CHAT, persona: "明前奶绿", kind, goal: GOAL }],
+        [{ task: TASK, chat: CHAT, personaId: MILKY.id, persona: "明前奶绿", kind, goal: GOAL }],
       ]);
     }
   });
@@ -561,7 +576,9 @@ describe("TaskWatch", () => {
 
   test("a task without a chat is told without a name, and asks for none", async () => {
     const { notices, paths } = await afterChange({ ...START, chat: undefined });
-    expect(notices).toEqual([{ task: TASK, chat: null, persona: null, kind: "start", goal: GOAL }]);
+    expect(notices).toEqual([
+      { task: TASK, chat: null, personaId: null, persona: null, kind: "start", goal: GOAL },
+    ]);
     expect(paths).toEqual([TASKS, TASKS]);
   });
 

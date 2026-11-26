@@ -32,8 +32,13 @@ describe("STRINGS", () => {
     expect(Object.keys(STRINGS)).toEqual([...LANGUAGES]);
     expect(shape(zh).sort()).toEqual(shape(en).sort());
     for (const language of LANGUAGES) {
-      const { label, text, notice } = STRINGS[language];
-      const blank = [...Object.entries(label), ...Object.entries(text), ...Object.entries(notice)]
+      const { label, text, notice, chatNotice } = STRINGS[language];
+      const blank = [
+        ...Object.entries(label),
+        ...Object.entries(text),
+        ...Object.entries(notice),
+        ...Object.entries(chatNotice),
+      ]
         .filter(([, value]) => typeof value === "string" && value.trim() === "")
         .map(([key]) => `${language} ${key}`);
       expect(blank).toEqual([]);
@@ -77,6 +82,23 @@ describe("STRINGS", () => {
         /[.。!！]$/.test(line),
       );
       expect([language, stopped]).toEqual([language, []]);
+    }
+  });
+
+  test("chat notification lines are sentence case, ending with no stop, in both languages", () => {
+    const keysAndTypes = (group: object) =>
+      Object.entries(group)
+        .map(([key, value]) => `${key}: ${typeof value}`)
+        .sort();
+    expect(keysAndTypes(zh.chatNotice)).toEqual(keysAndTypes(en.chatNotice));
+    const english = [en.chatNotice.photo, en.chatNotice.photos(2), en.chatNotice.voice];
+    expect(english.filter((line) => titleCase(line) === line)).toEqual([]);
+    for (const language of LANGUAGES) {
+      const { photo, photos, voice, listSeparator } = STRINGS[language].chatNotice;
+      for (const line of [photo, photos(2), voice]) {
+        expect(line).not.toMatch(/[.。!！]$/);
+      }
+      expect(listSeparator).toBe(language === "zh-Hans" ? "、" : ", ");
     }
   });
 

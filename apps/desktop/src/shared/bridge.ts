@@ -54,9 +54,21 @@ export const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 
 /**
  * What the menus and the notifications ask of the app's page; apps/web ignores one it doesn't
- * know. `open-task:<chat>:<task>` opens a task in its chat (openTaskCommand); `call` opens /call.
+ * know. `open-chat:<chat>` opens a chat, `open-task:<chat>:<task>` opens a task in its chat,
+ * and `call` opens /call.
  */
-export type DesktopCommand = "settings" | "tasks" | "call" | `open-task:${string}:${string}`;
+export type DesktopCommand =
+  | "settings"
+  | "tasks"
+  | "call"
+  | `open-chat:${string}`
+  | `open-task:${string}:${string}`;
+
+/** The command that opens `chat`; throws unless it is an id. */
+export function openChatCommand(chat: string): `open-chat:${string}` {
+  if (!ID_PATTERN.test(chat)) throw new Error("opening a chat takes a chat's id");
+  return `open-chat:${chat}`;
+}
 
 /** The command that opens `task` in `chat`; throws unless both are ids. */
 export function openTaskCommand(chat: string, task: string): `open-task:${string}:${string}` {
@@ -351,13 +363,16 @@ export interface ModelRef {
 }
 
 /** A persona's or a model's id: a lowercase slug, never a path. */
-const ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+export const SLUG_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 export function isModelRef(value: unknown): value is ModelRef {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const { persona, model } = value as Record<string, unknown>;
   return (
-    typeof persona === "string" && ID.test(persona) && typeof model === "string" && ID.test(model)
+    typeof persona === "string" &&
+    SLUG_PATTERN.test(persona) &&
+    typeof model === "string" &&
+    SLUG_PATTERN.test(model)
   );
 }
 
@@ -434,7 +449,7 @@ const COORDINATE_LIMIT = 1e6;
 /** A window's side past any display's. */
 const SIDE_LIMIT = 10_000;
 /** A model's id, as the server mints them. */
-const MODEL_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const MODEL_ID = SLUG_PATTERN;
 /** An outfit's key, as the server takes them. */
 const OUTFIT_ID = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const MENU_MODELS = 50;

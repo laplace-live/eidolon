@@ -145,6 +145,11 @@ export function gatekeeperCheck(run: ToolRun): Check {
   };
 }
 
+export const ALLOWED_MAC_TEAMS: readonly string[] = ["B5483RCL5H", "9H3CCD4YMM"];
+const APP_BUNDLE_ID = "live.laplace.eidolon";
+const COMM_ENTITLEMENT = "com.apple.developer.usernotifications.communication";
+const EMAIL_IN_TEXT = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+
 /** The app's notarization ticket stapled to it, which stapler validates or exits 65. */
 export function stapleCheck(run: ToolRun): Check {
   return {
@@ -152,6 +157,322 @@ export function stapleCheck(run: ToolRun): Check {
     pass: run.status === 0,
     detail: run.output.trim().split(/\r?\n/).at(-1) ?? "",
   };
+}
+
+function isAllowedOrgDevId(name: string | undefined, team: string | null | undefined): boolean {
+  return (
+    typeof team === "string" &&
+    ALLOWED_MAC_TEAMS.includes(team) &&
+    name !== undefined &&
+    PUBLISHER_NAMES.some((org) => name === `Developer ID Application: ${org} (${team})`)
+  );
+}
+
+/** Verifies macOS Developer ID signing identity belongs strictly to an allowed org without personal info. */
+export function macSignerCheck(run: ToolRun): Check {
+  const sig = codeSignature(run.output);
+  const leaf = sig.authorities[0] ?? "";
+  const orgAllowed = isAllowedOrgDevId(leaf, sig.team);
+  const noEmail = sig.authorities.every((auth) => !auth.includes("@"));
+  const pass = run.status === 0 && sig.signed && orgAllowed && noEmail;
+  return {
+    name: "macOS signer is an allowed organization Developer ID without personal identifiers",
+    pass,
+    detail: sig.signed ? `${leaf || "no leaf"}, team=${sig.team ?? "none"}` : firstLine(run.output),
+  };
+}
+
+function parseRfc2253Fields(subjectLine: string): Map<string, string> {
+  const fields = new Map<string, string>();
+  const body = subjectLine.replace(/^subject=\s*/i, "");
+  const parts: string[] = [];
+  let current = "";
+  let escaped = false;
+  let inQuotes = false;
+  for (const ch of body) {
+    if (escaped) {
+      current += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (!inQuotes && (ch === "," || ch === "+")) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim() !== "") parts.push(current.trim());
+  for (const part of parts) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    const key = part.slice(0, eq).trim();
+    const val = part.slice(eq + 1).trim();
+    if (!fields.has(key)) fields.set(key, val);
+  }
+  return fields;
+}
+
+function decodeXmlEntities(text: string): string {
+  return text.replace(
+    /&(lt|gt|amp|quot|apos|#(\d+)|#x([0-9a-fA-F]+));/g,
+    (full, name: string, dec?: string, hex?: string) => {
+      if (dec !== undefined) return String.fromCodePoint(Number.parseInt(dec, 10));
+      if (hex !== undefined) return String.fromCodePoint(Number.parseInt(hex, 16));
+      switch (name) {
+        case "lt":
+          return "<";
+        case "gt":
+          return ">";
+        case "amp":
+          return "&";
+        case "quot":
+          return '"';
+        case "apos":
+          return "'";
+        default:
+          return full;
+      }
+    },
+  );
+}
+
+const XML_WS = /\s+/y;
+const XML_OPEN = /<([a-zA-Z0-9_-]+)(?:\s[^>]*)?(\/?)>/y;
+const XML_KEY_OPEN = /<key(?:\s[^>]*)?(\/?)>/y;
+const XML_PLIST_OPEN = /<plist\b[^>]*>/y;
+
+/** Parses Apple's XML1 plist output (supports `<date>` and `<data>`, unlike `plutil -convert json`). */
+export function parseAppleXmlPlist(xml: string): unknown {
+  let pos = 0;
+
+  const matchAt = (re: RegExp): RegExpExecArray | null => {
+    re.lastIndex = pos;
+    return re.exec(xml);
+  };
+
+  const skipTrivia = () => {
+    while (pos < xml.length) {
+      const ws = matchAt(XML_WS);
+      if (ws !== null) {
+        pos += ws[0].length;
+        continue;
+      }
+      if (xml.startsWith("<!--", pos)) {
+        const end = xml.indexOf("-->", pos + 4);
+        if (end < 0) throw new Error("unterminated XML comment in plist");
+        pos = end + 3;
+        continue;
+      }
+      if (xml.startsWith("<?", pos)) {
+        const end = xml.indexOf("?>", pos + 2);
+        if (end < 0) throw new Error("unterminated XML processing instruction in plist");
+        pos = end + 2;
+        continue;
+      }
+      if (xml.startsWith("<!", pos)) {
+        const end = xml.indexOf(">", pos + 2);
+        if (end < 0) throw new Error("unterminated XML declaration in plist");
+        pos = end + 1;
+        continue;
+      }
+      break;
+    }
+  };
+
+  const readScalarText = (tag: string): string => {
+    const close = `</${tag}>`;
+    const end = xml.indexOf(close, pos);
+    if (end < 0) throw new Error(`missing ${close} in plist`);
+    const raw = xml.slice(pos, end);
+    pos = end + close.length;
+    return raw;
+  };
+
+  const readValue = (): unknown => {
+    skipTrivia();
+    const open = matchAt(XML_OPEN);
+    if (open === null) {
+      throw new Error(`unexpected plist token near ${xml.slice(pos, pos + 40)}`);
+    }
+    const tag = open[1] as string;
+    const selfClosing = open[2] === "/";
+    pos += open[0].length;
+
+    if (selfClosing) {
+      if (tag === "true") return true;
+      if (tag === "false") return false;
+      if (tag === "dict") return {};
+      if (tag === "array") return [];
+      if (tag === "string" || tag === "data" || tag === "date") return "";
+      throw new Error(`unsupported empty plist element <${tag}/>`);
+    }
+
+    if (tag === "dict") {
+      const dict: Record<string, unknown> = {};
+      while (true) {
+        skipTrivia();
+        if (xml.startsWith("</dict>", pos)) {
+          pos += 7;
+          return dict;
+        }
+        const keyOpen = matchAt(XML_KEY_OPEN);
+        if (keyOpen === null) {
+          throw new Error(`expected <key> inside <dict> near ${xml.slice(pos, pos + 40)}`);
+        }
+        pos += keyOpen[0].length;
+        const keyName = keyOpen[1] === "/" ? "" : decodeXmlEntities(readScalarText("key"));
+        const value = readValue();
+        Object.defineProperty(dict, keyName, {
+          value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
+    }
+
+    if (tag === "array") {
+      const items: unknown[] = [];
+      while (true) {
+        skipTrivia();
+        if (xml.startsWith("</array>", pos)) {
+          pos += 8;
+          return items;
+        }
+        items.push(readValue());
+      }
+    }
+
+    const raw = readScalarText(tag);
+    if (tag === "string") return decodeXmlEntities(raw);
+    if (tag === "date") return decodeXmlEntities(raw).trim();
+    if (tag === "data") return raw.replace(/\s+/g, "");
+    if (tag === "integer") return Number.parseInt(raw.trim(), 10);
+    if (tag === "real") return Number.parseFloat(raw.trim());
+    throw new Error(`unsupported plist element <${tag}>`);
+  };
+
+  skipTrivia();
+  const plistOpen = matchAt(XML_PLIST_OPEN);
+  if (plistOpen === null) throw new Error("expected <plist> root element");
+  pos += plistOpen[0].length;
+  const root = readValue();
+  skipTrivia();
+  if (!xml.startsWith("</plist>", pos)) {
+    throw new Error(`expected </plist> near ${xml.slice(pos, pos + 40)}`);
+  }
+  return root;
+}
+
+/** Anti-doxxing and entitlement checks on a decoded macOS `.provisionprofile` plist and X.509 cert subjects. */
+export function provisioningProfileChecks(
+  profile: unknown,
+  certSubjects: readonly ToolRun[],
+): Check[] {
+  const record =
+    profile !== null && typeof profile === "object"
+      ? (profile as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+  const teams = Array.isArray(record.TeamIdentifier)
+    ? record.TeamIdentifier.filter((value): value is string => typeof value === "string")
+    : [];
+  const teamName = typeof record.TeamName === "string" ? record.TeamName : "";
+  const teamPass =
+    teams.length > 0 &&
+    teams.every((team) => ALLOWED_MAC_TEAMS.includes(team)) &&
+    PUBLISHER_NAMES.includes(teamName);
+
+  const devices = Array.isArray(record.ProvisionedDevices) ? record.ProvisionedDevices : [];
+  const profileWithoutCerts = JSON.stringify({
+    ...record,
+    DeveloperCertificates: undefined,
+    "DER-Encoded-Profile": undefined,
+  });
+  const leakedEmail = EMAIL_IN_TEXT.exec(profileWithoutCerts)?.[0] ?? null;
+  const privacyPass = devices.length === 0 && leakedEmail === null;
+
+  const certs = Array.isArray(record.DeveloperCertificates) ? record.DeveloperCertificates : [];
+  const badCerts: string[] = [];
+  if (certs.length === 0) {
+    badCerts.push("no DeveloperCertificates");
+  } else if (certSubjects.length !== certs.length) {
+    badCerts.push(
+      `decoded ${certSubjects.length} certificate subjects for ${certs.length} certificates`,
+    );
+  } else {
+    for (const [index, cert] of certSubjects.entries()) {
+      if (cert.status !== 0) {
+        badCerts.push(`cert[${index}] exit ${cert.status ?? "null"}`);
+        continue;
+      }
+      if (cert.output.includes("@")) {
+        badCerts.push(`cert[${index}] exposes an email address`);
+        continue;
+      }
+      const subjectLine =
+        cert.output
+          .split(/\r?\n/)
+          .find((line) => /^subject=/i.test(line))
+          ?.trim() ?? cert.output.trim();
+      const fields = parseRfc2253Fields(subjectLine);
+      if (fields.has("emailAddress")) {
+        badCerts.push(`cert[${index}] exposes emailAddress`);
+        continue;
+      }
+      const ou = fields.get("OU");
+      const o = fields.get("O");
+      const cn = fields.get("CN");
+      const cnAllowed = isAllowedOrgDevId(cn, ou);
+      const oAllowed = o === undefined || PUBLISHER_NAMES.includes(o);
+      if (!cnAllowed || !oAllowed) {
+        badCerts.push(`cert[${index}] unexpected subject (${subjectLine})`);
+      }
+    }
+  }
+
+  const entitlements =
+    record.Entitlements !== null && typeof record.Entitlements === "object"
+      ? (record.Entitlements as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+  const appId = entitlements["com.apple.application-identifier"];
+  const hasAppId =
+    typeof appId === "string" &&
+    teams.some((team) => ALLOWED_MAC_TEAMS.includes(team) && appId === `${team}.${APP_BUNDLE_ID}`);
+  const hasComm = entitlements[COMM_ENTITLEMENT] === true;
+
+  return [
+    {
+      name: "embedded.provisionprofile belongs to an allowed organization team",
+      pass: teamPass,
+      detail: `TeamName=${teamName || "none"}, TeamIdentifier=[${teams.join(", ")}]`,
+    },
+    {
+      name: "embedded.provisionprofile has no provisioned device UDIDs or email addresses",
+      pass: privacyPass,
+      detail: privacyPass
+        ? "no ProvisionedDevices, no email"
+        : `devices=${devices.length}, email=${leakedEmail ?? "none"}`,
+    },
+    {
+      name: "embedded.provisionprofile holds only organization Developer ID certificates",
+      pass: badCerts.length === 0,
+      detail: badCerts.length === 0 ? `${certs.length} org certificate(s)` : badCerts.join("; "),
+    },
+    {
+      name: "embedded.provisionprofile grants communication notifications for live.laplace.eidolon",
+      pass: hasAppId && hasComm,
+      detail: `application-identifier=${typeof appId === "string" ? appId : "none"}, communication=${String(entitlements[COMM_ENTITLEMENT])}`,
+    },
+  ];
 }
 
 /** What the script's PowerShell pipeline emits for each file, through ConvertTo-Json. */
@@ -261,9 +582,8 @@ export function presenceCheck(files: readonly string[], required: readonly strin
 }
 
 function run(command: string, args: readonly string[]): ToolRun {
-  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
-  if (result.error) throw result.error;
-  return { status: result.status, output: `${result.stdout}${result.stderr}` };
+  const { status, stdout, stderr } = runRaw(command, args);
+  return { status, output: `${stdout}${stderr}` };
 }
 
 /** Every file under `dir`, links aside. */
@@ -288,12 +608,98 @@ export function payloadNativesCheck(
   };
 }
 
+function runRaw(
+  command: string,
+  args: readonly string[],
+  input?: string | Uint8Array,
+): {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+} {
+  const result = spawnSync(command, args, {
+    ...(input !== undefined ? { input } : {}),
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  if (result.error) throw result.error;
+  return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+}
+
+function checkProvisioningProfile(app: string, record: (check: Check) => void): void {
+  const profilePath = join(app, "Contents", "embedded.provisionprofile");
+  const expectProfile = process.env.EIDOLON_EXPECT_PROVISIONING_PROFILE === "1";
+  if (!existsSync(profilePath)) {
+    if (expectProfile) {
+      record({
+        name: "embedded.provisionprofile is present when provisioned signing was enabled",
+        pass: false,
+        detail: `missing: ${profilePath}`,
+      });
+    }
+    return;
+  }
+  const cms = runRaw("security", ["cms", "-D", "-i", profilePath]);
+  if (cms.status !== 0) {
+    record({
+      name: "embedded.provisionprofile decodes cleanly",
+      pass: false,
+      detail: `security cms exited ${cms.status ?? "null"}: ${firstLine(`${cms.stdout}\n${cms.stderr}`)}`,
+    });
+    return;
+  }
+  const xmlRun = runRaw("plutil", ["-convert", "xml1", "-o", "-", "-"], cms.stdout);
+  if (xmlRun.status !== 0) {
+    record({
+      name: "embedded.provisionprofile converts to XML plist",
+      pass: false,
+      detail: `plutil exited ${xmlRun.status ?? "null"}: ${firstLine(`${xmlRun.stdout}\n${xmlRun.stderr}`)}`,
+    });
+    return;
+  }
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parseAppleXmlPlist(xmlRun.stdout) as Record<string, unknown>;
+  } catch (error) {
+    record({
+      name: "embedded.provisionprofile parses as plist XML",
+      pass: false,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+  const certs = Array.isArray(parsed.DeveloperCertificates)
+    ? parsed.DeveloperCertificates.filter((value): value is string => typeof value === "string")
+    : [];
+  const subjects = certs.map((b64) => {
+    const out = runRaw(
+      "openssl",
+      ["x509", "-inform", "der", "-noout", "-subject", "-email", "-nameopt", "RFC2253"],
+      Buffer.from(b64, "base64"),
+    );
+    return { status: out.status, output: `${out.stdout}${out.stderr}` };
+  });
+  for (const check of provisioningProfileChecks(parsed, subjects)) record(check);
+}
+
 function checkMac(record: (check: Check) => void): void {
   const app = join(DESKTOP, ".out", "mac-arm64", "LAPLACE Eidolon.app");
   if (!existsSync(app)) throw new Error(`No ${app}: package the release first`);
   record(verifyCheck(run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", app])));
+  record(macSignerCheck(run("codesign", ["-dvvv", app])));
   record(gatekeeperCheck(run("spctl", ["--assess", "--type", "execute", "--verbose=4", app])));
   record(stapleCheck(run("xcrun", ["stapler", "validate", app])));
+  const macNotify = join(app, "Contents", "Resources", "native", "mac_notify.node");
+  if (existsSync(macNotify)) {
+    record(nativeCheck("native/mac_notify.node", run("codesign", ["-dvvv", macNotify])));
+  } else {
+    record({
+      name: "native/mac_notify.node ships in Contents/Resources/native",
+      pass: false,
+      detail: `missing: ${macNotify}`,
+    });
+  }
+  checkProvisioningProfile(app, record);
   const payload = join(app, "Contents", "Resources", "eidolon");
   const pnpmExe = join(shimPnpmExe(payload, { os: "darwin", cpu: "arm64" }), "pnpm");
   const natives = existsSync(payload)

@@ -34,6 +34,7 @@ import {
   isLanguage,
   isThemeSetting,
   loginItemStateOf,
+  openChatCommand,
   openTaskCommand,
   type PageChannel,
   pageAt,
@@ -245,8 +246,9 @@ test("the versions are main's answer, and empty strings where it answered someth
   }
 });
 
-describe("openTaskCommand", () => {
-  test("names a chat's task by both ids", () => {
+describe("openChatCommand and openTaskCommand", () => {
+  test("names a chat or a chat's task by its ids", () => {
+    expect(openChatCommand(CHAT)).toBe(`open-chat:${CHAT}`);
     expect(openTaskCommand(CHAT, TASK)).toBe(`open-task:${CHAT}:${TASK}`);
   });
 
@@ -262,6 +264,7 @@ describe("openTaskCommand", () => {
       "settings",
     ]) {
       expect([id, ID_PATTERN.test(id)]).toEqual([id, false]);
+      expect(() => openChatCommand(id)).toThrow();
       expect(() => openTaskCommand(id, TASK)).toThrow();
       expect(() => openTaskCommand(CHAT, id)).toThrow();
     }

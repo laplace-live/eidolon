@@ -11,10 +11,13 @@ import {
   designatedRequirement,
   ensureNoWindowsInstall,
   gatekeeperCheck,
+  macSignerCheck,
   nativeCheck,
+  parseAppleXmlPlist,
   parseAuthenticode,
   payloadNativesCheck,
   presenceCheck,
+  provisioningProfileChecks,
   requiredInInstall,
   requirementCheck,
   signatureChecks,
@@ -461,5 +464,164 @@ describe("Windows", () => {
       `LAPLACE Eidolon is already installed for this user in ${INSTALL}`,
     );
     expect(() => ensureNoWindowsInstall(INSTALL, () => false)).not.toThrow();
+  });
+});
+
+describe("macOS anti-doxxing checks", () => {
+  const ORG_PROFILE = {
+    TeamIdentifier: ["9H3CCD4YMM"],
+    TeamName: "LAPLACE Live LLC",
+    DeveloperCertificates: ["ZmFrZS1jZXJ0"],
+    Entitlements: {
+      "com.apple.application-identifier": "9H3CCD4YMM.live.laplace.eidolon",
+      "com.apple.developer.usernotifications.communication": true,
+    },
+  };
+  const ORG_CERT = ok(
+    "subject=UID=dev,CN=Developer ID Application: LAPLACE Live LLC (9H3CCD4YMM),OU=9H3CCD4YMM,O=LAPLACE Live LLC,C=US\n",
+  );
+  const SPARANID_CERT = ok(
+    "subject=CN=Developer ID Application: Sparanoid\\, Inc. (B5483RCL5H),OU=B5483RCL5H,O=Sparanoid\\, Inc.,C=US\n",
+  );
+
+  test("accepts allowed organization Developer ID app signatures and rejects personal signers", () => {
+    expect(macSignerCheck(ok(APP_SIGNATURE)).pass).toBe(true);
+    const personalTeam = APP_SIGNATURE.replaceAll("9H3CCD4YMM", "PERS123456").replaceAll(
+      "LAPLACE Live LLC",
+      "Jane Doe",
+    );
+    expect(macSignerCheck(ok(personalTeam)).pass).toBe(false);
+    const personalNameSameTeam = APP_SIGNATURE.replace(
+      "Authority=Developer ID Application: LAPLACE Live LLC (9H3CCD4YMM)",
+      "Authority=Developer ID Application: Jane Doe (9H3CCD4YMM)",
+    );
+    expect(macSignerCheck(ok(personalNameSameTeam)).pass).toBe(false);
+  });
+
+  test("accepts an organization provisioning profile with communication notifications", () => {
+    const checks = provisioningProfileChecks(ORG_PROFILE, [ORG_CERT]);
+    expect(checks.every((check) => check.pass)).toBe(true);
+
+    const sparanoidChecks = provisioningProfileChecks(
+      {
+        ...ORG_PROFILE,
+        TeamIdentifier: ["B5483RCL5H"],
+        TeamName: "Sparanoid, Inc.",
+        Entitlements: {
+          "com.apple.application-identifier": "B5483RCL5H.live.laplace.eidolon",
+          "com.apple.developer.usernotifications.communication": true,
+        },
+      },
+      [SPARANID_CERT],
+    );
+    expect(sparanoidChecks.every((check) => check.pass)).toBe(true);
+  });
+
+  test("rejects personal team names, ProvisionedDevices UDIDs, emails, personal certs, and missing entitlements", () => {
+    const failedNames = (profile: unknown, certs: readonly ToolRun[]) =>
+      provisioningProfileChecks(profile, certs)
+        .filter((check) => !check.pass)
+        .map((check) => check.name);
+
+    expect(failedNames({ ...ORG_PROFILE, TeamName: "Jane Doe" }, [ORG_CERT])).toContain(
+      "embedded.provisionprofile belongs to an allowed organization team",
+    );
+
+    expect(
+      failedNames({ ...ORG_PROFILE, ProvisionedDevices: ["00008112-001234567890001E"] }, [
+        ORG_CERT,
+      ]),
+    ).toContain("embedded.provisionprofile has no provisioned device UDIDs or email addresses");
+
+    expect(
+      failedNames({ ...ORG_PROFILE, Name: "profile for jane@example.com" }, [ORG_CERT]),
+    ).toContain("embedded.provisionprofile has no provisioned device UDIDs or email addresses");
+
+    expect(
+      failedNames(ORG_PROFILE, [
+        ok("subject=CN=Apple Development: Jane Doe (9H3CCD4YMM),OU=9H3CCD4YMM,O=Jane Doe,C=US\n"),
+      ]),
+    ).toContain("embedded.provisionprofile holds only organization Developer ID certificates");
+
+    expect(
+      failedNames(ORG_PROFILE, [
+        ok(
+          "subject=CN=Developer ID Application: LAPLACE Live LLC (9H3CCD4YMM),OU=9H3CCD4YMM,O=LAPLACE Live LLC,C=US\njane@example.com\n",
+        ),
+      ]),
+    ).toContain("embedded.provisionprofile holds only organization Developer ID certificates");
+
+    expect(
+      failedNames(
+        {
+          ...ORG_PROFILE,
+          Entitlements: {
+            "com.apple.application-identifier": "9H3CCD4YMM.live.laplace.eidolon",
+          },
+        },
+        [ORG_CERT],
+      ),
+    ).toContain(
+      "embedded.provisionprofile grants communication notifications for live.laplace.eidolon",
+    );
+  });
+
+  test("parses real Apple XML1 plists containing date and base64 data nodes", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>AppIDName</key>
+  <string>LAPLACE &amp; Eidolon</string>
+  <key>CreationDate</key>
+  <date>2026-11-26T19:26:12Z</date>
+  <key>IsXcodeManaged</key>
+  <false/>
+  <key>ProvisionsAllDevices</key>
+  <true/>
+  <key>TimeToLive</key>
+  <integer>6570</integer>
+  <key>DeveloperCertificates</key>
+  <array>
+    <data>
+    ZmFr
+    ZS1jZXJ0
+    </data>
+  </array>
+  <key>DER-Encoded-Profile</key>
+  <data>YWJjQGV4YW1wbGUuY29t</data>
+  <key>Entitlements</key>
+  <dict>
+    <key>com.apple.application-identifier</key>
+    <string>9H3CCD4YMM.live.laplace.eidolon</string>
+    <key>com.apple.developer.usernotifications.communication</key>
+    <true/>
+  </dict>
+  <key>TeamIdentifier</key>
+  <array>
+    <string>9H3CCD4YMM</string>
+  </array>
+  <key>TeamName</key>
+  <string>LAPLACE Live LLC</string>
+  <key>EmptyNote</key>
+  <string/>
+</dict>
+</plist>`;
+    const parsed = parseAppleXmlPlist(xml) as Record<string, unknown>;
+    expect(parsed).toMatchObject({
+      AppIDName: "LAPLACE & Eidolon",
+      CreationDate: "2026-11-26T19:26:12Z",
+      IsXcodeManaged: false,
+      ProvisionsAllDevices: true,
+      TimeToLive: 6570,
+      DeveloperCertificates: ["ZmFrZS1jZXJ0"],
+      TeamIdentifier: ["9H3CCD4YMM"],
+      TeamName: "LAPLACE Live LLC",
+      EmptyNote: "",
+    });
+    const realCert = ok(
+      "subject=C=US,O=LAPLACE Live LLC,OU=9H3CCD4YMM,CN=Developer ID Application: LAPLACE Live LLC (9H3CCD4YMM),UID=9H3CCD4YMM\n",
+    );
+    expect(provisioningProfileChecks(parsed, [realCert]).every((c) => c.pass)).toBe(true);
   });
 });

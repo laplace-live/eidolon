@@ -47,6 +47,7 @@ export const LOCAL_ROUTES = [
   "GET /api/local/personas/:id/avatar",
   "PUT /api/local/personas/:id/avatar",
   "DELETE /api/local/personas/:id/avatar",
+  "GET /api/local/personas/:id/notification-avatar",
   "GET /api/local/personas/:id/models",
   "POST /api/local/personas/:id/models",
   "PUT /api/local/personas/:id/models/:model/file",
@@ -1162,6 +1163,11 @@ export interface LocalApi {
   "GET /api/local/personas/:id/avatar": Endpoint<undefined, Raw<"image">>;
   "PUT /api/local/personas/:id/avatar": Endpoint<Raw<"image">, ReferenceImage>;
   "DELETE /api/local/personas/:id/avatar": Endpoint<undefined, Ok>;
+  "GET /api/local/personas/:id/notification-avatar": Endpoint<
+    undefined,
+    Raw<"image">,
+    { readonly group?: string }
+  >;
   /**
    * Her character models, which live only in her folder in the data home. Every
    * personas/:id/models/:model route answers 400 bad-request for a malformed model id, which is

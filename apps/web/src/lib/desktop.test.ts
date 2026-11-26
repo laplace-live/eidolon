@@ -74,16 +74,27 @@ test("the desktop companion's Call, while nothing here can place it, opens /call
 const CHAT = "0b7f5f2e-3c1d-4e8a-9f60-1a2b3c4d5e6f";
 const TASK = "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a";
 
-test("a notification's click opens the Tasks page, or a task in its chat", () => {
+test("a notification's click opens a chat, the Tasks page, or a task in its chat", () => {
   const navigate = vi.fn();
   runCommand("tasks", navigate);
+  runCommand(`open-chat:${CHAT}`, navigate);
   runCommand(`open-task:${CHAT}:${TASK}`, navigate);
-  expect(navigate.mock.calls).toEqual([["/tasks"], [`/chats/${CHAT}?task=${TASK}`]]);
+  expect(navigate.mock.calls).toEqual([
+    ["/tasks"],
+    [`/chats/${CHAT}`],
+    [`/chats/${CHAT}?task=${TASK}`],
+  ]);
 });
 
-test("a task's command opens nothing unless both are the server's ids, whole", () => {
+test("a chat or task command opens nothing unless the ids are the server's ids, whole", () => {
   const navigate = vi.fn();
   for (const command of [
+    `open-chat:${CHAT.toUpperCase()}`,
+    `open-chat:${CHAT}:x`,
+    `open-chat:../../settings`,
+    `open-chat:${CHAT}\n`,
+    "open-chat:",
+    "open-chat",
     `open-task:${CHAT}`,
     `open-task:${CHAT}:${TASK}:x`,
     `open-task:${CHAT.toUpperCase()}:${TASK}`,

@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { build, createServer, type InlineConfig, type Rolldown } from "vite";
+import { buildMacNotify } from "./build-mac-notify.ts";
 import { electronEnv } from "./electron-env.ts";
 import { mainBundle, preloadBundle, shellPages } from "./vite-common.ts";
 
@@ -37,6 +38,9 @@ async function watch(config: InlineConfig): Promise<Rolldown.RolldownWatcher> {
   });
   return watcher;
 }
+
+const macNotify = buildMacNotify();
+if (macNotify !== null) console.log(`built ${macNotify}`);
 
 const watchers = [
   await watch(mainBundle({ dev: true })),

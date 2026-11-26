@@ -231,10 +231,12 @@ describe("nativeUi", () => {
     };
     on.notify({ title: "Milky Green", body: "Finished the task\nWrite a TodoMVC" }, events).close();
     on.notify({ title: "LAPLACE Eidolon", body: "The task failed" }, events).close();
+    on.notify({ title: "Group Chat", subtitle: "Milky Green", body: "Hello!" }, events).close();
     on.notify({ body: "A\r\nB" }, events);
     expect(lines).toEqual([
       "Eidolon: background mode didn't show a notification: Milky Green: Finished the task / Write a TodoMVC",
       "Eidolon: background mode didn't show a notification: LAPLACE Eidolon: The task failed",
+      "Eidolon: background mode didn't show a notification: Group Chat (Milky Green): Hello!",
       "Eidolon: background mode didn't show a notification: : A / B",
     ]);
   });

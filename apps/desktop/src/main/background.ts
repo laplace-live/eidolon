@@ -8,7 +8,6 @@ import type {
   BrowserWindow,
   MenuItemConstructorOptions,
   MessageBoxOptions,
-  NotificationConstructorOptions,
   OpenDialogOptions,
   PopupOptions,
 } from "electron";
@@ -160,6 +159,23 @@ export interface NoticeHandle {
   close(): void;
 }
 
+export interface DesktopNotice {
+  readonly title?: string;
+  readonly subtitle?: string;
+  readonly body?: string;
+  readonly threadId?: string;
+  readonly sender?: {
+    readonly id: string;
+    readonly name: string;
+    readonly avatarPath?: string;
+  };
+  readonly group?: {
+    readonly id: string;
+    readonly title: string;
+    readonly avatarPath?: string;
+  };
+}
+
 /**
  * The calls into Electron that could put something in front of the owner. Chromium opens a file
  * input's chooser, a date field's calendar and a datalist's suggestions with none of them, and
@@ -179,7 +195,7 @@ export interface NativeUi {
   /** The native folder dialog; the folder picked, or null when cancelled. */
   chooseFolder(window: BrowserWindow | null, options: OpenDialogOptions): Promise<string | null>;
   /** Shows one notification; the handle closes it. Keep the handle: Electron drops a collected one. */
-  notify(options: NotificationConstructorOptions, events: NoticeEvents): NoticeHandle;
+  notify(notice: DesktopNotice, events: NoticeEvents): NoticeHandle;
 }
 
 function labels(menu: readonly MenuItemConstructorOptions[]): string {
@@ -230,9 +246,10 @@ export function nativeUi(background: boolean, electron: NativeUi, log: Log): Nat
       log.info("Eidolon: background mode didn't open the folder dialog");
       return null;
     },
-    notify({ title, body }) {
+    notify({ title, subtitle, body }) {
+      const head = subtitle ? `${title ?? ""} (${subtitle})` : (title ?? "");
       const lines = (body ?? "").replaceAll(/\r?\n/g, " / ");
-      log.info(`Eidolon: background mode didn't show a notification: ${title ?? ""}: ${lines}`);
+      log.info(`Eidolon: background mode didn't show a notification: ${head}: ${lines}`);
       return { close() {} };
     },
   };

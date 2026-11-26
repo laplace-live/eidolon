@@ -165,6 +165,13 @@ export interface Strings {
   };
   /** A task notification's line under her name, by its kind: sentence case. */
   readonly notice: Readonly<Record<NoticeKind, string>>;
+  /** Chat notifications: non-text placeholders and group-name list separator. */
+  readonly chatNotice: {
+    readonly photo: string;
+    readonly photos: (count: number) => string;
+    readonly voice: string;
+    readonly listSeparator: string;
+  };
 }
 
 /** "a", "a and b", "a, b and c". */
@@ -364,6 +371,12 @@ const en: Strings = {
     failed: "The task failed",
     cancelled: "The task was stopped",
   },
+  chatNotice: {
+    photo: "Sent a photo",
+    photos: (count) => `Sent ${count} photos`,
+    voice: "Sent a voice message",
+    listSeparator: ", ",
+  },
 };
 
 const zhHans: Strings = {
@@ -520,6 +533,12 @@ const zhHans: Strings = {
     succeeded: "任务完成了",
     failed: "任务失败了",
     cancelled: "任务已停止",
+  },
+  chatNotice: {
+    photo: "发来了一张照片",
+    photos: (count) => `发来了 ${count} 张照片`,
+    voice: "发来了一条语音",
+    listSeparator: "、",
   },
 };
 

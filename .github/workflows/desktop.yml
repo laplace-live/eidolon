@@ -105,6 +105,7 @@ jobs:
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
 
   signed-win:
     name: win32-x64, signed
@@ -327,6 +328,7 @@ jobs:
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
 
   update-test-win:
     name: Update test, win32-x64
