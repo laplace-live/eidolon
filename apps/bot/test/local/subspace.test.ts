@@ -279,6 +279,23 @@ describe("Local server Subspace proxy & host switching", () => {
     expect(proxied404.status).toBe(404);
     expect(await proxied404.json()).toEqual({ detail: "Not Found" });
 
+    // Security: unauthenticated fallback paths and protocol-relative // paths must NEVER forward to the peer.
+    const unauthFallback = await fetch(`${local.base}/api/nonexistent`, { method: "POST" });
+    expect(unauthFallback.status).toBe(401);
+
+    const protocolRelativeUnauth = await fetch(`${local.base}//x/api/local/restart`, {
+      method: "POST",
+    });
+    expect(protocolRelativeUnauth.status).toBe(400);
+    expect(protocolRelativeUnauth.headers.get("x-eidolon-subspace")).toBeNull();
+
+    const protocolRelativeAuth = await fetch(`${local.base}//x/api/local/restart`, {
+      method: "POST",
+      headers: local.session,
+    });
+    expect(protocolRelativeAuth.status).toBe(400);
+    expect(protocolRelativeAuth.headers.get("x-eidolon-subspace")).toBeNull();
+
     // 4f. Active tunneled calls keep local GET /api/local/status activeCalls === 1 (for desktop quitCheck)
     //     and block host switching until a fatal DTLS alert tears down the UDP bridge.
     const tunneledOfferRes = await fetch(`${local.base}/api/offer`, {

@@ -17,6 +17,7 @@ import {
   discoverRelayAuthUrl,
   isAllowedRelayUrl,
   listShareableAddresses,
+  resolveEffectiveRelayUrl,
   type SubspaceGrantView,
   type SubspaceStateSnapshot,
   SubspaceStore,
@@ -306,7 +307,7 @@ export async function subspaceMain(
     let relayUrl = relayAuth?.relayUrl ?? DEFAULT_SUBSPACE_RELAY_URL;
     if (relayAuth?.relayUrl === undefined) {
       try {
-        relayUrl = subspaceRelayUrl();
+        relayUrl = resolveEffectiveRelayUrl(null);
       } catch {
         // Show default relay URL in offline status when env override is invalid.
       }
@@ -420,7 +421,7 @@ export async function subspaceMain(
       if (logoutRecord !== null) {
         if (logoutRecord.corrupt) {
           err(
-            "Warning: relay-auth.json was corrupted; cleared local credentials without revoking remote session.",
+            "Warning: relay-auth.json was corrupted or used a disallowed auth URL; cleared local credentials without revoking remote session.",
           );
         } else {
           await signOutRelaySession(logoutRecord.authUrl, logoutRecord.token);

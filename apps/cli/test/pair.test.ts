@@ -130,6 +130,22 @@ describe("laplace-pair and laplace-subspace", () => {
     );
     expect(store.readRelayAuth()).toBeNull();
 
+    // Schema-valid relay-auth.json with a disallowed plaintext non-loopback authUrl must skip
+    // remote sign-out, warn clearly, and wipe the local file.
+    signOutFetch.mockClear();
+    store.saveRelayAuth({
+      authUrl: "http://evil.example.com",
+      relayUrl: "https://eidolon-relay.vrp.moe",
+      token: "plaintext-secret",
+      user: { id: "u1", name: "User", email: "user@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const disallowedLogoutIo = captureIo();
+    expect(await subspaceMain(["logout", "--json"], disallowedLogoutIo.io)).toBe(0);
+    expect(signOutFetch).not.toHaveBeenCalled();
+    expect(disallowedLogoutIo.stderr()).toContain("disallowed auth URL");
+    expect(store.readRelayAuth()).toBeNull();
+
     // Non-loopback plaintext relay/auth URLs must be rejected before talking to any server.
     const badRelayIo = captureIo();
     expect(

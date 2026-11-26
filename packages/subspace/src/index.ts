@@ -49,6 +49,7 @@ export {
   DEFAULT_SUBSPACE_AUTH_URL,
   DEFAULT_SUBSPACE_RELAY_URL,
   httpToWsUrl,
+  resolveEffectiveRelayUrl,
   subspaceAuthUrl,
   subspaceRelayUrl,
 } from "./settings.ts";
@@ -63,6 +64,8 @@ export {
 } from "./store.ts";
 export {
   ClientCallBridgePool,
+  extractHostUdpCandidate,
+  extractHostUdpCandidates,
   extractHostUdpPort,
   openHostUdpBridge,
   rewriteSdpAnswer,

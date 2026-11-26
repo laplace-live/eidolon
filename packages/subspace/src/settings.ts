@@ -1,4 +1,4 @@
-import { envStr, withoutTrailingSlashes } from "@eidolon/config";
+import { envOptional, envStr, withoutTrailingSlashes } from "@eidolon/config";
 import { isAllowedRelayUrl } from "./protocol/pairing.ts";
 
 export const DEFAULT_SUBSPACE_RELAY_URL = "https://eidolon-relay.vrp.moe";
@@ -18,6 +18,22 @@ export function subspaceRelayUrl(): string {
     DEFAULT_SUBSPACE_RELAY_URL,
     "Subspace Relay URL",
   );
+}
+
+/**
+ * Resolves the active Relay URL: honors `EIDOLON_SUBSPACE_RELAY_URL` when explicitly configured,
+ * else reuses a signed-in account's `savedRelayUrl` (set by `eidolon subspace login --relay-url`),
+ * else falls back to the default Relay URL.
+ */
+export function resolveEffectiveRelayUrl(savedRelayUrl?: string | null): string {
+  if (envOptional("EIDOLON_SUBSPACE_RELAY_URL") !== undefined) {
+    return subspaceRelayUrl();
+  }
+  const saved = savedRelayUrl?.trim();
+  if (saved) {
+    return normalizeAllowedUrl(saved, DEFAULT_SUBSPACE_RELAY_URL, "Subspace Relay URL");
+  }
+  return subspaceRelayUrl();
 }
 
 export function subspaceAuthUrl(): string {

@@ -11,10 +11,10 @@ import {
 } from "@eidolon/config";
 import {
   renderPairingQrTerminal,
+  resolveEffectiveRelayUrl,
   type SubspaceManager,
   type SubspaceStateSnapshot,
   SubspaceStore,
-  subspaceRelayUrl,
 } from "@eidolon/subspace";
 import { ArgparseExit, INT, type ParserSpec, parseArgs, parserError } from "./argparse.ts";
 import { type CommandDeps, printer, reportExit, resolveIo } from "./io.ts";
@@ -223,10 +223,16 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
   }
 
   const store = new SubspaceStore(dataHome());
-  if (relay && store.readRelayAuth() === null) {
+  let savedAuth: ReturnType<SubspaceStore["readRelayAuth"]> = null;
+  try {
+    savedAuth = store.readRelayAuth();
+  } catch {
+    savedAuth = null;
+  }
+  if (relay && savedAuth === null) {
     try {
       const ok = await runDeviceLoginFlow({
-        relayUrl: subspaceRelayUrl(),
+        relayUrl: resolveEffectiveRelayUrl(null),
         store,
         json,
         out,

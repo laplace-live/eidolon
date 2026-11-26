@@ -284,7 +284,9 @@ export class SubspaceStore {
     try {
       const auth = this.readRelayAuth();
       if (auth === null) return null;
-      return { authUrl: auth.authUrl, token: auth.token, corrupt: false };
+      const authUrl = withoutTrailingSlashes(auth.authUrl.trim());
+      if (!isAllowedRelayUrl(authUrl)) return { corrupt: true };
+      return { authUrl, token: auth.token, corrupt: false };
     } catch {
       try {
         const raw = JSON.parse(readFileSync(this.#relayAuthPath, "utf8")) as {

@@ -14,6 +14,7 @@ import {
   encodePairingUrl,
   generateX25519KeyPair,
   importX25519PrivateKey,
+  parsePairingInput,
   RELAY_CLOSE_CODE,
   RELAY_PATHS,
   SubspaceClient,
@@ -992,5 +993,102 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     await vi.waitFor(() => {
       expect(relayHost.relayError).toContain("https/wss or loopback");
     });
+  });
+
+  test("SubspaceManager honors custom relayUrl saved in relay-auth.json when no env override is set", async () => {
+    vi.stubEnv("EIDOLON_SUBSPACE_RELAY_URL", "");
+    const dir = tempDir("subspace-saved-relay-url-");
+    const store = new SubspaceStore(dir);
+    const relayKp = await generateX25519KeyPair();
+    const relayPriv = await importX25519PrivateKey(relayKp.privateKeyPkcs8B64);
+    const inviteCreates: string[] = [];
+
+    const httpServer = createServer((req, res) => {
+      if (req.url === "/api/auth/token") {
+        const exp = Math.floor(Date.now() / 1000) + 300;
+        const header = Buffer.from(JSON.stringify({ alg: "EdDSA" })).toString("base64url");
+        const payload = Buffer.from(JSON.stringify({ exp, sub: "alice" })).toString("base64url");
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ token: `${header}.${payload}.sig` }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const wss = new WebSocketServer({ noServer: true });
+    httpServer.on("upgrade", (req, socket, head) => {
+      if (req.url === RELAY_PATHS.HOST_CONTROL) {
+        wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+      } else {
+        socket.destroy();
+      }
+    });
+    wss.on("connection", (ws) => {
+      let relayHostId = "";
+      ws.on("message", async (raw) => {
+        const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+        if (msg.type === "host_hello") {
+          relayHostId = String(msg.relayHostId);
+          const challengeB64 = Buffer.from("challenge-32-bytes-0123456789abc").toString("base64");
+          await computeRelayControlProof(
+            relayPriv,
+            String(msg.hostPublicKeyB64),
+            challengeB64,
+            "alice",
+          );
+          ws.send(
+            JSON.stringify({
+              type: "host_challenge",
+              challengeB64,
+              relayEphPubB64: relayKp.publicKeyB64,
+              userId: "alice",
+            }),
+          );
+        } else if (msg.type === "host_challenge_ack") {
+          ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+        } else if (msg.type === "invite_create") {
+          inviteCreates.push(String(msg.inviteId));
+          ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+    const addr = httpServer.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+    const customRelayUrl = `http://127.0.0.1:${port}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const client of wss.clients) client.terminate();
+          wss.close(() => httpServer.close(() => resolve()));
+        }),
+    );
+
+    store.saveRelayAuth({
+      authUrl: customRelayUrl,
+      relayUrl: customRelayUrl,
+      token: "sess-custom",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+
+    const mgr = new SubspaceManager({
+      dataHome: dir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => mgr.stop());
+
+    const snap = await mgr.getState();
+    expect(snap.relayAuth.relayUrl).toBe(customRelayUrl);
+
+    const offerSnap = await mgr.createShareOffer({ mode: "relay" });
+    const parsed = parsePairingInput(offerSnap.pairingUrl);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.offer.relay?.url).toBe(customRelayUrl);
+    }
+    expect(inviteCreates).toHaveLength(1);
   });
 });

@@ -27,8 +27,8 @@ import { renderPairingQrSvg } from "./qr.ts";
 import {
   DEFAULT_SUBSPACE_AUTH_URL,
   DEFAULT_SUBSPACE_RELAY_URL,
+  resolveEffectiveRelayUrl,
   subspaceAuthUrl,
-  subspaceRelayUrl,
 } from "./settings.ts";
 import {
   type SubspaceGrantRecord,
@@ -154,7 +154,7 @@ export class SubspaceManager {
   constructor(deps: SubspaceManagerDeps) {
     this.#deps = deps;
     this.store = new SubspaceStore(deps.dataHome);
-    this.#relayUrlFn = deps.relayUrl ?? subspaceRelayUrl;
+    this.#relayUrlFn = deps.relayUrl ?? (() => resolveEffectiveRelayUrl(this.#safeSavedRelayUrl()));
     this.#authUrlFn = deps.authUrl;
     this.host = new SubspaceHost({
       store: this.store,
@@ -163,6 +163,14 @@ export class SubspaceManager {
       relayUrl: this.#relayUrlFn,
       onEvent: deps.onHostEvent,
     });
+  }
+
+  #safeSavedRelayUrl(): string | null {
+    try {
+      return this.store.readRelayAuth()?.relayUrl ?? null;
+    } catch {
+      return null;
+    }
   }
 
   get activeHostId(): string | null {
@@ -581,7 +589,7 @@ export class SubspaceManager {
     if (logoutRecord !== null) {
       if (logoutRecord.corrupt) {
         logger.warning(
-          "[subspace] relay-auth.json was corrupted; cleared local credentials without revoking remote session",
+          "[subspace] relay-auth.json was corrupted or used a disallowed auth URL; cleared local credentials without revoking remote session",
         );
       } else {
         await signOutRelaySession(logoutRecord.authUrl, logoutRecord.token);

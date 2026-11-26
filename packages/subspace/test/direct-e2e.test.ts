@@ -127,11 +127,13 @@ describe("Direct WebSocket SubspaceHost <-> SubspaceClient", () => {
       "",
     ].join("\r\n");
 
+    const dispatchedPaths: string[] = [];
     const host = new SubspaceHost({
       store: new SubspaceStore(join(dir, "host")),
       serverVersion: () => "0.19.0",
       relayUrl: () => "http://127.0.0.1:0",
       dispatch: async (request) => {
+        dispatchedPaths.push(new URL(request.url).pathname);
         if (request.method === "POST" && new URL(request.url).pathname === "/api/offer") {
           return Response.json({ pc_id: "pc-1", sdp: offerSdp });
         }
@@ -163,6 +165,17 @@ describe("Direct WebSocket SubspaceHost <-> SubspaceClient", () => {
     await vi.waitFor(() => {
       expect(unallowedClosed).toBe(true);
     });
+
+    // Protocol-relative // paths sent directly over a tunnel must return 400 without reaching dispatch.
+    const badPathRes = await paired.tunnel.mux.request({
+      method: "POST",
+      path: "//x/api/local/restart",
+      headers: [],
+      body: null,
+    });
+    expect(badPathRes.status).toBe(400);
+    await badPathRes.body?.cancel();
+    expect(dispatchedPaths).not.toContain("/api/local/restart");
 
     // Authorizing via 200 OK POST /api/offer allows opening the bridge for `allowedPort`.
     const offerRes = await paired.tunnel.mux.request({

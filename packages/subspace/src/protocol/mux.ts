@@ -39,6 +39,7 @@ export interface MuxResponseHead {
 
 export interface MuxCallOpen {
   readonly hostPort: number;
+  readonly hostAddress?: string;
 }
 
 export interface MuxHttpResponse {
@@ -74,6 +75,7 @@ export interface MuxHostHandlers {
       sendDatagram(data: Uint8Array): void;
       close(): void;
     },
+    hostAddress?: string,
   ): {
     sendToHost(data: Uint8Array): void;
     close(): void;
@@ -420,8 +422,8 @@ export class MuxEndpoint {
     }
   }
 
-  /** Opens a UDP call forwarding channel bound to `hostPort` on the remote SubspaceHost. */
-  openCallChannel(hostPort: number): MuxCallChannelHandle {
+  /** Opens a UDP call forwarding channel bound to `hostAddress`:`hostPort` on the remote SubspaceHost. */
+  openCallChannel(hostPort: number, hostAddress?: string): MuxCallChannelHandle {
     if (this.#closed) throw new Error("Subspace tunnel is closed");
     const channelId = this.#nextId++;
     const state = {
@@ -430,11 +432,9 @@ export class MuxEndpoint {
       closed: false,
     };
     this.#clientCalls.set(channelId, state);
-    void this.#emit(
-      MUX_FRAME.CALL_UDP_OPEN,
-      channelId,
-      utf8Encode(JSON.stringify({ hostPort } satisfies MuxCallOpen)),
-    );
+    const openPayload: MuxCallOpen =
+      hostAddress === undefined ? { hostPort } : { hostPort, hostAddress };
+    void this.#emit(MUX_FRAME.CALL_UDP_OPEN, channelId, utf8Encode(JSON.stringify(openPayload)));
     return {
       channelId,
       sendDatagram: (data) => {
@@ -892,15 +892,21 @@ export class MuxEndpoint {
       void this.#emit(MUX_FRAME.CALL_UDP_CLOSE, streamId);
       return;
     }
-    const bridge = open(streamId, parsed.hostPort, {
-      sendDatagram: (data) => {
-        if (!this.#closed) void this.#emit(MUX_FRAME.CALL_UDP_DATA, streamId, data);
+    const hostAddress = typeof parsed.hostAddress === "string" ? parsed.hostAddress : undefined;
+    const bridge = open(
+      streamId,
+      parsed.hostPort,
+      {
+        sendDatagram: (data) => {
+          if (!this.#closed) void this.#emit(MUX_FRAME.CALL_UDP_DATA, streamId, data);
+        },
+        close: () => {
+          this.#hostCalls.delete(streamId);
+          void this.#emit(MUX_FRAME.CALL_UDP_CLOSE, streamId);
+        },
       },
-      close: () => {
-        this.#hostCalls.delete(streamId);
-        void this.#emit(MUX_FRAME.CALL_UDP_CLOSE, streamId);
-      },
-    });
+      hostAddress,
+    );
     if (bridge === null) {
       void this.#emit(MUX_FRAME.CALL_UDP_CLOSE, streamId);
       return;

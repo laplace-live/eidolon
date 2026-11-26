@@ -194,6 +194,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
   const stopHooks: (() => Promise<void>)[] = [];
   let manager: TaskManager | null = null;
   let subspaceManager: SubspaceManager | null = null;
+  let authenticateRequest: Authenticate | null = null;
   let botFallbackHandler: Fallback | null = null;
   const origins = options.origins ?? new Set<string>();
   let hosts: ReadonlySet<string> | null = null;
@@ -257,6 +258,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
       };
 
       const authenticate = authenticator(options.token, context.port);
+      authenticateRequest = authenticate;
       let dispatchInProcess: ((request: Request) => Promise<Response>) | null = null;
       const subspace = new SubspaceManager({
         dataHome: dataHome(),
@@ -444,6 +446,11 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         }
         const url = new URL(request.url);
         const { pathname } = url;
+        if (pathname.startsWith("//") || pathname.includes("\\")) {
+          const invalid = localError(400, "bad-request", "Invalid request path");
+          logAccess(request, server, invalid);
+          return invalid;
+        }
         if ((request.method === "GET" || request.method === "HEAD") && !isApiPath(pathname)) {
           const response = options.site.respond(pathname, request);
           logAccess(request, server, response);
@@ -453,6 +460,23 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         const subspace = subspaceManager;
         const activeHostId = subspace?.activeHostId ?? null;
         if (origin === null && subspace !== null && !shouldBypassSubspace(request, pathname)) {
+          if (activeHostId !== null || request.headers.has(EXPECTED_HOST_HEADER)) {
+            if (authenticateRequest === null) {
+              const unavail = localError(503, "unavailable", "Authentication is not initialized");
+              logAccess(request, server, unavail);
+              return unavail;
+            }
+            const authFailure = checkProxyAuth(
+              request,
+              pathname,
+              "local-router",
+              authenticateRequest,
+            );
+            if (authFailure !== null) {
+              logAccess(request, server, authFailure);
+              return authFailure;
+            }
+          }
           const hostConflict = checkExpectedHost(request, activeHostId);
           if (hostConflict !== null) {
             logAccess(request, server, hostConflict);

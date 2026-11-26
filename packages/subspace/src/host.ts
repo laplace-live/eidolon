@@ -31,9 +31,9 @@ import {
   type RelayHostControlOutbound,
   RelayHostControlOutboundSchema,
 } from "./relay-contract.ts";
-import { httpToWsUrl } from "./settings.ts";
+import { httpToWsUrl, resolveEffectiveRelayUrl } from "./settings.ts";
 import type { SubspaceHostIdentity, SubspaceRelayAuthRecord, SubspaceStore } from "./store.ts";
-import { extractHostUdpPort, openHostUdpBridge } from "./webrtc-bridge.ts";
+import { extractHostUdpCandidates, openHostUdpBridge } from "./webrtc-bridge.ts";
 import {
   guardWsErrors,
   nextWsMessage,
@@ -67,7 +67,7 @@ export interface SubspaceHostDeps {
   readonly store: SubspaceStore;
   readonly serverVersion: () => string;
   readonly dispatch: (request: Request) => Promise<Response>;
-  readonly relayUrl: () => string;
+  readonly relayUrl?: () => string;
   readonly onEvent?: (event: SubspaceHostEvent) => void;
 }
 
@@ -87,19 +87,24 @@ export type SubspaceHostEvent =
     }
   | { readonly type: "device-revoked"; readonly grantId: string };
 
+function parseTunnelRequestUrl(rawPath: string): URL | null {
+  const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+  if (path.startsWith("//") || path.includes("\\")) return null;
+  const url = URL.parse(path, "http://subspace.local");
+  if (url === null || url.origin !== "http://subspace.local") return null;
+  return url;
+}
+
 function socketHeadToWebRequest(
   head: {
     readonly method: string;
     readonly path: string;
     readonly headers: readonly [string, string][];
   },
+  url: URL,
   body: ReadableStream<Uint8Array> | null,
   signal: AbortSignal,
 ): Request {
-  const url = new URL(
-    head.path.startsWith("/") ? head.path : `/${head.path}`,
-    "http://subspace.local",
-  );
   const headers = new Headers();
   for (const [name, value] of head.headers) headers.append(name, value);
   return new Request(url, {
@@ -422,7 +427,7 @@ export class SubspaceHost {
           { code: "relay-auth-required" },
         );
       }
-      const relayUrl = this.#deps.relayUrl();
+      const relayUrl = this.#resolveRelayUrl(auth);
       const relayHostId = await deriveRelayHostId(base64ToBytes(identity.publicKeyB64));
       await this.#ensureRelayConnected();
       offer = {
@@ -622,6 +627,19 @@ export class SubspaceHost {
     return minted.token;
   }
 
+  #safeSavedRelayUrl(): string | null {
+    try {
+      return this.#deps.store.readRelayAuth()?.relayUrl ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  #resolveRelayUrl(auth?: SubspaceRelayAuthRecord | null): string {
+    if (this.#deps.relayUrl !== undefined) return this.#deps.relayUrl();
+    return resolveEffectiveRelayUrl(auth?.relayUrl ?? this.#safeSavedRelayUrl());
+  }
+
   async #connectRelayControl(): Promise<void> {
     if (this.#stopped || !this.#relayWanted) return;
     const auth = this.#deps.store.readRelayAuth();
@@ -650,7 +668,7 @@ export class SubspaceHost {
     let url: string;
     let ws: WebSocket;
     try {
-      url = httpToWsUrl(this.#deps.relayUrl(), RELAY_PATHS.HOST_CONTROL);
+      url = httpToWsUrl(this.#resolveRelayUrl(auth), RELAY_PATHS.HOST_CONTROL);
       ws = new WebSocket(url, { headers: { authorization: `Bearer ${jwt}` } });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid Relay URL";
@@ -787,8 +805,13 @@ export class SubspaceHost {
     if (auth === null || this.#stopped) return;
     const jwt = await this.#resolveRelayJwt(auth).catch(() => null);
     if (jwt === null || this.#stopped) return;
-    const url = httpToWsUrl(this.#deps.relayUrl(), RELAY_PATHS.HOST_DATA);
-    const ws = new WebSocket(url, { headers: { authorization: `Bearer ${jwt}` } });
+    let ws: WebSocket;
+    try {
+      const url = httpToWsUrl(this.#resolveRelayUrl(auth), RELAY_PATHS.HOST_DATA);
+      ws = new WebSocket(url, { headers: { authorization: `Bearer ${jwt}` } });
+    } catch {
+      return;
+    }
     ws.once("open", () => {
       void sendWs(ws, JSON.stringify({ type: "host_data_auth", v: 1, relayHostId, sessionId }))
         .then(() => this.#serveTunnelSocket(ws, "relay"))
@@ -820,7 +843,16 @@ export class SubspaceHost {
     let session: E2eeSession;
     let mux: MuxEndpoint | null = null;
     let closed = false;
-    const allowedCallPorts = new Map<number, number>();
+    const allowedCallTargets: {
+      readonly address: string;
+      readonly port: number;
+      readonly expiresAt: number;
+    }[] = [];
+    const pruneCallTargets = (now: number) => {
+      for (let i = allowedCallTargets.length - 1; i >= 0; i -= 1) {
+        if (allowedCallTargets[i]!.expiresAt <= now) allowedCallTargets.splice(i, 1);
+      }
+    };
     const sessionHandle: HostSessionHandle = {
       grantId: null,
       close: () => closeSocket(RELAY_CLOSE_CODE.UNAUTHORIZED, "Device revoked"),
@@ -830,7 +862,7 @@ export class SubspaceHost {
       if (closed) return;
       closed = true;
       this.#sessions.delete(sessionHandle);
-      allowedCallPorts.clear();
+      allowedCallTargets.length = 0;
       mux?.close(reason);
       safeCloseWs(ws, code, reason);
     };
@@ -973,15 +1005,28 @@ export class SubspaceHost {
         sendFrame: (frame) => session.send(frame, (sealed) => sendWs(ws, sealed)),
         host: {
           onHttpRequest: async (head, body, signal) => {
-            const response = await this.#deps.dispatch(socketHeadToWebRequest(head, body, signal));
+            const url = parseTunnelRequestUrl(head.path);
+            if (url === null) {
+              if (body !== null && !body.locked) void body.cancel().catch(() => {});
+              return {
+                status: 400,
+                statusText: "Bad Request",
+                headers: [["content-type", "application/json"]],
+                body: new Response(
+                  JSON.stringify({
+                    error: { code: "bad-request", message: "Invalid request path" },
+                  }),
+                ).body,
+              };
+            }
+            const response = await this.#deps.dispatch(
+              socketHeadToWebRequest(head, url, body, signal),
+            );
             const headers: [string, string][] = [];
             response.headers.forEach((value, name) => {
               if (!HOST_HOP_BY_HOP.has(name.toLowerCase())) headers.push([name, value]);
             });
-            const pathname = URL.parse(
-              head.path.startsWith("/") ? head.path : `/${head.path}`,
-              "http://subspace.local",
-            )?.pathname;
+            const { pathname } = url;
             if (
               head.method.toUpperCase() === "POST" &&
               pathname === "/api/offer" &&
@@ -991,13 +1036,22 @@ export class SubspaceHost {
               try {
                 const parsed = JSON.parse(utf8Decode(rawBody)) as { sdp?: unknown } | null;
                 if (typeof parsed?.sdp === "string") {
-                  const hostPort = extractHostUdpPort(parsed.sdp);
-                  if (hostPort !== null) {
+                  const candidates = extractHostUdpCandidates(parsed.sdp);
+                  if (candidates.length > 0) {
                     const now = Date.now();
-                    for (const [port, exp] of allowedCallPorts) {
-                      if (exp <= now) allowedCallPorts.delete(port);
+                    pruneCallTargets(now);
+                    for (const candidate of candidates) {
+                      const entry = {
+                        address: candidate.address,
+                        port: candidate.port,
+                        expiresAt: now + ALLOWED_CALL_PORT_TTL_MS,
+                      };
+                      const idx = allowedCallTargets.findIndex(
+                        (t) => t.address === candidate.address && t.port === candidate.port,
+                      );
+                      if (idx >= 0) allowedCallTargets[idx] = entry;
+                      else allowedCallTargets.push(entry);
                     }
-                    allowedCallPorts.set(hostPort, now + ALLOWED_CALL_PORT_TTL_MS);
                   }
                 }
               } catch {
@@ -1017,16 +1071,22 @@ export class SubspaceHost {
               body: response.body,
             };
           },
-          onCallOpen: (_channelId, hostPort, bridge) => {
+          onCallOpen: (_channelId, hostPort, bridge, hostAddress) => {
             const now = Date.now();
-            for (const [port, exp] of allowedCallPorts) {
-              if (exp <= now) allowedCallPorts.delete(port);
-            }
-            const expiresAt = allowedCallPorts.get(hostPort);
-            if (expiresAt === undefined || expiresAt <= now) {
+            pruneCallTargets(now);
+            const wantedAddress = hostAddress
+              ?.trim()
+              .replace(/^\[|\]$/g, "")
+              .toLowerCase();
+            const target = allowedCallTargets.find((entry) => {
+              if (entry.port !== hostPort) return false;
+              if (wantedAddress === undefined) return true;
+              return entry.address.toLowerCase() === wantedAddress;
+            });
+            if (target === undefined) {
               return null;
             }
-            return openHostUdpBridge(hostPort, bridge);
+            return openHostUdpBridge(target.port, bridge, target.address);
           },
         },
       });

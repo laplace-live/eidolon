@@ -1,9 +1,20 @@
 import { createSocket, type Socket } from "node:dgram";
+import { isIP } from "node:net";
 import type { MuxCallChannelHandle, MuxEndpoint } from "./protocol/index.ts";
 
 const UDP_BRIDGE_IDLE_MS = 20_000;
 const DTLS_ALERT_CLOSE_DELAY_MS = 200;
 const IPV4_LITERAL = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+
+export interface HostUdpCandidate {
+  readonly address: string;
+  readonly port: number;
+}
+
+function normalizeCandidateIp(raw: string): string {
+  const bare = raw.startsWith("[") && raw.endsWith("]") ? raw.slice(1, -1) : raw;
+  return isIP(bare) === 6 ? bare.toLowerCase() : bare;
+}
 
 function isDtlsAlert(packet: Uint8Array): boolean {
   if (packet.length < 15 || packet[0] !== 21) return false;
@@ -20,27 +31,41 @@ interface BridgeEntry {
   readonly close: () => void;
 }
 
-/** Extracts the first UDP host candidate's port from a bundled SmallWebRTC SDP answer. */
-export function extractHostUdpPort(sdp: string): number | null {
+/** Extracts all UDP host candidates' addresses and ports from a bundled SmallWebRTC SDP answer. */
+export function extractHostUdpCandidates(sdp: string): HostUdpCandidate[] {
+  const out: HostUdpCandidate[] = [];
   for (const line of sdp.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed.startsWith("a=candidate:")) continue;
     const parts = trimmed.slice("a=candidate:".length).split(/\s+/);
     if (parts.length < 8) continue;
     const protocol = parts[2]?.toLowerCase();
+    const rawAddress = parts[4];
     const port = Number(parts[5]);
     const type = parts[7]?.toLowerCase();
-    if (
-      protocol === "udp" &&
-      type === "host" &&
-      Number.isInteger(port) &&
-      port >= 1 &&
-      port <= 65535
-    ) {
-      return port;
+    if (protocol !== "udp" || type !== "host" || rawAddress === undefined) continue;
+    const address = normalizeCandidateIp(rawAddress);
+    if (isIP(address) !== 0 && Number.isInteger(port) && port >= 1 && port <= 65535) {
+      out.push({ address, port });
     }
   }
-  return null;
+  return out;
+}
+
+/** Picks the primary UDP host candidate from a SmallWebRTC SDP answer, preferring non-loopback IPv4. */
+export function extractHostUdpCandidate(sdp: string): HostUdpCandidate | null {
+  const candidates = extractHostUdpCandidates(sdp);
+  return (
+    candidates.find((c) => isIP(c.address) === 4 && !c.address.startsWith("127.")) ??
+    candidates.find((c) => isIP(c.address) === 4) ??
+    candidates[0] ??
+    null
+  );
+}
+
+/** Extracts the primary UDP host candidate's port from a bundled SmallWebRTC SDP answer. */
+export function extractHostUdpPort(sdp: string): number | null {
+  return extractHostUdpCandidate(sdp)?.port ?? null;
 }
 
 /**
@@ -150,13 +175,25 @@ function attachIdleUdpSocket(
   };
 }
 
-/** Host-side UDP bridge forwarding tunnel CALL_UDP_* frames to 127.0.0.1:<weriftPort>. */
+/** Host-side UDP bridge forwarding tunnel CALL_UDP_* frames to `<hostAddress>:<hostPort>`. */
 export function openHostUdpBridge(
   hostPort: number,
   tunnel: { sendDatagram(data: Uint8Array): void; close(): void },
+  hostAddress = "127.0.0.1",
 ): { sendToHost(data: Uint8Array): void; close(): void } | null {
   if (!Number.isInteger(hostPort) || hostPort < 1 || hostPort > 65535) return null;
-  const socket = createSocket("udp4");
+  const targetAddress = normalizeCandidateIp(hostAddress);
+  const ipFamily = isIP(targetAddress);
+  if (ipFamily !== 4 && ipFamily !== 6) return null;
+  const socket = createSocket(ipFamily === 6 ? "udp6" : "udp4");
+  const bindAddress =
+    ipFamily === 6
+      ? targetAddress === "::1"
+        ? "::1"
+        : "::"
+      : targetAddress === "127.0.0.1"
+        ? "127.0.0.1"
+        : "0.0.0.0";
   let closed = false;
   let alertTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -177,19 +214,20 @@ export function openHostUdpBridge(
   };
   const idle = attachIdleUdpSocket(socket, close);
 
-  socket.on("message", (msg) => {
+  socket.on("message", (msg, rinfo) => {
     if (closed) return;
+    if (rinfo.port !== hostPort || normalizeCandidateIp(rinfo.address) !== targetAddress) return;
     idle.touch();
     tunnel.sendDatagram(msg);
     if (isDtlsAlert(msg)) scheduleAlertClose();
   });
-  socket.bind(0, "127.0.0.1");
+  socket.bind(0, bindAddress);
 
   return {
     sendToHost(data) {
       if (closed) return;
       idle.touch();
-      socket.send(data, hostPort, "127.0.0.1");
+      socket.send(data, hostPort, targetAddress);
       if (isDtlsAlert(data)) scheduleAlertClose();
     },
     close,
@@ -224,12 +262,12 @@ export class ClientCallBridgePool {
     if (typeof payload.sdp !== "string" || typeof payload.pc_id !== "string") {
       return new Response(text, response);
     }
-    const hostPort = extractHostUdpPort(payload.sdp);
-    if (hostPort === null) {
+    const candidate = extractHostUdpCandidate(payload.sdp);
+    if (candidate === null) {
       return new Response(text, response);
     }
     this.#bridges.get(payload.pc_id)?.close();
-    const bridge = await this.#openBridge(payload.pc_id, hostPort, mux);
+    const bridge = await this.#openBridge(payload.pc_id, candidate, mux);
     const rewrittenSdp = rewriteSdpAnswer(payload.sdp, {
       localPort: bridge.localPort,
       mode: options.mode,
@@ -249,7 +287,11 @@ export class ClientCallBridgePool {
     this.#bridges.clear();
   }
 
-  async #openBridge(pcId: string, hostPort: number, mux: MuxEndpoint): Promise<BridgeEntry> {
+  async #openBridge(
+    pcId: string,
+    target: HostUdpCandidate,
+    mux: MuxEndpoint,
+  ): Promise<BridgeEntry> {
     const socket = createSocket("udp4");
     let alertTimer: ReturnType<typeof setTimeout> | null = null;
     try {
@@ -262,7 +304,7 @@ export class ClientCallBridgePool {
       });
       const addr = socket.address();
       const localPort = addr.port;
-      const channel: MuxCallChannelHandle = mux.openCallChannel(hostPort);
+      const channel: MuxCallChannelHandle = mux.openCallChannel(target.port, target.address);
       let browserPeer: { address: string; port: number } | null = null;
       let closed = false;
 

@@ -1,10 +1,12 @@
 import { createSocket } from "node:dgram";
+import { networkInterfaces } from "node:os";
 import { describe, expect, test, vi } from "vitest";
 import {
   acceptHostHandshake,
   ClientCallBridgePool,
   decodeMuxFrame,
   encodeMuxFrame,
+  extractHostUdpCandidate,
   extractHostUdpPort,
   generateX25519KeyPair,
   importX25519PrivateKey,
@@ -39,7 +41,8 @@ async function wiredMuxPair(
       }),
     host: {
       onHttpRequest,
-      onCallOpen: (_id, hostPort, bridge) => openHostUdpBridge(hostPort, bridge),
+      onCallOpen: (_id, hostPort, bridge, hostAddress) =>
+        openHostUdpBridge(hostPort, bridge, hostAddress),
     },
   });
   clientMux = new MuxEndpoint({
@@ -669,6 +672,69 @@ describe("WebRTC SDP rewrite & UDP call bridge", () => {
       await vi.waitFor(() => {
         expect(pool.activeCount).toBe(0);
       });
+    } finally {
+      pool.closeAll();
+      browserSock.close();
+      hostEcho.close();
+      clientMux.close();
+      hostMux.close();
+    }
+  });
+
+  test("forwards UDP datagrams to non-loopback host interface IP advertised in SDP candidate", async (ctx) => {
+    const lanIp = Object.values(networkInterfaces())
+      .flat()
+      .find((entry) => entry !== undefined && entry.family === "IPv4" && !entry.internal)?.address;
+    if (lanIp === undefined) {
+      ctx.skip();
+      return;
+    }
+
+    const hostEcho = createSocket("udp4");
+    await new Promise<void>((resolve) => hostEcho.bind(0, lanIp, () => resolve()));
+    const hostPort = hostEcho.address().port;
+    hostEcho.on("message", (msg, rinfo) => {
+      hostEcho.send(Buffer.from(`echo:${msg.toString("utf8")}`), rinfo.port, rinfo.address);
+    });
+
+    const { clientMux, hostMux } = await wiredMuxPair(async () => ({
+      status: 404,
+      statusText: "Not Found",
+      headers: [],
+      body: null,
+    }));
+    const pool = new ClientCallBridgePool();
+    const browserSock = createSocket("udp4");
+    await new Promise<void>((resolve) => browserSock.bind(0, "127.0.0.1", () => resolve()));
+
+    try {
+      const lanSdp = [
+        "v=0",
+        "o=- 1 1 IN IP4 127.0.0.1",
+        "s=-",
+        "t=0 0",
+        "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+        `c=IN IP4 ${lanIp}`,
+        `a=candidate:1 1 udp 2122260223 ${lanIp} ${hostPort} typ host generation 0`,
+        "a=end-of-candidates",
+        "",
+      ].join("\r\n");
+      expect(extractHostUdpCandidate(lanSdp)).toEqual({ address: lanIp, port: hostPort });
+
+      const adapted = await pool.adaptOfferResponse(
+        new Response(JSON.stringify({ pc_id: "pc-lan-1", sdp: lanSdp }), { status: 200 }),
+        clientMux,
+        { mode: "relay" },
+      );
+      const { sdp: rewritten } = (await adapted.json()) as { sdp: string };
+      const bridgePort = extractHostUdpPort(rewritten)!;
+
+      const echoed = new Promise<string>((resolve) => {
+        browserSock.once("message", (msg) => resolve(msg.toString("utf8")));
+      });
+      await new Promise((r) => setTimeout(r, 25));
+      browserSock.send(Buffer.from("lan-opus"), bridgePort, "127.0.0.1");
+      expect(await echoed).toBe("echo:lan-opus");
     } finally {
       pool.closeAll();
       browserSock.close();
