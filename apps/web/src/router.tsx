@@ -181,12 +181,11 @@ export function SessionGate({
 }
 
 function AppRoutes() {
-  const [pathname] = useLocation();
   return (
     <Switch>
       <Route path="/setup">
         {() => (
-          <RouteBoundary resetKey={pathname} fallback={(error) => <RouteError error={error} />}>
+          <RouteBoundary fallback={(error) => <RouteError error={error} />}>
             <Suspense fallback={<Loading />}>
               <SetupRoute />
             </Suspense>
@@ -263,12 +262,11 @@ function AppRoutes() {
 }
 
 function RouterView({ store }: { readonly store: SessionStore }) {
-  const [pathname] = useLocation();
   return (
     <Switch>
       <Route path="/companion">
         {() => (
-          <RouteBoundary resetKey={pathname} fallback={() => <CompanionError />}>
+          <RouteBoundary fallback={() => <CompanionError />}>
             <Suspense fallback={<Nothing />}>
               <CompanionRoute />
             </Suspense>

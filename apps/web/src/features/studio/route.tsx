@@ -176,7 +176,7 @@ export function Component() {
   const personas = useQuery(personasQuery);
 
   if (tab !== undefined && !isSection(tab)) {
-    return <Redirect key={id} to={studioPath(id, "identity")} replace />;
+    return <Redirect key={`${id}:${tab}`} to={studioPath(id, "identity")} replace />;
   }
   if (personas.isPending) return <Loading />;
   if (personas.isError) return <LoadError error={personas.error} />;

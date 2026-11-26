@@ -195,8 +195,8 @@ export function createBrowserHistory(
         reset: () => setBlocker(IDLE_BLOCKER),
         proceed: () => {
           setBlocker({ state: "proceeding" });
-          allowNextPop = true;
           void restored.then(() => {
+            allowNextPop = true;
             win.history.go(delta);
           });
         },
@@ -247,6 +247,8 @@ export function createBrowserHistory(
     navigate,
     dispose: () => {
       win?.removeEventListener("popstate", onPopState);
+      unblockPop = null;
+      allowNextPop = false;
       locationListeners.clear();
       blockerListeners.clear();
       navigateListeners.clear();
@@ -283,7 +285,7 @@ export function HistoryControllerProvider({
   children,
 }: {
   readonly value: BrowserHistoryController;
-  readonly children: ReactNode;
+  readonly children?: ReactNode;
 }): ReactNode {
   return createElement(HistoryContext.Provider, { value }, children);
 }

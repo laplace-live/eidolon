@@ -3,7 +3,6 @@
 
 import { useLingui } from "@lingui/react/macro";
 import { type ReactNode, Suspense, useRef, useState } from "react";
-import { useLocation } from "wouter";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileBar } from "@/components/mobile-bar";
 import { RouteBoundary, RouteError } from "@/components/route-error";
@@ -60,7 +59,6 @@ export function FrameLayout({ children }: { readonly children?: ReactNode }) {
 
 export function AppShell({ children }: { readonly children?: ReactNode }) {
   const { t } = useLingui();
-  const [pathname] = useLocation();
   const [open, setOpen] = useState(storedOpen);
   const main = useRef<HTMLElement>(null);
 
@@ -95,7 +93,7 @@ export function AppShell({ children }: { readonly children?: ReactNode }) {
           className="min-w-0 overflow-y-auto outline-none md:mt-2 md:rounded-tl-xl md:border-t md:border-l shell:mt-(--strip) shell:border-t"
         >
           <BelowTitleStrip>
-            <RouteBoundary resetKey={pathname} fallback={(error) => <RouteError error={error} />}>
+            <RouteBoundary fallback={(error) => <RouteError error={error} />}>
               <Suspense fallback={null}>{children}</Suspense>
             </RouteBoundary>
           </BelowTitleStrip>
