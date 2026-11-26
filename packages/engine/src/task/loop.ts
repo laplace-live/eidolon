@@ -266,6 +266,17 @@ class TaskRun {
     const stored = await this.#request.store.entries();
     if (stored.length === 0) throw new Error(`Task ${this.#request.id} has no brief`);
     this.#entries.push(...stored);
+    if (this.#request.limits.contextTokens <= 0) {
+      for (const entry of this.#entries) {
+        if (
+          entry.type === "compaction" &&
+          entry.windowTokens !== undefined &&
+          entry.windowTokens > 0
+        ) {
+          this.#ceiling = Math.min(this.#ceiling, entry.windowTokens);
+        }
+      }
+    }
     this.#turns = stored.filter((entry) => entry.type === "assistant").length;
     const step = this.#request.limits.spendPauseUsd;
     // A resumed run goes on past the spend the owner continued from; a new one owes the first
@@ -500,7 +511,11 @@ class TaskRun {
   /** The turn's request, compacted first when the context calls for it; a summary may pause it. */
   async #ask(): Promise<Reply | TaskOutcome> {
     let view = this.#view();
-    if (Number.isFinite(this.#ceiling) && view.sized > compactAbove(this.#ceiling)) {
+    const pendingSlice = taskContext(this.#entries).compaction?.slice !== undefined;
+    if (
+      pendingSlice ||
+      (Number.isFinite(this.#ceiling) && view.sized > compactAbove(this.#ceiling))
+    ) {
       if (await this.#compact(view.sized)) {
         const held = this.#held();
         if (held !== null) return held;
@@ -599,21 +614,36 @@ class TaskRun {
    */
   async #compact(tokensBefore: number): Promise<boolean> {
     const context = taskContext(this.#entries);
+    const priorSlice =
+      context.compaction?.slice !== undefined &&
+      context.blocks[0]?.seq === context.compaction.firstKeptSeq
+        ? context.compaction.slice
+        : undefined;
     const window =
-      Number.isFinite(this.#ceiling) && this.#ceiling > 0 ? this.#ceiling : tokensBefore;
-    const first = firstKept(context.blocks, keepTokens(window));
+      Number.isFinite(this.#ceiling) && this.#ceiling > 0
+        ? this.#ceiling
+        : (context.compaction?.windowTokens ?? tokensBefore);
+    const first = Math.max(
+      priorSlice !== undefined ? 1 : 0,
+      firstKept(context.blocks, keepTokens(window)),
+    );
     const kept = context.blocks[first];
     if (first === 0 || kept === undefined) return false;
     const { system, instructions } = this.#request.compaction;
     const systemTokens = estimateTokens(system);
-    let budget = Math.max(256, compactAbove(window) - systemTokens);
+    const windowBudget = Math.max(256, compactAbove(window) - systemTokens);
+    let budget =
+      priorSlice !== undefined
+        ? Math.max(256, Math.min(windowBudget, priorSlice.budget))
+        : windowBudget;
     const older = context.blocks.slice(0, first);
     let summary = context.compaction?.summary ?? null;
     let start = 0;
-    let offset = 0;
+    let offset = priorSlice?.offset ?? 0;
+    let made = 0;
     let overflows = 0;
     while (start < older.length) {
-      if ((start > 0 || offset > 0) && this.#held() !== null) return true;
+      if (made > 0 && this.#held() !== null) return true;
       const chunk = this.#nextSummaryChunk(
         older,
         start,
@@ -623,6 +653,9 @@ class TaskRun {
         instructions,
         budget,
       );
+      if (chunk === null) {
+        throw new Error("Compaction failed. The model's context window was exceeded");
+      }
       let reply: Reply;
       try {
         reply = await this.#send(system, [{ role: "user", content: chunk.prompt }], [], false);
@@ -671,17 +704,22 @@ class TaskRun {
       const nextSummary = reply.text.trim();
       if (nextSummary === "") throw new Error("Compaction returned no summary");
       summary = nextSummary;
+      made++;
       overflows = 0;
-      if (chunk.nextOffset === 0) {
-        await this.#append({
-          type: "compaction",
-          summary,
-          firstKeptSeq: chunk.nextSeq,
-          files: chunk.files,
-          tokensBefore,
-        });
-        this.#counted = null;
-      }
+      const effectiveWindow =
+        Number.isFinite(this.#ceiling) && this.#ceiling > 0 ? this.#ceiling : window;
+      await this.#append({
+        type: "compaction",
+        summary,
+        firstKeptSeq: chunk.nextSeq,
+        files: chunk.files,
+        tokensBefore,
+        ...(chunk.nextOffset > 0 ? { slice: { offset: chunk.nextOffset, budget } } : {}),
+        ...(Number.isFinite(effectiveWindow) && effectiveWindow > 0
+          ? { windowTokens: effectiveWindow }
+          : {}),
+      });
+      this.#counted = null;
       start = chunk.end;
       offset = chunk.nextOffset;
     }
@@ -719,7 +757,7 @@ class TaskRun {
     readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
     readonly prompt: string;
     readonly singleBlock: boolean;
-  } {
+  } | null {
     const seqAfter = (end: number): number =>
       end < older.length ? (older[end] as Block).seq : keptSeq;
     const chunkFiles = (nextSeq: number) => filesBefore(this.#entries, nextSeq);
@@ -780,12 +818,13 @@ class TaskRun {
     const nextBlockSeq = seqAfter(start + 1);
     const completedFiles = chunkFiles(nextBlockSeq);
     const slice = summarySlicePrompt(block, offset, summary, completedFiles, instructions, budget);
+    if (slice === null) return null;
     const finished = slice.nextOffset >= slice.total;
     return {
       end: finished ? start + 1 : start,
       nextOffset: finished ? 0 : slice.nextOffset,
       nextSeq: finished ? nextBlockSeq : block.seq,
-      files: completedFiles,
+      files: finished ? completedFiles : chunkFiles(block.seq),
       prompt: slice.prompt,
       singleBlock: true,
     };

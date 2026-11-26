@@ -538,4 +538,86 @@ describe("runTask's unpriced pause", () => {
     // output tokens -> compactAbove (~15k) triggers proactive SUMMARY-2 before c-c's follow-up.
     expect(mind.summaryRequests).toHaveLength(2);
   });
+
+  test("persists partial slice summary and offset across spend pauses so continuing finishes the oversized turn without repeating slices", async () => {
+    const calls25 = Array.from({ length: 25 }, (_, i) =>
+      call(`r-${i}`, "read", { value: `t${i}` }),
+    );
+    const store = new MemoryStore({ type: "brief", brief: BRIEF });
+    const counted = meter(0);
+    const sizedReader = tool("read", async (args) => {
+      const value = String(args.value);
+      const size = value === "keep" ? 20_000 : 2_000;
+      return result(`${value}:${"x".repeat(size)}`, {
+        files: { read: [`/tmp/todo/${value}.txt`] },
+      });
+    });
+    const mind = new ScriptedMind(
+      [
+        calls(calls25),
+        calls([call("c-keep", "read", { value: "keep" })]),
+        new ProviderHttpError("anthropic", 400, "prompt is too long: 16000 tokens > 8192 maximum"),
+        says("done"),
+      ],
+      {
+        summaries: Array.from({ length: 10 }, (_, i) => says(`SUMMARY-${i + 1}`)),
+        after: (req) => {
+          counted.tap(record(req.system === "You summarize." ? 1.0 : 0, {}));
+        },
+      },
+    );
+    const req = taskRequest(mind, {
+      store,
+      tools: [sizedReader],
+      meter: counted,
+      limits: { contextTokens: 0, spendPauseUsd: 1, maskAfterTokens: 1e9 },
+    });
+
+    const p1 = await drain(req);
+    expect(p1.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.00; it pauses at every $1.00.",
+    });
+    const bigTurnSeq = store.of("assistant")[0]?.seq;
+    const keepSeq = store.of("assistant")[1]?.seq;
+    expect(store.of("compaction").at(-1)).toMatchObject({
+      summary: "SUMMARY-1",
+      firstKeptSeq: bigTurnSeq,
+      windowTokens: 8_192,
+    });
+    expect(store.of("compaction").at(-1)?.slice).toBeUndefined();
+
+    const p2 = await drain(req);
+    expect(p2.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $2.00; it pauses at every $1.00.",
+    });
+    const slice1Offset = store.of("compaction").at(-1)?.slice?.offset ?? 0;
+    expect(slice1Offset).toBeGreaterThan(0);
+    expect(store.of("compaction").at(-1)?.firstKeptSeq).toBe(bigTurnSeq);
+
+    const p3 = await drain(req);
+    expect(p3.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $3.00; it pauses at every $1.00.",
+    });
+    const slice2Offset = store.of("compaction").at(-1)?.slice?.offset ?? 0;
+    expect(slice2Offset).toBeGreaterThan(slice1Offset);
+    expect(store.of("compaction").at(-1)?.firstKeptSeq).toBe(bigTurnSeq);
+
+    let final = p3;
+    while (final.outcome.status === "paused") final = await drain(req);
+    expect(final.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(store.of("compaction").at(-1)?.slice).toBeUndefined();
+    expect(store.of("compaction").at(-1)?.firstKeptSeq).toBe(keepSeq);
+
+    const prompts = mind.summaryRequests.map((entry) =>
+      String((entry.messages[0] as { content?: string } | undefined)?.content),
+    );
+    expect(prompts.filter((p) => p.includes("[Tool result]: t0:"))).toHaveLength(1);
+    expect(prompts.some((p) => p.includes("[Tool result]: t24:"))).toBe(true);
+  });
 });

@@ -1821,6 +1821,10 @@ export type TaskEntry = { readonly seq: number; readonly at: number } & (
       readonly firstKeptSeq: number;
       readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
       readonly tokensBefore: number;
+      /** In-progress character offset and token budget when paused mid-block across summary slices. */
+      readonly slice?: { readonly offset: number; readonly budget: number };
+      /** Active or learned context ceiling when compacted, so resumed unlimited runs retain it. */
+      readonly windowTokens?: number;
     }
   | { readonly type: "pause"; readonly reason: TaskPauseReason; readonly detail: string }
   | { readonly type: "resume" }

@@ -416,14 +416,11 @@ export function summarySlicePrompt(
   files: { readonly read: readonly string[]; readonly written: readonly string[] },
   instructions: string,
   maxTokens: number,
-): { readonly prompt: string; readonly nextOffset: number; readonly total: number } {
+): { readonly prompt: string; readonly nextOffset: number; readonly total: number } | null {
   const full = serialized([block]);
   const total = full.length;
   const tail = summaryTail(previous, files, instructions);
-  if (offset >= total) {
-    return { prompt: wrapSummaryPrompt("", tail), nextOffset: total, total };
-  }
-  if (offset === 0) {
+  if (offset === 0 && offset < total) {
     const whole = wrapSummaryPrompt(full, tail);
     if (estimateTokens(whole) <= maxTokens) return { prompt: whole, nextOffset: total, total };
   }
@@ -448,6 +445,13 @@ export function summarySlicePrompt(
     activeTail = summaryTail(activePrev, activeFiles, instructions);
   }
 
+  if (offset >= total) {
+    const emptyPrompt = wrapSummaryPrompt("", activeTail);
+    return estimateTokens(emptyPrompt) <= maxTokens
+      ? { prompt: emptyPrompt, nextOffset: total, total }
+      : null;
+  }
+
   const rest = full.slice(offset);
   let lo = 0;
   let hi = rest.length;
@@ -459,7 +463,8 @@ export function summarySlicePrompt(
       hi = mid - 1;
     }
   }
-  let take = Math.max(1, lo);
+  if (lo === 0) return null;
+  let take = lo;
   if (take < rest.length) {
     const boundary = rest.lastIndexOf("\n\n", Math.max(0, take - 2));
     if (boundary >= Math.floor(take / 2)) take = boundary + 2;
@@ -467,7 +472,8 @@ export function summarySlicePrompt(
   if (take < rest.length) {
     const code = rest.charCodeAt(take - 1);
     if (code >= 0xd800 && code <= 0xdbff) {
-      take = take > 1 ? take - 1 : Math.min(rest.length, 2);
+      if (take <= 1) return null;
+      take -= 1;
     }
   }
   return {

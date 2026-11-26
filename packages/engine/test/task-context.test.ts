@@ -2,7 +2,7 @@
 // the context's threshold, and a provider's overflow compacted and retried.
 import { ProviderHttpError } from "@eidolon/providers";
 import { describe, expect, test } from "vitest";
-import { estimateTokens } from "../src/task/context.ts";
+import { estimateTokens, summarySlicePrompt, taskContext } from "../src/task/context.ts";
 import type { TaskEntryDraft, TaskEvent, TaskTool } from "../src/task.ts";
 import type { MindChunk, MindRequest } from "../src/types.ts";
 import {
@@ -716,5 +716,55 @@ describe("unlimited context (contextTokens: 0)", () => {
       error: "Compaction failed. The model's context window was exceeded",
     });
     expect(exhausted.summaryRequests).toHaveLength(3);
+  });
+
+  test("returns null from summarySlicePrompt when no capacity remains and fails compaction cleanly", async () => {
+    const oversizedStore = new MemoryStore(
+      { type: "brief", brief: BRIEF },
+      { type: "assistant", text: "𐐷𐐷𐐷𐐷", calls: [] },
+    );
+    const block = taskContext(oversizedStore.list).blocks[1]!;
+    expect(
+      summarySlicePrompt(block, 0, null, { read: [], written: [] }, "I".repeat(2_000), 256),
+    ).toBeNull();
+
+    // Exact capacity for tail + 1 UTF-16 code unit before a high surrogate: never breaks pair or
+    // exceeds maxTokens.
+    const prefix = "<conversation>\n";
+    const suffix = "\n</conversation>\n\nSummarize";
+    const exactBase = estimateTokens(`${prefix}a${suffix}`);
+    const singleCodeUnitBudget = exactBase;
+    const surrogateBlock = taskContext(new MemoryStore({ type: "steer", text: "𐐷𐐷𐐷𐐷" }).list)
+      .blocks[0]!;
+    // "[User]: " shifts offset before "𐐷"; start offset at the surrogate character itself.
+    const result = summarySlicePrompt(
+      surrogateBlock,
+      8,
+      null,
+      { read: [], written: [] },
+      "Summarize",
+      singleCodeUnitBudget,
+    );
+    expect(result === null || estimateTokens(result.prompt) <= singleCodeUnitBudget).toBe(true);
+
+    const mind = new ScriptedMind([
+      calls([call("c-a", "read", { value: "a" })]),
+      calls([call("c-b", "read", { value: "b" })]),
+      new ProviderHttpError("anthropic", 400, "prompt is too long: 10000 tokens > 2048 maximum"),
+    ]);
+    const outcome = (
+      await drain(
+        taskRequest(mind, {
+          tools: [reader(4_000)],
+          compaction: { system: SUMMARY_SYSTEM, instructions: "I".repeat(6_400) },
+          limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+        }),
+      )
+    ).outcome;
+    expect(outcome).toEqual({
+      status: "failed",
+      error: "Compaction failed. The model's context window was exceeded",
+    });
+    expect(mind.summaryRequests).toHaveLength(0);
   });
 });
