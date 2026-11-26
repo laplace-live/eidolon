@@ -383,8 +383,10 @@ export class ChatRunner {
           try {
             return (await this.store.read(id, { afterSeq })).events;
           } catch (error) {
-            if (error instanceof ChatStoreError && error.code === "not-found") return [];
-            throw error;
+            if (!(error instanceof ChatStoreError && error.code === "not-found")) {
+              logger.warning(`Chat ${id} unread skipped: ${errorText(error)}`);
+            }
+            return [];
           }
         }),
         active: this.#isActive(summary.id),

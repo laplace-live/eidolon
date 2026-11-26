@@ -47,7 +47,9 @@ export class ChatReadStore {
   readonly #path: string;
   readonly #log: (message: string) => void;
   #readSeq: Map<string, number> | null = null;
-  #loading: Promise<Map<string, number>> | null = null;
+  #loading: Promise<Map<string, number> | null> | null = null;
+  #writable = true;
+  #warnedReadError = false;
   readonly #unreads = new Map<string, UnreadCache>();
   #queue: Promise<void> = Promise.resolve();
 
@@ -146,6 +148,7 @@ export class ChatReadStore {
   ): Promise<number> {
     await this.#queue;
     const readSeq = await this.#ensureLoaded();
+    if (readSeq === null) return 0;
     const seen = readSeq.get(summary.id) ?? summary.lastSeq;
     if (seen >= summary.lastSeq) return 0;
 
@@ -174,20 +177,35 @@ export class ChatReadStore {
     await this.#queue;
   }
 
-  async #ensureLoaded(): Promise<Map<string, number>> {
+  async #ensureLoaded(): Promise<Map<string, number> | null> {
     if (this.#readSeq !== null) return this.#readSeq;
     this.#loading ??= this.#load();
     return this.#loading;
   }
 
-  async #load(): Promise<Map<string, number>> {
-    let parsed: unknown;
+  async #load(): Promise<Map<string, number> | null> {
+    let raw: string;
     try {
-      parsed = JSON.parse(await readFile(this.#path, "utf8"));
+      raw = await readFile(this.#path, "utf8");
     } catch (error) {
-      if (!isNotFound(error)) {
+      if (isNotFound(error)) {
+        this.#readSeq = new Map();
+        return this.#readSeq;
+      }
+      if (!this.#warnedReadError) {
+        this.#warnedReadError = true;
         this.#log(`Chat read watermarks ignored: ${errorText(error)}`);
       }
+      // Retry on later calls rather than wiping read.json with empty state after a transient error.
+      this.#loading = null;
+      return null;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      this.#log(`Chat read watermarks ignored: ${errorText(error)}`);
+      this.#writable = false;
       this.#readSeq = new Map();
       return this.#readSeq;
     }
@@ -200,6 +218,7 @@ export class ChatReadStore {
       }
     } else {
       this.#log("Chat read watermarks ignored: read.json is not an object");
+      this.#writable = false;
     }
     this.#readSeq = map;
     return map;
@@ -208,7 +227,8 @@ export class ChatReadStore {
   #serial(task: (readSeq: Map<string, number>) => Promise<boolean> | boolean): Promise<void> {
     const next = this.#queue.then(async () => {
       const readSeq = await this.#ensureLoaded();
-      if (await task(readSeq)) await this.#write(readSeq);
+      if (readSeq === null) return;
+      if ((await task(readSeq)) && this.#writable) await this.#write(readSeq);
     });
     this.#queue = next.catch(() => {});
     return next;

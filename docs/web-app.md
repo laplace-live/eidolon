@@ -562,11 +562,11 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
 - **The page:**
   - The chats are in the sidebar ([The layout](#the-layout)), newest first, each with who it is
     with (her circle avatar alone, or a rounded-square grid of up to nine participants' avatars for
-    a group), its name, its last line, when, and a badge (or dot when collapsed) for unread replies
-    that arrive while another view is open; the list polls every 2 s while any chat is active
-    and every 15 s otherwise, and opening a chat marks its latest event read (`POST chats/:id/read`).
-    The open chat fills the rest of the window, its lines in a centered column. With none open,
-    `/chats` offers **New Chat**.
+    a group), its name, its last line, when, and a badge (or dot when collapsed) for unread items of
+    hers — messages, spoken tool calls and turn failures — that arrive while another view is open;
+    the list polls every 2 s while any chat is active and every 15 s otherwise, and opening a chat
+    marks its latest event read (`POST chats/:id/read`). The open chat fills the rest of the window,
+    its lines in a centered column. With none open, `/chats` offers **New Chat**.
   - **The message box** floats at the foot of the column, with no bar behind it: the lines scroll
     under it and fade out above it, and the waiting bar, the call's dock and a reply that couldn't
     start stack above it, while a call with her model shows its screen over the column in the

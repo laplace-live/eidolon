@@ -58,12 +58,16 @@ export interface ChatTurns {
  * the viewer's, isn't in the log yet, the latest; null for none.
  * `quiet`: a call is up in the tab, or the server's in the chat: none of her voice messages plays
  * on its own, or waits to.
+ * `serverActive`: GET chats still sees a turn, upload or call running on this chat.
+ * `serverLastSeq`: GET chats' latest seq, used to catch up after a turn finishes off-stream.
  */
 export function useChat(
   id: string,
   calling: boolean,
   awaitingReport: number | null,
   quiet: boolean,
+  serverActive = false,
+  serverLastSeq = 0,
 ): ChatTurns {
   const queryClient = useQueryClient();
   const [live, dispatch] = useReducer(reduceLive, IDLE);
@@ -223,6 +227,35 @@ export function useChat(
       on = false;
     };
   }, [awaitingReport, calling, id, follow]);
+
+  // Reopening while hearing or turn setup runs can get 204 before GET live starts; retry while active.
+  useEffect(() => {
+    if (!serverActive || calling || awaitingReport !== null) return;
+    let on = true;
+    void (async () => {
+      while (on) {
+        if (streams.current.size === 0) {
+          await follow((signal) => followLive(id, signal), null, true);
+          if (!on) return;
+        }
+        await pause(CALL_FEED_RETRY_MS);
+      }
+    })();
+    return () => {
+      on = false;
+    };
+  }, [serverActive, calling, awaitingReport, id, follow]);
+
+  const caughtUp = useRef({ id, seq: 0 });
+  useEffect(() => {
+    if (streams.current.size > 0) return;
+    const localSeq = queryClient.getQueryData(chatQuery(id).queryKey)?.events.at(-1)?.seq;
+    if (localSeq === undefined || serverLastSeq <= localSeq) return;
+    const prev = caughtUp.current.id === id ? caughtUp.current.seq : 0;
+    if (serverLastSeq <= prev) return;
+    caughtUp.current = { id, seq: serverLastSeq };
+    void reread(queryClient, chatQuery(id).queryKey);
+  }, [id, serverLastSeq, queryClient]);
 
   const send = useCallback(
     (text: string, files: readonly Attachment[] = []) => {

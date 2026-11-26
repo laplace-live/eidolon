@@ -129,8 +129,10 @@ describe("useMarkRead", () => {
       await settle();
     });
 
-    expect(marked).toEqual([{ id: CHAT_ID, seq: 3 }]);
-    expect(client.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    await vi.waitFor(() => {
+      expect(marked).toEqual([{ id: CHAT_ID, seq: 3 }]);
+      expect(client!.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    });
   });
 
   test("cancels an in-flight chats poll and refreshes after markChatRead settles", async () => {
@@ -163,7 +165,9 @@ describe("useMarkRead", () => {
     );
     await mounted.act(settle);
 
-    expect(pollAborted).toBe(true);
+    await vi.waitFor(() => {
+      expect(pollAborted).toBe(true);
+    });
     stalePoll.resolve([summary(3, 2)]);
     await mounted.act(settle);
     expect(client.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
@@ -172,8 +176,10 @@ describe("useMarkRead", () => {
     mark.resolve();
     await mounted.act(settle);
 
-    expect(pollCalls).toBe(2);
-    expect(client.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    await vi.waitFor(() => {
+      expect(pollCalls).toBe(2);
+      expect(client!.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    });
   });
 
   test("refreshes chats if a poll started while markChatRead was in flight", async () => {
@@ -198,7 +204,9 @@ describe("useMarkRead", () => {
       createElement(QueryClientProvider, { client }, createElement(Harness, { id: CHAT_ID })),
     );
     await mounted.act(settle);
-    expect(pollCalls).toBe(1);
+    await vi.waitFor(() => {
+      expect(pollCalls).toBe(1);
+    });
 
     await mounted.act(async () => {
       read.resolve(
@@ -206,7 +214,9 @@ describe("useMarkRead", () => {
       );
       await settle();
     });
-    expect(client.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    await vi.waitFor(() => {
+      expect(client!.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    });
 
     // Trigger a list poll while POST /read is still in flight.
     void client.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
@@ -219,8 +229,10 @@ describe("useMarkRead", () => {
     midPoll.resolve([summary(3, 2)]);
     await mounted.act(settle);
 
-    expect(pollCalls).toBe(3);
-    expect(client.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    await vi.waitFor(() => {
+      expect(pollCalls).toBe(3);
+      expect(client!.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    });
   });
 
   test("handles an in-flight initial chats load without erroring and refreshes after markChatRead", async () => {
@@ -252,7 +264,47 @@ describe("useMarkRead", () => {
       await settle();
     });
 
-    expect(pollCalls).toBe(2);
-    expect(client.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    await vi.waitFor(() => {
+      expect(pollCalls).toBe(2);
+      expect(client!.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    });
+  });
+
+  test("retries markChatRead while the chat stays open after a transient failure", async () => {
+    vi.useFakeTimers();
+    try {
+      let markCalls = 0;
+      let serverUnread = 2;
+      listImpl = async () => [summary(3, serverUnread)];
+      readImpl = async () =>
+        contents([msg(1, "user", "hi"), msg(2, "persona", "a"), msg(3, "persona", "b")]);
+      markImpl = async () => {
+        markCalls += 1;
+        if (markCalls === 1) throw new Error("temporary failure");
+        serverUnread = 0;
+      };
+
+      client = new QueryClient({
+        defaultOptions: { queries: { retry: false, refetchIntervalInBackground: false } },
+      });
+      client.setQueryData(chatsQuery.queryKey, [summary(3, 2)]);
+
+      mounted = await mountFakeDom(
+        createElement(QueryClientProvider, { client }, createElement(Harness, { id: CHAT_ID })),
+      );
+      await mounted.act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(markCalls).toBe(1);
+
+      await mounted.act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(markCalls).toBe(2);
+      expect(client.getQueryData(chatsQuery.queryKey)?.[0]?.unread).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -7,6 +7,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -3118,5 +3119,109 @@ describe("unread counts and live state", () => {
         async () => [],
       ),
     ).toBe(2);
+  });
+
+  test("preserves read.json on corrupt parse or transient read error, and isolates corrupt chat logs in list()", async () => {
+    // Corrupt read.json must stay untouched on disk across restarts and subsequent operations.
+    const corruptRoot = join(dataHome(), "corrupt-read");
+    made.push(corruptRoot);
+    mkdirSync(corruptRoot, { recursive: true });
+    writeFileSync(join(corruptRoot, "read.json"), "{bad", { mode: 0o600 });
+    const corruptRunner = new ChatRunner({
+      root: corruptRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    try {
+      const createdId = await corruptRunner.create([PERSONA]);
+      await corruptRunner.markRead(createdId, 0);
+      expect(readFileSync(join(corruptRoot, "read.json"), "utf8")).toBe("{bad");
+    } finally {
+      await corruptRunner.shutdown();
+    }
+
+    // Transient non-ENOENT read error (e.g. EISDIR) must not overwrite watermarks once recovered.
+    const transientRoot = join(dataHome(), "transient-read");
+    made.push(transientRoot);
+    const chatStore = new JsonlChatStore(transientRoot);
+    const savedId = newId();
+    await chatStore.create({ format: 1, id: savedId, createdAt: 1000, participants: [PERSONA] });
+    await chatStore.append(savedId, [
+      { seq: 1, at: 1001, type: "message", id: "u1", speaker: { kind: "user" }, text: "一" },
+      {
+        seq: 2,
+        at: 1002,
+        type: "message",
+        id: "p2",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "二",
+      },
+      {
+        seq: 3,
+        at: 1003,
+        type: "message",
+        id: "p3",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "三",
+      },
+    ]);
+    const readPath = join(transientRoot, "read.json");
+    const backupPath = join(transientRoot, "read.bak");
+    writeFileSync(backupPath, JSON.stringify({ [savedId]: 1 }), { mode: 0o600 });
+    mkdirSync(readPath);
+    const blockedRunner = new ChatRunner({
+      root: transientRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    try {
+      expect(await blockedRunner.list()).toMatchObject([{ id: savedId, unread: 0 }]);
+      await blockedRunner.markRead(savedId, 3);
+      rmSync(readPath, { recursive: true });
+      renameSync(backupPath, readPath);
+      expect(await blockedRunner.list()).toMatchObject([{ id: savedId, unread: 2 }]);
+    } finally {
+      await blockedRunner.shutdown();
+    }
+
+    // Cold runner + corrupt chat.jsonl (same byte length as meta.json): skips only its unread count.
+    const coldRoot = join(dataHome(), "corrupt-log-list");
+    made.push(coldRoot);
+    const seedListRunner = new ChatRunner({
+      root: coldRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    let brokenId: string;
+    let healthyId: string;
+    try {
+      brokenId = await seedListRunner.create([PERSONA]);
+      healthyId = await seedListRunner.create([PERSONA]);
+      await (await seedListRunner.send(brokenId, "你好")).ended;
+      await (await seedListRunner.send(healthyId, "你好")).ended;
+    } finally {
+      await seedListRunner.shutdown();
+    }
+    const logPath = join(coldRoot, brokenId, "chat.jsonl");
+    const validBytes = readFileSync(logPath);
+    const brokenLine = `${"x".repeat(validBytes.length - 1)}\n`;
+    expect(Buffer.byteLength(brokenLine)).toBe(validBytes.length);
+    writeFileSync(logPath, brokenLine);
+    const coldListRunner = new ChatRunner({
+      root: coldRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    try {
+      const listed = await coldListRunner.list();
+      expect(listed.find((entry) => entry.id === brokenId)?.unread).toBe(0);
+      expect(listed.find((entry) => entry.id === healthyId)?.unread).toBe(1);
+    } finally {
+      await coldListRunner.shutdown();
+    }
   });
 });

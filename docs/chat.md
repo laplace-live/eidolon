@@ -65,8 +65,9 @@ isn't stored, she never saw.
 **`ChatSummary`** is what the chat list shows: the title, the participants, `createdAt`,
 `updatedAt`, the last message's text and the last seq. `summarize` derives it from a log, so a
 store can always rebuild it. In the local app, `GET chats` returns `LocalChatSummary`, adding
-`unread` (unread persona items past the viewer's watermark in `read.json`) and `active` (whether
-a reply, voice upload, late tool or call runs).
+`unread` (persona messages, spoken `tool-call`s, and non-`voice-failed` `turn-failed` items past
+the viewer's watermark in `read.json`) and `active` (whether a send, reply, `start_task` start or
+task report, late tool, or call runs).
 
 ## Her view: `viewOf`
 
@@ -933,7 +934,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 
 | Method and path (under `/api/local`) | Body | Answer |
 | --- | --- | --- |
-| `GET chats` | | `LocalChatSummary[]`, newest activity first: each `ChatSummary` plus `unread` (persona items past `<data home>/chats/read.json`, mode 0600) and `active` (a reply, hearing, late tool or call runs) |
+| `GET chats` | | `LocalChatSummary[]`, newest activity first: each `ChatSummary` plus `unread` (persona messages, spoken `tool-call`s, and non-`voice-failed` `turn-failed` items past `<data home>/chats/read.json`, mode 0600) and `active` (whether a send, reply, `start_task` start or task report, late tool, or call runs) |
 | `POST chats` | `{ participants: [id] }`, 1 to 6 personas, each once | `201 { id }`; one persona's greeting then runs |
 | `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, missingCallKeys, call, groupCall, defaultDisplay, defaultPermissions }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; while no persona in it can be called for want of a key, the accounts their calls lack one for, as Settings names them, else none; the call on in the chat, `{ id, persona, group? }`, or null; whether its personas can be called together now; and the app's `chats.display` and `assistant.permissions` as the read was made, which the chat follows until a `settings` event of its own sets a `display` or `permissions` |
 | `POST chats/:id/files?filename=` | A file the viewer sends with a line, as it is: a text file as any `text/*` type, UTF-8, at most 1 MB, named by `filename`, or as any other type an image, a PNG, JPEG, WebP or GIF by its bytes, at most 50 MB and 64 megapixels | `201` with its attachment, kept in `files/` by its hash, an image as `normalizeImage` made it, and in no event until a line names it ([The viewer's files](#the-viewers-files)). `415` for bytes that aren't one, `413` past the size, `400` for an empty body |

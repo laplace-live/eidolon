@@ -172,4 +172,27 @@ describe("readNdjson", () => {
     expect(values).toEqual([{ a: 1 }]);
     expect(cancelled).toBe(true);
   });
+
+  test("unblocks a waiting reader.read() when the signal aborts between chunks", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('{"a":1}\n'));
+      },
+      pull() {
+        return new Promise(() => {});
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const controller = new AbortController();
+    const values = [];
+    for await (const { value } of readNdjson(body, 0, controller.signal)) {
+      values.push(value);
+      setTimeout(() => controller.abort(), 10);
+    }
+    expect(values).toEqual([{ a: 1 }]);
+    expect(cancelled).toBe(true);
+  });
 });

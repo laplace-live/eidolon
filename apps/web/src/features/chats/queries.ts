@@ -6,7 +6,7 @@ import type {
   ReplyMode,
 } from "@eidolon/chat";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   changeParticipants,
   createChat,
@@ -57,19 +57,44 @@ export function useMarkRead(
   id: string,
   events: readonly ChatEvent[] | undefined,
   ready: boolean,
+  unread = 0,
 ): void {
   const queryClient = useQueryClient();
   const lastSeq = events?.at(-1)?.seq ?? 0;
   const marked = useRef({ id, seq: 0 });
+  const failed = useRef({ id, seq: 0 });
+  const [retry, setRetry] = useState(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeId = useRef(id);
 
   useEffect(() => {
-    if (!ready) return;
+    activeId.current = id;
+    return () => {
+      activeId.current = "";
+      if (retryTimer.current !== null) {
+        clearTimeout(retryTimer.current);
+        retryTimer.current = null;
+      }
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!ready || retry < 0) return;
     const current = marked.current.id === id ? marked.current.seq : 0;
     if (lastSeq <= current) return;
     marked.current = { id, seq: lastSeq };
     const chats = queryClient.getQueryData(chatsQuery.queryKey);
     const summary = chats?.find((chat) => chat.id === id);
-    if (summary !== undefined && summary.unread === 0 && lastSeq <= summary.lastSeq) return;
+    const retrying = failed.current.id === id && failed.current.seq === lastSeq;
+    if (
+      !retrying &&
+      unread === 0 &&
+      summary !== undefined &&
+      summary.unread === 0 &&
+      lastSeq <= summary.lastSeq
+    ) {
+      return;
+    }
     const clearUnread = () => {
       queryClient.setQueryData(chatsQuery.queryKey, (list) =>
         list?.some((chat) => chat.id === id && chat.unread > 0 && chat.lastSeq <= lastSeq)
@@ -85,6 +110,9 @@ export function useMarkRead(
     clearUnread();
     void markChatRead(id, lastSeq)
       .then(async () => {
+        if (failed.current.id === id && failed.current.seq === lastSeq) {
+          failed.current = { id, seq: 0 };
+        }
         const now = queryClient.getQueryData(chatsQuery.queryKey)?.find((chat) => chat.id === id);
         const inFlight = queryClient.isFetching({ queryKey: chatsQuery.queryKey, exact: true }) > 0;
         if (now !== undefined && now.unread > 0) clearUnread();
@@ -97,14 +125,22 @@ export function useMarkRead(
         }
       })
       .catch(() => {
+        failed.current = { id, seq: lastSeq };
         if (marked.current.id === id && marked.current.seq === lastSeq) {
           marked.current = { id, seq: 0 };
         }
         if (hadFetch) {
           void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
         }
+        if (activeId.current === id) {
+          if (retryTimer.current !== null) clearTimeout(retryTimer.current);
+          retryTimer.current = setTimeout(() => {
+            retryTimer.current = null;
+            setRetry((count) => count + 1);
+          }, CHATS_ACTIVE_POLL_MS);
+        }
       });
-  }, [id, lastSeq, ready, queryClient]);
+  }, [id, lastSeq, ready, unread, retry, queryClient]);
 }
 
 export function useCreateChat(onCreated: (id: string) => void) {
