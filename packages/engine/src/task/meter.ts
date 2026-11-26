@@ -85,6 +85,10 @@ export class UsageMeter implements TaskMeter {
     return this.#output;
   }
 
+  modelId(): string {
+    return `${this.#account}/${this.#model}`;
+  }
+
   unpriced(): string | null {
     return this.#uncounted;
   }

@@ -1822,9 +1822,14 @@ export type TaskEntry = { readonly seq: number; readonly at: number } & (
       readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
       readonly tokensBefore: number;
       /** In-progress character offset and token budget when paused mid-block across summary slices. */
-      readonly slice?: { readonly offset: number; readonly budget: number };
-      /** Active or learned context ceiling when compacted, so resumed unlimited runs retain it. */
-      readonly windowTokens?: number;
+      readonly slice?: {
+        readonly offset: number;
+        readonly budget: number;
+        readonly shrunk?: boolean;
+        readonly model?: string;
+      };
+      /** Context ceiling learned from an overflow on `model`, so same-model unlimited resumes keep it. */
+      readonly learned?: { readonly tokens: number; readonly model: string };
     }
   | { readonly type: "pause"; readonly reason: TaskPauseReason; readonly detail: string }
   | { readonly type: "resume" }

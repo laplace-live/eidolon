@@ -141,9 +141,14 @@ export class FakeMeter implements TaskMeter {
   spent = 0;
   input: number | null = null;
   output: number | null = null;
+  model: string | undefined = undefined;
   uncounted: string | null = null;
   /** The requests the loop said came back whole. */
   ended = 0;
+
+  modelId(): string | undefined {
+    return this.model;
+  }
 
   spentUsd(): number {
     return this.spent;

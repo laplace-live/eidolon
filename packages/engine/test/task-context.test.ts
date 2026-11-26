@@ -728,24 +728,19 @@ describe("unlimited context (contextTokens: 0)", () => {
       summarySlicePrompt(block, 0, null, { read: [], written: [] }, "I".repeat(2_000), 256),
     ).toBeNull();
 
-    // Exact capacity for tail + 1 UTF-16 code unit before a high surrogate: never breaks pair or
-    // exceeds maxTokens.
-    const prefix = "<conversation>\n";
-    const suffix = "\n</conversation>\n\nSummarize";
-    const exactBase = estimateTokens(`${prefix}a${suffix}`);
-    const singleCodeUnitBudget = exactBase;
+    // Exact capacity for tail + 1 UTF-16 code unit before a high surrogate: 1 ASCII code unit
+    // fits within 11 tokens (nextOffset: 9), whereas the surrogate pair needs 12 tokens so
+    // summarySlicePrompt must return null instead of splitting a pair or overflowing maxTokens.
     const surrogateBlock = taskContext(new MemoryStore({ type: "steer", text: "𐐷𐐷𐐷𐐷" }).list)
       .blocks[0]!;
-    // "[User]: " shifts offset before "𐐷"; start offset at the surrogate character itself.
-    const result = summarySlicePrompt(
-      surrogateBlock,
-      8,
-      null,
-      { read: [], written: [] },
-      "Summarize",
-      singleCodeUnitBudget,
-    );
-    expect(result === null || estimateTokens(result.prompt) <= singleCodeUnitBudget).toBe(true);
+    const asciiBlock = taskContext(new MemoryStore({ type: "steer", text: "abcd" }).list)
+      .blocks[0]!;
+    expect(
+      summarySlicePrompt(surrogateBlock, 8, null, { read: [], written: [] }, "Summarize.", 11),
+    ).toBeNull();
+    expect(
+      summarySlicePrompt(asciiBlock, 8, null, { read: [], written: [] }, "Summarize.", 11),
+    ).toMatchObject({ nextOffset: 9 });
 
     const mind = new ScriptedMind([
       calls([call("c-a", "read", { value: "a" })]),

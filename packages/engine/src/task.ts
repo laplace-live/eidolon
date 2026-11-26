@@ -108,9 +108,14 @@ export type TaskEntryDraft =
       readonly files: { readonly read: readonly string[]; readonly written: readonly string[] };
       readonly tokensBefore: number;
       /** In-progress character offset and token budget when paused mid-block across summary slices. */
-      readonly slice?: { readonly offset: number; readonly budget: number };
-      /** Active or learned context ceiling when compacted, so resumed unlimited runs retain it. */
-      readonly windowTokens?: number;
+      readonly slice?: {
+        readonly offset: number;
+        readonly budget: number;
+        readonly shrunk?: boolean;
+        readonly model?: string;
+      };
+      /** Context ceiling learned from an overflow on `model`, so same-model unlimited resumes keep it. */
+      readonly learned?: { readonly tokens: number; readonly model: string };
     }
   | { readonly type: "pause"; readonly reason: TaskPauseReason; readonly detail: string }
   | { readonly type: "resume" }
@@ -144,6 +149,8 @@ export interface TaskMeter {
   lastOutputTokens?(): number | null;
   /** A request attempt is starting: clears per-attempt usage so a failed attempt cannot leak. */
   requestStarted?(): void;
+  /** Active `<account>/<model>` identifier so learned context ceilings stay scoped to one model. */
+  modelId?(): string | undefined;
   /**
    * Why the first request it couldn't count went uncounted ("No price is known for <model> at
    * <provider>", "No usage was reported for <model> at <account>"), or null.

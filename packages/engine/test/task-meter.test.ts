@@ -584,7 +584,7 @@ describe("runTask's unpriced pause", () => {
     expect(store.of("compaction").at(-1)).toMatchObject({
       summary: "SUMMARY-1",
       firstKeptSeq: bigTurnSeq,
-      windowTokens: 8_192,
+      learned: { tokens: 8_192, model: "openrouter/test/model" },
     });
     expect(store.of("compaction").at(-1)?.slice).toBeUndefined();
 
@@ -619,5 +619,128 @@ describe("runTask's unpriced pause", () => {
     );
     expect(prompts.filter((p) => p.includes("[Tool result]: t0:"))).toHaveLength(1);
     expect(prompts.some((p) => p.includes("[Tool result]: t24:"))).toBe(true);
+  });
+
+  test("scopes persisted ceilings to overflow-learned limits on the same model, ignoring configured caps and model switches", async () => {
+    // Part A: compaction under a configured cap (30_000) does not restrict a later unlimited resume.
+    const configStore = history();
+    const countedA = meter(0);
+    const configMind = new ScriptedMind(
+      [
+        says("paused turn"),
+        calls([call("c-d", "read", { value: "d" })]),
+        calls([call("c-e", "read", { value: "e" })]),
+        says("done"),
+      ],
+      {
+        summaries: [says("SUMMARY-CFG")],
+        after: (req) => {
+          countedA.tap(record(req.system === "You summarize." ? 1.0 : 0, {}));
+        },
+      },
+    );
+    const cfgReader = tool("read", async () => result("x".repeat(80_000)));
+    const firstPause = await drain(
+      taskRequest(configMind, {
+        store: configStore,
+        tools: [cfgReader],
+        meter: countedA,
+        limits: { contextTokens: 30_000, spendPauseUsd: 1, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(firstPause.outcome).toMatchObject({ status: "paused", reason: "spend" });
+    expect(configStore.of("compaction").at(-1)?.learned).toBeUndefined();
+
+    const resumedUnlimited = await drain(
+      taskRequest(
+        new ScriptedMind(
+          [
+            calls([call("c-d", "read", { value: "d" })]),
+            calls([call("c-e", "read", { value: "e" })]),
+            says("done"),
+          ],
+          { summaries: [says("SHOULD-NOT-RUN")] },
+        ),
+        {
+          store: configStore,
+          tools: [cfgReader],
+          meter: countedA,
+          limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+        },
+      ),
+    );
+    expect(resumedUnlimited.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(configStore.of("compaction")).toHaveLength(1);
+
+    // Part B: overflow-learned limit is restored on the same model, ignored on a different model.
+    const smallMeter = new UsageMeter({ account: "openrouter", model: "small-8k" });
+    const smallStore = new MemoryStore({ type: "brief", brief: BRIEF });
+    const mediumReader = tool("read", async () => result("x".repeat(20_000)));
+    const overflowMind = new ScriptedMind(
+      [
+        calls([call("c-a", "read", { value: "a" })]),
+        calls([call("c-b", "read", { value: "b" })]),
+        new ProviderHttpError("anthropic", 400, "prompt is too long: 9000 tokens > 8192 maximum"),
+      ],
+      {
+        summaries: [says("SUMMARY-8K")],
+        after: (req) => {
+          smallMeter.tap(record(req.system === "You summarize." ? 1.0 : 0, {}));
+        },
+      },
+    );
+    const learnedPause = await drain(
+      taskRequest(overflowMind, {
+        store: smallStore,
+        tools: [mediumReader],
+        meter: smallMeter,
+        limits: { contextTokens: 0, spendPauseUsd: 1, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(learnedPause.outcome).toMatchObject({ status: "paused", reason: "spend" });
+    expect(smallStore.of("compaction").at(-1)?.learned).toEqual({
+      tokens: 8_192,
+      model: "openrouter/small-8k",
+    });
+
+    const sameModelStore = new MemoryStore(...smallStore.list);
+    const sameModelMind = new ScriptedMind(
+      [
+        calls([call("c-c", "read", { value: "c" })]),
+        calls([call("c-d", "read", { value: "d" })]),
+        says("done"),
+      ],
+      { summaries: [says("SUMMARY-SAME-1"), says("SUMMARY-SAME-2")] },
+    );
+    const sameModelOutcome = await drain(
+      taskRequest(sameModelMind, {
+        store: sameModelStore,
+        tools: [mediumReader],
+        meter: new UsageMeter({ account: "openrouter", model: "small-8k", spentUsd: 1 }),
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(sameModelOutcome.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(sameModelMind.summaryRequests).toHaveLength(2);
+
+    const switchedModelStore = new MemoryStore(...smallStore.list);
+    const switchedModelMind = new ScriptedMind(
+      [
+        calls([call("c-c", "read", { value: "c" })]),
+        calls([call("c-d", "read", { value: "d" })]),
+        says("done"),
+      ],
+      { summaries: [says("SHOULD-NOT-RUN")] },
+    );
+    const switchedOutcome = await drain(
+      taskRequest(switchedModelMind, {
+        store: switchedModelStore,
+        tools: [mediumReader],
+        meter: new UsageMeter({ account: "openrouter", model: "large-200k", spentUsd: 1 }),
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(switchedOutcome.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(switchedModelMind.summaryRequests).toHaveLength(0);
   });
 });

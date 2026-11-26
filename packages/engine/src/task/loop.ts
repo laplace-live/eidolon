@@ -220,6 +220,8 @@ class TaskRun {
   readonly #signatures: string[] = [];
   #spendLimit = Number.POSITIVE_INFINITY;
   #ceiling: number;
+  /** Ceiling learned from an overflow on this run/model (never from static config). */
+  #learned: number | null = null;
   /** The last request's input as its provider counted it, and as estimated. */
   #counted: { readonly reported: number; readonly estimated: number } | null = null;
 
@@ -266,14 +268,15 @@ class TaskRun {
     const stored = await this.#request.store.entries();
     if (stored.length === 0) throw new Error(`Task ${this.#request.id} has no brief`);
     this.#entries.push(...stored);
-    if (this.#request.limits.contextTokens <= 0) {
+    const currentModel = this.#request.meter.modelId?.();
+    if (
+      this.#request.limits.contextTokens <= 0 &&
+      currentModel !== undefined &&
+      currentModel !== ""
+    ) {
       for (const entry of this.#entries) {
-        if (
-          entry.type === "compaction" &&
-          entry.windowTokens !== undefined &&
-          entry.windowTokens > 0
-        ) {
-          this.#ceiling = Math.min(this.#ceiling, entry.windowTokens);
+        if (entry.type === "compaction" && entry.learned?.model === currentModel) {
+          this.#recordCeiling(entry.learned.tokens);
         }
       }
     }
@@ -537,7 +540,7 @@ class TaskRun {
           const input = reported !== null && reported > 0 ? reported : view.sized;
           const output = this.#request.meter.lastOutputTokens?.() ?? null;
           const total = input + (output !== null && output > 0 ? output : 0);
-          if (total > 0) this.#ceiling = Math.min(this.#ceiling, total);
+          this.#recordCeiling(total);
           const heldBefore = this.#held();
           if (heldBefore !== null) return heldBefore;
           if (compacted || !(await this.#compact(input))) {
@@ -553,8 +556,7 @@ class TaskRun {
       } catch (error) {
         if (this.#signal.aborted || compacted || !isContextOverflow(error)) throw error;
         compacted = true;
-        const ceiling = overflowTokens(error) ?? view.sized;
-        if (ceiling > 0) this.#ceiling = Math.min(this.#ceiling, ceiling);
+        this.#recordCeiling(overflowTokens(error) ?? view.sized);
         if (!(await this.#compact(view.sized))) throw error;
         const held = this.#held();
         if (held !== null) return held;
@@ -608,6 +610,12 @@ class TaskRun {
     return reply;
   }
 
+  #recordCeiling(tokens: number): void {
+    if (!(tokens > 0) || !Number.isFinite(tokens)) return;
+    this.#ceiling = Math.min(this.#ceiling, tokens);
+    this.#learned = this.#learned === null ? tokens : Math.min(this.#learned, tokens);
+  }
+
   /**
    * Summarizes what came before the newest blocks, through the task's mind with no tools, and
    * stores it. False when the newest blocks are all there is.
@@ -619,10 +627,10 @@ class TaskRun {
       context.blocks[0]?.seq === context.compaction.firstKeptSeq
         ? context.compaction.slice
         : undefined;
+    const rawModel = this.#request.meter.modelId?.();
+    const nonEmptyModel = rawModel !== undefined && rawModel !== "" ? rawModel : undefined;
     const window =
-      Number.isFinite(this.#ceiling) && this.#ceiling > 0
-        ? this.#ceiling
-        : (context.compaction?.windowTokens ?? tokensBefore);
+      Number.isFinite(this.#ceiling) && this.#ceiling > 0 ? this.#ceiling : tokensBefore;
     const first = Math.max(
       priorSlice !== undefined ? 1 : 0,
       firstKept(context.blocks, keepTokens(window)),
@@ -632,8 +640,9 @@ class TaskRun {
     const { system, instructions } = this.#request.compaction;
     const systemTokens = estimateTokens(system);
     const windowBudget = Math.max(256, compactAbove(window) - systemTokens);
+    let shrunkByOverflow = priorSlice?.shrunk === true && priorSlice.model === nonEmptyModel;
     let budget =
-      priorSlice !== undefined
+      shrunkByOverflow && priorSlice !== undefined
         ? Math.max(256, Math.min(windowBudget, priorSlice.budget))
         : windowBudget;
     const older = context.blocks.slice(0, first);
@@ -662,7 +671,7 @@ class TaskRun {
       } catch (error) {
         if (this.#signal.aborted || !isContextOverflow(error)) throw error;
         const learned = overflowTokens(error);
-        if (learned !== null && learned > 0) this.#ceiling = Math.min(this.#ceiling, learned);
+        if (learned !== null) this.#recordCeiling(learned);
         if (this.#held() !== null) return true;
         const shrunk = this.#shrinkCompactionBudget(
           overflows,
@@ -673,6 +682,7 @@ class TaskRun {
           chunk.singleBlock,
         );
         if (shrunk === null) throw error;
+        shrunkByOverflow = true;
         overflows++;
         budget = shrunk;
         continue;
@@ -682,7 +692,7 @@ class TaskRun {
         const output = this.#request.meter.lastOutputTokens?.() ?? null;
         const learned =
           input !== null && input > 0 ? input + (output !== null && output > 0 ? output : 0) : null;
-        if (learned !== null && learned > 0) this.#ceiling = Math.min(this.#ceiling, learned);
+        if (learned !== null) this.#recordCeiling(learned);
         if (this.#held() !== null) return true;
         const shrunk = this.#shrinkCompactionBudget(
           overflows,
@@ -693,6 +703,7 @@ class TaskRun {
           chunk.singleBlock,
         );
         if (shrunk !== null) {
+          shrunkByOverflow = true;
           overflows++;
           budget = shrunk;
           continue;
@@ -706,17 +717,24 @@ class TaskRun {
       summary = nextSummary;
       made++;
       overflows = 0;
-      const effectiveWindow =
-        Number.isFinite(this.#ceiling) && this.#ceiling > 0 ? this.#ceiling : window;
       await this.#append({
         type: "compaction",
         summary,
         firstKeptSeq: chunk.nextSeq,
         files: chunk.files,
         tokensBefore,
-        ...(chunk.nextOffset > 0 ? { slice: { offset: chunk.nextOffset, budget } } : {}),
-        ...(Number.isFinite(effectiveWindow) && effectiveWindow > 0
-          ? { windowTokens: effectiveWindow }
+        ...(chunk.nextOffset > 0
+          ? {
+              slice: {
+                offset: chunk.nextOffset,
+                budget,
+                ...(shrunkByOverflow ? { shrunk: true } : {}),
+                ...(nonEmptyModel === undefined ? {} : { model: nonEmptyModel }),
+              },
+            }
+          : {}),
+        ...(this.#learned !== null && nonEmptyModel !== undefined
+          ? { learned: { tokens: this.#learned, model: nonEmptyModel } }
           : {}),
       });
       this.#counted = null;
