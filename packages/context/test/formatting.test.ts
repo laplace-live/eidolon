@@ -69,12 +69,14 @@ describe("scopeFilter", () => {
     const B = broadcast("2026-09-08", "BV1abc", 2);
     for (const row of goldens.scopeFilter) {
       const broadcasts = row.broadcasts.map(() => B);
-      expect(scopeFilter(scope(row.scope), broadcasts)).toBe(row.where);
+      expect(scopeFilter(scope(row.scope), broadcasts)).toBe(
+        row.where === null ? null : row.where.replaceAll("''", "\\'"),
+      );
     }
   });
 
-  test("quotes ids for LanceDB", () => {
-    expect(scopeFilter(scope({ streamIds: ["a'b"] }), [])).toBe("stream_id IN ('a''b')");
+  test("quotes ids for Zvec", () => {
+    expect(scopeFilter(scope({ streamIds: ["a'b"] }), [])).toBe(String.raw`stream_id IN ('a\'b')`);
     expect(scopeFilter(scope({ latest: 1 }), [broadcast("2026-09-08", "BV1abc", 2)])).toBe(
       "stream_id IN ('2026-09-08-BV1abc_p1', '2026-09-08-BV1abc_p2')",
     );

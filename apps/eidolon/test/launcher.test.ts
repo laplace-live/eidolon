@@ -91,7 +91,7 @@ describe("unsupportedReason", () => {
     expect(unsupportedReason(host("win32", "arm64"))).toContain("Install the x64 build of Node");
     expect(unsupportedReason(host("win32", "ia32"))).toStartWith("win32-ia32 is not supported");
     expect(unsupportedReason(host("linux", "ia32"))).toStartWith("linux-ia32 is not supported");
-    expect(unsupportedReason(host("freebsd", "arm64"))).toContain("LanceDB and onnxruntime-node");
+    expect(unsupportedReason(host("freebsd", "arm64"))).toContain("Zvec and onnxruntime-node");
   });
 });
 

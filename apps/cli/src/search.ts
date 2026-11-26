@@ -67,7 +67,7 @@ positional arguments:
 options:
   -h, --help          show this help message and exit
   --top-k TOP_K       Number of results to return (default: 5)
-  --db-path DB_PATH   LanceDB dir (default: the persona's index/)
+  --db-path DB_PATH   Zvec index dir (default: the persona's index/)
   --table TABLE       Table name (default: stream_chunks)
   --full              Print full chunk text instead of a 200-char preview
   --json              Emit raw JSON (drops vector field for readability)
@@ -128,7 +128,7 @@ export interface SearchDeps extends Partial<CliIo> {
 export const UNRESOLVED_PERIOD_NOTE =
   "无法直接确定这个时间范围；请给出明确日期。对话中的直播查询工具可解析复杂指代。";
 
-/** A hit as Python's json.dumps writes it: no vector, and the scores LanceDB returns as floats. */
+/** A hit as Python's json.dumps writes it: no vector, and the hit's scores kept as floats. */
 function jsonRow(row: SearchRow): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(row)) {
@@ -309,7 +309,7 @@ export async function searchMain(argv: readonly string[], deps: SearchDeps = {})
   const retriever = await open(args.dbPath, args.table);
   if (args.recall) return recallMain(args, retriever, deps, io);
   if (!retriever.hasTable) {
-    io.stderr(`No LanceDB table at ${args.dbPath}/${args.table}.lance\n`);
+    io.stderr(`No Zvec table at ${args.dbPath}/${args.table}.zvec\n`);
     io.stderr(`Run \`${ingestHint(STREAM_ARCHIVE.ingestCommand)}\` first.\n`);
     return 1;
   }
@@ -334,7 +334,7 @@ export async function searchMain(argv: readonly string[], deps: SearchDeps = {})
       ? "higher relevance = better match"
       : "lower distance = better match";
   print(`Query: ${pyRepr(args.query)}`);
-  print(`Index: ${await retriever.rowCount()} rows in ${args.dbPath}/${args.table}.lance`);
+  print(`Index: ${await retriever.rowCount()} rows in ${args.dbPath}/${args.table}.zvec`);
   print(`Hits:  ${hits.length} (${scoreHint})`);
   print();
   hits.forEach((hit, index) => {

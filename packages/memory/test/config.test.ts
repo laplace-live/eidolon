@@ -6,7 +6,6 @@ import {
   buildMemoryConfig,
   type EmbedderSettings,
   memorySearchSettingsFromEnv,
-  qdrantHost,
   requireLlmKey,
 } from "../src/config.ts";
 import { isMemoryConfigured } from "../src/index.ts";
@@ -14,10 +13,11 @@ import { clearMemoryEnv, resetEnv, setEnv, tempPath } from "./support.ts";
 
 beforeEach(() => {
   clearMemoryEnv();
+  const dbPath = tempPath("h.db");
   setEnv({
-    MEM0_QDRANT_HOST: "qdrant",
+    MEM0_ENABLED: "true",
     OPENROUTER_API_KEY: "sk-or",
-    MEM0_HISTORY_DB_PATH: tempPath("h.db"),
+    MEM0_HISTORY_DB_PATH: dbPath,
   });
 });
 afterEach(resetEnv);
@@ -29,34 +29,35 @@ function embedder({ selection, dims }: EmbedderSettings) {
 }
 
 describe("enablement", () => {
-  test("a whitespace-only host leaves memory off", () => {
-    setEnv({ MEM0_QDRANT_HOST: " \t　" });
-    expect(qdrantHost()).toBe("");
-    expect(isMemoryConfigured()).toBe(false);
-  });
-
-  test("the host is stripped with Python's whitespace set", () => {
-    setEnv({ MEM0_QDRANT_HOST: "\u0085qdrant\n" });
-    expect(qdrantHost()).toBe("qdrant");
-    expect(isMemoryConfigured()).toBe(true);
-  });
-
   test("unset or empty is off", () => {
-    setEnv({ MEM0_QDRANT_HOST: "" });
+    setEnv({ MEM0_ENABLED: undefined, MEM0_QDRANT_HOST: undefined });
     expect(isMemoryConfigured()).toBe(false);
-    setEnv({ MEM0_QDRANT_HOST: undefined });
+    setEnv({ MEM0_ENABLED: " \t　" });
+    expect(isMemoryConfigured()).toBe(false);
+  });
+
+  test("MEM0_ENABLED turns memory on and off explicitly, overriding legacy MEM0_QDRANT_HOST", () => {
+    setEnv({ MEM0_ENABLED: "1", MEM0_QDRANT_HOST: undefined });
+    expect(isMemoryConfigured()).toBe(true);
+    setEnv({ MEM0_ENABLED: "false", MEM0_QDRANT_HOST: "qdrant" });
+    expect(isMemoryConfigured()).toBe(false);
+  });
+
+  test("falls back to legacy MEM0_QDRANT_HOST when MEM0_ENABLED is unset", () => {
+    setEnv({ MEM0_ENABLED: undefined, MEM0_QDRANT_HOST: "\u0085qdrant\n" });
+    expect(isMemoryConfigured()).toBe(true);
+    setEnv({ MEM0_QDRANT_HOST: " \t　" });
     expect(isMemoryConfigured()).toBe(false);
   });
 });
 
 describe("buildMemoryConfig", () => {
-  test("defaults", () => {
-    setEnv({ MEM0_HISTORY_DB_PATH: undefined });
+  test("defaults vector store beside history.db", () => {
+    const home = dirname(tempPath("home"));
+    setEnv({ EIDOLON_HOME: home, MEM0_HISTORY_DB_PATH: undefined, MEM0_DIR: undefined });
     const config = buildMemoryConfig();
-    expect(config.qdrant).toEqual({
-      host: "qdrant",
-      port: 6333,
-      collection: "eidolon_memories",
+    expect(config.store).toEqual({
+      dir: join(dataHome(), "mem0", "vectors"),
       vectorSize: 3072,
     });
     expect(embedder(config.embedder)).toEqual({
@@ -74,6 +75,18 @@ describe("buildMemoryConfig", () => {
       keyMissing: null,
     });
     expect(config.historyDbPath).toBe(join(dataHome(), "mem0", "history.db"));
+  });
+
+  test("follows MEM0_HISTORY_DB_PATH when MEM0_DIR is unset, and honours MEM0_DIR when set", () => {
+    const dbPath = join(dirname(tempPath("x")), "mounted", "mem0", "history.db");
+    setEnv({ MEM0_HISTORY_DB_PATH: dbPath, MEM0_DIR: undefined });
+    expect(buildMemoryConfig().store.dir).toBe(join(dirname(dbPath), "vectors"));
+    expect(existsSync(join(dirname(dbPath), "vectors"))).toBe(true);
+
+    const customDir = join(dirname(tempPath("y")), "custom-vectors");
+    setEnv({ MEM0_DIR: customDir });
+    expect(buildMemoryConfig().store.dir).toBe(customDir);
+    expect(existsSync(customDir)).toBe(true);
   });
 
   test("the LLM model falls back MEM0_LLM_MODEL → OPENROUTER_MODEL → default, empty counting as unset", () => {
@@ -98,7 +111,7 @@ describe("buildMemoryConfig", () => {
       baseUrl: "https://embed.example/v1",
       dims: 8,
     });
-    expect(config.qdrant.vectorSize).toBe(8);
+    expect(config.store.vectorSize).toBe(8);
     expect(config.llm.apiKey).toBe("sk-or");
   });
 
@@ -116,19 +129,9 @@ describe("buildMemoryConfig", () => {
     expect(existsSync(dirname(path))).toBe(true);
   });
 
-  test("port and collection", () => {
-    setEnv({ MEM0_QDRANT_PORT: "16333", MEM0_QDRANT_COLLECTION: " spaced " });
-    expect(buildMemoryConfig().qdrant).toMatchObject({ port: 16333, collection: " spaced " });
-  });
-
-  test("a non-positive port is refused rather than dialled on port 80", () => {
-    setEnv({ MEM0_QDRANT_PORT: "0" });
-    expect(() => buildMemoryConfig()).toThrow("MEM0_QDRANT_PORT=0 is not a Qdrant server port");
-  });
-
-  test("refuses to build without a host", () => {
-    setEnv({ MEM0_QDRANT_HOST: "  " });
-    expect(() => buildMemoryConfig()).toThrow("MEM0_QDRANT_HOST is unset");
+  test("refuses to build when memory is disabled", () => {
+    setEnv({ MEM0_ENABLED: "false" });
+    expect(() => buildMemoryConfig()).toThrow("MEM0_ENABLED is off");
   });
 });
 

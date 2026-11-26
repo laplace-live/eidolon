@@ -339,13 +339,13 @@ describe("where a library was mapped from", () => {
     const text = [
       "COMMAND   PID      USER   FD   TYPE DEVICE  SIZE/OFF     NODE NAME",
       "Eidolon 67738 sparanoid  cwd    DIR   1,17       640        2 /",
-      `Eidolon 67738 sparanoid  txt    REG   1,17  1234567 12345678 ${MAC_PAYLOAD}/node_modules/@lancedb/lancedb-darwin-arm64/lancedb.darwin-arm64.node`,
+      `Eidolon 67738 sparanoid  txt    REG   1,17  1234567 12345678 ${MAC_PAYLOAD}/node_modules/@zvec/bindings-darwin-arm64/zvec_node_binding.node`,
       "Eidolon 67738 sparanoid  txt    REG   1,17    23456 23456789 /Users/x/My Apps/libvips-cpp.8.18.7.dylib",
       "Eidolon 67738 sparanoid  txt    REG   1,17    34567 34567890 /usr/lib/dyld",
       "Eidolon 67738 sparanoid   12u  IPv4 0x1234      0t0      TCP 127.0.0.1:51054 (LISTEN)",
     ].join("\n");
     expect(lsofLibraries(text)).toEqual([
-      `${MAC_PAYLOAD}/node_modules/@lancedb/lancedb-darwin-arm64/lancedb.darwin-arm64.node`,
+      `${MAC_PAYLOAD}/node_modules/@zvec/bindings-darwin-arm64/zvec_node_binding.node`,
       "/Users/x/My Apps/libvips-cpp.8.18.7.dylib",
     ]);
   });

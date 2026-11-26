@@ -1,7 +1,7 @@
 // The local token and the session it grants: the secret stays on disk, mode 0600; the printed link
 // code lasts ten minutes; the cookie and the proof are two more values; and none reaches a log.
 import "../../../../packages/config/test/isolated-guard.ts";
-import { chmodSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dataHome } from "@eidolon/config";
 import { afterEach, describe, expect, test } from "vitest";
 import { cookieValues } from "../../src/local/session.ts";
@@ -32,6 +32,7 @@ const SECRET = "s".repeat(43);
 
 describe("the token file", () => {
   test("is made on first use, mode 0600, in a data home only this user can enter", () => {
+    rmSync(dataHome(), { recursive: true, force: true });
     const token = loadLocalToken();
     expect(statSync(tokenPath()).mode & 0o777).toBe(0o600);
     expect(statSync(dataHome()).mode & 0o777).toBe(0o700);

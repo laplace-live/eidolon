@@ -1,7 +1,7 @@
 // Which viewer a memory belongs to. mem0 validates and trims every id on every call, so a bad
 // MEM0_AGENT_ID doesn't stop a session from starting; it makes each add/search/list fail and log.
 import { isPySpace, pyError, pyStrip, sortedPy } from "@eidolon/config";
-import type { ScopeFilters } from "./qdrant.ts";
+import type { ScopeFilters } from "./zvec.ts";
 
 export interface MemoryScope {
   readonly userId?: string | null;

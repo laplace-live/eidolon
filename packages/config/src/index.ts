@@ -164,6 +164,7 @@ export {
   IDENTITY_DEFAULTS,
   installSettings,
   type LayeredSetting,
+  LEGACY_SETTING_ENVS,
   type LoadedSettings,
   layeredValue,
   loadSettings,

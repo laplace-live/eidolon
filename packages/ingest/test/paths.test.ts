@@ -77,15 +77,18 @@ describe("folders", () => {
   });
 
   test("indexWritePath is where the bot reads, never a template", () => {
+    setEnv("INDEX_PATH", undefined);
     setEnv("LANCEDB_PATH", undefined);
     expect(indexWritePath("milky-green")).toBe(
       join(dataHome(), "personas", "milky-green", "index"),
     );
-    setEnv("LANCEDB_PATH", "data/lancedb");
-    expect(indexWritePath("milky-green")).toBe(join(PROJECT_ROOT, "data/lancedb"));
-    setEnv("LANCEDB_PATH", "/srv/index");
+    setEnv("LANCEDB_PATH", "data/legacy");
+    expect(indexWritePath("milky-green")).toBe(join(PROJECT_ROOT, "data/legacy"));
+    setEnv("INDEX_PATH", "data/zvec");
+    expect(indexWritePath("milky-green")).toBe(join(PROJECT_ROOT, "data/zvec"));
+    setEnv("INDEX_PATH", "/srv/index");
     expect(indexWritePath("milky-green")).toBe("/srv/index");
-    setEnv("LANCEDB_PATH", "personas/milky-green/index");
+    setEnv("INDEX_PATH", "personas/milky-green/index");
     expect(() => indexWritePath("milky-green")).toThrow(
       `Refusing to write persona milky-green's index into the template folder ${join(PROJECT_ROOT, "personas/milky-green/index")}`,
     );
@@ -104,12 +107,12 @@ describe("folders", () => {
       const swapped = swapCase(templatesDir());
       if (existsSync(swapped)) spellings.push(join(swapped, "milky-green", "index"));
       for (const spelling of spellings) {
-        setEnv("LANCEDB_PATH", spelling);
+        setEnv("INDEX_PATH", spelling);
         expect(() => indexWritePath("milky-green"), spelling).toThrow(
           `Refusing to write persona milky-green's index into the template folder ${spelling}`,
         );
       }
-      setEnv("LANCEDB_PATH", join(dir, "templates-not/milky-green/index"));
+      setEnv("INDEX_PATH", join(dir, "templates-not/milky-green/index"));
       expect(indexWritePath("milky-green")).toBe(join(dir, "templates-not/milky-green/index"));
     } finally {
       rmSync(dir, { recursive: true, force: true });

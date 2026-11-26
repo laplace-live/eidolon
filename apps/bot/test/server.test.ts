@@ -71,7 +71,7 @@ function fakeDeps(overrides: { warmAudioModels?: () => Promise<void> } = {}): {
       },
       resolveDbPath: () => {
         calls.push("resolveDbPath");
-        return "/fake/data/lancedb";
+        return "/fake/data/index";
       },
       warmStreamCatalog: async (dbPath) => {
         calls.push(`warmStreamCatalog ${dbPath}`);
@@ -131,7 +131,7 @@ describe("startBotServer", () => {
       "configureLogging DEBUG",
       "warmTokenizer",
       "resolveDbPath",
-      "warmStreamCatalog /fake/data/lancedb",
+      "warmStreamCatalog /fake/data/index",
       "warmAudioModels",
       "audioQualitySettings",
       "describeOpusBitrates",

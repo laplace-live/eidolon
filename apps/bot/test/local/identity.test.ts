@@ -249,8 +249,8 @@ describe("memories per persona", () => {
       ["failed", 502, "upstream-failed"],
     ] as const) {
       booted.fakes.memoryAdmin = {
-        list: async () => ({ ok: false, reason, error: new Error("qdrant down") }),
-        forget: async () => ({ ok: false, reason, error: new Error("qdrant down") }),
+        list: async () => ({ ok: false, reason, error: new Error("store locked") }),
+        forget: async () => ({ ok: false, reason, error: new Error("store locked") }),
       };
       const response = await fetch(`${booted.base}/api/memories/forget`, {
         method: "POST",
@@ -258,13 +258,13 @@ describe("memories per persona", () => {
       });
       const text = await response.text();
       const { error } = JSON.parse(text);
-      expect([response.status, error.code, text.includes("qdrant down")]).toEqual([
+      expect([response.status, error.code, text.includes("store locked")]).toEqual([
         status,
         code,
         false,
       ]);
       // The answer's id names the log line that holds what went wrong.
-      expect(logs.lines().some((line) => line.endsWith(`(error ${error.id}): qdrant down`))).toBe(
+      expect(logs.lines().some((line) => line.endsWith(`(error ${error.id}): store locked`))).toBe(
         true,
       );
     }

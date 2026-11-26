@@ -1,6 +1,6 @@
 import type { ContextProvider } from "@eidolon/core";
 
-/** A mem0 memory as stored in Qdrant, in mem0's own payload schema. */
+/** A mem0 memory as stored in Zvec, in mem0's own payload schema. */
 export interface MemoryItem {
   id: string;
   memory: string;

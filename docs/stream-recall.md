@@ -15,7 +15,7 @@ summary and source ID remains in the catalog. These are extractive, compressed
 overviews, not a claim that every moment is included in the answer.
 
 The builder reads source scenes without excluding karaoke or anime audio. Those scenes
-remain represented in the broadcast overview even though the detailed LanceDB
+remain represented in the broadcast overview even though the detailed Zvec
 index excludes them by default. Missing refinement is recorded. Missing
 archive coverage never establishes that the streamer did not broadcast.
 

@@ -1,4 +1,4 @@
-import { msg, ph, plural } from "@lingui/core/macro";
+import { ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrainIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
@@ -24,8 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { UnavailableButton } from "@/components/unavailable-button";
-import { CopyCommand } from "@/features/setup/copy-command";
-import { QDRANT_COMMAND } from "@/features/setup/wizard";
 import { call, type MemoryStatus, type Status } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { useLang } from "@/locales/i18n";
@@ -37,29 +35,19 @@ function memoriesQuery(persona: string) {
   return queryOptions({
     queryKey: ["memories", persona],
     queryFn: ({ signal }) => call("GET /api/local/memories", { query: { persona }, signal }),
-    // A 503 is Qdrant down, which the panel says at once instead of retrying.
     retry: false,
   });
 }
 
-const VIEWS = {
-  off: {
-    body: msg`Memory is off, so she forgets you after every call. It needs Qdrant, a database you run in Docker on this machine. Run this once in a terminal, then turn memory on:`,
-    note: msg`Optional: calls work without it.`,
-  },
-  down: {
-    body: msg`Qdrant isn't answering, so she can't remember or recall anything for now. Start Docker, or start Qdrant if it isn't running:`,
-    note: msg`Calls go on without memory meanwhile.`,
-  },
-};
-
-function QdrantHelp({
+function MemoryHelp({
   view,
+  problem,
   retrying,
   calling,
   onRetry,
 }: {
-  readonly view: "off" | "down";
+  readonly view: "off" | "not-ready" | "unavailable";
+  readonly problem: string | null;
   readonly retrying: boolean;
   /** A call is up in this tab: setup, which would end it, waits. */
   readonly calling: boolean;
@@ -67,11 +55,11 @@ function QdrantHelp({
 }) {
   const { t } = useLingui();
   const waits = t`Setup would end the call. Hang up first.`;
-  return (
-    <SectionCard
-      note={t(VIEWS[view].note)}
-      actions={
-        view === "off" ? (
+  if (view === "off") {
+    return (
+      <SectionCard
+        note={t`Optional: calls work without it.`}
+        actions={
           calling ? (
             <UnavailableButton variant="default" reason={waits}>
               {t`Turn On Memory`}
@@ -81,27 +69,46 @@ function QdrantHelp({
               <Link to="/setup?step=memory">{t`Turn On Memory`}</Link>
             </Button>
           )
-        ) : (
-          <>
-            {calling ? (
-              <UnavailableButton variant="outline" reason={waits}>
-                {t`Check the Address`}
-              </UnavailableButton>
-            ) : (
-              <Button variant="outline" asChild>
-                <Link to="/setup?step=memory">{t`Check the Address`}</Link>
-              </Button>
-            )}
-            <Button disabled={retrying} onClick={onRetry}>
-              {retrying && <Spinner />}
-              {t`Try Again`}
-            </Button>
-          </>
-        )
+        }
+      >
+        <p className="text-sm">
+          {t`Memory is off, so she forgets you after every call. Turn it on to keep what she learns about you in your data home on this computer.`}
+        </p>
+      </SectionCard>
+    );
+  }
+  if (view === "not-ready") {
+    return (
+      <SectionCard
+        note={t`Calls go on without memory meanwhile.`}
+        actions={
+          <Button variant="outline" asChild>
+            <Link to="/settings?tab=providers">{t`Add Keys`}</Link>
+          </Button>
+        }
+      >
+        <p className="text-sm">
+          {t`Memory is on, but it needs an embedding key and a memory-extraction key before she can remember or recall anything.`}
+        </p>
+        {problem && (
+          <p className="break-words font-mono text-muted-foreground text-xs">{problem}</p>
+        )}
+      </SectionCard>
+    );
+  }
+  return (
+    <SectionCard
+      note={t`Calls go on without memory meanwhile.`}
+      actions={
+        <Button disabled={retrying} onClick={onRetry}>
+          {retrying && <Spinner />}
+          {t`Try Again`}
+        </Button>
       }
     >
-      <p className="text-sm">{t(VIEWS[view].body)}</p>
-      <CopyCommand command={QDRANT_COMMAND} />
+      <p className="text-sm">
+        {t`The local memory store couldn't be opened, so she can't remember or recall anything for now.`}
+      </p>
     </SectionCard>
   );
 }
@@ -160,7 +167,7 @@ export function MemoryPanel({
   const formats = useMemo(() => formatsFor(lang), [lang]);
   const queryClient = useQueryClient();
   const query = memoriesQuery(persona.id);
-  const list = useQuery({ ...query, enabled: memory.configured });
+  const list = useQuery({ ...query, enabled: memory.configured && memory.ready });
   const [all, setAll] = useState(false);
   const name = persona.shortName || persona.name;
   const forget = useMutation({
@@ -203,9 +210,10 @@ export function MemoryPanel({
         )
       }
     >
-      {(view === "off" || view === "down") && (
-        <QdrantHelp
+      {(view === "off" || view === "not-ready" || view === "unavailable") && (
+        <MemoryHelp
           view={view}
+          problem={memory.problem}
           retrying={list.isFetching}
           calling={calling}
           onRetry={() => void list.refetch()}

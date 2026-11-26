@@ -1,7 +1,6 @@
 // mem0's OSS engine as it runs without spaCy and fastembed: entity linking and BM25 never run, so
 // `text_lemmatized` is a copy of `data`, no sparse vector is written, and search is dense cosine
-// similarity behind a threshold. Writing anything else would desync the points mem0 reads from the
-// same collection.
+// similarity behind a threshold.
 import {
   type Clock,
   errorText,
@@ -28,16 +27,11 @@ import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "./extraction-p
 import { type HistoryEntry, HistoryStore } from "./history.ts";
 import { type Embedder, type ExtractionLlm, Mem0Embedder, OpenAICompatibleChat } from "./openai.ts";
 import { generateAdditiveExtractionPrompt } from "./prompts.ts";
-import {
-  type QdrantApi,
-  QdrantVectorStore,
-  type ScopeFilters,
-  type StoredPoint,
-} from "./qdrant.ts";
 import { buildSessionScope, type MemoryScope, scopeFilters } from "./scope.ts";
 import { md5Hex, parseExtraction, parseMessages } from "./text.ts";
 import { normalizeIsoTimestampToUtc, parseIsoDate, parseIsoDatetime } from "./time.ts";
 import type { MemoryItem } from "./types.ts";
+import { type ScopeFilters, type StoredPoint, type VectorStore, ZvecVectorStore } from "./zvec.ts";
 
 export const LIST_LIMIT = 1000;
 export const DELETE_ALL_BATCH_SIZE = 1000;
@@ -60,7 +54,7 @@ export interface AddResult {
 }
 
 export interface MemoryEngineDeps {
-  readonly store: QdrantVectorStore;
+  readonly store: VectorStore;
   readonly embedder: Embedder;
   readonly llm: ExtractionLlm;
   readonly history: HistoryStore;
@@ -146,7 +140,7 @@ interface PendingRecord {
 }
 
 export class MemoryEngine {
-  readonly #store: QdrantVectorStore;
+  readonly #store: VectorStore;
   readonly #embedder: Embedder;
   readonly #llm: ExtractionLlm;
   readonly #history: HistoryStore;
@@ -441,7 +435,7 @@ export class MemoryEngine {
  */
 export async function openMemoryEngine(
   config: MemoryConfig,
-  options: { readonly qdrantClient?: QdrantApi; readonly http?: OpenAIClientOptions } = {},
+  options: { readonly store?: VectorStore; readonly http?: OpenAIClientOptions } = {},
 ): Promise<MemoryEngine> {
   const { embedder: embedding, llm: chat } = config;
   const fetch = options.http?.fetch;
@@ -450,7 +444,7 @@ export async function openMemoryEngine(
     ...(fetch === undefined ? {} : { fetch }),
   });
   const embedder = new Mem0Embedder(model, embedding.dims);
-  const store = new QdrantVectorStore(config.qdrant, options.qdrantClient);
+  const store = options.store ?? new ZvecVectorStore(config.store);
   await store.ensureCollection();
   const llmClient = jsonPoster(
     { provider: chat.provider, baseUrl: chat.baseUrl, apiKey: requireLlmKey(chat) },

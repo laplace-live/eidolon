@@ -12,8 +12,8 @@ in folders the owner allows and read the web, which she starts, steers, stops
 and reports as her own, in a chat or on a call in one
 ([assistant.md](docs/assistant.md)). Production is the companion alone: viewers
 chat with and call her there, and no task ever runs. Two halves share one
-LanceDB instance: the bot that answers, and an offline batch chain that builds
-the indexes it reads.
+Zvec index directory: the bot that answers, and an offline batch chain that
+builds the indexes it reads.
 
 ```text
 webrtc in → STT ∥ VAD → Smart Turn → runTurn: RetrievalGate ∥ Mem0, StreamArchive,
@@ -97,7 +97,7 @@ a row here and writing the prose there — not a new section in this file.**
 | broadcast overviews, date-scoped recall, the archive lookup tool, or when she last did something | [stream-recall.md](docs/stream-recall.md) |
 | recalling a viewer or a particular SC, and recall's other gaps (design only, unbuilt) | [recall-gaps.md](docs/recall-gaps.md) |
 | the `take_selfie` tool, image generation, or `/api/selfie` | [selfies.md](docs/selfies.md) |
-| the retrieval gate, or why a turn skipped LanceDB | [retrieval-gate.md](docs/retrieval-gate.md) |
+| the retrieval gate, or why a turn skipped Zvec | [retrieval-gate.md](docs/retrieval-gate.md) |
 | anything under `apps/` or `packages/` | [typescript.md](docs/typescript.md) |
 | a provider, an account, a role's provider or model, model lists, prices, realtime models, the usage ledger or the Usage page | [providers.md](docs/providers.md) |
 | the assistant: Assistant Mode, a task's tools, `FolderPolicy` or files (`packages/assistant`), a task's commands (`bash`) and the `eidolon` command they run, skills (Settings' Skills, `skills.json`, `EIDOLON_SHARED_SKILLS`, the built-in skills in `packages/assistant/skills`), MCP servers (`mcp.json`), web search or kind, the task loop (`packages/engine/src/task.ts`), the app's tasks, permission levels and Approve for Me's review, her task tools (`start_task`, `steer_task`, `stop_task`, `check_task`), the status block, tasks on a call and the task routes (`apps/bot/src/local/tasks`, `routes/tasks.ts`), a chat's task display (`/focus`, `/normal`, `/verbose`), `/stop` and milestones on a call, or `laplace-task` | [assistant.md](docs/assistant.md) |
@@ -147,8 +147,8 @@ pnpm laplace-pipeline --dry-run        # plans every video the persona's sources
 pnpm laplace-download <url list>       # yt-dlp → vods/, installing its own yt-dlp; --expand <url>
 pnpm laplace-transcribe <audio>        # Soniox async → streams/<date>-<id>.md
 pnpm laplace-refine                    # LLM cleanup → streams/*.refined.json
-pnpm laplace-ingest-streams            # → stream_chunks.lance
-pnpm laplace-ingest-facts              # facts/ → persona_facts.lance
+pnpm laplace-ingest-streams            # → stream_chunks.zvec
+pnpm laplace-ingest-facts              # facts/ → persona_facts.zvec
 pnpm laplace-build-stream-catalog      # → stream_catalog.json
 pnpm laplace-prepare-batch             # a series capture's new videos → lists/batches/
 pnpm laplace-discover                  # her new streams on Bilibili/YouTube, ranked; --save → a batch
@@ -180,7 +180,7 @@ Match the gate to the surface you touched; don't reflexively run everything.
 | Approve for Me's review: its prompt, its notes or its verdict (`packages/assistant/src/review.ts`) | `pnpm review-decisions` — asks the assistant role's model (or `--model <account>/<model>`) about the labelled actions of `docs/benchmarks/2026-11-19-approve-for-me/` into its `decisions.json`, and exits non-zero if any risky one is let through or a review fails. About $0.002 on `deepseek-flash`; run it on the models tasks use |
 | the gate's timeline questions or `TIMELINE_THRESHOLD` (`packages/context/src/gate.ts`) | `node docs/benchmarks/2026-11-07-timeline-question/score.ts` — exits non-zero if any labeled turn lands on the wrong side of the threshold |
 | `prompt.md`'s 表演提示 markup, or `FISH_MODEL` | no scripted check exists ([the 2026-10-17 benchmark](docs/benchmarks/2026-10-17-drama-3-markup/README.md) records what drama-3 does with each kind). Hold a real call, `node apps/bot/scripts/e2e-call.ts --text "<a question her reply would mark up>" --headful`, and listen: a direction or a tag spoken aloud is a leak. Billed per character |
-| `packages/memory`, or `/api/memories` (`apps/bot/src/memory-admin.ts`) | `docker compose up qdrant`, then round-trip a real `add` → `search` → `deleteAll` through `openMemoryEngine(buildMemoryConfig())`. The tests fake Qdrant and both model calls, so only a live run proves the wire format; it needs an embedding key and an LLM key |
+| `packages/memory`, or `/api/memories` (`apps/bot/src/memory-admin.ts`) | `pnpm test packages/memory apps/bot/test/memory-admin.test.ts apps/bot/test/prod-memory-isolation.test.ts`, then round-trip a real `add` → `search` → `deleteAll` through `openMemoryEngine(buildMemoryConfig())` on a temporary `MEM0_DIR` when changing the LLM extraction prompt or embedding call (needs an embedding key and an LLM key) |
 | `packages/assistant`, the task loop (`packages/engine/src/task*`), or `laplace-task` | `pnpm test packages/assistant packages/engine apps/cli/test/task.test.ts`, which script every mind, and spawn real processes for `bash` and the MCP client in temporary folders, killing only their own; a change to how a task behaves also needs one billed task on a model you pick: `pnpm laplace-task --folder <tmp>/mg-react-todomvc "写一个 React TodoMVC，单文件 index.html"`, then try the page ([assistant.md](docs/assistant.md#laplace-task)) |
 | an env var | document it in `.env.example` in the same commit |
 | anything under `apps/` or `packages/` | `pnpm typecheck`, `pnpm lint` and `pnpm test`; for retrieval, the gate or the voice loop, also the row above that names it |
@@ -221,7 +221,7 @@ the layout's one line.
 ### Runtime
 
 - **Optional dependencies fail open, never loud.** Mem0, both RAG providers, the
-  reranker, the retrieval gate, and the LanceDB tables each log their failure
+  reranker, the retrieval gate, and the Zvec tables each log their failure
   and carry on without it: `packages/engine/src/parts.ts` opens the
   optional tiers that way, the gate's failure retrieves anyway, and a failed
   rerank falls back to RRF. A new optional tier follows that shape or it breaks
@@ -249,8 +249,8 @@ the layout's one line.
 - **A viewer's image reaches a mind only through `normalizeImage`**
   (`apps/bot/src/images.ts`, on sharp), which turns it upright, strips what its
   camera wrote (GPS included) and fits it to what minds take; a route that takes
-  images calls it. Production's is the bot's own sharp: the Dockerfile prunes
-  only LanceDB's older copy, and the npm package depends on it.
+  images calls it. Production's is the bot's own sharp, and the npm package
+  depends on it.
 
 ### The TypeScript bot
 
@@ -578,10 +578,11 @@ the layout's one line.
 - **Anonymous viewers skip Mem0 entirely** rather than sharing a `default-user`
   bucket, where their memories would cross-pollute every other conversation.
 - **Mem0 is self-hosted and runs embedded, not as a service.** `packages/memory`
-  is its own engine over Qdrant, writing mem0's payloads and `history.db`; no
-  mem0 platform client can reach it. Every caller — the turn engine's
-  `createMemoryProvider` and `/api/memories`' `createMemoryAdmin` alike — builds
-  its engine from `buildMemoryConfig()`, so a new one does too.
+  is its own engine over Zvec (`MEM0_DIR`, default `<data home>/mem0/vectors`),
+  writing mem0's payloads and `history.db`; no mem0 platform client can reach it.
+  Every caller — the turn engine's `createMemoryProvider` and `/api/memories`'
+  `createMemoryAdmin` alike — builds its engine from `buildMemoryConfig()`, so a
+  new one does too.
 - **Behind a proxy, set `EIDOLON_REAL_IP_HEADER`** or every caller rate-limits
   as the proxy's single IP.
 
@@ -589,15 +590,15 @@ the layout's one line.
 
 - **Ingest-time and query-time vectors must come from the same model and
   dimension.** Changing `EMBED_MODEL` or `EMBED_DIM` means re-running both
-  ingests; the LanceDB schema is fixed-size and old vectors are not
-  comparable to new ones. Mem0's Qdrant collection reads the same two vars
-  and pins its dimension at creation, so it also needs a new
-  `MEM0_QDRANT_COLLECTION` — and viewers' memories do not survive that.
-- **FTS runs over the jieba-tokenized `tokens` column, never raw text.** LanceDB
-  ships no CJK tokenizer, so both ingests fill `tokens` with `tokenizeZh` and
-  every query goes through `tokenizeZhQuery` (`packages/retrieval/src/tokenize.ts`).
-  Stopwords are stripped from queries only — stripping them from the index
-  collapses BM25.
+  ingests; the Zvec schema is fixed-size and old vectors are not comparable to
+  new ones. Mem0's Zvec store scopes its collection directory by dimension
+  (`v1_<dim>`), so changing `EMBED_DIM` starts a fresh collection automatically,
+  while changing `EMBED_MODEL` at the same dimension requires clearing `MEM0_DIR`.
+- **FTS runs over the jieba-tokenized `tokens` column, never raw text.** Zvec's
+  FTS uses whitespace tokenization (`filters: []`), so both ingests fill `tokens`
+  with `tokenizeZh` and every query goes through `tokenizeZhQuery`
+  (`packages/retrieval/src/tokenize.ts`). Stopwords are stripped from queries
+  only — stripping them from the index collapses BM25.
 - **A persona's index is never committed.** It lives in the data home
   (`personas/<id>/index/`), and a deployment mounts it at `/data`; the images
   carry only the templates. A re-ingest reaches production by copying the index
@@ -614,7 +615,7 @@ the layout's one line.
 - **`hybridSearch` (`packages/retrieval/src/hybrid.ts`) is the one search
   path.** The bot, the MCP server, `laplace-search` and `laplace-eval-retrieval`
   all go through it, so what the eval scores is what the bot runs. Keep it that
-  way. All but the eval reach it via `LanceRetriever` (`retriever.ts`), which
+  way. All but the eval reach it via `ZvecRetriever` (`retriever.ts`), which
   adds only the table handle and the stale-handle reopen — never scoring.
 - **Similarity search can't answer occurrence questions.** "When did you last
   play X" and "how often" go through `StreamCatalog.timeline`

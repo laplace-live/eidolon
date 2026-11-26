@@ -240,17 +240,27 @@ describe("paths", () => {
     write("personas/milky-green/persona.yaml", "prompt: prompt.md\nknowledge:\n  index: index\n");
     let loaded = loadSettings();
     expect(loaded.values.get("PERSONA_FILE")).toBe(join(TEMPLATE, "prompt.md"));
-    expect(loaded.values.get("LANCEDB_PATH")).toBe(join(OWN(), "index"));
+    expect(loaded.values.get("INDEX_PATH")).toBe(join(OWN(), "index"));
     write("personas/milky-green/prompt.md", "mine");
     loaded = loadSettings();
     expect(loaded.values.get("PERSONA_FILE")).toBe(join(OWN(), "prompt.md"));
   });
 
   test("install paths resolve in the data home; absolute and ~ paths stand alone", () => {
-    write("settings.yaml", "memory:\n  historyDb: mem0/h.db\n");
+    write("settings.yaml", "memory:\n  historyDb: mem0/h.db\n  dir: mem0/v\n");
     expect(loadSettings().values.get("MEM0_HISTORY_DB_PATH")).toBe(join(dataHome(), "mem0/h.db"));
+    expect(loadSettings().values.get("MEM0_DIR")).toBe(join(dataHome(), "mem0/v"));
     write("settings.yaml", "memory:\n  historyDb: /srv/h.db\n");
     expect(loadSettings().values.get("MEM0_HISTORY_DB_PATH")).toBe("/srv/h.db");
+  });
+
+  test("legacy memory.qdrant.host in settings.yaml turns memory.enabled on without warning", () => {
+    write("settings.yaml", "memory:\n  qdrant:\n    host: 127.0.0.1\n    port: 6333\n");
+    const loaded = loadSettings();
+    expect(loaded.values.get("MEM0_ENABLED")).toBe("true");
+    expect(warnings).toEqual([]);
+    write("settings.yaml", "memory:\n  enabled: false\n  qdrant:\n    host: 127.0.0.1\n");
+    expect(loadSettings().values.get("MEM0_ENABLED")).toBe("false");
   });
 
   test("selfie.references keep URLs and resolve files", () => {

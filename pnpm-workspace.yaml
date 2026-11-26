@@ -19,11 +19,12 @@ overrides:
 
 # Whether a dependency's install script runs; pnpm fails an install that meets one not listed here.
 allowBuilds:
+  # Prebuilt bindings ship in @zvec/bindings-*; install.js only resolves the platform package.
+  '@zvec/zvec': false
   # Squirrel.Windows' 7-Zip: electron-builder builds only the nsis target here.
   electron-winstaller: false
   # On linux/x64 it downloads the CUDA execution provider; the CPU binaries ship in the tarball.
   onnxruntime-node: false
   # It only warns about its dependents' version ranges.
   protobufjs: false
-  # LanceDB's older copy, which builds from source only beside a global libvips.
   sharp: false

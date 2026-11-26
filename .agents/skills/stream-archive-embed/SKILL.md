@@ -1,6 +1,6 @@
 ---
 name: stream-archive-embed
-description: Update laplace-eidolon's stream archive from the streamer's Bilibili replay series. Collect new BV IDs into a timestamped batch in the persona's URL lists, resume unfinished batches, and run download, Soniox STT, refinement, and LanceDB ingestion with the TypeScript tools. Use when asked to sync new stream replays or run the archive embedding workflow.
+description: Update laplace-eidolon's stream archive from the streamer's Bilibili replay series. Collect new BV IDs into a timestamped batch in the persona's URL lists, resume unfinished batches, and run download, Soniox STT, refinement, and Zvec ingestion with the TypeScript tools. Use when asked to sync new stream replays or run the archive embedding workflow.
 ---
 
 # Stream archive embed
@@ -27,7 +27,7 @@ streams/          <date>-<id>.md transcripts, .soniox.json payloads, .refined.js
 ```
 
 The index the bot reads is `<home>/personas/milky-green/index/`, unless
-`LANCEDB_PATH` (environment or `.env`) or `knowledge.index` (`settings.yaml`,
+`INDEX_PATH` (environment or `.env`, or legacy `LANCEDB_PATH`) or `knowledge.index` (`settings.yaml`,
 `persona.yaml`) points elsewhere.
 
 ## 1. Inspect local state

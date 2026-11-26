@@ -576,7 +576,7 @@ them. Each fixed a defect with the trigger it names; code and docs cite them by 
 | D13 | `interruptedBot` is exact | an empty turn within 3 s after Fish's audio ends |
 | D14 | no 15 s hold on a second reply in one turn | a follow-up after a tool call |
 | D15 | voices other than Fish keep her cues in the stored text | matches text chats; pipedog stored the filtered text |
-| D16 | her parts (her LanceDB tables, the selfie tool) outlive the call, in the engine's cache of its last 32 chats | every call |
+| D16 | her parts (her Zvec tables, the selfie tool) outlive the call, in the engine's cache of its last 32 chats | every call |
 
 A realtime call's differences, each a fix of pipedog's realtime path:
 

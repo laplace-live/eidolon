@@ -117,7 +117,7 @@ describe("readSettingsLayers", () => {
       value: "*设定集.txt,*事件集.txt",
       raw: ["*设定集.txt", "*事件集.txt"],
     });
-    expect(layers.values.get("MEM0_QDRANT_HOST")).toEqual(UNSET);
+    expect(layers.values.get("MEM0_ENABLED")).toEqual(UNSET);
     for (const setting of SETTINGS) expect(layers.values.has(setting.env)).toBe(true);
     for (const name of CREDENTIALS) expect(layers.values.get(name)).toEqual(UNSET);
     expect(layers.warnings).toEqual([]);
@@ -270,12 +270,12 @@ describe("a persona's own settings over the environment", () => {
   });
 
   test("an app setting: the environment still wins over settings.yaml", () => {
-    write("settings.yaml", "embeddings:\n  model: from-file\nmemory:\n  qdrant:\n    port: 7000\n");
+    write("settings.yaml", "embeddings:\n  model: from-file\nmemory:\n  enabled: true\n");
     setEnv("EMBED_MODEL", "from-env");
     installSettings();
     expect(envOptional("EMBED_MODEL")).toBe("from-env");
     expect(envOverride("EMBED_MODEL")).toBe("from-env");
-    expect(envOptional("MEM0_QDRANT_PORT")).toBe("7000");
+    expect(envOptional("MEM0_ENABLED")).toBe("true");
   });
 
   test("an empty or ill-typed value of hers decides nothing", () => {

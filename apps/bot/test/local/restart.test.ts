@@ -77,7 +77,7 @@ describe("BOOT_READ", () => {
       "personas/bob/persona.yaml",
       "memory:\n  model: bob/memory\nknowledge:\n  rerank:\n    model: bob/rerank\n",
     );
-    setEnv("MEM0_QDRANT_HOST", "127.0.0.1");
+    setEnv("MEM0_ENABLED", "true");
     setEnv("OPENROUTER_API_KEY", "or");
     installSettings();
     const engines = new SharedEngine(
@@ -133,13 +133,13 @@ describe("RestartTracker", () => {
     values.OPENROUTER_API_KEY = "sk-first";
     values.SONIOX_API_KEY = "s";
     tracker.noteInstalled();
-    values.MEM0_QDRANT_HOST = "127.0.0.1";
-    values.MEM0_QDRANT_PORT = "6333";
+    values.MEM0_ENABLED = "true";
+    values.MEM0_DIR = "/tmp/mem-a";
     tracker.noteInstalled();
     expect(tracker.changes()).toEqual({ calls: [], mcp: [] });
 
     values.OPENROUTER_API_KEY = "sk-rotated";
-    values.MEM0_QDRANT_PORT = "6334";
+    values.MEM0_DIR = "/tmp/mem-b";
     values.FISH_MODEL = "s2-pro";
     tracker.noteInstalled();
     expect(tracker.changes().calls).toEqual(["OPENROUTER_API_KEY"]);
@@ -166,10 +166,10 @@ describe("RestartTracker", () => {
   });
 
   test("what memory and the reranker are built from needs no restart", () => {
-    const { values, tracker } = tracked({ OPENROUTER_API_KEY: "k", MEM0_QDRANT_HOST: "a" });
+    const { values, tracker } = tracked({ OPENROUTER_API_KEY: "k", MEM0_ENABLED: "true" });
     for (const name of [
-      "MEM0_QDRANT_HOST",
-      "MEM0_QDRANT_COLLECTION",
+      "MEM0_ENABLED",
+      "MEM0_DIR",
       "MEM0_LLM_MODEL",
       "EMBED_MODEL",
       "EMBED_DIM",

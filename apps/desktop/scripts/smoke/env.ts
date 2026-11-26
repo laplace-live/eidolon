@@ -2,7 +2,7 @@
 // nothing else of it, then the fakes' accounts, the run's homes and the app's test switches. A key
 // or setting the developer's shell exports would otherwise reach the backend, win over the fakes'
 // accounts (a non-empty variable beats credentials.json) and bill.
-import { CREDENTIALS, SETTINGS } from "@eidolon/config";
+import { CREDENTIALS, LEGACY_SETTING_ENVS, SETTINGS } from "@eidolon/config";
 import { PROVIDERS } from "../../../../packages/providers/src/catalog.ts";
 
 /** The variables a login gives every process, which Electron, the backend and its tools read. */
@@ -49,6 +49,7 @@ export const OS_NAMES: { readonly posix: readonly string[]; readonly win32: read
 export const DROPPED_NAMES: ReadonlySet<string> = new Set([
   ...CREDENTIALS,
   ...SETTINGS.map((row) => row.env),
+  ...LEGACY_SETTING_ENVS,
   ...PROVIDERS.flatMap((provider) => [
     ...(provider.baseUrlEnv === null ? [] : [provider.baseUrlEnv]),
     ...(provider.fields ?? []).map((field) => field.env),

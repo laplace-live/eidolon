@@ -12,14 +12,13 @@ import { HistoryStore } from "../src/history.ts";
 import { createMemoryProvider, MEM0_STORE_KEY } from "../src/index.ts";
 import { Mem0Embedder, OpenAICompatibleChat } from "../src/openai.ts";
 import { Mem0MemoryProvider, openMemoryProvider } from "../src/provider.ts";
-import { QdrantVectorStore } from "../src/qdrant.ts";
 import type { MemoryItem } from "../src/types.ts";
 import {
   captureLogs,
   clearMemoryEnv,
   FakeEmbeddings,
   FakePoster,
-  FakeQdrant,
+  FakeStore,
   pinned,
   resetEnv,
   setEnv,
@@ -328,14 +327,11 @@ describe("the background store", () => {
 
   test("end to end: the stored point is mem0's Shape A", async () => {
     const pins = pinned(1793678706123456, 1000001);
-    const fake = new FakeQdrant();
+    const fake = new FakeStore();
     const poster = new FakePoster();
     poster.responses = ['{"memory": [{"text": "用户养了一只猫", "attributed_to": "user"}]}'];
     const engine = new MemoryEngine({
-      store: new QdrantVectorStore(
-        { host: "h", port: 6333, collection: "c", vectorSize: 4 },
-        fake.api,
-      ),
+      store: fake,
       embedder: new Mem0Embedder(new FakeEmbeddings("m"), 4),
       llm: new OpenAICompatibleChat("~google/gemini-flash-latest", poster),
       history: new HistoryStore(tempPath("h.db"), { clock: pins.clock, newId: pins.newId }),
@@ -403,7 +399,7 @@ describe("openMemoryProvider", () => {
   beforeEach(() => {
     clearMemoryEnv();
     setEnv({
-      MEM0_QDRANT_HOST: "qdrant",
+      MEM0_ENABLED: "true",
       OPENROUTER_API_KEY: "sk-or",
       MEM0_HISTORY_DB_PATH: tempPath("h.db"),
     });
@@ -469,11 +465,9 @@ describe("openMemoryProvider", () => {
     expect(e.opened).toEqual([]);
   });
 
-  test("createMemoryProvider rejects without a host and builds no client", async () => {
-    setEnv({ MEM0_QDRANT_HOST: "" });
-    await expect(createMemoryProvider({ userId: "1" })).rejects.toThrow(
-      "MEM0_QDRANT_HOST is unset",
-    );
+  test("createMemoryProvider rejects when memory is off", async () => {
+    setEnv({ MEM0_ENABLED: "false" });
+    await expect(createMemoryProvider({ userId: "1" })).rejects.toThrow("MEM0_ENABLED is off");
   });
 });
 
@@ -484,7 +478,7 @@ describe("SharedEngine", () => {
     EMBED_MODEL: "embed",
   };
   const CONFIG: MemoryConfig = {
-    qdrant: { host: "qdrant", port: 6333, collection: "eidolon_memories", vectorSize: 1536 },
+    store: { dir: "/vectors", vectorSize: 1536 },
     embedder: {
       selection: select("embeddings", (name) => settings[name]) as Selection,
       dims: 1536,
@@ -592,7 +586,7 @@ describe("openMemoryProvider per persona", () => {
   beforeEach(() => {
     clearMemoryEnv();
     setEnv({
-      MEM0_QDRANT_HOST: "qdrant",
+      MEM0_ENABLED: "true",
       OPENROUTER_API_KEY: "sk-or",
       MEM0_HISTORY_DB_PATH: tempPath("h.db"),
       LLM_PROVIDER: undefined,

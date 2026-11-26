@@ -3,6 +3,7 @@
 // chunk left to refine. Skips when the data is absent, unless EIDOLON_REQUIRE_PARITY=1.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
+import { tableExists } from "@eidolon/retrieval";
 import { expect, test } from "vitest";
 import { iterStreams, type ParsedStream, pipeline, refine } from "../src/index.ts";
 import { captureLogs } from "./pipeline_helpers.ts";
@@ -116,7 +117,9 @@ test.skipIf(!HAVE_DATA && !REQUIRED)(
     // (a sidecar it doesn't list must not exist), or, without a record, the catalog has the stream.
     const recordPath = join(INDEX, "stream_chunks.meta.json");
     let isIndexed: (stream: ParsedStream) => boolean;
-    if (existsSync(recordPath)) {
+    if (!tableExists(INDEX, "stream_chunks")) {
+      isIndexed = () => false;
+    } else if (existsSync(recordPath)) {
       const record = JSON.parse(readFileSync(recordPath, "utf8")) as {
         sources: { name: string; size: number; mtime: string }[];
       };

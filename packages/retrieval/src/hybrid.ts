@@ -1,11 +1,10 @@
-// Vector + FTS hybrid search over one table. LanceDB TS's native hybrid RRF ranks from 0 and breaks
-// ties differently from LanceDB Python's RRFReranker, which the index was tuned with, so the legs
-// run separately and fuse here. Omitting _distance/_score from select() makes lance log a
-// deprecation WARN per query.
+// Vector + FTS hybrid search over one Zvec table. The vector and BM25 legs run concurrently and
+// fuse through RRF(K=60) in float32 unless a cross-encoder reranker is active.
 import { errorText, logger, raceAbort } from "@eidolon/config";
 import type { RerankModel } from "@eidolon/providers";
-import type { Table } from "@lancedb/lancedb";
+import { ZVecIndexType } from "@zvec/zvec";
 import { makeReranker } from "./rerank.ts";
+import { materializeRow, type ZvecTable } from "./tables.ts";
 import { tokenizeZhQuery } from "./tokenize.ts";
 
 /** Table columns (never `vector`), plus `_relevance_score` or, for vectorSearch, `_distance`. */
@@ -14,6 +13,7 @@ export type SearchRow = Record<string, unknown>;
 export const RRF_K = 60;
 
 const VECTOR_COLUMN = "vector";
+const MIN_HNSW_EF = 128;
 
 export interface HybridSearchOptions {
   vector: readonly number[] | Float32Array;
@@ -32,60 +32,51 @@ export interface HybridSearchOptions {
   signal?: AbortSignal;
 }
 
-const columnCache = new WeakMap<Table, Promise<string[]>>();
-
-function rowColumns(table: Table): Promise<string[]> {
-  let columns = columnCache.get(table);
-  if (columns === undefined) {
-    columns = table
-      .schema()
-      .then((schema) => schema.fields.map((f) => f.name).filter((n) => n !== VECTOR_COLUMN));
-    columnCache.set(table, columns);
-    columns.catch(() => columnCache.delete(table));
-  }
-  return columns;
-}
-
-function plainRows(rows: readonly unknown[]): SearchRow[] {
-  return rows.map((row) => ({ ...(row as SearchRow) }));
-}
-
-// Python LanceDB treats limit <= 0 as unset, which leaves each leg at its default of 10 rows.
-function limited<Q extends { limit(n: number): Q }>(query: Q, candidates: number): Q {
-  return candidates > 0 ? query.limit(candidates) : query;
+function asFloat32(vector: readonly number[] | Float32Array): Float32Array {
+  return vector instanceof Float32Array ? vector : Float32Array.from(vector);
 }
 
 async function runLegs(
-  table: Table,
+  table: ZvecTable,
   vector: readonly number[] | Float32Array,
   tokens: string,
   candidates: number,
   where: string | null,
   ftsField: string,
 ): Promise<[SearchRow[], SearchRow[]]> {
-  const columns = await rowColumns(table);
-  let vectorQuery = limited(
-    table
-      .query()
-      .nearestTo(vector as number[])
-      .select([...columns, "_distance"])
-      .withRowId(),
-    candidates,
-  );
-  let ftsQuery = limited(
-    table
-      .query()
-      .fullTextSearch(tokens, { columns: ftsField })
-      .select([...columns, "_score"])
-      .withRowId(),
-    candidates,
-  );
-  if (where) {
-    vectorQuery = vectorQuery.where(where);
-    ftsQuery = ftsQuery.where(where);
-  }
-  const [vectorRows, ftsRows] = await Promise.all([vectorQuery.toArray(), ftsQuery.toArray()]);
-  return [plainRows(vectorRows), plainRows(ftsRows)];
+  if (candidates <= 0) return [[], []];
+  const outputFields = [...table.columnNames];
+  const filter = where ? { filter: where } : {};
+  const [vectorDocs, ftsDocs] = await Promise.all([
+    table.collection.query({
+      fieldName: VECTOR_COLUMN,
+      vector: asFloat32(vector),
+      topk: candidates,
+      params: { indexType: ZVecIndexType.HNSW, ef: Math.max(candidates * 4, MIN_HNSW_EF) },
+      outputFields,
+      ...filter,
+    }),
+    table.collection.query({
+      fieldName: ftsField,
+      fts: { matchString: tokens },
+      topk: candidates,
+      outputFields,
+      ...filter,
+    }),
+  ]);
+  const vectorRows = vectorDocs.map((doc) => {
+    const row = materializeRow(table.columnNames, doc);
+    row._distance = doc.score;
+    row._rowid = doc.id;
+    return row;
+  });
+  const ftsRows = ftsDocs.map((doc) => {
+    const row = materializeRow(table.columnNames, doc);
+    row._score = doc.score;
+    row._rowid = doc.id;
+    return row;
+  });
+  return [vectorRows, ftsRows];
 }
 
 /** Vector rows, then FTS rows not already seen, deduplicated by `_rowid`. */
@@ -106,9 +97,9 @@ function scored(row: SearchRow, score: number | null): SearchRow {
 }
 
 /**
- * Python LanceDB's `RRFReranker(K=60)`: ranks count from 1, the vector leg accumulates first,
- * merged rows keep their first (vector-leg) occurrence, and a stable sort orders them by the
- * float32 score. Rows need `_rowid`.
+ * Reciprocal rank fusion (`K=60`): ranks count from 1, the vector leg accumulates first, merged
+ * rows keep their first (vector-leg) occurrence, and a stable sort orders them by the float32
+ * score. Rows need `_rowid`.
  */
 export function rrfFuse(
   vectorRows: readonly SearchRow[],
@@ -137,7 +128,7 @@ function window(rows: SearchRow[], candidates: number, finalK: number): SearchRo
  * otherwise or when the rerank fails. Rows come best first and omit `vector`.
  */
 export async function hybridSearch(
-  table: Table,
+  table: ZvecTable,
   options: HybridSearchOptions,
 ): Promise<SearchRow[]> {
   const { vector, queryText, candidates, signal } = options;
@@ -149,6 +140,7 @@ export async function hybridSearch(
   const reranker = (options.rerank ?? true) ? (options.reranker ?? makeReranker()) : null;
   if (!tokens) throw new Error("Text query must be provided for hybrid search.");
   signal?.throwIfAborted();
+  if (candidates <= 0 || finalK <= 0) return [];
   const [vectorRows, ftsRows] = await raceAbort(
     runLegs(table, vector, tokens, candidates, options.where || null, options.ftsField ?? "tokens"),
     signal,
@@ -182,18 +174,23 @@ export async function hybridSearch(
 
 /** Vector-only KNN with `_distance`, as the eval's vector_only mode runs it. */
 export async function vectorSearch(
-  table: Table,
+  table: ZvecTable,
   options: { vector: readonly number[] | Float32Array; limit: number; where?: string | null },
 ): Promise<SearchRow[]> {
   if (options.limit <= 0) throw new Error("Limit is required for ANN/KNN queries");
-  const columns = await rowColumns(table);
-  let query = table
-    .query()
-    .nearestTo(options.vector as number[])
-    .select([...columns, "_distance"])
-    .limit(options.limit);
-  if (options.where) query = query.where(options.where);
-  return plainRows(await query.toArray());
+  const docs = await table.collection.query({
+    fieldName: VECTOR_COLUMN,
+    vector: asFloat32(options.vector),
+    topk: options.limit,
+    params: { indexType: ZVecIndexType.HNSW, ef: Math.max(options.limit * 4, MIN_HNSW_EF) },
+    outputFields: [...table.columnNames],
+    ...(options.where ? { filter: options.where } : {}),
+  });
+  return docs.map((doc) => {
+    const row = materializeRow(table.columnNames, doc);
+    row._distance = doc.score;
+    return row;
+  });
 }
 
 /**

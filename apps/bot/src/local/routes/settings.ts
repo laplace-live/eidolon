@@ -347,9 +347,12 @@ export function settingsRoutes(
         if (changes.length === 0) return localJson(200, settingsOf(app, persona));
 
         const dropStyles = scope === "persona" && dropsVoiceStyles(changes, persona);
+        const dropLegacyQdrant =
+          scope === "app" && changes.some(([field]) => field.path === "memory.enabled");
         const edit = (tree: Record<string, unknown>) => {
           for (const [field, value] of changes) setDotted(tree, field.path, value);
           if (dropStyles) setDotted(tree, "voice.styles", null);
+          if (dropLegacyQdrant) setDotted(tree, "memory.qdrant", null);
         };
         // ASSISTANT_ENABLED in the environment outlasts the file: only what takes effect is news.
         const wasEnabled = assistantSettings().enabled;

@@ -831,8 +831,8 @@ VC++ copies.
 - **What it holds:** what the npm package stages, through `apps/eidolon/scripts/build.ts`'s
   `stage()` (`dist/{server,cli,app}.js`, `web/`, `personas/`, `data/`, the built-in skills,
   `bin/eidolon.mjs`, the README, LICENSE, NOTICE and THIRD_PARTY_NOTICES.md), plus its runtime
-  dependencies in `node_modules`: onnxruntime-node, werift, libopus-wasm, apache-arrow, sharp and
-  the target's LanceDB binary, whose JS is inlined in `dist/`; and, which the npm package never
+  dependencies in `node_modules`: onnxruntime-node, werift, libopus-wasm, `@zvec/zvec` (with the
+  target's `@zvec/bindings-*` addon) and sharp; and, which the npm package never
   holds, the [node shim](#the-node-shim) in `node-shim/`. Main runs `dist/server.js` with
   `EIDOLON_APP_ROOT` set to the payload, so `shippedPath` finds everything in it.
 - **Pinned to pnpm-lock.yaml.** The payload's `package.json` is the npm package's manifest plus
@@ -841,19 +841,19 @@ VC++ copies.
   `npm install --omit=dev --ignore-scripts --no-audit --no-fund --no-package-lock --os=<os>
   --cpu=<cpu>` installs it for the target, and the stage fails unless `npm ls --all --json` shows
   exactly the lockfile's tree, each dependency at the version the lockfile gives its dependent and
-  the target's LanceDB binary included: npm skips an optional dependency it fails to fetch and
+  the target's Zvec binding included: npm skips an optional dependency it fails to fetch and
   still exits 0. An npx install resolves afresh, and drifts from what the tests ran.
   `--ignore-scripts` loses nothing on macOS or Windows.
 - **Pruned:** npm's `.bin` links and its record of the install, and onnxruntime-node down to the
   target's binding and the one library it loads: on darwin-arm64 `libonnxruntime.1.dylib`, without
   a second, identical copy; on win32-x64 `onnxruntime.dll`, without DirectML's DLLs, which CPU
   sessions never load. Type-only packages stay, or `npm ls` would call them missing.
-- **The VC++ runtime on Windows.** LanceDB, which loads at boot, and onnxruntime import it, so a
-  machine without the redistributable couldn't start the backend, and so does the reflink addon
-  the node shim's pnpm loads to clone a package into place. Each folder in the payload holding a
-  native addon, the node shim's included, gets the runtime DLLs its natives import (their import
-  and delay-import tables, and what those DLLs import in turn): onnxruntime's folder five,
-  LanceDB's and reflink's `vcruntime140.dll`. All come from the newest `Microsoft.VC14*.CRT` folder
+- **The VC++ runtime on Windows.** onnxruntime imports it, so a machine without the
+  redistributable couldn't run VAD or turn detection, and so does the reflink addon the node shim's
+  pnpm loads to clone a package into place. Each folder in the payload holding a native addon, the
+  node shim's included, gets the runtime DLLs its natives import (their import and delay-import
+  tables, and what those DLLs import in turn): onnxruntime's folder five, reflink's
+  `vcruntime140.dll`. All come from the newest `Microsoft.VC14*.CRT` folder
   vswhere finds, since whichever copy loads first serves the whole process. Node loads an addon
   with `LOAD_WITH_ALTERED_SEARCH_PATH`, which looks in its own folder first, so an older System32
   copy can't win. The copies shadow System32's, and Windows Update never services them: each
@@ -1007,7 +1007,7 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
 - **The asar** holds `dist/` and `package.json`, without source maps; `npmRebuild` is off, since
   main and the preload are bundles and the app has no dependencies. The output is `.out`, and build
   resources are in `resources/`, since the root `.gitignore` ignores `build/` at any depth.
-- **The payload** is an extra resource, outside the asar so onnxruntime and LanceDB open real files:
+- **The payload** is an extra resource, outside the asar so onnxruntime and Zvec open real files:
   `LAPLACE Eidolon.app/Contents/Resources/eidolon`, or `resources\eidolon` beside `LAPLACE Eidolon.exe`. Its source
   is the folder above the payload, `.stage/<target>` with the filter `eidolon/**/*`, because
   electron-builder skips a source folder's own top-level `node_modules` whatever the filter. Asar
@@ -1447,7 +1447,7 @@ reads `REG_SZ`, `REG_EXPAND_SZ` and non-ASCII values there through the real regi
 ### The stage test
 
 `test/stage.test.ts`, in the same project, checks a real stage: its files and manifest, its tree
-against `pnpm-lock.yaml`, the pruning, its natives loading from it (a LanceDB table, an onnxruntime
+against `pnpm-lock.yaml`, the pruning, its natives loading from it (a Zvec collection, an onnxruntime
 session and sharp, through `scripts/natives.ts`, with every native library and VC++ DLL the
 process mapped coming from the payload: `payloadLibraries()` picks them by file name, so Windows'
 own `msvcp_win.dll`, mapped in every process with a window, isn't one), the node shim (its
@@ -1658,7 +1658,7 @@ Playwright and CDP can't drive a fused build, so it calls the backend's API with
 main's forwarder does, and runs the app's binary in node mode beside it, as main runs the backend:
 
 - **The payload's natives,** before the app starts: `scripts/natives.ts` on the binary writes and
-  opens a LanceDB table, runs Silero on an onnxruntime CPU session and makes a JPEG with sharp,
+  opens a Zvec collection, runs Silero on an onnxruntime CPU session and makes a JPEG with sharp,
   every library mapped from the payload. The tray's icon files are in the app's resources, since
   background mode shows no tray.
 - **The launchers,** run as a terminal runs them (on Windows the `.cmd` files through
@@ -1687,7 +1687,7 @@ main's forwarder does, and runs the app's binary in node mode beside it, as main
   keeps her off screen. `--headful` seeds nothing, since she would show on the screen of whoever
   runs it, and has no such step.
 - **Its natives in use:** a photo with EXIF orientation 6 comes back from a chat upright and bare,
-  through the backend's sharp; the backend maps LanceDB from its start and sharp with the photo,
+  through the backend's sharp; the backend maps Zvec from its start and sharp with the photo,
   from the payload (`lsof` on macOS, the process's modules on Windows); an `ingest-facts` job, the
   binary in node mode under the backend, writes her facts through the fakes' embeddings, and a
   search on the binary reads them back.

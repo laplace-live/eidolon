@@ -983,7 +983,7 @@ function readJson(path: string): unknown {
   }
 }
 
-/** Whether `dbPath` holds `table`; a path LanceDB can't list, such as a file, holds none. */
+/** Whether `dbPath` holds `table`; a path listTableNames can't list, such as a file, holds none. */
 async function hasTable(dbPath: string, table: string): Promise<boolean> {
   try {
     return (await listTableNames(dbPath)).includes(table);

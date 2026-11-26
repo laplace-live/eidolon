@@ -1,6 +1,4 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { DEFAULT_PERSONA, IDENTITY_DEFAULTS, PROJECT_ROOT } from "@eidolon/config";
+import { DEFAULT_PERSONA, IDENTITY_DEFAULTS } from "@eidolon/config";
 import { describe, expect, test } from "vitest";
 import { LOCAL_ROUTES } from "../../../../bot/src/local/api.ts";
 import type { SettingRow } from "../../lib/api";
@@ -21,11 +19,8 @@ import {
   personaErrors,
   pickedVoice,
   previousStep,
-  QDRANT_COMMAND,
-  QDRANT_IMAGE,
   RESERVED_IDS,
   STEPS,
-  savedQdrant,
   suggestPersonaId,
   voiceProvider,
 } from "./wizard";
@@ -102,7 +97,7 @@ describe("the new-install cookie default", () => {
 
   test("any saved setting, environment value or key makes the install an existing one", () => {
     const saved = [...fresh, setting("local.viewerName", { source: "app", value: "Ann" })];
-    const fromEnv = [...fresh, setting("memory.qdrant.host", { envOverride: true })];
+    const fromEnv = [...fresh, setting("memory.enabled", { envOverride: true })];
     const withKey = [{ saved: false, key: { value: null, source: "env" as const } }];
     expect(isNewInstall(saved, none)).toBe(false);
     expect(isNewInstall(fromEnv, none)).toBe(false);
@@ -239,50 +234,11 @@ describe("creating a persona", () => {
   });
 });
 
-describe("the Qdrant one-liner", () => {
-  test("pins the image docker-compose.yml runs", () => {
-    const compose = readFileSync(join(PROJECT_ROOT, "docker-compose.yml"), "utf8");
-    expect(compose).toContain(`image: ${QDRANT_IMAGE}\n`);
-  });
-
-  test("publishes on loopback only, keeps a named volume and turns CORS off", () => {
-    expect(QDRANT_COMMAND).toContain(" -p 127.0.0.1:6333:6333 ");
-    expect(QDRANT_COMMAND).not.toMatch(/-p (?!127\.0\.0\.1:)/);
-    expect(QDRANT_COMMAND).toContain(" -v eidolon-qdrant:/qdrant/storage ");
-    expect(QDRANT_COMMAND).toContain(" -e QDRANT__SERVICE__ENABLE_CORS=false ");
-    expect(QDRANT_COMMAND.endsWith(` ${QDRANT_IMAGE}`)).toBe(true);
-  });
-});
-
 describe("the memory step", () => {
-  const saved = { host: "127.0.0.1", port: 6333 };
-
-  test("goes on while memory is on at the address shown", () => {
-    expect(memoryStepAction({ on: true, fromEnv: false, saved, typed: { ...saved } })).toBe("next");
-    expect(memoryStepAction({ on: false, fromEnv: false, saved, typed: saved })).toBe("check");
-  });
-
-  test("an address edited once memory is on can be checked and saved again", () => {
-    for (const typed of [
-      { host: "qdrant.local", port: 6333 },
-      { host: "127.0.0.1", port: 6334 },
-      null,
-    ]) {
-      expect([typed, memoryStepAction({ on: true, fromEnv: false, saved, typed })]).toEqual([
-        typed,
-        "check",
-      ]);
-    }
-    // The fields can't change an address the environment sets.
-    expect(
-      memoryStepAction({ on: true, fromEnv: true, saved, typed: { host: "x", port: 1 } }),
-    ).toBe("next");
-  });
-
-  test("the saved address is settings.yaml's, the port defaulting as memory's does", () => {
-    expect(savedQdrant(" 127.0.0.1 ", null)).toEqual(saved);
-    expect(savedQdrant("qdrant.local", 7000)).toEqual({ host: "qdrant.local", port: 7000 });
-    expect(savedQdrant(null, 6333)).toBeNull();
-    expect(savedQdrant("  ", 6333)).toBeNull();
+  test("offers turning memory on until enabled or locked by the environment", () => {
+    expect(memoryStepAction({ on: false, fromEnv: false })).toBe("turn-on");
+    expect(memoryStepAction({ on: true, fromEnv: false })).toBe("next");
+    expect(memoryStepAction({ on: false, fromEnv: true })).toBe("next");
+    expect(memoryStepAction({ on: true, fromEnv: true })).toBe("next");
   });
 });

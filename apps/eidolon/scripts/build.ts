@@ -36,28 +36,18 @@ const LAUNCHER = "bin/eidolon.mjs";
 
 /**
  * What the bundles leave in node_modules, each a dependency of the package: files read beside the
- * code (onnxruntime-node's binaries, LanceDB's per-platform binary, which its inlined loader
- * requires by name, and sharp's, which its own per-platform packages carry), and packages whose
- * prototypes or classes are shared: @eidolon/webrtc patches werift's, and LanceDB checks
- * apache-arrow's tables, which must be one copy for both. libopus-wasm stays a package: inlined,
- * the notices would carry its MIT license but not libopus's, which its THIRD_PARTY_NOTICES.md
- * holds.
+ * code (onnxruntime-node's binaries, Zvec's CJS loader and per-platform bindings, and sharp's,
+ * which its own per-platform packages carry), and packages whose prototypes or classes are shared:
+ * @eidolon/webrtc patches werift's. libopus-wasm stays a package: inlined, the notices would carry
+ * its MIT license but not libopus's, which its THIRD_PARTY_NOTICES.md holds.
  */
-const EXTERNAL = [
-  "onnxruntime-node",
-  "werift",
-  "libopus-wasm",
-  "apache-arrow",
-  "sharp",
-  "@lancedb/lancedb-*",
-];
+const EXTERNAL = ["onnxruntime-node", "werift", "libopus-wasm", "@zvec/zvec", "sharp"];
 
 /**
- * What the inlined code requires but the package never installs: LanceDB requires openai inside
- * its OpenAI embedding function only, which nothing calls, and ws tries bufferutil and
+ * What the inlined code requires but the package never installs: ws tries bufferutil and
  * utf-8-validate, its native speedups, and runs without them.
  */
-const NOT_INSTALLED = ["openai", "bufferutil", "utf-8-validate"];
+const NOT_INSTALLED = ["bufferutil", "utf-8-validate"];
 
 export interface Manifest {
   readonly name: string;
@@ -135,16 +125,16 @@ export function packageManifest(): Manifest {
       .filter(([name]) => EXTERNAL.some((pattern) => matches(pattern, name)))
       .sort(([a], [b]) => a.localeCompare(b)),
   );
-  const lancedb = pins.get("@lancedb/lancedb");
-  if (lancedb === undefined) throw new Error("No workspace depends on @lancedb/lancedb");
-  for (const [name, version] of Object.entries({ ...dependencies, "@lancedb/lancedb": lancedb })) {
+  const zvec = pins.get("@zvec/zvec");
+  if (zvec === undefined) throw new Error("No workspace depends on @zvec/zvec");
+  for (const [name, version] of Object.entries(dependencies)) {
     if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
       throw new Error(`${name} must be pinned to an exact version, not ${version}`);
     }
   }
   const optionalDependencies = Object.fromEntries(
     Object.values(PLATFORMS)
-      .map((binary) => [binary, lancedb])
+      .map((binary) => [binary, zvec])
       .sort(([a], [b]) => (a as string).localeCompare(b as string)),
   );
   const platforms = Object.keys(PLATFORMS).map((key) => key.split("-") as [string, string]);
@@ -241,12 +231,6 @@ export async function bundle(root: string): Promise<Bundles> {
           // Module comments name files from the checkout's root, wherever this runs.
           cwd: ROOT,
           external: isExternal,
-          onLog(level, log, handler) {
-            // LanceDB's Transformers.js embedding function, which nothing calls, imports that
-            // package through eval.
-            if (log.code === "EVAL" && log.id?.includes("/@lancedb/lancedb/")) return;
-            handler(level, log);
-          },
           output: {
             format: "es",
             entryFileNames: basename(file),
@@ -262,10 +246,7 @@ export async function bundle(root: string): Promise<Bundles> {
   return { imports, inlined };
 }
 
-/**
- * Throws when a bundle imports something the package doesn't install. LanceDB's loader names a
- * binary for every platform it supports, and requires only the running one's.
- */
+/** Throws when a bundle imports something the package doesn't install. */
 export function checkImports(
   imports: ReadonlyMap<string, ReadonlySet<string>>,
   manifest: Manifest,
@@ -280,7 +261,6 @@ export function checkImports(
       if (specifier.startsWith(".") || specifier.startsWith("/")) continue;
       const name = packageName(specifier);
       if (isBuiltin(specifier) || installed.has(name) || NOT_INSTALLED.includes(name)) continue;
-      if (name.startsWith("@lancedb/lancedb-")) continue;
       stray.push(`${file}: ${specifier}`);
     }
   }

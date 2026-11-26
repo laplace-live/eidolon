@@ -1,10 +1,9 @@
 // fixtures/write_side.golden.json pins the write side: the embedding cache's keys, blobs and file,
-// the batch-embedding scenarios and totals, and each table's schema, rows, FTS index and versions.
+// the batch-embedding scenarios and totals, and each table's schema, rows and float32 vectors.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { EmbeddingCostSource as CostSource } from "@eidolon/providers";
-import type { DataType, Field } from "apache-arrow";
-import type { ArrowSchema } from "../src/index.ts";
+import type { TableSchema } from "../src/index.ts";
 
 export interface GoldenScenario {
   name: string;
@@ -24,9 +23,6 @@ export interface GoldenScenario {
 
 export interface GoldenTable {
   rows: Record<string, unknown>[];
-  indices: [string, string, string[], Record<string, unknown>][];
-  versions: number[];
-  manifests: string[];
   read_back: Record<string, unknown>[];
   vectors_f32_hex: string[];
 }
@@ -58,30 +54,17 @@ export function fakeVector(text: string): number[] {
   return [base / 7, (0 - base) / 3, 0.1 * base, 1 / (base + 3)];
 }
 
-/** pyarrow's `str()` of a type, for the types the two schemas use. */
-function pyType(type: DataType): string {
-  const name = String(type);
-  if (name === "Utf8") return "string";
-  if (name === "Bool") return "bool";
-  if (name === "Int32") return "int32";
-  if (name === "Float32") return "float";
-  const item = type.children[0] as Field;
-  const size = (type as unknown as { listSize: number }).listSize;
-  return `fixed_size_list<${item.name}: ${pyType(item.type)}>[${size}]`;
-}
-
-/** A schema as the golden describes pyarrow's: name, type, nullability, and the list's item. */
-export function describeSchema(schema: ArrowSchema): {
+/** A TableSchema rendered in the golden's `[name, type, nullable]` shape, vector column last. */
+export function describeSchema(schema: TableSchema): {
   metadata: Record<string, string>;
   fields: unknown[][];
 } {
   return {
-    metadata: Object.fromEntries(schema.metadata),
-    fields: schema.fields.map((f) => {
-      const item = f.type.children?.[0] as Field | undefined;
-      const entry: unknown[] = [f.name, pyType(f.type), f.nullable];
-      return item === undefined ? entry : [...entry, item.name, pyType(item.type), item.nullable];
-    }),
+    metadata: {},
+    fields: [
+      ...schema.fields.map((f) => [f.name, f.kind, f.nullable]),
+      ["vector", `fixed_size_list<item: float>[${schema.vectorDim}]`, true, "item", "float", true],
+    ],
   };
 }
 

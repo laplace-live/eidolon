@@ -4,14 +4,13 @@ import { MemoryEngine, SharedEngine } from "../src/engine.ts";
 import { HistoryStore } from "../src/history.ts";
 import { memoryAdmin } from "../src/index.ts";
 import { Mem0Embedder, OpenAICompatibleChat } from "../src/openai.ts";
-import { QdrantVectorStore } from "../src/qdrant.ts";
 import fixtures from "./fixtures/engine.json";
 import {
   captureLogs,
   clearMemoryEnv,
   FakeEmbeddings,
   FakePoster,
-  FakeQdrant,
+  FakeStore,
   pinned,
   resetEnv,
   setEnv,
@@ -21,21 +20,18 @@ import {
 beforeEach(() => {
   clearMemoryEnv();
   setEnv({
-    MEM0_QDRANT_HOST: "qdrant",
+    MEM0_ENABLED: "true",
     OPENROUTER_API_KEY: "sk-or",
     MEM0_HISTORY_DB_PATH: tempPath("h.db"),
   });
 });
 afterEach(resetEnv);
 
-function engineOver(fake: FakeQdrant): MemoryEngine {
+function engineOver(fake: FakeStore): MemoryEngine {
   const pins = pinned(1793678706123456, 1);
   const poster = new FakePoster();
   return new MemoryEngine({
-    store: new QdrantVectorStore(
-      { host: "h", port: 6333, collection: "c", vectorSize: 4 },
-      fake.api,
-    ),
+    store: fake,
     embedder: new Mem0Embedder(new FakeEmbeddings("m"), 4),
     llm: new OpenAICompatibleChat("m", poster),
     history: new HistoryStore(tempPath("h.db"), { clock: pins.clock, newId: pins.newId }),
@@ -44,17 +40,17 @@ function engineOver(fake: FakeQdrant): MemoryEngine {
   });
 }
 
-function seeded(): FakeQdrant {
-  const fake = new FakeQdrant();
+function seeded(): FakeStore {
+  const fake = new FakeStore();
   for (const [id, payload] of Object.entries(fixtures.search_points)) fake.points.set(id, payload);
   return fake;
 }
 
 describe("memoryAdmin", () => {
   test("is null when memory is not configured", () => {
-    setEnv({ MEM0_QDRANT_HOST: " " });
+    setEnv({ MEM0_ENABLED: "false" });
     expect(memoryAdmin()).toBeNull();
-    setEnv({ MEM0_QDRANT_HOST: "qdrant" });
+    setEnv({ MEM0_ENABLED: "true" });
     expect(memoryAdmin()).not.toBeNull();
   });
 
@@ -88,12 +84,12 @@ describe("memoryAdmin", () => {
     const admin = createMemoryAdmin(
       new SharedEngine(async () => {
         attempts++;
-        throw new Error("connect ECONNREFUSED");
+        throw new Error("store unwritable");
       }),
     );
     const outcome = await admin.list("1");
     expect(outcome).toMatchObject({ ok: false, reason: "unavailable" });
-    if (!outcome.ok) expect(String(outcome.error)).toContain("ECONNREFUSED");
+    if (!outcome.ok) expect(String(outcome.error)).toContain("store unwritable");
     expect(await admin.forget("1")).toMatchObject({ ok: false, reason: "unavailable" });
     expect(attempts).toBe(2);
   });
@@ -117,7 +113,7 @@ describe("memoryAdmin", () => {
       "ValueError",
       "Memory with id 00000000-0000-4000-8000-000000000003 not found. Please provide a valid 'memory_id'",
     ]);
-    fake.scroll = async () => {
+    fake.list = async () => {
       throw new Error("timeout");
     };
     expect(await admin.list("12345678")).toMatchObject({ ok: false, reason: "failed" });

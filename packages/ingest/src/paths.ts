@@ -19,8 +19,8 @@ export { binDir, type SourceFolder, sourceFolder, sourcesDir } from "@eidolon/co
 export { acquireLock, LockedError, lockInfoPath } from "@eidolon/config/lock";
 
 /**
- * Where the writers build persona `id`'s index: where the bot reads it (`LANCEDB_PATH` or
- * `knowledge.index`, a relative one against the repository root), else
+ * Where the writers build persona `id`'s index: where the bot reads it (`INDEX_PATH` /
+ * `LANCEDB_PATH` or `knowledge.index`, a relative one against the repository root), else
  * `<home>/personas/<id>/index`. Only for the active persona, whose settings are installed; never
  * inside a persona template.
  */
@@ -31,9 +31,9 @@ export function indexWritePath(id: string): string {
       `Persona ${id} is not the active persona (${active}); its settings aren't loaded`,
     );
   }
-  const configured = envOptional("LANCEDB_PATH");
+  const configured = envOptional("INDEX_PATH") ?? envOptional("LANCEDB_PATH");
   const path = configured ? resolveProjectPath(configured) : join(personaHomeDir(id), INDEX_DIR);
-  refuseTemplatePath(id, path, "LANCEDB_PATH or knowledge.index");
+  refuseTemplatePath(id, path, "INDEX_PATH or knowledge.index");
   return path;
 }
 

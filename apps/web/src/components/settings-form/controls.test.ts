@@ -100,8 +100,9 @@ describe("the control for each kind", () => {
     expect(control("knowledge.rerank.enabled")).toEqual({ type: "flag" });
     expect(control("prompt")).toEqual({ type: "path", inPersona: true });
     expect(control("memory.historyDb")).toEqual({ type: "path", inPersona: false });
+    expect(control("memory.dir")).toEqual({ type: "path", inPersona: false });
+    expect(control("memory.enabled")).toEqual({ type: "flag", fallback: "off" });
     expect(control("selfie.references")).toEqual({ type: "paths", inPersona: true });
-    expect(control("memory.qdrant.port")).toEqual({ type: "integer", min: 1, max: 65535 });
     // A provider's API base shows the one it uses while unset.
     expect(control("providers.openai.baseUrl")).toEqual({
       type: "text",
@@ -259,7 +260,7 @@ describe("numbers parse as Python's int() and float() do", () => {
   });
 
   test("bounds, and integers past 2^53", () => {
-    const port = control("memory.qdrant.port");
+    const port = { type: "integer", min: 1, max: 65535 } as const;
     expect(parseDraft("6333", port)).toEqual({ ok: true, value: 6333 });
     expect(parseDraft("0", port)).toEqual({ ok: false, error: "settings.form.invalid.min" });
     expect(parseDraft("65536", port)).toEqual({ ok: false, error: "settings.form.invalid.max" });
@@ -631,8 +632,8 @@ describe("layout", () => {
 
 describe("changes", () => {
   const rows = [
-    row(field("memory.qdrant.port"), { value: 6333, source: "app" }),
-    row(field("memory.qdrant.host")),
+    row(field("embeddings.dim"), { value: 3072, source: "app" }),
+    row(field("memory.dir")),
     row(field("embeddings.model"), { envOverride: true }),
     row(field("sources.ytDlp"), { readOnly: true }),
     row(field("knowledge.facts.files"), { scope: "persona", value: "*.txt" }),
@@ -641,12 +642,12 @@ describe("changes", () => {
   test("sends only what was edited and differs, with null for a cleared value", () => {
     expect(
       changes(rows, {
-        "memory.qdrant.port": "6333",
-        "memory.qdrant.host": "127.0.0.1",
+        "embeddings.dim": "3072",
+        "memory.dir": "~/mem0-vectors",
         "knowledge.facts.files": "",
       }),
     ).toEqual({
-      values: { "memory.qdrant.host": "127.0.0.1", "knowledge.facts.files": null },
+      values: { "memory.dir": "~/mem0-vectors", "knowledge.facts.files": null },
       errors: {},
     });
   });
@@ -656,15 +657,15 @@ describe("changes", () => {
       changes(rows, {
         "embeddings.model": "x",
         "sources.ytDlp": "/bin/sh",
-        "memory.qdrant.port": "port",
+        "embeddings.dim": "dim",
       }),
-    ).toEqual({ values: {}, errors: { "memory.qdrant.port": "settings.form.invalid.integer" } });
+    ).toEqual({ values: {}, errors: { "embeddings.dim": "settings.form.invalid.integer" } });
   });
 });
 
 describe("where a field's value comes from", () => {
   const voice = (extra: Partial<SettingRow>) => row(field("voice.voiceId"), extra);
-  const host = (extra: Partial<SettingRow>) => row(field("memory.qdrant.host"), extra);
+  const host = (extra: Partial<SettingRow>) => row(field("memory.dir"), extra);
 
   test("a persona row inherits the environment's value while her draft is empty", () => {
     expect(originOf(voice({ envValue: "env-voice" }), "")).toBe("inherited");
@@ -720,18 +721,14 @@ describe("a settings card's rows", () => {
 
   test("named rows come in the given order, an array of paths as one line", () => {
     const card = cardSections(rows, "app", [
-      ["memory.qdrant.host", "memory.qdrant.port"],
-      "memory.qdrant.collection",
+      ["embeddings.provider", "embeddings.model"],
+      "memory.enabled",
       "memory.historyDb",
     ]);
     expect(paths(card)).toEqual([
       [
         null,
-        [
-          ["memory.qdrant.host", "memory.qdrant.port"],
-          ["memory.qdrant.collection"],
-          ["memory.historyDb"],
-        ],
+        [["embeddings.provider", "embeddings.model"], ["memory.enabled"], ["memory.historyDb"]],
       ],
     ]);
   });
@@ -739,7 +736,7 @@ describe("a settings card's rows", () => {
   test("rows of the other scope, hidden or production-only rows, and unknown paths drop out", () => {
     const card = cardSections(rows, "persona", [
       "voice.model",
-      "memory.qdrant.host",
+      "memory.dir",
       ["nope", "mind.model"],
       "mcp.allowedHosts",
     ]);

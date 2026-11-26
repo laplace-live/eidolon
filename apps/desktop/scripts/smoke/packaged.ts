@@ -240,7 +240,7 @@ export function inside(
 }
 
 /** The natives and the runtime libraries they import, by file name. */
-export const NATIVE = /onnxruntime|lancedb|sharp|vips|vcruntime140|msvcp140/i;
+export const NATIVE = /onnxruntime|zvec|sharp|vips|vcruntime140|msvcp140/i;
 
 /** The .node and .dylib files in `lsof -p`'s answer, by path. */
 export function lsofLibraries(text: string): string[] {

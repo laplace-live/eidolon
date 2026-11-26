@@ -19,8 +19,8 @@ nothing.
 | `packages/usage` | the usage ledger: SQLite records of what each request cost, and their sums |
 | `packages/access` | `loginSyncToken` validation, quotas, client IP, CORS, the `/api/offer` guard, audio quality |
 | `packages/turn` | Cloudflare TURN credentials, ICE plans, relay-only candidate rules |
-| `packages/retrieval` | the LanceDB read path: jieba (pure TS, same dictionary), hybrid search, RRF and the reranker, stream dates and the catalog; and its write side: the Arrow schemas, `writeTable`, `EmbedCache`, `embedInBatches` |
-| `packages/memory` | Mem0's engine over Qdrant: mem0's payloads, its `history.db` |
+| `packages/retrieval` | the Zvec read path: jieba (pure TS, same dictionary), hybrid search (HNSW + BM25), RRF and the reranker, stream dates and the catalog; and its write side: the Zvec schemas, atomic `writeTable` (`CURRENT` pointer swap), `EmbedCache`, `embedInBatches` |
+| `packages/memory` | Mem0's engine over local Zvec: mem0's payloads, its `history.db` |
 | `packages/context` | the retrieval gate, both RAG providers, the recall tool, the system instruction, the greeting, and group chats' director ([chat.md](chat.md#the-director)) |
 | `packages/tools`, `packages/imagegen` | `change_voice_style`, `take_selfie`, the selfie store |
 | `packages/chat` | the chat log's format, browser-safe: its events, `viewOf`, `parseMentions`, the `ChatStore` interface and its contract suite; `@eidolon/chat/jsonl` is the local store ([chat.md](chat.md)) |
@@ -37,9 +37,9 @@ A new context tier implements `ContextProvider`; a new LLM tool implements `LlmT
 engine runs both, in a chat and a call alike. Clients (the `/ai` page, and the local app's pages in
 a browser or the desktop app's window; Expo later) talk to `apps/bot` over HTTP and RTVI.
 
-The bot reads each persona's index from the data home ([personas.md](personas.md)) and viewers'
-memories from Qdrant. The compose `bot-ts` service keeps Mem0's `history.db` on a volume of its
-own, beside the read-only data home.
+The bot reads each persona's index from the data home ([personas.md](personas.md)) and keeps
+viewers' memories in a local Zvec collection (`MEM0_DIR`). The compose `bot-ts` service keeps
+Mem0's vectors and `history.db` on a volume of its own, beside the read-only data home.
 
 ## Commands
 
@@ -52,7 +52,7 @@ pnpm laplace-search "奶绿最喜欢喝什么"
 pnpm laplace-eval-retrieval           # recall@k and MRR against the persona's eval queries
 pnpm laplace-generate-image           # billed per image
 pnpm gate-decisions                   # billed; rewrites the gate benchmark's decisions.json
-docker compose --profile ts up --build bot-ts   # the image on :7861, with Qdrant
+docker compose --profile ts up --build bot-ts   # the image on :7861, with local Zvec memory
 ```
 
 CI publishes the image as `ghcr.io/laplace-live/eidolon`, tagged `edge`, `sha-…`, and per release
@@ -74,8 +74,8 @@ pnpm laplace-pipeline --dry-run          # plans every video the persona's sourc
 pnpm laplace-download <url list>         # yt-dlp → sources/<id>/vods/; --expand <url> lists a playlist
 pnpm laplace-transcribe <audio>          # Soniox async → sources/<id>/streams/<date>-<id>.md
 pnpm laplace-refine                      # two LLM passes → streams/*.refined.json
-pnpm laplace-ingest-streams              # → index/stream_chunks.lance
-pnpm laplace-ingest-facts                # sources/<id>/facts/ → index/persona_facts.lance
+pnpm laplace-ingest-streams              # → index/stream_chunks.zvec
+pnpm laplace-ingest-facts                # sources/<id>/facts/ → index/persona_facts.zvec
 pnpm laplace-build-stream-catalog        # → index/stream_catalog.json
 pnpm laplace-prepare-batch <capture> --expected-count <n>      # new videos → lists/batches/
 pnpm laplace-discover                    # her new videos on Bilibili and YouTube; --save → lists/batches/
@@ -124,8 +124,9 @@ Things it relies on:
   no table or an unfinished index. A command that never reads the signal goes in `IGNORE_SIGNAL`
   (`cli.ts`), which exits at the first.
 - **Rebuilds never leave a half index.** Every file is written to a temporary file beside it and
-  renamed. `writeTable` builds and checks the whole Arrow table, every value and vector, before it
-  drops the old table, and after a successful write each ingest records its inputs in
+  renamed. `writeTable` validates every value and vector, builds and optimizes a new Zvec
+  collection in `<table.zvec>/<buildId>`, and atomically swaps `<table.zvec>/CURRENT` before
+  removing older builds; after a successful write each ingest records its inputs in
   `index/<table>.meta.json`.
 - **The managed yt-dlp** is `<home>/bin/yt-dlp`, installed from yt-dlp's latest GitHub release,
   checked against the release's `SHA2-256SUMS`, and checked for a newer release at most once a
@@ -173,7 +174,7 @@ that provider's key, credit or reach:
 | `cookies-unavailable` | yt-dlp couldn't read the browser's cookies, or the site wants them |
 | `http-412` | the site refused yt-dlp, usually because it is outdated |
 | `ffmpeg-unavailable` | audio over 300 minutes needs ffmpeg to slice it |
-| `disk-full` | ENOSPC, or SQLite's or LanceDB's disk-full error |
+| `disk-full` | ENOSPC, or SQLite's or Zvec's disk-full error |
 | `no-upload-date` | audio whose `.info.json` has no upload date, so it has no stream id |
 | `no-speech` | Soniox heard nothing; the payload is kept, so it is billed once |
 | `cancelled` | the run was cancelled |
@@ -271,7 +272,7 @@ Choices a reader might take for bugs, and why they stand.
 - The async-tool instructions in the system prompt are pipedog's: a finished `take_selfie` result
   may be delivered on its own once everything the viewer said has been answered.
 - Every response, 500s included, carries CORS headers.
-- The CLIs' `--db-path` defaults to `LANCEDB_PATH`, else the persona's index.
+- The CLIs' `--db-path` defaults to `INDEX_PATH` (or legacy `LANCEDB_PATH`), else the persona's index.
 - `laplace-eval-retrieval`'s `--queries` defaults to `eval/queries.toml` in the persona's
   sources; a missing file's error says to pass `--queries`.
 - The missing-table hint names the command and the persona,
@@ -294,12 +295,12 @@ Choices a reader might take for bugs, and why they stand.
   no browser, `--language ''` sends no hint, and `--model ''` is sent as "". `EMBED_MODEL` and
   `EMBED_DIM` are read when embedding starts, so `.env` applies to a standalone run.
 - **Writers write where the bot reads.** `--db-path` defaults to her `knowledge.index`, else
-  `LANCEDB_PATH` (a relative path against the repository root), else
+  `INDEX_PATH` (or legacy `LANCEDB_PATH`, a relative path against the repository root), else
   `<home>/personas/<id>/index`, and never inside a persona template; each writer logs the path
-  first. With `--persona` spelled out, a `LANCEDB_PATH` from the environment that her
-  `knowledge.index` doesn't replace, and no `--db-path`, a writer exits 2 (`LANCEDB_PATH is set
-  in the environment; pass --db-path or set her knowledge.index to write persona <id>'s index.`),
-  since that path may be another persona's.
+  first. With `--persona` spelled out, an `INDEX_PATH` (or `LANCEDB_PATH`) from the environment
+  that her `knowledge.index` doesn't replace, and no `--db-path`, a writer exits 2 (`INDEX_PATH is
+  set in the environment; pass --db-path or set her knowledge.index to write persona <id>'s
+  index.`), since that path may be another persona's.
 - **Logs go to stderr**, in the logger's format. Stdout holds the command's report, or with
   `--json` events only.
 - **`--json` reports [progress events](#progress-events)**, with a code for each failure it can
@@ -309,7 +310,7 @@ Choices a reader might take for bugs, and why they stand.
 - **Cancellation** ([above](#the-offline-chain)) ends with each item in flight reporting
   `cancelled` and a summary with `cancelled: true`, and leaves no partial file looking done.
 - **Failures are reported, not raised.** A missing key fails with code `missing-credential`
-  before any request. Provider errors, unreadable files and LanceDB errors log their message and
+  before any request. Provider errors, unreadable files and Zvec errors log their message and
   stack, fail their stage with a summary listing them, and exit 1.
 - **Transcript frontmatter is YAML 1.2** (the `yaml` package's default), not 1.1: `yes`, `1:30`,
   `017`, `1_000` and unquoted timestamps read as 1.2 reads them. The tools write plain strings
@@ -511,12 +512,14 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
 
 ### Ingest, the catalog and the write side
 
-- Tables are written in Lance file format 2.2, with lance's newer FTS index format.
-- **The old table survives a failed rebuild.** The whole Arrow table is built and checked before
-  the drop, so a bad row, a short response or a cancel leaves the old table and its meta file.
-  Values the schema can't hold exactly are refused there (a missing column, a non-string text, a
-  non-boolean `refined`, an out-of-range or fractional `floor`), where apache-arrow alone would
-  coerce them. Once the drop happens, the build finishes.
+- Tables are written as Zvec collections under `<table.zvec>/<buildId>` with HNSW cosine vectors,
+  whitespace BM25 FTS on `tokens`, and inverted scalar indexes, pointed to by `<table.zvec>/CURRENT`.
+- **The old table survives a failed rebuild.** Every row and vector is validated before the new
+  build is opened, and `<table.zvec>/CURRENT` is swapped atomically only after `optimize()` finishes,
+  so a bad row, a short response or a cancel leaves the old table and its meta file. Values the
+  schema can't hold exactly are refused before writing (a missing column, a non-string text, a
+  non-boolean `refined`, an out-of-range or fractional `floor`). Once `writeTable` begins writing
+  the critical section finishes.
 - `--clear-cache` empties the cache with `DELETE` and `VACUUM` (busy_timeout 5000) and keeps the
   file, since every persona and model shares it; its help says so. `Cleared embedding cache at …`
   is logged only when the file existed.
@@ -556,7 +559,7 @@ It takes no lock: it reads, and `--save` writes one new batch, never over anothe
   job(s) in parallel (concurrency=N)`.
 - It takes `--persona`, `--json` and `--db-path`; `--provider` takes only `soniox`.
 - `url_list` is optional when `--stages` leaves out download.
-- **The dry run plans.** It takes no lock, needs no `--db-path` beside `LANCEDB_PATH`, and creates
+- **The dry run plans.** It takes no lock, needs no `--db-path` beside `INDEX_PATH`, and creates
   no `streams/` folder. Without a URL list it covers every video the persona's lists, `vods/` and
   `streams/` know, and the human dry run counts every list's URLs. With `--json` it emits one
   `plan` event per video, then a summary with stage `plan` of `{videos, downloadPending,

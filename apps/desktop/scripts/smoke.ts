@@ -74,7 +74,7 @@ const PERSONA = "milky-green";
 const FACTS = ["明前奶绿说她的猫叫坚果。", "明前奶绿开了一家花店。"] as const;
 const QUERY = "她的猫叫什么名字";
 /** What checkNatives must find mapped from the payload, by file name. */
-const EVERY_NATIVE = ["lancedb", "onnxruntime_binding", "sharp-", "vips"];
+const EVERY_NATIVE = ["zvec_node_binding", "onnxruntime_binding", "sharp-", "vips"];
 const JSON_TYPE = { "content-type": "application/json" };
 // Each step's limit. Together they end a hung run in failed checks, its uninstall and results.json
 // included, well inside desktop-build.yml's 20 minutes; a run takes about 12 s on macOS, and the
@@ -248,8 +248,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
 
   // Before the app starts: checkNatives blocks this process, whose fakes, focus watch and
   // connections to the backend would stall meanwhile.
-  const NATIVES =
-    "LanceDB, onnxruntime and sharp load from the payload and run on the app's binary";
+  const NATIVES = "Zvec, onnxruntime and sharp load from the payload and run on the app's binary";
   await checks.step(NATIVES, async () => {
     const at = Date.now();
     let report: NativesReport;
@@ -280,7 +279,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
         report.image === "jpeg 2x1" &&
         outside.length === 0 &&
         missing.length === 0,
-      `in node mode: LanceDB counted ${report.rows} rows in a table it wrote, Silero's CPU session gave ${report.speech.toFixed(3)}, sharp read back a ${report.image}; ${loaded.length} libraries mapped, ${outside.length === 0 ? "all from the payload" : `not from the payload: ${outside.join(", ")}`}${missing.length > 0 ? `; never mapped: ${missing.join(", ")}` : ""}`,
+      `in node mode: Zvec counted ${report.rows} rows in a collection it wrote, Silero's CPU session gave ${report.speech.toFixed(3)}, sharp read back a ${report.image}; ${loaded.length} libraries mapped, ${outside.length === 0 ? "all from the payload" : `not from the payload: ${outside.join(", ")}`}${missing.length > 0 ? `; never mapped: ${missing.join(", ")}` : ""}`,
     );
   });
 
@@ -611,11 +610,11 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   });
 
   const MAPPED =
-    "the backend maps its natives from the payload: LanceDB from its start, sharp and libvips with the first photo";
+    "the backend maps its natives from the payload: Zvec from its start, sharp and libvips with the first photo";
   await checks.step(MAPPED, async () => {
     const mapped = await mappedNatives(server.pid);
     const outside = mapped.filter((path) => !inside(path, payload));
-    const missing = ["lancedb", "sharp-", "vips"].filter(
+    const missing = ["zvec_node_binding", "sharp-", "vips"].filter(
       (name) => !mapped.some((path) => basename(path).toLowerCase().includes(name)),
     );
     checks.add(
@@ -626,7 +625,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
   });
 
   const JOB =
-    "LanceDB: an ingest-facts job on the app's binary writes her facts through the fakes' embeddings";
+    "Zvec: an ingest-facts job on the app's binary writes her facts through the fakes' embeddings";
   await checks.step(JOB, async () => {
     const { patterns } = (await (
       await smoke.api(`/api/local/personas/${PERSONA}/facts`)
@@ -646,7 +645,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
     const release = fakes.holdEmbeddings();
     let job: JobRecord;
     let command: string | null = null;
-    let lancedb: string | null = null;
+    let zvec: string | null = null;
     try {
       const started = await smoke.api("/api/local/jobs", {
         method: "POST",
@@ -681,7 +680,7 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
       if (row !== undefined) {
         command = row.command;
         const mapped = await mappedNatives(row.pid);
-        lancedb = mapped.find((path) => basename(path).toLowerCase().includes("lancedb")) ?? null;
+        zvec = mapped.find((path) => basename(path).toLowerCase().includes("zvec")) ?? null;
       }
     } finally {
       release();
@@ -700,16 +699,16 @@ async function walk(smoke: Smoke, layout: AppLayout, numbers: Numbers): Promise<
       JOB,
       put.status === 200 &&
         command !== null &&
-        lancedb !== null &&
-        inside(lancedb, payload) &&
+        zvec !== null &&
+        inside(zvec, payload) &&
         done.status === "succeeded" &&
         meta?.rows === FACTS.length,
-      `${name} ${put.status}; the job ${command === null ? "never seen running under the backend" : `ran as ${short(command)}`}, ${lancedb === null ? "without LanceDB mapped" : `LanceDB mapped from ${short(lancedb)}`}; held at its embeddings, then ${done.status} (exit ${done.exitCode}); persona_facts holds ${String(meta?.rows ?? "no")} rows`,
+      `${name} ${put.status}; the job ${command === null ? "never seen running under the backend" : `ran as ${short(command)}`}, ${zvec === null ? "without Zvec mapped" : `Zvec mapped from ${short(zvec)}`}; held at its embeddings, then ${done.status} (exit ${done.exitCode}); persona_facts holds ${String(meta?.rows ?? "no")} rows`,
     );
   });
 
   const SEARCH =
-    "LanceDB: a search on the app's binary reads her facts back through the fakes' embeddings";
+    "Zvec: a search on the app's binary reads her facts back through the fakes' embeddings";
   await checks.step(SEARCH, async () => {
     const embedded = fakes.count("POST /v1/embeddings");
     const at = Date.now();

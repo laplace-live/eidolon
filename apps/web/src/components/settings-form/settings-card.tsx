@@ -50,8 +50,8 @@ export interface SettingsCardProps {
   /** Whose values to show and save; the active persona when absent. */
   readonly persona?: string;
   /**
-   * These rows, in this order; an entry that is an array puts its rows side by side, as Qdrant's
-   * host and port. Every row of the scope when absent, under a legend per group.
+   * These rows, in this order; an entry that is an array puts its rows side by side, as a role's
+   * provider and model. Every row of the scope when absent, under a legend per group.
    */
   readonly paths?: readonly CardPath[];
   /** Rows left out, as an Advanced card leaves out what the other cards show. */

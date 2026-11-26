@@ -30,7 +30,7 @@ export interface LocalApp {
   restart(): void;
   /** Runs when the server stops, before the peers disconnect. */
   onStop(hook: () => Promise<void>): void;
-  /** Mem0's admin, built per call so saved Qdrant settings apply at once; null while memory is off. */
+  /** Mem0's admin, built per call so saved memory settings apply at once; null while memory is off. */
   memoryAdmin(): MemoryAdmin | null;
 }
 

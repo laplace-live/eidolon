@@ -763,6 +763,7 @@ msgstr "到<0>「设置 → 服务商」</0>添加它的密钥，就能看到你
 
 #: src/features/call/call-page.tsx
 #: src/features/chats/chat-view.tsx
+#: src/features/home/memory-panel.tsx
 #: src/features/home/readiness-labels.ts
 msgid "Add Keys"
 msgstr "添加密钥"
@@ -1458,8 +1459,8 @@ msgid "Changed"
 msgstr "有改动"
 
 #: src/components/settings-form/labels.ts
-msgid "Changing it means building every persona's index again and a new memory collection."
-msgstr "更换后需要重新构建每个人设的索引，并使用新的记忆集合。"
+msgid "Changing it means building every persona's knowledge index again and starting a fresh memory collection."
+msgstr "修改此项需要重新构建每位人设的知识索引，并启用全新的记忆集合。"
 
 #: src/components/settings-form/labels.ts
 msgid "Changing it means building every persona's knowledge index again."
@@ -1518,21 +1519,9 @@ msgstr "聊天"
 msgid "Check"
 msgstr "检查"
 
-#: src/features/setup/memory-step.tsx
-msgid "Check and Save"
-msgstr "检查并保存"
-
-#: src/features/setup/memory-step.tsx
-msgid "Check and Turn On"
-msgstr "检查并开启"
-
 #: src/components/settings-form/check-labels.ts
 msgid "Check failed"
 msgstr "检查未通过"
-
-#: src/features/setup/memory-step.tsx
-msgid "Check it below. Already running Qdrant here? Just check its address."
-msgstr "然后在下面检查。如果本机已经在运行 Qdrant，直接检查它的地址即可。"
 
 #: src/components/voice-picker/mine.tsx
 msgid "Check it in <0>Settings → Providers</0>."
@@ -1545,10 +1534,6 @@ msgstr "检查链接"
 #: src/components/settings-form/check-labels.ts
 msgid "Check passed"
 msgstr "检查通过"
-
-#: src/features/home/memory-panel.tsx
-msgid "Check the Address"
-msgstr "检查地址"
 
 #: src/features/call/call-notices.tsx
 msgid "Check your microphone, then call again."
@@ -1699,10 +1684,6 @@ msgstr "Cookie 来自文件 {file}。"
 msgid "Cookies File"
 msgstr "Cookie 文件"
 
-#: src/features/setup/copy-command.tsx
-msgid "Copy the Command"
-msgstr "复制命令"
-
 #: src/features/jobs/detail.tsx
 #: src/features/jobs/list.tsx
 msgid "Cost"
@@ -1819,16 +1800,12 @@ msgid "Default (comma-separated)"
 msgstr "默认（用逗号分隔）"
 
 #: src/components/settings-form/labels.ts
-msgid "Default 6333."
-msgstr "默认 6333。"
-
-#: src/components/settings-form/labels.ts
-msgid "Default eidolon_memories. A new embedding dimension needs a new collection."
-msgstr "默认 eidolon_memories。更换嵌入维度时需要使用新的集合。"
-
-#: src/components/settings-form/labels.ts
 msgid "Default mem0/history.db in the data home."
 msgstr "默认为数据目录中的 mem0/history.db。"
+
+#: src/components/settings-form/labels.ts
+msgid "Default mem0/vectors in the data home."
+msgstr "默认为数据目录中的 mem0/vectors。"
 
 #: src/components/settings-form/labels.ts
 msgid "Default Opus Bitrate"
@@ -2226,12 +2203,12 @@ msgid "Every persona"
 msgstr "所有人设"
 
 #: src/components/settings-form/reindex-dialog.tsx
-msgid "Every persona's knowledge index needs to be built again, and memory needs a new Qdrant collection: memories kept so far are lost."
-msgstr "每个人设的知识索引都需要重新构建，记忆也需要新的 Qdrant 集合：目前保存的记忆会丢失。"
+msgid "Every persona's knowledge index needs to be built again, and memory starts a new collection for the new dimension."
+msgstr "每位人设的知识索引都需要重新构建，记忆功能也将针对新维度启用新的集合。"
 
 #: src/features/settings/route.tsx
-msgid "Every persona's memories of you live in Qdrant, and each change to them is logged to a SQLite file."
-msgstr "所有人设对你的记忆都保存在 Qdrant 中，每次改动都会记录到一个 SQLite 文件里。"
+msgid "Every persona's memories of you live in a local Zvec index in your data home, and each change to them is logged to a SQLite file."
+msgstr "每位人设关于你的记忆都保存在数据目录中的本地 Zvec 索引里，每次更改都会记录到 SQLite 文件中。"
 
 #: src/features/studio/videos-section.tsx
 msgid "Every video is downloaded."
@@ -2935,10 +2912,6 @@ msgstr "安装"
 msgid "Install adds {path} to your PATH."
 msgstr "安装会把 {path} 加入你的 PATH。"
 
-#: src/features/setup/memory-step.tsx
-msgid "Install Docker Desktop, or Docker Engine on Linux, and start it."
-msgstr "安装并启动 Docker Desktop（Linux 上为 Docker Engine）。"
-
 #: src/features/studio/videos-section.tsx
 msgid "Install it yourself with brew install yt-dlp or pip install yt-dlp, and Eidolon uses the one on your PATH."
 msgstr "可以自己用 brew install yt-dlp 或 pip install yt-dlp 安装，Eidolon 会使用 PATH 中的那个。"
@@ -2996,10 +2969,6 @@ msgstr "已中断"
 #: src/features/chats/why-answered.tsx
 msgid "Invites a reply: {score}"
 msgstr "期待回应：{score}"
-
-#: src/features/setup/memory-step.tsx
-msgid "It answers only on this machine, keeps its data in a Docker volume and restarts with Docker."
-msgstr "它只在本机应答，数据保存在 Docker 卷中，并随 Docker 自动重启。"
 
 #: src/features/tasks/cards.tsx
 msgid "It asked for this path, which none of its folders hold."
@@ -3499,24 +3468,28 @@ msgid "Memory Extraction Provider"
 msgstr "记忆提取服务商"
 
 #: src/features/home/memory-panel.tsx
-msgid "Memory is off, so she forgets you after every call. It needs Qdrant, a database you run in Docker on this machine. Run this once in a terminal, then turn memory on:"
-msgstr "记忆已关闭，每次通话后她都会忘记你。记忆需要 Qdrant，一个在本机用 Docker 运行的数据库。在终端里运行一次这条命令，然后开启记忆："
+msgid "Memory is off, so she forgets you after every call. Turn it on to keep what she learns about you in your data home on this computer."
+msgstr "记忆功能未开启，因此每次通话结束后她都会忘记你。开启后，她了解到的信息会保存在这台电脑的数据目录中。"
 
 #: src/features/studio/models-section.tsx
-msgid "Memory is off: it needs a Qdrant host, which you set in <0>Settings</0>."
-msgstr "记忆功能未开启：它需要一个 Qdrant 主机，请在<0>设置</0>中设置。"
+msgid "Memory is off: turn it on in <0>Settings</0>."
+msgstr "记忆功能未开启：请在<0>设置</0>中开启。"
 
-#: src/components/settings-form/labels.ts
-msgid "Memory is on while this is set. Use 127.0.0.1 for the Docker container setup shows."
-msgstr "设置后记忆功能开启。使用设置向导中的 Docker 容器时填 127.0.0.1。"
+#: src/features/call/call-page.tsx
+msgid "Memory is off. Turn it on in Settings so {name} remembers your calls."
+msgstr "记忆功能未开启。请在设置中开启，以便{name}记住你们的通话。"
+
+#: src/features/home/memory-panel.tsx
+msgid "Memory is on, but it needs an embedding key and a memory-extraction key before she can remember or recall anything."
+msgstr "记忆功能已开启，但还需要配置向量嵌入密钥与记忆提取密钥，她才能记住或回忆内容。"
 
 #: src/features/setup/memory-step.tsx
 msgid "Memory is on."
 msgstr "记忆已开启。"
 
 #: src/features/call/call-page.tsx
-msgid "Memory needs Qdrant. Set it up in Settings so {name} remembers your calls."
-msgstr "记忆功能需要 Qdrant。在设置中配置后，{name}就能记住你们的通话。"
+msgid "Memory needs API keys in Settings before {name} can remember this call."
+msgstr "需要先在设置中配置 API 密钥，{name}才能记住这次通话。"
 
 #: src/features/call/call-page.tsx
 msgid "Memory off"
@@ -3529,6 +3502,10 @@ msgstr "记忆已开启"
 #: src/components/settings-form/labels.ts
 msgid "Memory Score Threshold"
 msgstr "记忆相关度阈值"
+
+#: src/components/settings-form/labels.ts
+msgid "Memory Vector Store"
+msgstr "记忆向量存储"
 
 #: src/features/chats/composer.tsx
 msgid "Mention"
@@ -3819,10 +3796,6 @@ msgstr "无法预览：这里只显示 PNG、JPEG 和 WebP 图片。自拍仍会
 msgid "No provider by that name."
 msgstr "没有这个名字的服务商。"
 
-#: src/components/settings-form/check-labels.ts
-msgid "No Qdrant address is set."
-msgstr "尚未设置 Qdrant 地址。"
-
 #: src/features/tasks/labels.ts
 msgid "No result"
 msgstr "没有结果"
@@ -3980,10 +3953,6 @@ msgstr "未保存：词汇表无法解析"
 msgid "Not sent"
 msgstr "未发送"
 
-#: src/components/settings-form/check-labels.ts
-msgid "Nothing answers there. Is the container running?"
-msgstr "该地址没有应答。容器在运行吗？"
-
 #: src/features/studio/videos-section.tsx
 msgid "Nothing is left to transcribe, refine or index."
 msgstr "没有需要转写、整理或索引的内容。"
@@ -4053,6 +4022,10 @@ msgstr "开"
 #: src/components/settings-form/labels.ts
 msgid "On, a task may ask to run commands on this computer, each waiting for your OK on its card unless you allowed that exact command in its folder for good. Off, no task starts one. On Windows, commands need Git Bash, or Cygwin's or MSYS2's bash on your PATH."
 msgstr "开启后，任务可以请求在这台电脑上运行命令，每条都要你在任务卡片上同意，除非你在它的文件夹里始终允许过这条命令。关闭后，任务不会再开始运行命令。在 Windows 上，运行命令需要 Git Bash，或者 PATH 中有 Cygwin 或 MSYS2 的 bash。"
+
+#: src/components/settings-form/labels.ts
+msgid "On, each persona remembers what she learns about you across calls and chats. Default off."
+msgstr "开启后，每位人设都会在通话与聊天之间记住她了解到的你的信息。默认关闭。"
 
 #: src/features/home/readiness-labels.ts
 msgid "On: she remembers you from one call to the next."
@@ -4503,40 +4476,6 @@ msgstr "公开部署"
 msgid "Public Library"
 msgstr "公开声音库"
 
-#: src/components/settings-form/labels.ts
-msgid "Qdrant Collection"
-msgstr "Qdrant 集合"
-
-#: src/components/settings-form/labels.ts
-#: src/features/setup/memory-step.tsx
-msgid "Qdrant Host"
-msgstr "Qdrant 主机"
-
-#: src/components/settings-form/check-labels.ts
-msgid "Qdrant is answering."
-msgstr "Qdrant 正常应答。"
-
-#: src/components/settings-form/check-labels.ts
-msgid "Qdrant is still starting. Try again in a few seconds."
-msgstr "Qdrant 仍在启动，请几秒后再试。"
-
-#: src/features/call/call-page.tsx
-msgid "Qdrant isn't answering, so {name} won't remember this call."
-msgstr "Qdrant 没有响应，{name}不会记住这次通话。"
-
-#: src/features/home/readiness-labels.ts
-msgid "Qdrant isn't answering, so memory is off for now."
-msgstr "Qdrant 没有应答，记忆暂时不可用。"
-
-#: src/features/home/memory-panel.tsx
-msgid "Qdrant isn't answering, so she can't remember or recall anything for now. Start Docker, or start Qdrant if it isn't running:"
-msgstr "Qdrant 没有应答，她暂时既记不住也想不起任何事。请启动 Docker；如果 Qdrant 没有运行，用这条命令启动它："
-
-#: src/components/settings-form/labels.ts
-#: src/features/setup/memory-step.tsx
-msgid "Qdrant Port"
-msgstr "Qdrant 端口"
-
 #: src/features/tasks/labels.ts
 msgctxt "task kind"
 msgid "Quick"
@@ -4946,10 +4885,6 @@ msgstr "运行一次"
 msgid "Run Once runs it this time only. Always in This Folder also runs exactly this command in this folder from now on without asking, whatever the folder's files then say, in later tasks too; Settings lists it, where you can remove it. Deny tells it it can't."
 msgstr "「运行一次」只运行这一次。「在这个文件夹里始终允许」会让以后在这个文件夹里原样运行这条命令时不再询问，之后的任务也一样，不管那时文件夹里的文件写了什么；它会列在设置里，可以在那里移除。「拒绝」会告诉它不能运行。"
 
-#: src/features/setup/memory-step.tsx
-msgid "Run this once in a terminal:"
-msgstr "在终端里运行一次这条命令："
-
 #: src/features/studio/videos-section.tsx
 msgid "Run, about {usd}"
 msgstr "运行，约 {usd}"
@@ -5217,10 +5152,6 @@ msgstr "已在环境变量中设置"
 #: src/features/setup/route.tsx
 msgid "Set Up Eidolon"
 msgstr "开始使用 Eidolon"
-
-#: src/features/home/readiness-labels.ts
-msgid "Set up, but Qdrant hasn't been checked yet."
-msgstr "已设置，但尚未检查 Qdrant。"
 
 #: src/components/app-sidebar.tsx
 #: src/features/settings/route.tsx
@@ -5504,10 +5435,6 @@ msgstr "有人设暂时无法回答"
 #: src/lib/labels.ts
 msgid "Someone here talks through a realtime model, which can't join a group call."
 msgstr "有人设通过实时语音模型说话，无法加入群通话。"
-
-#: src/components/settings-form/check-labels.ts
-msgid "Something answers there, but it isn't Qdrant."
-msgstr "该地址有服务应答，但不是 Qdrant。"
 
 #: src/components/route-error.tsx
 msgid "Something went wrong"
@@ -6186,6 +6113,10 @@ msgstr "这句话 @ 了某位人设，被 @ 的人设会先回答。"
 msgid "The link couldn't be read."
 msgstr "无法读取这个链接。"
 
+#: src/features/home/memory-panel.tsx
+msgid "The local memory store couldn't be opened, so she can't remember or recall anything for now."
+msgstr "无法打开本地记忆存储，她暂时无法记住或回忆内容。"
+
 #: src/features/settings/notices.tsx
 msgid "The MCP server still serves the old settings"
 msgstr "MCP 服务仍在使用旧设置"
@@ -6522,14 +6453,6 @@ msgstr "这份提示词教了表演提示，比如 [whispering] 或成对的标�
 msgid "This provider offers nothing to check a key against, so it wasn't verified."
 msgstr "这个服务商没有提供检查密钥的方式，因此未能验证。"
 
-#: src/components/settings-form/check-labels.ts
-msgid "This Qdrant wants an API key, which Eidolon doesn't support."
-msgstr "这个 Qdrant 需要 API 密钥，Eidolon 不支持。"
-
-#: src/components/settings-form/check-labels.ts
-msgid "This Qdrant's version is more than one minor release away from the one Eidolon is built for."
-msgstr "这个 Qdrant 的版本与 Eidolon 使用的版本相差超过一个次版本。"
-
 #: src/lib/labels.ts
 msgid "This setting can't be changed here."
 msgstr "这项设置无法在此修改。"
@@ -6704,6 +6627,7 @@ msgid "Turn On"
 msgstr "开启"
 
 #: src/features/home/memory-panel.tsx
+#: src/features/setup/memory-step.tsx
 msgid "Turn On Memory"
 msgstr "开启记忆"
 
@@ -6714,6 +6638,10 @@ msgstr "TURN 地址"
 #: src/components/settings-form/labels.ts
 msgid "TURN Username"
 msgstr "TURN 用户名"
+
+#: src/features/home/readiness-labels.ts
+msgid "Turned on, but missing a key it needs."
+msgstr "已开启，但缺少所需的密钥。"
 
 #: src/features/jobs/labels.ts
 msgid "Turns a video's audio into a transcript with Soniox."
@@ -6905,6 +6833,10 @@ msgstr "找到的视频（{count}）"
 #: src/features/usage/route.tsx
 msgid "View"
 msgstr "视图"
+
+#: src/components/settings-form/labels.ts
+msgid "Viewer Memory"
+msgstr "观众记忆"
 
 #: src/components/voice-picker/mine.tsx
 msgid "Visibility"
@@ -7231,8 +7163,8 @@ msgid "Wide"
 msgstr "横屏"
 
 #: src/features/setup/memory-step.tsx
-msgid "With memory on, she remembers you from one call to the next. It needs Qdrant, a database you run in Docker on this machine. Skip it and everything else still works."
-msgstr "开启记忆后，她会在多次通话之间记得你。这需要在本机用 Docker 运行 Qdrant 数据库。跳过也不影响其他功能。"
+msgid "With memory on, she remembers you from one call or chat to the next. Memories stay on this computer in your data home — no extra server or Docker container needed. Skip it and everything else still works."
+msgstr "开启记忆后，她会在一次次通话与聊天之间记住你。记忆保存在这台电脑的数据目录中，无需额外的服务器或 Docker 容器。跳过它，其余所有功能也依然可用。"
 
 #: src/features/setup/keys-step.tsx
 msgid "Without it, calls can't start, and these stay off: {off}."

@@ -33,6 +33,7 @@ import {
   dataHome,
   envOptional,
   expandUser,
+  LEGACY_SETTING_ENVS,
   SETTINGS,
   type Subprocess,
   spawnProcess,
@@ -1276,6 +1277,7 @@ function childEnv(home: string, dotenv = false): Record<string, string> {
   const dropped = new Set<string>([
     ...CREDENTIALS,
     ...SETTINGS.map((row) => row.env),
+    ...LEGACY_SETTING_ENVS,
     ...PROVIDERS.flatMap((provider) => [
       ...(provider.baseUrlEnv === null ? [] : [provider.baseUrlEnv]),
       ...(provider.fields ?? []).map((field) => field.env),
@@ -7145,11 +7147,7 @@ async function readiness(server: Server, options: Options, checks: Checks): Prom
         headers: { authorization: `Bearer ${server.secret}` },
       })
     ).json()) as Status;
-  const status = await poll(
-    read,
-    (s) => (!s.memory.configured || s.memory.reachable !== null) && s.persona.voice.ok !== null,
-    10_000,
-  );
+  const status = await poll(read, (s) => s.persona.voice.ok !== null, 10_000);
   const missing = status.keys.filter((key) => !key.set).map((key) => key.name);
   const { persona, memory } = status;
   const ready =
@@ -7171,9 +7169,9 @@ async function readiness(server: Server, options: Options, checks: Checks): Prom
         : `voice from ${persona.voice.source}, ${persona.voice.ok === false ? "unknown to Fish" : "known to Fish"}`,
       !memory.configured
         ? "memory off"
-        : memory.reachable
-          ? "memory on: Qdrant answers, so the call is remembered"
-          : "memory configured, Qdrant down",
+        : memory.ready
+          ? "memory on: Zvec stores what she remembers"
+          : `memory configured, not ready (${memory.problem ?? "missing key"})`,
       recall === 0 ? "recall off (no index)" : `recall on (${recall} tables)`,
       `${status.selfieReferences} selfie reference(s)`,
     ].join("; "),

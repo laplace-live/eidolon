@@ -44,9 +44,9 @@ keyed on `user_id = String(user.mid)` (the Bilibili UID from the validated
 service auto-extracts memories from chat (e.g. "the user mentioned they're
 allergic to seafood") and surfaces them in future conversations.
 
-Mem0 is self-hosted: the engine runs in-process and stores its vectors in
-Qdrant, so these endpoints reach the same store a call writes to
-rather than a hosted API. `buildMemoryConfig()` in
+Mem0 is self-hosted: the engine runs in-process and stores its vectors in a
+local Zvec collection (`MEM0_DIR`), so these endpoints reach the same store a
+call writes to rather than a hosted API. `buildMemoryConfig()` in
 [`../packages/memory/src/config.ts`](../packages/memory/src/config.ts) holds the
 configuration both paths share.
 
@@ -138,8 +138,8 @@ should map to its own copy).
 | ------ | ----------------------------------------------- | ------------------------------------------------- |
 | 401    | Missing / malformed / non-Bearer `Authorization`| `{ "error": "需要登录后才能查看记忆" }` (list)    |
 | 401    | Token didn't validate as a logged-in viewer     | `{ "error": "需要登录后才能管理记忆" }` (forget)  |
-| 502    | The Mem0 call itself failed (Qdrant, embeddings)| `{ "error": "Failed to load memories" }` etc.     |
-| 503    | Mem0 not configured, or Qdrant unreachable      | `{ "error": "Mem0 service unavailable" }`         |
+| 502    | The Mem0 call itself failed (Zvec, embeddings)  | `{ "error": "Failed to load memories" }` etc.     |
+| 503    | Mem0 not configured, or store unavailable       | `{ "error": "Mem0 service unavailable" }`         |
 
 The `401` body differs by endpoint (list says "查看记忆", forget says
 "管理记忆") — keeps the message scoped to the action the user was

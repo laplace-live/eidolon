@@ -429,7 +429,7 @@ here so we can copy-paste at implementation time:
 
 `PersonaFacts`, the `ContextProvider` in `packages/context/src/facts.ts`,
 currently retrieves the top-k facts by hybrid score. We extend this to
-**filter on a `tier_min` column** in the LanceDB table:
+**filter on a `tier_min` column** in the Zvec table:
 
 ```text
 Facts in <data home>/sources/<id>/facts/ gain an optional tier_min: N.

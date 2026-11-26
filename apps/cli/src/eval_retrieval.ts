@@ -33,12 +33,12 @@ import {
   extractDateFilter,
   type HybridSearchOptions,
   hybridSearch,
-  type LanceTable,
   listTableNames,
   makeReranker,
   openTable,
   type SearchRow,
   vectorSearch,
+  type ZvecTable,
 } from "@eidolon/retrieval";
 import { parse as parseToml } from "smol-toml";
 import { ArgparseExit, INT, type ParserSpec, parseArgs } from "./argparse.ts";
@@ -68,13 +68,13 @@ export const EVAL_PARSER: ParserSpec = {
   prog: "laplace-eval-retrieval",
   usage: USAGE,
   help: `${USAGE}
-Score retrieval quality for both LanceDB tables.
+Score retrieval quality for both Zvec tables.
 
 options:
   -h, --help            show this help message and exit
   --queries QUERIES     TOML file of [[query]] entries (default: the persona's
                         eval/queries.toml in the data home's sources)
-  --db-path DB_PATH     LanceDB directory (default: the persona's index/)
+  --db-path DB_PATH     Zvec index directory (default: the persona's index/)
   --table {persona_facts,stream_chunks}
                         Restrict eval to one table. Default: both.
   --modes {vector_only,hybrid,hybrid_rerank} [{vector_only,hybrid,hybrid_rerank} ...]
@@ -304,9 +304,9 @@ function resolveDeps(deps: EvalDeps): Resolved {
     openTable: deps.openTable ?? openTable,
     embed: deps.embed ?? ((texts) => embedTexts(texts)),
     vectorSearch:
-      deps.vectorSearch ?? ((table, options) => vectorSearch(table as LanceTable, options)),
+      deps.vectorSearch ?? ((table, options) => vectorSearch(table as ZvecTable, options)),
     hybridSearch:
-      deps.hybridSearch ?? ((table, options) => hybridSearch(table as LanceTable, options)),
+      deps.hybridSearch ?? ((table, options) => hybridSearch(table as ZvecTable, options)),
     makeReranker: deps.makeReranker ?? (() => makeReranker()),
     namedReranker: deps.namedReranker ?? namedReranker,
     now: deps.now ?? (() => performance.now()),
@@ -319,7 +319,7 @@ interface QueryOptions {
   readonly useDateFilter: boolean;
 }
 
-/** LanceDB raises a Schema error on the wrong date column, so the query's table picks it. */
+/** Zvec rejects a filter on the wrong date column, so the query's table picks it. */
 function dateWhere(query: EvalQuery, useDateFilter: boolean): string | null {
   const column = query.table === "stream_chunks" ? "stream_date" : "date";
   return useDateFilter ? extractDateFilter(query.text, { column }) : null;

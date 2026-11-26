@@ -1,6 +1,6 @@
 # Retrieval gate
 
-Every user turn used to search both LanceDB tables before the LLM could
+Every user turn used to search both Zvec tables before the LLM could
 start: an embedding and a rerank per table, 4.5–5.5 s in a live call. Most
 of that time bought nothing on turns like 我今天加班好累啊 or 哈哈哈好吧,
 which ask nothing about the streamer. The gate (`packages/context/src/gate.ts`)

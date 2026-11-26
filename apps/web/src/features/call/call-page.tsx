@@ -27,11 +27,11 @@ type Persona = Status["persona"];
 
 function MemoryChip({ memory, name }: { readonly memory: MemoryStatus; readonly name: string }) {
   const { t } = useLingui();
-  const on = memory.configured && memory.reachable !== false;
+  const on = memory.configured && memory.ready;
   const hint = !memory.configured
-    ? t`Memory needs Qdrant. Set it up in Settings so ${name} remembers your calls.`
-    : memory.reachable === false
-      ? t`Qdrant isn't answering, so ${name} won't remember this call.`
+    ? t`Memory is off. Turn it on in Settings so ${name} remembers your calls.`
+    : !memory.ready
+      ? t`Memory needs API keys in Settings before ${name} can remember this call.`
       : t`${name} remembers your conversations between calls.`;
   return (
     <Tooltip>

@@ -13,7 +13,7 @@ import {
   VIEWER,
 } from "./fakes.ts";
 
-class QdrantError extends Error {}
+class VectorStoreError extends Error {}
 
 const MEMORIES: MemorySummary[] = [
   {
@@ -171,13 +171,13 @@ describe("GET /api/memories", () => {
   test("a failed get_all is a 502 logged with the exception type", async () => {
     const { url } = await start(
       VIEWER,
-      admin({ ok: false, reason: "failed", error: new QdrantError("Bad Request") }),
+      admin({ ok: false, reason: "failed", error: new VectorStoreError("Bad Request") }),
     );
     const { response, body } = await call(`${url}/api/memories`, "GET", "Bearer tok");
     expect(response.status).toBe(502);
     expect(body).toBe('{"error":"Failed to load memories"}');
     expect(logs.lines()).toEqual([
-      "ERROR [memory-admin] get_all failed for mid=12345678: QdrantError: Bad Request",
+      "ERROR [memory-admin] get_all failed for mid=12345678: VectorStoreError: Bad Request",
     ]);
   });
 });

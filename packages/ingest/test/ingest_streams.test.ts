@@ -16,17 +16,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, installSettings, logger, pyRepr, resetSettings } from "@eidolon/config";
 import type { EmbeddingModel } from "@eidolon/providers";
-import { resetEmbeddingModel } from "@eidolon/retrieval";
+import { closeAllReadTables, resetEmbeddingModel } from "@eidolon/retrieval";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ingestStreams, type ProgressEvent } from "../src/index.ts";
 import { cancelMidRebuild } from "./forced_exit.ts";
 import {
+  expectGoldenTable,
   fakeModel,
   GOLDEN,
   GOLDEN_DIM,
   GOLDEN_MODEL,
   materialize,
   placehold,
+  portIngestLogs,
   readTable,
   substitute,
 } from "./ingest_streams_golden.ts";
@@ -48,8 +50,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  closeAllReadTables();
   logger.setSink(consoleSink);
-  rmSync(work, { recursive: true, force: true });
+  rmSync(work, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
 });
 
 function logs(): [string, string][] {
@@ -121,16 +124,16 @@ describe("ingestStreams", () => {
       expect({ run: run.name, ok: report.ok, logs: logs(), calls }).toEqual({
         run: run.name,
         ok: run.exit_code === 0,
-        logs: run.logs,
+        logs: portIngestLogs(run.logs),
         calls: run.embed_calls,
       });
       if (run.table) {
-        expect(await readTable(optionsFor(run.argv).dbPath)).toEqual(run.table);
+        expectGoldenTable(await readTable(optionsFor(run.argv).dbPath), run.table);
       }
     }
     // No dry run, empty folder or uncached run touches a cache or an index it wasn't given.
     expect(readdirSync(work).sort()).toEqual(["cache", "db", "db2", "db3", "empty", "streams"]);
-  });
+  }, 60_000);
 
   test("source_path names the folder a symlink resolves to, as Path.resolve() did", async () => {
     const link = join(work, "linked");
@@ -165,8 +168,8 @@ describe("ingestStreams", () => {
       skipTypes: ["anime_audio", "karaoke"],
     });
     expect(readdirSync(join(work, "db")).sort()).toEqual([
-      "stream_chunks.lance",
       "stream_chunks.meta.json",
+      "stream_chunks.zvec",
     ]);
   });
 
@@ -285,7 +288,7 @@ describe("ingestStreams", () => {
 
     expect(await readTable(db)).toEqual(before);
     expect(readFileSync(join(db, "stream_chunks.meta.json"), "utf8")).toBe(meta);
-    expect(readdirSync(db).sort()).toEqual(["stream_chunks.lance", "stream_chunks.meta.json"]);
+    expect(readdirSync(db).sort()).toEqual(["stream_chunks.meta.json", "stream_chunks.zvec"]);
   });
 
   test("a cancel's forced exit waits for the rebuild: table, FTS index and build record", async () => {

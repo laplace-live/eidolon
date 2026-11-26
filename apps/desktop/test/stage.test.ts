@@ -190,13 +190,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
     test("gives every license it holds in the one file the Licenses item opens", () => {
       const licenses = licenseSections(readFileSync(join(payload, LICENSES_FILE), "utf8"));
       const titles = [...licenses.keys()];
-      for (const name of [
-        "onnxruntime-node",
-        "sharp",
-        "werift",
-        "apache-arrow",
-        PLATFORMS[target],
-      ]) {
+      for (const name of ["onnxruntime-node", "sharp", "werift", "@zvec/zvec", PLATFORMS[target]]) {
         expect([name, titles.some((title) => title.startsWith(`${name} `))]).toEqual([name, true]);
       }
       for (const file of [
@@ -308,7 +302,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
     });
 
     test.skipIf(target !== HOST)(
-      "loads its natives from itself: a LanceDB table, a Silero session, a JPEG",
+      "loads its natives from itself: a Zvec collection, a Silero session, a JPEG",
       () => {
         const report = checkNatives(payload, PLATFORMS[target], { command: process.execPath });
         expect(report).toMatchObject({ rows: 2, image: "jpeg 2x1" });
@@ -316,7 +310,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
         expect(report.speech).toBeLessThanOrEqual(1);
         const home = same(realpathSync(payload));
         const natives = report.loaded.filter((path) => /\.(node|dll|dylib)$/i.test(path));
-        for (const name of ["lancedb", "onnxruntime_binding", "sharp-", "vips"]) {
+        for (const name of ["zvec_node_binding", "onnxruntime_binding", "sharp-", "vips"]) {
           expect([name, natives.some((path) => basename(path).includes(name))]).toEqual([
             name,
             true,
@@ -339,9 +333,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
         expect(copies.get("node_modules/onnxruntime-node/bin/napi-v6/win32/x64")?.sort()).toEqual(
           [...VC_RUNTIME_DLLS].sort(),
         );
-        expect(copies.get("node_modules/@lancedb/lancedb-win32-x64-msvc")).toEqual([
-          "vcruntime140.dll",
-        ]);
+        expect(copies.get("node_modules/@zvec/bindings-win32-x64")).toBeUndefined();
         // pnpm's reflink addon, wherever the shim keeps pnpm.
         const shim = [...copies].filter(([folder]) => folder.startsWith(`${NODE_SHIM}/`));
         expect(shim.map(([folder, dlls]) => [basename(folder), dlls])).toEqual([

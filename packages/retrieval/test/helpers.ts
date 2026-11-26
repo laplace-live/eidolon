@@ -1,8 +1,17 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
-import * as lancedb from "@lancedb/lancedb";
-import { afterEach, beforeEach, type Mock, vi } from "vitest";
-import { openTable, resetEmbeddingModel, resetRerankerCache } from "../src/index.ts";
+import { afterEach, beforeEach, expect, type Mock, vi } from "vitest";
+import {
+  closeReadTablesUnder,
+  openTable,
+  personaFactsSchema,
+  resetEmbeddingModel,
+  resetRerankerCache,
+  writeTable,
+  type ZvecTable,
+} from "../src/index.ts";
 
 /** Routes the logger into the returned array for each test, and back to the console after. */
 export function captureLogs(): LogRecord[] {
@@ -21,7 +30,7 @@ export function messages(records: readonly LogRecord[], level: LogRecord["level"
   return records.filter((r) => r.level === level).map((r) => r.message);
 }
 
-// Keys a shell may carry that would point a test at a billed service.
+// Keys a shell may carry that would point a test at a billed service or custom index.
 const ISOLATED = [
   "OPENROUTER_API_KEY",
   "OPENROUTER_API_BASE",
@@ -36,12 +45,21 @@ const ISOLATED = [
   "EMBED_BASE_URL",
   "EMBED_MODEL",
   "EMBED_DIM",
+  "INDEX_PATH",
   "LANCEDB_PATH",
   "PERSONA_FACTS_CANDIDATES",
   "STREAM_ARCHIVE_CANDIDATES",
   "OPENROUTER_APP_NAME",
   "OPENROUTER_APP_URL",
 ];
+
+const tempDirs: string[] = [];
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    closeReadTablesUnder(dir);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 /**
  * Unsets ISOLATED for each test and restores the original values after, with the env-derived
@@ -123,26 +141,20 @@ function fact(
   return { id, source, date, floor: Number(id.slice(1)), text, tokens, vector };
 }
 
-/** A fresh in-memory table with the whitespace FTS index the ingest builds. */
-export async function memoryTable(rows: readonly FactRow[] = FACT_ROWS, name = "persona_facts") {
-  const db = await lancedb.connect("memory://");
-  const table = await db.createTable(
-    name,
-    rows.map((row) => ({ ...row })),
-  );
-  await table.createIndex("tokens", {
-    config: lancedb.Index.fts({
-      baseTokenizer: "whitespace",
-      lowercase: false,
-      stem: false,
-      removeStopWords: false,
-      withPosition: false,
-    }),
-  });
-  return { db, table };
+/** A fresh Zvec table in a temporary directory with the HNSW + whitespace FTS indexes. */
+export async function memoryTable(
+  rows: readonly FactRow[] = FACT_ROWS,
+  name = "persona_facts",
+): Promise<{ dir: string; table: ZvecTable }> {
+  const dir = mkdtempSync(join(tmpdir(), "retrieval-zvec-"));
+  tempDirs.push(dir);
+  const dim = rows[0]?.vector.length ?? 4;
+  const vectors = Float32Array.from(rows.flatMap((row) => row.vector));
+  await writeTable(dir, name, rows, personaFactsSchema(dim), vectors);
+  const table = (await openTable(dir, name)) as ZvecTable;
+  return { dir, table };
 }
 
-/** A table from the committed data/lancedb, or null when absent or only LFS pointer stubs. */
 /** 奶绿's real index, where the developer's data home holds one; the parity tests skip without it. */
 export const REAL_INDEX = join(
   process.env.EIDOLON_REAL_HOME ?? "",
@@ -151,36 +163,30 @@ export const REAL_INDEX = join(
   "index",
 );
 
-export async function realTable(name: string): Promise<lancedb.Table | null> {
+export async function realTable(name: string): Promise<ZvecTable | null> {
   try {
-    const table = await openTable(REAL_INDEX, name);
-    if (table === null) return null;
-    // Row counts come from the manifest, which isn't in LFS; only reading a row hits a stub.
-    await table.query().limit(1).toArray();
-    return table;
+    return await openTable(REAL_INDEX, name);
   } catch {
     return null;
   }
-}
-
-/** A table's indices as a parity test compares them. */
-export async function tableIndices(table: lancedb.Table) {
-  return (await table.listIndices()).map((i) => ({
-    name: i.name,
-    indexType: i.indexType,
-    columns: i.columns,
-    numIndexedRows: i.numIndexedRows,
-    numUnindexedRows: i.numUnindexedRows,
-    indexDetails: i.indexDetails,
-  }));
 }
 
 /** The vectors' bytes, to compare bit for bit. */
 export const f32Bytes = (v: Float32Array): Buffer =>
   Buffer.from(v.buffer, v.byteOffset, v.byteLength);
 
-/** The latest version and its commit time; any re-ingest changes it. */
-export async function fingerprint(table: lancedb.Table): Promise<string> {
-  const latest = (await table.listVersions()).at(-1);
-  return latest === undefined ? "" : `${latest.version}@${latest.timestamp.toISOString()}`;
+/**
+ * Zvec's COSINE index stores `(v / ||v||)` and `||v||`, so `fetchSync` reconstructs each float32
+ * element within a couple of ULPs (`<= 1e-6` relative, or subnormal underflow `< 1e-30`).
+ */
+export function expectVectorsClose(actual: Float32Array, expected: Float32Array): void {
+  expect(actual.length).toBe(expected.length);
+  for (let i = 0; i < expected.length; i++) {
+    const a = actual[i] as number;
+    const b = expected[i] as number;
+    const tol = Math.max(1e-6 * Math.abs(b), 1e-30);
+    if (!Number.isFinite(a) || Math.abs(a - b) > tol) {
+      expect.fail(`vector[${i}] = ${a}, expected ${b} (±${tol})`);
+    }
+  }
 }

@@ -1,50 +1,52 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Table } from "@lancedb/lancedb";
-import * as lancedb from "@lancedb/lancedb";
 import { describe, expect, test } from "vitest";
 import {
+  closeAllReadTables,
   type HybridSearchOptions,
   ingestHint,
-  LanceRetriever,
-  type LanceRetrieverOptions,
   openPersonaFactsRetriever,
   openStreamArchiveRetriever,
   PERSONA_FACTS,
+  personaFactsSchema,
   type SearchRow,
+  writeTable,
+  ZvecRetriever,
+  type ZvecRetrieverOptions,
+  type ZvecTable,
 } from "../src/index.ts";
-import { captureLogs, FACT_ROWS, isolateEnv, memoryTable, messages } from "./helpers.ts";
+import { captureLogs, FACT_ROWS, isolateEnv, messages } from "./helpers.ts";
 
 const records = captureLogs();
 isolateEnv();
 
-const TABLE = { countRows: async () => 42 } as unknown as Table;
+const TABLE = { countRows: async () => 42 } as unknown as ZvecTable;
 const HIT: SearchRow = { id: "f0", source: "a.txt", date: "2026-05-09", _relevance_score: 0.016 };
 const PARAMS = { candidates: 30, topK: 8 };
 
 interface Harness {
-  retriever: LanceRetriever;
+  retriever: ZvecRetriever;
   opens: string[];
   embeds: string[][];
   searches: HybridSearchOptions[];
 }
 
 async function harness(
-  overrides: Partial<LanceRetrieverOptions> & {
-    tables?: (Table | null | Error)[];
+  overrides: Partial<ZvecRetrieverOptions> & {
+    tables?: (ZvecTable | null | Error)[];
     results?: (SearchRow[] | Error)[];
   } = {},
 ): Promise<Harness> {
   const tables = [...(overrides.tables ?? [TABLE])];
   const results = [...(overrides.results ?? [[HIT]])];
   const h: Harness = {
-    retriever: undefined as unknown as LanceRetriever,
+    retriever: undefined as unknown as ZvecRetriever,
     opens: [],
     embeds: [],
     searches: [],
   };
-  h.retriever = await LanceRetriever.open({
+  h.retriever = await ZvecRetriever.open({
     dbPath: "/db",
     tableName: "persona_facts",
     dateColumn: "date",
@@ -72,7 +74,7 @@ async function harness(
   return h;
 }
 
-describe("LanceRetriever", () => {
+describe("ZvecRetriever", () => {
   test("an absent table logs once, then every search is skipped without embedding", async () => {
     const h = await harness({ tables: [null] });
     expect(h.retriever.hasTable).toBe(false);
@@ -80,7 +82,7 @@ describe("LanceRetriever", () => {
     expect(await h.retriever.search("坚果", PARAMS)).toEqual([]);
     expect(h.embeds).toEqual([]);
     expect(messages(records, "WARNING")).toEqual([
-      "Persona facts: no LanceDB table at /db/persona_facts.lance — retrieval will be a no-op. " +
+      "Persona facts: no Zvec table at /db/persona_facts.zvec — retrieval will be a no-op. " +
         "Run `pnpm laplace-ingest-facts --persona milky-green` to build it.",
       "Persona facts search skipped: no table loaded",
     ]);
@@ -148,10 +150,10 @@ describe("LanceRetriever", () => {
   });
 
   test("a stale handle is reopened and the search retried with the same vector", async () => {
-    const fresh = { countRows: async () => 7 } as unknown as Table;
+    const fresh = { countRows: async () => 7 } as unknown as ZvecTable;
     const h = await harness({
       tables: [TABLE, fresh],
-      results: [new Error("lance error: LanceError(IO): Not found: t.lance/data/x.lance"), [HIT]],
+      results: [new Error("Not found: segment"), [HIT]],
     });
     expect(await h.retriever.search("q", PARAMS)).toEqual([HIT]);
     expect(h.opens.length).toBe(2);
@@ -180,7 +182,7 @@ describe("LanceRetriever", () => {
     expect(await h.retriever.search("q", PARAMS)).toEqual([]);
     expect(h.searches.length).toBe(1);
     expect(messages(records, "WARNING").slice(1)).toEqual([
-      "Persona facts re-open: no table at /db/persona_facts.lance",
+      "Persona facts re-open: no table at /db/persona_facts.zvec",
       "Persona facts search skipped: no table loaded",
     ]);
   });
@@ -196,17 +198,17 @@ describe("LanceRetriever", () => {
   });
 
   test("any other search error returns [] without a reopen", async () => {
-    const h = await harness({ results: [new Error("Schema error: No field named stream_date")] });
+    const h = await harness({ results: [new Error("Invalid filter: stream_date")] });
     expect(await h.retriever.search("q", PARAMS)).toEqual([]);
     expect(h.opens.length).toBe(1);
     expect(messages(records, "ERROR")).toEqual([
-      "Persona facts search failed for query='q': Schema error: No field named stream_date",
+      "Persona facts search failed for query='q': Invalid filter: stream_date",
     ]);
   });
 
-  test("an open error propagates, as Python's constructor raises", async () => {
-    await expect(harness({ tables: [new Error("corrupt manifest")] })).rejects.toThrow(
-      "corrupt manifest",
+  test("an open error propagates", async () => {
+    await expect(harness({ tables: [new Error("corrupt index")] })).rejects.toThrow(
+      "corrupt index",
     );
   });
 
@@ -226,51 +228,70 @@ describe("LanceRetriever", () => {
     expect(records).toEqual([]);
   });
 
-  test("a real stale handle on memory:// recovers after a reopen", async () => {
-    const { db } = await memoryTable();
-    const retriever = await LanceRetriever.open({
-      dbPath: "memory://",
-      tableName: "persona_facts",
-      dateColumn: "date",
-      label: "Persona facts",
-      open: async (_dbPath, name) => db.openTable(name),
-      embed: async () => [[1, 0, 0, 0]],
-    });
-    await db.dropTable("persona_facts");
-    await db.createTable(
-      "persona_facts",
-      FACT_ROWS.slice(0, 2).map((row) => ({ ...row })),
-    );
-    // The handle opened before the drop still answers countRows from its cached manifest.
-    expect(await retriever.rowCount()).toBe(5);
-    const fresh = await db.openTable("persona_facts");
-    await fresh.createIndex("tokens", {
-      config: lancedb.Index.fts({ baseTokenizer: "whitespace" }),
-    });
-    const rows = await retriever.search("坚果体重", { candidates: 5, topK: 3 });
-    expect(rows.map((r) => r.id)).toEqual(["f0", "f1"]);
-    expect(messages(records, "WARNING")[0]).toStartWith("Persona facts hit stale table");
-    expect(messages(records, "INFO")).toContain("Persona facts re-opened table (2 rows)");
+  test("a live re-ingest on disk updates CURRENT and the next search reopens the new build", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "retrieval-reopen-"));
+    try {
+      const schema = personaFactsSchema(4);
+      await writeTable(
+        dir,
+        "persona_facts",
+        FACT_ROWS,
+        schema,
+        Float32Array.from(FACT_ROWS.flatMap((r) => r.vector)),
+      );
+      const retriever = await ZvecRetriever.open({
+        dbPath: dir,
+        tableName: "persona_facts",
+        dateColumn: "date",
+        label: "Persona facts",
+        embed: async () => [[1, 0, 0, 0]],
+      });
+      expect(await retriever.rowCount()).toBe(5);
+      records.length = 0;
+
+      const subset = FACT_ROWS.slice(0, 2);
+      await writeTable(
+        dir,
+        "persona_facts",
+        subset,
+        schema,
+        Float32Array.from(subset.flatMap((r) => r.vector)),
+      );
+      records.length = 0;
+
+      const rows = await retriever.search("坚果体重", { candidates: 5, topK: 3 });
+      expect(rows.map((r) => r.id)).toEqual(["f0", "f1"]);
+      expect(await retriever.rowCount()).toBe(2);
+      expect(messages(records, "WARNING")[0]).toStartWith("Persona facts hit stale table");
+      expect(messages(records, "INFO")).toContain("Persona facts re-opened table (2 rows)");
+    } finally {
+      closeAllReadTables();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
 describe("factories", () => {
   test("open the presets over a real directory, or warn with the ingest hint", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "retrieval-lance-"));
+    const dir = mkdtempSync(join(tmpdir(), "retrieval-zvec-factories-"));
     try {
-      const db = await lancedb.connect(dir);
-      await db.createTable(
+      await writeTable(
+        dir,
         "persona_facts",
-        FACT_ROWS.map((row) => ({ ...row })),
+        FACT_ROWS,
+        personaFactsSchema(4),
+        Float32Array.from(FACT_ROWS.flatMap((r) => r.vector)),
       );
+      records.length = 0;
       expect((await openPersonaFactsRetriever(dir)).hasTable).toBe(true);
       expect((await openPersonaFactsRetriever(dir, { tableName: "nope" })).hasTable).toBe(false);
       expect((await openStreamArchiveRetriever(dir)).hasTable).toBe(false);
       expect(messages(records, "WARNING")).toEqual([
-        `Persona facts: no LanceDB table at ${dir}/nope.lance — retrieval will be a no-op. Run \`pnpm laplace-ingest-facts --persona milky-green\` to build it.`,
-        `Archive: no LanceDB table at ${dir}/stream_chunks.lance — retrieval will be a no-op. Run \`pnpm laplace-ingest-streams --persona milky-green\` to build it.`,
+        `Persona facts: no Zvec table at ${dir}/nope.zvec — retrieval will be a no-op. Run \`pnpm laplace-ingest-facts --persona milky-green\` to build it.`,
+        `Archive: no Zvec table at ${dir}/stream_chunks.zvec — retrieval will be a no-op. Run \`pnpm laplace-ingest-streams --persona milky-green\` to build it.`,
       ]);
     } finally {
+      closeAllReadTables();
       rmSync(dir, { recursive: true, force: true });
     }
   });

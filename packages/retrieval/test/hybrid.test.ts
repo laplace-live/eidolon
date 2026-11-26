@@ -1,9 +1,4 @@
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { pyJsonDumps } from "@eidolon/config";
 import { openRouterRerank, type RerankModel, type RerankResult } from "@eidolon/providers";
-import type { Table } from "@lancedb/lancedb";
 import { describe, expect, test } from "vitest";
 import {
   hybridSearch,
@@ -12,26 +7,17 @@ import {
   scoreOf,
   tokenizeZhQuery,
   vectorSearch,
+  type ZvecTable,
 } from "../src/index.ts";
-import {
-  captureLogs,
-  FACT_ROWS,
-  fakeFetch,
-  fingerprint,
-  isolateEnv,
-  memoryTable,
-  messages,
-  realTable,
-} from "./helpers.ts";
+import { captureLogs, FACT_ROWS, fakeFetch, isolateEnv, memoryTable, messages } from "./helpers.ts";
 
 const records = captureLogs();
 isolateEnv();
 
 const leg = (ids: number[], key: "_distance" | "_score") =>
-  ids.map((id, i) => ({ id: `r${id}`, [key]: i, _rowid: BigInt(id) }));
+  ids.map((id, i) => ({ id: `r${id}`, [key]: i, _rowid: String(id) }));
 
 describe("rrfFuse", () => {
-  // Printed by LanceDB 0.39's Python RRFReranker(K=60).
   test("ranks from 1, sums vector then FTS, stable float32 order", () => {
     const fused = rrfFuse(leg([1, 2, 3], "_distance"), leg([3, 4, 1], "_score"));
     expect(fused.map((r) => r.id)).toEqual(["r1", "r3", "r2", "r4"]);
@@ -51,8 +37,8 @@ describe("rrfFuse", () => {
   });
 
   test("drops the leg columns and keeps the vector-leg twin", () => {
-    const vectorRows = [{ id: "v", text: "from vector", _distance: 0.1, _rowid: 1n }];
-    const ftsRows = [{ id: "v", text: "from fts", _score: 9, _rowid: 1n }];
+    const vectorRows = [{ id: "v", text: "from vector", _distance: 0.1, _rowid: "1" }];
+    const ftsRows = [{ id: "v", text: "from fts", _score: 9, _rowid: "1" }];
     expect(rrfFuse(vectorRows, ftsRows)).toEqual([
       { id: "v", text: "from vector", _relevance_score: Math.fround(2 / 61) },
     ]);
@@ -84,7 +70,7 @@ function recordingReranker(
   };
 }
 
-describe("hybridSearch on an in-memory table", () => {
+describe("hybridSearch on a Zvec table", () => {
   test("one candidate per leg fuses to the shared top row", async () => {
     const { table } = await memoryTable();
     const rows = await hybridSearch(table, { ...QUERY, candidates: 1, rerank: false });
@@ -100,15 +86,50 @@ describe("hybridSearch on an in-memory table", () => {
     for (const row of rows) expect(Object.keys(row)).toEqual([...COLUMNS, "_relevance_score"]);
   });
 
-  test("where prefilters both legs", async () => {
-    const { table } = await memoryTable();
-    const rows = await hybridSearch(table, {
+  test("where prefilters both legs across equality, range, LIKE and IN clauses", async () => {
+    const { table } = await memoryTable([
+      ...FACT_ROWS,
+      {
+        id: "f5",
+        source: "o'brien.txt",
+        date: "2026-05-15",
+        floor: 5,
+        text: "坚果零食",
+        tokens: "坚果 零食",
+        vector: [0.8, 0.2, 0, 0],
+      },
+    ]);
+    const exact = await hybridSearch(table, {
       ...QUERY,
       candidates: 10,
       where: "date = '2026-05-09'",
       rerank: false,
     });
-    expect(rows.map((r) => r.id).sort()).toEqual(["f0", "f2"]);
+    expect(exact.map((r) => r.id).sort()).toEqual(["f0", "f2"]);
+
+    const range = await hybridSearch(table, {
+      ...QUERY,
+      candidates: 10,
+      where: "date >= '2026-05-01' AND date < '2026-06-01'",
+      rerank: false,
+    });
+    expect(range.map((r) => r.id).sort()).toEqual(["f0", "f2", "f5"]);
+
+    const like = await hybridSearch(table, {
+      ...QUERY,
+      candidates: 10,
+      where: "date LIKE '%-05-09'",
+      rerank: false,
+    });
+    expect(like.map((r) => r.id).sort()).toEqual(["f0", "f2"]);
+
+    const inList = await hybridSearch(table, {
+      ...QUERY,
+      candidates: 10,
+      where: String.raw`source IN ('b.txt', 'o\'brien.txt')`,
+      rerank: false,
+    });
+    expect(inList.map((r) => r.id).sort()).toEqual(["f1", "f5"]);
   });
 
   test("two empty legs return [] without reranking", async () => {
@@ -137,10 +158,12 @@ describe("hybridSearch on an in-memory table", () => {
 
   test("an empty query text raises before either leg runs", async () => {
     const table = {
-      query: () => {
-        throw new Error("leg ran");
+      collection: {
+        query: () => {
+          throw new Error("leg ran");
+        },
       },
-    } as unknown as Table;
+    } as unknown as ZvecTable;
     await expect(
       hybridSearch(table, { ...QUERY, queryText: "", candidates: 3, rerank: false }),
     ).rejects.toThrow("Text query must be provided for hybrid search.");
@@ -148,17 +171,33 @@ describe("hybridSearch on an in-memory table", () => {
 
   test("the reranker gets the query tokens and the text column, and its order wins", async () => {
     const { table } = await memoryTable();
-    const reranker = recordingReranker((documents) => [
-      { index: documents.length - 1, relevanceScore: 0.7 },
-      { index: 0, relevanceScore: 0.1 },
+    const { fetch, calls } = fakeFetch([
+      (init) => {
+        const n = JSON.parse(String(init.body)).documents.length;
+        return Response.json({
+          results: [
+            { index: n - 1, relevance_score: 0.7 },
+            { index: 0, relevance_score: 0.1 },
+          ],
+        });
+      },
     ]);
+    const reranker = openRouterRerank({
+      apiKey: "k",
+      model: "cohere/rerank-4-fast",
+      baseUrl: "https://example.invalid/v1/",
+      fetch,
+    });
     const rows = await hybridSearch(table, { ...QUERY, candidates: 10, finalK: 8, reranker });
-    const call = reranker.calls[0];
-    expect(call?.query).toBe(tokenizeZhQuery(QUERY.queryText));
-    expect(call?.documents[0]).toBe("坚果体重5.5kg");
-    expect([...(call?.documents ?? [])].sort()).toEqual(FACT_ROWS.map((r) => r.text).sort());
+    const body = JSON.parse(String(calls[0]?.init.body)) as {
+      query: string;
+      documents: string[];
+    };
+    expect(body.query).toBe(tokenizeZhQuery(QUERY.queryText));
+    expect(body.documents[0]).toBe("坚果体重5.5kg");
+    expect([...body.documents].sort()).toEqual(FACT_ROWS.map((r) => r.text).sort());
     expect(rows.map((r) => r._relevance_score)).toEqual([Math.fround(0.7), Math.fround(0.1)]);
-    expect(rows[0]?.text).toBe(call?.documents.at(-1) as string);
+    expect(rows[0]?.text).toBe(body.documents.at(-1) as string);
     expect(Object.keys(rows[0] as SearchRow)).toEqual([...COLUMNS, "_relevance_score"]);
   });
 
@@ -184,6 +223,7 @@ describe("hybridSearch on an in-memory table", () => {
 
   test("an abort rejects with the signal's reason and logs nothing", async () => {
     const { table } = await memoryTable();
+    records.length = 0;
     const reason = new Error("interrupted");
     const before = new AbortController();
     before.abort(reason);
@@ -214,96 +254,4 @@ describe("hybridSearch on an in-memory table", () => {
       "Limit is required for ANN/KNN queries",
     );
   });
-});
-
-// fixtures/hybrid_parity.json pins hybrid search over stored row vectors (no embedding calls) on
-// one snapshot of the real tables; a re-ingest changes their fingerprints and skips these.
-const parity = JSON.parse(
-  readFileSync(join(import.meta.dirname, "fixtures", "hybrid_parity.json"), "utf8"),
-);
-const real: Record<string, Table | null> = {
-  persona_facts: await realTable("persona_facts"),
-  stream_chunks: await realTable("stream_chunks"),
-};
-let sameData = true;
-for (const [name, table] of Object.entries(real)) {
-  if (table === null || (await fingerprint(table)) !== parity.fingerprints[name]) sameData = false;
-}
-
-async function anchorVector(table: Table, id: string): Promise<number[]> {
-  const [row] = await table.query().where(`id = '${id}'`).select(["vector"]).limit(1).toArray();
-  return Array.from(row.vector.toArray() as Float32Array);
-}
-
-const rowSha1 = (row: SearchRow) =>
-  createHash("sha1")
-    .update(pyJsonDumps(row, { ensureAscii: false }))
-    .digest("hex");
-
-describe("parity with Python on the committed tables", () => {
-  test.skipIf(!sameData)(
-    "RRF order, float32 scores, columns and row content",
-    async () => {
-      for (const c of parity.rrf) {
-        const table = real[c.table] as Table;
-        const rows = await hybridSearch(table, {
-          vector: await anchorVector(table, c.anchor),
-          queryText: c.text,
-          candidates: c.candidates,
-          where: c.where,
-          finalK: c.finalK,
-          rerank: false,
-        });
-        const label = `${c.table} ${c.text} candidates=${c.candidates} finalK=${c.finalK}`;
-        expect([label, rows.map((r) => r.id)]).toEqual([label, c.ids]);
-        expect(rows.map((r) => r._relevance_score)).toEqual(c.scores);
-        expect(Object.keys(rows[0] ?? {})).toEqual(c.keys.filter((k: string) => k !== "vector"));
-        expect(rows.map(rowSha1)).toEqual(c.hashes);
-      }
-    },
-    120_000,
-  );
-
-  test.skipIf(!sameData)(
-    "the rerank path sends Python's request and keeps the reranker's order",
-    async () => {
-      for (const c of parity.rerank) {
-        const table = real[c.table] as Table;
-        const { fetch, calls } = fakeFetch([
-          (init) => {
-            const n = JSON.parse(String(init.body)).documents.length;
-            const order = [...Array(n).keys()].reverse().slice(0, Math.max(1, n - 2));
-            return Response.json({
-              results: order.map((index, rank) => ({ index, relevance_score: 1 / (rank + 3) })),
-            });
-          },
-        ]);
-        const reranker = openRouterRerank({
-          apiKey: "k",
-          model: "cohere/rerank-4-fast",
-          baseUrl: "https://example.invalid/v1/",
-          fetch,
-        });
-        const rows = await hybridSearch(table, {
-          vector: await anchorVector(table, c.anchor),
-          queryText: c.text,
-          candidates: c.candidates,
-          where: c.where,
-          finalK: c.finalK,
-          reranker,
-        });
-        const body = JSON.parse(String(calls[0]?.init.body));
-        expect(body.query).toBe(c.query);
-        expect(body.documents.length).toBe(c.documents);
-        const sha1 = createHash("sha1")
-          .update(pyJsonDumps(body, { ensureAscii: false }))
-          .digest("hex");
-        expect(sha1).toBe(c.requestSha1);
-        expect(rows.map((r) => r.id)).toEqual(c.ids);
-        expect(rows.map((r) => r._relevance_score)).toEqual(c.scores);
-        expect(Object.keys(rows[0] ?? {})).toEqual(c.keys.filter((k: string) => k !== "vector"));
-      }
-    },
-    120_000,
-  );
 });

@@ -1,5 +1,6 @@
-// LanceDB ships no CJK tokenizer; pre-tokenizing at both ingest and query time is the official
-// workaround. https://github.com/lancedb/lancedb/issues/2168
+// Pre-tokenize Chinese text with jieba at both ingest and query time so Zvec's whitespace FTS
+// index preserves exact sub-token boundaries, case-distinct BV IDs, and query-only stopword
+// removal.
 import { isPySpace } from "@eidolon/config";
 import { JiebaTokenizer } from "./jieba.ts";
 

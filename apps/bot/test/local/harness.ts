@@ -58,7 +58,7 @@ export interface Fakes {
   memoryAdmin: MemoryAdmin | null;
 }
 
-/** The packages, faked where they would load models, open LanceDB or reach a network. */
+/** The packages, faked where they would load models, open Zvec or reach a network. */
 export function fakeModules(): Fakes {
   const offers: RecordedOffer[] = [];
   const admitted: string[] = [];

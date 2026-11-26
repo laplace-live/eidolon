@@ -128,8 +128,8 @@ describe("memories per persona", () => {
       ["failed", 502, "upstream-failed"],
     ] as const) {
       booted.fakes.memoryAdmin = {
-        list: async () => ({ ok: false, reason, error: new Error("qdrant down") }),
-        forget: async () => ({ ok: false, reason, error: new Error("qdrant down") }),
+        list: async () => ({ ok: false, reason, error: new Error("store locked") }),
+        forget: async () => ({ ok: false, reason, error: new Error("store locked") }),
       };
       for (const method of ["GET", "DELETE"]) {
         const response = await api(method);

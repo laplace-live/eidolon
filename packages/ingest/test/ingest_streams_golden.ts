@@ -6,7 +6,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type EmbeddingModel, EmbeddingUsage } from "@eidolon/providers";
-import { DEFAULT_EMBED_MODEL, type LanceTable, openTable } from "@eidolon/retrieval";
+import { DEFAULT_EMBED_MODEL, openTable, type ZvecTable } from "@eidolon/retrieval";
+import { expect } from "vitest";
+import { expectVectorsClose } from "../../retrieval/test/helpers.ts";
+import { fakeVector } from "../../retrieval/test/write_golden.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures");
 
@@ -57,15 +60,6 @@ export function materialize(set: "streams" | "bad_date", folder: string): string
   return folder;
 }
 
-/** The golden's stub vector, computed in float64. */
-function fakeVector(text: string): number[] {
-  let sum = 0;
-  for (const c of text) sum += c.codePointAt(0) as number;
-  const base = sum % 97;
-  // `0 - base`, not `-base`: for a base of 0 the golden holds 0.0, never -0.0.
-  return [base / 7, (0 - base) / 3, 0.1 * base, 1 / (base + 3)];
-}
-
 /** The golden's stubbed embedding model; `calls` records each batch's size. */
 export function fakeModel(calls: number[]): EmbeddingModel {
   return {
@@ -88,19 +82,37 @@ export function fakeModel(calls: number[]): EmbeddingModel {
 
 /** A table's rows without their vectors, in scan order, and each vector's float32 bytes in hex. */
 export async function readTable(dbPath: string, name = "stream_chunks"): Promise<GoldenTable> {
-  const table = (await openTable(dbPath, name)) as LanceTable;
-  const data = await table.query().toArrow();
-  const names = data.schema.fields.map((f) => f.name).filter((n) => n !== "vector");
-  const rows: Record<string, unknown>[] = [];
+  const table = (await openTable(dbPath, name)) as ZvecTable;
+  const back = table.readAll({ includeVectors: true });
   const vectors_f32_hex: string[] = [];
-  for (const row of data) {
-    rows.push(Object.fromEntries(names.map((n) => [n, row[n]])));
-    const vector = row.vector.toArray() as Float32Array;
+  for (let i = 0; i < back.rows.length; i++) {
+    const vector = back.vectors.subarray(i * table.vectorDim, (i + 1) * table.vectorDim);
     vectors_f32_hex.push(
       Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength).toString("hex"),
     );
   }
-  return { rows, vectors_f32_hex };
+  return { rows: back.rows, vectors_f32_hex };
+}
+
+function hexToFloat32(hexRows: readonly string[]): Float32Array {
+  const bytes = Buffer.concat(hexRows.map((hex) => Buffer.from(hex, "hex")));
+  return new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+}
+
+/** Asserts exact scalar rows and float32 vectors within Zvec COSINE's 1-2 ULP norm round-trip. */
+export function expectGoldenTable(actual: GoldenTable, expected: GoldenTable): void {
+  expect(actual.rows).toEqual(expected.rows);
+  expectVectorsClose(hexToFloat32(actual.vectors_f32_hex), hexToFloat32(expected.vectors_f32_hex));
+}
+
+/** Maps a golden write-side log list from `.lance` / FTS wording to Zvec's. */
+export function portIngestLogs(logs: readonly [string, string][]): [string, string][] {
+  return logs.map(([level, message]) => [
+    level,
+    message
+      .replace(/\.lance$/, ".zvec")
+      .replace(/^Built FTS index on 'tokens' for /, "Built HNSW and FTS indexes for "),
+  ]);
 }
 
 /** Each placeholder replaced by its path. */

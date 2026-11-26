@@ -121,7 +121,7 @@ export function CallProvider({ children }: { readonly children: ReactNode }): Re
     };
   }, [live, chatId, queryClient]);
 
-  // Status then says whether the bot recorded a failure, and whether Qdrant still answers.
+  // Status then says whether the bot recorded a failure.
   const ended = phase.name === "ended";
   useEffect(() => {
     if (ended) void queryClient.invalidateQueries({ queryKey: statusQuery.queryKey, exact: true });

@@ -95,8 +95,11 @@ describe("laplace-search matches the Python CLI", () => {
     test(c.argv.join(" "), async () => {
       expect(await run(c)).toEqual({
         code: c.code,
-        stdout: c.stdout,
-        stderr: c.stderr.replace(PYTHON_HINT, PORT_HINT),
+        stdout: c.stdout.replaceAll(".lance\n", ".zvec\n"),
+        stderr: c.stderr
+          .replace("No LanceDB table at ", "No Zvec table at ")
+          .replace(".lance\n", ".zvec\n")
+          .replace(PYTHON_HINT, PORT_HINT),
         opened: c.opened,
         calls: c.calls,
       });

@@ -168,24 +168,19 @@ const chunks = await realTable("stream_chunks");
 
 // `node packages/retrieval/test/jieba-parity.ts` checks every row; this samples it.
 describe("parity with the stored tokens column", () => {
-  test.skipIf(facts === null)("every persona_facts row", async () => {
-    const rows = await facts
-      ?.query()
-      .select([...FTS_COLUMNS.persona_facts])
-      .toArray();
-    const mismatched = (rows ?? []).filter((r) => tokenizeZh(factFtsText(r)) !== r.tokens);
-    expect(rows?.length).toBeGreaterThan(3000);
+  test.skipIf(facts === null)("every persona_facts row", () => {
+    const rows = facts?.readAll({ columns: [...FTS_COLUMNS.persona_facts] }).rows ?? [];
+    const mismatched = rows.filter((r) => tokenizeZh(factFtsText(r)) !== r.tokens);
+    expect(rows.length).toBeGreaterThan(3000);
     expect(mismatched.map((r) => r.id)).toEqual([]);
   });
 
-  test.skipIf(chunks === null)("stream_chunks rows whose id ends in 7", async () => {
-    const rows = await chunks
-      ?.query()
-      .where("id LIKE '%7'")
-      .select([...FTS_COLUMNS.stream_chunks])
-      .toArray();
-    const mismatched = (rows ?? []).filter((r) => tokenizeZh(chunkFtsText(r)) !== r.tokens);
-    expect(rows?.length).toBeGreaterThan(1000);
+  test.skipIf(chunks === null)("stream_chunks rows whose id ends in 7", () => {
+    const rows = (chunks?.readAll({ columns: [...FTS_COLUMNS.stream_chunks] }).rows ?? []).filter(
+      (r) => String(r.id).endsWith("7"),
+    );
+    const mismatched = rows.filter((r) => tokenizeZh(chunkFtsText(r)) !== r.tokens);
+    expect(rows.length).toBeGreaterThan(1000);
     expect(mismatched.map((r) => r.id)).toEqual([]);
   });
 });

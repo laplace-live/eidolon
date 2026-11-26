@@ -26,7 +26,13 @@ import {
   sortedPy,
 } from "@eidolon/config";
 import { type EmbeddingModel, EmbeddingUsage, openAIEmbeddings } from "@eidolon/providers";
-import { type LanceTable, openTable, resetEmbeddingModel, tokenizeZh } from "@eidolon/retrieval";
+import {
+  closeAllReadTables,
+  openTable,
+  resetEmbeddingModel,
+  tokenizeZh,
+  type ZvecTable,
+} from "@eidolon/retrieval";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { indexMetaPath, ingestFacts, type ProgressEvent } from "../src/index.ts";
 import { cancelMidRebuild } from "./forced_exit.ts";
@@ -102,6 +108,7 @@ beforeEach(() => {
   logger.setSink((record) => records.push(record));
 });
 afterEach(() => {
+  closeAllReadTables();
   logger.setSink(consoleSink);
   rmSync(work, { recursive: true, force: true });
   for (const [key, value] of saved) {
@@ -294,16 +301,13 @@ describe("settings", () => {
 
 /** Rows and float32 vectors of a table, in scan order. */
 async function tableState(dbPath: string, name: string) {
-  const table = (await openTable(dbPath, name)) as LanceTable;
-  const data = await table.query().toArrow();
-  const rows: Record<string, unknown>[] = [];
+  const table = (await openTable(dbPath, name)) as ZvecTable;
+  const back = table.readAll({ includeVectors: true });
   const vectors: number[][] = [];
-  for (const row of data) {
-    const { vector, ...rest } = row.toJSON() as Record<string, unknown>;
-    rows.push(rest);
-    vectors.push([...(vector as { toArray(): Float32Array }).toArray()]);
+  for (let i = 0; i < back.rows.length; i++) {
+    vectors.push([...back.vectors.subarray(i * table.vectorDim, (i + 1) * table.vectorDim)]);
   }
-  return { rows, vectors };
+  return { rows: back.rows, vectors };
 }
 
 describe("ingestFactFiles", () => {
@@ -510,7 +514,7 @@ describe("ingestFactFiles", () => {
       ok: false,
       failures: [{ item: "persona_facts", error: done.error }],
     });
-    expect(existsSync(join(work, "index", "persona_facts.lance"))).toBe(false);
+    expect(existsSync(join(work, "index", "persona_facts.zvec"))).toBe(false);
   });
 
   test("explicit files record no patterns; a missing one is reported skipped", async () => {

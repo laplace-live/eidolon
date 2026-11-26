@@ -3,7 +3,6 @@
 // of her index without opening it: each table's build record and the catalog's date.
 import {
   closeSync,
-  existsSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -38,6 +37,7 @@ import {
   PERSONA_FACTS_TABLE,
   resolveDbPath,
   STREAM_CHUNKS_TABLE,
+  tableExists,
 } from "@eidolon/retrieval";
 import { parse, stringify } from "yaml";
 import type {
@@ -405,7 +405,7 @@ export function findAvatar(id: string): (ReferenceImage & { readonly path: strin
 /** Persona `id`'s index folder, as the bot would open it with her active. */
 export function indexDir(id: string): string {
   if (id === activePersona().id) return resolveDbPath();
-  const configured = personaSetting(id, "LANCEDB_PATH");
+  const configured = personaSetting(id, "INDEX_PATH") ?? personaSetting(id, "LANCEDB_PATH");
   return configured ? resolveProjectPath(configured) : resolvePersonaPath(id, INDEX_DIR);
 }
 
@@ -492,7 +492,7 @@ function currentEmbedModel(): string | null {
 }
 
 function tableStatus(dir: string, table: IndexTable["table"]): IndexTable {
-  const built = existsSync(join(dir, `${table}.lance`));
+  const built = tableExists(dir, table);
   const meta = built ? readJsonObject(indexMetaPath(dir, table)) : null;
   const number = (value: unknown) => (typeof value === "number" ? value : null);
   const string = (value: unknown) => (typeof value === "string" ? value : null);

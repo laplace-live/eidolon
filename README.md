@@ -58,7 +58,7 @@ or [Windows x64](https://downloads.vrp.moe/eidolon/Eidolon-win-x64.exe). From a 
 
 ### Supported platforms
 
-LanceDB and ONNX Runtime, its native parts, decide where it runs:
+Zvec and ONNX Runtime, its native parts, decide where it runs:
 
 | Platform | |
 | --- | --- |
@@ -66,8 +66,8 @@ LanceDB and ONNX Runtime, its native parts, decide where it runs:
 | Linux on x64 or arm64, with glibc | Yes |
 | Windows on x64 | Yes, with the [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe); Windows on Arm runs the x64 Node. Tasks run commands in Git Bash, so only with [Git for Windows](https://git-scm.com/download/win), or Cygwin's or MSYS2's bash on PATH |
 
-The first `npx` downloads about 230 MB, mostly LanceDB and ONNX Runtime for your platform, which
-unpack to about 0.6 GB on a Mac and more on Linux and Windows. On Linux x64, npm 11 also runs
+The first `npx` downloads about 65 MB, mostly Zvec and ONNX Runtime for your platform, which
+unpack to about 0.3 GB on a Mac and more on Linux and Windows. On Linux x64, npm 11 also runs
 onnxruntime-node's install script, which fetches CUDA libraries Eidolon never uses, about 240 MB
 from NuGet, and fails the install when NuGet is out of reach. Skip it:
 
@@ -85,8 +85,8 @@ npm 12 runs no dependency's install script unless you allow it; leave onnxruntim
 | LLM              | [OpenRouter](https://openrouter.ai/) (default `~google/gemini-flash-latest`) |
 | TTS              | [Fish Audio](https://fish.audio/app/) (`drama-3`, WebSocket)              |
 | Transport        | SmallWebRTC, relayed through [Cloudflare TURN](https://developers.cloudflare.com/realtime/turn/) when configured |
-| Vector store     | LanceDB (local file, embeddings via OpenRouter)                           |
-| Long-term memory | [Mem0](https://docs.mem0.ai/open-source)'s engine, self-hosted over Qdrant (optional) |
+| Vector store     | [Zvec](https://zvec.org/) (in-process HNSW + BM25, embeddings via OpenRouter) |
+| Long-term memory | [Mem0](https://docs.mem0.ai/open-source)'s engine, embedded over local Zvec (optional) |
 
 Model IDs above are defaults. Every model the project runs — these three plus
 the embedding, reranker, and offline refinement models — is declared in one
@@ -107,16 +107,15 @@ behind your own reverse proxy.
 pnpm install
 cp .env.example .env          # fill in SONIOX_API_KEY, OPENROUTER_API_KEY,
                               # FISH_API_KEY, FISH_VOICE_ID...
-docker compose up -d qdrant   # optional: backs long-term memory
 pnpm dev                      # watch mode on localhost:7860; --port to move it
 pnpm typecheck && pnpm lint && pnpm test
 ```
 
-`pnpm start` runs it without watch mode. Mem0 is a
-library inside the bot process, not a service — the only thing it needs running
-is Qdrant, and only if you want long-term memory. Set
-`MEM0_QDRANT_HOST=localhost` in `.env` to point the bot at the container above;
-leave it blank and the bot boots normally with memory switched off.
+`pnpm start` runs it without watch mode. Mem0 runs in-process over a local Zvec
+collection (`MEM0_DIR`, default `<data home>/mem0/vectors`) — no external
+vector database container is needed. Set `MEM0_ENABLED=true` in `.env` to turn
+long-term memory on; leave it blank and the bot boots normally with memory
+switched off.
 
 The bot serves no UI. The web client is LAPLACE's `/ai` page, whose settings
 take a custom backend URL such as `http://localhost:7860`; the local web app
@@ -127,7 +126,7 @@ How the bot is laid out and what keeps it working is in
 
 ## Building the RAG indexes (optional)
 
-Both `persona_facts` and `stream_archive` no-op gracefully when their LanceDB
+Both `persona_facts` and `stream_archive` no-op gracefully when their Zvec
 tables are missing, so the bot is runnable from a fresh checkout without these.
 A persona's sources and its index live in the data home (`~/.laplace/eidolon`,
 or `EIDOLON_HOME`), never in git or an image:
@@ -196,8 +195,8 @@ are enabled:
    ("你", "什么", "了") to prevent BM25 score collapse on common tokens.
 5. **Cross-encoder rerank**. `cohere/rerank-4-fast` via OpenRouter
    re-scores down to `top_k` (8 for facts, 3 for chunks), on the same key
-   the LLM uses. Set `RERANK_ENABLED=false` to fall back to LanceDB's
-   default RRF fusion — worth keeping on at ~10k+ rows, at $0.002/search.
+   the LLM uses. Set `RERANK_ENABLED=false` to fall back to RRF fusion —
+   worth keeping on at ~10k+ rows, at $0.002/search.
 
 Alongside the search, the retrieval gate asks a small model whether the turn
 needs recall at all, and cancels both searches if not — it never delays one;
@@ -283,7 +282,7 @@ redirect either way). Access is anonymous by default and rate-limited per client
 header to be rate-limited per Bilibili UID at a higher ceiling
 (`EIDOLON_MCP_AUTH_RATE_LIMIT_PER_HOUR`, default 120/h) — the token raises your
 throughput only; it unlocks no private data. Both tools no-op gracefully (an
-empty result with a `note`) when their LanceDB index hasn't been built.
+empty result with a `note`) when their Zvec index hasn't been built.
 
 Behind a reverse proxy, set `EIDOLON_MCP_ALLOWED_HOSTS` to your public
 domain(s) so the DNS-rebinding Host check accepts requests; the proxy must pass
@@ -307,10 +306,12 @@ domain(s) so the DNS-rebinding Host check accepts requests; the proxy must pass
 - **CORS**: `PIPECAT_ALLOWED_ORIGINS` takes a comma-separated list of the
   origins allowed to call the TypeScript bot; blank allows every origin. The
   `eidolon-python` image always allows every origin.
-- **Persistent state**: viewers' long-term memories live in Qdrant, so its
-  storage volume is the one thing a restart must not lose; Mem0's change log
-  sits beside it. Both images read each persona's index and private references
-  from the data home mounted at `/data` (`docker-compose.yml` mounts yours).
+- **Persistent state**: the TypeScript bot stores viewers' long-term memory
+  vectors (`MEM0_DIR`) and change log (`MEM0_HISTORY_DB_PATH`) on a writable
+  volume (`mem0-history-ts` in `docker-compose.yml`), so restarts keep them;
+  the `eidolon-python` reference image uses Qdrant. Both images read each
+  persona's index and private references from the data home mounted at `/data`
+  (`docker-compose.yml` mounts yours).
 
 ## Releasing
 

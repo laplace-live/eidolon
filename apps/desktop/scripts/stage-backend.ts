@@ -543,7 +543,7 @@ export async function stageBackend(
     files: all.length,
     bytes: all.reduce((sum, file) => sum + lstatSync(file).size, 0),
     parts: {
-      lancedb: bytesUnder(join(modules, "@lancedb")),
+      zvec: bytesUnder(join(modules, "@zvec")),
       onnxruntime: bytesUnder(join(modules, "onnxruntime-node")),
       sharp: bytesUnder(join(modules, "sharp")) + bytesUnder(join(modules, "@img")),
       web: bytesUnder(join(payload, "web")),

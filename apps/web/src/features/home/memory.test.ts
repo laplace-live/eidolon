@@ -8,24 +8,23 @@ describe("what the memory panel shows", () => {
   const failed = (status: number, code: "unavailable" | "upstream-failed") =>
     ({ status: "error", error: new ApiError(status, code, "") }) as const;
 
-  test("off without a Qdrant host, whatever else holds", () => {
-    expect(memoryView({ configured: false, reachable: null }, pending)).toBe("off");
-    expect(memoryView({ configured: false, reachable: true }, listed)).toBe("off");
+  test("off while memory is disabled, whatever else holds", () => {
+    expect(memoryView({ configured: false, ready: false, problem: null }, pending)).toBe("off");
+    expect(memoryView({ configured: false, ready: true, problem: null }, listed)).toBe("off");
   });
 
-  test("down when Qdrant doesn't answer the list, or the last probe said so", () => {
-    expect(memoryView({ configured: true, reachable: true }, failed(503, "unavailable"))).toBe(
-      "down",
+  test("not-ready when enabled without required keys", () => {
+    expect(memoryView({ configured: true, ready: false, problem: "missing key" }, pending)).toBe(
+      "not-ready",
     );
-    expect(memoryView({ configured: true, reachable: false }, pending)).toBe("down");
   });
 
-  test("the list once it answers, even when the last probe failed", () => {
-    expect(memoryView({ configured: true, reachable: false }, listed)).toBe("list");
-    expect(memoryView({ configured: true, reachable: null }, pending)).toBe("loading");
-    expect(memoryView({ configured: true, reachable: true }, failed(502, "upstream-failed"))).toBe(
-      "failed",
-    );
+  test("loading, list, unavailable on 503, and failed on 502 once ready", () => {
+    const ready = { configured: true, ready: true, problem: null } as const;
+    expect(memoryView(ready, pending)).toBe("loading");
+    expect(memoryView(ready, listed)).toBe("list");
+    expect(memoryView(ready, failed(503, "unavailable"))).toBe("unavailable");
+    expect(memoryView(ready, failed(502, "upstream-failed"))).toBe("failed");
   });
 });
 

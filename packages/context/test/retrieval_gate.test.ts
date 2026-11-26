@@ -517,7 +517,7 @@ describe("retrievalGateFromEnv", () => {
       expect(retrievalGateFromEnv()).toBeNull();
     }
     expect(logs.records.at(-1)?.message).toBe(
-      "RETRIEVAL_GATE_ENABLED is off — every turn searches both LanceDB tiers",
+      "RETRIEVAL_GATE_ENABLED is off — every turn searches both Zvec tiers",
     );
     for (const value of ["", "true", "maybe"]) {
       setEnv("RETRIEVAL_GATE_ENABLED", value);

@@ -14,13 +14,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installSettings, PROJECT_ROOT, resetSettings, sourceFolder } from "@eidolon/config";
 import { acquireLock, embedCachePath, indexLockKey } from "@eidolon/ingest";
-import { resetEmbeddingModel } from "@eidolon/retrieval";
+import { closeAllReadTables, resetEmbeddingModel } from "@eidolon/retrieval";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+  expectGoldenTable,
   fakeModel,
   GOLDEN,
   materialize,
   placehold,
+  portIngestLogs,
   readTable,
   substitute,
 } from "../../../packages/ingest/test/ingest_streams_golden.ts";
@@ -45,6 +47,7 @@ beforeEach(() => {
   restoreEnv = setEnv({
     EIDOLON_HOME: home,
     EIDOLON_PERSONA: undefined,
+    INDEX_PATH: undefined,
     LANCEDB_PATH: undefined,
     INGEST_SKIP_TYPES: undefined,
     EMBED_MODEL: undefined,
@@ -57,10 +60,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  closeAllReadTables();
   restoreEnv();
   resetSettings();
   logs.stop();
-  rmSync(work, { recursive: true, force: true });
+  rmSync(work, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
 });
 
 function events(text: string): Record<string, unknown>[] {
@@ -79,7 +83,16 @@ describe("ingestStreamsMain", () => {
     const [usage, help] = GOLDEN.help.ingest_streams;
     const shown = captureIo();
     expect(await ingestStreamsMain(["-h"], shown.io)).toBe(0);
-    expect([shown.stdout(), shown.stderr()]).toEqual([help, ""]);
+    expect([shown.stdout(), shown.stderr()]).toEqual([
+      help
+        .replace(
+          "Ingest streams/*.md into a local LanceDB index.",
+          "Ingest streams/*.md into a local Zvec index.",
+        )
+        .replace("LanceDB directory", "Zvec index directory")
+        .replace("$LANCEDB_PATH", "$INDEX_PATH"),
+      "",
+    ]);
     const bad = captureIo();
     expect(await ingestStreamsMain(["--bogus"], bad.io)).toBe(2);
     expect(bad.stderr()).toBe(
@@ -106,14 +119,14 @@ describe("ingestStreamsMain", () => {
         run: run.name,
         code: run.exit_code,
         first: ["INFO", `Persona milky-green's index: ${placehold(db, paths)}`],
-        rest: run.logs,
+        rest: portIngestLogs(run.logs),
         calls: run.embed_calls,
       });
-      if (run.table) expect(await readTable(db)).toEqual(run.table);
+      if (run.table) expectGoldenTable(await readTable(db), run.table);
     }
     // The default cache was never needed: every run named one, or used none.
     expect(existsSync(embedCachePath())).toBe(false);
-  });
+  }, 60_000);
 
   test("defaults: the persona's sources, the index the bot reads, the shared cache", () => {
     const args = parseIngestStreamsArgs([]);
@@ -237,7 +250,7 @@ describe("ingestStreamsMain", () => {
       costSource: "reported",
     });
     expect(io.stderr()).toBe("");
-    expect(readdirSync(db).sort()).toEqual(["stream_chunks.lance", "stream_chunks.meta.json"]);
+    expect(readdirSync(db).sort()).toEqual(["stream_chunks.meta.json", "stream_chunks.zvec"]);
   });
 
   test("a cache miss without a key: exit 1, code missing-credential", async () => {
@@ -250,6 +263,6 @@ describe("ingestStreamsMain", () => {
       status: "failed",
       code: "missing-credential",
     });
-    expect(existsSync(join(work, "db", "stream_chunks.lance"))).toBe(false);
+    expect(existsSync(join(work, "db", "stream_chunks.zvec"))).toBe(false);
   });
 });

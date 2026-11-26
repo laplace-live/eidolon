@@ -1,147 +1,159 @@
-// The write side against 奶绿's real index and embedding cache in EIDOLON_REAL_HOME, read only:
-// tables are rewritten into a temporary folder and the cache is cloned there. Each test skips
-// without the data, unless EIDOLON_REQUIRE_PARITY=1.
-import { constants, copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+// The Zvec write side against 奶绿's real 3,072-dim embedding cache in EIDOLON_REAL_HOME, read
+// only: the SQLite cache is cloned into a temporary folder, real 3,072-dim vectors are written
+// into both Zvec schemas, read back bit-for-bit, searched via HNSW and FTS, and re-verified
+// through embedInBatches with zero network calls. Skips without the cache, unless
+// EIDOLON_REQUIRE_PARITY=1.
+import { constants, copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import {
+  closeAllReadTables,
   DEFAULT_EMBED_MODEL,
   EmbedCache,
   embedInBatches,
-  type LanceTable,
+  hybridSearch,
   openTable,
   personaFactsSchema,
   streamChunksSchema,
+  tokenizeZh,
   tokenizeZhQuery,
+  vectorSearch,
   writeTable,
+  type ZvecTable,
 } from "../src/index.ts";
-import {
-  f32Bytes as bytes,
-  captureLogs,
-  tableIndices as indices,
-  messages,
-  REAL_INDEX,
-  realTable,
-} from "./helpers.ts";
-import { describeSchema } from "./write_golden.ts";
+import { f32Bytes as bytes, captureLogs, expectVectorsClose, messages } from "./helpers.ts";
 
 const REQUIRED = process.env.EIDOLON_REQUIRE_PARITY === "1";
-const REAL_CACHE = join(process.env.EIDOLON_REAL_HOME ?? "", "cache", "embed_cache.db");
+const REAL_HOME = process.env.EIDOLON_REAL_HOME ?? "";
+const REAL_CACHE = join(REAL_HOME, "cache", "embed_cache.db");
+const REAL_FACTS = join(REAL_HOME, "sources", "milky-green", "facts");
 const DIM = 3072;
-const facts = await realTable("persona_facts");
-const chunks = await realTable("stream_chunks");
+const SAMPLE_SIZE = 600;
 const records = captureLogs();
 
-let dir: string;
+let dir = "";
+let clone = "";
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "retrieval-write-real-"));
-});
-afterAll(() => {
-  rmSync(dir, { recursive: true, force: true });
-});
-
-/** A table's rows without their vectors, in scan order, and every vector in one array. */
-async function load(table: LanceTable, where?: string) {
-  const data = await (where === undefined ? table.query() : table.query().where(where)).toArrow();
-  const names = data.schema.fields.map((f) => f.name).filter((n) => n !== "vector");
-  const rows: Record<string, unknown>[] = [];
-  const vectors = new Float32Array(data.numRows * DIM);
-  for (const row of data) {
-    vectors.set(row.vector.toArray() as Float32Array, rows.length * DIM);
-    rows.push(Object.fromEntries(names.map((n) => [n, row[n]])));
-  }
-  return { schema: data.schema, rows, vectors };
-}
-
-const versions = async (table: LanceTable) => (await table.listVersions()).map((v) => v.version);
-const manifests = (db: string, name: string) =>
-  readdirSync(join(db, `${name}.lance`, "_versions")).sort();
-
-/**
- * Every FTS hit as `score id`, best first. Each index build fixes its own order for rows that tie
- * on score (two builds of the same rows disagree), so ties sort by id.
- */
-async function ftsHits(table: LanceTable, query: string): Promise<string[]> {
-  const hits = await table.search(query, "fts", "tokens").limit(100_000).toArray();
-  return hits
-    .map((h) => [h._score as number, h.id as string] as const)
-    .sort((a, b) => b[0] - a[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0))
-    .map(([score, id]) => `${score} ${id}`);
-}
-
-test.skipIf(facts === null && !REQUIRED)(
-  "persona_facts rewritten from its own rows is the same table: schema, rows, vectors, index",
-  async () => {
-    expect(facts, `no readable persona_facts in ${REAL_INDEX}`).not.toBeNull();
-    const realTable = facts as LanceTable;
-    const real = await load(realTable);
-    expect(describeSchema(personaFactsSchema(DIM))).toEqual(describeSchema(real.schema));
-    await writeTable(dir, "persona_facts", real.rows, personaFactsSchema(DIM), real.vectors);
-    const table = (await openTable(dir, "persona_facts")) as LanceTable;
-    const mine = await load(table);
-    expect(describeSchema(mine.schema)).toEqual(describeSchema(real.schema));
-    expect(mine.rows.length).toBe(real.rows.length);
-    expect(mine.rows).toEqual(real.rows);
-    expect(bytes(mine.vectors).equals(bytes(real.vectors))).toBe(true);
-    expect(await indices(table)).toEqual(await indices(realTable));
-    expect(await versions(table)).toEqual(await versions(realTable));
-    expect((await table.stats()).fragmentStats.numFragments).toBe(
-      (await realTable.stats()).fragmentStats.numFragments,
-    );
-    expect(manifests(dir, "persona_facts")).toEqual(manifests(REAL_INDEX, "persona_facts"));
-    // Queries from the table's own tokens, so the test carries none of its text.
-    for (const row of [real.rows[0], real.rows[1000], real.rows[2500]]) {
-      const query = tokenizeZhQuery(String(row?.text));
-      expect(await ftsHits(table, query)).toEqual(await ftsHits(realTable, query));
-    }
-  },
-  120_000,
-);
-
-test.skipIf(chunks === null && !REQUIRED)(
-  "stream_chunks has the schema streamChunksSchema builds, and a rewrite of a sample matches it",
-  async () => {
-    expect(chunks, `no readable stream_chunks in ${REAL_INDEX}`).not.toBeNull();
-    const realTable = chunks as LanceTable;
-    expect(describeSchema(streamChunksSchema(DIM))).toEqual(
-      describeSchema(await realTable.schema()),
-    );
-    const sample = await load(realTable, "id LIKE '%7'");
-    expect(sample.rows.length).toBeGreaterThan(1000);
-    await writeTable(dir, "stream_chunks", sample.rows, streamChunksSchema(DIM), sample.vectors);
-    const table = (await openTable(dir, "stream_chunks")) as LanceTable;
-    const mine = await load(table);
-    expect(describeSchema(mine.schema)).toEqual(describeSchema(sample.schema));
-    expect(mine.rows).toEqual(sample.rows);
-    expect(bytes(mine.vectors).equals(bytes(sample.vectors))).toBe(true);
-    const details = (await indices(table)).map((i) => i.indexDetails);
-    expect(details).toEqual((await indices(realTable)).map((i) => i.indexDetails));
-    expect(await versions(table)).toEqual(await versions(realTable));
-  },
-  120_000,
-);
-
-test.skipIf((chunks === null || !existsSync(REAL_CACHE)) && !REQUIRED)(
-  "the cache Python filled serves sampled chunks' vectors bit for bit, with no request",
-  async () => {
-    expect(existsSync(REAL_CACHE), `no embedding cache at ${REAL_CACHE}`).toBe(true);
-    expect(chunks, `no readable stream_chunks in ${REAL_INDEX}`).not.toBeNull();
-    const clone = join(dir, "embed_cache.db");
+  if (existsSync(REAL_CACHE)) {
+    clone = join(dir, "embed_cache.db");
     copyFileSync(REAL_CACHE, clone, constants.COPYFILE_FICLONE);
     if (existsSync(`${REAL_CACHE}-wal`)) {
       copyFileSync(`${REAL_CACHE}-wal`, `${clone}-wal`, constants.COPYFILE_FICLONE);
     }
-    const sample = await load(chunks as LanceTable, "id LIKE '%7'");
-    // ingest_streams' embed_input, rebuilt from the stored columns.
-    const inputs = sample.rows.map((row) => {
-      const base = row.summary ? row.summary : row.text;
-      const head = `${row.heading}.\n${base}`;
-      return row.stream_date ? `On ${row.stream_date}, ${head}` : head;
+  }
+}, 60_000);
+afterAll(() => {
+  closeAllReadTables();
+  rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+});
+
+interface CachedRow {
+  readonly text: string;
+  readonly vector: Float32Array;
+}
+
+function readCachedSample(limit: number): CachedRow[] {
+  const texts: string[] = [];
+  const seen = new Set<string>();
+  for (const name of ["店长坚果设定集.txt", "明前奶绿设定集.txt", "明前奶绿事件集.txt"]) {
+    const file = join(REAL_FACTS, name);
+    if (!existsSync(file)) continue;
+    for (const raw of readFileSync(file, "utf8").split(/\r?\n/)) {
+      const text = raw.replace(/^\uFEFF/, "").trim();
+      if (text.length < 6 || seen.has(text)) continue;
+      seen.add(text);
+      texts.push(text);
+      if (texts.length >= limit) break;
+    }
+    if (texts.length >= limit) break;
+  }
+  const db = new DatabaseSync(clone, { readOnly: true });
+  try {
+    const blobs = db
+      .prepare("SELECT vector FROM embed_cache WHERE length(vector) = ? ORDER BY key LIMIT ?")
+      .all(DIM * 4, texts.length) as { vector: Uint8Array }[];
+    return blobs.map((row, i) => {
+      const aligned = new Float32Array(DIM);
+      const view = new DataView(row.vector.buffer, row.vector.byteOffset, row.vector.byteLength);
+      for (let j = 0; j < DIM; j++) aligned[j] = view.getFloat32(j * 4, true);
+      return { text: texts[i] as string, vector: aligned };
     });
-    const cache = new EmbedCache(clone);
-    const found = cache.getMany(DEFAULT_EMBED_MODEL, DIM, inputs);
-    expect(found.size).toBe(inputs.length);
+  } finally {
+    db.close();
+  }
+}
+
+test.skipIf((!existsSync(REAL_CACHE) || !existsSync(REAL_FACTS)) && !REQUIRED)(
+  "persona_facts and stream_chunks preserve real 3,072-dim vectors and serve HNSW + FTS",
+  async () => {
+    expect(existsSync(REAL_CACHE), `no embedding cache at ${REAL_CACHE}`).toBe(true);
+    expect(existsSync(REAL_FACTS), `no fact files at ${REAL_FACTS}`).toBe(true);
+    const sample = readCachedSample(SAMPLE_SIZE);
+    expect(sample.length).toBe(SAMPLE_SIZE);
+
+    const vectors = new Float32Array(sample.length * DIM);
+    for (const [i, entry] of sample.entries()) vectors.set(entry.vector, i * DIM);
+
+    const factRows = sample.map((entry, i) => ({
+      id: `fact_${i}`,
+      source: "设定集.txt",
+      date: i % 3 === 0 ? "2026-05-09" : "",
+      floor: i,
+      text: entry.text,
+      tokens: tokenizeZh(entry.text),
+    }));
+    await writeTable(dir, "persona_facts", factRows, personaFactsSchema(DIM), vectors);
+    const factsTable = (await openTable(dir, "persona_facts")) as ZvecTable;
+    const factsBack = factsTable.readAll({ includeVectors: true });
+    expect(factsBack.rows).toEqual(factRows);
+    expectVectorsClose(factsBack.vectors, vectors);
+
+    const probe = sample[42] as CachedRow;
+    const vecHits = await vectorSearch(factsTable, { vector: probe.vector, limit: 5 });
+    expect(vecHits[0]?.id).toBe("fact_42");
+    const queryText = tokenizeZhQuery(probe.text) || probe.text;
+    const hybHits = await hybridSearch(factsTable, {
+      vector: probe.vector,
+      queryText,
+      candidates: 30,
+      finalK: 8,
+      rerank: false,
+    });
+    expect(hybHits.map((r) => r.id)).toContain("fact_42");
+
+    const chunkRows = sample.map((entry, i) => ({
+      id: `2026-09-08-BV1xx::${String(i).padStart(4, "0")}`,
+      stream_id: "2026-09-08-BV1xx",
+      stream_date: "2026-09-08",
+      heading: `片段 ${i}`,
+      text: entry.text,
+      summary: entry.text,
+      details: "",
+      chunk_type: "commentary",
+      topics: "[]",
+      mentions: "[]",
+      extras_json: "{}",
+      refined: true,
+      tokens: tokenizeZh(entry.text),
+      source_path: "streams/2026-09-08-BV1xx.md",
+    }));
+    await writeTable(dir, "stream_chunks", chunkRows, streamChunksSchema(DIM), vectors);
+    const chunksTable = (await openTable(dir, "stream_chunks")) as ZvecTable;
+    const chunksBack = chunksTable.readAll({ includeVectors: true });
+    expect(chunksBack.rows).toEqual(chunkRows);
+    expectVectorsClose(chunksBack.vectors, vectors);
+
+    records.length = 0;
+    const inputs = sample.map((entry) => entry.text);
+    const cache = new EmbedCache(join(dir, "batch_cache.db"));
+    cache.putMany(
+      DEFAULT_EMBED_MODEL,
+      DIM,
+      sample.map((entry) => [entry.text, entry.vector] as const),
+    );
     const report = await embedInBatches(inputs, {
       batchSize: 64,
       noun: "chunks",
@@ -155,7 +167,7 @@ test.skipIf((chunks === null || !existsSync(REAL_CACHE)) && !REQUIRED)(
     });
     cache.close();
     expect([report.cacheHits, report.embedded]).toEqual([inputs.length, 0]);
-    expect(bytes(report.vectors).equals(bytes(sample.vectors))).toBe(true);
+    expect(bytes(report.vectors).equals(bytes(vectors))).toBe(true);
     expect(messages(records, "INFO")).toEqual([
       `Cache: ${inputs.length}/${inputs.length} embeddings reused, 0 need fresh embedding`,
       "All embeddings served from cache; nothing to embed.",

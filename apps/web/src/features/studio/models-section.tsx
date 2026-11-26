@@ -101,8 +101,7 @@ export function ModelsSection({ persona }: { readonly persona: PersonaSummary })
         {status?.memory.configured === false && (
           <Hint icon={<DatabaseIcon />}>
             <Trans>
-              Memory is off: it needs a Qdrant host, which you set in{" "}
-              <Link to="/settings?tab=memory">Settings</Link>.
+              Memory is off: turn it on in <Link to="/settings?tab=memory">Settings</Link>.
             </Trans>
           </Hint>
         )}

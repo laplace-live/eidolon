@@ -15,19 +15,11 @@ const VERDICTS: Readonly<Record<CheckCode, MessageDescriptor>> = {
   "rate-limited": msg`The provider is busy. Try again in a minute.`,
   unreachable: msg`Couldn't reach the provider.`,
   unexpected: msg`The provider sent an answer the check doesn't recognize.`,
-  "not-qdrant": msg`Something answers there, but it isn't Qdrant.`,
-  "needs-api-key": msg`This Qdrant wants an API key, which Eidolon doesn't support.`,
-  starting: msg`Qdrant is still starting. Try again in a few seconds.`,
 };
 
 const OWN_VERDICTS: Readonly<Record<string, Partial<Record<CheckCode, MessageDescriptor>>>> = {
   soniox: {
     "invalid-key": msg`Soniox rejected this key. A key from an EU, Japan or India project doesn't work either: Eidolon supports US projects only.`,
-  },
-  qdrant: {
-    ok: msg`Qdrant is answering.`,
-    missing: msg`No Qdrant address is set.`,
-    unreachable: msg`Nothing answers there. Is the container running?`,
   },
 };
 
@@ -44,7 +36,6 @@ const WARNINGS: Readonly<Record<CheckWarningCode, MessageDescriptor>> = {
   "voice-unknown": msg`Fish doesn't know this persona's voice. Pick another.`,
   "voice-private": msg`This persona's voice belongs to another account. Pick a public one.`,
   "cannot-verify": msg`This provider offers nothing to check a key against, so it wasn't verified.`,
-  "version-mismatch": msg`This Qdrant's version is more than one minor release away from the one Eidolon is built for.`,
 };
 
 /**

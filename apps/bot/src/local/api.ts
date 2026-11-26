@@ -362,10 +362,12 @@ export type YtDlpStatus =
   | { readonly state: "unavailable"; readonly reason: string };
 
 export interface MemoryStatus {
-  /** MEM0_QDRANT_HOST is set. */
+  /** MEM0_ENABLED is on. */
   readonly configured: boolean;
-  /** The last probe's answer; null when never probed. */
-  readonly reachable: boolean | null;
+  /** The embeddings and memory-extraction roles have usable models and keys. */
+  readonly ready: boolean;
+  /** Why memory isn't ready while configured, in English; null when off or ready. */
+  readonly problem: string | null;
 }
 
 /** Assistant Mode: tasks she runs on the owner's computer. */
@@ -392,8 +394,8 @@ export interface AssistantStatus {
 }
 
 /**
- * GET status, which the home page polls: cheap. It never waits on a remote probe; Qdrant and the
- * voice are checked in the background and reported from the last answer.
+ * GET status, which the home page polls: cheap. It never waits on a remote probe; the persona's
+ * voice is checked in the background and reported from the last answer.
  */
 export interface Status {
   readonly version: string;
@@ -537,8 +539,8 @@ export type CredentialsResponse = Readonly<Record<string, CredentialState>>;
 export type CredentialsUpdate = Readonly<Record<string, string | null>>;
 
 /**
- * What a check can ask about: a role's endpoint and key (`embeddings`, `rerank`, `refine`),
- * Qdrant, or a provider's key by its catalog id.
+ * What a check can ask about: a role's endpoint and key (`embeddings`, `rerank`, `refine`) or a
+ * provider's key by its catalog id.
  */
 export const CHECK_PROVIDERS = [
   "soniox",
@@ -547,7 +549,6 @@ export const CHECK_PROVIDERS = [
   "embeddings",
   "rerank",
   "refine",
-  "qdrant",
   "openai",
   "anthropic",
   "google",
@@ -568,17 +569,14 @@ export type CheckProvider = (typeof CHECK_PROVIDERS)[number];
 
 export interface CheckRequest {
   readonly provider: CheckProvider;
-  /**
-   * A value typed but not saved yet; without it the check reads the saved, effective one. A key,
-   * or for qdrant `host` or `host:port`.
-   */
+  /** A key typed but not saved yet; without it the check reads the saved, effective one. */
   readonly value?: string;
 }
 
 /** A check's verdict. Each comes from the provider's HTTP status, never from its wording. */
 export const CHECK_CODES = [
   "ok",
-  /** Nothing to check: no key saved, or no Qdrant host. */
+  /** Nothing to check: no key saved. */
   "missing",
   /** 401. For Soniox, also a key from an EU, JP or IN project, which Eidolon can't use. */
   "invalid-key",
@@ -592,12 +590,6 @@ export const CHECK_CODES = [
   "unreachable",
   /** An answer the check can't place. */
   "unexpected",
-  /** Something other than Qdrant answers there. */
-  "not-qdrant",
-  /** This Qdrant wants an API key, which Eidolon doesn't send. */
-  "needs-api-key",
-  /** Qdrant answered 503: it is still starting. */
-  "starting",
 ] as const;
 export type CheckCode = (typeof CHECK_CODES)[number];
 
@@ -626,8 +618,6 @@ export const CHECK_WARNINGS = [
   "voice-private",
   /** A provider other than OpenRouter that offers nothing to check the key against. */
   "cannot-verify",
-  /** Qdrant more than one minor version from the client Eidolon uses. */
-  "version-mismatch",
 ] as const;
 export type CheckWarningCode = (typeof CHECK_WARNINGS)[number];
 

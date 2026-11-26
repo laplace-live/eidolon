@@ -49,14 +49,14 @@ export function overviewText(result: RecallResult, maxChars = 10000): string {
   return formatBroadcasts(result.broadcasts, maxChars);
 }
 
-/** The LanceDB `where` that keeps a details search inside `scope`, or null for none. */
+/** The Zvec scalar `filter` that keeps a details search inside `scope`, or null for none. */
 export function scopeFilter(scope: StreamScope, broadcasts: readonly Broadcast[]): string | null {
   const ids =
     broadcasts.length > 0 && (scope.latest !== null || scope.streamIds.length > 0)
       ? broadcasts.flatMap((broadcast) => broadcast.streamIds)
       : [...scope.streamIds];
   if (ids.length > 0) {
-    return `stream_id IN (${ids.map((id) => `'${id.replaceAll("'", "''")}'`).join(", ")})`;
+    return `stream_id IN (${ids.map((id) => `'${id.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`).join(", ")})`;
   }
   const conditions: string[] = [];
   if (scope.startDate) conditions.push(`stream_date >= '${scope.startDate}'`);

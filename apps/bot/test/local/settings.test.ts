@@ -299,8 +299,9 @@ describe("PUT settings", () => {
     for (const values of [
       { "embeddings.dim": "1024" },
       { "embeddings.dim": 10.5 },
-      { "memory.qdrant.host": 5 },
-      { "memory.qdrant.host": "a\nb" },
+      { "memory.enabled": "true" },
+      { "memory.dir": 5 },
+      { "memory.dir": "a\nb" },
       { "access.allowedOrigins": ["a,b"] },
       { "access.allowedOrigins": [1] },
     ]) {

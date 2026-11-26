@@ -88,7 +88,7 @@ const ENV_NAMES = [
   "LLM_PROVIDER",
   "LLM_MODEL",
   "FISH_API_KEY",
-  "MEM0_QDRANT_HOST",
+  "MEM0_ENABLED",
 ];
 const saved = new Map<string, string | undefined>();
 let logs: CapturedLogs;

@@ -17,15 +17,26 @@ import {
   resetSettings,
   sourceFolder,
 } from "@eidolon/config";
-import { acquireLock, canonicalPath, embedCachePath, indexLockKey } from "@eidolon/ingest";
+import {
+  acquireLock,
+  canonicalPath,
+  embedCachePath,
+  indexLockKey,
+  ingestFacts,
+} from "@eidolon/ingest";
 import { type EmbeddingModel, EmbeddingUsage } from "@eidolon/providers";
 import {
+  closeAllReadTables,
   DEFAULT_EMBED_MODEL,
-  type LanceTable,
   openTable,
   resetEmbeddingModel,
+  tableExists,
+  type ZvecTable,
 } from "@eidolon/retrieval";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { portIngestLogs } from "../../../packages/ingest/test/ingest_streams_golden.ts";
+import { expectVectorsClose } from "../../../packages/retrieval/test/helpers.ts";
+import { fakeVector } from "../../../packages/retrieval/test/write_golden.ts";
 import { ingestFactsMain, parseIngestFactsArgs } from "../src/ingest_facts.ts";
 import { blockNetwork, captureIo, captureLogs, placehold, substitute } from "./helpers.ts";
 
@@ -63,6 +74,7 @@ const ISOLATED = [
   "EMBED_BASE_URL",
   "EMBED_API_KEY",
   "OPENROUTER_API_KEY",
+  "INDEX_PATH",
   "LANCEDB_PATH",
 ];
 const saved = new Map<string, string | undefined>();
@@ -79,6 +91,7 @@ beforeEach(() => {
   logs = captureLogs();
 });
 afterEach(() => {
+  closeAllReadTables();
   logs.stop();
   for (const [key, value] of saved) {
     if (value === undefined) delete process.env[key];
@@ -96,13 +109,7 @@ function fakeModel(calls: Call[]): EmbeddingModel {
     async embed(texts, dimensions) {
       calls.push({ texts: [...texts], model: DEFAULT_EMBED_MODEL, dimensions });
       const tokens = texts.reduce((n, t) => n + [...t].length, 0);
-      const vectors = texts.map((text) => {
-        let sum = 0;
-        for (const ch of text) sum += ch.codePointAt(0) as number;
-        const base = sum % 97;
-        // `0 - base`, not `-base`: for a base of 0 the golden's vectors hold 0.0, never -0.0.
-        return [base / 7, (0 - base) / 3, 0.1 * base, 1 / (base + 3)];
-      });
+      const vectors = texts.map(fakeVector);
       return [
         vectors,
         new EmbeddingUsage({
@@ -116,54 +123,25 @@ function fakeModel(calls: Call[]): EmbeddingModel {
   };
 }
 
-interface Utf8Chunk {
-  readonly length: number;
-  readonly values: Uint8Array;
-  readonly valueOffsets: Int32Array;
-}
-
-/** A Utf8 column's strings as stored: apache-arrow's own decoder drops a leading U+FEFF. */
-function utf8Column(table: unknown, name: string): string[] {
-  const column = (table as { getChild(name: string): { data: Utf8Chunk[] } }).getChild(name);
-  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
-  return column.data.flatMap((chunk) =>
-    Array.from({ length: chunk.length }, (_, i) =>
-      decoder.decode(
-        chunk.values.subarray(chunk.valueOffsets[i] as number, chunk.valueOffsets[i + 1] as number),
-      ),
-    ),
-  );
-}
-
-/** The golden's table state: the row count, and digests of the rows as JSON and the vectors. */
-async function tableState(dbPath: string, name: string): Promise<Scenario["state"]> {
-  if (!existsSync(join(dbPath, `${name}.lance`))) return null;
-  const table = (await openTable(dbPath, name)) as LanceTable;
-  const data = await table.query().toArrow();
-  const text = Object.fromEntries(
-    ["id", "source", "date", "text", "tokens"].map((column) => [column, utf8Column(data, column)]),
-  );
-  const rows: Record<string, unknown>[] = [];
+/** The golden's table state: the row count, row JSON digest, raw vectors, and Zvec vector digest. */
+async function tableState(
+  dbPath: string,
+  name: string,
+): Promise<(NonNullable<Scenario["state"]> & { vectors: Float32Array }) | null> {
+  if (!tableExists(dbPath, name)) return null;
+  const table = (await openTable(dbPath, name)) as ZvecTable;
+  const back = table.readAll({ includeVectors: true });
   const vectors = createHash("sha256");
-  for (const [i, row] of [...data].entries()) {
-    const at = (column: string) => text[column]?.[i];
-    rows.push({
-      id: at("id"),
-      source: at("source"),
-      date: at("date"),
-      floor: row.floor,
-      text: at("text"),
-      tokens: at("tokens"),
-    });
-    const vector = row.vector.toArray() as Float32Array;
-    vectors.update(new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength));
-  }
+  vectors.update(
+    new Uint8Array(back.vectors.buffer, back.vectors.byteOffset, back.vectors.byteLength),
+  );
   return {
-    rows: rows.length,
+    rows: back.rows.length,
     rows_sha256: createHash("sha256")
-      .update(pyJsonDumps(rows, { ensureAscii: false }), "utf8")
+      .update(pyJsonDumps(back.rows, { ensureAscii: false }), "utf8")
       .digest("hex"),
     vectors_sha256: vectors.digest("hex"),
+    vectors: back.vectors,
   };
 }
 
@@ -192,6 +170,7 @@ describe("replays ingest_facts.py's main() over the synthetic fact files", () =>
     rmSync(work, { recursive: true, force: true });
   });
 
+  let coldVectorsSha = "";
   for (const scenario of golden.scenarios) {
     test(scenario.name, async () => {
       const calls: Call[] = [];
@@ -201,13 +180,36 @@ describe("replays ingest_facts.py's main() over the synthetic fact files", () =>
       const paths = { "<TMP>": canonicalPath(work) };
       const records = logs.records.map(([level, message]) => [level, placehold(message, paths)]);
       expect(records.filter(([, message]) => !INDEX_LINE.test(message as string))).toEqual(
-        scenario.logs,
+        portIngestLogs(scenario.logs),
       );
       expect(records.filter(([, message]) => INDEX_LINE.test(message as string))).toEqual([
         ["INFO", "Persona milky-green's index: <TMP>/index"],
       ]);
       expect(calls).toEqual(scenario.calls);
-      expect(await tableState(join(work, "index"), scenario.table)).toEqual(scenario.state);
+      const state = await tableState(join(work, "index"), scenario.table);
+      if (scenario.state === null) {
+        expect(state).toBeNull();
+      } else {
+        expect(state).not.toBeNull();
+        expect({ rows: state?.rows, rows_sha256: state?.rows_sha256 }).toEqual({
+          rows: scenario.state.rows,
+          rows_sha256: scenario.state.rows_sha256,
+        });
+        const loaded = ingestFacts.loadFacts(ingestFacts.resolveFactFiles(join(work, "facts")), {
+          minChars: scenario.name === "partial" ? 2 : 4,
+          stripPrefix: scenario.name !== "unstripped",
+        });
+        const expectedVecs = Float32Array.from(
+          loaded.rows.flatMap((row) => fakeVector(row.embed_input)),
+        );
+        expectVectorsClose(state?.vectors as Float32Array, expectedVecs);
+        if (scenario.name === "cold") coldVectorsSha = state?.vectors_sha256 as string;
+        else if (scenario.name === "unstripped" || scenario.name === "partial") {
+          expect(state?.vectors_sha256).not.toBe(coldVectorsSha);
+        } else {
+          expect(state?.vectors_sha256).toBe(coldVectorsSha);
+        }
+      }
       expect(cacheCount(join(work, "cache", "embed_cache.db"))).toBe(scenario.cache_count);
       expect(io.stdout()).toBe("");
       expect(io.stderr()).toBe("");
@@ -227,8 +229,8 @@ describe("arguments", () => {
     expect(io.stdout()).toContain("\n  --clear-cache         Delete every cached vector, of every");
     // ingest-streams' words, since both default to the index the bot reads.
     expect(io.stdout()).toContain(
-      "\n  --db-path DB_PATH     LanceDB directory (default: the index the bot reads:\n" +
-        "                        knowledge.index or $LANCEDB_PATH, else the persona's\n" +
+      "\n  --db-path DB_PATH     Zvec index directory (default: the index the bot reads:\n" +
+        "                        knowledge.index or $INDEX_PATH, else the persona's\n" +
         "                        index/ in the data home)\n",
     );
   });
@@ -387,7 +389,7 @@ describe("the index it writes", () => {
       .split("\n")
       .map((line) => JSON.parse(line));
     expect(events.at(-1)).toMatchObject({ type: "summary", ok: false, cancelled: true });
-    expect(existsSync(join(db, "persona_facts.lance"))).toBe(false);
+    expect(existsSync(join(db, "persona_facts.zvec"))).toBe(false);
     acquireLock(indexLockKey(db), "test")();
   });
 

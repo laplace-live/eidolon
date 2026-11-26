@@ -710,7 +710,10 @@ describe("facts and the index", () => {
 
   test("the index comes from its build records, for any persona", async () => {
     await call("POST", "/personas", NEW_PERSONA);
-    mkdirSync(join(personaHomeDir("aria"), "index", "persona_facts.lance"), { recursive: true });
+    mkdirSync(join(personaHomeDir("aria"), "index", "persona_facts.zvec", "b1"), {
+      recursive: true,
+    });
+    writeFileSync(join(personaHomeDir("aria"), "index", "persona_facts.zvec", "CURRENT"), "b1\n");
     write(
       "personas/aria/index/persona_facts.meta.json",
       JSON.stringify({
