@@ -5,7 +5,7 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type ReactNode, type SubmitEvent, useState } from "react";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
 import { FieldSkeletons, SectionCard } from "@/components/section-card";
@@ -174,7 +174,7 @@ export function SettingsCard({
     else setAsking({ values, question });
   }
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     setTouched(new Set(Object.keys(drafts)));
     if (invalid || !changed) return;

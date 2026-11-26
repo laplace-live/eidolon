@@ -5,7 +5,7 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { TriangleAlertIcon, XIcon } from "lucide-react";
+import { TriangleExclamationPointIcon, XIcon } from "lucide-react";
 import { useId } from "react";
 import { ErrorAlert } from "@/components/error-alert";
 import { FieldSkeletons, SectionCard } from "@/components/section-card";
@@ -135,7 +135,7 @@ export function McpServersCard() {
       description={t`Programs that give tasks more tools, from ${ph({ path })}. A task asks you before each call it makes to one, unless you chose Always for that tool.`}
     >
       <Alert>
-        <TriangleAlertIcon />
+        <TriangleExclamationPointIcon />
         <AlertTitle>{t`Only Add Programs You Trust`}</AlertTitle>
         <AlertDescription>{t`An MCP server is a program on this computer. Eidolon starts it with the command in mcp.json whenever a task begins, with your permissions and outside the task's folders. Each call asks you first, unless you chose Always for that tool. Every task reads how it describes its tools, and unlike a web page, that doesn't make what you allowed for good ask again.`}</AlertDescription>
       </Alert>
@@ -147,7 +147,7 @@ export function McpServersCard() {
         <>
           {servers.data.errors.map((error) => (
             <Alert key={error} variant="destructive">
-              <TriangleAlertIcon />
+              <TriangleExclamationPointIcon />
               <AlertTitle>{t`No MCP server starts until mcp.json is fixed`}</AlertTitle>
               <AlertDescription className="wrap-anywhere">{error}</AlertDescription>
             </Alert>

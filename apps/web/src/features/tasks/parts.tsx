@@ -6,9 +6,9 @@ import { ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import {
-  CircleAlertIcon,
   CircleCheckIcon,
   CircleDotIcon,
+  CircleExclamationPointIcon,
   CircleIcon,
   CirclePauseIcon,
   CircleSlashIcon,
@@ -47,7 +47,7 @@ import { nextPauseAt, pathIn, queuedLines } from "./state";
 export const ASSISTANT_SETTINGS = "/settings?tab=assistant";
 
 const STATUS_ICONS = {
-  "awaiting-approval": CircleAlertIcon,
+  "awaiting-approval": CircleExclamationPointIcon,
   running: LoaderCircleIcon,
   paused: CirclePauseIcon,
   interrupted: CirclePauseIcon,

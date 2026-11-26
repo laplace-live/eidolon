@@ -75,7 +75,7 @@ export async function followJob(
 }
 
 export function refreshJob(queryClient: QueryClient, id: string): Promise<JobSnapshot> {
-  return queryClient.fetchQuery({ ...jobQuery(id), staleTime: 0 });
+  return queryClient.query({ ...jobQuery(id), staleTime: 0 });
 }
 
 /** The view of job `id`'s events, live while it runs; null follows nothing. */

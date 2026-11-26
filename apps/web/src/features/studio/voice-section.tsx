@@ -1,7 +1,12 @@
 import { msg, ph } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AudioLinesIcon, CircleCheckIcon, CircleXIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  AudioLinesIcon,
+  CircleCheckIcon,
+  CircleXIcon,
+  TriangleExclamationPointIcon,
+} from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { ListCard, ListRow } from "@/components/list";
@@ -261,7 +266,7 @@ function CueAlert({ clash }: { readonly clash: CueClash }) {
       : t`${ph({ model: clash.model })} doesn't perform every delivery cue`;
   return (
     <Alert>
-      <TriangleAlertIcon />
+      <TriangleExclamationPointIcon />
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>{t`This prompt teaches delivery cues, such as [whispering] or paired tags, which only ${ph({ model: CUE_MODEL })} performs in full. Eidolon takes out the ones this model can't read, so it never speaks them, but her delivery is plainer. Pick ${ph({ model: CUE_MODEL })} for the whole performance.`}</AlertDescription>
     </Alert>

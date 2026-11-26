@@ -264,22 +264,19 @@ pipeline's dry run against the plan it emits).
   (`isolated-guard.test.ts` enforces it).
 - **Production sharp ownership:** `normalizeImage` (`apps/bot/src/images.ts`) relies on `apps/bot`'s
   own `sharp` dependency (`apps/bot/Dockerfile` prunes unused native binaries).
-- **werift needs four corrections, all in `packages/webrtc/src/patches.ts`.** Its prototype patch
-  is guarded with `Symbol.for("eidolon.werift.patched")`, so a second evaluation of the module
-  patches nothing (`packages/webrtc/test/werift.test.ts`).
-  1. It queries `stun.l.google.com` when no STUN server is configured. That put the origin's
-     public IP in every non-relay answer and, where UDP to Google is blocked, stalled every
-     answer by its 5 s STUN timeout. It now queries only a server the plan names.
-  2. It derives the connection state from ICE alone, so a browser hanging up (a DTLS
+- **werift uses `iceUseDefaultStunServer: false` in `packages/webrtc/src/peer.ts` plus three
+  corrections in `packages/webrtc/src/patches.ts` (`packages/webrtc/test/werift.test.ts`):**
+  - Without `iceUseDefaultStunServer: false`, werift queries `stun.l.google.com` when no STUN
+    server is configured, which would put the origin's public IP in non-relay answers and stall
+    answers behind UDP blocks by 5 s.
+  1. It derives the connection state from ICE alone, so a browser hanging up (a DTLS
      close_notify) went unnoticed until ICE consent expired about 30 s later, with the session
-     and its STT/TTS sockets still running. It now disconnects once every DTLS transport closes,
-     as aiortc does.
-  3. Relay-only uses werift's `"relay"` policy, which gathers nothing but the relay candidate.
-  4. werift fills a relay candidate's `raddr` with the TURN server's XOR-MAPPED-ADDRESS, which
-     is this host's public IP, so every answer is scrubbed to `raddr 0.0.0.0 rport 0`.
-
-  A fifth, ported from pipedog, sits in `packages/webrtc/src/peer.ts` under pipedog's flag: an
-  `error` listener on werift's UDP sockets, whose ICMP errors otherwise kill the process.
+     and its STT/TTS sockets still running. `closeWhenDtlsCloses` disconnects once every DTLS
+     transport closes, as aiortc does.
+  2. Relay-only uses werift's `"relay"` policy (`icePolicy`), which gathers nothing but the relay
+     candidate.
+  3. Answers pass through `scrubRelayRelatedAddresses` (`packages/turn/src/candidates.ts`),
+     normalizing any relay candidate's `raddr`/`rport` to `raddr 0.0.0.0 rport 0`.
 - **ICE servers and the Opus bitrate are set per peer.** `@eidolon/webrtc` builds each peer from
   its own offer's plan; the interleaved-offer test (`packages/webrtc/test/signalling.test.ts`)
   holds that two offers in flight never share one.

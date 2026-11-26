@@ -3,7 +3,13 @@
 import { msg, ph, plural, t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, FilePlusIcon, FileTextIcon, PencilIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  CheckIcon,
+  FilePlusIcon,
+  FileTextIcon,
+  PencilIcon,
+  TriangleExclamationPointIcon,
+} from "lucide-react";
 import { useCallback, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { ListCard, ListRow } from "@/components/list";
@@ -225,7 +231,7 @@ function FactsCard({ persona }: { readonly persona: PersonaSummary }) {
         ))}
       {state.gone.length > 0 && (
         <Alert>
-          <TriangleAlertIcon />
+          <TriangleExclamationPointIcon />
           <AlertTitle>{t`${plural(ph({ count: state.gone.length }), { one: `Her index still has facts from # removed file`, other: `Her index still has facts from # removed files` })}`}</AlertTitle>
           <AlertDescription>
             <p>

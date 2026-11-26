@@ -4,7 +4,7 @@
 import { msg, ph, plural } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChartColumnIcon, CircleAlertIcon, ReceiptIcon, TableIcon } from "lucide-react";
+import { ChartColumnIcon, CircleExclamationPointIcon, ReceiptIcon, TableIcon } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { EmptyState } from "@/components/empty-state";
@@ -183,7 +183,7 @@ export function Component() {
       {usage.isError && <ErrorAlert error={usage.error} />}
       {summary?.recording === false && (
         <Alert variant="destructive">
-          <CircleAlertIcon />
+          <CircleExclamationPointIcon />
           <AlertTitle>{t`Usage isn't being recorded`}</AlertTitle>
           <AlertDescription>
             <Trans>

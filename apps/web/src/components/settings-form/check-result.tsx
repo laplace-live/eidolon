@@ -2,7 +2,7 @@
 
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { CircleAlertIcon, CircleCheckIcon, CircleXIcon } from "lucide-react";
+import { CircleCheckIcon, CircleExclamationPointIcon, CircleXIcon } from "lucide-react";
 import type { ApiError, CheckResult } from "@/lib/api";
 import { formatUsd } from "@/lib/format";
 import { errorMessage } from "@/lib/labels";
@@ -22,7 +22,11 @@ const TONE_CLASS: Readonly<Record<Tone, string>> = {
   error: "text-destructive",
 };
 
-const TONE_ICON = { ok: CircleCheckIcon, warn: CircleAlertIcon, error: CircleXIcon } as const;
+const TONE_ICON = {
+  ok: CircleCheckIcon,
+  warn: CircleExclamationPointIcon,
+  error: CircleXIcon,
+} as const;
 
 export function CheckResultView({
   provider,
@@ -65,7 +69,7 @@ export function CheckResultView({
         const label = warningMessage(warning.code);
         return (
           <div key={warning.code} className={cn("flex items-start gap-2", TONE_CLASS.warn)}>
-            <CircleAlertIcon className="mt-0.5 size-4 shrink-0" />
+            <CircleExclamationPointIcon className="mt-0.5 size-4 shrink-0" />
             <span>
               {label ? t(label) : warning.message}
               {label && warning.message && (

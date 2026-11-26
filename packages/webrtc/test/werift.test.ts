@@ -1,46 +1,39 @@
-// @eidolon/webrtc's werift corrections: each patches werift once, however often it loads.
-import { join } from "node:path";
+// @eidolon/webrtc's werift configuration and corrections (docs/typescript.md).
+import { setTimeout as delay } from "node:timers/promises";
 import { describe, expect, test } from "vitest";
 import { Connection, UdpTransport } from "werift";
 import { closeWhenDtlsCloses } from "../src/patches.ts";
-// Patches werift as it loads, as patches.ts does.
-import "../src/peer.ts";
-import { setTimeout as delay } from "node:timers/promises";
 
-const SRC = join(import.meta.dirname, "..", "src");
-
-test("loading a patch again changes nothing", async () => {
-  const gatherCandidates = Connection.prototype.gatherCandidates;
-  // A private method, which the patch wraps.
-  const udp = UdpTransport.prototype as unknown as { init: unknown };
-  const udpInit = udp.init;
-  // Each module that patches, evaluated a second time, as a second copy of its package would be.
-  await import(`${join(SRC, "patches.ts")}?again`);
-  await import(`${join(SRC, "peer.ts")}?again`);
-  expect(Connection.prototype.gatherCandidates).toBe(gatherCandidates);
-  expect(udp.init).toBe(udpInit);
-});
-
-describe("the werift patches", () => {
-  test("a connection with no STUN server gathers host candidates only, without waiting", async () => {
-    const connection = new Connection(true, { useIpv6: false });
+describe("the werift corrections", () => {
+  test("a connection with useDefaultStunServer: false gathers host candidates only, without waiting", async () => {
+    const connection = new Connection(true, { useDefaultStunServer: false, useIpv6: false });
     const started = performance.now();
     await connection.gatherCandidates();
     expect(performance.now() - started).toBeLessThan(1000);
-    expect(connection.stunServer).toBeUndefined();
+    expect(connection.stunServers).toEqual([]);
     expect(connection.localCandidates.map((candidate) => candidate.type)).not.toContain("srflx");
     await connection.close();
   });
 
   test("a configured STUN server is kept", async () => {
     const connection = new Connection(true, {
-      stunServer: ["stun.example", 3478],
+      stunServers: [["stun.example", 3478]],
+      useDefaultStunServer: false,
       useIpv4: false,
       useIpv6: false,
     });
     await connection.gatherCandidates();
-    expect(connection.stunServer).toEqual(["stun.example", 3478]);
+    expect(connection.stunServers).toEqual([["stun.example", 3478]]);
     await connection.close();
+  });
+
+  test("UdpTransport attaches an error listener to its socket", async () => {
+    const transport = await UdpTransport.init("udp4");
+    try {
+      expect(transport.socket.listenerCount("error")).toBeGreaterThan(0);
+    } finally {
+      await transport.close();
+    }
   });
 
   function fakePeer(states: string[]) {

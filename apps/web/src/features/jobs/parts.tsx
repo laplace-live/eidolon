@@ -14,7 +14,7 @@ import {
   OctagonXIcon,
   PlayIcon,
   SquareIcon,
-  TriangleAlertIcon,
+  TriangleExclamationPointIcon,
 } from "lucide-react";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -82,7 +82,7 @@ const OUTCOME_ICONS = {
   running: LoaderCircleIcon,
   succeeded: CircleCheckIcon,
   failed: CircleXIcon,
-  crashed: TriangleAlertIcon,
+  crashed: TriangleExclamationPointIcon,
   cancelled: CircleSlashIcon,
   interrupted: CirclePauseIcon,
 } as const satisfies Record<Outcome, unknown>;

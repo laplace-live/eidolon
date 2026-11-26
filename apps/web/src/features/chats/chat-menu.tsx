@@ -1,7 +1,7 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { EllipsisIcon, PencilIcon, Settings2Icon, Trash2Icon } from "lucide-react";
-import { type FormEvent, useId, useRef, useState } from "react";
+import { type SubmitEvent, useId, useRef, useState } from "react";
 import { useMatch, useNavigate } from "react-router";
 import {
   AlertDialog,
@@ -53,7 +53,7 @@ function RenameForm({
   const [title, setTitle] = useState(name);
   const trimmed = title.trim();
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     if (trimmed !== "" && !pending) onRename(trimmed);
   }

@@ -14,7 +14,7 @@ import {
   InfoIcon,
   PlayIcon,
   RefreshCwIcon,
-  TriangleAlertIcon,
+  TriangleExclamationPointIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { SectionCard } from "@/components/section-card";
@@ -392,7 +392,7 @@ export function VideosSection({ persona }: { readonly persona: PersonaSummary })
         >
           {cookieTrouble && (
             <Alert variant="destructive">
-              <TriangleAlertIcon />
+              <TriangleExclamationPointIcon />
               <AlertTitle>{t`yt-dlp couldn't read the browser's cookies, or the site asked for them.`}</AlertTitle>
               <AlertDescription>{t`The last download failed on cookies. Pick another browser, a cookies file or none, then download again.`}</AlertDescription>
             </Alert>

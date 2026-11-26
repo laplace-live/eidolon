@@ -160,7 +160,7 @@ describe("production never loads the local app", () => {
       ([, version]) => !version.startsWith("workspace:"),
     );
     expect(Object.fromEntries(external)).toEqual({
-      "@modelcontextprotocol/sdk": "1.32.1",
+      "@modelcontextprotocol/sdk": "1.32.2",
       sharp: "0.35.5",
       "smol-toml": "1.9.1",
       srvx: "1.0.8",

@@ -5,7 +5,7 @@ import { msg, ph } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AudioLinesIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { type ReactNode, type SubmitEvent, useId, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
@@ -274,7 +274,7 @@ function StyleForm({
   const builtIn = builtInHint(typed, styles.builtInHints);
   const replacing = problem === null ? (replaced(styles, typed)?.env ?? null) : null;
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     setShowErrors(true);
     if (problem !== null || noVoice) return;

@@ -1,7 +1,7 @@
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { type FormEvent, useId, useState } from "react";
+import { type SubmitEvent, useId, useState } from "react";
 import { useRevalidator } from "react-router";
 import { AppMark } from "@/components/app-mark";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
@@ -63,7 +63,7 @@ function LinkScreen({ expired }: { readonly expired: boolean }) {
   const [problem, setProblem] = useState<MessageDescriptor | null>(expired ? EXPIRED : null);
   const [busy, setBusy] = useState(false);
 
-  async function submit(event: FormEvent) {
+  async function submit(event: SubmitEvent) {
     event.preventDefault();
     const code = linkCodeIn(link);
     if (!code) {

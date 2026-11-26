@@ -1,6 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CircleCheckIcon, CircleXIcon, InfoIcon, TriangleAlertIcon } from "lucide-react";
+import { CircleCheckIcon, CircleXIcon, InfoIcon, TriangleExclamationPointIcon } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { ListCard, ListRow } from "@/components/list";
@@ -20,7 +20,7 @@ import { CHECK_TITLES, FIX_LABELS, READY_TEXT } from "./readiness-labels";
 const TONES: Readonly<Record<Tone, { icon: typeof InfoIcon; className: string }>> = {
   ok: { icon: CircleCheckIcon, className: "text-success" },
   info: { icon: InfoIcon, className: "text-muted-foreground" },
-  warn: { icon: TriangleAlertIcon, className: "text-warning" },
+  warn: { icon: TriangleExclamationPointIcon, className: "text-warning" },
   error: { icon: CircleXIcon, className: "text-destructive" },
 };
 

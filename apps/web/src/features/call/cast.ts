@@ -28,13 +28,11 @@ export async function loadCastModel(
   canvas: HTMLCanvasElement,
   signal: AbortSignal,
 ): Promise<LoadedModel | null> {
-  const list = await queryClient.fetchQuery({ ...characterModelsQuery(member.id), staleTime: 0 });
+  const list = await queryClient.query({ ...characterModelsQuery(member.id), staleTime: 0 });
   signal.throwIfAborted();
   const model = list.models.find(({ id }) => id === list.active);
   if (model === undefined) return null;
-  const bytes = await queryClient.fetchQuery(
-    characterModelFileQuery(member.id, model.id, model.sha256),
-  );
+  const bytes = await queryClient.query(characterModelFileQuery(member.id, model.id, model.sha256));
   signal.throwIfAborted();
   const { loadPsd2liveModel } = await import("./avatar-loader");
   const loaded = await loadPsd2liveModel(canvas, new Uint8Array(bytes));

@@ -10,9 +10,9 @@ import {
   SquareSlashIcon,
 } from "lucide-react";
 import {
-  type FormEvent,
   type KeyboardEvent,
   type ReactNode,
+  type SubmitEvent,
   useEffect,
   useId,
   useLayoutEffect,
@@ -276,7 +276,7 @@ export function Composer({
     else pick(list.at, entry.name);
   }
 
-  function submit(event?: FormEvent) {
+  function submit(event?: SubmitEvent) {
     event?.preventDefault();
     if ((trimmed === "" && !attached) || inCall) return;
     const parsed = parseCommand(trimmed, skills);

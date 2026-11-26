@@ -18,7 +18,7 @@ import {
   resolveDbPath,
   streamArchiveSearchParams,
 } from "@eidolon/retrieval";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
   ListPromptsRequestSchema,
@@ -125,12 +125,11 @@ async function resolveCallerTier(
   return { quota: deps.anonQuota, key: clientIp, name: "anonymous" };
 }
 
-function buildServer(deps: Deps, tier: CallerTier): McpServer {
-  const mcp = new McpServer(
+function buildServer(deps: Deps, tier: CallerTier): Server {
+  const server = new Server(
     { name: SERVER_NAME, version: "" },
     { capabilities: CAPABILITIES, instructions: instructions(activePersona().identity.name) },
   );
-  const { server } = mcp;
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: toolDefinitions() }));
   server.setRequestHandler(ListResourcesRequestSchema, () => ({ resources: [] }));
   server.setRequestHandler(ListResourceTemplatesRequestSchema, () => ({ resourceTemplates: [] }));
@@ -149,7 +148,7 @@ function buildServer(deps: Deps, tier: CallerTier): McpServer {
     }
     return callTool(deps.tools, params.name, args, tier);
   };
-  return mcp;
+  return server;
 }
 
 async function dispatch(

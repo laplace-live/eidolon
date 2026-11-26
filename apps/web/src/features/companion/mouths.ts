@@ -9,7 +9,7 @@ export const VOICE_FPS = 60;
 
 const SILENCE_DB = -180;
 
-const clamp01 = (value: number): number => (value < 0 ? 0 : value > 1 ? 1 : value);
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 const performanceNow = () => performance.now();
 

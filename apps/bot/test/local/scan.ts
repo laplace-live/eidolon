@@ -1,6 +1,6 @@
 // The import scan the boundary tests share: what a source file loads once TypeScript erases its types.
 import { readFileSync } from "node:fs";
-import { parseAst } from "vitest/node";
+import { parseAst } from "rolldown/parseAst";
 
 interface AstNode {
   readonly type: string;

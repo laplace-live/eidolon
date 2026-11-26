@@ -5,7 +5,14 @@ import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { ImagePlusIcon, ImagesIcon, Trash2Icon, UserPlusIcon, UsersIcon } from "lucide-react";
-import { type DragEvent, type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
+import {
+  type DragEvent,
+  type ReactNode,
+  type SubmitEvent,
+  useEffect,
+  useId,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
 import { SectionCard, SectionCardSkeleton } from "@/components/section-card";
@@ -224,7 +231,7 @@ function FriendDialog({
   const target = file === null ? "" : renamed(file.name, name);
   const problem = file === null || name.trim() === "" ? null : uploadProblem(file, target, lang);
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     if (file !== null && name.trim() !== "" && problem === null) onUpload(file, target);
   }

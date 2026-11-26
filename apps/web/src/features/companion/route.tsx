@@ -319,7 +319,7 @@ class Control {
     const persona = this.#live.persona?.id;
     if (persona === undefined) return this.#live.models;
     const read = this.#queryClient
-      .fetchQuery({ ...characterModelsQuery(persona), staleTime: 0 })
+      .query({ ...characterModelsQuery(persona), staleTime: 0 })
       .catch(() => undefined);
     const late = new Promise<undefined>((settle) => setTimeout(settle, MENU_READ_MS));
     return (await Promise.race([read, late])) ?? this.#live.models;

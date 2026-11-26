@@ -4,7 +4,7 @@ import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import {
   CameraIcon,
-  CircleAlertIcon,
+  CircleExclamationPointIcon,
   HourglassIcon,
   ListTodoIcon,
   MessageSquareShareIcon,
@@ -386,7 +386,7 @@ function Failed({
     <div className="flex flex-col items-start gap-1.5 text-sm">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span className="flex items-center gap-1.5 text-destructive">
-          <CircleAlertIcon className="size-4 shrink-0" />
+          <CircleExclamationPointIcon className="size-4 shrink-0" />
           {t`${name} couldn't answer.`}
         </span>
         {onRetry && (

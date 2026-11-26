@@ -210,6 +210,7 @@ const OPUS = new RTCRtpCodecParameters({
 class Client {
   readonly pc = new RTCPeerConnection({
     iceServers: [],
+    iceUseDefaultStunServer: false,
     codecs: { audio: [OPUS], video: [useVP8()] },
   });
   readonly audio: RTCRtpTransceiver;

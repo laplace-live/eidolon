@@ -51,12 +51,12 @@ process.stdout.write(seen);`,
 }
 
 describe("onnx sessions", () => {
-  test("the ORT build is the pinned 1.30.0: another shifts Smart Turn's probabilities", async () => {
+  test("the ORT build is the pinned 1.31.1: another shifts Smart Turn's probabilities", async () => {
     // Through sharedSession first, so ORT loads as the bot loads it: after its telemetry is off.
     await sharedSession(SILERO_MODEL);
     const mod: any = await import("onnxruntime-node");
     const ort = mod.InferenceSession ? mod : mod.default;
-    expect(ort.env.versions).toEqual({ common: "1.30.0", node: "1.30.0" });
+    expect(ort.env.versions).toEqual({ common: "1.31.1", node: "1.31.1" });
   });
 
   test("ORT's telemetry is off by the time it loads, where its getenv reads it", async () => {

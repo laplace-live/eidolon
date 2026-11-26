@@ -4,7 +4,7 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useMutation } from "@tanstack/react-query";
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type SubmitEvent, useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
 import { Button } from "@/components/ui/button";
@@ -81,7 +81,7 @@ export function NewSkillDialog({ open, folder, skills, onClose, onAdded }: NewSk
   const instructionsProblem = instructions.trim() === "" ? t`A skill needs instructions.` : null;
   const busy = save.isPending;
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     setTried(true);
     if (nameProblem === null && descriptionProblem === null && instructionsProblem === null) {

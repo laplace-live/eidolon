@@ -3,7 +3,7 @@
 
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { ListTodoIcon, SettingsIcon, TriangleAlertIcon } from "lucide-react";
+import { ListTodoIcon, SettingsIcon, TriangleExclamationPointIcon } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { PersonaAvatar } from "@/components/avatar";
@@ -46,7 +46,7 @@ function NotReadyNotice({ assistant }: { readonly assistant: AssistantStatus }) 
     >
       <div className="flex min-w-0 flex-1 basis-72 items-start gap-3.5">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning [&_svg]:size-4">
-          <TriangleAlertIcon aria-hidden />
+          <TriangleExclamationPointIcon aria-hidden />
         </span>
         <div className="flex min-w-0 flex-col gap-0.5 pt-1.5 text-sm">
           <p className="font-medium leading-5">{t`Tasks can't start yet`}</p>

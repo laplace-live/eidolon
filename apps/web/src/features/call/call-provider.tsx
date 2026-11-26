@@ -102,7 +102,7 @@ export function CallProvider({ children }: { readonly children: ReactNode }): Re
 
   // While this tab's call is up, the chat holds no other: the call a read made then says it holds
   // is this one. Neither the offer's answer nor the page's clock names it, and the cached log may
-  // still name a call a killed server never ended. A read already in flight, which fetchQuery would
+  // still name a call a killed server never ended. A read already in flight, which query() would
   // hand back, may have started before the call was live, so it is cancelled first.
   const live = phase.name === "live";
   const chatId = target?.kind === "chat" ? target.chatId : null;
@@ -112,7 +112,7 @@ export function CallProvider({ children }: { readonly children: ReactNode }): Re
     const query = chatQuery(chatId);
     void (async () => {
       await queryClient.cancelQueries({ queryKey: query.queryKey, exact: true });
-      const read = await queryClient.fetchQuery({ ...query, staleTime: 0 }).catch(() => null);
+      const read = await queryClient.query({ ...query, staleTime: 0 }).catch(() => null);
       const held = read === null ? null : callOn(read);
       if (current && held !== null) setServerCall((placed) => placed ?? held.id);
     })();

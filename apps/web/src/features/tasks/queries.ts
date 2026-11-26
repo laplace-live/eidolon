@@ -53,7 +53,7 @@ export function fetchTask(id: string): Promise<TaskSnapshot> {
  * ended, those waiting on the owner too. Null when they can't be counted.
  */
 export function stoppedByTurningOff(queryClient: QueryClient): Promise<number | null> {
-  return queryClient.fetchQuery({ ...tasksQuery, staleTime: 0 }).then(
+  return queryClient.query({ ...tasksQuery, staleTime: 0 }).then(
     ({ tasks }) => tasks.filter((task) => !ended(task.status)).length,
     () => null,
   );

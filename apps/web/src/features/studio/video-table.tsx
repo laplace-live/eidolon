@@ -4,7 +4,7 @@ import type { PlanVideo } from "@eidolon/ingest/progress";
 import { ph, plural, t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { ExternalLinkIcon, VideoIcon } from "lucide-react";
-import { type FormEvent, memo, useId, useState } from "react";
+import { memo, type SubmitEvent, useId, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { SectionCardTable } from "@/components/section-card";
 import { Badge } from "@/components/ui/badge";
@@ -101,7 +101,7 @@ function DateDialog({
   const { t } = useLingui();
   const id = useId();
   const [date, setDate] = useState("");
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     if (video !== null && /^\d{4}-\d{2}-\d{2}$/.test(date)) onTranscribe(video, date);
   }

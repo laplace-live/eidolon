@@ -283,7 +283,7 @@ export function ChatView({ id }: { readonly id: string }) {
   // Read afresh: the chat's list polls only every few seconds, and only once her log holds a task.
   const askStop = async () => {
     const read = await queryClient
-      .fetchQuery({ ...chatTasksQuery(id), staleTime: 0 })
+      .query({ ...chatTasksQuery(id), staleTime: 0 })
       .catch((error: unknown) => {
         toastError(error);
         return null;

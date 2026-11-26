@@ -28,6 +28,9 @@
   "linter": {
     "rules": {
       "preset": "recommended",
+      "performance": {
+        "useDomNodeTextContent": "off"
+      },
       "security": {
         "noDangerouslySetInnerHtml": "error"
       },
@@ -64,6 +67,22 @@
   "css": {
     "parser": {
       "tailwindDirectives": true
+    }
+  },
+  "markdown": {
+    "formatter": {
+      "enabled": false
+    },
+    "linter": {
+      "enabled": false
+    }
+  },
+  "yaml": {
+    "formatter": {
+      "enabled": false
+    },
+    "linter": {
+      "enabled": false
     }
   },
   "overrides": [
@@ -416,6 +435,16 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "apps/web/src/test/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noComponentHookFactories": "off"
           }
         }
       }

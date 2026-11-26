@@ -46,7 +46,7 @@ export function RestartButton({
   async function begin() {
     setChecking(true);
     const jobs = await queryClient
-      .fetchQuery({ ...jobsQuery, staleTime: 0 })
+      .query({ ...jobsQuery, staleTime: 0 })
       .then(runningJobs, () => null);
     setChecking(false);
     if (jobs?.length === 0) void restart();

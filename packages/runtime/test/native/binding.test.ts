@@ -842,7 +842,7 @@ describe.skipIf(!CAN_DIAL)("over a real peer", () => {
         candidates: PASS_THROUGH_RULES,
       },
     );
-    const peer = new RTCPeerConnection({ iceServers: [] });
+    const peer = new RTCPeerConnection({ iceServers: [], iceUseDefaultStunServer: false });
     try {
       peer.addTransceiver("audio", { direction: "sendrecv" });
       const channel = peer.createDataChannel("chat");

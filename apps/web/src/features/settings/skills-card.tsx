@@ -12,7 +12,7 @@ import {
   RefreshCwIcon,
   ScrollTextIcon,
   SearchIcon,
-  TriangleAlertIcon,
+  TriangleExclamationPointIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { EmptyState } from "@/components/empty-state";
@@ -164,7 +164,7 @@ function Skipped({ skipped }: { readonly skipped: SkillsResponse["skipped"] }) {
   return (
     <Collapsible className="overflow-hidden rounded-xl border">
       <CollapsibleTrigger className="group flex w-full items-center gap-3 px-4 py-3 text-left text-sm outline-none transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset">
-        <TriangleAlertIcon className="size-4 shrink-0 text-warning" aria-hidden />
+        <TriangleExclamationPointIcon className="size-4 shrink-0 text-warning" aria-hidden />
         <span className="flex-1 font-medium">
           {t`${plural(ph({ count: skipped.length }), { one: `# skill couldn't be loaded`, other: `# skills couldn't be loaded` })}`}
         </span>
@@ -299,14 +299,14 @@ export function SkillsCard() {
         <>
           {skills.data.errors.map((error) => (
             <Alert key={error} variant="destructive">
-              <TriangleAlertIcon />
+              <TriangleExclamationPointIcon />
               <AlertTitle>{t`Your switches can't be read`}</AlertTitle>
               <AlertDescription className="wrap-anywhere">{error}</AlertDescription>
             </Alert>
           ))}
           {unlisted > 0 && (
             <Alert>
-              <TriangleAlertIcon className="text-warning" />
+              <TriangleExclamationPointIcon className="text-warning" />
               <AlertTitle>{t`Tasks' list of skills is full`}</AlertTitle>
               <AlertDescription>
                 {t`${plural(ph({ count: unlisted }), { one: `A task lists 150 skills, or about 4,500 tokens of them, at most, so # skill that is on is left out. Switch off skills tasks don't need.`, other: `A task lists 150 skills, or about 4,500 tokens of them, at most, so # skills that are on are left out. Switch off skills tasks don't need.` })}`}

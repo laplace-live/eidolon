@@ -47,7 +47,7 @@ and that the host is one of them; a call that fails the check fails as `Bot sess
 **Warm-up:** `warmAudioModels()` loads both models and the resampler before the server listens:
 `models/silero_vad.onnx` and `models/smart-turn-v3.2-cpu.onnx` (`voiceModels()`, through
 `@eidolon/config`'s `voiceModelsDir()`; the npm package ships them in `data/models/`), on the
-pinned onnxruntime-node 1.30.0. ORT's telemetry is off (`ORT_DISABLE_TELEMETRY=1`): an upload in
+pinned onnxruntime-node 1.31.1. ORT's telemetry is off (`ORT_DISABLE_TELEMETRY=1`): an upload in
 flight at exit crashed the bot (exit 134). `src/input/onnx.ts` sets it before ORT first loads,
 unless the environment set it.
 

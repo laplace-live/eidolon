@@ -1032,10 +1032,7 @@ fails to compile when the union grows without it.
 `zh-Hans.po`, or it shows in English. A message's id is its English text, with any `context` that
 sets two meanings of one word apart (`t({ message: "Done", context: "job status" })`), so renaming
 a string orphans its translation unless you update its `msgid` in `zh-Hans.po` across every call
-site before re-extracting. **Never nest a `t` inside another `t`'s placeholder** — the native macro
-transform leaves the inner one uncompiled and renders nothing
-([lingui/swc-plugin#284](https://github.com/lingui/swc-plugin/issues/284)); hoist it into a
-variable first. Nothing compiles the catalogs by hand: the Vite plugin turns `.po` imports into
+site before re-extracting. Nothing compiles the catalogs by hand: the Vite plugin turns `.po` imports into
 one chunk per language, and `locales/i18n.ts` loads the one in use before the first render. The
 language is the one the viewer last picked in this browser (`localStorage`'s `eidolon.lang`), else
 the first Chinese or English entry in the browser's languages, else English.

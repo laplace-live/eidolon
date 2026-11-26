@@ -129,7 +129,7 @@ function parseHms(b: Cursor, end: number, out: number[]): number {
     b.pos--;
   }
   const remains = end - b.pos;
-  const take = remains >= 6 ? 6 : remains;
+  const take = Math.min(6, remains);
   const fraction = b.digits(take);
   if (fraction === null) return -3;
   out[3] = fraction * 10 ** (6 - take);

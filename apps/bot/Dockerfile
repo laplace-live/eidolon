@@ -51,7 +51,7 @@ ARG TARGETARCH
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod --ignore-scripts --store-dir /pnpm/store \
       --filter '!@laplace.live/eidolon-sdk' \
- && ORT="$(echo node_modules/.pnpm/onnxruntime-node@1.30.*/node_modules/onnxruntime-node/bin/napi-v6)" \
+ && ORT="$(echo node_modules/.pnpm/onnxruntime-node@1.31.*/node_modules/onnxruntime-node/bin/napi-v6)" \
  && rm -rf "$ORT/darwin" "$ORT/win32" \
            "$ORT/linux/$(if [ "$TARGETARCH" = arm64 ]; then echo x64; else echo arm64; fi)"
 

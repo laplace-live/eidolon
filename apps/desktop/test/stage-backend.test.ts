@@ -658,16 +658,10 @@ describe("onnxruntime-node", () => {
     "darwin/arm64": [
       "onnxruntime_binding.node",
       "libonnxruntime.1.dylib",
-      "libonnxruntime.1.30.0.dylib",
+      "libonnxruntime.1.31.1.dylib",
     ],
     "linux/x64": ["onnxruntime_binding.node", "libonnxruntime.so.1"],
-    "win32/x64": [
-      "onnxruntime_binding.node",
-      "onnxruntime.dll",
-      "DirectML.dll",
-      "dxcompiler.dll",
-      "dxil.dll",
-    ],
+    "win32/x64": ["onnxruntime_binding.node", "onnxruntime.dll", "DirectML.dll", "dxcompiler.dll"],
     "win32/arm64": ["onnxruntime_binding.node", "onnxruntime.dll"],
   };
   function modules(): string {

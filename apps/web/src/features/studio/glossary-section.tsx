@@ -1,6 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { TriangleAlertIcon } from "lucide-react";
+import { TriangleExclamationPointIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SectionCard } from "@/components/section-card";
@@ -67,7 +67,7 @@ export function GlossarySection({ persona }: { readonly persona: PersonaSummary 
           {area}
           {errors.length > 0 && (
             <Alert variant="destructive">
-              <TriangleAlertIcon />
+              <TriangleExclamationPointIcon />
               <AlertTitle>
                 {refused === null
                   ? t`This glossary doesn't parse`

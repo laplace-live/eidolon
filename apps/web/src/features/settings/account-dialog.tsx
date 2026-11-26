@@ -5,7 +5,7 @@ import { ph, t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftIcon } from "lucide-react";
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type SubmitEvent, useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { ErrorAlert } from "@/components/error-alert";
 import { KeyLinks } from "@/components/settings-form/account-key-field";
@@ -172,7 +172,7 @@ export function AccountDialog({ open, account, onClose }: AccountDialogProps) {
     },
   });
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     save.mutate();
   }

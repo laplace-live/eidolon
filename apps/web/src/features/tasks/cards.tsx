@@ -5,7 +5,12 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { CircleAlertIcon, CirclePauseIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  CircleExclamationPointIcon,
+  CirclePauseIcon,
+  ShieldCheckIcon,
+  TriangleExclamationPointIcon,
+} from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
 import { parseDraft } from "@/components/settings-form/controls";
@@ -332,7 +337,7 @@ function ApprovalPrompt({
     assistant !== undefined && blocked ? (
       <ModeNote assistant={assistant} compact={compact} />
     ) : undefined;
-  const icon = <CircleAlertIcon />;
+  const icon = <CircleExclamationPointIcon />;
 
   switch (pending.kind) {
     case "start":
@@ -426,7 +431,10 @@ function ApprovalPrompt({
           <p className="text-muted-foreground text-xs">{t`It runs in this folder:`}</p>
           <Asked>{task.brief.folder}</Asked>
           <p className="flex items-start gap-2 text-xs">
-            <TriangleAlertIcon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warning" />
+            <TriangleExclamationPointIcon
+              aria-hidden
+              className="mt-0.5 size-3.5 shrink-0 text-warning"
+            />
             <span>{t`Commands run as you, with no sandbox: this one can read, change or delete any of your files, not only this folder's, and reach the network.`}</span>
           </p>
           <StopsAt seconds={pending.timeout} />

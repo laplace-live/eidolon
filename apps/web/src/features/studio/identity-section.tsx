@@ -4,7 +4,7 @@ import { msg, ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CameraIcon, LocateFixedIcon } from "lucide-react";
-import { type FormEvent, useId, useMemo, useState } from "react";
+import { type SubmitEvent, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PersonaAvatar } from "@/components/avatar";
 import { SectionCard, SectionCardSkeleton } from "@/components/section-card";
@@ -235,7 +235,7 @@ function IdentityCard({
     onError: toastError,
   });
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     if (!dirty || missing) return;
     save.mutate({
@@ -377,7 +377,7 @@ function TimeZoneForm({
     onError: toastError,
   });
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     setTouched(true);
     if (error === null && row.path in values) save.mutate(values[row.path]);

@@ -1,7 +1,7 @@
 import { ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDownIcon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react";
+import { ChevronDownIcon, RotateCcwIcon, TriangleExclamationPointIcon } from "lucide-react";
 import { settingsQuery } from "@/components/settings-form/queries";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { statusQuery } from "@/lib/query";
@@ -51,7 +51,7 @@ export function FileWarnings({ warnings }: { readonly warnings: readonly string[
   return (
     <Collapsible className="overflow-hidden rounded-xl border bg-card">
       <CollapsibleTrigger className="group flex min-h-14 w-full items-center gap-3.5 px-4 py-3 text-left text-sm outline-none transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset sm:px-6">
-        <TriangleAlertIcon className="size-4 shrink-0 text-warning" aria-hidden />
+        <TriangleExclamationPointIcon className="size-4 shrink-0 text-warning" aria-hidden />
         <span className="flex-1 font-medium">
           {t`${plural(ph({ count: warnings.length }), { one: `The settings files have # problem Eidolon ignores`, other: `The settings files have # problems Eidolon ignores` })}`}
         </span>

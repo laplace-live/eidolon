@@ -9,7 +9,7 @@ import {
   HistoryIcon,
   RefreshCwIcon,
   SearchXIcon,
-  TriangleAlertIcon,
+  TriangleExclamationPointIcon,
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -113,7 +113,7 @@ function Failure({
   const { t } = useLingui();
   if (outcome !== "failed" && outcome !== "crashed") return null;
   const crashed = outcome === "crashed";
-  const Icon = crashed ? TriangleAlertIcon : CircleXIcon;
+  const Icon = crashed ? TriangleExclamationPointIcon : CircleXIcon;
   return (
     <div className="flex gap-3">
       <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />

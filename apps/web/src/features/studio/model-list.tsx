@@ -17,8 +17,8 @@ import {
 import {
   type ChangeEvent,
   type DragEvent,
-  type FormEvent,
   type ReactNode,
+  type SubmitEvent,
   useCallback,
   useId,
   useRef,
@@ -220,7 +220,7 @@ function RenameForm({
   // An empty name waits for its Save to go off, without a word.
   const shown = problem === null || problem === "empty" ? null : t(NAME_PROBLEMS[problem]);
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     if (problem === null && !pending) onRename(typed.trim());
   }

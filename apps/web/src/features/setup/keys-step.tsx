@@ -257,12 +257,12 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
       setDrafts({});
       setTried(false);
       await keys.save(needs.map((need) => need.account));
-      const fresh = await queryClient.fetchQuery(statusQuery);
+      const fresh = await queryClient.query(statusQuery);
       if (requiredKeyMissing(fresh)) {
         setMissing(true);
         return;
       }
-      const keyed = await queryClient.fetchQuery(accountsQuery);
+      const keyed = await queryClient.query(accountsQuery);
       const checked = keyNeeds(picked, keyed.accounts).filter((need) => need.set);
       const outcomes = await Promise.all(checked.map((need) => keys.check(need.account)));
       if (outcomes.every((outcome) => outcome.result?.ok)) onDone();

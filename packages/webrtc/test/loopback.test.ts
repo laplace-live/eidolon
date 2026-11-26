@@ -162,7 +162,7 @@ describe("the signalling server", () => {
           candidates: PASS_THROUGH_RULES,
         },
       );
-      const second = new RTCPeerConnection({ iceServers: [] });
+      const second = new RTCPeerConnection({ iceServers: [], iceUseDefaultStunServer: false });
       try {
         const strip = (sdp: string) => {
           const lines = sdp.split("\r\n");

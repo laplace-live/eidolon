@@ -6,8 +6,8 @@ import {
   ChevronDownIcon,
   HandIcon,
   type LucideIcon,
-  ShieldAlertIcon,
   ShieldCheckIcon,
+  ShieldExclamationPointIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +25,7 @@ import { useSetPermissions } from "./queries";
 const ICONS: Readonly<Record<PermissionLevel, LucideIcon>> = {
   ask: HandIcon,
   auto: ShieldCheckIcon,
-  full: ShieldAlertIcon,
+  full: ShieldExclamationPointIcon,
 };
 
 export function PermissionsPicker({

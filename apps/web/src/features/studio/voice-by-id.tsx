@@ -1,5 +1,5 @@
 import { useLingui } from "@lingui/react/macro";
-import { type FormEvent, useId, useState } from "react";
+import { type SubmitEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ export function VoiceById({
   const [draft, setDraft] = useState("");
   const [invalid, setInvalid] = useState(false);
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     const id = draft.trim().toLowerCase();
     if (!VOICE_ID.test(id)) {

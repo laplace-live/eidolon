@@ -39,7 +39,7 @@ const GATE_DB = 2;
 const SILENCE_DB = -180;
 
 function clamp01(value: number): number {
-  return value < 0 ? 0 : value > 1 ? 1 : value;
+  return Math.min(1, Math.max(0, value));
 }
 
 /** The loudness of samples (-1..1), in dBFS. */

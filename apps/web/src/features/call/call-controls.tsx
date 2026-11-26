@@ -1,6 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import { MicIcon, MicOffIcon, PhoneIcon, PhoneOffIcon, SendHorizontalIcon } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -38,7 +38,7 @@ export function MessageInput({
     }
   }, [autoFocus, disabled]);
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     if (disabled || text.trim() === "") return;
     onSend(text);

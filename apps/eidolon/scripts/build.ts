@@ -37,9 +37,10 @@ const LAUNCHER = "bin/eidolon.mjs";
 /**
  * What the bundles leave in node_modules, each a dependency of the package: files read beside the
  * code (onnxruntime-node's binaries, Zvec's CJS loader and per-platform bindings, and sharp's,
- * which its own per-platform packages carry), and packages whose prototypes or classes are shared:
- * @eidolon/webrtc patches werift's. libopus-wasm stays a package: inlined, the notices would carry
- * its MIT license but not libopus's, which its THIRD_PARTY_NOTICES.md holds.
+ * which its own per-platform packages carry), and packages that share runtime classes or ship
+ * additional license files (werift's THIRD_PARTY_LICENSES_LIBWEBRTC.txt). libopus-wasm stays a
+ * package: inlined, the notices would carry its MIT license but not libopus's, which its
+ * THIRD_PARTY_NOTICES.md holds.
  */
 const EXTERNAL = ["onnxruntime-node", "werift", "libopus-wasm", "@zvec/zvec", "sharp"];
 

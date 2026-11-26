@@ -111,7 +111,7 @@ Things you would break without being told. Subsystem-specific rules live in the 
 
 - **User-facing changes require a changeset in the same commit:** run `pnpm changeset add --minor|--patch <packages> -m "<kind>: <summary>"` (`--minor` for features/substantial changes, `--patch` for fixes; skip for CI, docs, tests, dev tooling, invisible refactors). Use `laplace-eidolon,@laplace.live/eidolon` together for bot/CLI/local changes, add `laplace-eidolon-desktop` when desktop users see it, and name `@laplace.live/eidolon-sdk` for SDK changes (`@eidolon/*` are ignored). Summary must start with `feat:`/`fix:`/`perf:`/`chore:` + one capitalized plain sentence under ~80 chars ([releasing.md](docs/releasing.md#changesets)).
 - **Never bump versions, push release tags, edit `CHANGELOG.md`/`changelog.json`, or publish to npm by hand.** Merging the Release PR automates it (`release.yml`). Every non-ignored push to `master` rebuilds `:edge` and Watchtower restarts production, dropping live calls.
-- **UI strings:** Write English Lingui macros in Title Case for controls/headings and sentence case for prose/errors, never nest `t` inside `t` (`lingui/swc-plugin#284`), run `pnpm i18n`, and update `zh-Hans.po` ([web-app.md](docs/web-app.md#strings-and-languages)).
+- **UI strings:** Write English Lingui macros in Title Case for controls/headings and sentence case for prose/errors, run `pnpm i18n`, and update `zh-Hans.po` ([web-app.md](docs/web-app.md#strings-and-languages)).
 - **Code discipline:** Fix defects with concrete triggers instead of speculative guards or single-caller abstractions; cite upstream bugs in comments; treat tool schemas and descriptions as live API surface.
 
 ## Comments

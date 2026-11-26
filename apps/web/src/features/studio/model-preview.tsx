@@ -9,10 +9,10 @@ import {
 } from "@laplace.live/eidolon-sdk/avatar";
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { CircleAlertIcon, RotateCcwIcon } from "lucide-react";
+import { CircleExclamationPointIcon, RotateCcwIcon } from "lucide-react";
 import {
-  type FormEvent,
   type RefObject,
+  type SubmitEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -187,7 +187,7 @@ function StageFailure({
         : t(STAGE_ERRORS.trap);
   return (
     <Alert variant="destructive">
-      <CircleAlertIcon />
+      <CircleExclamationPointIcon />
       <AlertTitle>{t`Her model can't show here`}</AlertTitle>
       <AlertDescription>{reason}</AlertDescription>
       <AlertAction>
@@ -275,7 +275,7 @@ export function ModelPreviewCard({
   );
   useFramingGestures(surface, framing && ready !== null, editBox);
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent) {
     event.preventDefault();
     if (!dirty || problem !== null || save.isPending) return;
     const sent = draft;

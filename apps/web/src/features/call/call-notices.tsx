@@ -1,10 +1,10 @@
 import { msg, ph, t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import {
-  CircleAlertIcon,
+  CircleExclamationPointIcon,
   InfoIcon,
   type LucideIcon,
-  TriangleAlertIcon,
+  TriangleExclamationPointIcon,
   Volume2Icon,
   XIcon,
 } from "lucide-react";
@@ -167,7 +167,7 @@ function Notice({
 function EndingNotice({ ending }: { readonly ending: Ending }) {
   return (
     <Notice
-      icon={ending.error ? CircleAlertIcon : InfoIcon}
+      icon={ending.error ? CircleExclamationPointIcon : InfoIcon}
       tone={ending.error ? "error" : "info"}
       title={ending.title}
     >
@@ -229,7 +229,7 @@ export function CallNotices({
       )}
       {botError && (
         <Notice
-          icon={TriangleAlertIcon}
+          icon={TriangleExclamationPointIcon}
           tone="error"
           title={t`${name} ran into an error`}
           onDismiss={call.dismissBotError}
@@ -248,7 +248,7 @@ export function CallNotices({
       )}
       {voice?.ok === false && (
         <Notice
-          icon={TriangleAlertIcon}
+          icon={TriangleExclamationPointIcon}
           tone="warning"
           title={
             voice.source === "env"

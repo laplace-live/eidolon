@@ -1,6 +1,6 @@
 # The models
 
-The two ONNX models the Ear runs on onnxruntime-node 1.30.0, as pipedog 0.10.0's
+The two ONNX models the Ear runs on onnxruntime-node 1.31.1, as pipedog 0.10.0's
 `@pipedog/audio-silero` and `@pipedog/audio-smart-turn` shipped them, byte for byte. Each is the
 file Pipecat ships. `THIRD_PARTY_LICENSES.md` holds their licenses.
 

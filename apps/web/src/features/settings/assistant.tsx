@@ -6,7 +6,7 @@ import type { MessageDescriptor } from "@lingui/core";
 import { msg, ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListTodoIcon, TriangleAlertIcon } from "lucide-react";
+import { ListTodoIcon, TriangleExclamationPointIcon } from "lucide-react";
 import { Link } from "react-router";
 import type { CardPath } from "@/components/settings-form/controls";
 import { type SaveQuestion, SettingsCard } from "@/components/settings-form/settings-card";
@@ -65,7 +65,7 @@ export function AssistantCard({ paths, title, description }: CardProps) {
     >
       {assistant?.enabled && !assistant.ready && (
         <Alert>
-          <TriangleAlertIcon />
+          <TriangleExclamationPointIcon />
           <AlertTitle>{t`Tasks can't start yet`}</AlertTitle>
           <AlertDescription>
             {t`Choose the account and model tasks run on here, and add a key for that account in Providers.`}
@@ -75,7 +75,7 @@ export function AssistantCard({ paths, title, description }: CardProps) {
       )}
       {assistant?.enabled && searchProblem !== null && (
         <Alert data-search-problem>
-          <TriangleAlertIcon />
+          <TriangleExclamationPointIcon />
           <AlertDescription className="wrap-anywhere">
             {t`Web search is off: ${ph({ problem: searchProblem })}`}
           </AlertDescription>
@@ -103,7 +103,7 @@ export function KindsCard({ paths, title, description }: CardProps) {
     <SettingsCard scope="app" paths={paths} title={title} description={description}>
       {fallbacks.map(({ kind, reason }) => (
         <Alert key={kind} data-kind-fallback={kind}>
-          <TriangleAlertIcon />
+          <TriangleExclamationPointIcon />
           <AlertTitle>{t(KIND_FALLBACKS[kind])}</AlertTitle>
           <AlertDescription className="wrap-anywhere">{reason}</AlertDescription>
         </Alert>

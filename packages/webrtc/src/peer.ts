@@ -8,28 +8,12 @@
 // trickled candidates, restart_pc, the states a call sees), and a call's transport over it.
 import { AsyncQueue, errorText, logger } from "@eidolon/config";
 import type { ServerIceServer } from "@eidolon/turn";
-import { RTCPeerConnection, RTCRtpCodecParameters, UdpTransport, useH264, useVP8 } from "werift";
+import { RTCPeerConnection, RTCRtpCodecParameters, useH264, useVP8 } from "werift";
 import { AudioIn } from "./audio_in.ts";
 import { AudioOut, type PcmSource } from "./audio_out.ts";
 import { Channel, SIGNALLING_TYPE } from "./channel.ts";
 import { OPUS_RTP_CLOCK_RATE, type OpusCodec } from "./opus.ts";
 import { icePolicy } from "./patches.ts";
-
-// werift's ICE sockets have no "error" listener. A UDP socket reports ICMP errors from earlier
-// sends (`recvmsg ECONNREFUSED` on Linux, for a STUN check to a candidate nobody listens on) as an
-// "error" event, which without a listener is an uncaught exception that kills the process. The
-// symbol keeps a second evaluation of this module from patching again.
-const UDP_PATCHED = Symbol.for("eidolon.werift.udp-patched");
-const udp = UdpTransport.prototype as unknown as { init: (this: UdpTransport) => Promise<void> };
-const udpInit = udp.init as typeof udp.init & { [UDP_PATCHED]?: boolean };
-if (udpInit[UDP_PATCHED] !== true) {
-  const init = async function (this: UdpTransport): Promise<void> {
-    this.socket.on("error", (e: Error) => logger.debug(`ICE UDP socket error: ${e.message}`));
-    return udpInit.call(this);
-  };
-  (init as { [UDP_PATCHED]?: boolean })[UDP_PATCHED] = true;
-  udp.init = init;
-}
 
 /**
  * The SCTP DATA chunk payload, so the worst-case datagram (SCTP 28 + DTLS/GCM ~29 + UDP 8 + IPv6
@@ -287,6 +271,8 @@ export class Peer {
         ...(server.username !== null ? { username: server.username } : {}),
         ...(server.credential !== null ? { credential: server.credential } : {}),
       })),
+      // Only a STUN server the plan names may be queried, never werift's fallback stun.l.google.com.
+      iceUseDefaultStunServer: false,
       // With the balanced policy, the screen share's transceiver is left off the bundled
       // transport, so its packets never reach it.
       bundlePolicy: "max-bundle",
