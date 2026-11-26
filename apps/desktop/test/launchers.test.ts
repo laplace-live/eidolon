@@ -524,7 +524,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   afterAll(() => {
     server.close();
     rmSync(scratch, { recursive: true, force: true });
-  });
+  }, 60_000);
 
   /** A home whose .npmrc names the registry served here, then `lines`. */
   function newHome(...lines: string[]): string {
@@ -1043,7 +1043,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     expect(files.filter((file) => /(?:^|\/)\.npmrc$/.test(file))).toEqual([".npmrc"]);
   }, 60_000);
 
-  test("rebuilds only deferred subdependencies without re-running already-built root scripts", async () => {
+  test("builds dependencies before root lifecycle scripts once per dlx cache install", async () => {
     publish(
       write(join(scratch, "once-dep"), {
         "package.json": JSON.stringify({
@@ -1052,8 +1052,10 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
           scripts: { postinstall: "node post.js" },
         }),
         "post.js": [
+          'const { appendFileSync, writeFileSync } = require("fs");',
           'const { join } = require("path");',
-          'require("fs").appendFileSync(join(process.env.EIDOLON_TEST_MARKS, "calls"), "dep\\n");',
+          'writeFileSync("built.txt", "dep-built");',
+          'appendFileSync(join(process.env.EIDOLON_TEST_MARKS, "calls"), "dep\\n");',
           "",
         ].join("\n"),
       }),
@@ -1070,8 +1072,11 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
           scripts: { postinstall: "node post.js" },
         }),
         "post.js": [
-          'const { join } = require("path");',
-          'require("fs").appendFileSync(join(process.env.EIDOLON_TEST_MARKS, "calls"), "app\\n");',
+          'const { appendFileSync, readFileSync } = require("fs");',
+          'const { dirname, join } = require("path");',
+          'const depDir = dirname(require.resolve("@eidolon-corp/once-dep/package.json"));',
+          'const built = readFileSync(join(depDir, "built.txt"), "utf8");',
+          'appendFileSync(join(process.env.EIDOLON_TEST_MARKS, "calls"), "app:" + built + "\\n");',
           "",
         ].join("\n"),
         "cli.js": "#!/usr/bin/env node\nconsole.log('once');\n",
@@ -1083,12 +1088,27 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
       ".npmrc": privateNpmrc(TOKEN),
     });
+    const home = newHome();
     const marks = mkdtempSync(join(scratch, "once-marks-"));
-    const ran = await launch("npx", ["-y", "@eidolon-corp/once-app"], {
+    const first = await launch("npx", ["-y", "@eidolon-corp/once-app"], {
+      home,
       cwd: project,
       env: { EIDOLON_TEST_MARKS: marks },
     });
-    expect([ran.status, ran.stdout, ran.stderr]).toEqual([0, "once\n", ""]);
-    expect(readFileSync(join(marks, "calls"), "utf8").trim().split("\n")).toEqual(["app", "dep"]);
+    expect([first.status, first.stdout, first.stderr]).toEqual([0, "once\n", ""]);
+    expect(readFileSync(join(marks, "calls"), "utf8").trim().split("\n")).toEqual([
+      "dep",
+      "app:dep-built",
+    ]);
+    const second = await launch("npx", ["-y", "@eidolon-corp/once-app"], {
+      home,
+      cwd: project,
+      env: { EIDOLON_TEST_MARKS: marks },
+    });
+    expect([second.status, second.stdout, second.stderr]).toEqual([0, "once\n", ""]);
+    expect(readFileSync(join(marks, "calls"), "utf8").trim().split("\n")).toEqual([
+      "dep",
+      "app:dep-built",
+    ]);
   }, 60_000);
 });

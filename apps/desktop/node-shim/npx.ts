@@ -880,11 +880,6 @@ function spawnErrorExit(error: NodeJS.ErrnoException): number {
   return error.code === "ENOENT" ? 127 : error.code === "EACCES" ? 126 : 1;
 }
 
-function pkgName(spec: string): string {
-  const at = spec.indexOf("@", spec.startsWith("@") ? spec.indexOf("/") + 1 : 0);
-  return at > 0 ? spec.slice(0, at) : spec;
-}
-
 function runPnpm(dir: string, args: readonly string[], env: NodeJS.ProcessEnv): Promise<PnpmRun> {
   const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", SHIM_BIN));
   const child = spawn(
@@ -915,6 +910,7 @@ async function install(packages: readonly string[]): Promise<string> {
   const sources = npmConfig(process.env, npmPrefix(process.cwd()).prefix, homedir());
   const settings = npxSettings(sources);
   if ("error" in settings) fail(settings.error);
+  const ignoreScripts = settings.includes("--config.ignore-scripts=true");
   const scratch = mkdtempSync(path.join(tmpdir(), "eidolon-npx-"));
   // pnpm reads the .npmrc of the project it finds itself in, not the one npm reads at its local
   // prefix, and expands no ${VAR} in one's registries or credentials. So it runs in a folder of
@@ -943,6 +939,7 @@ async function install(packages: readonly string[]): Promise<string> {
       scratch,
       [
         ...npxToPnpm(packages, settings, process.cwd(), homedir()),
+        ...(ignoreScripts ? [] : ["--config.ignore-scripts=true"]),
         "--",
         process.execPath,
         ...process.execArgv,
@@ -959,17 +956,13 @@ async function install(packages: readonly string[]): Promise<string> {
   }
   if (dlx.error !== undefined) fail(`couldn't start pnpm: ${dlx.error}`, dlx.code ?? 1);
   if (dlx.code !== 0 || !bin) return end(dlx.code || 1, dlx.signal);
-  // pnpm dlx clears dangerously_allow_all_builds in .modules.yaml's cache policy, leaving subdep
-  // install scripts unrun under ignoredBuilds; rebuild those packages alone unless ignore-scripts
-  // is set, so already-built root scripts never run twice.
-  if (settings.includes("--config.ignore-scripts=true")) return bin;
+  // pnpm dlx clears dangerously_allow_all_builds in .modules.yaml's cache policy, running root
+  // scripts before subdependencies can build; defer all scripts on dlx and rebuild --pending in
+  // dependency order unless ignore-scripts is set.
+  if (ignoreScripts) return bin;
   const cachedDir = path.dirname(path.dirname(bin));
-  const ignored = readJson(path.join(cachedDir, "node_modules", ".modules.yaml"))?.ignoredBuilds;
-  if (!Array.isArray(ignored) || ignored.length === 0) return bin;
-  const pkgs = [
-    ...new Set(ignored.filter((entry): entry is string => typeof entry === "string").map(pkgName)),
-  ];
-  if (pkgs.length === 0) return bin;
+  const pending = readJson(path.join(cachedDir, "node_modules", ".modules.yaml"))?.pendingBuilds;
+  if (!Array.isArray(pending) || pending.length === 0) return bin;
   const cachedNpmrc = path.join(cachedDir, ".npmrc");
   const wroteNpmrc = npmrc !== "" && !isFile(cachedNpmrc);
   let rebuilt: PnpmRun;
@@ -977,7 +970,7 @@ async function install(packages: readonly string[]): Promise<string> {
     if (wroteNpmrc) writeFileSync(cachedNpmrc, `${npmrc}\n`, { mode: 0o600 });
     rebuilt = await runPnpm(
       cachedDir,
-      ["--loglevel=error", ...settings, "rebuild", ...pkgs],
+      ["--loglevel=error", ...settings, "rebuild", "--pending"],
       baseEnv,
     );
   } finally {

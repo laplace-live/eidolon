@@ -825,8 +825,9 @@ The backend runs on the environment main reads, plus four variables of its own, 
 `scripts/stage-backend.ts` stages the backend in `apps/desktop/.stage/<target>/eidolon` for the
 host target (`darwin-arm64` on macOS arm64 or `win32-x64` on Windows x64, whose Visual Studio
 redistributable supplies its VC++ copies and whose install holds its `@pnpm/exe.*` binary):
-`pnpm build:desktop` and `node apps/desktop/scripts/stage-backend.ts --target <target>` both stage
-cleanly or leave nothing on failure.
+`pnpm build:desktop` stages the host target before building `dist/`, while
+`node apps/desktop/scripts/stage-backend.ts --target <target>` stages the requested target; a
+failed staging step removes its partial stage.
 
 - **What it holds:** what the npm package stages, through `apps/eidolon/scripts/build.ts`'s
   `stage()` (`dist/{server,cli,app}.js`, `web/`, `personas/`, `data/`, the built-in skills,
@@ -926,9 +927,10 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   bundled pnpm installs into its dlx cache, `npxSettings` making it install as npm does under the
   owner's npm config, which `npmConfig` reads from `npm_config_*` variables, the `.npmrc` at npm's
   local prefix and the user's, parsed and `${VAR}`-expanded as npm does: every dependency's install
-  scripts run (after `dlx` finishes, unless `ignore-scripts` is set, `npx.ts` checks
-  `node_modules/.modules.yaml` and runs `pnpm rebuild` in the cache folder when `ignoredBuilds` is
-  non-empty, since `dlx` resets `dangerously-allow-all-builds` when populating its cache), or none
+  scripts run in dependency order (unless `ignore-scripts` is set, `npx.ts` passes
+  `--config.ignore-scripts=true` to `dlx` and then runs `pnpm rebuild --pending` in the cache folder
+  when `node_modules/.modules.yaml` lists `pendingBuilds`, since `dlx` resets
+  `dangerously-allow-all-builds` when populating its cache), or none
   under `ignore-scripts`; the newest version is taken, or the newest
   `min-release-age` or `before` allows; git and tarball-URL dependencies install, but a dependency's
   own not where `allow-git` or `allow-remote` is `root` or `none`; `node_modules` is flat, so a
