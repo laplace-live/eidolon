@@ -509,3 +509,23 @@ mv data/mem0-cloud-export.json "$home/mem0/cloud-export.json"   # if you have on
 `*` skips dotfiles, so each folder's tracked `.gitignore` stays. On one volume each `mv` is
 instant; the cache moves with its `-wal` and `-shm` once checkpointed. Then
 `pnpm laplace-pipeline --persona <id> --dry-run` should find every transcript already done.
+
+## Prompt and code rules
+
+- **Persona edits go in `prompt.md` and `persona.yaml`, not in code.** `buildPersonaPrefix`
+  (`packages/context/src/persona.ts`) layers only per-session facts on top — current date, viewer
+  name, recent stream dates, and hints for voice, selfie, and assistant tools.
+- **The Chinese prompt text is load-bearing.** The `不要主动念` lines in `buildPersonaPrefix` stop
+  the model narrating the clock and reading UIDs aloud, tracking `prompt.md`'s vocabulary; do not
+  paraphrase them in passing. The same applies to the assistant's Chinese hints, task tool
+  descriptions, nudges, and status block (`apps/bot/src/local/tasks`).
+- **`change_voice_style` is named once,** as `VOICE_TOOL_NAME` in `packages/tools/src/voice.ts`, and
+  reaches the prompt via `voicePromptHint`, not `prompt.md`.
+- **Templates under `personas/` are published.** Never commit an index, source file, friend image,
+  character model, or viewer transcript there — those belong in the data home. Adding a new setting
+  requires adding its row to both `SETTINGS` (`packages/config/src/settings.ts`) and the tables
+  above (`packages/config/test/settings.test.ts` checks parity).
+- **Checking `prompt.md`'s 表演提示 markup or `FISH_MODEL`:** No scripted test covers delivery
+  tags ([the 2026-10-17 benchmark](benchmarks/2026-10-17-drama-3-markup/README.md) documents
+  `drama-3`). Hold a real call with `node apps/bot/scripts/e2e-call.ts --text "<question>"
+  --headful` (billed per character) and listen: any direction or tag spoken aloud is a leak.
