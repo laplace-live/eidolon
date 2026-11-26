@@ -52,7 +52,8 @@ server at a time ([desktop.md](desktop.md#attaching-to-a-server-already-on-the-d
   bin/eidolon           the CLI as assistant tasks' commands run it, which the local app writes
                         at each start; bin/ leads those commands' PATH (assistant.md)
   locks/                the offline tools' locks, released when their process exits
-  chats/<id>/           the local web app's text chats, 0700: chat.jsonl, meta.json, files/ (chat.md)
+  chats/<id>/           the local web app's text chats, 0700: chat.jsonl, meta.json, files/;
+                        chats/read.json, each chat's read watermark (chat.md)
   tasks/<id>/           assistant tasks' records; tasks/allowed-commands.json, the commands
                         allowed for good from their cards (assistant.md)
   skills/<name>/        the owner's Agent Skills, each a SKILL.md, which tasks may load, besides
@@ -412,9 +413,10 @@ it finds risky; `full` asks about none, so its commands run as you unasked. Any 
 as `ask`, with a warning. At every level a task's file tools stay out of the data home, your keys
 and `.git` folders; your Denies, spend pauses and No Web still hold.
 A task pauses to ask before going on each time its spend crosses a multiple of
-`assistant.spendPauseUsd` (default 1, in US dollars; 0 never pauses), or after its first request
+`assistant.spendPauseUsd` (default 10, in US dollars; 0 never pauses), or after its first request
 on a model with no known price, whose spend can't be counted, and keeps its requests within
-`assistant.contextTokens` tokens (default 128000).
+`assistant.contextTokens` tokens (default 0: 0 uses the model's full window, compacting when it
+fills).
 
 `assistant.quick`, `assistant.coding` and `assistant.research` name the account and model for the
 tasks she marks quick, coding or research. Unset, they follow `assistant.provider` and

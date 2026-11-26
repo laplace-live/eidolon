@@ -594,7 +594,9 @@ export function SettingField({
   const help = SETTING_HELP[row.path];
   const refusal = error === null ? undefined : INVALID_MESSAGES[error];
   const limits =
-    control.type === "integer" ? { min: control.min ?? "", max: control.max ?? "" } : undefined;
+    control.type === "integer" || control.type === "number"
+      ? { min: control.min ?? "", max: control.type === "integer" ? (control.max ?? "") : "" }
+      : undefined;
   return (
     <Field data-invalid={error !== null} data-disabled={locked} onBlur={onBlur}>
       <div className="flex flex-wrap items-center gap-2">

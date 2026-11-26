@@ -3,6 +3,7 @@
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
 import { ProviderHttpError, type UsageRecord } from "@eidolon/providers";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { estimateTokens } from "../src/task/context.ts";
 import { type TaskEntryDraft, UsageMeter } from "../src/task.ts";
 import type { MindChunk } from "../src/types.ts";
 import {
@@ -66,10 +67,10 @@ function billed(
   });
 }
 
-/** A task three big reads in, as a restart left it. */
-function history(): MemoryStore {
+/** A task several reads in, as a restart left it. */
+function history(turns: readonly string[] = ["a", "b", "c"], chars = 40_000): MemoryStore {
   const drafts: TaskEntryDraft[] = [{ type: "brief", brief: BRIEF }];
-  for (const value of ["a", "b", "c"]) {
+  for (const value of turns) {
     drafts.push(
       { type: "assistant", text: "", calls: [call(`c-${value}`, "read", { value })] },
       { type: "tool-start", callId: `c-${value}`, name: "read" },
@@ -77,7 +78,7 @@ function history(): MemoryStore {
         type: "tool-result",
         callId: `c-${value}`,
         name: "read",
-        content: "x".repeat(40_000),
+        content: "x".repeat(chars),
         isError: false,
       },
     );
@@ -114,25 +115,43 @@ describe("UsageMeter", () => {
     expect(warnings()).toEqual([`${UNPRICED}, so the task's spend pauses can't count it`]);
   });
 
-  test("counts the last request's whole input, what its provider cached included", () => {
+  test("counts the last request's whole input, what its provider cached included, plus output tokens", () => {
     const counted = meter();
-    expect(counted.lastInputTokens()).toBeNull();
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([null, null]);
     counted.tap(record(0, { inputTokens: 300, cachedTokens: 9000, cacheWriteTokens: 700 }));
-    expect(counted.lastInputTokens()).toBe(10_000);
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([10_000, null]);
     counted.tap(record(0, { inputTokens: 40, outputTokens: 5 }));
-    expect(counted.lastInputTokens()).toBe(40);
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([40, 5]);
     counted.tap(record(0, { outputTokens: 5 }));
-    expect(counted.lastInputTokens()).toBeNull();
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([null, 5]);
+  });
+
+  test("requestStarted clears per-attempt input, output, and record count without losing spend", () => {
+    const counted = meter(0.5);
+    counted.tap(record(0.25, { inputTokens: 1_000, outputTokens: 500 }));
+    counted.requestStarted();
+    expect([counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([null, null]);
+    counted.requestEnded();
+    expect(counted.unpriced()).toBe(UNREPORTED);
+    expect(counted.spentUsd()).toBeCloseTo(0.75, 10);
   });
 
   test("a request that ended with no usage record is one it can't count, its input unknown", () => {
     const counted = meter(0.5);
-    counted.tap(record(0.25, { inputTokens: 40 }));
+    counted.tap(record(0.25, { inputTokens: 40, outputTokens: 12 }));
     counted.requestEnded();
-    expect([counted.unpriced(), counted.lastInputTokens()]).toEqual([null, 40]);
+    expect([counted.unpriced(), counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([
+      null,
+      40,
+      12,
+    ]);
     // A server that ignores stream_options.include_usage.
     counted.requestEnded();
-    expect([counted.unpriced(), counted.lastInputTokens()]).toEqual([UNREPORTED, null]);
+    expect([counted.unpriced(), counted.lastInputTokens(), counted.lastOutputTokens()]).toEqual([
+      UNREPORTED,
+      null,
+      null,
+    ]);
     // The first it couldn't count says why.
     counted.tap(record(null));
     counted.requestEnded();
@@ -391,5 +410,540 @@ describe("runTask's unpriced pause", () => {
     // The overflow, the summary, a network error, a reply with no finish reason, the calls, the report.
     expect(seen).toEqual([0, 0, 1, 1, 1, 2]);
     expect(counted.ended).toBe(3);
+  });
+
+  test("pauses before compacting when a model_context_window_exceeded reply crosses spend pause or goes unpriced", async () => {
+    const cut = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ] satisfies MindChunk[];
+
+    const spend = meter(0.95);
+    const overSpend = billed(spend, 0.1, [cut, says("done")], [says("SUMMARY")]);
+    const spendOutcome = (
+      await drain(
+        taskRequest(overSpend, { store: history(), tools: [tool("read")], meter: spend, limits }),
+      )
+    ).outcome;
+    expect(spendOutcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.05; it pauses at every $1.00.",
+    });
+    expect(overSpend.summaryRequests).toHaveLength(0);
+
+    const missing = meter();
+    const unpriced = billed(missing, "none", [cut, says("done")], [says("SUMMARY")]);
+    const unpricedOutcome = (
+      await drain(
+        taskRequest(unpriced, {
+          store: history(),
+          tools: [tool("read")],
+          meter: missing,
+          limits,
+        }),
+      )
+    ).outcome;
+    expect(unpricedOutcome).toEqual({
+      status: "paused",
+      reason: "unpriced",
+      detail: detail(UNREPORTED),
+    });
+    expect(unpriced.summaryRequests).toHaveLength(0);
+  });
+
+  test("pauses between summary chunks once the first chunk crosses the spend pause", async () => {
+    const drafts: TaskEntryDraft[] = [{ type: "brief", brief: BRIEF }];
+    for (let i = 0; i < 60; i++) {
+      const id = `c-${i}`;
+      drafts.push(
+        { type: "assistant", text: "", calls: [call(id, "read", { value: String(i) })] },
+        { type: "tool-start", callId: id, name: "read" },
+        {
+          type: "tool-result",
+          callId: id,
+          name: "read",
+          content: "x".repeat(8_000),
+          isError: false,
+        },
+      );
+    }
+    const store = new MemoryStore(...drafts);
+    const counted = meter(0);
+    let summaries = 0;
+    const mind = new ScriptedMind([says("done")], {
+      summaries: [says("SUMMARY-1"), says("SUMMARY-2"), says("SUMMARY-3")],
+      after: (req) => {
+        if (req.system === "You summarize.") {
+          summaries++;
+          counted.tap(record(summaries === 1 ? 1.0 : 0.1));
+        }
+      },
+    });
+    const outcome = (
+      await drain(
+        taskRequest(mind, {
+          store,
+          tools: [tool("read")],
+          meter: counted,
+          limits: { contextTokens: 4_096, spendPauseUsd: 1, maskAfterTokens: 1_000 },
+        }),
+      )
+    ).outcome;
+    expect(outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.00; it pauses at every $1.00.",
+    });
+    expect(mind.summaryRequests).toHaveLength(1);
+    expect(mind.requests).toHaveLength(0);
+    expect(store.of("compaction")).toMatchObject([{ summary: "SUMMARY-1" }]);
+  });
+
+  test("does not leak outputTokens from a failed attempt into a retry's model_context_window_exceeded ceiling", async () => {
+    const counted = meter();
+    const reader = tool("read", async () => result("x".repeat(40_000)));
+    const cut: readonly MindChunk[] = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ];
+    const mind = new ScriptedMind(
+      [
+        calls([call("c-a", "read", { value: "a" })]),
+        calls([call("c-b", "read", { value: "b" })]),
+        () => {
+          counted.tap(record(0.01, { inputTokens: 20_000, outputTokens: 20_000 }));
+          throw new TypeError("fetch failed");
+        },
+        cut,
+        calls([call("c-c", "read", { value: "c" })]),
+        says("done"),
+      ],
+      {
+        summaries: [says("SUMMARY-1"), says("SUMMARY-2")],
+        after: (req) => {
+          if (req.system === "You summarize.") counted.tap(record(0.01, { inputTokens: 500 }));
+        },
+      },
+    );
+    const { outcome } = await drain(
+      taskRequest(mind, {
+        tools: [reader],
+        meter: counted,
+        sleep: async () => {},
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    // Retry emitted no usage, so #ceiling came from view.sized (~20k) without Attempt 1's 20k
+    // output tokens -> compactAbove (~15k) triggers proactive SUMMARY-2 before c-c's follow-up.
+    expect(mind.summaryRequests).toHaveLength(2);
+  });
+
+  test("persists partial slice summary and offset across spend pauses so continuing finishes the oversized turn without repeating slices", async () => {
+    const calls25 = Array.from({ length: 25 }, (_, i) =>
+      call(`r-${i}`, "read", { value: `t${i}` }),
+    );
+    const store = new MemoryStore({ type: "brief", brief: BRIEF });
+    const counted = meter(0);
+    const sizedReader = tool("read", async (args) => {
+      const value = String(args.value);
+      const size = value === "keep" ? 20_000 : 2_000;
+      return result(`${value}:${"x".repeat(size)}`, {
+        files: { read: [`/tmp/todo/${value}.txt`] },
+      });
+    });
+    const mind = new ScriptedMind(
+      [
+        calls(calls25),
+        calls([call("c-keep", "read", { value: "keep" })]),
+        new ProviderHttpError("anthropic", 400, "prompt is too long: 16000 tokens > 8192 maximum"),
+        says("done"),
+      ],
+      {
+        summaries: Array.from({ length: 10 }, (_, i) => says(`SUMMARY-${i + 1}`)),
+        after: (req) => {
+          counted.tap(record(req.system === "You summarize." ? 1.0 : 0, {}));
+        },
+      },
+    );
+    const req = taskRequest(mind, {
+      store,
+      tools: [sizedReader],
+      meter: counted,
+      limits: { contextTokens: 0, spendPauseUsd: 1, maskAfterTokens: 1e9 },
+    });
+
+    const p1 = await drain(req);
+    expect(p1.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.00; it pauses at every $1.00.",
+    });
+    const bigTurnSeq = store.of("assistant")[0]?.seq;
+    const keepSeq = store.of("assistant")[1]?.seq;
+    expect(store.of("compaction").at(-1)).toMatchObject({
+      summary: "SUMMARY-1",
+      firstKeptSeq: bigTurnSeq,
+      learned: { tokens: 8_192, model: "openrouter/test/model" },
+    });
+    expect(store.of("compaction").at(-1)?.slice).toBeUndefined();
+
+    const p2 = await drain(req);
+    expect(p2.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $2.00; it pauses at every $1.00.",
+    });
+    const slice1Offset = store.of("compaction").at(-1)?.slice?.offset ?? 0;
+    expect(slice1Offset).toBeGreaterThan(0);
+    expect(store.of("compaction").at(-1)?.firstKeptSeq).toBe(bigTurnSeq);
+
+    const p3 = await drain(req);
+    expect(p3.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $3.00; it pauses at every $1.00.",
+    });
+    const slice2Offset = store.of("compaction").at(-1)?.slice?.offset ?? 0;
+    expect(slice2Offset).toBeGreaterThan(slice1Offset);
+    expect(store.of("compaction").at(-1)?.firstKeptSeq).toBe(bigTurnSeq);
+
+    let final = p3;
+    while (final.outcome.status === "paused") final = await drain(req);
+    expect(final.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(store.of("compaction").at(-1)?.slice).toBeUndefined();
+    expect(store.of("compaction").at(-1)?.firstKeptSeq).toBe(keepSeq);
+
+    const prompts = mind.summaryRequests.map((entry) =>
+      String((entry.messages[0] as { content?: string } | undefined)?.content),
+    );
+    expect(prompts.filter((p) => p.includes("[Tool result]: t0:"))).toHaveLength(1);
+    expect(prompts.some((p) => p.includes("[Tool result]: t24:"))).toBe(true);
+  });
+
+  test("scopes persisted ceilings to overflow-learned limits on the same model, ignoring configured caps and model switches", async () => {
+    // Part A: compaction under a configured cap (30_000) does not restrict a later unlimited resume.
+    const configStore = history();
+    const countedA = meter(0);
+    const configMind = new ScriptedMind(
+      [
+        says("paused turn"),
+        calls([call("c-d", "read", { value: "d" })]),
+        calls([call("c-e", "read", { value: "e" })]),
+        says("done"),
+      ],
+      {
+        summaries: [says("SUMMARY-CFG")],
+        after: (req) => {
+          countedA.tap(record(req.system === "You summarize." ? 1.0 : 0, {}));
+        },
+      },
+    );
+    const cfgReader = tool("read", async () => result("x".repeat(80_000)));
+    const firstPause = await drain(
+      taskRequest(configMind, {
+        store: configStore,
+        tools: [cfgReader],
+        meter: countedA,
+        limits: { contextTokens: 30_000, spendPauseUsd: 1, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(firstPause.outcome).toMatchObject({ status: "paused", reason: "spend" });
+    expect(configStore.of("compaction").at(-1)?.learned).toBeUndefined();
+
+    const resumedUnlimited = await drain(
+      taskRequest(
+        new ScriptedMind(
+          [
+            calls([call("c-d", "read", { value: "d" })]),
+            calls([call("c-e", "read", { value: "e" })]),
+            says("done"),
+          ],
+          { summaries: [says("SHOULD-NOT-RUN")] },
+        ),
+        {
+          store: configStore,
+          tools: [cfgReader],
+          meter: countedA,
+          limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+        },
+      ),
+    );
+    expect(resumedUnlimited.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(configStore.of("compaction")).toHaveLength(1);
+
+    // Part B: overflow-learned limit is restored on the same model, ignored on a different model.
+    const smallMeter = new UsageMeter({ account: "openrouter", model: "small-8k" });
+    const smallStore = new MemoryStore({ type: "brief", brief: BRIEF });
+    const mediumReader = tool("read", async () => result("x".repeat(20_000)));
+    const overflowMind = new ScriptedMind(
+      [
+        calls([call("c-a", "read", { value: "a" })]),
+        calls([call("c-b", "read", { value: "b" })]),
+        new ProviderHttpError("anthropic", 400, "prompt is too long: 9000 tokens > 8192 maximum"),
+      ],
+      {
+        summaries: [says("SUMMARY-8K")],
+        after: (req) => {
+          smallMeter.tap(record(req.system === "You summarize." ? 1.0 : 0, {}));
+        },
+      },
+    );
+    const learnedPause = await drain(
+      taskRequest(overflowMind, {
+        store: smallStore,
+        tools: [mediumReader],
+        meter: smallMeter,
+        limits: { contextTokens: 0, spendPauseUsd: 1, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(learnedPause.outcome).toMatchObject({ status: "paused", reason: "spend" });
+    expect(smallStore.of("compaction").at(-1)?.learned).toEqual({
+      tokens: 8_192,
+      model: "openrouter/small-8k",
+    });
+
+    const sameModelStore = new MemoryStore(...smallStore.list);
+    const sameModelMind = new ScriptedMind(
+      [
+        calls([call("c-c", "read", { value: "c" })]),
+        calls([call("c-d", "read", { value: "d" })]),
+        says("done"),
+      ],
+      { summaries: [says("SUMMARY-SAME-1"), says("SUMMARY-SAME-2")] },
+    );
+    const sameModelOutcome = await drain(
+      taskRequest(sameModelMind, {
+        store: sameModelStore,
+        tools: [mediumReader],
+        meter: new UsageMeter({ account: "openrouter", model: "small-8k", spentUsd: 1 }),
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(sameModelOutcome.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(sameModelMind.summaryRequests).toHaveLength(2);
+
+    const switchedModelStore = new MemoryStore(...smallStore.list);
+    const switchedModelMind = new ScriptedMind(
+      [
+        calls([call("c-c", "read", { value: "c" })]),
+        calls([call("c-d", "read", { value: "d" })]),
+        says("done"),
+      ],
+      { summaries: [says("SHOULD-NOT-RUN")] },
+    );
+    const switchedOutcome = await drain(
+      taskRequest(switchedModelMind, {
+        store: switchedModelStore,
+        tools: [mediumReader],
+        meter: new UsageMeter({ account: "openrouter", model: "large-200k", spentUsd: 1 }),
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(switchedOutcome.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(switchedModelMind.summaryRequests).toHaveLength(0);
+
+    // Part C: positive contextTokens exceeding the model's real window restores the same-model
+    // learned ceiling across Continue so compaction summarizes older turns rather than failing.
+    const capStore = history(["a", "b"], 10_000);
+    const countedCap = meter(0);
+    const capCut: readonly MindChunk[] = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ];
+    const capOverflowMind = new ScriptedMind([capCut], {
+      after: () => countedCap.tap(record(1.0, { inputTokens: 5_000, outputTokens: 3_192 })),
+    });
+    const capPause = await drain(
+      taskRequest(capOverflowMind, {
+        store: capStore,
+        meter: countedCap,
+        limits: { contextTokens: 128_000, spendPauseUsd: 1, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(capPause.outcome).toMatchObject({ status: "paused", reason: "spend" });
+    expect(capStore.of("pause").at(-1)).toMatchObject({
+      learned: { tokens: 8_192, model: "openrouter/test/model" },
+      compact: { inputTokens: 5_000, model: "openrouter/test/model" },
+    });
+
+    const capResumedMind = new ScriptedMind([says("done")], {
+      summaries: [says("SUMMARY-POS-CAP")],
+    });
+    const capResumedOutcome = await drain(
+      taskRequest(capResumedMind, {
+        store: capStore,
+        meter: meter(1.0),
+        limits: { contextTokens: 128_000, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(capResumedOutcome.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(capResumedMind.summaryRequests).toHaveLength(1);
+  });
+
+  test("persists learned ceiling and pending compaction when model_context_window_exceeded pauses before compacting", async () => {
+    const cut: readonly MindChunk[] = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ];
+    // Part A: overflow + spend pause on same turn; view.sized (30k) <= compactAbove(50k) = 37.5k,
+    // so Continue must still honor compact before resending, then compact proactively from 50k.
+    const storeA = history();
+    const meterA = meter(0);
+    let step = 0;
+    const mind = new ScriptedMind(
+      [cut, calls([call("c-d", "read", { value: "d" })]), says("done")],
+      {
+        summaries: [says("SUMMARY-1"), says("SUMMARY-2")],
+        after: () => {
+          step++;
+          if (step === 1) {
+            meterA.tap(record(1.0, { inputTokens: 30_000, outputTokens: 20_000 }));
+          } else {
+            meterA.tap(record(0.1, {}));
+          }
+        },
+      },
+    );
+    const reader = tool("read", async () => result("x".repeat(80_000)));
+    const limitsUnlimited = { contextTokens: 0, spendPauseUsd: 1, maskAfterTokens: 1e9 };
+
+    const pause1 = await drain(
+      taskRequest(mind, { store: storeA, tools: [reader], meter: meterA, limits: limitsUnlimited }),
+    );
+    expect(pause1.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.00; it pauses at every $1.00.",
+    });
+    expect(mind.summaryRequests).toHaveLength(0);
+    expect(storeA.of("pause").at(-1)).toMatchObject({
+      learned: { tokens: 50_000, model: "openrouter/test/model" },
+      compact: { inputTokens: 30_000, model: "openrouter/test/model" },
+    });
+
+    const resumed = await drain(
+      taskRequest(mind, { store: storeA, tools: [reader], meter: meterA, limits: limitsUnlimited }),
+    );
+    expect(resumed.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(mind.summaryRequests).toHaveLength(2);
+    expect(
+      String((mind.requests[1]?.messages[0] as { content?: string } | undefined)?.content),
+    ).toContain("<summary>\nSUMMARY-1");
+
+    // Part B: uncompactable Turn 1 pauses on spend; same-model resume fails immediately without
+    // resending the failing request, while switching models retries cleanly.
+    const storeB = new MemoryStore({ type: "brief", brief: BRIEF });
+    const meterB = meter(0);
+    const mindB1 = new ScriptedMind([cut], {
+      after: () => meterB.tap(record(1.0, { inputTokens: 1_000, outputTokens: 1_000 })),
+    });
+    const pauseB = await drain(
+      taskRequest(mindB1, { store: storeB, meter: meterB, limits: limitsUnlimited }),
+    );
+    expect(pauseB.outcome).toMatchObject({ status: "paused", reason: "spend" });
+
+    const sameModelStore = new MemoryStore(...storeB.list);
+    const sameModelMind = new ScriptedMind([says("should-not-send")]);
+    const sameFailed = await drain(
+      taskRequest(sameModelMind, {
+        store: sameModelStore,
+        meter: meter(1.0),
+        limits: { contextTokens: 0, spendPauseUsd: 0 },
+      }),
+    );
+    expect(sameFailed.outcome).toEqual({
+      status: "failed",
+      error: "The model's context window was exceeded",
+    });
+    expect(sameModelMind.requests).toHaveLength(0);
+
+    const switchedStore = new MemoryStore(...storeB.list);
+    const switchedMind = new ScriptedMind([says("done")]);
+    const switchedOk = await drain(
+      taskRequest(switchedMind, {
+        store: switchedStore,
+        meter: new UsageMeter({ account: "openrouter", model: "large-200k", spentUsd: 1.0 }),
+        limits: { contextTokens: 0, spendPauseUsd: 0 },
+      }),
+    );
+    expect(switchedOk.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(switchedMind.requests).toHaveLength(1);
+  });
+
+  test("persists shrunk summary budget when a summary reply hits model_context_window_exceeded at a spend pause, and ignores model-less pause metadata", async () => {
+    const cut: readonly MindChunk[] = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ];
+    const storeA = history(
+      Array.from({ length: 10 }, (_, i) => `t${i}`),
+      8_000,
+    );
+    const countedA = meter(0);
+    let attempt = 0;
+    const mindA = new ScriptedMind([says("done")], {
+      summaries: [cut, ...Array.from({ length: 12 }, (_, i) => says(`SUMMARY-${i + 1}`))],
+      after: () => {
+        attempt++;
+        if (attempt === 1) {
+          countedA.tap(record(1.0, { inputTokens: 5_000, outputTokens: 3_192 }));
+        } else {
+          countedA.tap(record(0.1, {}));
+        }
+      },
+    });
+    const limitsA = { contextTokens: 8_192, spendPauseUsd: 1, maskAfterTokens: 1e9 };
+
+    const pausedA = await drain(
+      taskRequest(mindA, { store: storeA, meter: countedA, limits: limitsA }),
+    );
+    expect(pausedA.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.00; it pauses at every $1.00.",
+    });
+    const compactMeta = storeA.of("pause").at(-1)?.compact;
+    expect(compactMeta).toMatchObject({
+      model: "openrouter/test/model",
+      summaryOverflows: 1,
+    });
+    expect(compactMeta?.summaryBudget).toBeLessThan(4_000);
+    expect(mindA.summaryRequests).toHaveLength(1);
+    expect(mindA.requests).toHaveLength(0);
+
+    const resumedA = await drain(
+      taskRequest(mindA, { store: storeA, meter: countedA, limits: limitsA }),
+    );
+    expect(resumedA.outcome).toEqual({ status: "succeeded", report: "done" });
+    const summaryPrompts = mindA.summaryRequests.map((entry) =>
+      String((entry.messages[0] as { content?: string } | undefined)?.content),
+    );
+    expect(summaryPrompts.length).toBeGreaterThan(2);
+    for (const prompt of summaryPrompts.slice(1)) {
+      expect(estimateTokens(prompt)).toBeLessThanOrEqual(compactMeta?.summaryBudget ?? 0);
+    }
+
+    // Part B: model-less pause metadata must not match an unknown-model resume (`undefined === undefined`).
+    const unknownStore = new MemoryStore(
+      { type: "brief", brief: BRIEF },
+      {
+        type: "pause",
+        reason: "spend",
+        detail: "Spent $1.00; it pauses at every $1.00.",
+        compact: { inputTokens: 1_000 } as never,
+      },
+    );
+    const unknownMind = new ScriptedMind([says("done")]);
+    const unknownResumed = await drain(
+      taskRequest(unknownMind, {
+        store: unknownStore,
+        meter: new FakeMeter(),
+        limits: { contextTokens: 0, spendPauseUsd: 0 },
+      }),
+    );
+    expect(unknownResumed.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(unknownMind.requests).toHaveLength(1);
   });
 });

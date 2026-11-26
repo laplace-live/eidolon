@@ -117,6 +117,13 @@ function permissionsIn(body: unknown): PermissionLevel | null {
   return isPermissionLevel(body.permissions) ? body.permissions : null;
 }
 
+/** POST read's `seq`: a whole number from 0; else null. */
+function readSeqIn(body: unknown): number | null {
+  if (!isPlainObject(body) || Object.keys(body).length !== 1) return null;
+  const { seq } = body;
+  return typeof seq === "number" && Number.isSafeInteger(seq) && seq >= 0 ? seq : null;
+}
+
 /**
  * POST messages' line: `text`, 0 to MAX_TEXT characters once trimmed, and `attachments`, up to
  * MAX_LINE_FILES files sent to POST files first, each named once; at least one of the two. Else
@@ -454,6 +461,24 @@ export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
             return new Response(null, { status: 204 });
           })
         );
+      },
+    },
+    {
+      route: "POST /api/local/chats/:id/read",
+      async handler(request, { params }) {
+        const id = params.id as string;
+        const refused = chatRefusal(id);
+        if (refused !== null) return refused;
+        const body = await readJson(request, BODY_LIMIT);
+        if (!body.ok) return body.response;
+        const seq = readSeqIn(body.value);
+        if (seq === null) {
+          return localError(400, "bad-request", "Send `seq`, a whole number from 0");
+        }
+        return inChat(async () => {
+          await runner().markRead(id, seq);
+          return localJson(200, { ok: true });
+        });
       },
     },
     {

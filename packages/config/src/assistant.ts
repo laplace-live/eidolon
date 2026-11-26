@@ -5,8 +5,8 @@ import { envChoice, envFlag, envFloat, envInt, envOptional } from "./env.ts";
 import { expandUser } from "./paths.ts";
 import { pyStrip } from "./py.ts";
 
-export const DEFAULT_ASSISTANT_SPEND_PAUSE_USD = 1;
-export const DEFAULT_ASSISTANT_CONTEXT_TOKENS = 128_000;
+export const DEFAULT_ASSISTANT_SPEND_PAUSE_USD = 10;
+export const DEFAULT_ASSISTANT_CONTEXT_TOKENS = 0;
 
 /** @eidolon/chat's PERMISSION_LEVELS, which a chat's own level overrides. */
 const PERMISSION_LEVELS = ["ask", "auto", "full"] as const;
@@ -29,7 +29,7 @@ export interface AssistantSettings {
   readonly bash: boolean;
   /** A task pauses each time its spend crosses a multiple of this; 0 never. */
   readonly spendPauseUsd: number;
-  /** The context window a task's requests are kept within, in tokens. */
+  /** The context window a task's requests are kept within, in tokens; 0 leaves it to the model's. */
   readonly contextTokens: number;
   /** How much a task asks the owner, in a chat that picks no level of its own. */
   readonly permissions: AssistantPermissions;
@@ -51,7 +51,7 @@ export function assistantSettings(): AssistantSettings {
       Number.isFinite(spendPauseUsd) && spendPauseUsd >= 0
         ? spendPauseUsd
         : DEFAULT_ASSISTANT_SPEND_PAUSE_USD,
-    contextTokens: contextTokens > 0 ? contextTokens : DEFAULT_ASSISTANT_CONTEXT_TOKENS,
+    contextTokens: contextTokens >= 0 ? contextTokens : DEFAULT_ASSISTANT_CONTEXT_TOKENS,
     permissions: envChoice(
       "ASSISTANT_PERMISSIONS",
       PERMISSION_LEVELS,

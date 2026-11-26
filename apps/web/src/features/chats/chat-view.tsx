@@ -52,7 +52,7 @@ import { DISPLAY_CHANGED, DISPLAY_HELP } from "./labels";
 import { ParticipantsMenu } from "./participants";
 import { PermissionsPicker } from "./permissions-picker";
 import { chatWith, shortNameOf, usePersonaOf } from "./persona";
-import { chatQuery, useSetDisplay } from "./queries";
+import { chatQuery, chatsQuery, useMarkRead, useSetDisplay } from "./queries";
 import { callOn, type LiveError } from "./stream";
 import { useChat } from "./use-chat";
 import { useDraftFiles } from "./use-draft-files";
@@ -131,6 +131,8 @@ export function ChatView({ id }: { readonly id: string }) {
   const lang = useLang();
   const queryClient = useQueryClient();
   const chat = useQuery(chatQuery(id));
+  const { data: chatList } = useQuery(chatsQuery);
+  const listed = chatList?.find((entry) => entry.id === id);
   const { data: status } = useQuery(statusQuery);
   const personaOf = usePersonaOf();
   // The server's word on a call in the chat, which another tab may hold.
@@ -144,10 +146,18 @@ export function ChatView({ id }: { readonly id: string }) {
   // This tab knows of its own call before the server's answer says so.
   const inCall = view.calling || serverCall !== null;
   const events = chat.data?.events;
+  useMarkRead(id, events, !chat.isFetching && !chat.isError, listed?.unread ?? 0);
   const tasks = useChatTasks(id, events ?? NO_EVENTS);
   // Another tab's call is followed too, so its lines show and its end frees the composer. During
   // any call in the tab, or the chat's in another tab, her voice messages keep quiet.
-  const turns = useChat(id, inCall, tasks.awaitingReport, presence.up || serverCall !== null);
+  const turns = useChat(
+    id,
+    inCall,
+    tasks.awaitingReport,
+    presence.up || serverCall !== null,
+    listed?.active ?? false,
+    listed?.lastSeq ?? 0,
+  );
   const draftFiles = useDraftFiles(id);
   const [recordable] = useState(canRecord);
   const [settingsOpen, setSettingsOpen] = useState(false);

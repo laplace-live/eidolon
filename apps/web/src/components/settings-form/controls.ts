@@ -18,7 +18,7 @@ export type Control =
   /** `placeholder`: what applies while it is empty, where that is a value, such as an API base. */
   | { readonly type: "text"; readonly placeholder?: string }
   | { readonly type: "integer"; readonly min?: number; readonly max?: number }
-  | { readonly type: "number"; readonly slider?: Slider }
+  | { readonly type: "number"; readonly min?: number; readonly slider?: Slider }
   /** `fallback`: what applies while nothing sets it, where the reader has a default. */
   | { readonly type: "flag"; readonly fallback?: "on" | "off" }
   | { readonly type: "list" }
@@ -95,6 +95,8 @@ const BY_PATH: Readonly<Record<string, Control>> = {
     options: PERMISSION_LEVELS,
     fallback: DEFAULT_PERMISSIONS,
   },
+  "assistant.spendPauseUsd": { type: "number", min: 0 },
+  "assistant.contextTokens": { type: "integer", min: 0 },
   "chats.display": { type: "select", options: CHAT_DISPLAYS, fallback: DEFAULT_DISPLAY },
   "subspace.relayUrl": { type: "text", placeholder: "https://eidolon-relay.vrp.moe" },
   "subspace.authUrl": { type: "text", placeholder: "https://id.laplace.live" },
@@ -366,17 +368,16 @@ export function staysInside(path: string): boolean {
 function parseNumber(text: string, control: Control & { type: "integer" | "number" }): Parsed {
   // NFKC turns full-width digits, which a Chinese input method types, into ASCII ones.
   const ascii = text.normalize("NFKC");
-  if (control.type === "number") {
-    const value = Number(ascii.replaceAll("_", ""));
-    return FLOAT.test(ascii) && Number.isFinite(value)
-      ? ok(value)
-      : fail("settings.form.invalid.number");
-  }
   const value = Number(ascii.replaceAll("_", ""));
-  if (!INT.test(ascii) || !Number.isSafeInteger(value))
+  if (control.type === "number") {
+    if (!FLOAT.test(ascii) || !Number.isFinite(value)) return fail("settings.form.invalid.number");
+  } else if (!INT.test(ascii) || !Number.isSafeInteger(value)) {
     return fail("settings.form.invalid.integer");
+  }
   if (control.min !== undefined && value < control.min) return fail("settings.form.invalid.min");
-  if (control.max !== undefined && value > control.max) return fail("settings.form.invalid.max");
+  if (control.type === "integer" && control.max !== undefined && value > control.max) {
+    return fail("settings.form.invalid.max");
+  }
   return ok(value);
 }
 

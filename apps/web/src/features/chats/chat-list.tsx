@@ -1,4 +1,5 @@
-import { type ChatSummary, MAX_PARTICIPANTS, type ParticipantId } from "@eidolon/chat";
+import { MAX_PARTICIPANTS, type ParticipantId } from "@eidolon/chat";
+import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { MessageSquarePlusIcon, OrbitIcon } from "lucide-react";
@@ -26,8 +27,10 @@ import {
 } from "@/components/ui/sidebar";
 import { activeSubspaceServer, subspaceQuery } from "@/features/subspace/queries";
 import { ApiError } from "@/lib/api";
+import type { LocalChatSummary } from "@/lib/chats";
 import { statusQuery } from "@/lib/query";
 import { useNow } from "@/lib/use-now";
+import { cn } from "@/lib/utils";
 import { type Lang, useLang } from "@/locales/i18n";
 import { ChatMenu } from "./chat-menu";
 import { chatName, relativeTime } from "./format";
@@ -120,22 +123,27 @@ function ChatRow({
   personaOf,
   subspaceHost,
 }: {
-  readonly chat: ChatSummary;
+  readonly chat: LocalChatSummary;
   readonly open: boolean;
   readonly now: number;
   readonly lang: Lang;
   readonly personaOf: (id: ParticipantId) => ChatPersona;
   readonly subspaceHost: string | null;
 }) {
+  const { t } = useLingui();
   const personas = chat.participants.map(personaOf);
   const name = chatName(chat.title, chatWith(personas), chat.createdAt, lang, now);
+  // An open chat is being marked read; suppress its badge immediately on selection.
+  const unread = open ? 0 : chat.unread;
+  const unreadLabel = unread > 0 ? t`, ${ph({ count: unread })} unread` : "";
+  const baseTooltip = unread > 0 ? `${name}${unreadLabel}` : name;
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         asChild
         size="lg"
         isActive={open}
-        tooltip={subspaceHost === null ? name : `${name} · ${subspaceHost}`}
+        tooltip={subspaceHost === null ? baseTooltip : `${baseTooltip} · ${subspaceHost}`}
         className="h-auto gap-2.5 py-1.5 data-active:font-normal"
       >
         <Link to={chatPath(chat.id)}>
@@ -158,12 +166,35 @@ function ChatRow({
                 {relativeTime(chat.updatedAt, now, lang)}
               </time>
             </span>
-            <span className="truncate text-sidebar-foreground/60 text-xs">
-              {chat.lastText === null ? "" : previewText(chat.lastText)}
+            <span className="flex min-h-4 items-center gap-2">
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-xs",
+                  unread > 0 ? "font-medium text-sidebar-foreground" : "text-sidebar-foreground/60",
+                )}
+              >
+                {chat.lastText === null ? "" : previewText(chat.lastText)}
+              </span>
+              {unread > 0 && (
+                <span
+                  data-unread-count
+                  className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 font-medium text-[11px] text-primary-foreground leading-none tabular-nums"
+                >
+                  <span aria-hidden>{unread > 99 ? "99+" : unread}</span>
+                  <span className="sr-only">{unreadLabel}</span>
+                </span>
+              )}
             </span>
           </span>
         </Link>
       </SidebarMenuButton>
+      {unread > 0 && (
+        <span
+          data-unread-dot
+          aria-hidden
+          className="pointer-events-none absolute top-0.5 right-0.5 hidden size-2 rounded-full bg-primary ring-2 ring-sidebar group-data-[collapsible=icon]:block"
+        />
+      )}
       <ChatMenu
         id={chat.id}
         name={name}

@@ -663,9 +663,8 @@ class HumanReport implements Report {
       return;
     }
     // A failed attempt's words stay; its retry, and the warning on stderr, start a line of their own.
-    if (event.type === "request" && event.error !== undefined && this.#midLine) {
-      this.#write("\n");
-      this.#midLine = false;
+    if (event.type === "request" && event.error !== undefined) {
+      this.#endLine();
       return;
     }
     if (event.type !== "entry") return;
@@ -674,6 +673,8 @@ class HumanReport implements Report {
       for (const call of entry.calls) this.#calls.set(call.id, call);
     } else if (entry.type === "tool-result") {
       this.#line(toolLine(this.#calls.get(entry.callId), entry));
+    } else if (entry.type === "compaction") {
+      this.#endLine();
     }
   }
 
@@ -684,8 +685,7 @@ class HumanReport implements Report {
       this.#write(outcome.report);
       this.#midLine = !outcome.report.endsWith("\n");
     }
-    if (this.#midLine) this.#write("\n");
-    this.#midLine = false;
+    this.#endLine();
     const lines = [""];
     if (outcome.status === "succeeded") {
       const written = snapshots.written;
@@ -700,9 +700,14 @@ class HumanReport implements Report {
     this.#write(`${lines.join("\n")}\n`);
   }
 
-  #line(text: string): void {
-    if (this.#midLine) this.#write("\n");
+  #endLine(): void {
+    if (!this.#midLine) return;
+    this.#write("\n");
     this.#midLine = false;
+  }
+
+  #line(text: string): void {
+    this.#endLine();
     this.#write(`${text}\n`);
   }
 }

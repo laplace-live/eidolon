@@ -140,9 +140,15 @@ export class MemoryInbox implements TaskInbox {
 export class FakeMeter implements TaskMeter {
   spent = 0;
   input: number | null = null;
+  output: number | null = null;
+  model: string | undefined = undefined;
   uncounted: string | null = null;
   /** The requests the loop said came back whole. */
   ended = 0;
+
+  modelId(): string | undefined {
+    return this.model;
+  }
 
   spentUsd(): number {
     return this.spent;
@@ -152,8 +158,17 @@ export class FakeMeter implements TaskMeter {
     return this.input;
   }
 
+  lastOutputTokens(): number | null {
+    return this.output;
+  }
+
   unpriced(): string | null {
     return this.uncounted;
+  }
+
+  requestStarted(): void {
+    this.input = null;
+    this.output = null;
   }
 
   requestEnded(): void {
@@ -214,7 +229,7 @@ export function taskRequest<M extends Mind = ScriptedMind>(
     store: new MemoryStore({ type: "brief", brief: BRIEF }),
     inbox: new MemoryInbox(),
     meter: new FakeMeter(),
-    limits: { contextTokens: 128_000, spendPauseUsd: 0 },
+    limits: { contextTokens: 0, spendPauseUsd: 0 },
     compaction: { system: SUMMARY_SYSTEM, instructions: "Summarize the task so far." },
     signal: new AbortController().signal,
     ...overrides,
