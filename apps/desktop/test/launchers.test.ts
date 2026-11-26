@@ -14,7 +14,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { type AddressInfo, connect } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -320,7 +320,14 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       return;
     }
     const file = files.get(url);
-    const packument = packuments.get(url.slice(1));
+    let packument = packuments.get(url.slice(1));
+    if (!file && !packument && url.endsWith("/latest")) {
+      const pkgPack = packuments.get(url.slice(1, -"/latest".length)) as
+        | { "dist-tags"?: { latest?: string }; versions?: Record<string, object> }
+        | undefined;
+      const latest = pkgPack?.["dist-tags"]?.latest;
+      if (latest !== undefined) packument = pkgPack?.versions?.[latest];
+    }
     response.writeHead(file || packument ? 200 : 404);
     response.end(file ? readFileSync(file) : JSON.stringify(packument ?? { error: "Not found" }));
   });
@@ -547,6 +554,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}`,
         EIDOLON_NODE: process.execPath,
         EIDOLON_TEST_MARKS: marks,
+        pnpm_config_fetch_retries: "0",
         ...env,
       },
     });
@@ -572,7 +580,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     });
     const missing = await launch("npx", ["-y", "eidolon-test-missing"]);
     expect([missing.status, missing.stdout]).toEqual([1, ""]);
-    expect(missing.stderr).toContain("ERR_PNPM_FETCH_404");
+    expect(missing.stderr).toContain("404 Not Found");
   }, 60_000);
 
   test("reads no pnpmfile, as npm reads none", async () => {
@@ -721,7 +729,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     const asked = requests.length;
     const ran = await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd: project });
     expect([ran.status, ran.stdout, requests.slice(asked)]).toEqual([1, "", []]);
-    expect(ran.stderr).toContain("Invalid URL");
+    expect(ran.stderr).toContain("relative URL without a base");
   }, 60_000);
 
   test("gives pnpm no registry a variable names in its arguments, which any process reads", async () => {
@@ -774,12 +782,23 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   }, 60_000);
 
   test("installs through the proxy the project's .npmrc names, which pnpm reads from none", async () => {
-    // pnpm tunnels a plain http request through a proxy too. This one opens each tunnel it is
-    // asked for.
-    const tunnels: string[] = [];
-    const proxy = createServer();
+    const proxied: string[] = [];
+    const proxy = createServer((clientReq, clientRes) => {
+      const target = new URL(clientReq.url ?? "");
+      proxied.push(target.host);
+      const upstream = httpRequest(
+        target,
+        { method: clientReq.method, headers: clientReq.headers },
+        (upRes) => {
+          clientRes.writeHead(upRes.statusCode ?? 502, upRes.headers);
+          upRes.pipe(clientRes);
+        },
+      );
+      upstream.on("error", () => clientRes.writeHead(502).end());
+      clientReq.pipe(upstream);
+    });
     proxy.on("connect", (request, socket, head) => {
-      tunnels.push(request.url ?? "");
+      proxied.push(request.url ?? "");
       const target = new URL(`http://${request.url}`);
       const upstream = connect(Number(target.port), target.hostname, () => {
         socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
@@ -798,7 +817,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       });
       const ran = await launch("npx", ["-y", "eidolon-test-hello", "x"], { cwd: project });
       expect(ran).toEqual({ status: 0, stdout: 'hello ["x"]\n', stderr: "", marks: [] });
-      expect(tunnels).toContain(new URL(registry).host);
+      expect(proxied).toContain(new URL(registry).host);
     } finally {
       proxy.close();
     }

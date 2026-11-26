@@ -10,6 +10,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { dirname, join, relative, win32 } from "node:path";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { PUBLISHER_NAMES } from "../electron-builder.release.ts";
+import { shimPnpmExe } from "./node-shim.ts";
 import { readPe } from "./pe.ts";
 import { DESKTOP, installedBinary, installer, runsFolder, sleep } from "./smoke/kit.ts";
 import { namesUninstaller, silentUninstall, UNINSTALLER, uninstallEntries } from "./smoke/nsis.ts";
@@ -240,6 +241,7 @@ export function requiredInInstall(listed: readonly string[]): string[] {
     ...new Set([
       "LAPLACE Eidolon.exe",
       UNINSTALLER,
+      "pnpm.exe",
       "d3dcompiler_47.dll",
       ...TARGETS["win32-x64"].onnxruntime,
       ...VC_RUNTIME_DLLS,
@@ -279,13 +281,14 @@ function checkMac(record: (check: Check) => void): void {
   record(gatekeeperCheck(run("spctl", ["--assess", "--type", "execute", "--verbose=4", app])));
   record(stapleCheck(run("xcrun", ["stapler", "validate", app])));
   const payload = join(app, "Contents", "Resources", "eidolon");
+  const pnpmExe = join(shimPnpmExe(payload, { os: "darwin", cpu: "arm64" }), "pnpm");
   const natives = existsSync(payload)
-    ? filesUnder(payload).filter((file) => /\.(node|dylib)$/.test(file))
+    ? filesUnder(payload).filter((file) => /\.(node|dylib)$/.test(file) || file === pnpmExe)
     : [];
   record({
     name: "the payload holds natives to check",
     pass: natives.length > 0,
-    detail: `${natives.length} .node and .dylib files`,
+    detail: `${natives.length} Mach-O files`,
   });
   for (const native of natives) {
     record(nativeCheck(relative(payload, native), run("codesign", ["-dvvv", native])));

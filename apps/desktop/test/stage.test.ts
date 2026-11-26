@@ -26,6 +26,7 @@ import {
   SHIM_MODULES,
   shimLaunchers,
   shimPnpm,
+  shimPnpmExe,
 } from "../scripts/node-shim.ts";
 import { compareVersions, readPe } from "../scripts/pe.ts";
 import {
@@ -150,6 +151,7 @@ for (const target of Object.keys(TARGETS) as Target[]) {
   const { os, cpu, onnxruntime } = TARGETS[target];
   const modules = join(payload, "node_modules");
   const pnpm = shimPnpm(payload);
+  const exe = shimPnpmExe(payload, { os, cpu });
   const title = `the ${target} payload${staged && !current ? ` (${STALE})` : ""}`;
 
   describe.skipIf(!current && !(REQUIRED && target === HOST))(title, () => {
@@ -229,14 +231,20 @@ for (const target of Object.keys(TARGETS) as Target[]) {
           expect([prefix, line, text.includes(line)]).toEqual([prefix, line, true]);
         }
       }
-      // The node shim's pnpm, and each package its dist/ bundles.
-      for (const dir of [pnpm, ...packageDirs(join(pnpm, "dist", "node_modules"))]) {
+      // The node shim's pnpm, @pnpm/exe.*, and each package its dist/ bundles.
+      for (const dir of [
+        ...packageDirs(dirname(pnpm)),
+        ...packageDirs(join(pnpm, "dist", "node_modules")),
+      ]) {
         const { name, version, license } = manifestOf(dir);
         const section = `${name} ${version} (${license})`;
         expect([section, licenses.has(section)]).toEqual([section, true]);
       }
-      expect(licenses.get(`pnpm ${manifestOf(pnpm).version} (MIT)`)).toBe(
-        readFileSync(join(pnpm, "LICENSE"), "utf8").trim(),
+      expect(licenses.get(`pnpm ${manifestOf(pnpm).version} (MIT)`)).toContain(
+        "this is SPDX's text of MIT",
+      );
+      expect(licenses.get(`@pnpm/exe.${os}-${cpu} ${manifestOf(exe).version} (MIT)`)).toBe(
+        readFileSync(join(exe, "LICENSE"), "utf8").trim(),
       );
     });
 
@@ -264,31 +272,41 @@ for (const target of Object.keys(TARGETS) as Target[]) {
       expect(version).toBe(devDependencies.pnpm);
       const { importers } = readPnpmLock(join(ROOT, "pnpm-lock.yaml"));
       expect(importers["apps/desktop"]?.devDependencies?.pnpm?.version).toBe(version);
-      // With what the shim's npx takes from pnpm's dist: npm's semver, and node-gyp's bin for
-      // npm's PATH.
+      // With its @pnpm/exe.* binary, and what npx takes from pnpm's dist: npm's semver, and
+      // node-gyp's bin for npm's PATH.
+      const exeBin = os === "win32" ? "pnpm.exe" : "pnpm";
       for (const file of [
-        "bin/pnpm.mjs",
-        "bin/pnpx.mjs",
-        "dist/pnpm.mjs",
-        "dist/node_modules/semver/index.js",
-        "dist/node-gyp-bin/node-gyp",
+        join(pnpm, "bin/pnpm.mjs"),
+        join(pnpm, "bin/pnpx.mjs"),
+        join(pnpm, "native-binary.mjs"),
+        join(pnpm, "dist/node_modules/semver/index.js"),
+        join(pnpm, "dist/node-gyp-bin/node-gyp"),
+        join(exe, exeBin),
       ]) {
-        expect([file, existsSync(join(pnpm, file))]).toEqual([file, true]);
+        expect([file, existsSync(file)]).toEqual([file, true]);
       }
-      // The Windows release signs every .exe it packs.
+      if (process.platform !== "win32" && os !== "win32") {
+        expect(statSync(join(exe, exeBin)).mode & 0o777).toBe(0o755);
+      }
+      // On Windows the release signs every .exe it packs; @pnpm/exe.win32-x64/pnpm.exe is the shim's one.
       const { files } = listing(join(payload, NODE_SHIM));
-      expect(files.filter((file) => file.endsWith(".exe"))).toEqual([]);
+      expect(files.filter((file) => file.endsWith(".exe"))).toEqual(
+        os === "win32" ? [`node_modules/node_modules/@pnpm/exe.${os}-${cpu}/pnpm.exe`] : [],
+      );
     });
 
-    test("keeps only the target's natives among the packages pnpm bundles", () => {
-      const natives = packageDirs(join(pnpm, "dist", "node_modules"))
+    test("keeps only the target's @pnpm/exe.* binary beside pnpm, and no foreign natives in its dist", () => {
+      const exes = packageDirs(dirname(pnpm))
+        .map(manifestOf)
+        .filter((fields) => fields.name.startsWith("@pnpm/exe."));
+      expect(exes.map((fields) => fields.name)).toEqual([`@pnpm/exe.${os}-${cpu}`]);
+      for (const fields of exes) {
+        expect(supports(fields.os, os) && supports(fields.cpu, cpu)).toBe(true);
+      }
+      const distNatives = packageDirs(join(pnpm, "dist", "node_modules"))
         .map(manifestOf)
         .filter((fields) => fields.os !== undefined || fields.cpu !== undefined);
-      expect(natives.length).toBeGreaterThan(0);
-      for (const fields of natives) {
-        const admitted = supports(fields.os, os) && supports(fields.cpu, cpu);
-        expect([fields.name, admitted]).toEqual([fields.name, true]);
-      }
+      expect(distNatives).toEqual([]);
     });
 
     test("is the tree pnpm-lock.yaml pins, as npm ls shows it", () => {
@@ -341,11 +359,9 @@ for (const target of Object.keys(TARGETS) as Target[]) {
           [...VC_RUNTIME_DLLS].sort(),
         );
         expect(copies.get("node_modules/@zvec/bindings-win32-x64")).toBeUndefined();
-        // pnpm's reflink addon, wherever the shim keeps pnpm.
+        // @pnpm/exe.win32-x64/pnpm.exe links its CRT statically, so node-shim gets no VC++ copies.
         const shim = [...copies].filter(([folder]) => folder.startsWith(`${NODE_SHIM}/`));
-        expect(shim.map(([folder, dlls]) => [basename(folder), dlls])).toEqual([
-          ["reflink-win32-x64-msvc", ["vcruntime140.dll"]],
-        ]);
+        expect(shim).toEqual([]);
         const hashes = new Map<string, Set<string>>();
         for (const [folder, dlls] of copies) {
           const natives = readdirSync(join(payload, folder)).filter(

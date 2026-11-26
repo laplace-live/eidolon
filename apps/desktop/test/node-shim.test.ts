@@ -3,9 +3,9 @@
 //
 // Ported from deepseek-harness scripts/primary-runtime/prepare.spec.ts@2e39e70496
 //
-// pnpm's prune, on deepseek's made-up bundled packages, then the shim the stage writes from the
-// checkout's launchers and pnpm, for each target, its .cmd launchers where cross-spawn escapes their
-// words for the cmd.exe that reads them again. The staged payload's is stage.test.ts's.
+// The shim the stage writes from the checkout's launchers, pnpm and @pnpm/exe.<os>-<cpu>, for each
+// target, its .cmd launchers where cross-spawn escapes their words for the cmd.exe that reads them
+// again. The staged payload's is stage.test.ts's.
 import {
   mkdirSync,
   mkdtempSync,
@@ -25,13 +25,17 @@ import {
   LAUNCHER_SOURCES,
   NODE_SHIM,
   POSIX_LAUNCHERS,
-  prunePnpmForeignNativePackages,
   SHIM_MODULES,
   shimLaunchers,
   shimPnpm,
+  shimPnpmExe,
   stageNodeShim,
 } from "../scripts/node-shim.ts";
 import { appLayout } from "../scripts/smoke/packaged.ts";
+
+const PNPM_VERSION: string = JSON.parse(
+  readFileSync(join(LAUNCHER_SOURCES, "..", "package.json"), "utf8"),
+).devDependencies.pnpm;
 
 const temps: string[] = [];
 function temp(): string {
@@ -43,44 +47,34 @@ afterEach(() => {
   for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe("pnpm's prune", () => {
-  test.each([
-    ["darwin", "arm64", ["reflink", "reflink-darwin-arm64"], ["@reflink", "not-windows", "semver"]],
-    ["darwin", "x64", ["reflink", "reflink-darwin-x64"], ["@reflink", "not-windows", "semver"]],
-    ["win32", "x64", ["reflink", "reflink-win32-x64-msvc"], ["@reflink", "not-darwin", "semver"]],
-  ] as const)("keeps only the bundled packages %s/%s admits", (platform, arch, reflink, top) => {
-    const root = temp();
-    const modules = join(root, "dist", "node_modules");
-    const packages: Record<string, { os?: string[]; cpu?: string[] }> = {
-      semver: {},
-      "@reflink/reflink": {},
-      "@reflink/reflink-darwin-arm64": { os: ["darwin"], cpu: ["arm64"] },
-      "@reflink/reflink-darwin-x64": { os: ["darwin"], cpu: ["x64"] },
-      "@reflink/reflink-win32-x64-msvc": { os: ["win32"], cpu: ["x64"] },
-      "not-windows": { os: ["!win32"] },
-      "not-darwin": { os: ["!darwin"] },
-      contradictory: { os: ["darwin", "win32", "!darwin", "!win32"] },
-    };
-    for (const [name, fields] of Object.entries(packages)) {
-      mkdirSync(join(modules, name), { recursive: true });
-      writeFileSync(join(modules, name, "package.json"), JSON.stringify({ name, ...fields }));
-    }
-    mkdirSync(join(modules, ".bin"));
-    prunePnpmForeignNativePackages(root, platform, arch);
-    expect(readdirSync(modules).sort()).toEqual([".bin", ...top]);
-    expect(readdirSync(join(modules, "@reflink")).sort()).toEqual(reflink);
-  });
-});
+/** A stand-in @pnpm/exe.<os>-<cpu> package when staging a target other than the host's. */
+function exeSource(os: string, cpu: string) {
+  if (os === process.platform && cpu === process.arch) return undefined;
+  const exe = join(temp(), "@pnpm", `exe.${os}-${cpu}`);
+  mkdirSync(exe, { recursive: true });
+  writeFileSync(
+    join(exe, "package.json"),
+    JSON.stringify({
+      name: `@pnpm/exe.${os}-${cpu}`,
+      version: PNPM_VERSION,
+      os: [os],
+      cpu: [cpu],
+    }),
+  );
+  writeFileSync(join(exe, "LICENSE"), "MIT\n");
+  writeFileSync(join(exe, os === "win32" ? "pnpm.exe" : "pnpm"), "");
+  return { exe };
+}
 
 describe("the shim the stage writes", () => {
   test.each([
-    ["darwin", "arm64", "@reflink/reflink-darwin-arm64"],
-    ["win32", "x64", "@reflink/reflink-win32-x64-msvc"],
+    ["darwin", "arm64", "pnpm"],
+    ["win32", "x64", "pnpm.exe"],
   ] as const)(
-    "for %s/%s: the checkout's launchers in a node_modules/.bin, sh's executable, and pnpm at their ../node_modules/pnpm, pruned, without the install's links to its commands, its bundled packages' .bin or any .exe",
-    (os, cpu, native) => {
+    "for %s/%s: the checkout's launchers in node_modules/.bin, sh's executable, pnpm at their ../node_modules/pnpm, and its @pnpm/exe.* binary beside it",
+    (os, cpu, binary) => {
       const payload = temp();
-      stageNodeShim(payload, { os, cpu });
+      stageNodeShim(payload, { os, cpu }, exeSource(os, cpu));
       expect(readdirSync(join(payload, NODE_SHIM)).sort()).toEqual(
         ["node_modules", ...SHIM_MODULES].sort(),
       );
@@ -110,22 +104,26 @@ describe("the shim the stage writes", () => {
       const pnpm = shimPnpm(payload);
       expect(pnpm).toBe(join(bin, "..", "node_modules", "pnpm"));
       expect(readdirSync(pnpm)).not.toContain("node_modules");
-      const { devDependencies } = JSON.parse(
-        readFileSync(join(LAUNCHER_SOURCES, "..", "package.json"), "utf8"),
-      );
       expect(JSON.parse(readFileSync(join(pnpm, "package.json"), "utf8")).version).toBe(
-        devDependencies.pnpm,
+        PNPM_VERSION,
       );
       const modules = join(pnpm, "dist", "node_modules");
       expect(readdirSync(modules)).not.toContain(".bin");
-      expect(readdirSync(join(modules, "@reflink")).sort()).toEqual([
-        "reflink",
-        native.slice("@reflink/".length),
-      ]);
-      const exes = readdirSync(join(payload, NODE_SHIM), { recursive: true }).filter((file) =>
-        String(file).endsWith(".exe"),
+      const exe = shimPnpmExe(payload, { os, cpu });
+      expect(exe).toBe(join(bin, "..", "node_modules", "@pnpm", `exe.${os}-${cpu}`));
+      expect(JSON.parse(readFileSync(join(exe, "package.json"), "utf8")).version).toBe(
+        PNPM_VERSION,
       );
-      expect(exes).toEqual([]);
+      expect(readdirSync(exe)).toContain(binary);
+      if (os !== "win32" && process.platform !== "win32") {
+        expect(statSync(join(exe, binary)).mode & 0o777).toBe(0o755);
+      }
+      const exes = readdirSync(join(payload, NODE_SHIM), { recursive: true })
+        .map((file) => String(file).replaceAll("\\", "/"))
+        .filter((file) => file.endsWith(".exe"));
+      expect(exes).toEqual(
+        os === "win32" ? [`node_modules/node_modules/@pnpm/exe.${os}-${cpu}/pnpm.exe`] : [],
+      );
     },
   );
 
@@ -152,7 +150,7 @@ describe("cross-spawn, which starts an MCP server", () => {
   test("takes each .cmd launcher, as staged and in a packaged app on Windows, for a cmd-shim", () => {
     const shim = isCmdShim();
     const payload = temp();
-    stageNodeShim(payload, { os: "win32", cpu: "x64" });
+    stageNodeShim(payload, { os: "win32", cpu: "x64" }, exeSource("win32", "x64"));
     const packaged = appLayout(
       "C:\\Users\\me\\AppData\\Local\\Programs\\eidolon\\LAPLACE Eidolon.exe",
       "win32",

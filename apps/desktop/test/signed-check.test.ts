@@ -273,6 +273,10 @@ const SIGNED: Authenticode[] = [
   signature(`${INSTALL}\\LAPLACE Eidolon.exe`, "LAPLACE Live LLC"),
   signature(`${INSTALL}\\Uninstall LAPLACE Eidolon.exe`, "LAPLACE Live LLC"),
   signature(`${INSTALL}\\resources\\elevate.exe`, "LAPLACE Live LLC"),
+  signature(
+    `${INSTALL}\\resources\\eidolon\\node-shim\\node_modules\\node_modules\\@pnpm\\exe.win32-x64\\pnpm.exe`,
+    "LAPLACE Live LLC",
+  ),
   signature(`${INSTALL}\\d3dcompiler_47.dll`, "Microsoft Windows"),
   ...[
     "dxcompiler.dll",
@@ -421,6 +425,7 @@ describe("Windows", () => {
       expect.arrayContaining([
         "LAPLACE Eidolon.exe",
         "Uninstall LAPLACE Eidolon.exe",
+        "pnpm.exe",
         "d3dcompiler_47.dll",
         "onnxruntime.dll",
         "onnxruntime_binding.node",

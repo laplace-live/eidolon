@@ -843,11 +843,11 @@ export function relay(
 }
 
 /** Ends as the child did: npm raises its signal again on itself, or exits with its code. */
-function end(code: number | null, signal: NodeJS.Signals | null): void {
+function end(code: number | null, signal: NodeJS.Signals | null): Promise<never> {
   if (signal !== null && process.platform !== "win32") {
     process.kill(process.pid, signal);
     setTimeout(() => process.exit(1), 500);
-    return;
+    return new Promise(() => {});
   }
   process.exit(code ?? 1);
 }
@@ -870,8 +870,34 @@ function interpreterOf(file: string): string | undefined {
 const REPORT =
   'require("node:fs").writeFileSync(process.env.EIDOLON_NPX_REPORT, process.env.PATH ?? "")';
 
+function runPnpm(
+  dir: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+  const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", SHIM_BIN));
+  const child = spawn(
+    process.execPath,
+    [...process.execArgv, pnpm, `--dir=${dir}`, "--ignore-workspace", ...args],
+    {
+      cwd: dir,
+      stdio: ["ignore", 2, 2],
+      env,
+      windowsHide: true,
+    },
+  );
+  const undo = relay(child);
+  return new Promise((resolve) => {
+    child.on("error", (error) => fail(`couldn't start pnpm: ${error.message}`));
+    child.on("exit", (code, signal) => {
+      undo();
+      resolve({ code, signal });
+    });
+  });
+}
+
 /** Installs `packages` in pnpm's dlx cache, resolving to its node_modules/.bin, or ends as pnpm. */
-function install(packages: readonly string[]): Promise<string> {
+async function install(packages: readonly string[]): Promise<string> {
   const sources = npmConfig(process.env, npmPrefix(process.cwd()).prefix, homedir());
   const settings = npxSettings(sources);
   if ("error" in settings) fail(settings.error);
@@ -882,21 +908,7 @@ function install(packages: readonly string[]): Promise<string> {
   // over its own, and no pnpm workspace around it. The folder is the user's alone, and goes once
   // pnpm ends.
   const npmrc = pnpmNpmrc(sources, process.cwd(), homedir());
-  if (npmrc) writeFileSync(path.join(scratch, ".npmrc"), `${npmrc}\n`, { mode: 0o600 });
   const report = path.join(scratch, "path");
-  const pnpm = fileURLToPath(new URL("../node_modules/pnpm/bin/pnpm.mjs", SHIM_BIN));
-  const args = [
-    ...process.execArgv,
-    pnpm,
-    `--dir=${scratch}`,
-    "--ignore-workspace",
-    ...npxToPnpm(packages, settings, process.cwd(), homedir()),
-    "--",
-    process.execPath,
-    ...process.execArgv,
-    "-e",
-    REPORT,
-  ];
   // pnpm's stdout goes to stderr with its own, and it never reads the server's stdin. Its
   // variables carry npm's network settings, which a proxy's URL can hold credentials in: only the
   // owner's processes read them. A relative userconfig pnpm would read from its own folder.
@@ -905,30 +917,49 @@ function install(packages: readonly string[]): Promise<string> {
     typeof variables.userconfig === "string" && variables.userconfig
       ? { npm_config_userconfig: userConfig(variables, homedir()) }
       : undefined;
-  const child = spawn(process.execPath, args, {
-    cwd: scratch,
-    stdio: ["ignore", 2, 2],
-    env: withVariables(process.env, {
-      ...pnpmNetworkEnv(sources),
-      ...userconfig,
-      EIDOLON_NPX_REPORT: report,
-    }) as NodeJS.ProcessEnv,
-    windowsHide: true,
-  });
-  const undo = relay(child);
-  return new Promise((resolve) => {
-    child.on("error", (error) => fail(`couldn't start pnpm: ${error.message}`));
-    child.on("exit", (code, signal) => {
-      undo();
-      let bin: string | undefined;
-      try {
-        bin = readFileSync(report, "utf8").split(path.delimiter)[0];
-      } catch {}
-      rmSync(scratch, { recursive: true, force: true });
-      if (code === 0 && bin) resolve(bin);
-      else end(code || 1, signal);
-    });
-  });
+  const baseEnv = withVariables(process.env, {
+    ...pnpmNetworkEnv(sources),
+    ...userconfig,
+  }) as NodeJS.ProcessEnv;
+  let bin: string | undefined;
+  let dlx: { code: number | null; signal: NodeJS.Signals | null };
+  try {
+    if (npmrc) writeFileSync(path.join(scratch, ".npmrc"), `${npmrc}\n`, { mode: 0o600 });
+    dlx = await runPnpm(
+      scratch,
+      [
+        ...npxToPnpm(packages, settings, process.cwd(), homedir()),
+        "--",
+        process.execPath,
+        ...process.execArgv,
+        "-e",
+        REPORT,
+      ],
+      { ...baseEnv, EIDOLON_NPX_REPORT: report },
+    );
+    try {
+      bin = readFileSync(report, "utf8").split(path.delimiter)[0];
+    } catch {}
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+  if (dlx.code !== 0 || !bin) return end(dlx.code || 1, dlx.signal);
+  // pnpm dlx clears dangerously_allow_all_builds in .modules.yaml's cache policy, leaving subdep
+  // install scripts unrun under ignoredBuilds; rebuild once unless ignore-scripts is set.
+  if (settings.includes("--config.ignore-scripts=true")) return bin;
+  const cachedDir = path.dirname(path.dirname(bin));
+  const ignored = readJson(path.join(cachedDir, "node_modules", ".modules.yaml"))?.ignoredBuilds;
+  if (!Array.isArray(ignored) || ignored.length === 0) return bin;
+  const cachedNpmrc = path.join(cachedDir, ".npmrc");
+  const wroteNpmrc = npmrc !== "" && !isFile(cachedNpmrc);
+  if (wroteNpmrc) writeFileSync(cachedNpmrc, `${npmrc}\n`, { mode: 0o600 });
+  try {
+    const rebuilt = await runPnpm(cachedDir, ["--loglevel=error", ...settings, "rebuild"], baseEnv);
+    if (rebuilt.code !== 0) return end(rebuilt.code || 1, rebuilt.signal);
+  } finally {
+    if (wroteNpmrc) rmSync(cachedNpmrc, { force: true });
+  }
+  return bin;
 }
 
 /** The packages npx installed in the dlx folder whose node_modules/.bin is `bin`, in order. */
