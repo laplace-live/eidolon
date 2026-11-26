@@ -5,7 +5,7 @@ import { msg, ph } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { AudioWaveformIcon, DatabaseIcon, FlaskConicalIcon } from "lucide-react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { effectiveProviderType } from "@/components/settings-form/controls";
 import { settingsQuery } from "@/components/settings-form/queries";
 import { SettingsCard } from "@/components/settings-form/settings-card";

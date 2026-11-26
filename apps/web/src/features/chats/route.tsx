@@ -2,7 +2,7 @@ import { isChatId } from "@eidolon/chat";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { MessagesSquareIcon, PlusIcon } from "lucide-react";
-import { useParams } from "react-router";
+import { useParams } from "wouter";
 import { EmptyState } from "@/components/empty-state";
 import { MobileBar } from "@/components/mobile-bar";
 import { Button } from "@/components/ui/button";

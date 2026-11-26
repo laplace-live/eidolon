@@ -18,7 +18,7 @@ import {
   UserRoundXIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
-import { Link, Navigate, useParams } from "react-router";
+import { Link, Redirect, useParams } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -176,7 +176,7 @@ export function Component() {
   const personas = useQuery(personasQuery);
 
   if (tab !== undefined && !isSection(tab)) {
-    return <Navigate to={studioPath(id, "identity")} replace />;
+    return <Redirect key={`${id}:${tab}`} to={studioPath(id, "identity")} replace />;
   }
   if (personas.isPending) return <Loading />;
   if (personas.isError) return <LoadError error={personas.error} />;

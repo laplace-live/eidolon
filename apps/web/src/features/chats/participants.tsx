@@ -2,7 +2,7 @@ import { MAX_PARTICIPANTS, type ParticipantId } from "@eidolon/chat";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { UserRoundMinusIcon, UserRoundPlusIcon } from "lucide-react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { personasQuery } from "@/components/settings-form/queries";
 import { AvatarGroup, AvatarGroupCount } from "@/components/ui/avatar";

@@ -3,7 +3,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { MessageSquarePlusIcon } from "lucide-react";
 import { memo, type ReactElement, useState } from "react";
-import { Link, useMatch, useNavigate } from "react-router";
+import { Link, useLocation, useRoute } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { ErrorAlert } from "@/components/error-alert";
 import { personasQuery } from "@/components/settings-form/queries";
@@ -57,7 +57,7 @@ export function NewChatMenu({
   }) => ReactElement;
 }) {
   const { t } = useLingui();
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
   const personas = useQuery(personasQuery);
   const status = useQuery(statusQuery);
   const create = useCreateChat((id) => navigate(chatPath(id)));
@@ -173,7 +173,8 @@ export const SidebarChats = memo(function SidebarChats() {
   const personaOf = usePersonaOf();
   const now = useNow(true, CLOCK_MS);
   const chats = useQuery(chatsQuery);
-  const current = useMatch("/chats/:id")?.params.id;
+  const [, match] = useRoute("/chats/:id");
+  const current = match?.id;
 
   if (chats.error instanceof ApiError && chats.error.status === 401) return null;
 

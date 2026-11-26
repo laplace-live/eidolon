@@ -2,7 +2,6 @@ import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { type SubmitEvent, useId, useState } from "react";
-import { useRevalidator } from "react-router";
 import { AppMark } from "@/components/app-mark";
 import { LanguageSwitch, ThemeMenu } from "@/components/preferences";
 import { SectionCard } from "@/components/section-card";
@@ -14,6 +13,7 @@ import { WindowDragStrip } from "@/components/window-drag-strip";
 import { desktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/labels";
 import { exchangeLinkCode, linkCodeIn } from "@/lib/session";
+import { useRevalidate } from "@/router";
 
 const EXPIRED = msg`That link has expired or isn't valid. A link works for 10 minutes: run the same command again for a fresh one.`;
 const INVALID = msg`That isn't an Eidolon link.`;
@@ -58,7 +58,7 @@ function DesktopLockedScreen({ platform }: { readonly platform: string }) {
 function LinkScreen({ expired }: { readonly expired: boolean }) {
   const { t } = useLingui();
   const id = useId();
-  const revalidator = useRevalidator();
+  const revalidate = useRevalidate();
   const [link, setLink] = useState("");
   const [problem, setProblem] = useState<MessageDescriptor | null>(expired ? EXPIRED : null);
   const [busy, setBusy] = useState(false);
@@ -73,7 +73,7 @@ function LinkScreen({ expired }: { readonly expired: boolean }) {
     setBusy(true);
     const failure = await exchangeLinkCode(code);
     setBusy(false);
-    if (!failure) await revalidator.revalidate();
+    if (!failure) await revalidate();
     else if (failure.code === "link-expired") setProblem(EXPIRED);
     else if (failure.code === "unauthorized") setProblem(INVALID);
     else setProblem(errorMessage(failure));

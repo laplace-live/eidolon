@@ -3,10 +3,10 @@
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, type ReactNode } from "react";
+import { createElement, type FunctionComponent, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router";
 import { expect, test, vi } from "vitest";
+import { Router, type RouterOptions } from "wouter";
 import type { TaskSnapshot } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
@@ -64,8 +64,8 @@ function render(node: ReactNode, tasks: readonly TaskSnapshot[] = [TASK]): strin
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
   return renderToStaticMarkup(
     createElement(
-      MemoryRouter,
-      null,
+      Router as FunctionComponent<RouterOptions>,
+      { ssrPath: "/" },
       createElement(I18nProvider, { i18n }, createElement(QueryClientProvider, { client }, node)),
     ),
   );

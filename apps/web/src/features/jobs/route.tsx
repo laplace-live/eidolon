@@ -1,4 +1,4 @@
-import { useParams } from "react-router";
+import { useParams } from "wouter";
 import { JobDetail } from "./detail";
 import { JobsList } from "./list";
 

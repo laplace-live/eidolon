@@ -7,7 +7,7 @@ import { msg, ph, plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListTodoIcon, TriangleExclamationPointIcon } from "lucide-react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import type { CardPath } from "@/components/settings-form/controls";
 import { type SaveQuestion, SettingsCard } from "@/components/settings-form/settings-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

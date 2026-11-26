@@ -3,7 +3,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { AudioLinesIcon, BrainIcon, KeyRoundIcon } from "lucide-react";
 import { type ReactNode, type Ref, useEffect, useRef } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -254,7 +254,7 @@ export function CallPage() {
   const { t } = useLingui();
   const { data: status } = useQuery(statusQuery);
   const { up } = useCallPresence();
-  // The root loader primes it, so it is known from the first render.
+  // The session gate primes it, so it is known from the first render.
   if (status === undefined) return null;
 
   const { persona } = status;

@@ -1,7 +1,7 @@
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { ErrorAlert } from "@/components/error-alert";
 import { PersonaBadges } from "@/components/persona-badges";

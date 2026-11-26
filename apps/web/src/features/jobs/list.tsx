@@ -3,7 +3,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpenIcon, TimerIcon, WorkflowIcon } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { EmptyState } from "@/components/empty-state";
 import { ListCard, ListRow } from "@/components/list";

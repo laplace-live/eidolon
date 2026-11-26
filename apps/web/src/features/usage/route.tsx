@@ -6,7 +6,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChartColumnIcon, CircleExclamationPointIcon, ReceiptIcon, TableIcon } from "lucide-react";
 import { useState } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams } from "wouter";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorAlert } from "@/components/error-alert";
 import { PageHeader } from "@/components/page-header";

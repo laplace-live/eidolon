@@ -5,7 +5,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { ListTodoIcon, SettingsIcon, TriangleExclamationPointIcon } from "lucide-react";
 import { useMemo } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { EmptyState } from "@/components/empty-state";
 import { ListCard, ListRow } from "@/components/list";

@@ -5,10 +5,10 @@
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement } from "react";
+import { createElement, type FunctionComponent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { Router, type RouterOptions } from "wouter";
 import type { Status } from "@/lib/api";
 import type { EidolonDesktop } from "@/lib/desktop";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
@@ -119,8 +119,8 @@ function render({
           TooltipProvider,
           null,
           createElement(
-            MemoryRouter,
-            null,
+            Router as FunctionComponent<RouterOptions>,
+            { ssrPath: "/" },
             createElement(
               CallPresenceContext.Provider,
               { value: call },

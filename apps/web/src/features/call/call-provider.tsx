@@ -10,7 +10,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useRevalidator } from "react-router";
 import { chatQuery } from "@/features/chats/queries";
 import { callOn } from "@/features/chats/stream";
 import { pausePlayback } from "@/features/chats/voice";
@@ -19,6 +18,7 @@ import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import type { Status } from "@/lib/api";
 import { subscribeWindowShows, windowShows } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
+import { useRevalidate } from "@/router";
 import {
   type CallPresence,
   CallPresenceContext,
@@ -35,7 +35,7 @@ const activeOf = (status: Status) => status.persona.id;
 
 export function CallProvider({ children }: { readonly children: ReactNode }): ReactNode {
   const queryClient = useQueryClient();
-  const { revalidate } = useRevalidator();
+  const revalidate = useRevalidate();
   const [signals] = useState(() => new CallSignals());
   const [stages] = useState(() => new CallStages(signals));
   const engine = useCall(signals);

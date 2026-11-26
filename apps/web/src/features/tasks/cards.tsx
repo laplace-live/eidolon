@@ -12,7 +12,7 @@ import {
   TriangleExclamationPointIcon,
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { parseDraft } from "@/components/settings-form/controls";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";

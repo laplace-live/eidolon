@@ -4,7 +4,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { InfoIcon, LockIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { ErrorAlert } from "@/components/error-alert";
 import { FieldSkeletons } from "@/components/section-card";
 import { AccountKeyField, NoKeyField } from "@/components/settings-form/account-key-field";

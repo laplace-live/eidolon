@@ -6,7 +6,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { PhoneCallIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { shortNameOf } from "@/features/chats/persona";
 import { listOf } from "@/lib/labels";

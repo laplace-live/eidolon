@@ -3,7 +3,7 @@
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams } from "wouter";
 import { SectionCardSkeleton } from "@/components/section-card";
 import { settingsQuery } from "@/components/settings-form/queries";
 import { useCallPresence } from "@/features/call/call-context";

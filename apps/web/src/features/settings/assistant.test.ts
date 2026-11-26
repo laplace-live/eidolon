@@ -5,10 +5,10 @@ import { SETTINGS } from "@eidolon/config";
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, type ReactNode } from "react";
+import { createElement, type FunctionComponent, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { Router, type RouterOptions } from "wouter";
 import type { AssistantStatus, SettingRow } from "@/lib/api";
 import type { EidolonDesktop } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
@@ -50,8 +50,8 @@ function render(node: ReactNode, data: ReadonlyArray<readonly [readonly unknown[
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
   return renderToStaticMarkup(
     createElement(
-      MemoryRouter,
-      null,
+      Router as FunctionComponent<RouterOptions>,
+      { ssrPath: "/" },
       createElement(I18nProvider, { i18n }, createElement(QueryClientProvider, { client }, node)),
     ),
   );

@@ -9,7 +9,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { Status } from "@/lib/api";

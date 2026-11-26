@@ -18,9 +18,9 @@ export function requiredKeyMissing(status: Pick<Status, "keys">): boolean {
 }
 
 /**
- * Where the root loader sends the viewer before any page renders, or null to stay. Never during a
- * call: the wizard is outside the shell, so opening it ends the tab's call, and the loader runs
- * again on every change of a page's search.
+ * Where the session gate sends the viewer before any page renders, or null to stay. Never during a
+ * call: the wizard is outside the shell, so opening it ends the tab's call, and the gate
+ * evaluates again whenever status or location changes.
  */
 export function firstRunRedirect(
   status: Pick<Status, "keys" | "activeCalls">,

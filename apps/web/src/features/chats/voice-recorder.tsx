@@ -4,7 +4,7 @@ import { MAX_VOICE_MS } from "@eidolon/chat";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ArrowUpIcon, MicIcon, XIcon } from "lucide-react";
 import { type PointerEvent, useEffect, useRef } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { UnavailableButton } from "@/components/unavailable-button";
 import { formatDuration } from "@/lib/format";

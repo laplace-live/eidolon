@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { memo, type ReactNode, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation } from "wouter";
 import { useAvatarVersion } from "@/components/avatar/version";
 import { useShellCall } from "@/features/call/call-context";
 import { soloTarget } from "@/features/call/target";
@@ -40,7 +40,7 @@ export const CompanionFeed = memo(function CompanionFeed(): ReactNode {
 function Feed({ app }: { readonly app: FeedBridge }): ReactNode {
   const { target, phase, up, micOn, start, signals, setMic, hangUp } = useShellCall();
   const { data: status } = useQuery(statusQuery);
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const { persona, call, key, feeding } = feedState(status, { target, phase, up, micOn });
   const current = { status, callable: call.callable, start, navigate, hangUp, setMic };

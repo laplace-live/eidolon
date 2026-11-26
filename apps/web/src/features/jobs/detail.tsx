@@ -12,7 +12,7 @@ import {
   TriangleExclamationPointIcon,
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -165,7 +165,7 @@ function Overview({
 }) {
   const { t } = useLingui();
   const lang = useLang();
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
   const { data: personas } = useQuery(personasQuery);
   const persona = personas?.personas.find((entry) => entry.id === job.persona) ?? {
     id: job.persona,

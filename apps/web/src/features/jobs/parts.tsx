@@ -17,7 +17,7 @@ import {
   TriangleExclamationPointIcon,
 } from "lucide-react";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link } from "wouter";
 import {
   AlertDialog,
   AlertDialogAction,

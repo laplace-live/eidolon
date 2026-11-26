@@ -2,7 +2,7 @@ import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { EllipsisIcon, PencilIcon, Settings2Icon, Trash2Icon } from "lucide-react";
 import { type SubmitEvent, useId, useRef, useState } from "react";
-import { useMatch, useNavigate } from "react-router";
+import { useLocation, useRoute } from "wouter";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -126,8 +126,9 @@ function DeleteDialog({
   readonly onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useLingui();
-  const navigate = useNavigate();
-  const current = useMatch("/chats/:id")?.params.id;
+  const [, navigate] = useLocation();
+  const [, match] = useRoute("/chats/:id");
+  const current = match?.id;
   const remove = useDeleteChat((deleted) => {
     onOpenChange(false);
     if (deleted === current) navigate("/chats", { replace: true });
