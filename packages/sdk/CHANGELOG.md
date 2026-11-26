@@ -1,5 +1,11 @@
 # @laplace.live/eidolon-sdk
 
+## 0.5.0
+
+### Minor Changes
+
+- 51bf389: Add group roll-call, silent-member, and @all triggers with 0–100 hop presets
+
 ## 0.4.0
 
 ### Minor Changes
