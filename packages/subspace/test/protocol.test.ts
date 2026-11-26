@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   acceptHostHandshake,
   ClientAuthSchema,
@@ -20,7 +20,9 @@ import {
   httpToWsUrl,
   importX25519PrivateKey,
   importX25519PublicKey,
+  isAllowedRelayUrl,
   isPairingExpired,
+  isValidDirectHost,
   listShareableAddresses,
   parsePairingInput,
   pollDeviceToken,
@@ -28,11 +30,19 @@ import {
   randomBytes,
   signOutRelaySession,
   startClientHandshake,
+  subspaceAuthUrl,
+  subspaceRelayUrl,
   utf8Decode,
   utf8Encode,
 } from "../src/index.ts";
 
+beforeEach(() => {
+  vi.stubEnv("EIDOLON_SUBSPACE_AUTH_URL", "");
+  vi.stubEnv("EIDOLON_SUBSPACE_RELAY_URL", "");
+});
+
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -428,5 +438,30 @@ describe("Dual-DH X25519 + AES-256-GCM", () => {
     });
     await signOutRelaySession("https://id.laplace.live", "tok-1");
     expect(signOutSignal).toBeInstanceOf(AbortSignal);
+  });
+
+  test("subspaceRelayUrl, subspaceAuthUrl, and httpToWsUrl enforce https/wss or loopback http/ws", () => {
+    expect(subspaceRelayUrl()).toBe("https://eidolon-relay.vrp.moe");
+    expect(subspaceAuthUrl()).toBe("https://id.laplace.live");
+
+    vi.stubEnv("EIDOLON_SUBSPACE_RELAY_URL", "http://127.0.0.1:8787/");
+    vi.stubEnv("EIDOLON_SUBSPACE_AUTH_URL", "http://localhost:8080/");
+    expect(subspaceRelayUrl()).toBe("http://127.0.0.1:8787");
+    expect(subspaceAuthUrl()).toBe("http://localhost:8080");
+
+    vi.stubEnv("EIDOLON_SUBSPACE_RELAY_URL", "http://relay.example.com");
+    expect(() => subspaceRelayUrl()).toThrow(/https\/wss or loopback/);
+
+    vi.stubEnv("EIDOLON_SUBSPACE_AUTH_URL", "http://auth.example.com");
+    expect(() => subspaceAuthUrl()).toThrow(/https\/wss or loopback/);
+
+    expect(() => httpToWsUrl("http://relay.example.com", "/v1/host/control")).toThrow(
+      /https\/wss or loopback/,
+    );
+    expect(isAllowedRelayUrl("http://[::1]:8787")).toBe(true);
+    expect(isAllowedRelayUrl("http://evil.example.com")).toBe(false);
+    expect(isValidDirectHost("192.168.1.10")).toBe(true);
+    expect(isValidDirectHost("::1")).toBe(true);
+    expect(isValidDirectHost("http://192.168.1.10")).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ export const MUX_FRAME = {
   RES_END: 0x07,
   RES_ERR: 0x08,
   STREAM_CREDIT: 12,
+  REQ_STOP: 13,
   CALL_UDP_OPEN: 0x10,
   CALL_UDP_DATA: 0x11,
   CALL_UDP_CLOSE: 0x12,
@@ -120,15 +121,27 @@ function hasNoResponseBody(status: number, method: string): boolean {
   return method === "HEAD" || status === 204 || status === 205 || status === 304;
 }
 
-function encodeCredit(bytes: number): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(4);
-  new DataView(out.buffer).setUint32(0, bytes >>> 0, false);
+type CreditDirection = typeof MUX_FRAME.REQ_BODY | typeof MUX_FRAME.RES_BODY;
+
+function creditKey(direction: CreditDirection, streamId: number): string {
+  return `${direction}:${streamId}`;
+}
+
+function encodeCredit(direction: CreditDirection, bytes: number): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(5);
+  out[0] = direction;
+  new DataView(out.buffer).setUint32(1, bytes >>> 0, false);
   return out;
 }
 
-function decodeCredit(payload: Uint8Array): number {
-  if (payload.byteLength < 4) return 0;
-  return new DataView(payload.buffer, payload.byteOffset, 4).getUint32(0, false);
+function decodeCredit(
+  payload: Uint8Array,
+): { readonly direction: CreditDirection; readonly bytes: number } | null {
+  if (payload.byteLength !== 5) return null;
+  const direction = payload[0];
+  if (direction !== MUX_FRAME.REQ_BODY && direction !== MUX_FRAME.RES_BODY) return null;
+  const bytes = new DataView(payload.buffer, payload.byteOffset + 1, 4).getUint32(0, false);
+  return { direction, bytes };
 }
 
 interface FlowControlledStream {
@@ -271,13 +284,14 @@ export class MuxEndpoint {
     }
   >();
   readonly #sendCredits = new Map<
-    number,
+    string,
     {
       credit: number;
       wake: (() => void) | null;
       readonly cancel: () => void;
     }
   >();
+  readonly #clientUploads = new Map<number, () => void>();
   readonly #clientCalls = new Map<
     number,
     {
@@ -337,6 +351,15 @@ export class MuxEndpoint {
     this.#pendingResponses.set(streamId, { resolve, reject, method: input.method });
 
     let aborted = false;
+    let uploadStopped = false;
+    const hasUploadBody = input.body !== null && input.method !== "GET" && input.method !== "HEAD";
+    if (hasUploadBody) {
+      this.#clientUploads.set(streamId, () => {
+        if (uploadStopped) return;
+        uploadStopped = true;
+        this.#sendCredits.get(creditKey(MUX_FRAME.REQ_BODY, streamId))?.cancel();
+      });
+    }
     const sendAbort = (): void => {
       if (aborted || this.#closed) return;
       aborted = true;
@@ -367,7 +390,7 @@ export class MuxEndpoint {
           bodyFrame: MUX_FRAME.REQ_BODY,
           endFrame: MUX_FRAME.REQ_END,
           signal: input.signal,
-          isAborted: () => aborted,
+          isAborted: () => aborted || uploadStopped,
           onError: async (error) => {
             const pending = this.#pendingResponses.get(streamId);
             if (pending !== undefined) {
@@ -376,10 +399,13 @@ export class MuxEndpoint {
             }
             void this.#emit(MUX_FRAME.REQ_ABORT, streamId);
           },
+        }).finally(() => {
+          this.#clientUploads.delete(streamId);
         });
       }
       return await promise;
     } catch (error) {
+      this.#clientUploads.delete(streamId);
       this.#pendingResponses.delete(streamId);
       throw error;
     } finally {
@@ -501,11 +527,11 @@ export class MuxEndpoint {
         return;
       }
       case MUX_FRAME.STREAM_CREDIT: {
-        const amount = decodeCredit(payload);
-        if (amount > 0) {
-          const entry = this.#sendCredits.get(streamId);
+        const credit = decodeCredit(payload);
+        if (credit !== null && credit.bytes > 0) {
+          const entry = this.#sendCredits.get(creditKey(credit.direction, streamId));
           if (entry !== undefined) {
-            entry.credit += amount;
+            entry.credit += credit.bytes;
             const wake = entry.wake;
             entry.wake = null;
             wake?.();
@@ -513,6 +539,9 @@ export class MuxEndpoint {
         }
         return;
       }
+      case MUX_FRAME.REQ_STOP:
+        this.#clientUploads.get(streamId)?.();
+        return;
       case MUX_FRAME.CALL_UDP_OPEN:
         this.#onCallOpen(streamId, payload);
         return;
@@ -550,6 +579,8 @@ export class MuxEndpoint {
       req.bodyStream?.fail(error);
     }
     this.#hostRequests.clear();
+    for (const stop of this.#clientUploads.values()) stop();
+    this.#clientUploads.clear();
     for (const entry of this.#sendCredits.values()) entry.cancel();
     this.#sendCredits.clear();
     for (const call of this.#clientCalls.values()) {
@@ -577,12 +608,13 @@ export class MuxEndpoint {
   async #pumpStreamBody(input: {
     readonly streamId: number;
     readonly body: ReadableStream<Uint8Array>;
-    readonly bodyFrame: MuxFrameType;
+    readonly bodyFrame: CreditDirection;
     readonly endFrame: MuxFrameType;
     readonly signal?: AbortSignal;
     readonly isAborted: () => boolean;
     readonly onError: (error: unknown) => Promise<void>;
   }): Promise<void> {
+    const key = creditKey(input.bodyFrame, input.streamId);
     const reader = input.body.getReader();
     let cancelled = false;
     const creditEntry = {
@@ -597,7 +629,7 @@ export class MuxEndpoint {
         void reader.cancel().catch(() => {});
       },
     };
-    this.#sendCredits.set(input.streamId, creditEntry);
+    this.#sendCredits.set(key, creditEntry);
     input.signal?.addEventListener("abort", creditEntry.cancel, { once: true });
     if (input.signal?.aborted || input.isAborted() || this.#closed) {
       creditEntry.cancel();
@@ -639,7 +671,7 @@ export class MuxEndpoint {
         await input.onError(error);
       }
     } finally {
-      this.#sendCredits.delete(input.streamId);
+      this.#sendCredits.delete(key);
       input.signal?.removeEventListener("abort", creditEntry.cancel);
       try {
         reader.releaseLock();
@@ -664,10 +696,16 @@ export class MuxEndpoint {
     const bodyStream = hasBody
       ? createFlowControlledStream({
           onPullBytes: (bytes) => {
-            void this.#emit(MUX_FRAME.STREAM_CREDIT, streamId, encodeCredit(bytes));
+            void this.#emit(
+              MUX_FRAME.STREAM_CREDIT,
+              streamId,
+              encodeCredit(MUX_FRAME.REQ_BODY, bytes),
+            );
           },
           onCancel: (wasEnded) => {
-            if (!wasEnded) abort.abort();
+            if (!wasEnded && !abort.signal.aborted) {
+              void this.#emit(MUX_FRAME.REQ_STOP, streamId);
+            }
           },
         })
       : null;
@@ -728,6 +766,9 @@ export class MuxEndpoint {
         );
       }
     } finally {
+      if (body !== null && !body.locked) {
+        void body.cancel().catch(() => {});
+      }
       this.#hostRequests.delete(streamId);
     }
   }
@@ -780,7 +821,7 @@ export class MuxEndpoint {
     }
     const bodyStream = createFlowControlledStream({
       onPullBytes: (bytes) => {
-        void this.#emit(MUX_FRAME.STREAM_CREDIT, streamId, encodeCredit(bytes));
+        void this.#emit(MUX_FRAME.STREAM_CREDIT, streamId, encodeCredit(MUX_FRAME.RES_BODY, bytes));
       },
       onComplete: () => {
         this.#clientBodies.delete(streamId);
@@ -800,6 +841,7 @@ export class MuxEndpoint {
   }
 
   #failOrCloseClientStream(streamId: number, error: Error | null): void {
+    this.#clientUploads.get(streamId)?.();
     const pending = this.#pendingResponses.get(streamId);
     if (pending !== undefined) {
       this.#pendingResponses.delete(streamId);

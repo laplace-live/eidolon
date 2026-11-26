@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { avatarChanged, avatarSrc, avatarVersion } from "./version";
+import { avatarChanged, avatarSrc, avatarsResetForHost, avatarVersion } from "./version";
 
 test("a changed picture gets a URL the page hasn't loaded, for that persona only", () => {
   const before = avatarSrc("milky-green", avatarVersion("milky-green"));
@@ -15,6 +15,21 @@ test("a changed picture gets a URL the page hasn't loaded, for that persona only
   expect(avatarSrc("someone-else", avatarVersion("someone-else"))).toBe(
     "/api/local/personas/someone-else/avatar",
   );
+});
+
+test("switching Subspace hosts bumps every persona avatar version away from stale image cache", () => {
+  const before = avatarSrc("someone-else", avatarVersion("someone-else"));
+  avatarsResetForHost();
+  const afterHostA = avatarSrc("someone-else", avatarVersion("someone-else"));
+  expect(afterHostA).not.toBe(before);
+  expect(afterHostA).toContain("?v=");
+
+  avatarChanged("someone-else");
+  const afterEdit = avatarSrc("someone-else", avatarVersion("someone-else"));
+  avatarsResetForHost();
+  const afterHostB = avatarSrc("someone-else", avatarVersion("someone-else"));
+  expect(afterHostB).not.toBe(afterHostA);
+  expect(afterHostB).not.toBe(afterEdit);
 });
 
 test("the id is one encoded path segment", () => {

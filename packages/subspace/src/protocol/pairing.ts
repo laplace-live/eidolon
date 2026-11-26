@@ -12,7 +12,7 @@ export const PAIRING_HOST = "pair";
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-function isValidDirectHost(host: string): boolean {
+export function isValidDirectHost(host: string): boolean {
   if (/[\s/@?#]/.test(host)) return false;
   if (/^[A-Za-z0-9.-]+$/.test(host)) return true;
   if (!/^(?:\[[0-9a-fA-F:.]+\]|[0-9a-fA-F:.]+)$/.test(host) || !host.includes(":")) {
@@ -27,7 +27,7 @@ function isValidDirectHost(host: string): boolean {
   }
 }
 
-function isAllowedRelayUrl(raw: string): boolean {
+export function isAllowedRelayUrl(raw: string): boolean {
   let parsed: URL;
   try {
     parsed = new URL(raw);

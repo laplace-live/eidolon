@@ -1,6 +1,7 @@
-import { newId, withoutTrailingSlashes } from "@eidolon/config";
+import { errorText, logger, newId, withoutTrailingSlashes } from "@eidolon/config";
 import {
   completeDeviceAuthorization,
+  type DeviceAuthStart,
   discoverRelayAuthUrl,
   type RelayUser,
   signOutRelaySession,
@@ -18,6 +19,7 @@ import {
   encodePairingCode,
   encodePairingUrl,
   isPairingExpired,
+  isValidDirectHost,
   parsePairingInput,
   type SubspacePairingOffer,
 } from "./protocol/index.ts";
@@ -25,6 +27,7 @@ import { renderPairingQrSvg } from "./qr.ts";
 import { subspaceAuthUrl, subspaceRelayUrl } from "./settings.ts";
 import {
   type SubspaceGrantRecord,
+  type SubspaceRelayAuthRecord,
   type SubspaceSavedServer,
   type SubspaceServersFile,
   type SubspaceShareMode,
@@ -164,11 +167,15 @@ export class SubspaceManager {
 
   async boot(): Promise<void> {
     if (this.#stopped) return;
-    await this.host.ensureStartedFromDisk();
-    const { activeHostId, servers } = this.store.readServers();
-    for (const server of servers) {
-      const client = this.#clientFor(server);
-      if (server.id === activeHostId) client.start();
+    try {
+      await this.host.ensureStartedFromDisk();
+      const { activeHostId, servers } = this.store.readServers();
+      for (const server of servers) {
+        const client = this.#clientFor(server);
+        if (server.id === activeHostId) client.start();
+      }
+    } catch (error) {
+      logger.error(`[subspace] Failed to restore Subspace state: ${errorText(error)}`);
     }
   }
 
@@ -372,6 +379,14 @@ export class SubspaceManager {
     readonly directPort?: number;
   }): Promise<SubspaceStateSnapshot> {
     const current = await this.store.loadOrCreateIdentity();
+    if (
+      patch.directAddress !== undefined &&
+      patch.directAddress !== null &&
+      patch.directAddress.trim() !== "" &&
+      !isValidDirectHost(patch.directAddress.trim())
+    ) {
+      throw codedError("bad-request", "Invalid direct endpoint host");
+    }
     if (patch.shareMode === "relay" && this.store.readRelayAuth() === null) {
       throw codedError(
         "relay-auth-required",
@@ -383,7 +398,11 @@ export class SubspaceManager {
       hostName: patch.hostName?.trim() || current.hostName,
       shareMode: patch.shareMode ?? current.shareMode,
       directAddress:
-        patch.directAddress === undefined ? current.directAddress : patch.directAddress,
+        patch.directAddress === undefined
+          ? current.directAddress
+          : patch.directAddress === null || patch.directAddress.trim() === ""
+            ? null
+            : patch.directAddress.trim(),
       directPort: patch.directPort ?? current.directPort,
     };
     if (
@@ -413,7 +432,7 @@ export class SubspaceManager {
       await this.host.startDirect(next.directPort);
     } else if (!needsDirect) {
       await this.host.stopDirect();
-    } else if (!this.host.listening) {
+    } else {
       await this.host.startDirect(next.directPort);
     }
 
@@ -491,7 +510,12 @@ export class SubspaceManager {
       this.#authUrlFn !== undefined
         ? withoutTrailingSlashes(this.#authUrlFn())
         : await discoverRelayAuthUrl(relayUrl, abort.signal);
-    const started = await startDeviceAuthorization(authUrl, abort.signal);
+    let started: DeviceAuthStart;
+    try {
+      started = await startDeviceAuthorization(authUrl, abort.signal);
+    } catch {
+      throw codedError("upstream-failed", "Could not reach the Relay auth server");
+    }
     this.#deviceFlow = {
       status: "pending",
       userCode: started.userCode,
@@ -516,7 +540,12 @@ export class SubspaceManager {
     this.#devicePollAbort?.abort();
     this.#devicePollAbort = null;
     this.#deviceFlow = IDLE_FLOW;
-    const current = this.store.readRelayAuth();
+    let current: SubspaceRelayAuthRecord | null = null;
+    try {
+      current = this.store.readRelayAuth();
+    } catch {
+      // Explicit sign-out must still clear an unreadable credential file.
+    }
     this.store.saveRelayAuth(null);
     this.host.clearRelayInvites();
     this.host.stopRelay();

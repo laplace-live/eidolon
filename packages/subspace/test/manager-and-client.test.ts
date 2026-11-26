@@ -1,5 +1,6 @@
+import "../../../packages/config/test/isolated-guard.ts";
 import { createSocket } from "node:dgram";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -752,5 +753,183 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     expect(host.listening).toBe(true);
     await host.stopDirect();
     expect(host.listening).toBe(false);
+  });
+
+  test("SubspaceManager boot recovers from corrupt JSON, logout clears corrupt auth, and directPort updates apply with shareMode off", async () => {
+    const dir = tempDir("subspace-manager-resilience-");
+    const store = new SubspaceStore(dir);
+    mkdirSync(store.dir, { recursive: true });
+    writeFileSync(join(store.dir, "host.json"), "{corrupt-host", "utf8");
+    writeFileSync(join(store.dir, "servers.json"), "{corrupt-servers", "utf8");
+    writeFileSync(join(store.dir, "relay-auth.json"), "{corrupt-auth", "utf8");
+
+    const corruptMgr = new SubspaceManager({
+      dataHome: dir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+      relayUrl: () => "http://127.0.0.1:0",
+    });
+    cleanups.push(() => corruptMgr.stop());
+
+    // boot() must log and continue instead of crashing server startup on corrupt JSON.
+    await expect(corruptMgr.boot()).resolves.toBeUndefined();
+
+    const cleanDir = tempDir("subspace-manager-logout-port-");
+    const cleanStore = new SubspaceStore(cleanDir);
+    const mgr = new SubspaceManager({
+      dataHome: cleanDir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+      relayUrl: () => "http://127.0.0.1:1",
+      authUrl: () => "http://127.0.0.1:1",
+    });
+    cleanups.push(() => mgr.stop());
+
+    cleanStore.addGrant({
+      id: "g_direct_1",
+      clientName: "Direct Peer",
+      tokenSha256: "b".repeat(64),
+      mode: "direct",
+      createdAt: 1,
+      lastSeenAt: null,
+    });
+    await mgr.updateShareSettings({ shareMode: "direct", directPort: 0 });
+    const firstPort = mgr.host.directPort;
+    expect(firstPort).toBeNumber();
+
+    // Switch shareMode to off while retaining a direct grant: Direct listener stays up,
+    // and changing directPort must rebind the listener to the new port.
+    await mgr.updateShareSettings({ shareMode: "off" });
+    expect(mgr.host.directPort).toBe(firstPort);
+
+    const freeServer = createServer();
+    await new Promise<void>((resolve) => freeServer.listen(0, "127.0.0.1", resolve));
+    const addr = freeServer.address();
+    const targetPort = typeof addr === "object" && addr !== null ? addr.port : 0;
+    await new Promise<void>((resolve) => freeServer.close(() => resolve()));
+
+    const updated = await mgr.updateShareSettings({ directPort: targetPort });
+    expect(updated.share.listeningPort).toBe(targetPort);
+    expect(mgr.host.directPort).toBe(targetPort);
+
+    // Corrupt relay-auth.json is cleared cleanly by logoutRelayAuth.
+    writeFileSync(join(cleanStore.dir, "relay-auth.json"), "{corrupt-auth", "utf8");
+    const afterLogout = await mgr.logoutRelayAuth();
+    expect(afterLogout.relayAuth.status).toBe("signed-out");
+    expect(cleanStore.readRelayAuth()).toBeNull();
+
+    // Unreachable auth server surfaces coded upstream-failed instead of untyped error.
+    await expect(mgr.startRelayAuth()).rejects.toMatchObject({ code: "upstream-failed" });
+  });
+
+  test("createPairingOffer cancels cleanly when share state changes while relay WS connection is in flight", async () => {
+    const dir = tempDir("subspace-offer-epoch-race-");
+    const store = new SubspaceStore(dir);
+    const kp = await generateX25519KeyPair();
+    store.saveIdentity({
+      hostName: "Race Host",
+      publicKeyB64: kp.publicKeyB64,
+      privateKeyPkcs8B64: kp.privateKeyPkcs8B64,
+      shareMode: "off",
+      directAddress: null,
+      directPort: 0,
+      createdAt: Date.now(),
+    });
+
+    const relayKp = await generateX25519KeyPair();
+    const relayPriv = await importX25519PrivateKey(relayKp.privateKeyPkcs8B64);
+    const inviteCreates: string[] = [];
+    const ackEntered = Promise.withResolvers<void>();
+    const releaseAck = Promise.withResolvers<void>();
+
+    const httpServer = createServer((req, res) => {
+      if (req.url === "/api/auth/token") {
+        const exp = Math.floor(Date.now() / 1000) + 300;
+        const header = Buffer.from(JSON.stringify({ alg: "EdDSA" })).toString("base64url");
+        const payload = Buffer.from(JSON.stringify({ exp, sub: "alice" })).toString("base64url");
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ token: `${header}.${payload}.sig` }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    const wss = new WebSocketServer({ noServer: true });
+    httpServer.on("upgrade", (req, socket, head) => {
+      if (req.url === RELAY_PATHS.HOST_CONTROL) {
+        wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+      } else {
+        socket.destroy();
+      }
+    });
+    wss.on("connection", (ws) => {
+      let relayHostId = "";
+      ws.on("message", async (raw) => {
+        const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+        if (msg.type === "host_hello") {
+          relayHostId = String(msg.relayHostId);
+          const challengeB64 = Buffer.from("challenge-32-bytes-0123456789abc").toString("base64");
+          await computeRelayControlProof(
+            relayPriv,
+            String(msg.hostPublicKeyB64),
+            challengeB64,
+            "alice",
+          );
+          ws.send(
+            JSON.stringify({
+              type: "host_challenge",
+              challengeB64,
+              relayEphPubB64: relayKp.publicKeyB64,
+              userId: "alice",
+            }),
+          );
+        } else if (msg.type === "host_challenge_ack") {
+          ackEntered.resolve();
+          await releaseAck.promise;
+          ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+        } else if (msg.type === "invite_create") {
+          inviteCreates.push(String(msg.inviteId));
+          ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+    const addr = httpServer.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const client of wss.clients) client.terminate();
+          wss.close(() => httpServer.close(() => resolve()));
+        }),
+    );
+
+    store.saveRelayAuth({
+      authUrl: baseUrl,
+      relayUrl: baseUrl,
+      token: "sess-1",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const host = new SubspaceHost({
+      store,
+      serverVersion: () => "0.19.0",
+      relayUrl: () => baseUrl,
+      dispatch: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => host.stop());
+
+    const offerPromise = host.createPairingOffer({ mode: "relay" });
+    await ackEntered.promise;
+    host.clearInvites();
+    releaseAck.resolve();
+
+    await expect(offerPromise).rejects.toMatchObject({ code: "pairing-failed" });
+    expect(inviteCreates).toEqual([]);
+    expect(host.activeOffer()).toBeNull();
+    expect((await store.loadOrCreateIdentity()).shareMode).toBe("off");
   });
 });

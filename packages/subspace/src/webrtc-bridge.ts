@@ -6,7 +6,12 @@ const DTLS_ALERT_CLOSE_DELAY_MS = 200;
 const IPV4_LITERAL = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 function isDtlsAlert(packet: Uint8Array): boolean {
-  return packet.length >= 13 && packet[0] === 21;
+  if (packet.length < 15 || packet[0] !== 21) return false;
+  if (packet[3] === 0 && packet[4] === 0) {
+    // Epoch-0 alerts are plaintext: [level, description]. Ignore warnings unless close_notify.
+    return packet[13] === 2 || packet[14] === 0;
+  }
+  return true;
 }
 
 interface BridgeEntry {

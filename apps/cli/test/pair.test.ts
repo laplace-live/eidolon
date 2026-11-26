@@ -95,6 +95,25 @@ describe("laplace-pair and laplace-subspace", () => {
     expect(JSON.parse(logoutIo.stdout())).toEqual({ status: "signed-out" });
     expect((await store.loadOrCreateIdentity()).shareMode).toBe("off");
 
+    // Corrupt relay-auth.json must still allow status and explicit logout offline.
+    writeFileSync(join(store.dir, "relay-auth.json"), "{corrupt-json", "utf8");
+    const corruptStatusIo = captureIo();
+    expect(await subspaceMain(["status", "--json"], corruptStatusIo.io)).toBe(0);
+    expect(JSON.parse(corruptStatusIo.stdout())).toMatchObject({
+      relayAuth: { status: "signed-out", user: null },
+    });
+    const corruptLogoutIo = captureIo();
+    expect(await subspaceMain(["logout", "--json"], corruptLogoutIo.io)).toBe(0);
+    expect(JSON.parse(corruptLogoutIo.stdout())).toEqual({ status: "signed-out" });
+    expect(store.readRelayAuth()).toBeNull();
+
+    // Non-loopback plaintext relay/auth URLs must be rejected before talking to any server.
+    const badRelayIo = captureIo();
+    expect(
+      await subspaceMain(["login", "--relay-url", "http://relay.example.com"], badRelayIo.io),
+    ).toBe(2);
+    expect(badRelayIo.stderr()).toContain("https/wss or loopback");
+
     // A non-Eidolon server listening on the port from local-server.info must not receive Bearer token.
     const seenHeaders: (string | undefined)[] = [];
     const decoy = createServer((req, res) => {
@@ -140,6 +159,7 @@ describe("laplace-pair and laplace-subspace", () => {
   test("pairMain respawns headless server on exit 75 with bound port and re-probes to print new grants", async () => {
     const work = mkdtempSync(join(tmpdir(), "pair-restart-"));
     const argsLog = join(work, "args.log");
+    const firstPortFile = join(work, "first-port.txt");
     const entry = join(work, "fake-server.mjs");
     const infoPath = lockInfoPath("local-server");
     const tokenPath = join(dataHome(), "local-token");
@@ -207,6 +227,7 @@ const server = createServer((req, res) => {
 const listenPort = isSecondBoot ? 0 : requestedPort;
 server.listen(listenPort, "127.0.0.1", () => {
   const port = server.address().port;
+  if (!isSecondBoot) writeFileSync(${JSON.stringify(firstPortFile)}, String(port));
   mkdirSync(${JSON.stringify(dirname(infoPath))}, { recursive: true });
   writeFileSync(${JSON.stringify(tokenPath)}, token);
   writeFileSync(${JSON.stringify(infoPath)}, JSON.stringify({ pid: process.pid, host: "127.0.0.1", port }));
@@ -234,7 +255,9 @@ server.listen(listenPort, "127.0.0.1", () => {
       expect(spawns[0]).toContain("--port=0");
       const secondPortArg = spawns[1]?.find((arg) => arg.startsWith("--port="));
       expect(secondPortArg).toBeDefined();
-      expect(Number(secondPortArg?.slice("--port=".length))).toBeGreaterThan(0);
+      const firstPort = Number(readFileSync(firstPortFile, "utf8"));
+      expect(firstPort).toBeGreaterThan(0);
+      expect(Number(secondPortArg?.slice("--port=".length))).toBe(firstPort);
     } finally {
       controller.abort();
       rmSync(work, { recursive: true, force: true });

@@ -1,5 +1,6 @@
 import { createSocket } from "node:dgram";
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -247,5 +248,54 @@ describe("Direct WebSocket SubspaceHost <-> SubspaceClient", () => {
 
     await expect(connectPromise).rejects.toMatchObject({ code: "pairing-failed" });
     expect(events).not.toContain("device-connected");
+  });
+
+  test("binds dual-stack :: so Direct clients pairing over ::1 IPv6 loopback connect", async () => {
+    const probe = createServer();
+    const hasIpv6Loopback = await new Promise<boolean>((resolve) => {
+      probe.once("error", () => resolve(false));
+      probe.listen(0, "::1", () => {
+        probe.close(() => resolve(true));
+      });
+    });
+    if (!hasIpv6Loopback) return;
+
+    const dir = mkdtempSync(join(tmpdir(), "subspace-ipv6-e2e-"));
+    cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+
+    const host = new SubspaceHost({
+      store: new SubspaceStore(join(dir, "host")),
+      serverVersion: () => "0.19.0",
+      relayUrl: () => "http://127.0.0.1:0",
+      dispatch: async () => Response.json({ ipFamily: 6, ok: true }),
+    });
+    cleanups.push(() => host.stop());
+
+    const port = await host.startDirect(0);
+    const offer = await host.createPairingOffer({ mode: "direct", address: "::1", port });
+    expect(offer.endpoint).toEqual({ host: "::1", port });
+
+    const paired = await performPairingHandshake(offer, { clientName: "IPv6 Client" });
+    const client = new SubspaceClient(
+      {
+        id: "srv-ipv6-1",
+        name: paired.hostName,
+        hostPublicKeyB64: offer.hostPublicKeyB64,
+        grantId: paired.grantId,
+        deviceToken: paired.deviceToken,
+        mode: "direct",
+        endpoint: offer.endpoint,
+        addedAt: Date.now(),
+        lastConnectedAt: Date.now(),
+        lastVersion: paired.serverVersion,
+      },
+      {},
+      paired.tunnel,
+    );
+    cleanups.push(() => client.stop());
+
+    const res = await client.proxyFetch(new Request("http://subspace.local/api/ping"), "/api/ping");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ipFamily: 6, ok: true });
   });
 });

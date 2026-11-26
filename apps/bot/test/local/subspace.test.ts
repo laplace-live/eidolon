@@ -108,7 +108,14 @@ async function spawnPeerServer(remoteHome: string, distDir: string) {
     });
   });
 
-  return ready;
+  return {
+    ...ready,
+    stop: async () => {
+      child.stdin?.end();
+      if (child.exitCode === null) killTree(child.pid, { wait: true });
+      await child.exited.catch(() => {});
+    },
+  };
 }
 
 describe("Local server Subspace proxy & host switching", () => {
@@ -298,6 +305,13 @@ describe("Local server Subspace proxy & host switching", () => {
     expect(staleMutate.status).toBe(409);
     expect(await staleMutate.json()).toMatchObject({ error: { code: "conflict" } });
 
+    const staleFallback = await fetch(`${local.base}/api/offer`, {
+      method: "DELETE",
+      headers: { ...local.session, [EXPECTED_HOST_HEADER]: remoteId },
+    });
+    expect(staleFallback.status).toBe(409);
+    expect(await staleFallback.json()).toMatchObject({ error: { code: "conflict" } });
+
     const unauthStale = await fetch(`${local.base}/api/local/chats`, {
       headers: { [EXPECTED_HOST_HEADER]: remoteId },
     });
@@ -329,6 +343,14 @@ describe("Local server Subspace proxy & host switching", () => {
     expect(restartRes.status).toBe(200);
     expect(restartRes.headers.get("x-eidolon-subspace")).toBe("remote");
     expect(local.io.exits).toEqual([]);
+
+    // 7. When the active remote peer becomes unreachable, proxy returns 502 localFailure with hex error.id.
+    await peer.stop();
+    const downRes = await fetch(`${local.base}/api/local/chats`, { headers: local.session });
+    expect(downRes.status).toBe(502);
+    const downBody = (await downRes.json()) as ErrorBody;
+    expect(downBody.error.code).toBe("subspace-unreachable");
+    expect(downBody.error.id).toMatch(/^[0-9a-f]{8}$/);
   });
 
   test("tunneled /api/offer sets allowHostCandidates while direct local offers keep it false, and dispatchLocal preserves botFallback 405 + Allow", async () => {
@@ -410,6 +432,11 @@ describe("subspaceRoutes error handling", () => {
       revokeGrant: async () => {
         throw Object.assign(new Error("raw internal conflict detail"), { code: "conflict" });
       },
+      startRelayAuth: async () => {
+        throw Object.assign(new Error("connect ECONNREFUSED 10.9.8.7:4444"), {
+          code: "upstream-failed",
+        });
+      },
     } as unknown as SubspaceManager;
 
     const router = createLocalRouter(subspaceRoutes(fakeManager), () => "bearer");
@@ -461,5 +488,32 @@ describe("subspaceRoutes error handling", () => {
       message: "Active Subspace server changed; reload and try again",
     });
     expect(conflictText).not.toContain("raw internal conflict detail");
+
+    const authStartRes = await router(
+      req("http://127.0.0.1:7860/api/local/subspace/auth/start", { method: "POST" }),
+      server,
+    );
+    expect(authStartRes.status).toBe(502);
+    const authStartText = await authStartRes.text();
+    expect(JSON.parse(authStartText)).toEqual({
+      error: {
+        code: "upstream-failed",
+        message: "Could not reach the Relay auth server",
+      },
+    });
+    expect(authStartText).not.toContain("ECONNREFUSED");
+
+    const badOfferRes = await router(
+      req("http://127.0.0.1:7860/api/local/subspace/share/offer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "direct", address: "http://127.0.0.1/bad" }),
+      }),
+      server,
+    );
+    expect(badOfferRes.status).toBe(400);
+    expect((await badOfferRes.json()) as ErrorBody).toMatchObject({
+      error: { code: "bad-request" },
+    });
   });
 });

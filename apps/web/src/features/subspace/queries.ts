@@ -3,6 +3,7 @@ import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@ta
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { avatarsResetForHost } from "@/components/avatar/version";
 import {
   call,
   type SubspaceConnectionState,
@@ -30,7 +31,11 @@ export const SUBSPACE_CONNECTION_DOT: Readonly<Record<SubspaceConnectionState, s
 
 export const subspaceQuery = queryOptions({
   queryKey: SUBSPACE_KEY,
-  queryFn: ({ signal }) => call("GET /api/local/subspace", { signal }),
+  queryFn: async ({ signal }) => {
+    const data = await call("GET /api/local/subspace", { signal });
+    setExpectedSubspaceHost(data.activeHostId);
+    return data;
+  },
   refetchInterval: (query) => {
     const data = query.state.data;
     if (!data) return false;
@@ -100,6 +105,7 @@ export async function resetHostCacheAndRoute(
 ): Promise<void> {
   const nonSubspace = (query: { readonly queryKey: readonly unknown[] }) =>
     query.queryKey[0] !== SUBSPACE_KEY[0];
+  avatarsResetForHost();
   await queryClient.cancelQueries({ predicate: nonSubspace });
   queryClient.removeQueries({ predicate: nonSubspace });
   if (/^\/chats\/.+/.test(pathname)) {

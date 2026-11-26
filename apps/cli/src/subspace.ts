@@ -13,6 +13,7 @@ import { lockInfoPath } from "@eidolon/config/lock";
 import {
   completeDeviceAuthorization,
   discoverRelayAuthUrl,
+  isAllowedRelayUrl,
   listShareableAddresses,
   type SubspaceGrantView,
   type SubspaceStateSnapshot,
@@ -286,7 +287,12 @@ export async function subspaceMain(
     const identity = await store.loadOrCreateIdentity();
     const servers = store.readServers();
     const grants = store.readGrants();
-    const relayAuth = store.readRelayAuth();
+    let relayAuth = null;
+    try {
+      relayAuth = store.readRelayAuth();
+    } catch {
+      // Corrupt relay-auth.json should not block inspecting Subspace status offline.
+    }
     const authUrl = relayAuth?.authUrl ?? subspaceAuthUrl();
     const relayUrl = relayAuth?.relayUrl ?? subspaceRelayUrl();
     const snapshot = {
@@ -393,7 +399,12 @@ export async function subspaceMain(
         return 1;
       }
     } else {
-      const current = store.readRelayAuth();
+      let current = null;
+      try {
+        current = store.readRelayAuth();
+      } catch {
+        // Explicit sign-out must still clear an unreadable credential file.
+      }
       store.saveRelayAuth(null);
       if (current !== null) await signOutRelaySession(current.authUrl, current.token);
       const identity = await store.loadOrCreateIdentity();
@@ -410,10 +421,25 @@ export async function subspaceMain(
     typeof ns.relayUrl === "string" && ns.relayUrl.trim()
       ? withoutTrailingSlashes(ns.relayUrl.trim())
       : subspaceRelayUrl();
+  if (!isAllowedRelayUrl(relayUrl)) {
+    return reportExit(
+      io,
+      parserError(
+        SUBSPACE_PARSER,
+        `--relay-url must use https/wss or loopback http/ws: ${relayUrl}`,
+      ),
+    );
+  }
   const authUrl =
     typeof ns.authUrl === "string" && ns.authUrl.trim()
       ? withoutTrailingSlashes(ns.authUrl.trim())
       : undefined;
+  if (authUrl !== undefined && !isAllowedRelayUrl(authUrl)) {
+    return reportExit(
+      io,
+      parserError(SUBSPACE_PARSER, `--auth-url must use https/wss or loopback http/ws: ${authUrl}`),
+    );
+  }
   try {
     const ok = await runDeviceLoginFlow({
       relayUrl,

@@ -5,8 +5,9 @@ import type { AvatarStage, Bounds, Box } from "@laplace.live/eidolon-sdk/avatar"
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { PersonaAvatar } from "@/components/avatar";
-import { avatarChanged } from "@/components/avatar/version";
+import { avatarChanged, avatarsResetForHost } from "@/components/avatar/version";
 import { MouthTap } from "@/features/call/signals";
+import { subspaceQuery } from "@/features/subspace/queries";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import {
   asApiError,
@@ -14,6 +15,7 @@ import {
   type CharacterModels,
   call,
   type Status,
+  setExpectedSubspaceHost,
 } from "@/lib/api";
 import { characterModelFileQuery, characterModelsQuery } from "@/lib/character-models";
 import {
@@ -479,7 +481,22 @@ function CompanionPage({ bridge }: { readonly bridge: EidolonCompanion }) {
   const reducedMotion = useReducedMotion();
   const root = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
+  const previousHostId = useRef<string | null | undefined>(undefined);
   const [control] = useState(() => new Control(bridge, queryClient, root));
+
+  const subspace = useQuery(subspaceQuery);
+  const activeHostId = subspace.data?.activeHostId;
+  useEffect(() => {
+    if (activeHostId === undefined) return;
+    setExpectedSubspaceHost(activeHostId);
+    if (previousHostId.current !== undefined && previousHostId.current !== activeHostId) {
+      avatarsResetForHost();
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] !== "subspace",
+      });
+    }
+    previousHostId.current = activeHostId;
+  }, [activeHostId, queryClient]);
 
   const status = useQuery(statusQuery);
   const persona = status.data?.persona;

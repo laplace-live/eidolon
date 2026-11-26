@@ -20,7 +20,7 @@ import {
 import type { ChatRunner } from "./chats/runner.ts";
 import { allowedHosts, guardRequest, isApiPath, listedOrigin } from "./guard.ts";
 import { identityHandlers } from "./identity.ts";
-import { localError } from "./responses.ts";
+import { localError, localFailure } from "./responses.ts";
 import {
   type Authenticate,
   createLocalRouter,
@@ -133,13 +133,13 @@ async function forwardToSubspace(
       mapPairingFailed && error instanceof SubspaceConnectError && error.code === "pairing-failed"
         ? "pairing-failed"
         : "subspace-unreachable";
-    logger.warning(`[subspace] Proxy request failed: ${errorText(error)}`);
-    return localError(
+    return localFailure(
       502,
       code,
       code === "pairing-failed"
         ? "Remote server rejected this device's pairing token"
         : "Could not reach the active Subspace server",
+      (id) => logger.warning(`[subspace] Proxy request failed (error ${id}): ${errorText(error)}`),
     );
   }
 }
@@ -451,25 +451,22 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         const origin = listedOrigin(request, origins);
         const subspace = subspaceManager;
         const activeHostId = subspace?.activeHostId ?? null;
-        if (
-          origin === null &&
-          subspace !== null &&
-          activeHostId !== null &&
-          !shouldBypassSubspace(request, pathname)
-        ) {
+        if (origin === null && subspace !== null && !shouldBypassSubspace(request, pathname)) {
           const hostConflict = checkExpectedHost(request, activeHostId);
           if (hostConflict !== null) {
             logAccess(request, server, hostConflict);
             return hostConflict;
           }
-          const response = await forwardToSubspace(
-            subspace,
-            request,
-            `${pathname}${url.search}`,
-            activeHostId,
-          );
-          logAccess(request, server, response);
-          return response;
+          if (activeHostId !== null) {
+            const response = await forwardToSubspace(
+              subspace,
+              request,
+              `${pathname}${url.search}`,
+              activeHostId,
+            );
+            logAccess(request, server, response);
+            return response;
+          }
         }
         // Unknown /api and /mcp paths keep the bot's own 404 and 405 bytes.
         const response = await botFallback(request, server);

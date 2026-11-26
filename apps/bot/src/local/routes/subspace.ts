@@ -1,5 +1,5 @@
 // Subspace remote pairing, host sharing, and Relay account routes under /api/local/subspace.
-import type { SubspaceManager } from "@eidolon/subspace";
+import { isValidDirectHost, type SubspaceManager } from "@eidolon/subspace";
 import { z } from "zod";
 import type {
   ErrorCode,
@@ -16,43 +16,54 @@ const PairBodySchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   activate: z.boolean().optional(),
 });
+const DirectHostSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .refine(isValidDirectHost, "Invalid direct endpoint host");
+
 const UpdateServerBodySchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
-  host: z.string().trim().min(1).max(255).optional(),
+  host: DirectHostSchema.optional(),
   port: z.number().int().min(1).max(65535).optional(),
 });
 const ShareOfferBodySchema = z.object({
   mode: z.enum(["direct", "relay"]),
-  address: z.string().trim().min(1).max(255).optional(),
+  address: DirectHostSchema.optional(),
   port: z.number().int().min(0).max(65535).optional(),
   rotate: z.boolean().optional(),
 });
 const ShareSettingsBodySchema = z.object({
   hostName: z.string().trim().min(1).max(120).optional(),
   shareMode: z.enum(["off", "direct", "relay"]).optional(),
-  directAddress: z.string().trim().min(1).max(255).nullable().optional(),
+  directAddress: DirectHostSchema.nullable().optional(),
   directPort: z.number().int().min(0).max(65535).optional(),
 });
 
 const STATUS_BY_CODE: Readonly<Partial<Record<ErrorCode, number>>> = {
+  "bad-request": 400,
   conflict: 409,
   "call-active": 409,
   "invalid-pairing-code": 400,
   "pairing-expired": 410,
   "pairing-failed": 400,
   "subspace-unreachable": 502,
+  "upstream-failed": 502,
   "relay-auth-required": 409,
   "unknown-subspace-server": 404,
   "unknown-subspace-grant": 404,
 };
 
 const MESSAGE_BY_CODE: Readonly<Partial<Record<ErrorCode, string>>> = {
+  "bad-request": "Invalid request",
   conflict: "Active Subspace server changed; reload and try again",
   "call-active": "A call is in progress; hang up before changing Subspace hosts",
   "invalid-pairing-code": "That pairing link or code is not valid",
   "pairing-expired": "This pairing link has expired; ask the remote host for a new one",
   "pairing-failed": "Pairing with the remote Subspace server failed",
   "subspace-unreachable": "Could not reach the Subspace server",
+  "upstream-failed": "Could not reach the Relay auth server",
   "relay-auth-required": "Sign in to the Subspace Relay first",
   "unknown-subspace-server": "Unknown Subspace server",
   "unknown-subspace-grant": "Unknown Subspace device grant",

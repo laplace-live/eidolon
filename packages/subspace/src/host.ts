@@ -3,6 +3,7 @@ import type { Duplex } from "node:stream";
 import { errorText, logger, newId } from "@eidolon/config";
 import WebSocket, { WebSocketServer } from "ws";
 import { mintRelayJwt, RelayAuthExpiredError } from "./auth-client.ts";
+import { SubspaceConnectError } from "./client.ts";
 import {
   acceptHostHandshake,
   base64ToBytes,
@@ -16,6 +17,7 @@ import {
   type E2eeAuthResponse,
   type E2eeSession,
   importX25519PrivateKey,
+  isValidDirectHost,
   MuxEndpoint,
   randomBytes,
   type SubspacePairingOffer,
@@ -142,6 +144,7 @@ export class SubspaceHost {
     readonly reject: (err: Error) => void;
   }>();
   readonly #inviteAckWaiters = new Map<string, () => void>();
+  #shareEpoch = 0;
   #stopped = false;
 
   constructor(deps: SubspaceHostDeps) {
@@ -239,18 +242,40 @@ export class SubspaceHost {
       });
     });
 
-    const boundPort = await new Promise<number>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(targetPort, "0.0.0.0", () => {
-        server.removeListener("error", reject);
-        const addr = server.address();
-        if (addr === null || typeof addr === "string") {
-          reject(new Error("Direct server failed to bind a numeric port"));
-          return;
+    const listen = (host: string, ipv6Only?: boolean): Promise<number> =>
+      new Promise<number>((resolve, reject) => {
+        const onError = (err: Error) => reject(err);
+        server.once("error", onError);
+        const onListening = () => {
+          server.removeListener("error", onError);
+          const addr = server.address();
+          if (addr === null || typeof addr === "string") {
+            reject(new Error("Direct server failed to bind a numeric port"));
+            return;
+          }
+          resolve(addr.port);
+        };
+        if (ipv6Only === undefined) {
+          server.listen(targetPort, host, onListening);
+        } else {
+          server.listen({ host, port: targetPort, ipv6Only }, onListening);
         }
-        resolve(addr.port);
       });
-    });
+
+    let listenHost = "::";
+    let boundPort: number;
+    try {
+      boundPort = await listen("::", false);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      if (code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL") {
+        listenHost = "0.0.0.0";
+        boundPort = await listen("0.0.0.0");
+      } else {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        throw error;
+      }
+    }
 
     this.#directServer = server;
     this.#directWss = wss;
@@ -259,7 +284,9 @@ export class SubspaceHost {
       this.#identity = { ...identity, directPort: boundPort };
       this.#deps.store.saveIdentity(this.#identity);
     }
-    logger.info(`[subspace] Direct listener ready on 0.0.0.0:${boundPort}${DIRECT_WS_PATH}`);
+    logger.info(
+      `[subspace] Direct listener ready on ${listenHost === "::" ? "[::]" : listenHost}:${boundPort}${DIRECT_WS_PATH}`,
+    );
     this.#deps.onEvent?.({ type: "direct-listening", port: boundPort });
     return boundPort;
   }
@@ -301,6 +328,11 @@ export class SubspaceHost {
   }
 
   clearInvites(mode?: "direct" | "relay"): void {
+    this.#shareEpoch += 1;
+    this.#deleteInvites(mode);
+  }
+
+  #deleteInvites(mode?: "direct" | "relay"): void {
     for (const [key, invite] of this.#invites) {
       if (mode === undefined || invite.mode === mode) {
         this.#invites.delete(key);
@@ -316,6 +348,7 @@ export class SubspaceHost {
   }
 
   stopRelay(): void {
+    this.#shareEpoch += 1;
     this.#relayWanted = false;
     this.#cachedRelayJwt = null;
     if (this.#relayTimer !== null) {
@@ -334,6 +367,10 @@ export class SubspaceHost {
     readonly port?: number;
     readonly rotate?: boolean;
   }): Promise<SubspacePairingOffer> {
+    if (options.address !== undefined && !isValidDirectHost(options.address.trim())) {
+      throw Object.assign(new Error("Invalid direct endpoint host"), { code: "bad-request" });
+    }
+    const offerEpoch = this.#shareEpoch;
     const identity = await this.#ensureIdentity();
     if (!options.rotate) {
       const existing = this.activeOffer(options.mode);
@@ -365,7 +402,7 @@ export class SubspaceHost {
 
     let offer: SubspacePairingOffer;
     if (options.mode === "direct") {
-      const hostAddress = options.address ?? identity.directAddress ?? "127.0.0.1";
+      const hostAddress = (options.address ?? identity.directAddress ?? "127.0.0.1").trim();
       const port = await this.startDirect(options.port);
       const refreshed = await this.#ensureIdentity();
       offer = {
@@ -380,7 +417,10 @@ export class SubspaceHost {
     } else {
       const auth = this.#deps.store.readRelayAuth();
       if (auth === null) {
-        throw new Error("Sign in to the Subspace Relay before creating a relay pairing link");
+        throw Object.assign(
+          new Error("Sign in to the Subspace Relay before creating a relay pairing link"),
+          { code: "relay-auth-required" },
+        );
       }
       const relayUrl = this.#deps.relayUrl();
       const relayHostId = await deriveRelayHostId(base64ToBytes(identity.publicKeyB64));
@@ -396,13 +436,24 @@ export class SubspaceHost {
       };
     }
 
+    if (
+      this.#stopped ||
+      offerEpoch !== this.#shareEpoch ||
+      (options.mode === "relay" && !this.#relayWanted)
+    ) {
+      throw new SubspaceConnectError(
+        "pairing-failed",
+        "Share settings changed while creating pairing offer",
+      );
+    }
+
     const currentIdentity = await this.#ensureIdentity();
     if (currentIdentity.shareMode !== options.mode) {
       this.#identity = { ...currentIdentity, shareMode: options.mode };
       this.#deps.store.saveIdentity(this.#identity);
     }
 
-    this.clearInvites(options.mode);
+    this.#deleteInvites(options.mode);
     this.#invites.set(inviteId, {
       id: inviteId,
       mode: options.mode,
@@ -461,6 +512,7 @@ export class SubspaceHost {
   }
 
   async reloadIdentity(): Promise<void> {
+    this.#shareEpoch += 1;
     this.#cachedRelayJwt = null;
     this.#identity = await this.#deps.store.loadOrCreateIdentity();
     this.#privateKey = await importX25519PrivateKey(this.#identity.privateKeyPkcs8B64);

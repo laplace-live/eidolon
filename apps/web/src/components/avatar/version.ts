@@ -5,17 +5,25 @@
 import { useSyncExternalStore } from "react";
 import { url } from "@/lib/api";
 
+let hostEpoch = 0;
 const versions = new Map<string, number>();
 const listeners = new Set<() => void>();
 
 /** Persona `id`'s picture changed: every avatar of hers on the page loads it again. */
 export function avatarChanged(id: string): void {
-  versions.set(id, avatarVersion(id) + 1);
+  versions.set(id, (versions.get(id) ?? 0) + 1);
+  for (const listener of listeners) listener();
+}
+
+/** Active Subspace host changed: bump every avatar URL past the previous host's image cache. */
+export function avatarsResetForHost(): void {
+  hostEpoch += 1_000_000;
+  versions.clear();
   for (const listener of listeners) listener();
 }
 
 export function avatarVersion(id: string): number {
-  return versions.get(id) ?? 0;
+  return hostEpoch + (versions.get(id) ?? 0);
 }
 
 function subscribe(listener: () => void): () => void {

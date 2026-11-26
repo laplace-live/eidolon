@@ -745,4 +745,32 @@ describe("Subspace web UI regressions", () => {
       history.dispose();
     }
   });
+
+  test("subspaceQuery queryFn arms expected host header and resetHostCacheAndRoute resets persona avatar cache versions", async () => {
+    const { avatarSrc, avatarVersion } = await import("@/components/avatar/version");
+    const { resetHostCacheAndRoute } = await import("./queries");
+
+    const vBefore = avatarVersion("milky-green");
+    const initialState = makeState({ activeHostId: "srv_remote_2" });
+    mockCall.mockResolvedValueOnce(initialState);
+    const client = new QueryClient();
+    await client.fetchQuery(subspaceQuery);
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    await send("POST /api/local/settings", { body: {} });
+    const reqInit = fetchSpy.mock.calls[0]?.[1];
+    expect(
+      (reqInit?.headers as Record<string, string> | undefined)?.["X-Eidolon-Expected-Host"],
+    ).toBe("srv_remote_2");
+
+    const navigate = vi.fn();
+    const revalidate = vi.fn();
+    await resetHostCacheAndRoute(client, "/chats/c1", navigate, revalidate);
+    expect(navigate).toHaveBeenCalledWith("/chats", { replace: true });
+    expect(revalidate).toHaveBeenCalledTimes(1);
+    expect(avatarVersion("milky-green")).toBeGreaterThan(vBefore);
+    expect(avatarSrc("milky-green", avatarVersion("milky-green"))).toContain("?v=");
+  });
 });

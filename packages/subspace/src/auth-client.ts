@@ -1,5 +1,6 @@
 import { abortableSleep, envOptional, errorText, withoutTrailingSlashes } from "@eidolon/config";
 import { base64UrlToBytes, utf8Decode } from "./protocol/encoding.ts";
+import { isAllowedRelayUrl } from "./protocol/pairing.ts";
 import { DEFAULT_SUBSPACE_RELAY_URL, subspaceAuthUrl } from "./settings.ts";
 
 export const SUBSPACE_AUTH_CLIENT_ID = "eidolon-subspace";
@@ -84,11 +85,8 @@ export async function discoverRelayAuthUrl(
           try {
             const parsed = new URL(issuer);
             if (
-              parsed.protocol === "https:" ||
-              (parsed.protocol === "http:" &&
-                (parsed.hostname === "localhost" ||
-                  parsed.hostname === "127.0.0.1" ||
-                  parsed.hostname === "[::1]"))
+              (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+              isAllowedRelayUrl(parsed.toString())
             ) {
               return withoutTrailingSlashes(parsed.toString());
             }

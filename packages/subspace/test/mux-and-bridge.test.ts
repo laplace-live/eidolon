@@ -319,6 +319,142 @@ describe("MuxEndpoint", () => {
       hostMux.close();
     }
   });
+
+  test("rejects >4 MiB upload with 413 without aborting host handler and stops client upload cleanly", async () => {
+    let hostSignalAborted = false;
+    let cancelledOnClient = false;
+    const { clientMux, hostMux } = await wiredMuxPair(async (head, body, signal) => {
+      signal.addEventListener("abort", () => {
+        hostSignalAborted = true;
+      });
+      if (head.path === "/upload-limit" && body !== null) {
+        const reader = body.getReader();
+        const first = await reader.read();
+        expect(first.value?.byteLength).toBeGreaterThan(0);
+        await reader.cancel();
+        return {
+          status: 413,
+          statusText: "Payload Too Large",
+          headers: [["content-type", "application/json"]],
+          body: new Response(JSON.stringify({ error: { code: "payload-too-large" } })).body,
+        };
+      }
+      return { status: 404, statusText: "Not Found", headers: [], body: null };
+    });
+
+    try {
+      let producedChunks = 0;
+      const hugeUpload = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (producedChunks >= 48) {
+            controller.close();
+            return;
+          }
+          producedChunks += 1;
+          controller.enqueue(new Uint8Array(256 * 1024));
+        },
+        cancel() {
+          cancelledOnClient = true;
+        },
+      });
+      const res = await clientMux.request({
+        method: "POST",
+        path: "/upload-limit",
+        headers: [],
+        body: hugeUpload,
+      });
+      expect(res.status).toBe(413);
+      expect(JSON.parse(await new Response(res.body).text())).toEqual({
+        error: { code: "payload-too-large" },
+      });
+      expect(hostSignalAborted).toBe(false);
+      await vi.waitFor(() => {
+        expect(cancelledOnClient).toBe(true);
+      });
+      expect(producedChunks).toBeLessThan(48);
+    } finally {
+      clientMux.close();
+      hostMux.close();
+    }
+  });
+
+  test("isolates STREAM_CREDIT by direction so RES_BODY credits cannot replenish REQ_BODY uploads", async () => {
+    let seenReqChunks = 0;
+    const sentTypes: number[] = [];
+    let unblockHostRead: (() => void) | null = null;
+    const hostPaused = new Promise<void>((resolve) => {
+      unblockHostRead = resolve;
+    });
+
+    let serverMux!: MuxEndpoint;
+    const clientMux = new MuxEndpoint({
+      sendFrame: async (frame) => {
+        await serverMux.handleFrame(frame);
+      },
+    });
+    serverMux = new MuxEndpoint({
+      sendFrame: async (frame) => {
+        sentTypes.push(decodeMuxFrame(frame).type);
+        await clientMux.handleFrame(frame);
+      },
+      host: {
+        onHttpRequest: async (_head, body) => {
+          await hostPaused;
+          const reader = body!.getReader();
+          for (;;) {
+            const { done } = await reader.read();
+            if (done) break;
+            seenReqChunks += 1;
+          }
+          return { status: 200, statusText: "OK", headers: [], body: null };
+        },
+      },
+    });
+
+    try {
+      let enqueued = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (enqueued >= 40) {
+            controller.close();
+            return;
+          }
+          enqueued += 1;
+          controller.enqueue(new Uint8Array(128 * 1024));
+        },
+      });
+      const reqPromise = clientMux.request({
+        method: "POST",
+        path: "/dir-credit",
+        headers: [],
+        body,
+      });
+
+      // Wait until the 4 MiB upload window saturates.
+      await vi.waitFor(() => {
+        expect(enqueued).toBeGreaterThanOrEqual(32);
+      });
+      const beforeSpoof = enqueued;
+
+      // Spoof a RES_BODY credit frame on stream 1: must NOT unblock REQ_BODY upload window.
+      const wrongDir = new Uint8Array(5);
+      wrongDir[0] = MUX_FRAME.RES_BODY;
+      new DataView(wrongDir.buffer).setUint32(1, 2 * 1024 * 1024, false);
+      await clientMux.handleFrame(encodeMuxFrame(MUX_FRAME.STREAM_CREDIT, 1, wrongDir));
+      await new Promise((r) => setTimeout(r, 25));
+      expect(enqueued).toBe(beforeSpoof);
+
+      unblockHostRead!();
+      const res = await reqPromise;
+      expect(res.status).toBe(200);
+      await res.body?.cancel();
+      expect(seenReqChunks).toBe(40);
+      expect(sentTypes).toContain(MUX_FRAME.STREAM_CREDIT);
+    } finally {
+      clientMux.close();
+      serverMux.close();
+    }
+  });
 });
 
 describe("WebRTC SDP rewrite & UDP call bridge", () => {
@@ -413,6 +549,58 @@ describe("WebRTC SDP rewrite & UDP call bridge", () => {
         ),
       ).rejects.toThrow("Subspace tunnel is closed");
       expect(pool.activeCount).toBe(0);
+    } finally {
+      pool.closeAll();
+      browserSock.close();
+      hostEcho.close();
+      clientMux.close();
+      hostMux.close();
+    }
+  });
+
+  test("ignores epoch-0 warning DTLS alerts while closing on fatal/close_notify alerts", async () => {
+    const hostEcho = createSocket("udp4");
+    await new Promise<void>((resolve) => hostEcho.bind(0, "127.0.0.1", () => resolve()));
+    const hostPort = hostEcho.address().port;
+
+    const { clientMux, hostMux } = await wiredMuxPair(async () => ({
+      status: 404,
+      statusText: "Not Found",
+      headers: [],
+      body: null,
+    }));
+    const pool = new ClientCallBridgePool();
+    const browserSock = createSocket("udp4");
+    await new Promise<void>((resolve) => browserSock.bind(0, "127.0.0.1", () => resolve()));
+
+    try {
+      const sdp = SAMPLE_SDP.replaceAll("45678", String(hostPort));
+      const adapted = await pool.adaptOfferResponse(
+        new Response(JSON.stringify({ pc_id: "pc-warn-alert", sdp }), { status: 200 }),
+        clientMux,
+        { mode: "relay" },
+      );
+      const { sdp: rewritten } = (await adapted.json()) as { sdp: string };
+      const bridgePort = extractHostUdpPort(rewritten)!;
+
+      // Plaintext epoch-0 DTLS warning alert (level=1, desc=100) must NOT tear down the bridge.
+      const warnAlert = new Uint8Array(15);
+      warnAlert[0] = 21;
+      warnAlert[13] = 1;
+      warnAlert[14] = 100;
+      browserSock.send(warnAlert, bridgePort, "127.0.0.1");
+      await new Promise((r) => setTimeout(r, 40));
+      expect(pool.activeCount).toBe(1);
+
+      // Fatal alert (level=2) on epoch 0 DOES tear down the bridge.
+      const fatalAlert = new Uint8Array(15);
+      fatalAlert[0] = 21;
+      fatalAlert[13] = 2;
+      fatalAlert[14] = 40;
+      browserSock.send(fatalAlert, bridgePort, "127.0.0.1");
+      await vi.waitFor(() => {
+        expect(pool.activeCount).toBe(0);
+      });
     } finally {
       pool.closeAll();
       browserSock.close();
