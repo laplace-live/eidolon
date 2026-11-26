@@ -320,7 +320,14 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       return;
     }
     const file = files.get(url);
-    const packument = packuments.get(url.slice(1));
+    let packument = packuments.get(url.slice(1));
+    if (!file && !packument && url.endsWith("/latest")) {
+      const pkgPack = packuments.get(url.slice(1, -"/latest".length)) as
+        | { "dist-tags"?: { latest?: string }; versions?: Record<string, object> }
+        | undefined;
+      const latest = pkgPack?.["dist-tags"]?.latest;
+      if (latest !== undefined) packument = pkgPack?.versions?.[latest];
+    }
     response.writeHead(file || packument ? 200 : 404);
     response.end(file ? readFileSync(file) : JSON.stringify(packument ?? { error: "Not found" }));
   });
@@ -517,7 +524,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   afterAll(() => {
     server.close();
     rmSync(scratch, { recursive: true, force: true });
-  });
+  }, 60_000);
 
   /** A home whose .npmrc names the registry served here, then `lines`. */
   function newHome(...lines: string[]): string {
@@ -547,6 +554,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
         PATH: `/usr/bin:/bin:${LAUNCHER_SOURCES}`,
         EIDOLON_NODE: process.execPath,
         EIDOLON_TEST_MARKS: marks,
+        pnpm_config_fetch_retries: "0",
         ...env,
       },
     });
@@ -572,7 +580,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     });
     const missing = await launch("npx", ["-y", "eidolon-test-missing"]);
     expect([missing.status, missing.stdout]).toEqual([1, ""]);
-    expect(missing.stderr).toContain("ERR_PNPM_FETCH_404");
+    expect(missing.stderr).toContain("404 Not Found");
   }, 60_000);
 
   test("reads no pnpmfile, as npm reads none", async () => {
@@ -721,7 +729,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     const asked = requests.length;
     const ran = await launch("npx", ["-y", "@eidolon-corp/tool", "x"], { cwd: project });
     expect([ran.status, ran.stdout, requests.slice(asked)]).toEqual([1, "", []]);
-    expect(ran.stderr).toContain("Invalid URL");
+    expect(ran.stderr).toContain("relative URL without a base");
   }, 60_000);
 
   test("gives pnpm no registry a variable names in its arguments, which any process reads", async () => {
@@ -774,12 +782,20 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
   }, 60_000);
 
   test("installs through the proxy the project's .npmrc names, which pnpm reads from none", async () => {
-    // pnpm tunnels a plain http request through a proxy too. This one opens each tunnel it is
-    // asked for.
-    const tunnels: string[] = [];
-    const proxy = createServer();
+    const base = new URL(registry);
+    const proxied: string[] = [];
+    const proxy = createServer((clientReq, clientRes) => {
+      const target = new URL(clientReq.url ?? "");
+      if (target.host !== base.host) {
+        clientRes.writeHead(403).end();
+        return;
+      }
+      proxied.push(base.host);
+      clientReq.url = `${target.pathname}${target.search}`;
+      server.emit("request", clientReq, clientRes);
+    });
     proxy.on("connect", (request, socket, head) => {
-      tunnels.push(request.url ?? "");
+      proxied.push(request.url ?? "");
       const target = new URL(`http://${request.url}`);
       const upstream = connect(Number(target.port), target.hostname, () => {
         socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
@@ -798,7 +814,7 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       });
       const ran = await launch("npx", ["-y", "eidolon-test-hello", "x"], { cwd: project });
       expect(ran).toEqual({ status: 0, stdout: 'hello ["x"]\n', stderr: "", marks: [] });
-      expect(tunnels).toContain(new URL(registry).host);
+      expect(proxied).toContain(new URL(registry).host);
     } finally {
       proxy.close();
     }
@@ -982,5 +998,117 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
       ran.push({ spec, status, stdout });
     }
     expect(ran).toEqual(specs.map((spec) => ({ spec, status: 0, stdout: 'hello ["x"]\n' })));
+  }, 60_000);
+
+  test("removes the temporary .npmrc from the dlx cache when rebuild fails", async () => {
+    publish(
+      write(join(scratch, "bad-build"), {
+        "package.json": JSON.stringify({
+          name: "@eidolon-corp/bad-build",
+          version: "1.0.0",
+          scripts: { postinstall: "node post.js" },
+        }),
+        "post.js": [
+          'const { join } = require("path");',
+          'require("fs").writeFileSync(join(process.env.EIDOLON_TEST_MARKS, "bad-build"), "");',
+          "process.exit(1);",
+          "",
+        ].join("\n"),
+      }),
+      old,
+      PRIVATE,
+    );
+    publish(
+      write(join(scratch, "needs-rebuild"), {
+        "package.json": JSON.stringify({
+          name: "@eidolon-corp/needs-rebuild",
+          version: "1.0.0",
+          bin: { "eidolon-test-needs-rebuild": "cli.js" },
+          dependencies: { "@eidolon-corp/bad-build": "1.0.0" },
+        }),
+        "cli.js": "#!/usr/bin/env node\n",
+      }),
+      old,
+      PRIVATE,
+    );
+    const project = write(join(scratch, "rebuild-fail"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": privateNpmrc(TOKEN),
+    });
+    const home = newHome();
+    const ran = await launch("npx", ["-y", "@eidolon-corp/needs-rebuild"], { home, cwd: project });
+    const files = readdirSync(home, { recursive: true }).map(String);
+    expect([ran.status, ran.marks]).toEqual([1, ["bad-build"]]);
+    expect(files.some((file) => file.endsWith(".modules.yaml"))).toBe(true);
+    expect(files.filter((file) => /(?:^|\/)\.npmrc$/.test(file))).toEqual([".npmrc"]);
+  }, 60_000);
+
+  test("builds dependencies before root lifecycle scripts once per dlx cache install", async () => {
+    publish(
+      write(join(scratch, "once-dep"), {
+        "package.json": JSON.stringify({
+          name: "@eidolon-corp/once-dep",
+          version: "1.0.0",
+          scripts: { postinstall: "node post.js" },
+        }),
+        "post.js": [
+          'const { appendFileSync, writeFileSync } = require("fs");',
+          'const { join } = require("path");',
+          'writeFileSync("built.txt", "dep-built");',
+          'appendFileSync(join(process.env.EIDOLON_TEST_MARKS, "calls"), "dep\\n");',
+          "",
+        ].join("\n"),
+      }),
+      old,
+      PRIVATE,
+    );
+    publish(
+      write(join(scratch, "once-app"), {
+        "package.json": JSON.stringify({
+          name: "@eidolon-corp/once-app",
+          version: "1.0.0",
+          bin: { "eidolon-test-once": "cli.js" },
+          dependencies: { "@eidolon-corp/once-dep": "1.0.0" },
+          scripts: { postinstall: "node post.js" },
+        }),
+        "post.js": [
+          'const { appendFileSync, readFileSync } = require("fs");',
+          'const { dirname, join } = require("path");',
+          'const depDir = dirname(require.resolve("@eidolon-corp/once-dep/package.json"));',
+          'const built = readFileSync(join(depDir, "built.txt"), "utf8");',
+          'appendFileSync(join(process.env.EIDOLON_TEST_MARKS, "calls"), "app:" + built + "\\n");',
+          "",
+        ].join("\n"),
+        "cli.js": "#!/usr/bin/env node\nconsole.log('once');\n",
+      }),
+      old,
+      PRIVATE,
+    );
+    const project = write(join(scratch, "rebuild-once"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": privateNpmrc(TOKEN),
+    });
+    const home = newHome();
+    const marks = mkdtempSync(join(scratch, "once-marks-"));
+    const first = await launch("npx", ["-y", "@eidolon-corp/once-app"], {
+      home,
+      cwd: project,
+      env: { EIDOLON_TEST_MARKS: marks },
+    });
+    expect([first.status, first.stdout, first.stderr]).toEqual([0, "once\n", ""]);
+    expect(readFileSync(join(marks, "calls"), "utf8").trim().split("\n")).toEqual([
+      "dep",
+      "app:dep-built",
+    ]);
+    const second = await launch("npx", ["-y", "@eidolon-corp/once-app"], {
+      home,
+      cwd: project,
+      env: { EIDOLON_TEST_MARKS: marks },
+    });
+    expect([second.status, second.stdout, second.stderr]).toEqual([0, "once\n", ""]);
+    expect(readFileSync(join(marks, "calls"), "utf8").trim().split("\n")).toEqual([
+      "dep",
+      "app:dep-built",
+    ]);
   }, 60_000);
 });

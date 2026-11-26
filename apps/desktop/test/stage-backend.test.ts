@@ -780,7 +780,7 @@ describe("the VC++ runtime", () => {
     const sharp = join(modules, "@img", "sharp-win32-x64", "lib");
     put(join(sharp, "sharp-win32-x64.node"), pe({ imports: ["KERNEL32.dll"] }));
     put(join(sharp, "libvips-42.dll"), pe());
-    // The node shim's pnpm's, which pnpm loads to clone a package into place; the UCRT is Windows'.
+    // Another native addon under node-shim; the UCRT is Windows'.
     const reflink = join(
       payload,
       NODE_SHIM,

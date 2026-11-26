@@ -13,6 +13,7 @@ import {
   gatekeeperCheck,
   nativeCheck,
   parseAuthenticode,
+  payloadNativesCheck,
   presenceCheck,
   requiredInInstall,
   requirementCheck,
@@ -134,6 +135,16 @@ describe("macOS", () => {
     expect(nativeCheck("zvec_node_binding.node", ok(NATIVE_SIGNATURE))).toMatchObject({
       pass: true,
     });
+  });
+
+  test("fails the payload natives check when empty or missing the bundled pnpm binary", () => {
+    const pnpm = "node-shim/node_modules/node_modules/@pnpm/exe.darwin-arm64/pnpm";
+    expect(payloadNativesCheck(["zvec.node", pnpm], [pnpm])).toMatchObject({ pass: true });
+    expect(payloadNativesCheck(["zvec.node"], [pnpm])).toMatchObject({
+      pass: false,
+      detail: `missing: ${pnpm}`,
+    });
+    expect(payloadNativesCheck([], [])).toMatchObject({ pass: false });
   });
 
   test("fails a native signed ad hoc, without a secure timestamp, without the runtime or unsigned", () => {
@@ -273,6 +284,10 @@ const SIGNED: Authenticode[] = [
   signature(`${INSTALL}\\LAPLACE Eidolon.exe`, "LAPLACE Live LLC"),
   signature(`${INSTALL}\\Uninstall LAPLACE Eidolon.exe`, "LAPLACE Live LLC"),
   signature(`${INSTALL}\\resources\\elevate.exe`, "LAPLACE Live LLC"),
+  signature(
+    `${INSTALL}\\resources\\eidolon\\node-shim\\node_modules\\node_modules\\@pnpm\\exe.win32-x64\\pnpm.exe`,
+    "LAPLACE Live LLC",
+  ),
   signature(`${INSTALL}\\d3dcompiler_47.dll`, "Microsoft Windows"),
   ...[
     "dxcompiler.dll",
@@ -421,6 +436,7 @@ describe("Windows", () => {
       expect.arrayContaining([
         "LAPLACE Eidolon.exe",
         "Uninstall LAPLACE Eidolon.exe",
+        "pnpm.exe",
         "d3dcompiler_47.dll",
         "onnxruntime.dll",
         "onnxruntime_binding.node",

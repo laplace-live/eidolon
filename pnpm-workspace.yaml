@@ -20,5 +20,7 @@ allowBuilds:
   electron-winstaller: false
   # On linux/x64 it downloads the CUDA execution provider; the CPU binaries ship in the tarball.
   onnxruntime-node: false
+  # Prebuilt binaries ship in @pnpm/exe.*; install.js only links the command.
+  pnpm: false
   # Prebuilt binaries ship in @img/sharp-*; install only falls back to building from source.
   sharp: false

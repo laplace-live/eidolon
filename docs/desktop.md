@@ -822,11 +822,12 @@ The backend runs on the environment main reads, plus four variables of its own, 
 
 ## The payload
 
-`scripts/stage-backend.ts` stages the backend in `apps/desktop/.stage/<target>/eidolon`, for
-`darwin-arm64` or `win32-x64`: `pnpm build:desktop` stages this machine's, and
-`node apps/desktop/scripts/stage-backend.ts --target <target>` names one. A failed stage leaves
-none, and `win32-x64` stages only on Windows, whose Visual Studio redistributable supplies its
-VC++ copies.
+`scripts/stage-backend.ts` stages the backend in `apps/desktop/.stage/<target>/eidolon` for the
+host target (`darwin-arm64` on macOS arm64 or `win32-x64` on Windows x64, whose Visual Studio
+redistributable supplies its VC++ copies and whose install holds its `@pnpm/exe.*` binary):
+`pnpm build:desktop` stages the host target before building `dist/`, while
+`node apps/desktop/scripts/stage-backend.ts --target <target>` stages the requested target; a
+failed staging step removes its partial stage.
 
 - **What it holds:** what the npm package stages, through `apps/eidolon/scripts/build.ts`'s
   `stage()` (`dist/{server,cli,app}.js`, `web/`, `personas/`, `data/`, the built-in skills,
@@ -849,11 +850,9 @@ VC++ copies.
   a second, identical copy; on win32-x64 `onnxruntime.dll`, without DirectML's DLLs, which CPU
   sessions never load. Type-only packages stay, or `npm ls` would call them missing.
 - **The VC++ runtime on Windows.** onnxruntime imports it, so a machine without the
-  redistributable couldn't run VAD or turn detection, and so does the reflink addon the node shim's
-  pnpm loads to clone a package into place. Each folder in the payload holding a native addon, the
-  node shim's included, gets the runtime DLLs its natives import (their import and delay-import
-  tables, and what those DLLs import in turn): onnxruntime's folder five, reflink's
-  `vcruntime140.dll`. All come from the newest `Microsoft.VC14*.CRT` folder
+  redistributable couldn't run VAD or turn detection. Each folder in the payload holding a native
+  addon gets the runtime DLLs its natives import (their import and delay-import tables, and what
+  those DLLs import in turn): onnxruntime's folder five. All come from the newest `Microsoft.VC14*.CRT` folder
   vswhere finds, since whichever copy loads first serves the whole process. Node loads an addon
   with `LOAD_WITH_ALTERED_SEARCH_PATH`, which looks in its own folder first, so an older System32
   copy can't win. The copies shadow System32's, and Windows Update never services them: each
@@ -869,7 +868,8 @@ VC++ copies.
   the prune drops onnxruntime's.
 - **Licenses.** `THIRD_PARTY_LICENSES.txt` in the payload, which Licenses opens (the Help menu on
   macOS, the tray on Windows), holds every license the payload carries: each `node_modules`
-  package's, the node shim's pnpm and the packages its `dist/` bundles included, SPDX's text where
+  package's, the node shim's pnpm, its `@pnpm/exe.*` package and the packages its `dist/` bundles
+  included, SPDX's text where
   one ships none, with libvips's LGPL-3.0-or-later text and where its source is for each package
   that ships libvips (on Windows, sharp's own platform package); the VC++ runtime's terms on
   Windows; then the payload's NOTICE, THIRD_PARTY_NOTICES.md (what its bundles and web app include)
@@ -893,20 +893,21 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   `PATH`, from npm-normalize-package-bin, @npmcli/package-json, libnpmexec and @npmcli/run-script)
   and `npm-checks.ts` (a project's devEngines, from npm-install-checks); in
   `node_modules/node_modules/pnpm`, the launchers' `../node_modules/pnpm`, the pnpm `apps/desktop`
-  pins as an exact dev dependency, so `pnpm-lock.yaml` pins it as it pins the rest. The launchers
+  pins as an exact dev dependency, with `@pnpm/exe.<os>-<cpu>` beside it in
+  `node_modules/node_modules/@pnpm/exe.<os>-<cpu>`, so `pnpm-lock.yaml` pins it as it pins the rest. The launchers
   sit in a `node_modules/.bin` because cross-spawn, which starts an MCP server, escapes the words of a
   `.cmd` there twice: it takes one for a cmd-shim, whose `%*` cmd.exe reads a second time, and a
   launcher's `%*` is read again the same way. A `.cmd` anywhere else gets its words escaped once,
   so cmd.exe acts on a word holding a quote and one of `&`, `|`, `<`, `>` or
   `^` when it reads it the second time: the word arrives cut, and what follows an `&` runs as a
   command. `scripts/node-shim.ts`, ported from deepseek-harness, stages them from
-  `apps/desktop/node-shim` and a copy of the installed pnpm, pruned of the natives its `dist/`
-  bundles for other platforms (`prunePnpmForeignNativePackages`), its bundled packages' `.bin`
-  links, and `dist/vendor`'s fastlist executables, which nothing runs and the Windows release would
-  sign as Eidolon's. [The stage test](#the-stage-test) holds them to their sources, the pin and the
-  target's natives, with no `.exe`, and pnpm's `dist/` to the semver and `node-gyp-bin` that
-  npx uses. In a checkout, under `dev:desktop` and in the Electron lane, the launchers'
-  folder is `apps/desktop/node-shim` itself, whose `../node_modules/pnpm` is the installed one.
+  `apps/desktop/node-shim`, a copy of the installed pnpm without its bundled packages' `.bin` links,
+  and the target's `@pnpm/exe.*` binary (`0755` on macOS; `pnpm.exe` on Windows, which the release
+  signs when packaging). [The stage test](#the-stage-test) holds them to their sources, the pin,
+  the target's `@pnpm/exe.*` binary with no other `.exe` under `node-shim`, and pnpm's `dist/`
+  to the semver and `node-gyp-bin` that npx uses. In a checkout, under `dev:desktop` and in the
+  Electron lane, the launchers' folder is `apps/desktop/node-shim` itself, whose
+  `../node_modules/pnpm` is the installed one.
 - **A server gets it** from `serverEnv` (`packages/assistant/src/mcp/session.ts`) when the backend
   runs on Electron's Node and the launchers' folder is there (`shippedPath`): that folder last on
   the server's `PATH`, added after `shellEnv()`'s filter, which drops every `node_modules/.bin`,
@@ -926,7 +927,11 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
   bundled pnpm installs into its dlx cache, `npxSettings` making it install as npm does under the
   owner's npm config, which `npmConfig` reads from `npm_config_*` variables, the `.npmrc` at npm's
   local prefix and the user's, parsed and `${VAR}`-expanded as npm does: every dependency's install
-  scripts run, or none under `ignore-scripts`; the newest version is taken, or the newest
+  scripts run in dependency order (unless `ignore-scripts` is set, `npx.ts` passes
+  `--config.ignore-scripts=true` to `dlx` and then runs `pnpm rebuild --pending` in the cache folder
+  when `node_modules/.modules.yaml` lists `pendingBuilds`, since `dlx` resets
+  `dangerously-allow-all-builds` when populating its cache), or none
+  under `ignore-scripts`; the newest version is taken, or the newest
   `min-release-age` or `before` allows; git and tarball-URL dependencies install, but a dependency's
   own not where `allow-git` or `allow-remote` is `root` or `none`; `node_modules` is flat, so a
   package finds what it uses and the packages beside it as under npm; and no `.pnpmfile.cjs`
@@ -1177,7 +1182,8 @@ one failed. `test/signed-check.test.ts` holds its verdicts to the tools' own out
 
 - **macOS,** on `.out/mac-arm64/LAPLACE Eidolon.app`: `codesign --verify --deep --strict` passes; `spctl
   --assess` accepts it as a notarized Developer ID; `stapler validate` finds the ticket; every
-  `.node` and `.dylib` in the payload has the hardened runtime and a secure timestamp from Apple's
+  `.node` and `.dylib` in the payload, plus `node-shim/node_modules/node_modules/@pnpm/exe.darwin-arm64/pnpm`,
+  has the hardened runtime and a secure timestamp from Apple's
   server, which neither an ad-hoc signature nor `Signed Time` alone gives; and the designated
   requirement of the app and of each helper app and framework is the requirement file's, as `csreq
   -t` prints it.
@@ -1185,7 +1191,7 @@ one failed. `test/signed-check.test.ts` holds its verdicts to the tools' own out
   already, then reads `Get-AuthenticodeSignature` on the setup and on every PE file of the install,
   found by its headers whatever its name. Each must be Valid and timestamped, since a Trusted
   Signing certificate lasts three days and an untimestamped signature lapses with it. The setup,
-  every `.exe` in the install (`LAPLACE Eidolon.exe`, the uninstaller, `elevate.exe`) and every name the
+  every `.exe` in the install (`LAPLACE Eidolon.exe`, the uninstaller, `elevate.exe`, `pnpm.exe`) and every name the
   stage listed must be signed by one of `publish.publisherName`'s names; every other file must keep
   the Microsoft signature it came with (`MICROSOFT_SIGNERS`): onnxruntime's, the VC++ runtime and
   Electron's `d3dcompiler_47.dll`. The install must hold each of those and every listed file, so no
@@ -1453,8 +1459,8 @@ session and sharp, through `scripts/natives.ts`, with every native library and V
 process mapped coming from the payload: `payloadLibraries()` picks them by file name, so Windows'
 own `msvcp_win.dll`, mapped in every process with a window, isn't one), the node shim (its
 launchers in `node-shim/node_modules/.bin`, the payload's one `.bin`, equal to their sources in
-`apps/desktop/node-shim`, the sh ones executable, and its pnpm at `pnpm-lock.yaml`'s pin, licensed,
-pruned to the target's natives and with no `.exe`), on a Windows stage the VC++ copies and the
+`apps/desktop/node-shim`, the sh ones executable, its pnpm and target `@pnpm/exe.*` at `pnpm-lock.yaml`'s
+pin, licensed, with no foreign natives in pnpm's `dist/` and no other `.exe`), on a Windows stage the VC++ copies and the
 signers, and, once the app was packaged after the stage, that the packaged payload holds the same
 files. A target with no stage skips, and so does one staged from another
 version or `pnpm-lock.yaml`, whose title then says to run `pnpm build:desktop`.

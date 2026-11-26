@@ -5,12 +5,12 @@
 //
 // The node shim in the desktop payload, which npm users never get: launchers that run node, npx,
 // pnpm and pnpx on the app's own binary as Node, in node-shim/node_modules/.bin, and the pnpm
-// apps/desktop pins in node-shim/node_modules/node_modules, so the launchers' ../node_modules/pnpm
-// is the same path as from their sources in apps/desktop/node-shim.
-import { chmodSync, cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+// apps/desktop pins (plus its @pnpm/exe.* binary) in node-shim/node_modules/node_modules, so the
+// launchers' ../node_modules/pnpm is the same path as from their sources in apps/desktop/node-shim.
+import { chmodSync, cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
-import { basename, dirname, join, resolve } from "node:path";
-import { type Platform, supports } from "./lockfile.ts";
+import { dirname, join, resolve } from "node:path";
+import type { Platform } from "./lockfile.ts";
 
 const DESKTOP = resolve(import.meta.dirname, "..");
 
@@ -52,35 +52,36 @@ export function shimPnpm(payload: string): string {
   return join(payload, NODE_SHIM, "node_modules", "node_modules", "pnpm");
 }
 
+/** The platform binary package pnpm's native-binary.mjs resolves at ../@pnpm/exe.<os>-<cpu>. */
+export function shimPnpmExe(payload: string, platform: Platform): string {
+  return join(dirname(shimPnpm(payload)), "@pnpm", `exe.${platform.os}-${platform.cpu}`);
+}
+
 /** The folder of the pnpm package apps/desktop pins, as the workspace's pnpm installed it. */
 export function pnpmPackage(): string {
-  // Its exports map "." to its package.json, and nothing else.
-  return dirname(createRequire(join(DESKTOP, "package.json")).resolve("pnpm"));
+  return dirname(createRequire(join(DESKTOP, "package.json")).resolve("pnpm/package.json"));
 }
 
-/**
- * Remove packages bundled directly under pnpm's dist/node_modules whose npm `os`/`cpu` fields
- * exclude the target. The pnpm tarball carries every platform's optional native packages, such as
- * `@reflink/reflink-darwin-x64`. Nested node_modules and the `libc` field are not inspected; the
- * pinned pnpm bundles neither nested native packages nor Linux variants.
- */
-export function prunePnpmForeignNativePackages(pnpm: string, platform: string, arch: string): void {
-  const modules = join(pnpm, "dist", "node_modules");
-  const directories = (parent: string): string[] =>
-    readdirSync(parent, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && entry.name !== ".bin")
-      .map((entry) => join(parent, entry.name));
-  const packages = directories(modules).flatMap((entry) =>
-    basename(entry).startsWith("@") ? directories(entry) : [entry],
-  );
-  for (const directory of packages) {
-    const { os, cpu } = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
-    if (!supports(os, platform) || !supports(cpu, arch)) rmSync(directory, { recursive: true });
+/** The folder of @pnpm/exe.<os>-<cpu> beside the workspace's installed pnpm. */
+export function pnpmExePackage(platform: Platform): string {
+  const dir = join(dirname(pnpmPackage()), "@pnpm", `exe.${platform.os}-${platform.cpu}`);
+  if (!existsSync(dir)) {
+    throw new Error(`No @pnpm/exe.${platform.os}-${platform.cpu} at ${dir}`);
   }
+  return dir;
 }
 
-/** Writes the shim into `payload`, its pnpm pruned to `platform`'s natives. */
-export function stageNodeShim(payload: string, platform: Platform): void {
+export interface NodeShimSources {
+  readonly pnpm?: string;
+  readonly exe?: string;
+}
+
+/** Writes the shim into `payload`, with `platform`'s `@pnpm/exe.*` beside pnpm. */
+export function stageNodeShim(
+  payload: string,
+  platform: Platform,
+  sources: NodeShimSources = {},
+): void {
   const shim = join(payload, NODE_SHIM);
   const bin = shimLaunchers(payload);
   mkdirSync(bin, { recursive: true });
@@ -89,17 +90,16 @@ export function stageNodeShim(payload: string, platform: Platform): void {
   // A checkout's modes follow the umask it was made under.
   for (const name of POSIX_LAUNCHERS) chmodSync(join(bin, name), 0o755);
   const pnpm = shimPnpm(payload);
-  const source = pnpmPackage();
+  const source = sources.pnpm ?? pnpmPackage();
   // Its own node_modules holds only the links the workspace's install made to its commands.
   cpSync(source, pnpm, {
     recursive: true,
     dereference: true,
     filter: (path) => path !== join(source, "node_modules"),
   });
-  prunePnpmForeignNativePackages(pnpm, platform.os, platform.cpu);
   // The bundled packages' commands, which pnpm never runs: node-gyp's is in dist/node-gyp-bin.
   rmSync(join(pnpm, "dist", "node_modules", ".bin"), { recursive: true, force: true });
-  // ps-list's fastlist executables, which pnpm's build copies in and nothing runs: electron-builder
-  // signs every .exe it packs, so the Windows release would sign them as Eidolon's.
-  rmSync(join(pnpm, "dist", "vendor"), { recursive: true, force: true });
+  const exe = shimPnpmExe(payload, platform);
+  cpSync(sources.exe ?? pnpmExePackage(platform), exe, { recursive: true, dereference: true });
+  if (platform.os !== "win32") chmodSync(join(exe, "pnpm"), 0o755);
 }

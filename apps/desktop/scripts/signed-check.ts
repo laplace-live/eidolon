@@ -10,6 +10,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { dirname, join, relative, win32 } from "node:path";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 import { PUBLISHER_NAMES } from "../electron-builder.release.ts";
+import { shimPnpmExe } from "./node-shim.ts";
 import { readPe } from "./pe.ts";
 import { DESKTOP, installedBinary, installer, runsFolder, sleep } from "./smoke/kit.ts";
 import { namesUninstaller, silentUninstall, UNINSTALLER, uninstallEntries } from "./smoke/nsis.ts";
@@ -232,14 +233,15 @@ export function signatureChecks(
 
 /**
  * What the Windows checks must find in the install by name, so none passes on nothing: the app, its
- * uninstaller, each listed file, and the files that keep Microsoft's signature (onnxruntime's, the
- * VC++ runtime and Electron's d3dcompiler_47.dll).
+ * uninstaller, `pnpm.exe`, each listed file, and the files that keep Microsoft's signature
+ * (onnxruntime's, the VC++ runtime and Electron's d3dcompiler_47.dll).
  */
 export function requiredInInstall(listed: readonly string[]): string[] {
   return [
     ...new Set([
       "LAPLACE Eidolon.exe",
       UNINSTALLER,
+      "pnpm.exe",
       "d3dcompiler_47.dll",
       ...TARGETS["win32-x64"].onnxruntime,
       ...VC_RUNTIME_DLLS,
@@ -272,6 +274,20 @@ function filesUnder(dir: string): string[] {
     .sort();
 }
 
+/** A macOS app bundle's payload Mach-O binaries: non-empty, with every required path present. */
+export function payloadNativesCheck(
+  natives: readonly string[],
+  required: readonly string[],
+): Check {
+  const missing = required.filter((file) => !natives.includes(file));
+  return {
+    name: "the payload holds natives to check",
+    pass: natives.length > 0 && missing.length === 0,
+    detail:
+      missing.length > 0 ? `missing: ${missing.join(", ")}` : `${natives.length} Mach-O files`,
+  };
+}
+
 function checkMac(record: (check: Check) => void): void {
   const app = join(DESKTOP, ".out", "mac-arm64", "LAPLACE Eidolon.app");
   if (!existsSync(app)) throw new Error(`No ${app}: package the release first`);
@@ -279,14 +295,16 @@ function checkMac(record: (check: Check) => void): void {
   record(gatekeeperCheck(run("spctl", ["--assess", "--type", "execute", "--verbose=4", app])));
   record(stapleCheck(run("xcrun", ["stapler", "validate", app])));
   const payload = join(app, "Contents", "Resources", "eidolon");
+  const pnpmExe = join(shimPnpmExe(payload, { os: "darwin", cpu: "arm64" }), "pnpm");
   const natives = existsSync(payload)
-    ? filesUnder(payload).filter((file) => /\.(node|dylib)$/.test(file))
+    ? filesUnder(payload).filter((file) => /\.(node|dylib)$/.test(file) || file === pnpmExe)
     : [];
-  record({
-    name: "the payload holds natives to check",
-    pass: natives.length > 0,
-    detail: `${natives.length} .node and .dylib files`,
-  });
+  record(
+    payloadNativesCheck(
+      natives.map((file) => relative(payload, file)),
+      [relative(payload, pnpmExe)],
+    ),
+  );
   for (const native of natives) {
     record(nativeCheck(relative(payload, native), run("codesign", ["-dvvv", native])));
   }
