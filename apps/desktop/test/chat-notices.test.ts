@@ -72,11 +72,14 @@ function chatServer() {
     events: new Map<string, ChatEvent[]>(),
     personas: [MILKY, RIN, KURO] as PersonaSummary[],
     fails: new Map<string, number | "never">(),
+    holds: new Map<string, () => Promise<void>>(),
     requests: [] as { readonly path: string; readonly signal: AbortSignal }[],
   };
-  const fetch: BackendFetch = (path, { signal }) => {
+  const fetch: BackendFetch = async (path, { signal }) => {
     state.requests.push({ path, signal });
     const base = path.split("?")[0] as string;
+    const hold = state.holds.get(path) ?? state.holds.get(base);
+    if (hold !== undefined) await hold();
     const fail = state.fails.get(path) ?? state.fails.get(base);
     if (fail === "never") return new Promise<never>(() => {});
     const status = fail ?? 200;
@@ -85,14 +88,13 @@ function chatServer() {
     else if (path === PERSONAS) body = { active: MILKY.id, personas: state.personas };
     else {
       const match = /^\/api\/local\/chats\/([^/?]+)\?afterSeq=(\d+)$/.exec(path);
-      if (match === null)
-        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+      if (match === null) return { ok: false, status: 404, json: async () => ({}) };
       const [, id, afterRaw] = match;
       const after = Number(afterRaw);
       const events = (state.events.get(id as string) ?? []).filter((event) => event.seq > after);
       body = { events };
     }
-    return Promise.resolve({ ok: status === 200, status, json: async () => body });
+    return { ok: status === 200, status, json: async () => body };
   };
   return Object.assign(state, {
     fetch,
@@ -197,7 +199,7 @@ describe("plainReplyText", () => {
 });
 
 describe("ChatWatch", () => {
-  test("baseline sets seen seqs without notifying, and focused skips chat/persona reads", async () => {
+  test("baseline sets seen seqs without notifying, and focused skips chat event and persona reads", async () => {
     const { time, backend, shown, app, watch } = watching();
     backend.chats = [summary(CHAT_1, { lastSeq: 5 })];
     watch.ready();
@@ -273,15 +275,17 @@ describe("ChatWatch", () => {
     ]);
 
     app.lang = "zh-Hans";
-    backend.chats = [summary(CHAT_1, { lastSeq: 9 })];
+    backend.chats = [summary(CHAT_1, { lastSeq: 10 })];
     backend.events.set(CHAT_1, [
       message(9, {
         text: "",
         attachments: [{ kind: "image", name: "c.png", mime: "image/png" }],
       }),
+      message(10, { text: "[sighing] Hold on" }),
     ]);
     await time.advance(2_000);
-    expect(shown.at(-1)?.body).toBe("发来了一张照片");
+    expect(shown.at(-2)?.body).toBe("发来了一张照片");
+    expect(shown.at(-1)?.body).toBe("\u{1F62E}\u200D\u{1F4A8} Hold on");
     watch.stop();
   });
 
@@ -329,11 +333,16 @@ describe("ChatWatch", () => {
     watch.stop();
   });
 
-  test("groupFor enriches TaskWatch notices for group chats and returns null for 1-on-1 chats", async () => {
+  test("groupFor enriches TaskWatch notices for group chats, preserves persona Cf chars, and returns null for 1-on-1 chats", async () => {
     const { time, backend, watch } = watching("en");
+    backend.personas = [
+      ...backend.personas,
+      { id: "kana", name: "Ka\u2060na\u0007", shortName: "" } as unknown as PersonaSummary,
+    ];
     backend.chats = [
       summary(CHAT_1, { participants: [MILKY.id], lastSeq: 1 }),
       summary(CHAT_2, { participants: [MILKY.id, RIN.id, KURO.id], lastSeq: 1 }),
+      summary("chat-kana", { participants: [MILKY.id, "kana"], lastSeq: 1 }),
     ];
     watch.ready();
     await time.advance(0);
@@ -344,6 +353,10 @@ describe("ChatWatch", () => {
       groupTitle: "奶绿, Rin, Kuro",
       groupPeers: [RIN.id, KURO.id],
     });
+    expect(await watch.groupFor("chat-kana", MILKY.id)).toEqual({
+      groupTitle: "奶绿, Ka\u2060na",
+      groupPeers: ["kana"],
+    });
     watch.stop();
   });
 
@@ -353,16 +366,23 @@ describe("ChatWatch", () => {
     watch.ready();
     await time.advance(0);
 
-    backend.fails.set(`${CHATS}/${CHAT_1}`, "never");
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    backend.holds.set(`${CHATS}/${CHAT_1}`, () => gate);
+    backend.events.set(CHAT_1, [message(2, { text: "Reply arrived during focus change" })]);
     backend.chats = [summary(CHAT_1, { lastSeq: 2 })];
     await time.advance(2_000);
     app.focused = true;
-    await time.advance(10_000);
+    release?.();
+    await settle();
+    await time.advance(0);
     expect(shown).toEqual([]);
     watch.stop();
   });
 
-  test("logs failure streaks once, aborts after 10 s, resets baseline on recovery, and maps open-chat command", async () => {
+  test("logs failure streaks once, aborts after 10 s, preserves initial baseline after startup outage, and notifies after mid-run outage", async () => {
     const { time, backend, shown, lines, watch } = watching();
     backend.fails.set(CHATS, "never");
     watch.ready();
@@ -380,6 +400,17 @@ describe("ChatWatch", () => {
     await time.advance(2_000);
     expect(lines.at(-1)).toBe("info Eidolon: chat notifications read the chats again");
     expect(shown).toEqual([]);
+
+    // Once baseline exists, recovering from a mid-run outage still notifies new replies.
+    backend.fails.set(CHATS, 503);
+    await time.advance(2_000);
+    backend.fails.delete(CHATS);
+    backend.chats = [summary(CHAT_1, { lastSeq: 4 })];
+    backend.events.set(CHAT_1, [message(4, { text: "Back online" })]);
+    await time.advance(2_000);
+    expect(shown.map(({ seq, body }) => ({ seq, body }))).toEqual([
+      { seq: 4, body: "Back online" },
+    ]);
 
     expect(chatNoticeCommand({ chat: CHAT_1 })).toBe(openChatCommand(CHAT_1));
     watch.stop();

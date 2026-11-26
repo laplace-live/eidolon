@@ -2,7 +2,7 @@
 // keyed by speaker and group peers and stored by content SHA-256 so native notification APIs
 // read real local PNG files without holding auth tokens or decoding WebP.
 import { hash, randomBytes } from "node:crypto";
-import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SLUG_PATTERN } from "../shared/bridge.ts";
 
@@ -71,11 +71,15 @@ export class NotificationAvatarCache {
   /** Query key (`speaker|peer1,peer2`) → cached PNG file path, oldest-used first. */
   readonly #paths = new Map<string, string>();
   readonly #inflight = new Map<string, Promise<string | null>>();
+  /** Pre-existing `.png` paths from prior launches, oldest mtime first, not yet in `#paths`. */
+  readonly #staleFiles: string[] = [];
+  #pruned = false;
+  #io: Promise<void> = Promise.resolve();
   #failing = false;
 
   constructor(options: AvatarCacheOptions) {
     this.#options = options;
-    this.#maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
+    this.#maxEntries = Math.max(1, options.maxEntries ?? DEFAULT_MAX_ENTRIES);
   }
 
   /**
@@ -135,15 +139,7 @@ export class NotificationAvatarCache {
         this.#options.log.info("Eidolon: notifications read avatars again");
       }
 
-      const sha = hash("sha256", bytes, "hex");
-      const filePath = join(this.#options.folder, `${sha}.png`);
-      if (!(await fileExists(filePath))) {
-        await mkdir(this.#options.folder, { recursive: true });
-        await writeAtomic(filePath, bytes);
-      }
-
-      await this.#remember(key, filePath);
-      return filePath;
+      return await this.#commit(key, bytes);
     } catch (error) {
       if (!this.#failing) {
         this.#failing = true;
@@ -151,22 +147,80 @@ export class NotificationAvatarCache {
           `Eidolon: notifications couldn't read an avatar: ${errorDetail(error)}`,
         );
       }
-      const fallback = this.#paths.get(key);
-      return fallback !== undefined && (await fileExists(fallback)) ? fallback : null;
+      return await this.#inIo(async () => {
+        const fallback = this.#paths.get(key);
+        return fallback !== undefined && (await fileExists(fallback)) ? fallback : null;
+      });
     }
   }
 
-  async #remember(key: string, filePath: string): Promise<void> {
-    this.#paths.delete(key);
-    this.#paths.set(key, filePath);
-    const evict: string[] = [];
-    while (this.#paths.size > this.#maxEntries) {
-      const oldest = this.#paths.entries().next().value as [string, string] | undefined;
-      if (oldest === undefined) break;
-      this.#paths.delete(oldest[0]);
-      // Keep the file if another active key (e.g. two personas using the fallback silhouette) shares it.
-      if (![...this.#paths.values()].includes(oldest[1])) evict.push(oldest[1]);
+  async #inIo<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.#io.then(work, work);
+    this.#io = run.then(
+      () => {},
+      () => {},
+    );
+    return run;
+  }
+
+  async #pruneFolderOnce(): Promise<void> {
+    if (this.#pruned) return;
+    this.#pruned = true;
+    await mkdir(this.#options.folder, { recursive: true });
+    const entries = await readdir(this.#options.folder, { withFileTypes: true });
+    const pngs: { readonly path: string; readonly mtimeMs: number }[] = [];
+    const temps: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const full = join(this.#options.folder, entry.name);
+      if (entry.name.endsWith(".tmp")) temps.push(full);
+      else if (entry.name.endsWith(".png")) {
+        const info = await stat(full).catch(() => null);
+        if (info !== null) pngs.push({ path: full, mtimeMs: info.mtimeMs });
+      }
     }
-    await Promise.all(evict.map((path) => rm(path, { force: true }).catch(() => {})));
+    await Promise.all(temps.map((path) => rm(path, { force: true }).catch(() => {})));
+    pngs.sort((a, b) => a.mtimeMs - b.mtimeMs);
+    for (const item of pngs) this.#staleFiles.push(item.path);
+  }
+
+  async #commit(key: string, bytes: Uint8Array): Promise<string> {
+    return await this.#inIo(async () => {
+      await this.#pruneFolderOnce();
+      const sha = hash("sha256", bytes, "hex");
+      const filePath = join(this.#options.folder, `${sha}.png`);
+      const staleIndex = this.#staleFiles.indexOf(filePath);
+      if (staleIndex !== -1) this.#staleFiles.splice(staleIndex, 1);
+
+      if (!(await fileExists(filePath))) await writeAtomic(filePath, bytes);
+
+      const previous = this.#paths.get(key);
+      this.#paths.delete(key);
+      this.#paths.set(key, filePath);
+
+      const candidates: string[] = [];
+      if (previous !== undefined && previous !== filePath) candidates.push(previous);
+      while (this.#paths.size > this.#maxEntries) {
+        const oldest = this.#paths.entries().next().value as [string, string] | undefined;
+        if (oldest === undefined) break;
+        this.#paths.delete(oldest[0]);
+        candidates.push(oldest[1]);
+      }
+
+      const active = new Set(this.#paths.values());
+      const evict = new Set<string>();
+      for (const path of candidates) {
+        if (!active.has(path)) evict.add(path);
+      }
+      while (
+        active.size + this.#staleFiles.length > this.#maxEntries &&
+        this.#staleFiles.length > 0
+      ) {
+        const stale = this.#staleFiles.shift();
+        if (stale !== undefined && !active.has(stale)) evict.add(stale);
+      }
+      await Promise.all([...evict].map((path) => rm(path, { force: true }).catch(() => {})));
+      return filePath;
+    });
   }
 }

@@ -131,10 +131,10 @@ function fishVoiceId(value: unknown): string | null {
 
 function matchesEtag(header: string | null, etag: string): boolean {
   if (header === null) return false;
-  return header
-    .split(",")
-    .map((part) => part.trim().replace(/^W\//, ""))
-    .includes(etag);
+  return header.split(",").some((part) => {
+    const trimmed = part.trim();
+    return trimmed === "*" || trimmed.replace(/^W\//, "") === etag;
+  });
 }
 
 /** Validated persona ids from `?group=a,b` (up to `MAX_PARTICIPANTS`). */

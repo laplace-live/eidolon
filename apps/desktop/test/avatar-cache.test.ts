@@ -58,10 +58,11 @@ describe("NotificationAvatarCache", () => {
       "/api/local/personas/milky-green/notification-avatar?group=rin,kuro",
     ]);
 
-    // Updated avatar bytes produce a new file path by new SHA-256.
+    // Updated avatar bytes produce a new file path by new SHA-256 and unlink the superseded file.
     responses.set("/api/local/personas/milky-green/notification-avatar", pngBytes("milky-v2"));
     const updated = await cache.resolve("milky-green");
     expect(updated).not.toBe(single);
+    expect(existsSync(single as string)).toBe(false);
     expect(existsSync(updated as string)).toBe(true);
     expect(lines).toEqual([]);
   });
@@ -131,5 +132,58 @@ describe("NotificationAvatarCache", () => {
     expect(existsSync(pathA)).toBe(true);
     expect(existsSync(pathB)).toBe(true);
     expect(readdirSync(folder).sort()).toHaveLength(2);
+  });
+
+  test("prunes leftover temp files and excess PNGs from prior launches oldest-first", async () => {
+    const { mkdirSync, utimesSync, writeFileSync } = await import("node:fs");
+    mkdirSync(folder, { recursive: true });
+    const oldPng = join(folder, "111.png");
+    const midPng = join(folder, "222.png");
+    const newPng = join(folder, "333.png");
+    const temp = join(folder, "999.tmp");
+    writeFileSync(oldPng, pngBytes("1"));
+    writeFileSync(midPng, pngBytes("2"));
+    writeFileSync(newPng, pngBytes("3"));
+    writeFileSync(temp, "partial");
+    utimesSync(oldPng, 1_000, 1_000);
+    utimesSync(midPng, 2_000, 2_000);
+    utimesSync(newPng, 3_000, 3_000);
+
+    const cache = new NotificationAvatarCache({
+      folder,
+      maxEntries: 2,
+      fetch: async () => new Response(Buffer.from(pngBytes("fresh")), { status: 200 }),
+      log: { info: () => {}, warn: () => {} },
+    });
+    const fresh = await cache.resolve("fresh");
+    expect(existsSync(fresh as string)).toBe(true);
+    expect(existsSync(temp)).toBe(false);
+    expect(existsSync(oldPng)).toBe(false);
+    expect(existsSync(midPng)).toBe(false);
+    expect(existsSync(newPng)).toBe(true);
+    expect(readdirSync(folder)).toHaveLength(2);
+  });
+
+  test("coordinates concurrent same-hash fetches and evictions without deleting returned files", async () => {
+    const shared = pngBytes("shared");
+    const bodies = new Map([
+      ["/api/local/personas/a/notification-avatar", shared],
+      ["/api/local/personas/b/notification-avatar", pngBytes("b")],
+      ["/api/local/personas/c/notification-avatar", pngBytes("c")],
+      ["/api/local/personas/d/notification-avatar", shared],
+    ]);
+    const cache = new NotificationAvatarCache({
+      folder,
+      maxEntries: 2,
+      fetch: async (path) => new Response(Buffer.from(bodies.get(path) ?? shared), { status: 200 }),
+      log: { info: () => {}, warn: () => {} },
+    });
+
+    await cache.resolve("a");
+    await cache.resolve("b");
+    const [pathC, pathD] = await Promise.all([cache.resolve("c"), cache.resolve("d")]);
+    expect(existsSync(pathC as string)).toBe(true);
+    expect(existsSync(pathD as string)).toBe(true);
+    expect(readdirSync(folder)).toHaveLength(2);
   });
 });

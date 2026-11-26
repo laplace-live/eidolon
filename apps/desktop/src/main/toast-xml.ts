@@ -32,10 +32,10 @@ function escapeXml(value: string): string {
 /** Builds a Windows ToastGeneric XML payload for `notice`. */
 export function windowsToastXml(notice: DesktopNotice): string {
   const avatarPath = notice.group?.avatarPath ?? notice.sender?.avatarPath;
-  // hint-crop="none": the backend already masked single avatars and group composites onto transparent PNGs.
+  // Omit hint-crop: our backend already pre-masks transparent circular/group PNGs cleanly.
   const image =
     avatarPath !== undefined && avatarPath !== ""
-      ? `<image placement="appLogoOverride" hint-crop="none" src="${escapeXml(pathToFileURL(avatarPath).href)}"/>`
+      ? `<image placement="appLogoOverride" src="${escapeXml(pathToFileURL(avatarPath).href)}"/>`
       : "";
   const header =
     notice.group === undefined

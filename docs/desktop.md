@@ -673,8 +673,9 @@ notifications unentitled or to Electron's `Notification`), and on Windows throug
   format or bidi characters, cut at 80 characters, and never what a worker wrote or a page read.
 - **Clicks and handles:** notifications have no inline reply actions. Clicking a chat notice
   focuses the window and sends `open-chat:<chat>`; clicking a task notice sends
-  `open-task:<chat>:<task>` (or `tasks`). Handles are retained in bounded maps so Electron/macOS
-  never garbage-collects click callbacks while banners are visible.
+  `open-task:<chat>:<task>` (or `tasks`). Recent notice handles are retained in bounded maps
+  (32 chat notices, 64 macOS pending callbacks, closing evicted macOS banners) so Electron/macOS does
+  not drop click callbacks prematurely.
 - **Which copies:** the packaged app, on Windows only its installed copy (`isUpdatableInstall`),
   since another would point the installed app's Start menu shortcut and its COM key at itself; and
   any copy in background mode, which only logs them (without loading `mac_notify.node` or fetching

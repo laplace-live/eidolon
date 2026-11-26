@@ -98,7 +98,10 @@ export const native = nativeUi(
           const id = `eidolon:${randomUUID()}`;
           if (macPending.size >= MAX_MAC_PENDING) {
             const oldest = macPending.keys().next().value;
-            if (oldest !== undefined) macPending.delete(oldest);
+            if (oldest !== undefined) {
+              macPending.delete(oldest);
+              addon.close(oldest);
+            }
           }
           macPending.set(id, events);
           try {

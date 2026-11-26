@@ -3,6 +3,7 @@
 import { hash } from "node:crypto";
 import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { MAX_SENT_IMAGE_PIXELS } from "../images.ts";
 import { findAvatar } from "./personas.ts";
 
 const SIZE = 256;
@@ -117,7 +118,8 @@ async function loadFace(diameter: number, avatarPath: string | null): Promise<Ui
     const file = await readFile(avatarPath);
     const sharp = await loadSharp();
     const { data, info } = await inSlot(() =>
-      sharp(file, { failOn: "error", limitInputPixels: false, autoOrient: true })
+      // Match attachment pixel cap (64 MP) so absurdly large headers fall back to silhouette.
+      sharp(file, { failOn: "error", limitInputPixels: MAX_SENT_IMAGE_PIXELS, autoOrient: true })
         .resize(diameter, diameter, { fit: "cover" })
         .ensureAlpha()
         .raw()

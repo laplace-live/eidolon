@@ -130,9 +130,12 @@ export function plainReplyText(text: string): string {
   return out.replace(/\s+/g, " ").trim();
 }
 
-function sanitizeAndClip(raw: string, limit: number): string {
+const CONTROL_OR_FORMAT = /[\p{Cc}\u2028\u2029]|(?!\u200D)\p{Cf}/gu;
+const CONTROL_ONLY = /[\p{Cc}\u2028\u2029]/gu;
+
+function sanitizeAndClip(raw: string, limit: number, stripFormat = true): string {
   const line = raw
-    .replace(/[\p{Cc}\p{Cf}\u2028\u2029]/gu, " ")
+    .replace(stripFormat ? CONTROL_OR_FORMAT : CONTROL_ONLY, " ")
     .replace(/\s+/g, " ")
     .trim();
   const chars = [...line];
@@ -206,6 +209,7 @@ function groupMetadata(
             })
             .join(strings.chatNotice.listSeparator),
           GROUP_TITLE_CHARS,
+          false,
         );
   const peers = summary.participants.filter((id) => id !== speakerId).slice(0, 2);
   return { groupTitle: title, groupPeers: peers };

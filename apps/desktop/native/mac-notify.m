@@ -90,6 +90,19 @@ typedef struct {
 
 static napi_threadsafe_function g_click_tsfn = NULL;
 static napi_threadsafe_function g_failed_tsfn = NULL;
+static NSMutableSet<NSString*>* g_pending_auth = nil;
+static NSMutableSet<NSString*>* g_cancelled = nil;
+
+static NSObject* notification_state_lock(void) {
+  static NSObject* lock = nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    lock = [[NSObject alloc] init];
+    g_pending_auth = [NSMutableSet set];
+    g_cancelled = [NSMutableSet set];
+  });
+  return lock;
+}
 
 static void dispatch_event(napi_threadsafe_function tsfn, NSString* identifier, NSString* error) {
   if (tsfn == NULL || identifier == nil) return;
@@ -314,10 +327,27 @@ static napi_value js_show(napi_env env, napi_callback_info info) {
     }
 
     @try {
+      @synchronized(notification_state_lock()) {
+        [g_cancelled removeObject:noticeId];
+        [g_pending_auth addObject:noticeId];
+      }
       UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
       [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound)
                             completionHandler:^(BOOL granted, NSError* _Nullable authError) {
+        BOOL wasCancelled = NO;
+        @synchronized(notification_state_lock()) {
+          wasCancelled = [g_cancelled containsObject:noticeId];
+          if (wasCancelled) {
+            [g_pending_auth removeObject:noticeId];
+            [g_cancelled removeObject:noticeId];
+          }
+        }
+        if (wasCancelled) return;
         if (!granted) {
+          @synchronized(notification_state_lock()) {
+            [g_pending_auth removeObject:noticeId];
+            [g_cancelled removeObject:noticeId];
+          }
           dispatch_failed(
               noticeId, authError ? authError.localizedDescription : @"notification permission denied");
           return;
@@ -403,16 +433,29 @@ static napi_value js_show(napi_env env, napi_callback_info info) {
             }
           }
 
-          UNNotificationRequest* request =
-              [UNNotificationRequest requestWithIdentifier:noticeId content:finalContent trigger:nil];
-          [center addNotificationRequest:request
-                   withCompletionHandler:^(NSError* _Nullable addError) {
-            if (addError != nil) dispatch_failed(noticeId, addError.localizedDescription);
-          }];
+          @synchronized(notification_state_lock()) {
+            [g_pending_auth removeObject:noticeId];
+            if ([g_cancelled containsObject:noticeId]) {
+              [g_cancelled removeObject:noticeId];
+              return;
+            }
+            UNNotificationRequest* request =
+                [UNNotificationRequest requestWithIdentifier:noticeId content:finalContent trigger:nil];
+            [center addNotificationRequest:request
+                     withCompletionHandler:^(NSError* _Nullable addError) {
+              if (addError != nil) dispatch_failed(noticeId, addError.localizedDescription);
+            }];
+          }
         }
       }];
     } @catch (NSException* ex) {
-      dispatch_failed(noticeId, ex.reason ?: @"notification exception");
+      BOOL wasCancelled = NO;
+      @synchronized(notification_state_lock()) {
+        [g_pending_auth removeObject:noticeId];
+        wasCancelled = [g_cancelled containsObject:noticeId];
+        [g_cancelled removeObject:noticeId];
+      }
+      if (!wasCancelled) dispatch_failed(noticeId, ex.reason ?: @"notification exception");
     }
   }
 
@@ -432,6 +475,9 @@ static napi_value js_close(napi_env env, napi_callback_info info) {
     NSString* noticeId = read_nsstring(env, argv[0]);
     if (noticeId.length > 0 && has_bundle_identifier()) {
       @try {
+        @synchronized(notification_state_lock()) {
+          if ([g_pending_auth containsObject:noticeId]) [g_cancelled addObject:noticeId];
+        }
         UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
         [center removePendingNotificationRequestsWithIdentifiers:@[ noticeId ]];
         [center removeDeliveredNotificationsWithIdentifiers:@[ noticeId ]];

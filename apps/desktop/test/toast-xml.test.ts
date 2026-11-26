@@ -16,7 +16,8 @@ describe("windowsToastXml", () => {
     expect(xml).not.toContain("<header ");
     expect(xml).toContain("<text>Milky &lt;Green&gt; &amp; Co</text>");
     expect(xml).toContain("<text>Line 1\n&quot;quoted&quot; &amp; &apos;single&apos; </text>");
-    expect(xml).toContain('placement="appLogoOverride" hint-crop="none" src="file:///');
+    expect(xml).toContain('placement="appLogoOverride" src="file:///');
+    expect(xml).not.toContain("hint-crop");
     expect(xml).toContain("%20&amp;%201.png");
   });
 
@@ -33,7 +34,8 @@ describe("windowsToastXml", () => {
       '<header id="chat-uuid" title="Group &lt;Alpha&gt;" arguments="chat-uuid"/>',
     );
     expect(xml).toContain("<text>Rin</text><text>Ready!</text>");
-    expect(xml).toContain('placement="appLogoOverride" hint-crop="none" src="file:///');
+    expect(xml).toContain('placement="appLogoOverride" src="file:///');
+    expect(xml).not.toContain("hint-crop");
   });
 
   test("omits the image element when no avatarPath is given", () => {

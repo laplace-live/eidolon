@@ -99,6 +99,13 @@ describe("GET /api/local/personas/:id/notification-avatar", () => {
     expect(notModified.status).toBe(304);
     expect(notModified.headers.get("etag")).toBe(etag);
     expect(await notModified.text()).toBe("");
+
+    const wildcard = await fetch(url, {
+      headers: { ...booted.session, "If-None-Match": "*" },
+    });
+    expect(wildcard.status).toBe(304);
+    expect(wildcard.headers.get("etag")).toBe(etag);
+    expect(await wildcard.text()).toBe("");
   });
 
   test("renders single circular PNG, respects EXIF orientation, and keeps transparent cutouts", async () => {
@@ -244,5 +251,28 @@ describe("GET /api/local/personas/:id/notification-avatar", () => {
         )
       ).status,
     ).toBe(400);
+  });
+
+  test("falls back to silhouette when an avatar exceeds MAX_SENT_IMAGE_PIXELS", async () => {
+    const oversized = await sharp({
+      create: {
+        width: 8500,
+        height: 8500,
+        channels: 3,
+        background: { r: 220, g: 40, b: 40 },
+      },
+    })
+      .png({ compressionLevel: 1 })
+      .toBuffer();
+    saveAvatar(MILKY, "avatar.png", oversized);
+
+    const res = await fetch(`${booted.base}/api/local/personas/${MILKY}/notification-avatar`, {
+      headers: { Authorization: `Bearer ${booted.token.secret}` },
+    });
+    expect(res.status).toBe(200);
+    const decoded = await decodeRgba(new Uint8Array(await res.arrayBuffer()));
+    // Neutral silhouette head is light grey rather than the uploaded image's red.
+    expect(pixelAt(decoded, 128, 95)[0]).toBeGreaterThan(200);
+    expect(pixelAt(decoded, 128, 95)[1]).toBeGreaterThan(200);
   });
 });

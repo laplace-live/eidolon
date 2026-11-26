@@ -539,8 +539,14 @@ describe("macOS anti-doxxing checks", () => {
 
     expect(
       failedNames(ORG_PROFILE, [
+        ok("subject=CN=Apple Development: Jane Doe (9H3CCD4YMM),OU=9H3CCD4YMM,O=Jane Doe,C=US\n"),
+      ]),
+    ).toContain("embedded.provisionprofile holds only organization Developer ID certificates");
+
+    expect(
+      failedNames(ORG_PROFILE, [
         ok(
-          "subject=CN=Apple Development: Jane Doe (9H3CCD4YMM),OU=9H3CCD4YMM,O=Jane Doe,C=US\njane@example.com\n",
+          "subject=CN=Developer ID Application: LAPLACE Live LLC (9H3CCD4YMM),OU=9H3CCD4YMM,O=LAPLACE Live LLC,C=US\njane@example.com\n",
         ),
       ]),
     ).toContain("embedded.provisionprofile holds only organization Developer ID certificates");
