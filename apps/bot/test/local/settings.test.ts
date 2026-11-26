@@ -191,6 +191,21 @@ describe("GET settings", () => {
       envValue: "from/env",
       envOverride: true,
     });
+
+    process.env.MEM0_QDRANT_HOST = "localhost";
+    process.env.LANCEDB_PATH = "legacy/index";
+    touched.push("MEM0_QDRANT_HOST", "LANCEDB_PATH");
+    const legacy = await settings();
+    expect(row(legacy, "memory.enabled")).toMatchObject({
+      envValue: "true",
+      envName: "MEM0_QDRANT_HOST",
+      envOverride: true,
+    });
+    expect(row(legacy, "knowledge.index")).toMatchObject({
+      envValue: "legacy/index",
+      envName: "LANCEDB_PATH",
+      envOverride: false,
+    });
   });
 
   test("names a persona by id, and refuses one that isn't", async () => {

@@ -56,7 +56,12 @@ export function scopeFilter(scope: StreamScope, broadcasts: readonly Broadcast[]
       ? broadcasts.flatMap((broadcast) => broadcast.streamIds)
       : [...scope.streamIds];
   if (ids.length > 0) {
-    return `stream_id IN (${ids.map((id) => `'${id.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`).join(", ")})`;
+    // Zvec's filter lexer unescapes `\'` without unescaping `\\`, and cannot close a literal that
+    // ends with `\`.
+    const literals = ids
+      .filter((id) => !id.endsWith("\\"))
+      .map((id) => `'${id.replaceAll("'", "\\'")}'`);
+    return literals.length > 0 ? `stream_id IN (${literals.join(", ")})` : "stream_id = ''";
   }
   const conditions: string[] = [];
   if (scope.startDate) conditions.push(`stream_date >= '${scope.startDate}'`);

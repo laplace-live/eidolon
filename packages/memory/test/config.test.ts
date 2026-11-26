@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { dataHome } from "@eidolon/config";
+import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   buildMemoryConfig,
@@ -43,11 +43,20 @@ describe("enablement", () => {
     expect(isMemoryConfigured()).toBe(false);
   });
 
-  test("falls back to legacy MEM0_QDRANT_HOST when MEM0_ENABLED is unset", () => {
-    setEnv({ MEM0_ENABLED: undefined, MEM0_QDRANT_HOST: "\u0085qdrant\n" });
-    expect(isMemoryConfigured()).toBe(true);
-    setEnv({ MEM0_QDRANT_HOST: " \t　" });
-    expect(isMemoryConfigured()).toBe(false);
+  test("falls back to legacy MEM0_QDRANT_HOST when MEM0_ENABLED is unset, beating settings.yaml", () => {
+    const home = dirname(tempPath("home-legacy"));
+    mkdirSync(home, { recursive: true });
+    writeFileSync(join(home, "settings.yaml"), "memory:\n  enabled: false\n");
+    setEnv({ EIDOLON_HOME: home, MEM0_ENABLED: undefined, MEM0_QDRANT_HOST: "\u0085qdrant\n" });
+    resetSettings();
+    installSettings();
+    try {
+      expect(isMemoryConfigured()).toBe(true);
+      setEnv({ MEM0_QDRANT_HOST: " \t　" });
+      expect(isMemoryConfigured()).toBe(false);
+    } finally {
+      resetSettings();
+    }
   });
 });
 

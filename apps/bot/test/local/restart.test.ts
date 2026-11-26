@@ -202,6 +202,19 @@ describe("RestartTracker", () => {
     installSettings();
     expect(tracker.changes()).toEqual({ calls: [], mcp: [] });
   });
+
+  test("tracks legacy LANCEDB_PATH as MCP's initial index baseline", () => {
+    setEnv("LANCEDB_PATH", "legacy/index");
+    resetSettings();
+    installSettings();
+    const tracker = new RestartTracker();
+    expect(tracker.changes()).toEqual({ calls: [], mcp: [] });
+    write("personas/milky-green/persona.yaml", "knowledge:\n  index: own-index\n");
+    resetSettings();
+    installSettings();
+    tracker.noteInstalled();
+    expect(tracker.changes()).toEqual({ calls: [], mcp: ["INDEX_PATH"] });
+  });
 });
 
 describe("POST restart", () => {

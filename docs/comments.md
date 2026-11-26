@@ -92,8 +92,9 @@ never code.
 Keep — cites an external system, with a link (`packages/retrieval/src/tokenize.ts`):
 
 ```ts
-// Zvec's FTS uses whitespace tokenization; pre-tokenizing Chinese text with jieba at both ingest
-// and query time keeps BM25 scoring exact.
+// Pre-tokenize Chinese text with jieba at both ingest and query time so Zvec's whitespace FTS
+// index (https://github.com/alibaba/zvec) preserves exact sub-token boundaries, case-distinct BV
+// IDs, and query-only stopword removal.
 ```
 
 Keep — a trap, where removing the field breaks everything quietly

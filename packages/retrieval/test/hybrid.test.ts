@@ -254,4 +254,36 @@ describe("hybridSearch on a Zvec table", () => {
       "Limit is required for ANN/KNN queries",
     );
   });
+
+  test("clamps HNSW ef at 2048 when candidates or limit exceeds 512, and matches unescaped backslashes in IN", async () => {
+    const { table } = await memoryTable([
+      ...FACT_ROWS,
+      {
+        id: "f-slash",
+        source: String.raw`dir\file'1.txt`,
+        date: "2026-05-16",
+        floor: 6,
+        text: "坚果日常",
+        tokens: "坚果 日常",
+        vector: [0.9, 0.1, 0, 0],
+      },
+    ]);
+    const hybrid = await hybridSearch(table, {
+      ...QUERY,
+      candidates: 600,
+      finalK: 10,
+      rerank: false,
+    });
+    expect(hybrid.length).toBe(6);
+    const vec = await vectorSearch(table, { vector: [1, 0, 0, 0], limit: 600 });
+    expect(vec.length).toBe(6);
+
+    const matched = await hybridSearch(table, {
+      ...QUERY,
+      candidates: 10,
+      where: String.raw`source IN ('dir\file\'1.txt')`,
+      rerank: false,
+    });
+    expect(matched.map((r) => r.id)).toEqual(["f-slash"]);
+  });
 });

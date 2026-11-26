@@ -1,8 +1,7 @@
 // Self-hosted Mem0 configuration: the OSS engine and Zvec vector store both run in-process. Fact
 // extraction is the memory role's model (the persona's chat model unless she names another), and
 // embeddings reuse retrieval's model and dimension so one EMBED_MODEL / EMBED_DIM pair governs
-// every vector this project writes. Zvec scopes each collection directory by EMBED_DIM, so a new
-// dimension starts a fresh collection cleanly.
+// every vector this project writes.
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
@@ -12,7 +11,7 @@ import {
   envFloat,
   envInt,
   envOptional,
-  envRaw,
+  envVariable,
   expandUser,
   pyFloatRepr,
   pyStrip,
@@ -60,9 +59,10 @@ export interface MemorySearchSettings {
  * deployment's `.env` keeps memory on without edits.
  */
 export function isMemoryConfigured(): boolean {
-  const explicit = pyStrip(envRaw("MEM0_ENABLED") ?? "");
-  if (explicit !== "") return envFlag("MEM0_ENABLED", false);
-  return pyStrip(envRaw("MEM0_QDRANT_HOST") ?? "") !== "";
+  const envExplicit = pyStrip(envVariable("MEM0_ENABLED") ?? "");
+  if (envExplicit !== "") return envFlag("MEM0_ENABLED", false);
+  if (pyStrip(envVariable("MEM0_QDRANT_HOST") ?? "") !== "") return true;
+  return envFlag("MEM0_ENABLED", false);
 }
 
 /** The memory role: `memory.provider` and `memory.model`, else the persona's chat model. */

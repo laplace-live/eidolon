@@ -4,4 +4,4 @@
 "laplace-eidolon-desktop": minor
 ---
 
-feat: Store viewer memories and persona RAG indexes in local Zvec instead of Qdrant and LanceDB
+feat: Store viewer memories and knowledge indexes locally on disk with Zvec

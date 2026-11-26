@@ -2203,6 +2203,10 @@ msgid "Every persona"
 msgstr "Every persona"
 
 #: src/components/settings-form/reindex-dialog.tsx
+msgid "Every persona's knowledge index needs to be built again, and existing viewer memories must be cleared so old and new vectors aren't mixed."
+msgstr "Every persona's knowledge index needs to be built again, and existing viewer memories must be cleared so old and new vectors aren't mixed."
+
+#: src/components/settings-form/reindex-dialog.tsx
 msgid "Every persona's knowledge index needs to be built again, and memory starts a new collection for the new dimension."
 msgstr "Every persona's knowledge index needs to be built again, and memory starts a new collection for the new dimension."
 

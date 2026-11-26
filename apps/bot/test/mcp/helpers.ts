@@ -24,7 +24,7 @@ export const CHUNK_HIT: SearchRow = {
 
 export const ACCEPT = "application/json, text/event-stream";
 
-/** Stand-in for LanceRetriever: `hasTable: false` mimics a missing index. */
+/** Stand-in for ZvecRetriever: `hasTable: false` mimics a missing index. */
 export class FakeRetriever implements Pick<Retriever, "hasTable" | "search"> {
   readonly hasTable: boolean;
   readonly calls: { query: string; options: SearchOptions }[] = [];

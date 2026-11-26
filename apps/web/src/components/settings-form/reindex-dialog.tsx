@@ -10,13 +10,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-/** Asks before a save of REINDEX_PATHS, which requires rebuilding indexes and opens a new memory collection. */
+/** Asks before a save of REINDEX_PATHS or embedding provider, which requires rebuilding indexes. */
 export function ReindexDialog({
   open,
+  dimensionChanged = false,
   onCancel,
   onConfirm,
 }: {
   readonly open: boolean;
+  readonly dimensionChanged?: boolean;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) {
@@ -26,7 +28,11 @@ export function ReindexDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t`Change the embedding model?`}</AlertDialogTitle>
-          <AlertDialogDescription>{t`Every persona's knowledge index needs to be built again, and memory starts a new collection for the new dimension.`}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {dimensionChanged
+              ? t`Every persona's knowledge index needs to be built again, and memory starts a new collection for the new dimension.`
+              : t`Every persona's knowledge index needs to be built again, and existing viewer memories must be cleared so old and new vectors aren't mixed.`}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t`Cancel`}</AlertDialogCancel>

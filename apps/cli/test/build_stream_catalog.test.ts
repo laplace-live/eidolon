@@ -35,7 +35,12 @@ beforeEach(() => {
   mkdirSync(join(work, "empty"));
   paths = { "<STREAMS>": streams, "<TMP>": work };
   logs = captureLogs();
-  restoreEnv = setEnv({ EIDOLON_HOME: home, EIDOLON_PERSONA: undefined, LANCEDB_PATH: undefined });
+  restoreEnv = setEnv({
+    EIDOLON_HOME: home,
+    EIDOLON_PERSONA: undefined,
+    INDEX_PATH: undefined,
+    LANCEDB_PATH: undefined,
+  });
   resetSettings();
 });
 
@@ -51,7 +56,10 @@ describe("buildStreamCatalogMain", () => {
     const [usage, help] = GOLDEN.help.build_stream_catalog;
     const shown = captureIo();
     expect(await buildStreamCatalogMain(["-h"], shown.io)).toBe(0);
-    expect([shown.stdout(), shown.stderr()]).toEqual([help, ""]);
+    expect([shown.stdout(), shown.stderr()]).toEqual([
+      help.replace("$LANCEDB_PATH", "$INDEX_PATH"),
+      "",
+    ]);
     const bad = captureIo();
     expect(await buildStreamCatalogMain(["--table", "x"], bad.io)).toBe(2);
     expect(bad.stderr()).toBe(

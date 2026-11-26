@@ -13,16 +13,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
-  CURRENT_FILE,
   closeAllReadTables,
   listTableNames,
   openTable,
   personaFactsSchema,
-  readCurrentBuildId,
   streamChunksSchema,
   writeTable,
   type ZvecTable,
 } from "../src/index.ts";
+import { CURRENT_FILE, readCurrentBuildId } from "../src/tables.ts";
 import { captureLogs, expectVectorsClose, messages } from "./helpers.ts";
 import { describeSchema, GOLDEN_DIM, type GoldenTable, WRITE_GOLDEN } from "./write_golden.ts";
 

@@ -1,5 +1,6 @@
 // One Zvec table searched the way the bot searches it: embed, date pre-filter, hybrid search,
 // automatic reload when `CURRENT` points to a newer build, and one retry against a stale handle.
+import { existsSync } from "node:fs";
 import { errorText, logger, pyFixed, pyRepr } from "@eidolon/config";
 import { type EmbedOptions, embedTexts } from "./embeddings.ts";
 import { type HybridSearchOptions, hybridSearch, type SearchRow, scoreOf } from "./hybrid.ts";
@@ -50,9 +51,11 @@ export interface ZvecRetrieverOptions {
 
 function isStaleError(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code;
-  if (code === "ZVEC_NOT_FOUND" || code === "ENOENT") return true;
+  if (code === "ZVEC_NOT_FOUND" || code === "ZVEC_FAILED_PRECONDITION" || code === "ENOENT") {
+    return true;
+  }
   const text = errorText(error);
-  return text.includes("Not found") || text.includes("ENOENT");
+  return text.includes("Not found") || text.includes("ENOENT") || text.includes("already closed");
 }
 
 export class ZvecRetriever implements Retriever {
@@ -87,6 +90,9 @@ export class ZvecRetriever implements Retriever {
   }
 
   async rowCount(): Promise<number> {
+    if (this.#table?.isClosed && this.#options.open === undefined) {
+      await this.#reopen();
+    }
     return this.#table === null ? 0 : this.#table.countRows();
   }
 
@@ -99,12 +105,15 @@ export class ZvecRetriever implements Retriever {
     }
     if (this.#options.open === undefined) {
       const diskBuildId = readCurrentBuildId(dbPath, tableName);
-      if (diskBuildId !== this.#table.buildId) {
+      if (this.#table.isClosed || diskBuildId !== this.#table.buildId) {
         logger.warning(
           `${label} hit stale table (likely re-ingested while bot was running); ` +
             "re-opening and retrying once.",
         );
-        await this.#reopen();
+        // `rsync --delay-updates` renames `CURRENT` before moving `<newBuildId>/.~tmp~/*`: keep the
+        // live previous build when the incoming build cannot open yet.
+        const keepCurrentIfOpen = !this.#table.isClosed && existsSync(this.#table.buildPath);
+        await this.#reopen({ keepCurrentIfOpen });
         if (this.#table === null) return [];
       }
     }
@@ -131,6 +140,14 @@ export class ZvecRetriever implements Retriever {
     for (const attempt of [1, 2]) {
       const table = this.#table;
       if (table === null) return [];
+      if (attempt === 1 && table.isClosed && this.#options.open === undefined) {
+        logger.warning(
+          `${label} hit stale table (likely re-ingested while bot was running); ` +
+            "re-opening and retrying once.",
+        );
+        await this.#reopen();
+        continue;
+      }
       try {
         const results = await search(table, {
           vector,
@@ -161,17 +178,25 @@ export class ZvecRetriever implements Retriever {
   }
 
   /** Once the table is gone, the retriever stays disabled for the life of the process. */
-  async #reopen(): Promise<void> {
+  async #reopen(options: { keepCurrentIfOpen?: boolean } = {}): Promise<void> {
     const { label, dbPath, tableName } = this.#options;
     let table: ZvecTable | null;
     try {
       table = await (this.#options.open ?? openTable)(dbPath, tableName);
     } catch (error) {
+      if (options.keepCurrentIfOpen && this.#table !== null && !this.#table.isClosed) {
+        logger.warning(`${label} re-open deferred while new build settles: ${errorText(error)}`);
+        return;
+      }
       logger.error(`${label} re-open failed: ${errorText(error)}`);
       this.#table = null;
       return;
     }
     if (table === null) {
+      if (options.keepCurrentIfOpen && this.#table !== null && !this.#table.isClosed) {
+        logger.warning(`${label} re-open deferred while new build settles`);
+        return;
+      }
       logger.warning(`${label} re-open: no table at ${dbPath}/${tableName}.zvec`);
       this.#table = null;
       return;

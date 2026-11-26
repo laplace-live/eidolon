@@ -137,28 +137,35 @@ both are empty, report that the archive has no new or unfinished batches. A zero
 The ingest drops and rebuilds the whole `stream_chunks` table from `streams/`, so
 a stream indexed without a local transcript would vanish from the index. Before
 the first run, snapshot the index. `home` and `DB` follow the introduction:
-export `EIDOLON_HOME` and `LANCEDB_PATH` first when only `.env` sets them, and
-export `DB` as `knowledge.index` when that is set and `LANCEDB_PATH` is not.
+export `EIDOLON_HOME` and `INDEX_PATH` (or legacy `LANCEDB_PATH`) first when only
+`.env` sets them, and export `DB` as `knowledge.index` when that is set and
+neither env var is.
 
 ```bash
 home="${EIDOLON_HOME:-$HOME/.laplace/eidolon}"; home="${home/#\~/$HOME}"
-DB="${DB:-${LANCEDB_PATH:-$home/personas/milky-green/index}}"; DB="${DB/#\~/$HOME}"
+DB="${DB:-${INDEX_PATH:-${LANCEDB_PATH:-$home/personas/milky-green/index}}}"; DB="${DB/#\~/$HOME}"
 DB="$DB" STREAMS="$home/sources/milky-green/streams" node --input-type=module -e '
 import { iterStreams } from "./packages/ingest/src/index.ts";
 import { openTable } from "./packages/retrieval/src/index.ts";
 const { DB, STREAMS } = process.env;
 const table = await openTable(DB, "stream_chunks");
 if (!table) throw new Error(`No stream_chunks table in ${DB}`);
-const rows = await table.query().select(["stream_id"]).toArray();
-const streams = [...new Set(rows.map((r) => r.stream_id))].sort();
-const local = new Set(iterStreams(STREAMS).map((s) => s.streamId));
-const indices = await table.listIndices();
-console.log(JSON.stringify({
-  rows: rows.length,
-  fts: indices.some((i) => i.indexType === "FTS" && i.columns.includes("tokens")),
-  missingSources: streams.filter((id) => !local.has(id)),
-  streams,
-}));
+try {
+  const { rows } = table.readAll({ columns: ["stream_id"] });
+  const streams = [...new Set(rows.map((r) => r.stream_id))].sort();
+  const local = new Set(iterStreams(STREAMS).map((s) => s.streamId));
+  const fts = Boolean(
+    table.collection.schema.fields().find((f) => f.name === "tokens")?.indexParams,
+  );
+  console.log(JSON.stringify({
+    rows: rows.length,
+    fts,
+    missingSources: streams.filter((id) => !local.has(id)),
+    streams,
+  }));
+} finally {
+  table.close();
+}
 ' > "${TMPDIR:-/tmp}/stream-index-before.json"
 ```
 
@@ -183,9 +190,9 @@ pnpm laplace-pipeline --persona milky-green "$batch_path" --abort-on-error 2>&1 
 
 This runs download → STT → refinement → embeddings/FTS → the stream catalog.
 Before ingesting it logs `Persona milky-green's index: <path>`; that must be the
-index the bot reads. With `LANCEDB_PATH` in the environment or `.env`, the
-command exits 2 and asks for `--db-path`: report the conflicting runtime path
-before running an update against either index. Keep the process/session handle,
+index the bot reads. With `INDEX_PATH` (or legacy `LANCEDB_PATH`) in the
+environment or `.env`, the command exits 2 and asks for `--db-path`: report the
+conflicting runtime path before running an update against either index. Keep the process/session handle,
 monitor progress, and wait for the exit status. Ctrl-C stops it cleanly
 (exit 130), and the same command resumes. Log the invocation time and exit status
 when appending a retry to an existing log.

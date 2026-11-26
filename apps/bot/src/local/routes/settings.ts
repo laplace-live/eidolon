@@ -61,7 +61,18 @@ function environmentValue(
   layers: SettingsLayers,
 ): { value: string; name: string } | null {
   const own = envVariable(field.env);
-  if (own !== undefined) return { value: own, name: field.env };
+  if (own !== undefined && (field.env !== "MEM0_ENABLED" || pyStrip(own) !== "")) {
+    return { value: own, name: field.env };
+  }
+  if (field.env === "MEM0_ENABLED") {
+    return pyStrip(envVariable("MEM0_QDRANT_HOST") ?? "") !== ""
+      ? { value: "true", name: "MEM0_QDRANT_HOST" }
+      : null;
+  }
+  if (field.env === "INDEX_PATH") {
+    const value = envVariable("LANCEDB_PATH");
+    return value === undefined ? null : { value, name: "LANCEDB_PATH" };
+  }
   const legacy = field.legacy;
   if (legacy === undefined || field.provider === undefined) return null;
   const provider = layeredValue(layers, field.provider) ?? PROVIDER_DEFAULTS.get(field.provider);

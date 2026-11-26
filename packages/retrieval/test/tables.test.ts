@@ -1,10 +1,20 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataHome, PROJECT_ROOT } from "@eidolon/config";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   closeAllReadTables,
+  closeReadTablesUnder,
   decodeTopics,
   hybridSearch,
   listTableNames,
@@ -19,6 +29,7 @@ import {
   streamChunksSchema,
   writeTable,
 } from "../src/index.ts";
+import { CURRENT_FILE, readCurrentBuildId } from "../src/tables.ts";
 import { captureLogs, FACT_ROWS, isolateEnv, messages } from "./helpers.ts";
 
 const records = captureLogs();
@@ -88,6 +99,83 @@ describe("openTable / listTableNames", () => {
       setModes(dir, 0o755, 0o644);
     }
   });
+
+  test("reopening a newer build retires the superseded handle, waits for in-flight reads, and prunes shadows", async () => {
+    const setModes = (root: string, dirMode: number, fileMode: number): void => {
+      if (dirMode >= 0o700) chmodSync(root, dirMode);
+      for (const entry of readdirSync(root, { withFileTypes: true })) {
+        const full = join(root, entry.name);
+        if (entry.isDirectory()) setModes(full, dirMode, fileMode);
+        else chmodSync(full, fileMode);
+      }
+      if (dirMode < 0o700) chmodSync(root, dirMode);
+    };
+
+    const vectors = Float32Array.from(FACT_ROWS.flatMap((row) => row.vector));
+    await writeTable(dir, "persona_facts", FACT_ROWS, personaFactsSchema(4), vectors);
+    closeAllReadTables();
+    setModes(dir, 0o555, 0o444);
+    try {
+      const first = (await openTable(dir, "persona_facts"))!;
+      let releaseRead!: () => void;
+      const gate = new Promise<void>((resolveGate) => {
+        releaseRead = resolveGate;
+      });
+      const inFlight = first.run(async (col) => {
+        await gate;
+        return col.stats.docCount;
+      });
+
+      setModes(dir, 0o755, 0o644);
+      const subset = FACT_ROWS.slice(0, 2);
+      await writeTable(
+        dir,
+        "persona_facts",
+        subset,
+        personaFactsSchema(4),
+        Float32Array.from(subset.flatMap((row) => row.vector)),
+      );
+      setModes(dir, 0o555, 0o444);
+
+      const second = (await openTable(dir, "persona_facts"))!;
+      expect(first.isClosed).toBe(true);
+      expect(second.buildId).not.toBe(first.buildId);
+      // Still usable by the already-running read until it settles.
+      releaseRead();
+      expect(await inFlight).toBe(5);
+      expect(await second.countRows()).toBe(2);
+
+      const uid = process.getuid?.() ?? "user";
+      const shadowRoot = join(tmpdir(), `eidolon-zvec-ro-${uid}`, String(process.pid));
+      const buckets = readdirSync(shadowRoot).filter((name) => name.endsWith("-persona_facts"));
+      for (const b of buckets) {
+        expect(readdirSync(join(shadowRoot, b))).not.toContain(first.buildId);
+      }
+    } finally {
+      closeAllReadTables();
+      setModes(dir, 0o755, 0o644);
+    }
+  });
+
+  test("rejects path-traversal CURRENT pointers and closes handles opened across symlinks", async () => {
+    const vectors = Float32Array.from(FACT_ROWS.flatMap((row) => row.vector));
+    await writeTable(dir, "persona_facts", FACT_ROWS, personaFactsSchema(4), vectors);
+    const linkParent = mkdtempSync(join(tmpdir(), "retrieval-link-"));
+    try {
+      const link = join(linkParent, "alias");
+      symlinkSync(dir, link, "dir");
+      const viaLink = (await openTable(link, "persona_facts"))!;
+      expect(viaLink.isClosed).toBe(false);
+      closeReadTablesUnder(dir);
+      expect(viaLink.isClosed).toBe(true);
+
+      writeFileSync(join(dir, "persona_facts.zvec", CURRENT_FILE), "../../escape\n");
+      expect(readCurrentBuildId(dir, "persona_facts")).toBeNull();
+      expect(await openTable(dir, "persona_facts")).toBeNull();
+    } finally {
+      rmSync(linkParent, { recursive: true, force: true });
+    }
+  });
 });
 
 test("resolveDbPath: the persona's index by default, else INDEX_PATH or legacy LANCEDB_PATH", () => {
@@ -152,6 +240,33 @@ describe("scanStreamDates", () => {
       "2026-09-08",
       "2026-09-09",
     ]);
+  });
+
+  test("scans across multiple SCAN_CHUNK slices while yielding to the event loop", async () => {
+    const rows = Array.from({ length: 2_100 }, (_, i) => ({
+      id: `c${i}`,
+      stream_id: `s${i}`,
+      stream_date: i % 2 === 0 ? "2026-09-10" : "",
+      heading: "",
+      text: "",
+      summary: "",
+      details: "",
+      chunk_type: "",
+      topics: "[]",
+      mentions: "[]",
+      extras_json: "{}",
+      refined: false,
+      tokens: "",
+      source_path: "",
+    }));
+    await writeTable(
+      dir,
+      "stream_chunks",
+      rows,
+      streamChunksSchema(4),
+      new Float32Array(rows.length * 4),
+    );
+    expect((await scanStreamDates(dir))?.length).toBe(1_050);
   });
 });
 

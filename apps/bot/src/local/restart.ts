@@ -190,7 +190,9 @@ function accountRead(role: RoleId): string | undefined {
 /** What a reader acts on: for EIDOLON_PERSONA, the persona the files choose, even by default. */
 function effective(name: string): string | undefined {
   if (name.startsWith("@")) return accountRead(name.slice(1) as RoleId);
-  return name === "EIDOLON_PERSONA" ? activePersona().id : envOptional(name);
+  if (name === "EIDOLON_PERSONA") return activePersona().id;
+  if (name === "INDEX_PATH") return envOptional("INDEX_PATH") ?? envOptional("LANCEDB_PATH");
+  return envOptional(name);
 }
 
 /**

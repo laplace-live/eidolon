@@ -19,7 +19,11 @@ export const PLAN_VARIABLES: readonly string[] = SETTINGS.filter((field) =>
 export function planInputs(persona: string): string {
   const layers = readSettingsLayers(persona);
   return JSON.stringify([
-    PLAN_VARIABLES.map((name) => layeredValue(layers, name) ?? null),
+    PLAN_VARIABLES.map((name) =>
+      name === "INDEX_PATH"
+        ? (layeredValue(layers, "INDEX_PATH") ?? layeredValue(layers, "LANCEDB_PATH") ?? null)
+        : (layeredValue(layers, name) ?? null),
+    ),
     download.batchLists(sourceFolder(persona, "lists")),
   ]);
 }

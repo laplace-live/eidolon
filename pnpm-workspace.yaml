@@ -12,8 +12,7 @@ minimumReleaseAge: 20160
 minimumReleaseAgeExclude:
   - electron@45.4.1
 
-# @qdrant/js-client-rest pins undici exactly, at a version with open advisories, which would keep a
-# second copy in the npm package's bundle.
+# Transitive CLI and build dependencies pull older undici ranges with open advisories.
 overrides:
   undici: 7.30.2
 
@@ -25,6 +24,5 @@ allowBuilds:
   electron-winstaller: false
   # On linux/x64 it downloads the CUDA execution provider; the CPU binaries ship in the tarball.
   onnxruntime-node: false
-  # It only warns about its dependents' version ranges.
-  protobufjs: false
+  # Prebuilt binaries ship in @img/sharp-*; install only falls back to building from source.
   sharp: false

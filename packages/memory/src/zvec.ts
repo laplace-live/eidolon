@@ -1,6 +1,6 @@
 // Per-viewer memory vectors on Zvec: an in-process flat cosine index with inverted scalar indexes
 // on the four mem0 scope columns and the full mem0 payload preserved verbatim as JSON.
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   type ZVecCollection,
@@ -46,6 +46,8 @@ export interface VectorStore {
 
 const INDEXED_FIELDS = ["user_id", "agent_id", "run_id", "actor_id"] as const;
 const MAX_LIST_FETCH = 50_000;
+// Zvec rejects upsertSync batches above 1024 docs.
+const WRITE_BATCH = 512;
 const INIT_KEY = Symbol.for("eidolon.zvec.initialized");
 const STORES_KEY = Symbol.for("eidolon.zvec.memoryStores");
 
@@ -156,7 +158,9 @@ export class ZvecVectorStore implements VectorStore {
     }
     mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
     const options = { readOnly: false, enableMMAP: true } as const;
-    const col = existsSync(path)
+    const populated = existsSync(path) && readdirSync(path).length > 0;
+    if (!populated && existsSync(path)) rmSync(path, { recursive: true, force: true });
+    const col = populated
       ? ZVecOpen(path, options)
       : ZVecCreateAndOpen(path, memorySchema(this.#vectorSize), options);
     stores.set(path, col);
@@ -170,26 +174,29 @@ export class ZvecVectorStore implements VectorStore {
   async insert(points: readonly NewPoint[]): Promise<void> {
     if (!points.length) return;
     const col = this.#open();
-    const statuses = col.upsertSync(
-      points.map((point) => {
-        // Zvec represents NULL on a nullable column by omitting the field from `fields`.
-        const fields: Record<string, string> = {
-          payload_json: JSON.stringify(point.payload),
-        };
-        for (const key of INDEXED_FIELDS) {
-          const value = scopeValue(point.payload, key);
-          if (value !== null) fields[key] = value;
+    for (let start = 0; start < points.length; start += WRITE_BATCH) {
+      const slice = points.slice(start, start + WRITE_BATCH);
+      const statuses = col.upsertSync(
+        slice.map((point) => {
+          // Zvec represents NULL on a nullable column by omitting the field from `fields`.
+          const fields: Record<string, string> = {
+            payload_json: JSON.stringify(point.payload),
+          };
+          for (const key of INDEXED_FIELDS) {
+            const value = scopeValue(point.payload, key);
+            if (value !== null) fields[key] = value;
+          }
+          return {
+            id: point.id,
+            vectors: { embedding: Float32Array.from(point.vector) },
+            fields,
+          };
+        }),
+      );
+      for (const status of statuses) {
+        if (!status.ok) {
+          throw new Error(`Zvec upsert failed (${status.code}): ${status.message}`);
         }
-        return {
-          id: point.id,
-          vectors: { embedding: Float32Array.from(point.vector) },
-          fields,
-        };
-      }),
-    );
-    for (const status of statuses) {
-      if (!status.ok) {
-        throw new Error(`Zvec upsert failed (${status.code}): ${status.message}`);
       }
     }
   }

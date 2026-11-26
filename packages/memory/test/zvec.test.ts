@@ -1,4 +1,4 @@
-import { rmSync, statSync } from "node:fs";
+import { mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Selection, select } from "@eidolon/providers";
 import { afterEach, describe, expect, test } from "vitest";
@@ -123,8 +123,23 @@ describe("ZvecVectorStore", () => {
 
     closeMemoryStores();
     rmSync(dir, { recursive: true, force: true });
+    mkdirSync(join(dir, "v1_4"), { recursive: true });
     await store4.ensureCollection();
     expect(await store4.list({ user_id: "u1" }, 10)).toEqual([]);
+  });
+
+  test("chunks inserts past Zvec's 1,024-doc batch limit", async () => {
+    const store = new ZvecVectorStore({ dir: storeDir(), vectorSize: 4 });
+    const points = Array.from({ length: 1_100 }, (_, i) => ({
+      id: `p-${String(i).padStart(4, "0")}`,
+      vector: [1, 0, 0, 0],
+      payload: { user_id: "u-bulk", data: `item-${i}` },
+    }));
+    await store.insert(points);
+    const listed = await store.list({ user_id: "u-bulk" }, 1_200);
+    expect(listed.length).toBe(1_100);
+    expect(listed[0]?.id).toBe("p-0000");
+    expect(listed[1_099]?.id).toBe("p-1099");
   });
 
   test.skipIf(process.platform === "win32")(

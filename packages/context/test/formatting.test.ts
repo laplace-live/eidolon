@@ -77,6 +77,10 @@ describe("scopeFilter", () => {
 
   test("quotes ids for Zvec", () => {
     expect(scopeFilter(scope({ streamIds: ["a'b"] }), [])).toBe(String.raw`stream_id IN ('a\'b')`);
+    expect(scopeFilter(scope({ streamIds: [String.raw`a\b`, "c'd", "bad\\"] }), [])).toBe(
+      String.raw`stream_id IN ('a\b', 'c\'d')`,
+    );
+    expect(scopeFilter(scope({ streamIds: ["bad\\"] }), [])).toBe("stream_id = ''");
     expect(scopeFilter(scope({ latest: 1 }), [broadcast("2026-09-08", "BV1abc", 2)])).toBe(
       "stream_id IN ('2026-09-08-BV1abc_p1', '2026-09-08-BV1abc_p2')",
     );

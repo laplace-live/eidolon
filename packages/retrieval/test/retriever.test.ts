@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -264,6 +264,64 @@ describe("ZvecRetriever", () => {
       expect(await retriever.rowCount()).toBe(2);
       expect(messages(records, "WARNING")[0]).toStartWith("Persona facts hit stale table");
       expect(messages(records, "INFO")).toContain("Persona facts re-opened table (2 rows)");
+    } finally {
+      closeAllReadTables();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps serving the previous build while rsync --delay-updates stages a new CURRENT, and rotates sibling retrievers", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "retrieval-rsync-"));
+    try {
+      const schema = personaFactsSchema(4);
+      await writeTable(
+        dir,
+        "persona_facts",
+        FACT_ROWS,
+        schema,
+        Float32Array.from(FACT_ROWS.flatMap((r) => r.vector)),
+      );
+      const primary = await ZvecRetriever.open({
+        dbPath: dir,
+        tableName: "persona_facts",
+        dateColumn: "date",
+        label: "Persona facts",
+        embed: async () => [[1, 0, 0, 0]],
+      });
+      const sibling = await ZvecRetriever.open({
+        dbPath: dir,
+        tableName: "persona_facts",
+        dateColumn: "date",
+        label: "Persona facts",
+        embed: async () => [[1, 0, 0, 0]],
+      });
+
+      // Simulate rsync renaming CURRENT before moving `<newBuildId>/.~tmp~/*`.
+      const tableRoot = join(dir, "persona_facts.zvec");
+      mkdirSync(join(tableRoot, "staging-build"));
+      writeFileSync(join(tableRoot, "CURRENT"), "staging-build\n");
+      records.length = 0;
+
+      const duringStage = await primary.search("坚果体重", { candidates: 5, topK: 3 });
+      expect(duringStage.length).toBe(3);
+      expect(primary.hasTable).toBe(true);
+
+      // Once the new build finishes landing, both retrievers switch cleanly to it.
+      const subset = FACT_ROWS.slice(0, 2);
+      await writeTable(
+        dir,
+        "persona_facts",
+        subset,
+        schema,
+        Float32Array.from(subset.flatMap((r) => r.vector)),
+      );
+      expect(
+        (await primary.search("坚果体重", { candidates: 5, topK: 3 })).map((r) => r.id),
+      ).toEqual(["f0", "f1"]);
+      expect(await sibling.rowCount()).toBe(2);
+      expect(
+        (await sibling.search("坚果体重", { candidates: 5, topK: 3 })).map((r) => r.id),
+      ).toEqual(["f0", "f1"]);
     } finally {
       closeAllReadTables();
       rmSync(dir, { recursive: true, force: true });

@@ -14,6 +14,12 @@ export const RRF_K = 60;
 
 const VECTOR_COLUMN = "vector";
 const MIN_HNSW_EF = 128;
+// Zvec rejects HNSW queries with ef > 2048.
+const MAX_HNSW_EF = 2_048;
+
+function hnswEf(k: number): number {
+  return Math.min(Math.max(k * 4, MIN_HNSW_EF), MAX_HNSW_EF);
+}
 
 export interface HybridSearchOptions {
   vector: readonly number[] | Float32Array;
@@ -48,15 +54,15 @@ async function runLegs(
   const outputFields = [...table.columnNames];
   const filter = where ? { filter: where } : {};
   const [vectorDocs, ftsDocs] = await Promise.all([
-    table.collection.query({
+    table.query({
       fieldName: VECTOR_COLUMN,
       vector: asFloat32(vector),
       topk: candidates,
-      params: { indexType: ZVecIndexType.HNSW, ef: Math.max(candidates * 4, MIN_HNSW_EF) },
+      params: { indexType: ZVecIndexType.HNSW, ef: hnswEf(candidates) },
       outputFields,
       ...filter,
     }),
-    table.collection.query({
+    table.query({
       fieldName: ftsField,
       fts: { matchString: tokens },
       topk: candidates,
@@ -178,11 +184,11 @@ export async function vectorSearch(
   options: { vector: readonly number[] | Float32Array; limit: number; where?: string | null },
 ): Promise<SearchRow[]> {
   if (options.limit <= 0) throw new Error("Limit is required for ANN/KNN queries");
-  const docs = await table.collection.query({
+  const docs = await table.query({
     fieldName: VECTOR_COLUMN,
     vector: asFloat32(options.vector),
     topk: options.limit,
-    params: { indexType: ZVecIndexType.HNSW, ef: Math.max(options.limit * 4, MIN_HNSW_EF) },
+    params: { indexType: ZVecIndexType.HNSW, ef: hnswEf(options.limit) },
     outputFields: [...table.columnNames],
     ...(options.where ? { filter: options.where } : {}),
   });

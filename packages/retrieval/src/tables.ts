@@ -10,12 +10,13 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import {
   activePersona,
   envInt,
@@ -34,8 +35,10 @@ import {
   ZVecLogLevel,
   ZVecLogType,
   ZVecOpen,
+  type ZVecQuery,
 } from "@zvec/zvec";
 import type { SearchRow } from "./hybrid.ts";
+import { Slicer } from "./slicer.ts";
 
 /** Where a persona keeps its index, relative to its folder. */
 export const INDEX_DIR = "index";
@@ -47,6 +50,18 @@ const INIT_KEY = Symbol.for("eidolon.zvec.initialized");
 const READ_TABLES_KEY = Symbol.for("eidolon.zvec.readTables");
 const SCAN_CHUNK = 1_000;
 const STREAM_DATE_SCAN_LIMIT = 200_000;
+const liveShadowPaths = new Set<string>();
+
+function canonicalize(targetPath: string): string {
+  const resolved = resolve(targetPath);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    const parent = dirname(resolved);
+    if (parent === resolved) return resolved;
+    return join(canonicalize(parent), basename(resolved));
+  }
+}
 
 export function initZvecOnce(): void {
   const state = globalThis as Record<symbol, unknown>;
@@ -81,7 +96,8 @@ export function readCurrentBuildId(dbPath: string, tableName: string): string | 
   const pointer = join(tableDir(dbPath, tableName), CURRENT_FILE);
   try {
     const id = readFileSync(pointer, "utf8").trim();
-    return id || null;
+    if (!id || id === "." || id === ".." || /[/\\:\0]/.test(id)) return null;
+    return id;
   } catch {
     return null;
   }
@@ -95,12 +111,15 @@ export function tableExists(dbPath: string, tableName: string): boolean {
 
 /** Closes cached read-only handles whose build path lies at or under `targetPath`. */
 export function closeReadTablesUnder(targetPath: string): void {
-  const prefix = resolve(targetPath);
+  const prefixes = new Set([resolve(targetPath), canonicalize(targetPath)]);
   const cache = readTableCache();
   for (const [key, table] of cache) {
-    if (key === prefix || key.startsWith(`${prefix}/`) || key.startsWith(`${prefix}\\`)) {
-      table.close();
-      cache.delete(key);
+    for (const prefix of prefixes) {
+      if (key === prefix || key.startsWith(`${prefix}/`) || key.startsWith(`${prefix}\\`)) {
+        table.retire();
+        cache.delete(key);
+        break;
+      }
     }
   }
 }
@@ -120,8 +139,11 @@ export class ZvecTable {
   readonly collection: ZVecCollection;
   readonly columnNames: readonly string[];
   readonly vectorDim: number;
+  readonly #docCount: number;
   readonly #shadowPath: string | null;
   #closed = false;
+  #retired = false;
+  #inFlight = 0;
 
   constructor(options: {
     name: string;
@@ -137,16 +159,33 @@ export class ZvecTable {
     this.buildPath = options.buildPath;
     this.collection = options.collection;
     this.#shadowPath = options.shadowPath ?? null;
+    if (this.#shadowPath !== null) liveShadowPaths.add(this.#shadowPath);
     this.columnNames = options.collection.schema.fields().map((f) => f.name);
     this.vectorDim = options.collection.schema.vector("vector").dimension ?? 0;
+    this.#docCount = options.collection.stats.docCount;
   }
 
   get isClosed(): boolean {
-    return this.#closed;
+    return this.#closed || this.#retired;
   }
 
   async countRows(): Promise<number> {
-    return this.collection.stats.docCount;
+    return this.#docCount;
+  }
+
+  /** Runs an async read while holding the collection open across retirement. */
+  async run<T>(fn: (collection: ZVecCollection) => Promise<T>): Promise<T> {
+    this.#inFlight++;
+    try {
+      return await fn(this.collection);
+    } finally {
+      this.#inFlight--;
+      if (this.#retired && this.#inFlight === 0) this.#finalizeClose();
+    }
+  }
+
+  query(request: ZVecQuery): Promise<ZVecDoc[]> {
+    return this.run((collection) => collection.query(request));
   }
 
   /**
@@ -193,7 +232,20 @@ export class ZvecTable {
     return { rows, vectors };
   }
 
+  /** Retires a superseded build: closes now if idle, or once in-flight reads finish. */
+  retire(): void {
+    if (this.#closed || this.#retired) return;
+    this.#retired = true;
+    if (this.#inFlight === 0) this.#finalizeClose();
+  }
+
   close(): void {
+    if (this.#closed) return;
+    this.#retired = true;
+    this.#finalizeClose();
+  }
+
+  #finalizeClose(): void {
     if (this.#closed) return;
     this.#closed = true;
     try {
@@ -202,6 +254,7 @@ export class ZvecTable {
       // Already closed.
     }
     if (this.#shadowPath !== null) {
+      liveShadowPaths.delete(this.#shadowPath);
       rmSync(this.#shadowPath, { recursive: true, force: true });
     }
   }
@@ -305,14 +358,29 @@ function processShadowRoot(): string {
   return root;
 }
 
+function shadowBucket(root: string, tableName: string): string {
+  const hash = createHash("sha256").update(root).digest("hex").slice(0, 16);
+  return join(processShadowRoot(), `${hash}-${tableName}`);
+}
+
+function pruneInactiveShadows(bucket: string, keepShadowPath: string | null): void {
+  if (!existsSync(bucket)) return;
+  for (const sibling of readdirSync(bucket)) {
+    if (sibling.endsWith(".tmp")) continue;
+    const full = join(bucket, sibling);
+    if (full !== keepShadowPath && !liveShadowPaths.has(full)) {
+      rmSync(full, { recursive: true, force: true });
+    }
+  }
+}
+
 function stageReadOnlyShadow(
   root: string,
   tableName: string,
   buildId: string,
   buildPath: string,
 ): string {
-  const hash = createHash("sha256").update(resolve(root)).digest("hex").slice(0, 16);
-  const bucket = join(processShadowRoot(), `${hash}-${tableName}`);
+  const bucket = shadowBucket(root, tableName);
   mkdirSync(bucket, { recursive: true, mode: 0o700 });
   const shadowPath = join(bucket, buildId);
   if (!existsSync(shadowPath)) {
@@ -323,13 +391,6 @@ function stageReadOnlyShadow(
     } catch (error) {
       rmSync(tmp, { recursive: true, force: true });
       if (!existsSync(shadowPath)) throw error;
-    }
-  }
-  const activeBuilds = new Set([...readTableCache().values()].map((t) => t.buildId));
-  activeBuilds.add(buildId);
-  for (const sibling of readdirSync(bucket)) {
-    if (!activeBuilds.has(sibling) && !sibling.endsWith(".tmp")) {
-      rmSync(join(bucket, sibling), { recursive: true, force: true });
     }
   }
   return shadowPath;
@@ -343,9 +404,11 @@ function stageReadOnlyShadow(
 export async function openTable(dbPath: string, tableName: string): Promise<ZvecTable | null> {
   const buildId = readCurrentBuildId(dbPath, tableName);
   if (buildId === null) return null;
-  const root = tableDir(dbPath, tableName);
-  const buildPath = resolve(root, buildId);
-  if (!existsSync(buildPath)) return null;
+  const rawRoot = tableDir(dbPath, tableName);
+  const rawBuildPath = resolve(rawRoot, buildId);
+  if (!existsSync(rawBuildPath)) return null;
+  const root = canonicalize(rawRoot);
+  const buildPath = canonicalize(rawBuildPath);
 
   const cache = readTableCache();
   const existing = cache.get(buildPath);
@@ -363,18 +426,13 @@ export async function openTable(dbPath: string, tableName: string): Promise<Zvec
       throw error;
     }
   };
-  let opened: { collection: ZVecCollection; shadowPath: string | null };
-  if (hasUnwritableProxima(buildPath)) {
-    opened = openShadow();
-  } else {
-    try {
-      opened = { collection: ZVecOpen(buildPath, openOptions), shadowPath: null };
-    } catch (error) {
-      try {
-        opened = openShadow();
-      } catch {
-        throw error;
-      }
+  const opened = hasUnwritableProxima(buildPath)
+    ? openShadow()
+    : { collection: ZVecOpen(buildPath, openOptions), shadowPath: null };
+  for (const [key, prior] of cache) {
+    if (prior.path === root && prior.buildId !== buildId) {
+      cache.delete(key);
+      prior.retire();
     }
   }
   const table = new ZvecTable({
@@ -385,6 +443,9 @@ export async function openTable(dbPath: string, tableName: string): Promise<Zvec
     collection: opened.collection,
     shadowPath: opened.shadowPath,
   });
+  if (opened.shadowPath !== null) {
+    pruneInactiveShadows(shadowBucket(root, tableName), opened.shadowPath);
+  }
   cache.set(buildPath, table);
   return table;
 }
@@ -489,11 +550,25 @@ export async function scanStreamDates(
 ): Promise<string[] | null> {
   const table = await openTable(dbPath, tableName);
   if (table === null) return null;
-  const { rows } = table.readAll({ columns: ["stream_date"], limit: STREAM_DATE_SCAN_LIMIT });
-  const dates: string[] = [];
-  for (const row of rows) {
-    const value: unknown = row.stream_date;
-    if (pyTruthy(value)) dates.push(value as string);
-  }
-  return dates;
+  const total = Math.min(await table.countRows(), STREAM_DATE_SCAN_LIMIT);
+  return table.run(async (collection) => {
+    const dates: string[] = [];
+    const slicer = new Slicer();
+    for (let start = 0; start < total; start += SCAN_CHUNK) {
+      await slicer.tick();
+      const end = Math.min(total, start + SCAN_CHUNK);
+      const ids: string[] = [];
+      for (let i = start; i < end; i++) ids.push(String(i));
+      const fetched = collection.fetchSync({
+        ids,
+        outputFields: ["stream_date"],
+        includeVector: false,
+      });
+      for (const id of ids) {
+        const value: unknown = fetched[id]?.fields.stream_date;
+        if (pyTruthy(value)) dates.push(value as string);
+      }
+    }
+    return dates;
+  });
 }

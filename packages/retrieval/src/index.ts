@@ -88,7 +88,6 @@ export {
   streamScope,
 } from "./stream_time.ts";
 export {
-  CURRENT_FILE,
   closeAllReadTables,
   closeReadTablesUnder,
   dbPathArgument,
@@ -100,7 +99,6 @@ export {
   PERSONA_FACTS,
   PERSONA_FACTS_TABLE,
   personaFactsSearchParams,
-  readCurrentBuildId,
   resolveDbPath,
   type SearchParams,
   STREAM_ARCHIVE,
@@ -108,16 +106,12 @@ export {
   scanStreamDates,
   streamArchiveSearchParams,
   type TablePreset,
-  tableDir,
   tableExists,
   ZvecTable,
 } from "./tables.ts";
 export { tokenizeZh, tokenizeZhQuery, warmTokenizer, ZH_QUERY_STOPWORDS } from "./tokenize.ts";
 export {
-  type FieldSpec,
   personaFactsSchema,
-  type ScalarIndex,
-  type ScalarKind,
   streamChunksSchema,
   type TableSchema,
   writeTable,

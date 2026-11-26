@@ -787,7 +787,7 @@ export const LEGACY_SETTING_ENVS = [
   "MEM0_QDRANT_COLLECTION",
 ] as const;
 
-// Pre-Zvec settings.yaml keys: a non-empty host still turns memory on, and none warns.
+// Legacy Qdrant keys in settings.yaml: a non-empty host turns memory on, and none warns.
 const LEGACY_QDRANT_PATHS = new Set([
   "memory.qdrant.host",
   "memory.qdrant.port",
