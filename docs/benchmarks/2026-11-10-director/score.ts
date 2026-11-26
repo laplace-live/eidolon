@@ -33,6 +33,7 @@ import {
   INTEREST_THRESHOLD,
   INVITES_THRESHOLD,
   JUST_SPOKE_PENALTY,
+  MAX_HOP_RAISE,
   MAX_REPLIES_TO_USER,
   OTHERS_THRESHOLD,
 } from "../../../packages/context/src/index.ts";
@@ -405,7 +406,7 @@ function question(points: readonly Point[], threshold: number | null) {
 }
 
 const lineOf = new Map(lines.map((line) => [line.id, line]));
-const raiseOf = (row: Row) => HOP_STEP * row.hop;
+const raiseOf = (row: Row) => Math.min(HOP_STEP * row.hop, MAX_HOP_RAISE);
 const addressed: Point[] = [];
 const interested: Point[] = [];
 const keen: Point[] = [];
@@ -523,6 +524,7 @@ const result = {
     everyone: EVERYONE_THRESHOLD,
     others: OTHERS_THRESHOLD,
     hop_step: HOP_STEP,
+    max_hop_raise: MAX_HOP_RAISE,
     just_spoke_penalty: JUST_SPOKE_PENALTY,
     max_replies_to_user: MAX_REPLIES_TO_USER,
     voice: VOICE_THRESHOLD,

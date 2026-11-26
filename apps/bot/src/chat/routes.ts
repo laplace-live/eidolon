@@ -59,7 +59,7 @@ import {
   chatFiles,
 } from "./files.ts";
 import { ChatSigner, chatSecretFromEnv } from "./sig.ts";
-import { openChatWindow, type RequestChatStore } from "./window.ts";
+import { openChatWindow, PUBLIC_CHAIN_LIMIT, type RequestChatStore } from "./window.ts";
 
 const CHAT_TURN_PATH = "/api/chat/turn";
 const CHAT_VOICE_PATH = "/api/chat/voice";
@@ -412,7 +412,17 @@ export function createChatEndpoint(options: ChatEndpointOptions): ChatEndpoint {
     const id = store.header.id;
     return (async function* () {
       const chat = await store.read(id);
-      yield* runChat({ chat, read: () => store.read(id), viewer, after, signal }, deps);
+      yield* runChat(
+        {
+          chat,
+          read: () => store.read(id),
+          viewer,
+          after,
+          signal,
+          maxChainLimit: PUBLIC_CHAIN_LIMIT,
+        },
+        deps,
+      );
     })();
   }
 

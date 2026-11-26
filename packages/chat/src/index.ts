@@ -7,6 +7,7 @@ export {
   attachmentKind,
   attachmentMime,
   attachmentNamed,
+  CHAIN_LIMITS,
   CHAT_DISPLAYS,
   CHAT_FORMAT,
   type ChatDisplay,

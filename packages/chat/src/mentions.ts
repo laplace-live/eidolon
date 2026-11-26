@@ -28,7 +28,7 @@ export function parseMentions(
   text: string,
   participants: readonly MentionTarget[],
 ): ParticipantId[] {
-  const found: ParticipantId[] = [];
+  const found = new Set<ParticipantId>();
   for (const at of text.matchAll(/[@＠]/g)) {
     const from = at.index + 1;
     let best:
@@ -46,13 +46,8 @@ export function parseMentions(
       best = { kind: "all", length: alias.length };
     }
     if (best === null) continue;
-    if (best.kind === "one") {
-      if (!found.includes(best.id)) found.push(best.id);
-    } else {
-      for (const participant of participants) {
-        if (!found.includes(participant.id)) found.push(participant.id);
-      }
-    }
+    if (best.kind === "one") found.add(best.id);
+    else for (const participant of participants) found.add(participant.id);
   }
-  return found;
+  return [...found];
 }

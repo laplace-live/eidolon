@@ -28,6 +28,7 @@ import {
   INTEREST_THRESHOLD,
   INVITES_THRESHOLD,
   JUST_SPOKE_PENALTY,
+  MAX_HOP_RAISE,
   MAX_REPLIES_TO_USER,
   OTHERS_THRESHOLD,
 } from "../src/index.ts";
@@ -505,6 +506,25 @@ describe("after a persona's line", () => {
     const invites = INVITES_THRESHOLD + HOP_STEP + 0.05;
     expect(await at(1, { invites_reply: invites, addressed_ruby: 1 })).toEqual(["ruby"]);
     expect(await at(2, { invites_reply: invites, addressed_ruby: 1 })).toEqual([]);
+    // The raise plateaus at MAX_HOP_RAISE (0.3), so high-hop chains stay reachable below 1.0.
+    expect(
+      await at(10, {
+        invites_reply: INVITES_THRESHOLD + MAX_HOP_RAISE,
+        addressed_ruby: ADDRESSED_THRESHOLD + MAX_HOP_RAISE,
+      }),
+    ).toEqual(["ruby"]);
+    expect(
+      await at(10, {
+        invites_reply: INVITES_THRESHOLD + MAX_HOP_RAISE - 0.01,
+        addressed_ruby: ADDRESSED_THRESHOLD + MAX_HOP_RAISE,
+      }),
+    ).toEqual([]);
+    expect(
+      await at(10, {
+        invites_reply: INVITES_THRESHOLD + MAX_HOP_RAISE,
+        addressed_ruby: ADDRESSED_THRESHOLD + MAX_HOP_RAISE - 0.01,
+      }),
+    ).toEqual([]);
   });
 
   test("the persona who spoke before the latest is marked down in a chain", async () => {

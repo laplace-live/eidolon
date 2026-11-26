@@ -1429,7 +1429,7 @@ export interface ChatVoiceQuery {
 
 /**
  * PATCH chats/:id, one field at a time: a `title` of 1 to 80 characters on one line, the
- * `chainLimit` of persona-to-persona hops after each viewer line, 0 to 6, the `replyMode` that
+ * `chainLimit` of persona-to-persona hops after each viewer line, 0 to 100, the `replyMode` that
  * overrides every persona's own, the `display` of her tasks there, focus, normal or verbose, or the
  * `permissions` her tasks there act under, ask, auto or full; each setting is kept as a `settings`
  * event.

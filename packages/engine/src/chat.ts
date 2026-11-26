@@ -7,6 +7,7 @@ import {
   type ChatEvent,
   type ChatEventDraft,
   chainLimitOf,
+  MAX_CHAIN_LIMIT,
   type ParticipantId,
   parseMentions,
   summarize,
@@ -75,6 +76,8 @@ export interface ChatRequest {
   readonly tools?: TurnRequest["tools"];
   /** Run in each turn after her own providers. */
   readonly providers?: TurnRequest["providers"];
+  /** Caps the chat's chainLimit, for endpoints with a public hop budget. */
+  readonly maxChainLimit?: number;
 }
 
 /** A call's answer: each persona's turn is a call's, and every reply is spoken. */
@@ -254,7 +257,10 @@ export async function* runChat(
     yield* answerWhileDeciding(request, deps, only.id, deciding);
     return;
   }
-  const limit = participants.length > 1 ? chainLimitOf(request.chat.events) : 0;
+  const limit =
+    participants.length > 1
+      ? Math.min(chainLimitOf(request.chat.events), request.maxChainLimit ?? MAX_CHAIN_LIMIT)
+      : 0;
   const owed = participants.length > 1 ? (request.owed ?? []) : [];
   const present = new Set(participants.map(({ id }) => id));
   let log = request.chat;

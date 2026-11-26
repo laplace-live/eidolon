@@ -382,9 +382,10 @@ gate's decision model: the active persona's `gate` role and its key, through `ga
      viewer is never left unanswered. A persona whose talkativeness is 0 is passed over unless
      everyone's is, even when the penalty sinks the others below her.
 - **Who answers a persona's line:** someone answers only if `invites_reply` is 0.3 or more. Each
-  hop raises every bar by 0.1 (`HOP_STEP`), so chains die down on their own. When `everyone` or
-  `others` clears its raised bar on a group handoff, every willing unheard candidate answers;
-  otherwise one reply at most and none forced.
+  hop raises every bar by 0.1 (`HOP_STEP`), capped at 0.3 (`MAX_HOP_RAISE`), so chains with higher
+  limits plateau instead of climbing past 1.0. When `everyone` or `others` clears its raised bar
+  on a group handoff, every willing unheard candidate answers; otherwise one reply at most and none
+  forced.
 - **Mentions** are `@` or `＠` and a participant's name or short name, case-blind
   (`parseMentions`, in `@eidolon/chat`, which the composer shares), or a broadcast alias (`@all`,
   `@everyone`, `@全体`, `@全体成员`, `@所有人`, `@大家`) when no longer participant name matches. A
@@ -412,8 +413,8 @@ gate's decision model: the active persona's `gate` role and its key, through `ga
 `runChat` (`packages/engine/src/chat.ts`) answers each viewer line:
 
 1. It reads the participants, their reply modes and the chain limit once, from the log as it
-   stood. The limit is the last `settings` event's `chainLimit`, 0 to 6, else 3
-   (`DEFAULT_CHAIN_LIMIT`). A chat of one never chains.
+   stood. The limit is the last `settings` event's `chainLimit`, 0 to 100 (presets 0, 1, 5, 10,
+   100), else 5 (`DEFAULT_CHAIN_LIMIT`). A chat of one never chains.
 2. It asks the director about the viewer's line, in the chat's usage scope, and yields the
    decision for the caller to store.
 3. It runs each chosen persona's turn in order with `runTurn`, in the mode the decision gave her.
@@ -486,18 +487,18 @@ Production's endpoint and calls pass no owed lines.
 
 ### Costs
 
-For each viewer line, at the default chain limit, the most it can cost is:
-- 6 turns (3 replies to the viewer, then 3 hops), or up to all 6 participants plus 3 hops when
+For each viewer line, at the default chain limit (5 hops), the most it can cost is:
+- 8 turns (3 replies to the viewer, then 5 hops), or up to all 6 participants plus 5 hops when
   explicit `@`-mentions, `everyone`, or `others` wake the whole group. Each turn is up to
   `chat.maxRounds` + 1 mind calls, 9 by default ([step 5](#a-turn-runturn)), and more where a
   malformed reply is asked for again, with its gate and recall as in a chat of one;
-- 4 director calls: one for the viewer's line, and one before each of the 3 hops. The
+- 6 director calls: one for the viewer's line, and one before each of the 5 hops. The
   benchmark's 107 calls cost $0.0039 in all, about $0.00004 each, and took 382 ms at the median on
   a warm connection;
 - a synthesis for each of those turns that answers in voice ([Voice costs](#voice-costs)).
 
-The defaults keep a typical line at one to three replies. A chain limit of 6 allows 9 turns (or up
-to 12 when all 6 reply) and 7 director calls.
+The defaults keep a typical line at one to three replies. A chain limit of 100 allows up to 103
+turns (or 106 when all 6 reply) and 101 director calls.
 
 ### Calibrating
 
@@ -936,7 +937,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `409 chat-in-call` during a call, `502 upstream-failed` when hearing fails |
 | `GET chats/:id/live` | | NDJSON of the running reply from its start; during a call, each event the chat stores, from `call-started` until the stream ends after `call-ended`; or `204` while neither runs |
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
-| `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, `{ replyMode }`, `auto`, `text` or `voice`, `{ display }`, `focus`, `normal` or `verbose`, or `{ permissions }`, `ask`, `auto` or `full`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line; a `display` applies at once, during a call too, whose feed carries it, and starts no turn; `permissions` reaches her tasks there at their next question, and her texts at her next turn, a call's included, and starts no turn |
+| `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 100, `{ replyMode }`, `auto`, `text` or `voice`, `{ display }`, `focus`, `normal` or `verbose`, or `{ permissions }`, `ask`, `auto` or `full`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line; a `display` applies at once, during a call too, whose feed carries it, and starts no turn; `permissions` reaches her tasks there at their next question, and her texts at her next turn, a call's included, and starts no turn |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
 | `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`; stops the chat's live tasks, after any `start_task` still being answered; then removes `chats/<id>/` and nothing else, leaving the tasks' records. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |
 | `GET chats/:id/files/:name` | | The attachment: its type, a text file's with `charset=utf-8`, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers a single `Range` with a `206` and an unsatisfiable one with a `416` (`ranges.ts`), and always sends `Accept-Ranges: bytes`, with a `Content-Length` on a `200` or `206`, since Safari plays audio only from a server that takes ranges |

@@ -179,6 +179,7 @@ export {
   type BrowserChatRecord,
   type BrowserChatStore,
   type CallEndReason,
+  CHAIN_LIMITS,
   CHAT_FORMAT,
   CHAT_WINDOW_BYTES,
   CHAT_WINDOW_EVENTS,

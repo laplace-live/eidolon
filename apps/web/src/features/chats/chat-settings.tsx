@@ -1,10 +1,10 @@
 import {
+  CHAIN_LIMITS,
   CHAT_DISPLAYS,
   type ChatDisplay,
   isChatDisplay,
   isPermissionLevel,
   isReplyMode,
-  MAX_CHAIN_LIMIT,
   PERMISSION_LEVELS,
   type PermissionLevel,
   REPLY_MODES,
@@ -32,7 +32,10 @@ import {
 } from "./labels";
 import { useSetChainLimit, useSetDisplay, useSetPermissions, useSetReplyMode } from "./queries";
 
-const LIMITS = Array.from({ length: MAX_CHAIN_LIMIT + 1 }, (_, limit) => String(limit));
+/** Preset hop limits, keeping an older custom value visible until changed. */
+export function chainLimitChoices(current: number): string[] {
+  return [...new Set([...CHAIN_LIMITS, current])].sort((a, b) => a - b).map(String);
+}
 
 /** How the personas answer in this chat; until it is set, each answers as her own settings say. */
 function ReplyModeField({
@@ -207,6 +210,7 @@ export function ChatSettingsSheet({
   const labelId = useId();
   const save = useSetChainLimit();
   const shown = save.isPending ? save.variables.chainLimit : chainLimit;
+  const limits = chainLimitChoices(shown);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -235,7 +239,7 @@ export function ChatSettingsSheet({
               disabled={save.isPending}
               aria-labelledby={labelId}
             >
-              {LIMITS.map((limit) => (
+              {limits.map((limit) => (
                 <ToggleGroupItem key={limit} value={limit} className="h-9 min-w-9 px-3">
                   {limit}
                 </ToggleGroupItem>

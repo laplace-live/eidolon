@@ -25,6 +25,8 @@ export const EVERYONE_THRESHOLD = 0.5;
 export const OTHERS_THRESHOLD = 0.65;
 /** Each persona-to-persona hop raises every bar by this, so chains die down on their own. */
 export const HOP_STEP = 0.1;
+/** Plateau for HOP_STEP × hop, so chains up to 100 hops stay reachable below 1.0. */
+export const MAX_HOP_RAISE = 0.3;
 /** Off the interest of whoever spoke the persona line before, so two can't trade the floor. */
 export const JUST_SPOKE_PENALTY = 0.1;
 export const MAX_REPLIES_TO_USER = 3;
@@ -230,9 +232,9 @@ function mostTalkative(ranked: readonly DirectorParticipant[]): DirectorParticip
   return ranked.reduce((best, p) => (p.talkativeness > best.talkativeness ? p : best));
 }
 
-function willing<T extends { readonly p: DirectorParticipant }>(list: readonly T[]): T[] {
+function willingIds(list: readonly { readonly p: DirectorParticipant }[]): string[] {
   const active = list.filter(({ p }) => p.talkativeness > 0);
-  return active.length > 0 ? active : [...list];
+  return (active.length > 0 ? active : list).map(({ p }) => p.id);
 }
 
 /**
@@ -266,7 +268,7 @@ function choose(
   scores: Readonly<Record<string, number>>,
 ): { ids: string[]; source: "mention" | "model" } {
   const toViewer = latestOf(input).speaker.kind === "user";
-  const raise = toViewer ? 0 : HOP_STEP * input.hop;
+  const raise = toViewer ? 0 : Math.min(HOP_STEP * input.hop, MAX_HOP_RAISE);
   const cap = toViewer ? MAX_REPLIES_TO_USER : 1;
   if (!toViewer && (scores.invites_reply as number) < INVITES_THRESHOLD + raise) {
     return { ids: [], source: "model" };
@@ -301,7 +303,7 @@ function choose(
   if (callEveryone) {
     const pool = !toViewer && unheard.length > 0 ? unheard : ranked;
     return {
-      ids: [...new Set([...addressed, ...willing(pool).map(({ p }) => p.id)])],
+      ids: [...new Set([...addressed, ...willingIds(pool)])],
       source: "model",
     };
   }
@@ -309,7 +311,7 @@ function choose(
     return { ids: addressed.slice(0, cap), source: "model" };
   }
   if (callOthers) {
-    return { ids: willing(unheard).map(({ p }) => p.id), source: "model" };
+    return { ids: willingIds(unheard), source: "model" };
   }
   const keen = ranked.filter(({ score }) => score >= INTEREST_THRESHOLD + raise);
   if (keen.length > 0) return { ids: keen.slice(0, cap).map(({ p }) => p.id), source: "model" };
@@ -319,9 +321,7 @@ function choose(
   // The just-spoke penalty can sink a talkative persona under a silent one's 0, so a persona at 0
   // answers only when everyone is. A persona's line may go unanswered.
   return {
-    ids: willing(ranked)
-      .slice(0, 1)
-      .map(({ p }) => p.id),
+    ids: willingIds(ranked).slice(0, 1),
     source: "model",
   };
 }
@@ -349,7 +349,7 @@ function fallback(input: DirectorInput, candidates: readonly DirectorParticipant
   const toViewer = latest.speaker.kind === "user";
   const cap = toViewer ? MAX_REPLIES_TO_USER : 1;
   const named = mentioned(input, candidates);
-  if (named.length > 0) return named.slice(0, toViewer ? Math.max(cap, named.length) : cap);
+  if (named.length > 0) return toViewer ? named : named.slice(0, cap);
   const text = latest.text.toLowerCase();
   const found = candidates
     .map((p) => {
