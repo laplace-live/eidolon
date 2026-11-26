@@ -1,5 +1,12 @@
 # laplace-eidolon-desktop
 
+## 0.6.1
+
+### Patch Changes
+
+- ac97b72: Align the group chat decision button beside voice and photo replies
+- 1510512: Upgrade the bundled pnpm in the node shim to v12
+
 ## 0.6.0
 
 ### Minor Changes
