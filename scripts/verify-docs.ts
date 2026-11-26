@@ -40,7 +40,7 @@ function stripFencedCode(markdown: string): string {
   const out: string[] = [];
   let fenceChar: "`" | "~" | null = null;
   let fenceLen = 0;
-  for (const line of markdown.split("\n")) {
+  for (const line of markdown.replace(/\r\n/g, "\n").split("\n")) {
     if (fenceChar === null) {
       const open = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
       if (open?.[1]) {
@@ -118,7 +118,7 @@ export function verifyDocs(root: string): VerifyDocsResult {
   const warnings: string[] = [];
   const fail = (msg: string) => failures.push(msg);
   const warn = (msg: string) => warnings.push(msg);
-  const read = (rel: string) => readFileSync(join(root, rel), "utf8");
+  const read = (rel: string) => readFileSync(join(root, rel), "utf8").replace(/\r\n/g, "\n");
 
   const docsDir = join(root, "docs");
   const docsEntries = existsSync(docsDir)
@@ -192,7 +192,7 @@ export function verifyDocs(root: string): VerifyDocsResult {
       if (file === "AGENTS.md") linkedFromAgents.add(relative(root, abs).replace(/\\/g, "/"));
       let targetBody: string;
       try {
-        targetBody = readFileSync(abs, "utf8");
+        targetBody = readFileSync(abs, "utf8").replace(/\r\n/g, "\n");
       } catch {
         let isDir = false;
         try {

@@ -96,6 +96,52 @@ describe("verifyDocs", () => {
     expect(verifyDocs(root).failures).toEqual([]);
   });
 
+  test("normalizes CRLF line endings when parsing fences, headings, links, and changesets", () => {
+    const root = makeFixtureRepo();
+    writeFixture(
+      root,
+      "README.md",
+      "# Fixture\r\n\r\n<!-- Electron 45 floors -->\r\n\r\n- macOS 13+\r\n",
+    );
+    writeFixture(
+      root,
+      "AGENTS.md",
+      [
+        "# AGENTS.md",
+        "",
+        "## Index",
+        "",
+        "- guide → [guide.md](docs/guide.md#details)",
+        "- desktop: `apps/desktop`, `pnpm test`, `pnpm doc-check`",
+        "",
+      ].join("\r\n"),
+    );
+    writeFixture(
+      root,
+      ".changeset/good-fix.md",
+      '---\r\n"fixture-desktop": patch\r\n---\r\n\r\nfix: Handle CRLF endings\r\n',
+    );
+    writeFixture(
+      root,
+      "docs/guide.md",
+      [
+        "# Guide",
+        "",
+        "## Details",
+        "",
+        "```bash",
+        "echo [missing](docs/nope.md)",
+        "```",
+        "",
+        "Real link after fence: [after-fence](docs/still-caught.md).",
+        "",
+      ].join("\r\n"),
+    );
+    expect(verifyDocs(root).failures).toEqual([
+      "docs/guide.md: link target does not exist → docs/still-caught.md",
+    ]);
+  });
+
   test("flags AGENTS.md over budget with its fattest sections", () => {
     const root = makeFixtureRepo();
     writeFixture(
