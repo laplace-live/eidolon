@@ -289,4 +289,17 @@ describe.runIf(WINDOWS)("the staged launchers, started by the backend's cross-sp
     },
     TIMEOUT_MS,
   );
+
+  test(
+    "npx ends with npx.ts's non-zero exit code when it fails",
+    () => {
+      const ran = start("npx", ["-c", "echo hi"]);
+      expect([ran.status, ran.stdout, lines(ran.stderr)]).toEqual([
+        1,
+        "",
+        ["npx: Eidolon's npx doesn't take -c"],
+      ]);
+    },
+    TIMEOUT_MS,
+  );
 });

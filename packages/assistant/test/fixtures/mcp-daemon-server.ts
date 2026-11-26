@@ -13,9 +13,7 @@ const helper = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
 helper.unref();
 console.error(`helper ${helper.pid}`);
 const pidfile = argv.indexOf("--pidfile");
-if (pidfile !== -1 && argv[pidfile + 1] !== undefined) {
-  writeFileSync(argv[pidfile + 1] as string, JSON.stringify([process.pid, helper.pid]));
-}
+if (pidfile !== -1) writeFileSync(argv[pidfile + 1], JSON.stringify([process.pid, helper.pid]));
 
 const lines = createInterface({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY });
 lines.on("line", (line) => {

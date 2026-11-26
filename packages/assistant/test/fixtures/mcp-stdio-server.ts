@@ -7,7 +7,7 @@ import { createInterface } from "node:readline";
 interface RpcRequest {
   readonly id?: unknown;
   readonly method?: string;
-  readonly params?: { readonly arguments?: { readonly text?: unknown } };
+  readonly params: { readonly arguments: { readonly text: unknown } };
 }
 
 console.error("stdio fixture ready");
@@ -26,7 +26,7 @@ for await (const line of lines) {
   } else if (message.method === "tools/list") {
     result = { tools: [{ name: "echo", inputSchema: { type: "object" } }] };
   } else if (message.method === "tools/call") {
-    result = { content: [{ type: "text", text: String(message.params?.arguments?.text) }] };
+    result = { content: [{ type: "text", text: String(message.params.arguments.text) }] };
   } else if (message.method === "ping") {
     result = {};
   } else {
