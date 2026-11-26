@@ -6,11 +6,13 @@ process.on("unhandledRejection", (reason) => logger.error("Unhandled rejection",
 installHttpDefaults();
 
 const server = await startRelayServer();
-logger.info(`[relay] Listening on ${server.url}`);
+logger.info(`[relay] Listening on ${server.url} (public URL: ${server.publicUrl})`);
 
 let stopping = false;
 const shutdown = () => {
-  if (stopping) return;
+  if (stopping) {
+    process.exit(1);
+  }
   stopping = true;
   void server
     .stop()

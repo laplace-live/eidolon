@@ -8,20 +8,24 @@ import { openRelayDatabase, RelayStore } from "./relay-db.ts";
 export interface RelayServerHandle {
   readonly port: number;
   readonly url: string;
+  readonly publicUrl: string;
   readonly hub: RelayHub;
   readonly verifyToken: RelayTokenVerifier;
   stop(): Promise<void>;
 }
 
 export async function startRelayServer(
-  overrides: Partial<RelayConfig> & { readonly fetch?: typeof fetch } = {},
+  overrides: Partial<RelayConfig> & {
+    readonly fetch?: typeof fetch;
+    readonly heartbeatMs?: number;
+  } = {},
 ): Promise<RelayServerHandle> {
-  const { fetch: fetchImpl, ...configOverrides } = overrides;
+  const { fetch: fetchImpl, heartbeatMs, ...configOverrides } = overrides;
   const config: RelayConfig = { ...loadRelayConfig(), ...configOverrides };
   const db = openRelayDatabase(config.dbPath);
   const store = new RelayStore(db);
   const verifyToken = createRelayTokenVerifier(config, { fetch: fetchImpl });
-  const hub = new RelayHub(verifyToken, store);
+  const hub = new RelayHub(verifyToken, store, { heartbeatMs });
 
   const srvx = serve({
     hostname: config.host,
@@ -35,6 +39,7 @@ export async function startRelayServer(
         return Response.json({
           ok: true,
           onlineHosts: hub.onlineHostCount,
+          publicUrl: config.publicUrl,
           auth: {
             issuer: config.authIssuer,
             audience: config.authAudience,
@@ -52,7 +57,18 @@ export async function startRelayServer(
     },
   });
 
-  await srvx.ready();
+  try {
+    await srvx.ready();
+  } catch (error) {
+    await srvx.close(true).catch(() => {});
+    await hub.close().catch(() => {});
+    try {
+      db.close();
+    } catch {
+      // Preserve startup error if database close also fails.
+    }
+    throw error;
+  }
   const nodeServer = srvx.node?.server;
   const address = nodeServer?.address();
   const port = typeof address === "object" && address !== null ? address.port : undefined;
@@ -74,6 +90,7 @@ export async function startRelayServer(
   return {
     port,
     url: withoutTrailingSlashes(url),
+    publicUrl: config.publicUrl,
     hub,
     verifyToken,
     async stop() {

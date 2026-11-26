@@ -160,7 +160,7 @@ function EditServerForm({
   const [host, setHost] = useState(server.endpoint?.host ?? "");
   const [port, setPort] = useState(server.endpoint ? String(server.endpoint.port) : "");
 
-  const parsedPort = port.trim() === "" ? undefined : Number.parseInt(port.trim(), 10);
+  const parsedPort = port.trim() === "" ? undefined : Number(port.trim());
   const portValid =
     server.mode !== "direct" ||
     (parsedPort !== undefined &&

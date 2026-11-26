@@ -1,12 +1,15 @@
 import { createSocket } from "node:dgram";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   acceptHostHandshake,
   ClientCallBridgePool,
+  decodeMuxFrame,
+  encodeMuxFrame,
   extractHostUdpPort,
   generateX25519KeyPair,
   importX25519PrivateKey,
   MAX_MUX_CHUNK,
+  MUX_FRAME,
   MuxEndpoint,
   openHostUdpBridge,
   rewriteSdpAnswer,
@@ -144,6 +147,178 @@ describe("MuxEndpoint", () => {
       hostMux.close();
     }
   });
+
+  test("enforces 4 MiB stream flow-control window with STREAM_CREDIT and rejects overflow", async () => {
+    const STREAM_WINDOW = 4 * 1024 * 1024;
+    const totalBytes = STREAM_WINDOW + 256 * 1024;
+    let hostBodyFrames = 0;
+    let clientCreditFrames = 0;
+
+    let clientMux!: MuxEndpoint;
+    let hostMux!: MuxEndpoint;
+    const hostKp = await generateX25519KeyPair();
+    const hostPriv = await importX25519PrivateKey(hostKp.privateKeyPkcs8B64);
+    const clientHs = await startClientHandshake(hostKp.publicKeyB64);
+    const { readyRaw, session: hostSession } = await acceptHostHandshake(
+      { publicKeyB64: hostKp.publicKeyB64, privateKey: hostPriv },
+      clientHs.helloRaw,
+    );
+    const clientSession = await clientHs.finish(readyRaw);
+
+    hostMux = new MuxEndpoint({
+      sendFrame: (frame) =>
+        hostSession.send(frame, async (sealed) => {
+          const plain = await clientSession.open(sealed);
+          if (decodeMuxFrame(plain).type === MUX_FRAME.RES_BODY) hostBodyFrames += 1;
+          await clientMux.handleFrame(plain);
+        }),
+      host: {
+        onHttpRequest: async (head) => {
+          if (head.path === "/large") {
+            const payload = new Uint8Array(totalBytes);
+            payload.fill(0x3c);
+            return {
+              status: 200,
+              statusText: "OK",
+              headers: [],
+              body: new Response(payload).body,
+            };
+          }
+          return { status: 404, statusText: "Not Found", headers: [], body: null };
+        },
+      },
+    });
+    clientMux = new MuxEndpoint({
+      sendFrame: (frame) =>
+        clientSession.send(frame, async (sealed) => {
+          const plain = await hostSession.open(sealed);
+          if (decodeMuxFrame(plain).type === MUX_FRAME.STREAM_CREDIT) clientCreditFrames += 1;
+          await hostMux.handleFrame(plain);
+        }),
+    });
+
+    try {
+      const res = await clientMux.request({
+        method: "GET",
+        path: "/large",
+        headers: [],
+        body: null,
+      });
+      // Sender stops after sending the 4 MiB initial window before consumer reads.
+      await vi.waitFor(() => {
+        expect(hostBodyFrames).toBe(STREAM_WINDOW / MAX_MUX_CHUNK);
+      });
+      await new Promise((r) => setTimeout(r, 25));
+      expect(hostBodyFrames).toBe(STREAM_WINDOW / MAX_MUX_CHUNK);
+      expect(clientCreditFrames).toBe(0);
+
+      // Reading from the response drains the buffer, returns STREAM_CREDIT, and completes all bytes.
+      const received = new Uint8Array(await new Response(res.body).arrayBuffer());
+      expect(received.byteLength).toBe(totalBytes);
+      expect(clientCreditFrames).toBeGreaterThan(0);
+
+      // Overflowing the 4 MiB receive window errors the stream and emits REQ_ABORT.
+      const sentFrames: number[] = [];
+      const standalone = new MuxEndpoint({
+        sendFrame: async (frame) => {
+          sentFrames.push(decodeMuxFrame(frame).type);
+        },
+      });
+      const overflowReq = standalone.request({
+        method: "GET",
+        path: "/overflow",
+        headers: [],
+        body: null,
+      });
+      await standalone.handleFrame(
+        encodeMuxFrame(
+          MUX_FRAME.RES_HEAD,
+          1,
+          utf8Encode(JSON.stringify({ status: 200, statusText: "OK", headers: [] })),
+        ),
+      );
+      const overflowRes = await overflowReq;
+      const chunk = new Uint8Array(1024 * 1024);
+      for (let i = 0; i < 4; i++) {
+        await standalone.handleFrame(encodeMuxFrame(MUX_FRAME.RES_BODY, 1, chunk));
+      }
+      await standalone.handleFrame(encodeMuxFrame(MUX_FRAME.RES_BODY, 1, new Uint8Array([1])));
+      await expect(overflowRes.body!.getReader().read()).rejects.toThrow("window");
+      expect(sentFrames).toContain(MUX_FRAME.REQ_ABORT);
+      standalone.close();
+    } finally {
+      clientMux.close();
+      hostMux.close();
+    }
+  });
+
+  test("immediately cancels idle response reader on abort and rejects pending request on upload stream error or invalid RES_ERR", async () => {
+    let idleCancelled = false;
+    const { clientMux, hostMux } = await wiredMuxPair(async (head) => {
+      if (head.path === "/idle-sse") {
+        return {
+          status: 200,
+          statusText: "OK",
+          headers: [["content-type", "text/event-stream"]],
+          body: new ReadableStream<Uint8Array>({
+            start(ctrl) {
+              ctrl.enqueue(utf8Encode("data: hello\n\n"));
+            },
+            cancel() {
+              idleCancelled = true;
+            },
+          }),
+        };
+      }
+      if (head.path === "/wait-body") {
+        return await new Promise<never>(() => {});
+      }
+      return { status: 404, statusText: "Not Found", headers: [], body: null };
+    });
+
+    try {
+      // Cancelling an idle SSE response immediately cancels the host stream reader.
+      const sseRes = await clientMux.request({
+        method: "GET",
+        path: "/idle-sse",
+        headers: [],
+        body: null,
+      });
+      const sseReader = sseRes.body!.getReader();
+      expect(utf8Decode((await sseReader.read()).value!)).toBe("data: hello\n\n");
+      await sseReader.cancel();
+      await vi.waitFor(() => {
+        expect(idleCancelled).toBe(true);
+      });
+
+      // An errored request body rejects request() immediately even before RES_HEAD arrives.
+      const failingBody = new ReadableStream<Uint8Array>({
+        pull() {
+          throw new Error("upload stream failed");
+        },
+      });
+      await expect(
+        clientMux.request({
+          method: "POST",
+          path: "/wait-body",
+          headers: [],
+          body: failingBody,
+        }),
+      ).rejects.toThrow("upload stream failed");
+
+      // Invalid UTF-8 in RES_ERR falls back cleanly without throwing out of handleFrame.
+      const rawMux = new MuxEndpoint({ sendFrame: async () => {} });
+      const pending = rawMux.request({ method: "GET", path: "/bad-err", headers: [], body: null });
+      await rawMux.handleFrame(
+        encodeMuxFrame(MUX_FRAME.RES_ERR, 1, new Uint8Array([0xff, 0xfe, 0x80])),
+      );
+      await expect(pending).rejects.toThrow("Remote request failed");
+      rawMux.close();
+    } finally {
+      clientMux.close();
+      hostMux.close();
+    }
+  });
 });
 
 describe("WebRTC SDP rewrite & UDP call bridge", () => {
@@ -218,6 +393,26 @@ describe("WebRTC SDP rewrite & UDP call bridge", () => {
       await new Promise((r) => setTimeout(r, 25));
       browserSock.send(Buffer.from("opus-packet"), bridgePort!, "127.0.0.1");
       expect(await echoed).toBe("echo:opus-packet");
+      expect(pool.activeCount).toBe(1);
+
+      // Sending a DTLS close alert (>=13 bytes, byte[0] === 21) schedules bridge teardown.
+      const dtlsAlert = new Uint8Array(15);
+      dtlsAlert[0] = 21;
+      browserSock.send(dtlsAlert, bridgePort!, "127.0.0.1");
+      await vi.waitFor(() => {
+        expect(pool.activeCount).toBe(0);
+      });
+
+      // Closed mux during adaptOfferResponse rejects cleanly without adding a bridge.
+      clientMux.close();
+      await expect(
+        pool.adaptOfferResponse(
+          new Response(JSON.stringify({ pc_id: "pc-closed", sdp }), { status: 200 }),
+          clientMux,
+          { mode: "relay" },
+        ),
+      ).rejects.toThrow("Subspace tunnel is closed");
+      expect(pool.activeCount).toBe(0);
     } finally {
       pool.closeAll();
       browserSock.close();

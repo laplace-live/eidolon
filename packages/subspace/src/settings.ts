@@ -14,7 +14,7 @@ export function subspaceAuthUrl(): string {
 }
 
 export function httpToWsUrl(baseUrl: string, pathname: string): string {
-  const url = new URL(pathname, `${withoutTrailingSlashes(baseUrl)}/`);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  const url = new URL(pathname.replace(/^\/+/, ""), `${withoutTrailingSlashes(baseUrl)}/`);
+  url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
   return url.toString();
 }

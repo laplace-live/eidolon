@@ -1,21 +1,40 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   acceptHostHandshake,
+  ClientAuthSchema,
+  completeDeviceAuthorization,
   computeRelayControlProof,
+  DirectEndpointSchema,
+  deriveRelayDeviceToken,
   deriveRelayHostId,
+  deriveRelayInviteToken,
+  discoverRelayAuthUrl,
   E2eeError,
   encodePairingCode,
   encodePairingUrl,
   generateX25519KeyPair,
+  HostChallengeAckSchema,
+  HostChallengeSchema,
+  HostHelloAckSchema,
+  HostHelloSchema,
+  httpToWsUrl,
   importX25519PrivateKey,
   importX25519PublicKey,
   isPairingExpired,
+  listShareableAddresses,
   parsePairingInput,
+  pollDeviceToken,
+  RelayEndpointSchema,
   randomBytes,
+  signOutRelaySession,
   startClientHandshake,
   utf8Decode,
   utf8Encode,
 } from "../src/index.ts";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("pairing codec", () => {
   test("encodes and parses Direct and Relay pairing links and bare codes", async () => {
@@ -213,5 +232,201 @@ describe("Dual-DH X25519 + AES-256-GCM", () => {
     expect(proofHost).toBe(proofRelay);
     expect(proofWrongUser).not.toBe(proofHost);
     expect(proofWrongKey).not.toBe(proofHost);
+  });
+
+  test("enforces fatal UTF-8 decoding, endpoint validation, relay contract bounds, and derived tokens", async () => {
+    expect(() => utf8Decode(new Uint8Array([0xff, 0xfe]))).toThrow(TypeError);
+
+    expect(DirectEndpointSchema.safeParse({ host: "100.64.0.8", port: 48921 }).success).toBe(true);
+    expect(DirectEndpointSchema.safeParse({ host: "::1", port: 48921 }).success).toBe(true);
+    expect(DirectEndpointSchema.safeParse({ host: "[2001:db8::1]", port: 48921 }).success).toBe(
+      true,
+    );
+    for (const badHost of [
+      "evil.com/path",
+      "user@127.0.0.1",
+      "host?x=1",
+      "host#frag",
+      "bad host",
+      "127.0.0.1:8080",
+    ]) {
+      expect(DirectEndpointSchema.safeParse({ host: badHost, port: 48921 }).success).toBe(false);
+    }
+
+    expect(
+      RelayEndpointSchema.safeParse({
+        url: "https://eidolon-relay.vrp.moe",
+        relayHostId: "host_12345678",
+      }).success,
+    ).toBe(true);
+    expect(
+      RelayEndpointSchema.safeParse({
+        url: "wss://eidolon-relay.vrp.moe",
+        relayHostId: "host_12345678",
+      }).success,
+    ).toBe(true);
+    expect(
+      RelayEndpointSchema.safeParse({
+        url: "http://127.0.0.1:8787",
+        relayHostId: "host_12345678",
+      }).success,
+    ).toBe(true);
+    expect(
+      RelayEndpointSchema.safeParse({
+        url: "ws://[::1]:8787",
+        relayHostId: "host_12345678",
+      }).success,
+    ).toBe(true);
+    expect(
+      RelayEndpointSchema.safeParse({
+        url: "http://relay.example.com",
+        relayHostId: "host_12345678",
+      }).success,
+    ).toBe(false);
+
+    const long = "a".repeat(257);
+    expect(
+      HostHelloSchema.safeParse({
+        type: "host_hello",
+        v: 1,
+        relayHostId: "host_12345678",
+        hostPublicKeyB64: long,
+        hostName: "Mac",
+      }).success,
+    ).toBe(false);
+    expect(
+      HostChallengeSchema.safeParse({
+        type: "host_challenge",
+        challengeB64: long,
+        relayEphPubB64: "abc",
+        userId: "u1",
+      }).success,
+    ).toBe(false);
+    expect(
+      HostChallengeAckSchema.safeParse({ type: "host_challenge_ack", proofB64: long }).success,
+    ).toBe(false);
+    expect(
+      HostHelloAckSchema.safeParse({
+        type: "host_hello_ack",
+        relayHostId: "host_12345678",
+        userId: long,
+      }).success,
+    ).toBe(false);
+
+    const inviteTok = await deriveRelayInviteToken("secret-ticket");
+    const deviceTok = await deriveRelayDeviceToken("secret-device");
+    expect(inviteTok).toMatch(/^[0-9a-f]{64}$/);
+    expect(deviceTok).toMatch(/^[0-9a-f]{64}$/);
+    expect(inviteTok).not.toBe(deviceTok);
+    expect(
+      ClientAuthSchema.safeParse({
+        type: "client_auth",
+        v: 1,
+        relayHostId: "host_12345678",
+        credential: { kind: "invite", relayTicket: inviteTok },
+      }).success,
+    ).toBe(true);
+    expect(
+      ClientAuthSchema.safeParse({
+        type: "client_auth",
+        v: 1,
+        relayHostId: "host_12345678",
+        credential: { kind: "invite", ticket: "raw-ticket" },
+      }).success,
+    ).toBe(false);
+  });
+
+  test("httpToWsUrl preserves wss:/ws: protocols and base path prefixes", () => {
+    expect(httpToWsUrl("https://eidolon-relay.vrp.moe", "/v1/client/connect")).toBe(
+      "wss://eidolon-relay.vrp.moe/v1/client/connect",
+    );
+    expect(httpToWsUrl("wss://relay.example.com/subpath/", "/v1/client/connect")).toBe(
+      "wss://relay.example.com/subpath/v1/client/connect",
+    );
+    expect(httpToWsUrl("http://127.0.0.1:8080/proxy", "/v1/host/control")).toBe(
+      "ws://127.0.0.1:8080/proxy/v1/host/control",
+    );
+    expect(httpToWsUrl("ws://localhost:8080/app/", "/v1/host/data")).toBe(
+      "ws://localhost:8080/app/v1/host/data",
+    );
+  });
+
+  test("listShareableAddresses skips 169.254.*, sorts octets numerically, and ranks 172.16/12 after 10/8 and 192.168/16", () => {
+    const info = (address: string) => ({
+      address,
+      netmask: "255.255.255.0",
+      family: "IPv4" as const,
+      mac: "00:00:00:00:00:00",
+      internal: false,
+      cidr: `${address}/24`,
+    });
+    const list = listShareableAddresses({
+      en1: [info("169.254.10.20")],
+      docker0: [info("172.17.0.1")],
+      en0: [info("192.168.1.10"), info("192.168.1.2")],
+      utun3: [info("100.64.0.9")],
+      en2: [info("10.0.0.5")],
+      eth0: [info("203.0.113.5")],
+    });
+    expect(list.map((x) => x.address)).toEqual([
+      "100.64.0.9",
+      "10.0.0.5",
+      "192.168.1.2",
+      "192.168.1.10",
+      "172.17.0.1",
+      "203.0.113.5",
+    ]);
+  });
+
+  test("auth-client validates issuer scheme, retries transient poll failures, respects abort, and times out signOut", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ auth: { issuer: "http://evil.example.com" } }),
+    );
+    expect(await discoverRelayAuthUrl("https://custom-relay.example.com")).toBe(
+      "https://id.laplace.live",
+    );
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ auth: { issuer: "http://127.0.0.1:4321/" } }),
+    );
+    expect(await discoverRelayAuthUrl("https://custom-relay.example.com")).toBe(
+      "http://127.0.0.1:4321",
+    );
+
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("ECONNRESET"));
+    expect(await pollDeviceToken("https://id.laplace.live", "code-1")).toEqual({
+      status: "pending",
+    });
+
+    const ac = new AbortController();
+    ac.abort();
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("aborted"));
+    expect(await pollDeviceToken("https://id.laplace.live", "code-1", ac.signal)).toEqual({
+      status: "error",
+      message: "Sign-in cancelled",
+    });
+
+    const abortDuringPoll = new AbortController();
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(async () => {
+      abortDuringPoll.abort();
+      return Response.json({ error: "authorization_pending" }, { status: 400 });
+    });
+    expect(
+      await completeDeviceAuthorization({
+        authUrl: "https://id.laplace.live",
+        deviceCode: "code-2",
+        intervalSec: 0.005,
+        expiresAt: Date.now() + 5_000,
+        signal: abortDuringPoll.signal,
+      }),
+    ).toEqual({ status: "aborted" });
+
+    let signOutSignal: AbortSignal | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(async (_url, init) => {
+      signOutSignal = init?.signal ?? undefined;
+      return new Response(null, { status: 200 });
+    });
+    await signOutRelaySession("https://id.laplace.live", "tok-1");
+    expect(signOutSignal).toBeInstanceOf(AbortSignal);
   });
 });

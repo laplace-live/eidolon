@@ -3,9 +3,24 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChatSummary } from "@eidolon/chat";
-import { killTree, spawnProcess } from "@eidolon/config";
+import { killTree, newId, spawnProcess } from "@eidolon/config";
+import {
+  parsePairingInput,
+  performPairingHandshake,
+  SubspaceClient,
+  SubspaceConnectError,
+  type SubspaceManager,
+} from "@eidolon/subspace";
 import { afterEach, describe, expect, test } from "vitest";
-import type { SubspaceStateResponse } from "../../src/local/api.ts";
+import {
+  type ErrorBody,
+  EXPECTED_HOST_HEADER,
+  type SubspaceStateResponse,
+} from "../../src/local/api.ts";
+import { createLocalRouter } from "../../src/local/router.ts";
+import { subspaceRoutes } from "../../src/local/routes/subspace.ts";
+import type { RouteRequest } from "../../src/routing.ts";
+import { captureLogs } from "../fakes.ts";
 import { type Booted, bootFixture, cleanUpBoot, fixtureDist } from "./harness.ts";
 
 const cleanups: (() => Promise<void> | void)[] = [];
@@ -208,16 +223,90 @@ describe("Local server Subspace proxy & host switching", () => {
     const offer2 = (await offer2Res.json()) as { pairingCode: string };
     expect(offer2.pairingCode).toBe(offer1.pairingCode);
 
-    // 5. Switching activeHostId back to null returns local chats and x-eidolon-subspace-host: local.
+    // 4d. X-Eidolon-Expected-Host rejects mismatched expectations (local->remote) while allowing matches and bypasses.
+    const mismatchToLocal = await fetch(`${local.base}/api/local/chats`, {
+      headers: { ...local.session, [EXPECTED_HOST_HEADER]: "local" },
+    });
+    expect(mismatchToLocal.status).toBe(409);
+    expect(await mismatchToLocal.json()).toMatchObject({ error: { code: "conflict" } });
+
+    const fallbackMismatch = await fetch(`${local.base}/api/offer`, {
+      method: "DELETE",
+      headers: { ...local.session, [EXPECTED_HOST_HEADER]: "local" },
+    });
+    expect(fallbackMismatch.status).toBe(409);
+    expect(await fallbackMismatch.json()).toMatchObject({ error: { code: "conflict" } });
+
+    const matchingRemote = await fetch(`${local.base}/api/local/chats`, {
+      headers: { ...local.session, [EXPECTED_HOST_HEADER]: remoteId },
+    });
+    expect(matchingRemote.status).toBe(200);
+
+    const bypassedWithHeader = await fetch(`${local.base}/api/local/chats`, {
+      headers: {
+        ...local.session,
+        "x-eidolon-target": "local",
+        [EXPECTED_HOST_HEADER]: remoteId,
+      },
+    });
+    expect(bypassedWithHeader.status).toBe(200);
+
+    const localOnlyWithHeader = await fetch(`${local.base}/api/local/subspace`, {
+      headers: { ...local.session, [EXPECTED_HOST_HEADER]: "local" },
+    });
+    expect(localOnlyWithHeader.status).toBe(200);
+
+    // 4e. Proxied fallback routes preserve botFallback 405 + Allow and 404 semantics through dispatchLocal.
+    const proxied405 = await fetch(`${local.base}/api/offer`, {
+      method: "DELETE",
+      headers: local.session,
+    });
+    expect(proxied405.status).toBe(405);
+    expect(proxied405.headers.get("allow")).toBe("POST");
+    expect(await proxied405.json()).toEqual({ detail: "Method Not Allowed" });
+
+    const proxied404 = await fetch(`${local.base}/api/nonexistent`, {
+      headers: local.session,
+    });
+    expect(proxied404.status).toBe(404);
+    expect(await proxied404.json()).toEqual({ detail: "Not Found" });
+
+    // 5. Switching activeHostId back to null returns local chats and x-eidolon-subspace-host: local,
+    //    while stale clients expecting the remote host receive 409 conflict without mutating local state.
     const switchLocalRes = await fetch(`${local.base}/api/local/subspace/active`, {
       method: "POST",
       headers: { ...local.session, "content-type": "application/json" },
       body: JSON.stringify({ hostId: null }),
     });
     expect(switchLocalRes.status).toBe(200);
-    const localChatsAgainRes = await fetch(`${local.base}/api/local/chats`, {
-      headers: local.session,
+
+    const staleGet = await fetch(`${local.base}/api/local/chats`, {
+      headers: { ...local.session, [EXPECTED_HOST_HEADER]: remoteId },
     });
+    expect(staleGet.status).toBe(409);
+    expect(await staleGet.json()).toMatchObject({ error: { code: "conflict" } });
+
+    const staleMutate = await fetch(`${local.base}/api/local/chats`, {
+      method: "POST",
+      headers: {
+        ...local.session,
+        "content-type": "application/json",
+        [EXPECTED_HOST_HEADER]: remoteId,
+      },
+      body: JSON.stringify({ participants: ["milky-green"] }),
+    });
+    expect(staleMutate.status).toBe(409);
+    expect(await staleMutate.json()).toMatchObject({ error: { code: "conflict" } });
+
+    const unauthStale = await fetch(`${local.base}/api/local/chats`, {
+      headers: { [EXPECTED_HOST_HEADER]: remoteId },
+    });
+    expect(unauthStale.status).toBe(401);
+
+    const localChatsAgainRes = await fetch(`${local.base}/api/local/chats`, {
+      headers: { ...local.session, [EXPECTED_HOST_HEADER]: "local" },
+    });
+    expect(localChatsAgainRes.status).toBe(200);
     expect(localChatsAgainRes.headers.get("x-eidolon-subspace-host")).toBe("local");
     const localChatsAgain = (await localChatsAgainRes.json()) as ChatSummary[];
     expect(localChatsAgain.map((c) => c.id)).toEqual([localChatId]);
@@ -240,5 +329,137 @@ describe("Local server Subspace proxy & host switching", () => {
     expect(restartRes.status).toBe(200);
     expect(restartRes.headers.get("x-eidolon-subspace")).toBe("remote");
     expect(local.io.exits).toEqual([]);
+  });
+
+  test("tunneled /api/offer sets allowHostCandidates while direct local offers keep it false, and dispatchLocal preserves botFallback 405 + Allow", async () => {
+    const host = await bootFixture();
+    cleanups.push(() => host.stop());
+
+    const offerRes = await fetch(`${host.base}/api/local/subspace/share/offer`, {
+      method: "POST",
+      headers: { ...host.session, "content-type": "application/json" },
+      body: JSON.stringify({ mode: "direct", address: "127.0.0.1", port: 0 }),
+    });
+    expect(offerRes.status).toBe(200);
+    const { pairingUrl } = (await offerRes.json()) as { pairingUrl: string };
+    const parsed = parsePairingInput(pairingUrl);
+    if (!parsed.ok) throw new Error(parsed.reason);
+
+    const handshake = await performPairingHandshake(parsed.offer);
+    const client = new SubspaceClient(
+      {
+        id: newId(),
+        name: "Test Host",
+        hostPublicKeyB64: parsed.offer.hostPublicKeyB64,
+        grantId: handshake.grantId,
+        deviceToken: handshake.deviceToken,
+        mode: "direct",
+        endpoint: parsed.offer.endpoint,
+        addedAt: Date.now(),
+        lastConnectedAt: Date.now(),
+        lastVersion: handshake.serverVersion,
+      },
+      {},
+      handshake.tunnel,
+    );
+    cleanups.push(() => client.stop());
+
+    const directOffer = await fetch(`${host.base}/api/offer`, {
+      method: "POST",
+      headers: { ...host.session, "content-type": "application/json" },
+      body: JSON.stringify({ sdp: "v=0\r\n", type: "offer" }),
+    });
+    expect(directOffer.status).toBe(200);
+    expect(host.fakes.offers.at(-1)?.admission.allowHostCandidates).toBe(false);
+
+    const tunneledOffer = await client.proxyFetch(
+      new Request("http://subspace.local/api/offer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sdp: "v=0\r\n", type: "offer" }),
+      }),
+      "/api/offer",
+    );
+    expect(tunneledOffer.status).toBe(200);
+    expect(host.fakes.offers.at(-1)?.admission.allowHostCandidates).toBe(true);
+
+    const tunneledMethodNotAllowed = await client.proxyFetch(
+      new Request("http://subspace.local/api/offer", { method: "DELETE" }),
+      "/api/offer",
+    );
+    expect(tunneledMethodNotAllowed.status).toBe(405);
+    expect(tunneledMethodNotAllowed.headers.get("allow")).toBe("POST");
+  });
+});
+
+describe("subspaceRoutes error handling", () => {
+  test("returns static messages for mapped codes and rethrows unexpected errors as 500 internal", async () => {
+    const logs = captureLogs();
+    cleanups.push(() => logs.restore());
+
+    const fakeManager = {
+      getState: async () => {
+        throw new Error("SQLITE_CANTOPEN: /secret/db/path");
+      },
+      setActiveHostId: async () => {
+        throw new SubspaceConnectError(
+          "subspace-unreachable",
+          "connect ECONNREFUSED 10.9.8.7:44321",
+        );
+      },
+      revokeGrant: async () => {
+        throw Object.assign(new Error("raw internal conflict detail"), { code: "conflict" });
+      },
+    } as unknown as SubspaceManager;
+
+    const router = createLocalRouter(subspaceRoutes(fakeManager), () => "bearer");
+    const server = { requestIP: () => ({ address: "127.0.0.1", port: 12345 }) };
+    const req = (url: string, init?: RequestInit): RouteRequest =>
+      Object.assign(new Request(url, init), { params: {} });
+
+    const unexpectedRes = await router(
+      req("http://127.0.0.1:7860/api/local/subspace", { method: "GET" }),
+      server,
+    );
+    expect(unexpectedRes.status).toBe(500);
+    const unexpectedText = await unexpectedRes.text();
+    const unexpectedJson = JSON.parse(unexpectedText) as ErrorBody;
+    expect(unexpectedJson.error.code).toBe("internal");
+    expect(unexpectedJson.error.id).toMatch(/^[0-9a-f]{8}$/);
+    expect(unexpectedText).not.toContain("SQLITE_CANTOPEN");
+    expect(unexpectedText).not.toContain("/secret/db/path");
+
+    const unreachableRes = await router(
+      req("http://127.0.0.1:7860/api/local/subspace/active", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ hostId: "srv-1" }),
+      }),
+      server,
+    );
+    expect(unreachableRes.status).toBe(502);
+    const unreachableText = await unreachableRes.text();
+    const unreachableJson = JSON.parse(unreachableText) as ErrorBody;
+    expect(unreachableJson.error).toEqual({
+      code: "subspace-unreachable",
+      message: "Could not reach the Subspace server",
+    });
+    expect(unreachableText).not.toContain("ECONNREFUSED");
+    expect(unreachableText).not.toContain("10.9.8.7");
+
+    const conflictRes = await router(
+      req("http://127.0.0.1:7860/api/local/subspace/share/grants/g1", {
+        method: "DELETE",
+      }),
+      server,
+    );
+    expect(conflictRes.status).toBe(409);
+    const conflictText = await conflictRes.text();
+    const conflictJson = JSON.parse(conflictText) as ErrorBody;
+    expect(conflictJson.error).toEqual({
+      code: "conflict",
+      message: "Active Subspace server changed; reload and try again",
+    });
+    expect(conflictText).not.toContain("raw internal conflict detail");
   });
 });

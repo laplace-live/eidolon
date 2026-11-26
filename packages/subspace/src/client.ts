@@ -1,7 +1,9 @@
 import { hostname } from "node:os";
-import { errorText } from "@eidolon/config";
+import { errorText, logger } from "@eidolon/config";
 import WebSocket from "ws";
 import {
+  deriveRelayDeviceToken,
+  deriveRelayInviteToken,
   type E2eeAuthRequest,
   type E2eeAuthResponse,
   E2eeError,
@@ -15,7 +17,14 @@ import { RELAY_CLOSE_CODE, RELAY_PATHS, type RelayReadyMessage } from "./relay-c
 import { httpToWsUrl } from "./settings.ts";
 import type { SubspaceSavedServer } from "./store.ts";
 import { ClientCallBridgePool } from "./webrtc-bridge.ts";
-import { nextWsMessage, rawDataToText, rawDataToUint8Array, safeCloseWs, sendWs } from "./ws.ts";
+import {
+  guardWsErrors,
+  nextWsMessage,
+  rawDataToText,
+  rawDataToUint8Array,
+  safeCloseWs,
+  sendWs,
+} from "./ws.ts";
 
 export type SubspaceConnectionState = "disconnected" | "connecting" | "connected" | "error";
 
@@ -25,6 +34,7 @@ const STRIPPED_PROXY_HEADERS = new Set([
   "authorization",
   "cookie",
   "x-eidolon-proof",
+  "x-eidolon-expected-host",
   "host",
   "origin",
   "sec-fetch-site",
@@ -50,9 +60,17 @@ export class SubspaceConnectError extends Error {
   }
 }
 
-function closeCodeToError(code: number, msg: string, fallbackPrefix: string): SubspaceConnectError {
+function closeCodeToError(
+  code: number,
+  msg: string,
+  fallbackPrefix: string,
+  credentialKind?: "invite" | "device",
+): SubspaceConnectError {
   if (code === RELAY_CLOSE_CODE.UNAUTHORIZED) {
-    return new SubspaceConnectError("pairing-failed", msg || "Unauthorized");
+    return new SubspaceConnectError(
+      "pairing-failed",
+      credentialKind === "device" ? "Device access was revoked" : msg || "Unauthorized",
+    );
   }
   if (code === RELAY_CLOSE_CODE.HOST_NOT_FOUND) {
     return new SubspaceConnectError(
@@ -63,7 +81,12 @@ function closeCodeToError(code: number, msg: string, fallbackPrefix: string): Su
   return new SubspaceConnectError("subspace-unreachable", msg || `${fallbackPrefix} (${code})`);
 }
 
-function waitForOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
+function waitForOpen(
+  ws: WebSocket,
+  timeoutMs: number,
+  credentialKind?: "invite" | "device",
+): Promise<void> {
+  guardWsErrors(ws);
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = (fn: () => void) => {
@@ -84,21 +107,35 @@ function waitForOpen(ws: WebSocket, timeoutMs: number): Promise<void> {
     );
     const onOpen = () => finish(resolve);
     const onClose = (code: number, reason: Buffer) => {
-      finish(() => reject(closeCodeToError(code, reason.toString("utf8"), "Closed")));
+      finish(() =>
+        reject(closeCodeToError(code, reason.toString("utf8"), "Closed", credentialKind)),
+      );
     };
     const onError = (err: Error) =>
-      finish(() => reject(new SubspaceConnectError("subspace-unreachable", errorText(err))));
+      finish(() => {
+        logger.warning(`[subspace] Client WebSocket connect error: ${errorText(err)}`);
+        reject(
+          new SubspaceConnectError("subspace-unreachable", "Could not connect to remote server"),
+        );
+      });
     ws.on("open", onOpen);
     ws.on("close", onClose);
     ws.on("error", onError);
   });
 }
 
-function nextMessage(ws: WebSocket, timeoutMs: number): Promise<WebSocket.RawData> {
+function nextMessage(
+  ws: WebSocket,
+  timeoutMs: number,
+  credentialKind?: "invite" | "device",
+): Promise<WebSocket.RawData> {
   return nextWsMessage(ws, timeoutMs, {
     onTimeout: () => new SubspaceConnectError("subspace-unreachable", "Handshake timed out"),
-    onClose: (code, msg) => closeCodeToError(code, msg, "Connection closed"),
-    onError: (err) => new SubspaceConnectError("subspace-unreachable", errorText(err)),
+    onClose: (code, msg) => closeCodeToError(code, msg, "Connection closed", credentialKind),
+    onError: (err) => {
+      logger.warning(`[subspace] Client WebSocket handshake error: ${errorText(err)}`);
+      return new SubspaceConnectError("subspace-unreachable", "Could not connect to remote server");
+    },
   });
 }
 
@@ -106,7 +143,11 @@ function targetWsUrl(server: Pick<SubspaceSavedServer, "mode" | "endpoint" | "re
   if (server.mode === "direct") {
     if (!server.endpoint) throw new Error("Direct Subspace server lacks endpoint");
     const proto = server.endpoint.tls ? "wss" : "ws";
-    return `${proto}://${server.endpoint.host}:${server.endpoint.port}/v1/subspace`;
+    const host =
+      server.endpoint.host.includes(":") && !server.endpoint.host.startsWith("[")
+        ? `[${server.endpoint.host}]`
+        : server.endpoint.host;
+    return `${proto}://${host}:${server.endpoint.port}/v1/subspace`;
   }
   if (!server.relay) throw new Error("Relay Subspace server lacks relay details");
   return httpToWsUrl(server.relay.url, RELAY_PATHS.CLIENT_CONNECT);
@@ -122,8 +163,8 @@ async function dialAuthenticatedTunnel(input: {
   readonly target: Pick<SubspaceSavedServer, "mode" | "endpoint" | "relay">;
   readonly hostPublicKeyB64: string;
   readonly relayCredential:
-    | { readonly kind: "invite"; readonly ticket: string }
-    | { readonly kind: "device"; readonly grantId: string; readonly deviceToken: string };
+    | { readonly kind: "invite"; readonly relayTicket: string }
+    | { readonly kind: "device"; readonly grantId: string; readonly relayToken: string };
   readonly relayUnexpectedErrorCode: SubspaceConnectError["code"];
   readonly buildE2eeAuth: (authBinding: string) => E2eeAuthRequest;
   readonly signal?: AbortSignal;
@@ -132,10 +173,11 @@ async function dialAuthenticatedTunnel(input: {
     throw new SubspaceConnectError("subspace-unreachable", "Disconnected");
   }
   const ws = new WebSocket(targetWsUrl(input.target));
+  guardWsErrors(ws);
   const onAbort = () => ws.terminate();
   input.signal?.addEventListener("abort", onAbort, { once: true });
   try {
-    await waitForOpen(ws, CONNECT_TIMEOUT_MS);
+    await waitForOpen(ws, CONNECT_TIMEOUT_MS, input.relayCredential.kind);
     if (input.target.mode === "relay") {
       await sendWs(
         ws,
@@ -146,7 +188,9 @@ async function dialAuthenticatedTunnel(input: {
           credential: input.relayCredential,
         }),
       );
-      const readyRaw = rawDataToText(await nextMessage(ws, CONNECT_TIMEOUT_MS));
+      const readyRaw = rawDataToText(
+        await nextMessage(ws, CONNECT_TIMEOUT_MS, input.relayCredential.kind),
+      );
       const relayReady = JSON.parse(readyRaw) as RelayReadyMessage;
       if (relayReady.type !== "relay_ready") {
         throw new SubspaceConnectError(
@@ -157,13 +201,15 @@ async function dialAuthenticatedTunnel(input: {
     }
     const hs = await startClientHandshake(input.hostPublicKeyB64);
     await sendWs(ws, hs.helloRaw);
-    const e2eeReady = rawDataToText(await nextMessage(ws, CONNECT_TIMEOUT_MS));
+    const e2eeReady = rawDataToText(
+      await nextMessage(ws, CONNECT_TIMEOUT_MS, input.relayCredential.kind),
+    );
     const session = await hs.finish(e2eeReady);
     await session.sendJson(input.buildE2eeAuth(session.authBinding), (sealed) =>
       sendWs(ws, sealed),
     );
     const authRes = await session.openJson<E2eeAuthResponse>(
-      rawDataToUint8Array(await nextMessage(ws, CONNECT_TIMEOUT_MS)),
+      rawDataToUint8Array(await nextMessage(ws, CONNECT_TIMEOUT_MS, input.relayCredential.kind)),
     );
     const mux = new MuxEndpoint({
       sendFrame: (frame) => session.send(frame, (sealed) => sendWs(ws, sealed)),
@@ -196,10 +242,11 @@ export async function performPairingHandshake(
     "Eidolon Client"
   ).slice(0, 120);
   try {
+    const relayTicket = await deriveRelayInviteToken(offer.ticket);
     const { tunnel, authRes } = await dialAuthenticatedTunnel({
       target: { mode: offer.mode, endpoint: offer.endpoint, relay: offer.relay },
       hostPublicKeyB64: offer.hostPublicKeyB64,
-      relayCredential: { kind: "invite", ticket: offer.ticket },
+      relayCredential: { kind: "invite", relayTicket },
       relayUnexpectedErrorCode: "pairing-failed",
       buildE2eeAuth: (authBinding) => ({
         type: "e2ee_auth",
@@ -228,7 +275,8 @@ export async function performPairingHandshake(
     if (error instanceof E2eeError) {
       throw new SubspaceConnectError("pairing-failed", error.message);
     }
-    throw new SubspaceConnectError("pairing-failed", errorText(error));
+    logger.warning(`[subspace] Pairing handshake failed: ${errorText(error)}`);
+    throw new SubspaceConnectError("pairing-failed", "Could not connect to remote server");
   }
 }
 
@@ -252,6 +300,8 @@ export class SubspaceClient {
   #latencyMs: number | null = null;
   #wanted = false;
   #revoked = false;
+  #manuallyDisconnected = false;
+  #pendingOffers = 0;
   #backoffMs = 500;
   #reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   #pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -285,6 +335,14 @@ export class SubspaceClient {
     return this.#latencyMs;
   }
 
+  get manuallyDisconnected(): boolean {
+    return this.#manuallyDisconnected;
+  }
+
+  get activeCallCount(): number {
+    return this.#pendingOffers + this.#bridges.activeCount;
+  }
+
   updateServer(server: SubspaceSavedServer): void {
     const endpointChanged =
       server.mode !== this.#server.mode ||
@@ -302,6 +360,7 @@ export class SubspaceClient {
   start(): void {
     this.#wanted = true;
     this.#revoked = false;
+    this.#manuallyDisconnected = false;
     if (this.#tunnel === null && this.#connecting === null) {
       void this.connect().catch(() => {});
     }
@@ -318,11 +377,17 @@ export class SubspaceClient {
     this.#setState("disconnected", null);
   }
 
+  disconnectManually(): void {
+    this.#manuallyDisconnected = true;
+    this.stop();
+  }
+
   async connect(): Promise<ActiveTunnel> {
     if (this.#tunnel !== null && !this.#tunnel.mux.closed) return this.#tunnel;
     if (this.#connecting !== null) return this.#connecting;
     this.#wanted = true;
     this.#revoked = false;
+    this.#manuallyDisconnected = false;
     if (this.#reconnectTimer !== null) {
       clearTimeout(this.#reconnectTimer);
       this.#reconnectTimer = null;
@@ -339,42 +404,53 @@ export class SubspaceClient {
   }
 
   async proxyFetch(request: Request, targetPathWithSearch: string): Promise<Response> {
-    let tunnel: ActiveTunnel;
-    try {
-      tunnel = await this.connect();
-    } catch (error) {
-      if (error instanceof SubspaceConnectError) throw error;
-      throw new SubspaceConnectError("subspace-unreachable", errorText(error));
-    }
-    const headers: [string, string][] = [];
-    request.headers.forEach((value, name) => {
-      if (!STRIPPED_PROXY_HEADERS.has(name.toLowerCase())) headers.push([name, value]);
-    });
-    const bodiless = request.method === "GET" || request.method === "HEAD";
-    const res = await tunnel.mux.request({
-      method: request.method,
-      path: targetPathWithSearch,
-      headers,
-      body: bodiless ? null : request.body,
-      signal: request.signal,
-    });
-    const outHeaders = new Headers();
-    for (const [name, value] of res.headers) outHeaders.append(name, value);
-    const response = new Response(res.body, {
-      status: res.status,
-      statusText: res.statusText,
-      headers: outHeaders,
-    });
-    if (
+    const isOfferRequest =
       request.method === "POST" &&
-      new URL(targetPathWithSearch, "http://subspace.local").pathname === "/api/offer"
-    ) {
-      return await this.#bridges.adaptOfferResponse(response, tunnel.mux, {
-        mode: this.#server.mode,
-        directHost: this.#server.endpoint?.host,
+      new URL(targetPathWithSearch, "http://subspace.local").pathname === "/api/offer";
+    if (isOfferRequest) this.#pendingOffers += 1;
+    try {
+      let tunnel: ActiveTunnel;
+      try {
+        tunnel = await this.connect();
+      } catch (error) {
+        if (error instanceof SubspaceConnectError) throw error;
+        logger.warning(
+          `[subspace] Proxy connect failed for ${this.#server.id}: ${errorText(error)}`,
+        );
+        throw new SubspaceConnectError(
+          "subspace-unreachable",
+          "Could not connect to remote server",
+        );
+      }
+      const headers: [string, string][] = [];
+      request.headers.forEach((value, name) => {
+        if (!STRIPPED_PROXY_HEADERS.has(name.toLowerCase())) headers.push([name, value]);
       });
+      const bodiless = request.method === "GET" || request.method === "HEAD";
+      const res = await tunnel.mux.request({
+        method: request.method,
+        path: targetPathWithSearch,
+        headers,
+        body: bodiless ? null : request.body,
+        signal: request.signal,
+      });
+      const outHeaders = new Headers();
+      for (const [name, value] of res.headers) outHeaders.append(name, value);
+      const response = new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: outHeaders,
+      });
+      if (isOfferRequest) {
+        return await this.#bridges.adaptOfferResponse(response, tunnel.mux, {
+          mode: this.#server.mode,
+          directHost: this.#server.endpoint?.host,
+        });
+      }
+      return response;
+    } finally {
+      if (isOfferRequest) this.#pendingOffers -= 1;
     }
-    return response;
   }
 
   #cancelConnecting(): void {
@@ -387,13 +463,14 @@ export class SubspaceClient {
   async #openTunnel(epoch: number, signal: AbortSignal): Promise<ActiveTunnel> {
     this.#setState("connecting", null);
     try {
+      const relayToken = await deriveRelayDeviceToken(this.#server.deviceToken);
       const { tunnel, authRes } = await dialAuthenticatedTunnel({
         target: this.#server,
         hostPublicKeyB64: this.#server.hostPublicKeyB64,
         relayCredential: {
           kind: "device",
           grantId: this.#server.grantId,
-          deviceToken: this.#server.deviceToken,
+          relayToken,
         },
         relayUnexpectedErrorCode: "subspace-unreachable",
         buildE2eeAuth: (authBinding) => ({
@@ -423,7 +500,17 @@ export class SubspaceClient {
       return tunnel;
     } catch (error) {
       if (signal.aborted || !this.#wanted || epoch !== this.#connectEpoch) throw error;
-      const message = errorText(error);
+      if (error instanceof SubspaceConnectError && error.code === "pairing-failed") {
+        this.#revoked = true;
+      } else if (!(error instanceof SubspaceConnectError)) {
+        logger.warning(
+          `[subspace] Client connection error for ${this.#server.id}: ${errorText(error)}`,
+        );
+      }
+      const message =
+        error instanceof SubspaceConnectError
+          ? error.message
+          : "Could not connect to remote server";
       this.#setState("error", message);
       if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
       throw error;
@@ -463,16 +550,25 @@ export class SubspaceClient {
           const plain = await tunnel.session.open(rawDataToUint8Array(raw));
           await tunnel.mux.handleFrame(plain);
         } catch (error) {
-          this.#failActiveTunnel(tunnel, errorText(error));
+          logger.warning(
+            `[subspace] Client tunnel frame error for ${this.#server.id}: ${errorText(error)}`,
+          );
+          this.#failActiveTunnel(tunnel, "Tunnel error", "Could not connect to remote server");
         }
       })();
     });
-    tunnel.ws.on("close", (_code, reason) => {
+    tunnel.ws.on("close", (code, reason) => {
+      if (code === RELAY_CLOSE_CODE.UNAUTHORIZED) {
+        this.#revoked = true;
+        this.#failActiveTunnel(tunnel, "Device access was revoked", "Device access was revoked");
+        return;
+      }
       const msg = reason.toString("utf8") || null;
       this.#failActiveTunnel(tunnel, msg ?? "Disconnected", msg);
     });
     tunnel.ws.on("error", (err) => {
-      this.#failActiveTunnel(tunnel, errorText(err));
+      logger.warning(`[subspace] Client socket error for ${this.#server.id}: ${errorText(err)}`);
+      this.#failActiveTunnel(tunnel, "Socket error", "Could not connect to remote server");
     });
   }
 

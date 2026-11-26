@@ -11,6 +11,12 @@ export type * from "../../../bot/src/local/api.ts";
 export const CLIENT_ERROR_CODES = ["unreachable", "bad-response"] as const;
 export type ClientErrorCode = (typeof CLIENT_ERROR_CODES)[number];
 
+let expectedSubspaceHost: string | undefined;
+
+export function setExpectedSubspaceHost(activeHostId: string | null): void {
+  expectedSubspaceHost = activeHostId ?? "local";
+}
+
 export class ApiError extends Error {
   override readonly name = "ApiError";
   /** 0 when no response arrived. */
@@ -125,9 +131,21 @@ export function url<R extends Route>(route: R, ...[input]: Args<R>): string {
 /** One request, its route unchecked: for an answer `call` and `stream` can't read, such as a 204. */
 export async function send(route: string, input: Loose = {}): Promise<Response> {
   const { body, signal } = input;
+  const space = route.indexOf(" ");
+  const method = route.slice(0, space);
+  const path = route.slice(space + 1);
   const headers = proofHeaders();
+  if (
+    expectedSubspaceHost !== undefined &&
+    method !== "GET" &&
+    method !== "HEAD" &&
+    !path.startsWith("/api/local/session") &&
+    !path.startsWith("/api/local/subspace")
+  ) {
+    headers["X-Eidolon-Expected-Host"] = expectedSubspaceHost;
+  }
   const init: RequestInit = {
-    method: route.slice(0, route.indexOf(" ")),
+    method,
     credentials: "same-origin",
     signal,
     headers,

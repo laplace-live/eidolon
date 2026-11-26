@@ -1,8 +1,13 @@
 import { createSocket, type Socket } from "node:dgram";
 import type { MuxCallChannelHandle, MuxEndpoint } from "./protocol/index.ts";
 
-const UDP_BRIDGE_IDLE_MS = 120_000;
+const UDP_BRIDGE_IDLE_MS = 20_000;
+const DTLS_ALERT_CLOSE_DELAY_MS = 200;
 const IPV4_LITERAL = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+
+function isDtlsAlert(packet: Uint8Array): boolean {
+  return packet.length >= 13 && packet[0] === 21;
+}
 
 interface BridgeEntry {
   readonly socket: Socket;
@@ -119,7 +124,7 @@ function attachIdleUdpSocket(
   let lastActiveAt = Date.now();
   const check = setInterval(() => {
     if (!closed && Date.now() - lastActiveAt >= UDP_BRIDGE_IDLE_MS) onClose();
-  }, 10_000);
+  }, 5_000);
   check.unref?.();
 
   socket.on("error", () => onClose());
@@ -148,12 +153,22 @@ export function openHostUdpBridge(
   if (!Number.isInteger(hostPort) || hostPort < 1 || hostPort > 65535) return null;
   const socket = createSocket("udp4");
   let closed = false;
+  let alertTimer: ReturnType<typeof setTimeout> | null = null;
 
   const close = () => {
     if (closed) return;
     closed = true;
+    if (alertTimer !== null) {
+      clearTimeout(alertTimer);
+      alertTimer = null;
+    }
     idle.stop();
     tunnel.close();
+  };
+  const scheduleAlertClose = () => {
+    if (closed || alertTimer !== null) return;
+    alertTimer = setTimeout(close, DTLS_ALERT_CLOSE_DELAY_MS);
+    alertTimer.unref?.();
   };
   const idle = attachIdleUdpSocket(socket, close);
 
@@ -161,6 +176,7 @@ export function openHostUdpBridge(
     if (closed) return;
     idle.touch();
     tunnel.sendDatagram(msg);
+    if (isDtlsAlert(msg)) scheduleAlertClose();
   });
   socket.bind(0, "127.0.0.1");
 
@@ -169,6 +185,7 @@ export function openHostUdpBridge(
       if (closed) return;
       idle.touch();
       socket.send(data, hostPort, "127.0.0.1");
+      if (isDtlsAlert(data)) scheduleAlertClose();
     },
     close,
   };
@@ -177,6 +194,10 @@ export function openHostUdpBridge(
 /** Client-side UDP bridge pool rewriting `/api/offer` answers to loopback ports over the mux. */
 export class ClientCallBridgePool {
   readonly #bridges = new Map<string, BridgeEntry>();
+
+  get activeCount(): number {
+    return this.#bridges.size;
+  }
 
   async adaptOfferResponse(
     response: Response,
@@ -225,43 +246,65 @@ export class ClientCallBridgePool {
 
   async #openBridge(pcId: string, hostPort: number, mux: MuxEndpoint): Promise<BridgeEntry> {
     const socket = createSocket("udp4");
-    await new Promise<void>((resolve, reject) => {
-      socket.once("error", reject);
-      socket.bind(0, "127.0.0.1", () => {
-        socket.removeListener("error", reject);
-        resolve();
+    let alertTimer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.once("error", reject);
+        socket.bind(0, "127.0.0.1", () => {
+          socket.removeListener("error", reject);
+          resolve();
+        });
       });
-    });
-    const addr = socket.address();
-    const localPort = addr.port;
-    const channel: MuxCallChannelHandle = mux.openCallChannel(hostPort);
-    let browserPeer: { address: string; port: number } | null = null;
-    let closed = false;
+      const addr = socket.address();
+      const localPort = addr.port;
+      const channel: MuxCallChannelHandle = mux.openCallChannel(hostPort);
+      let browserPeer: { address: string; port: number } | null = null;
+      let closed = false;
 
-    const close = () => {
-      if (closed) return;
-      closed = true;
-      idle.stop();
-      this.#bridges.delete(pcId);
-      channel.close();
-    };
-    const idle = attachIdleUdpSocket(socket, close);
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        if (alertTimer !== null) {
+          clearTimeout(alertTimer);
+          alertTimer = null;
+        }
+        idle.stop();
+        this.#bridges.delete(pcId);
+        channel.close();
+      };
+      const scheduleAlertClose = () => {
+        if (closed || alertTimer !== null) return;
+        alertTimer = setTimeout(close, DTLS_ALERT_CLOSE_DELAY_MS);
+        alertTimer.unref?.();
+      };
+      const idle = attachIdleUdpSocket(socket, close);
 
-    socket.on("message", (msg, rinfo) => {
-      if (closed) return;
-      idle.touch();
-      browserPeer = { address: rinfo.address, port: rinfo.port };
-      channel.sendDatagram(msg);
-    });
-    channel.onDatagram((data) => {
-      if (closed || browserPeer === null) return;
-      idle.touch();
-      socket.send(data, browserPeer.port, browserPeer.address);
-    });
-    channel.onClose(() => close());
+      socket.on("message", (msg, rinfo) => {
+        if (closed) return;
+        idle.touch();
+        browserPeer = { address: rinfo.address, port: rinfo.port };
+        channel.sendDatagram(msg);
+        if (isDtlsAlert(msg)) scheduleAlertClose();
+      });
+      channel.onDatagram((data) => {
+        if (closed || browserPeer === null) return;
+        idle.touch();
+        socket.send(data, browserPeer.port, browserPeer.address);
+        if (isDtlsAlert(data)) scheduleAlertClose();
+      });
+      channel.onClose(() => close());
 
-    const entry: BridgeEntry = { socket, localPort, close };
-    this.#bridges.set(pcId, entry);
-    return entry;
+      const entry: BridgeEntry = { socket, localPort, close };
+      this.#bridges.set(pcId, entry);
+      return entry;
+    } catch (error) {
+      if (alertTimer !== null) clearTimeout(alertTimer);
+      try {
+        socket.close();
+      } catch {
+        // Ignore already closed socket.
+      }
+      throw error;
+    }
   }
 }

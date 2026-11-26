@@ -33,6 +33,7 @@ export {
   SubspaceManager,
   type SubspaceManagerDeps,
   type SubspaceOfferSnapshot,
+  type SubspacePairSnapshot,
   type SubspaceServerView,
   type SubspaceStateSnapshot,
 } from "./manager.ts";

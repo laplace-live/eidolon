@@ -38,6 +38,15 @@ export function safeCloseWs(ws: WebSocket, code = 1000, reason = "Closed"): void
   }
 }
 
+const guardedSockets = new WeakSet<WebSocket>();
+
+/** Installs a socket-lifetime fallback error listener so detaching handshake handlers never leaves zero listeners. */
+export function guardWsErrors(ws: WebSocket): void {
+  if (guardedSockets.has(ws)) return;
+  guardedSockets.add(ws);
+  ws.on("error", () => {});
+}
+
 export function nextWsMessage(
   ws: WebSocket,
   timeoutMs: number,
@@ -47,6 +56,7 @@ export function nextWsMessage(
     readonly onError?: (error: Error) => Error;
   },
 ): Promise<WebSocket.RawData> {
+  guardWsErrors(ws);
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = (fn: () => void) => {

@@ -23,12 +23,15 @@ export function openRelayDatabase(dbPath: string): DatabaseSync {
 
 type PreparedStatement = ReturnType<DatabaseSync["prepare"]>;
 
+const MAX_INVITE_TTL_MS = 11 * 60_000;
+
 /** SQLite backing store for registered Subspace hosts, single-use pairing invites, and device tokens. */
 export class RelayStore {
   readonly #selectHost: PreparedStatement;
   readonly #updateHost: PreparedStatement;
   readonly #insertHost: PreparedStatement;
   readonly #pruneExpiredInvites: PreparedStatement;
+  readonly #deleteHostInvites: PreparedStatement;
   readonly #insertInvite: PreparedStatement;
   readonly #pruneHostExpiredInvites: PreparedStatement;
   readonly #selectHostInvites: PreparedStatement;
@@ -73,6 +76,7 @@ export class RelayStore {
       "INSERT INTO subspace_hosts (relay_host_id, user_id, public_key_b64, host_name, updated_at) VALUES (?, ?, ?, ?, ?)",
     );
     this.#pruneExpiredInvites = db.prepare("DELETE FROM subspace_invites WHERE expires_at <= ?");
+    this.#deleteHostInvites = db.prepare("DELETE FROM subspace_invites WHERE relay_host_id = ?");
     this.#insertInvite = db.prepare(
       "INSERT OR REPLACE INTO subspace_invites (invite_id, relay_host_id, ticket_sha256, expires_at) VALUES (?, ?, ?, ?)",
     );
@@ -116,14 +120,19 @@ export class RelayStore {
     return "ok";
   }
 
-  putInvite(input: {
-    readonly inviteId: string;
-    readonly relayHostId: string;
-    readonly ticketSha256: string;
-    readonly expiresAt: number;
-  }): void {
-    this.#pruneExpiredInvites.run(Date.now());
-    this.#insertInvite.run(input.inviteId, input.relayHostId, input.ticketSha256, input.expiresAt);
+  putInvite(
+    input: {
+      readonly inviteId: string;
+      readonly relayHostId: string;
+      readonly ticketSha256: string;
+      readonly expiresAt: number;
+    },
+    nowMs = Date.now(),
+  ): void {
+    const boundedExpiresAt = Math.min(input.expiresAt, nowMs + MAX_INVITE_TTL_MS);
+    this.#pruneExpiredInvites.run(nowMs);
+    this.#deleteHostInvites.run(input.relayHostId);
+    this.#insertInvite.run(input.inviteId, input.relayHostId, input.ticketSha256, boundedExpiresAt);
   }
 
   consumeInvite(relayHostId: string, ticketSha256: string, nowMs = Date.now()): boolean {

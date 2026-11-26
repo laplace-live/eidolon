@@ -226,6 +226,8 @@ export interface SessionRequest {
 export const PROOF_HEADER = "X-Eidolon-Proof";
 /** Forces the local server to handle a request itself even when a remote Subspace host is active. */
 export const TARGET_HEADER = "X-Eidolon-Target";
+/** Names the Subspace host (`"local"` or a server id) the client expects to handle the request. */
+export const EXPECTED_HOST_HEADER = "X-Eidolon-Expected-Host";
 /** Marks responses proxied from a remote Subspace host so the desktop forwarder skips local restarts. */
 export const SUBSPACE_REMOTE_HEADER = "X-Eidolon-Subspace";
 /** Identifies which host (`"local"` or a Subspace server id) served `GET /api/local/tasks` or `GET /api/local/chats`. */
@@ -1332,7 +1334,7 @@ export interface LocalApi {
   "PUT /api/local/skills/:name": Endpoint<SkillChange, SkillsResponse>;
   "GET /api/local/subspace": Endpoint<undefined, SubspaceStateResponse>;
   "POST /api/local/subspace/active": Endpoint<SubspaceActiveRequest, SubspaceStateResponse>;
-  "POST /api/local/subspace/servers": Endpoint<SubspacePairRequest, SubspaceStateResponse>;
+  "POST /api/local/subspace/servers": Endpoint<SubspacePairRequest, SubspacePairResponse>;
   "PATCH /api/local/subspace/servers/:id": Endpoint<
     SubspaceServerUpdateRequest,
     SubspaceStateResponse
@@ -2188,6 +2190,10 @@ export interface SubspaceStateResponse {
     readonly user: SubspaceRelayUser | null;
     readonly deviceFlow: SubspaceDeviceFlowSnapshot;
   };
+}
+
+export interface SubspacePairResponse extends SubspaceStateResponse {
+  readonly pairedServerId: string;
 }
 
 export interface SubspaceActiveRequest {

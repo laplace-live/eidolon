@@ -22,6 +22,7 @@ const DROPPED = new Set([
   "cookie",
   "sec-fetch-site",
   "x-eidolon-proof",
+  "x-eidolon-target",
   "authorization",
 ]);
 // Set-Cookie would fill the page's cookie jar. undici decodes the body, so its encoding and length
@@ -98,9 +99,14 @@ export interface Forwarder {
   /**
    * A GET of main's own at `path`, such as the quit check's, to the server ready now, with the
    * Bearer and over a proven connection; rejects while none is ready. Its connections closing
-   * tell the controller nothing. Passing `local: true` bypasses any active Subspace host proxy.
+   * tell the controller nothing. Passing `local: true` bypasses any active Subspace host proxy;
+   * `expectedHost` pins the request to that host (`X-Eidolon-Expected-Host`).
    */
-  get(path: string, signal: AbortSignal, options?: { readonly local?: boolean }): Promise<Response>;
+  get(
+    path: string,
+    signal: AbortSignal,
+    options?: { readonly local?: boolean; readonly expectedHost?: string },
+  ): Promise<Response>;
   /** Drops every connection it holds. */
   destroy(): Promise<void>;
 }
@@ -360,6 +366,9 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
         headers: {
           authorization: `Bearer ${state.token.secret}`,
           ...(options?.local ? { "x-eidolon-target": "local" } : {}),
+          ...(options?.expectedHost !== undefined
+            ? { "x-eidolon-expected-host": options.expectedHost }
+            : {}),
         },
         redirect: "manual",
         signal,

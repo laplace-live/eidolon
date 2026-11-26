@@ -3,18 +3,27 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  base64ToBytes,
+  computeRelayControlProof,
+  deriveRelayDeviceToken,
+  deriveRelayHostId,
+  deriveRelayInviteToken,
   generateX25519KeyPair,
+  importX25519PrivateKey,
   performPairingHandshake,
   SubspaceClient,
   SubspaceHost,
   type SubspaceSavedServer,
   SubspaceStore,
+  sha256Hex,
+  utf8Encode,
 } from "@eidolon/subspace";
 import { RELAY_CLOSE_CODE, RELAY_PATHS } from "@eidolon/subspace/relay-contract";
 import { serve } from "srvx";
 import { afterEach, describe, expect, test } from "vitest";
 import WebSocket from "ws";
 import { createRelayTokenVerifier } from "../src/jwks-verifier.ts";
+import { openRelayDatabase, RelayStore } from "../src/relay-db.ts";
 import { startRelayServer } from "../src/server.ts";
 
 const cleanups: (() => Promise<void> | void)[] = [];
@@ -71,6 +80,7 @@ async function startMockAuthServer(sessions: ReadonlyMap<string, string>) {
   };
 
   let failJwks = false;
+  let jwksRequests = 0;
   const issuer = "https://id.laplace.live";
   const srvx = serve({
     hostname: "127.0.0.1",
@@ -81,6 +91,7 @@ async function startMockAuthServer(sessions: ReadonlyMap<string, string>) {
     async fetch(request) {
       const { pathname } = new URL(request.url);
       if (pathname === "/.well-known/jwks.json") {
+        jwksRequests += 1;
         if (failJwks) return new Response("unavailable", { status: 503 });
         return Response.json({ keys: [edJwk, ecJwk] });
       }
@@ -117,7 +128,100 @@ async function startMockAuthServer(sessions: ReadonlyMap<string, string>) {
     setFailJwks: (next: boolean) => {
       failJwks = next;
     },
+    jwksRequests: () => jwksRequests,
   };
+}
+
+function waitForClose(ws: WebSocket): Promise<{ code: number; reason: string }> {
+  return new Promise((resolve) => {
+    ws.on("error", () => {});
+    if (ws.readyState === WebSocket.CLOSED) {
+      resolve({ code: 1006, reason: "" });
+      return;
+    }
+    ws.once("close", (code, reason) => resolve({ code, reason: reason.toString("utf8") }));
+  });
+}
+
+async function connectRawRelayHost(
+  relayUrl: string,
+  jwt: string,
+  options: { readonly autoPong?: boolean; readonly hostName?: string } = {},
+): Promise<{
+  readonly ws: WebSocket;
+  readonly relayHostId: string;
+  readonly closed: Promise<{ code: number; reason: string }>;
+  waitMessage(
+    predicate: (msg: Record<string, unknown>) => boolean,
+  ): Promise<Record<string, unknown>>;
+}> {
+  const keys = await generateX25519KeyPair();
+  const privateKey = await importX25519PrivateKey(keys.privateKeyPkcs8B64);
+  const relayHostId = await deriveRelayHostId(base64ToBytes(keys.publicKeyB64));
+  const ws = new WebSocket(`${relayUrl.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`, {
+    autoPong: options.autoPong ?? true,
+    headers: { authorization: `Bearer ${jwt}` },
+  });
+  cleanups.push(() => {
+    if (ws.readyState !== WebSocket.CLOSED) ws.terminate();
+  });
+
+  const closed = waitForClose(ws);
+  const messages: Record<string, unknown>[] = [];
+  const waiters: {
+    readonly predicate: (msg: Record<string, unknown>) => boolean;
+    readonly resolve: (msg: Record<string, unknown>) => void;
+    readonly reject: (err: Error) => void;
+  }[] = [];
+  ws.on("message", (raw) => {
+    const parsed = JSON.parse(raw.toString()) as Record<string, unknown>;
+    const idx = waiters.findIndex((w) => w.predicate(parsed));
+    if (idx !== -1) {
+      waiters.splice(idx, 1)[0]!.resolve(parsed);
+    } else {
+      messages.push(parsed);
+    }
+  });
+  void closed.then(() => {
+    for (const waiter of waiters.splice(0)) {
+      waiter.reject(new Error("Host control socket closed"));
+    }
+  });
+  const waitMessage = (
+    predicate: (msg: Record<string, unknown>) => boolean,
+  ): Promise<Record<string, unknown>> => {
+    const idx = messages.findIndex(predicate);
+    if (idx !== -1) return Promise.resolve(messages.splice(idx, 1)[0]!);
+    return new Promise((resolve, reject) => {
+      waiters.push({ predicate, resolve, reject });
+    });
+  };
+
+  await new Promise<void>((resolve, reject) => {
+    ws.once("open", () => resolve());
+    ws.once("error", reject);
+  });
+  ws.send(
+    JSON.stringify({
+      type: "host_hello",
+      v: 1,
+      relayHostId,
+      hostPublicKeyB64: keys.publicKeyB64,
+      hostName: options.hostName ?? "RawTestHost",
+    }),
+  );
+
+  const challenge = await waitMessage((m) => m.type === "host_challenge");
+  const proofB64 = await computeRelayControlProof(
+    privateKey,
+    String(challenge.relayEphPubB64),
+    String(challenge.challengeB64),
+    String(challenge.userId),
+  );
+  ws.send(JSON.stringify({ type: "host_challenge_ack", proofB64 }));
+
+  await waitMessage((m) => m.type === "host_hello_ack");
+  return { ws, relayHostId, closed, waitMessage };
 }
 
 describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
@@ -130,7 +234,7 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
         authAudience: "eidolon-relay",
         jwksUrl: `${auth.url}/.well-known/jwks.json`,
       },
-      { now: () => nowMs, maxStaleMs: 60_000 },
+      { now: () => nowMs, maxStaleMs: 12 * 60_000 },
     );
 
     const nowSec = Math.floor(nowMs / 1000);
@@ -172,25 +276,69 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     expect(await verifier(`Bearer ${expired}`)).toBeNull();
     expect(await verifier("Bearer not-a-jwt")).toBeNull();
 
-    // Advance past 10m cache TTL while JWKS fails -> stale fallback still works within 60s wait.
+    // Advance past maxStaleMs (12m) while JWKS fails -> maxStaleMs exceeded, returns null (fail-closed).
     auth.setFailJwks(true);
-    nowMs += 11 * 60_000;
-    expect(await verifier(`Bearer ${validEd}`)).toBeNull(); // exp exceeded at +11m
+    nowMs += 13 * 60_000;
+    expect(await verifier(`Bearer ${validEd}`)).toBeNull();
     const freshToken = signEdDsaJwt(auth.ed.privateKey, "ed-1", {
       iss: auth.issuer,
       aud: "eidolon-relay",
       sub: "user-ed",
       exp: Math.floor(nowMs / 1000) + 300,
     });
-    // Wait: maxStaleMs=60_000 is relative to fetchedAt, so beyond 11m cache is staler than 60s and fails closed.
     expect(await verifier(`Bearer ${freshToken}`)).toBeNull();
 
-    // Re-seed cache when auth recovers, then simulate brief outage within 60s maxStaleMs.
+    // Re-seed cache after cooldown when auth recovers, then advance past CACHE_TTL_MS into stale window inside maxStaleMs.
     auth.setFailJwks(false);
-    expect(await verifier(`Bearer ${freshToken}`)).toEqual({ userId: "user-ed" });
+    nowMs += 31_000;
+    const recoveredToken = signEdDsaJwt(auth.ed.privateKey, "ed-1", {
+      iss: auth.issuer,
+      aud: "eidolon-relay",
+      sub: "user-ed",
+      exp: Math.floor(nowMs / 1000) + 1200,
+    });
+    expect(await verifier(`Bearer ${recoveredToken}`)).toEqual({ userId: "user-ed" });
     auth.setFailJwks(true);
-    nowMs += 30_000;
-    expect(await verifier(`Bearer ${freshToken}`)).toEqual({ userId: "user-ed" });
+    nowMs += 11 * 60_000;
+    const fetchesBeforeOutage = auth.jwksRequests();
+    expect(await verifier(`Bearer ${recoveredToken}`)).toEqual({ userId: "user-ed" });
+    expect(auth.jwksRequests()).toBe(fetchesBeforeOutage + 1);
+    nowMs += 10_000;
+    expect(await verifier(`Bearer ${recoveredToken}`)).toEqual({ userId: "user-ed" });
+    expect(auth.jwksRequests()).toBe(fetchesBeforeOutage + 1);
+  });
+
+  test("returns null during retry cooldown without hammering JWKS when cache is empty", async () => {
+    const auth = await startMockAuthServer(new Map());
+    auth.setFailJwks(true);
+    let nowMs = Date.now();
+    const verifier = createRelayTokenVerifier(
+      {
+        authIssuer: auth.issuer,
+        authAudience: "eidolon-relay",
+        jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      },
+      { now: () => nowMs },
+    );
+
+    const token = signEdDsaJwt(auth.ed.privateKey, "ed-1", {
+      iss: auth.issuer,
+      aud: "eidolon-relay",
+      sub: "user-ed",
+      exp: Math.floor(nowMs / 1000) + 300,
+    });
+
+    expect(await verifier(`Bearer ${token}`)).toBeNull();
+    expect(auth.jwksRequests()).toBe(1);
+
+    nowMs += 10_000;
+    expect(await verifier(`Bearer ${token}`)).toBeNull();
+    expect(auth.jwksRequests()).toBe(1);
+
+    nowMs += 21_000;
+    auth.setFailJwks(false);
+    expect(await verifier(`Bearer ${token}`)).toEqual({ userId: "user-ed" });
+    expect(auth.jwksRequests()).toBe(2);
   });
 
   test("serves /healthz, validates JWT + X25519 challenge, blocks hijack, splices E2EE, and enforces revocation", async () => {
@@ -205,6 +353,7 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     const relay = await startRelayServer({
       host: "127.0.0.1",
       port: 0,
+      publicUrl: "https://relay.example.test",
       authIssuer: auth.issuer,
       authAudience: "eidolon-relay",
       jwksUrl: `${auth.url}/.well-known/jwks.json`,
@@ -218,6 +367,7 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     expect(await health.json()).toEqual({
       ok: true,
       onlineHosts: 0,
+      publicUrl: "https://relay.example.test",
       auth: { issuer: auth.issuer, audience: "eidolon-relay" },
     });
 
@@ -310,5 +460,293 @@ describe("Eidolon Subspace Relay (@eidolon/relay)", () => {
     const client3 = new SubspaceClient(saved);
     await expect(client3.connect()).rejects.toThrow();
     client3.stop();
+  });
+
+  test("putInvite replaces prior host invites and clamps TTL to 11 minutes", async () => {
+    const db = openRelayDatabase(":memory:");
+    cleanups.push(() => db.close());
+    const store = new RelayStore(db);
+
+    const now = 1_700_000_000_000;
+    const hashA = await sha256Hex(utf8Encode("ticket-a"));
+    const hashB = await sha256Hex(utf8Encode("ticket-b"));
+    const hashOther = await sha256Hex(utf8Encode("ticket-other"));
+
+    store.putInvite(
+      {
+        inviteId: "inv-a",
+        relayHostId: "host-alpha",
+        ticketSha256: hashA,
+        expiresAt: now + 60 * 60_000,
+      },
+      now,
+    );
+    expect(store.consumeInvite("host-alpha", hashA, now + 11 * 60_000)).toBe(false);
+
+    store.putInvite(
+      {
+        inviteId: "inv-a-2",
+        relayHostId: "host-alpha",
+        ticketSha256: hashA,
+        expiresAt: now + 60 * 60_000,
+      },
+      now,
+    );
+    store.putInvite(
+      {
+        inviteId: "inv-b",
+        relayHostId: "host-alpha",
+        ticketSha256: hashB,
+        expiresAt: now + 60 * 60_000,
+      },
+      now,
+    );
+    store.putInvite(
+      {
+        inviteId: "inv-other",
+        relayHostId: "host-beta",
+        ticketSha256: hashOther,
+        expiresAt: now + 60 * 60_000,
+      },
+      now,
+    );
+
+    expect(store.consumeInvite("host-alpha", hashA, now + 1000)).toBe(false);
+    expect(store.consumeInvite("host-alpha", hashB, now + 10 * 60_000)).toBe(true);
+    expect(store.consumeInvite("host-alpha", hashB, now + 10 * 60_000)).toBe(false);
+    expect(store.consumeInvite("host-beta", hashOther, now + 1000)).toBe(true);
+  });
+
+  test("closes sockets that exceed the 64 KiB pre-auth frame limit", async () => {
+    const auth = await startMockAuthServer(new Map([["sess-alice", "alice"]]));
+    let releaseJwks!: () => void;
+    let holdJwks = true;
+    const gate = new Promise<void>((resolve) => {
+      releaseJwks = resolve;
+    });
+    const relay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+      fetch: async (input, init) => {
+        if (holdJwks) await gate;
+        return fetch(input, init);
+      },
+    });
+    cleanups.push(() => {
+      holdJwks = false;
+      releaseJwks();
+      return relay.stop();
+    });
+
+    const clientWs = new WebSocket(
+      `${relay.url.replace("http", "ws")}${RELAY_PATHS.CLIENT_CONNECT}`,
+    );
+    const clientClosed = waitForClose(clientWs);
+    await new Promise<void>((resolve, reject) => {
+      clientWs.once("open", () => resolve());
+      clientWs.once("error", reject);
+    });
+    clientWs.send("x".repeat(65 * 1024));
+    await clientClosed;
+
+    const jwtRes = await fetch(`${auth.url}/api/auth/token`, {
+      headers: { authorization: "Bearer sess-alice" },
+    });
+    const { token: jwt } = (await jwtRes.json()) as { token: string };
+    const hostWs = new WebSocket(`${relay.url.replace("http", "ws")}${RELAY_PATHS.HOST_CONTROL}`, {
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+    const hostClosed = waitForClose(hostWs);
+    await new Promise<void>((resolve, reject) => {
+      hostWs.once("open", () => resolve());
+      hostWs.once("error", reject);
+    });
+    hostWs.send("a".repeat(40 * 1024));
+    hostWs.send("b".repeat(40 * 1024));
+    await hostClosed;
+
+    holdJwks = false;
+    releaseJwks();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(relay.hub.onlineHostCount).toBe(0);
+    expect((await fetch(`${relay.url}/healthz`)).status).toBe(200);
+  });
+
+  test("handles errors on authenticated host control sockets without crashing", async () => {
+    const auth = await startMockAuthServer(new Map([["sess-alice", "alice"]]));
+    const relay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+    });
+    cleanups.push(() => relay.stop());
+
+    const { token: jwt } = (await (
+      await fetch(`${auth.url}/api/auth/token`, {
+        headers: { authorization: "Bearer sess-alice" },
+      })
+    ).json()) as { token: string };
+
+    const host = await connectRawRelayHost(relay.url, jwt);
+    expect(relay.hub.onlineHostCount).toBe(1);
+
+    // Exceeds WebSocketServer maxPayload (16 MiB), triggering Receiver error after queue detachment.
+    host.ws.send(Buffer.alloc(16 * 1024 * 1024 + 1024));
+    await host.closed;
+
+    expect(relay.hub.onlineHostCount).toBe(0);
+    expect((await fetch(`${relay.url}/healthz`)).status).toBe(200);
+  });
+
+  test("evicts hosts that miss heartbeat pongs and retains responsive hosts", async () => {
+    const auth = await startMockAuthServer(
+      new Map([
+        ["sess-alice", "alice"],
+        ["sess-bob", "bob"],
+      ]),
+    );
+    const relay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+      heartbeatMs: 25,
+    });
+    cleanups.push(() => relay.stop());
+
+    const { token: aliceJwt } = (await (
+      await fetch(`${auth.url}/api/auth/token`, {
+        headers: { authorization: "Bearer sess-alice" },
+      })
+    ).json()) as { token: string };
+    const { token: bobJwt } = (await (
+      await fetch(`${auth.url}/api/auth/token`, {
+        headers: { authorization: "Bearer sess-bob" },
+      })
+    ).json()) as { token: string };
+
+    const aliveHost = await connectRawRelayHost(relay.url, aliceJwt, { autoPong: true });
+    const silentHost = await connectRawRelayHost(relay.url, bobJwt, { autoPong: false });
+    expect(relay.hub.onlineHostCount).toBe(2);
+
+    await silentHost.closed;
+    await new Promise((r) => setTimeout(r, 80));
+
+    expect(relay.hub.onlineHostCount).toBe(1);
+    expect(aliveHost.ws.readyState).toBe(WebSocket.OPEN);
+  });
+
+  test("validates client_auth relayTicket and relayToken credentials", async () => {
+    const auth = await startMockAuthServer(new Map([["sess-alice", "alice"]]));
+    const relay = await startRelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      authIssuer: auth.issuer,
+      authAudience: "eidolon-relay",
+      jwksUrl: `${auth.url}/.well-known/jwks.json`,
+      dbPath: ":memory:",
+    });
+    cleanups.push(() => relay.stop());
+
+    const { token: jwt } = (await (
+      await fetch(`${auth.url}/api/auth/token`, {
+        headers: { authorization: "Bearer sess-alice" },
+      })
+    ).json()) as { token: string };
+    const host = await connectRawRelayHost(relay.url, jwt);
+
+    const goodRelayTicket = await deriveRelayInviteToken("good-ticket");
+    const wrongRelayTicket = await deriveRelayInviteToken("wrong-ticket");
+    const goodRelayToken = await deriveRelayDeviceToken("good-token");
+    const wrongRelayToken = await deriveRelayDeviceToken("wrong-token");
+    const inviteHash = await sha256Hex(utf8Encode(goodRelayTicket));
+    const deviceHash = await sha256Hex(utf8Encode(goodRelayToken));
+    host.ws.send(
+      JSON.stringify({
+        type: "invite_create",
+        inviteId: "inv-1",
+        ticketHash: inviteHash,
+        expiresAt: Date.now() + 60_000,
+      }),
+    );
+    host.ws.send(
+      JSON.stringify({
+        type: "device_install",
+        grantId: "grant-1",
+        tokenHash: deviceHash,
+        clientName: "Phone",
+      }),
+    );
+
+    const sendClientAuth = async (credential: Record<string, unknown>) => {
+      const ws = new WebSocket(`${relay.url.replace("http", "ws")}${RELAY_PATHS.CLIENT_CONNECT}`);
+      cleanups.push(() => {
+        if (ws.readyState !== WebSocket.CLOSED) ws.terminate();
+      });
+      const closed = waitForClose(ws);
+      await new Promise<void>((resolve, reject) => {
+        ws.once("open", () => resolve());
+        ws.once("error", reject);
+      });
+      ws.send(
+        JSON.stringify({
+          type: "client_auth",
+          v: 1,
+          relayHostId: host.relayHostId,
+          credential,
+        }),
+      );
+      return { ws, closed };
+    };
+
+    await host.waitMessage((m) => m.type === "invite_created");
+    await host.waitMessage((m) => m.type === "device_installed");
+
+    const badInvite = await sendClientAuth({ kind: "invite", relayTicket: wrongRelayTicket });
+    expect((await badInvite.closed).code).toBe(RELAY_CLOSE_CODE.UNAUTHORIZED);
+
+    const badDevice = await sendClientAuth({
+      kind: "device",
+      grantId: "grant-1",
+      relayToken: wrongRelayToken,
+    });
+    expect((await badDevice.closed).code).toBe(RELAY_CLOSE_CODE.UNAUTHORIZED);
+
+    const openInvitePromise = host.waitMessage(
+      (m) => m.type === "connection_open" && m.grantId === null,
+    );
+    const goodInvite = await sendClientAuth({ kind: "invite", relayTicket: goodRelayTicket });
+    const inviteOpen = await Promise.race([
+      openInvitePromise,
+      goodInvite.closed.then((c) => {
+        throw new Error(`Invite auth closed early (${c.code}): ${c.reason}`);
+      }),
+    ]);
+    expect(inviteOpen.grantId).toBeNull();
+
+    const openDevicePromise = host.waitMessage(
+      (m) => m.type === "connection_open" && m.grantId === "grant-1",
+    );
+    const goodDevice = await sendClientAuth({
+      kind: "device",
+      grantId: "grant-1",
+      relayToken: goodRelayToken,
+    });
+    const deviceOpen = await Promise.race([
+      openDevicePromise,
+      goodDevice.closed.then((c) => {
+        throw new Error(`Device auth closed early (${c.code}): ${c.reason}`);
+      }),
+    ]);
+    expect(deviceOpen.grantId).toBe("grant-1");
   });
 });

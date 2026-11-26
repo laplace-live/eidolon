@@ -88,6 +88,8 @@ export interface AllowedOffer {
   readonly clientIp: string;
   /** null for a validated token, which bypasses the anonymous quota. */
   readonly quota: RateLimitResult | null;
+  /** Keep host candidates even when the ICE plan is relay-only (e.g. Subspace-tunneled calls). */
+  readonly allowHostCandidates?: boolean;
 }
 
 export interface RejectedOffer {

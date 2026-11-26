@@ -9,9 +9,14 @@ import { SubspaceConnectError, SubspaceManager } from "@eidolon/subspace";
 import manifest from "../../package.json" with { type: "json" };
 import { logAccess, type MethodRoutes, type RouteHandler, type RouteMethod } from "../app.ts";
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "../memory-admin.ts";
-import { routeRequest } from "../routing.ts";
+import { type Fallback, routeRequest } from "../routing.ts";
 import type { LocalContext, LocalExtension } from "../server.ts";
-import { SUBSPACE_HOST_HEADER, SUBSPACE_REMOTE_HEADER, TARGET_HEADER } from "./api.ts";
+import {
+  EXPECTED_HOST_HEADER,
+  SUBSPACE_HOST_HEADER,
+  SUBSPACE_REMOTE_HEADER,
+  TARGET_HEADER,
+} from "./api.ts";
 import type { ChatRunner } from "./chats/runner.ts";
 import { allowedHosts, guardRequest, isApiPath, listedOrigin } from "./guard.ts";
 import { identityHandlers } from "./identity.ts";
@@ -128,8 +133,23 @@ async function forwardToSubspace(
       mapPairingFailed && error instanceof SubspaceConnectError && error.code === "pairing-failed"
         ? "pairing-failed"
         : "subspace-unreachable";
-    return localError(502, code, errorText(error));
+    logger.warning(`[subspace] Proxy request failed: ${errorText(error)}`);
+    return localError(
+      502,
+      code,
+      code === "pairing-failed"
+        ? "Remote server rejected this device's pairing token"
+        : "Could not reach the active Subspace server",
+    );
   }
+}
+
+function checkExpectedHost(request: Request, activeHostId: string | null): Response | null {
+  const expected = request.headers.get(EXPECTED_HOST_HEADER);
+  if (expected !== null && expected !== (activeHostId ?? "local")) {
+    return localError(409, "conflict", "Active Subspace server changed; reload and try again");
+  }
+  return null;
 }
 
 function setHeaderMutable(response: Response, name: string, value: string): Response {
@@ -174,6 +194,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
   const stopHooks: (() => Promise<void>)[] = [];
   let manager: TaskManager | null = null;
   let subspaceManager: SubspaceManager | null = null;
+  let botFallbackHandler: Fallback | null = null;
   const origins = options.origins ?? new Set<string>();
   let hosts: ReadonlySet<string> | null = null;
   const hostsOf = (context: LocalContext): ReadonlySet<string> => {
@@ -216,10 +237,12 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
       const chats = chatRunner({ onStop }, { tasks });
       // Stop hooks run newest first: every run is left before the chats shut down.
       onStop(() => tasks.stop());
+      const tunneledRequests = new WeakSet<Request>();
       const identity = identityHandlers({
         signalling: context.signalling,
         memoryAdmin: options.memoryAdmin,
         chats,
+        isTunneledRequest: (request) => tunneledRequests.has(request),
       });
       let listedOffers = 0;
       const app: LocalApp = {
@@ -263,30 +286,47 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
               : { duplex: "half" as const }),
             signal: request.signal,
           });
+          tunneledRequests.add(authorized);
           return await dispatchInProcess(authorized);
         },
       });
       subspaceManager = subspace;
       onStop(() => subspace.stop());
 
+      const guardHost = (
+        request: Request,
+        server: Parameters<RouteHandler>[1],
+        pathname: string,
+        policy: ProxyAuthPolicy,
+        activeHostId: string | null,
+      ): Response | null => {
+        const failure =
+          checkProxyAuth(request, pathname, policy, authenticate) ??
+          checkExpectedHost(request, activeHostId);
+        if (failure !== null) logAccess(request, server, failure);
+        return failure;
+      };
+
       const withProxy =
         (localHandler: RouteHandler, policy: ProxyAuthPolicy): RouteHandler =>
         async (request, server) => {
           const url = new URL(request.url);
           const { pathname } = url;
+          const bypass = shouldBypassSubspace(request, pathname);
           const activeHostId = subspace.activeHostId;
-          if (activeHostId === null || shouldBypassSubspace(request, pathname)) {
+          if (activeHostId === null || bypass) {
+            if (!bypass && request.headers.has(EXPECTED_HOST_HEADER)) {
+              const failure = guardHost(request, server, pathname, policy, null);
+              if (failure !== null) return failure;
+            }
             const response = await localHandler(request, server);
             if (request.method === "GET" && HOST_TAGGED_PATHS.has(pathname)) {
               return setHeaderMutable(response, SUBSPACE_HOST_HEADER, "local");
             }
             return response;
           }
-          const authFailure = checkProxyAuth(request, pathname, policy, authenticate);
-          if (authFailure !== null) {
-            logAccess(request, server, authFailure);
-            return authFailure;
-          }
+          const failure = guardHost(request, server, pathname, policy, activeHostId);
+          if (failure !== null) return failure;
           let response = await forwardToSubspace(
             subspace,
             request,
@@ -382,16 +422,19 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
       rawRoutes[`${LOCAL_PREFIX}/*`] = localRouter;
       routes[`${LOCAL_PREFIX}/*`] = guarded(withProxy(localRouter, "local-router"), context);
 
-      const fallback404 = routeRequest(rawRoutes, (_req) =>
-        localError(404, "not-found", "No such API route"),
+      const dispatchRaw = routeRequest(rawRoutes, (req, srv) =>
+        botFallbackHandler
+          ? botFallbackHandler(req, srv)
+          : Promise.resolve(localError(404, "not-found", "No such API route")),
       );
       dispatchInProcess = (req) =>
-        fallback404(req, { requestIP: () => ({ address: "127.0.0.1", port: context.port() }) });
+        dispatchRaw(req, { requestIP: () => ({ address: "127.0.0.1", port: context.port() }) });
 
       return routes;
     },
 
     fallback(botFallback, context) {
+      botFallbackHandler = botFallback;
       return async (request, server) => {
         const refused = guardRequest(request, server, hostsOf(context), origins);
         if (refused !== null) {
@@ -407,13 +450,24 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         }
         const origin = listedOrigin(request, origins);
         const subspace = subspaceManager;
+        const activeHostId = subspace?.activeHostId ?? null;
         if (
           origin === null &&
           subspace !== null &&
-          subspace.activeHostId !== null &&
+          activeHostId !== null &&
           !shouldBypassSubspace(request, pathname)
         ) {
-          const response = await forwardToSubspace(subspace, request, `${pathname}${url.search}`);
+          const hostConflict = checkExpectedHost(request, activeHostId);
+          if (hostConflict !== null) {
+            logAccess(request, server, hostConflict);
+            return hostConflict;
+          }
+          const response = await forwardToSubspace(
+            subspace,
+            request,
+            `${pathname}${url.search}`,
+            activeHostId,
+          );
           logAccess(request, server, response);
           return response;
         }

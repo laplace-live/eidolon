@@ -7,10 +7,12 @@ import {
   call,
   type SubspaceConnectionState,
   type SubspacePairRequest,
+  type SubspacePairResponse,
   type SubspaceServerUpdateRequest,
   type SubspaceShareOfferRequest,
   type SubspaceShareSettingsRequest,
   type SubspaceStateResponse,
+  setExpectedSubspaceHost,
 } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { useRevalidate } from "@/router";
@@ -77,7 +79,20 @@ export function useClipboardCopy(successMessage: string): {
   return { copied, copy };
 }
 
-async function resetHostCacheAndRoute(
+const handledHostSwitches = new WeakMap<QueryClient, string | null>();
+
+export function markHostSwitchHandled(queryClient: QueryClient, hostId: string | null): void {
+  handledHostSwitches.set(queryClient, hostId);
+}
+
+export function consumeHandledHostSwitch(queryClient: QueryClient, hostId: string | null): boolean {
+  if (!handledHostSwitches.has(queryClient)) return false;
+  const marked = handledHostSwitches.get(queryClient);
+  handledHostSwitches.delete(queryClient);
+  return marked === hostId;
+}
+
+export async function resetHostCacheAndRoute(
   queryClient: QueryClient,
   pathname: string,
   navigate: (to: string, options?: { replace?: boolean }) => void,
@@ -118,6 +133,11 @@ export function useSwitchSubspaceHost(onSwitched?: () => void) {
     mutationFn: (hostId: string | null) =>
       call("POST /api/local/subspace/active", { body: { hostId } }),
     onSuccess: async (next) => {
+      const previous = queryClient.getQueryData<SubspaceStateResponse>(SUBSPACE_KEY);
+      setExpectedSubspaceHost(next.activeHostId);
+      if (previous !== undefined && previous.activeHostId !== next.activeHostId) {
+        markHostSwitchHandled(queryClient, next.activeHostId);
+      }
       queryClient.setQueryData(SUBSPACE_KEY, next);
       await resetHostCacheAndRoute(queryClient, pathname, navigate, revalidate);
       onSwitched?.();
@@ -126,7 +146,7 @@ export function useSwitchSubspaceHost(onSwitched?: () => void) {
   });
 }
 
-export function usePairSubspaceServer(onPaired?: (state: SubspaceStateResponse) => void) {
+export function usePairSubspaceServer(onPaired?: (state: SubspacePairResponse) => void) {
   const queryClient = useQueryClient();
   const [pathname, navigate] = useLocation();
   const revalidate = useRevalidate();
@@ -134,6 +154,15 @@ export function usePairSubspaceServer(onPaired?: (state: SubspaceStateResponse) 
   return useMutation({
     mutationFn: (body: SubspacePairRequest) => call("POST /api/local/subspace/servers", { body }),
     onSuccess: async (next, variables) => {
+      const previous = queryClient.getQueryData<SubspaceStateResponse>(SUBSPACE_KEY);
+      setExpectedSubspaceHost(next.activeHostId);
+      if (
+        variables.activate &&
+        previous !== undefined &&
+        previous.activeHostId !== next.activeHostId
+      ) {
+        markHostSwitchHandled(queryClient, next.activeHostId);
+      }
       queryClient.setQueryData(SUBSPACE_KEY, next);
       if (variables.activate) {
         await resetHostCacheAndRoute(queryClient, pathname, navigate, revalidate);
@@ -159,6 +188,10 @@ export function useRemoveSubspaceServer() {
     mutationFn: (id: string) => call("DELETE /api/local/subspace/servers/:id", { params: { id } }),
     onSuccess: async (next) => {
       const previous = queryClient.getQueryData<SubspaceStateResponse>(SUBSPACE_KEY);
+      setExpectedSubspaceHost(next.activeHostId);
+      if (previous !== undefined && previous.activeHostId !== next.activeHostId) {
+        markHostSwitchHandled(queryClient, next.activeHostId);
+      }
       queryClient.setQueryData(SUBSPACE_KEY, next);
       if (previous?.activeHostId !== next.activeHostId) {
         await resetHostCacheAndRoute(queryClient, pathname, navigate, revalidate);

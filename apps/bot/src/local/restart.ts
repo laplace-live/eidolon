@@ -65,6 +65,8 @@ export const BOOT_READ: Readonly<Record<string, readonly BootReader[]>> = {
   EIDOLON_OPUS_BITRATE_MEDIUM_BPS: ["server"],
   EIDOLON_OPUS_BITRATE_LOW_BPS: ["server"],
   EIDOLON_OPUS_BITRATE_LOWEST_BPS: ["server"],
+  // Subspace Relay connection is established at boot.
+  EIDOLON_SUBSPACE_RELAY_URL: ["server"],
   // At boot, the MCP server opens the persona's index and builds its quotas. Logins are validated
   // only for MCP's logged-in tier here, whose resolver keeps its TTL and WAF token.
   EIDOLON_PERSONA: ["mcp"],
@@ -114,7 +116,6 @@ export const LIVE_READ: readonly string[] = [
   "ASSISTANT_SEARCH_PROVIDER",
   "ASSISTANT_SEARCH_MODEL",
   "CHAT_DISPLAY",
-  "EIDOLON_SUBSPACE_RELAY_URL",
   "EIDOLON_SUBSPACE_AUTH_URL",
   "PERSONA_FILE",
   "PERSONA_TIMEZONE",

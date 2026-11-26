@@ -74,10 +74,14 @@ function chatServer() {
     host: "local" as string | null,
     fails: new Map<string, number | "never">(),
     holds: new Map<string, () => Promise<void>>(),
-    requests: [] as { readonly path: string; readonly signal: AbortSignal }[],
+    requests: [] as {
+      readonly path: string;
+      readonly signal: AbortSignal;
+      readonly expectedHost?: string;
+    }[],
   };
-  const fetch: BackendFetch = async (path, { signal }) => {
-    state.requests.push({ path, signal });
+  const fetch: BackendFetch = async (path, { signal, expectedHost }) => {
+    state.requests.push({ path, signal, expectedHost });
     const base = path.split("?")[0] as string;
     const hold = state.holds.get(path) ?? state.holds.get(base);
     if (hold !== undefined) await hold();
@@ -473,6 +477,67 @@ describe("ChatWatch", () => {
       `close:${CHAT_1}:2`,
       "show:Remote Milky:Fresh remote message",
     ]);
+    watch.stop();
+  });
+
+  test("pins follow-up /chats/:id, /personas, and groupFor reads to expectedHost and aborts cleanly on 409 host mismatch", async () => {
+    const { time, backend, shown, lines, watch } = watching("en");
+    backend.host = "sub_remote_1";
+    backend.chats = [summary(CHAT_1, { participants: [MILKY.id, RIN.id], lastSeq: 1 })];
+    watch.ready();
+    await time.advance(0);
+
+    backend.chats = [summary(CHAT_1, { participants: [MILKY.id, RIN.id], lastSeq: 2 })];
+    backend.events.set(CHAT_1, [
+      message(2, { speaker: { kind: "persona", id: RIN.id }, text: "Pinned reply" }),
+    ]);
+    await time.advance(2_000);
+
+    expect(backend.requests.map((r) => [r.path, r.expectedHost])).toEqual([
+      [CHATS, undefined],
+      [CHATS, undefined],
+      [`${CHATS}/${CHAT_1}?afterSeq=1`, "sub_remote_1"],
+      [PERSONAS, "sub_remote_1"],
+    ]);
+    expect(shown).toHaveLength(1);
+
+    // groupFor ignores chats from another host and passes expectedHost when reading personas.
+    expect(await watch.groupFor(CHAT_1, RIN.id, "local")).toBeNull();
+    backend.personas = [...backend.personas, KURO];
+    backend.chats = [summary(CHAT_1, { participants: [MILKY.id, RIN.id, KURO.id], lastSeq: 2 })];
+    await time.advance(2_000);
+    // Force persona cache miss for groupFor.
+    backend.chats = [summary(CHAT_2, { participants: [MILKY.id, "new-p"], lastSeq: 1 })];
+    await time.advance(2_000);
+    expect(await watch.groupFor(CHAT_2, MILKY.id, "sub_remote_1")).toEqual({
+      groupTitle: "奶绿, new-p",
+      groupPeers: ["new-p"],
+    });
+    expect(backend.requests.at(-1)).toMatchObject({
+      path: PERSONAS,
+      expectedHost: "sub_remote_1",
+    });
+
+    // Mid-flight 409 on /chats/:id discards emission without warning or advancing seen seq.
+    backend.fails.set(`${CHATS}/${CHAT_2}`, 409);
+    backend.chats = [summary(CHAT_2, { participants: [MILKY.id, "new-p"], lastSeq: 2 })];
+    backend.events.set(CHAT_2, [message(2, { text: "Should wait for new host poll" })]);
+    await time.advance(2_000);
+    expect(shown).toHaveLength(1);
+    expect(lines).toEqual([]);
+
+    // Next poll succeeds without 409 and delivers the message.
+    backend.fails.delete(`${CHATS}/${CHAT_2}`);
+    await time.advance(2_000);
+    expect(shown).toHaveLength(2);
+    expect(shown.at(-1)?.body).toBe("Should wait for new host poll");
+
+    // 409 on groupFor persona lookup fails open to null without logging.
+    backend.fails.set(PERSONAS, 409);
+    backend.chats = [summary(CHAT_2, { participants: [MILKY.id, "unknown-p"], lastSeq: 2 })];
+    await time.advance(2_000);
+    expect(await watch.groupFor(CHAT_2, MILKY.id, "sub_remote_1")).toBeNull();
+    expect(lines).toEqual([]);
     watch.stop();
   });
 });

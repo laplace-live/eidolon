@@ -1,3 +1,4 @@
+export { deriveRelayDeviceToken, deriveRelayInviteToken } from "./crypto.ts";
 export {
   acceptHostHandshake,
   type ClientHandshakeState,

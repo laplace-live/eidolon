@@ -9,6 +9,7 @@ export const MUX_FRAME = {
   RES_BODY: 0x06,
   RES_END: 0x07,
   RES_ERR: 0x08,
+  STREAM_CREDIT: 12,
   CALL_UDP_OPEN: 0x10,
   CALL_UDP_DATA: 0x11,
   CALL_UDP_CLOSE: 0x12,
@@ -21,6 +22,7 @@ export type MuxFrameType = (typeof MUX_FRAME)[keyof typeof MUX_FRAME];
 /** Chunk bodies below 128 KiB so large transfers never block interactive turns or audio packets. */
 export const MAX_MUX_CHUNK = 128 * 1024;
 const MUX_HEADER_BYTES = 5;
+const STREAM_WINDOW_BYTES = 4 * 1024 * 1024;
 
 export interface MuxHttpHead {
   readonly method: string;
@@ -118,6 +120,130 @@ function hasNoResponseBody(status: number, method: string): boolean {
   return method === "HEAD" || status === 204 || status === 205 || status === 304;
 }
 
+function encodeCredit(bytes: number): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(4);
+  new DataView(out.buffer).setUint32(0, bytes >>> 0, false);
+  return out;
+}
+
+function decodeCredit(payload: Uint8Array): number {
+  if (payload.byteLength < 4) return 0;
+  return new DataView(payload.buffer, payload.byteOffset, 4).getUint32(0, false);
+}
+
+interface FlowControlledStream {
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly push: (chunk: Uint8Array) => boolean;
+  readonly finish: () => void;
+  readonly fail: (error: Error) => void;
+  readonly isClosed: () => boolean;
+  setCleanup(fn: (() => void) | undefined): void;
+}
+
+function createFlowControlledStream(options: {
+  readonly onPullBytes: (bytes: number) => void;
+  readonly onComplete?: () => void;
+  readonly onCancel?: (wasEnded: boolean) => void;
+}): FlowControlledStream {
+  const chunks: Uint8Array[] = [];
+  let queuedBytes = 0;
+  let ended = false;
+  let closed = false;
+  let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let pullWake: (() => void) | null = null;
+  let cleanup: (() => void) | undefined;
+
+  const wakePull = () => {
+    const wake = pullWake;
+    pullWake = null;
+    wake?.();
+  };
+
+  const runCleanup = () => {
+    const fn = cleanup;
+    cleanup = undefined;
+    fn?.();
+  };
+
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      start(ctrl) {
+        controller = ctrl;
+      },
+      async pull(ctrl) {
+        while (chunks.length === 0 && !ended && !closed) {
+          await new Promise<void>((resolve) => {
+            pullWake = resolve;
+          });
+        }
+        if (closed) return;
+        if (chunks.length > 0) {
+          const chunk = chunks.shift()!;
+          queuedBytes -= chunk.byteLength;
+          ctrl.enqueue(chunk);
+          if (chunk.byteLength > 0) options.onPullBytes(chunk.byteLength);
+          return;
+        }
+        if (ended) {
+          closed = true;
+          runCleanup();
+          options.onComplete?.();
+          try {
+            ctrl.close();
+          } catch {
+            // Ignore already closed controller.
+          }
+        }
+      },
+      cancel() {
+        if (closed) return;
+        closed = true;
+        const wasEnded = ended;
+        chunks.length = 0;
+        queuedBytes = 0;
+        wakePull();
+        runCleanup();
+        options.onCancel?.(wasEnded);
+      },
+    },
+    { highWaterMark: 0 },
+  );
+
+  return {
+    stream,
+    isClosed: () => closed,
+    setCleanup(fn) {
+      cleanup = fn;
+    },
+    push(payload) {
+      if (closed) return true;
+      if (queuedBytes + payload.byteLength > STREAM_WINDOW_BYTES) return false;
+      chunks.push(new Uint8Array(payload));
+      queuedBytes += payload.byteLength;
+      wakePull();
+      return true;
+    },
+    finish() {
+      if (closed) return;
+      ended = true;
+      wakePull();
+    },
+    fail(error) {
+      if (closed) return;
+      closed = true;
+      chunks.length = 0;
+      queuedBytes = 0;
+      wakePull();
+      runCleanup();
+      try {
+        controller?.error(error);
+      } catch {
+        // Ignore already closed controller.
+      }
+    },
+  };
+}
+
 /**
  * Bidirectional HTTP stream + UDP call datagram multiplexer over an already-authenticated
  * Subspace E2EE byte transport. Pure WebStreams/WebCrypto so mobile clients share it directly.
@@ -136,20 +262,20 @@ export class MuxEndpoint {
       readonly method: string;
     }
   >();
-  readonly #clientBodies = new Map<
-    number,
-    {
-      controller: ReadableStreamDefaultController<Uint8Array> | null;
-      closed: boolean;
-      cleanup?: () => void;
-    }
-  >();
+  readonly #clientBodies = new Map<number, FlowControlledStream>();
   readonly #hostRequests = new Map<
     number,
     {
       readonly abort: AbortController;
-      readonly bodyController: ReadableStreamDefaultController<Uint8Array> | null;
-      bodyClosed: boolean;
+      readonly bodyStream: FlowControlledStream | null;
+    }
+  >();
+  readonly #sendCredits = new Map<
+    number,
+    {
+      credit: number;
+      wake: (() => void) | null;
+      readonly cancel: () => void;
     }
   >();
   readonly #clientCalls = new Map<
@@ -219,13 +345,10 @@ export class MuxEndpoint {
         this.#pendingResponses.delete(streamId);
         pending.reject(new Error("Request aborted"));
       }
-      const controller = this.#takeClientStream(streamId);
-      if (controller !== null) {
-        try {
-          controller.error(new Error("Request aborted"));
-        } catch {
-          // Ignore already-closed stream controller.
-        }
+      const stream = this.#clientBodies.get(streamId);
+      if (stream !== undefined) {
+        this.#clientBodies.delete(streamId);
+        stream.fail(new Error("Request aborted"));
       }
       void this.#emit(MUX_FRAME.REQ_ABORT, streamId);
     };
@@ -243,8 +366,14 @@ export class MuxEndpoint {
           body: input.body,
           bodyFrame: MUX_FRAME.REQ_BODY,
           endFrame: MUX_FRAME.REQ_END,
+          signal: input.signal,
           isAborted: () => aborted,
-          onError: async () => {
+          onError: async (error) => {
+            const pending = this.#pendingResponses.get(streamId);
+            if (pending !== undefined) {
+              this.#pendingResponses.delete(streamId);
+              pending.reject(error instanceof Error ? error : new Error(String(error)));
+            }
             void this.#emit(MUX_FRAME.REQ_ABORT, streamId);
           },
         });
@@ -257,8 +386,8 @@ export class MuxEndpoint {
       // Remove listener once completed, or bind cleanup onto the active response stream so closing
       // the HTTP response never fires a late REQ_ABORT on a finished tunnel stream.
       const activeStream = this.#clientBodies.get(streamId);
-      if (activeStream !== undefined && !activeStream.closed) {
-        activeStream.cleanup = () => input.signal?.removeEventListener("abort", sendAbort);
+      if (activeStream !== undefined && !activeStream.isClosed()) {
+        activeStream.setCleanup(() => input.signal?.removeEventListener("abort", sendAbort));
       } else {
         input.signal?.removeEventListener("abort", sendAbort);
       }
@@ -361,9 +490,29 @@ export class MuxEndpoint {
       case MUX_FRAME.RES_END:
         this.#onResEnd(streamId);
         return;
-      case MUX_FRAME.RES_ERR:
-        this.#onResErr(streamId, utf8Decode(payload));
+      case MUX_FRAME.RES_ERR: {
+        let message = "Remote request failed";
+        try {
+          message = utf8Decode(payload) || message;
+        } catch {
+          // Invalid UTF-8 error payload falls back to generic remote error.
+        }
+        this.#onResErr(streamId, message);
         return;
+      }
+      case MUX_FRAME.STREAM_CREDIT: {
+        const amount = decodeCredit(payload);
+        if (amount > 0) {
+          const entry = this.#sendCredits.get(streamId);
+          if (entry !== undefined) {
+            entry.credit += amount;
+            const wake = entry.wake;
+            entry.wake = null;
+            wake?.();
+          }
+        }
+        return;
+      }
       case MUX_FRAME.CALL_UDP_OPEN:
         this.#onCallOpen(streamId, payload);
         return;
@@ -394,30 +543,15 @@ export class MuxEndpoint {
     const error = new Error(reason);
     for (const pending of this.#pendingResponses.values()) pending.reject(error);
     this.#pendingResponses.clear();
-    for (const stream of this.#clientBodies.values()) {
-      if (!stream.closed) {
-        stream.closed = true;
-        stream.cleanup?.();
-        try {
-          stream.controller?.error(error);
-        } catch {
-          // Stream may already be cancelled/closed.
-        }
-      }
-    }
+    for (const stream of this.#clientBodies.values()) stream.fail(error);
     this.#clientBodies.clear();
     for (const req of this.#hostRequests.values()) {
       req.abort.abort(error);
-      if (!req.bodyClosed) {
-        req.bodyClosed = true;
-        try {
-          req.bodyController?.error(error);
-        } catch {
-          // Ignore closed controller.
-        }
-      }
+      req.bodyStream?.fail(error);
     }
     this.#hostRequests.clear();
+    for (const entry of this.#sendCredits.values()) entry.cancel();
+    this.#sendCredits.clear();
     for (const call of this.#clientCalls.values()) {
       if (!call.closed) {
         call.closed = true;
@@ -445,13 +579,36 @@ export class MuxEndpoint {
     readonly body: ReadableStream<Uint8Array>;
     readonly bodyFrame: MuxFrameType;
     readonly endFrame: MuxFrameType;
+    readonly signal?: AbortSignal;
     readonly isAborted: () => boolean;
     readonly onError: (error: unknown) => Promise<void>;
   }): Promise<void> {
     const reader = input.body.getReader();
+    let cancelled = false;
+    const creditEntry = {
+      credit: STREAM_WINDOW_BYTES,
+      wake: null as (() => void) | null,
+      cancel: () => {
+        if (cancelled) return;
+        cancelled = true;
+        const wake = creditEntry.wake;
+        creditEntry.wake = null;
+        wake?.();
+        void reader.cancel().catch(() => {});
+      },
+    };
+    this.#sendCredits.set(input.streamId, creditEntry);
+    input.signal?.addEventListener("abort", creditEntry.cancel, { once: true });
+    if (input.signal?.aborted || input.isAborted() || this.#closed) {
+      creditEntry.cancel();
+    }
+
+    const isDoneOrAborted = () =>
+      cancelled || input.isAborted() || Boolean(input.signal?.aborted) || this.#closed;
+
     try {
       for (;;) {
-        if (input.isAborted() || this.#closed) {
+        if (isDoneOrAborted()) {
           await reader.cancel().catch(() => {});
           return;
         }
@@ -459,20 +616,36 @@ export class MuxEndpoint {
         if (done) break;
         if (value !== undefined && value.byteLength > 0) {
           for (const chunk of splitChunks(value)) {
-            if (input.isAborted() || this.#closed) {
+            while (creditEntry.credit < chunk.byteLength && !isDoneOrAborted()) {
+              await new Promise<void>((resolve) => {
+                creditEntry.wake = resolve;
+              });
+            }
+            if (isDoneOrAborted()) {
               await reader.cancel().catch(() => {});
               return;
             }
+            creditEntry.credit -= chunk.byteLength;
             await this.#sendFrame(encodeMuxFrame(input.bodyFrame, input.streamId, chunk));
           }
         }
       }
-      if (!input.isAborted() && !this.#closed) {
+      if (!isDoneOrAborted()) {
         await this.#sendFrame(encodeMuxFrame(input.endFrame, input.streamId));
       }
     } catch (error) {
       await reader.cancel().catch(() => {});
-      await input.onError(error);
+      if (!isDoneOrAborted()) {
+        await input.onError(error);
+      }
+    } finally {
+      this.#sendCredits.delete(input.streamId);
+      input.signal?.removeEventListener("abort", creditEntry.cancel);
+      try {
+        reader.releaseLock();
+      } catch {
+        // Ignore if reader was already released or errored.
+      }
     }
   }
 
@@ -488,21 +661,19 @@ export class MuxEndpoint {
     }
     const abort = new AbortController();
     const hasBody = head.method !== "GET" && head.method !== "HEAD";
-    let bodyController: ReadableStreamDefaultController<Uint8Array> | null = null;
-    const body = hasBody
-      ? new ReadableStream<Uint8Array>({
-          start(controller) {
-            bodyController = controller;
+    const bodyStream = hasBody
+      ? createFlowControlledStream({
+          onPullBytes: (bytes) => {
+            void this.#emit(MUX_FRAME.STREAM_CREDIT, streamId, encodeCredit(bytes));
           },
-          cancel: () => {
-            abort.abort();
+          onCancel: (wasEnded) => {
+            if (!wasEnded) abort.abort();
           },
         })
       : null;
-    const entry = { abort, bodyController, bodyClosed: !hasBody };
-    this.#hostRequests.set(streamId, entry);
+    this.#hostRequests.set(streamId, { abort, bodyStream });
 
-    void this.#runHostRequest(streamId, host, head, body, abort.signal);
+    void this.#runHostRequest(streamId, host, head, bodyStream?.stream ?? null, abort.signal);
   }
 
   async #runHostRequest(
@@ -536,6 +707,7 @@ export class MuxEndpoint {
         body: res.body,
         bodyFrame: MUX_FRAME.RES_BODY,
         endFrame: MUX_FRAME.RES_END,
+        signal,
         isAborted: () => signal.aborted,
         onError: async (error) => {
           if (!signal.aborted && !this.#closed) {
@@ -562,37 +734,27 @@ export class MuxEndpoint {
 
   #onReqBody(streamId: number, payload: Uint8Array): void {
     const req = this.#hostRequests.get(streamId);
-    if (req === undefined || req.bodyClosed || req.bodyController === null) return;
-    try {
-      req.bodyController.enqueue(new Uint8Array(payload));
-    } catch {
-      req.bodyClosed = true;
+    if (req === undefined || req.bodyStream === null || req.bodyStream.isClosed()) return;
+    if (!req.bodyStream.push(payload)) {
+      const err = new Error("Request stream exceeded flow control window");
+      req.abort.abort(err);
+      req.bodyStream.fail(err);
+      this.#hostRequests.delete(streamId);
+      void this.#emit(MUX_FRAME.RES_ERR, streamId, utf8Encode(err.message));
     }
   }
 
   #onReqEnd(streamId: number): void {
     const req = this.#hostRequests.get(streamId);
-    if (req === undefined || req.bodyClosed) return;
-    req.bodyClosed = true;
-    try {
-      req.bodyController?.close();
-    } catch {
-      // Ignore already closed controller.
-    }
+    if (req === undefined || req.bodyStream === null) return;
+    req.bodyStream.finish();
   }
 
   #onReqAbort(streamId: number): void {
     const req = this.#hostRequests.get(streamId);
     if (req === undefined) return;
     req.abort.abort();
-    if (!req.bodyClosed) {
-      req.bodyClosed = true;
-      try {
-        req.bodyController?.error(new Error("Client aborted request"));
-      } catch {
-        // Ignore already closed controller.
-      }
-    }
+    req.bodyStream?.fail(new Error("Client aborted request"));
     this.#hostRequests.delete(streamId);
   }
 
@@ -616,37 +778,25 @@ export class MuxEndpoint {
       });
       return;
     }
-    const streamState: {
-      controller: ReadableStreamDefaultController<Uint8Array> | null;
-      closed: boolean;
-      cleanup?: () => void;
-    } = { controller: null, closed: false };
-    this.#clientBodies.set(streamId, streamState);
-    const body = new ReadableStream<Uint8Array>({
-      start: (controller) => {
-        streamState.controller = controller;
+    const bodyStream = createFlowControlledStream({
+      onPullBytes: (bytes) => {
+        void this.#emit(MUX_FRAME.STREAM_CREDIT, streamId, encodeCredit(bytes));
       },
-      cancel: () => {
-        if (this.#takeClientStream(streamId) !== null) {
-          void this.#emit(MUX_FRAME.REQ_ABORT, streamId);
-        }
+      onComplete: () => {
+        this.#clientBodies.delete(streamId);
+      },
+      onCancel: (wasEnded) => {
+        this.#clientBodies.delete(streamId);
+        if (!wasEnded) void this.#emit(MUX_FRAME.REQ_ABORT, streamId);
       },
     });
+    this.#clientBodies.set(streamId, bodyStream);
     pending.resolve({
       status: head.status,
       statusText: head.statusText,
       headers: head.headers,
-      body,
+      body: bodyStream.stream,
     });
-  }
-
-  #takeClientStream(streamId: number): ReadableStreamDefaultController<Uint8Array> | null {
-    const stream = this.#clientBodies.get(streamId);
-    if (stream === undefined || stream.closed) return null;
-    stream.closed = true;
-    this.#clientBodies.delete(streamId);
-    stream.cleanup?.();
-    return stream.controller;
   }
 
   #failOrCloseClientStream(streamId: number, error: Error | null): void {
@@ -656,23 +806,23 @@ export class MuxEndpoint {
       pending.reject(error ?? new Error("Response ended before headers"));
       return;
     }
-    const controller = this.#takeClientStream(streamId);
-    if (controller === null) return;
-    try {
-      if (error === null) controller.close();
-      else controller.error(error);
-    } catch {
-      // Ignore already closed stream.
+    const stream = this.#clientBodies.get(streamId);
+    if (stream === undefined) return;
+    if (error === null) {
+      stream.finish();
+      return;
     }
+    this.#clientBodies.delete(streamId);
+    stream.fail(error);
   }
 
   #onResBody(streamId: number, payload: Uint8Array): void {
     const stream = this.#clientBodies.get(streamId);
-    if (stream === undefined || stream.closed || stream.controller === null) return;
-    try {
-      stream.controller.enqueue(new Uint8Array(payload));
-    } catch {
-      this.#takeClientStream(streamId);
+    if (stream === undefined || stream.isClosed()) return;
+    if (!stream.push(payload)) {
+      this.#clientBodies.delete(streamId);
+      stream.fail(new Error("Response stream exceeded flow control window"));
+      void this.#emit(MUX_FRAME.REQ_ABORT, streamId);
     }
   }
 

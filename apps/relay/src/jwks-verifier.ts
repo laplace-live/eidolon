@@ -171,8 +171,11 @@ export function createRelayTokenVerifier(
       if (hasKid || current - lastFetchAttemptAt < FETCH_RETRY_COOLDOWN_MS) {
         return cache!.keys;
       }
-    } else if (inBackoff && cache !== null && current - cache.fetchedAt <= maxStaleMs) {
-      return cache.keys;
+    } else if (inBackoff) {
+      if (cache !== null && current - cache.fetchedAt <= maxStaleMs) {
+        return cache.keys;
+      }
+      return null;
     }
     try {
       return await refreshJwks();

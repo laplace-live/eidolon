@@ -17,7 +17,7 @@ export interface AvatarBackendResponse {
 
 export type AvatarBackendFetch = (
   path: string,
-  init: { readonly signal: AbortSignal },
+  init: { readonly signal: AbortSignal; readonly expectedHost?: string },
 ) => Promise<AvatarBackendResponse>;
 
 export interface AvatarCacheOptions {
@@ -101,7 +101,7 @@ export class NotificationAvatarCache {
     const key = `${host ?? "local"}|${speakerId}|${peers.join(",")}`;
     let pending = this.#inflight.get(key);
     if (pending === undefined) {
-      pending = this.#fetchAndStore(key, speakerId, peers).finally(() => {
+      pending = this.#fetchAndStore(key, speakerId, peers, host).finally(() => {
         if (this.#inflight.get(key) === pending) this.#inflight.delete(key);
       });
       this.#inflight.set(key, pending);
@@ -126,13 +126,20 @@ export class NotificationAvatarCache {
     key: string,
     speakerId: string,
     peers: readonly string[],
+    host?: string | null,
   ): Promise<string | null> {
     const query = peers.length > 0 ? `?group=${peers.join(",")}` : "";
     const urlPath = `/api/local/personas/${speakerId}/notification-avatar${query}`;
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 
     try {
-      const response = await this.#options.fetch(urlPath, { signal: timeout });
+      const response = await this.#options.fetch(
+        urlPath,
+        host !== undefined && host !== null
+          ? { signal: timeout, expectedHost: host }
+          : { signal: timeout },
+      );
+      if (response.status === 409 && host !== undefined && host !== null) return null;
       if (!response.ok) throw new Error(`GET ${urlPath} answered ${response.status}`);
       const bytes = new Uint8Array(await response.arrayBuffer());
       if (bytes.byteLength === 0) throw new Error(`GET ${urlPath} returned an empty body`);

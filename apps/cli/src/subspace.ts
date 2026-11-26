@@ -14,6 +14,7 @@ import {
   completeDeviceAuthorization,
   discoverRelayAuthUrl,
   listShareableAddresses,
+  type SubspaceGrantView,
   type SubspaceStateSnapshot,
   SubspaceStore,
   signOutRelaySession,
@@ -81,6 +82,16 @@ function isLoopbackHost(host: string): boolean {
 
 function digest(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
+}
+
+function toGrantView(grant: SubspaceGrantView): SubspaceGrantView {
+  return {
+    id: grant.id,
+    clientName: grant.clientName,
+    mode: grant.mode,
+    createdAt: grant.createdAt,
+    lastSeenAt: grant.lastSeenAt,
+  };
 }
 
 export async function probeRunningLocalServer(): Promise<{
@@ -287,13 +298,7 @@ export async function subspaceMain(
         shareMode: identity.shareMode,
         directPort: identity.directPort,
         addresses: listShareableAddresses(),
-        grants: grants.map((g) => ({
-          id: g.id,
-          clientName: g.clientName,
-          mode: g.mode,
-          createdAt: g.createdAt,
-          lastSeenAt: g.lastSeenAt,
-        })),
+        grants: grants.map(toGrantView),
       },
       relayAuth: {
         authUrl,
@@ -320,7 +325,8 @@ export async function subspaceMain(
   }
 
   if (action === "grants") {
-    const grants = running?.subspace.share.grants ?? store.readGrants();
+    const grants: readonly SubspaceGrantView[] =
+      running?.subspace.share.grants ?? store.readGrants().map(toGrantView);
     if (json) {
       out(JSON.stringify(grants, null, 2));
       return 0;

@@ -140,7 +140,7 @@ export class Backend {
   get(
     path: string,
     signal: AbortSignal,
-    options?: { readonly local?: boolean },
+    options?: { readonly local?: boolean; readonly expectedHost?: string },
   ): Promise<Response> {
     return (
       this.#forwarder?.get(path, signal, options) ?? Promise.reject(new Error("no server is ready"))

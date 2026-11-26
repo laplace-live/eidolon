@@ -10,14 +10,49 @@ import {
 export const PAIRING_SCHEME = "eidolon";
 export const PAIRING_HOST = "pair";
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function isValidDirectHost(host: string): boolean {
+  if (/[\s/@?#]/.test(host)) return false;
+  if (/^[A-Za-z0-9.-]+$/.test(host)) return true;
+  if (!/^(?:\[[0-9a-fA-F:.]+\]|[0-9a-fA-F:.]+)$/.test(host) || !host.includes(":")) {
+    return false;
+  }
+  const bracketed = host.startsWith("[") ? host : `[${host}]`;
+  try {
+    new URL(`http://${bracketed}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedRelayUrl(raw: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol === "https:" || parsed.protocol === "wss:") return true;
+  if (parsed.protocol === "http:" || parsed.protocol === "ws:") {
+    return LOOPBACK_HOSTS.has(parsed.hostname);
+  }
+  return false;
+}
+
 export const DirectEndpointSchema = z.object({
-  host: z.string().trim().min(1).max(255),
+  host: z.string().trim().min(1).max(255).refine(isValidDirectHost, "Invalid direct endpoint host"),
   port: z.number().int().min(1).max(65535),
   tls: z.boolean().optional(),
 });
 
 export const RelayEndpointSchema = z.object({
-  url: z.string().trim().url(),
+  url: z
+    .string()
+    .trim()
+    .url()
+    .refine(isAllowedRelayUrl, "Relay URL must use https/wss or loopback http/ws"),
   relayHostId: z.string().regex(/^[A-Za-z0-9_-]{8,32}$/),
 });
 

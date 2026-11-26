@@ -18,7 +18,7 @@ export type QuitPurpose = "quit" | "restart";
 /** A GET to our own backend, Bearer included, at a root-relative `path`. */
 export type BackendFetch = (
   path: string,
-  init: { readonly signal: AbortSignal },
+  init: { readonly signal: AbortSignal; readonly expectedHost?: string },
 ) => Promise<BackendResponse>;
 
 export interface BackendResponse {

@@ -110,6 +110,10 @@ export interface SubspaceStateSnapshot {
   };
 }
 
+export interface SubspacePairSnapshot extends SubspaceStateSnapshot {
+  readonly pairedServerId: string;
+}
+
 const IDLE_FLOW: SubspaceDeviceFlowSnapshot = {
   status: "idle",
   userCode: null,
@@ -245,7 +249,7 @@ export class SubspaceManager {
 
   async setActiveHostId(hostId: string | null): Promise<SubspaceStateSnapshot> {
     if (hostId !== null) this.#requireServer(hostId);
-    if (hostId !== this.activeHostId && this.#deps.activeCalls() > 0) {
+    if (hostId !== this.activeHostId && this.#totalActiveCalls() > 0) {
       throw codedError("call-active", "A call is in progress; hang up before switching servers");
     }
     const previous = this.activeHostId;
@@ -267,7 +271,7 @@ export class SubspaceManager {
     readonly code: string;
     readonly name?: string;
     readonly activate?: boolean;
-  }): Promise<SubspaceStateSnapshot> {
+  }): Promise<SubspacePairSnapshot> {
     const parsed = parsePairingInput(input.code);
     if (!parsed.ok) {
       throw new SubspaceConnectError(
@@ -301,10 +305,10 @@ export class SubspaceManager {
       file.servers.find((s) => s.hostPublicKeyB64 === saved.hostPublicKeyB64) ?? saved;
     this.#clients.get(persisted.id)?.stop();
     this.#attachClient(persisted, handshake.tunnel);
-    if (input.activate && this.#deps.activeCalls() === 0) {
+    if (input.activate && this.#totalActiveCalls() === 0) {
       await this.setActiveHostId(persisted.id);
     }
-    return await this.getState();
+    return { ...(await this.getState()), pairedServerId: persisted.id };
   }
 
   async updateServer(
@@ -334,7 +338,7 @@ export class SubspaceManager {
   }
 
   async removeServer(id: string): Promise<SubspaceStateSnapshot> {
-    if (this.activeHostId === id && this.#deps.activeCalls() > 0) {
+    if (this.activeHostId === id && this.#totalActiveCalls() > 0) {
       throw codedError(
         "call-active",
         "A call is in progress; hang up before removing the active server",
@@ -356,8 +360,8 @@ export class SubspaceManager {
   }
 
   async disconnectServer(id: string): Promise<SubspaceStateSnapshot> {
-    this.#requireServer(id);
-    this.#clients.get(id)?.stop();
+    const { server } = this.#requireServer(id);
+    this.#clientFor(server).disconnectManually();
     return await this.getState();
   }
 
@@ -392,18 +396,31 @@ export class SubspaceManager {
       await this.host.reloadIdentity();
     }
 
+    if (next.shareMode === "off") {
+      this.host.clearInvites();
+    } else if (
+      next.shareMode !== current.shareMode &&
+      (current.shareMode === "direct" || current.shareMode === "relay")
+    ) {
+      this.host.clearInvites(current.shareMode);
+    }
+
+    const grants = this.store.readGrants();
+    const needsDirect = next.shareMode === "direct" || grants.some((g) => g.mode === "direct");
+    const needsRelay = next.shareMode === "relay" || grants.some((g) => g.mode === "relay");
+
     if (next.shareMode === "direct") {
       await this.host.startDirect(next.directPort);
-    } else if (next.shareMode === "relay") {
-      this.host.startRelay();
+    } else if (!needsDirect) {
+      await this.host.stopDirect();
+    } else if (!this.host.listening) {
+      await this.host.startDirect(next.directPort);
+    }
+
+    if (needsRelay) {
+      if (this.store.readRelayAuth() !== null) this.host.startRelay();
     } else {
-      const grants = this.store.readGrants();
-      if (!grants.some((g) => g.mode === "direct")) await this.host.stopDirect();
-      if (grants.some((g) => g.mode === "relay")) {
-        if (this.store.readRelayAuth() !== null) this.host.startRelay();
-      } else {
-        this.host.stopRelay();
-      }
+      this.host.stopRelay();
     }
     return await this.getState();
   }
@@ -528,7 +545,17 @@ export class SubspaceManager {
         "Active Subspace server no longer exists",
       );
     }
-    return await this.#clientFor(server).proxyFetch(request, targetPathWithSearch);
+    const client = this.#clientFor(server);
+    if (client.manuallyDisconnected) {
+      throw new SubspaceConnectError("subspace-unreachable", "Disconnected from remote server");
+    }
+    return await client.proxyFetch(request, targetPathWithSearch);
+  }
+
+  #totalActiveCalls(): number {
+    let total = this.#deps.activeCalls();
+    for (const client of this.#clients.values()) total += client.activeCallCount;
+    return total;
   }
 
   #offerSnapshot(offer: SubspacePairingOffer | null): SubspaceOfferSnapshot | null {

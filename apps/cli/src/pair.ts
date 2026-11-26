@@ -5,6 +5,7 @@ import {
   errorText,
   jsRuntime,
   killTree,
+  type Subprocess,
   serverEntry,
   spawnProcess,
 } from "@eidolon/config";
@@ -22,6 +23,9 @@ import {
   type RunningLocalServer,
   runDeviceLoginFlow,
 } from "./subspace.ts";
+
+/** EX_TEMPFAIL: local server exited so its supervisor restarts it on the same port. */
+const RESTART_EXIT_CODE = 75;
 
 const PROG = "laplace-pair";
 
@@ -57,60 +61,122 @@ export const PAIR_PARSER: ParserSpec = {
     { dest: "port", flags: ["--port"], kind: "store", type: INT },
     { dest: "name", flags: ["--name"], kind: "store" },
     { dest: "rotate", flags: ["--rotate"], kind: "store_true" },
-    { dest: "wait", flags: ["--wait"], kind: "boolean_optional", default: null },
+    { dest: "wait", flags: ["--wait", "--no-wait"], kind: "boolean_optional", default: null },
     { dest: "json", flags: ["--json"], kind: "store_true" },
   ],
 };
 
-async function startHeadlessServer(signal?: AbortSignal): Promise<{
+export interface PairDeps extends CommandDeps {
+  readonly serverEntry?: string;
+  readonly pollMs?: number;
+}
+
+function isListeningMessage(message: unknown): message is { kind: "listening"; port: number } {
+  const value = message as { kind?: unknown; port?: unknown } | null;
+  return (
+    value?.kind === "listening" &&
+    typeof value.port === "number" &&
+    Number.isInteger(value.port) &&
+    value.port >= 1 &&
+    value.port <= 65535
+  );
+}
+
+export async function startHeadlessServer(
+  signal?: AbortSignal,
+  options: { readonly entry?: string } = {},
+): Promise<{
   readonly server: RunningLocalServer;
   stop(): Promise<void>;
 }> {
-  const runtime = jsRuntime();
-  const child = spawnProcess(
-    [runtime.command, ...runtime.args, serverEntry(), "--host=127.0.0.1", "--port=0", "--no-open"],
-    {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  const stderrLines: string[] = [];
-  if (child.stderr !== null) {
-    const decoder = new TextDecoder();
-    void (async () => {
-      for await (const chunk of child.stderr!) {
-        if (stderrLines.length < 40) stderrLines.push(decoder.decode(chunk, { stream: true }));
-      }
-    })().catch(() => {});
-  }
-  const stop = async () => {
-    if (child.exitCode === null) {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        // Ignore already exited child.
-      }
-      await Promise.race([child.exited, new Promise<void>((r) => setTimeout(r, 2_000))]).catch(
-        () => {},
-      );
-    }
-    if (child.exitCode === null) killTree(child.pid, { wait: true });
-    await child.exited.catch(() => {});
-  };
-
+  const entry = options.entry ?? serverEntry();
+  let currentChild: Subprocess | null = null;
+  let stopping = false;
+  let boundPort: number | null = null;
   let exited = false;
   let exitCode: number | null = null;
-  void child.exited.then((code) => {
-    exited = true;
-    exitCode = code;
-  });
+  let stderrLines: string[] = [];
+  let stderrDone: Promise<void> = Promise.resolve();
+
+  const spawnChild = (port: number): Subprocess => {
+    boundPort = null;
+    exited = false;
+    exitCode = null;
+    stderrLines = [];
+    const runtime = jsRuntime();
+    const child = spawnProcess(
+      [runtime.command, ...runtime.args, entry, "--host=127.0.0.1", `--port=${port}`, "--no-open"],
+      {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "pipe",
+        ipc(message) {
+          if (isListeningMessage(message)) boundPort = message.port;
+        },
+      },
+    );
+    currentChild = child;
+    if (child.stderr !== null) {
+      const decoder = new TextDecoder();
+      stderrDone = (async () => {
+        for await (const chunk of child.stderr!) {
+          if (stderrLines.length < 40) stderrLines.push(decoder.decode(chunk, { stream: true }));
+        }
+        const tail = decoder.decode();
+        if (tail && stderrLines.length < 40) stderrLines.push(tail);
+      })().catch(() => {});
+    } else {
+      stderrDone = Promise.resolve();
+    }
+
+    void child.exited.then(async (code) => {
+      await stderrDone;
+      if (currentChild !== child) return;
+      if (code === RESTART_EXIT_CODE && !stopping && !signal?.aborted) {
+        try {
+          spawnChild(boundPort ?? 0);
+          return;
+        } catch (error) {
+          stderrLines.push(errorText(error));
+          exitCode = 1;
+          exited = true;
+          return;
+        }
+      }
+      exitCode = code;
+      exited = true;
+    });
+    return child;
+  };
+
+  const stop = async () => {
+    stopping = true;
+    const child = currentChild;
+    if (child !== null) {
+      if (child.exitCode === null) {
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // Ignore already exited child.
+        }
+        await Promise.race([child.exited, new Promise<void>((r) => setTimeout(r, 2_000))]).catch(
+          () => {},
+        );
+      }
+      if (child.exitCode === null) killTree(child.pid, { wait: true });
+      await child.exited.catch(() => {});
+      await stderrDone;
+    }
+  };
+
+  currentChild = spawnChild(0);
 
   const deadline = Date.now() + 30_000;
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error("Cancelled before server started");
       if (exited) {
+        await stderrDone;
         throw new Error(
           `Server exited with status ${exitCode ?? 1}: ${stderrLines.join("").trim()}`,
         );
@@ -118,7 +184,7 @@ async function startHeadlessServer(signal?: AbortSignal): Promise<{
       const probed = await probeRunningLocalServer();
       if (probed !== null) {
         return {
-          server: { ...probed.server, pid: probed.server.pid ?? child.pid ?? null },
+          server: { ...probed.server, pid: probed.server.pid ?? currentChild?.pid ?? null },
           stop,
         };
       }
@@ -131,7 +197,7 @@ async function startHeadlessServer(signal?: AbortSignal): Promise<{
   }
 }
 
-export async function pairMain(argv: readonly string[], deps: CommandDeps = {}): Promise<number> {
+export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Promise<number> {
   const io = resolveIo(deps);
   const out = printer(io.stdout);
   const err = printer(io.stderr);
@@ -180,8 +246,14 @@ export async function pairMain(argv: readonly string[], deps: CommandDeps = {}):
   if (existing !== null) {
     server = existing.server;
   } else {
+    if (explicitWait === false) {
+      return reportExit(
+        io,
+        parserError(PAIR_PARSER, "--no-wait requires an already-running Eidolon server"),
+      );
+    }
     try {
-      ownedServer = await startHeadlessServer(deps.signal);
+      ownedServer = await startHeadlessServer(deps.signal, { entry: deps.serverEntry });
       server = ownedServer.server;
     } catch (error) {
       err(`Could not start local Eidolon server: ${errorText(error)}`);
@@ -268,20 +340,29 @@ export async function pairMain(argv: readonly string[], deps: CommandDeps = {}):
       out("");
       out("Waiting for clients to pair… Press Ctrl-C to stop.");
     }
+    const recordNewGrants = (snapshot: SubspaceStateSnapshot) => {
+      for (const grant of snapshot.share.grants) {
+        if (seenGrants.has(grant.id)) continue;
+        seenGrants.add(grant.id);
+        if (json) out(JSON.stringify({ event: "paired", grant }));
+        else out(`Paired device: ${grant.clientName} (${grant.id})`);
+      }
+    };
+    const pollMs = deps.pollMs ?? 2_000;
     while (!deps.signal?.aborted) {
-      await abortableSleep(2_000, deps.signal).catch(() => {});
+      await abortableSleep(pollMs, deps.signal).catch(() => {});
       if (deps.signal?.aborted) break;
       const poll = await fetch(`${server.baseUrl}/api/local/subspace`, {
         headers: { authorization: `Bearer ${server.token}` },
         signal: deps.signal,
       }).catch(() => null);
       if (poll?.ok) {
-        const snapshot = (await poll.json()) as SubspaceStateSnapshot;
-        for (const grant of snapshot.share.grants) {
-          if (seenGrants.has(grant.id)) continue;
-          seenGrants.add(grant.id);
-          if (json) out(JSON.stringify({ event: "paired", grant }));
-          else out(`Paired device: ${grant.clientName} (${grant.id})`);
+        recordNewGrants((await poll.json()) as SubspaceStateSnapshot);
+      } else if (!deps.signal?.aborted) {
+        const reprobed = await probeRunningLocalServer();
+        if (reprobed !== null) {
+          server = reprobed.server;
+          recordNewGrants(reprobed.subspace);
         }
       }
     }

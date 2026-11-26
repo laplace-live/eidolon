@@ -143,7 +143,32 @@ export function ShareCard() {
     }
     setUseCustomHost(false);
     setCustomHostDirty(false);
-    updateShare.mutate({ directAddress: value });
+    updateShare.mutate(
+      { directAddress: value },
+      {
+        onSuccess: (next) => {
+          if ((next?.share?.shareMode ?? share?.shareMode) === "direct") {
+            createOffer.mutate({ mode: "direct", address: value });
+          }
+        },
+      },
+    );
+  }
+
+  function applyCustomHost() {
+    const value = customHost.trim();
+    if (!value) return;
+    updateShare.mutate(
+      { directAddress: value },
+      {
+        onSuccess: (next) => {
+          setCustomHostDirty(false);
+          if ((next?.share?.shareMode ?? share?.shareMode) === "direct") {
+            createOffer.mutate({ mode: "direct", address: value });
+          }
+        },
+      },
+    );
   }
 
   function generateOffer(rotate: boolean) {
@@ -277,12 +302,7 @@ export function ShareCard() {
                     type="button"
                     variant="outline"
                     disabled={!customHost.trim() || busy}
-                    onClick={() =>
-                      updateShare.mutate(
-                        { directAddress: customHost.trim() },
-                        { onSuccess: () => setCustomHostDirty(false) },
-                      )
-                    }
+                    onClick={applyCustomHost}
                   >
                     {t`Apply`}
                   </Button>

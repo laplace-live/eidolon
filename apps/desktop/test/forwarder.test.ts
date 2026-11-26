@@ -257,9 +257,26 @@ describe("headers", () => {
       accept: "application/json",
       "x-request-id": "kept",
     });
-    for (const name of ["origin", "cookie", "sec-fetch-site", "x-eidolon-proof"]) {
+    for (const name of [
+      "origin",
+      "cookie",
+      "sec-fetch-site",
+      "x-eidolon-proof",
+      "x-eidolon-target",
+    ]) {
       expect([name, seen?.headers[name]]).toEqual([name, undefined]);
     }
+  });
+
+  test("drops forged x-eidolon-target header from the page", async () => {
+    const backend = new FakeBackend();
+    const up = await upstream();
+    backend.ready(up.origin);
+    const response = await forwarder(backend).handle(
+      app("/api/local/status", { headers: { "x-eidolon-target": "local" } }),
+    );
+    expect(response.status).toBe(200);
+    expect(up.seen[0]?.headers["x-eidolon-target"]).toBeUndefined();
   });
 
   test("withholds Set-Cookie, the body's encoding and length, and hop-by-hop headers; passes the rest", async () => {
@@ -650,6 +667,16 @@ describe("main's own requests", () => {
     backend.ready(up.origin);
     await forwarder(backend).get("/api/local/status", AbortSignal.timeout(5000), { local: true });
     expect(up.seen[0]?.headers["x-eidolon-target"]).toBe("local");
+  });
+
+  test("{ expectedHost } sets X-Eidolon-Expected-Host on main's own GET requests", async () => {
+    const backend = new FakeBackend();
+    const up = await upstream();
+    backend.ready(up.origin);
+    await forwarder(backend).get("/api/local/personas", AbortSignal.timeout(5000), {
+      expectedHost: "sub_remote_1",
+    });
+    expect(up.seen[0]?.headers["x-eidolon-expected-host"]).toBe("sub_remote_1");
   });
 
   test("tell the controller nothing when their connections close, unlike the page's", async () => {

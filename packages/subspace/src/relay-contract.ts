@@ -21,26 +21,26 @@ export const HostHelloSchema = z.object({
   type: z.literal("host_hello"),
   v: z.literal(1),
   relayHostId: RelayHostIdSchema,
-  hostPublicKeyB64: z.string().min(1),
+  hostPublicKeyB64: z.string().min(1).max(256),
   hostName: z.string().trim().min(1).max(120),
 });
 
 export const HostChallengeSchema = z.object({
   type: z.literal("host_challenge"),
-  challengeB64: z.string().min(1),
-  relayEphPubB64: z.string().min(1),
-  userId: z.string().min(1),
+  challengeB64: z.string().min(1).max(256),
+  relayEphPubB64: z.string().min(1).max(256),
+  userId: z.string().min(1).max(256),
 });
 
 export const HostChallengeAckSchema = z.object({
   type: z.literal("host_challenge_ack"),
-  proofB64: z.string().min(1),
+  proofB64: z.string().min(1).max(256),
 });
 
 export const HostHelloAckSchema = z.object({
   type: z.literal("host_hello_ack"),
   relayHostId: RelayHostIdSchema,
-  userId: z.string().min(1),
+  userId: z.string().min(1).max(256),
 });
 
 export const InviteCreateSchema = z.object({
@@ -105,11 +105,11 @@ export const ClientAuthSchema = z.object({
   v: z.literal(1),
   relayHostId: RelayHostIdSchema,
   credential: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("invite"), ticket: z.string().min(1).max(128) }),
+    z.object({ kind: z.literal("invite"), relayTicket: Sha256HexSchema }),
     z.object({
       kind: z.literal("device"),
       grantId: z.string().min(1).max(64),
-      deviceToken: z.string().min(1).max(256),
+      relayToken: Sha256HexSchema,
     }),
   ]),
 });

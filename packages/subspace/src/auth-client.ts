@@ -80,8 +80,21 @@ export async function discoverRelayAuthUrl(
           auth?: { issuer?: unknown };
         } | null;
         const issuer = body?.auth?.issuer;
-        if (typeof issuer === "string" && /^https?:\/\//i.test(issuer)) {
-          return withoutTrailingSlashes(issuer);
+        if (typeof issuer === "string") {
+          try {
+            const parsed = new URL(issuer);
+            if (
+              parsed.protocol === "https:" ||
+              (parsed.protocol === "http:" &&
+                (parsed.hostname === "localhost" ||
+                  parsed.hostname === "127.0.0.1" ||
+                  parsed.hostname === "[::1]"))
+            ) {
+              return withoutTrailingSlashes(parsed.toString());
+            }
+          } catch {
+            // Malformed issuer URL; fall back to default auth server URL.
+          }
         }
       }
     } catch {
@@ -157,8 +170,11 @@ export async function pollDeviceToken(
       }),
       signal,
     });
-  } catch (error) {
-    return { status: "error", message: errorText(error) };
+  } catch {
+    if (signal?.aborted) {
+      return { status: "error", message: "Sign-in cancelled" };
+    }
+    return { status: "pending" };
   }
   const body = (await response.json().catch(() => ({}))) as {
     access_token?: string;
@@ -265,6 +281,7 @@ export async function completeDeviceAuthorization(input: {
     }
     if (input.signal?.aborted) return { status: "aborted" };
     const poll = await pollDeviceToken(input.authUrl, input.deviceCode, input.signal);
+    if (input.signal?.aborted) return { status: "aborted" };
     if (poll.status === "pending") continue;
     if (poll.status === "slow_down") {
       waitMs += 5_000;
@@ -294,5 +311,6 @@ export async function signOutRelaySession(authUrl: string, sessionToken: string)
     method: "POST",
     headers: { authorization: `Bearer ${sessionToken}`, "content-type": "application/json" },
     body: "{}",
+    signal: AbortSignal.timeout(5_000),
   }).catch(() => {});
 }

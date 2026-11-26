@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useCallPresence } from "@/features/call/call-context";
-import { activeSubspaceServer, usePairSubspaceServer } from "./queries";
+import { usePairSubspaceServer } from "./queries";
 
 export function AddSubspaceServerDialog({
   open,
@@ -42,8 +42,8 @@ export function AddSubspaceServerDialog({
   };
 
   const pair = usePairSubspaceServer((state) => {
-    const active = activeSubspaceServer(state);
-    const pairedName = name.trim() || active?.name || state.servers.at(-1)?.name || "";
+    const paired = state.servers.find((s) => s.id === state.pairedServerId);
+    const pairedName = name.trim() || paired?.name || "";
     toast.success(
       pairedName ? t`Paired with ${ph({ name: pairedName })}.` : t`Paired with the remote server.`,
     );

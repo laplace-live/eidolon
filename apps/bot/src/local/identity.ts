@@ -75,6 +75,8 @@ export interface IdentityParts {
   readonly memoryAdmin: () => MemoryAdmin | null;
   /** The chats an offer's requestData may bind its call to. */
   readonly chats: () => ChatRunner;
+  /** Whether an offer arrived through a Subspace tunnel and should retain host candidates. */
+  readonly isTunneledRequest?: (request: Request) => boolean;
 }
 
 /** The local handlers for POST /api/offer, POST /api/offer/preflight and /api/memories*. */
@@ -133,6 +135,7 @@ export function identityHandlers(parts: IdentityParts): IdentityHandlers {
         opusBitrateBps: sessionBitrateFor(audioQualityFrom(requestData), audioQualitySettings()),
         clientIp: server.requestIP(request)?.address ?? UNKNOWN_CLIENT_IP,
         quota: null,
+        allowHostCandidates: parts.isTunneledRequest?.(request) === true,
       };
       pending++;
       try {

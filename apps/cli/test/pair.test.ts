@@ -1,12 +1,13 @@
 import "../../../packages/config/test/isolated-guard.ts";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { dataHome } from "@eidolon/config";
 import { lockInfoPath } from "@eidolon/config/lock";
 import { SubspaceStore } from "@eidolon/subspace";
 import { afterEach, describe, expect, test } from "vitest";
-import { pairMain } from "../src/pair.ts";
+import { pairMain, startHeadlessServer } from "../src/pair.ts";
 import { probeRunningLocalServer, subspaceMain } from "../src/subspace.ts";
 import { captureIo } from "./helpers.ts";
 
@@ -33,6 +34,12 @@ describe("laplace-pair and laplace-subspace", () => {
     expect(io.stderr()).toContain("must be between 0 and 65535");
   });
 
+  test("pair --no-wait exits 2 when no local server is running", async () => {
+    const io = captureIo();
+    expect(await pairMain(["--no-wait"], io.io)).toBe(2);
+    expect(io.stderr()).toContain("--no-wait requires an already-running Eidolon server");
+  });
+
   test("subspace status, grants, and revoke read/modify subspace store cleanly", async () => {
     const store = new SubspaceStore(dataHome());
     store.addGrant({
@@ -55,9 +62,18 @@ describe("laplace-pair and laplace-subspace", () => {
 
     const grantsIo = captureIo();
     expect(await subspaceMain(["grants", "--json"], grantsIo.io)).toBe(0);
-    const grants = JSON.parse(grantsIo.stdout()) as { id: string; clientName: string }[];
-    expect(grants).toHaveLength(1);
-    expect(grants[0]?.clientName).toBe("CLI Test Phone");
+    const grants = JSON.parse(grantsIo.stdout()) as Record<string, unknown>[];
+    expect(grants).toEqual([
+      {
+        id: "grant_cli_1",
+        clientName: "CLI Test Phone",
+        mode: "direct",
+        createdAt: 1_760_000_000_000,
+        lastSeenAt: null,
+      },
+    ]);
+    expect(grantsIo.stdout()).not.toContain("tokenSha256");
+    expect(grantsIo.stdout()).not.toContain("relayTokenSha256");
 
     const revokeIo = captureIo();
     expect(await subspaceMain(["revoke", "grant_cli_1", "--json"], revokeIo.io)).toBe(0);
@@ -98,6 +114,130 @@ describe("laplace-pair and laplace-subspace", () => {
       expect(seenHeaders).toEqual([undefined]);
     } finally {
       await new Promise<void>((resolve) => decoy.close(() => resolve()));
+    }
+  });
+
+  test("startHeadlessServer drains stderr before throwing on non-zero exit and ignores stdout flood", async () => {
+    const work = mkdtempSync(join(tmpdir(), "pair-stderr-"));
+    try {
+      const entry = join(work, "fail-server.mjs");
+      writeFileSync(
+        entry,
+        [
+          'process.stdout.write("x".repeat(256 * 1024));',
+          'process.stderr.write("fatal boot failure");',
+          "setTimeout(() => { process.stderr.write(' tail\\n'); process.exit(1); }, 15);",
+        ].join("\n"),
+      );
+      await expect(startHeadlessServer(undefined, { entry })).rejects.toThrow(
+        "Server exited with status 1: fatal boot failure tail",
+      );
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
+  });
+
+  test("pairMain respawns headless server on exit 75 with bound port and re-probes to print new grants", async () => {
+    const work = mkdtempSync(join(tmpdir(), "pair-restart-"));
+    const argsLog = join(work, "args.log");
+    const entry = join(work, "fake-server.mjs");
+    const infoPath = lockInfoPath("local-server");
+    const tokenPath = join(dataHome(), "local-token");
+    writeFileSync(
+      entry,
+      `
+import { createHmac } from "node:crypto";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(argsLog)}, JSON.stringify(args) + "\\n");
+const portFlag = args.find((a) => a.startsWith("--port="));
+const requestedPort = portFlag ? Number(portFlag.slice("--port=".length)) : 0;
+const isSecondBoot = requestedPort > 0;
+const token = isSecondBoot ? "b".repeat(43) : "a".repeat(43);
+
+const grants = isSecondBoot
+  ? [{ id: "g_after_reboot", clientName: "Reboot Phone", mode: "direct", createdAt: 2, lastSeenAt: null }]
+  : [];
+
+const server = createServer((req, res) => {
+  const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  if (url.pathname === "/api/local/session") {
+    const nonce = url.searchParams.get("probe") ?? "";
+    const proof = createHmac("sha256", token).update("probe:" + nonce, "utf8").digest("base64url");
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ proof }));
+    return;
+  }
+  if (url.pathname === "/api/local/subspace" && req.method === "GET") {
+    if (req.headers.authorization !== "Bearer " + token) {
+      res.writeHead(401).end();
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
+      activeHostId: null,
+      servers: [],
+      share: { hostName: "Headless", shareMode: "direct", directPort: 45123, directAddress: null, addresses: [], listening: true, listeningPort: 45123, relayConnected: false, relayError: null, activeOffer: null, grants },
+      relayAuth: { authUrl: "https://id.laplace.live", relayUrl: "https://eidolon-relay.vrp.moe", status: "signed-out", user: null, deviceFlow: { status: "idle", userCode: null, verificationUri: null, verificationUriComplete: null, expiresAt: null, error: null } },
+    }));
+    return;
+  }
+  if (url.pathname === "/api/local/subspace/share/offer" && req.method === "POST") {
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
+      pairingUrl: "eidolon://pair?code=123",
+      pairingCode: "123",
+      qrSvg: "<svg/>",
+      expiresAt: Date.now() + 60_000,
+      state: {
+        activeHostId: null,
+        servers: [],
+        share: { hostName: "Headless", shareMode: "direct", directPort: 45123, directAddress: null, addresses: [], listening: true, listeningPort: 45123, relayConnected: false, relayError: null, activeOffer: null, grants: [] },
+        relayAuth: { authUrl: "https://id.laplace.live", relayUrl: "https://eidolon-relay.vrp.moe", status: "signed-out", user: null, deviceFlow: { status: "idle", userCode: null, verificationUri: null, verificationUriComplete: null, expiresAt: null, error: null } },
+      },
+    }));
+    setTimeout(() => {
+      server.closeAllConnections();
+      server.close(() => process.exit(75));
+    }, 50);
+    return;
+  }
+  res.writeHead(404).end();
+});
+
+const listenPort = isSecondBoot ? 0 : requestedPort;
+server.listen(listenPort, "127.0.0.1", () => {
+  const port = server.address().port;
+  mkdirSync(${JSON.stringify(dirname(infoPath))}, { recursive: true });
+  writeFileSync(${JSON.stringify(tokenPath)}, token);
+  writeFileSync(${JSON.stringify(infoPath)}, JSON.stringify({ pid: process.pid, host: "127.0.0.1", port }));
+  process.send?.({ kind: "listening", port });
+});
+`,
+    );
+    const controller = new AbortController();
+    const io = captureIo();
+    try {
+      const exitPromise = pairMain(["--json"], {
+        ...io.io,
+        signal: controller.signal,
+        serverEntry: entry,
+        pollMs: 50,
+      });
+      await expect.poll(() => io.stdout(), { timeout: 10_000 }).toContain('"id":"g_after_reboot"');
+      controller.abort();
+      expect(await exitPromise).toBe(0);
+      const spawns = readFileSync(argsLog, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as string[]);
+      expect(spawns).toHaveLength(2);
+      expect(spawns[0]).toContain("--port=0");
+      const secondPortArg = spawns[1]?.find((arg) => arg.startsWith("--port="));
+      expect(secondPortArg).toBeDefined();
+      expect(Number(secondPortArg?.slice("--port=".length))).toBeGreaterThan(0);
+    } finally {
+      controller.abort();
+      rmSync(work, { recursive: true, force: true });
     }
   });
 });

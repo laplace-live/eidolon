@@ -216,9 +216,13 @@ describe("NotificationAvatarCache", () => {
 
   test("scopes cached entries by host so identical persona ids on remote hosts never collide with local", async () => {
     let activeHost = "local";
+    const seenExpectedHosts: (string | undefined)[] = [];
     const cache = new NotificationAvatarCache({
       folder,
-      fetch: async () => new Response(Buffer.from(pngBytes(activeHost)), { status: 200 }),
+      fetch: async (_path, init) => {
+        seenExpectedHosts.push(init.expectedHost);
+        return new Response(Buffer.from(pngBytes(activeHost)), { status: 200 });
+      },
       log: { info: () => {}, warn: () => {} },
     });
 
@@ -230,5 +234,29 @@ describe("NotificationAvatarCache", () => {
     expect(remoteFirst).not.toBe(localFirst);
     expect(readFileSync(localFirst as string)).toEqual(Buffer.from(pngBytes("local")));
     expect(readFileSync(remoteFirst as string)).toEqual(Buffer.from(pngBytes("sub_remote_1")));
+    expect(seenExpectedHosts).toEqual(["local", "sub_remote_1"]);
+  });
+
+  test("returns null without fallback or warning when server rejects expectedHost with 409", async () => {
+    const lines: string[] = [];
+    let status = 200;
+    const cache = new NotificationAvatarCache({
+      folder,
+      fetch: async () =>
+        status === 200
+          ? new Response(Buffer.from(pngBytes("remote")), { status: 200 })
+          : new Response(null, { status }),
+      log: {
+        info: (m) => lines.push(`info ${m}`),
+        warn: (m) => lines.push(`warn ${m}`),
+      },
+    });
+
+    const cached = await cache.resolve("milky-green", [], undefined, "sub_remote_1");
+    expect(cached).not.toBeNull();
+
+    status = 409;
+    expect(await cache.resolve("milky-green", [], undefined, "sub_remote_1")).toBeNull();
+    expect(lines).toEqual([]);
   });
 });

@@ -432,8 +432,9 @@ time. Any other value reads as `normal`, with a warning. No mode hides a task th
 Production's chat endpoint, which runs no tasks, never reads it.
 
 `subspace.relayUrl` sets the base URL of the Subspace Relay (`https://eidolon-relay.vrp.moe` by
-default) and `subspace.authUrl` sets the LAPLACE ID / auth server (`https://id.laplace.live` by
-default) used for account-based remote pairing and connections ([subspace.md](subspace.md)).
+default) and `subspace.authUrl` sets the LAPLACE ID / auth server used for account-based remote
+pairing and connections (`https://id.laplace.live` for the default relay, or auto-discovered from a
+custom `subspace.relayUrl`'s `/healthz` when unset; [subspace.md](subspace.md)).
 
 ## Deploying a persona
 

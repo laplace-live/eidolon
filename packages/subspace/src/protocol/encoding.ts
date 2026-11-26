@@ -2,7 +2,7 @@
 
 const BASE64URL_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
+const textDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /** Copy or cast to an ArrayBuffer-backed Uint8Array accepted by WebCrypto SubtleCrypto. */
 export function toBufferBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {

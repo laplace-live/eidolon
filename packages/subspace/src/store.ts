@@ -27,6 +27,10 @@ const GrantRecordSchema = z.object({
   id: z.string().min(1),
   clientName: z.string().trim().min(1).max(120),
   tokenSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  relayTokenSha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
   mode: z.enum(["direct", "relay"]),
   createdAt: z.number().int().positive(),
   lastSeenAt: z.number().int().positive().nullable(),
@@ -90,13 +94,14 @@ function defaultHostName(): string {
 }
 
 function readJsonFile<T>(path: string, schema: z.ZodType<T>): T | null {
+  let text: string;
   try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    const parsed = schema.safeParse(raw);
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
+    text = readFileSync(path, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    throw err;
   }
+  return schema.parse(JSON.parse(text));
 }
 
 function writeSecretJson(path: string, data: unknown): void {
@@ -130,6 +135,7 @@ export class SubspaceStore {
   readonly #serversPath: string;
   readonly #relayAuthPath: string;
   #serversCache: SubspaceServersFile | null = null;
+  #identityTask: Promise<SubspaceHostIdentity> | null = null;
 
   constructor(dataHomeDir: string) {
     this.dir = join(dataHomeDir, "subspace");
@@ -139,21 +145,28 @@ export class SubspaceStore {
     this.#relayAuthPath = join(this.dir, "relay-auth.json");
   }
 
-  async loadOrCreateIdentity(): Promise<SubspaceHostIdentity> {
-    const existing = readJsonFile(this.#hostPath, HostIdentitySchema);
-    if (existing !== null) return existing;
-    const kp = await generateX25519KeyPair();
-    const created: SubspaceHostIdentity = {
-      hostName: defaultHostName(),
-      publicKeyB64: kp.publicKeyB64,
-      privateKeyPkcs8B64: kp.privateKeyPkcs8B64,
-      directPort: 0,
-      directAddress: null,
-      shareMode: "off",
-      createdAt: Date.now(),
-    };
-    this.saveIdentity(created);
-    return created;
+  loadOrCreateIdentity(): Promise<SubspaceHostIdentity> {
+    if (this.#identityTask !== null) return this.#identityTask;
+    const task = (async () => {
+      const existing = readJsonFile(this.#hostPath, HostIdentitySchema);
+      if (existing !== null) return existing;
+      const kp = await generateX25519KeyPair();
+      const created: SubspaceHostIdentity = {
+        hostName: defaultHostName(),
+        publicKeyB64: kp.publicKeyB64,
+        privateKeyPkcs8B64: kp.privateKeyPkcs8B64,
+        directPort: 0,
+        directAddress: null,
+        shareMode: "off",
+        createdAt: Date.now(),
+      };
+      this.saveIdentity(created);
+      return created;
+    })().finally(() => {
+      if (this.#identityTask === task) this.#identityTask = null;
+    });
+    this.#identityTask = task;
+    return task;
   }
 
   saveIdentity(identity: SubspaceHostIdentity): void {
@@ -255,7 +268,7 @@ export class SubspaceStore {
   }
 
   readRelayAuth(): SubspaceRelayAuthRecord | null {
-    return readJsonFile(this.#relayAuthPath, RelayAuthRecordSchema);
+    return readJsonFile(this.#relayAuthPath, RelayAuthRecordSchema.nullable());
   }
 
   saveRelayAuth(auth: SubspaceRelayAuthRecord | null): void {

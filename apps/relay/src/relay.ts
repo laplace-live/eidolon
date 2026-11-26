@@ -27,13 +27,19 @@ import type { RelayStore } from "./relay-db.ts";
 
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 const MAX_PENDING_SESSIONS_PER_HOST = 32;
+const MAX_PREAUTH_QUEUE_BYTES = 64 * 1024;
 const BACKPRESSURE_HIGH_WATER = 4 * 1024 * 1024;
 const HEARTBEAT_MS = 25_000;
+
+export interface RelayHubOptions {
+  readonly heartbeatMs?: number;
+}
 
 interface OnlineHost {
   readonly relayHostId: string;
   readonly userId: string;
   readonly ws: WebSocket;
+  alive: boolean;
 }
 
 interface BufferedFrame {
@@ -62,12 +68,19 @@ function rawDataToText(data: WebSocket.RawData): string {
   return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("utf8");
 }
 
+function rawDataByteLength(data: WebSocket.RawData): number {
+  if (typeof data === "string") return Buffer.byteLength(data, "utf8");
+  if (Array.isArray(data)) return data.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  return data.byteLength;
+}
+
 /**
  * Attaches message/close/error listeners synchronously on upgrade so pipelined frames sent while
  * async JWT/JWKS verification runs are queued rather than dropped.
  */
 function attachMessageQueue(ws: WebSocket): AttachedMessageQueue {
   const buffer: BufferedFrame[] = [];
+  let queuedBytes = 0;
   let closed: Error | null = null;
   let waiter: {
     readonly resolve: (frame: BufferedFrame) => void;
@@ -84,6 +97,19 @@ function attachMessageQueue(ws: WebSocket): AttachedMessageQueue {
   };
 
   const onMessage = (data: WebSocket.RawData, isBinary: boolean) => {
+    if (closed !== null) return;
+    const frameBytes = rawDataByteLength(data);
+    if (queuedBytes + frameBytes > MAX_PREAUTH_QUEUE_BYTES) {
+      const err = new Error("Handshake frame limit exceeded");
+      closed = err;
+      buffer.length = 0;
+      failWaiter(err);
+      ws.off("message", onMessage);
+      safeClose(ws, RELAY_CLOSE_CODE.UNAUTHORIZED, "Handshake frame limit exceeded");
+      ws.terminate();
+      return;
+    }
+    queuedBytes += frameBytes;
     if (waiter !== null) {
       const current = waiter;
       waiter = null;
@@ -214,14 +240,20 @@ export class RelayHub {
   readonly #pending = new Map<string, PendingSession>();
   readonly #heartbeatTimer: ReturnType<typeof setInterval>;
 
-  constructor(verifyToken: RelayTokenVerifier, store: RelayStore) {
+  constructor(verifyToken: RelayTokenVerifier, store: RelayStore, options: RelayHubOptions = {}) {
     this.#verifyToken = verifyToken;
     this.#store = store;
     this.#heartbeatTimer = setInterval(() => {
-      for (const host of this.#hosts.values()) {
+      for (const [relayHostId, host] of this.#hosts) {
+        if (!host.alive) {
+          this.#hosts.delete(relayHostId);
+          host.ws.terminate();
+          continue;
+        }
+        host.alive = false;
         if (host.ws.readyState === WebSocket.OPEN) host.ws.ping();
       }
-    }, HEARTBEAT_MS);
+    }, options.heartbeatMs ?? HEARTBEAT_MS);
     this.#heartbeatTimer.unref?.();
   }
 
@@ -239,6 +271,10 @@ export class RelayHub {
       return false;
     }
     this.#wss.handleUpgrade(req, socket, head, (ws) => {
+      ws.on("error", (err) => {
+        logger.warning(`[relay] WebSocket error (${pathname}): ${errorText(err)}`);
+        ws.terminate();
+      });
       const queue = attachMessageQueue(ws);
       if (pathname === RELAY_PATHS.HOST_CONTROL) {
         void this.#onHostControl(ws, req, queue);
@@ -327,13 +363,23 @@ export class RelayHub {
         return;
       }
 
+      if (ws.readyState !== WebSocket.OPEN) {
+        queue.drainRaw();
+        return;
+      }
+
       relayHostId = hello.relayHostId;
       const previous = this.#hosts.get(relayHostId);
       if (previous !== undefined && previous.ws !== ws) {
         safeClose(previous.ws, 1000, "Replaced by newer host connection");
       }
-      const entry: OnlineHost = { relayHostId, userId, ws };
+      const entry: OnlineHost = { relayHostId, userId, ws, alive: true };
       this.#hosts.set(relayHostId, entry);
+      const dropHost = () => {
+        if (this.#hosts.get(relayHostId) === entry) {
+          this.#hosts.delete(relayHostId);
+        }
+      };
 
       const handleControl = (raw: WebSocket.RawData) => {
         try {
@@ -371,10 +417,14 @@ export class RelayHub {
 
       const buffered = queue.drainRaw();
       ws.on("message", handleControl);
-      ws.on("close", () => {
-        if (this.#hosts.get(relayHostId) === entry) {
-          this.#hosts.delete(relayHostId);
-        }
+      ws.on("pong", () => {
+        entry.alive = true;
+      });
+      ws.on("close", dropHost);
+      ws.on("error", () => {
+        dropHost();
+        safeClose(ws, 1011, "Host control socket error");
+        ws.terminate();
       });
 
       ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId }));
@@ -407,7 +457,7 @@ export class RelayHub {
 
       let grantId: string | null = null;
       if (authMsg.credential.kind === "invite") {
-        const ticketHash = await sha256Hex(utf8Encode(authMsg.credential.ticket));
+        const ticketHash = await sha256Hex(utf8Encode(authMsg.credential.relayTicket));
         if (host.ws.readyState !== WebSocket.OPEN) {
           queue.drainRaw();
           safeClose(clientWs, RELAY_CLOSE_CODE.HOST_NOT_FOUND, "Remote Eidolon server is offline");
@@ -419,7 +469,7 @@ export class RelayHub {
           return;
         }
       } else {
-        const tokenHash = await sha256Hex(utf8Encode(authMsg.credential.deviceToken));
+        const tokenHash = await sha256Hex(utf8Encode(authMsg.credential.relayToken));
         if (host.ws.readyState !== WebSocket.OPEN) {
           queue.drainRaw();
           safeClose(clientWs, RELAY_CLOSE_CODE.HOST_NOT_FOUND, "Remote Eidolon server is offline");

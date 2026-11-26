@@ -320,6 +320,30 @@ describe("the signalling server", () => {
       expect(built[0]?.sdp).toBe(OFFER_WITH_CANDIDATES);
     });
 
+    test("allowHostCandidates bypasses a relay-only plan and keeps host candidates", async () => {
+      const { signalling } = server([RELAY_PLAN]);
+      const result = await signalling.offer({
+        ...admission({ sdp: OFFER_WITH_CANDIDATES, type: "offer" }),
+        allowHostCandidates: true,
+      });
+      expect(built[0]?.connection.options.relayOnly).toBe(false);
+      expect(built[0]?.sdp).toBe(OFFER_WITH_CANDIDATES);
+      const pcId = (result.body as { pc_id: string }).pc_id;
+      await signalling.patch(
+        JSON.stringify({
+          pc_id: pcId,
+          candidates: [
+            {
+              candidate: "candidate:1 1 udp 2122260223 192.168.1.20 4000 typ host",
+              sdp_mid: "0",
+              sdp_mline_index: 0,
+            },
+          ],
+        }),
+      );
+      expect(added.map((c) => c?.ip ?? null)).toEqual(["192.168.1.20"]);
+    });
+
     test("a TURN URL without credentials warns once per new connection", async () => {
       const plan: ServerIcePlan = {
         iceServers: [{ urls: "turn:turn.example:3478", username: null, credential: null }],
