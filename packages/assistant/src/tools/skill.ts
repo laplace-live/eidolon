@@ -30,6 +30,8 @@ import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES } from "./truncate.ts";
 // As agentskills.io advises, a skill's bundled files are listed for the worker, not read to it.
 const LISTED_FILES = 50;
 const LISTED_DEPTH = 3;
+// Quarter of 128,000 tokens, used when assistant.contextTokens is 0 (the model's own window).
+const DEFAULT_SKILL_BUDGET_TOKENS = 32_000;
 
 /** Whose a skill is, as its SKILL.md's heading says. */
 const WHOSE: Readonly<Record<SkillSource, string>> = {
@@ -178,8 +180,8 @@ export const SKILL_LEFT_TO_LOAD =
 /**
  * A run's skills from `catalog`: what its skill tool loads, and what its prompt carries for each
  * named skill, its SKILL.md as skill answers for it, cut as skill cuts a file. Together they fill
- * at most a quarter of `contextTokens`, the task's context; a skill past that is named with
- * SKILL_LEFT_TO_LOAD.
+ * at most a quarter of `contextTokens` (or 32,000 tokens when `contextTokens` is 0); a skill past
+ * that is named with SKILL_LEFT_TO_LOAD.
  */
 export async function taskSkills(
   catalog: SkillCatalog,
@@ -190,7 +192,7 @@ export async function taskSkills(
   const context: TaskToolContext = { signal: new AbortController().signal, onUpdate: () => {} };
   const requested: RequestedSkill[] = [];
   const unreadable: SkillProblem[] = [];
-  let room = contextTokens / 4;
+  let room = contextTokens > 0 ? contextTokens / 4 : DEFAULT_SKILL_BUDGET_TOKENS;
   for (const skill of catalog.requested) {
     const { content, isError } = await load(skill, guard, { path: SKILL_FILE }, context);
     if (isError) {

@@ -390,3 +390,119 @@ describe("a context overflow", () => {
     expect(mind.requests).toHaveLength(1);
   });
 });
+
+describe("unlimited context (contextTokens: 0)", () => {
+  test("sends past 200,000 tokens without proactive compaction when contextTokens is 0", async () => {
+    const mind = new ScriptedMind(reads(["a", "b", "c", "d", "e"]));
+    const { outcome } = await drain(
+      taskRequest(mind, {
+        tools: [reader(200_000)],
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(mind.summaryRequests).toHaveLength(0);
+    expect(toolMessages(mind.requests[5]).map(([, content]) => content.length)).toEqual([
+      200_000, 200_000, 200_000, 200_000, 200_000,
+    ]);
+  });
+
+  test("remembers the ceiling from an HTTP overflow so later turns compact proactively", async () => {
+    const tooLong = new ProviderHttpError(
+      "anthropic",
+      400,
+      "prompt is too long: 91000 tokens > 80000 maximum",
+    );
+    const mind = new ScriptedMind(
+      [
+        calls([call("c-1", "read", { value: "1" })]),
+        calls([call("c-2", "read", { value: "2" })]),
+        calls([call("c-3", "read", { value: "3" })]),
+        tooLong,
+        calls([call("c-4", "read", { value: "4" })]),
+        calls([call("c-5", "read", { value: "5" })]),
+        says("done"),
+      ],
+      { summaries: [says("SUMMARY-1"), says("SUMMARY-2")] },
+    );
+    const { outcome } = await drain(
+      taskRequest(mind, {
+        tools: [reader(120_000)],
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(mind.summaryRequests).toHaveLength(2);
+    // Request 4 retried after the reactive compaction; request 6 compacted proactively before send.
+    expect(opening(mind.requests[4])).toStartWith(`${SUMMARY_OPENING}SUMMARY-1`);
+    expect(toolMessages(mind.requests[4]).map(([id]) => id)).toEqual(["c-3"]);
+    expect(opening(mind.requests[6])).toStartWith(`${SUMMARY_OPENING}SUMMARY-2`);
+    expect(toolMessages(mind.requests[6]).map(([id]) => id)).toEqual(["c-5"]);
+  });
+
+  test("compacts and remembers the ceiling on model_context_window_exceeded", async () => {
+    const meter = new FakeMeter();
+    let seen = 0;
+    const mind = new ScriptedMind(
+      [
+        calls([call("c-a", "read", { value: "a" })]),
+        calls([call("c-b", "read", { value: "b" })]),
+        calls([call("c-c", "read", { value: "c" })]),
+        [
+          { type: "text", text: "partial" },
+          { type: "done", finishReason: "model_context_window_exceeded" },
+        ],
+        calls([call("c-d", "read", { value: "d" })]),
+        calls([call("c-e", "read", { value: "e" })]),
+        says("done"),
+      ],
+      {
+        summaries: [says("SUMMARY-1"), says("SUMMARY-2")],
+        after: () => {
+          seen++;
+          meter.input = seen === 4 ? 50_000 : null;
+        },
+      },
+    );
+    const { outcome } = await drain(
+      taskRequest(mind, {
+        tools: [reader(40_000)],
+        meter,
+        limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+      }),
+    );
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(mind.summaryRequests).toHaveLength(2);
+    expect(opening(mind.requests[4])).toStartWith(`${SUMMARY_OPENING}SUMMARY-1`);
+    expect(toolMessages(mind.requests[4]).map(([id]) => id)).toEqual(["c-b", "c-c"]);
+    expect(opening(mind.requests[6])).toStartWith(`${SUMMARY_OPENING}SUMMARY-2`);
+    expect(toolMessages(mind.requests[6]).map(([id]) => id)).toEqual(["c-d", "c-e"]);
+  });
+
+  test("scales kept blocks on a small-window overflow with no token count in the error", async () => {
+    const mind = new ScriptedMind(
+      [
+        calls([call("c-a", "read", { value: "a" })]),
+        calls([call("c-b", "read", { value: "b" })]),
+        calls([call("c-c", "read", { value: "c" })]),
+        calls([call("c-d", "read", { value: "d" })]),
+        new ProviderHttpError("provider", 413, "Payload Too Large"),
+        says("done"),
+      ],
+      { summaries: [says("SUMMARY-1")] },
+    );
+    const request = taskRequest(mind, {
+      tools: [reader(8_000)],
+      limits: { contextTokens: 0, spendPauseUsd: 0, maskAfterTokens: 1e9 },
+    });
+    const { outcome } = await drain(request);
+    expect(outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(request.store.of("compaction")).toMatchObject([
+      {
+        summary: "SUMMARY-1",
+        files: { read: ["/tmp/todo/a.txt", "/tmp/todo/b.txt"], written: [] },
+      },
+    ]);
+    expect(toolMessages(mind.requests[5]).map(([id]) => id)).toEqual(["c-c", "c-d"]);
+  });
+});

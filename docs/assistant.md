@@ -427,7 +427,7 @@ and `description` the worker's prompt lists, and whose body and files the worker
   each run's prompt carries each one's `SKILL.md` as `skill` answers for it, cut at 2,000 lines or
   50 KB with where to read on, in `<requested_skills>` after `<skills>`, whether or not the catalog
   lists it, `disable-model-invocation: true` included (`taskSkills`). Together they take at most a
-  quarter of the task's context (`assistant.contextTokens`); one past that is named with a note to
+  quarter of the task's context (`assistant.contextTokens`, or 32,000 tokens while it is 0); one past that is named with a note to
   load it first. `skill` loads the rest of a skill's folder. A start naming a skill switched off,
   or one the owner hasn't, is refused (400 `unknown-skill`), saying which, so she can tell the
   owner; one switched off or gone since the start is left out of the next run, with a warning.
@@ -561,11 +561,14 @@ What it adds to pi:
   `bash`'s points at `bash_output` and the command's id, so the worker doesn't run it again to
   see its output). The boundary moves in steps of
   20,000, so the newest 20,000 to 40,000 tokens stay whole and each request between two steps
-  only adds to the one before, which keeps the provider's prompt cache. Past
-  `assistant.contextTokens` less 16,384 (less a quarter, in a window under 65,536), the older part
-  is compacted into pi's structured summary through the task's own mind, keeping the newest
+  only adds to the one before, which keeps the provider's prompt cache. `assistant.contextTokens`
+  defaults to 0, which leaves the window to the model's own. When a ceiling is set, or learned from
+  an overflow, requests past it less 16,384 (less a quarter, in a window under 65,536) have their
+  older part compacted into pi's structured summary through the task's own mind, keeping the newest
   ~20,000 tokens whole (half the threshold, where that is less); a summary that was cut off or
-  stopped fails the task. A provider's context-overflow error compacts once and retries.
+  stopped fails the task. A provider's context-overflow error or a reply cut off at
+  `model_context_window_exceeded` compacts once, remembers that ceiling for the rest of the run, and
+  retries.
 - **Thinking, on Anthropic,** goes back with a reply only while everything before it is as it
   was ([prefix checks](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/prefix-checks)),
   so a masking step or a compaction drops the thinking of the replies before it.

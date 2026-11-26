@@ -676,8 +676,8 @@ msgid "A table built with another embedding model or size than the settings now 
 msgstr "用与当前设置不同的嵌入模型或维度建立的表无法检索。请重新运行对应的作业。"
 
 #: src/components/settings-form/labels.ts
-msgid "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
-msgstr "任务的花费每越过这个金额的一个整数倍，都会先问过你再继续。单位为美元，0 表示从不询问。默认 1。"
+msgid "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 10."
+msgstr "任务的花费每越过这个金额的一个整数倍，都会先问过你再继续。单位为美元，0 表示从不询问。默认 10。"
 
 #: src/features/settings/new-skill-dialog.tsx
 msgid "A task reads them once it chooses the skill, or from its start when you name the skill to her."
@@ -6143,8 +6143,8 @@ msgid "The model's file wasn't found."
 msgstr "找不到这个模型的文件。"
 
 #: src/components/settings-form/labels.ts
-msgid "The most context a task's requests carry, in tokens. Default 128000."
-msgstr "任务每次请求最多携带的上下文，以 token 计。默认 128000。"
+msgid "The most context a task's requests carry, in tokens. 0 uses the model's full window, compacting when it fills. Default 0."
+msgstr "任务每次请求最多携带的上下文，以 token 计。0 表示使用模型的完整上下文窗口，装满时自动压缩。默认 0。"
 
 #: src/features/jobs/list.tsx
 msgid "The offline work that builds each persona's knowledge. A job keeps running when you close this page."

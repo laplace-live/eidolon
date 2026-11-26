@@ -214,7 +214,7 @@ export function taskRequest<M extends Mind = ScriptedMind>(
     store: new MemoryStore({ type: "brief", brief: BRIEF }),
     inbox: new MemoryInbox(),
     meter: new FakeMeter(),
-    limits: { contextTokens: 128_000, spendPauseUsd: 0 },
+    limits: { contextTokens: 0, spendPauseUsd: 0 },
     compaction: { system: SUMMARY_SYSTEM, instructions: "Summarize the task so far." },
     signal: new AbortController().signal,
     ...overrides,

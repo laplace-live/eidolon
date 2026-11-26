@@ -676,8 +676,8 @@ msgid "A table built with another embedding model or size than the settings now 
 msgstr "A table built with another embedding model or size than the settings now name can't be searched. Run its job again."
 
 #: src/components/settings-form/labels.ts
-msgid "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
-msgstr "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 1."
+msgid "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 10."
+msgstr "A task asks before going on each time its spend crosses another multiple of this, in US dollars. 0 never asks. Default 10."
 
 #: src/features/settings/new-skill-dialog.tsx
 msgid "A task reads them once it chooses the skill, or from its start when you name the skill to her."
@@ -6143,8 +6143,8 @@ msgid "The model's file wasn't found."
 msgstr "The model's file wasn't found."
 
 #: src/components/settings-form/labels.ts
-msgid "The most context a task's requests carry, in tokens. Default 128000."
-msgstr "The most context a task's requests carry, in tokens. Default 128000."
+msgid "The most context a task's requests carry, in tokens. 0 uses the model's full window, compacting when it fills. Default 0."
+msgstr "The most context a task's requests carry, in tokens. 0 uses the model's full window, compacting when it fills. Default 0."
 
 #: src/features/jobs/list.tsx
 msgid "The offline work that builds each persona's knowledge. A job keeps running when you close this page."

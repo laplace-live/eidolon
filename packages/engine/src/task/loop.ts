@@ -34,7 +34,7 @@ import {
   taskContext,
   unfinished,
 } from "./context.ts";
-import { isContextOverflow, isTransient } from "./errors.ts";
+import { isContextOverflow, isTransient, overflowTokens } from "./errors.ts";
 import { echoed, validateToolArguments } from "./validate.ts";
 
 /** The waits before each retry of a request that failed for a transient reason. */
@@ -217,6 +217,7 @@ class TaskRun {
   /** Each turn's calls this run, for stalls. */
   readonly #signatures: string[] = [];
   #spendLimit = Number.POSITIVE_INFINITY;
+  #ceiling: number;
   /** The last request's input as its provider counted it, and as estimated. */
   #counted: { readonly reported: number; readonly estimated: number } | null = null;
 
@@ -225,6 +226,8 @@ class TaskRun {
     this.#emit = emit;
     this.#left = left;
     this.#signal = AbortSignal.any([request.signal, left]);
+    this.#ceiling =
+      request.limits.contextTokens > 0 ? request.limits.contextTokens : Number.POSITIVE_INFINITY;
     this.#fixedTokens =
       estimateTokens(request.system) +
       estimateTokens(JSON.stringify(request.tools.map((tool) => tool.schema)));
@@ -495,7 +498,7 @@ class TaskRun {
   /** The turn's request, compacted first when the context calls for it; a summary may pause it. */
   async #ask(): Promise<Reply | TaskOutcome> {
     let view = this.#view();
-    if (view.sized > compactAbove(this.#request.limits.contextTokens)) {
+    if (Number.isFinite(this.#ceiling) && view.sized > compactAbove(this.#ceiling)) {
       if (await this.#compact(view.sized)) {
         const held = this.#held();
         if (held !== null) return held;
@@ -513,10 +516,23 @@ class TaskRun {
         );
         const reported = this.#request.meter.lastInputTokens();
         this.#counted = reported === null ? null : { reported, estimated: view.tokens };
+        if (reply.finishReason === "model_context_window_exceeded" && !compacted) {
+          const sized = reported !== null && reported > 0 ? reported : view.sized;
+          compacted = true;
+          if (sized > 0) this.#ceiling = Math.min(this.#ceiling, sized);
+          if (await this.#compact(sized)) {
+            const held = this.#held();
+            if (held !== null) return held;
+            view = this.#view();
+            continue;
+          }
+        }
         return reply;
       } catch (error) {
         if (this.#signal.aborted || compacted || !isContextOverflow(error)) throw error;
         compacted = true;
+        const ceiling = overflowTokens(error) ?? view.sized;
+        if (ceiling > 0) this.#ceiling = Math.min(this.#ceiling, ceiling);
         if (!(await this.#compact(view.sized))) throw error;
         const held = this.#held();
         if (held !== null) return held;
@@ -575,7 +591,9 @@ class TaskRun {
    */
   async #compact(tokensBefore: number): Promise<boolean> {
     const context = taskContext(this.#entries);
-    const first = firstKept(context.blocks, keepTokens(this.#request.limits.contextTokens));
+    const window =
+      Number.isFinite(this.#ceiling) && this.#ceiling > 0 ? this.#ceiling : tokensBefore;
+    const first = firstKept(context.blocks, keepTokens(window));
     const kept = context.blocks[first];
     if (first === 0 || kept === undefined) return false;
     const files = filesBefore(this.#entries, kept.seq);

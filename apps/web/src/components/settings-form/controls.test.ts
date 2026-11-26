@@ -458,6 +458,25 @@ describe("Assistant Mode", () => {
   test("its commands are on while nothing sets them, as assistantSettings reads them", () => {
     expect(control("assistant.bash")).toEqual({ type: "flag", fallback: "on" });
   });
+
+  test("its spend pause and context limit accept 0 and positive values and reject negatives", () => {
+    const spend = control("assistant.spendPauseUsd");
+    const context = control("assistant.contextTokens");
+    expect(spend).toEqual({ type: "number", min: 0 });
+    expect(context).toEqual({ type: "integer", min: 0 });
+    expect(parseDraft("0", spend)).toEqual({ ok: true, value: 0 });
+    expect(parseDraft("10.5", spend)).toEqual({ ok: true, value: 10.5 });
+    expect(parseDraft("", spend)).toEqual({ ok: true, value: null });
+    expect(parseDraft("-0.5", spend)).toEqual({ ok: false, error: "settings.form.invalid.min" });
+    expect(parseDraft("0", context)).toEqual({ ok: true, value: 0 });
+    expect(parseDraft("200000", context)).toEqual({ ok: true, value: 200_000 });
+    expect(parseDraft("", context)).toEqual({ ok: true, value: null });
+    expect(parseDraft("-1", context)).toEqual({ ok: false, error: "settings.form.invalid.min" });
+    expect(parseDraft("1.5", context)).toEqual({
+      ok: false,
+      error: "settings.form.invalid.integer",
+    });
+  });
 });
 
 describe("providers and the models they fill", () => {

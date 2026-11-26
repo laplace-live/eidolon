@@ -177,6 +177,7 @@ export interface TaskRequest {
   readonly steeringMode?: "one-at-a-time" | "all";
   readonly followUpMode?: "one-at-a-time" | "all";
   readonly limits: {
+    /** Token ceiling per request; 0 leaves the context window to the model's own. */
     readonly contextTokens: number;
     readonly spendPauseUsd: number;
     /**
