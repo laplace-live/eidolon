@@ -1,10 +1,19 @@
-import type { ChatDisplay, ParticipantId, PermissionLevel, ReplyMode } from "@eidolon/chat";
+import type {
+  ChatDisplay,
+  ChatEvent,
+  ParticipantId,
+  PermissionLevel,
+  ReplyMode,
+} from "@eidolon/chat";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import {
   changeParticipants,
   createChat,
   deleteChat,
+  type LocalChatSummary,
   listChats,
+  markChatRead,
   readChat,
   renameChat,
   setChainLimit,
@@ -15,9 +24,21 @@ import {
 import { toastError } from "@/lib/feedback";
 import { latePoll } from "./stream";
 
+/** Poll the chat list more often while any chat has a turn, upload or call running. */
+export const CHATS_ACTIVE_POLL_MS = 2000;
+export const CHATS_IDLE_POLL_MS = 15_000;
+
+export function chatsPoll(
+  chats: readonly Pick<LocalChatSummary, "active">[] | undefined,
+): number | false {
+  if (chats === undefined) return false;
+  return chats.some((chat) => chat.active) ? CHATS_ACTIVE_POLL_MS : CHATS_IDLE_POLL_MS;
+}
+
 export const chatsQuery = queryOptions({
   queryKey: ["chats"],
   queryFn: ({ signal }) => listChats(signal),
+  refetchInterval: (query) => chatsPoll(query.state.data),
 });
 
 export function chatQuery(id: string) {
@@ -26,6 +47,41 @@ export function chatQuery(id: string) {
     queryFn: ({ signal }) => readChat(id, signal),
     refetchInterval: (query) => latePoll(query.state.data),
   });
+}
+
+/**
+ * Marks chat `id` read up to its latest stored event whenever that seq advances, clearing its
+ * cached unread badge optimistically so switching back never flashes stale counts.
+ */
+export function useMarkRead(id: string, events: readonly ChatEvent[] | undefined): void {
+  const queryClient = useQueryClient();
+  const lastSeq = events?.at(-1)?.seq ?? 0;
+  const marked = useRef({ id, seq: 0 });
+
+  useEffect(() => {
+    const current = marked.current.id === id ? marked.current.seq : 0;
+    if (lastSeq <= current) return;
+    marked.current = { id, seq: lastSeq };
+    const summary = queryClient.getQueryData(chatsQuery.queryKey)?.find((chat) => chat.id === id);
+    if (summary !== undefined && summary.unread === 0 && lastSeq <= summary.lastSeq) return;
+    queryClient.setQueryData(chatsQuery.queryKey, (chats) =>
+      chats?.some((chat) => chat.id === id && chat.unread > 0 && chat.lastSeq <= lastSeq)
+        ? chats.map((chat) => (chat.id === id ? { ...chat, unread: 0 } : chat))
+        : chats,
+    );
+    void markChatRead(id, lastSeq)
+      .then(() => {
+        const now = queryClient.getQueryData(chatsQuery.queryKey)?.find((chat) => chat.id === id);
+        if (now !== undefined && now.unread > 0) {
+          void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
+        }
+      })
+      .catch(() => {
+        if (marked.current.id === id && marked.current.seq === lastSeq) {
+          marked.current = { id, seq: 0 };
+        }
+      });
+  }, [id, lastSeq, queryClient]);
 }
 
 export function useCreateChat(onCreated: (id: string) => void) {

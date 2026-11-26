@@ -67,9 +67,18 @@ export class LineSplitter {
 export async function* readNdjson<T = unknown>(
   body: ReadableStream<Uint8Array>,
   offset = 0,
+  signal?: AbortSignal,
 ): AsyncGenerator<NdjsonRecord<T>> {
+  if (signal?.aborted) {
+    await body.cancel().catch(() => {});
+    return;
+  }
   const splitter = new LineSplitter(offset);
   const reader = body.getReader();
+  const cancel = () => {
+    void reader.cancel().catch(() => {});
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
   try {
     for (let read = await reader.read(); !read.done; read = await reader.read()) {
       for (const line of splitter.push(read.value)) {
@@ -77,6 +86,7 @@ export async function* readNdjson<T = unknown>(
       }
     }
   } finally {
+    signal?.removeEventListener("abort", cancel);
     await reader.cancel().catch(() => {});
   }
 }

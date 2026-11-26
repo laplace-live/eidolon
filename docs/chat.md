@@ -64,7 +64,9 @@ isn't stored, she never saw.
 
 **`ChatSummary`** is what the chat list shows: the title, the participants, `createdAt`,
 `updatedAt`, the last message's text and the last seq. `summarize` derives it from a log, so a
-store can always rebuild it.
+store can always rebuild it. In the local app, `GET chats` returns `LocalChatSummary`, adding
+`unread` (unread persona items past the viewer's watermark in `read.json`) and `active` (whether
+a reply, voice upload, late tool or call runs).
 
 ## Her view: `viewOf`
 
@@ -931,7 +933,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 
 | Method and path (under `/api/local`) | Body | Answer |
 | --- | --- | --- |
-| `GET chats` | | `ChatSummary[]`, newest activity first |
+| `GET chats` | | `LocalChatSummary[]`, newest activity first: each `ChatSummary` plus `unread` (persona items past `<data home>/chats/read.json`, mode 0600) and `active` (a reply, hearing, late tool or call runs) |
 | `POST chats` | `{ participants: [id] }`, 1 to 6 personas, each once | `201 { id }`; one persona's greeting then runs |
 | `GET chats/:id?afterSeq=n` | | `{ header, events, lateTools, hearingRefusal, missingCallKeys, call, groupCall, defaultDisplay, defaultPermissions }`: the events after `afterSeq`; the tools interrupted turns left running; why a voice message can't be heard now, in `POST voice`'s words, or null; while no persona in it can be called for want of a key, the accounts their calls lack one for, as Settings names them, else none; the call on in the chat, `{ id, persona, group? }`, or null; whether its personas can be called together now; and the app's `chats.display` and `assistant.permissions` as the read was made, which the chat follows until a `settings` event of its own sets a `display` or `permissions` |
 | `POST chats/:id/files?filename=` | A file the viewer sends with a line, as it is: a text file as any `text/*` type, UTF-8, at most 1 MB, named by `filename`, or as any other type an image, a PNG, JPEG, WebP or GIF by its bytes, at most 50 MB and 64 megapixels | `201` with its attachment, kept in `files/` by its hash, an image as `normalizeImage` made it, and in no event until a line names it ([The viewer's files](#the-viewers-files)). `415` for bytes that aren't one, `413` past the size, `400` for an empty body |
@@ -939,6 +941,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `409 chat-in-call` during a call, `502 upstream-failed` when hearing fails |
 | `GET chats/:id/live` | | NDJSON of the running reply from its start; during a call, each event the chat stores, from `call-started` until the stream ends after `call-ended`; or `204` while neither runs |
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
+| `POST chats/:id/read` | `{ seq }`, a whole number from 0 | `200 { ok }` and stores the chat's read watermark in `read.json` without changing `updatedAt` |
 | `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 100, `{ replyMode }`, `auto`, `text` or `voice`, `{ display }`, `focus`, `normal` or `verbose`, or `{ permissions }`, `ask`, `auto` or `full`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line; a `display` applies at once, during a call too, whose feed carries it, and starts no turn; `permissions` reaches her tasks there at their next question, and her texts at her next turn, a call's included, and starts no turn |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
 | `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`; stops the chat's live tasks, after any `start_task` still being answered; then removes `chats/<id>/` and nothing else, leaving the tasks' records. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |

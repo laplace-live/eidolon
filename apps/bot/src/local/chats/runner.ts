@@ -15,7 +15,6 @@ import {
   type ChatEventDraft,
   type ChatHeader,
   ChatStoreError,
-  type ChatSummary,
   displayOf,
   MAX_PARTICIPANTS,
   type ParticipantId,
@@ -67,6 +66,7 @@ import type {
   ChatCallInfo,
   ChatContents,
   ChatUpdateRequest,
+  LocalChatSummary,
   StartTaskFinal,
   TaskChat,
   TaskSnapshot,
@@ -92,6 +92,7 @@ import { missingCallKeys } from "./call-keys.ts";
 import { type GroupCallRefusal, groupCallRefusal } from "./group.ts";
 import { HearingFailed, hearingRefusal } from "./hearing.ts";
 import { LiveTurn } from "./live.ts";
+import { ChatReadStore } from "./unread.ts";
 
 type MessageDraft = Extract<ChatEventDraft, { readonly type: "message" }>;
 
@@ -218,6 +219,8 @@ interface Chat {
   appends: Promise<unknown>;
   /** null until read, and after a failed append. */
   lastSeq: number | null;
+  /** Sends, voice uploads and task reports queued or running ahead of `reply`. */
+  sending: number;
   reply: Reply | null;
   /** What a reply stopped by a newer line left unanswered, until the next stored line's answer. */
   owed: readonly OwedLine[];
@@ -342,6 +345,7 @@ class Reply {
 
 export class ChatRunner {
   readonly store: JsonlChatStore;
+  readonly #reads: ChatReadStore;
   readonly #turn: ChatTurn;
   readonly #answer: ChatAnswer;
   readonly #hear: ChatHear;
@@ -362,6 +366,7 @@ export class ChatRunner {
     this.store = new JsonlChatStore(options.root ?? join(dataHome(), "chats"), {
       log: (message) => logger.warning(message),
     });
+    this.#reads = new ChatReadStore(this.store.root, (message) => logger.warning(message));
     this.#turn = options.turn ?? engineTurn;
     this.#answer = options.answer ?? engineAnswer;
     this.#hear = options.hear ?? engineHear;
@@ -369,8 +374,40 @@ export class ChatRunner {
     this.#now = options.now ?? Date.now;
   }
 
-  list(): Promise<ChatSummary[]> {
-    return this.store.list();
+  async list(): Promise<LocalChatSummary[]> {
+    const summaries = await this.store.list();
+    return Promise.all(
+      summaries.map(async (summary) => ({
+        ...summary,
+        unread: await this.#reads.count(summary, async (id, afterSeq) => {
+          try {
+            return (await this.store.read(id, { afterSeq })).events;
+          } catch (error) {
+            if (error instanceof ChatStoreError && error.code === "not-found") return [];
+            throw error;
+          }
+        }),
+        active: this.#isActive(summary.id),
+      })),
+    );
+  }
+
+  /** Marks chat `id` read through `seq`, clamped to its latest stored event. */
+  async markRead(id: string, seq: number): Promise<void> {
+    const summary = await this.store.summary(id);
+    await this.#reads.markRead(id, seq, summary.lastSeq);
+  }
+
+  #isActive(id: string): boolean {
+    const chat = this.#chats.get(id);
+    return (
+      chat !== undefined &&
+      (chat.sending > 0 ||
+        chat.reply !== null ||
+        chat.call !== null ||
+        chat.late.length > 0 ||
+        chat.starts.size > 0)
+    );
   }
 
   async read(id: string, afterSeq?: number): Promise<ChatContents> {
@@ -443,6 +480,7 @@ export class ChatRunner {
       participants,
     };
     await this.store.create(header);
+    await this.#reads.created(header.id);
     const chat = this.#chat(header.id);
     chat.lastSeq = 0;
     const [persona] = participants;
@@ -466,23 +504,25 @@ export class ChatRunner {
     if (final === null || origin === undefined) return;
     const chat = await this.#existing(origin.id);
     if (chat === null) return;
-    // Her turn starts in the same slot, so no viewer line's answer reads the final first.
-    await this.#whenIdle(origin.id, chat, async () => {
-      const stored = await this.#storeFinal(chat, origin, final);
-      if (stored === null) return;
-      const told = final.status !== "cancelled";
-      const { call } = chat;
-      if (call === null) {
-        if (told) await this.#tell(chat, origin);
-      } else if (this.#takesTasks(call, origin.persona)) {
-        const drafts = call.known.has(origin.call) ? stored.slice(-1) : stored;
-        call.known.add(origin.call);
-        call.outside.push({ drafts, ...(told ? { nudge: taskEndedNudge(origin.call) } : {}) });
-        if (told) call.ends.push({ origin, state: "handed" });
-      } else if (told) {
-        call.ends.push({ origin, state: "held" });
-      }
-    });
+    return this.#trackSending(chat, () =>
+      // Her turn starts in the same slot, so no viewer line's answer reads the final first.
+      this.#whenIdle(origin.id, chat, async () => {
+        const stored = await this.#storeFinal(chat, origin, final);
+        if (stored === null) return;
+        const told = final.status !== "cancelled";
+        const { call } = chat;
+        if (call === null) {
+          if (told) await this.#tell(chat, origin);
+        } else if (this.#takesTasks(call, origin.persona)) {
+          const drafts = call.known.has(origin.call) ? stored.slice(-1) : stored;
+          call.known.add(origin.call);
+          call.outside.push({ drafts, ...(told ? { nudge: taskEndedNudge(origin.call) } : {}) });
+          if (told) call.ends.push({ origin, state: "handed" });
+        } else if (told) {
+          call.ends.push({ origin, state: "held" });
+        }
+      }),
+    );
   }
 
   /**
@@ -631,17 +671,19 @@ export class ChatRunner {
    */
   send(id: string, text: string, files: readonly Attachment[] = []): Promise<LiveTurn> {
     const chat = this.#chat(id);
-    return this.#serial(chat, async () => {
-      if (chat.call !== null) throw new ChatInCall();
-      await this.#yield(chat);
-      return this.#answerLine(id, chat, {
-        type: "message",
-        id: newId(),
-        speaker: { kind: "user" },
-        text,
-        ...(files.length > 0 ? { attachments: [...files] } : {}),
-      });
-    });
+    return this.#trackSending(chat, () =>
+      this.#serial(chat, async () => {
+        if (chat.call !== null) throw new ChatInCall();
+        await this.#yield(chat);
+        return this.#answerLine(id, chat, {
+          type: "message",
+          id: newId(),
+          speaker: { kind: "user" },
+          text,
+          ...(files.length > 0 ? { attachments: [...files] } : {}),
+        });
+      }),
+    );
   }
 
   /**
@@ -652,16 +694,18 @@ export class ChatRunner {
    */
   sendVoice(id: string, clip: AudioClip): Promise<LiveTurn> {
     const chat = this.#chat(id);
-    return this.#serial(chat, async () => {
-      // Before the hearing, which bills.
-      if (chat.call !== null) throw new ChatInCall();
-      await this.#yield(chat);
-      const request = { chat: await this.store.read(id), clip, signal: chat.cancel.signal };
-      const message = await this.#hear(request, this.#files(id)).catch((error: unknown) => {
-        throw error instanceof ChatStoreError ? error : new HearingFailed(error);
-      });
-      return this.#answerLine(id, chat, message);
-    });
+    return this.#trackSending(chat, () =>
+      this.#serial(chat, async () => {
+        // Before the hearing, which bills.
+        if (chat.call !== null) throw new ChatInCall();
+        await this.#yield(chat);
+        const request = { chat: await this.store.read(id), clip, signal: chat.cancel.signal };
+        const message = await this.#hear(request, this.#files(id)).catch((error: unknown) => {
+          throw error instanceof ChatStoreError ? error : new HearingFailed(error);
+        });
+        return this.#answerLine(id, chat, message);
+      }),
+    );
   }
 
   /** The running reply of chat `id`, else its call's events, or null while it is idle. */
@@ -867,6 +911,7 @@ export class ChatRunner {
       await chat.appends;
       try {
         await this.store.remove(id);
+        await this.#reads.remove(id);
       } finally {
         if (this.#chats.get(id) === chat) this.#chats.delete(id);
         this.#levels.delete(id);
@@ -889,16 +934,18 @@ export class ChatRunner {
       if (chat.call) void this.#endCall(id, chat, chat.call, "shutdown");
     }
     const endings = [...this.#endings];
-    if (running.length === 0 && endings.length === 0) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([
-      Promise.all([...running.map((reply) => reply.live.ended), ...endings]),
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, STOP_WAIT_MS);
-      }),
-    ]);
-    clearTimeout(timer);
-    for (const reply of running) reply.live.end();
+    if (running.length > 0 || endings.length > 0) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        Promise.all([...running.map((reply) => reply.live.ended), ...endings]),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, STOP_WAIT_MS);
+        }),
+      ]);
+      clearTimeout(timer);
+      for (const reply of running) reply.live.end();
+    }
+    await this.#reads.flush();
   }
 
   #chat(id: string): Chat {
@@ -908,6 +955,7 @@ export class ChatRunner {
         queue: Promise.resolve(),
         appends: Promise.resolve(),
         lastSeq: null,
+        sending: 0,
         reply: null,
         owed: [],
         changing: 0,
@@ -930,6 +978,13 @@ export class ChatRunner {
         mime: attachmentMime(name) as string,
       }),
     };
+  }
+
+  #trackSending<T>(chat: Chat, work: () => Promise<T>): Promise<T> {
+    chat.sending += 1;
+    return work().finally(() => {
+      chat.sending -= 1;
+    });
   }
 
   #serial<T>(chat: Chat, task: () => Promise<T>): Promise<T> {
@@ -956,8 +1011,10 @@ export class ChatRunner {
         if (made.length === 0) return [];
         const lastSeq = chat.lastSeq ?? (await this.store.summary(id)).lastSeq;
         const events = stampEvents(made, lastSeq, Date.now());
+        await this.#reads.beforeAppend(id, lastSeq);
         await this.store.append(id, events);
         chat.lastSeq = lastSeq + events.length;
+        await this.#reads.appended(id, events);
         feed?.push({ type: "events", events });
         return events;
       } catch (error) {

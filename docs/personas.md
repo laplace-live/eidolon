@@ -52,7 +52,8 @@ server at a time ([desktop.md](desktop.md#attaching-to-a-server-already-on-the-d
   bin/eidolon           the CLI as assistant tasks' commands run it, which the local app writes
                         at each start; bin/ leads those commands' PATH (assistant.md)
   locks/                the offline tools' locks, released when their process exits
-  chats/<id>/           the local web app's text chats, 0700: chat.jsonl, meta.json, files/ (chat.md)
+  chats/<id>/           the local web app's text chats, 0700: chat.jsonl, meta.json, files/;
+                        chats/read.json, each chat's read watermark (chat.md)
   tasks/<id>/           assistant tasks' records; tasks/allowed-commands.json, the commands
                         allowed for good from their cards (assistant.md)
   skills/<name>/        the owner's Agent Skills, each a SKILL.md, which tasks may load, besides

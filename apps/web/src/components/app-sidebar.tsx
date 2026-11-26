@@ -3,7 +3,7 @@
 
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpenIcon,
   HouseIcon,
@@ -15,7 +15,7 @@ import {
   SquarePenIcon,
   WorkflowIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { Link, matchRoute, useLocation, useRouter } from "wouter";
 import { AppMark } from "@/components/app-mark";
 import { PersonaSwitcher } from "@/components/persona-switcher";
@@ -35,8 +35,10 @@ import {
 } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 import { NewChatMenu, SidebarChats } from "@/features/chats/chat-list";
+import { chatsQuery } from "@/features/chats/queries";
 import { tasksQuery } from "@/features/tasks/queries";
-import { tasksPoll, waitingCount } from "@/features/tasks/state";
+import { endedSince, tasksPoll, waitingCount } from "@/features/tasks/state";
+import type { TaskStatus } from "@/lib/api";
 import { studioPath } from "@/lib/paths";
 import { statusQuery } from "@/lib/query";
 
@@ -124,6 +126,8 @@ export function AppSidebar() {
   const { t } = useLingui();
   const [pathname] = useLocation();
   const { parser } = useRouter();
+  const queryClient = useQueryClient();
+  const seenTasks = useRef<ReadonlyMap<string, TaskStatus>>(new Map());
   const { isMobile, state } = useSidebar();
   const { data: status } = useQuery(statusQuery);
   const assistant = status?.assistant.enabled === true;
@@ -132,6 +136,14 @@ export function AppSidebar() {
     enabled: assistant,
     refetchInterval: (read) => tasksPoll(read.state.data?.tasks, TASKS_IDLE_POLL_MS),
   }).data?.tasks;
+  // A task that ends starts her report turn in its chat; refresh the list so active polling starts.
+  useEffect(() => {
+    if (tasks === undefined) return;
+    if (endedSince(seenTasks.current, tasks).length > 0) {
+      void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
+    }
+    seenTasks.current = new Map(tasks.map((task) => [task.id, task.status]));
+  }, [tasks, queryClient]);
   // The studio opens on the active persona; it stays lit on any persona's.
   const pages: readonly Page[] = [
     { to: "/", label: t`Home`, icon: <HouseIcon />, end: true },

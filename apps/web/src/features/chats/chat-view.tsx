@@ -52,7 +52,7 @@ import { DISPLAY_CHANGED, DISPLAY_HELP } from "./labels";
 import { ParticipantsMenu } from "./participants";
 import { PermissionsPicker } from "./permissions-picker";
 import { chatWith, shortNameOf, usePersonaOf } from "./persona";
-import { chatQuery, useSetDisplay } from "./queries";
+import { chatQuery, useMarkRead, useSetDisplay } from "./queries";
 import { callOn, type LiveError } from "./stream";
 import { useChat } from "./use-chat";
 import { useDraftFiles } from "./use-draft-files";
@@ -144,6 +144,7 @@ export function ChatView({ id }: { readonly id: string }) {
   // This tab knows of its own call before the server's answer says so.
   const inCall = view.calling || serverCall !== null;
   const events = chat.data?.events;
+  useMarkRead(id, events);
   const tasks = useChatTasks(id, events ?? NO_EVENTS);
   // Another tab's call is followed too, so its lines show and its end frees the composer. During
   // any call in the tab, or the chat's in another tab, her voice messages keep quiet.

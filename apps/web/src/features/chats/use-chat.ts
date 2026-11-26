@@ -109,6 +109,7 @@ export function useChat(
       let ended = false;
       let broke = false;
       let received = false;
+      let sendFailed = false;
       let following = false;
       const carry = () => {
         if (following) return;
@@ -138,17 +139,28 @@ export function useChat(
         }
       } catch (error) {
         broke = !controller.signal.aborted;
-        // Live failing leaves the log as stored, which the refetch below shows.
-        if (key !== null && !controller.signal.aborted) {
-          const { code, message } = asApiError(error);
-          dispatch({ type: "send-failed", key, error: { code, message } });
+        if (key !== null) {
+          sendFailed = true;
+          if (controller.signal.aborted) {
+            toastError(error);
+          } else {
+            const { code, message } = asApiError(error);
+            dispatch({ type: "send-failed", key, error: { code, message } });
+          }
         }
       } finally {
         streams.current.delete(controller);
         if (following) dispatch({ type: "unfollow" });
         if (received) carried.current = Date.now();
       }
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        // A send or live reply left running on the server needs the sidebar list refreshed.
+        if ((key !== null && !sendFailed) || received) {
+          void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
+          void queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey });
+        }
+        return;
+      }
       dispatch({ type: "settled", key, turn: null });
       // The log a turn ends with, and a turn that ended between the page's two requests.
       void reread(queryClient, chatQuery(id).queryKey);

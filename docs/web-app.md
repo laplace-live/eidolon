@@ -246,7 +246,7 @@ server log's line that holds what went wrong, and the app shows it beside the de
 | Jobs | `POST jobs`, `GET jobs`, `GET jobs/:id`, `…/events?after=`, `…/log`, `DELETE jobs/:id`, `POST jobs/:id/resume` | [Jobs](#jobs) |
 | Memories | `GET`, `DELETE memories?persona=` | One persona's memories of you |
 | Usage | `GET usage?from=&to=&persona=` | The usage ledger's spend summed by day, persona, provider, task and model, every persona and provider it knows, and whether it records at all ([providers.md](providers.md#usage-and-cost)) |
-| Chats | `GET`, `POST chats`, `GET`, `PATCH`, `DELETE chats/:id`, `POST chats/:id/messages`, `GET chats/:id/live`, `POST chats/:id/stop`, `POST chats/:id/participants`, `GET chats/:id/files/:name` | [Chats](#chats) |
+| Chats | `GET`, `POST chats`, `GET`, `PATCH`, `DELETE chats/:id`, `POST chats/:id/messages`, `GET chats/:id/live`, `POST chats/:id/stop`, `POST chats/:id/read`, `POST chats/:id/participants`, `GET chats/:id/files/:name` | [Chats](#chats) |
 | Tasks | `GET tasks?chat=`, `GET tasks/:id`, `GET tasks/:id/events?after=`, `POST tasks/:id/approve`, `POST tasks/:id/continue`, `DELETE tasks/:id` | The app's tasks, which she starts in a chat with `start_task`, and the answers and Stop of each one's card; no route starts, steers or deletes a task ([assistant.md](assistant.md#the-routes)) |
 | Commands and MCP | `GET assistant/commands`, `DELETE assistant/commands/:id`, `GET mcp`, `PUT mcp/servers/:name` | The commands tasks run without asking, and taking one back; the MCP servers `mcp.json` gives tasks, never an `env` value or a secret, and turning one on or off or taking back a tool's Always, which only a card adds ([assistant.md](assistant.md#the-routes)) |
 
@@ -562,8 +562,11 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
 - **The page:**
   - The chats are in the sidebar ([The layout](#the-layout)), newest first, each with who it is
     with (her circle avatar alone, or a rounded-square grid of up to nine participants' avatars for
-    a group), its name, its last line and when, and the open chat fills the rest of the window, its
-    lines in a centered column. With none open, `/chats` offers **New Chat**.
+    a group), its name, its last line, when, and a badge (or dot when collapsed) for unread replies
+    that arrive while another view is open; the list polls every 2 s while any chat is active
+    and every 15 s otherwise, and opening a chat marks its latest event read (`POST chats/:id/read`).
+    The open chat fills the rest of the window, its lines in a centered column. With none open,
+    `/chats` offers **New Chat**.
   - **The message box** floats at the foot of the column, with no bar behind it: the lines scroll
     under it and fade out above it, and the waiting bar, the call's dock and a reply that couldn't
     start stack above it, while a call with her model shows its screen over the column in the

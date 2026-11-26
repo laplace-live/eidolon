@@ -131,4 +131,45 @@ describe("readNdjson", () => {
     };
     await expect(read()).rejects.toThrow(SyntaxError);
   });
+
+  test("cancels the body immediately when the signal is already aborted", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(encoder.encode("{}\n"));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const controller = new AbortController();
+    controller.abort();
+    const values = [];
+    for await (const { value } of readNdjson(body, 0, controller.signal)) values.push(value);
+    expect(values).toEqual([]);
+    expect(cancelled).toBe(true);
+  });
+
+  test("stops reading and cancels the body when the signal aborts mid-stream", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('{"a":1}\n'));
+      },
+      pull() {
+        return new Promise(() => {});
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const controller = new AbortController();
+    const values = [];
+    for await (const { value } of readNdjson(body, 0, controller.signal)) {
+      values.push(value);
+      controller.abort();
+    }
+    expect(values).toEqual([{ a: 1 }]);
+    expect(cancelled).toBe(true);
+  });
 });
