@@ -217,15 +217,26 @@ function HerWords({
   );
 }
 
-function HerPhotos({ name, srcs }: { readonly name: string; readonly srcs: readonly string[] }) {
+function HerPhotos({
+  name,
+  srcs,
+  aside,
+}: {
+  readonly name: string;
+  readonly srcs: readonly string[];
+  readonly aside?: ReactNode;
+}) {
   const { t } = useLingui();
   const alt = t`A photo from ${name}`;
   const failed = t`This photo couldn't be loaded`;
   return (
-    <div className="flex flex-wrap gap-2">
-      {srcs.map((src) => (
-        <Photo key={src} src={src} alt={alt} failed={failed} />
-      ))}
+    <div className="flex max-w-full items-end gap-0.5">
+      <div className="flex min-w-0 flex-wrap gap-2">
+        {srcs.map((src) => (
+          <Photo key={src} src={src} alt={alt} failed={failed} />
+        ))}
+      </div>
+      {aside}
     </div>
   );
 }
@@ -262,7 +273,7 @@ function HerBubble({
   /** Said on a call. */
   readonly call?: boolean;
   readonly onRetry?: (() => void) | null;
-  /** Beside her words, or under her photos or voice message. */
+  /** Beside her bubble or photos, or beside a badge when nothing else shows. */
   readonly aside?: ReactNode;
   readonly autoPlay?: boolean;
   readonly onAutoPlayEnd?: AutoPlayEnd;
@@ -273,11 +284,12 @@ function HerBubble({
     () => parseMarkup(shown).map((token) => ({ ...token, pending: false })),
     [shown],
   );
-  const asideBelow = shown === "" || voice !== null;
+  const photoAside = voice === null && shown === "";
+  const asideBelow = photoAside && images.length === 0;
   return (
     <div className="flex flex-col items-start gap-1.5">
       {voice !== null && (
-        <div className="flex max-w-[80%] flex-col items-start">
+        <div className="max-w-[80%]">
           <VoiceBubble
             src={chatFilePath(chatId, voice.name)}
             durationMs={voice.durationMs ?? null}
@@ -287,6 +299,7 @@ function HerBubble({
             autoPlay={autoPlay}
             onAutoPlayEnd={onAutoPlayEnd}
             fact={fact}
+            aside={aside}
           />
         </div>
       )}
@@ -294,7 +307,11 @@ function HerBubble({
         <HerWords name={name} runs={runs} call={call} aside={aside} />
       )}
       {images.length > 0 && (
-        <HerPhotos name={name} srcs={images.map((image) => chatFilePath(chatId, image.name))} />
+        <HerPhotos
+          name={name}
+          srcs={images.map((image) => chatFilePath(chatId, image.name))}
+          aside={photoAside ? aside : undefined}
+        />
       )}
       {(interrupted || cutOff || sentAsText || (asideBelow && aside)) && (
         <div className="flex items-center gap-1">
