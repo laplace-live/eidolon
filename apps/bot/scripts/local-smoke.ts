@@ -396,7 +396,7 @@ const DISPLAY_TOLD = {
   normal: "Normal is on for this chat",
   verbose: "Verbose is on for this chat",
 } as const;
-/** What a greeting's request ends on, Mem0 being off. */
+/** What a greeting's request starts on (before any recalled memories). */
 const GREETING_KICKOFF = "用一两句话简短自然地打个招呼。";
 /**
  * On a call in the task's chat: her greeting, the viewer's line the fake hearing hears, the task
@@ -1119,6 +1119,24 @@ async function fakeEmbeddings(key: string, places: TaskPlaces) {
       if (refused !== null) return refused;
       if (route === "POST /v1/chat/completions") {
         const body = (await request.json()) as ChatRequest;
+        if (
+          (body as { response_format?: { type?: unknown } }).response_format?.type === "json_object"
+        ) {
+          return Response.json({
+            id: "chatcmpl-mem0",
+            object: "chat.completion",
+            created: 0,
+            model: String(body.model ?? "fake"),
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: '{"facts":[],"memory":[]}' },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          });
+        }
         if (WORKER_MODELS.has(String(body.model)) && systemOf(body).startsWith(REVIEW_LEAD)) {
           seen.reviews.push(body);
           return reviewAnswer(body);
@@ -3510,9 +3528,10 @@ async function chatCallWalk(walk: Walk): Promise<void> {
       viewport !== null &&
       Math.abs(barBox.y + barBox.height - viewport.height) <= 1;
     const setupLinks = await page.locator('a[href^="/setup"]').count();
-    const memory = page.getByRole("button", { name: t("en", "Turn On Memory"), exact: true });
-    const memoryWaits =
-      (await shows(memory, 5_000)) && (await memory.getAttribute("aria-disabled")) === "true";
+    const memoryOn = await shows(
+      page.getByText(t("en", "On: she remembers you from one call to the next."), { exact: true }),
+      5_000,
+    );
     const held = (await (await walk.api("GET", `/api/local/chats/${id}`)).json()) as ChatContents;
     const stillHeld =
       held.call !== null &&
@@ -3587,7 +3606,7 @@ async function chatCallWalk(walk: Walk): Promise<void> {
         barHolds &&
         atFoot &&
         setupLinks === 0 &&
-        memoryWaits &&
+        memoryOn &&
         stillHeld &&
         switchWaits &&
         otherWaits &&
@@ -3602,8 +3621,8 @@ async function chatCallWalk(walk: Walk): Promise<void> {
       `on Home the call bar ${barShown ? "showed" : "never showed"} ` +
         `${barHolds ? "with" : "WITHOUT"} Hang Up and Return to Call, its foot ` +
         `${atFoot ? "at" : `NOT at (${JSON.stringify(barBox)} in ${JSON.stringify(viewport)})`} ` +
-        `the window's; Home held ${setupLinks} link(s) into setup, and Turn On Memory ` +
-        `${memoryWaits ? "waited" : "didn't wait"}; GET chats/:id ` +
+        `the window's; Home held ${setupLinks} link(s) into setup, and Home showed memory ` +
+        `${memoryOn ? "on" : "NOT on"}; GET chats/:id ` +
         `${stillHeld ? "still held the call" : `said ${JSON.stringify(held.call)}`}; ${switcher}; ` +
         `another chat's Call ${otherWaits ? "waited" : "didn't wait"}, its text box ` +
         `${otherTypes ? "took text" : "didn't"}, beside ${recorders} voice-message button(s); ` +

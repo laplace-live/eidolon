@@ -25,15 +25,16 @@ checkout boots without them.
 ```bash
 pnpm install
 cp .env.example .env          # fill in SONIOX_API_KEY, OPENROUTER_API_KEY, FISH_API_KEY, FISH_VOICE_ID...
-                              # optional: set MEM0_ENABLED=true to enable local viewer memory
+                              # optional: set MEM0_ENABLED=false to turn off local viewer memory
 pnpm dev                      # watch mode on :7860 (--port to move it); `pnpm start` without watch
 ```
 
 Mem0 runs in-process over a local Zvec collection (`MEM0_DIR`, default `<data home>/mem0/vectors`)
-with no external vector database container. Set `MEM0_ENABLED=true` to turn viewer memory on and
-`MEM0_ENABLED=false` to turn it off explicitly; leaving `MEM0_ENABLED` blank also keeps memory off
-unless a legacy `MEM0_QDRANT_HOST` is set (in which case the first boot migrates existing Qdrant
-points matching `EMBED_DIM` into Zvec).
+with no external vector database container. Viewer memory is on by default (`MEM0_ENABLED=true`);
+set `MEM0_ENABLED=false` (or `memory.enabled: false` in `settings.yaml`) to turn it off explicitly.
+When `MEM0_ENABLED` is unset in the environment and a legacy `MEM0_QDRANT_HOST` is set, memory
+stays enabled even over `memory.enabled: false` in `settings.yaml` and the first boot migrates
+existing Qdrant points matching `EMBED_DIM` into Zvec.
 
 The production bot serves no UI. LAPLACE's `/ai` page accepts a custom backend URL such as
 `http://localhost:7860`, while the local web app (`pnpm app`) is a separate entry point

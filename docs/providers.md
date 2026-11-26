@@ -57,9 +57,9 @@ it offers, beside that kind's others, and a line in each kind's table; chat need
 | transcription | `transcription.provider`, `.model` | `TRANSCRIBE_PROVIDER`, `TRANSCRIBE_MODEL` | Soniox `stt-async-v6` | jobs |
 | refine | `refine.provider`, `.model` | `REFINE_PROVIDER`, `REFINE_MODEL` | OpenRouter `~google/gemini-pro-latest` | jobs |
 | embeddings | `embeddings.provider`, `.model` (app-wide) | `EMBED_PROVIDER`, `EMBED_MODEL` | OpenRouter `google/gemini-embedding-2-preview` | jobs, calls, MCP |
-| assistant | `assistant.provider`, `.model` (app-wide) | `ASSISTANT_PROVIDER`, `ASSISTANT_MODEL` | off | tasks |
+| assistant | `assistant.provider`, `.model` (app-wide) | `ASSISTANT_PROVIDER`, `ASSISTANT_MODEL` | OpenRouter `~google/gemini-flash-latest` | tasks |
 | assistant-quick, -coding, -research | `assistant.quick.provider`, `.model`, and `.coding`'s and `.research`'s (app-wide) | `ASSISTANT_QUICK_PROVIDER`, `ASSISTANT_QUICK_MODEL`, and `_CODING_`'s and `_RESEARCH_`'s | the assistant's | tasks of that kind |
-| search | `assistant.search.provider`, `.model` (app-wide) | `ASSISTANT_SEARCH_PROVIDER`, `ASSISTANT_SEARCH_MODEL` | off; OpenRouter `exa` once its account is picked | a task's `web_search` |
+| search | `assistant.search.provider`, `.model` (app-wide) | `ASSISTANT_SEARCH_PROVIDER`, `ASSISTANT_SEARCH_MODEL` | OpenRouter `exa` | a task's `web_search` |
 
 The local app's setup wizard requires the mind, which every chat needs, recommends hearing and
 voice, which calls need, and offers the optional embeddings and gate; for a persona on a realtime
@@ -75,19 +75,19 @@ Memory follows the mind: unset, it uses her chat account, and her chat model whi
 accounts' providers match, as `modelFor` resolves it. Embeddings are app-wide, because every
 persona's index and the memory collection share one vector space.
 
-The assistant runs the tasks of Assistant Mode, app-wide. It has no default provider and no
-default model, whatever the provider: its tasks stay off until both are named, and her chat
-model is never the fallback.
+The assistant runs the tasks of Assistant Mode, app-wide. It defaults to OpenRouter and each
+provider's default model (`~google/gemini-flash-latest` on OpenRouter; providers without one need
+`ASSISTANT_MODEL`), and her chat model is never the fallback.
 
 The task kinds follow the assistant as memory follows the mind (`follows: "assistant"`): a kind
 with nothing set runs on the assistant's account and model, a model alone on the assistant's
 account, another account of the assistant's provider its model too, and an account of another
-provider takes a model of its own. `selectTask(kind)` (`resolve.ts`) picks a task's at its start,
-and when a kind's own can't run (another provider's account without a model, an
-account with no key, one Eidolon doesn't know), it returns the assistant's with the reason as
-`fallback`; `other`, and no kind, are the assistant's own. It throws as `select` does when the
-assistant can't run either. Each kind's usage is recorded as role `assistant`
-([assistant.md](assistant.md#kinds)).
+provider takes its own model or, unset, that provider's default model. `selectTask(kind)`
+(`resolve.ts`) picks a task's at its start, and when a kind's own can't run (a modelless
+provider's account without a model, an account with no key, one Eidolon doesn't know), it returns
+the assistant's with the reason as `fallback`; `other`, and no kind, are the assistant's own. It
+throws as `select` does when the assistant can't run either. Each kind's usage is recorded as role
+`assistant` ([assistant.md](assistant.md#kinds)).
 
 Search is a category of its own, `search`, with one role: tasks' `web_search`. Its only offer is
 OpenRouter's `openrouter:web_search` server tool, closed to the engine `exa` at $7 per 1,000

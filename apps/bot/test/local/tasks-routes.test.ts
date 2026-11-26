@@ -868,7 +868,7 @@ describe("GET status", () => {
       ready: true,
       problem: null,
       running: 1,
-      search: { on: false, problem: null },
+      search: { on: true, problem: null },
       kinds: { quick: null, coding: null, research: null },
     });
     open.resolve();

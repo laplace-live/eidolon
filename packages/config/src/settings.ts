@@ -191,7 +191,9 @@ export const SETTINGS: readonly SettingField[] = [
   field("app", "sources.cookiesFile", "YT_DLP_COOKIES", "path", "Cookies file"),
   field("app", "usage.db", "EIDOLON_USAGE_DB", "path", "Usage ledger"),
   field("app", "assistant.enabled", "ASSISTANT_ENABLED", "flag", "Assistant Mode"),
-  field("app", "assistant.provider", "ASSISTANT_PROVIDER", "string", "Assistant provider"),
+  field("app", "assistant.provider", "ASSISTANT_PROVIDER", "string", "Assistant provider", {
+    default: "openrouter",
+  }),
   field("app", "assistant.model", "ASSISTANT_MODEL", "string", "Assistant model", {
     provider: "ASSISTANT_PROVIDER",
   }),
@@ -250,6 +252,7 @@ export const SETTINGS: readonly SettingField[] = [
     "ASSISTANT_SEARCH_PROVIDER",
     "string",
     "Web search provider",
+    { default: "openrouter" },
   ),
   field("app", "assistant.search.model", "ASSISTANT_SEARCH_MODEL", "string", "Web search engine", {
     provider: "ASSISTANT_SEARCH_PROVIDER",

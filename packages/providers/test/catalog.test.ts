@@ -78,12 +78,12 @@ describe("the catalog", () => {
     }
   });
 
-  test("web search is an app role, off until an account is picked, and OpenRouter's one engine is Exa, priced per 1,000 searches", () => {
+  test("web search is an app role defaulting to OpenRouter, and OpenRouter's one engine is Exa, priced per 1,000 searches", () => {
     expect(roleById("search")).toMatchObject({
       category: "search",
       scope: "app",
       path: "assistant.search",
-      defaultProvider: null,
+      defaultProvider: "openrouter",
     });
     expect(providersFor("search").map((provider) => provider.id)).toEqual(["openrouter"]);
     const offer = providerById("openrouter")?.offers.search;
@@ -94,6 +94,10 @@ describe("the catalog", () => {
   });
 
   test("each task kind but other has an app role of its own, following the assistant's, and no other role does", () => {
+    expect(roleById("assistant")).toMatchObject({
+      defaultProvider: "openrouter",
+    });
+    expect(roleById("assistant").defaultModels).toBeUndefined();
     const kinds = TASK_KINDS.filter((kind) => kind !== "other");
     expect(taskRoleId("other")).toBe("assistant");
     for (const kind of kinds) {
@@ -103,9 +107,9 @@ describe("the catalog", () => {
         scope: "app",
         path: `assistant.${kind}`,
         defaultProvider: null,
-        defaultModels: null,
         follows: "assistant",
       });
+      expect(roleById(taskRoleId(kind)).defaultModels).toBeUndefined();
     }
     const following = ROLES.filter((role) => role.follows === "assistant").map((role) => role.id);
     expect(following).toEqual(kinds.map(taskRoleId));

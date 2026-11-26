@@ -31,10 +31,15 @@ export function callNeeds(role: RoleId): boolean {
 }
 
 /**
- * Optional roles the step doesn't pick for, whose accounts it still lists keys for, with what each
- * goes without: they run on the accounts her settings name.
+ * Optional roles the step doesn't pick for, whose accounts it still lists keys for: they run on
+ * the accounts her settings name (or their defaults).
  */
-export const RIDERS = ["rerank", "selfie"] as const satisfies readonly RoleId[];
+export const RIDERS = [
+  "rerank",
+  "selfie",
+  "assistant",
+  "search",
+] as const satisfies readonly RoleId[];
 
 export interface Choice {
   /** The account it names; a provider's id names its default account. */

@@ -175,15 +175,21 @@ export function KeysStep({ onDone }: { readonly onDone: () => void }) {
   const required = picks.filter((role) => callNeeds(role) && !RECOMMENDED_ROLES.has(role));
   const recommended = picks.filter((role) => RECOMMENDED_ROLES.has(role));
   const optional = picks.filter((role) => !callNeeds(role));
-  // Reranking, unless she turned it off, and selfies, once she has an outfit to draw.
-  const riders = RIDERS.filter((role) =>
-    role === "rerank"
-      ? flagOn(
-          rows.find((row) => row.path === "knowledge.rerank.enabled"),
-          true,
-        )
-      : (status.data?.selfieReferences ?? 0) > 0,
+  const assistantOn = flagOn(
+    rows.find((row) => row.path === "assistant.enabled"),
+    true,
   );
+  // Reranking and assistant roles unless switched off, and selfies once she has an outfit to draw.
+  const riders = RIDERS.filter((role) => {
+    if (role === "rerank") {
+      return flagOn(
+        rows.find((row) => row.path === "knowledge.rerank.enabled"),
+        true,
+      );
+    }
+    if (role === "selfie") return (status.data?.selfieReferences ?? 0) > 0;
+    return assistantOn;
+  });
   const picked: Picked[] = [
     ...(realtime === null ? [] : [{ role: "realtime" as const, account: realtime, call: true }]),
     // In the order the step shows them, so the keys a chat needs come first.

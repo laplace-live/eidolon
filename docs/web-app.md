@@ -331,8 +331,10 @@ them and place no call, a chat's microphone is off, and her replies are text.
   Settings → Providers has. An OpenAI-compatible
   endpoint is listed once an account of it has an API base, and a pick with no default model asks
   for one. A role whose provider or model the environment sets is locked, naming the variable:
-  the environment's model would go to whichever provider took the role. Then it asks for one key per account the picks name, and the accounts her reranking
-  (unless turned off) and selfies (once she has an outfit) run on, saying what each is used for:
+  the environment's model would go to whichever provider took the role. Then it asks for one key per
+  account the picks name, and the accounts her reranking (unless turned off), Assistant Mode and
+  web search (unless turned off) and selfies (once she has an outfit) run on, saying what each is
+  used for:
   an account her mind uses is required, and listed first; one only her hearing or voice uses is
   recommended, and says calls can't start without it; any other is optional and says what stays
   off without it. Ollama takes no key and MiniMax also takes its group id. Saving writes the picks to her
@@ -363,9 +365,10 @@ active persona remembers and forgets it on request, through `GET` and
 `DELETE /api/local/memories?persona=<id>`; other personas keep theirs.
 
 Memory runs in-process over a local Zvec collection (`memory.dir`, default `mem0/vectors` in the
-data home); without it calls run without memory. The wizard's memory step (`/setup?step=memory`)
-turns `memory.enabled` on or skips it, with no external container or port to run. Turning memory on
-or off needs no restart: the next call or chat turn reads the saved setting.
+data home); viewer memory is on by default (`memory.enabled`, `MEM0_ENABLED`). The wizard's memory
+step (`/setup?step=memory`) lets you keep it on or turn `memory.enabled` off (or turn it back on),
+with no external container or port to run. Turning memory on or off needs no restart: the next call
+or chat turn reads the saved setting.
 
 ## The layout
 
@@ -878,9 +881,9 @@ tools.
   - There is no New Task, no button and no steps. While the mode is on but not ready, the problem
     shows above the rows, with **Open Settings**; while it is off, `/tasks` leads home.
   - The nav polls the list, every 2 s while a task runs, 5 s while one waits and 30 s otherwise.
-- **Settings → Assistant Mode** holds the switch, the account and model (the role's picker),
-  **Web Search Provider** and **Web Search Engine** ("Off: No Web Search" until an OpenRouter
-  account is picked, then `exa`, with "Web search is off: …" while the chosen one can't search),
+- **Settings → Assistant Mode** holds the switch, the account and model (the role's picker,
+  default OpenRouter), **Web Search Provider** and **Web Search Engine** (default OpenRouter `exa`,
+  with "Web search is off: …" while the account can't search),
   the folders (full paths, never `/` or `~`; PUT settings also refuses, 400 `invalid-setting` with
   `GrantRefused`'s reason, any folder that is or holds home on disk, such as `/Users/<you>`,
   `/Users`, `~/.` or `~/..`; in the desktop app **Choose Folder** adds one from its folder dialog,
@@ -892,8 +895,8 @@ tools.
   them."), and asks anyway when the list can't be read. Web Access's help on a start's card says a
   task may search without asking while search is on, and No Web's that each MCP call asks. Three
   cards follow it, whose buttons act at once:
-  - **Models by Kind**: an account and model for quick, coding and research tasks, each "Same as
-    Assistant Tasks" until set, and for a kind that falls back, why
+  - **Models by Kind**: an account and model for quick, coding and research tasks, each
+    "Same as Assistant Tasks (…)" until set, and for a kind that falls back, why
     (`features/settings/assistant.tsx`);
   - **Allowed Commands**: each command allowed for good, escaped in its box with its size, with its
     folder and **Remove** (`commands-card.tsx`); the help says what sets the grants aside: a page
@@ -1251,8 +1254,8 @@ milky-green, whose template needs no index: recall is simply off. It checks:
   after Hang up;
 
 then prints the transcript and each turn's stages (LLM runs, tool calls, speech, audio, the
-picture) timed from the turn's start. When `MEM0_ENABLED` is on, the call is remembered like
-any other: as the local viewer's, for that persona.
+picture) timed from the turn's start. Unless `MEM0_ENABLED` is turned off, the call is remembered
+like any other: as the local viewer's, for that persona.
 
 **Which checks.** `--call` is paid and uses the real keys in the `.env`: about one short call to
 Soniox, OpenRouter and Fish, and `--selfie` adds one image. Run it after changing the call page

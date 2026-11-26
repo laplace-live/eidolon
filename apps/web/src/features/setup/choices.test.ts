@@ -276,6 +276,8 @@ describe("the keys the picks need", () => {
       "gate",
       "rerank",
       "selfie",
+      "assistant",
+      "search",
     ]);
   });
 

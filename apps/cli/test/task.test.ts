@@ -1043,13 +1043,16 @@ describe("laplace-task", () => {
     acquireLock(`task:${id}`, "probe")();
   });
 
-  test("with no assistant model and no --model, it exits 2 saying how to choose one", async () => {
+  test("with no assistant model and no --model, it defaults to OpenRouter; a modelless provider exits 1 before anything is made", async () => {
     const mind = scripted([says("Done.")]);
-    for (const env of [
-      { ASSISTANT_PROVIDER: undefined, ASSISTANT_MODEL: undefined },
-      { ASSISTANT_PROVIDER: "openrouter", ASSISTANT_MODEL: " " },
-      { ASSISTANT_PROVIDER: undefined, ASSISTANT_MODEL: "test/model" },
-    ]) {
+    for (const [env, expected] of [
+      [
+        { ASSISTANT_PROVIDER: undefined, ASSISTANT_MODEL: undefined },
+        "~google/gemini-flash-latest",
+      ],
+      [{ ASSISTANT_PROVIDER: "openrouter", ASSISTANT_MODEL: " " }, "~google/gemini-flash-latest"],
+      [{ ASSISTANT_PROVIDER: undefined, ASSISTANT_MODEL: "test/model" }, "test/model"],
+    ] as const) {
       const restore = setEnv(env);
       try {
         const io = captureIo();
@@ -1058,19 +1061,37 @@ describe("laplace-task", () => {
           createMind: mind.createMind,
           confirm: null,
         });
-        expect([env, code]).toEqual([env, 2]);
-        expect(io.stderr()).toStartWith("usage: laplace-task ");
-        expect(io.stderr()).toContain(
-          "laplace-task: error: no model to run the task on: pass --model ACCOUNT/MODEL, or " +
-            "choose the assistant's account and model under Assistant Mode in the app's Settings",
-        );
+        expect([env, code]).toEqual([env, 0]);
+        expect(mind.made.at(-1)?.options).toMatchObject({ account: "openrouter", model: expected });
       } finally {
         restore();
+        rmSync(tasksDir(), { recursive: true, force: true });
       }
     }
-    expect(mind.made).toEqual([]);
-    expect(existsSync(folder)).toBe(false);
-    expect(existsSync(tasksDir())).toBe(false);
+
+    const modelless = setEnv({
+      ASSISTANT_PROVIDER: "openai-compatible",
+      ASSISTANT_MODEL: undefined,
+    });
+    const countBefore = mind.made.length;
+    try {
+      const io = captureIo();
+      const code = await taskMain(["--folder", join(work, "nope"), "Write hello.txt"], {
+        ...io.io,
+        createMind: mind.createMind,
+        confirm: null,
+      });
+      expect(code).toBe(1);
+      expect(logs.records).toContainEqual([
+        "ERROR",
+        "OpenAI-compatible endpoint needs a model: set ASSISTANT_MODEL",
+      ]);
+      expect(existsSync(join(work, "nope"))).toBe(false);
+      expect(existsSync(tasksDir())).toBe(false);
+      expect(mind.made).toHaveLength(countBefore);
+    } finally {
+      modelless();
+    }
 
     // --model chooses for itself, split at its first slash.
     const restore = setEnv({ ASSISTANT_PROVIDER: undefined, ASSISTANT_MODEL: undefined });
@@ -1084,7 +1105,7 @@ describe("laplace-task", () => {
     } finally {
       restore();
     }
-    expect(mind.made[0]?.options).toMatchObject({
+    expect(mind.made.at(-1)?.options).toMatchObject({
       account: "openrouter",
       model: "anthropic/claude-sonnet-5.5",
     });
@@ -1489,8 +1510,8 @@ describe("parseTaskArgs", () => {
     );
     expect(help).toContain(
       "  --web {any,off}       Whether the task may fetch web pages, from any site,\n" +
-        "                        and search the web once assistant.search.provider\n" +
-        "                        is set (default: off; with --resume, the task's own)\n",
+        "                        and search the web with assistant.search.provider\n" +
+        "                        (default: off; with --resume, the task's own)\n",
     );
     expect(help).toContain("Assistant Mode (assistant.enabled) governs the local app");
     expect(help).toContain("It exits 0 when the task succeeded, 1 when it failed, 3 when it");

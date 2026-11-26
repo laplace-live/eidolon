@@ -101,7 +101,7 @@ describe("the control for each kind", () => {
     expect(control("prompt")).toEqual({ type: "path", inPersona: true });
     expect(control("memory.historyDb")).toEqual({ type: "path", inPersona: false });
     expect(control("memory.dir")).toEqual({ type: "path", inPersona: false });
-    expect(control("memory.enabled")).toEqual({ type: "flag", fallback: "off" });
+    expect(control("memory.enabled")).toEqual({ type: "flag", fallback: "on" });
     expect(control("selfie.references")).toEqual({ type: "paths", inPersona: true });
     // A provider's API base shows the one it uses while unset.
     expect(control("providers.openai.baseUrl")).toEqual({
@@ -508,8 +508,11 @@ describe("providers and the models they fill", () => {
     const coding = roleById("assistant-coding");
     expect(control("assistant.coding.provider")).toEqual({ type: "provider", role: coding });
     expect(control("assistant.coding.model")).toEqual({ type: "model", role: coding });
-    // Nothing set anywhere: no task runs, the kind's included.
-    expect(effectiveProvider(coding, rows({}), {})).toBeNull();
+    // Nothing set anywhere: follows assistant, which defaults to OpenRouter.
+    expect(effectiveProvider(coding, rows({}), {})).toBe("openrouter");
+    expect(effectiveModel(coding, rows({}), {}, [])).toBe(
+      defaultModel(roleById("assistant"), "openrouter"),
+    );
     const assistant = rows({
       "assistant.provider": "openrouter",
       "assistant.model": "anthropic/claude-sonnet-5.5",
@@ -519,30 +522,43 @@ describe("providers and the models they fill", () => {
     // A model alone runs on the assistant's account.
     const own = { "assistant.coding.model": "openai/gpt-6" };
     expect(effectiveModel(coding, assistant, own, [])).toBe("openai/gpt-6");
-    // On another provider's account, the assistant's model isn't one it serves: it names its own.
+    // On another provider's account with no model named, it uses that provider's default model.
     const elsewhere = { "assistant.coding.provider": "anthropic" };
     expect(effectiveProvider(coding, assistant, elsewhere)).toBe("anthropic");
-    expect(effectiveModel(coding, assistant, elsewhere, [])).toBeNull();
+    expect(effectiveModel(coding, assistant, elsewhere, [])).toBe(
+      defaultModel(coding, "anthropic"),
+    );
+    expect(
+      effectiveModel(coding, assistant, { "assistant.coding.provider": "openai-compatible" }, []),
+    ).toBeNull();
   });
 
-  test("web search is off until an account is chosen, and takes the offer's engine while none is named", () => {
+  test("web search defaults to OpenRouter, and takes the offer's engine while none is named", () => {
     const search = roleById("search");
     expect(control("assistant.search.provider")).toEqual({ type: "provider", role: search });
     expect(control("assistant.search.model")).toEqual({ type: "model", role: search });
-    expect(effectiveProvider(search, rows({ "assistant.provider": "openrouter" }), {})).toBeNull();
+    expect(effectiveProvider(search, rows({ "assistant.provider": "anthropic" }), {})).toBe(
+      "openrouter",
+    );
+    expect(effectiveModel(search, rows({}), {}, [])).toBe("exa");
     const chosen = rows({ "assistant.search.provider": "openrouter" });
     expect(effectiveModel(search, chosen, {}, [])).toBe(defaultModel(search, "openrouter"));
     expect(defaultModel(search, "openrouter")).toBe("exa");
   });
 
-  test("a role's model: its own as the drafts stand, else its fallback; the assistant has none", () => {
+  test("a role's model: its own as the drafts stand, else its provider's default", () => {
     const assistant = roleById("assistant");
     expect(effectiveModel(assistant, rows({ "assistant.provider": "openrouter" }), {}, [])).toBe(
-      null,
+      defaultModel(assistant, "openrouter"),
     );
+    expect(
+      effectiveModel(assistant, rows({ "assistant.provider": "openai-compatible" }), {}, []),
+    ).toBeNull();
     const chosen = rows({ "assistant.provider": "openrouter", "assistant.model": "x-ai/grok-5" });
     expect(effectiveModel(assistant, chosen, {}, [])).toBe("x-ai/grok-5");
-    expect(effectiveModel(assistant, chosen, { "assistant.model": "" }, [])).toBeNull();
+    expect(effectiveModel(assistant, chosen, { "assistant.model": "" }, [])).toBe(
+      defaultModel(assistant, "openrouter"),
+    );
     expect(effectiveModel(roleById("mind"), rows({}), {}, [])).toBe(
       defaultModel(roleById("mind"), "openrouter"),
     );

@@ -78,7 +78,7 @@ const BY_PATH: Readonly<Record<string, Control>> = {
   "sources.cookiesFromBrowser": { type: "select", options: COOKIE_BROWSERS },
   "identity.timezone": { type: "timezone" },
   "transcription.language": { type: "language" },
-  "memory.enabled": { type: "flag", fallback: "off" },
+  "memory.enabled": { type: "flag", fallback: "on" },
   "embeddings.dim": { type: "integer", min: 1 },
   "refine.concurrency": { type: "integer", min: 1 },
   "chat.talkativeness": {

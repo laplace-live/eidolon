@@ -614,6 +614,23 @@ export async function startFakes({ replyHoldMs = 2000 }: FakesOptions = {}): Pro
         return;
       case "POST /v1/chat/completions": {
         const chat = sent as ChatRequest;
+        if ((sent.response_format as { type?: unknown } | undefined)?.type === "json_object") {
+          json(response, 200, {
+            id: "chatcmpl-mem0",
+            object: "chat.completion",
+            created: 0,
+            model: typeof chat.model === "string" ? chat.model : "fake-chat",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: '{"facts":[],"memory":[]}' },
+                finish_reason: "stop",
+              },
+            ],
+            usage: UNPRICED,
+          });
+          return;
+        }
         chats.push(chat);
         if (chat.stream === true) {
           await stream(response, chat);

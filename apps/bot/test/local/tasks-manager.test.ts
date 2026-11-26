@@ -3251,7 +3251,7 @@ describe("profiles", () => {
       model: { account: "openrouter", model: "test/model" },
     });
     expect(logs.lines()).toContain(
-      "WARNING A research task runs on the assistant's model: Anthropic needs a model: set ASSISTANT_RESEARCH_MODEL",
+      "WARNING A research task runs on the assistant's model: Anthropic needs an API key: set ANTHROPIC_API_KEY in credentials.json or the environment",
     );
   });
 

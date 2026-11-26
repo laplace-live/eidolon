@@ -146,12 +146,13 @@ Kind card.
   tasks. Until it is ready she has none of her task tools and no hint, Settings and the Tasks list
   show `problem`, and a card's answers but a Deny at its start are refused
   `409 assistant-not-ready`, since each would run the task.
-- **The `assistant` role** ([providers.md](providers.md)) has no default provider and no default
-  model, whatever the provider: tasks stay off until both are named, and her chat model is never
-  the fallback. `createMind("assistant", { account, model })` overrides both for one task, and
-  fails as the settings would, before any request. On Anthropic a task's reply may run to 64,000
-  tokens, thinking included, where her chat's stops at 4,096, so one long `write` fits; elsewhere
-  no cap is sent and the provider's default applies.
+- **The `assistant` role** ([providers.md](providers.md)) defaults to `openrouter` and its
+  provider's default model (`~google/gemini-flash-latest` on OpenRouter; providers without a default
+  model still require `ASSISTANT_MODEL`), and her chat model is never the fallback.
+  `createMind("assistant", { account, model })` overrides both for one task, and fails as the
+  settings would, before any request. On Anthropic a task's reply may run to 64,000 tokens,
+  thinking included, where her chat's stops at 4,096, so one long `write` fits; elsewhere no cap
+  is sent and the provider's default applies.
 - **`assistant.folders`** are granted read-write to every task, besides its own folder. A task she
   starts in one runs at once; anywhere else it asks the owner first, unless its chat's level lets
   it start ([Permission levels](#permission-levels)).
@@ -166,24 +167,25 @@ Kind card.
   now.`). Turning it off kills nothing: a command already running goes on to its end or its
   timeout. Her texts follow it at each turn ([`start_task`](#start_task)).
 - **`assistant.search.provider` and `.model`** are the `search` role ([providers.md](providers.md)):
-  no default provider, so tasks can't search until the owner picks an OpenRouter account; its one
-  engine is `exa`. `GET status`'s `assistant.search` is `{ on, problem }`: `on` once the role has
-  an account with its key, and `problem`, in English, why a chosen one can't search.
+  default `openrouter` and engine `exa`, so tasks can search as soon as the account has a key.
+  `GET status`'s `assistant.search` is `{ on, problem }`: `on` once the role has an account with
+  its key, and `problem`, in English, why the account can't search.
 
 ### Kinds
 
 `start_task` takes the kind of task she says it is, as `profile`: `quick`, `coding`, `research` or
 `other`. Each of the first three is a role of its own (`assistant-quick`, `-coding`, `-research`)
 that follows `assistant`, as memory follows the mind: unset, it runs on the assistant's account and
-model, a model alone runs on the assistant's account, and another account takes its own model.
+model, a model alone runs on the assistant's account, and another provider's account takes its own
+model or, unset, that provider's default model.
 
 - **At the start** the manager picks the account and model with `selectTask(profile)` and stores
   them, with `profile`, in `task.json`; Allow, Continue and a resume keep them, and a model picked
-  on the start's card replaces the model and keeps the kind. A kind whose own can't run (no model
-  on another account, no key, an account Eidolon doesn't know) runs on the assistant's, with a
-  warning naming why (`A coding task runs on the assistant's model: …`), and `GET status`'s
-  `assistant.kinds` carries that reason for each kind while tasks are ready. When the assistant
-  can't run either, the start is refused `409 assistant-not-ready`.
+  on the start's card replaces the model and keeps the kind. A kind whose own can't run (a
+  modelless provider without a model, no key, an account Eidolon doesn't know) runs on the
+  assistant's, with a warning naming why (`A coding task runs on the assistant's model: …`), and
+  `GET status`'s `assistant.kinds` carries that reason for each kind while tasks are ready. When the
+  assistant can't run either, the start is refused `409 assistant-not-ready`.
 - **`other`, a value that is missing or no kind at all,** stores no profile and runs on the
   assistant's own, the last two with a warning: her chat tools aren't checked against their schema,
   and starting the task matters more than where it runs.
@@ -1396,8 +1398,8 @@ Whether a real model follows her hint, her tools' descriptions, the status block
 takes billed checks, after a change to any of them.
 
 **A chat, on OpenRouter,** about $0.20, most of it the worker: Assistant Mode on a model you pick,
-her mind on the model to check, a temporary data home with `EIDOLON_NO_DOTENV=1` and only the
-OpenRouter key exported, so Mem0 stays out. In one chat with milky-green:
+her mind on the model to check, a temporary data home with `EIDOLON_NO_DOTENV=1`, `MEM0_ENABLED=false`
+to keep Mem0 out, and only the OpenRouter key exported. In one chat with milky-green:
 
 1. Ask for a single-file to-do page in a folder outside `assistant.folders`, such as
    `/tmp/c-check/todo`. Her line must say the card asks to start it, not that she is at work.
@@ -1444,9 +1446,10 @@ pnpm laplace-task --folder <path> [--allow <path>]... [--web any|off] \
 pnpm laplace-task --resume <id> [--model <account>/<model>] [--web any|off] [--json]
 ```
 
-- **One task in the foreground,** on the assistant role's model unless `--model` names another,
-  split at its first slash (`openrouter/anthropic/claude-sonnet-5.5`). With neither, it exits 2
-  saying how to choose one. The npm package runs it as `eidolon task`.
+- **One task in the foreground,** on the assistant role's account and model (OpenRouter
+  `~google/gemini-flash-latest` by default) unless `--model` names another, split at its first slash
+  (`openrouter/anthropic/claude-sonnet-5.5`). It exits 1 before anything is made when the chosen
+  provider lacks a model or key. The npm package runs it as `eidolon task`.
 - **Its folder is made if missing,** once the policy lets a task write there. `--folder`,
   `--allow` and `assistant.folders` are read-write grants; a folder in the data home or the app
   root, one holding home, or a link that leads nowhere, exits 2 before anything is made.
