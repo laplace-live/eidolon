@@ -4,9 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type FunctionComponent, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
-import { Router, type RouterOptions } from "wouter";
+import { Router, type RouterOptions, type SsrContext } from "wouter";
 import { ApiError, type Status } from "@/lib/api";
 import { statusQuery } from "@/lib/query";
+import { mountFakeDom } from "@/test/fake-dom";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 vi.doMock("@lingui/core/macro", linguiMacro);
@@ -15,7 +16,14 @@ vi.doMock("@/components/preferences", () => ({
   LanguageSwitch: () => null,
   ThemeMenu: () => null,
 }));
-const { createSessionStore, SessionGate } = await import("./router");
+vi.doMock("@/components/app-shell", () => ({
+  AppShell: () => {
+    throw new Error("shell boom");
+  },
+  PageLayout: ({ children }: { readonly children?: ReactNode }) => children ?? null,
+  FrameLayout: ({ children }: { readonly children?: ReactNode }) => children ?? null,
+}));
+const { AppRoutes, createSessionStore, SessionGate } = await import("./router");
 const { RouteError } = await import("@/components/route-error");
 
 function statusFixture(keysMissing: boolean): Status {
@@ -54,19 +62,25 @@ function statusFixture(keysMissing: boolean): Status {
   } as unknown as Status;
 }
 
-function renderGate(path: string, client: QueryClient, node: ReactNode): string {
+function renderGate(path: string, client: QueryClient, node: ReactNode) {
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
-  return renderToStaticMarkup(
+  const ssrContext: SsrContext = {};
+  const html = renderToStaticMarkup(
     createElement(
       I18nProvider,
       { i18n },
       createElement(
         QueryClientProvider,
         { client },
-        createElement(Router as FunctionComponent<RouterOptions>, { ssrPath: path }, node),
+        createElement(
+          Router as FunctionComponent<RouterOptions>,
+          { ssrPath: path, ssrContext },
+          node,
+        ),
       ),
     ),
   );
+  return { html, redirectTo: ssrContext.redirectTo };
 }
 
 test("session store primes statusQuery on success and transitions loading -> ready", async () => {
@@ -150,13 +164,29 @@ test("SessionGate renders locked screen, errors, redirects to /setup when keys m
     },
   });
   await lockedStore.revalidate();
-  const lockedHtml = renderGate(
+  const locked = renderGate(
     "/",
     client,
     createElement(SessionGate, { store: lockedStore }, createElement("p", null, "App")),
   );
-  expect(lockedHtml).toContain("Open Eidolon from Your Terminal");
-  expect(lockedHtml).toContain("That link has expired");
+  expect(locked.html).toContain("Open Eidolon from Your Terminal");
+  expect(locked.html).toContain("That link has expired");
+
+  const errorStore = createSessionStore({
+    queryClient: client,
+    exchanged: Promise.resolve(null),
+    fetchStatus: async () => {
+      throw new Error("server down");
+    },
+  });
+  await errorStore.revalidate();
+  const errored = renderGate(
+    "/",
+    client,
+    createElement(SessionGate, { store: errorStore }, createElement("p", null, "App")),
+  );
+  expect(errored.html).toContain("Something went wrong");
+  expect(errored.html).toContain("server down");
 
   const missingKeyStore = createSessionStore({
     queryClient: client,
@@ -164,23 +194,52 @@ test("SessionGate renders locked screen, errors, redirects to /setup when keys m
     fetchStatus: async () => statusFixture(true),
   });
   await missingKeyStore.revalidate();
-  // Redirect renders null instead of the protected children.
-  expect(
-    renderGate(
-      "/",
-      client,
-      createElement(SessionGate, { store: missingKeyStore }, createElement("p", null, "App")),
-    ),
-  ).toBe("");
-  expect(
-    renderGate(
-      "/setup",
-      client,
-      createElement(SessionGate, { store: missingKeyStore }, createElement("p", null, "Wizard")),
-    ),
-  ).toBe("<p>Wizard</p>");
+  const redirected = renderGate(
+    "/",
+    client,
+    createElement(SessionGate, { store: missingKeyStore }, createElement("p", null, "App")),
+  );
+  expect(redirected.html).toBe("");
+  expect(redirected.redirectTo).toBe("/setup");
 
-  expect(renderGate("/missing", client, createElement(RouteError, { status: 404 }))).toContain(
+  const onSetup = renderGate(
+    "/setup",
+    client,
+    createElement(SessionGate, { store: missingKeyStore }, createElement("p", null, "Wizard")),
+  );
+  expect(onSetup.html).toBe("<p>Wizard</p>");
+  expect(onSetup.redirectTo).toBeUndefined();
+
+  expect(renderGate("/missing", client, createElement(RouteError, { status: 404 })).html).toContain(
     "This page doesn&#x27;t exist.",
   );
+});
+
+test("AppRoutes wraps AppShell in RouteBoundary so shell failures render RouteError", async () => {
+  const client = new QueryClient();
+  const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+  const { createBrowserHistory } = await import("@/lib/navigation");
+  const history = createBrowserHistory(null);
+  const mounted = await mountFakeDom(
+    createElement(
+      I18nProvider,
+      { i18n },
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          Router as FunctionComponent<RouterOptions>,
+          { hook: history.hook, searchHook: history.searchHook },
+          createElement(AppRoutes),
+        ),
+      ),
+    ),
+  );
+  try {
+    expect(mounted.container.textContent).toContain("Something went wrong");
+    expect(mounted.container.textContent).toContain("shell boom");
+  } finally {
+    history.dispose();
+    await mounted.unmount();
+  }
 });

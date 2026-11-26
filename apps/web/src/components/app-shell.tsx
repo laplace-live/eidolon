@@ -8,6 +8,7 @@ import { MobileBar } from "@/components/mobile-bar";
 import { RouteBoundary, RouteError } from "@/components/route-error";
 import { TitleStrip } from "@/components/title-strip";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { Spinner } from "@/components/ui/spinner";
 import { BelowTitleStrip } from "@/components/window-drag-strip";
 import { CallBar } from "@/features/call/call-bar";
 import { CallProvider } from "@/features/call/call-provider";
@@ -94,7 +95,15 @@ export function AppShell({ children }: { readonly children?: ReactNode }) {
         >
           <BelowTitleStrip>
             <RouteBoundary fallback={(error) => <RouteError error={error} />}>
-              <Suspense fallback={null}>{children}</Suspense>
+              <Suspense
+                fallback={
+                  <div className="flex min-h-64 items-center justify-center">
+                    <Spinner className="size-6 text-muted-foreground" />
+                  </div>
+                }
+              >
+                {children}
+              </Suspense>
             </RouteBoundary>
           </BelowTitleStrip>
           <CallBar />

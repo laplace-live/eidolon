@@ -70,6 +70,10 @@ export function createBrowserHistory(
   win: BrowserWindow | null = typeof window !== "undefined" ? window : null,
 ): BrowserHistoryController {
   let index = 0;
+  let lastBrowserIdx = 0;
+  let inflightReturn = 0;
+  let restoreTargetIdx: number | null = null;
+  let blockedTargetIdx: number | null = null;
   let pathname = win?.location.pathname ?? "/";
   let search = win?.location.search ?? "";
 
@@ -81,6 +85,7 @@ export function createBrowserHistory(
       const base = isRecord(win.history.state) ? win.history.state : {};
       win.history.replaceState({ ...base, idx: 0 }, "");
     }
+    lastBrowserIdx = index;
   }
 
   const locationListeners = new Set<() => void>();
@@ -132,9 +137,20 @@ export function createBrowserHistory(
   ) => {
     if (win !== null) {
       const replace = options?.replace === true;
-      if (!replace) index += 1;
+      const currentIdx = historyIndex(win.history.state) ?? index;
+      index = replace ? currentIdx : currentIdx + 1;
+      lastBrowserIdx = index;
       const state = { usr: options?.state ?? null, idx: index };
       win.history[replace ? "replaceState" : "pushState"](state, "", href);
+    }
+    allowNextPop = false;
+    inflightReturn = 0;
+    restoreTargetIdx = null;
+    blockedTargetIdx = null;
+    if (unblockPop !== null) {
+      const resolve = unblockPop;
+      unblockPop = null;
+      resolve();
     }
     pathname = nextPath;
     search = nextSearch;
@@ -166,14 +182,40 @@ export function createBrowserHistory(
 
   const onPopState = () => {
     if (win === null) return;
-    if (unblockPop !== null) {
+    const rawIdx = historyIndex(win.history.state);
+
+    if (unblockPop !== null && restoreTargetIdx !== null) {
+      if (rawIdx !== null) {
+        const step = rawIdx - lastBrowserIdx;
+        lastBrowserIdx = rawIdx;
+        if (inflightReturn !== 0 && step !== 0 && Math.sign(step) === Math.sign(inflightReturn)) {
+          inflightReturn =
+            Math.sign(inflightReturn) * Math.max(0, Math.abs(inflightReturn) - Math.abs(step));
+        }
+      }
+      if (rawIdx === restoreTargetIdx && inflightReturn === 0) {
+        const resolve = unblockPop;
+        unblockPop = null;
+        restoreTargetIdx = null;
+        resolve();
+        return;
+      }
+      if (rawIdx !== null && shouldBlock()) {
+        const remaining = restoreTargetIdx - rawIdx - inflightReturn;
+        if (remaining !== 0) {
+          inflightReturn += remaining;
+          win.history.go(remaining);
+        }
+        return;
+      }
+      // Unblocked mid-reversal or an unindexed entry: stop waiting and let traversal finish below.
       const resolve = unblockPop;
       unblockPop = null;
+      restoreTargetIdx = null;
+      inflightReturn = 0;
       resolve();
-      return;
     }
 
-    const rawIdx = historyIndex(win.history.state);
     const delta = rawIdx !== null ? rawIdx - index : null;
     const nextPath = win.location.pathname;
     const nextSearch = win.location.search;
@@ -186,6 +228,10 @@ export function createBrowserHistory(
       shouldBlock()
     ) {
       // Restore the browser's current entry before prompting so TitleStrip Back/Forward stay aligned.
+      lastBrowserIdx = rawIdx!;
+      blockedTargetIdx = rawIdx!;
+      restoreTargetIdx = index;
+      inflightReturn = -delta;
       const restored = new Promise<void>((resolve) => {
         unblockPop = resolve;
       });
@@ -194,10 +240,18 @@ export function createBrowserHistory(
         state: "blocked",
         reset: () => setBlocker(IDLE_BLOCKER),
         proceed: () => {
+          const target = blockedTargetIdx;
           setBlocker({ state: "proceeding" });
           void restored.then(() => {
+            if (target === null) return;
+            const current = historyIndex(win.history.state) ?? index;
+            const step = target - current;
+            if (step === 0) {
+              setBlocker(IDLE_BLOCKER);
+              return;
+            }
             allowNextPop = true;
-            win.history.go(delta);
+            win.history.go(step);
           });
         },
       });
@@ -205,10 +259,13 @@ export function createBrowserHistory(
     }
 
     allowNextPop = false;
+    blockedTargetIdx = null;
     if (rawIdx !== null) {
       index = rawIdx;
+      lastBrowserIdx = rawIdx;
     } else {
       index += 1;
+      lastBrowserIdx = index;
       const base = isRecord(win.history.state) ? win.history.state : {};
       win.history.replaceState({ ...base, idx: index }, "");
     }
@@ -249,6 +306,9 @@ export function createBrowserHistory(
       win?.removeEventListener("popstate", onPopState);
       unblockPop = null;
       allowNextPop = false;
+      inflightReturn = 0;
+      restoreTargetIdx = null;
+      blockedTargetIdx = null;
       locationListeners.clear();
       blockerListeners.clear();
       navigateListeners.clear();

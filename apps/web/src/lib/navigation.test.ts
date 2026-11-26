@@ -47,9 +47,9 @@ function createFakeWindow(initialHref = "http://localhost:7860/", initialState: 
       },
       go(delta = 0) {
         if (delta === 0) return;
-        const next = cursor + delta;
-        if (next < 0 || next >= entries.length) return;
         goQueue = goQueue.then(async () => {
+          const next = cursor + delta;
+          if (next < 0 || next >= entries.length) return;
           cursor = next;
           emit("popstate");
         });
@@ -176,6 +176,54 @@ describe("createBrowserHistory", () => {
     await fake.flush();
     expect(fake.cursor()).toBe(2);
     expect(fake.win.location.pathname).toBe("/personas/milky-green/prompt");
+
+    history.dispose();
+  });
+
+  test("reconciles overlapping popstate traversals and navigate calls while dirty reversal is pending", async () => {
+    const fake = createFakeWindow("eidolon-app://app/");
+    const history = createBrowserHistory(fake.win);
+    history.navigate("/personas/milky-green");
+    history.navigate("/personas/milky-green/prompt");
+    expect(fake.cursor()).toBe(2);
+
+    const id = Symbol("editor");
+    history.setBlockerDirty(id, true);
+
+    // Trigger two rapid Back traversals before the first reversal settles: browser visits 1 then 0,
+    // and restoration must bring both browser cursor and location cleanly back to idx 2.
+    fake.win.history.go(-1);
+    fake.win.history.go(-1);
+    await fake.flush();
+
+    expect(fake.cursor()).toBe(2);
+    expect(fake.win.location.pathname).toBe("/personas/milky-green/prompt");
+    expect(history.getBlocker().state).toBe("blocked");
+
+    // Discard Changes still reaches /personas/milky-green (idx 1).
+    history.getBlocker().proceed?.();
+    await fake.flush();
+    expect(fake.cursor()).toBe(1);
+    expect(fake.win.location.pathname).toBe("/personas/milky-green");
+    expect(history.getBlocker().state).toBe("unblocked");
+
+    // Calling navigate() mid-reversal (while go(+1) restoration is still queued) clears pending
+    // popstate flags cleanly and keeps dirty guards active on later Back steps.
+    history.setBlockerDirty(id, false);
+    history.navigate("/personas/milky-green/prompt");
+    history.setBlockerDirty(id, true);
+    fake.win.history.go(-1);
+    await Promise.resolve();
+    history.setBlockerDirty(id, false);
+    history.navigate("/settings");
+    await fake.flush();
+    expect(fake.win.location.pathname).toBe("/settings");
+
+    history.setBlockerDirty(id, true);
+    fake.win.history.go(-1);
+    await fake.flush();
+    expect(fake.win.location.pathname).toBe("/settings");
+    expect(history.getBlocker().state).toBe("blocked");
 
     history.dispose();
   });

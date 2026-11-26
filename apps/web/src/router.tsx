@@ -180,7 +180,7 @@ export function SessionGate({
   return children ?? null;
 }
 
-function AppRoutes() {
+export function AppRoutes() {
   return (
     <Switch>
       <Route path="/setup">
@@ -194,67 +194,69 @@ function AppRoutes() {
       </Route>
       <Route>
         {() => (
-          <AppShell>
-            <Switch>
-              <Route path="/">
-                {() => (
-                  <PageLayout>
-                    <HomeRoute />
-                  </PageLayout>
-                )}
-              </Route>
-              <Route path="/personas/:id/:tab?">
-                {() => (
-                  <PageLayout>
-                    <StudioRoute />
-                  </PageLayout>
-                )}
-              </Route>
-              <Route path="/settings">
-                {() => (
-                  <PageLayout>
-                    <SettingsRoute />
-                  </PageLayout>
-                )}
-              </Route>
-              <Route path="/tasks">
-                {() => (
-                  <PageLayout>
-                    <TasksRoute />
-                  </PageLayout>
-                )}
-              </Route>
-              <Route path="/jobs/:id?">
-                {() => (
-                  <PageLayout>
-                    <JobsRoute />
-                  </PageLayout>
-                )}
-              </Route>
-              <Route path="/usage">
-                {() => (
-                  <PageLayout>
-                    <UsageRoute />
-                  </PageLayout>
-                )}
-              </Route>
-              <Route path="/chats/:id?">
-                {() => (
-                  <FrameLayout>
-                    <ChatsRoute />
-                  </FrameLayout>
-                )}
-              </Route>
-              <Route path="/call">
-                {() => (
-                  <FrameLayout>
-                    <CallRoute />
-                  </FrameLayout>
-                )}
-              </Route>
-              <Route>{() => <RouteError status={404} />}</Route>
-            </Switch>
-          </AppShell>
+          <RouteBoundary fallback={(error) => <RouteError error={error} />}>
+            <AppShell>
+              <Switch>
+                <Route path="/">
+                  {() => (
+                    <PageLayout>
+                      <HomeRoute />
+                    </PageLayout>
+                  )}
+                </Route>
+                <Route path="/personas/:id/:tab?">
+                  {() => (
+                    <PageLayout>
+                      <StudioRoute />
+                    </PageLayout>
+                  )}
+                </Route>
+                <Route path="/settings">
+                  {() => (
+                    <PageLayout>
+                      <SettingsRoute />
+                    </PageLayout>
+                  )}
+                </Route>
+                <Route path="/tasks">
+                  {() => (
+                    <PageLayout>
+                      <TasksRoute />
+                    </PageLayout>
+                  )}
+                </Route>
+                <Route path="/jobs/:id?">
+                  {() => (
+                    <PageLayout>
+                      <JobsRoute />
+                    </PageLayout>
+                  )}
+                </Route>
+                <Route path="/usage">
+                  {() => (
+                    <PageLayout>
+                      <UsageRoute />
+                    </PageLayout>
+                  )}
+                </Route>
+                <Route path="/chats/:id?">
+                  {() => (
+                    <FrameLayout>
+                      <ChatsRoute />
+                    </FrameLayout>
+                  )}
+                </Route>
+                <Route path="/call">
+                  {() => (
+                    <FrameLayout>
+                      <CallRoute />
+                    </FrameLayout>
+                  )}
+                </Route>
+                <Route>{() => <RouteError status={404} />}</Route>
+              </Switch>
+            </AppShell>
+          </RouteBoundary>
         )}
       </Route>
     </Switch>

@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type FunctionComponent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vitest";
-import { Router, type RouterOptions } from "wouter";
+import { Router, type RouterOptions, type SsrContext } from "wouter";
 import type { EidolonDesktop } from "@/lib/desktop";
 import { statusQuery } from "@/lib/query";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 /** The page at `path`, in `app` or a browser. */
-function render(path: string, app: EidolonDesktop | undefined): string {
+function render(path: string, app: EidolonDesktop | undefined) {
   globalThis.eidolonDesktop = app;
   const client = new QueryClient();
   // The page reads only the persona from the status.
@@ -50,10 +50,11 @@ function render(path: string, app: EidolonDesktop | undefined): string {
     persona: { id: "milky-green", name: "明前奶绿", shortName: "奶绿", avatar: false },
   });
   const i18n = setupI18n({ locale: "en", messages: { en: {} } });
-  return renderToStaticMarkup(
+  const ssrContext: SsrContext = {};
+  const html = renderToStaticMarkup(
     createElement(
       Router as FunctionComponent<RouterOptions>,
-      { ssrPath: path },
+      { ssrPath: path, ssrContext },
       createElement(
         I18nProvider,
         { i18n },
@@ -61,6 +62,7 @@ function render(path: string, app: EidolonDesktop | undefined): string {
       ),
     ),
   );
+  return { html, redirectTo: ssrContext.redirectTo };
 }
 
 /** The sections the nav links to, in order. */
@@ -69,9 +71,9 @@ const tabs = (markup: string) =>
 
 test("the nav lists Desktop, before Advanced, only in a desktop app that offers its options", () => {
   const others = ["providers", "general", "memory", "downloads", "assistant", "skills", "advanced"];
-  expect(tabs(render("/settings?tab=general", undefined))).toEqual(others);
-  expect(tabs(render("/settings?tab=general", older))).toEqual(others);
-  expect(tabs(render("/settings?tab=general", current))).toEqual([
+  expect(tabs(render("/settings?tab=general", undefined).html)).toEqual(others);
+  expect(tabs(render("/settings?tab=general", older).html)).toEqual(others);
+  expect(tabs(render("/settings?tab=general", current).html)).toEqual([
     ...others.slice(0, -1),
     "desktop",
     "advanced",
@@ -79,8 +81,15 @@ test("the nav lists Desktop, before Advanced, only in a desktop app that offers 
 });
 
 test("?tab=desktop opens the Desktop App card there, and leads elsewhere in a browser", () => {
-  expect(render("/settings?tab=desktop", current)).toContain("Desktop App");
-  // Redirect renders nothing: the page goes to the section resolveSection names instead.
-  expect(render("/settings?tab=desktop", undefined)).toBe("");
-  expect(render("/settings?tab=desktop", older)).toBe("");
+  const desktop = render("/settings?tab=desktop", current);
+  expect(desktop.redirectTo).toBeUndefined();
+  expect(desktop.html).toContain("Desktop App");
+
+  const browser = render("/settings?tab=desktop", undefined);
+  expect(browser.html).toBe("");
+  expect(browser.redirectTo).toBe("?tab=providers");
+
+  const stale = render("/settings?tab=desktop", older);
+  expect(stale.html).toBe("");
+  expect(stale.redirectTo).toBe("?tab=providers");
 });

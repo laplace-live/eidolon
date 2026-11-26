@@ -9,6 +9,8 @@ import { createElement, type FunctionComponent, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
 import { Route, Router, type RouterOptions, Switch } from "wouter";
+import { createBrowserHistory } from "@/lib/navigation";
+import { mountFakeDom } from "@/test/fake-dom";
 import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 vi.doMock("@lingui/core/macro", linguiMacro);
@@ -89,34 +91,60 @@ test("setup scrolls below its header, in a window-high frame", () => {
   expect(markup.indexOf("<main")).toBeGreaterThan(box.at);
 });
 
-test("an error in the frame gets no drag strip below the title strip, and one outside it does", () => {
-  const at = (path: string, node: ReactNode): string => {
-    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
-    return renderToStaticMarkup(
+test("an error in the frame gets no drag strip below the title strip, and one outside it does", async () => {
+  const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+  const history = createBrowserHistory(null);
+  const Boom = () => {
+    throw new Error("boom");
+  };
+  const mounted = await mountFakeDom(
+    createElement(
+      I18nProvider,
+      { i18n },
       createElement(
-        I18nProvider,
-        { i18n },
+        QueryClientProvider,
+        { client: new QueryClient() },
         createElement(
-          QueryClientProvider,
-          { client: new QueryClient() },
+          TooltipProvider,
+          null,
           createElement(
-            TooltipProvider,
-            null,
-            createElement(Router as FunctionComponent<RouterOptions>, { ssrPath: path }, node),
+            Router as FunctionComponent<RouterOptions>,
+            { hook: history.hook, searchHook: history.searchHook },
+            createElement(AppShell, null, createElement(Boom)),
           ),
         ),
       ),
-    );
-  };
-  const inside = at(
-    "/inside",
-    createElement(AppShell, null, createElement(RouteError, { error: new Error("boom") })),
+    ),
   );
-  expect(inside).toContain("Something went wrong");
-  const rows = [...inside.matchAll(/<[^>]*data-window-drag[^>]*>/g)].map((row) => row[0]);
-  expect(rows).toHaveLength(1);
-  expect(rows[0]).toContain("data-title-strip");
-  expect(at("/outside", createElement(RouteError, { error: new Error("boom") }))).toContain(
-    "data-window-drag",
+  try {
+    const inside = mounted.container.innerHTML;
+    expect(inside).toContain("Something went wrong");
+    const rows = [...inside.matchAll(/<[^>]*data-window-drag[^>]*>/g)].map((row) => row[0]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain("data-title-strip");
+  } finally {
+    history.dispose();
+    await mounted.unmount();
+  }
+
+  const outside = renderToStaticMarkup(
+    createElement(
+      I18nProvider,
+      { i18n },
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(
+            Router as FunctionComponent<RouterOptions>,
+            { ssrPath: "/outside" },
+            createElement(RouteError, { error: new Error("boom") }),
+          ),
+        ),
+      ),
+    ),
   );
+  expect(outside).toContain("data-window-drag");
 });
