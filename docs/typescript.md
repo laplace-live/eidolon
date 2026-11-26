@@ -190,17 +190,24 @@ this server spawned kills it, with what it started (`killTree`) ([web-app.md](we
 
 ### Real-data tests
 
-The `*_real.test.ts` files check the code against the real corpus in `EIDOLON_REAL_HOME`
-(default: `EIDOLON_HOME`, else `~/.laplace/eidolon`) and never write there: they write to
-temporary folders, work on a clone of the embedding cache, and fake every paid request, so they
-cost nothing. Without the corpus they skip quietly; `EIDOLON_REQUIRE_PARITY=1` turns each skip
-into a failure. Some compare against digests their fixtures store, covering only the files those
-digests list; the rest compare against the real files themselves (a re-rendered transcript
-against its `.md`, a rebuilt table against the real index, a re-saved sidecar against the
-original) or one code path against another (the pipeline's dry run against the plan it emits).
+The real-data test files (`packages/ingest/test/*_real.test.ts`,
+`apps/cli/test/ingest_facts_real.test.ts`, and `packages/retrieval/test/write_real.test.ts`) check
+the code against the real corpus in `EIDOLON_REAL_HOME` (default: `EIDOLON_HOME`, else
+`~/.laplace/eidolon`) and never write there: they write to temporary folders, work on a clone of
+the embedding cache, and fake every paid request, so they cost nothing. Without the corpus they
+skip quietly; `EIDOLON_REQUIRE_PARITY=1` turns each skip into a failure. Some compare against
+digests their fixtures store, covering only the files those digests list; the rest compare against
+the real files themselves (a re-rendered transcript against its `.md`, a rebuilt table against the
+real index, a re-saved sidecar against the original) or one code path against another (the
+pipeline's dry run against the plan it emits).
 
 ## What keeps it working
 
+- **Optional dependencies fail open, never loud.** Mem0, both RAG providers, the reranker, the
+  retrieval gate, and the LanceDB tables each log their failure and carry on without it:
+  `packages/engine/src/parts.ts` opens optional tiers that way, a failed retrieval gate retrieves
+  anyway, and a failed rerank falls back to RRF. New optional tiers follow that shape so a fresh
+  checkout boots cleanly.
 - **pipedog-derived code carries its BSD-2 header**, then `Ported from pipedog <path>@ce8f8bc`.
   pipedog is never followed past that commit; `NOTICE` names every copyright holder a ported
   file's header does, and `apps/eidolon/test/build.test.ts` holds it to that. Code ported from
@@ -217,8 +224,12 @@ original) or one code path against another (the pipeline's dry run against the p
   hears or speaks through. A new provider gets one too, or bills behind the usage ledger's back.
 - **`@eidolon/providers/catalog` imports nothing.** The web app bundles it for its provider and
   model pickers; a test keeps it import-free, and Biome lets the web app import it alone.
+- **An empty env var is not unset.** `.env` parses `KEY=` as `""`, so `Number(process.env.X ?? "60")`
+  reads a copied `.env.example`'s blank `X` as `0`. Read env through `envInt`, `envFloat`, `envStr`,
+  or `envOptional` (`packages/config/src/env.ts`), which treat blank as unset.
 - **`load-env.ts`, the first import of each entry point, is the only `.env` reader**, with
-  python-dotenv's rules. Node reads no `.env` unless told to, and
+  python-dotenv's rules; in a git worktree without a `.env`, it walks up to the main checkout's
+  unless `EIDOLON_NO_DOTENV=1` is set. Node reads no `.env` unless told to, and
   `vitest.config.ts` loads none into a test.
 - **No module reads env at import.** Everything reads at call time, so the order of imports
   against the `.env` load cannot pin a fallback. The exceptions are
@@ -232,6 +243,25 @@ original) or one code path against another (the pipeline's dry run against the p
   entry started with, which `environ.ts` keeps by being imported before `load-env.ts`. Handed
   `process.env`, it would keep every key deleted from `.env` since, because `override` sets keys
   and never unsets them.
+- **Shipped files resolve via `shippedPath` (`@eidolon/config`), never `import.meta`.** The npm
+  package bundles modules under `dist/`, so shipped templates, the web build, jieba's data, and
+  spawns resolve under `EIDOLON_APP_ROOT` or the checkout, and `apps/eidolon`'s build copies them
+  in. The two exceptions are desktop main (`process.resourcesPath` when packaged, checkout
+  otherwise) and the SDK avatar entry (`psd2liveRuntimeUrl()`'s `new URL("./wasm/p2l_runtime.wasm",
+  import.meta.url)` in browsers vs server `psd2liveDir()`).
+- **pnpm, Node 24, install policy, and no Bun APIs.** `package.json`'s `packageManager` is pnpm's
+  sole version pin (CI and Docker read it), and everything runs on Node 24 (`engines`, CI, Docker,
+  Electron). `pnpm-workspace.yaml` enforces `allowBuilds` (disabling install scripts such as
+  `onnxruntime-node`'s CUDA fetch on `linux/x64`) and a 14-day `minimumReleaseAge` (newer versions
+  need an exact `minimumReleaseAgeExclude` entry until aged). No runtime code, script, or
+  benchmark imports `bun`/`bun:*` or uses `Bun`, `HTMLRewriter`, `import.meta.dir`, `import.meta.path`,
+  or `Uint8Array.fromBase64`/`toBase64`/`fromHex` (`apps/cli/test/no_bun.test.ts` and Biome check it).
+- **Run tests from the repository root only (`pnpm test [paths]`).** Running Vitest outside the root
+  skips `vitest.config.ts` and its `isolated-home.ts` setup, exposing the real data home; any test
+  that deletes inside the data home imports `packages/config/test/isolated-guard.ts` first
+  (`isolated-guard.test.ts` enforces it).
+- **Production sharp ownership:** `normalizeImage` (`apps/bot/src/images.ts`) relies on `apps/bot`'s
+  own `sharp` dependency (`apps/bot/Dockerfile` prunes only LanceDB's older copy).
 - **werift needs four corrections, all in `packages/webrtc/src/patches.ts`.** Its prototype patch
   is guarded with `Symbol.for("eidolon.werift.patched")`, so a second evaluation of the module
   patches nothing (`packages/webrtc/test/werift.test.ts`).

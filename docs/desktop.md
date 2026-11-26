@@ -1953,7 +1953,9 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
    - the fuses: a new one keeps Electron's default unless `electron-builder.yml` lists it, so read
      the packaged binary's fuse wire with a current `@electron/fuses`;
    - its Node's major, which Vite's `node24` target (`scripts/vite-common.ts`) and the repo's Node
-     24 assume, and its system minimums, which this doc restates;
+     24 assume, and its system minimums, which this doc and [README.md](../README.md#system-requirements)
+     state (update the `<!-- Electron 45 floors … -->` marker in `README.md` alongside any
+     floor changes so `pnpm doc-check` passes);
    - on Windows, the unsigned-PE list, which takes Electron's own DLLs from its zip.
 5. Run the backend suite on its Node ([the Electron lane](#the-electron-lane)) and `pnpm test
    apps/desktop`; stage and package the app, then run [the stage test](#the-stage-test) and both

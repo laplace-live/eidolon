@@ -259,7 +259,7 @@ it for ever; a barge-in drops the segments still waiting and sends nothing more 
 silence when it is empty. As its cursor plays, it posts `reply-start`, each segment's start and end,
 the words played, and `drained`. Clearing it takes effect at once.
 
-**What was heard** (`heard()`), which her turn stores:
+**What was heard** (`heard()`), which her turn stores (never what streamed):
 - the raw text, cues included, of every segment the cursor has passed the end of, plus the played
   words of the current one where the provider times words;
 - joined with `joinSegments`;

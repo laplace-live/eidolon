@@ -1,0 +1,62 @@
+name: Docs
+
+# Gates AGENTS.md, README.md, docs/, and .changeset/ — size budgets, dead links or heading
+# anchors, orphan docs, undocumented root scripts or workspace packages, changeset release-note
+# rules, and README Electron floor markers.
+# scripts/verify-docs.ts imports only node:* and scripts/changelog.ts, so Node 24 runs it directly
+# without pnpm install.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "AGENTS.md"
+      - "README.md"
+      - "apps/*/package.json"
+      - "packages/*/package.json"
+      - "docs/**"
+      - ".changeset/**"
+      - "package.json"
+      - "scripts/verify-docs.ts"
+      - "scripts/changelog.ts"
+      - ".changeset/changelog.ts"
+      - "apps/desktop/src/shared/release-notes.ts"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "AGENTS.md"
+      - "README.md"
+      - "apps/*/package.json"
+      - "packages/*/package.json"
+      - "docs/**"
+      - ".changeset/**"
+      - "package.json"
+      - "scripts/verify-docs.ts"
+      - "scripts/changelog.ts"
+      - ".changeset/changelog.ts"
+      - "apps/desktop/src/shared/release-notes.ts"
+      - ".github/workflows/docs.yml"
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.head_ref != 'changeset-release/master'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: node scripts/verify-docs.ts
