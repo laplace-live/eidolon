@@ -374,17 +374,19 @@ export function settingsRoutes(
               const expanded = expandUser(raw);
               return resolve(dataHome(), expanded);
             };
-            const rawHistory =
+            const historyDb =
               envOverride("MEM0_HISTORY_DB_PATH") ??
               (typeof memObj.historyDb === "string" && memObj.historyDb.trim()
                 ? resolveHomePath(memObj.historyDb.trim())
                 : join(dataHome(), "mem0", "history.db"));
-            const rawDir =
-              envOverride("MEM0_DIR") ??
-              (typeof memObj.dir === "string" && memObj.dir.trim()
-                ? resolveHomePath(memObj.dir.trim())
-                : join(dirname(expandUser(rawHistory)), "vectors"));
-            const migrated = existsSync(join(resolve(expandUser(rawDir)), ".qdrant-migrated"));
+            const envDir = envOverride("MEM0_DIR");
+            const vectorsDir =
+              envDir !== undefined
+                ? expandUser(envDir)
+                : typeof memObj.dir === "string" && memObj.dir.trim()
+                  ? resolveHomePath(memObj.dir.trim())
+                  : join(dirname(historyDb), "vectors");
+            const migrated = existsSync(join(resolve(vectorsDir), ".qdrant-migrated"));
             if (clearedMemoryEnabled || migrated) setDotted(tree, "memory.qdrant", null);
           }
         };

@@ -4,9 +4,10 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { jsRuntime } from "@eidolon/config";
 import { type Selection, select } from "@eidolon/providers";
+import { ZVecOpen } from "@zvec/zvec";
 import { afterEach, describe, expect, test } from "vitest";
 import { openMemoryEngine, SharedEngine } from "../src/engine.ts";
-import { closeMemoryStores, ZvecVectorStore } from "../src/zvec.ts";
+import { closeMemoryStores, queryMatchingIds, ZvecVectorStore } from "../src/zvec.ts";
 import { resetEnv, setEnv, tempPath } from "./support.ts";
 
 const createdDirs: string[] = [];
@@ -438,5 +439,42 @@ describe("ZvecVectorStore", () => {
       "Memory deletion tombstones are unreadable",
     );
     await expect(store.delete("p-1")).rejects.toThrow("Memory deletion tombstones are unreadable");
+  });
+
+  test("queryMatchingIds bisects unordered pages without skipping out-of-order UUIDs", async () => {
+    const dir = storeDir();
+    const store = new ZvecVectorStore({ dir, vectorSize: 4 });
+    // Insert high-lexicographic IDs first so an unbisected max-ID cursor on page 1 would skip smaller IDs.
+    const ids = [
+      "z-99",
+      "y-88",
+      "x-77",
+      "m-55",
+      "k-44",
+      "f-33",
+      "e-22",
+      "d-19",
+      "c-15",
+      "b-11",
+      "a-09",
+      "a-05",
+      "a-02",
+      "0-01",
+    ];
+    await store.insert(
+      ids.map((id) => ({ id, vector: [1, 0, 0, 0], payload: { user_id: "u1", data: id } })),
+    );
+    await store.insert([
+      { id: "other-user", vector: [1, 0, 0, 0], payload: { user_id: "u2", data: "other" } },
+    ]);
+    closeMemoryStores();
+
+    const col = ZVecOpen(join(dir, "v1_4"), { readOnly: true, enableMMAP: true });
+    try {
+      const matched = await queryMatchingIds(col, "user_id = 'u1'", 4);
+      expect(matched).toEqual([...ids].sort());
+    } finally {
+      col.closeSync();
+    }
   });
 });

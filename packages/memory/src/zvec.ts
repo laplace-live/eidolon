@@ -185,33 +185,37 @@ function canonicalScope(filters: ScopeFilters): ScopeFilters {
   return out;
 }
 
-async function queryMatchingIds(
+export async function queryMatchingIds(
   col: ZVecCollection,
   filter: string | undefined,
+  pageSize = ZVEC_MAX_TOPK,
 ): Promise<string[]> {
   const hasPointId = col.schema.fields().some((field) => field.name === "point_id");
   const allIds: string[] = [];
-  let cursorKey: string | null = null;
-  for (;;) {
-    const pageFilter =
-      cursorKey === null
-        ? filter
-        : filter
-          ? `(${filter}) AND point_id > '${cursorKey}'`
-          : `point_id > '${cursorKey}'`;
+  const ranges: { lo: string | null; hi: string | null }[] = [{ lo: null, hi: null }];
+  while (ranges.length > 0) {
+    const { lo, hi } = ranges.pop() as { lo: string | null; hi: string | null };
+    const clauses: string[] = [];
+    if (filter) clauses.push(`(${filter})`);
+    if (lo !== null) clauses.push(`point_id >= '${lo}'`);
+    if (hi !== null) clauses.push(`point_id < '${hi}'`);
+    const pageFilter = clauses.length > 0 ? clauses.join(" AND ") : undefined;
     const docs = await col.query({
-      topk: ZVEC_MAX_TOPK,
+      topk: pageSize,
       ...(pageFilter ? { filter: pageFilter } : {}),
       outputFields: [],
     });
-    if (docs.length === 0) break;
-    let maxId = "";
-    for (const doc of docs) {
-      allIds.push(doc.id);
-      if (maxId === "" || doc.id > maxId) maxId = doc.id;
+    if (docs.length === 0) continue;
+    if (!hasPointId || docs.length < pageSize || docs.length < 2) {
+      for (const doc of docs) allIds.push(doc.id);
+      continue;
     }
-    if (!hasPointId || docs.length < ZVEC_MAX_TOPK) break;
-    cursorKey = idOrderKey(maxId);
+    // `col.query` without vector distance is unordered; bisecting on the sampled median `point_id`
+    // partitions `[lo, hi)` into two disjoint non-empty subranges without relying on scan order.
+    const keys = docs.map((doc) => idOrderKey(doc.id)).sort();
+    const mid = keys[keys.length >> 1] as string;
+    ranges.push({ lo: mid, hi });
+    ranges.push({ lo, hi: mid });
   }
   allIds.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   return allIds;
