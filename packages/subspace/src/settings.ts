@@ -25,11 +25,14 @@ export function subspaceRelayUrl(): string {
  * else reuses a signed-in account's `savedRelayUrl` (set by `eidolon subspace login --relay-url`),
  * else falls back to the default Relay URL.
  */
-export function resolveEffectiveRelayUrl(savedRelayUrl?: string | null): string {
+export function resolveEffectiveRelayUrl(
+  savedRelayUrl?: string | null | (() => string | null),
+): string {
   if (envOptional("EIDOLON_SUBSPACE_RELAY_URL") !== undefined) {
     return subspaceRelayUrl();
   }
-  const saved = savedRelayUrl?.trim();
+  const resolved = typeof savedRelayUrl === "function" ? savedRelayUrl() : savedRelayUrl;
+  const saved = resolved?.trim();
   if (saved) {
     return normalizeAllowedUrl(saved, DEFAULT_SUBSPACE_RELAY_URL, "Subspace Relay URL");
   }

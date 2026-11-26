@@ -6,6 +6,7 @@ import { OFFER_PATH, PREFLIGHT_PATH, withCors } from "@eidolon/access";
 import { assistantSettings, dataHome, errorText, logger } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import { SubspaceConnectError, SubspaceManager } from "@eidolon/subspace";
+import type { ServerRequest } from "srvx";
 import manifest from "../../package.json" with { type: "json" };
 import { logAccess, type MethodRoutes, type RouteHandler, type RouteMethod } from "../app.ts";
 import { FORGET_MEMORIES_PATH, LIST_MEMORIES_PATH } from "../memory-admin.ts";
@@ -117,6 +118,24 @@ function shouldBypassSubspace(request: Request, pathname: string): boolean {
     request.headers.get(TARGET_HEADER)?.toLowerCase() === "local" ||
     isLocalOnlySubspacePath(pathname)
   );
+}
+
+function rawTargetPathInvalid(target: string): boolean {
+  const end = target.search(/[?#]/);
+  const rawPath = end >= 0 ? target.slice(0, end) : target;
+  return !rawPath.startsWith("/") || rawPath.startsWith("//") || rawPath.includes("\\");
+}
+
+function hasInvalidRequestTarget(request: Request, pathname: string): boolean {
+  if (pathname.startsWith("//") || pathname.includes("\\")) return true;
+  const nodeUrl = (request as ServerRequest).runtime?.node?.req?.url;
+  if (typeof nodeUrl === "string" && rawTargetPathInvalid(nodeUrl)) return true;
+  const schemeEnd = request.url.indexOf("://");
+  if (schemeEnd >= 0) {
+    const pathStart = request.url.indexOf("/", schemeEnd + 3);
+    if (pathStart >= 0 && rawTargetPathInvalid(request.url.slice(pathStart))) return true;
+  }
+  return false;
 }
 
 async function forwardToSubspace(
@@ -315,6 +334,11 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         async (request, server) => {
           const url = new URL(request.url);
           const { pathname } = url;
+          if (hasInvalidRequestTarget(request, pathname)) {
+            const invalid = localError(400, "bad-request", "Invalid request path");
+            logAccess(request, server, invalid);
+            return invalid;
+          }
           const bypass = shouldBypassSubspace(request, pathname);
           const activeHostId = subspace.activeHostId;
           if (activeHostId === null || bypass) {
@@ -446,7 +470,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
         }
         const url = new URL(request.url);
         const { pathname } = url;
-        if (pathname.startsWith("//") || pathname.includes("\\")) {
+        if (hasInvalidRequestTarget(request, pathname)) {
           const invalid = localError(400, "bad-request", "Invalid request path");
           logAccess(request, server, invalid);
           return invalid;

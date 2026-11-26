@@ -1,6 +1,7 @@
 import "../../../../packages/config/test/isolated-guard.ts";
 import { createSocket } from "node:dgram";
 import { mkdtempSync, rmSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChatSummary } from "@eidolon/chat";
@@ -581,5 +582,48 @@ describe("subspaceRoutes error handling", () => {
     expect((await badOfferRes.json()) as ErrorBody).toMatchObject({
       error: { code: "bad-request" },
     });
+  });
+
+  test("rejects raw HTTP request targets containing backslashes before URL normalization", async () => {
+    const host = await bootFixture();
+    cleanups.push(() => host.stop());
+    const port = Number(new URL(host.base).port);
+
+    const sendRaw = (method: string, target: string) =>
+      new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const req = httpRequest(
+          {
+            host: "127.0.0.1",
+            port,
+            method,
+            path: target,
+            headers: { connection: "close" },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+            res.on("end", () => {
+              resolve({
+                status: res.statusCode ?? 0,
+                body: Buffer.concat(chunks).toString("utf8"),
+              });
+            });
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+
+    for (const [method, target] of [
+      ["GET", "/foo\\bar"],
+      ["POST", "/\\evil/api/local/restart"],
+      ["GET", "/api\\local\\status"],
+    ] as const) {
+      const res = await sendRaw(method, target);
+      expect(res.status).toBe(400);
+      expect(JSON.parse(res.body) as ErrorBody).toMatchObject({
+        error: { code: "bad-request" },
+      });
+    }
   });
 });

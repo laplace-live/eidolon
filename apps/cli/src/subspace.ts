@@ -24,7 +24,6 @@ import {
   signOutRelaySession,
   startDeviceAuthorization,
   subspaceAuthUrl,
-  subspaceRelayUrl,
 } from "@eidolon/subspace";
 import { ArgparseExit, type ParserSpec, parseArgs, parserError } from "./argparse.ts";
 import { type CommandDeps, printer, reportExit, resolveIo } from "./io.ts";
@@ -307,9 +306,9 @@ export async function subspaceMain(
     let relayUrl = relayAuth?.relayUrl ?? DEFAULT_SUBSPACE_RELAY_URL;
     if (relayAuth?.relayUrl === undefined) {
       try {
-        relayUrl = resolveEffectiveRelayUrl(null);
+        relayUrl = resolveEffectiveRelayUrl(() => store.readSavedRelayUrl());
       } catch {
-        // Show default relay URL in offline status when env override is invalid.
+        // Show default relay URL in offline status when env/saved override is invalid or corrupt.
       }
     }
     const snapshot = {
@@ -437,10 +436,16 @@ export async function subspaceMain(
     return 0;
   }
 
-  const relayUrl =
-    typeof ns.relayUrl === "string" && ns.relayUrl.trim()
-      ? withoutTrailingSlashes(ns.relayUrl.trim())
-      : subspaceRelayUrl();
+  let relayUrl: string;
+  try {
+    relayUrl =
+      typeof ns.relayUrl === "string" && ns.relayUrl.trim()
+        ? withoutTrailingSlashes(ns.relayUrl.trim())
+        : resolveEffectiveRelayUrl(() => store.readSavedRelayUrl());
+  } catch (error) {
+    err(`Relay login failed: ${errorText(error)}`);
+    return 1;
+  }
   if (!isAllowedRelayUrl(relayUrl)) {
     return reportExit(
       io,

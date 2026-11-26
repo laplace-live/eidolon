@@ -224,15 +224,20 @@ export async function pairMain(argv: readonly string[], deps: PairDeps = {}): Pr
 
   const store = new SubspaceStore(dataHome());
   let savedAuth: ReturnType<SubspaceStore["readRelayAuth"]> = null;
+  let authReadFailed = false;
   try {
     savedAuth = store.readRelayAuth();
   } catch {
+    authReadFailed = true;
     savedAuth = null;
   }
   if (relay && savedAuth === null) {
     try {
+      const resolvedRelayUrl = resolveEffectiveRelayUrl(
+        authReadFailed ? () => store.readSavedRelayUrl() : null,
+      );
       const ok = await runDeviceLoginFlow({
-        relayUrl: resolveEffectiveRelayUrl(null),
+        relayUrl: resolvedRelayUrl,
         store,
         json,
         out,

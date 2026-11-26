@@ -20,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { WindowDragStrip } from "@/components/window-drag-strip";
 import { CompanionError, Nothing } from "@/features/companion/quiet";
 import { firstRunRedirect } from "@/features/setup/first-run";
+import { useSubspaceHostEpoch, useSubspaceHostSync } from "@/features/subspace/queries";
 import { ApiError, call, type Status } from "@/lib/api";
 import {
   createBrowserHistory,
@@ -181,13 +182,15 @@ export function SessionGate({
 }
 
 export function AppRoutes() {
+  useSubspaceHostSync();
+  const hostEpoch = useSubspaceHostEpoch();
   return (
     <Switch>
       <Route path="/setup">
         {() => (
           <RouteBoundary fallback={(error) => <RouteError error={error} />}>
             <Suspense fallback={<Loading />}>
-              <SetupRoute />
+              <SetupRoute key={hostEpoch} />
             </Suspense>
           </RouteBoundary>
         )}

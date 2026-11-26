@@ -1091,4 +1091,271 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     }
     expect(inviteCreates).toHaveLength(1);
   });
+
+  test("SubspaceStore recovers custom relayUrl from partially corrupt JSON and fails with bad-request on unparseable relay-auth.json", async () => {
+    vi.stubEnv("EIDOLON_SUBSPACE_RELAY_URL", "");
+    const dir = tempDir("subspace-corrupt-relay-url-");
+    const store = new SubspaceStore(dir);
+    mkdirSync(store.dir, { recursive: true });
+
+    // Partially corrupt JSON still preserves a valid custom relayUrl.
+    writeFileSync(
+      join(store.dir, "relay-auth.json"),
+      JSON.stringify({ relayUrl: "https://custom.relay.example/", token: "" }),
+      "utf8",
+    );
+    expect(store.readSavedRelayUrl()).toBe("https://custom.relay.example");
+
+    const mgr = new SubspaceManager({
+      dataHome: dir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => mgr.stop());
+    const recoveredState = await mgr.getState();
+    expect(recoveredState.relayAuth.relayUrl).toBe("https://custom.relay.example");
+    expect(recoveredState.relayAuth.status).toBe("signed-out");
+
+    // Unparseable JSON fails explicitly instead of silently falling back to the default relay.
+    writeFileSync(join(store.dir, "relay-auth.json"), "{not-json", "utf8");
+    expect(() => store.readSavedRelayUrl()).toThrowError(/corrupted/i);
+    await expect(mgr.startRelayAuth()).rejects.toMatchObject({ code: "bad-request" });
+    await expect(mgr.createShareOffer({ mode: "relay" })).rejects.toMatchObject({
+      code: "bad-request",
+    });
+    const corruptState = await mgr.getState();
+    expect(corruptState.relayAuth.status).toBe("signed-out");
+  });
+
+  test("SubspaceHost reconnects when saved relayUrl changes and keeps invites/data channels on the active relay", async () => {
+    vi.stubEnv("EIDOLON_SUBSPACE_RELAY_URL", "");
+    const dir = tempDir("subspace-switch-relay-");
+    const store = new SubspaceStore(dir);
+    const relayKp = await generateX25519KeyPair();
+    const relayPriv = await importX25519PrivateKey(relayKp.privateKeyPkcs8B64);
+
+    async function startMockRelay() {
+      const inviteIds: string[] = [];
+      const controlSockets = new Set<import("ws").WebSocket>();
+      const dataConnections: string[] = [];
+      let closedCount = 0;
+
+      const httpServer = createServer((req, res) => {
+        if (req.url === "/api/auth/token") {
+          const exp = Math.floor(Date.now() / 1000) + 300;
+          const header = Buffer.from(JSON.stringify({ alg: "EdDSA" })).toString("base64url");
+          const payload = Buffer.from(JSON.stringify({ exp, sub: "alice" })).toString("base64url");
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ token: `${header}.${payload}.sig` }));
+          return;
+        }
+        res.writeHead(404).end();
+      });
+      const wss = new WebSocketServer({ noServer: true });
+      httpServer.on("upgrade", (req, socket, head) => {
+        if (req.url === RELAY_PATHS.HOST_CONTROL || req.url === RELAY_PATHS.HOST_DATA) {
+          wss.handleUpgrade(req, socket, head, (ws) => {
+            if (req.url === RELAY_PATHS.HOST_CONTROL) {
+              controlSockets.add(ws);
+              let relayHostId = "";
+              ws.on("close", () => {
+                controlSockets.delete(ws);
+                closedCount += 1;
+              });
+              ws.on("message", async (raw) => {
+                const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+                if (msg.type === "host_hello") {
+                  relayHostId = String(msg.relayHostId);
+                  const challengeB64 = Buffer.from("challenge-32-bytes-0123456789abc").toString(
+                    "base64",
+                  );
+                  await computeRelayControlProof(
+                    relayPriv,
+                    String(msg.hostPublicKeyB64),
+                    challengeB64,
+                    "alice",
+                  );
+                  ws.send(
+                    JSON.stringify({
+                      type: "host_challenge",
+                      challengeB64,
+                      relayEphPubB64: relayKp.publicKeyB64,
+                      userId: "alice",
+                    }),
+                  );
+                } else if (msg.type === "host_challenge_ack") {
+                  ws.send(JSON.stringify({ type: "host_hello_ack", relayHostId, userId: "alice" }));
+                } else if (msg.type === "invite_create") {
+                  inviteIds.push(String(msg.inviteId));
+                  ws.send(JSON.stringify({ type: "invite_created", inviteId: msg.inviteId }));
+                }
+              });
+            } else {
+              ws.once("message", (raw) => {
+                const msg = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
+                if (msg.type === "host_data_auth") {
+                  dataConnections.push(String(msg.sessionId));
+                }
+              });
+            }
+          });
+        } else {
+          socket.destroy();
+        }
+      });
+
+      await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+      const addr = httpServer.address();
+      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+      const url = `http://127.0.0.1:${port}`;
+      cleanups.push(
+        () =>
+          new Promise<void>((resolve) => {
+            for (const c of wss.clients) c.terminate();
+            wss.close(() => httpServer.close(() => resolve()));
+          }),
+      );
+      return {
+        url,
+        inviteIds,
+        dataConnections,
+        closedCount: () => closedCount,
+        sendConnectionOpen: (sessionId: string) => {
+          for (const ws of controlSockets) {
+            ws.send(JSON.stringify({ type: "connection_open", sessionId, grantId: null }));
+          }
+        },
+      };
+    }
+
+    const relayA = await startMockRelay();
+    const relayB = await startMockRelay();
+
+    store.saveRelayAuth({
+      authUrl: relayA.url,
+      relayUrl: relayA.url,
+      token: "sess-a",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+
+    const mgr = new SubspaceManager({
+      dataHome: dir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => Response.json({ ok: true }),
+    });
+    cleanups.push(() => mgr.stop());
+
+    const offerA = await mgr.createShareOffer({ mode: "relay" });
+    const parsedA = parsePairingInput(offerA.pairingUrl);
+    expect(parsedA.ok && parsedA.offer.relay?.url).toBe(relayA.url);
+    expect(relayA.inviteIds).toHaveLength(1);
+
+    // Switch saved relay login externally (as `eidolon subspace login --relay-url B` does) and notify host.
+    store.saveRelayAuth({
+      authUrl: relayB.url,
+      relayUrl: relayB.url,
+      token: "sess-b",
+      user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
+      savedAt: Date.now(),
+    });
+    const switched = await mgr.updateShareSettings({});
+    expect(switched.relayAuth.relayUrl).toBe(relayB.url);
+    await vi.waitFor(() => {
+      expect(mgr.host.activeRelayUrl).toBe(relayB.url);
+      expect(mgr.host.relayConnected).toBe(true);
+      expect(relayA.closedCount()).toBeGreaterThanOrEqual(1);
+    });
+
+    const offerB = await mgr.createShareOffer({ mode: "relay" });
+    const parsedB = parsePairingInput(offerB.pairingUrl);
+    expect(parsedB.ok && parsedB.offer.relay?.url).toBe(relayB.url);
+    expect(relayA.inviteIds).toHaveLength(1);
+    expect(relayB.inviteIds).toHaveLength(1);
+
+    relayB.sendConnectionOpen("sess-on-b");
+    await vi.waitFor(() => {
+      expect(relayB.dataConnections).toContain("sess-on-b");
+    });
+    expect(relayA.dataConnections).toEqual([]);
+  });
+
+  test("pairServer rejects re-pairing a host with active calls even when activate is false without dropping its tunnel", async () => {
+    const hostDir = tempDir("subspace-repair-host-");
+    const clientDir = tempDir("subspace-repair-client-");
+
+    const udpSock = createSocket("udp4");
+    cleanups.push(() => {
+      udpSock.close();
+    });
+    await new Promise<void>((resolve) => udpSock.bind(0, "127.0.0.1", () => resolve()));
+    const udpPort = udpSock.address().port;
+    const sdp = [
+      "v=0",
+      "o=- 1 1 IN IP4 127.0.0.1",
+      "s=-",
+      "t=0 0",
+      "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+      "c=IN IP4 127.0.0.1",
+      `a=candidate:1 1 udp 2122260223 127.0.0.1 ${udpPort} typ host generation 0`,
+      "a=end-of-candidates",
+      "",
+    ].join("\r\n");
+
+    const host = new SubspaceHost({
+      store: new SubspaceStore(hostDir),
+      serverVersion: () => "0.19.0",
+      relayUrl: () => "http://127.0.0.1:0",
+      dispatch: async (req) => {
+        if (req.method === "POST" && new URL(req.url).pathname === "/api/offer") {
+          return Response.json({ pc_id: "pc-repair-call", sdp });
+        }
+        return Response.json({ ok: true });
+      },
+    });
+    cleanups.push(() => host.stop());
+
+    const directPort = await host.startDirect(0);
+    const offer1 = await host.createPairingOffer({
+      mode: "direct",
+      address: "127.0.0.1",
+      port: directPort,
+    });
+
+    const mgr = new SubspaceManager({
+      dataHome: clientDir,
+      serverVersion: () => "0.19.0",
+      activeCalls: () => 0,
+      dispatchLocal: async () => new Response("local"),
+    });
+    cleanups.push(() => mgr.stop());
+
+    const paired1 = await mgr.pairServer({ code: encodePairingUrl(offer1), activate: true });
+    const beforeToken = mgr.store.readServers().servers[0]?.deviceToken;
+
+    const offerRes = await mgr.proxyToActive(
+      new Request("http://127.0.0.1/api/offer", { method: "POST", body: "{}" }),
+      "/api/offer",
+    );
+    expect(offerRes.status).toBe(200);
+    expect(mgr.activeCallCount).toBeGreaterThan(0);
+
+    const offer2 = await host.createPairingOffer({
+      mode: "direct",
+      address: "127.0.0.1",
+      port: directPort,
+      rotate: true,
+    });
+    await expect(
+      mgr.pairServer({ code: encodePairingUrl(offer2), activate: false }),
+    ).rejects.toMatchObject({ code: "call-active" });
+
+    expect(mgr.activeCallCount).toBeGreaterThan(0);
+    expect(mgr.store.readServers().servers[0]?.deviceToken).toBe(beforeToken);
+    expect(
+      (await mgr.getState()).servers.find((s) => s.id === paired1.pairedServerId)?.connectionState,
+    ).toBe("connected");
+  });
 });

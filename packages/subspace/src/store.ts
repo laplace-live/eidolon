@@ -273,6 +273,47 @@ export class SubspaceStore {
   }
 
   /**
+   * Reads the saved custom `relayUrl` from `relay-auth.json`, recovering it from partially corrupt
+   * JSON when possible and failing explicitly with `bad-request` on unparseable/disallowed files
+   * instead of silently resetting to the default relay.
+   */
+  readSavedRelayUrl(): string | null {
+    try {
+      const auth = this.readRelayAuth();
+      if (auth === null) return null;
+      const url = withoutTrailingSlashes(auth.relayUrl.trim());
+      if (!isAllowedRelayUrl(url)) {
+        throw Object.assign(
+          new Error(`Subspace Relay URL must use https/wss or loopback http/ws: ${url}`),
+          { code: "bad-request" },
+        );
+      }
+      return url;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+      if ((err as { readonly code?: unknown })?.code === "bad-request") throw err;
+      try {
+        const raw = JSON.parse(readFileSync(this.#relayAuthPath, "utf8")) as {
+          relayUrl?: unknown;
+        } | null;
+        if (raw === null) return null;
+        if (typeof raw === "object" && typeof raw.relayUrl === "string") {
+          const recovered = withoutTrailingSlashes(raw.relayUrl.trim());
+          if (recovered && isAllowedRelayUrl(recovered)) return recovered;
+        }
+      } catch {
+        // Fall through to explicit bad-request error so callers don't overwrite custom relay settings.
+      }
+      throw Object.assign(
+        new Error(
+          "Saved Subspace Relay credentials in relay-auth.json are corrupted; sign out before signing in again",
+        ),
+        { code: "bad-request" },
+      );
+    }
+  }
+
+  /**
    * Reads `relay-auth.json` for logout: falls back to recovering `authUrl` and `token` from
    * partially corrupt JSON so the remote session can still be revoked, or reports `corrupt: true`
    * when unparseable.

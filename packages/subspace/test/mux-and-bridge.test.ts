@@ -7,6 +7,7 @@ import {
   decodeMuxFrame,
   encodeMuxFrame,
   extractHostUdpCandidate,
+  extractHostUdpCandidates,
   extractHostUdpPort,
   generateX25519KeyPair,
   importX25519PrivateKey,
@@ -741,6 +742,73 @@ describe("WebRTC SDP rewrite & UDP call bridge", () => {
       hostEcho.close();
       clientMux.close();
       hostMux.close();
+    }
+  });
+
+  test("extracts zoned link-local IPv6 candidates preserving zone case and accepts unzoned rinfo replies", async (ctx) => {
+    const sdpWithZonedV6 = [
+      "v=0",
+      "o=- 1 1 IN IP4 127.0.0.1",
+      "s=-",
+      "t=0 0",
+      "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+      "a=candidate:1 1 udp 2122260223 [FE80::1%En0] 51234 typ host generation 0",
+      "a=end-of-candidates",
+      "",
+    ].join("\r\n");
+    expect(extractHostUdpCandidates(sdpWithZonedV6)).toEqual([
+      { address: "fe80::1%En0", port: 51234 },
+    ]);
+
+    const linkLocal = Object.entries(networkInterfaces())
+      .flatMap(([ifName, entries]) => (entries ?? []).map((entry) => ({ ifName, entry })))
+      .find(
+        ({ entry }) =>
+          entry.family === "IPv6" &&
+          entry.address.toLowerCase().startsWith("fe80:") &&
+          !entry.internal,
+      );
+    if (linkLocal === undefined) {
+      ctx.skip();
+      return;
+    }
+
+    const scopedHostIp = linkLocal.entry.address.includes("%")
+      ? linkLocal.entry.address
+      : `${linkLocal.entry.address}%${linkLocal.ifName}`;
+    const hostEcho = createSocket("udp6");
+    await new Promise<void>((resolve, reject) => {
+      hostEcho.once("error", reject);
+      hostEcho.bind(0, scopedHostIp, () => resolve());
+    });
+    const hostPort = hostEcho.address().port;
+    hostEcho.on("message", (msg, rinfo) => {
+      const replyTarget = rinfo.address.includes("%")
+        ? rinfo.address
+        : `${rinfo.address}%${linkLocal.ifName}`;
+      hostEcho.send(Buffer.from(`echo:${msg.toString("utf8")}`), rinfo.port, replyTarget);
+    });
+
+    const receivedFromHost: string[] = [];
+    const bridge = openHostUdpBridge(
+      hostPort,
+      {
+        sendDatagram: (data) => receivedFromHost.push(Buffer.from(data).toString("utf8")),
+        close: () => {},
+      },
+      scopedHostIp,
+    );
+    expect(bridge).not.toBeNull();
+
+    try {
+      await new Promise((r) => setTimeout(r, 25));
+      bridge!.sendToHost(utf8Encode("v6-zone"));
+      await vi.waitFor(() => {
+        expect(receivedFromHost).toContain("echo:v6-zone");
+      });
+    } finally {
+      bridge?.close();
+      hostEcho.close();
     }
   });
 });

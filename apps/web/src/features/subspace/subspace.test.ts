@@ -1,7 +1,7 @@
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createElement, type FunctionComponent, type ReactNode } from "react";
+import { createElement, Fragment, type FunctionComponent, type ReactNode, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { Router, type RouterOptions, useLocation } from "wouter";
@@ -190,10 +190,16 @@ vi.doMock("@/features/call/call-context", () => ({
 const { ShareCard } = await import("./share-card");
 const { AddSubspaceServerDialog } = await import("./add-server-dialog");
 const { ServersCard } = await import("./servers-card");
-const { subspaceQuery, useRemoveSubspaceServer, useSwitchSubspaceHost } = await import("./queries");
+const {
+  subspaceQuery,
+  useRemoveSubspaceServer,
+  useSubspaceHostEpoch,
+  useSubspaceHostSync,
+  useSwitchSubspaceHost,
+} = await import("./queries");
 const { SubspaceSwitcher } = await import("@/components/subspace-switcher");
 const { SidebarProvider } = await import("@/components/ui/sidebar");
-const { send } = await import("@/lib/api");
+const { resetExpectedSubspaceHost, send } = await import("@/lib/api");
 
 function findFormOnSubmit(root: unknown): ((event: { preventDefault(): void }) => void) | null {
   const queue: unknown[] = [root];
@@ -266,6 +272,7 @@ describe("Subspace web UI regressions", () => {
     dropdownCloseHandler = undefined;
     toastSuccess.mockReset();
     mockCall.mockReset();
+    resetExpectedSubspaceHost();
     vi.restoreAllMocks();
     if (mounted !== null) {
       const current = mounted;
@@ -772,5 +779,116 @@ describe("Subspace web UI regressions", () => {
     expect(revalidate).toHaveBeenCalledTimes(1);
     expect(avatarVersion("milky-green")).toBeGreaterThan(vBefore);
     expect(avatarSrc("milky-green", avatarVersion("milky-green"))).toContain("?v=");
+  });
+
+  test("cross-tab host switch bumps hostEpoch to discard stale Settings drafts and 409 conflict invalidates subspaceQuery", async () => {
+    const client = new QueryClient();
+    const initial = makeState({ activeHostId: null });
+    mockCall.mockResolvedValueOnce(initial);
+    await client.fetchQuery(subspaceQuery);
+
+    // A background query poll with a new host must NOT silently overwrite expectedSubspaceHost
+    // before useSubspaceHostSync resets local drafts.
+    const switched = makeState({
+      activeHostId: "srv_other",
+      servers: [
+        {
+          id: "srv_other",
+          name: "Other Box",
+          mode: "direct",
+          endpoint: { host: "10.0.0.2", port: 45123 },
+          relay: null,
+          addedAt: 1,
+          lastConnectedAt: null,
+          lastVersion: null,
+          connectionState: "connected",
+          lastError: null,
+          latencyMs: 5,
+        },
+      ],
+    });
+    mockCall.mockResolvedValueOnce(switched);
+    await client.fetchQuery({ ...subspaceQuery, queryFn: subspaceQuery.queryFn! });
+
+    const preSyncSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: { code: "conflict", message: "Active Subspace server changed" },
+        }),
+        { status: 409 },
+      ),
+    );
+    await expect(send("PUT /api/local/settings", { body: {} })).rejects.toMatchObject({
+      status: 409,
+      code: "conflict",
+    });
+    expect(new Headers(preSyncSpy.mock.calls[0]?.[1]?.headers).get("X-Eidolon-Expected-Host")).toBe(
+      "local",
+    );
+
+    // Reset back to initial before mounting the shell-level host sync harness.
+    client.setQueryData(subspaceQuery.queryKey, initial);
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+
+    let setDraftExternal: ((val: string) => void) | null = null;
+    function DraftForm() {
+      const [draft, setDraft] = useState("clean");
+      setDraftExternal = setDraft;
+      return createElement("div", { "data-draft": draft }, draft);
+    }
+    function ShellHarness() {
+      useSubspaceHostSync();
+      const hostEpoch = useSubspaceHostEpoch();
+      return createElement(Fragment, { key: hostEpoch }, createElement(DraftForm));
+    }
+
+    const history = createBrowserHistory(null);
+    const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+    mounted = await mountFakeDom(
+      createElement(
+        I18nProvider,
+        { i18n },
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(
+            Router as FunctionComponent<RouterOptions>,
+            { hook: history.hook, searchHook: history.searchHook },
+            createElement(ShellHarness),
+          ),
+        ),
+      ),
+    );
+    try {
+      await mounted.act(() => {
+        setDraftExternal!("unsaved-tab-a-value");
+      });
+      expect(mounted.container.innerHTML).toContain('data-draft="unsaved-tab-a-value"');
+
+      // Receiving a 409 conflict invalidates subspaceQuery so stale tabs refetch promptly.
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: "conflict", message: "Active Subspace server changed" },
+          }),
+          { status: 409 },
+        ),
+      );
+      await expect(send("PUT /api/local/settings", { body: {} })).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: subspaceQuery.queryKey });
+
+      // Cross-tab host switch bumps hostEpoch and remounts DraftForm, wiping stale draft state.
+      mockCall.mockResolvedValueOnce(switched);
+      await mounted.act(async () => {
+        client.setQueryData(subspaceQuery.queryKey, switched);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(mounted.container.innerHTML).toContain('data-draft="clean"');
+      expect(mounted.container.innerHTML).not.toContain("unsaved-tab-a-value");
+    } finally {
+      history.dispose();
+    }
   });
 });

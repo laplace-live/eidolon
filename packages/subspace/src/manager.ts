@@ -154,7 +154,8 @@ export class SubspaceManager {
   constructor(deps: SubspaceManagerDeps) {
     this.#deps = deps;
     this.store = new SubspaceStore(deps.dataHome);
-    this.#relayUrlFn = deps.relayUrl ?? (() => resolveEffectiveRelayUrl(this.#safeSavedRelayUrl()));
+    this.#relayUrlFn =
+      deps.relayUrl ?? (() => resolveEffectiveRelayUrl(() => this.store.readSavedRelayUrl()));
     this.#authUrlFn = deps.authUrl;
     this.host = new SubspaceHost({
       store: this.store,
@@ -165,12 +166,22 @@ export class SubspaceManager {
     });
   }
 
-  #safeSavedRelayUrl(): string | null {
+  #readRelayAuthOrBadRequest() {
     try {
-      return this.store.readRelayAuth()?.relayUrl ?? null;
-    } catch {
-      return null;
+      return this.store.readRelayAuth();
+    } catch (error) {
+      throw codedError(
+        "bad-request",
+        error instanceof Error ? error.message : "Corrupted Subspace Relay credentials",
+      );
     }
+  }
+
+  #hasActiveCallsOnHostKey(hostPublicKeyB64: string): boolean {
+    const existing = this.store
+      .readServers()
+      .servers.find((s) => s.hostPublicKeyB64 === hostPublicKeyB64);
+    return existing !== undefined && (this.#clients.get(existing.id)?.activeCallCount ?? 0) > 0;
   }
 
   get activeHostId(): string | null {
@@ -209,7 +220,13 @@ export class SubspaceManager {
   async getState(): Promise<SubspaceStateSnapshot> {
     const identity = await this.store.loadOrCreateIdentity();
     const { activeHostId, servers } = this.store.readServers();
-    const relayAuth = this.store.readRelayAuth();
+    let relayAuth: ReturnType<SubspaceStore["readRelayAuth"]> = null;
+    let configRelayError: string | null = null;
+    try {
+      relayAuth = this.store.readRelayAuth();
+    } catch (error) {
+      configRelayError = error instanceof Error ? error.message : String(error);
+    }
     const grants: readonly SubspaceGrantRecord[] = this.store.readGrants();
     const activeOffer =
       identity.shareMode === "off"
@@ -218,11 +235,10 @@ export class SubspaceManager {
     const needsRelay = identity.shareMode === "relay" || grants.some((g) => g.mode === "relay");
     let relayUrl = DEFAULT_SUBSPACE_RELAY_URL;
     let authUrl = relayAuth?.authUrl ?? DEFAULT_SUBSPACE_AUTH_URL;
-    let configRelayError: string | null = null;
     try {
       relayUrl = withoutTrailingSlashes(this.#relayUrlFn());
     } catch (error) {
-      configRelayError = error instanceof Error ? error.message : String(error);
+      configRelayError ??= error instanceof Error ? error.message : String(error);
     }
     if (relayAuth?.authUrl === undefined) {
       try {
@@ -233,6 +249,15 @@ export class SubspaceManager {
       } catch (error) {
         configRelayError ??= error instanceof Error ? error.message : String(error);
       }
+    }
+    if (
+      needsRelay &&
+      relayAuth !== null &&
+      configRelayError === null &&
+      this.host.activeRelayUrl !== null &&
+      this.host.activeRelayUrl !== relayUrl
+    ) {
+      this.host.startRelay();
     }
 
     return {
@@ -326,7 +351,21 @@ export class SubspaceManager {
       );
     }
     const offer = parsed.offer;
+    if (this.#hasActiveCallsOnHostKey(offer.hostPublicKeyB64)) {
+      throw codedError(
+        "call-active",
+        "A call is in progress on this server; hang up before re-pairing it",
+      );
+    }
     const handshake = await performPairingHandshake(offer);
+    if (this.#hasActiveCallsOnHostKey(offer.hostPublicKeyB64)) {
+      handshake.tunnel.mux.close("Call active");
+      handshake.tunnel.ws.terminate();
+      throw codedError(
+        "call-active",
+        "A call is in progress on this server; hang up before re-pairing it",
+      );
+    }
     const saved: SubspaceSavedServer = {
       id: newId(),
       name: input.name?.trim() || handshake.hostName || offer.hostName,
@@ -420,7 +459,8 @@ export class SubspaceManager {
     ) {
       throw codedError("bad-request", "Invalid direct endpoint host");
     }
-    if (patch.shareMode === "relay" && this.store.readRelayAuth() === null) {
+    const authRecord = this.#readRelayAuthOrBadRequest();
+    if (patch.shareMode === "relay" && authRecord === null) {
       throw codedError(
         "relay-auth-required",
         "Sign in to the Subspace Relay before sharing via Relay",
@@ -470,7 +510,7 @@ export class SubspaceManager {
     }
 
     if (needsRelay) {
-      if (this.store.readRelayAuth() !== null) this.host.startRelay();
+      if (this.#readRelayAuthOrBadRequest() !== null) this.host.startRelay();
     } else {
       this.host.stopRelay();
     }
@@ -489,7 +529,7 @@ export class SubspaceManager {
     readonly expiresAt: number;
     readonly state: SubspaceStateSnapshot;
   }> {
-    if (options.mode === "relay" && this.store.readRelayAuth() === null) {
+    if (options.mode === "relay" && this.#readRelayAuthOrBadRequest() === null) {
       throw codedError("relay-auth-required", "Sign in to the Subspace Relay first");
     }
     const identity = await this.store.loadOrCreateIdentity();

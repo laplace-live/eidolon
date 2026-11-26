@@ -1,9 +1,9 @@
 import { ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronsUpDownIcon, MonitorIcon, OrbitIcon, PlusIcon, SettingsIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useRef, useState } from "react";
+import { Link } from "wouter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,41 +20,23 @@ import { useCallPresence } from "@/features/call/call-context";
 import { AddSubspaceServerDialog } from "@/features/subspace/add-server-dialog";
 import {
   activeSubspaceServer,
-  consumeHandledHostSwitch,
-  resetHostCacheAndRoute,
   SUBSPACE_CONNECTION_DOT,
   subspaceQuery,
+  useSubspaceHostSync,
   useSwitchSubspaceHost,
 } from "@/features/subspace/queries";
-import { setExpectedSubspaceHost } from "@/lib/api";
-import { useRevalidate } from "@/router";
 
 const LOCAL_HOST = "__local__";
 
 export function SubspaceSwitcher({ side }: { readonly side: "bottom" | "right" }) {
   const { t } = useLingui();
   const subspace = useQuery(subspaceQuery);
-  const queryClient = useQueryClient();
-  const [pathname, navigate] = useLocation();
-  const revalidate = useRevalidate();
+  useSubspaceHostSync();
   const { up } = useCallPresence();
   const switching = useSwitchSubspaceHost();
   const [adding, setAdding] = useState(false);
   // Defer opening the dialog until the menu finishes closing so focus traps don't collide.
   const openingDialog = useRef(false);
-  const prevHostRef = useRef<string | null | undefined>(undefined);
-
-  const activeHostId = subspace.data?.activeHostId;
-  useEffect(() => {
-    if (activeHostId === undefined) return;
-    setExpectedSubspaceHost(activeHostId);
-    const prev = prevHostRef.current;
-    prevHostRef.current = activeHostId;
-    const handled = consumeHandledHostSwitch(queryClient, activeHostId);
-    if (prev !== undefined && prev !== activeHostId && !handled) {
-      void resetHostCacheAndRoute(queryClient, pathname, navigate, revalidate);
-    }
-  }, [activeHostId, queryClient, pathname, navigate, revalidate]);
 
   const state = subspace.data;
   if (!state || (state.servers.length === 0 && state.activeHostId === null)) return null;

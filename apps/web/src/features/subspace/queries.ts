@@ -1,11 +1,19 @@
 import { useLingui } from "@lingui/react/macro";
-import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import {
+  type QueryClient,
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { avatarsResetForHost } from "@/components/avatar/version";
 import {
   call,
+  clearExpectedHostConflictListener,
+  primeExpectedSubspaceHost,
   type SubspaceConnectionState,
   type SubspacePairRequest,
   type SubspacePairResponse,
@@ -13,6 +21,7 @@ import {
   type SubspaceShareOfferRequest,
   type SubspaceShareSettingsRequest,
   type SubspaceStateResponse,
+  setExpectedHostConflictListener,
   setExpectedSubspaceHost,
 } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
@@ -33,7 +42,7 @@ export const subspaceQuery = queryOptions({
   queryKey: SUBSPACE_KEY,
   queryFn: async ({ signal }) => {
     const data = await call("GET /api/local/subspace", { signal });
-    setExpectedSubspaceHost(data.activeHostId);
+    primeExpectedSubspaceHost(data.activeHostId);
     return data;
   },
   refetchInterval: (query) => {
@@ -85,6 +94,29 @@ export function useClipboardCopy(successMessage: string): {
 }
 
 const handledHostSwitches = new WeakMap<QueryClient, string | null>();
+const syncedHostsByClient = new WeakMap<QueryClient, string | null>();
+let hostEpoch = 0;
+const hostEpochListeners = new Set<() => void>();
+
+export function bumpSubspaceHostEpoch(): void {
+  hostEpoch += 1;
+  for (const listener of [...hostEpochListeners]) listener();
+}
+
+function subscribeHostEpoch(listener: () => void): () => void {
+  hostEpochListeners.add(listener);
+  return () => {
+    hostEpochListeners.delete(listener);
+  };
+}
+
+export function useSubspaceHostEpoch(): number {
+  return useSyncExternalStore(
+    subscribeHostEpoch,
+    () => hostEpoch,
+    () => hostEpoch,
+  );
+}
 
 export function markHostSwitchHandled(queryClient: QueryClient, hostId: string | null): void {
   handledHostSwitches.set(queryClient, hostId);
@@ -97,6 +129,34 @@ export function consumeHandledHostSwitch(queryClient: QueryClient, hostId: strin
   return marked === hostId;
 }
 
+export function useSubspaceHostSync(): void {
+  const subspace = useQuery(subspaceQuery);
+  const queryClient = useQueryClient();
+  const [pathname, navigate] = useLocation();
+  const revalidate = useRevalidate();
+  const activeHostId = subspace.data?.activeHostId;
+
+  useEffect(() => {
+    const onConflict = () => {
+      void queryClient.invalidateQueries({ queryKey: SUBSPACE_KEY });
+    };
+    setExpectedHostConflictListener(onConflict);
+    return () => clearExpectedHostConflictListener(onConflict);
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (activeHostId === undefined) return;
+    setExpectedSubspaceHost(activeHostId);
+    const hadPrev = syncedHostsByClient.has(queryClient);
+    const prev = syncedHostsByClient.get(queryClient);
+    syncedHostsByClient.set(queryClient, activeHostId);
+    const handled = consumeHandledHostSwitch(queryClient, activeHostId);
+    if (hadPrev && prev !== activeHostId && !handled) {
+      void resetHostCacheAndRoute(queryClient, pathname, navigate, revalidate);
+    }
+  }, [activeHostId, queryClient, pathname, navigate, revalidate]);
+}
+
 export async function resetHostCacheAndRoute(
   queryClient: QueryClient,
   pathname: string,
@@ -106,6 +166,7 @@ export async function resetHostCacheAndRoute(
   const nonSubspace = (query: { readonly queryKey: readonly unknown[] }) =>
     query.queryKey[0] !== SUBSPACE_KEY[0];
   avatarsResetForHost();
+  bumpSubspaceHostEpoch();
   await queryClient.cancelQueries({ predicate: nonSubspace });
   queryClient.removeQueries({ predicate: nonSubspace });
   if (/^\/chats\/.+/.test(pathname)) {

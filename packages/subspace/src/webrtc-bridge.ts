@@ -11,9 +11,16 @@ export interface HostUdpCandidate {
   readonly port: number;
 }
 
+function stripIpZone(ip: string): string {
+  const pct = ip.indexOf("%");
+  return pct >= 0 ? ip.slice(0, pct) : ip;
+}
+
 function normalizeCandidateIp(raw: string): string {
   const bare = raw.startsWith("[") && raw.endsWith("]") ? raw.slice(1, -1) : raw;
-  return isIP(bare) === 6 ? bare.toLowerCase() : bare;
+  if (isIP(bare) !== 6) return bare;
+  const pct = bare.indexOf("%");
+  return pct >= 0 ? `${bare.slice(0, pct).toLowerCase()}${bare.slice(pct)}` : bare.toLowerCase();
 }
 
 function isDtlsAlert(packet: Uint8Array): boolean {
@@ -183,15 +190,16 @@ export function openHostUdpBridge(
 ): { sendToHost(data: Uint8Array): void; close(): void } | null {
   if (!Number.isInteger(hostPort) || hostPort < 1 || hostPort > 65535) return null;
   const targetAddress = normalizeCandidateIp(hostAddress);
+  const unzonedTarget = stripIpZone(targetAddress);
   const ipFamily = isIP(targetAddress);
   if (ipFamily !== 4 && ipFamily !== 6) return null;
   const socket = createSocket(ipFamily === 6 ? "udp6" : "udp4");
   const bindAddress =
     ipFamily === 6
-      ? targetAddress === "::1"
+      ? unzonedTarget === "::1"
         ? "::1"
         : "::"
-      : targetAddress === "127.0.0.1"
+      : unzonedTarget === "127.0.0.1"
         ? "127.0.0.1"
         : "0.0.0.0";
   let closed = false;
@@ -216,7 +224,12 @@ export function openHostUdpBridge(
 
   socket.on("message", (msg, rinfo) => {
     if (closed) return;
-    if (rinfo.port !== hostPort || normalizeCandidateIp(rinfo.address) !== targetAddress) return;
+    if (
+      rinfo.port !== hostPort ||
+      stripIpZone(normalizeCandidateIp(rinfo.address)) !== unzonedTarget
+    ) {
+      return;
+    }
     idle.touch();
     tunnel.sendDatagram(msg);
     if (isDtlsAlert(msg)) scheduleAlertClose();
