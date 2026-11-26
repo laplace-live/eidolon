@@ -2890,21 +2890,25 @@ async function groupChatWalk(walk: Walk): Promise<void> {
   }
   const short = (persona: typeof first) => persona.shortName.trim() || persona.name;
 
+  const startGroupChat = async () => {
+    await page
+      .getByRole("button", { name: t("en", "New Chat"), exact: true })
+      .first()
+      .click();
+    for (const persona of [first, second]) {
+      await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
+    }
+    const posted = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" && response.url() === `${origin}/api/local/chats`,
+    );
+    await page.getByRole("menuitem", { name: t("en", "Start Group Chat"), exact: true }).click();
+    return posted;
+  };
+
   await page.goto(`${origin}/chats`);
-  await page
-    .getByRole("button", { name: t("en", "New Chat"), exact: true })
-    .first()
-    .click();
-  for (const persona of [first, second]) {
-    await page.getByRole("menuitemcheckbox").filter({ hasText: persona.name }).click();
-  }
-  const posted = page.waitForResponse(
-    (response) =>
-      response.request().method() === "POST" && response.url() === `${origin}/api/local/chats`,
-  );
   const asked = chats.length;
-  await page.getByRole("menuitem", { name: t("en", "Start Group Chat"), exact: true }).click();
-  const createStatus = (await posted).status();
+  const createStatus = (await startGroupChat()).status();
   await page.waitForURL(/\/chats\/[0-9a-f-]{36}$/);
   const id = new URL(page.url()).pathname.split("/").at(-1) as string;
   // Untitled, the page names it by who is in it.
@@ -3017,6 +3021,47 @@ async function groupChatWalk(walk: Walk): Promise<void> {
       JSON.stringify(after) === JSON.stringify(expectedNames),
     `her answer shows under ${String(shown[0])} and the hop's under ${String(shown[1])}; ` +
       `after a reload, ${reloaded ? `${String(after[0])} and ${String(after[1])}` : "neither shows"}`,
+  );
+
+  const { id: otherId } = (await (await startGroupChat()).json()) as { readonly id: string };
+  await page.waitForURL(`${origin}/chats/${otherId}`);
+  const otherBox = page.getByRole("textbox", { name: t("en", "Message everyone"), exact: true });
+  await otherBox.waitFor();
+  await otherBox.fill(GROUP_MESSAGE);
+  await otherBox.press("Enter");
+  // Switch away right after Enter so the server reply settles in the background.
+  const sidebar = page.getByRole("list", { name: t("en", "Chats"), exact: true });
+  await sidebar.locator(`a[href="/chats/${id}"]`).click();
+  await page.waitForURL(`${origin}/chats/${id}`);
+  const otherRow = sidebar.getByRole("listitem").filter({
+    has: page.locator(`a[href="/chats/${otherId}"]`),
+  });
+  const listUpdated = await shows(otherRow.getByText(HOP_REPLY), 15_000);
+  const unreadShown = await shows(
+    otherRow.locator("[data-unread-count] [aria-hidden]", { hasText: /^2$/ }),
+    15_000,
+  );
+  const markedRead = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url() === `${origin}/api/local/chats/${otherId}/read`,
+  );
+  await sidebar.locator(`a[href="/chats/${otherId}"]`).click();
+  await page.waitForURL(`${origin}/chats/${otherId}`);
+  const readStatus = (await markedRead).status();
+  await sidebar.locator(`a[href="/chats/${id}"]`).click();
+  await page.waitForURL(`${origin}/chats/${id}`);
+  const badgeGone = await waitFor(
+    async () => (await otherRow.locator("[data-unread-count]").count()) === 0,
+    10_000,
+  );
+  await walk.api("DELETE", `/api/local/chats/${otherId}`);
+  checks.add(
+    "chat switch and unread badge",
+    listUpdated && unreadShown && readStatus === 200 && badgeGone !== null,
+    `background chat list ${listUpdated ? "updated" : "never updated"} to her reply and ` +
+      `${unreadShown ? "showed" : "missed"} its unread badge; POST read answered ${readStatus} ` +
+      `and the badge ${badgeGone !== null ? "cleared" : "stayed"} after switching back`,
   );
 }
 

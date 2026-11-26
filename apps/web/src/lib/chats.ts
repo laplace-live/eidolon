@@ -3,21 +3,23 @@ import type {
   Attachment,
   ChatDisplay,
   ChatStreamLine,
-  ChatSummary,
   ParticipantId,
   PermissionLevel,
   ReplyMode,
 } from "@eidolon/chat";
-import { ApiError, type ChatContents, call, send, stream, url } from "./api";
+import { ApiError, type ChatContents, call, type LocalChatSummary, send, stream, url } from "./api";
 import { readNdjson } from "./ndjson";
 
-export type { ChatContents };
+export type { ChatContents, LocalChatSummary };
 
-async function* lines(body: ReadableStream<Uint8Array>): AsyncGenerator<ChatStreamLine> {
-  for await (const { value } of readNdjson<ChatStreamLine>(body)) yield value;
+async function* lines(
+  body: ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
+): AsyncGenerator<ChatStreamLine> {
+  for await (const { value } of readNdjson<ChatStreamLine>(body, 0, signal)) yield value;
 }
 
-export function listChats(signal?: AbortSignal): Promise<readonly ChatSummary[]> {
+export function listChats(signal?: AbortSignal): Promise<readonly LocalChatSummary[]> {
   return call("GET /api/local/chats", { signal });
 }
 
@@ -64,8 +66,10 @@ export async function* sendMessage(
       : { name: file.name },
   );
   const body = attachments.length > 0 ? { text, attachments } : { text };
+  // Never pass `signal` to fetch(): navigating away before headers must let the POST land.
   yield* lines(
-    await stream("POST /api/local/chats/:id/messages", { params: { id }, body, signal }),
+    await stream("POST /api/local/chats/:id/messages", { params: { id }, body }),
+    signal,
   );
 }
 
@@ -85,8 +89,8 @@ export async function* sendVoice(
       params: { id },
       query: { durationMs: Math.max(1, Math.round(durationMs)) },
       body: audio,
-      signal,
     }),
+    signal,
   );
 }
 
@@ -95,7 +99,12 @@ export async function* followLive(id: string, signal: AbortSignal): AsyncGenerat
   const response = await send("GET /api/local/chats/:id/live", { params: { id }, signal });
   if (response.status === 204) return;
   if (!response.body) throw new ApiError(response.status, "bad-response", "no body");
-  yield* lines(response.body);
+  yield* lines(response.body, signal);
+}
+
+/** Marks events through `seq` as read without modifying the chat log. */
+export async function markChatRead(id: string, seq: number): Promise<void> {
+  await call("POST /api/local/chats/:id/read", { params: { id }, body: { seq } });
 }
 
 /** Resolves once the stopped reply's words are stored. */

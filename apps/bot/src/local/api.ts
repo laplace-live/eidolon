@@ -81,6 +81,7 @@ export const LOCAL_ROUTES = [
   "POST /api/local/chats/:id/voice",
   "GET /api/local/chats/:id/live",
   "POST /api/local/chats/:id/stop",
+  "POST /api/local/chats/:id/read",
   "POST /api/local/chats/:id/participants",
   "GET /api/local/chats/:id/files/:name",
   "GET /api/local/tasks",
@@ -1229,7 +1230,7 @@ export interface LocalApi {
   "DELETE /api/local/memories": Endpoint<undefined, Ok, MemoriesQuery>;
   "GET /api/local/usage": Endpoint<undefined, UsageSummary, UsageQuery>;
   /** Newest activity first. */
-  "GET /api/local/chats": Endpoint<undefined, readonly ChatSummary[]>;
+  "GET /api/local/chats": Endpoint<undefined, readonly LocalChatSummary[]>;
   "POST /api/local/chats": Endpoint<ChatCreateRequest, ChatCreated>;
   "GET /api/local/chats/:id": Endpoint<undefined, ChatContents, ChatReadQuery>;
   "PATCH /api/local/chats/:id": Endpoint<ChatUpdateRequest, Ok>;
@@ -1245,6 +1246,7 @@ export interface LocalApi {
   "GET /api/local/chats/:id/live": Endpoint<undefined, Raw<"ndjson">>;
   /** A 204 with no body, once the turn has stopped and what it said is stored. */
   "POST /api/local/chats/:id/stop": Endpoint<undefined, undefined>;
+  "POST /api/local/chats/:id/read": Endpoint<ChatReadRequest, Ok>;
   "POST /api/local/chats/:id/participants": Endpoint<ChatParticipantsRequest, Ok>;
   /** Audio answers Range requests, so a player can seek. */
   "GET /api/local/chats/:id/files/:name": Endpoint<undefined, Raw<"image" | "audio">>;
@@ -1305,6 +1307,19 @@ export interface LocalApi {
    * name.
    */
   "PUT /api/local/skills/:name": Endpoint<SkillChange, SkillsResponse>;
+}
+
+/** A chat in GET chats' list: its summary, how many of her items are unread, and whether it runs. */
+export interface LocalChatSummary extends ChatSummary {
+  /** Items of hers stored after the viewer's last read seq. */
+  readonly unread: number;
+  /** A reply, a voice message being heard, a late tool or a call is on in the chat. */
+  readonly active: boolean;
+}
+
+/** POST chats/:id/read: marks events through `seq` as read without changing `updatedAt`. */
+export interface ChatReadRequest {
+  readonly seq: number;
 }
 
 /**

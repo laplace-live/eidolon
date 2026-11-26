@@ -14,6 +14,10 @@ msgctxt "list separator"
 msgid ", "
 msgstr "、"
 
+#: src/features/chats/chat-list.tsx
+msgid ", {count} unread"
+msgstr "，{count} 条未读"
+
 #: src/components/app-sidebar.tsx
 msgid ", {count} waiting for you"
 msgstr "，{count} 个在等你"

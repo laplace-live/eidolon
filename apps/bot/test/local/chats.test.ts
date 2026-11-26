@@ -2,7 +2,16 @@
 // which order, and what each stream carries. The engine itself is never run here.
 import "../../../../packages/config/test/isolated-guard.ts";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { crc32, deflateSync } from "node:zlib";
@@ -18,6 +27,7 @@ import {
   summarize,
   viewOf,
 } from "@eidolon/chat";
+import { JsonlChatStore } from "@eidolon/chat/jsonl";
 import {
   activePersona,
   dataHome,
@@ -51,7 +61,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { serveFetch } from "../../../../packages/config/test/http.ts";
 import type { RouteHandler } from "../../src/app.ts";
 import { MAX_SENT_IMAGE_BYTES } from "../../src/images.ts";
-import type { ChatContents } from "../../src/local/api.ts";
+import type { ChatContents, LocalChatSummary } from "../../src/local/api.ts";
 import type { LiveTurn } from "../../src/local/chats/live.ts";
 import {
   type ChatAnswer,
@@ -61,6 +71,7 @@ import {
   type ChatTurn,
   NotInChat,
 } from "../../src/local/chats/runner.ts";
+import { ChatReadStore } from "../../src/local/chats/unread.ts";
 import { identityHandlers } from "../../src/local/identity.ts";
 import { ndjsonResponse } from "../../src/local/responses.ts";
 import { createLocalRouter, type LocalApp, localRoute } from "../../src/local/router.ts";
@@ -1247,7 +1258,9 @@ describe("a chat", () => {
     expect(await json(await server.call("DELETE", `/chats/${id}`))).toEqual({ ok: true });
     expect(requests.at(-1)?.signal.aborted).toBe(true);
     expect(shape(await live.all()).at(-1)).toBe("ended");
-    expect(readdirSync(chatsRoot()).toSorted()).toEqual([keep, "notes.txt"].toSorted());
+    expect(readdirSync(chatsRoot()).toSorted()).toEqual(
+      [keep, "notes.txt", "read.json"].toSorted(),
+    );
     expect(existsSync(join(dataHome(), "chats-elsewhere"))).toBe(true);
     expect(await errorCode(await server.call("GET", `/chats/${id}`))).toEqual([
       404,
@@ -2809,5 +2822,410 @@ describe("the files the viewer sends", () => {
       expect([body, await errorCode(await post(body))]).toEqual([body, [400, "bad-request"]]);
     }
     expect((await log(id)).events).toHaveLength(2);
+  });
+});
+
+describe("unread counts and live state", () => {
+  test("a new chat is active during its greeting, counts 1 unread after, and read clears it without touching updatedAt", async () => {
+    const hold = deferred();
+    scripts.set("", reply("你好呀", { hold: hold.promise }));
+    const { id } = await json<{ id: string }>(
+      await server.call("POST", "/chats", { participants: [PERSONA] }),
+      201,
+    );
+    const live = new Lines(await server.call("GET", `/chats/${id}/live`));
+    await live.until((line) => line.type === "delta");
+
+    const during = await json<LocalChatSummary[]>(await server.call("GET", "/chats"));
+    expect(during).toMatchObject([{ id, active: true }]);
+
+    hold.resolve();
+    await live.all();
+
+    const after = await json<LocalChatSummary[]>(await server.call("GET", "/chats"));
+    expect(after).toMatchObject([{ id, unread: 1, active: false, lastSeq: 2 }]);
+    const updatedAt = after[0]!.updatedAt;
+
+    const read = await json<{ ok: true }>(
+      await server.call("POST", `/chats/${id}/read`, { seq: 2 }),
+    );
+    expect(read).toEqual({ ok: true });
+
+    const cleared = await json<LocalChatSummary[]>(await server.call("GET", "/chats"));
+    expect(cleared).toMatchObject([{ id, unread: 0, active: false, lastSeq: 2, updatedAt }]);
+    expect(statSync(join(chatsRoot(), "read.json")).mode & 0o777).toBe(0o600);
+  });
+
+  test("partial read seq counts only newer replies, clamps above lastSeq, and rejects invalid requests", async () => {
+    persona("beta", "贝塔");
+    const id = await group("beta");
+    plans.set("聊聊", [
+      { replies: [PERSONA, "beta"], source: "model", scores: { addressed_beta: 0.9 } },
+    ]);
+    scripts.set(`${PERSONA} 聊聊`, reply("第一句"));
+    scripts.set("beta 聊聊", reply("第二句"));
+
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "聊聊" })).all();
+    const { events } = await log(id);
+    const firstReply = events.find(
+      (event) => event.type === "message" && event.speaker.kind === "persona",
+    )!;
+    const beforeRead = await json<LocalChatSummary[]>(await server.call("GET", "/chats"));
+    expect(beforeRead).toMatchObject([{ id, unread: 2, active: false }]);
+
+    await json(await server.call("POST", `/chats/${id}/read`, { seq: firstReply.seq }));
+    expect(await json<LocalChatSummary[]>(await server.call("GET", "/chats"))).toMatchObject([
+      { id, unread: 1 },
+    ]);
+
+    // Clamps cleanly past lastSeq.
+    await json(await server.call("POST", `/chats/${id}/read`, { seq: 999 }));
+    expect(await json<LocalChatSummary[]>(await server.call("GET", "/chats"))).toMatchObject([
+      { id, unread: 0 },
+    ]);
+
+    for (const bad of [{}, { seq: -1 }, { seq: 1.5 }, { seq: "2" }, { seq: 1, extra: true }]) {
+      expect(await errorCode(await server.call("POST", `/chats/${id}/read`, bad))).toEqual([
+        400,
+        "bad-request",
+      ]);
+    }
+    expect(await errorCode(await server.call("POST", "/chats/not-an-id/read", { seq: 1 }))).toEqual(
+      [400, "bad-request"],
+    );
+    expect(
+      await errorCode(await server.call("POST", `/chats/${crypto.randomUUID()}/read`, { seq: 1 })),
+    ).toEqual([404, "unknown-chat"]);
+  });
+
+  test("a dropped send finishes in the background, counts unread persona events accurately, and leaves other chats/calls uncounted", async () => {
+    const id = await greeted();
+    await json(await server.call("POST", `/chats/${id}/read`, { seq: 2 }));
+
+    const hold = deferred();
+    scripts.set("切换前发送", reply("后台完成回复", { hold: hold.promise }));
+    const stream = new Lines(
+      await server.call("POST", `/chats/${id}/messages`, { text: "切换前发送" }),
+    );
+    await stream.until((line) => line.type === "delta");
+    await stream.drop();
+
+    const midFlight = await json<LocalChatSummary[]>(await server.call("GET", "/chats"));
+    expect(midFlight).toMatchObject([{ id, active: true, unread: 0 }]);
+
+    hold.resolve();
+    await until(async () => (await server.call("GET", `/chats/${id}/live`)).status === 204);
+
+    const finished = await json<LocalChatSummary[]>(await server.call("GET", "/chats"));
+    expect(finished).toMatchObject([{ id, lastText: "后台完成回复", unread: 1, active: false }]);
+
+    // Metadata updates do not create unread counts.
+    await json(await server.call("PATCH", `/chats/${id}`, { title: "标题" }));
+    await json(await server.call("PATCH", `/chats/${id}`, { chainLimit: 2 }));
+    expect(await json<LocalChatSummary[]>(await server.call("GET", "/chats"))).toMatchObject([
+      { id, unread: 1 },
+    ]);
+
+    // Call lines do not count toward unread either.
+    const binding = await dial(id);
+    binding.onTranscript({ role: "user", text: "喂", interrupted: false });
+    binding.onTranscript({ role: "assistant", text: "通话内容", interrupted: false });
+    await until(async () =>
+      (await log(id)).events.some((e) => e.type === "message" && e.text === "通话内容"),
+    );
+    binding.onEnded("hangup");
+    await until(async () => (await log(id)).events.some((e) => e.type === "call-ended"));
+    expect(await json<LocalChatSummary[]>(await server.call("GET", "/chats"))).toMatchObject([
+      { id, unread: 1, active: false },
+    ]);
+
+    // Sending clears prior unread items, and voice-failed does not double count her fallback text.
+    scripts.set("语音回退", async function* (request) {
+      const turn = crypto.randomUUID();
+      yield { type: "started", turn, persona: request.persona };
+      yield {
+        type: "events",
+        events: [
+          {
+            type: "message",
+            id: crypto.randomUUID(),
+            speaker: { kind: "persona", id: request.persona },
+            text: "转成文字啦",
+          },
+          {
+            type: "turn-failed",
+            persona: request.persona,
+            turn,
+            error: "tts down",
+            code: "voice-failed",
+          },
+        ],
+      };
+      yield { type: "ended", turn };
+    });
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "语音回退" })).all();
+    expect(await json<LocalChatSummary[]>(await server.call("GET", "/chats"))).toMatchObject([
+      { id, unread: 1 },
+    ]);
+
+    // tool-call `said` and non-voice-failed `turn-failed` each count once (prior turn was read by sending).
+    scripts.set("工具报错", async function* (request) {
+      const turn = crypto.randomUUID();
+      yield { type: "started", turn, persona: request.persona };
+      yield {
+        type: "events",
+        events: [
+          {
+            type: "tool-call",
+            persona: request.persona,
+            turn,
+            callId: "c1",
+            name: "recall_streams",
+            arguments: {},
+            said: "我找找",
+          },
+          { type: "turn-failed", persona: request.persona, turn, error: "boom" },
+        ],
+      };
+      yield { type: "ended", turn };
+    });
+    await new Lines(await server.call("POST", `/chats/${id}/messages`, { text: "工具报错" })).all();
+    expect(await json<LocalChatSummary[]>(await server.call("GET", "/chats"))).toMatchObject([
+      { id, unread: 2 },
+    ]);
+  });
+
+  test("persists watermarks across restarts, leaves pre-existing chats at 0 unread, and cleans up on delete", async () => {
+    const legacyRoot = join(dataHome(), "legacy-chats");
+    made.push(legacyRoot);
+    const store = new JsonlChatStore(legacyRoot);
+    const legacyId = newId();
+    await store.create({ format: 1, id: legacyId, createdAt: 1000, participants: [PERSONA] });
+    await store.append(legacyId, [
+      { seq: 1, at: 1001, type: "message", id: "u1", speaker: { kind: "user" }, text: "旧消息" },
+      {
+        seq: 2,
+        at: 1002,
+        type: "message",
+        id: "m2",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "旧回复",
+      },
+    ]);
+
+    const firstRunner = new ChatRunner({
+      root: legacyRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    try {
+      expect(await firstRunner.list()).toMatchObject([{ id: legacyId, unread: 0, active: false }]);
+      await (await firstRunner.send(legacyId, "新消息")).ended;
+      expect(await firstRunner.list()).toMatchObject([{ id: legacyId, unread: 1, active: false }]);
+    } finally {
+      await firstRunner.shutdown();
+    }
+
+    const secondRunner = new ChatRunner({
+      root: legacyRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    try {
+      expect(await secondRunner.list()).toMatchObject([{ id: legacyId, unread: 1, active: false }]);
+      await secondRunner.remove(legacyId);
+      expect(await secondRunner.list()).toEqual([]);
+    } finally {
+      await secondRunner.shutdown();
+    }
+    expect(JSON.parse(readFileSync(join(legacyRoot, "read.json"), "utf8"))).toEqual({});
+  });
+
+  test("concurrent append past summary.lastSeq while count reads disk does not double-count unread items", async () => {
+    const storeRoot = join(dataHome(), "unread-race");
+    made.push(storeRoot);
+    const reads = new ChatReadStore(storeRoot, () => {});
+    const id = newId();
+    const otherId = newId();
+    await reads.created(id);
+    await reads.created(otherId);
+    const ev1: ChatEvent = {
+      seq: 1,
+      at: 1001,
+      type: "message",
+      id: "u1",
+      speaker: { kind: "user" },
+      text: "你好",
+    };
+    const ev2: ChatEvent = {
+      seq: 2,
+      at: 1002,
+      type: "message",
+      id: "m2",
+      speaker: { kind: "persona", id: PERSONA },
+      text: "第一条",
+    };
+    const ev3: ChatEvent = {
+      seq: 3,
+      at: 1003,
+      type: "message",
+      id: "m3",
+      speaker: { kind: "persona", id: PERSONA },
+      text: "第二条",
+    };
+    await reads.appended(id, [ev1, ev2]);
+
+    // Simulate a cold unread cache and a summary captured at lastSeq=2 while seq=3 lands on disk
+    // and another write delays `appended(id, [ev3])` in #queue until after `readAfter` returns.
+    const cold = new ChatReadStore(storeRoot, () => {});
+    const readStarted = deferred();
+    const releaseRead = deferred();
+    const countAt2 = cold.count(
+      {
+        id,
+        title: null,
+        participants: [PERSONA],
+        createdAt: 1000,
+        updatedAt: 1002,
+        lastText: "第一条",
+        lastSeq: 2,
+      },
+      async () => {
+        readStarted.resolve();
+        await releaseRead.promise;
+        return [ev2, ev3];
+      },
+    );
+    await readStarted.promise;
+    const holdQueue = cold.markRead(otherId, 0, 0);
+    const appended3 = cold.appended(id, [ev3]);
+    releaseRead.resolve();
+    expect(await countAt2).toBe(1);
+    await Promise.all([holdQueue, appended3]);
+
+    expect(
+      await cold.count(
+        {
+          id,
+          title: null,
+          participants: [PERSONA],
+          createdAt: 1000,
+          updatedAt: 1003,
+          lastText: "第二条",
+          lastSeq: 3,
+        },
+        async () => [],
+      ),
+    ).toBe(2);
+  });
+
+  test("preserves read.json on corrupt parse or transient read error, and isolates corrupt chat logs in list()", async () => {
+    // Corrupt read.json must stay untouched on disk across restarts and subsequent operations.
+    const corruptRoot = join(dataHome(), "corrupt-read");
+    made.push(corruptRoot);
+    mkdirSync(corruptRoot, { recursive: true });
+    writeFileSync(join(corruptRoot, "read.json"), "{bad", { mode: 0o600 });
+    const corruptRunner = new ChatRunner({
+      root: corruptRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    try {
+      const createdId = await corruptRunner.create([PERSONA]);
+      await corruptRunner.markRead(createdId, 0);
+      expect(readFileSync(join(corruptRoot, "read.json"), "utf8")).toBe("{bad");
+    } finally {
+      await corruptRunner.shutdown();
+    }
+
+    // Transient non-ENOENT read error (e.g. EISDIR) must not overwrite watermarks once recovered.
+    const transientRoot = join(dataHome(), "transient-read");
+    made.push(transientRoot);
+    const chatStore = new JsonlChatStore(transientRoot);
+    const savedId = newId();
+    await chatStore.create({ format: 1, id: savedId, createdAt: 1000, participants: [PERSONA] });
+    await chatStore.append(savedId, [
+      { seq: 1, at: 1001, type: "message", id: "u1", speaker: { kind: "user" }, text: "一" },
+      {
+        seq: 2,
+        at: 1002,
+        type: "message",
+        id: "p2",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "二",
+      },
+      {
+        seq: 3,
+        at: 1003,
+        type: "message",
+        id: "p3",
+        speaker: { kind: "persona", id: PERSONA },
+        text: "三",
+      },
+    ]);
+    const readPath = join(transientRoot, "read.json");
+    const backupPath = join(transientRoot, "read.bak");
+    writeFileSync(backupPath, JSON.stringify({ [savedId]: 1 }), { mode: 0o600 });
+    mkdirSync(readPath);
+    const blockedRunner = new ChatRunner({
+      root: transientRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    try {
+      expect(await blockedRunner.list()).toMatchObject([{ id: savedId, unread: 0 }]);
+      await blockedRunner.markRead(savedId, 3);
+      rmSync(readPath, { recursive: true });
+      renameSync(backupPath, readPath);
+      expect(await blockedRunner.list()).toMatchObject([{ id: savedId, unread: 2 }]);
+    } finally {
+      await blockedRunner.shutdown();
+    }
+
+    // Cold runner + corrupt chat.jsonl (same byte length as meta.json): skips only its unread count.
+    const coldRoot = join(dataHome(), "corrupt-log-list");
+    made.push(coldRoot);
+    const seedListRunner = new ChatRunner({
+      root: coldRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    let brokenId: string;
+    let healthyId: string;
+    try {
+      brokenId = await seedListRunner.create([PERSONA]);
+      healthyId = await seedListRunner.create([PERSONA]);
+      await (await seedListRunner.send(brokenId, "你好")).ended;
+      await (await seedListRunner.send(healthyId, "你好")).ended;
+    } finally {
+      await seedListRunner.shutdown();
+    }
+    const logPath = join(coldRoot, brokenId, "chat.jsonl");
+    const validBytes = readFileSync(logPath);
+    const brokenLine = `${"x".repeat(validBytes.length - 1)}\n`;
+    expect(Buffer.byteLength(brokenLine)).toBe(validBytes.length);
+    writeFileSync(logPath, brokenLine);
+    const coldListRunner = new ChatRunner({
+      root: coldRoot,
+      turn: fakeTurn,
+      answer: fakeAnswer,
+      hear: fakeHear,
+    });
+    try {
+      const listed = await coldListRunner.list();
+      expect(listed.find((entry) => entry.id === brokenId)?.unread).toBe(0);
+      expect(listed.find((entry) => entry.id === healthyId)?.unread).toBe(1);
+      // Restoring the temporarily unreadable log must recover its unread badge (not cached as 0).
+      writeFileSync(logPath, validBytes);
+      const recovered = await coldListRunner.list();
+      expect(recovered.find((entry) => entry.id === brokenId)?.unread).toBe(1);
+    } finally {
+      await coldListRunner.shutdown();
+    }
   });
 });

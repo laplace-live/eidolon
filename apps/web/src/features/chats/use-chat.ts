@@ -58,12 +58,16 @@ export interface ChatTurns {
  * the viewer's, isn't in the log yet, the latest; null for none.
  * `quiet`: a call is up in the tab, or the server's in the chat: none of her voice messages plays
  * on its own, or waits to.
+ * `serverActive`: GET chats still sees a turn, upload or call running on this chat.
+ * `serverLastSeq`: GET chats' latest seq, used to catch up after a turn finishes off-stream.
  */
 export function useChat(
   id: string,
   calling: boolean,
   awaitingReport: number | null,
   quiet: boolean,
+  serverActive = false,
+  serverLastSeq = 0,
 ): ChatTurns {
   const queryClient = useQueryClient();
   const [live, dispatch] = useReducer(reduceLive, IDLE);
@@ -109,6 +113,7 @@ export function useChat(
       let ended = false;
       let broke = false;
       let received = false;
+      let sendFailed = false;
       let following = false;
       const carry = () => {
         if (following) return;
@@ -138,17 +143,28 @@ export function useChat(
         }
       } catch (error) {
         broke = !controller.signal.aborted;
-        // Live failing leaves the log as stored, which the refetch below shows.
-        if (key !== null && !controller.signal.aborted) {
-          const { code, message } = asApiError(error);
-          dispatch({ type: "send-failed", key, error: { code, message } });
+        if (key !== null) {
+          sendFailed = true;
+          if (controller.signal.aborted) {
+            toastError(error);
+          } else {
+            const { code, message } = asApiError(error);
+            dispatch({ type: "send-failed", key, error: { code, message } });
+          }
         }
       } finally {
         streams.current.delete(controller);
         if (following) dispatch({ type: "unfollow" });
         if (received) carried.current = Date.now();
       }
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        // A send or live reply left running on the server needs the sidebar list refreshed.
+        if ((key !== null && !sendFailed) || received) {
+          void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
+          void queryClient.invalidateQueries({ queryKey: chatQuery(id).queryKey });
+        }
+        return;
+      }
       dispatch({ type: "settled", key, turn: null });
       // The log a turn ends with, and a turn that ended between the page's two requests.
       void reread(queryClient, chatQuery(id).queryKey);
@@ -211,6 +227,66 @@ export function useChat(
       on = false;
     };
   }, [awaitingReport, calling, id, follow]);
+
+  // Reopening while hearing or turn setup runs can get 204 before GET live starts; retry while active.
+  useEffect(() => {
+    if (!serverActive || calling || awaitingReport !== null) return;
+    let on = true;
+    void (async () => {
+      while (on) {
+        if (streams.current.size === 0) {
+          await follow((signal) => followLive(id, signal), null, true);
+          if (!on) return;
+        }
+        await pause(CALL_FEED_RETRY_MS);
+      }
+    })();
+    return () => {
+      on = false;
+    };
+  }, [serverActive, calling, awaitingReport, id, follow]);
+
+  const caughtUp = useRef({ id, seq: 0 });
+  const catchUpActive = useRef(id);
+  const catchUpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [catchUpRetry, setCatchUpRetry] = useState(0);
+
+  useEffect(() => {
+    catchUpActive.current = id;
+    return () => {
+      catchUpActive.current = "";
+      if (catchUpTimer.current !== null) {
+        clearTimeout(catchUpTimer.current);
+        catchUpTimer.current = null;
+      }
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (catchUpRetry < 0 || streams.current.size > 0) return;
+    const cached = queryClient.getQueryData(chatQuery(id).queryKey);
+    if (cached === undefined) return;
+    const localSeq = cached.events.at(-1)?.seq ?? 0;
+    if (serverLastSeq <= localSeq) return;
+    const prev = caughtUp.current.id === id ? caughtUp.current.seq : 0;
+    if (serverLastSeq <= prev) return;
+    caughtUp.current = { id, seq: serverLastSeq };
+    const key = chatQuery(id).queryKey;
+    const scheduleRetry = () => {
+      if (caughtUp.current.id === id && caughtUp.current.seq === serverLastSeq) {
+        caughtUp.current = { id, seq: prev };
+      }
+      if (catchUpActive.current !== id) return;
+      if (catchUpTimer.current !== null) clearTimeout(catchUpTimer.current);
+      catchUpTimer.current = setTimeout(() => {
+        catchUpTimer.current = null;
+        setCatchUpRetry((count) => count + 1);
+      }, CALL_FEED_RETRY_MS);
+    };
+    void reread(queryClient, key).then(() => {
+      if (queryClient.getQueryState(key)?.status === "error") scheduleRetry();
+    }, scheduleRetry);
+  }, [id, serverLastSeq, catchUpRetry, queryClient]);
 
   const send = useCallback(
     (text: string, files: readonly Attachment[] = []) => {
