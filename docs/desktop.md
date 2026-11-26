@@ -982,7 +982,7 @@ Node, and a pnpm, as deepseek-harness does. Where the owner has Node, theirs win
 - **On Electron's Node,** a server's N-API native modules load, while one whose prebuilds are for
   Node's ABI alone looks for an Electron build; and macOS shows a shim-run server's permission
   prompts in Eidolon's name.
-- **A pnpm bump** is an exact pin in `apps/desktop/package.json`, under the same 14-day gate as
+- **A pnpm bump** is an exact pin in `apps/desktop/package.json`, under the same 3-hour gate as
   [Electron's](#bumping-electron); `pnpm install` rewrites `pnpm-lock.yaml`, which `docker.yml`
   doesn't skip, so merging it restarts production. Stage and package the app, then run the stage
   test.
@@ -1936,7 +1936,7 @@ A bump moves the backend's Node and V8 as well as the shell, so it is a backend 
 1. Change `electron` in `apps/desktop/package.json`, an exact pin, and `electronVersion` in
    `electron-builder.yml` together: a Windows stage refuses Electron's zip when they differ.
    `packages/config/test/electron.ts` names the version `asElectron()` reports.
-2. `pnpm-workspace.yaml`'s `minimumReleaseAge` holds back any release younger than 14 days, at
+2. `pnpm-workspace.yaml`'s `minimumReleaseAge` holds back any release younger than 3 hours, at
    install as well as at resolution: give the new one an exact `minimumReleaseAgeExclude` entry
    (`electron@<version>`), and drop it, and any old one, once the gate passes it. Add no
    `allowBuilds` entry: Electron's package has no install script (the binary downloads on the first

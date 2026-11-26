@@ -50,10 +50,9 @@ async function connected(peer: RTCPeerConnection): Promise<void> {
   await until(() => peer.connectionState === "connected", 8000);
 }
 
-/** Offers, once its candidates are gathered into its description. */
+/** Offers; setLocalDescription gathers the primary candidates into localDescription (werift#814). */
 async function offered(peer: RTCPeerConnection): Promise<void> {
   await peer.setLocalDescription(await peer.createOffer());
-  await until(() => peer.iceGatheringState === "complete", 5000);
 }
 
 describe("the signalling server", () => {
