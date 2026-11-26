@@ -403,6 +403,14 @@ export class SubspaceManager {
             ...(target.endpoint.tls ? { tls: true } : {}),
           }
         : target.endpoint;
+    const endpointChanged =
+      nextEndpoint?.host !== target.endpoint?.host || nextEndpoint?.port !== target.endpoint?.port;
+    if (endpointChanged && (this.#clients.get(id)?.activeCallCount ?? 0) > 0) {
+      throw codedError(
+        "call-active",
+        "A call is in progress on this server; hang up before changing its address or port",
+      );
+    }
     const updated: SubspaceSavedServer = {
       ...target,
       name: patch.name?.trim() || target.name,
@@ -459,8 +467,7 @@ export class SubspaceManager {
     ) {
       throw codedError("bad-request", "Invalid direct endpoint host");
     }
-    const authRecord = this.#readRelayAuthOrBadRequest();
-    if (patch.shareMode === "relay" && authRecord === null) {
+    if (patch.shareMode === "relay" && this.#readRelayAuthOrBadRequest() === null) {
       throw codedError(
         "relay-auth-required",
         "Sign in to the Subspace Relay before sharing via Relay",
@@ -510,7 +517,14 @@ export class SubspaceManager {
     }
 
     if (needsRelay) {
-      if (this.#readRelayAuthOrBadRequest() !== null) this.host.startRelay();
+      let shouldStartRelay = false;
+      try {
+        shouldStartRelay = this.store.readRelayAuth() !== null;
+      } catch {
+        // Let startRelay() surface corrupt-credential state on host.relayError without blocking Off/Direct edits.
+        shouldStartRelay = true;
+      }
+      if (shouldStartRelay) this.host.startRelay();
     } else {
       this.host.stopRelay();
     }

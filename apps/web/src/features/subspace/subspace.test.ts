@@ -192,6 +192,7 @@ const { AddSubspaceServerDialog } = await import("./add-server-dialog");
 const { ServersCard } = await import("./servers-card");
 const {
   subspaceQuery,
+  usePairSubspaceServer,
   useRemoveSubspaceServer,
   useSubspaceHostEpoch,
   useSubspaceHostSync,
@@ -831,15 +832,32 @@ describe("Subspace web UI regressions", () => {
     const invalidateSpy = vi.spyOn(client, "invalidateQueries");
 
     let setDraftExternal: ((val: string) => void) | null = null;
+    let setDrawerOpenExternal: ((open: boolean) => void) | null = null;
+    let pairServerExternal: ((code: string) => Promise<void>) | null = null;
     function DraftForm() {
       const [draft, setDraft] = useState("clean");
       setDraftExternal = setDraft;
       return createElement("div", { "data-draft": draft }, draft);
     }
+    function DrawerSyncStub() {
+      useSubspaceHostSync();
+      return null;
+    }
     function ShellHarness() {
       useSubspaceHostSync();
+      const [drawerOpen, setDrawerOpen] = useState(true);
+      const pair = usePairSubspaceServer();
       const hostEpoch = useSubspaceHostEpoch();
-      return createElement(Fragment, { key: hostEpoch }, createElement(DraftForm));
+      setDrawerOpenExternal = setDrawerOpen;
+      pairServerExternal = async (code) => {
+        await pair.mutateAsync({ code, activate: true });
+      };
+      return createElement(
+        Fragment,
+        null,
+        drawerOpen ? createElement(DrawerSyncStub) : null,
+        createElement(Fragment, { key: hostEpoch }, createElement(DraftForm)),
+      );
     }
 
     const history = createBrowserHistory(null);
@@ -865,6 +883,11 @@ describe("Subspace web UI regressions", () => {
       });
       expect(mounted.container.innerHTML).toContain('data-draft="unsaved-tab-a-value"');
 
+      // Closing a secondary sync subscriber (e.g. mobile drawer sidebar) must NOT drop route 409 refresh.
+      await mounted.act(() => {
+        setDrawerOpenExternal!(false);
+      });
+
       // Receiving a 409 conflict invalidates subspaceQuery so stale tabs refetch promptly.
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
         new Response(
@@ -887,6 +910,16 @@ describe("Subspace web UI regressions", () => {
       });
       expect(mounted.container.innerHTML).toContain('data-draft="clean"');
       expect(mounted.container.innerHTML).not.toContain("unsaved-tab-a-value");
+
+      // Re-pairing the already-active host with activate: true keeps activeHostId unchanged and preserves drafts.
+      await mounted.act(() => {
+        setDraftExternal!("keep-same-host-draft");
+      });
+      mockCall.mockResolvedValueOnce({ ...switched, pairedServerId: "srv_other" });
+      await mounted.act(async () => {
+        await pairServerExternal!("eidolon://pair?c=1");
+      });
+      expect(mounted.container.innerHTML).toContain('data-draft="keep-same-host-draft"');
     } finally {
       history.dispose();
     }

@@ -12,7 +12,7 @@ export const CLIENT_ERROR_CODES = ["unreachable", "bad-response"] as const;
 export type ClientErrorCode = (typeof CLIENT_ERROR_CODES)[number];
 
 let expectedSubspaceHost: string | undefined;
-let expectedHostConflictListener: (() => void) | null = null;
+const expectedHostConflictListeners = new Set<() => void>();
 
 export function setExpectedSubspaceHost(activeHostId: string | null): void {
   expectedSubspaceHost = activeHostId ?? "local";
@@ -26,12 +26,11 @@ export function primeExpectedSubspaceHost(activeHostId: string | null): void {
   if (expectedSubspaceHost === undefined) setExpectedSubspaceHost(activeHostId);
 }
 
-export function setExpectedHostConflictListener(listener: (() => void) | null): void {
-  expectedHostConflictListener = listener;
-}
-
-export function clearExpectedHostConflictListener(listener: () => void): void {
-  if (expectedHostConflictListener === listener) expectedHostConflictListener = null;
+export function subscribeExpectedHostConflict(listener: () => void): () => void {
+  expectedHostConflictListeners.add(listener);
+  return () => {
+    expectedHostConflictListeners.delete(listener);
+  };
 }
 
 export class ApiError extends Error {
@@ -183,7 +182,9 @@ export async function send(route: string, input: Loose = {}): Promise<Response> 
   }
   if (!response.ok) {
     const err = await errorFrom(response);
-    if (err.status === 409 && err.code === "conflict") expectedHostConflictListener?.();
+    if (err.status === 409 && err.code === "conflict") {
+      for (const listener of [...expectedHostConflictListeners]) listener();
+    }
     throw err;
   }
   return response;

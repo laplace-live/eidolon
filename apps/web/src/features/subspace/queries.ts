@@ -12,7 +12,6 @@ import { useLocation } from "wouter";
 import { avatarsResetForHost } from "@/components/avatar/version";
 import {
   call,
-  clearExpectedHostConflictListener,
   primeExpectedSubspaceHost,
   type SubspaceConnectionState,
   type SubspacePairRequest,
@@ -21,8 +20,8 @@ import {
   type SubspaceShareOfferRequest,
   type SubspaceShareSettingsRequest,
   type SubspaceStateResponse,
-  setExpectedHostConflictListener,
   setExpectedSubspaceHost,
+  subscribeExpectedHostConflict,
 } from "@/lib/api";
 import { toastError } from "@/lib/feedback";
 import { useRevalidate } from "@/router";
@@ -136,13 +135,13 @@ export function useSubspaceHostSync(): void {
   const revalidate = useRevalidate();
   const activeHostId = subspace.data?.activeHostId;
 
-  useEffect(() => {
-    const onConflict = () => {
-      void queryClient.invalidateQueries({ queryKey: SUBSPACE_KEY });
-    };
-    setExpectedHostConflictListener(onConflict);
-    return () => clearExpectedHostConflictListener(onConflict);
-  }, [queryClient]);
+  useEffect(
+    () =>
+      subscribeExpectedHostConflict(() => {
+        void queryClient.invalidateQueries({ queryKey: SUBSPACE_KEY });
+      }),
+    [queryClient],
+  );
 
   useEffect(() => {
     if (activeHostId === undefined) return;
@@ -201,12 +200,15 @@ export function useSwitchSubspaceHost(onSwitched?: () => void) {
       call("POST /api/local/subspace/active", { body: { hostId } }),
     onSuccess: async (next) => {
       const previous = queryClient.getQueryData<SubspaceStateResponse>(SUBSPACE_KEY);
+      const hostChanged = previous === undefined || previous.activeHostId !== next.activeHostId;
       setExpectedSubspaceHost(next.activeHostId);
       if (previous !== undefined && previous.activeHostId !== next.activeHostId) {
         markHostSwitchHandled(queryClient, next.activeHostId);
       }
       queryClient.setQueryData(SUBSPACE_KEY, next);
-      await resetHostCacheAndRoute(queryClient, pathname, navigate, revalidate);
+      if (hostChanged) {
+        await resetHostCacheAndRoute(queryClient, pathname, navigate, revalidate);
+      }
       onSwitched?.();
     },
     onError: toastError,
@@ -222,16 +224,16 @@ export function usePairSubspaceServer(onPaired?: (state: SubspacePairResponse) =
     mutationFn: (body: SubspacePairRequest) => call("POST /api/local/subspace/servers", { body }),
     onSuccess: async (next, variables) => {
       const previous = queryClient.getQueryData<SubspaceStateResponse>(SUBSPACE_KEY);
+      const hostChanged =
+        previous === undefined
+          ? next.activeHostId !== null
+          : previous.activeHostId !== next.activeHostId;
       setExpectedSubspaceHost(next.activeHostId);
-      if (
-        variables.activate &&
-        previous !== undefined &&
-        previous.activeHostId !== next.activeHostId
-      ) {
+      if (variables.activate && hostChanged) {
         markHostSwitchHandled(queryClient, next.activeHostId);
       }
       queryClient.setQueryData(SUBSPACE_KEY, next);
-      if (variables.activate) {
+      if (variables.activate && hostChanged) {
         await resetHostCacheAndRoute(queryClient, pathname, navigate, revalidate);
       }
       onPaired?.(next);

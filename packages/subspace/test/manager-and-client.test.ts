@@ -1117,13 +1117,45 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     expect(recoveredState.relayAuth.relayUrl).toBe("https://custom.relay.example");
     expect(recoveredState.relayAuth.status).toBe("signed-out");
 
-    // Unparseable JSON fails explicitly instead of silently falling back to the default relay.
+    // Unparseable JSON fails explicitly instead of silently falling back to the default relay,
+    // yet non-relay updateShareSettings edits (renaming host, switching Direct/Off) still work.
+    await mgr.updateShareSettings({
+      shareMode: "direct",
+      directAddress: "127.0.0.1",
+      directPort: 0,
+    });
+    await mgr.createShareOffer({ mode: "direct", address: "127.0.0.1", port: 0 });
+    writeFileSync(
+      join(store.dir, "grants.json"),
+      JSON.stringify({
+        grants: [
+          {
+            id: "g-relay-1",
+            clientName: "Phone",
+            tokenSha256: "a".repeat(64),
+            mode: "relay",
+            createdAt: Date.now(),
+            lastSeenAt: null,
+          },
+        ],
+      }),
+      "utf8",
+    );
     writeFileSync(join(store.dir, "relay-auth.json"), "{not-json", "utf8");
     expect(() => store.readSavedRelayUrl()).toThrowError(/corrupted/i);
     await expect(mgr.startRelayAuth()).rejects.toMatchObject({ code: "bad-request" });
     await expect(mgr.createShareOffer({ mode: "relay" })).rejects.toMatchObject({
       code: "bad-request",
     });
+    await expect(mgr.updateShareSettings({ shareMode: "relay" })).rejects.toMatchObject({
+      code: "bad-request",
+    });
+
+    const renamedState = await mgr.updateShareSettings({ hostName: "Renamed Direct" });
+    expect(renamedState.share.hostName).toBe("Renamed Direct");
+    const turnedOff = await mgr.updateShareSettings({ shareMode: "off" });
+    expect(turnedOff.share.shareMode).toBe("off");
+    expect(turnedOff.share.activeOffer).toBeNull();
     const corruptState = await mgr.getState();
     expect(corruptState.relayAuth.status).toBe("signed-out");
   });
@@ -1253,7 +1285,8 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     expect(parsedA.ok && parsedA.offer.relay?.url).toBe(relayA.url);
     expect(relayA.inviteIds).toHaveLength(1);
 
-    // Switch saved relay login externally (as `eidolon subspace login --relay-url B` does) and notify host.
+    // Switch saved relay login externally and invoke createShareOffer directly (without prior
+    // updateShareSettings): the first call must reconnect to relayB without self-cancelling.
     store.saveRelayAuth({
       authUrl: relayB.url,
       relayUrl: relayB.url,
@@ -1261,15 +1294,13 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
       user: { id: "alice", name: "Alice", email: "alice@example.com", image: null },
       savedAt: Date.now(),
     });
-    const switched = await mgr.updateShareSettings({});
-    expect(switched.relayAuth.relayUrl).toBe(relayB.url);
+    const offerB = await mgr.createShareOffer({ mode: "relay" });
+    expect(offerB.state.relayAuth.relayUrl).toBe(relayB.url);
+    expect(mgr.host.activeRelayUrl).toBe(relayB.url);
+    expect(mgr.host.relayConnected).toBe(true);
     await vi.waitFor(() => {
-      expect(mgr.host.activeRelayUrl).toBe(relayB.url);
-      expect(mgr.host.relayConnected).toBe(true);
       expect(relayA.closedCount()).toBeGreaterThanOrEqual(1);
     });
-
-    const offerB = await mgr.createShareOffer({ mode: "relay" });
     const parsedB = parsePairingInput(offerB.pairingUrl);
     expect(parsedB.ok && parsedB.offer.relay?.url).toBe(relayB.url);
     expect(relayA.inviteIds).toHaveLength(1);
@@ -1351,6 +1382,20 @@ describe("SubspaceManager, SubspaceClient, and SubspaceHost regressions", () => 
     await expect(
       mgr.pairServer({ code: encodePairingUrl(offer2), activate: false }),
     ).rejects.toMatchObject({ code: "call-active" });
+
+    // Endpoint edits reject during an active call while name-only edits succeed without dropping the tunnel.
+    await expect(mgr.updateServer(paired1.pairedServerId, { port: 65000 })).rejects.toMatchObject({
+      code: "call-active",
+    });
+    await expect(
+      mgr.updateServer(paired1.pairedServerId, { host: "127.0.0.2" }),
+    ).rejects.toMatchObject({ code: "call-active" });
+    const renamed = await mgr.updateServer(paired1.pairedServerId, {
+      name: "Renamed During Call",
+    });
+    const savedAfterRename = renamed.servers.find((s) => s.id === paired1.pairedServerId);
+    expect(savedAfterRename?.name).toBe("Renamed During Call");
+    expect(savedAfterRename?.endpoint?.port).toBe(directPort);
 
     expect(mgr.activeCallCount).toBeGreaterThan(0);
     expect(mgr.store.readServers().servers[0]?.deviceToken).toBe(beforeToken);

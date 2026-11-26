@@ -417,6 +417,16 @@ export class SubspaceHost {
     if (options.address !== undefined && !isValidDirectHost(options.address.trim())) {
       throw Object.assign(new Error("Invalid direct endpoint host"), { code: "bad-request" });
     }
+    if (options.mode === "relay") {
+      if (this.#readRelayAuthOrBadRequest() === null) {
+        throw Object.assign(
+          new Error("Sign in to the Subspace Relay before creating a relay pairing link"),
+          { code: "relay-auth-required" },
+        );
+      }
+      // Reconnect before capturing offerEpoch so switching relays doesn't self-cancel the new offer.
+      this.startRelay();
+    }
     const offerEpoch = this.#shareEpoch;
     const identity = await this.#ensureIdentity();
     if (!options.rotate) {
@@ -479,13 +489,6 @@ export class SubspaceHost {
         endpoint: { host: hostAddress, port },
       };
     } else {
-      const initialAuth = this.#readRelayAuthOrBadRequest();
-      if (initialAuth === null) {
-        throw Object.assign(
-          new Error("Sign in to the Subspace Relay before creating a relay pairing link"),
-          { code: "relay-auth-required" },
-        );
-      }
       const relayHostId = await deriveRelayHostId(base64ToBytes(identity.publicKeyB64));
       await this.#ensureRelayConnected();
       const currentAuth = this.#readRelayAuthOrBadRequest();
