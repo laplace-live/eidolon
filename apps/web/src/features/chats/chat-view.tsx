@@ -144,7 +144,7 @@ export function ChatView({ id }: { readonly id: string }) {
   // This tab knows of its own call before the server's answer says so.
   const inCall = view.calling || serverCall !== null;
   const events = chat.data?.events;
-  useMarkRead(id, events);
+  useMarkRead(id, events, !chat.isFetching && !chat.isError);
   const tasks = useChatTasks(id, events ?? NO_EVENTS);
   // Another tab's call is followed too, so its lines show and its end frees the composer. During
   // any call in the tab, or the chat's in another tab, her voice messages keep quiet.

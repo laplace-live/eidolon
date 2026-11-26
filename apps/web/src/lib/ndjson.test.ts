@@ -154,7 +154,7 @@ describe("readNdjson", () => {
     let cancelled = false;
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(encoder.encode('{"a":1}\n'));
+        controller.enqueue(encoder.encode('{"a":1}\n{"a":2}\n'));
       },
       pull() {
         return new Promise(() => {});

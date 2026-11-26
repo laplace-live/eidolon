@@ -70,6 +70,7 @@ import {
   type ChatTurn,
   NotInChat,
 } from "../../src/local/chats/runner.ts";
+import { ChatReadStore } from "../../src/local/chats/unread.ts";
 import { identityHandlers } from "../../src/local/identity.ts";
 import { ndjsonResponse } from "../../src/local/responses.ts";
 import { createLocalRouter, type LocalApp, localRoute } from "../../src/local/router.ts";
@@ -3039,5 +3040,83 @@ describe("unread counts and live state", () => {
       await secondRunner.shutdown();
     }
     expect(JSON.parse(readFileSync(join(legacyRoot, "read.json"), "utf8"))).toEqual({});
+  });
+
+  test("concurrent append past summary.lastSeq while count reads disk does not double-count unread items", async () => {
+    const storeRoot = join(dataHome(), "unread-race");
+    made.push(storeRoot);
+    const reads = new ChatReadStore(storeRoot, () => {});
+    const id = newId();
+    const otherId = newId();
+    await reads.created(id);
+    await reads.created(otherId);
+    const ev1: ChatEvent = {
+      seq: 1,
+      at: 1001,
+      type: "message",
+      id: "u1",
+      speaker: { kind: "user" },
+      text: "你好",
+    };
+    const ev2: ChatEvent = {
+      seq: 2,
+      at: 1002,
+      type: "message",
+      id: "m2",
+      speaker: { kind: "persona", id: PERSONA },
+      text: "第一条",
+    };
+    const ev3: ChatEvent = {
+      seq: 3,
+      at: 1003,
+      type: "message",
+      id: "m3",
+      speaker: { kind: "persona", id: PERSONA },
+      text: "第二条",
+    };
+    await reads.appended(id, [ev1, ev2]);
+
+    // Simulate a cold unread cache and a summary captured at lastSeq=2 while seq=3 lands on disk
+    // and another write delays `appended(id, [ev3])` in #queue until after `readAfter` returns.
+    const cold = new ChatReadStore(storeRoot, () => {});
+    const readStarted = deferred();
+    const releaseRead = deferred();
+    const countAt2 = cold.count(
+      {
+        id,
+        title: null,
+        participants: [PERSONA],
+        createdAt: 1000,
+        updatedAt: 1002,
+        lastText: "第一条",
+        lastSeq: 2,
+      },
+      async () => {
+        readStarted.resolve();
+        await releaseRead.promise;
+        return [ev2, ev3];
+      },
+    );
+    await readStarted.promise;
+    const holdQueue = cold.markRead(otherId, 0, 0);
+    const appended3 = cold.appended(id, [ev3]);
+    releaseRead.resolve();
+    expect(await countAt2).toBe(1);
+    await Promise.all([holdQueue, appended3]);
+
+    expect(
+      await cold.count(
+        {
+          id,
+          title: null,
+          participants: [PERSONA],
+          createdAt: 1000,
+          updatedAt: 1003,
+          lastText: "第二条",
+          lastSeq: 3,
+        },
+        async () => [],
+      ),
+    ).toBe(2);
   });
 });

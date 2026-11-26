@@ -155,10 +155,15 @@ export class ChatReadStore {
     }
 
     const events = await readAfter(summary.id, seen);
-    const seqs = events.filter(isUnreadEvent).map((event) => event.seq);
+    const seqs = events
+      .filter((event) => event.seq <= summary.lastSeq && isUnreadEvent(event))
+      .map((event) => event.seq);
     const current = readSeq.get(summary.id) ?? summary.lastSeq;
     if (current === seen) {
-      this.#unreads.set(summary.id, { throughSeq: summary.lastSeq, seqs });
+      const latest = this.#unreads.get(summary.id);
+      if (latest === undefined || latest.throughSeq < summary.lastSeq) {
+        this.#unreads.set(summary.id, { throughSeq: summary.lastSeq, seqs });
+      }
       return seqs.length;
     }
     return seqs.filter((seq) => seq > current).length;

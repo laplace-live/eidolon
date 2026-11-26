@@ -50,38 +50,61 @@ export function chatQuery(id: string) {
 }
 
 /**
- * Marks chat `id` read up to its latest stored event whenever that seq advances, clearing its
- * cached unread badge optimistically so switching back never flashes stale counts.
+ * Marks chat `id` read up to its latest stored event whenever `ready` and that seq advances,
+ * clearing its cached unread badge optimistically so switching back never flashes stale counts.
  */
-export function useMarkRead(id: string, events: readonly ChatEvent[] | undefined): void {
+export function useMarkRead(
+  id: string,
+  events: readonly ChatEvent[] | undefined,
+  ready: boolean,
+): void {
   const queryClient = useQueryClient();
   const lastSeq = events?.at(-1)?.seq ?? 0;
   const marked = useRef({ id, seq: 0 });
 
   useEffect(() => {
+    if (!ready) return;
     const current = marked.current.id === id ? marked.current.seq : 0;
     if (lastSeq <= current) return;
     marked.current = { id, seq: lastSeq };
-    const summary = queryClient.getQueryData(chatsQuery.queryKey)?.find((chat) => chat.id === id);
+    const chats = queryClient.getQueryData(chatsQuery.queryKey);
+    const summary = chats?.find((chat) => chat.id === id);
     if (summary !== undefined && summary.unread === 0 && lastSeq <= summary.lastSeq) return;
-    queryClient.setQueryData(chatsQuery.queryKey, (chats) =>
-      chats?.some((chat) => chat.id === id && chat.unread > 0 && chat.lastSeq <= lastSeq)
-        ? chats.map((chat) => (chat.id === id ? { ...chat, unread: 0 } : chat))
-        : chats,
-    );
+    const clearUnread = () => {
+      queryClient.setQueryData(chatsQuery.queryKey, (list) =>
+        list?.some((chat) => chat.id === id && chat.unread > 0 && chat.lastSeq <= lastSeq)
+          ? list.map((chat) => (chat.id === id ? { ...chat, unread: 0 } : chat))
+          : list,
+      );
+    };
+    // Cancel an in-flight list poll with cached data so its pre-read snapshot can't overwrite 0.
+    const hadFetch = queryClient.isFetching({ queryKey: chatsQuery.queryKey, exact: true }) > 0;
+    if (hadFetch && chats !== undefined) {
+      void queryClient.cancelQueries({ queryKey: chatsQuery.queryKey, exact: true });
+    }
+    clearUnread();
     void markChatRead(id, lastSeq)
-      .then(() => {
+      .then(async () => {
         const now = queryClient.getQueryData(chatsQuery.queryKey)?.find((chat) => chat.id === id);
-        if (now !== undefined && now.unread > 0) {
-          void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
+        const inFlight = queryClient.isFetching({ queryKey: chatsQuery.queryKey, exact: true }) > 0;
+        if (now !== undefined && now.unread > 0) clearUnread();
+        if (hadFetch || inFlight || (now !== undefined && now.unread > 0)) {
+          const empty = queryClient.getQueryData(chatsQuery.queryKey) === undefined;
+          await queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
+          if (empty) {
+            await queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
+          }
         }
       })
       .catch(() => {
         if (marked.current.id === id && marked.current.seq === lastSeq) {
           marked.current = { id, seq: 0 };
         }
+        if (hadFetch) {
+          void queryClient.invalidateQueries({ queryKey: chatsQuery.queryKey, exact: true });
+        }
       });
-  }, [id, lastSeq, queryClient]);
+  }, [id, lastSeq, ready, queryClient]);
 }
 
 export function useCreateChat(onCreated: (id: string) => void) {

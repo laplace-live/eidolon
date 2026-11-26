@@ -82,6 +82,7 @@ export async function* readNdjson<T = unknown>(
   try {
     for (let read = await reader.read(); !read.done; read = await reader.read()) {
       for (const line of splitter.push(read.value)) {
+        if (signal?.aborted) return;
         yield { value: JSON.parse(line.text) as T, offset: line.offset };
       }
     }
