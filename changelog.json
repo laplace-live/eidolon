@@ -2,6 +2,27 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-26T19:37:50.018Z",
+      "versions": {
+        "laplace-eidolon": "0.19.0",
+        "@laplace.live/eidolon": "0.19.0",
+        "@laplace.live/eidolon-sdk": "0.5.0",
+        "laplace-eidolon-desktop": "0.7.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "@laplace.live/eidolon-sdk",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Add group roll-call, silent-member, and @all triggers with 0–100 hop presets"
+        }
+      ]
+    },
+    {
       "date": "2026-11-26T18:37:17.579Z",
       "versions": {
         "laplace-eidolon": "0.18.1",
