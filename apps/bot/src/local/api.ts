@@ -1838,7 +1838,12 @@ export type TaskEntry = { readonly seq: number; readonly at: number } & (
       /** Context ceiling learned before this pause, so same-model unlimited resumes keep it. */
       readonly learned?: { readonly tokens: number; readonly model: string };
       /** Overflowed request that paused before compacting, so same-model Continue compacts first. */
-      readonly compact?: { readonly inputTokens: number; readonly model?: string };
+      readonly compact?: {
+        readonly inputTokens: number;
+        readonly model: string;
+        readonly summaryBudget?: number;
+        readonly summaryOverflows?: number;
+      };
     }
   | { readonly type: "resume" }
   | { readonly type: "end"; readonly outcome: TaskOutcome }

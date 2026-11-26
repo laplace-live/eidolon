@@ -3,6 +3,7 @@
 import { consoleSink, type LogRecord, logger } from "@eidolon/config";
 import { ProviderHttpError, type UsageRecord } from "@eidolon/providers";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { estimateTokens } from "../src/task/context.ts";
 import { type TaskEntryDraft, UsageMeter } from "../src/task.ts";
 import type { MindChunk } from "../src/types.ts";
 import {
@@ -66,10 +67,10 @@ function billed(
   });
 }
 
-/** A task three big reads in, as a restart left it. */
-function history(): MemoryStore {
+/** A task several reads in, as a restart left it. */
+function history(turns: readonly string[] = ["a", "b", "c"], chars = 40_000): MemoryStore {
   const drafts: TaskEntryDraft[] = [{ type: "brief", brief: BRIEF }];
-  for (const value of ["a", "b", "c"]) {
+  for (const value of turns) {
     drafts.push(
       { type: "assistant", text: "", calls: [call(`c-${value}`, "read", { value })] },
       { type: "tool-start", callId: `c-${value}`, name: "read" },
@@ -77,7 +78,7 @@ function history(): MemoryStore {
         type: "tool-result",
         callId: `c-${value}`,
         name: "read",
-        content: "x".repeat(40_000),
+        content: "x".repeat(chars),
         isError: false,
       },
     );
@@ -832,5 +833,80 @@ describe("runTask's unpriced pause", () => {
     );
     expect(switchedOk.outcome).toEqual({ status: "succeeded", report: "done" });
     expect(switchedMind.requests).toHaveLength(1);
+  });
+
+  test("persists shrunk summary budget when a summary reply hits model_context_window_exceeded at a spend pause, and ignores model-less pause metadata", async () => {
+    const cut: readonly MindChunk[] = [
+      { type: "text", text: "partial" },
+      { type: "done", finishReason: "model_context_window_exceeded" },
+    ];
+    const storeA = history(
+      Array.from({ length: 10 }, (_, i) => `t${i}`),
+      8_000,
+    );
+    const countedA = meter(0);
+    let attempt = 0;
+    const mindA = new ScriptedMind([says("done")], {
+      summaries: [cut, ...Array.from({ length: 12 }, (_, i) => says(`SUMMARY-${i + 1}`))],
+      after: () => {
+        attempt++;
+        if (attempt === 1) {
+          countedA.tap(record(1.0, { inputTokens: 5_000, outputTokens: 3_192 }));
+        } else {
+          countedA.tap(record(0.1, {}));
+        }
+      },
+    });
+    const limitsA = { contextTokens: 8_192, spendPauseUsd: 1, maskAfterTokens: 1e9 };
+
+    const pausedA = await drain(
+      taskRequest(mindA, { store: storeA, meter: countedA, limits: limitsA }),
+    );
+    expect(pausedA.outcome).toEqual({
+      status: "paused",
+      reason: "spend",
+      detail: "Spent $1.00; it pauses at every $1.00.",
+    });
+    const compactMeta = storeA.of("pause").at(-1)?.compact;
+    expect(compactMeta).toMatchObject({
+      model: "openrouter/test/model",
+      summaryOverflows: 1,
+    });
+    expect(compactMeta?.summaryBudget).toBeLessThan(4_000);
+    expect(mindA.summaryRequests).toHaveLength(1);
+    expect(mindA.requests).toHaveLength(0);
+
+    const resumedA = await drain(
+      taskRequest(mindA, { store: storeA, meter: countedA, limits: limitsA }),
+    );
+    expect(resumedA.outcome).toEqual({ status: "succeeded", report: "done" });
+    const summaryPrompts = mindA.summaryRequests.map((entry) =>
+      String((entry.messages[0] as { content?: string } | undefined)?.content),
+    );
+    expect(summaryPrompts.length).toBeGreaterThan(2);
+    for (const prompt of summaryPrompts.slice(1)) {
+      expect(estimateTokens(prompt)).toBeLessThanOrEqual(compactMeta?.summaryBudget ?? 0);
+    }
+
+    // Part B: model-less pause metadata must not match an unknown-model resume (`undefined === undefined`).
+    const unknownStore = new MemoryStore(
+      { type: "brief", brief: BRIEF },
+      {
+        type: "pause",
+        reason: "spend",
+        detail: "Spent $1.00; it pauses at every $1.00.",
+        compact: { inputTokens: 1_000 } as never,
+      },
+    );
+    const unknownMind = new ScriptedMind([says("done")]);
+    const unknownResumed = await drain(
+      taskRequest(unknownMind, {
+        store: unknownStore,
+        meter: new FakeMeter(),
+        limits: { contextTokens: 0, spendPauseUsd: 0 },
+      }),
+    );
+    expect(unknownResumed.outcome).toEqual({ status: "succeeded", report: "done" });
+    expect(unknownMind.requests).toHaveLength(1);
   });
 });

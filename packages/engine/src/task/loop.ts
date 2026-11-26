@@ -223,7 +223,11 @@ class TaskRun {
   /** Ceiling learned from an overflow on this run/model (never from static config). */
   #learned: number | null = null;
   /** An overflowed request that paused before compacting, so Continue compacts first. */
-  #pendingCompact: { readonly inputTokens: number } | null = null;
+  #pendingCompact: {
+    readonly inputTokens: number;
+    readonly summaryBudget?: number;
+    readonly summaryOverflows?: number;
+  } | null = null;
   /** The last request's input as its provider counted it, and as estimated. */
   #counted: { readonly reported: number; readonly estimated: number } | null = null;
 
@@ -266,11 +270,17 @@ class TaskRun {
             ...(this.#learned !== null && model !== undefined
               ? { learned: { tokens: this.#learned, model } }
               : {}),
-            ...(this.#pendingCompact !== null
+            ...(this.#pendingCompact !== null && model !== undefined
               ? {
                   compact: {
                     inputTokens: this.#pendingCompact.inputTokens,
-                    ...(model === undefined ? {} : { model }),
+                    model,
+                    ...(this.#pendingCompact.summaryBudget === undefined
+                      ? {}
+                      : { summaryBudget: this.#pendingCompact.summaryBudget }),
+                    ...(this.#pendingCompact.summaryOverflows === undefined
+                      ? {}
+                      : { summaryOverflows: this.#pendingCompact.summaryOverflows }),
                   },
                 }
               : {}),
@@ -301,9 +311,18 @@ class TaskRun {
       } else if (
         entry.type === "pause" &&
         entry.compact !== undefined &&
+        currentModel !== undefined &&
         entry.compact.model === currentModel
       ) {
-        this.#pendingCompact = { inputTokens: entry.compact.inputTokens };
+        this.#pendingCompact = {
+          inputTokens: entry.compact.inputTokens,
+          ...(entry.compact.summaryBudget === undefined
+            ? {}
+            : { summaryBudget: entry.compact.summaryBudget }),
+          ...(entry.compact.summaryOverflows === undefined
+            ? {}
+            : { summaryOverflows: entry.compact.summaryOverflows }),
+        };
       }
     }
     this.#turns = stored.filter((entry) => entry.type === "assistant").length;
@@ -664,6 +683,36 @@ class TaskRun {
    * Summarizes what came before the newest blocks, through the task's mind with no tools, and
    * stores it. False when the newest blocks are all there is.
    */
+  #shrinkOrPauseCompaction(
+    tokensBefore: number,
+    learned: number | null,
+    overflows: number,
+    promptTokens: number,
+    budget: number,
+    systemTokens: number,
+    singleBlock: boolean,
+  ): number | "paused" | null {
+    if (learned !== null) this.#recordCeiling(learned);
+    const shrunk = this.#shrinkCompactionBudget(
+      overflows,
+      learned,
+      promptTokens,
+      budget,
+      systemTokens,
+      singleBlock,
+    );
+    if (shrunk === null) return null;
+    if (this.#held() !== null) {
+      this.#pendingCompact = {
+        inputTokens: this.#pendingCompact?.inputTokens ?? tokensBefore,
+        summaryBudget: shrunk,
+        summaryOverflows: overflows + 1,
+      };
+      return "paused";
+    }
+    return shrunk;
+  }
+
   async #compact(tokensBefore: number): Promise<boolean> {
     const context = taskContext(this.#entries);
     const priorSlice =
@@ -683,17 +732,26 @@ class TaskRun {
     const { system, instructions } = this.#request.compaction;
     const systemTokens = estimateTokens(system);
     const windowBudget = Math.max(256, compactAbove(window) - systemTokens);
-    let shrunkByOverflow = priorSlice?.shrunk === true && priorSlice.model === nonEmptyModel;
-    let budget =
-      shrunkByOverflow && priorSlice !== undefined
-        ? Math.max(256, Math.min(windowBudget, priorSlice.budget))
-        : windowBudget;
+    const priorShrunk =
+      priorSlice?.shrunk === true &&
+      nonEmptyModel !== undefined &&
+      priorSlice.model === nonEmptyModel;
+    const pendingBudget = this.#pendingCompact?.summaryBudget;
+    let shrunkByOverflow = priorShrunk || pendingBudget !== undefined;
+    let budget = windowBudget;
+    if (priorShrunk && priorSlice !== undefined) {
+      budget = Math.min(budget, priorSlice.budget);
+    }
+    if (pendingBudget !== undefined) {
+      budget = Math.min(budget, pendingBudget);
+    }
+    if (shrunkByOverflow) budget = Math.max(256, budget);
     const older = context.blocks.slice(0, first);
     let summary = context.compaction?.summary ?? null;
     let start = 0;
     let offset = priorSlice?.offset ?? 0;
     let made = 0;
-    let overflows = 0;
+    let overflows = this.#pendingCompact?.summaryOverflows ?? 0;
     while (start < older.length) {
       if (made > 0 && this.#held() !== null) return true;
       const chunk = this.#nextSummaryChunk(
@@ -713,18 +771,17 @@ class TaskRun {
         reply = await this.#send(system, [{ role: "user", content: chunk.prompt }], [], false);
       } catch (error) {
         if (this.#signal.aborted || !isContextOverflow(error)) throw error;
-        const learned = overflowTokens(error);
-        if (learned !== null) this.#recordCeiling(learned);
-        if (this.#held() !== null) return true;
-        const shrunk = this.#shrinkCompactionBudget(
+        const shrunk = this.#shrinkOrPauseCompaction(
+          tokensBefore,
+          overflowTokens(error),
           overflows,
-          learned,
           estimateTokens(chunk.prompt),
           budget,
           systemTokens,
           chunk.singleBlock,
         );
         if (shrunk === null) throw error;
+        if (shrunk === "paused") return true;
         shrunkByOverflow = true;
         overflows++;
         budget = shrunk;
@@ -735,23 +792,23 @@ class TaskRun {
         const output = this.#request.meter.lastOutputTokens?.() ?? null;
         const learned =
           input !== null && input > 0 ? input + (output !== null && output > 0 ? output : 0) : null;
-        if (learned !== null) this.#recordCeiling(learned);
-        if (this.#held() !== null) return true;
-        const shrunk = this.#shrinkCompactionBudget(
-          overflows,
+        const shrunk = this.#shrinkOrPauseCompaction(
+          tokensBefore,
           learned,
+          overflows,
           estimateTokens(chunk.prompt),
           budget,
           systemTokens,
           chunk.singleBlock,
         );
-        if (shrunk !== null) {
-          shrunkByOverflow = true;
-          overflows++;
-          budget = shrunk;
-          continue;
+        if (shrunk === null) {
+          throw new Error("Compaction failed. The model's context window was exceeded");
         }
-        throw new Error("Compaction failed. The model's context window was exceeded");
+        if (shrunk === "paused") return true;
+        shrunkByOverflow = true;
+        overflows++;
+        budget = shrunk;
+        continue;
       }
       const why = unfinished(reply.finishReason);
       if (why !== null) throw new Error(`Compaction failed. ${why.error}`);
