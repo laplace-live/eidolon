@@ -118,6 +118,30 @@ describe("Dual-DH X25519 + AES-256-GCM", () => {
     });
   });
 
+  test("rejects malformed base64 pinned or peer host keys with E2eeError", async () => {
+    await expect(startClientHandshake("not-valid-base64!")).rejects.toMatchObject({
+      name: "E2eeError",
+      code: "invalid-key",
+    });
+
+    const realHost = await generateX25519KeyPair();
+    const eph = await generateX25519KeyPair();
+    const clientHs = await startClientHandshake(realHost.publicKeyB64);
+    await expect(
+      clientHs.finish(
+        JSON.stringify({
+          type: "e2ee_ready",
+          v: 1,
+          hostPubB64: "not-valid-base64!",
+          hostEphPubB64: eph.publicKeyB64,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      name: "E2eeError",
+      code: "invalid-key",
+    });
+  });
+
   test("refuses replayed, reordered, truncated, or tampered frames", async () => {
     const hostKp = await generateX25519KeyPair();
     const hostPriv = await importX25519PrivateKey(hostKp.privateKeyPkcs8B64);

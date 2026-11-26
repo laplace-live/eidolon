@@ -182,9 +182,10 @@ export class SubspaceManager {
     const { activeHostId, servers } = this.store.readServers();
     const relayAuth = this.store.readRelayAuth();
     const grants: readonly SubspaceGrantRecord[] = this.store.readGrants();
-    const activeOffer = this.#offerSnapshot(
-      this.host.activeOffer(identity.shareMode === "off" ? undefined : identity.shareMode),
-    );
+    const activeOffer =
+      identity.shareMode === "off"
+        ? null
+        : this.#offerSnapshot(this.host.activeOffer(identity.shareMode));
 
     return {
       activeHostId,
@@ -243,6 +244,7 @@ export class SubspaceManager {
   }
 
   async setActiveHostId(hostId: string | null): Promise<SubspaceStateSnapshot> {
+    if (hostId !== null) this.#requireServer(hostId);
     if (hostId !== this.activeHostId && this.#deps.activeCalls() > 0) {
       throw codedError("call-active", "A call is in progress; hang up before switching servers");
     }
@@ -397,7 +399,11 @@ export class SubspaceManager {
     } else {
       const grants = this.store.readGrants();
       if (!grants.some((g) => g.mode === "direct")) await this.host.stopDirect();
-      if (!grants.some((g) => g.mode === "relay")) this.host.stopRelay();
+      if (grants.some((g) => g.mode === "relay")) {
+        if (this.store.readRelayAuth() !== null) this.host.startRelay();
+      } else {
+        this.host.stopRelay();
+      }
     }
     return await this.getState();
   }
@@ -418,28 +424,26 @@ export class SubspaceManager {
       throw codedError("relay-auth-required", "Sign in to the Subspace Relay first");
     }
     const identity = await this.store.loadOrCreateIdentity();
+    const explicitAddress = options.address?.trim() || undefined;
     const chosenAddress =
       options.mode === "direct"
-        ? options.address?.trim() ||
+        ? explicitAddress ||
           identity.directAddress ||
           listShareableAddresses()[0]?.address ||
           "127.0.0.1"
         : undefined;
-    if (
-      identity.shareMode !== options.mode ||
-      (chosenAddress !== undefined && identity.directAddress !== chosenAddress)
-    ) {
+    const addressChanged = chosenAddress !== undefined && identity.directAddress !== chosenAddress;
+    if (identity.shareMode !== options.mode || addressChanged) {
       this.store.saveIdentity({
         ...identity,
         shareMode: options.mode,
         ...(chosenAddress !== undefined ? { directAddress: chosenAddress } : {}),
-        ...(options.port !== undefined ? { directPort: options.port } : {}),
       });
       await this.host.reloadIdentity();
     }
     const offer = await this.host.createPairingOffer({
       mode: options.mode,
-      address: chosenAddress,
+      address: explicitAddress ?? (addressChanged ? chosenAddress : undefined),
       port: options.port,
       rotate: options.rotate,
     });
@@ -497,6 +501,7 @@ export class SubspaceManager {
     this.#deviceFlow = IDLE_FLOW;
     const current = this.store.readRelayAuth();
     this.store.saveRelayAuth(null);
+    this.host.clearRelayInvites();
     this.host.stopRelay();
     if (current !== null) await signOutRelaySession(current.authUrl, current.token);
     const identity = await this.store.loadOrCreateIdentity();
@@ -507,8 +512,12 @@ export class SubspaceManager {
     return await this.getState();
   }
 
-  async proxyToActive(request: Request, targetPathWithSearch: string): Promise<Response> {
-    const activeId = this.activeHostId;
+  async proxyToActive(
+    request: Request,
+    targetPathWithSearch: string,
+    expectedHostId?: string,
+  ): Promise<Response> {
+    const activeId = expectedHostId ?? this.activeHostId;
     if (activeId === null) {
       throw new SubspaceConnectError("subspace-unreachable", "No remote Subspace server is active");
     }

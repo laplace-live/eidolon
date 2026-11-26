@@ -85,6 +85,16 @@ async function startHeadlessServer(signal?: AbortSignal): Promise<{
     })().catch(() => {});
   }
   const stop = async () => {
+    if (child.exitCode === null) {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // Ignore already exited child.
+      }
+      await Promise.race([child.exited, new Promise<void>((r) => setTimeout(r, 2_000))]).catch(
+        () => {},
+      );
+    }
     if (child.exitCode === null) killTree(child.pid, { wait: true });
     await child.exited.catch(() => {});
   };
@@ -180,43 +190,48 @@ export async function pairMain(argv: readonly string[], deps: CommandDeps = {}):
   }
 
   try {
-    if (name !== undefined) {
-      const settingsRes = await fetch(`${server.baseUrl}/api/local/subspace/share/settings`, {
+    let result: Awaited<ReturnType<SubspaceManager["createShareOffer"]>>;
+    try {
+      if (name !== undefined) {
+        const settingsRes = await fetch(`${server.baseUrl}/api/local/subspace/share/settings`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${server.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ hostName: name }),
+          signal: deps.signal,
+        });
+        if (!settingsRes.ok) {
+          err(`Could not update host name: ${await settingsRes.text()}`);
+          return 1;
+        }
+      }
+
+      const offerRes = await fetch(`${server.baseUrl}/api/local/subspace/share/offer`, {
         method: "POST",
         headers: {
           authorization: `Bearer ${server.token}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ hostName: name }),
+        body: JSON.stringify({
+          mode: relay ? "relay" : "direct",
+          ...(address !== undefined ? { address } : {}),
+          ...(port !== undefined ? { port } : {}),
+          rotate,
+        }),
         signal: deps.signal,
       });
-      if (!settingsRes.ok) {
-        err(`Could not update host name: ${await settingsRes.text()}`);
+      if (!offerRes.ok) {
+        err(`Could not generate pairing offer: ${await offerRes.text()}`);
         return 1;
       }
-    }
-
-    const offerRes = await fetch(`${server.baseUrl}/api/local/subspace/share/offer`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${server.token}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        mode: relay ? "relay" : "direct",
-        ...(address !== undefined ? { address } : {}),
-        ...(port !== undefined ? { port } : {}),
-        rotate,
-      }),
-      signal: deps.signal,
-    });
-    if (!offerRes.ok) {
-      err(`Could not generate pairing offer: ${await offerRes.text()}`);
+      result = (await offerRes.json()) as Awaited<ReturnType<SubspaceManager["createShareOffer"]>>;
+    } catch (error) {
+      if (deps.signal?.aborted) return 130;
+      err(`Could not prepare pairing offer: ${errorText(error)}`);
       return 1;
     }
-    const result = (await offerRes.json()) as Awaited<
-      ReturnType<SubspaceManager["createShareOffer"]>
-    >;
     const seenGrants = new Set(result.state.share.grants.map((g) => g.id));
 
     if (json) {

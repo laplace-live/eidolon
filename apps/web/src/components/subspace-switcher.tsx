@@ -20,17 +20,12 @@ import { useCallPresence } from "@/features/call/call-context";
 import { AddSubspaceServerDialog } from "@/features/subspace/add-server-dialog";
 import {
   activeSubspaceServer,
+  SUBSPACE_CONNECTION_DOT,
   subspaceQuery,
   useSwitchSubspaceHost,
 } from "@/features/subspace/queries";
 
 const LOCAL_HOST = "__local__";
-const CONNECTION_DOT_CLASS = {
-  connected: "bg-success",
-  connecting: "bg-warning",
-  disconnected: "bg-muted-foreground",
-  error: "bg-muted-foreground",
-} as const;
 
 export function SubspaceSwitcher({ side }: { readonly side: "bottom" | "right" }) {
   const { t } = useLingui();
@@ -134,7 +129,7 @@ export function SubspaceSwitcher({ side }: { readonly side: "bottom" | "right" }
                     <span className="min-w-0 flex-1 truncate">{server.name}</span>
                     <span
                       aria-hidden
-                      className={`size-1.5 shrink-0 rounded-full ${CONNECTION_DOT_CLASS[server.connectionState]}`}
+                      className={`size-1.5 shrink-0 rounded-full ${SUBSPACE_CONNECTION_DOT[server.connectionState]}`}
                     />
                   </DropdownMenuRadioItem>
                 ))}

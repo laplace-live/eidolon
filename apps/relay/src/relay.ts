@@ -408,6 +408,11 @@ export class RelayHub {
       let grantId: string | null = null;
       if (authMsg.credential.kind === "invite") {
         const ticketHash = await sha256Hex(utf8Encode(authMsg.credential.ticket));
+        if (host.ws.readyState !== WebSocket.OPEN) {
+          queue.drainRaw();
+          safeClose(clientWs, RELAY_CLOSE_CODE.HOST_NOT_FOUND, "Remote Eidolon server is offline");
+          return;
+        }
         if (!this.#store.consumeInvite(authMsg.relayHostId, ticketHash)) {
           queue.drainRaw();
           safeClose(clientWs, RELAY_CLOSE_CODE.UNAUTHORIZED, "Invalid or expired pairing ticket");
@@ -415,6 +420,11 @@ export class RelayHub {
         }
       } else {
         const tokenHash = await sha256Hex(utf8Encode(authMsg.credential.deviceToken));
+        if (host.ws.readyState !== WebSocket.OPEN) {
+          queue.drainRaw();
+          safeClose(clientWs, RELAY_CLOSE_CODE.HOST_NOT_FOUND, "Remote Eidolon server is offline");
+          return;
+        }
         if (!this.#store.verifyDevice(authMsg.relayHostId, authMsg.credential.grantId, tokenHash)) {
           queue.drainRaw();
           safeClose(clientWs, RELAY_CLOSE_CODE.UNAUTHORIZED, "Revoked or invalid device token");
@@ -424,11 +434,17 @@ export class RelayHub {
       }
 
       const sessionId = newId();
+      const dropPending = () => {
+        const entry = this.#pending.get(sessionId);
+        if (entry === undefined) return;
+        clearTimeout(entry.timer);
+        entry.clientQueue.drainRaw();
+        this.#pending.delete(sessionId);
+      };
       const timer = setTimeout(() => {
         const dropped = this.#pending.get(sessionId);
         if (dropped !== undefined) {
-          this.#pending.delete(sessionId);
-          dropped.clientQueue.drainRaw();
+          dropPending();
           safeClose(dropped.clientWs, RELAY_CLOSE_CODE.TIMEOUT, "Host did not open data channel");
         }
       }, HANDSHAKE_TIMEOUT_MS);
@@ -444,16 +460,13 @@ export class RelayHub {
       };
       this.#pending.set(sessionId, pending);
 
-      clientWs.once("close", () => {
-        const stillPending = this.#pending.get(sessionId);
-        if (stillPending !== undefined) {
-          clearTimeout(stillPending.timer);
-          stillPending.clientQueue.drainRaw();
-          this.#pending.delete(sessionId);
-        }
-      });
+      clientWs.once("close", dropPending);
 
-      host.ws.send(JSON.stringify({ type: "connection_open", sessionId, grantId }));
+      host.ws.send(JSON.stringify({ type: "connection_open", sessionId, grantId }), (err) => {
+        if (!err) return;
+        dropPending();
+        safeClose(clientWs, RELAY_CLOSE_CODE.HOST_NOT_FOUND, "Remote Eidolon server is offline");
+      });
     } catch {
       queue.drainRaw();
       safeClose(clientWs, RELAY_CLOSE_CODE.UNAUTHORIZED, "Client auth failed");

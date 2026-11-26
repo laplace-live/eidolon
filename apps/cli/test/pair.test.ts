@@ -1,10 +1,13 @@
 import "../../../packages/config/test/isolated-guard.ts";
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { join } from "node:path";
 import { dataHome } from "@eidolon/config";
+import { lockInfoPath } from "@eidolon/config/lock";
 import { SubspaceStore } from "@eidolon/subspace";
 import { afterEach, describe, expect, test } from "vitest";
 import { pairMain } from "../src/pair.ts";
-import { subspaceMain } from "../src/subspace.ts";
+import { probeRunningLocalServer, subspaceMain } from "../src/subspace.ts";
 import { captureIo } from "./helpers.ts";
 
 afterEach(() => {
@@ -64,5 +67,37 @@ describe("laplace-pair and laplace-subspace", () => {
     const missingRevoke = captureIo();
     expect(await subspaceMain(["revoke", "nonexistent"], missingRevoke.io)).toBe(1);
     expect(missingRevoke.stderr()).toContain("Unknown grant id");
+  });
+
+  test("subspace logout resets offline relay shareMode to off and probeRunningLocalServer refuses unverified listeners", async () => {
+    const store = new SubspaceStore(dataHome());
+    const identity = await store.loadOrCreateIdentity();
+    store.saveIdentity({ ...identity, shareMode: "relay" });
+
+    const logoutIo = captureIo();
+    expect(await subspaceMain(["logout", "--json"], logoutIo.io)).toBe(0);
+    expect(JSON.parse(logoutIo.stdout())).toEqual({ status: "signed-out" });
+    expect((await store.loadOrCreateIdentity()).shareMode).toBe("off");
+
+    // A non-Eidolon server listening on the port from local-server.info must not receive Bearer token.
+    const seenHeaders: (string | undefined)[] = [];
+    const decoy = createServer((req, res) => {
+      seenHeaders.push(req.headers.authorization);
+      res.writeHead(404).end();
+    });
+    await new Promise<void>((resolve) => decoy.listen(0, "127.0.0.1", resolve));
+    try {
+      const addr = decoy.address();
+      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+      const infoPath = lockInfoPath("local-server");
+      mkdirSync(join(dataHome(), "locks"), { recursive: true });
+      writeFileSync(infoPath, JSON.stringify({ pid: process.pid, host: "127.0.0.1", port }));
+      writeFileSync(join(dataHome(), "local-token"), "a".repeat(43));
+
+      expect(await probeRunningLocalServer()).toBeNull();
+      expect(seenHeaders).toEqual([undefined]);
+    } finally {
+      await new Promise<void>((resolve) => decoy.close(() => resolve()));
+    }
   });
 });

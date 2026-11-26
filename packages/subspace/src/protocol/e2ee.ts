@@ -363,11 +363,8 @@ export interface ClientHandshakeState {
 export async function startClientHandshake(
   expectedHostPublicKeyB64: string,
 ): Promise<ClientHandshakeState> {
-  const expectedHostBytes = base64ToBytes(expectedHostPublicKeyB64);
-  if (expectedHostBytes.byteLength !== 32) {
-    throw new E2eeError("invalid-key", "Pinned host public key must be 32 bytes");
-  }
   const hostStaticKey = await importX25519PublicKey(expectedHostPublicKeyB64);
+  const expectedHostBytes = base64ToBytes(expectedHostPublicKeyB64);
   const clientEph = await generateEphemeralX25519();
   const nonce = randomBytes(16);
   const hello: E2eeHelloMessage = {
@@ -394,7 +391,12 @@ export async function startClientHandshake(
       ) {
         throw new E2eeError("invalid-frame", "Invalid e2ee_ready message");
       }
-      const receivedHostBytes = base64ToBytes(ready.hostPubB64);
+      let receivedHostBytes: Uint8Array<ArrayBuffer>;
+      try {
+        receivedHostBytes = base64ToBytes(ready.hostPubB64);
+      } catch {
+        throw new E2eeError("invalid-key", "Remote host public key is not valid base64");
+      }
       if (!constantTimeEqual(receivedHostBytes, expectedHostBytes)) {
         throw new E2eeError("key-mismatch", "Remote host public key does not match pinned key");
       }

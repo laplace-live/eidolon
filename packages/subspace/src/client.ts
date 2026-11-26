@@ -126,8 +126,14 @@ async function dialAuthenticatedTunnel(input: {
     | { readonly kind: "device"; readonly grantId: string; readonly deviceToken: string };
   readonly relayUnexpectedErrorCode: SubspaceConnectError["code"];
   readonly buildE2eeAuth: (authBinding: string) => E2eeAuthRequest;
+  readonly signal?: AbortSignal;
 }): Promise<{ readonly tunnel: ActiveTunnel; readonly authRes: E2eeAuthResponse }> {
+  if (input.signal?.aborted) {
+    throw new SubspaceConnectError("subspace-unreachable", "Disconnected");
+  }
   const ws = new WebSocket(targetWsUrl(input.target));
+  const onAbort = () => ws.terminate();
+  input.signal?.addEventListener("abort", onAbort, { once: true });
   try {
     await waitForOpen(ws, CONNECT_TIMEOUT_MS);
     if (input.target.mode === "relay") {
@@ -166,6 +172,8 @@ async function dialAuthenticatedTunnel(input: {
   } catch (error) {
     ws.terminate();
     throw error;
+  } finally {
+    input.signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -237,6 +245,8 @@ export class SubspaceClient {
 
   #tunnel: ActiveTunnel | null = null;
   #connecting: Promise<ActiveTunnel> | null = null;
+  #connectAbort: AbortController | null = null;
+  #connectEpoch = 0;
   #state: SubspaceConnectionState = "disconnected";
   #lastError: string | null = null;
   #latencyMs: number | null = null;
@@ -283,6 +293,7 @@ export class SubspaceClient {
       server.relay?.url !== this.#server.relay?.url;
     this.#server = server;
     if (endpointChanged && this.#wanted) {
+      this.#cancelConnecting();
       this.#dropTunnel("Server settings updated");
       void this.connect().catch(() => {});
     }
@@ -302,6 +313,7 @@ export class SubspaceClient {
       clearTimeout(this.#reconnectTimer);
       this.#reconnectTimer = null;
     }
+    this.#cancelConnecting();
     this.#dropTunnel("Disconnected");
     this.#setState("disconnected", null);
   }
@@ -315,8 +327,12 @@ export class SubspaceClient {
       clearTimeout(this.#reconnectTimer);
       this.#reconnectTimer = null;
     }
-    const task = this.#openTunnel().finally(() => {
+    const epoch = ++this.#connectEpoch;
+    const abort = new AbortController();
+    this.#connectAbort = abort;
+    const task = this.#openTunnel(epoch, abort.signal).finally(() => {
       if (this.#connecting === task) this.#connecting = null;
+      if (this.#connectAbort === abort) this.#connectAbort = null;
     });
     this.#connecting = task;
     return task;
@@ -327,6 +343,7 @@ export class SubspaceClient {
     try {
       tunnel = await this.connect();
     } catch (error) {
+      if (error instanceof SubspaceConnectError) throw error;
       throw new SubspaceConnectError("subspace-unreachable", errorText(error));
     }
     const headers: [string, string][] = [];
@@ -360,7 +377,14 @@ export class SubspaceClient {
     return response;
   }
 
-  async #openTunnel(): Promise<ActiveTunnel> {
+  #cancelConnecting(): void {
+    this.#connectEpoch += 1;
+    this.#connectAbort?.abort();
+    this.#connectAbort = null;
+    this.#connecting = null;
+  }
+
+  async #openTunnel(epoch: number, signal: AbortSignal): Promise<ActiveTunnel> {
     this.#setState("connecting", null);
     try {
       const { tunnel, authRes } = await dialAuthenticatedTunnel({
@@ -379,7 +403,13 @@ export class SubspaceClient {
           deviceToken: this.#server.deviceToken,
           authBinding,
         }),
+        signal,
       });
+      if (signal.aborted || !this.#wanted || epoch !== this.#connectEpoch) {
+        tunnel.mux.close("Disconnected");
+        tunnel.ws.terminate();
+        throw new SubspaceConnectError("subspace-unreachable", "Disconnected");
+      }
       if (!authRes.ok) {
         tunnel.ws.terminate();
         if (authRes.code === "invalid-token" || authRes.code === "unauthorized") {
@@ -392,11 +422,23 @@ export class SubspaceClient {
       this.#events.onConnected?.(authRes.serverVersion);
       return tunnel;
     } catch (error) {
+      if (signal.aborted || !this.#wanted || epoch !== this.#connectEpoch) throw error;
       const message = errorText(error);
       this.#setState("error", message);
       if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
       throw error;
     }
+  }
+
+  #failActiveTunnel(
+    tunnel: ActiveTunnel,
+    dropReason: string,
+    errorReason: string | null = dropReason,
+  ): void {
+    if (this.#tunnel !== tunnel) return;
+    this.#dropTunnel(dropReason);
+    this.#setState(this.#wanted ? "error" : "disconnected", this.#wanted ? errorReason : null);
+    if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
   }
 
   #attachTunnel(tunnel: ActiveTunnel): void {
@@ -407,11 +449,10 @@ export class SubspaceClient {
       void tunnel.mux
         .ping()
         .then((ms) => {
-          this.#latencyMs = ms;
+          if (this.#tunnel === tunnel) this.#latencyMs = ms;
         })
         .catch(() => {
-          this.#dropTunnel("Keepalive timeout");
-          if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
+          this.#failActiveTunnel(tunnel, "Keepalive timeout");
         });
     }, PING_INTERVAL_MS);
     this.#pingTimer.unref?.();
@@ -422,24 +463,16 @@ export class SubspaceClient {
           const plain = await tunnel.session.open(rawDataToUint8Array(raw));
           await tunnel.mux.handleFrame(plain);
         } catch (error) {
-          this.#dropTunnel(errorText(error));
-          if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
+          this.#failActiveTunnel(tunnel, errorText(error));
         }
       })();
     });
     tunnel.ws.on("close", (_code, reason) => {
-      if (this.#tunnel !== tunnel) return;
       const msg = reason.toString("utf8") || null;
-      this.#dropTunnel(msg ?? "Disconnected");
-      this.#setState(this.#wanted ? "error" : "disconnected", msg);
-      if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
+      this.#failActiveTunnel(tunnel, msg ?? "Disconnected", msg);
     });
     tunnel.ws.on("error", (err) => {
-      if (this.#tunnel !== tunnel) return;
-      const msg = errorText(err);
-      this.#dropTunnel(msg);
-      this.#setState("error", msg);
-      if (this.#wanted && !this.#revoked) this.#scheduleReconnect();
+      this.#failActiveTunnel(tunnel, errorText(err));
     });
   }
 

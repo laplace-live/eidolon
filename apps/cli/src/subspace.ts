@@ -1,4 +1,5 @@
 // laplace-subspace (`eidolon subspace`): inspect status, sign in to the Relay, or revoke paired devices.
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -69,6 +70,19 @@ export interface RunningLocalServer {
   readonly pid: number | null;
 }
 
+function isLoopbackHost(host: string): boolean {
+  if (host === "[::1]") return true;
+  const octets = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host)?.slice(1) ?? [];
+  return (
+    octets.length === 3 &&
+    octets.every((octet) => String(Number(octet)) === octet && Number(octet) <= 255)
+  );
+}
+
+function digest(value: string): Buffer {
+  return createHash("sha256").update(value, "utf8").digest();
+}
+
 export async function probeRunningLocalServer(): Promise<{
   readonly server: RunningLocalServer;
   readonly subspace: SubspaceStateSnapshot;
@@ -87,14 +101,34 @@ export async function probeRunningLocalServer(): Promise<{
   }
   if (
     typeof info.host !== "string" ||
+    !isLoopbackHost(info.host) ||
     typeof info.port !== "number" ||
     !Number.isInteger(info.port) ||
+    info.port < 1 ||
+    info.port > 65535 ||
     token === ""
   ) {
     return null;
   }
   const baseUrl = `http://${info.host}:${info.port}`;
   try {
+    // Prove the listener holds our local-token before sending Bearer credentials to it.
+    const nonce = randomBytes(16).toString("base64url");
+    const probeRes = await fetch(`${baseUrl}/api/local/session?probe=${nonce}`, {
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!probeRes.ok) return null;
+    const probeBody = (await probeRes.json().catch(() => null)) as { proof?: unknown } | null;
+    const expectedProof = createHmac("sha256", token)
+      .update(`probe:${nonce}`, "utf8")
+      .digest("base64url");
+    if (
+      typeof probeBody?.proof !== "string" ||
+      !timingSafeEqual(digest(probeBody.proof), digest(expectedProof))
+    ) {
+      return null;
+    }
+
     const res = await fetch(`${baseUrl}/api/local/subspace`, {
       headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(2_000),
@@ -163,7 +197,8 @@ export async function runDeviceLoginFlow(options: {
     signal: options.signal,
   });
   if (result.status !== "approved") {
-    if (result.status === "aborted" || result.status === "expired") return false;
+    if (result.status === "aborted") return false;
+    if (result.status === "expired") throw new Error("Verification code expired");
     if (result.status === "profile-failed") {
       throw new Error("Account sign-in approved, but profile lookup failed");
     }
@@ -242,7 +277,7 @@ export async function subspaceMain(
     const grants = store.readGrants();
     const relayAuth = store.readRelayAuth();
     const authUrl = relayAuth?.authUrl ?? subspaceAuthUrl();
-    const relayUrl = subspaceRelayUrl();
+    const relayUrl = relayAuth?.relayUrl ?? subspaceRelayUrl();
     const snapshot = {
       running: false,
       activeHostId: servers.activeHostId,
@@ -304,14 +339,21 @@ export async function subspaceMain(
   if (action === "revoke") {
     const grantId = target!;
     if (running !== null) {
-      const res = await fetch(
-        `${running.server.baseUrl}/api/local/subspace/share/grants/${encodeURIComponent(grantId)}`,
-        {
-          method: "DELETE",
-          headers: { authorization: `Bearer ${running.server.token}` },
-          signal: deps.signal,
-        },
-      );
+      let res: Response;
+      try {
+        res = await fetch(
+          `${running.server.baseUrl}/api/local/subspace/share/grants/${encodeURIComponent(grantId)}`,
+          {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${running.server.token}` },
+            signal: deps.signal,
+          },
+        );
+      } catch (error) {
+        if (deps.signal?.aborted) return 130;
+        err(`Failed to revoke grant ${grantId}: ${errorText(error)}`);
+        return 1;
+      }
       if (!res.ok) {
         const body = await res.text();
         err(`Failed to revoke grant ${grantId}: ${body}`);
@@ -328,15 +370,30 @@ export async function subspaceMain(
 
   if (action === "logout") {
     if (running !== null) {
-      await fetch(`${running.server.baseUrl}/api/local/subspace/auth/logout`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${running.server.token}` },
-        signal: deps.signal,
-      });
+      let res: Response;
+      try {
+        res = await fetch(`${running.server.baseUrl}/api/local/subspace/auth/logout`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${running.server.token}` },
+          signal: deps.signal,
+        });
+      } catch (error) {
+        if (deps.signal?.aborted) return 130;
+        err(`Failed to sign out: ${errorText(error)}`);
+        return 1;
+      }
+      if (!res.ok) {
+        err(`Failed to sign out: ${await res.text()}`);
+        return 1;
+      }
     } else {
       const current = store.readRelayAuth();
       store.saveRelayAuth(null);
       if (current !== null) await signOutRelaySession(current.authUrl, current.token);
+      const identity = await store.loadOrCreateIdentity();
+      if (identity.shareMode === "relay") {
+        store.saveIdentity({ ...identity, shareMode: "off" });
+      }
     }
     if (json) out(JSON.stringify({ status: "signed-out" }));
     else out("Signed out of Subspace Relay.");

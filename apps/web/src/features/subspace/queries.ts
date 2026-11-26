@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useLocation } from "wouter";
 import {
   call,
+  type SubspaceConnectionState,
   type SubspacePairRequest,
   type SubspaceServerUpdateRequest,
   type SubspaceShareOfferRequest,
@@ -17,6 +18,13 @@ import { useRevalidate } from "@/router";
 const SUBSPACE_KEY = ["subspace"] as const;
 const PENDING_POLL_MS = 3_000;
 const IDLE_POLL_MS = 15_000;
+
+export const SUBSPACE_CONNECTION_DOT: Readonly<Record<SubspaceConnectionState, string>> = {
+  connected: "bg-success",
+  connecting: "bg-warning",
+  disconnected: "bg-muted-foreground",
+  error: "bg-destructive",
+};
 
 export const subspaceQuery = queryOptions({
   queryKey: SUBSPACE_KEY,
@@ -145,6 +153,7 @@ export function useUpdateSubspaceServer() {
 
 export function useRemoveSubspaceServer() {
   const queryClient = useQueryClient();
+  const [pathname, navigate] = useLocation();
   const revalidate = useRevalidate();
   return useMutation({
     mutationFn: (id: string) => call("DELETE /api/local/subspace/servers/:id", { params: { id } }),
@@ -152,10 +161,7 @@ export function useRemoveSubspaceServer() {
       const previous = queryClient.getQueryData<SubspaceStateResponse>(SUBSPACE_KEY);
       queryClient.setQueryData(SUBSPACE_KEY, next);
       if (previous?.activeHostId !== next.activeHostId) {
-        queryClient.removeQueries({
-          predicate: (query) => query.queryKey[0] !== SUBSPACE_KEY[0],
-        });
-        await revalidate();
+        await resetHostCacheAndRoute(queryClient, pathname, navigate, revalidate);
       }
     },
     onError: toastError,

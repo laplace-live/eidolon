@@ -245,7 +245,9 @@ export class SubspaceStore {
   setActiveHostId(hostId: string | null): SubspaceServersFile {
     const current = this.readServers();
     if (hostId !== null && !current.servers.some((s) => s.id === hostId)) {
-      throw new Error(`Unknown Subspace server ${hostId}`);
+      throw Object.assign(new Error(`Unknown Subspace server ${hostId}`), {
+        code: "unknown-subspace-server",
+      });
     }
     const next: SubspaceServersFile = { activeHostId: hostId, servers: current.servers };
     this.saveServers(next);

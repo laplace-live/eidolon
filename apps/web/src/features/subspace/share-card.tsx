@@ -3,7 +3,7 @@ import { msg, ph } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { CheckIcon, CopyIcon, QrCodeIcon } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ListCard, ListRow } from "@/components/list";
 import { QuietBadge } from "@/components/quiet-badge";
@@ -62,7 +62,9 @@ export function ShareCard() {
   const [hostNameDraft, setHostNameDraft] = useState("");
   const [hostNameDirty, setHostNameDirty] = useState(false);
   const [customHost, setCustomHost] = useState("");
+  const [customHostDirty, setCustomHostDirty] = useState(false);
   const [useCustomHost, setUseCustomHost] = useState(false);
+  const lastDirectAddress = useRef<string | null | undefined>(undefined);
   const { copied: copiedLink, copy: copyLink } = useClipboardCopy(t`Pairing link copied.`);
 
   const share = state?.share;
@@ -75,11 +77,16 @@ export function ShareCard() {
   useEffect(() => {
     if (!share) return;
     const saved = share.directAddress;
+    if (saved === lastDirectAddress.current) return;
+    lastDirectAddress.current = saved;
     if (saved && !share.addresses.some((a) => a.address === saved)) {
       setUseCustomHost(true);
-      setCustomHost(saved);
+      if (!customHostDirty) setCustomHost(saved);
+    } else if (saved !== null) {
+      setUseCustomHost(false);
+      if (!customHostDirty) setCustomHost("");
     }
-  }, [share]);
+  }, [share, customHostDirty]);
 
   if (!share || !relayAuth) return null;
 
@@ -135,6 +142,7 @@ export function ShareCard() {
       return;
     }
     setUseCustomHost(false);
+    setCustomHostDirty(false);
     updateShare.mutate({ directAddress: value });
   }
 
@@ -256,7 +264,10 @@ export function ShareCard() {
                   <Input
                     id={customAddrId}
                     value={customHost}
-                    onChange={(event) => setCustomHost(event.target.value)}
+                    onChange={(event) => {
+                      setCustomHostDirty(true);
+                      setCustomHost(event.target.value);
+                    }}
                     placeholder="100.x.y.z"
                     className="font-mono text-xs md:text-xs"
                     autoComplete="off"
@@ -266,7 +277,12 @@ export function ShareCard() {
                     type="button"
                     variant="outline"
                     disabled={!customHost.trim() || busy}
-                    onClick={() => updateShare.mutate({ directAddress: customHost.trim() })}
+                    onClick={() =>
+                      updateShare.mutate(
+                        { directAddress: customHost.trim() },
+                        { onSuccess: () => setCustomHostDirty(false) },
+                      )
+                    }
                   >
                     {t`Apply`}
                   </Button>

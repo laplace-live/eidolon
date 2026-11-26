@@ -175,6 +175,39 @@ describe("Local server Subspace proxy & host switching", () => {
       [localChatId, "Local Computer Chat"],
     ]);
 
+    // 4b. POST /api/local/subspace/active with an unknown server id returns 404 without dropping the active host.
+    const missingActiveRes = await fetch(`${local.base}/api/local/subspace/active`, {
+      method: "POST",
+      headers: { ...local.session, "content-type": "application/json" },
+      body: JSON.stringify({ hostId: "srv_does_not_exist" }),
+    });
+    expect(missingActiveRes.status).toBe(404);
+    expect(await missingActiveRes.json()).toMatchObject({
+      error: { code: "unknown-subspace-server" },
+    });
+    const stillRemoteChats = await fetch(`${local.base}/api/local/chats`, {
+      headers: local.session,
+    });
+    expect(stillRemoteChats.status).toBe(200);
+    expect(stillRemoteChats.headers.get("x-eidolon-subspace-host")).toBe(remoteId);
+
+    // 4c. Generating a direct share offer without address/rotate reuses the active offer.
+    const offer1Res = await fetch(`${local.base}/api/local/subspace/share/offer`, {
+      method: "POST",
+      headers: { ...local.session, "content-type": "application/json" },
+      body: JSON.stringify({ mode: "direct", address: "127.0.0.1", port: 0 }),
+    });
+    expect(offer1Res.status).toBe(200);
+    const offer1 = (await offer1Res.json()) as { pairingCode: string };
+    const offer2Res = await fetch(`${local.base}/api/local/subspace/share/offer`, {
+      method: "POST",
+      headers: { ...local.session, "content-type": "application/json" },
+      body: JSON.stringify({ mode: "direct" }),
+    });
+    expect(offer2Res.status).toBe(200);
+    const offer2 = (await offer2Res.json()) as { pairingCode: string };
+    expect(offer2.pairingCode).toBe(offer1.pairingCode);
+
     // 5. Switching activeHostId back to null returns local chats and x-eidolon-subspace-host: local.
     const switchLocalRes = await fetch(`${local.base}/api/local/subspace/active`, {
       method: "POST",

@@ -51,6 +51,7 @@ import { useCallPresence } from "@/features/call/call-context";
 import type { SubspaceConnectionState, SubspaceServerView } from "@/lib/api";
 import { AddSubspaceServerDialog } from "./add-server-dialog";
 import {
+  SUBSPACE_CONNECTION_DOT,
   subspaceQuery,
   useConnectSubspaceServer,
   useDisconnectSubspaceServer,
@@ -67,10 +68,10 @@ const MODE_LABELS: Readonly<Record<SubspaceServerView["mode"], MessageDescriptor
 const CONNECTION_LABELS: Readonly<
   Record<SubspaceConnectionState, { readonly label: MessageDescriptor; readonly dot: string }>
 > = {
-  connected: { label: msg`Connected`, dot: "bg-success" },
-  connecting: { label: msg`Connecting…`, dot: "bg-warning" },
-  disconnected: { label: msg`Offline`, dot: "bg-muted-foreground" },
-  error: { label: msg`Connection Error`, dot: "bg-destructive" },
+  connected: { label: msg`Connected`, dot: SUBSPACE_CONNECTION_DOT.connected },
+  connecting: { label: msg`Connecting…`, dot: SUBSPACE_CONNECTION_DOT.connecting },
+  disconnected: { label: msg`Offline`, dot: SUBSPACE_CONNECTION_DOT.disconnected },
+  error: { label: msg`Connection Error`, dot: SUBSPACE_CONNECTION_DOT.error },
 };
 
 function ServerMenu({

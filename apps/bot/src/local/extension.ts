@@ -118,10 +118,11 @@ async function forwardToSubspace(
   subspace: SubspaceManager,
   request: Request,
   targetPathWithSearch: string,
+  expectedHostId?: string,
   mapPairingFailed = false,
 ): Promise<Response> {
   try {
-    return await subspace.proxyToActive(request, targetPathWithSearch);
+    return await subspace.proxyToActive(request, targetPathWithSearch, expectedHostId);
   } catch (error) {
     const code =
       mapPairingFailed && error instanceof SubspaceConnectError && error.code === "pairing-failed"
@@ -290,6 +291,7 @@ export function createLocalExtension(options: LocalExtensionOptions): LocalAppEx
             subspace,
             request,
             `${pathname}${url.search}`,
+            activeHostId,
             true,
           );
           if (request.method === "POST" && pathname === "/api/local/restart" && response.ok) {

@@ -277,7 +277,13 @@ export async function completeDeviceAuthorization(input: {
       if (user === null) return { status: "profile-failed" };
       return { status: "approved", accessToken: poll.accessToken, user };
     }
-    return { status: "error", message: poll.message || errorText(poll) };
+    const fallback =
+      poll.status === "denied"
+        ? "Sign-in was denied"
+        : poll.status === "expired"
+          ? "Verification code expired"
+          : "Relay sign-in failed";
+    return { status: "error", message: poll.message || fallback };
   }
   return input.signal?.aborted ? { status: "aborted" } : { status: "expired" };
 }

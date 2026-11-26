@@ -114,6 +114,7 @@ export class SubspaceHost {
 
   #relayWanted = false;
   #relayWs: WebSocket | null = null;
+  #relayConnectTask: Promise<void> | null = null;
   #relayConnected = false;
   #relayError: string | null = null;
   #relayTimer: ReturnType<typeof setTimeout> | null = null;
@@ -258,9 +259,10 @@ export class SubspaceHost {
     if (this.#stopped) return;
     this.#relayWanted = true;
     if (
-      this.#relayWs !== null &&
-      (this.#relayWs.readyState === WebSocket.OPEN ||
-        this.#relayWs.readyState === WebSocket.CONNECTING)
+      this.#relayConnectTask !== null ||
+      (this.#relayWs !== null &&
+        (this.#relayWs.readyState === WebSocket.OPEN ||
+          this.#relayWs.readyState === WebSocket.CONNECTING))
     ) {
       return;
     }
@@ -268,7 +270,20 @@ export class SubspaceHost {
       clearTimeout(this.#relayTimer);
       this.#relayTimer = null;
     }
-    void this.#connectRelayControl();
+    const task = this.#connectRelayControl().finally(() => {
+      if (this.#relayConnectTask === task) this.#relayConnectTask = null;
+    });
+    this.#relayConnectTask = task;
+  }
+
+  clearRelayInvites(): void {
+    for (const [key, invite] of this.#invites) {
+      if (invite.mode === "relay") {
+        this.#invites.delete(key);
+        this.#inviteAckWaiters.get(key)?.();
+        this.#inviteAckWaiters.delete(key);
+      }
+    }
   }
 
   stopRelay(): void {
@@ -293,19 +308,18 @@ export class SubspaceHost {
     const identity = await this.#ensureIdentity();
     if (!options.rotate) {
       const existing = this.activeOffer(options.mode);
-      if (existing !== null) {
+      if (existing !== null && existing.hostName === identity.hostName) {
         if (
           options.mode === "direct" &&
           options.address === undefined &&
-          options.port === undefined
+          options.port === undefined &&
+          (identity.directAddress === null || existing.endpoint?.host === identity.directAddress) &&
+          (this.#directPort === null || existing.endpoint?.port === this.#directPort)
         ) {
           return existing;
         }
         if (options.mode === "relay") return existing;
       }
-    }
-    for (const [key, invite] of this.#invites) {
-      if (invite.mode === options.mode) this.#invites.delete(key);
     }
 
     const ticket = bytesToBase64Url(randomBytes(24));
@@ -333,6 +347,7 @@ export class SubspaceHost {
       }
       const relayUrl = this.#deps.relayUrl();
       const relayHostId = await deriveRelayHostId(base64ToBytes(identity.publicKeyB64));
+      await this.#ensureRelayConnected();
       offer = {
         v: 1,
         mode: "relay",
@@ -344,6 +359,9 @@ export class SubspaceHost {
       };
     }
 
+    for (const [key, invite] of this.#invites) {
+      if (invite.mode === options.mode) this.#invites.delete(key);
+    }
     this.#invites.set(inviteId, {
       id: inviteId,
       mode: options.mode,
@@ -353,30 +371,32 @@ export class SubspaceHost {
       offer,
     });
     if (options.mode === "relay") {
-      await this.#ensureRelayConnected();
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(() => {
-          this.#inviteAckWaiters.delete(inviteId);
-          resolve();
-        }, 3_000);
-        this.#inviteAckWaiters.set(inviteId, () => {
-          clearTimeout(timer);
-          resolve();
+      const ws = this.#relayWs;
+      if (ws !== null && ws.readyState === WebSocket.OPEN) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            this.#inviteAckWaiters.delete(inviteId);
+            resolve();
+          }, 3_000);
+          this.#inviteAckWaiters.set(inviteId, () => {
+            clearTimeout(timer);
+            resolve();
+          });
+          void sendWs(
+            ws,
+            JSON.stringify({
+              type: "invite_create",
+              inviteId,
+              ticketHash: ticketSha256,
+              expiresAt,
+            }),
+          ).catch(() => {
+            clearTimeout(timer);
+            this.#inviteAckWaiters.delete(inviteId);
+            resolve();
+          });
         });
-        void sendWs(
-          this.#relayWs!,
-          JSON.stringify({
-            type: "invite_create",
-            inviteId,
-            ticketHash: ticketSha256,
-            expiresAt,
-          }),
-        ).catch(() => {
-          clearTimeout(timer);
-          this.#inviteAckWaiters.delete(inviteId);
-          resolve();
-        });
-      });
+      }
     }
     return offer;
   }
@@ -471,7 +491,12 @@ export class SubspaceHost {
     this.#relayBackoffMs = Math.min(15_000, Math.round(this.#relayBackoffMs * 1.8));
     this.#relayTimer = setTimeout(() => {
       this.#relayTimer = null;
-      void this.#connectRelayControl();
+      if (!this.#stopped && this.#relayWanted && this.#relayConnectTask === null) {
+        const task = this.#connectRelayControl().finally(() => {
+          if (this.#relayConnectTask === task) this.#relayConnectTask = null;
+        });
+        this.#relayConnectTask = task;
+      }
     }, delay);
     this.#relayTimer.unref?.();
   }
@@ -558,6 +583,7 @@ export class SubspaceHost {
     });
 
     ws.on("error", (err) => {
+      if (this.#relayWs !== ws) return;
       this.#setRelayState(false, errorText(err));
     });
   }
@@ -807,6 +833,10 @@ export class SubspaceHost {
           onCallOpen: (_channelId, hostPort, bridge) => openHostUdpBridge(hostPort, bridge),
         },
       });
+      if (this.#stopped) {
+        closeSocket(1001, "Server stopping");
+        return;
+      }
       sessionHandle = {
         grantId,
         close: () => closeSocket(RELAY_CLOSE_CODE.UNAUTHORIZED, "Device revoked"),
