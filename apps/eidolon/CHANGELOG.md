@@ -1,5 +1,11 @@
 # @laplace.live/eidolon
 
+## 0.18.1
+
+### Patch Changes
+
+- ac97b72: Align the group chat decision button beside voice and photo replies
+
 ## 0.18.0
 
 ### Minor Changes

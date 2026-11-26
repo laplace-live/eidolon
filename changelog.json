@@ -2,6 +2,32 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-26T18:37:17.579Z",
+      "versions": {
+        "laplace-eidolon": "0.18.1",
+        "@laplace.live/eidolon": "0.18.1",
+        "laplace-eidolon-desktop": "0.6.1"
+      },
+      "items": [
+        {
+          "kind": "improvement",
+          "packages": [
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Upgrade the bundled pnpm in the node shim to v12"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Align the group chat decision button beside voice and photo replies"
+        }
+      ]
+    },
+    {
       "date": "2026-11-26T13:46:29.192Z",
       "versions": {
         "laplace-eidolon": "0.18.0",
