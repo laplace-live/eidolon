@@ -23,11 +23,13 @@ import {
   directorParticipant,
   directorQuestions,
   directorState,
+  EVERYONE_THRESHOLD,
   HOP_STEP,
   INTEREST_THRESHOLD,
   INVITES_THRESHOLD,
   JUST_SPOKE_PENALTY,
   MAX_REPLIES_TO_USER,
+  OTHERS_THRESHOLD,
 } from "../src/index.ts";
 import { captureLogs, resetEnv, setEnv } from "./helpers.ts";
 
@@ -156,7 +158,7 @@ describe("what Jev reads", () => {
     expect(state.recent_turns).toEqual({ 明前奶绿: 0, 露比: 0 });
   });
 
-  test("each candidate's two questions, then invites_reply, as the roadmap words them", () => {
+  test("each candidate's two questions, then invites_reply, everyone and others, as the roadmap words them", () => {
     expect(directorQuestions([RUBY, KEN])).toEqual({
       addressed_ruby: {
         type: "noul",
@@ -186,6 +188,19 @@ describe("what Jev reads", () => {
           "Does the latest message invite a reply (a question, an opinion, a tease) rather than " +
           "close the exchange?",
       },
+      everyone: {
+        type: "noul",
+        instructions:
+          "Does the latest message explicitly ask every participant (or each one in turn) to " +
+          "answer, rather than just anyone who wants to?",
+      },
+      others: {
+        type: "noul",
+        instructions:
+          "Does the latest message explicitly call on the other participants who have stayed " +
+          "silent so far (e.g. asking where the others are or telling the rest to speak up) " +
+          "rather than a specific named person or whoever just spoke?",
+      },
     });
     expect(Object.keys(directorQuestions([RUBY, KEN]))).toEqual([
       "addressed_ruby",
@@ -193,6 +208,8 @@ describe("what Jev reads", () => {
       "addressed_ken",
       "interested_ken",
       "invites_reply",
+      "everyone",
+      "others",
     ]);
   });
 });
@@ -231,6 +248,8 @@ describe("the request", () => {
       addressed_ken: 0,
       interested_ken: 0,
       invites_reply: 0,
+      everyone: 0,
+      others: 0,
     });
     expect(usage).toEqual([
       expect.objectContaining({
@@ -278,20 +297,34 @@ describe("the request", () => {
 describe("after the viewer's line", () => {
   const line = [viewer("你们好")];
 
-  test("a mention answers first, in mention order, then the addressed, two at most", async () => {
+  test("a mention answers first, in mention order, then the addressed; explicit mentions aren't capped", async () => {
+    const four = [persona("a", "A"), persona("b", "B"), persona("c", "C"), persona("d", "D")];
     const decision = await directorWith(answering({ addressed_ken: 0.9 })).decide(
       input([viewer("@露比 @奶绿 你们呢")], { mentions: ["ruby", "milky"] }),
     );
     expect(decision.replies).toEqual([
       { persona: "ruby", mode: "text" },
       { persona: "milky", mode: "text" },
+      { persona: "ken", mode: "text" },
     ]);
     expect(decision.source).toBe("mention");
-    expect(MAX_REPLIES_TO_USER).toBe(2);
+    expect(MAX_REPLIES_TO_USER).toBe(3);
     expect(await who({ addressed_ken: 0.9 }, line, { mentions: ["ruby"] })).toEqual([
       "ruby",
       "ken",
     ]);
+    expect(await who({}, line, { participants: four, mentions: ["a", "b", "c", "d"] })).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+    ]);
+    expect(
+      await who({ addressed_b: 0.95, addressed_c: 0.85, addressed_d: 0.75 }, line, {
+        participants: four,
+        mentions: ["a"],
+      }),
+    ).toEqual(["a", "b", "c"]);
   });
 
   test("a mention of someone not in the chat counts for nothing", async () => {
@@ -312,13 +345,17 @@ describe("after the viewer's line", () => {
     ).toEqual(["ruby"]);
   });
 
-  test("otherwise the keenest by interest × talkativeness, inclusive, two at most", async () => {
-    const eager = [persona("a", "A", 1), persona("b", "B", 1), persona("c", "C", 1)];
+  test("otherwise the keenest by interest × talkativeness, inclusive, three at most", async () => {
+    const eager = [
+      persona("a", "A", 1),
+      persona("b", "B", 1),
+      persona("c", "C", 1),
+      persona("d", "D", 1),
+    ];
     const keen = (nouls: Record<string, number>) => who(nouls, line, { participants: eager });
-    expect(await keen({ interested_a: 0.6, interested_b: 0.9, interested_c: 0.7 })).toEqual([
-      "b",
-      "c",
-    ]);
+    expect(
+      await keen({ interested_a: 0.6, interested_b: 0.9, interested_c: 0.7, interested_d: 0.8 }),
+    ).toEqual(["b", "d", "c"]);
     expect(await keen({ interested_a: INTEREST_THRESHOLD })).toEqual(["a"]);
     // Below the bar, the keenest answers anyway.
     expect(await keen({ interested_b: INTEREST_THRESHOLD - 0.01 })).toEqual(["b"]);
@@ -367,6 +404,61 @@ describe("after the viewer's line", () => {
     ).toEqual(["chatty"]);
     const silent = [persona("a", "A", 0), persona("b", "B", 0)];
     expect(await who({ interested_b: 1 }, line, { participants: silent })).toHaveLength(1);
+  });
+
+  test("everyone wakes all willing participants (even five), putting any addressed first", async () => {
+    const five = [
+      persona("a", "A", 0.5),
+      persona("b", "B", 0.8),
+      persona("c", "C", 0.6),
+      persona("d", "D", 0.4),
+      persona("mute", "Mute", 0),
+    ];
+    expect(
+      await who({ everyone: EVERYONE_THRESHOLD, addressed_d: 0.9 }, line, { participants: five }),
+    ).toEqual(["d", "b", "c", "a"]);
+    const allSilent = [persona("a", "A", 0), persona("b", "B", 0)];
+    expect(await who({ everyone: EVERYONE_THRESHOLD }, line, { participants: allSilent })).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  test("others wakes unheard willing participants and ignores addressed on recent speakers", async () => {
+    const four = [
+      persona("a", "A"),
+      persona("b", "B"),
+      persona("c", "C"),
+      persona("mute", "Mute", 0),
+    ];
+    const afterA = [viewer("介绍一下"), from("a", "我是A"), viewer("其他人呢？")];
+    // False-positive addressed on `a` is ignored; unheard `c`'s higher addressed orders her first.
+    expect(
+      await who({ others: OTHERS_THRESHOLD, addressed_a: 0.9, addressed_c: 0.8 }, afterA, {
+        participants: four,
+      }),
+    ).toEqual(["c"]);
+    expect(
+      await who({ others: OTHERS_THRESHOLD, addressed_a: 0.9, interested_b: 0.6 }, afterA, {
+        participants: four,
+      }),
+    ).toEqual(["b", "c"]);
+    // Before any persona has spoken recently, `others` is a no-op.
+    expect(
+      await who({ others: 1, interested_b: 0.9 }, [viewer("其他人呢？")], { participants: four }),
+    ).toEqual(["b"]);
+    // When every candidate has spoken in the last 10 lines, exclude whoever spoke since the last viewer line.
+    const pair = [persona("a", "A"), persona("b", "B")];
+    const allSpoke = [
+      viewer("1"),
+      from("a", "A1"),
+      viewer("2"),
+      from("b", "B1"),
+      viewer("其他人呢？"),
+    ];
+    expect(await who({ others: OTHERS_THRESHOLD }, allSpoke, { participants: pair })).toEqual([
+      "a",
+    ]);
   });
 });
 
@@ -429,6 +521,35 @@ describe("after a persona's line", () => {
         participants: eager,
       }),
     ).toEqual(["a"]);
+  });
+
+  test("a persona group handoff wakes unheard willing participants above the hop-raised bar", async () => {
+    const four = [persona("a", "A"), persona("b", "B"), persona("c", "C"), persona("d", "D")];
+    const handoff = [viewer("都介绍一下"), from("a", "我是A，你们也冒个泡吧")];
+    expect(
+      await who({ invites_reply: 1, others: OTHERS_THRESHOLD + HOP_STEP }, handoff, {
+        hop: 1,
+        participants: four,
+      }),
+    ).toEqual(["b", "c", "d"]);
+    expect(
+      await who({ invites_reply: 1, others: OTHERS_THRESHOLD + HOP_STEP - 0.01 }, handoff, {
+        hop: 1,
+        participants: four,
+      }),
+    ).toEqual([]);
+    expect(
+      await who({ invites_reply: 1, everyone: EVERYONE_THRESHOLD + HOP_STEP }, handoff, {
+        hop: 1,
+        participants: four,
+      }),
+    ).toEqual(["b", "c", "d"]);
+    expect(
+      await who({ invites_reply: 1, everyone: EVERYONE_THRESHOLD + HOP_STEP - 0.01 }, handoff, {
+        hop: 1,
+        participants: four,
+      }),
+    ).toEqual([]);
   });
 });
 
@@ -494,16 +615,30 @@ describe("falling back to rules", () => {
     expect(messages("WARNING")).toEqual([]);
   });
 
-  test("mentions first, two at most", async () => {
-    const decision = await rules([viewer("@露比 @Ken @奶绿")], {
-      mentions: ["ruby", "ken", "milky"],
+  test("mentions first, uncapped for the viewer; plain names cap at three", async () => {
+    const four = [RUBY, KEN, MILKY, persona("a", "A")];
+    const decision = await rules([viewer("@露比 @Ken @奶绿 @A")], {
+      participants: four,
+      mentions: ["ruby", "ken", "milky", "a"],
     });
-    expect(decision.replies.map((r) => r.persona)).toEqual(["ruby", "ken"]);
+    expect(decision.replies.map((r) => r.persona)).toEqual(["ruby", "ken", "milky", "a"]);
+    expect(
+      (
+        await rules([viewer("hi"), from("a", "露比和Ken")], {
+          hop: 1,
+          participants: four,
+          mentions: ["ruby", "ken"],
+        })
+      ).replies.map((r) => r.persona),
+    ).toEqual(["ruby"]);
   });
 
   test("then whoever the line names, by name or short name, case-blind, in order", async () => {
+    const four = [RUBY, KEN, MILKY, persona("a", "A")];
     const named = await rules([viewer("ken和奶绿你们呢，明前奶绿？")]);
     expect(named.replies.map((r) => r.persona)).toEqual(["ken", "milky"]);
+    const capped = await rules([viewer("露比、Ken、奶绿、A 都在吗")], { participants: four });
+    expect(capped.replies.map((r) => r.persona)).toEqual(["ruby", "ken", "milky"]);
     const late = await rules([viewer("问一下奶绿，然后露比")], { participants: [RUBY, MILKY] });
     expect(late.replies.map((r) => r.persona)).toEqual(["milky", "ruby"]);
   });
@@ -654,6 +789,8 @@ describe("voice replies", () => {
       "addressed_ken",
       "interested_ken",
       "invites_reply",
+      "everyone",
+      "others",
       "voice_moment",
     ]);
     expect(directorQuestions([RUBY, auto(KEN)]).voice_moment).toEqual(VOICE_QUESTION);
@@ -677,8 +814,8 @@ describe("voice replies", () => {
       ).decide(input([viewer("大家好")], { participants: room }));
       return decision.replies.map(({ persona, mode }) => `${persona} ${mode}`);
     };
-    expect(await modes(VOICE_THRESHOLD)).toEqual(["milky voice", "ruby voice"]);
-    expect(await modes(VOICE_THRESHOLD - 0.01)).toEqual(["milky text", "ruby voice"]);
+    expect(await modes(VOICE_THRESHOLD)).toEqual(["milky voice", "ruby voice", "ken text"]);
+    expect(await modes(VOICE_THRESHOLD - 0.01)).toEqual(["milky text", "ruby voice", "ken text"]);
     const ken = await directorWith(answering({ addressed_ken: 1, voice_moment: 1 })).decide(
       input([viewer("Ken?")], { participants: room }),
     );

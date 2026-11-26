@@ -2987,7 +2987,8 @@ async function groupChatWalk(walk: Walk): Promise<void> {
       hopLine?.speaker?.id === PERSONA &&
       JSON.stringify(picks) === JSON.stringify(expected) &&
       asks.length === 3 &&
-      questioned(1) === `addressed_${PERSONA} interested_${PERSONA} invites_reply voice_moment` &&
+      questioned(1) ===
+        `addressed_${PERSONA} everyone interested_${PERSONA} invites_reply others voice_moment` &&
       heldBack &&
       introduced,
     `@ ${offered ? "offered" : "didn't offer"} ${second.name}, the box read ${quote(typed)} ` +

@@ -46,4 +46,29 @@ describe("parseMentions", () => {
     expect(parseMentions("@奶绿", [blank, MILKY])).toEqual(["milky-green"]);
     expect(parseMentions("@x", [])).toEqual([]);
   });
+
+  test("broadcast aliases mention every participant in order, unless a participant has that name", () => {
+    for (const text of [
+      "@all",
+      "@ALL 介绍一下自己",
+      "@everyone 晚上好",
+      "@全体 冒个泡",
+      "@全体成员",
+      "@所有人",
+      "@大家",
+      "＠大家",
+    ]) {
+      expect(parseMentions(text, ROOM)).toEqual(["milky-green", "ruby", "ken"]);
+    }
+    expect(parseMentions("@allen @everyone_2", ROOM)).toEqual([]);
+    expect(parseMentions("@all", [])).toEqual([]);
+    expect(parseMentions("@奶绿 @all", ROOM)).toEqual(["milky-green", "ruby", "ken"]);
+    const allie: MentionTarget = { id: "allie", name: "Allie", shortName: "All" };
+    expect(parseMentions("@all", [allie, RUBY])).toEqual(["allie"]);
+    const dajia: MentionTarget = { id: "dajia", name: "大家", shortName: "大家" };
+    expect(parseMentions("@大家", [dajia, RUBY])).toEqual(["dajia"]);
+    const sister: MentionTarget = { id: "sister", name: "大家姐", shortName: "大姐" };
+    expect(parseMentions("@大家姐", [sister, RUBY])).toEqual(["sister"]);
+    expect(parseMentions("@大家", [sister, RUBY])).toEqual(["sister", "ruby"]);
+  });
 });

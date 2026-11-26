@@ -15,18 +15,19 @@ import {
 import { type DecisionModel, gateDecisionModel } from "@eidolon/providers";
 import { errorRepr } from "./compat.ts";
 
-// Bars on Jev's nouls. With these, docs/benchmarks/2026-11-10-director decides all 100 of its
-// labelled lines right, and in both its runs still does with any one bar moved: addressed from 0.4
-// to 0.61, interest from 0.1 to 0.43, invites from 0.17 to 0.33.
+// Bars on Jev's nouls. With these, docs/benchmarks/2026-11-10-director decides all 106 of its
+// labelled lines right: addressed 0.5, interest 0.3, invites 0.3, everyone 0.5, others 0.65.
 export const ADDRESSED_THRESHOLD = 0.5;
 /** On interested × talkativeness. */
 export const INTEREST_THRESHOLD = 0.3;
 export const INVITES_THRESHOLD = 0.3;
+export const EVERYONE_THRESHOLD = 0.5;
+export const OTHERS_THRESHOLD = 0.65;
 /** Each persona-to-persona hop raises every bar by this, so chains die down on their own. */
 export const HOP_STEP = 0.1;
 /** Off the interest of whoever spoke the persona line before, so two can't trade the floor. */
 export const JUST_SPOKE_PENALTY = 0.1;
-export const MAX_REPLIES_TO_USER = 2;
+export const MAX_REPLIES_TO_USER = 3;
 // Bars on voice_moment for a persona whose reply mode is auto. With these, the second run of
 // docs/benchmarks/2026-11-10-director answers all 24 of its voice_moment labels in the right mode,
 // and still does with the first from 0.39 to 0.44, the second from 0.29 to 0.6. The second, kept
@@ -168,8 +169,8 @@ function voiceQuestions(
 }
 
 /**
- * Per candidate, `addressed_<id>` and `interested_<id>`; then `invites_reply`, and `voice_moment`
- * when some candidate's reply mode is auto. Jev reads them literally.
+ * Per candidate, `addressed_<id>` and `interested_<id>`; then `invites_reply`, `everyone`, `others`,
+ * and `voice_moment` when some candidate's reply mode is auto. Jev reads them literally.
  */
 export function directorQuestions(
   candidates: readonly Pick<DirectorParticipant, "id" | "name" | "replyMode">[],
@@ -192,6 +193,19 @@ export function directorQuestions(
     instructions:
       "Does the latest message invite a reply (a question, an opinion, a tease) rather than " +
       "close the exchange?",
+  };
+  questions.everyone = {
+    type: "noul",
+    instructions:
+      "Does the latest message explicitly ask every participant (or each one in turn) to " +
+      "answer, rather than just anyone who wants to?",
+  };
+  questions.others = {
+    type: "noul",
+    instructions:
+      "Does the latest message explicitly call on the other participants who have stayed " +
+      "silent so far (e.g. asking where the others are or telling the rest to speak up) " +
+      "rather than a specific named person or whoever just spoke?",
   };
   return { ...questions, ...voiceQuestions(candidates) };
 }
@@ -216,6 +230,36 @@ function mostTalkative(ranked: readonly DirectorParticipant[]): DirectorParticip
   return ranked.reduce((best, p) => (p.talkativeness > best.talkativeness ? p : best));
 }
 
+function willing<T extends { readonly p: DirectorParticipant }>(list: readonly T[]): T[] {
+  const active = list.filter(({ p }) => p.talkativeness > 0);
+  return active.length > 0 ? active : [...list];
+}
+
+/**
+ * Candidates with no line among the last `RECENT_LINES`, or, when every candidate has one, those
+ * who didn't speak after the previous viewer line. Empty before any persona has spoken recently,
+ * where "the others" means no one.
+ */
+function unheardOf<T extends { readonly p: DirectorParticipant }>(
+  lines: readonly DirectorLine[],
+  ranked: readonly T[],
+): T[] {
+  const recent = new Set<string>();
+  for (const { speaker } of lines.slice(-RECENT_LINES)) {
+    if (speaker.kind === "persona") recent.add(speaker.id);
+  }
+  if (recent.size === 0) return [];
+  const silent = ranked.filter(({ p }) => !recent.has(p.id));
+  if (silent.length > 0) return silent;
+  const justSpoke = new Set<string>();
+  for (let i = lines.length - 2; i >= 0; i--) {
+    const speaker = lines[i]?.speaker;
+    if (!speaker || speaker.kind === "user") break;
+    justSpoke.add(speaker.id);
+  }
+  return ranked.filter(({ p }) => !justSpoke.has(p.id));
+}
+
 function choose(
   input: DirectorInput,
   candidates: readonly DirectorParticipant[],
@@ -228,15 +272,6 @@ function choose(
     return { ids: [], source: "model" };
   }
   const named = mentioned(input, candidates);
-  const addressed = candidates
-    .map((p) => ({ id: p.id, score: scores[`addressed_${p.id}`] as number }))
-    .filter(({ score }) => score >= ADDRESSED_THRESHOLD + raise)
-    .sort((a, b) => b.score - a.score)
-    .map(({ id }) => id);
-  const first = [...new Set([...named, ...addressed])];
-  if (first.length > 0) {
-    return { ids: first.slice(0, cap), source: named.length > 0 ? "mention" : "model" };
-  }
   const last = spokeBefore(input.lines);
   const ranked = candidates
     .map((p) => ({
@@ -246,16 +281,49 @@ function choose(
         (p.id === last ? JUST_SPOKE_PENALTY : 0),
     }))
     .sort((a, b) => b.score - a.score || b.p.talkativeness - a.p.talkativeness);
+  const unheard = unheardOf(input.lines, ranked);
+  const callOthers = unheard.length > 0 && (scores.others as number) >= OTHERS_THRESHOLD + raise;
+  const callEveryone = (scores.everyone as number) >= EVERYONE_THRESHOLD + raise;
+  const unheardIds = new Set(unheard.map(({ p }) => p.id));
+  const addressed = candidates
+    .filter((p) => !callOthers || unheardIds.has(p.id))
+    .map((p) => ({ id: p.id, score: scores[`addressed_${p.id}`] as number }))
+    .filter(({ score }) => score >= ADDRESSED_THRESHOLD + raise)
+    .sort((a, b) => b.score - a.score)
+    .map(({ id }) => id);
+  if (named.length > 0) {
+    const first = [...new Set([...named, ...addressed])];
+    return {
+      ids: first.slice(0, toViewer ? Math.max(cap, named.length) : cap),
+      source: "mention",
+    };
+  }
+  if (callEveryone) {
+    const pool = !toViewer && unheard.length > 0 ? unheard : ranked;
+    return {
+      ids: [...new Set([...addressed, ...willing(pool).map(({ p }) => p.id)])],
+      source: "model",
+    };
+  }
+  if (addressed.length > 0) {
+    return { ids: addressed.slice(0, cap), source: "model" };
+  }
+  if (callOthers) {
+    return { ids: willing(unheard).map(({ p }) => p.id), source: "model" };
+  }
   const keen = ranked.filter(({ score }) => score >= INTEREST_THRESHOLD + raise);
   if (keen.length > 0) return { ids: keen.slice(0, cap).map(({ p }) => p.id), source: "model" };
+  if (!toViewer) return { ids: [], source: "model" };
   // The viewer is never left unanswered, so the keenest answers below the bar; the most talkative
   // instead sent the benchmark's cooking question to the idol (interest 0.08) over the cook (0.94).
   // The just-spoke penalty can sink a talkative persona under a silent one's 0, so a persona at 0
   // answers only when everyone is. A persona's line may go unanswered.
-  if (!toViewer) return { ids: [], source: "model" };
-  const willing = ranked.filter(({ p }) => p.talkativeness > 0);
-  const forced = willing.length > 0 ? willing : ranked;
-  return { ids: forced.slice(0, 1).map(({ p }) => p.id), source: "model" };
+  return {
+    ids: willing(ranked)
+      .slice(0, 1)
+      .map(({ p }) => p.id),
+    source: "model",
+  };
 }
 
 const LATIN_WORD = /[a-z0-9_]/i;
@@ -281,7 +349,7 @@ function fallback(input: DirectorInput, candidates: readonly DirectorParticipant
   const toViewer = latest.speaker.kind === "user";
   const cap = toViewer ? MAX_REPLIES_TO_USER : 1;
   const named = mentioned(input, candidates);
-  if (named.length > 0) return named.slice(0, cap);
+  if (named.length > 0) return named.slice(0, toViewer ? Math.max(cap, named.length) : cap);
   const text = latest.text.toLowerCase();
   const found = candidates
     .map((p) => {

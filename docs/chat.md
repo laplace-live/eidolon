@@ -354,38 +354,53 @@ gate's decision model: the active persona's `gate` role and its key, through `ga
     something <name> cares about (her interests above), or something she has a stake in?");
   - once, `invites_reply` ("Does the latest message invite a reply (a question, an opinion, a
     tease) rather than close the exchange?");
+  - once, `everyone` ("Does the latest message explicitly ask every participant (or each one in
+    turn) to answer, rather than just anyone who wants to?");
+  - once, `others` ("Does the latest message explicitly call on the other participants who have
+    stayed silent so far (e.g. asking where the others are or telling the rest to speak up) rather
+    than a specific named person or whoever just spoke?");
   - once, and only when some candidate's reply mode is `auto`, `voice_moment` ("Would a voice
     message suit a reply to the latest message better than text…?",
     [Voice messages](#voice-messages)).
 
   Jev reads them literally, so a reworded question or state needs the benchmark run again.
 - **Who answers the viewer's line:**
-  1. The personas it @-mentions, in order, then those it addresses (`addressed` 0.5 or more), most
-     addressed first. The source is `mention` when it mentions anyone, else `model`.
-  2. Otherwise each candidate scores `interested × chat.talkativeness`, less 0.1 for whoever
-     spoke the persona line before. Those at 0.3 or more answer, keenest first.
-  3. With no one at that bar, the keenest answers anyway, the more talkative of a tie, because the
+  1. The personas it @-mentions, in order (uncapped, so mentioning every participant wakes them
+     all), then those it addresses (`addressed` 0.5 or more), most addressed first, up to
+     `MAX_REPLIES_TO_USER` (3) when not solely mentions. The source is `mention`.
+  2. Otherwise, when `everyone` is 0.5 or more, every willing participant (`talkativeness > 0`,
+     else all; any `addressed` participant first), uncapped.
+  3. Otherwise, those it addresses (`addressed` 0.5 or more), most addressed first, up to 3. When
+     `others` is 0.65 or more with unheard candidates, `addressed` checks only unheard candidates
+     so a recent speaker isn't re-picked by mistake.
+  4. Otherwise, when `others` is 0.65 or more with unheard candidates, every willing unheard
+     candidate (those without a line in the last 10 lines, or who didn't speak after the previous
+     viewer line if everyone spoke recently), keenest first.
+  5. Otherwise each candidate scores `interested × chat.talkativeness`, less 0.1 for whoever
+     spoke the persona line before. Those at 0.3 or more answer, keenest first, up to 3.
+  6. With no one at that bar, the keenest answers anyway, the more talkative of a tie, because the
      viewer is never left unanswered. A persona whose talkativeness is 0 is passed over unless
      everyone's is, even when the penalty sinks the others below her.
-  4. Two replies at most.
-- **Who answers a persona's line:** someone answers only if `invites_reply` is 0.3 or more, then by
-  the same rules, but with one reply at most and none forced. Each hop raises every bar by 0.1
-  (`HOP_STEP`), so chains die down on their own.
+- **Who answers a persona's line:** someone answers only if `invites_reply` is 0.3 or more. Each
+  hop raises every bar by 0.1 (`HOP_STEP`), so chains die down on their own. When `everyone` or
+  `others` clears its raised bar on a group handoff, every willing unheard candidate answers;
+  otherwise one reply at most and none forced.
 - **Mentions** are `@` or `＠` and a participant's name or short name, case-blind
-  (`parseMentions`, in `@eidolon/chat`, which the composer shares). A mention of someone not in the
-  chat counts for nothing.
-- **The bars** come from the 100 labelled lines of
+  (`parseMentions`, in `@eidolon/chat`, which the composer shares), or a broadcast alias (`@all`,
+  `@everyone`, `@全体`, `@全体成员`, `@所有人`, `@大家`) when no longer participant name matches. A
+  mention of someone not in the chat counts for nothing.
+- **The bars** come from the 106 labelled lines of
   [`docs/benchmarks/2026-11-10-director/`](benchmarks/2026-11-10-director/README.md), which are
-  synthetic until real logs replace them. All 100 are decided right, and stay right with any one
-  bar moved 0.05 either way.
+  synthetic until real logs replace them. All 106 are decided right.
 - **When it fails:** nobody can speak before it answers, so it gives up after 2 s
   (`DIRECTOR_TIMEOUT_SEC`) or on any error, and falls back to rules:
-  1. the mentions;
-  2. then the personas whose name or short name the line holds, in the order they appear;
+  1. the mentions (uncapped for the viewer, 1 for a persona line);
+  2. then the personas whose name or short name the line holds, in the order they appear (up to 3
+     for the viewer, 1 for a persona line);
   3. then, after the viewer's line only, the most talkative.
 
-  The same caps apply. The source is `fallback`, with no scores, so every reply is in text unless
-  her mode is `voice`. Without a key for the gate role, every group decision falls back.
+  The source is `fallback`, with no scores, so every reply is in text unless her mode is `voice`.
+  Without a key for the gate role, every group decision falls back.
 - **A chat of one persona:** she answers every viewer line, as `single`. The director asks only
   `voice_moment`, and only while her reply mode is `auto`; otherwise it makes no request. She
   doesn't wait for it ([Voice messages](#voice-messages)).
@@ -472,16 +487,17 @@ Production's endpoint and calls pass no owed lines.
 ### Costs
 
 For each viewer line, at the default chain limit, the most it can cost is:
-- 5 turns: 2 replies to the viewer, then 3 hops. Each turn is up to `chat.maxRounds` + 1 mind
-  calls, 9 by default ([step 5](#a-turn-runturn)), and more where a malformed reply is asked for
-  again, with its gate and recall as in a chat of one;
+- 6 turns (3 replies to the viewer, then 3 hops), or up to all 6 participants plus 3 hops when
+  explicit `@`-mentions, `everyone`, or `others` wake the whole group. Each turn is up to
+  `chat.maxRounds` + 1 mind calls, 9 by default ([step 5](#a-turn-runturn)), and more where a
+  malformed reply is asked for again, with its gate and recall as in a chat of one;
 - 4 director calls: one for the viewer's line, and one before each of the 3 hops. The
-  benchmark's 101 calls cost $0.0033 in all, about $0.00003 each, and took 413 ms at the median on
+  benchmark's 107 calls cost $0.0039 in all, about $0.00004 each, and took 382 ms at the median on
   a warm connection;
 - a synthesis for each of those turns that answers in voice ([Voice costs](#voice-costs)).
 
-The defaults keep a typical line at one or two replies. A chain limit of 6 allows 8 turns and 7
-director calls.
+The defaults keep a typical line at one to three replies. A chain limit of 6 allows 9 turns (or up
+to 12 when all 6 reply) and 7 director calls.
 
 ### Calibrating
 
