@@ -192,10 +192,15 @@ describe("createBrowserHistory", () => {
 
     // Trigger two rapid Back traversals before the first reversal settles: browser visits 1 then 0,
     // and restoration must bring both browser cursor and location cleanly back to idx 2.
+    const visited: number[] = [];
+    const record = () => visited.push(fake.cursor());
+    fake.win.addEventListener("popstate", record);
     fake.win.history.go(-1);
     fake.win.history.go(-1);
     await fake.flush();
+    fake.win.removeEventListener("popstate", record);
 
+    expect(visited).toEqual([1, 0, 1, 2]);
     expect(fake.cursor()).toBe(2);
     expect(fake.win.location.pathname).toBe("/personas/milky-green/prompt");
     expect(history.getBlocker().state).toBe("blocked");
@@ -219,10 +224,21 @@ describe("createBrowserHistory", () => {
     await fake.flush();
     expect(fake.win.location.pathname).toBe("/settings");
 
+    // Calling navigate() after proceed() while restoration is still in flight cancels the stale
+    // proceed continuation rather than undoing the newly committed navigation.
+    history.setBlockerDirty(id, true);
+    fake.win.history.go(-1);
+    await Promise.resolve();
+    history.getBlocker().proceed?.();
+    history.setBlockerDirty(id, false);
+    history.navigate("/jobs");
+    await fake.flush();
+    expect(fake.win.location.pathname).toBe("/jobs");
+
     history.setBlockerDirty(id, true);
     fake.win.history.go(-1);
     await fake.flush();
-    expect(fake.win.location.pathname).toBe("/settings");
+    expect(fake.win.location.pathname).toBe("/jobs");
     expect(history.getBlocker().state).toBe("blocked");
 
     history.dispose();

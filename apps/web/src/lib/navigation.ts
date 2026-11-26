@@ -243,7 +243,7 @@ export function createBrowserHistory(
           const target = blockedTargetIdx;
           setBlocker({ state: "proceeding" });
           void restored.then(() => {
-            if (target === null) return;
+            if (target === null || blockedTargetIdx !== target) return;
             const current = historyIndex(win.history.state) ?? index;
             const step = target - current;
             if (step === 0) {

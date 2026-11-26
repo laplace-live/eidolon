@@ -52,7 +52,7 @@ function createFakeDom() {
         if (value) children.push(doc.createTextNode(String(value)));
       },
       get textContent() {
-        return children.map((c) => (c.nodeType === 3 ? (c.data ?? "") : c.textContent)).join("");
+        return children.map((c) => c.textContent).join("");
       },
       get innerHTML() {
         return children.map((c) => c.outerHTML).join("");
@@ -98,17 +98,42 @@ function createFakeDom() {
     createElement: (tag: string) => makeElement(tag),
     createElementNS: (_ns: string, tag: string) => makeElement(tag),
     createTextNode: (text: string): FakeNode => {
-      const value = String(text);
+      let value = String(text);
       return {
         nodeType: 3,
         attrs: new Map(),
-        nodeValue: value,
-        data: value,
+        get nodeValue() {
+          return value;
+        },
+        set nodeValue(next: string) {
+          value = String(next);
+        },
+        get data() {
+          return value;
+        },
+        set data(next: string) {
+          value = String(next);
+        },
         childNodes: [],
         parentNode: null,
-        textContent: value,
-        innerHTML: escapeHtml(value),
-        outerHTML: escapeHtml(value),
+        get textContent() {
+          return value;
+        },
+        set textContent(next: string) {
+          value = String(next);
+        },
+        get innerHTML() {
+          return escapeHtml(value);
+        },
+        set innerHTML(next: string) {
+          value = String(next);
+        },
+        get outerHTML() {
+          return escapeHtml(value);
+        },
+        set outerHTML(next: string) {
+          value = String(next);
+        },
       };
     },
     createComment: (text: string): FakeNode => ({
