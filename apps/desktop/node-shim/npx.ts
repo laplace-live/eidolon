@@ -953,12 +953,13 @@ async function install(packages: readonly string[]): Promise<string> {
   const cachedNpmrc = path.join(cachedDir, ".npmrc");
   const wroteNpmrc = npmrc !== "" && !isFile(cachedNpmrc);
   if (wroteNpmrc) writeFileSync(cachedNpmrc, `${npmrc}\n`, { mode: 0o600 });
+  let rebuilt: Awaited<ReturnType<typeof runPnpm>>;
   try {
-    const rebuilt = await runPnpm(cachedDir, ["--loglevel=error", ...settings, "rebuild"], baseEnv);
-    if (rebuilt.code !== 0) return end(rebuilt.code || 1, rebuilt.signal);
+    rebuilt = await runPnpm(cachedDir, ["--loglevel=error", ...settings, "rebuild"], baseEnv);
   } finally {
     if (wroteNpmrc) rmSync(cachedNpmrc, { force: true });
   }
+  if (rebuilt.code !== 0) return end(rebuilt.code || 1, rebuilt.signal);
   return bin;
 }
 

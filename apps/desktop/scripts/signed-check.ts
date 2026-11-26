@@ -233,8 +233,8 @@ export function signatureChecks(
 
 /**
  * What the Windows checks must find in the install by name, so none passes on nothing: the app, its
- * uninstaller, each listed file, and the files that keep Microsoft's signature (onnxruntime's, the
- * VC++ runtime and Electron's d3dcompiler_47.dll).
+ * uninstaller, `pnpm.exe`, each listed file, and the files that keep Microsoft's signature
+ * (onnxruntime's, the VC++ runtime and Electron's d3dcompiler_47.dll).
  */
 export function requiredInInstall(listed: readonly string[]): string[] {
   return [

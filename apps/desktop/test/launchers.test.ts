@@ -1002,4 +1002,47 @@ describe.skipIf(!POSIX)("npx from a registry, against one served here", () => {
     }
     expect(ran).toEqual(specs.map((spec) => ({ spec, status: 0, stdout: 'hello ["x"]\n' })));
   }, 60_000);
+
+  test("removes the temporary .npmrc from the dlx cache when rebuild fails", async () => {
+    publish(
+      write(join(scratch, "bad-build"), {
+        "package.json": JSON.stringify({
+          name: "@eidolon-corp/bad-build",
+          version: "1.0.0",
+          scripts: { postinstall: "node post.js" },
+        }),
+        "post.js": [
+          'const { join } = require("path");',
+          'require("fs").writeFileSync(join(process.env.EIDOLON_TEST_MARKS, "bad-build"), "");',
+          "process.exit(1);",
+          "",
+        ].join("\n"),
+      }),
+      old,
+      PRIVATE,
+    );
+    publish(
+      write(join(scratch, "needs-rebuild"), {
+        "package.json": JSON.stringify({
+          name: "@eidolon-corp/needs-rebuild",
+          version: "1.0.0",
+          bin: { "eidolon-test-needs-rebuild": "cli.js" },
+          dependencies: { "@eidolon-corp/bad-build": "1.0.0" },
+        }),
+        "cli.js": "#!/usr/bin/env node\n",
+      }),
+      old,
+      PRIVATE,
+    );
+    const project = write(join(scratch, "rebuild-fail"), {
+      "package.json": JSON.stringify({ name: "eidolon-test-project", version: "1.0.0" }),
+      ".npmrc": privateNpmrc(TOKEN),
+    });
+    const home = newHome();
+    const ran = await launch("npx", ["-y", "@eidolon-corp/needs-rebuild"], { home, cwd: project });
+    const files = readdirSync(home, { recursive: true }).map(String);
+    expect([ran.status, ran.marks]).toEqual([1, ["bad-build"]]);
+    expect(files.some((file) => file.endsWith(".modules.yaml"))).toBe(true);
+    expect(files.filter((file) => /(?:^|\/)\.npmrc$/.test(file))).toEqual([".npmrc"]);
+  }, 60_000);
 });
