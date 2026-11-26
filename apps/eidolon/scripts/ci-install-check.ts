@@ -1,7 +1,7 @@
 // Installs a packed @laplace.live/eidolon with npm, install scripts and all, as npx would, then runs
 // it on a new HOME and data home: its link, a sign-in with the link's code, the status with the
 // cookie and the proof, a character model checked by its PSD2Live runtime, a CLI command's help,
-// the eidolon command tasks run, the built-in skills, sharp, LanceDB and onnxruntime-node as the
+// the eidolon command tasks run, the built-in skills, sharp, Zvec and onnxruntime-node as the
 // bundles load them, and a clean exit on SIGTERM. CI runs it on linux-x64 and win32-x64, where
 // tasks' commands run in Git Bash and nothing sends SIGTERM: there it also checks npm's .cmd for
 // the command, and that the app ends with its launcher.
@@ -42,22 +42,35 @@ const { format, width, height } = await sharp(made).metadata();
 console.log(\`\${format} \${width}×\${height}\`);
 `;
 /**
- * LanceDB's binary for this platform, which the bundles require by name, opening a database, and
- * onnxruntime-node running Silero VAD from the package's models: on Windows each needs the Visual
- * C++ runtime.
+ * Zvec's binding for this platform, opening a collection and querying a vector, and
+ * onnxruntime-node running Silero VAD from the package's models: on Windows onnxruntime-node needs
+ * the Visual C++ runtime.
  */
 const NATIVE_CHECK = `
 const { createRequire } = await import("node:module");
 const { mkdtempSync, rmSync } = await import("node:fs");
 const { tmpdir } = await import("node:os");
 const { join } = await import("node:path");
-const { Connection } = createRequire(join(process.cwd(), "package.json"))(process.argv[1]);
-const dir = mkdtempSync(join(tmpdir(), "eidolon-lancedb-"));
-const tables = await (await Connection.new(dir, {})).tableNames();
+createRequire(join(process.cwd(), "package.json")).resolve(process.argv[1]);
+const { ZVecCollectionSchema, ZVecCreateAndOpen, ZVecDataType, ZVecIndexType, ZVecMetricType } =
+  await import("@zvec/zvec");
+const dir = mkdtempSync(join(tmpdir(), "eidolon-zvec-"));
+const col = ZVecCreateAndOpen(join(dir, "check"), new ZVecCollectionSchema({
+  name: "check",
+  vectors: {
+    name: "vector",
+    dataType: ZVecDataType.VECTOR_FP32,
+    dimension: 2,
+    indexParams: { indexType: ZVecIndexType.FLAT, metricType: ZVecMetricType.COSINE },
+  },
+}));
+col.upsertSync([{ id: "1", vectors: { vector: [1, 0] } }]);
+const hits = col.querySync({ fieldName: "vector", vector: [1, 0], topk: 1 });
+col.closeSync();
 rmSync(dir, { recursive: true, force: true });
 const ort = await import("onnxruntime-node");
 const vad = await ort.InferenceSession.create(join(process.cwd(), "data", "models", "silero_vad.onnx"));
-console.log(\`lancedb \${JSON.stringify(tables)}, silero inputs \${vad.inputNames.join(",")}\`);
+console.log(\`zvec \${hits.length}, silero inputs \${vad.inputNames.join(",")}\`);
 `;
 const STOP_TIMEOUT_MS = 15_000;
 const TAIL_LINES = 40;
@@ -363,15 +376,15 @@ async function checkPackage(tarball: string, temp: string): Promise<void> {
       images.code === 0 && images.stdout.trim() === "jpeg 2×1",
       images.code === 0 ? images.stdout.trim() : `exit ${images.code}: ${images.stderr.trim()}`,
     );
-    const lancedb = PLATFORMS[`${process.platform}-${process.arch}` as keyof typeof PLATFORMS];
+    const zvecBinding = PLATFORMS[`${process.platform}-${process.arch}` as keyof typeof PLATFORMS];
     const native = await run(
-      [process.execPath, "--input-type=module", "--eval", NATIVE_CHECK, lancedb],
+      [process.execPath, "--input-type=module", "--eval", NATIVE_CHECK, zvecBinding],
       env,
       pkg,
     );
     check(
       "native modules",
-      native.code === 0 && native.stdout.startsWith("lancedb [], silero inputs "),
+      native.code === 0 && native.stdout.startsWith("zvec 1, silero inputs "),
       native.code === 0 ? native.stdout.trim() : `exit ${native.code}: ${native.stderr.trim()}`,
     );
     const skills = await fetch(`${app.origin}/api/local/skills`, { headers: session });

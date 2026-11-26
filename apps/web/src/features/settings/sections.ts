@@ -67,11 +67,7 @@ export const CARDS: Readonly<Record<Named, readonly CardSpec[]>> = {
   memory: [
     {
       id: "storage",
-      paths: [
-        ["memory.qdrant.host", "memory.qdrant.port"],
-        "memory.qdrant.collection",
-        "memory.historyDb",
-      ],
+      paths: ["memory.enabled", "memory.dir", "memory.historyDb"],
     },
   ],
   // Beneath the accounts: the embedding model every persona's index shares.

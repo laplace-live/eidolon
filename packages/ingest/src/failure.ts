@@ -10,7 +10,7 @@ export interface Failure {
 
 const CODES: ReadonlySet<string> = new Set(EVENT_CODES);
 
-// Node's ENOSPC, SQLite's SQLITE_FULL, and the OS text LanceDB and yt-dlp pass along.
+// Node's ENOSPC, SQLite's SQLITE_FULL, and the OS text Zvec and yt-dlp pass along.
 const DISK_FULL = /\bENOSPC\b|No space left on device|database or disk is full/i;
 
 // The OpenAI SDK's error names, which OpenAIClient keeps.

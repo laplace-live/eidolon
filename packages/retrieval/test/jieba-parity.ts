@@ -19,10 +19,7 @@ for (const [name, ftsText] of [
     failed = true;
     continue;
   }
-  const rows = await table
-    .query()
-    .select([...FTS_COLUMNS[name]])
-    .toArray();
+  const { rows } = table.readAll({ columns: [...FTS_COLUMNS[name]] });
   const t0 = performance.now();
   const mismatches = rows.filter((row) => tokenizeZh(ftsText(row)) !== row.tokens);
   const seconds = ((performance.now() - t0) / 1000).toFixed(1);

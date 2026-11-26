@@ -185,7 +185,14 @@ describe("argparse", () => {
   test("-h is argparse's help for the port's flags", async () => {
     const io = captureIo();
     expect(await pipelineMain(["-h"], io.io)).toBe(0);
-    expect(io.stdout()).toBe(pipelineGolden.help[1]);
+    const expectedHelp = pipelineGolden.help[1]
+      .replace(
+        "End-to-end pipeline: bilibili URL list → ingested LanceDB rows.",
+        "End-to-end pipeline: bilibili URL list → ingested Zvec rows.",
+      )
+      .replace("LanceDB directory", "Zvec index directory")
+      .replace("$LANCEDB_PATH", "$INDEX_PATH");
+    expect(io.stdout()).toBe(expectedHelp);
     expect(PIPELINE_PARSER.usage).toBe(pipelineGolden.help[0]);
   });
 

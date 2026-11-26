@@ -150,10 +150,7 @@ export function lastSelection(
 /** How many chats' parts are kept; the one used longest ago goes first. */
 const KEPT_CHATS = 32;
 
-/**
- * Opening Mem0 reaches Qdrant, which can take its whole timeout when the host is down, and Qdrant's
- * client warns on the console each time, so a chat tries again only this often.
- */
+/** Retry interval after an unexpected failure opening a viewer's memory store. */
 const MEMORY_RETRY_MS = 60_000;
 
 /** One persona's parts in one chat, for one settings generation. */
@@ -261,7 +258,7 @@ class Pieces {
     if (!(await this.#deps.dbPathExists(dbPath))) {
       this.#once(
         label,
-        `${label} disabled: no LanceDB index at ${dbPath}. Run \`${ingestHint(ingestCommand)}\` to build it.`,
+        `${label} disabled: no index at ${dbPath}. Run \`${ingestHint(ingestCommand)}\` to build it.`,
       );
       return null;
     }
@@ -287,7 +284,7 @@ class Pieces {
     }
     const deps = this.#deps;
     if (!deps.isMemoryConfigured()) {
-      this.#once("memory", "Mem0 skipped: MEM0_QDRANT_HOST is unset, so there is no vector store");
+      this.#once("memory", "Mem0 skipped: viewer memory is disabled");
       return null;
     }
     const userId = String(viewer.mid);
@@ -304,7 +301,6 @@ class Pieces {
         );
         return memory;
       } catch (e) {
-        // Constructing the engine reaches Qdrant, so an unreachable vector store surfaces here.
         this.#once(
           `memory ${userId}`,
           `Mem0 unavailable, continuing without memory: ${errorText(e)}`,

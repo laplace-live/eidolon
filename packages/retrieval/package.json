@@ -8,7 +8,6 @@
   "dependencies": {
     "@eidolon/config": "workspace:*",
     "@eidolon/providers": "workspace:*",
-    "@lancedb/lancedb": "0.41.0",
-    "apache-arrow": "21.2.0"
+    "@zvec/zvec": "0.8.0"
   }
 }

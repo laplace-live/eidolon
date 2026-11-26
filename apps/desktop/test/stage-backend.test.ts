@@ -292,7 +292,7 @@ function zip(entries: readonly { name: string; data: Buffer; deflate: boolean }[
 // a takes b@1.1.0, and d and e take b@2.0.0; a's peers are p and q, an optional one, and b@2.0.0
 // resolved q, its own optional peer, for d alone. One optional package is for macOS on Apple
 // silicon, one for Windows x64, one for anything but Windows. bin-mac and bin-win are a manifest's
-// own optional binaries, as LanceDB's are the payload's. pnpm writes its own document first.
+// own optional binaries, as Zvec's are the payload's. pnpm writes its own document first.
 const LOCK = `---
 lockfileVersion: '9.0'
 
@@ -493,7 +493,7 @@ describe("pnpm-lock.yaml", () => {
     });
   });
 
-  test("pins every package the externals reach, those npx drifted on among them, and none of LanceDB's own", () => {
+  test("pins every package the externals reach, those npx drifted on among them, and Zvec's bindings", () => {
     const manifest = packageManifest();
     const roots = { ...manifest.dependencies, ...manifest.optionalDependencies };
     const tree = lockedTree(readPnpmLock(join(ROOT, "pnpm-lock.yaml")), roots);
@@ -514,10 +514,10 @@ describe("pnpm-lock.yaml", () => {
       }
     }
     const names = new Set([...tree.values()].map((locked) => locked.name));
-    for (const name of ["mediabunny", "global-agent", "@lancedb/lancedb-win32-x64-msvc"]) {
+    for (const name of ["mediabunny", "global-agent", "@zvec/zvec", "@zvec/bindings-win32-x64"]) {
       expect([name, names.has(name)]).toEqual([name, true]);
     }
-    for (const name of ["@lancedb/lancedb", "@huggingface/transformers", "openai"]) {
+    for (const name of ["@lancedb/lancedb", "@qdrant/js-client-rest", "apache-arrow"]) {
       expect([name, names.has(name)]).toEqual([name, false]);
     }
   });
@@ -781,8 +781,8 @@ describe("the VC++ runtime", () => {
       join(ort, "onnxruntime.dll"),
       pe({ imports: ["MSVCP140_1.dll"], delayImports: ["MSVCP140_ATOMIC_WAIT.dll"] }),
     );
-    const lancedb = join(modules, "@lancedb", "lancedb-win32-x64-msvc");
-    put(join(lancedb, "lancedb.win32-x64-msvc.node"), pe({ imports: ["VCRUNTIME140.dll"] }));
+    const zvec = join(modules, "@zvec", "bindings-win32-x64");
+    put(join(zvec, "zvec_node_binding.node"), pe({ imports: ["KERNEL32.dll"] }));
     const sharp = join(modules, "@img", "sharp-win32-x64", "lib");
     put(join(sharp, "sharp-win32-x64.node"), pe({ imports: ["KERNEL32.dll"] }));
     put(join(sharp, "libvips-42.dll"), pe());
@@ -809,7 +809,6 @@ describe("the VC++ runtime", () => {
     }
     expect(copies).toEqual(
       new Map([
-        [lancedb, ["vcruntime140.dll"]],
         [ort, [...VC].sort()],
         [reflink, ["vcruntime140.dll"]],
       ]),

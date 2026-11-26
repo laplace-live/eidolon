@@ -68,7 +68,7 @@ export const BOOT_READ: Readonly<Record<string, readonly BootReader[]>> = {
   // At boot, the MCP server opens the persona's index and builds its quotas. Logins are validated
   // only for MCP's logged-in tier here, whose resolver keeps its TTL and WAF token.
   EIDOLON_PERSONA: ["mcp"],
-  LANCEDB_PATH: ["mcp"],
+  INDEX_PATH: ["mcp"],
   PERSONA_FACTS_CANDIDATES: ["mcp"],
   STREAM_ARCHIVE_CANDIDATES: ["mcp"],
   EIDOLON_MCP_ANON_RATE_LIMIT_PER_HOUR: ["mcp"],
@@ -127,9 +127,8 @@ export const LIVE_READ: readonly string[] = [
   "REALTIME_VOICE",
   "LLM_PROVIDER",
   "LLM_MODEL",
-  "MEM0_QDRANT_HOST",
-  "MEM0_QDRANT_PORT",
-  "MEM0_QDRANT_COLLECTION",
+  "MEM0_ENABLED",
+  "MEM0_DIR",
   "MEM0_HISTORY_DB_PATH",
   "MEM0_LLM_PROVIDER",
   "MEM0_LLM_MODEL",
@@ -191,7 +190,9 @@ function accountRead(role: RoleId): string | undefined {
 /** What a reader acts on: for EIDOLON_PERSONA, the persona the files choose, even by default. */
 function effective(name: string): string | undefined {
   if (name.startsWith("@")) return accountRead(name.slice(1) as RoleId);
-  return name === "EIDOLON_PERSONA" ? activePersona().id : envOptional(name);
+  if (name === "EIDOLON_PERSONA") return activePersona().id;
+  if (name === "INDEX_PATH") return envOptional("INDEX_PATH") ?? envOptional("LANCEDB_PATH");
+  return envOptional(name);
 }
 
 /**

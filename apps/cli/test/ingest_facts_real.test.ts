@@ -1,13 +1,13 @@
 // 奶绿's persona_facts rebuilt from her real fact files, through the command as a user runs it, and
-// compared with the table in her real index. EIDOLON_REAL_HOME is only read: the index is written
-// into a temporary folder, and the embedding cache is cloned there, so a run that missed it would
-// fail rather than pay. Skips without the data, unless EIDOLON_REQUIRE_PARITY=1.
+// verified against loadFacts and her real embedding cache. EIDOLON_REAL_HOME is only read: the
+// Zvec index is written into a temporary folder, and the embedding cache is cloned there, so a run
+// that missed it would fail rather than pay. Skips without the data, unless
+// EIDOLON_REQUIRE_PARITY=1.
 import {
   constants,
   copyFileSync,
   existsSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -16,97 +16,47 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { installSettings, resetSettings } from "@eidolon/config";
-import { canonicalPath } from "@eidolon/ingest";
+import { canonicalPath, ingestFacts } from "@eidolon/ingest";
 import {
+  closeAllReadTables,
+  DEFAULT_EMBED_MODEL,
+  EmbedCache,
   embeddingSelection,
-  type LanceTable,
+  hybridSearch,
   openTable,
+  personaFactsSchema,
   resetEmbeddingModel,
+  tokenizeZhQuery,
+  vectorSearch,
+  type ZvecTable,
 } from "@eidolon/retrieval";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import {
-  f32Bytes as bytes,
-  tableIndices as indices,
-} from "../../../packages/retrieval/test/helpers.ts";
+import { expectVectorsClose } from "../../../packages/retrieval/test/helpers.ts";
 import { ingestFactsMain } from "../src/ingest_facts.ts";
 import { captureIo, captureLogs } from "./helpers.ts";
 
 const REAL_HOME = process.env.EIDOLON_REAL_HOME ?? "";
 const REAL_FACTS = join(REAL_HOME, "sources", "milky-green", "facts");
-const REAL_INDEX = join(REAL_HOME, "personas", "milky-green", "index");
 const REAL_CACHE = join(REAL_HOME, "cache", "embed_cache.db");
 const REQUIRED = process.env.EIDOLON_REQUIRE_PARITY === "1";
 const DIM = 3072;
-// The order resolveFactFiles gives: each pattern's matches by code point (店 U+5E97 before
-// 明 U+660E), then the next pattern's.
 const FILES = ["店长坚果设定集.txt", "明前奶绿设定集.txt", "明前奶绿事件集.txt"];
-
-async function realTable(): Promise<LanceTable | null> {
-  try {
-    const table = await openTable(REAL_INDEX, "persona_facts");
-    await table?.query().limit(1).toArray();
-    return table;
-  } catch {
-    return null;
-  }
-}
-
-const real = await realTable();
-const present = real !== null && existsSync(REAL_FACTS) && existsSync(REAL_CACHE);
+const present = REAL_HOME !== "" && existsSync(REAL_FACTS) && existsSync(REAL_CACHE);
 
 let dir = "";
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "cli-ingest-facts-real-"));
 });
 afterAll(() => {
+  closeAllReadTables();
   rmSync(dir, { recursive: true, force: true });
 });
 
-interface Utf8Chunk {
-  readonly length: number;
-  readonly values: Uint8Array;
-  readonly valueOffsets: Int32Array;
-}
-
-/** A Utf8 column's strings as stored: apache-arrow's own decoder drops a leading U+FEFF. */
-function utf8Column(table: unknown, name: string): string[] {
-  const column = (table as { getChild(name: string): { data: Utf8Chunk[] } }).getChild(name);
-  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
-  return column.data.flatMap((chunk) =>
-    Array.from({ length: chunk.length }, (_, i) =>
-      decoder.decode(
-        chunk.values.subarray(chunk.valueOffsets[i] as number, chunk.valueOffsets[i + 1] as number),
-      ),
-    ),
-  );
-}
-
-/** Every column in scan order, the strings as stored and the vectors as their float32 bytes. */
-async function load(table: LanceTable) {
-  const data = await table.query().toArrow();
-  const columns: Record<string, unknown[]> = {};
-  for (const name of ["id", "source", "date", "text", "tokens"]) {
-    columns[name] = utf8Column(data, name);
-  }
-  columns.floor = [...data].map((row) => row.floor as number);
-  const vectors = new Float32Array(data.numRows * DIM);
-  for (const [i, row] of [...data].entries()) {
-    vectors.set(row.vector.toArray() as Float32Array, i * DIM);
-  }
-  const schema = data.schema.fields.map((f) => {
-    const child = (f.type as { children?: { name: string; type: unknown; nullable: boolean }[] })
-      .children?.[0];
-    return [f.name, String(f.type), f.nullable, child?.name, String(child?.type), child?.nullable];
-  });
-  return { schema, metadata: [...data.schema.metadata], columns, vectors, rows: data.numRows };
-}
-
 test.skipIf(!present && !REQUIRED)(
-  "laplace-ingest-facts rebuilds the real persona_facts exactly, every vector from the cache",
+  "laplace-ingest-facts rebuilds persona_facts.zvec from the real fact files and cached vectors",
   async () => {
     expect(existsSync(REAL_FACTS), `no fact files at ${REAL_FACTS}`).toBe(true);
     expect(existsSync(REAL_CACHE), `no embedding cache at ${REAL_CACHE}`).toBe(true);
-    expect(real, `no readable persona_facts in ${REAL_INDEX}`).not.toBeNull();
     const clone = join(dir, "embed_cache.db");
     copyFileSync(REAL_CACHE, clone, constants.COPYFILE_FICLONE);
     if (existsSync(`${REAL_CACHE}-wal`)) {
@@ -118,6 +68,13 @@ test.skipIf(!present && !REQUIRED)(
     delete process.env.EMBED_DIM;
     installSettings();
     resetEmbeddingModel();
+
+    const resolvedFiles = ingestFacts.resolveFactFiles(REAL_FACTS);
+    const expectedLoaded = ingestFacts.loadFacts(resolvedFiles);
+    const perSource = FILES.map(
+      (name) => expectedLoaded.rows.filter((row) => row.source === name).length,
+    );
+
     const logs = captureLogs();
     const io = captureIo();
     let code: number;
@@ -150,10 +107,7 @@ test.skipIf(!present && !REQUIRED)(
     }
     expect([code, io.stdout(), io.stderr()]).toEqual([0, "", ""]);
 
-    const expected = await load(real as LanceTable);
-    const perSource = FILES.map(
-      (name) => expected.columns.source?.filter((source) => source === name).length,
-    );
+    const totalRows = expectedLoaded.rows.length;
     const messages = logs.records.map(([, message]) => message);
     const at = (pattern: RegExp) => messages.filter((m) => pattern.test(m));
     expect(messages[0]).toBe(`Persona milky-green's index: ${canonicalPath(db)}`);
@@ -163,49 +117,60 @@ test.skipIf(!present && !REQUIRED)(
     );
     expect(at(/^Total: /)).toEqual([
       expect.stringMatching(
-        new RegExp(
-          `^Total: ${expected.rows} unique facts from \\d+ raw lines across 3 file\\(s\\)$`,
-        ),
+        new RegExp(`^Total: ${totalRows} unique facts from \\d+ raw lines across 3 file\\(s\\)$`),
       ),
     ]);
     const escaped = canonicalPath(clone).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     expect(messages.slice(6)).toEqual([
       expect.stringMatching(new RegExp(`^Embedding cache: ${escaped} \\(\\d+ vectors on disk\\)$`)),
-      `Cache: ${expected.rows}/${expected.rows} embeddings reused, 0 need fresh embedding`,
+      `Cache: ${totalRows}/${totalRows} embeddings reused, 0 need fresh embedding`,
       "All embeddings served from cache; nothing to embed.",
-      `Wrote ${expected.rows} rows to ${canonicalPath(db)}/persona_facts.lance`,
-      "Built FTS index on 'tokens' for persona_facts",
-      `Embedding totals: ${expected.rows} facts, 0 tokens (provider did not report cost and no ` +
+      `Wrote ${totalRows} rows to ${canonicalPath(db)}/persona_facts.zvec`,
+      "Built HNSW and FTS indexes for persona_facts",
+      `Embedding totals: ${totalRows} facts, 0 tokens (provider did not report cost and no ` +
         "local price entry — add the model's price to the provider catalog to fix)",
     ]);
 
-    const table = (await openTable(db, "persona_facts")) as LanceTable;
-    const mine = await load(table);
-    expect(mine.schema).toEqual(expected.schema);
-    expect(mine.metadata).toEqual(expected.metadata);
-    expect(mine.rows).toBe(expected.rows);
-    for (const [name, values] of Object.entries(expected.columns)) {
-      expect({ name, equal: isDeepStrictEqual(mine.columns[name], values) }).toEqual({
-        name,
-        equal: true,
-      });
+    const table = (await openTable(db, "persona_facts")) as ZvecTable;
+    expect(table.columnNames).toEqual(personaFactsSchema(DIM).fields.map((f) => f.name));
+    expect(table.vectorDim).toBe(DIM);
+    const mine = table.readAll({ includeVectors: true });
+    expect(mine.rows.length).toBe(totalRows);
+    const expectedRows = expectedLoaded.rows.map(({ embed_input: _ignored, ...rest }) => rest);
+    expect(isDeepStrictEqual(mine.rows, expectedRows)).toBe(true);
+
+    const cache = new EmbedCache(clone);
+    const cachedMap = cache.getMany(
+      DEFAULT_EMBED_MODEL,
+      DIM,
+      expectedLoaded.rows.map((r) => r.embed_input),
+    );
+    cache.close();
+    expect(cachedMap.size).toBe(totalRows);
+    const expectedVectors = new Float32Array(totalRows * DIM);
+    for (let i = 0; i < totalRows; i++) {
+      expectedVectors.set(cachedMap.get(i) as Float32Array, i * DIM);
     }
-    expect(bytes(mine.vectors).equals(bytes(expected.vectors))).toBe(true);
-    expect(await indices(table)).toEqual(await indices(real as LanceTable));
-    const versions = async (t: LanceTable) => (await t.listVersions()).map((v) => v.version);
-    expect(await versions(table)).toEqual(await versions(real as LanceTable));
-    expect((await table.stats()).fragmentStats.numFragments).toBe(
-      (await (real as LanceTable).stats()).fragmentStats.numFragments,
-    );
-    expect(readdirSync(join(db, "persona_facts.lance", "_versions")).sort()).toEqual(
-      readdirSync(join(REAL_INDEX, "persona_facts.lance", "_versions")).sort(),
-    );
+    expectVectorsClose(mine.vectors, expectedVectors);
+
+    const probeRow = expectedLoaded.rows[0]!;
+    const probeVec = mine.vectors.subarray(0, DIM);
+    const vecHits = await vectorSearch(table, { vector: probeVec, limit: 5 });
+    expect(vecHits[0]?.id).toBe(probeRow.id);
+    const hybHits = await hybridSearch(table, {
+      vector: probeVec,
+      queryText: tokenizeZhQuery(probeRow.text) || probeRow.text,
+      candidates: 30,
+      finalK: 8,
+      rerank: false,
+    });
+    expect(hybHits.map((r) => r.id)).toContain(probeRow.id);
 
     const meta = JSON.parse(readFileSync(join(db, "persona_facts.meta.json"), "utf8"));
     expect(meta).toEqual({
       embedModel: "google/gemini-embedding-2-preview",
       embedDim: DIM,
-      rows: expected.rows,
+      rows: totalRows,
       builtAt: expect.any(String),
       sources: FILES.map((name) => {
         const stat = statSync(join(REAL_FACTS, name));

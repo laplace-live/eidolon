@@ -71,7 +71,7 @@ function reads() {
     name: activePersona().identity.name,
     model: envOptional("LLM_MODEL"),
     agent: envOptional("MEM0_AGENT_ID"),
-    index: envOptional("LANCEDB_PATH"),
+    index: envOptional("INDEX_PATH"),
   };
 }
 
@@ -177,10 +177,7 @@ describe("withPersona", () => {
     ] as const) {
       setEnv(name, value);
     }
-    write(
-      "settings.yaml",
-      "embeddings:\n  model: file/embed\nmemory:\n  qdrant:\n    port: 7000\n",
-    );
+    write("settings.yaml", "embeddings:\n  model: file/embed\nmemory:\n  enabled: true\n");
     write("credentials.json", '{"accounts": {"work": {"provider": "anthropic"}}}');
     write(
       "personas/alice/persona.yaml",
@@ -266,8 +263,6 @@ test("loadSettings reads the persona it is given without installing her", () => 
   const alice = loadSettings("alice");
   expect(alice.persona.identity.name).toBe("Alice");
   expect(alice.values.get("LLM_MODEL")).toBe("alice/chat");
-  expect(alice.values.get("LANCEDB_PATH")).toBe(
-    join(dataHome(), "personas", "alice", "alice-index"),
-  );
+  expect(alice.values.get("INDEX_PATH")).toBe(join(dataHome(), "personas", "alice", "alice-index"));
   expect(reads()).toEqual(GREEN);
 });

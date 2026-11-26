@@ -39,7 +39,7 @@ export function makeReranker(model?: string | null): RerankModel | null {
     return rerankOff(
       "info",
       `${selection?.keyName ?? "The reranker's key"} is not set — hybrid retrieval will use ` +
-        "LanceDB's default RRF fusion (no cross-encoder rerank). For best precision at the " +
+        "RRF fusion (no cross-encoder rerank). For best precision at the " +
         "current data scale, set it in credentials.json or the environment.",
     );
   }

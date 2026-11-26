@@ -35,15 +35,15 @@ const USAGE = `usage: laplace-ingest-streams [-h] [--streams-dir STREAMS_DIR]
 `;
 
 const HELP = `${USAGE}
-Ingest streams/*.md into a local LanceDB index.
+Ingest streams/*.md into a local Zvec index.
 
 options:
   -h, --help            show this help message and exit
   --streams-dir STREAMS_DIR
                         Directory of *.md transcripts (default: the persona's
                         streams/ in the data home's sources)
-  --db-path DB_PATH     LanceDB directory (default: the index the bot reads:
-                        knowledge.index or $LANCEDB_PATH, else the persona's
+  --db-path DB_PATH     Zvec index directory (default: the index the bot reads:
+                        knowledge.index or $INDEX_PATH, else the persona's
                         index/ in the data home)
   --table TABLE         Table name (default: stream_chunks)
   --skip-types SKIP_TYPES
@@ -95,9 +95,9 @@ export function ingestStreamsParser(): ParserSpec {
 }
 
 /**
- * `--db-path` when given, else where the bot reads `persona`'s index. A `LANCEDB_PATH` from the
- * environment names one index for every persona that sets no knowledge.index, so with `--persona`
- * spelled out it must be overridden explicitly.
+ * `--db-path` when given, else where the bot reads `persona`'s index. `INDEX_PATH` (or legacy
+ * `LANCEDB_PATH`) from the environment names one index for every persona that sets no
+ * knowledge.index, so with `--persona` spelled out it must be overridden explicitly.
  */
 export function writerDbPath(
   spec: ParserSpec,
@@ -113,10 +113,16 @@ export function writerDbPath(
     }
     return dbPath;
   }
-  if (personaFlag && envOverride("LANCEDB_PATH") !== undefined) {
+  const envVar =
+    envOverride("INDEX_PATH") !== undefined
+      ? "INDEX_PATH"
+      : envOverride("LANCEDB_PATH") !== undefined
+        ? "LANCEDB_PATH"
+        : null;
+  if (personaFlag && envVar !== null) {
     throw parserError(
       spec,
-      "LANCEDB_PATH is set in the environment; pass --db-path or set her knowledge.index to " +
+      `${envVar} is set in the environment; pass --db-path or set her knowledge.index to ` +
         `write persona ${persona}'s index.`,
     );
   }

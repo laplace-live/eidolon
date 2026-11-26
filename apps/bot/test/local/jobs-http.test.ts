@@ -182,7 +182,7 @@ describe("the plan cache", () => {
 
   test("a setting the plan reads makes the next plan run again; another setting doesn't", async () => {
     expect(PLAN_VARIABLES.toSorted()).toEqual([
-      "LANCEDB_PATH",
+      "INDEX_PATH",
       "REFINE_MODEL",
       "REFINE_PROVIDER",
       "TRANSCRIBE_MODEL",

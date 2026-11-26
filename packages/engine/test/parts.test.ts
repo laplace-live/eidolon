@@ -325,9 +325,9 @@ describe("personaParts", () => {
       expect(built.gate).toBeNull();
     }
     expect(calls.gate).toBe(0);
-    expect(messages("INFO").filter((line) => line.includes("no LanceDB index"))).toEqual([
-      `Stream archive disabled: no LanceDB index at /index/${PERSONA}. Run \`pnpm laplace-ingest-streams --persona ${PERSONA}\` to build it.`,
-      `Persona facts disabled: no LanceDB index at /index/${PERSONA}. Run \`pnpm laplace-ingest-facts --persona ${PERSONA}\` to build it.`,
+    expect(messages("INFO").filter((line) => line.includes("no index at"))).toEqual([
+      `Stream archive disabled: no index at /index/${PERSONA}. Run \`pnpm laplace-ingest-streams --persona ${PERSONA}\` to build it.`,
+      `Persona facts disabled: no index at /index/${PERSONA}. Run \`pnpm laplace-ingest-facts --persona ${PERSONA}\` to build it.`,
     ]);
 
     exists = true;
@@ -374,11 +374,11 @@ describe("personaParts", () => {
     expect(off.calls.memory).toEqual([]);
     expect(messages("INFO").filter((line) => line.startsWith("Mem0 skipped"))).toEqual([
       "Mem0 skipped: anonymous viewer",
-      "Mem0 skipped: MEM0_QDRANT_HOST is unset, so there is no vector store",
+      "Mem0 skipped: viewer memory is disabled",
     ]);
   });
 
-  test("tries Mem0 again a minute after Qdrant was down, saying so once", async () => {
+  test("tries Mem0 again a minute after opening failed, saying so once", async () => {
     let down = true;
     const {
       deps,

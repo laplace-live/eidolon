@@ -119,6 +119,37 @@ describe("memories per persona", () => {
     expect((await api("DELETE", "?persona=nobody")).status).toBe(404);
   });
 
+  test("surfaces retainedCount when inactive embedding collections still hold memories", async () => {
+    booted.fakes.memoryAdmin = {
+      list: async () => ({ ok: true, value: [] }),
+      forget: async () => ({ ok: true, value: undefined }),
+      retainedCount: async () => ({ ok: true, value: 3 }),
+    };
+    const response = await api("GET");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      persona: "alpha",
+      count: 0,
+      memories: [],
+      retainedCount: 3,
+    });
+
+    booted.fakes.memoryAdmin = {
+      list: async () => ({ ok: true, value: [] }),
+      forget: async () => ({ ok: true, value: undefined }),
+      retainedCount: async () => ({
+        ok: false,
+        reason: "failed",
+        error: new Error("corrupt old store"),
+      }),
+    };
+    const failedRetained = await api("GET");
+    expect([failedRetained.status, (await failedRetained.json()).error.code]).toEqual([
+      502,
+      "upstream-failed",
+    ]);
+  });
+
   test("memory off is 503; a store that fails is 503 or 502", async () => {
     booted.fakes.memoryAdmin = null;
     const off = await api("GET");
@@ -128,8 +159,8 @@ describe("memories per persona", () => {
       ["failed", 502, "upstream-failed"],
     ] as const) {
       booted.fakes.memoryAdmin = {
-        list: async () => ({ ok: false, reason, error: new Error("qdrant down") }),
-        forget: async () => ({ ok: false, reason, error: new Error("qdrant down") }),
+        list: async () => ({ ok: false, reason, error: new Error("store locked") }),
+        forget: async () => ({ ok: false, reason, error: new Error("store locked") }),
       };
       for (const method of ["GET", "DELETE"]) {
         const response = await api(method);

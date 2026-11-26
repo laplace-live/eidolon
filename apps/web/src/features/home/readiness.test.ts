@@ -64,7 +64,7 @@ const healthy: Status = {
     catalogBuiltAt: "2026-11-01T00:00:00Z",
   },
   selfieReferences: 2,
-  memory: { configured: true, reachable: true },
+  memory: { configured: true, ready: true, problem: null },
   ytDlp: { state: "installed", tag: "2026.10.30" },
   ffmpeg: true,
   freeBytes: 200e9,
@@ -154,11 +154,11 @@ describe("the voice", () => {
   test("unchecked offers the Fish check, and says whether she inherits it", () => {
     expect(item(voice({ ok: null }), "voice")).toMatchObject({
       text: "home.ready.voice.unchecked",
-      fix: { kind: "check", target: { account: "fish" } },
+      fix: { kind: "check", account: "fish" },
     });
     expect(item(voice({ source: "env", ok: null }), "voice")).toMatchObject({
       text: "home.ready.voice.uncheckedEnv",
-      fix: { kind: "check", target: { account: "fish" } },
+      fix: { kind: "check", account: "fish" },
     });
   });
 
@@ -243,18 +243,19 @@ test("the verdict: an error blocks calls, a warning wants a look, information is
   expect(verdict(readiness({ ...healthy, freeBytes: 2e9 }, plain))).toBe("attention");
 });
 
-test("memory off links to the wizard's memory step; down or unchecked offers a check", () => {
+test("memory off links to the wizard's memory step; missing keys warn and link to providers", () => {
   const memory = (state: Status["memory"]) => item({ ...healthy, memory: state }, "memory");
-  expect(memory({ configured: false, reachable: null })?.fix).toEqual({
+  expect(memory({ configured: false, ready: false, problem: null })?.fix).toEqual({
     kind: "link",
     to: "/setup?step=memory",
     label: "home.fix.memory",
   });
-  expect(memory({ configured: true, reachable: false })).toMatchObject({
+  expect(memory({ configured: true, ready: false, problem: "missing key" })).toMatchObject({
     tone: "warn",
-    fix: { kind: "check", target: "qdrant" },
+    detail: "missing key",
+    fix: { kind: "link", to: "/settings?tab=providers", label: "home.fix.setup" },
   });
-  expect(memory({ configured: true, reachable: null })?.tone).toBe("info");
+  expect(memory({ configured: true, ready: true, problem: null })?.tone).toBe("ok");
 });
 
 test("index tables: never built, stale, and a missing broadcast overview link to the studio", () => {

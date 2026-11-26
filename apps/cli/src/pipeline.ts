@@ -88,7 +88,7 @@ export const PIPELINE_PARSER: ParserSpec = {
   prog: PROG,
   usage: USAGE,
   help: `${USAGE}
-End-to-end pipeline: bilibili URL list → ingested LanceDB rows.
+End-to-end pipeline: bilibili URL list → ingested Zvec rows.
 
 positional arguments:
   url_list              Path to a text file with one URL per line (# comments
@@ -178,9 +178,9 @@ ingest stage:
                         $INGEST_SKIP_TYPES, else 'anime_audio,karaoke'; none
                         drops nothing). Pass an empty string to disable
                         filtering.
-  --db-path DB_PATH     LanceDB directory the ingest stage writes (default:
+  --db-path DB_PATH     Zvec index directory the ingest stage writes (default:
                         the index the bot reads: knowledge.index or
-                        $LANCEDB_PATH, else the persona's index/ in the data
+                        $INDEX_PATH, else the persona's index/ in the data
                         home)
 `,
   actions: [
@@ -264,7 +264,7 @@ export function parsePipelineArgs(argv: readonly string[]): PipelineArgs {
     checkConcurrency(spec, refine.refineConcurrency());
   }
   const dbFlag = ns.db_path as string | null;
-  // A dry run writes nothing, so it needs no --db-path beside LANCEDB_PATH; its plan reads the
+  // A dry run writes nothing, so it needs no --db-path beside INDEX_PATH; its plan reads the
   // index the bot reads.
   const dbPath =
     stages.includes("ingest") && !ns.dry_run

@@ -151,9 +151,8 @@ export const SETTINGS: readonly SettingField[] = [
     "MCP window seconds",
   ),
   field("app", "mcp.allowedHosts", "EIDOLON_MCP_ALLOWED_HOSTS", "list", "MCP allowed hosts"),
-  field("app", "memory.qdrant.host", "MEM0_QDRANT_HOST", "string", "Qdrant host"),
-  field("app", "memory.qdrant.port", "MEM0_QDRANT_PORT", "int", "Qdrant port"),
-  field("app", "memory.qdrant.collection", "MEM0_QDRANT_COLLECTION", "string", "Qdrant collection"),
+  field("app", "memory.enabled", "MEM0_ENABLED", "flag", "Viewer memory"),
+  field("app", "memory.dir", "MEM0_DIR", "path", "Memory vector store"),
   field("app", "memory.historyDb", "MEM0_HISTORY_DB_PATH", "path", "Mem0 history database"),
   field(
     "app",
@@ -308,7 +307,7 @@ export const SETTINGS: readonly SettingField[] = [
   field("persona", "memory.model", "MEM0_LLM_MODEL", "string", "Memory extraction model", {
     provider: "MEM0_LLM_PROVIDER",
   }),
-  field("persona", "knowledge.index", "LANCEDB_PATH", "path", "Knowledge index"),
+  field("persona", "knowledge.index", "INDEX_PATH", "path", "Knowledge index"),
   field(
     "persona",
     "knowledge.factsCandidates",
@@ -780,6 +779,21 @@ function providerValue(
   return setting?.default;
 }
 
+/** Legacy environment variables still honored as fallbacks, which isolated smokes must drop. */
+export const LEGACY_SETTING_ENVS = [
+  "LANCEDB_PATH",
+  "MEM0_QDRANT_HOST",
+  "MEM0_QDRANT_PORT",
+  "MEM0_QDRANT_COLLECTION",
+] as const;
+
+// Legacy Qdrant keys in settings.yaml: a non-empty host turns memory on, and none warns.
+const LEGACY_QDRANT_PATHS = new Set([
+  "memory.qdrant.host",
+  "memory.qdrant.port",
+  "memory.qdrant.collection",
+]);
+
 /** The one reader behind loadSettings and readSettingsLayers; `chosen` null picks the active persona. */
 function readLayers(chosen: string | null, warn: Warn): ReadLayers {
   const home = dataHome();
@@ -821,6 +835,27 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
     values.set(setting.env, { source: setting.scope, value, raw });
     if (setting.scope === "persona" && value) owned.add(setting.env);
   }
+  const legacyHost = lookup(app, "memory.qdrant.host");
+  if (typeof legacyHost === "string" && legacyHost.trim() !== "") {
+    values.set("MEM0_QDRANT_HOST", { source: "app", value: legacyHost.trim(), raw: legacyHost });
+    if ((values.get("MEM0_ENABLED")?.value ?? null) === null) {
+      values.set("MEM0_ENABLED", { source: "app", value: "true", raw: true });
+    }
+  }
+  const legacyPort = lookup(app, "memory.qdrant.port");
+  if (typeof legacyPort === "number" && Number.isInteger(legacyPort) && legacyPort > 0) {
+    values.set("MEM0_QDRANT_PORT", { source: "app", value: String(legacyPort), raw: legacyPort });
+  } else if (typeof legacyPort === "string" && legacyPort.trim() !== "") {
+    values.set("MEM0_QDRANT_PORT", { source: "app", value: legacyPort.trim(), raw: legacyPort });
+  }
+  const legacyCollection = lookup(app, "memory.qdrant.collection");
+  if (typeof legacyCollection === "string" && legacyCollection.trim() !== "") {
+    values.set("MEM0_QDRANT_COLLECTION", {
+      source: "app",
+      value: legacyCollection.trim(),
+      raw: legacyCollection,
+    });
+  }
   const styles = readVoiceStyles(persona, personaPath, warn);
   for (const [env, { voiceId }] of styles) {
     values.set(env, { source: "persona", value: voiceId, raw: voiceId });
@@ -846,6 +881,10 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
       why.set(setting.legacy.env, why.get(setting.env) as string);
     }
   }
+  if (owned.has("INDEX_PATH")) {
+    owned.add("LANCEDB_PATH");
+    why.set("LANCEDB_PATH", why.get("INDEX_PATH") as string);
+  }
   // The environment's styles are another voice's moods: with her own voice they'd switch to it.
   if (owned.has("TTS_VOICE_ID")) {
     for (const name of Object.keys(process.env)) {
@@ -860,6 +899,7 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
     ["persona", persona, personaPath],
   ] as const) {
     for (const path of leafPaths(tree)) {
+      if (scope === "app" && LEGACY_QDRANT_PATHS.has(path)) continue;
       if (!known.has(`${scope}:${path}`)) warn(`Unknown setting ${path} in ${label}`);
     }
   }

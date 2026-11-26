@@ -1,6 +1,6 @@
-// GET status, which the home page polls, so every part of it is local and cheap. Qdrant and the
-// persona's voice are checked in the background and reported from the last answer; the tools on
-// PATH are looked up at most once a minute.
+// GET status, which the home page polls, so every part of it is local and cheap. The persona's
+// voice is checked in the background and reported from the last answer; the tools on PATH are
+// looked up at most once a minute.
 import { existsSync, statfsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { grantRefusal } from "@eidolon/assistant";
@@ -16,6 +16,7 @@ import {
 } from "@eidolon/config";
 import { referenceCandidates } from "@eidolon/imagegen";
 import { download } from "@eidolon/ingest";
+import { isMemoryConfigured } from "@eidolon/memory";
 import {
   accountsFor,
   callRoles,
@@ -34,13 +35,14 @@ import manifest from "../../package.json" with { type: "json" };
 import type {
   AssistantStatus,
   CallRole,
+  MemoryStatus,
   Status,
   TaskProfile,
   VoiceStatus,
   YtDlpStatus,
 } from "./api.ts";
 import { activeModel } from "./appearance.ts";
-import { checkFishVoice, checkQdrant, configuredQdrant, voiceOk } from "./checks.ts";
+import { checkFishVoice, voiceOk } from "./checks.ts";
 import { findAvatar, indexStatus } from "./personas.ts";
 import { restartTracker } from "./restart.ts";
 import type { LocalApp } from "./router.ts";
@@ -67,7 +69,6 @@ interface Answer {
 
 /** What one server remembers between polls. */
 class StatusState {
-  readonly qdrant = new Map<string, Answer>();
   readonly voices = new Map<string, Answer>();
   readonly probing = new Set<string>();
   readonly versions = new Map<string, string | null>();
@@ -85,15 +86,6 @@ function stateOf(app: LocalApp): StatusState {
     states.set(app, state);
   }
   return state;
-}
-
-/** A Qdrant check's answer, which GET status reports as memory.reachable. */
-export function recordQdrant(
-  app: LocalApp,
-  address: { readonly host: string; readonly port: number },
-  ok: boolean,
-): void {
-  stateOf(app).qdrant.set(`${address.host}:${address.port}`, { ok, at: Date.now() });
 }
 
 /**
@@ -142,28 +134,26 @@ export function trackSessionErrors(app: LocalApp): void {
 }
 
 /**
- * Runs `probe` unless one for `key` runs already or its last answer is fresher than `ttl`. The
- * answer is kept only if `current` still holds when it arrives.
+ * Runs `probe` unless one for `key` runs already or its last answer is still fresh. The answer is
+ * kept only if `current` still holds when it arrives.
  */
-function refresh(
+function refreshVoice(
   state: StatusState,
-  kind: "qdrant" | "voices",
   key: string,
-  ttl: (answer: Answer) => number,
   deps: StatusDeps,
   probe: () => Promise<boolean | null>,
-  current: () => boolean = () => true,
+  current: () => boolean,
 ): void {
-  const cache = state[kind];
-  const last = cache.get(key);
-  const id = `${kind}:${key}`;
-  if (state.probing.has(id) || (last !== undefined && deps.now() - last.at < ttl(last))) return;
-  state.probing.add(id);
+  const last = state.voices.get(key);
+  if (state.probing.has(key) || (last !== undefined && deps.now() - last.at < voiceTtl(last))) {
+    return;
+  }
+  state.probing.add(key);
   void probe()
     .then((ok) => {
-      if (current()) cache.set(key, { ok, at: deps.now() });
+      if (current()) state.voices.set(key, { ok, at: deps.now() });
     })
-    .finally(() => state.probing.delete(id));
+    .finally(() => state.probing.delete(key));
 }
 
 function voiceTtl(answer: Answer): number {
@@ -342,6 +332,27 @@ export function statusRoles(): readonly RoleId[] {
   }
 }
 
+/** Whether viewer memory is turned on and has the embedding and extraction keys it needs. */
+export function memoryStatus(): MemoryStatus {
+  if (!isMemoryConfigured()) {
+    return { configured: false, ready: false, problem: null };
+  }
+  for (const role of ["embeddings", "memory"] as const) {
+    try {
+      const selection = selectRequired(role);
+      if (!hasKey(selection)) {
+        return { configured: true, ready: false, problem: missingKey(selection).message };
+      }
+    } catch (error) {
+      if (error instanceof ProviderConfigError) {
+        return { configured: true, ready: false, problem: error.message };
+      }
+      throw error;
+    }
+  }
+  return { configured: true, ready: true, problem: null };
+}
+
 /** `tasks`: the server's task manager, which counts the running tasks; none runs without one. */
 export function buildStatus(
   app: LocalApp,
@@ -361,28 +372,14 @@ export function buildStatus(
     voice = voiceKey(voiceId, fishKey);
     // Fish limits concurrent requests per account, which a call's speech needs.
     if (app.activeCalls() === 0) {
-      refresh(
+      refreshVoice(
         state,
-        "voices",
         voice,
-        voiceTtl,
         deps,
         async () => voiceOk(await checkFishVoice(deps, voiceId, fishKey)),
         () => isFishKey(fishKey),
       );
     }
-  }
-
-  const qdrant = configuredQdrant(envOptional);
-  if (qdrant !== null) {
-    refresh(
-      state,
-      "qdrant",
-      `${qdrant.host}:${qdrant.port}`,
-      () => PROBE_TTL_MS,
-      deps,
-      async () => (await checkQdrant(deps, qdrant.host, qdrant.port)).ok,
-    );
   }
 
   const changes = restartTracker(app).changes();
@@ -416,11 +413,7 @@ export function buildStatus(
     },
     index: indexStatus(persona.id),
     selfieReferences: referenceCandidates().length,
-    memory: {
-      configured: qdrant !== null,
-      reachable:
-        qdrant === null ? null : (state.qdrant.get(`${qdrant.host}:${qdrant.port}`)?.ok ?? null),
-    },
+    memory: memoryStatus(),
     ytDlp,
     ffmpeg,
     freeBytes: freeBytes(),

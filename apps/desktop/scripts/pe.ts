@@ -29,7 +29,7 @@ export interface Pe {
   readonly fileVersion: string | null;
 }
 
-/** Positioned reads: LanceDB's addon is about 350 MB. */
+/** Positioned reads so large native binaries aren't buffered in memory. */
 interface Source {
   readonly size: number;
   read(offset: number, length: number): Buffer;

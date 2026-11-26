@@ -24,16 +24,13 @@ const TONES: Readonly<Record<Tone, { icon: typeof InfoIcon; className: string }>
   error: { icon: CircleXIcon, className: "text-destructive" },
 };
 
-function CheckButton({ target }: { readonly target: "qdrant" | { readonly account: string } }) {
+function CheckButton({ account }: { readonly account: string }) {
   const { t } = useLingui();
   const queryClient = useQueryClient();
   const check = useMutation({
-    mutationFn: () =>
-      target === "qdrant"
-        ? call("POST /api/local/credentials/check", { body: { provider: "qdrant" } })
-        : call("POST /api/local/accounts/check", { body: { account: target.account } }),
+    mutationFn: () => call("POST /api/local/accounts/check", { body: { account } }),
     onSuccess: async (result) => {
-      const text = t(verdictMessage(target === "qdrant" ? "qdrant" : "fish", result));
+      const text = t(verdictMessage("fish", result));
       const tone = checkTone(result);
       if (tone === "ok") toast.success(text);
       else if (tone === "warn") toast.warning(text, { description: result.warnings[0]?.message });
@@ -87,7 +84,7 @@ function FixButton({
         </Button>
       );
     case "check":
-      return <CheckButton target={fix.target} />;
+      return <CheckButton account={fix.account} />;
     case "restart":
       return <RestartButton label={t(FIX_LABELS["home.fix.restart"])} variant="outline" />;
   }

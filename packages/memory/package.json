@@ -9,6 +9,6 @@
     "@eidolon/config": "workspace:*",
     "@eidolon/core": "workspace:*",
     "@eidolon/providers": "workspace:*",
-    "@qdrant/js-client-rest": "1.19.0"
+    "@zvec/zvec": "0.8.0"
   }
 }

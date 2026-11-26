@@ -28,7 +28,7 @@ it buries the handful of comments that genuinely matter.
 
 The dividing line: **a comment about something outside this repo can be a
 paragraph. A comment about this repo's own structure gets one sentence, or
-nothing.** Every keeper below cites LanceDB, an upstream SDK, mem0, or a
+nothing.** Every keeper below cites Zvec, an upstream SDK, mem0, or a
 benchmark. Every deleted essay explained our own module boundaries to
 ourselves.
 
@@ -92,8 +92,9 @@ never code.
 Keep — cites an external system, with a link (`packages/retrieval/src/tokenize.ts`):
 
 ```ts
-// LanceDB ships no CJK tokenizer; pre-tokenizing at both ingest and query time is the official
-// workaround. https://github.com/lancedb/lancedb/issues/2168
+// Pre-tokenize Chinese text with jieba at both ingest and query time so Zvec's whitespace FTS
+// index (https://github.com/alibaba/zvec) preserves exact sub-token boundaries, case-distinct BV
+// IDs, and query-only stopword removal.
 ```
 
 Keep — a trap, where removing the field breaks everything quietly

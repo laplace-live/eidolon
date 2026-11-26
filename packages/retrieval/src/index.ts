@@ -1,11 +1,9 @@
-// The read side of the two LanceDB tables: jieba tokenization, the date pre-filter, hybrid search
+// The read side of the two Zvec tables: jieba tokenization, the date pre-filter, hybrid search
 // with RRF or a reranker, the retrievers context and MCP search through, and the stream-time and
 // stream-catalog helpers the archive's recall builds on. Also their write side, for the offline
-// ingests: the schemas, the table rebuild, and the embedding cache and batches.
+// ingests: the schemas, the atomic table rebuild, and the embedding cache and batches.
 
 export { DEFAULT_EMBED_MODEL, embedDim } from "@eidolon/config";
-export type { Table as LanceTable } from "@lancedb/lancedb";
-export type { Schema as ArrowSchema } from "apache-arrow";
 export {
   addDays,
   DateRangeError,
@@ -57,13 +55,13 @@ export {
 } from "./query.ts";
 export { makeReranker, resetRerankerCache } from "./rerank.ts";
 export {
-  LanceRetriever,
-  type LanceRetrieverOptions,
   openPersonaFactsRetriever,
   openStreamArchiveRetriever,
   type Retriever,
   type RetrieverOpenOptions,
   type SearchOptions,
+  ZvecRetriever,
+  type ZvecRetrieverOptions,
 } from "./retriever.ts";
 export {
   type Broadcast,
@@ -90,6 +88,8 @@ export {
   streamScope,
 } from "./stream_time.ts";
 export {
+  closeAllReadTables,
+  closeReadTablesUnder,
   dbPathArgument,
   decodeTopics,
   INDEX_DIR,
@@ -106,6 +106,13 @@ export {
   scanStreamDates,
   streamArchiveSearchParams,
   type TablePreset,
+  tableExists,
+  ZvecTable,
 } from "./tables.ts";
 export { tokenizeZh, tokenizeZhQuery, warmTokenizer, ZH_QUERY_STOPWORDS } from "./tokenize.ts";
-export { personaFactsSchema, streamChunksSchema, writeTable } from "./write.ts";
+export {
+  personaFactsSchema,
+  streamChunksSchema,
+  type TableSchema,
+  writeTable,
+} from "./write.ts";

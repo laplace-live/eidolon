@@ -9,7 +9,7 @@ through the bot's own `StreamArchive` and gate code.
 The archive answers "what did she say about X" well. Before the timeline, it
 couldn't answer when she last did something, and it answers questions about
 viewers and their super chats only when ranking happens to favor them.
-LanceDB isn't the cause. Every vector store returns the chunks most similar to
+The vector store isn't the cause. Every vector store returns the chunks most similar to
 a question, and these questions ask for something else.
 
 ## When she last did something

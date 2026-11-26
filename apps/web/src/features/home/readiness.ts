@@ -15,8 +15,8 @@ export type Tone = "ok" | "info" | "warn" | "error";
 export type Fix =
   | { readonly kind: "link"; readonly to: string; readonly label: FixCode }
   | { readonly kind: "pick-voice"; readonly label: FixCode }
-  /** A check of her voice's account, or of Qdrant. */
-  | { readonly kind: "check"; readonly target: "qdrant" | { readonly account: string } }
+  /** A check of her voice's account. */
+  | { readonly kind: "check"; readonly account: string }
   | { readonly kind: "restart" };
 
 export interface Item {
@@ -84,7 +84,7 @@ function voiceItem(persona: Status["persona"]): Item {
   }
   if (voice.ok === null) {
     const text = inherited ? "home.ready.voice.uncheckedEnv" : "home.ready.voice.unchecked";
-    const fix: Fix = { kind: "check", target: { account: voice.account ?? "fish" } };
+    const fix: Fix = { kind: "check", account: voice.account ?? "fish" };
     return { id: "voice", tone: "info", text, vars, fix };
   }
   const text = inherited ? "home.ready.voice.env" : "home.ready.voice.ok";
@@ -96,12 +96,15 @@ function memoryItem(memory: MemoryStatus): Item {
     const fix: Fix = { kind: "link", to: "/setup?step=memory", label: "home.fix.memory" };
     return { id: "memory", tone: "info", text: "home.ready.memory.off", fix };
   }
-  const check: Fix = { kind: "check", target: "qdrant" };
-  if (memory.reachable === false) {
-    return { id: "memory", tone: "warn", text: "home.ready.memory.down", fix: check };
-  }
-  if (memory.reachable === null) {
-    return { id: "memory", tone: "info", text: "home.ready.memory.unchecked", fix: check };
+  if (!memory.ready) {
+    const fix: Fix = { kind: "link", to: "/settings?tab=providers", label: "home.fix.setup" };
+    return {
+      id: "memory",
+      tone: "warn",
+      text: "home.ready.memory.notReady",
+      detail: memory.problem ?? undefined,
+      fix,
+    };
   }
   return { id: "memory", tone: "ok", text: "home.ready.memory.on" };
 }

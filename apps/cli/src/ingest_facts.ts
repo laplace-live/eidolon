@@ -31,7 +31,7 @@ export const INGEST_FACTS_PARSER: ParserSpec = {
   prog: COMMAND,
   usage: USAGE,
   help: `${USAGE}
-Ingest persona-fact .txt files into a local LanceDB index.
+Ingest persona-fact .txt files into a local Zvec index.
 
 options:
   -h, --help            show this help message and exit
@@ -40,8 +40,8 @@ options:
   --files [FILES ...]   Explicit fact file paths. If omitted, scans data-dir
                         for the persona's knowledge.facts.files patterns
                         (default: *.txt).
-  --db-path DB_PATH     LanceDB directory (default: the index the bot reads:
-                        knowledge.index or $LANCEDB_PATH, else the persona's
+  --db-path DB_PATH     Zvec index directory (default: the index the bot reads:
+                        knowledge.index or $INDEX_PATH, else the persona's
                         index/ in the data home)
   --table TABLE         Table name (default: persona_facts)
   --min-chars MIN_CHARS

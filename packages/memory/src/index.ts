@@ -1,11 +1,13 @@
-// Per-viewer long-term memory: mem0's OSS engine over Qdrant, the context provider each turn runs,
-// and the admin operations behind /api/memories.
+// Per-viewer long-term memory: mem0's OSS extraction engine over in-process Zvec, the context
+// provider each turn runs, and the admin operations behind /api/memories.
 import { createMemoryAdmin } from "./admin.ts";
-import { qdrantHost } from "./config.ts";
+import { isMemoryConfigured } from "./config.ts";
 import { SharedEngine } from "./engine.ts";
 import { openMemoryProvider } from "./provider.ts";
 import type { MemoryAdmin, MemoryProvider } from "./types.ts";
+import { closeMemoryStores as closeZvecStores } from "./zvec.ts";
 
+export { isMemoryConfigured } from "./config.ts";
 export { MEM0_LABEL, MEM0_STORE_KEY } from "./provider.ts";
 export type {
   AdminOutcome,
@@ -17,21 +19,17 @@ export type {
 
 const engines = new SharedEngine();
 
-/**
- * `MEM0_QDRANT_HOST` is set (trimmed, non-empty). Deliberately not a reachability check: Qdrant
- * being down is handled where the engine opens, so a restart-order blip degrades a session
- * instead of failing the boot.
- */
-export function isMemoryConfigured(): boolean {
-  return qdrantHost() !== "";
+/** Closes every cached writable memory collection and shared history DB in this process. */
+export function closeMemoryStores(): void {
+  engines.close();
+  closeZvecStores();
 }
 
 /**
  * The provider for one logged-in viewer. `userId` is `String(mid)`. Reads MEM0_AGENT_ID,
  * MEM0_RUN_ID and the search settings itself. Runtime calls it only when `isMemoryConfigured()`;
- * it rejects when memory is unusable (not configured, Qdrant unreachable, no embedding key,
- * out-of-range MEM0_SEARCH_*). Never builds a Qdrant client from a blank host: the JS client
- * would default to 127.0.0.1.
+ * it rejects when memory is unusable (not enabled, store unwritable, no embedding key,
+ * out-of-range MEM0_SEARCH_*).
  */
 export function createMemoryProvider(options: { userId: string }): Promise<MemoryProvider> {
   return openMemoryProvider(options, engines);

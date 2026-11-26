@@ -78,7 +78,7 @@ const BY_PATH: Readonly<Record<string, Control>> = {
   "sources.cookiesFromBrowser": { type: "select", options: COOKIE_BROWSERS },
   "identity.timezone": { type: "timezone" },
   "transcription.language": { type: "language" },
-  "memory.qdrant.port": { type: "integer", min: 1, max: 65535 },
+  "memory.enabled": { type: "flag", fallback: "off" },
   "embeddings.dim": { type: "integer", min: 1 },
   "refine.concurrency": { type: "integer", min: 1 },
   "chat.talkativeness": {
@@ -442,8 +442,8 @@ export function optionsOf(control: Control & { type: "select" }, current: string
 }
 
 /**
- * Changing either needs every index re-ingested and a new memory collection, as does another
- * embedding provider; another account of the same one doesn't.
+ * Changing either needs every index re-ingested and starts a fresh memory collection for the new
+ * embedding space; another account of the same provider doesn't.
  */
 export const REINDEX_PATHS: readonly string[] = ["embeddings.model", "embeddings.dim"];
 

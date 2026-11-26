@@ -84,12 +84,12 @@ describe("the cards", () => {
     expect(advanced.filter((path) => path.startsWith("assistant."))).toEqual([]);
   });
 
-  test("Qdrant's host and port, and the embedding provider and model, sit side by side", () => {
+  test("the embedding provider and model, and cookie browser and file, sit side by side", () => {
     const lines = Object.values(CARDS).flatMap((section) =>
       section.flatMap((card) => card.paths.filter((line) => typeof line !== "string")),
     );
-    expect(lines).toContainEqual(["memory.qdrant.host", "memory.qdrant.port"]);
     expect(lines).toContainEqual(["embeddings.provider", "embeddings.model"]);
+    expect(lines).toContainEqual(["sources.cookiesFromBrowser", "sources.cookiesFile"]);
   });
 });
 

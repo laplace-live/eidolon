@@ -5,12 +5,11 @@ import { createMemoryAdmin } from "../src/admin.ts";
 import { MemoryEngine, SharedEngine } from "../src/engine.ts";
 import { HistoryStore } from "../src/history.ts";
 import { Mem0Embedder, OpenAICompatibleChat } from "../src/openai.ts";
-import { QdrantVectorStore } from "../src/qdrant.ts";
 import {
   clearMemoryEnv,
   FakeEmbeddings,
   FakePoster,
-  FakeQdrant,
+  FakeStore,
   pinned,
   resetEnv,
   setEnv,
@@ -20,7 +19,7 @@ import {
 beforeEach(() => {
   clearMemoryEnv();
   setEnv({
-    MEM0_QDRANT_HOST: "qdrant",
+    MEM0_ENABLED: "true",
     OPENROUTER_API_KEY: "sk-or",
     MEM0_HISTORY_DB_PATH: tempPath("h.db"),
   });
@@ -33,22 +32,19 @@ function point(memory: string, scope: Record<string, string>): Record<string, un
   return { data: memory, hash: memory, created_at: STAMP, updated_at: STAMP, ...scope };
 }
 
-function seeded(): FakeQdrant {
-  const fake = new FakeQdrant();
+function seeded(): FakeStore {
+  const fake = new FakeStore();
   fake.points.set("p1", point("alpha fact", { user_id: "local", agent_id: "alpha" }));
   fake.points.set("p2", point("beta fact", { user_id: "local", agent_id: "beta" }));
   fake.points.set("p3", point("someone else", { user_id: "12345678" }));
   return fake;
 }
 
-function adminOver(fake: FakeQdrant) {
+function adminOver(fake: FakeStore) {
   const pins = pinned(1793678706123456, 1);
   const poster = new FakePoster();
   const engine = new MemoryEngine({
-    store: new QdrantVectorStore(
-      { host: "h", port: 6333, collection: "c", vectorSize: 4 },
-      fake.api,
-    ),
+    store: fake,
     embedder: new Mem0Embedder(new FakeEmbeddings("m"), 4),
     llm: new OpenAICompatibleChat("m", poster),
     history: new HistoryStore(tempPath("h.db"), { clock: pins.clock, newId: pins.newId }),

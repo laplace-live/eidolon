@@ -15,7 +15,7 @@ import { type CheckDeps, checkProvider } from "../checks.ts";
 import { localError, localJson, readJson } from "../responses.ts";
 import { reinstallSettings } from "../restart.ts";
 import type { LocalApp, LocalRouteSpec } from "../router.ts";
-import { recordQdrant, recordVoice } from "../status.ts";
+import { recordVoice } from "../status.ts";
 import { writeDataFile } from "../write.ts";
 
 /** A key's longest plausible length; anything longer is a paste gone wrong. */
@@ -158,12 +158,9 @@ export function credentialsRoutes(
           read: envOptional,
           fromEnv: (name) => envOverride(name) !== undefined,
         });
-        // What the check learned of the saved voice and Qdrant, GET status shows too.
+        // What the check learned of the saved voice, GET status shows too.
         if (outcome.voice !== undefined && typed === undefined && fishKey !== undefined) {
           recordVoice(app, outcome.voice.id, fishKey, outcome.voice.ok);
-        }
-        if (outcome.qdrant !== undefined && typed === undefined) {
-          recordQdrant(app, outcome.qdrant, outcome.qdrant.ok);
         }
         return localJson(200, outcome.result);
       },

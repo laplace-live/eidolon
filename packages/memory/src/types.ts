@@ -1,6 +1,6 @@
 import type { ContextProvider } from "@eidolon/core";
 
-/** A mem0 memory as stored in Qdrant, in mem0's own payload schema. */
+/** A mem0 memory as stored in Zvec, in mem0's own payload schema. */
 export interface MemoryItem {
   id: string;
   memory: string;
@@ -47,4 +47,6 @@ export interface MemoryAdmin {
   /** `agentId` narrows the scope to one agent's memories, as the local app's per-persona ones. */
   list(userId: string, agentId?: string): Promise<AdminOutcome<MemorySummary[]>>;
   forget(userId: string, agentId?: string): Promise<AdminOutcome<void>>;
+  /** Count of unexpired memories in retained inactive collections that `forget` will also wipe. */
+  retainedCount?(userId: string, agentId?: string): Promise<AdminOutcome<number>>;
 }

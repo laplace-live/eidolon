@@ -6,17 +6,17 @@ import { constants } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** The platforms Eidolon runs on, each with LanceDB's build for it. */
+/** The platforms Eidolon runs on, each with Zvec's prebuilt binding for it. */
 export const PLATFORMS = {
-  "darwin-arm64": "@lancedb/lancedb-darwin-arm64",
-  "linux-x64": "@lancedb/lancedb-linux-x64-gnu",
-  "linux-arm64": "@lancedb/lancedb-linux-arm64-gnu",
-  "win32-x64": "@lancedb/lancedb-win32-x64-msvc",
+  "darwin-arm64": "@zvec/bindings-darwin-arm64",
+  "linux-x64": "@zvec/bindings-linux-x64",
+  "linux-arm64": "@zvec/bindings-linux-arm64",
+  "win32-x64": "@zvec/bindings-win32-x64",
 } as const;
 
 /**
- * The Visual C++ runtime's DLLs that onnxruntime-node's and LanceDB's Windows builds import, and
- * Windows doesn't ship. Missing, either fails to load with "The specified module could not be found".
+ * The Visual C++ runtime's DLLs that onnxruntime-node's Windows build imports, and Windows doesn't
+ * ship. Missing, it fails to load with "The specified module could not be found".
  */
 export const VC_RUNTIME_DLLS: readonly string[] = [
   "vcruntime140.dll",
@@ -115,7 +115,7 @@ export function unsupportedReason(host: Host): string | null {
     return host.rosetta
       ? "this Node is an x64 build that Rosetta translates, and Eidolon's native modules are " +
           "arm64. Install the arm64 build of Node, then run eidolon again."
-      : `Intel Macs are not supported: LanceDB and onnxruntime-node ship no build for them. ${SUPPORTED}`;
+      : `Intel Macs are not supported: onnxruntime-node ships no build for them. ${SUPPORTED}`;
   }
   if (host.platform === "win32" && host.arch === "arm64") {
     return (
@@ -124,11 +124,11 @@ export function unsupportedReason(host: Host): string | null {
     );
   }
   if (!Object.hasOwn(PLATFORMS, key)) {
-    return `${key} is not supported: LanceDB and onnxruntime-node ship no build for it. ${SUPPORTED}`;
+    return `${key} is not supported: Zvec and onnxruntime-node ship no build for it. ${SUPPORTED}`;
   }
   if (host.platform === "win32" && !host.vcRuntime) {
     return (
-      "the Microsoft Visual C++ Redistributable, which LanceDB and onnxruntime-node need, is " +
+      "the Microsoft Visual C++ Redistributable, which onnxruntime-node needs, is " +
       "missing or out of date. Install it from https://aka.ms/vs/17/release/vc_redist.x64.exe, " +
       "then run eidolon again."
     );

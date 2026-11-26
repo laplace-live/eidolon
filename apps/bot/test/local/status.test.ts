@@ -21,7 +21,7 @@ import { checkRig } from "../../src/local/psd2live.ts";
 import { reinstallSettings } from "../../src/local/restart.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { statusRoutes } from "../../src/local/routes/status.ts";
-import { buildStatus, PROBE_TTL_MS, type StatusDeps } from "../../src/local/status.ts";
+import { buildStatus, type StatusDeps } from "../../src/local/status.ts";
 import { ensureDataHome } from "../../src/local/write.ts";
 import { type CapturedLogs, captureLogs } from "../fakes.ts";
 
@@ -161,7 +161,7 @@ describe("GET status", () => {
         catalogBuiltAt: null,
       },
       selfieReferences: 2,
-      memory: { configured: false, reachable: null },
+      memory: { configured: false, ready: false, problem: null },
       lastSessionError: null,
       activeCalls: 0,
     });
@@ -405,21 +405,27 @@ describe("GET status", () => {
     expect(buildStatus(app, deps).persona.appearance).toEqual({ model: null });
   });
 
-  test("probes Qdrant in the background, once per TTL, and reports the last answer", async () => {
-    setEnv("MEM0_QDRANT_HOST", "127.0.0.1");
-    const { deps, asked } = fakeDeps({
-      "http://127.0.0.1:6333/collections": () => json(200, { result: {} }),
-      "http://127.0.0.1:6333/": () =>
-        json(200, { title: "qdrant - vector search engine", version: "1.19.1" }),
+  test("memory status reports off, missing keys, and ready once keys are set", () => {
+    const { deps, asked } = fakeDeps({});
+    expect(buildStatus(app, deps).memory).toEqual({
+      configured: false,
+      ready: false,
+      problem: null,
     });
-    expect(buildStatus(app, deps).memory).toEqual({ configured: true, reachable: null });
-    await until(() => buildStatus(app, deps).memory.reachable === true);
-    const probes = asked.length;
-    buildStatus(app, deps);
-    expect(asked.length).toBe(probes);
-    deps.clock += PROBE_TTL_MS;
-    buildStatus(app, deps);
-    expect(asked.length).toBeGreaterThan(probes);
+    setEnv("MEM0_ENABLED", "true");
+    expect(buildStatus(app, deps).memory).toEqual({
+      configured: true,
+      ready: false,
+      problem:
+        "OpenRouter needs an API key: set OPENROUTER_API_KEY in credentials.json or the environment, or EMBED_API_KEY for embeddings alone",
+    });
+    setEnv("OPENROUTER_API_KEY", "k");
+    expect(buildStatus(app, deps).memory).toEqual({
+      configured: true,
+      ready: true,
+      problem: null,
+    });
+    expect(asked).toEqual([]);
   });
 
   test("checks the voice with the key in the background, never during a call", async () => {
@@ -507,8 +513,10 @@ describe("GET status", () => {
 
   test("reads the index from its build records and the catalog's head, opening no table", () => {
     const index = join(personaHomeDir("milky-green"), "index");
-    mkdirSync(join(index, "stream_chunks.lance"), { recursive: true });
-    mkdirSync(join(index, "persona_facts.lance"), { recursive: true });
+    for (const table of ["stream_chunks", "persona_facts"]) {
+      mkdirSync(join(index, `${table}.zvec`, "b1"), { recursive: true });
+      writeFileSync(join(index, `${table}.zvec`, "CURRENT"), "b1\n");
+    }
     write(
       "personas/milky-green/index/stream_chunks.meta.json",
       JSON.stringify({

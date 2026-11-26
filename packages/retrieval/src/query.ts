@@ -25,7 +25,7 @@ function normalizeYear(text: string): number {
 const pad = (n: number, width: number) => String(n).padStart(width, "0");
 
 /**
- * A LanceDB `WHERE` clause for a date the query names, else null. A full date matches exactly, a
+ * A scalar filter clause for a date the query names, else null. A full date matches exactly, a
  * year+month becomes a half-open range, and a bare `MM月DD` matches that day in any year. Year-only
  * ("2024年发生什么") and month-only ("3月") are deliberately not filtered — too coarse to help,
  * and vector + FTS handle them better.

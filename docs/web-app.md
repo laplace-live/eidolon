@@ -83,15 +83,15 @@ reach the launcher, the supervisor and the server alike, and the first two wait 
 own stop; Windows ends them all some seconds after the window closes. A process the app spawns
 without `detached` sits in its parent's job object, which ends it when the parent ends, however
 it ends: killing the launcher takes the supervisor and the server with it, without their stop.
-The launcher refuses to start without the Visual C++ runtime that LanceDB and onnxruntime-node
+The launcher refuses to start without the Visual C++ runtime that Zvec and onnxruntime-node
 load (`VC_RUNTIME_DLLS`), and points to its installer. Assistant tasks' commands on Windows need
 Git Bash (from Git for Windows) or Cygwin's / MSYS2's bash on `PATH`.
 
-The first `npx @laplace.live/eidolon` run downloads about 230 MB (mostly LanceDB and ONNX Runtime
-for the platform) and unpacks to about 0.6 GB on macOS (more on Linux and Windows). On Linux x64,
-npm 11 runs `onnxruntime-node`'s install script, which tries to fetch ~240 MB of unused CUDA
-libraries from NuGet; skip it with `ONNXRUNTIME_NODE_INSTALL_CUDA=skip npx @laplace.live/eidolon`
-(npm 12 skips dependency install scripts unless allowed).
+The first `npx @laplace.live/eidolon` run downloads the bundle plus Zvec and ONNX Runtime for the
+platform. On Linux x64, npm 11 runs `onnxruntime-node`'s install script, which tries to fetch
+~240 MB of unused CUDA libraries from NuGet; skip it with
+`ONNXRUNTIME_NODE_INSTALL_CUDA=skip npx @laplace.live/eidolon` (npm 12 skips dependency install
+scripts unless allowed).
 
 ## What stays out of production
 
@@ -234,7 +234,7 @@ server log's line that holds what went wrong, and the app shows it beside the de
 | Status | `GET status`, `POST restart` | Readiness, polled by the home page and never waiting on a remote probe: the keys her call roles need, each role's provider and model or what is wrong with them, her voice, and `assistant: { enabled, ready, problem, running, search, kinds }`, Assistant Mode's state, why it isn't ready, how many tasks run, whether tasks can search the web (`{ on, problem }`), and why each kind of task runs on Assistant Mode's own model, if it does; restart is refused during a call, or while one is connecting |
 | Settings | `GET settings?persona=`, `PUT settings` | Every `SETTINGS` row: the value the files give it and which file, the environment's value and the variable it comes from, and whether that overrides the file's, as only an app row's does (a persona's own value wins, and without one she inherits the environment's, a model or voice only while the environment's provider is hers); and her voice styles, with each one the environment sets and whether she inherits it, replaces it with one of hers, or ignores it while her voice isn't the environment's; PUT `{scope, persona?, values}` is checked by kind, a provider against the catalog, the time zone as an IANA zone, `appearance.model` against her character models, and written to `settings.yaml` or her `persona.yaml`; one that turns Assistant Mode off, as the environment and the file decide it, answers once every live task is cancelled |
 | Accounts | `GET`, `POST accounts`, `PUT`, `DELETE accounts/:id`, `POST accounts/check`, `GET accounts/:id/models?category=` | Every provider account: `credentials.json`'s, and each provider's default that the environment configures or her calls need, with where its key comes from and never the key, its API base and settings, and which settings name it; a new one takes its provider's id while that is free, else `<provider>-2` and on; an API base is refused for a provider without a base variable; DELETE is refused while a settings file names it; the check asks the provider about a typed or the saved key, where the catalog says how: a free listing, never a model call; models lists what the provider's API offers now ([providers.md](providers.md#model-lists)) |
-| Credentials | `GET`, `PUT credentials`, `POST credentials/check` | The secrets `credentials.json` keeps under variable names, `{NAME: {set, source}}`, never a value; the check is Qdrant's for the memory step and home |
+| Credentials | `GET`, `PUT credentials`, `POST credentials/check` | The secrets `credentials.json` keeps under variable names, `{NAME: {set, source}}`, never a value; `credentials/check` verifies a provider's saved or typed key |
 | Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice, the providers and models the active persona's `persona.yaml` sets for `hearing`, `mind`, `voice` and `knowledge.gate`, and a starter `prompt.md`), switch (refused during a call, or while one is connecting). A new persona's voice is her voice provider's: a Fish Audio voice id, or for another provider one line of text |
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
 | Voice styles | `PUT personas/:id/voice-styles` | `{styles}`: all of hers, in order, each with a name of its own, a voice and a hint, replacing her `persona.yaml`'s `voice.styles`; answers as `GET settings` does. Any name her file can hold passes, since a save sends back those a hand-written file gave her; the studio names a new style with a lowercase letter, then letters, digits or `_`, never `default` |
@@ -275,7 +275,7 @@ whether or not she is the active persona ([chat.md](chat.md#calls)).
 | `conflict` | 409 | A file that doesn't read as it should (`credentials.json`, a `persona.yaml`, a hand-made URL list, a `settings.yaml` an Always answer would write), a persona `EIDOLON_PERSONA` pins, a job an earlier server started |
 | `payload-too-large` | 413 | A body or upload over its cap |
 | `unsupported-media-type` | 415 | An upload that isn't one of the image or text types its route takes, or a model that doesn't start as a `.p2lrt` does, by its bytes |
-| `unavailable` | 503 | Memory is off or Qdrant doesn't answer; Fish Audio doesn't answer a voice search |
+| `unavailable` | 503 | Memory is off or lacks its keys; Fish Audio doesn't answer a voice search |
 | `upstream-failed` | 502 | Mem0 or Fish Audio failed |
 | `internal` | 500 | A bug; the server log's line with the answer's `id` has the details |
 | `invalid-persona-id` | 400 | A persona id that isn't a slug |
@@ -351,7 +351,7 @@ them and place no call, a chat's microphone is off, and her replies are text.
 ## The local viewer and memory
 
 Whoever holds the session is the local viewer: a logged-in viewer with UID 0, which no Bilibili
-account has, so a Qdrant shared with production can't mix their memories with anyone's. Only a
+account has, so a memory store shared with production can't mix their memories with anyone's. Only a
 valid cookie or Bearer token grants it, never a request body. Their name is `local.viewerName`,
 read at every call, and the persona's prompt names them through `identity.localViewerLine`, which
 has no UID. The anonymous quota doesn't apply.
@@ -362,21 +362,10 @@ agent id is the active persona's id. That default is set in code, never written 
 active persona remembers and forgets it on request, through `GET` and
 `DELETE /api/local/memories?persona=<id>`; other personas keep theirs.
 
-Memory needs Qdrant; without it calls run without memory. The wizard's memory step
-(`/setup?step=memory`) shows this command, which publishes on loopback only (Qdrant has no auth),
-turns CORS off and keeps the data in a named volume:
-
-```bash
-docker run -d --name eidolon-qdrant --restart unless-stopped -p 127.0.0.1:6333:6333 \
-  -v eidolon-qdrant:/qdrant/storage -e QDRANT__SERVICE__ENABLE_CORS=false \
-  -e QDRANT__TELEMETRY_DISABLED=true qdrant/qdrant:v1.19.1
-```
-
-Keep the tag in step with `docker-compose.yml`'s; if compose's `qdrant` already answers on 6333,
-use it instead. The step checks an address (127.0.0.1:6333 unless you change it) and saves it as
-`memory.qdrant.host` and `memory.qdrant.port` only when Qdrant answers; once memory is on, an
-edited address is checked and saved the same way. No address needs a restart: the next call opens
-memory at the saved one.
+Memory runs in-process over a local Zvec collection (`memory.dir`, default `mem0/vectors` in the
+data home); without it calls run without memory. The wizard's memory step (`/setup?step=memory`)
+turns `memory.enabled` on or skips it, with no external container or port to run. Turning memory on
+or off needs no restart: the next call or chat turn reads the saved setting.
 
 ## The layout
 
@@ -1264,7 +1253,7 @@ milky-green, whose template needs no index: recall is simply off. It checks:
   after Hang up;
 
 then prints the transcript and each turn's stages (LLM runs, tool calls, speech, audio, the
-picture) timed from the turn's start. When the `.env`'s Qdrant answers, the call is remembered like
+picture) timed from the turn's start. When `MEM0_ENABLED` is on, the call is remembered like
 any other: as the local viewer's, for that persona.
 
 **Which checks.** `--call` is paid and uses the real keys in the `.env`: about one short call to
@@ -1293,8 +1282,9 @@ else.
   port the message names. Use that one, or stop it first.
 - **Keys, or a data home, you didn't expect**: a `.env` further up was applied. Set
   `EIDOLON_NO_DOTENV=1`.
-- **Memory is off, or 503 `unavailable`**: Qdrant isn't set or doesn't answer; start it with the
-  command above and check it in the wizard's memory step.
+- **Memory is off, or 503 `unavailable`**: `memory.enabled` is off, an embedding or
+  memory-extraction key is missing, or the local memory store cannot be opened; turn it on, set the
+  keys in Settings → Providers, and ensure `memory.dir` is writable.
 - **A restart banner**: a saved value is read only at boot. Restart from Home or Settings; it is
   refused during a call, or while one is connecting, and it interrupts running jobs, after asking.
   Setting the value back doesn't clear it: a call may have read the changed one.

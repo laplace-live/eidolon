@@ -31,7 +31,7 @@ function loader(): Loader {
 }
 
 const AZURE = { AZURE_SIGNING_ACCOUNT_NAME: "account", AZURE_CERTIFICATE_PROFILE_NAME: "profile" };
-const LISTED = ["Eidolon_wer.dll", "ffmpeg.dll", "lancedb.win32-x64-msvc.node", "libvips-42.dll"];
+const LISTED = ["Eidolon_wer.dll", "ffmpeg.dll", "libvips-42.dll", "zvec_node_binding.node"];
 const scratch = mkdtempSync(join(tmpdir(), "eidolon-release-config-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 

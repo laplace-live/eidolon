@@ -45,10 +45,14 @@ const PYTHON_DEFAULTS: Record<string, string> = {
   queries: "data/eval/queries.toml",
 };
 const HELP_LINES: [string, string][] = [
-  ["LanceDB dir (default: data/lancedb)", "LanceDB dir (default: the persona's index/)"],
+  [
+    "Score retrieval quality for both LanceDB tables.",
+    "Score retrieval quality for both Zvec tables.",
+  ],
+  ["LanceDB dir (default: data/lancedb)", "Zvec index dir (default: the persona's index/)"],
   [
     "LanceDB directory (default: data/lancedb)",
-    "LanceDB directory (default: the persona's index/)",
+    "Zvec index directory (default: the persona's index/)",
   ],
   [
     "entries (default:\n                        data/eval/queries.toml)",

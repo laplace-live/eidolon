@@ -33,7 +33,7 @@ options:
                         Directory of *.md transcripts (default: the persona's
                         streams/ in the data home's sources)
   --db-path DB_PATH     Where stream_catalog.json goes (default: the index the
-                        bot reads: knowledge.index or $LANCEDB_PATH, else the
+                        bot reads: knowledge.index or $INDEX_PATH, else the
                         persona's index/ in the data home)
   --persona PERSONA     Persona whose transcripts to read (default: the active
                         persona)

@@ -14,23 +14,26 @@ Cloud — the bot runs behind your own reverse proxy.
 | LLM | [OpenRouter](https://openrouter.ai/) (`~google/gemini-flash-latest`) |
 | TTS | [Fish Audio](https://fish.audio/app/) (`drama-3`, WebSocket) |
 | Transport | SmallWebRTC, relayed through [Cloudflare TURN](https://developers.cloudflare.com/realtime/turn/) when configured |
-| Vector store | LanceDB (local file, embeddings via OpenRouter; [retrieval.md](retrieval.md)) |
-| Long-term memory | [Mem0](https://docs.mem0.ai/open-source)'s engine, embedded over Qdrant (optional) |
+| Vector store | Zvec (in-process local index, embeddings via OpenRouter; [retrieval.md](retrieval.md)) |
+| Long-term memory | [Mem0](https://docs.mem0.ai/open-source)'s engine, embedded over local Zvec (optional) |
 
 Model IDs above are defaults declared in [`.env.example`](../.env.example). Any persona can fill a
 role with another provider from `packages/providers` ([providers.md](providers.md)). Mem0, the
-reranker, the retrieval gate, and both LanceDB indexes degrade quietly when missing, so a fresh
+reranker, the retrieval gate, and both Zvec indexes degrade quietly when missing, so a fresh
 checkout boots without them.
 
 ```bash
 pnpm install
 cp .env.example .env          # fill in SONIOX_API_KEY, OPENROUTER_API_KEY, FISH_API_KEY, FISH_VOICE_ID...
-docker compose up -d qdrant   # optional: backs long-term memory (set MEM0_QDRANT_HOST=localhost)
+                              # optional: set MEM0_ENABLED=true to enable local viewer memory
 pnpm dev                      # watch mode on :7860 (--port to move it); `pnpm start` without watch
 ```
 
-Mem0 is a library inside the bot process, not a separate service — only Qdrant needs its own
-container, and leaving `MEM0_QDRANT_HOST` blank switches memory off cleanly.
+Mem0 runs in-process over a local Zvec collection (`MEM0_DIR`, default `<data home>/mem0/vectors`)
+with no external vector database container. Set `MEM0_ENABLED=true` to turn viewer memory on and
+`MEM0_ENABLED=false` to turn it off explicitly; leaving `MEM0_ENABLED` blank also keeps memory off
+unless a legacy `MEM0_QDRANT_HOST` is set (in which case the first boot migrates existing Qdrant
+points matching `EMBED_DIM` into Zvec).
 
 The production bot serves no UI. LAPLACE's `/ai` page accepts a custom backend URL such as
 `http://localhost:7860`, while the local web app (`pnpm app`) is a separate entry point
@@ -41,11 +44,11 @@ The production bot serves no UI. LAPLACE's `/ai` page accepts a custom backend U
 
 CI publishes `ghcr.io/laplace-live/eidolon` from `apps/bot/Dockerfile`, tagged `edge`, `sha-…`,
 and per release `X.Y.Z`, `X.Y`, and `X`. It listens on port `7860`, reads `.env`, mounts the
-persona data home at `/data` (`EIDOLON_HOME=/data`), and writes Mem0's change log to
-`/data/mem0/history.db` unless `MEM0_HISTORY_DB_PATH` overrides it (the `bot-ts` compose service
-points `MEM0_HISTORY_DB_PATH` at `/var/lib/eidolon/mem0/history.db` on its own volume beside a
-read-only `/data` mount, and publishes port `7861` → `7860`). To build and run `bot-ts` locally
-from this checkout:
+persona data home at `/data` (`EIDOLON_HOME=/data`), and writes Mem0's vectors and change log to
+`/data/mem0/vectors` and `/data/mem0/history.db` unless `MEM0_DIR` / `MEM0_HISTORY_DB_PATH`
+override them (the `bot-ts` compose service points both at `/var/lib/eidolon/mem0` on its own
+writable volume beside a read-only `/data` mount, defaults `MEM0_ENABLED` to `${MEM0_ENABLED:-true}`,
+and publishes port `7861` → `7860`). To build and run `bot-ts` locally from this checkout:
 
 ```bash
 docker compose --profile ts up --build bot-ts
@@ -90,8 +93,8 @@ Access is anonymous by default and rate-limited per client IP
 (`EIDOLON_MCP_ANON_RATE_LIMIT_PER_HOUR`, default 20/h). Sending the same `loginSyncToken` used on
 WebRTC offers as `Authorization: Bearer <token>` switches rate-limiting to per-Bilibili-UID at a
 higher ceiling (`EIDOLON_MCP_AUTH_RATE_LIMIT_PER_HOUR`, default 120/h) — it raises throughput only
-and unlocks no private data. Both tools return an empty result with a `note` when their LanceDB
-table is absent.
+and unlocks no private data. Both tools return an empty result with a `note` when their Zvec table
+is absent.
 
 Behind a reverse proxy, set `EIDOLON_MCP_ALLOWED_HOSTS` to your public domain(s) for DNS-rebinding
 Host validation, and pass `POST /mcp` through unbuffered.
@@ -107,13 +110,13 @@ Host validation, and pass `POST /mcp` through unbuffered.
 - **Anonymous viewers skip Mem0 entirely** rather than sharing a `default-user` bucket where their
   memories would cross-pollute every other conversation.
 - **Mem0 is self-hosted and runs embedded, not as a service.** `packages/memory` is Eidolon's own
-  engine over Qdrant, writing mem0 payloads and `history.db`; no mem0 platform client reaches it.
-  Every caller (`createMemoryProvider`, `createMemoryAdmin`) builds its engine from
-  `buildMemoryConfig()`.
-- **Live Mem0 check:** Unit tests fake Qdrant and both model calls, so after changing
-  `packages/memory` or `/api/memories` (`apps/bot/src/memory-admin.ts`), start Qdrant with
-  `docker compose up -d qdrant` and round-trip a real `add` → `search` → `deleteAll` through
-  `openMemoryEngine(buildMemoryConfig())` (requires an embedding key and an LLM key).
+  engine over in-process Zvec (`MEM0_DIR`, default `<data home>/mem0/vectors`), writing mem0
+  payloads and `history.db`; no mem0 platform client reaches it. Every caller
+  (`createMemoryProvider`, `createMemoryAdmin`) builds its engine from `buildMemoryConfig()`.
+- **Live Mem0 check:** Unit tests exercise Zvec in-process and fake both model calls; when changing
+  the extraction prompt or embedding call in `packages/memory`, round-trip a real `add` → `search`
+  → `deleteAll` through `openMemoryEngine(buildMemoryConfig())` on a temporary `MEM0_DIR` and
+  `MEM0_HISTORY_DB_PATH` (requires an embedding key and an LLM key).
 
 ## Production checklist
 
@@ -128,9 +131,9 @@ Host validation, and pass `POST /mcp` through unbuffered.
   every caller shares the proxy's single IP quota.
 - **CORS:** `PIPECAT_ALLOWED_ORIGINS` accepts a comma-separated allowlist for the TypeScript bot;
   blank allows every origin.
-- **Persistent state and persona mounts:** Keep Qdrant's storage volume across restarts, mount a
-  writable volume for `MEM0_HISTORY_DB_PATH` if `/data` is read-only, and sync each persona's
-  `index/` and `references/friends/` per [personas.md](personas.md#deploying-a-persona).
+- **Persistent state and persona mounts:** Mount a writable volume for `MEM0_DIR` and
+  `MEM0_HISTORY_DB_PATH` if `/data` is mounted read-only, and sync each persona's `index/` and
+  `references/friends/` per [personas.md](personas.md#deploying-a-persona).
 - **Watchtower deploys:** Every push to `master` not ignored by `docker.yml` rebuilds `:edge`, and
   Watchtower restarts production from it, dropping active calls. Merge production-facing changes at
   quiet hours.

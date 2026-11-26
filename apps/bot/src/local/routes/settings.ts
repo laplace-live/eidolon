@@ -2,11 +2,13 @@
 // settings.yaml or a persona's own persona.yaml. A persona path setting must stay inside her
 // folder, and sources.ytDlp is never written here: either would let a page read files or run a
 // binary.
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import {
   accountProvider,
   activePersona,
   assistantSettings,
+  dataHome,
   envOverride,
   envVariable,
   envVariablesStartingWith,
@@ -61,7 +63,18 @@ function environmentValue(
   layers: SettingsLayers,
 ): { value: string; name: string } | null {
   const own = envVariable(field.env);
-  if (own !== undefined) return { value: own, name: field.env };
+  if (own !== undefined && (field.env !== "MEM0_ENABLED" || pyStrip(own) !== "")) {
+    return { value: own, name: field.env };
+  }
+  if (field.env === "MEM0_ENABLED") {
+    return pyStrip(envVariable("MEM0_QDRANT_HOST") ?? "") !== ""
+      ? { value: "true", name: "MEM0_QDRANT_HOST" }
+      : null;
+  }
+  if (field.env === "INDEX_PATH") {
+    const value = envVariable("LANCEDB_PATH");
+    return value === undefined ? null : { value, name: "LANCEDB_PATH" };
+  }
   const legacy = field.legacy;
   if (legacy === undefined || field.provider === undefined) return null;
   const provider = layeredValue(layers, field.provider) ?? PROVIDER_DEFAULTS.get(field.provider);
@@ -347,9 +360,35 @@ export function settingsRoutes(
         if (changes.length === 0) return localJson(200, settingsOf(app, persona));
 
         const dropStyles = scope === "persona" && dropsVoiceStyles(changes, persona);
+        const touchedMemoryEnabled =
+          scope === "app" && changes.some(([field]) => field.path === "memory.enabled");
+        const clearedMemoryEnabled =
+          scope === "app" &&
+          changes.some(([field, value]) => field.path === "memory.enabled" && value === null);
         const edit = (tree: Record<string, unknown>) => {
           for (const [field, value] of changes) setDotted(tree, field.path, value);
           if (dropStyles) setDotted(tree, "voice.styles", null);
+          if (touchedMemoryEnabled) {
+            const memObj = isPlainObject(tree.memory) ? tree.memory : {};
+            const resolveHomePath = (raw: string) => {
+              const expanded = expandUser(raw);
+              return resolve(dataHome(), expanded);
+            };
+            const historyDb =
+              envOverride("MEM0_HISTORY_DB_PATH") ??
+              (typeof memObj.historyDb === "string" && memObj.historyDb.trim()
+                ? resolveHomePath(memObj.historyDb.trim())
+                : join(dataHome(), "mem0", "history.db"));
+            const envDir = envOverride("MEM0_DIR");
+            const vectorsDir =
+              envDir !== undefined
+                ? expandUser(envDir)
+                : typeof memObj.dir === "string" && memObj.dir.trim()
+                  ? resolveHomePath(memObj.dir.trim())
+                  : join(dirname(historyDb), "vectors");
+            const migrated = existsSync(join(resolve(vectorsDir), ".qdrant-migrated"));
+            if (clearedMemoryEnabled || migrated) setDotted(tree, "memory.qdrant", null);
+          }
         };
         // ASSISTANT_ENABLED in the environment outlasts the file: only what takes effect is news.
         const wasEnabled = assistantSettings().enabled;

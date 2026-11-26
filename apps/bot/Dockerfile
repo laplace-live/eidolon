@@ -46,25 +46,13 @@ COPY packages/webrtc/package.json packages/webrtc/
 # linux/x64, and the CPU binaries already ship in the tarball.
 #
 # --filter skips the browser SDK's dependencies (its manifest is still checked against
-# pnpm-lock.yaml). The prune removes what the bot never loads. LanceDB's optional
-# @huggingface/transformers (with a second onnxruntime-node, onnxruntime-web and an older sharp and
-# its libvips, matched below by version) is imported only by LanceDB's own embedding functions,
-# while the bot's own sharp stays; typescript is a types-only peer of @qdrant/js-client-rest;
-# onnxruntime-node bundles every platform's binaries.
+# pnpm-lock.yaml). The prune removes the non-Linux and other-arch binaries onnxruntime-node bundles.
 ARG TARGETARCH
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod --ignore-scripts --store-dir /pnpm/store \
       --filter '!@laplace.live/eidolon-sdk' \
  && ORT="$(echo node_modules/.pnpm/onnxruntime-node@1.30.*/node_modules/onnxruntime-node/bin/napi-v6)" \
- && rm -rf node_modules/.pnpm/@huggingface+transformers@* \
-           node_modules/.pnpm/onnxruntime-node@1.19.* \
-           node_modules/.pnpm/onnxruntime-web@* \
-           node_modules/.pnpm/sharp@0.33.* \
-           node_modules/.pnpm/@img+sharp-*@0.33.* \
-           node_modules/.pnpm/@img+sharp-libvips-*@1.0.* \
-           node_modules/.pnpm/typescript@* \
-           node_modules/.pnpm/@typescript+typescript-* \
-           "$ORT/darwin" "$ORT/win32" \
+ && rm -rf "$ORT/darwin" "$ORT/win32" \
            "$ORT/linux/$(if [ "$TARGETARCH" = arm64 ]; then echo x64; else echo arm64; fi)"
 
 FROM node:24-slim

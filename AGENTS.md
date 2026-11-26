@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 ## What this is
 
-`laplace-eidolon` is a personal assistant with a streamer role-play persona. In production (`ghcr.io/laplace-live/eidolon`), she chats and takes self-hosted SmallWebRTC calls (no Daily, telephony, or Pipecat Cloud) using Soniox, OpenRouter, and Fish Audio by default, plus optional Mem0 over Qdrant and LanceDB RAG indexes built offline (`packages/ingest`, `apps/cli`). On the owner's computer, the local app (`apps/bot/src/local`, `apps/web`), npm package (`@laplace.live/eidolon`), and Electron desktop app (`LAPLACE Eidolon`, `apps/desktop`) also run assistant tasks that edit files, search/read the web, and run approved commands ([assistant.md](docs/assistant.md)). All active code is TypeScript on Node 24.
+`laplace-eidolon` is a personal assistant with a streamer role-play persona. In production (`ghcr.io/laplace-live/eidolon`), she chats and takes self-hosted SmallWebRTC calls (no Daily, telephony, or Pipecat Cloud) using Soniox, OpenRouter, and Fish Audio by default, plus optional in-process Mem0 and Zvec RAG indexes built offline (`packages/ingest`, `apps/cli`). On the owner's computer, the local app (`apps/bot/src/local`, `apps/web`), npm package (`@laplace.live/eidolon`), and Electron desktop app (`LAPLACE Eidolon`, `apps/desktop`) also run assistant tasks that edit files, search/read the web, and run approved commands ([assistant.md](docs/assistant.md)). All active code is TypeScript on Node 24.
 
 ## Repository layout
 
@@ -82,7 +82,7 @@ Match the gate to what you touched; don't reflexively run paid or full-stack sui
 - **`packages/assistant`, `runTask`, `laplace-task`** → `pnpm test packages/assistant packages/engine apps/cli/test/task.test.ts`, plus `pnpm review-decisions` if changing `review.ts` (billed ~$0.002), and one billed `laplace-task` run if changing task behavior ([assistant.md](docs/assistant.md#laplace-task)).
 - **Voice loop / transport / `packages/runtime`** → `pnpm test packages/voice packages/webrtc packages/runtime`, then billed `e2e-call.ts` + `e2e-compare.ts` ([voice-engine.md](docs/voice-engine.md#real-calls)).
 - **Retrieval / offline ingest / `packages/retrieval` write side** → `pnpm laplace-eval-retrieval --compare ...` ([retrieval.md](docs/retrieval.md#evaluation)), re-run both ingests if changing embeddings, and run `EIDOLON_REQUIRE_PARITY=1 pnpm test` on the `*_real.test.ts` suites ([typescript.md](docs/typescript.md#real-data-tests)).
-- **Gate / director / `prompt.md` markup / selfies / Mem0** → `pnpm gate-decisions`; run `pnpm director-decisions` for director question or state changes (`node docs/benchmarks/2026-11-10-director/score.ts --cached --check` only after threshold or label edits); live `e2e-call.ts` for markup ([personas.md](docs/personas.md#prompt-and-code-rules)); `pnpm laplace-generate-image` for selfies ([selfies.md](docs/selfies.md)); live Qdrant round-trip for `packages/memory` ([self-hosting.md](docs/self-hosting.md#identity-quotas-and-mem0)).
+- **Gate / director / `prompt.md` markup / selfies / Mem0** → `pnpm gate-decisions`; run `pnpm director-decisions` for director question or state changes (`node docs/benchmarks/2026-11-10-director/score.ts --cached --check` only after threshold or label edits); live `e2e-call.ts` for markup ([personas.md](docs/personas.md#prompt-and-code-rules)); `pnpm laplace-generate-image` for selfies ([selfies.md](docs/selfies.md)); in-process Zvec round-trip for `packages/memory` ([self-hosting.md](docs/self-hosting.md#identity-quotas-and-mem0)).
 
 ## Rules
 

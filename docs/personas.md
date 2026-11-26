@@ -19,10 +19,10 @@ personas/<id>/
   index/                what the ingests build; derived, rebuildable, never edited
 ```
 
-`index/` holds the two LanceDB tables (`stream_chunks.lance`, `persona_facts.lance`),
+`index/` holds the two Zvec tables (`stream_chunks.zvec`, `persona_facts.zvec`),
 `stream_catalog.json`, and beside each table a `<table>.meta.json` recording what built it: the
 embedding model and dimension, the row count, when, and each source file's size and modification
-time.
+time. Any earlier `*.lance` and `__manifest` folders in `index/` stay untouched beside them.
 
 Two copies of that folder exist. The repository ships each persona's template under `personas/`,
 and the user keeps their own under `<data home>/personas/<id>/`. Every file resolves from the
@@ -236,7 +236,7 @@ is unset, and the other providers use `transcription.language`, else `zh`.
 | `memory.runId` | `MEM0_RUN_ID` | string | Mem0 run id |
 | `memory.provider` | `MEM0_LLM_PROVIDER` | string | Memory extraction provider |
 | `memory.model` | `MEM0_LLM_MODEL` | string | Memory extraction model |
-| `knowledge.index` | `LANCEDB_PATH` | path | Knowledge index |
+| `knowledge.index` | `INDEX_PATH` | path | Knowledge index |
 | `knowledge.factsCandidates` | `PERSONA_FACTS_CANDIDATES` | int | Fact candidates |
 | `knowledge.archiveCandidates` | `STREAM_ARCHIVE_CANDIDATES` | int | Stream candidates |
 | `knowledge.rerank.enabled` | `RERANK_ENABLED` | flag | Rerank results |
@@ -340,9 +340,8 @@ The install's settings, for every persona. Paths resolve in the data home.
 | `mcp.authRateLimitPerHour` | `EIDOLON_MCP_AUTH_RATE_LIMIT_PER_HOUR` | int | MCP logged-in calls per window |
 | `mcp.rateLimitWindowSec` | `EIDOLON_MCP_RATE_LIMIT_WINDOW_SEC` | int | MCP window seconds |
 | `mcp.allowedHosts` | `EIDOLON_MCP_ALLOWED_HOSTS` | list | MCP allowed hosts |
-| `memory.qdrant.host` | `MEM0_QDRANT_HOST` | string | Qdrant host |
-| `memory.qdrant.port` | `MEM0_QDRANT_PORT` | int | Qdrant port |
-| `memory.qdrant.collection` | `MEM0_QDRANT_COLLECTION` | string | Qdrant collection |
+| `memory.enabled` | `MEM0_ENABLED` | flag | Viewer memory |
+| `memory.dir` | `MEM0_DIR` | path | Memory vector store |
 | `memory.historyDb` | `MEM0_HISTORY_DB_PATH` | path | Mem0 history database |
 | `providers.openrouter.apiBase` | `OPENROUTER_API_BASE` | string | OpenRouter API base |
 | `providers.openrouter.appName` | `OPENROUTER_APP_NAME` | string | OpenRouter app name |
@@ -455,11 +454,13 @@ Copy the first time, and again after every re-ingest:
 ssh <host> mkdir -p "<mounted path>/personas/<id>/references"
 for folder in index references/friends; do
   rsync -a --checksum --delete-after --delay-updates \
+    --exclude '*.lance/' --exclude '__manifest/' \
     "<data home>/personas/<id>/$folder/" "<host>:<mounted path>/personas/<id>/$folder/"
 done
 
 # a persona of your own
-rsync -a --checksum --delete-after --delay-updates --exclude models/ \
+rsync -a --checksum --delete-after --delay-updates \
+  --exclude models/ --exclude '*.lance/' --exclude '__manifest/' \
   <data home>/personas/<id>/ <host>:<mounted path>/personas/<id>/
 ```
 
@@ -467,12 +468,14 @@ The bot keeps serving calls through the copy and picks up the new tables without
 long as the command keeps all three options:
 
 - `--delay-updates` holds the new files back until the transfer ends. Without it, a call that
-  starts mid-transfer can open a new manifest whose data hasn't arrived, and gets no recall.
-- `--delete-after` removes the old files last. A search still holding an old table then fails on
-  a missing file and reopens the new one, logging a "hit stale table" warning. Without it,
-  long-lived handles such as the MCP server's keep serving the old tables until a restart.
-- `--checksum`, because a re-ingest writes the same manifest file names again, and rsync's default
-  check (size, and modification time to the second) can skip a changed one.
+  starts mid-transfer can see an updated `CURRENT` pointer before the new `<buildId>` files have
+  finished arriving.
+- `--delete-after` removes the old `<buildId>` folders last. A search still holding an old build
+  keeps reading it until `CURRENT` advances and the retriever reopens the new build, logging a "hit
+  stale table" warning.
+- `--checksum`, because a re-ingest overwrites `CURRENT`, `<table>.meta.json`, and
+  `stream_catalog.json` in place, and rsync's default check (size, and modification time to the
+  second) can skip a changed one.
 
 `--delete-after` makes the server's folder match yours, so preview with `--dry-run` first: an
 empty or mistyped source folder would empty the server's.

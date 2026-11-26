@@ -775,8 +775,8 @@ describe("provider error text", () => {
 });
 
 describe("open()", () => {
-  test("an empty LanceDB directory gives providers that never search or offer the tool", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "eidolon-lancedb-"));
+  test("an empty index directory gives providers that never search or offer the tool", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eidolon-zvec-"));
     const archive = await StreamArchive.open({ dbPath: dir, timeZone: "UTC" });
     expect(await archive.recallTool()).toBeNull();
     const facts = await PersonaFacts.open({ dbPath: dir });

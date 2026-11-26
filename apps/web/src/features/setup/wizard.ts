@@ -80,14 +80,20 @@ export function inheritedValue(
 }
 
 /**
- * Whether a flag row is on: her file's value, else the environment's, else `fallback`, as the
- * bot reads it.
+ * Whether a flag row is on: the environment's value when it overrides an app row, else her file's
+ * value, else the environment's, else `fallback`, as the bot reads it.
  */
 export function flagOn(
-  row: Pick<SettingRow, "value" | "envValue"> | undefined,
+  row:
+    | (Pick<SettingRow, "value" | "envValue"> & Partial<Pick<SettingRow, "envOverride">>)
+    | undefined,
   fallback: boolean,
 ): boolean {
   const control = { type: "flag" } as const;
+  if (row?.envOverride) {
+    const env = draftOf(row.envValue, control);
+    return env === "" ? fallback : env === "on";
+  }
   const own = draftOf(row?.value ?? null, control);
   const set = own === "" ? draftOf(row?.envValue ?? null, control) : own;
   return set === "" ? fallback : set === "on";
@@ -254,53 +260,14 @@ export function createRequest(draft: PersonaDraft, voiceId: string): CreatePerso
   };
 }
 
-export const QDRANT_IMAGE = "qdrant/qdrant:v1.19.1";
-export const QDRANT_HOST = "127.0.0.1";
-export const QDRANT_PORT = 6333;
-
-export interface QdrantAddress {
-  readonly host: string;
-  readonly port: number;
-}
-
-/** The address settings.yaml gives memory, as the step shows it; null when it names no host. */
-export function savedQdrant(host: unknown, port: unknown): QdrantAddress | null {
-  if (typeof host !== "string" || host.trim() === "") return null;
-  return { host: host.trim(), port: typeof port === "number" ? port : QDRANT_PORT };
-}
-
 export interface MemoryStepState {
-  /** Memory answers: checked on this visit, or by the last status. */
+  /** Memory is enabled: turned on during this visit, in settings.yaml, or by status. */
   readonly on: boolean;
-  /** The environment sets the address, so the fields can't change it. */
+  /** The environment sets MEM0_ENABLED, so the step can't change it. */
   readonly fromEnv: boolean;
-  /** Where memory runs: what this visit saved, else what settings.yaml holds. */
-  readonly saved: QdrantAddress | null;
-  /** The fields' address; null while the port doesn't parse. */
-  readonly typed: QdrantAddress | null;
 }
 
-/**
- * What the memory step offers: going on while memory is on at the address shown, else checking
- * the typed address and saving it, which a changed address needs again once memory is on.
- */
-export function memoryStepAction({ on, fromEnv, saved, typed }: MemoryStepState): "next" | "check" {
-  if (!on) return "check";
-  if (fromEnv) return "next";
-  const same =
-    saved !== null && typed !== null && saved.host === typed.host && saved.port === typed.port;
-  return same ? "next" : "check";
+/** What the memory step offers: continuing once memory is on or locked by env, else turning it on. */
+export function memoryStepAction({ on, fromEnv }: MemoryStepState): "next" | "turn-on" {
+  return on || fromEnv ? "next" : "turn-on";
 }
-
-/**
- * Qdrant has no auth, so it publishes on loopback only, with CORS off so no web page can reach
- * it; a named volume keeps the memories across container upgrades.
- */
-export const QDRANT_COMMAND = [
-  "docker run -d --name eidolon-qdrant --restart unless-stopped",
-  `-p ${QDRANT_HOST}:${QDRANT_PORT}:6333`,
-  "-v eidolon-qdrant:/qdrant/storage",
-  "-e QDRANT__SERVICE__ENABLE_CORS=false",
-  "-e QDRANT__TELEMETRY_DISABLED=true",
-  QDRANT_IMAGE,
-].join(" ");

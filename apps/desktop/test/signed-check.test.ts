@@ -23,7 +23,7 @@ import {
 } from "../scripts/signed-check.ts";
 
 const APP = "/Users/runner/work/eidolon/eidolon/apps/desktop/.out/mac-arm64/LAPLACE Eidolon.app";
-const NATIVE = `${APP}/Contents/Resources/eidolon/node_modules/@lancedb/lancedb-darwin-arm64/lancedb.darwin-arm64.node`;
+const NATIVE = `${APP}/Contents/Resources/eidolon/node_modules/@zvec/bindings-darwin-arm64/zvec_node_binding.node`;
 const ORG_REQUIREMENT =
   'designated => anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and (certificate leaf[subject.OU] = B5483RCL5H or certificate leaf[subject.OU] = "9H3CCD4YMM")';
 
@@ -58,7 +58,7 @@ Chosen signature=1
 
 /** `codesign -dvvv` of one of the payload's natives, as the same build signed it. */
 const NATIVE_SIGNATURE = `Executable=${NATIVE}
-Identifier=lancedb.darwin-arm64
+Identifier=zvec_node_binding
 Format=Mach-O thin (arm64)
 CodeDirectory v=20500 size=508645 flags=0x10000(runtime) hashes=15889+2 location=embedded
 Hash type=sha256 size=32
@@ -84,7 +84,7 @@ Chosen signature=1
 
 /** The same native in an unsigned build, signed ad hoc by -c.mac.identity=-. */
 const AD_HOC_NATIVE = `Executable=${NATIVE}
-Identifier=lancedb.darwin-arm64
+Identifier=zvec_node_binding
 Format=Mach-O thin (arm64)
 CodeDirectory v=20500 size=508629 flags=0x10002(adhoc,runtime) hashes=15889+2 location=embedded
 Hash type=sha256 size=32
@@ -131,7 +131,7 @@ describe("macOS", () => {
   });
 
   test("passes a native with the hardened runtime and a secure timestamp", () => {
-    expect(nativeCheck("lancedb.darwin-arm64.node", ok(NATIVE_SIGNATURE))).toMatchObject({
+    expect(nativeCheck("zvec_node_binding.node", ok(NATIVE_SIGNATURE))).toMatchObject({
       pass: true,
     });
   });
@@ -145,9 +145,9 @@ describe("macOS", () => {
       ["unsigned", { status: 1, output: `${NATIVE}: code object is not signed at all\n` }],
     ];
     for (const [why, run] of failing) {
-      expect([why, nativeCheck("lancedb.darwin-arm64.node", run).pass]).toEqual([why, false]);
+      expect([why, nativeCheck("zvec_node_binding.node", run).pass]).toEqual([why, false]);
     }
-    expect(nativeCheck("lancedb.darwin-arm64.node", ok(AD_HOC_NATIVE)).detail).toContain(
+    expect(nativeCheck("zvec_node_binding.node", ok(AD_HOC_NATIVE)).detail).toContain(
       "no secure timestamp",
     );
   });
@@ -238,19 +238,19 @@ const INSTALL = "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\eidolon";
 const SETUP = "D:\\a\\eidolon\\eidolon\\apps\\desktop\\.out\\LAPLACE Eidolon Setup 0.1.0.exe";
 const MODULES = `${INSTALL}\\resources\\eidolon\\node_modules`;
 const ORT = `${MODULES}\\onnxruntime-node\\bin\\napi-v6\\win32\\x64`;
-const LANCEDB = `${MODULES}\\@lancedb\\lancedb-win32-x64-msvc`;
+const ZVEC = `${MODULES}\\@zvec\\bindings-win32-x64`;
 const SHARP = `${MODULES}\\@img\\sharp-win32-x64\\lib`;
 /** The stage's unsigned-pe.json: Electron's unsigned DLLs and the payload's. */
 const LISTED = [
   "LAPLACE Eidolon_wer.dll",
   "dxcompiler.dll",
   "ffmpeg.dll",
-  "lancedb.win32-x64-msvc.node",
   "libvips-42.dll",
   "libvips-cpp-8.18.7.dll",
   "sharp-win32-x64.node",
   "vk_swiftshader.dll",
   "vulkan-1.dll",
+  "zvec_node_binding.node",
 ];
 const PUBLISHERS = ["Sparanoid, Inc.", "LAPLACE Live LLC"];
 const TIMESTAMPER = "Microsoft Public RSA Time Stamping Authority";
@@ -290,8 +290,7 @@ const SIGNED: Authenticode[] = [
     "vcruntime140.dll",
     "vcruntime140_1.dll",
   ].map((name) => signature(`${ORT}\\${name}`, VC_RUNTIME_SIGNER)),
-  signature(`${LANCEDB}\\lancedb.win32-x64-msvc.node`, "LAPLACE Live LLC"),
-  signature(`${LANCEDB}\\vcruntime140.dll`, VC_RUNTIME_SIGNER),
+  signature(`${ZVEC}\\zvec_node_binding.node`, "LAPLACE Live LLC"),
   ...["sharp-win32-x64.node", "libvips-42.dll", "libvips-cpp-8.18.7.dll"].map((name) =>
     signature(`${SHARP}\\${name}`, "LAPLACE Live LLC"),
   ),
@@ -348,12 +347,12 @@ describe("Windows", () => {
     );
     expect(
       failures(
-        replacing("lancedb.win32-x64-msvc.node", (path) =>
+        replacing("zvec_node_binding.node", (path) =>
           signature(path, "LAPLACE Live LLC", "HashMismatch"),
         ),
       ),
     ).toEqual([
-      "resources\\eidolon\\node_modules\\@lancedb\\lancedb-win32-x64-msvc\\lancedb.win32-x64-msvc.node is signed by the org",
+      "resources\\eidolon\\node_modules\\@zvec\\bindings-win32-x64\\zvec_node_binding.node is signed by the org",
     ]);
   });
 

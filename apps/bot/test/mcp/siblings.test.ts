@@ -16,7 +16,7 @@ isolateEnv();
 
 test("default retrievers over a missing db answer the notes", async () => {
   const handler = await createMcpHandler({
-    dbPath: "/nonexistent/lancedb",
+    dbPath: "/nonexistent/index",
     anonQuota: new SlidingWindowQuota(5, 3600),
     authQuota: new SlidingWindowQuota(5, 3600),
   });

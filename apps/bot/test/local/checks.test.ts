@@ -6,15 +6,8 @@ import { join } from "node:path";
 import { dataHome, installSettings, resetSettings } from "@eidolon/config";
 import type { MemoryAdmin } from "@eidolon/memory";
 import { afterEach, describe, expect, test } from "vitest";
-import memoryManifest from "../../../../packages/memory/package.json" with { type: "json" };
 import type { CheckProvider, CheckResult } from "../../src/local/api.ts";
-import {
-  type CheckDeps,
-  type CheckOutcome,
-  checkProvider,
-  parseQdrantAddress,
-  QDRANT_CLIENT_VERSION,
-} from "../../src/local/checks.ts";
+import { type CheckDeps, type CheckOutcome, checkProvider } from "../../src/local/checks.ts";
 import type { LocalApp } from "../../src/local/router.ts";
 import { credentialsRoutes } from "../../src/local/routes/credentials.ts";
 import { buildStatus } from "../../src/local/status.ts";
@@ -472,76 +465,6 @@ describe("embeddings, rerank and refine", () => {
       { OPENROUTER_API_KEY: "k" },
     );
     expect(verdict(outcome.result)).toEqual([true, "ok", []]);
-  });
-});
-
-const ROOT = "GET http://127.0.0.1:6333/";
-const COLLECTIONS = "GET http://127.0.0.1:6333/collections";
-const qdrantRoot = (version: string, title = "qdrant - vector search engine") =>
-  json(200, { title, version, commit: "abc" });
-
-describe("qdrant", () => {
-  test("names itself at /, then lists collections without a key", async () => {
-    const outcome = await check(
-      "qdrant",
-      { [ROOT]: qdrantRoot("1.19.1"), [COLLECTIONS]: json(200, { result: { collections: [] } }) },
-      {},
-      "127.0.0.1:6333",
-    );
-    expect(verdict(outcome.result)).toEqual([true, "ok", []]);
-    expect(outcome.qdrant).toEqual({ host: "127.0.0.1", port: 6333, ok: true });
-    expect(outcome.sent.every((s) => s.authorization === null)).toBe(true);
-  });
-
-  test("reads the saved host and port when nothing is typed, and needs a host", async () => {
-    const outcome = await check(
-      "qdrant",
-      {
-        "GET http://localhost:6334/": qdrantRoot("1.19.1"),
-        "GET http://localhost:6334/collections": json(200, {}),
-      },
-      { MEM0_QDRANT_HOST: " localhost ", MEM0_QDRANT_PORT: "6334" },
-    );
-    expect(verdict(outcome.result)).toEqual([true, "ok", []]);
-    const missing = await check("qdrant", {});
-    expect(verdict(missing.result)).toEqual([false, "missing", []]);
-  });
-
-  test("a version more than one minor from the client warns", async () => {
-    const outcome = await check(
-      "qdrant",
-      { [ROOT]: qdrantRoot("1.22.0"), [COLLECTIONS]: json(200, {}) },
-      {},
-      "127.0.0.1",
-    );
-    expect(verdict(outcome.result)).toEqual([true, "ok", ["version-mismatch"]]);
-  });
-
-  test("not Qdrant, still starting, wanting a key, or nothing there", async () => {
-    for (const [replies, code] of [
-      [{ [ROOT]: qdrantRoot("1.19.1", "something else") }, "not-qdrant"],
-      [{ [ROOT]: json(404, {}) }, "not-qdrant"],
-      [{ [ROOT]: json(503, {}) }, "starting"],
-      [{ [ROOT]: qdrantRoot("1.19.1"), [COLLECTIONS]: json(401, {}) }, "needs-api-key"],
-      [{ [ROOT]: qdrantRoot("1.19.1"), [COLLECTIONS]: json(403, {}) }, "needs-api-key"],
-      [{ [ROOT]: qdrantRoot("1.19.1"), [COLLECTIONS]: json(503, {}) }, "starting"],
-      [{}, "unreachable"],
-    ] as const) {
-      const outcome = await check("qdrant", replies, {}, "127.0.0.1:6333");
-      expect([code, outcome.result.ok, outcome.result.code]).toEqual([code, false, code]);
-    }
-  });
-
-  test("a typed address must be a host or host:port", async () => {
-    const outcome = await check("qdrant", {}, {}, "http://127.0.0.1:6333/path");
-    expect(verdict(outcome.result)).toEqual([false, "unexpected", []]);
-    expect(parseQdrantAddress("[::1]:7000", 6333)).toEqual({ host: "::1", port: 7000 });
-    expect(parseQdrantAddress("qdrant", 6333)).toEqual({ host: "qdrant", port: 6333 });
-    expect(parseQdrantAddress("x:70000", 6333)).toBeNull();
-  });
-
-  test("the client version matches the one packages/memory pins", () => {
-    expect(memoryManifest.dependencies["@qdrant/js-client-rest"]).toBe(QDRANT_CLIENT_VERSION);
   });
 });
 

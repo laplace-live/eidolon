@@ -1,6 +1,6 @@
-// Jev decides once per user turn whether the LanceDB tiers search at all. Both RAG providers race
-// their search against that decision through unlessSkipped, so it may cancel a search but never
-// delays one.
+// Jev decides once per user turn whether the Zvec knowledge tiers search at all. Both RAG providers
+// race their search against that decision through unlessSkipped, so it may cancel a search but
+// never delays one.
 import {
   activePersona,
   envFlag,
@@ -153,7 +153,7 @@ export function gateState(messages: readonly unknown[]): GateState | null {
 
 /** Jev's answers for one turn. */
 export interface GateVerdict {
-  /** Whether the LanceDB tiers search at all. */
+  /** Whether the Zvec tiers search at all. */
   readonly retrieve: boolean;
   /** Whether the viewer asks when, or how often, the streamer did something. */
   readonly timeline: boolean;
@@ -285,7 +285,7 @@ export class RetrievalGate {
 /** null when the gate's key is unset, its settings name no decision model, or it is disabled. */
 export function retrievalGateFromEnv(): RetrievalGate | null {
   if (!envFlag("RETRIEVAL_GATE_ENABLED", true)) {
-    logger.info("RETRIEVAL_GATE_ENABLED is off — every turn searches both LanceDB tiers");
+    logger.info("RETRIEVAL_GATE_ENABLED is off — every turn searches both Zvec tiers");
     return null;
   }
   const decisions = gateDecisionModel({ timeoutSec: GATE_TIMEOUT_SEC }, (error) =>

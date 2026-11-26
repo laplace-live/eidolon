@@ -114,7 +114,7 @@ export function createBotApp(parts: BotAppParts): BotApp {
     // The routing hands OPTIONS to function-valued routes (/mcp) instead of the fallback.
     const preflight = access.corsPreflightResponse(request, cors);
     if (preflight) return preflight;
-    // The routing runs a GET handler for HEAD, which would mint TURN credentials or scroll Qdrant;
+    // The routing runs a GET handler for HEAD, which would mint TURN credentials or scan memories;
     // FastAPI's GET routes answer HEAD with a 405.
     if (getOnly && request.method === "HEAD") {
       return access.withCors(request, methodNotAllowed("GET"), cors);

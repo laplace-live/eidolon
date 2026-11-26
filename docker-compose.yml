@@ -35,9 +35,8 @@ services:
       # The data home: each persona's index and private references (docs/personas.md).
       - ${EIDOLON_HOME:-${HOME}/.laplace/eidolon}:/data:ro
 
-  # The TypeScript bot, beside the Python one: same .env, same Qdrant collection, its own
-  # port and Mem0 history volume. Opt-in, so `docker compose up --build` still builds and
-  # runs only the Python bot:
+  # The TypeScript bot, beside the Python one: same .env, its own port and local Zvec Mem0 volume.
+  # Opt-in, so `docker compose up --build` still builds and runs only the Python bot:
   #
   #   docker compose --profile ts up --build
   bot-ts:
@@ -48,8 +47,6 @@ services:
     image: laplace-eidolon-ts
     container_name: laplace-eidolon-ts
     restart: unless-stopped
-    depends_on:
-      - qdrant
     env_file:
       - ./.env
     ports:
@@ -57,7 +54,9 @@ services:
     environment:
       # Fixed here: a blank or host-side EIDOLON_HOME in .env would point it away from the mount.
       EIDOLON_HOME: /data
-      # Its own change log, beside the read-only data home: the two bots never share one.
+      # Its own viewer memory vectors and change log, beside the read-only data home.
+      MEM0_ENABLED: ${MEM0_ENABLED:-true}
+      MEM0_DIR: /var/lib/eidolon/mem0/vectors
       MEM0_HISTORY_DB_PATH: /var/lib/eidolon/mem0/history.db
     volumes:
       - mem0-history-ts:/var/lib/eidolon/mem0

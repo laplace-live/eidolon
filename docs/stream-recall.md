@@ -15,7 +15,7 @@ summary and source ID remains in the catalog. These are extractive, compressed
 overviews, not a claim that every moment is included in the answer.
 
 The builder reads source scenes without excluding karaoke or anime audio. Those scenes
-remain represented in the broadcast overview even though the detailed LanceDB
+remain represented in the broadcast overview even though the detailed Zvec
 index excludes them by default. Missing refinement is recorded. Missing
 archive coverage never establishes that the streamer did not broadcast.
 
@@ -40,7 +40,7 @@ to interpret or clarify.
 
 Recap questions read the matching catalog records directly and skip archive
 embedding, reranking, and persona-fact retrieval. Questions about a particular
-topic within a period use the existing `LanceRetriever` and `hybridSearch`
+topic within a period use the existing `ZvecRetriever` and `hybridSearch`
 with a metadata prefilter. Mem0 remains unchanged for logged-in
 viewers. Catalog files are cached across sessions and refresh when the file
 changes; loading runs off the audio event loop.

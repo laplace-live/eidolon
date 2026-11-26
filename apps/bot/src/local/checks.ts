@@ -1,7 +1,7 @@
 // The provider checks behind POST credentials/check. A verdict comes from the HTTP status; a body
 // is read only for the fields a check names, and the provider's own wording is never shown. Every
 // endpoint here is free: listings, key lookups and the Fish wallet, never a model call.
-import { isPlainObject, pyParseInt, pyStrip } from "@eidolon/config";
+import { isPlainObject } from "@eidolon/config";
 import {
   type KeyCheck,
   LEGACY_VOICE_ENV,
@@ -38,8 +38,6 @@ export interface CheckDeps {
 }
 
 export const CHECK_TIMEOUT_MS = 10_000;
-/** As packages/memory gives a Qdrant call. */
-export const QDRANT_TIMEOUT_MS = 5_000;
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const SONIOX_MODELS_URL = "https://api.soniox.com/v1/models";
@@ -52,10 +50,6 @@ export const FISH_MODELS: readonly string[] =
   providerById("fish")?.offers.tts?.models.map((model) => model.id) ?? [];
 const FISH_FREE_MODEL = "s2.1-pro-free";
 const FISH_DEPRECATED_MODEL = "s1";
-
-/** The @qdrant/js-client-rest pin in packages/memory/package.json, which warns past one minor. */
-export const QDRANT_CLIENT_VERSION = "1.19.0";
-const QDRANT_TITLE = "qdrant - vector search engine";
 
 const EXPIRY_WARNING_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -125,9 +119,6 @@ const MESSAGES: Readonly<Record<CheckCode, string>> = {
   "rate-limited": "The provider is busy; try again shortly",
   unreachable: "The provider didn't answer",
   unexpected: "The provider gave an answer Eidolon can't read",
-  "not-qdrant": "Something other than Qdrant answers there",
-  "needs-api-key": "This Qdrant wants an API key, which Eidolon doesn't support",
-  starting: "Qdrant is still starting; try again shortly",
 };
 
 interface Verdict {
@@ -378,70 +369,6 @@ async function checkFish(
   return { ok: true, code: "ok", warnings, credit, voice: { id: voiceId, ok: voiceOk(voice) } };
 }
 
-export const DEFAULT_QDRANT_PORT = 6333;
-
-/** The Qdrant the bot's memory uses, read as packages/memory reads it; null when memory is off. */
-export function configuredQdrant(
-  read: CheckDeps["read"],
-): { readonly host: string; readonly port: number } | null {
-  const host = pyStrip(read("MEM0_QDRANT_HOST") ?? "");
-  if (host === "") return null;
-  const raw = read("MEM0_QDRANT_PORT");
-  return { host, port: (raw === undefined ? null : pyParseInt(raw)) ?? DEFAULT_QDRANT_PORT };
-}
-
-/** `host`, `host:port`, `[v6]` or `[v6]:port`; null when it isn't one. */
-export function parseQdrantAddress(
-  value: string,
-  defaultPort: number,
-): { host: string; port: number } | null {
-  const match = /^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::(\d{1,5}))?$/.exec(value.trim());
-  if (match === null) return null;
-  const port = match[2] === undefined ? defaultPort : Number(match[2]);
-  if (port < 1 || port > 65535) return null;
-  return { host: (match[1] as string).replace(/^\[(.*)\]$/, "$1"), port };
-}
-
-function qdrantBase(host: string, port: number): string {
-  return `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
-}
-
-/** Major and minor within one of the client's. */
-function compatibleQdrant(version: string): boolean {
-  const [major, minor] = version.split(".").map(Number);
-  const [clientMajor, clientMinor] = QDRANT_CLIENT_VERSION.split(".").map(Number);
-  return major === clientMajor && Math.abs((minor ?? Number.NaN) - (clientMinor as number)) <= 1;
-}
-
-/** GET / names the server and its version; GET /collections shows whether it wants a key. */
-export async function checkQdrant(
-  deps: Pick<CheckDeps, "fetch">,
-  host: string,
-  port: number,
-): Promise<Verdict> {
-  const base = qdrantBase(host, port);
-  const root = await ask(deps, `${base}/`, { timeoutMs: QDRANT_TIMEOUT_MS });
-  if (root.status === 0) return fail("unreachable", `Nothing answers at ${host}:${port}`);
-  if (root.status === 503) return fail("starting");
-  if (root.status !== 200 || field(root.body, "title") !== QDRANT_TITLE) return fail("not-qdrant");
-  const warnings: CheckWarning[] = [];
-  const version = field(root.body, "version");
-  if (typeof version !== "string" || !compatibleQdrant(version)) {
-    warnings.push(
-      warning(
-        "version-mismatch",
-        `Qdrant ${String(version)} is more than one minor version from the client's ` +
-          `${QDRANT_CLIENT_VERSION}`,
-      ),
-    );
-  }
-  const collections = await ask(deps, `${base}/collections`, { timeoutMs: QDRANT_TIMEOUT_MS });
-  if (collections.status === 401 || collections.status === 403) return fail("needs-api-key");
-  if (collections.status === 503) return fail("starting");
-  if (collections.status !== 200) return fail(codeOf(collections.status));
-  return { ok: true, code: "ok", message: `Qdrant ${String(version)} answers`, warnings };
-}
-
 /** A role as the settings fill it now; undefined for one they leave off or name wrong. */
 function selected(role: RoleId, deps: Pick<CheckDeps, "read" | "sources">): Selection | undefined {
   return trySelect(role, deps.sources ?? deps.read) ?? undefined;
@@ -499,34 +426,14 @@ async function checkRole(
 export interface CheckOutcome {
   readonly result: CheckResult;
   readonly voice?: { readonly id: string; readonly ok: boolean | null };
-  readonly qdrant?: { readonly host: string; readonly port: number; readonly ok: boolean };
 }
 
-/**
- * Checks `provider` with `value` when given (a key typed but not saved, or a Qdrant address),
- * else with what the bot reads now.
- */
+/** Checks `provider` with `value` when given (a key typed but not saved), else with what the bot reads now. */
 export async function checkProvider(
   provider: CheckProvider,
   value: string | undefined,
   deps: CheckDeps,
 ): Promise<CheckOutcome> {
-  if (provider === "qdrant") {
-    const envOverride = deps.fromEnv("MEM0_QDRANT_HOST") || deps.fromEnv("MEM0_QDRANT_PORT");
-    const address =
-      value === undefined
-        ? configuredQdrant(deps.read)
-        : parseQdrantAddress(value, DEFAULT_QDRANT_PORT);
-    if (address === null) {
-      const verdict =
-        value === undefined
-          ? fail("missing")
-          : fail("unexpected", "That isn't a host, or host:port");
-      return { result: finish(verdict, envOverride) };
-    }
-    const verdict = await checkQdrant(deps, address.host, address.port);
-    return { result: finish(verdict, envOverride), qdrant: { ...address, ok: verdict.ok } };
-  }
   if (isRoleCheck(provider)) return checkRole(provider, value, deps);
   const entry = providerById(provider);
   const own = entry?.credential ?? null;

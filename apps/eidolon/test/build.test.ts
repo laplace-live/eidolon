@@ -28,7 +28,7 @@ import {
   packageManifest,
   stage,
 } from "../scripts/build.ts";
-import { ENTRIES, NODE_MAJOR, PLATFORMS } from "../src/launcher.ts";
+import { ENTRIES, NODE_MAJOR } from "../src/launcher.ts";
 
 const ROOT = join(import.meta.dirname, "../../..");
 const LAUNCHER = "bin/eidolon.mjs";
@@ -72,13 +72,12 @@ describe("the bundles", () => {
     );
   });
 
-  test("leave werift and apache-arrow to node_modules, one copy for the packages that share them", () => {
+  test("leave werift, libopus-wasm, Zvec and onnxruntime-node to node_modules", () => {
     const server = bundles.imports.get("dist/server.js");
-    for (const name of ["werift", "libopus-wasm", "apache-arrow", "onnxruntime-node"]) {
+    for (const name of ["werift", "libopus-wasm", "@zvec/zvec", "onnxruntime-node"]) {
       expect([name, server?.has(name)]).toEqual([name, true]);
     }
-    expect([...bundles.inlined.keys()]).toContain("@lancedb/lancedb");
-    for (const name of ["werift", "libopus-wasm", "apache-arrow", "onnxruntime-node"]) {
+    for (const name of ["werift", "libopus-wasm", "@zvec/zvec", "onnxruntime-node"]) {
       expect([name, bundles.inlined.has(name)]).toEqual([name, false]);
     }
     expect([...bundles.inlined.keys()].filter((name) => name.startsWith("@eidolon/"))).toEqual([]);
@@ -88,12 +87,10 @@ describe("the bundles", () => {
     }
   });
 
-  test("keep LanceDB's loader requiring each supported platform's binary by name", () => {
+  test("keep the server and CLI bundles importing @zvec/zvec from node_modules", () => {
     for (const file of ["dist/server.js", "dist/cli.js"]) {
       const imports = bundles.imports.get(file);
-      for (const lancedb of Object.values(PLATFORMS)) {
-        expect([file, lancedb, imports?.has(lancedb)]).toEqual([file, lancedb, true]);
-      }
+      expect([file, imports?.has("@zvec/zvec")]).toEqual([file, true]);
     }
   });
 
@@ -192,15 +189,10 @@ describe("the third-party notices", () => {
     }
   });
 
-  test("give each package the bundles inline its text, LanceDB's from SPDX", () => {
+  test("give each package the bundles inline its license text", () => {
     const dist = inlinedPackages(bundles.inlined);
-    const lancedb = dist.find((pkg) => pkg.name === "@lancedb/lancedb");
-    expect(lancedb).toMatchObject({ identifier: "Apache-2.0", text: undefined });
+    expect(dist.length).toBeGreaterThan(0);
     const text = notices(dist, []);
-    expect(text).toContain(
-      `### @lancedb/lancedb ${lancedb?.version} (Apache-2.0)\n\nThe package ships no license ` +
-        "file; this is SPDX's text of Apache-2.0",
-    );
     expect(text.match(/^### /gm)?.length).toBe(dist.length);
   });
 
@@ -260,25 +252,27 @@ describe("the published manifest", () => {
     }
   });
 
-  test("depends on the externals at the workspaces' pins, and each platform's LanceDB", () => {
+  test("depends on the externals at the workspaces' pins, and each platform's Zvec binding", () => {
     const runtime = manifestOf<{ dependencies: Record<string, string> }>("packages/runtime");
     const retrieval = manifestOf<{ dependencies: Record<string, string> }>("packages/retrieval");
+    const memory = manifestOf<{ dependencies: Record<string, string> }>("packages/memory");
     const voice = manifestOf<{ dependencies: Record<string, string> }>("packages/voice");
     const webrtc = manifestOf<{ dependencies: Record<string, string> }>("packages/webrtc");
     const bot = manifestOf<{ dependencies: Record<string, string> }>("apps/bot");
     expect(manifest.dependencies).toEqual({
-      "onnxruntime-node": voice.dependencies["onnxruntime-node"],
-      werift: webrtc.dependencies.werift,
+      "@zvec/zvec": retrieval.dependencies["@zvec/zvec"],
       "libopus-wasm": webrtc.dependencies["libopus-wasm"],
-      "apache-arrow": retrieval.dependencies["apache-arrow"],
+      "onnxruntime-node": voice.dependencies["onnxruntime-node"],
       sharp: bot.dependencies.sharp,
+      werift: webrtc.dependencies.werift,
     });
+    expect(retrieval.dependencies["@zvec/zvec"]).toBe(memory.dependencies["@zvec/zvec"]);
     expect(webrtc.dependencies.werift).toBe(runtime.dependencies.werift);
     expect(manifest.optionalDependencies).toEqual({
-      "@lancedb/lancedb-darwin-arm64": retrieval.dependencies["@lancedb/lancedb"],
-      "@lancedb/lancedb-linux-arm64-gnu": retrieval.dependencies["@lancedb/lancedb"],
-      "@lancedb/lancedb-linux-x64-gnu": retrieval.dependencies["@lancedb/lancedb"],
-      "@lancedb/lancedb-win32-x64-msvc": retrieval.dependencies["@lancedb/lancedb"],
+      "@zvec/bindings-darwin-arm64": retrieval.dependencies["@zvec/zvec"],
+      "@zvec/bindings-linux-arm64": retrieval.dependencies["@zvec/zvec"],
+      "@zvec/bindings-linux-x64": retrieval.dependencies["@zvec/zvec"],
+      "@zvec/bindings-win32-x64": retrieval.dependencies["@zvec/zvec"],
     });
   });
 });

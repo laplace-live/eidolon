@@ -199,9 +199,9 @@ aborts the turn. The engine never rejects for the turn's own failures.
      takes up as its recall scope the broadcasts her last `recall_streams` call returned, so
      `period: "selected"` still works. It doesn't when a recall block came after that call: the
      archive's own recall may have moved the scope, and the log doesn't record where.
-   - **What fails:** a missing index or an unreachable Qdrant is logged once per chat and skipped.
-     An index is tried again next turn, and Qdrant a minute later, since each try can wait out its
-     timeout.
+   - **What fails:** a missing index or a failed Mem0 store is logged once per chat and skipped.
+     An index is tried again next turn, and Mem0 a minute later after a failed open, since opening
+     it can wait out a request timeout.
    - **The system instruction** is rebuilt every turn, since it carries the clock:
      `buildSystemInstruction`, with `voicePromptHint` in a voice reply alone, and in a group the
      line naming the others ([below](#what-each-persona-sees)).
@@ -986,7 +986,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
   ([Calibrating](#calibrating)).
 - **By hand, billed:** a chat with milky-green on OpenRouter. Ask a recall question (it must call
   `recall_streams` or get archive context), and ask for a selfie, which must still show after
-  `SELFIE_TTL_SECONDS`. Run Mem0 with `docker compose up qdrant`.
+  `SELFIE_TTL_SECONDS`. Turn Mem0 on with `MEM0_ENABLED=true`.
 - **By hand, billed:** a group of two personas on OpenRouter. Its `decision` events must come
   from `mention` or `model` with scores, not `fallback`, and neither persona may write the other's
   lines.
@@ -1295,7 +1295,7 @@ The browser's side is in
   chats used last. The browser picks a chat's id, so the key adds the viewer, a logged-in one's
   mid or anyone else's client IP (`chatKey`, `mid:<mid>/<id>` or `ip:<ip>/<id>`): two viewers
   sending the same id never share recall. The signed events keep the chat's own id. With more
-  chats active than that, a turn opens the stream archive's and the facts' LanceDB tables again.
+  chats active than that, a turn opens the stream archive's and the facts' Zvec tables again.
   Measure that under load before setting the secret on the server.
 - **Files live in one process.** A second instance behind a load balancer would answer `404` for
   another's files.

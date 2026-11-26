@@ -73,7 +73,7 @@ const CARD_LABELS: Readonly<
   },
   storage: {
     title: msg`Storage`,
-    body: msg`Every persona's memories of you live in Qdrant, and each change to them is logged to a SQLite file.`,
+    body: msg`Every persona's memories of you live in a local Zvec index in your data home, and each change to them is logged to a SQLite file.`,
   },
   embeddings: {
     title: msg`Embeddings`,

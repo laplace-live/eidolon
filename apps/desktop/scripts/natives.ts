@@ -1,29 +1,45 @@
-// Loads a payload's native modules on a given runtime, as the backend loads them: LanceDB writes and
-// opens a table, onnxruntime runs Silero on a CPU session, and sharp makes and reads a JPEG. The
-// stage test runs it on Node; the packaged app's binary runs it in node mode.
+// Loads a payload's native modules on a given runtime, as the backend loads them: Zvec writes and
+// opens a collection, onnxruntime runs Silero on a CPU session, and sharp makes and reads a JPEG.
+// The stage test runs it on Node; the packaged app's binary runs it in node mode.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VC_RUNTIME_DLLS } from "../../eidolon/src/launcher.ts";
 
-/** Run as `<runtime> natives.mjs <payload> <LanceDB's package for this platform>`. */
+/** Run as `<runtime> natives.mjs <payload> <Zvec's binding package for this platform>`. */
 const SCRIPT = `
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const [payload, lancedb] = process.argv.slice(2);
+const [payload, zvecBinding] = process.argv.slice(2);
 const require = createRequire(join(payload, "package.json"));
 const dir = mkdtempSync(join(tmpdir(), "eidolon-natives-"));
 try {
-  const arrow = require("apache-arrow");
-  const { Connection } = require(lancedb);
-  const db = await Connection.new(dir, {});
-  const ipc = arrow.tableToIPC(arrow.tableFromArrays({ id: Int32Array.of(1, 2) }), "file");
-  await db.createTable("natives", Buffer.from(ipc), "create");
-  const rows = await (await db.openTable("natives")).countRows();
+  require.resolve(zvecBinding);
+  const { ZVecCollectionSchema, ZVecCreateAndOpen, ZVecDataType, ZVecIndexType, ZVecMetricType, ZVecOpen } =
+    require("@zvec/zvec");
+  const tableDir = join(dir, "natives");
+  const col = ZVecCreateAndOpen(tableDir, new ZVecCollectionSchema({
+    name: "natives",
+    vectors: {
+      name: "vector",
+      dataType: ZVecDataType.VECTOR_FP32,
+      dimension: 2,
+      indexParams: { indexType: ZVecIndexType.FLAT, metricType: ZVecMetricType.COSINE },
+    },
+  }));
+  col.upsertSync([
+    { id: "1", vectors: { vector: [1, 0] } },
+    { id: "2", vectors: { vector: [0, 1] } },
+  ]);
+  await col.optimize();
+  col.closeSync();
+  const opened = ZVecOpen(tableDir, { readOnly: true });
+  const rows = opened.stats.docCount;
+  opened.closeSync();
   const ort = require("onnxruntime-node");
   const session = await ort.InferenceSession.create(
     join(payload, "data", "models", "silero_vad.onnx"),
@@ -51,7 +67,7 @@ try {
 `;
 
 export interface NativesReport {
-  /** The rows LanceDB counts in the table it wrote and opened: 2. */
+  /** The rows Zvec counts in the collection it wrote and opened: 2. */
   readonly rows: number;
   /** Silero's speech probability for a silent window, from 0 to 1. */
   readonly speech: number;
@@ -70,7 +86,7 @@ export function payloadLibraries(mapped: readonly string[]): string[] {
     .map((path) => path.replace(/^\\\\\?\\/, ""))
     .filter((path) => {
       const name = path.split(/[\\/]/).at(-1)?.toLowerCase() ?? "";
-      return /onnxruntime|lancedb|sharp|vips/.test(name) || VC_RUNTIME_DLLS.includes(name);
+      return /onnxruntime|zvec|sharp|vips/.test(name) || VC_RUNTIME_DLLS.includes(name);
     });
 }
 
@@ -82,16 +98,24 @@ export interface Runtime {
 }
 
 /** Runs the check on `runtime` against `payload`; throws with its output when it fails. */
-export function checkNatives(payload: string, lancedb: string, runtime: Runtime): NativesReport {
+export function checkNatives(
+  payload: string,
+  zvecBinding: string,
+  runtime: Runtime,
+): NativesReport {
   const dir = mkdtempSync(join(tmpdir(), "eidolon-natives-check-"));
   try {
     const script = join(dir, "natives.mjs");
     writeFileSync(script, SCRIPT);
-    const run = spawnSync(runtime.command, [...(runtime.args ?? []), script, payload, lancedb], {
-      encoding: "utf8",
-      env: runtime.env ?? process.env,
-      timeout: 60_000,
-    });
+    const run = spawnSync(
+      runtime.command,
+      [...(runtime.args ?? []), script, payload, zvecBinding],
+      {
+        encoding: "utf8",
+        env: runtime.env ?? process.env,
+        timeout: 60_000,
+      },
+    );
     const line = run.stdout?.trim().split("\n").at(-1) ?? "";
     if (run.error !== undefined || run.status !== 0 || !line.startsWith("{")) {
       // spawnSync's error is a failed start, or its timeout, whose kill names the signal.

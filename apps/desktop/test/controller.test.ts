@@ -846,7 +846,7 @@ describe("our own server", () => {
     r.controller.start();
     await settle();
     const child = r.last();
-    child.complain("Persona facts: no LanceDB table. Run `pnpm laplace-ingest-facts` to build it.");
+    child.complain("Persona facts: no Zvec table. Run `pnpm laplace-ingest-facts` to build it.");
     await settle();
     child.listen(7860);
     child.complain("boom");
@@ -855,7 +855,7 @@ describe("our own server", () => {
     const { failure } = r.controller.state as Extract<BackendState, { phase: "failed" }>;
     expect(failure.stderr).toEqual(["boom"]);
     expect(r.backendLines).toContain(
-      "stderr: Persona facts: no LanceDB table. Run `pnpm laplace-ingest-facts` to build it.",
+      "stderr: Persona facts: no Zvec table. Run `pnpm laplace-ingest-facts` to build it.",
     );
   });
 

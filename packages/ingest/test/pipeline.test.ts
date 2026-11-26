@@ -1114,7 +1114,7 @@ describe("planPipeline", () => {
       JSON.stringify({ sources: [sourceRecord(mdPath), sourceRecord(sidecar)] }),
     );
     expect(await indexed()).toEqual([["BV1aaaaaaaa1", false]]);
-    // A path LanceDB can't list holds no table either.
+    // A path that isn't a directory holds no Zvec table either.
     expect(await indexed(join(index, "stream_catalog.json"))).toEqual([["BV1aaaaaaaa1", false]]);
     await chunksTable(index);
     expect(await indexed()).toEqual([["BV1aaaaaaaa1", true]]);

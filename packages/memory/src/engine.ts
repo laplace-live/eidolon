@@ -1,7 +1,6 @@
 // mem0's OSS engine as it runs without spaCy and fastembed: entity linking and BM25 never run, so
 // `text_lemmatized` is a copy of `data`, no sparse vector is written, and search is dense cosine
-// similarity behind a threshold. Writing anything else would desync the points mem0 reads from the
-// same collection.
+// similarity behind a threshold.
 import {
   type Clock,
   errorText,
@@ -28,16 +27,12 @@ import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "./extraction-p
 import { type HistoryEntry, HistoryStore } from "./history.ts";
 import { type Embedder, type ExtractionLlm, Mem0Embedder, OpenAICompatibleChat } from "./openai.ts";
 import { generateAdditiveExtractionPrompt } from "./prompts.ts";
-import {
-  type QdrantApi,
-  QdrantVectorStore,
-  type ScopeFilters,
-  type StoredPoint,
-} from "./qdrant.ts";
+import { migrateLegacyQdrantIfNeeded } from "./qdrant-import.ts";
 import { buildSessionScope, type MemoryScope, scopeFilters } from "./scope.ts";
 import { md5Hex, parseExtraction, parseMessages } from "./text.ts";
 import { normalizeIsoTimestampToUtc, parseIsoDate, parseIsoDatetime } from "./time.ts";
 import type { MemoryItem } from "./types.ts";
+import { type ScopeFilters, type StoredPoint, type VectorStore, ZvecVectorStore } from "./zvec.ts";
 
 export const LIST_LIMIT = 1000;
 export const DELETE_ALL_BATCH_SIZE = 1000;
@@ -60,7 +55,7 @@ export interface AddResult {
 }
 
 export interface MemoryEngineDeps {
-  readonly store: QdrantVectorStore;
+  readonly store: VectorStore;
   readonly embedder: Embedder;
   readonly llm: ExtractionLlm;
   readonly history: HistoryStore;
@@ -146,7 +141,7 @@ interface PendingRecord {
 }
 
 export class MemoryEngine {
-  readonly #store: QdrantVectorStore;
+  readonly #store: VectorStore;
   readonly #embedder: Embedder;
   readonly #llm: ExtractionLlm;
   readonly #history: HistoryStore;
@@ -164,6 +159,10 @@ export class MemoryEngine {
 
   ensureCollection(): Promise<void> {
     return this.#store.ensureCollection();
+  }
+
+  close(): void {
+    this.#history.close();
   }
 
   /**
@@ -382,6 +381,18 @@ export class MemoryEngine {
     return items;
   }
 
+  /** Counts unexpired memories for `scope` in retained inactive collections (older embedding settings). */
+  async countRetained(scope: MemoryScope): Promise<number> {
+    if (!this.#store.listRetainedScope) return 0;
+    const filters = requireScope(scopeFilters(scope));
+    const points = await this.#store.listRetainedScope(filters);
+    let count = 0;
+    for (const point of points) {
+      if (!this.#isExpired(point.payload)) count++;
+    }
+    return count;
+  }
+
   /** mem0 `delete_all`: scroll and delete until the scope is empty. Returns how many went. */
   async deleteAll(scope: MemoryScope): Promise<number> {
     const filters = scopeFilters(scope);
@@ -390,6 +401,11 @@ export class MemoryEngine {
         "ValueError",
         "At least one filter is required to delete all memories. If you want to delete all memories, use the `reset()` method.",
       );
+    }
+    if (this.#store.deleteScope) {
+      const removed = await this.#store.deleteScope(filters);
+      for (const point of removed) this.#recordDeleted(point.id, point.payload);
+      return removed.length;
     }
     let deleted = 0;
     const seen = new Set<string>();
@@ -408,19 +424,10 @@ export class MemoryEngine {
     return deleted;
   }
 
-  async #deleteMemory(id: string): Promise<void> {
-    const existing = await this.#store.get(id);
-    if (!existing) {
-      throw pyError(
-        "ValueError",
-        `Memory with id ${id} not found. Please provide a valid 'memory_id'`,
-      );
-    }
-    const payload = existing.payload;
+  #recordDeleted(id: string, payload: Readonly<Record<string, unknown>>): void {
     const oldMemory = get(payload, "data", "");
     const createdAt = normalizeIsoTimestampToUtc(get(payload, "created_at"));
     const updatedAt = pyIsoformatUtc(this.#clock());
-    await this.#store.delete(id);
     this.#history.addHistory({
       memoryId: id,
       oldMemory,
@@ -433,6 +440,18 @@ export class MemoryEngine {
       isDeleted: 1,
     });
   }
+
+  async #deleteMemory(id: string): Promise<void> {
+    const existing = await this.#store.get(id);
+    if (!existing) {
+      throw pyError(
+        "ValueError",
+        `Memory with id ${id} not found. Please provide a valid 'memory_id'`,
+      );
+    }
+    await this.#store.delete(id);
+    this.#recordDeleted(id, existing.payload);
+  }
 }
 
 /**
@@ -441,7 +460,7 @@ export class MemoryEngine {
  */
 export async function openMemoryEngine(
   config: MemoryConfig,
-  options: { readonly qdrantClient?: QdrantApi; readonly http?: OpenAIClientOptions } = {},
+  options: { readonly store?: VectorStore; readonly http?: OpenAIClientOptions } = {},
 ): Promise<MemoryEngine> {
   const { embedder: embedding, llm: chat } = config;
   const fetch = options.http?.fetch;
@@ -450,8 +469,11 @@ export async function openMemoryEngine(
     ...(fetch === undefined ? {} : { fetch }),
   });
   const embedder = new Mem0Embedder(model, embedding.dims);
-  const store = new QdrantVectorStore(config.qdrant, options.qdrantClient);
+  const store = options.store ?? new ZvecVectorStore(config.store);
   await store.ensureCollection();
+  if (options.store === undefined && store instanceof ZvecVectorStore) {
+    await migrateLegacyQdrantIfNeeded(store, embedding.dims, fetch);
+  }
   const llmClient = jsonPoster(
     { provider: chat.provider, baseUrl: chat.baseUrl, apiKey: requireLlmKey(chat) },
     options.http,
@@ -494,6 +516,11 @@ export class SharedEngine {
       this.#opening.set(key, opening);
     }
     return { engine: await opening, fresh: true };
+  }
+
+  close(): void {
+    for (const engine of this.#engines.values()) engine.close();
+    this.#engines.clear();
   }
 }
 

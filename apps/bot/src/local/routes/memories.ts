@@ -19,10 +19,16 @@ export function memoriesRoutes(app: LocalApp): LocalRouteSpec[] {
         const scope = memoryScopeOf(persona);
         const outcome = await admin.list(scope.userId, scope.agentId ?? undefined);
         if (!outcome.ok) return memoryFailure(outcome, "list memories");
+        const retained = admin.retainedCount
+          ? await admin.retainedCount(scope.userId, scope.agentId ?? undefined)
+          : null;
+        if (retained && !retained.ok) return memoryFailure(retained, "count retained memories");
+        const retainedCount = retained?.value ?? 0;
         const body: MemoriesResponse = {
           persona,
           count: outcome.value.length,
           memories: outcome.value,
+          ...(retainedCount > 0 ? { retainedCount } : {}),
         };
         return localJson(200, body);
       },

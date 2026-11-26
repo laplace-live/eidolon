@@ -174,8 +174,8 @@ export async function openMemoryProvider(
 ): Promise<MemoryProvider> {
   const config = buildMemoryConfig();
   const search = memorySearchSettingsFromEnv();
-  // The collection setup reruns at every session start, so a dropped collection comes back and a
-  // Qdrant outage then costs only that session its memory.
+  // Collection setup reruns at every session start, so a removed vector folder comes back and a
+  // disk failure affects only that session's memory.
   const { engine, fresh } = await engines.get(config);
   if (!fresh) await engine.ensureCollection();
   const agentId = envOptional("MEM0_AGENT_ID") ?? null;

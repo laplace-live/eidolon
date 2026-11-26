@@ -1,28 +1,28 @@
-// Self-hosted Mem0 configuration: the OSS engine runs in-process with Qdrant holding the vectors.
-// Fact extraction is the memory role's model (the persona's chat model unless she names another),
-// and embeddings reuse retrieval's model and dimension so one EMBED_MODEL / EMBED_DIM pair governs
-// every vector this project writes. Qdrant pins the collection's dimension at creation, so
-// changing EMBED_DIM means dropping MEM0_QDRANT_COLLECTION and letting viewers re-accumulate: old
-// vectors are not comparable.
+// Self-hosted Mem0 configuration: the OSS engine and Zvec vector store both run in-process. Fact
+// extraction is the memory role's model (the persona's chat model unless she names another), and
+// embeddings reuse retrieval's model and dimension so one EMBED_MODEL / EMBED_DIM pair governs
+// every vector this project writes.
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   dataHome,
   embedDim,
+  envFlag,
   envFloat,
   envInt,
   envOptional,
-  envRaw,
+  envVariable,
+  expandUser,
   pyFloatRepr,
   pyStrip,
 } from "@eidolon/config";
 import { hasKey, missingKey, type Selection, selectRequired } from "@eidolon/providers";
-import type { QdrantSettings } from "./qdrant.ts";
+import type { ZvecSettings } from "./zvec.ts";
 
-export const DEFAULT_QDRANT_PORT = 6333;
-export const DEFAULT_COLLECTION = "eidolon_memories";
 /** Mem0's change log, under the data home: memories are per install, not per persona. */
 export const historyDbDefault = (): string => join(dataHome(), "mem0", "history.db");
+export const memoryDirDefault = (historyDbPath = historyDbDefault()): string =>
+  join(dirname(historyDbPath), "vectors");
 export const DEFAULT_SEARCH_LIMIT = 10;
 export const DEFAULT_SEARCH_THRESHOLD = 0.3;
 
@@ -43,7 +43,7 @@ export interface LlmSettings {
 }
 
 export interface MemoryConfig {
-  readonly qdrant: QdrantSettings;
+  readonly store: ZvecSettings;
   readonly embedder: EmbedderSettings;
   readonly llm: LlmSettings;
   readonly historyDbPath: string;
@@ -54,9 +54,15 @@ export interface MemorySearchSettings {
   readonly searchThreshold: number;
 }
 
-/** `MEM0_QDRANT_HOST`, trimmed; empty when memory is off. */
-export function qdrantHost(): string {
-  return pyStrip(envRaw("MEM0_QDRANT_HOST") ?? "");
+/**
+ * `MEM0_ENABLED` when set, else whether legacy `MEM0_QDRANT_HOST` is non-empty so an existing
+ * deployment's `.env` keeps memory on without edits.
+ */
+export function isMemoryConfigured(): boolean {
+  const envExplicit = pyStrip(envVariable("MEM0_ENABLED") ?? "");
+  if (envExplicit !== "") return envFlag("MEM0_ENABLED", false);
+  if (pyStrip(envVariable("MEM0_QDRANT_HOST") ?? "") !== "") return true;
+  return envFlag("MEM0_ENABLED", false);
 }
 
 /** The memory role: `memory.provider` and `memory.model`, else the persona's chat model. */
@@ -72,30 +78,29 @@ function llmSettings(): LlmSettings {
 }
 
 /**
- * Reads the whole configuration and creates the history DB's parent directory. Throws when memory
- * is off or no embedding key is set, which would otherwise surface as an opaque 401 on the first
- * memory write.
+ * Reads the whole configuration and creates the history DB's and vector store's directories.
+ * Throws when memory is off or no embedding key is set, which would otherwise surface as an opaque
+ * 401 on the first memory write.
  */
 export function buildMemoryConfig(): MemoryConfig {
-  const host = qdrantHost();
-  if (!host) throw new Error("MEM0_QDRANT_HOST is unset, so there is no vector store");
+  if (!isMemoryConfigured()) {
+    throw new Error("MEM0_ENABLED is off, so viewer memory is disabled");
+  }
   const embeddings = selectRequired("embeddings");
   if (!hasKey(embeddings)) throw missingKey(embeddings);
-  // node:sqlite, like sqlite3, raises rather than create missing parents, and the history DB
-  // lands under a mounted volume that starts empty.
+  // node:sqlite, like sqlite3, raises rather than create missing parents, and in Docker both
+  // files land under a mounted volume that starts empty.
   const historyDbPath = envOptional("MEM0_HISTORY_DB_PATH") ?? historyDbDefault();
-  mkdirSync(dirname(historyDbPath), { recursive: true });
-  const port = envInt("MEM0_QDRANT_PORT", DEFAULT_QDRANT_PORT);
-  // mem0 swaps a zero port for an embedded on-disk store; the JS client has none and would
-  // dial port 80 instead.
-  if (port <= 0) throw new Error(`MEM0_QDRANT_PORT=${port} is not a Qdrant server port`);
+  mkdirSync(dirname(historyDbPath), { recursive: true, mode: 0o700 });
+  const configuredDir = envOptional("MEM0_DIR");
+  const dir = configuredDir ? expandUser(configuredDir) : memoryDirDefault(historyDbPath);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   const dims = embedDim();
   return {
-    qdrant: {
-      host,
-      port,
-      collection: envOptional("MEM0_QDRANT_COLLECTION") ?? DEFAULT_COLLECTION,
+    store: {
+      dir,
       vectorSize: dims,
+      embedModel: `${embeddings.provider.id}:${embeddings.model}`,
     },
     embedder: { selection: embeddings, dims },
     llm: llmSettings(),

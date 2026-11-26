@@ -7,7 +7,7 @@ import { checkNatives, payloadLibraries } from "../scripts/natives.ts";
 
 test("on Windows, the payload's natives and VC++ runtime, never the system's own C++ runtime", () => {
   const modules = "C:\\Program Files\\Eidolon\\resources\\eidolon\\node_modules";
-  const lancedb = `${modules}\\@lancedb\\lancedb-win32-x64-msvc`;
+  const zvec = `${modules}\\@zvec\\bindings-win32-x64`;
   const ort = `${modules}\\onnxruntime-node\\bin\\napi-v6\\win32\\x64`;
   const sharp = `${modules}\\@img\\sharp-win32-x64\\lib`;
   expect(
@@ -19,8 +19,7 @@ test("on Windows, the payload's natives and VC++ runtime, never the system's own
       // USER32 → GDI32 → gdi32full maps it in every process with a window.
       "C:\\WINDOWS\\System32\\msvcp_win.dll",
       "C:\\WINDOWS\\System32\\ucrtbase.dll",
-      `\\\\?\\${lancedb}\\lancedb.win32-x64-msvc.node`,
-      `${lancedb}\\vcruntime140.dll`,
+      `\\\\?\\${zvec}\\zvec_node_binding.node`,
       `\\\\?\\${ort}\\onnxruntime_binding.node`,
       `${ort}\\onnxruntime.dll`,
       `${ort}\\MSVCP140.dll`,
@@ -29,8 +28,7 @@ test("on Windows, the payload's natives and VC++ runtime, never the system's own
       `${sharp}\\libvips-42.dll`,
     ]),
   ).toEqual([
-    `${lancedb}\\lancedb.win32-x64-msvc.node`,
-    `${lancedb}\\vcruntime140.dll`,
+    `${zvec}\\zvec_node_binding.node`,
     `${ort}\\onnxruntime_binding.node`,
     `${ort}\\onnxruntime.dll`,
     `${ort}\\MSVCP140.dll`,
@@ -46,12 +44,12 @@ test("on macOS, the payload's natives, by their own names and not their folders'
     payloadLibraries([
       "/Users/sharp/LAPLACE Eidolon.app/Contents/MacOS/LAPLACE Eidolon",
       "/usr/lib/libc++.1.dylib",
-      `${modules}/@lancedb/lancedb-darwin-arm64/lancedb.darwin-arm64.node`,
+      `${modules}/@zvec/bindings-darwin-arm64/zvec_node_binding.node`,
       `${modules}/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.dylib`,
       `${modules}/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib`,
     ]),
   ).toEqual([
-    `${modules}/@lancedb/lancedb-darwin-arm64/lancedb.darwin-arm64.node`,
+    `${modules}/@zvec/bindings-darwin-arm64/zvec_node_binding.node`,
     `${modules}/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.dylib`,
     `${modules}/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib`,
   ]);
@@ -59,9 +57,9 @@ test("on macOS, the payload's natives, by their own names and not their folders'
 
 test("a check that never ran says why, as spawnSync gives it", () => {
   const runtime = join(tmpdir(), "eidolon-no-such-runtime");
-  expect(() => checkNatives("/payload", "lancedb", { command: runtime })).toThrow(
-    `The natives check failed: spawnSync ${runtime} ENOENT:`,
-  );
+  expect(() =>
+    checkNatives("/payload", "@zvec/bindings-darwin-arm64", { command: runtime }),
+  ).toThrow(`The natives check failed: spawnSync ${runtime} ENOENT:`);
 });
 
 // Windows ends a process with TerminateProcess, whatever signal process.kill names.
@@ -70,7 +68,7 @@ test.skipIf(process.platform === "win32")("a check a signal ended names the sign
     command: process.execPath,
     args: ["-e", "process.kill(process.pid, 'SIGKILL')"],
   };
-  expect(() => checkNatives("/payload", "lancedb", runtime)).toThrow(
+  expect(() => checkNatives("/payload", "@zvec/bindings-darwin-arm64", runtime)).toThrow(
     "The natives check exited SIGKILL:",
   );
 });

@@ -1,48 +1,42 @@
-// Fakes shared by the tests. FakeQdrant, FakePoster and FakeEmbeddings behave exactly like the
-// fakes mem0 ran against to record fixtures/*.json, so a fixture case replays here unchanged.
+// Fakes shared by the tests. FakeStore, FakePoster and FakeEmbeddings behave like the fakes mem0
+// ran against to record fixtures/*.json, so a fixture case replays here unchanged.
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { consoleSink, cpLen, type JsonPoster, type LogRecord, logger } from "@eidolon/config";
 import { type EmbeddingModel, EmbeddingUsage } from "@eidolon/providers";
-import type { QdrantApi } from "../src/qdrant.ts";
+import type { NewPoint, ScopeFilters, StoredPoint, VectorStore } from "../src/zvec.ts";
 
 export type Payload = Record<string, unknown>;
 
 interface Filter {
-  must?: { key: string; match: { value: unknown } }[];
+  must: { key: string; match: { value: unknown } }[];
 }
 
-function matches(filter: Filter | undefined, payload: Payload): boolean {
+function filterFor(filters: ScopeFilters): Filter | null {
+  const must = Object.entries(filters).map(([key, value]) => ({ key, match: { value } }));
+  return must.length ? { must } : null;
+}
+
+function matches(filter: Filter | null, payload: Payload): boolean {
   return (filter?.must ?? []).every((c) => payload[c.key] === c.match.value);
 }
 
-export interface FakeQdrantOptions {
-  collections?: string[];
-  sparse?: Record<string, unknown> | null;
+export interface FakeStoreOptions {
   fail?: Record<string, unknown>;
 }
 
-/** An in-memory Qdrant: query by a fixed score table, scroll by id, recording canonical calls. */
-export class FakeQdrant {
+/** An in-memory vector store: query by a fixed score table, list by id, recording canonical calls. */
+export class FakeStore implements VectorStore {
   readonly calls: unknown[][] = [];
-  readonly raw: [string, unknown][] = [];
   readonly points = new Map<string, Payload>();
   scores: Record<string, number> = {};
   noopDelete = false;
   missing: string[] = [];
-  readonly collections: string[];
-  readonly sparse: Record<string, unknown> | null;
   readonly fail: Record<string, unknown>;
 
-  constructor(options: FakeQdrantOptions = {}) {
-    this.collections = options.collections ?? ["eidolon_memories"];
-    this.sparse = options.sparse === undefined ? { bm25: {} } : options.sparse;
+  constructor(options: FakeStoreOptions = {}) {
     this.fail = { ...(options.fail ?? {}) };
-  }
-
-  get api(): QdrantApi {
-    return this as unknown as QdrantApi;
   }
 
   #maybeFail(name: string): void {
@@ -53,83 +47,58 @@ export class FakeQdrant {
     }
   }
 
-  async getCollections() {
-    this.calls.push(["getCollections"]);
-    return { collections: this.collections.map((name) => ({ name })) };
+  async ensureCollection(): Promise<void> {
+    this.calls.push(["ensureCollection"]);
   }
 
-  async getCollection(name: string) {
-    this.calls.push(["getCollection", name]);
-    return { config: { params: { sparse_vectors: this.sparse } } };
-  }
-
-  async createCollection(_name: string, args: { vectors: unknown; sparse_vectors: unknown }) {
-    this.raw.push(["createCollection", args]);
-    this.calls.push([
-      "createCollection",
-      { vectors: args.vectors, sparse_vectors: args.sparse_vectors },
-    ]);
-    return true;
-  }
-
-  async createPayloadIndex(_name: string, args: { field_name: string; field_schema: string }) {
-    this.raw.push(["createPayloadIndex", args]);
-    this.calls.push(["createPayloadIndex", args.field_name, args.field_schema]);
-    this.#maybeFail("create_payload_index");
-    return { operation_id: 0, status: "completed" };
-  }
-
-  async upsert(
-    _name: string,
-    args: { points: { id: string; vector: unknown; payload: Payload }[] },
-  ) {
-    this.raw.push(["upsert", args]);
-    this.calls.push(["upsert", args.points]);
+  async insert(points: readonly NewPoint[]): Promise<void> {
+    const formatted = points.map((p) => ({
+      id: p.id,
+      vector: { "": [...p.vector] },
+      payload: { ...p.payload },
+    }));
+    this.calls.push(["upsert", formatted]);
     const rejected = (this.fail.upsert_ids as string[] | undefined) ?? [];
-    for (const p of args.points) {
+    for (const p of points) {
       if (rejected.includes(p.id)) throw new Error(`upsert rejected ${p.id}`);
     }
     this.#maybeFail("upsert");
-    for (const p of args.points) this.points.set(p.id, p.payload);
-    return { operation_id: 0, status: "completed" };
+    for (const p of formatted) this.points.set(p.id, p.payload);
   }
 
-  async query(_name: string, args: { query: number[]; filter?: Filter; limit: number }) {
-    this.raw.push(["query", args]);
-    this.calls.push([
-      "query",
-      { query: args.query, filter: args.filter ?? null, limit: args.limit },
-    ]);
+  async search(
+    vector: readonly number[],
+    limit: number,
+    filters: ScopeFilters,
+  ): Promise<StoredPoint[]> {
+    const filter = filterFor(filters);
+    this.calls.push(["query", { query: [...vector], filter, limit }]);
     const hits = [...this.points]
-      .filter(([, payload]) => matches(args.filter, payload))
-      .map(([id, payload]) => ({ id, version: 0, score: this.scores[id] ?? 0.5, payload }));
+      .filter(([, payload]) => matches(filter, payload))
+      .map(([id, payload]) => ({ id, score: this.scores[id] ?? 0.5, payload }));
     hits.sort((a, b) => b.score - a.score);
-    return { points: hits.slice(0, args.limit) };
+    return hits.slice(0, limit);
   }
 
-  async scroll(_name: string, args: { filter?: Filter; limit: number }) {
-    this.raw.push(["scroll", args]);
-    this.calls.push(["scroll", { filter: args.filter ?? null, limit: args.limit }]);
+  async list(filters: ScopeFilters, limit: number): Promise<StoredPoint[]> {
+    const filter = filterFor(filters);
+    this.calls.push(["scroll", { filter, limit }]);
     const ids = [...this.points.keys()].sort();
-    const points = ids
-      .filter((id) => matches(args.filter, this.points.get(id) as Payload))
-      .map((id) => ({ id, payload: this.points.get(id) as Payload }));
-    return { points: points.slice(0, args.limit), next_page_offset: null };
-  }
-
-  async retrieve(_name: string, args: { ids: string[] }) {
-    this.raw.push(["retrieve", args]);
-    this.calls.push(["retrieve", args.ids]);
-    return args.ids
-      .filter((id) => this.points.has(id) && !this.missing.includes(id))
+    return ids
+      .filter((id) => matches(filter, this.points.get(id) as Payload))
+      .slice(0, limit)
       .map((id) => ({ id, payload: this.points.get(id) as Payload }));
   }
 
-  async delete(_name: string, args: { points: string[] }) {
-    this.raw.push(["delete", args]);
-    this.calls.push(["delete", args.points]);
-    if (!this.noopDelete) for (const id of args.points) this.points.delete(id);
-    return { operation_id: 0, status: "completed" };
+  async get(id: string): Promise<StoredPoint | null> {
+    this.calls.push(["retrieve", [id]]);
+    if (!this.points.has(id) || this.missing.includes(id)) return null;
+    return { id, payload: this.points.get(id) as Payload };
+  }
+
+  async delete(id: string): Promise<void> {
+    this.calls.push(["delete", [id]]);
+    if (!this.noopDelete) this.points.delete(id);
   }
 }
 
@@ -230,6 +199,8 @@ export function resetEnv(): void {
 }
 
 export const MEMORY_ENV_KEYS = [
+  "MEM0_ENABLED",
+  "MEM0_DIR",
   "MEM0_QDRANT_HOST",
   "MEM0_QDRANT_PORT",
   "MEM0_QDRANT_COLLECTION",

@@ -1,6 +1,6 @@
-// Parity with mem0: every case in fixtures/engine.json was produced by running mem0's own
-// Memory.add/search/get_all/delete_all and Qdrant.create_col against the fakes in support.ts, with
-// the clock and uuid4 pinned. Each replays here and must match call for call, row for row.
+// Parity with mem0: every add/search/get_all/delete_all case in fixtures/engine.json was produced
+// by running mem0's own Memory engine against the fakes in support.ts, with the clock and uuid4
+// pinned. Each replays here and must match call for call, row for row.
 import { DatabaseSync } from "node:sqlite";
 import { type Selection, select, setUsageSink, type UsageRecord } from "@eidolon/providers";
 import { describe, expect, test } from "vitest";
@@ -8,7 +8,6 @@ import { MemoryEngine, openMemoryEngine, sortNewestFirst } from "../src/engine.t
 import { ADDITIVE_EXTRACTION_PROMPT, AGENT_CONTEXT_SUFFIX } from "../src/extraction-prompt.ts";
 import { HistoryStore } from "../src/history.ts";
 import { EXTRACTION_MAX_TOKENS, Mem0Embedder, OpenAICompatibleChat } from "../src/openai.ts";
-import { QdrantVectorStore } from "../src/qdrant.ts";
 import type { MemoryItem } from "../src/types.ts";
 import fixtures from "./fixtures/engine.json";
 import {
@@ -16,7 +15,7 @@ import {
   captureLogs,
   FakeEmbeddings,
   FakePoster,
-  FakeQdrant,
+  FakeStore,
   type Payload,
   pinned,
   tempPath,
@@ -30,31 +29,26 @@ function scope(ids: Ids) {
 }
 
 function build(options: {
-  fake: FakeQdrant;
+  fake: FakeStore;
   poster: FakePoster;
   pins: ReturnType<typeof pinned>;
   embeddings?: FakeEmbeddings;
   model?: string;
-  vectorSize?: number;
 }) {
   const dbPath = tempPath("history.db");
-  const store = new QdrantVectorStore(
-    { host: "h", port: 6333, collection: "eidolon_memories", vectorSize: options.vectorSize ?? 4 },
-    options.fake.api,
-  );
   const history = new HistoryStore(dbPath, {
     clock: options.pins.clock,
     newId: options.pins.newId,
   });
   const engine = new MemoryEngine({
-    store,
+    store: options.fake,
     embedder: new Mem0Embedder(options.embeddings ?? new FakeEmbeddings(), 4),
     llm: new OpenAICompatibleChat(options.model ?? "~google/gemini-flash-latest", options.poster),
     history,
     clock: options.pins.clock,
     newId: options.pins.newId,
   });
-  return { engine, history, store, dbPath };
+  return { engine, history, store: options.fake, dbPath };
 }
 
 function rows(dbPath: string) {
@@ -112,7 +106,7 @@ describe("add replays mem0", () => {
   for (const c of fixtures.add.filter((a) => a.name !== "batch_reversed")) {
     test(c.name, async () => {
       const pins = pinned(c.input.base, c.input.step);
-      const fake = new FakeQdrant({ fail: c.input.fail });
+      const fake = new FakeStore({ fail: c.input.fail });
       for (const [id, payload] of Object.entries(c.input.existing)) fake.points.set(id, payload);
       fake.scores = c.input.scores as Record<string, number>;
       const poster = new FakePoster();
@@ -168,7 +162,7 @@ describe("add replays mem0", () => {
 });
 
 function seeded(points: Record<string, Payload>, scores: Record<string, number> = {}) {
-  const fake = new FakeQdrant();
+  const fake = new FakeStore();
   for (const [id, payload] of Object.entries(points)) fake.points.set(id, payload);
   fake.scores = scores;
   return fake;
@@ -262,38 +256,6 @@ describe("delete_all replays mem0", () => {
   });
 });
 
-describe("collection setup replays mem0", () => {
-  for (const c of fixtures.create_col) {
-    test(c.name, async () => {
-      const fake = new FakeQdrant({
-        collections: c.input.collections,
-        sparse: c.input.sparse,
-        fail: c.input.fail,
-      });
-      const { store } = build({
-        fake,
-        poster: new FakePoster(),
-        pins: pinned(0, 1),
-        vectorSize: 3072,
-      });
-      const logs = captureLogs();
-      await store.ensureCollection();
-      logs.stop();
-      expect(json(fake.calls)).toBe(json(c.qdrant));
-      expect(logs.at(...PROBLEM_LEVELS)).toEqual(c.logs as [string, string][]);
-    });
-  }
-
-  test("an unreachable Qdrant rejects", async () => {
-    const fake = new FakeQdrant();
-    fake.getCollections = async () => {
-      throw new Error("connect ECONNREFUSED");
-    };
-    const { store } = build({ fake, poster: new FakePoster(), pins: pinned(0, 1) });
-    await expect(store.ensureCollection()).rejects.toThrow("connect ECONNREFUSED");
-  });
-});
-
 describe("openMemoryEngine", () => {
   const settings: Readonly<Record<string, string>> = {
     EMBED_PROVIDER: "openai-compatible",
@@ -303,7 +265,7 @@ describe("openMemoryEngine", () => {
   };
   const embeddings = select("embeddings", (name) => settings[name]) as Selection;
   const config = (apiKey: string | null) => ({
-    qdrant: { host: "h", port: 6333, collection: "c", vectorSize: 4 },
+    store: { dir: tempPath("vectors"), vectorSize: 4 },
     embedder: { selection: embeddings, dims: 4 },
     llm: {
       provider: "openai-compatible",
@@ -316,7 +278,7 @@ describe("openMemoryEngine", () => {
   });
 
   test("routes embeddings and extraction to their own endpoints and keys", async () => {
-    const fake = new FakeQdrant({ collections: [] });
+    const fake = new FakeStore();
     const seen: [string, string | null][] = [];
     const fetch = (async (url: string, init: RequestInit) => {
       seen.push([url, new Headers(init.headers).get("authorization")]);
@@ -329,19 +291,10 @@ describe("openMemoryEngine", () => {
       return Response.json({ choices: [{ message: { content: '{"memory": [{"text": "x"}]}' } }] });
     }) as unknown as typeof globalThis.fetch;
     const engine = await openMemoryEngine(config("sk-llm"), {
-      qdrantClient: fake.api,
+      store: fake,
       http: { fetch },
     });
-    expect(fake.calls.slice(0, 2)).toEqual([
-      ["getCollections"],
-      [
-        "createCollection",
-        {
-          vectors: { size: 4, distance: "Cosine", on_disk: true },
-          sparse_vectors: { bm25: { modifier: "idf" } },
-        },
-      ],
-    ]);
+    expect(fake.calls).toEqual([["ensureCollection"]]);
     const added = await engine.add([{ role: "user", content: "hi" }], {
       scope: { userId: "1" },
       metadata: { platform: "pipecat" },
@@ -358,7 +311,7 @@ describe("openMemoryEngine", () => {
     const records: UsageRecord[] = [];
     setUsageSink((record) => records.push(record));
     try {
-      const fake = new FakeQdrant({ collections: [] });
+      const fake = new FakeStore();
       const usage = { prompt_tokens: 7, completion_tokens: 2, total_tokens: 9 };
       const fetch = (async (url: string, init: RequestInit) => {
         const body = JSON.parse(init.body as string) as { input?: string[] };
@@ -376,7 +329,7 @@ describe("openMemoryEngine", () => {
         });
       }) as unknown as typeof globalThis.fetch;
       const engine = await openMemoryEngine(config("sk-llm"), {
-        qdrantClient: fake.api,
+        store: fake,
         http: { fetch },
       });
       await engine.add([{ role: "user", content: "hi" }], { scope: { userId: "1" }, metadata: {} });
@@ -390,11 +343,11 @@ describe("openMemoryEngine", () => {
   });
 
   test("a missing LLM key fails after the collection setup, in mem0's construction order", async () => {
-    const fake = new FakeQdrant();
-    await expect(openMemoryEngine(config(null), { qdrantClient: fake.api })).rejects.toThrow(
+    const fake = new FakeStore();
+    await expect(openMemoryEngine(config(null), { store: fake })).rejects.toThrow(
       "the memory key is missing",
     );
-    expect(fake.calls[0]).toEqual(["getCollections"]);
+    expect(fake.calls).toEqual([["ensureCollection"]]);
   });
 
   /** A search whose embedding requests get `replies` in turn; resolves to its error and requests. */
@@ -405,7 +358,7 @@ describe("openMemoryEngine", () => {
       return replies.shift() ?? Response.json({}, { status: 500 });
     }) as unknown as typeof globalThis.fetch;
     const engine = await openMemoryEngine(config("sk-llm"), {
-      qdrantClient: new FakeQdrant().api,
+      store: new FakeStore(),
       http: { fetch },
     });
     const error = await engine.search("q", { filters: { userId: "1" } }).catch((e: Error) => e);
