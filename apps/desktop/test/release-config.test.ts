@@ -168,4 +168,30 @@ describe("electron-builder's loader", () => {
     expect(config.win).toMatchObject({ target: [{ target: "nsis" }], signExts: LISTED });
     await validateConfiguration(config, { isEnabled: false });
   });
+
+  test("applies provisioningProfile and release entitlements only when APPLE_PROVISIONING_PROFILE is set", async () => {
+    const profilePath = join(scratch, "eidolon.provisionprofile");
+    const withoutProfile = overlay.releaseConfig({
+      platform: "darwin",
+      env: { APPLE_PROVISIONING_PROFILE: "  " },
+    });
+    expect(withoutProfile.mac.provisioningProfile).toBeUndefined();
+    expect(withoutProfile.mac.entitlements).toBeUndefined();
+
+    const withProfile = overlay.releaseConfig({
+      platform: "darwin",
+      env: { APPLE_PROVISIONING_PROFILE: profilePath },
+    });
+    expect(withProfile.mac.provisioningProfile).toBe(profilePath);
+    expect(withProfile.mac.entitlements).toBe("resources/entitlements.mac.release.plist");
+
+    const { getConfig, doMergeConfigs, validateConfiguration } = loader();
+    const base = await getConfig(DESKTOP, "electron-builder.yml", null);
+    const merged = doMergeConfigs([base, withProfile]);
+    expect(merged.mac).toMatchObject({
+      provisioningProfile: profilePath,
+      entitlements: "resources/entitlements.mac.release.plist",
+    });
+    await validateConfiguration(merged, { isEnabled: false });
+  });
 });

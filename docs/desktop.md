@@ -631,12 +631,15 @@ when she is made, shown, moved and closed, both without Electron (`test/companio
 
 ## Notifications
 
-While the window isn't focused, the OS's notifications tell the owner of her tasks: one that comes
-to wait on them, and one that ends. `task-notices.ts` decides without Electron, and
-`test/task-notices.test.ts` covers it on fake answers and a fake clock; `native.ts` shows each
-through Electron's `Notification`.
+While the window isn't focused, the OS's notifications tell the owner of new chat replies and her
+tasks (`TaskWatch` in `task-notices.ts`, `ChatWatch` in `chat-notices.ts`, and `NotificationAvatarCache`
+in `avatar-cache.ts`; their Electron-free unit tests cover fake answers and clocks). `native.ts`
+presents each on macOS through the compiled Objective-C N-API addon `native/mac-notify.m`
+(`UNUserNotificationCenter` + `INSendMessageIntent` when provisioned, falling back cleanly to plain
+notifications unentitled or to Electron's `Notification`), and on Windows through Electron's
+`Notification` with `ToastGeneric` `toastXml` (`toast-xml.ts`).
 
-- **The watch** (`TaskWatch`) asks the server ready now, our own or one attached to, for
+- **The task watch** (`TaskWatch`) asks the server ready now, our own or one attached to, for
   `GET /api/local/tasks` with main's Bearer (`Backend.get`, GET alone): every 3 s while a task
   runs and every 30 s otherwise, each request aborted after 10 s. A ready server it doesn't follow
   yet, a restarted one included, starts it on a new baseline: the first answer records every task
@@ -644,36 +647,44 @@ through Electron's `Notification`.
   at each idle close leaves it be (`followBackend`); no server, or an approved quit, stops it. A
   failure logs once a streak (`Eidolon: notifications couldn't read the tasks: …`) and tries again
   in 30 s.
-- **What is told,** after the baseline: a task that ended, however it ended, and one that waits on
-  the owner for something it didn't wait for at the poll before (its status, its card's question
-  and its pause, compared as one key): its start, a path outside its folders to read or write, a
-  site, a command, an MCP call, a spend, stall or unpriced pause, an interruption, or anything else
-  it waits on. A new wait replaces the task's notice, a wait that's over closes it, and an end
-  replaces it and stays.
-- **Only while the window isn't focused** at the poll that sees the change, both as its answer comes
-  and once her name is read: one seen while it is focused is recorded, and never told later.
-- **What one says:** her name as its title, the task's chat's persona as `GET /api/local/personas`
-  names her (read once a baseline, and again for a persona it doesn't know), else `LAPLACE Eidolon`; a fixed
-  phrase for its kind in the shell's language; and her goal on a second line, made one line,
-  without control, format or bidi characters, and cut at 80 characters. Never what a worker wrote
-  or a page it read could have: no command, path, site, tool or arguments, no step, file name,
-  report or error.
-- **It answers nothing.** A notification has no action and no reply: only the task's card and the
-  waiting bar answer a task. A click shows the window and opens the task in its chat
-  (`open-task:<chat>:<task>`), or the Tasks page for a task without one (`noticeCommand`); a call
-  goes on meanwhile, as it does through any page.
-- **Its handle** is kept by task until the task's next notice replaces it or its wait ends: Electron
-  drops a notification nothing holds, and its click with it.
+- **What a task notice tells,** after the baseline: a task that ended, however it ended, and one
+  that waits on the owner for something it didn't wait for at the poll before (its status, its card's
+  question and its pause, compared as one key): its start, a path outside its folders to read or
+  write, a site, a command, an MCP call, a spend, stall or unpriced pause, an interruption, or
+  anything else it waits on. A new wait replaces the task's notice, a wait that's over closes it,
+  and an end replaces it and stays.
+- **The chat watch** (`ChatWatch`) polls `GET /api/local/chats` every 2 s (new baseline on each
+  ready server) and reads `GET /api/local/chats/:id?afterSeq=…` for newly advanced chats, notifying
+  on completed non-call persona messages (`plainReplyText` clipped at 120 chars, or `[Voice
+  message]` / `[Photo]` / `[N photos]`) across both single chats and multi-persona group chains
+  (`<header>` grouping on Windows, `threadIdentifier` and `speakableGroupName` on macOS). `TaskWatch`
+  also asks `chatWatch.groupFor(chat, personaId)` so tasks started in group chats carry group context.
+- **Notification avatars** (`avatar-cache.ts`): outside background mode, main fetches a 256×256
+  transparent circular PNG (or a front-speaker + peeking peers group composite keeping the
+  bottom-right corner clear for macOS's app badge) from `GET /api/local/personas/:id/notification-avatar`
+  (with `?group=…`), caching up to 64 content-hashed PNG files under `userData/notification-avatars`.
+  If `close()` or window focus wins before resolution finishes, the stale notification is skipped.
+- **Only while the window isn't focused** at the poll that sees the change, as its answer comes,
+  once her name is read, and after any avatar fetch finishes: one seen while it is focused is
+  recorded, and never told later.
+- **What one says:** in a single chat or task notice, her name (or `LAPLACE Eidolon` for a task
+  without a persona); in a group chat, the group's title with her name as subtitle/sender; a task
+  notice keeps a fixed phrase in the shell's language and her goal on a second line without control,
+  format or bidi characters, cut at 80 characters, and never what a worker wrote or a page read.
+- **Clicks and handles:** notifications have no inline reply actions. Clicking a chat notice
+  focuses the window and sends `open-chat:<chat>`; clicking a task notice sends
+  `open-task:<chat>:<task>` (or `tasks`). Handles are retained in bounded maps so Electron/macOS
+  never garbage-collects click callbacks while banners are visible.
 - **Which copies:** the packaged app, on Windows only its installed copy (`isUpdatableInstall`),
   since another would point the installed app's Start menu shortcut and its COM key at itself; and
-  any copy in background mode, which only logs them. Any other runs no watch, and says so once in
-  main.log: `Eidolon: notifications are off in this copy of the app`. The installed Windows app
-  pins its toast activator's CLSID before any notification: Electron otherwise makes one up
-  whenever the shortcut has none, as after each update rewrites it, and registers each under HKCU
-  for good.
-- **Background mode** runs the watch but makes no `Notification` ([below](#background-mode)), and
+  any copy in background mode, which only logs them (without loading `mac_notify.node` or fetching
+  avatar PNGs). Any other runs neither watch, and says so once in main.log: `Eidolon: notifications
+  are off in this copy of the app`. The installed Windows app pins its toast activator's CLSID
+  before any notification: Electron otherwise makes one up whenever the shortcut has none, as after
+  each update rewrites it, and registers each under HKCU for good.
+- **Background mode** runs the watches but makes no OS notification ([below](#background-mode)), and
   logs each instead:
-  `Eidolon: background mode didn't show a notification: <title>: <line> / <line>`.
+  `Eidolon: background mode didn't show a notification: <head>: <line> / <line>` (`<title> (<subtitle>)` when a subtitle is set).
 
 ## Open at Login
 
@@ -1028,10 +1039,11 @@ builds signed, from a release's tag or a `sign` dispatch ([Releasing](#releasing
   the browser-process V8 snapshot off, their defaults. `wasmTrapHandlers` keeps its default, on, as
   electron-builder has no key for it. `resetAdHocDarwinSignature`, beside them, re-signs an
   unsigned build ad hoc after the fuses change, so it launches on Apple silicon.
-- **macOS:** arm64 DMG and zip, the hardened runtime, the entitlements (`allow-jit`,
-  `allow-unsigned-executable-memory`, `disable-library-validation`, which ad-hoc signing with the
-  hardened runtime needs, and `audio-input`; no camera), and the microphone's usage string. The DMG
-  writes no update info: updates will take the zip.
+- **macOS:** arm64 DMG and zip, the hardened runtime, the unentitled entitlements
+  (`allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation`, which ad-hoc
+  signing with the hardened runtime needs, and `audio-input`; no camera), `NSUserActivityTypes`
+  (`INSendMessageIntent`), `dist/native/mac_notify.node` shipped in `Contents/Resources/native`,
+  and the microphone's usage string. The DMG writes no update info: updates will take the zip.
 - **Windows:** a per-user, one-click NSIS setup for x64, whose shortcut's AppUserModelID is the
   `appId`. `resources/installer.nsh` carries a workaround for electron-builder#6865; its uninstall
   removes the install folder alone. Installing, updating and uninstalling never touch the data home.
@@ -1046,11 +1058,13 @@ what electron-builder's own loader and schema make of it:
   install accepts updates from ([Signing identities](#signing-identities)).
 - **macOS:** `notarize`, with the App Store Connect key from `APPLE_API_KEY`, `APPLE_API_KEY_ID` and
   `APPLE_API_ISSUER` (notarizing staples the app); `forceCodeSigning`, so a build that finds no
-  Developer ID fails rather than ships ad hoc; and `requirements`, the designated requirement in
+  Developer ID fails rather than ships ad hoc; `requirements`, the designated requirement in
   `resources/designated-requirement.mac`, whose name has no `.txt`: GitHub's dependency graph read
-  `requirements.mac.txt` as a package list and failed on it. The DMG stays unsigned and
-  unnotarized: electron-builder notarizes and staples only the app inside it, and updates take the
-  zip.
+  `requirements.mac.txt` as a package list and failed on it; and when `APPLE_PROVISIONING_PROFILE`
+  is set, `provisioningProfile` alongside `resources/entitlements.mac.release.plist` (adding
+  `com.apple.developer.usernotifications.communication`, which macOS `amfid` refuses without an
+  embedded profile). The DMG stays unsigned and unnotarized: electron-builder notarizes and staples
+  only the app inside it, and updates take the zip.
 - **Windows,** added only when it runs on Windows, since electron-builder's schema requires the
   Azure names only that leg's environment has: `azureSignOptions` (Azure Trusted Signing at
   `https://eus.codesigning.azure.net`, the account and profile from `AZURE_SIGNING_ACCOUNT_NAME` and
@@ -1180,13 +1194,19 @@ runs before a change reaches master.
 step left in `.out`) prints a `PASS` or `FAIL` line per check, as the smokes do, and exits 1 when
 one failed. `test/signed-check.test.ts` holds its verdicts to the tools' own output.
 
-- **macOS,** on `.out/mac-arm64/LAPLACE Eidolon.app`: `codesign --verify --deep --strict` passes; `spctl
-  --assess` accepts it as a notarized Developer ID; `stapler validate` finds the ticket; every
-  `.node` and `.dylib` in the payload, plus `node-shim/node_modules/node_modules/@pnpm/exe.darwin-arm64/pnpm`,
-  has the hardened runtime and a secure timestamp from Apple's
-  server, which neither an ad-hoc signature nor `Signed Time` alone gives; and the designated
+- **macOS,** on `.out/mac-arm64/LAPLACE Eidolon.app`: `codesign --verify --deep --strict` passes; the
+  app's signer and `TeamIdentifier` belong strictly to an allowed org (`Sparanoid, Inc.` /
+  `LAPLACE Live LLC` without emails or personal signers); `spctl --assess` accepts it as a notarized
+  Developer ID; `stapler validate` finds the ticket; every `.node` and `.dylib` in the payload,
+  plus `node-shim/node_modules/node_modules/@pnpm/exe.darwin-arm64/pnpm` and
+  `Contents/Resources/native/mac_notify.node`, has the hardened runtime and a secure timestamp from
+  Apple's server, which neither an ad-hoc signature nor `Signed Time` alone gives; the designated
   requirement of the app and of each helper app and framework is the requirement file's, as `csreq
-  -t` prints it.
+  -t` prints it; and when `Contents/embedded.provisionprofile` is present (or
+  `EIDOLON_EXPECT_PROVISIONING_PROFILE=1`), anti-doxxing checks confirm no `ProvisionedDevices`
+  hardware UDIDs, no email addresses, allowed org `TeamName`/`TeamIdentifier` and Developer ID
+  certificate subjects only, and the `com.apple.developer.usernotifications.communication`
+  entitlement for `live.laplace.eidolon`.
 - **Windows:** it installs the setup silently for the user, refusing where LAPLACE Eidolon is installed
   already, then reads `Get-AuthenticodeSignature` on the setup and on every PE file of the install,
   found by its headers whatever its name. Each must be Valid and timestamped, since a Trusted
@@ -1211,7 +1231,8 @@ In the signed package step:
   `CSC_KEY_PASSWORD`, which on Windows would send electron-builder to signtool (it imports the
   Developer ID certificate into a temporary keychain itself); `APPLE_API_KEY`, written to
   `$RUNNER_TEMP/apple-api-key.p8` by the step before and removed by one after, whatever happened;
-  `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`.
+  `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`; plus optional `APPLE_PROVISIONING_PROFILE` (base64
+  `.provisionprofile`, decoded to `$RUNNER_TEMP/eidolon.provisionprofile` and removed right after).
 - **Windows:** `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   `AZURE_SIGNING_ACCOUNT_NAME` and `AZURE_CERTIFICATE_PROFILE_NAME`.
 
@@ -1574,13 +1595,14 @@ Each step prints one line, made of the checks inside it:
    accessory, its window neither visible nor focused). The kit's canary check follows it, on a line
    of its own: the key the smoke puts in its own environment never reaches the backend.
 2. **A chat:** her reply streams through the forwarder, its first part shown about 2 s before the
-   rest, as the fake holds it. A picture and a text file sent with a line (set on the composer's
-   input, never a click, which opens the file chooser) reach her mind; the picture opens in the
-   in-page viewer, whose Save saves it, and the text file saves through `<a download>` under the
-   name it was sent with, each whole into the profile's `downloads` folder. Her selfie, from
-   `take_selfie` on the fakes' image model, which the chat must offer while the persona has an
-   outfit to draw, opens and saves the same way. Each link must be an `<a download>`: main's
-   `downloadURL` fallback would save a `target="_blank"` one too, with the same lines in main.log.
+   rest, as the fake holds it, and the chat watch logs her reply's notification in main.log. A
+   picture and a text file sent with a line (set on the composer's input, never a click, which opens
+   the file chooser) reach her mind; the picture opens in the in-page viewer, whose Save saves it,
+   and the text file saves through `<a download>` under the name it was sent with, each whole into
+   the profile's `downloads` folder. Her selfie, from `take_selfie` on the fakes' image model, which
+   the chat must offer while the persona has an outfit to draw, opens and saves the same way. Each
+   link must be an `<a download>`: main's `downloadURL` fallback would save a `target="_blank"` one
+   too, with the same lines in main.log.
 3. **Theme and language:** the page's theme setting reaches `nativeTheme.themeSource` as it is, its
    language rebuilds the menus in it, and its `[data-shell]` strip drags while its buttons don't,
    clear of the traffic lights on macOS, with the sidebar and the page below it and no drag row
@@ -1628,7 +1650,7 @@ Each step prints one line, made of the checks inside it:
     `strings.ts` has in English: the watch polls every 30 s while no task runs, and never tells of a
     task already there at its first answer, so the task starts once the server is ready. Deny on the
     card stops it, and within 45 s the watch's notice of that follows, with the stopped task's
-    words: two notices in all.
+    words: two task notices in all.
 11. **Attach:** after `--quit` ends that launch and its backend, with no box, a server started first
     on the same home (`apps/bot/src/local/main.ts` on Node, with its supervisor) is used, not
     replaced: Settings' Restart there waits for the supervisor's next server, a restart from outside

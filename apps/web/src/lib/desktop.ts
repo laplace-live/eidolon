@@ -213,14 +213,23 @@ const COMMANDS = {
 
 /** A chat's or a task's id, as the server makes them. */
 const ID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-/** A notification's click: the task, in its chat. */
+/** A notification's click: a chat, or a task in its chat. */
+const OPEN_CHAT = new RegExp(`^open-chat:(${ID})$`);
 const OPEN_TASK = new RegExp(`^open-task:(${ID}):(${ID})$`);
 
-export type DesktopCommand = keyof typeof COMMANDS | `open-task:${string}:${string}`;
+export type DesktopCommand =
+  | keyof typeof COMMANDS
+  | `open-chat:${string}`
+  | `open-task:${string}:${string}`;
 
 export function runCommand(command: string, navigate: (to: string) => void): void {
   if (Object.hasOwn(COMMANDS, command)) {
     COMMANDS[command as keyof typeof COMMANDS](navigate);
+    return;
+  }
+  const [, openChat] = OPEN_CHAT.exec(command) ?? [];
+  if (openChat !== undefined) {
+    navigate(`/chats/${openChat}`);
     return;
   }
   const [, chat, task] = OPEN_TASK.exec(command) ?? [];

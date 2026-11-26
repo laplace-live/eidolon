@@ -25,6 +25,8 @@ export interface ReleaseConfig {
     readonly notarize: boolean;
     readonly forceCodeSigning: boolean;
     readonly requirements: string;
+    readonly provisioningProfile?: string;
+    readonly entitlements?: string;
   };
   readonly win?: {
     readonly azureSignOptions: {
@@ -59,6 +61,7 @@ export function releaseConfig({
   env = process.env,
   unsignedPe = UNSIGNED_PE,
 }: ReleaseConfigOptions = {}): ReleaseConfig {
+  const provisioningProfile = env.APPLE_PROVISIONING_PROFILE?.trim() || undefined;
   return {
     extends: "./electron-builder.yml",
     // Deep-merged into the base's publish block.
@@ -69,6 +72,12 @@ export function releaseConfig({
       forceCodeSigning: true,
       // electron-builder stamps it on every file it signs, so it names no identifier.
       requirements: "resources/designated-requirement.mac",
+      ...(provisioningProfile === undefined
+        ? {}
+        : {
+            provisioningProfile,
+            entitlements: "resources/entitlements.mac.release.plist",
+          }),
     },
     // The schema requires the account and profile names, and only the Windows leg's environment
     // has them.

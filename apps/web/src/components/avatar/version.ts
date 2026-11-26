@@ -24,7 +24,11 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function useAvatarVersion(id: string): number {
-  return useSyncExternalStore(subscribe, () => avatarVersion(id));
+  return useSyncExternalStore(
+    subscribe,
+    () => avatarVersion(id),
+    () => avatarVersion(id),
+  );
 }
 
 /** The avatar route's URL for the picture's `version`. */

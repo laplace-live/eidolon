@@ -29,6 +29,8 @@ export interface Notice {
   readonly task: string;
   /** The task's chat, or null for a task without one. */
   readonly chat: string | null;
+  /** The persona's id, or null when unknown. */
+  readonly personaId: string | null;
   /** The persona's display name, or null when unknown. */
   readonly persona: string | null;
   readonly kind: NoticeKind;
@@ -271,6 +273,7 @@ export class TaskWatch {
       const handle = this.#options.show({
         task: task.id,
         chat: task.chat?.id ?? null,
+        personaId: persona ?? null,
         persona: persona === undefined ? null : (names?.get(persona) ?? null),
         kind,
         goal: goalLine(task.brief?.goal),

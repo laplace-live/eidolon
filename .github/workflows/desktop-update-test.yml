@@ -28,6 +28,8 @@ on:
         required: false
       APPLE_API_ISSUER:
         required: false
+      APPLE_PROVISIONING_PROFILE:
+        required: false
       AZURE_TENANT_ID:
         required: false
       AZURE_CLIENT_ID:
@@ -75,9 +77,14 @@ jobs:
       - name: Materialize the App Store Connect key
         if: runner.os == 'macOS'
         timeout-minutes: 1
-        run: printf '%s' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/apple-api-key.p8"
+        run: |
+          printf '%s' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/apple-api-key.p8"
+          if [[ -n "$APPLE_PROVISIONING_PROFILE_B64" ]]; then
+            printf '%s' "$APPLE_PROVISIONING_PROFILE_B64" | base64 --decode > "$RUNNER_TEMP/eidolon.provisionprofile"
+          fi
         env:
           APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+          APPLE_PROVISIONING_PROFILE_B64: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
 
       # The release overlay, as the build job's signed step runs it, with this leg's secrets alone.
       # 0.0.1's outputs move out of .out, where signed-check reads 0.0.2's.
@@ -100,6 +107,7 @@ jobs:
           APPLE_API_KEY: ${{ runner.os == 'macOS' && format('{0}/apple-api-key.p8', runner.temp) || '' }}
           APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
           APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_PROVISIONING_PROFILE: ${{ runner.os == 'macOS' && secrets.APPLE_PROVISIONING_PROFILE != '' && format('{0}/eidolon.provisionprofile', runner.temp) || '' }}
           AZURE_TENANT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_TENANT_ID || '' }}
           AZURE_CLIENT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_ID || '' }}
           AZURE_CLIENT_SECRET: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_SECRET || '' }}
@@ -110,11 +118,13 @@ jobs:
       - name: Remove the App Store Connect key
         if: always() && runner.os == 'macOS'
         timeout-minutes: 1
-        run: rm -f "$RUNNER_TEMP/apple-api-key.p8"
+        run: rm -f "$RUNNER_TEMP/apple-api-key.p8" "$RUNNER_TEMP/eidolon.provisionprofile"
 
       - name: The signatures of 0.0.2
         if: ${{ !cancelled() && steps.signed.outcome == 'success' }}
         timeout-minutes: 15
+        env:
+          EIDOLON_EXPECT_PROVISIONING_PROFILE: ${{ runner.os == 'macOS' && secrets.APPLE_PROVISIONING_PROFILE != '' && '1' || '0' }}
         run: node apps/desktop/scripts/signed-check.ts
 
       - id: update

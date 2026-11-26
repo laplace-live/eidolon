@@ -238,7 +238,7 @@ server log's line that holds what went wrong, and the app shows it beside the de
 | Personas | `GET`, `POST personas`, `PUT personas/active` | List, create (with a voice, the providers and models the active persona's `persona.yaml` sets for `hearing`, `mind`, `voice` and `knowledge.gate`, and a starter `prompt.md`), switch (refused during a call, or while one is connecting). A new persona's voice is her voice provider's: a Fish Audio voice id, or for another provider one line of text |
 | Persona files | `GET`, `PUT personas/:id/{prompt,glossary,identity}` | Her copy in the data home, copied from the template on the first write; a glossary that doesn't parse isn't saved |
 | Voice styles | `PUT personas/:id/voice-styles` | `{styles}`: all of hers, in order, each with a name of its own, a voice and a hint, replacing her `persona.yaml`'s `voice.styles`; answers as `GET settings` does. Any name her file can hold passes, since a save sends back those a hand-written file gave her; the studio names a new style with a lowercase letter, then letters, digits or `_`, never `default` |
-| Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar` | Outfits and friends under `references/`, and the avatar, `avatar.*` at the root of her folder, where selfies never take it for an outfit; a template's pictures can't be deleted |
+| Pictures | `personas/:id/references/:kind/:name`, `personas/:id/avatar`, `GET personas/:id/notification-avatar?group=` | Outfits and friends under `references/`, the avatar `avatar.*` at the root of her folder (where selfies never take it for an outfit), and a 256×256 transparent circular PNG (or 2–3 persona group composite) rendered for desktop notifications with ETag caching and Bearer/session-proof auth; a template's pictures can't be deleted |
 | Character models | `GET`, `POST personas/:id/models?filename=`, `PUT personas/:id/models/:model/file`, `PATCH`, `DELETE personas/:id/models/:model`, `GET personas/:id/models/:model/file?sha256=` | Her PSD2Live models, each in `models/<model>/` of her folder in the data home, never a template's ([avatar.md](avatar.md)): POST takes a `.p2lrt`'s bytes, which PSD2Live's runtime loads before they are kept, under an id and a name made from `filename`, the name numbered past her other models' (`tml 2`), and never makes it the one she shows, which is `appearance.model`, set through `PUT settings`; GET's `active` is that model, while she has it. PUT puts a new file in place, keeping the model's settings that still name what it holds; PATCH replaces its name, framing, `look` (how far her gaze turns her, 0 to 1), moods, `moodParameters` (up to eight parameters a mood holds, each in its range), gestures, outfits or outfit, and checks the moods, mood parameters, gestures and outfits against what the file holds; DELETE also clears her `appearance.model` when it names the model. The file is served under its sha256 as immutable, which a browser keeps for good and the desktop app's page fetches again on each full load. An import or a new file is refused during a call, or while one is connecting (409 `call-active`). A persona's summary and status' `persona` carry `appearance.model`: the active model's id, name, kind, sha256 and `updatedAt`, or null |
 | Knowledge | `personas/:id/facts[/:file]`, `GET personas/:id/index` | Fact files with whether the patterns pick them and whether they changed since the last index; the index from its build records |
 | Videos | `POST personas/:id/batches` | `{urls}` → a new batch of the URLs her lists don't have yet |
@@ -417,9 +417,9 @@ has none of them, and without them nothing below happens.
   the OS (`darwin`, `win32`). The page reports the theme *setting* (`light`, `dark` or `system`,
   never the theme System resolves to) and the active language (`en`, `zh-Hans`) once at start and on
   every change. `onCommand` hands it the menus' and the notifications' commands: `settings` opens
-  `/settings`, `tasks` `/tasks`, `call` `/call`, and `open-task:<chat>:<task>`
-  `/chats/<chat>?task=<task>` when both are ids; one it doesn't know is ignored (`runCommand` in
-  `lib/desktop.ts`). The members added since the first desktop release are optional, since a
+  `/settings`, `tasks` `/tasks`, `call` `/call`, `open-chat:<chat>` `/chats/<chat>`, and
+  `open-task:<chat>:<task>` `/chats/<chat>?task=<task>` when the ids are valid; one it doesn't know
+  is ignored (`runCommand` in `lib/desktop.ts`). The members added since the first desktop release are optional, since a
   terminal's server can serve this page to an older app, and the page looks for each before it uses
   it: `chooseFolder()`, `loginItem()`, `setLoginItem(on)`, `terminalCommand()` and
   `setTerminalCommand(action)`, each a promise of main's answer
@@ -561,7 +561,8 @@ turn, the director, voice messages, calls and the API are in [chat.md](chat.md).
 
 - **The page:**
   - The chats are in the sidebar ([The layout](#the-layout)), newest first, each with who it is
-    with, its name, its last line and when, and the open chat fills the rest of the window, its
+    with (her circle avatar alone, or a rounded-square grid of up to nine participants' avatars for
+    a group), its name, its last line and when, and the open chat fills the rest of the window, its
     lines in a centered column. With none open, `/chats` offers **New Chat**.
   - **The message box** floats at the foot of the column, with no bar behind it: the lines scroll
     under it and fade out above it, and the waiting bar, the call's dock and a reply that couldn't

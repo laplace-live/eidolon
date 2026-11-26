@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { MAX_PARTICIPANTS } from "@eidolon/chat";
 import {
   activePersona,
   isPlainObject,
@@ -31,6 +32,7 @@ import {
   type VoiceStyle,
 } from "../api.ts";
 import { activeModel } from "../appearance.ts";
+import { notificationAvatar } from "../notification-avatar.ts";
 import {
   AVATAR_STEM,
   editSettingsYaml,
@@ -125,6 +127,24 @@ function line(value: unknown, max: number): string | null {
 
 function fishVoiceId(value: unknown): string | null {
   return typeof value === "string" && VOICE_ID.test(value) ? value : null;
+}
+
+function matchesEtag(header: string | null, etag: string): boolean {
+  if (header === null) return false;
+  return header
+    .split(",")
+    .map((part) => part.trim().replace(/^W\//, ""))
+    .includes(etag);
+}
+
+/** Validated persona ids from `?group=a,b` (up to `MAX_PARTICIPANTS`). */
+function notificationPeers(raw: string | null): string[] | Response {
+  if (raw === null || raw === "") return [];
+  const parts = raw.split(",");
+  if (parts.length > MAX_PARTICIPANTS || parts.some((part) => !isPersonaId(part))) {
+    return localError(400, "bad-request", `\`group\` names up to ${MAX_PARTICIPANTS} persona ids`);
+  }
+  return parts;
 }
 
 /**
@@ -571,6 +591,23 @@ export function personasRoutes(app: LocalApp): LocalRouteSpec[] {
         }
         return localJson(200, { ok: true });
       }),
+    },
+    {
+      route: "GET /api/local/personas/:id/notification-avatar",
+      async handler(request, { params, url }) {
+        const id = params.id as string;
+        if (!isPersonaId(id)) {
+          return localError(400, "invalid-persona-id", "A persona id is a lowercase slug");
+        }
+        const peers = notificationPeers(url.searchParams.get("group"));
+        if (peers instanceof Response) return peers;
+        const { bytes, sha256 } = await notificationAvatar(id, peers);
+        const etag = `"${sha256}"`;
+        if (matchesEtag(request.headers.get("if-none-match"), etag)) {
+          return new Response(null, { status: 304, headers: { etag, "cache-control": NO_STORE } });
+        }
+        return imageResponse(bytes, "image/png", { "cache-control": NO_STORE, etag });
+      },
     },
 
     {

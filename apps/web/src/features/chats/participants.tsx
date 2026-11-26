@@ -2,8 +2,11 @@ import { MAX_PARTICIPANTS, type ParticipantId } from "@eidolon/chat";
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { UserRoundMinusIcon, UserRoundPlusIcon } from "lucide-react";
+import { useState } from "react";
 import { Link } from "wouter";
 import { PersonaAvatar } from "@/components/avatar";
+import { monogram } from "@/components/avatar/monogram";
+import { avatarSrc, useAvatarVersion } from "@/components/avatar/version";
 import { personasQuery } from "@/components/settings-form/queries";
 import { AvatarGroup, AvatarGroupCount } from "@/components/ui/avatar";
 import {
@@ -22,23 +25,105 @@ import { cn } from "@/lib/utils";
 import type { ChatPersona } from "./persona";
 import { useChangeParticipants } from "./queries";
 
-/** Two fit the box one avatar fills, so their monograms shrink with them. */
-const SMALL = "size-5 *:data-[slot=avatar-fallback]:text-[0.5rem]";
+const MAX_GROUP_AVATAR_TILES = 9;
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-/** A chat's avatar in the list: hers alone, or two of a group's, overlapping in the same box. */
-export function ChatAvatar({ personas }: { readonly personas: readonly ChatPersona[] }) {
-  const [first, second] = personas;
-  if (first === undefined) return null;
-  if (second === undefined) return <PersonaAvatar persona={first} size="sm" />;
+function firstGrapheme(text: string): string {
+  for (const { segment } of graphemeSegmenter.segment(text)) return segment;
+  return "?";
+}
+
+/** WeChat-style row partitioning for up to 9 group chat tiles (`[2]`, `[1,2]`, ..., `[3,3,3]`). */
+export function groupAvatarRows<T>(items: readonly T[]): readonly (readonly T[])[] {
+  const shown = items.slice(0, MAX_GROUP_AVATAR_TILES);
+  switch (shown.length) {
+    case 0:
+      return [];
+    case 1:
+    case 2:
+      return [shown];
+    case 3:
+      return [shown.slice(0, 1), shown.slice(1)];
+    case 4:
+    case 5:
+      return [shown.slice(0, 2), shown.slice(2)];
+    case 6:
+      return [shown.slice(0, 3), shown.slice(3)];
+    case 7:
+      return [shown.slice(0, 1), shown.slice(1, 4), shown.slice(4)];
+    case 8:
+      return [shown.slice(0, 2), shown.slice(2, 5), shown.slice(5)];
+    default:
+      return [shown.slice(0, 3), shown.slice(3, 6), shown.slice(6, 9)];
+  }
+}
+
+function GroupAvatarTile({
+  persona,
+  compact,
+}: {
+  readonly persona: ChatPersona;
+  readonly compact: boolean;
+}) {
+  const version = useAvatarVersion(persona.id);
+  const src = avatarSrc(persona.id, version);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const showImage = persona.avatar !== false && failedSrc !== src;
+
   return (
-    <div className="relative size-8 shrink-0">
-      <PersonaAvatar persona={first} size="xs" className={cn(SMALL, "absolute top-0 left-0")} />
-      <PersonaAvatar
-        persona={second}
-        size="xs"
-        className={cn(SMALL, "absolute right-0 bottom-0 ring-2 ring-sidebar")}
-      />
-    </div>
+    <span
+      data-slot="group-avatar-tile"
+      className={cn(
+        "shrink-0 overflow-clip",
+        compact ? "size-[calc(28px/3)] rounded-[1.5px]" : "size-[14.5px] rounded-[2px]",
+      )}
+    >
+      {showImage ? (
+        <img
+          src={src}
+          alt=""
+          onError={() => setFailedSrc(src)}
+          className="block size-full object-cover"
+        />
+      ) : (
+        <span
+          className={cn(
+            "flex size-full items-center justify-center bg-background/90 font-medium leading-none text-muted-foreground dark:bg-background/75",
+            compact ? "text-[6px]" : "text-[8px]",
+          )}
+        >
+          {firstGrapheme(monogram(persona.shortName || persona.name))}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** A chat's avatar in the list: hers alone, or a rounded-square grid of up to 9 group members. */
+export function ChatAvatar({ personas }: { readonly personas: readonly ChatPersona[] }) {
+  const [first] = personas;
+  if (first === undefined) return null;
+  if (personas.length === 1) return <PersonaAvatar persona={first} size="sm" />;
+
+  const rows = groupAvatarRows(personas);
+  const compact = personas.length >= 5;
+  return (
+    <span
+      data-slot="group-avatar"
+      aria-hidden
+      className="relative flex size-8 shrink-0 flex-col items-center justify-center gap-px rounded-[6px] bg-black/[0.07] p-px select-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[6px] after:border after:border-border/50 after:mix-blend-darken dark:bg-white/[0.12] dark:after:mix-blend-lighten"
+    >
+      {rows.map((row) => (
+        <span
+          key={row.map((persona) => persona.id).join(",")}
+          className="flex items-center justify-center gap-px"
+        >
+          {row.map((persona) => (
+            <GroupAvatarTile key={persona.id} persona={persona} compact={compact} />
+          ))}
+        </span>
+      ))}
+    </span>
   );
 }
 

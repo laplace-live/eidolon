@@ -14,10 +14,20 @@ import {
   screen,
   session,
 } from "electron";
-import { BRIDGE, type Language, pageAt } from "../shared/bridge.ts";
+import { BRIDGE, type DesktopCommand, type Language, pageAt } from "../shared/bridge.ts";
 import { dataHome } from "./attach.ts";
+import { NotificationAvatarCache } from "./avatar-cache.ts";
 import { Backend, licensesFile } from "./backend.ts";
-import { BACKGROUND_LINE, backendPort, hasHideNotice, hasTray } from "./background.ts";
+import {
+  BACKGROUND_LINE,
+  backendPort,
+  type DesktopNotice,
+  hasHideNotice,
+  hasTray,
+  type NoticeEvents,
+  type NoticeHandle,
+} from "./background.ts";
+import { type ChatNotice, ChatWatch, chatNoticeCommand } from "./chat-notices.ts";
 import {
   dressWindow,
   handleAppBridge,
@@ -56,7 +66,6 @@ import {
   waitingPage,
 } from "./protocol.ts";
 import { installQuit, watchSession } from "./quit.ts";
-import type { BackendFetch } from "./quit-check.ts";
 import { HideNotice } from "./quit-flow.ts";
 import { senderWindow } from "./senders.ts";
 import { STRINGS, shellLanguage } from "./strings.ts";
@@ -168,25 +177,149 @@ function run(): void {
       return waitingPage(shellPageStrings(language(), strings()));
     },
   });
-  const backendFetch: BackendFetch = (path, { signal }) => backend.get(path, signal);
+  const backendFetch = (path: string, { signal }: { readonly signal: AbortSignal }) =>
+    backend.get(path, signal);
+  const avatarCache =
+    notifies && !background
+      ? new NotificationAvatarCache({
+          folder: join(app.getPath("userData"), "notification-avatars"),
+          fetch: backendFetch,
+          log: mainLog,
+        })
+      : null;
   let noticeFailed = false;
+  const noticeEvents = (click: () => void): NoticeEvents => ({
+    click,
+    failed: (error) => {
+      if (noticeFailed) return;
+      noticeFailed = true;
+      mainLog.warn(`Eidolon: a notification failed: ${error}`);
+    },
+  });
+  const showAsyncNotice = (
+    build: (signal: AbortSignal) => Promise<DesktopNotice | null>,
+    events: NoticeEvents,
+  ): NoticeHandle => {
+    const controller = new AbortController();
+    let inner: NoticeHandle | null = null;
+    let closed = false;
+    void build(controller.signal)
+      .then((built) => {
+        if (closed || built === null || mainWindow()?.isFocused() === true) return;
+        inner = native.notify(built, events);
+        if (closed) {
+          inner?.close();
+          inner = null;
+        }
+      })
+      .catch((error) => {
+        if (!closed && !controller.signal.aborted) {
+          mainLog.warn(`Eidolon: couldn't prepare a notification: ${String(error)}`);
+        }
+      });
+    return {
+      close() {
+        if (closed) return;
+        closed = true;
+        controller.abort();
+        inner?.close();
+        inner = null;
+      },
+    };
+  };
+  const buildDesktopNotice = (params: {
+    readonly title: string;
+    readonly body: string;
+    readonly chat: string | null;
+    readonly senderId: string | null;
+    readonly senderName: string;
+    readonly groupTitle: string | null;
+    readonly avatarPath: string | null;
+  }): DesktopNotice => {
+    const { title, body, chat, senderId, senderName, groupTitle, avatarPath } = params;
+    const withAvatar = avatarPath !== null ? { avatarPath } : {};
+    if (groupTitle !== null && chat !== null) {
+      return {
+        title: groupTitle,
+        subtitle: title,
+        body,
+        threadId: chat,
+        ...(senderId !== null ? { sender: { id: senderId, name: senderName } } : {}),
+        group: { id: chat, title: groupTitle, ...withAvatar },
+      };
+    }
+    return {
+      title,
+      body,
+      ...(chat !== null ? { threadId: chat } : {}),
+      ...(senderId !== null ? { sender: { id: senderId, name: senderName, ...withAvatar } } : {}),
+    };
+  };
+  const chatWatch = notifies
+    ? new ChatWatch({
+        fetch: backendFetch,
+        focused: () => mainWindow()?.isFocused() === true,
+        strings,
+        show: (notice) => {
+          const events = noticeEvents(() => openChatNotice(notice));
+          const toDesktopNotice = (avatarPath: string | null) =>
+            buildDesktopNotice({
+              title: notice.speakerName,
+              body: notice.body,
+              chat: notice.chat,
+              senderId: notice.speakerId,
+              senderName: notice.speakerName,
+              groupTitle: notice.groupTitle,
+              avatarPath,
+            });
+          if (avatarCache === null) return native.notify(toDesktopNotice(null), events);
+          return showAsyncNotice(
+            async (signal) =>
+              toDesktopNotice(
+                await avatarCache.resolve(notice.speakerId, notice.groupPeers, signal),
+              ),
+            events,
+          );
+        },
+        log: mainLog,
+      })
+    : null;
   const watch = notifies
     ? new TaskWatch({
         fetch: backendFetch,
         focused: () => mainWindow()?.isFocused() === true,
         show: (notice) => {
           const { title, body } = noticeText(notice, strings());
-          return native.notify(
-            { title, body },
-            {
-              click: () => openNotice(notice),
-              failed: (error) => {
-                if (noticeFailed) return;
-                noticeFailed = true;
-                mainLog.warn(`Eidolon: a notification failed: ${error}`);
-              },
-            },
-          );
+          const events = noticeEvents(() => openNotice(notice));
+          const toDesktopNotice = (groupTitle: string | null, avatarPath: string | null) =>
+            buildDesktopNotice({
+              title,
+              body,
+              chat: notice.chat,
+              senderId: notice.personaId,
+              senderName: title,
+              groupTitle,
+              avatarPath,
+            });
+          if (avatarCache === null || notice.personaId === null) {
+            return native.notify(
+              avatarCache === null ? { title, body } : toDesktopNotice(null, null),
+              events,
+            );
+          }
+          const personaId = notice.personaId;
+          return showAsyncNotice(async (signal) => {
+            const groupInfo =
+              notice.chat !== null
+                ? ((await chatWatch?.groupFor(notice.chat, personaId)) ?? null)
+                : null;
+            const avatarPath = await avatarCache.resolve(
+              personaId,
+              groupInfo?.groupPeers ?? [],
+              signal,
+            );
+            return toDesktopNotice(groupInfo?.groupTitle ?? null, avatarPath);
+          }, events);
         },
         log: mainLog,
       })
@@ -203,6 +336,7 @@ function run(): void {
     strings,
     icon,
     approved: () => {
+      chatWatch?.stop();
       watch?.stop();
       companion?.quit();
       tray?.destroy();
@@ -349,14 +483,23 @@ function run(): void {
     }
   }
 
-  /** A notification's click: the window, then its task. */
-  function openNotice(notice: Notice): void {
+  function openNoticeCommand(kind: "task" | "chat", command: () => DesktopCommand): void {
     openWindow();
     try {
-      commands.send(noticeCommand(notice));
+      commands.send(command());
     } catch (error) {
-      mainLog.warn(`Eidolon: couldn't open the task a notification named: ${String(error)}`);
+      mainLog.warn(`Eidolon: couldn't open the ${kind} a notification named: ${String(error)}`);
     }
+  }
+
+  /** A notification's click: the window, then its task. */
+  function openNotice(notice: Notice): void {
+    openNoticeCommand("task", () => noticeCommand(notice));
+  }
+
+  /** A chat notification's click: the window, then its conversation. */
+  function openChatNotice(notice: ChatNotice): void {
+    openNoticeCommand("chat", () => chatNoticeCommand(notice));
   }
 
   app.on("second-instance", (_event, _argv, _cwd, data) => {
@@ -507,9 +650,11 @@ function run(): void {
         });
       }
       const watchFollows = watch === null ? null : followBackend(watch);
+      const chatWatchFollows = chatWatch === null ? null : followBackend(chatWatch);
       backend.subscribe((state) => {
         pages.backend(state);
         watchFollows?.(state);
+        chatWatchFollows?.(state);
         if (state.phase !== "ready") return;
         setAbout();
         if (!updatesHeld) updates?.backendReady();
