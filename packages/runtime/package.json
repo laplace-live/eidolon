@@ -17,6 +17,6 @@
     "@eidolon/turn": "workspace:*",
     "@eidolon/voice": "workspace:*",
     "@eidolon/webrtc": "workspace:*",
-    "werift": "0.27.0"
+    "werift": "0.28.0"
   }
 }

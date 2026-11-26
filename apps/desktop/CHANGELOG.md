@@ -1,5 +1,19 @@
 # laplace-eidolon-desktop
 
+## 0.6.0
+
+### Minor Changes
+
+- d65edf4: Add a desktop title bar with Back and Forward, and show pages in a card
+- 8c164e8: Setup recommends the speech recognition and voice keys instead of requiring them
+- d0b28e2: Store viewer memories and knowledge indexes locally on disk with Zvec
+
+### Patch Changes
+
+- 8f4aad8: Name the desktop app LAPLACE Eidolon
+- 51aaead: Discard Changes now goes back from unsaved studio edits instead of asking again
+- 8887905: Keep tooltips, popovers and menus clear of the window edge
+
 ## 0.5.0
 
 ### Minor Changes

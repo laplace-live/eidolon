@@ -472,7 +472,7 @@ the chat numbered it. Each persona's photo reaches `onServerMessage` with her `p
 
 ## RTVI
 
-The server stays at protocol 2.2.0; client-js 1.16.0 speaks 2.3.0 and accepts any server of the
+The server stays at protocol 2.2.0; client-js 1.17.0 speaks 2.4.0 and accepts any server of the
 same major. Every message is `{label: "rtvi-ai", type, id?, data?}` with snake_case keys and nulls
 left out; `id` appears only on `bot-ready` and `error-response`.
 

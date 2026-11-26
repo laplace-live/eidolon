@@ -1,6 +1,6 @@
 {
   "name": "@laplace.live/eidolon",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "license": "AGPL-3.0-only",
   "type": "module",
   "publishConfig": {
@@ -13,6 +13,6 @@
     "@eidolon/config": "workspace:*",
     "@types/cross-spawn": "6.0.6",
     "cross-spawn": "7.0.6",
-    "vite": "8.3.8"
+    "vite": "8.4.0"
   }
 }

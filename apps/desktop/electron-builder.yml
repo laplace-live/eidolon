@@ -2,7 +2,7 @@
 # (scripts/package.ts).
 appId: live.laplace.eidolon
 productName: LAPLACE Eidolon
-electronVersion: 45.4.1
+electronVersion: 45.5.0
 # A per-user NSIS install goes to %LOCALAPPDATA%\Programs\<name>, from the package name, not
 # productName, and electron-updater caches in <name>-updater. Updates keep the first install's folder.
 extraMetadata:

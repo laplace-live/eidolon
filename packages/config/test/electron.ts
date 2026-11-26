@@ -13,7 +13,7 @@ function seeVersions(electron: string | undefined): () => void {
 
 /** Until the returned function runs, jsRuntime() answers as inside Electron 45. */
 export function asElectron(): () => void {
-  return seeVersions("45.4.1");
+  return seeVersions("45.5.0");
 }
 
 /** Until the returned function runs, jsRuntime() answers as on plain Node: never spawn with it. */

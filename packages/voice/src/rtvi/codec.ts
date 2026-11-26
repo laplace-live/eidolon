@@ -8,7 +8,7 @@
 // ones with the error texts pipedog's RTVIProcessor answers them with.
 
 export const RTVI_LABEL = "rtvi-ai";
-/** Clients of the same major accept it: client-js 1.16.0 speaks 2.3.0. */
+/** Clients of the same major accept it: client-js 1.17.0 speaks 2.4.0. */
 export const PROTOCOL_VERSION = "2.2.0";
 
 export type RtviMessage = {

@@ -253,7 +253,7 @@ pipeline's dry run against the plan it emits).
 - **pnpm, Node 24, install policy, and no Bun APIs.** `package.json`'s `packageManager` is pnpm's
   sole version pin (CI and Docker read it), and everything runs on Node 24 (`engines`, CI, Docker,
   Electron). `pnpm-workspace.yaml` enforces `allowBuilds` (disabling install scripts such as
-  `onnxruntime-node`'s CUDA fetch on `linux/x64`) and a 14-day `minimumReleaseAge` (newer versions
+  `onnxruntime-node`'s CUDA fetch on `linux/x64`) and a 3-hour `minimumReleaseAge` (newer versions
   need an exact `minimumReleaseAgeExclude` entry until aged). No runtime code, script, or
   benchmark imports `bun`/`bun:*` or uses `Bun`, `HTMLRewriter`, `import.meta.dir`, `import.meta.path`,
   or `Uint8Array.fromBase64`/`toBase64`/`fromHex`; `apps/cli/test/no_bun.test.ts` and Biome enforce

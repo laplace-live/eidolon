@@ -2,7 +2,7 @@
   "name": "laplace-eidolon-monorepo",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.20.0",
+  "packageManager": "pnpm@12.23.0",
   "scripts": {
     "dev": "node --watch apps/bot/src/main.ts",
     "start": "node apps/bot/src/main.ts",
@@ -48,10 +48,10 @@
     "release": "pnpm build:npm && pnpm build:sdk && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.7",
+    "@biomejs/biome": "2.6.9",
     "@changesets/cli": "3.0.3",
-    "@types/node": "24.19.2",
+    "@types/node": "24.19.4",
     "typescript": "7.0.2",
-    "vitest": "5.1.0"
+    "vitest": "5.1.2"
   }
 }

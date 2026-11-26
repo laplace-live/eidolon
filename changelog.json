@@ -2,6 +2,78 @@
   "schema": 1,
   "releases": [
     {
+      "date": "2026-11-26T13:46:29.192Z",
+      "versions": {
+        "laplace-eidolon": "0.18.0",
+        "@laplace.live/eidolon": "0.18.0",
+        "laplace-eidolon-desktop": "0.6.0"
+      },
+      "items": [
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Add a desktop title bar with Back and Forward, and show pages in a card"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Setup recommends the speech recognition and voice keys instead of requiring them"
+        },
+        {
+          "kind": "feature",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Store viewer memories and knowledge indexes locally on disk with Zvec"
+        },
+        {
+          "kind": "improvement",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Name the desktop app LAPLACE Eidolon"
+        },
+        {
+          "kind": "improvement",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon"
+          ],
+          "text": "Run the Docker image on Node 24 instead of Bun"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Discard Changes now goes back from unsaved studio edits instead of asking again"
+        },
+        {
+          "kind": "fix",
+          "packages": [
+            "@laplace.live/eidolon",
+            "laplace-eidolon",
+            "laplace-eidolon-desktop"
+          ],
+          "text": "Keep tooltips, popovers and menus clear of the window edge"
+        }
+      ]
+    },
+    {
       "date": "2026-11-25T14:55:54.141Z",
       "versions": {
         "laplace-eidolon": "0.17.0",

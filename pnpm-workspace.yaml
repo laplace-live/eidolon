@@ -5,12 +5,8 @@ packages:
 # `pnpm add`, and the shadcn CLI that runs it, write exact pins.
 saveExact: true
 
-# Only versions at least 14 days old resolve, and every install checks the lockfile's against it.
-minimumReleaseAge: 20160
-# The desktop's Electron was published 2026-11-19: drop its entry once the gate passes it on
-# 2026-12-03.
-minimumReleaseAgeExclude:
-  - electron@45.4.1
+# Only versions at least 3 hours old resolve, and every install checks the lockfile's against it.
+minimumReleaseAge: 180
 
 # Transitive CLI and build dependencies pull older undici ranges with open advisories.
 overrides:

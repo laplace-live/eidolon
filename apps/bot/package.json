@@ -1,6 +1,6 @@
 {
   "name": "laplace-eidolon",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -31,9 +31,9 @@
     "@eidolon/assistant": "workspace:*",
     "@eidolon/cli": "workspace:*",
     "@eidolon/ingest": "workspace:*",
-    "@pipecat-ai/client-js": "1.16.0",
-    "@pipecat-ai/small-webrtc-transport": "1.11.2",
-    "playwright-core": "1.65.0",
-    "rolldown": "1.3.2"
+    "@pipecat-ai/client-js": "1.17.0",
+    "@pipecat-ai/small-webrtc-transport": "1.11.3",
+    "playwright-core": "1.65.1",
+    "rolldown": "1.3.3"
   }
 }

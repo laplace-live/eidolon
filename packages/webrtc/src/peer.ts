@@ -320,10 +320,10 @@ export class Peer {
       transceiver.setDirection(i < 2 ? "sendrecv" : "recvonly");
     });
     logger.debug("Creating answer");
+    // setLocalDescription awaits the host sockets, TURN allocations, and the default-route and
+    // wildcard STUN queries (werift#814); waiting for "complete" would block 5 s on non-default
+    // interfaces (such as Tailscale or a TUN proxy) whose bound sockets never reach STUN.
     await pc.setLocalDescription(await pc.createAnswer());
-    if (pc.iceGatheringState !== "complete") {
-      await pc.iceGatheringStateChange.watch((state) => state === "complete");
-    }
     const local = pc.localDescription;
     this.#answer = local === null ? null : { sdp: local.sdp, type: local.type };
   }
