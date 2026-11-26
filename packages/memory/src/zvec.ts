@@ -1,7 +1,7 @@
 // Per-viewer memory vectors on Zvec: an in-process flat cosine index with inverted scalar indexes
 // on the four mem0 scope columns and the full mem0 payload preserved verbatim as JSON.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   type ZVecCollection,
@@ -47,6 +47,13 @@ export interface VectorStore {
   delete(id: string): Promise<void>;
   /** Deletes every point matching `filters` across all retained collections and returns them for history logging. */
   deleteScope?(filters: ScopeFilters): Promise<StoredPoint[]>;
+  /** Lists points matching `filters` in retained inactive collections (excluding the active collection). */
+  listRetainedScope?(filters: ScopeFilters): Promise<StoredPoint[]>;
+}
+
+interface DeletionTombstones {
+  readonly ids: string[];
+  readonly scopes: ScopeFilters[];
 }
 
 const INDEXED_FIELDS = ["user_id", "agent_id", "run_id", "actor_id"] as const;
@@ -55,6 +62,7 @@ const ZVEC_MAX_TOPK = 100_000;
 const WRITE_BATCH = 512;
 const FETCH_BATCH = 1_000;
 const QDRANT_MIGRATED_MARKER = ".qdrant-migrated";
+const TOMBSTONES_FILE = ".deleted-tombstones.json";
 const INIT_KEY = Symbol.for("eidolon.zvec.initialized");
 const STORES_KEY = Symbol.for("eidolon.zvec.memoryStores");
 
@@ -139,7 +147,15 @@ function parsePayload(raw: unknown): Readonly<Record<string, unknown>> {
 
 function hasZvecFiles(path: string): boolean {
   if (!existsSync(path)) return false;
-  return readdirSync(path).some((name) => name !== QDRANT_MIGRATED_MARKER);
+  return readdirSync(path).length > 0;
+}
+
+function canonicalScope(filters: ScopeFilters): ScopeFilters {
+  const out: Partial<Record<"user_id" | "agent_id" | "run_id", string>> = {};
+  for (const key of ["user_id", "agent_id", "run_id"] as const) {
+    if (typeof filters[key] === "string") out[key] = filters[key];
+  }
+  return out;
 }
 
 async function queryMatchingIds(
@@ -247,29 +263,59 @@ export class ZvecVectorStore implements VectorStore {
     const existing = this.#openExisting(path);
     if (existing) return existing;
     mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
-    const migrated = this.hasQdrantMigrationMarker();
     if (existsSync(path)) rmSync(path, { recursive: true, force: true });
     const col = ZVecCreateAndOpen(path, memorySchema(this.#vectorSize), {
       readOnly: false,
       enableMMAP: true,
     });
-    if (migrated) this.markQdrantMigrated();
     openStores().set(path, col);
     return col;
   }
 
+  #readTombstones(): DeletionTombstones {
+    const file = join(this.#dir, TOMBSTONES_FILE);
+    if (!existsSync(file)) return { ids: [], scopes: [] };
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as Partial<DeletionTombstones>;
+      return {
+        ids: Array.isArray(parsed.ids)
+          ? parsed.ids.filter((id): id is string => typeof id === "string")
+          : [],
+        scopes: Array.isArray(parsed.scopes) ? parsed.scopes.map(canonicalScope) : [],
+      };
+    } catch {
+      return { ids: [], scopes: [] };
+    }
+  }
+
+  #writeTombstones(tombstones: DeletionTombstones): void {
+    mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
+    writeFileSync(join(this.#dir, TOMBSTONES_FILE), `${JSON.stringify(tombstones)}\n`, {
+      mode: 0o600,
+    });
+  }
+
   hasQdrantMigrationMarker(): boolean {
-    return existsSync(join(this.#collectionPath(), QDRANT_MIGRATED_MARKER));
+    return existsSync(join(this.#dir, QDRANT_MIGRATED_MARKER));
   }
 
   markQdrantMigrated(): void {
-    const path = this.#collectionPath();
-    if (!existsSync(path)) mkdirSync(path, { recursive: true, mode: 0o700 });
-    writeFileSync(join(path, QDRANT_MIGRATED_MARKER), "1\n", { mode: 0o600 });
+    mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
+    writeFileSync(join(this.#dir, QDRANT_MIGRATED_MARKER), "1\n", { mode: 0o600 });
   }
 
-  docCount(): number {
-    return this.#open().stats.docCount;
+  hasPoint(id: string): boolean {
+    const found = this.#open().fetchSync({ ids: id, outputFields: [], includeVector: false });
+    return found[id] !== undefined;
+  }
+
+  isTombstoned(id: string, payload: Readonly<Record<string, unknown>>): boolean {
+    const tombstones = this.#readTombstones();
+    if (tombstones.ids.includes(id)) return true;
+    return tombstones.scopes.some((scope) => {
+      const entries = Object.entries(scope);
+      return entries.length > 0 && entries.every(([key, value]) => payload[key] === value);
+    });
   }
 
   async ensureCollection(): Promise<void> {
@@ -351,12 +397,41 @@ export class ZvecVectorStore implements VectorStore {
     if (!status.ok && status.code !== "ZVEC_NOT_FOUND") {
       throw new Error(`Zvec delete failed (${status.code}): ${status.message}`);
     }
+    const tombstones = this.#readTombstones();
+    if (!tombstones.ids.includes(id)) {
+      this.#writeTombstones({ ids: [...tombstones.ids, id], scopes: tombstones.scopes });
+    }
+  }
+
+  async listRetainedScope(filters: ScopeFilters): Promise<StoredPoint[]> {
+    const filter = filterFor(filters);
+    if (!filter || !existsSync(this.#dir)) return [];
+    const activePath = this.#collectionPath();
+    const retained: StoredPoint[] = [];
+    for (const entry of readdirSync(this.#dir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !entry.name.startsWith("v1_")) continue;
+      const collectionPath = join(this.#dir, entry.name);
+      if (collectionPath === activePath) continue;
+      const col = this.#openExisting(collectionPath);
+      if (!col) continue;
+      const ids = await queryMatchingIds(col, filter);
+      if (ids.length > 0) retained.push(...fetchStoredPoints(col, ids));
+    }
+    return retained;
   }
 
   async deleteScope(filters: ScopeFilters): Promise<StoredPoint[]> {
     const filter = filterFor(filters);
     if (!filter) return [];
     this.#open();
+    const scope = canonicalScope(filters);
+    if (Object.keys(scope).length > 0) {
+      const tombstones = this.#readTombstones();
+      const encoded = JSON.stringify(scope);
+      if (!tombstones.scopes.some((existing) => JSON.stringify(existing) === encoded)) {
+        this.#writeTombstones({ ids: tombstones.ids, scopes: [...tombstones.scopes, scope] });
+      }
+    }
     if (!existsSync(this.#dir)) return [];
     const removed: StoredPoint[] = [];
     for (const entry of readdirSync(this.#dir, { withFileTypes: true })) {

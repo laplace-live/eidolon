@@ -381,6 +381,18 @@ export class MemoryEngine {
     return items;
   }
 
+  /** Counts unexpired memories for `scope` in retained inactive collections (older embedding settings). */
+  async countRetained(scope: MemoryScope): Promise<number> {
+    if (!this.#store.listRetainedScope) return 0;
+    const filters = requireScope(scopeFilters(scope));
+    const points = await this.#store.listRetainedScope(filters);
+    let count = 0;
+    for (const point of points) {
+      if (!this.#isExpired(point.payload)) count++;
+    }
+    return count;
+  }
+
   /** mem0 `delete_all`: scroll and delete until the scope is empty. Returns how many went. */
   async deleteAll(scope: MemoryScope): Promise<number> {
     const filters = scopeFilters(scope);

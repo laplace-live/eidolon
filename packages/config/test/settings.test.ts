@@ -254,10 +254,16 @@ describe("paths", () => {
     expect(loadSettings().values.get("MEM0_HISTORY_DB_PATH")).toBe("/srv/h.db");
   });
 
-  test("legacy memory.qdrant.host in settings.yaml turns memory.enabled on without warning", () => {
-    write("settings.yaml", "memory:\n  qdrant:\n    host: 127.0.0.1\n    port: 6333\n");
+  test("legacy memory.qdrant.host in settings.yaml turns memory.enabled on and preserves connection settings without warning", () => {
+    write(
+      "settings.yaml",
+      "memory:\n  qdrant:\n    host: 127.0.0.1\n    port: 6334\n    collection: custom_mem\n",
+    );
     const loaded = loadSettings();
     expect(loaded.values.get("MEM0_ENABLED")).toBe("true");
+    expect(loaded.values.get("MEM0_QDRANT_HOST")).toBe("127.0.0.1");
+    expect(loaded.values.get("MEM0_QDRANT_PORT")).toBe("6334");
+    expect(loaded.values.get("MEM0_QDRANT_COLLECTION")).toBe("custom_mem");
     expect(warnings).toEqual([]);
     write("settings.yaml", "memory:\n  enabled: false\n  qdrant:\n    host: 127.0.0.1\n");
     expect(loadSettings().values.get("MEM0_ENABLED")).toBe("false");

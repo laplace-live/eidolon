@@ -5,6 +5,7 @@ import type { NewPoint, ZvecVectorStore } from "./zvec.ts";
 
 const SCROLL_LIMIT = 256;
 const REQUEST_TIMEOUT_MS = 5_000;
+export const DEFAULT_LEGACY_QDRANT_COLLECTION = "eidolon_memories";
 
 function qdrantBaseUrl(rawHost: string, port: number): string {
   if (/^https?:\/\//i.test(rawHost)) return rawHost.replace(/\/+$/, "");
@@ -20,16 +21,14 @@ export async function migrateLegacyQdrantIfNeeded(
   const rawHost = envOptional("MEM0_QDRANT_HOST");
   if (!rawHost) return 0;
   if (store.hasQdrantMigrationMarker()) return 0;
-  if (store.docCount() > 0) {
-    store.markQdrantMigrated();
-    return 0;
-  }
 
   const port = envInt("MEM0_QDRANT_PORT", 6333);
-  const collection = envOptional("MEM0_QDRANT_COLLECTION") ?? "mem0";
+  const collection = envOptional("MEM0_QDRANT_COLLECTION") ?? DEFAULT_LEGACY_QDRANT_COLLECTION;
   const url = `${qdrantBaseUrl(rawHost, port)}/collections/${encodeURIComponent(collection)}/points/scroll`;
 
   let migrated = 0;
+  let validDimSeen = 0;
+  let skippedWrongDim = 0;
   let offset: string | number | null = null;
   try {
     for (;;) {
@@ -59,18 +58,19 @@ export async function migrateLegacyQdrantIfNeeded(
         if (!isPlainObject(raw)) continue;
         const id = typeof raw.id === "string" || typeof raw.id === "number" ? String(raw.id) : null;
         const vec = Array.isArray(raw.vector) ? raw.vector : null;
-        if (
-          id === null ||
-          vec === null ||
-          vec.length !== dims ||
-          !vec.every((v) => typeof v === "number" && Number.isFinite(v))
-        ) {
+        if (id === null || vec === null) continue;
+        if (vec.length !== dims) {
+          skippedWrongDim++;
           continue;
         }
+        if (!vec.every((v) => typeof v === "number" && Number.isFinite(v))) continue;
+        validDimSeen++;
+        const payload = isPlainObject(raw.payload) ? raw.payload : {};
+        if (store.isTombstoned(id, payload) || store.hasPoint(id)) continue;
         batch.push({
           id,
           vector: vec as number[],
-          payload: isPlainObject(raw.payload) ? raw.payload : {},
+          payload,
         });
       }
       if (batch.length > 0) {
@@ -83,6 +83,12 @@ export async function migrateLegacyQdrantIfNeeded(
       } else {
         break;
       }
+    }
+    if (validDimSeen === 0 && skippedWrongDim > 0) {
+      logger.warning(
+        `Legacy Qdrant (${rawHost}:${port}/${collection}) has ${skippedWrongDim} point(s) whose dimension does not match EMBED_DIM=${dims}; leaving migration pending`,
+      );
+      return 0;
     }
     store.markQdrantMigrated();
     if (migrated > 0) {

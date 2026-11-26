@@ -188,6 +188,7 @@ export function MemoryPanel({
   const memories = useMemo(() => shownMemories(list.data?.memories ?? []), [list.data]);
   const shown = all ? memories : memories.slice(0, MEMORIES_SHOWN);
   const count = list.data?.count ?? 0;
+  const forgettableCount = count + (list.data?.retainedCount ?? 0);
 
   return (
     <HomeSection
@@ -207,7 +208,7 @@ export function MemoryPanel({
             </Button>
             <ForgetButton
               name={name}
-              count={count}
+              count={forgettableCount}
               pending={forget.isPending}
               onForget={() => forget.mutate()}
             />

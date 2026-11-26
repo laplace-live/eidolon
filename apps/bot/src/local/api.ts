@@ -1120,6 +1120,8 @@ export interface MemoriesResponse {
   readonly persona: string;
   readonly count: number;
   readonly memories: readonly Memory[];
+  /** Memories in retained inactive embedding collections that `DELETE /api/local/memories` also wipes. */
+  readonly retainedCount?: number;
 }
 
 export interface LocalApi {

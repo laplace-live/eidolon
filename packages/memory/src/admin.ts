@@ -43,5 +43,6 @@ export function createMemoryAdmin(engines: SharedEngine): MemoryAdmin {
       run(async (engine) => {
         await engine.deleteAll({ userId, agentId });
       }),
+    retainedCount: (userId, agentId) => run((engine) => engine.countRetained({ userId, agentId })),
   };
 }

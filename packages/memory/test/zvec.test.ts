@@ -246,31 +246,36 @@ describe("ZvecVectorStore", () => {
       },
     ]);
 
-    // Same dimension, different embedding models do not mix vectors.
+    // Same dimension, different embedding models do not mix vectors, while retained count reports inactive scopes.
     expect((await store4.list({ user_id: "u1" }, 10)).map((p) => p.payload.data)).toEqual([
       "from model a",
     ]);
     expect((await store4b.list({ user_id: "u1" }, 10)).map((p) => p.payload.data)).toEqual([
       "from model b",
     ]);
+    expect((await store8.listRetainedScope({ user_id: "u1" })).map((p) => p.id).sort()).toEqual([
+      "m-a1",
+      "m-b1",
+    ]);
 
     // Wiping u1 from the active store removes u1 from every retained collection while keeping u2.
     const removed = await store8.deleteScope({ user_id: "u1" });
     expect(removed.map((p) => p.id).sort()).toEqual(["m-a1", "m-b1", "m-c1"]);
+    expect(await store8.listRetainedScope({ user_id: "u1" })).toEqual([]);
     expect(await store4.list({ user_id: "u1" }, 10)).toEqual([]);
     expect(await store4b.list({ user_id: "u1" }, 10)).toEqual([]);
     expect(await store8.list({ user_id: "u1" }, 10)).toEqual([]);
     expect((await store4.list({ user_id: "u2" }, 10)).map((p) => p.id)).toEqual(["m-a2"]);
   });
 
-  test("imports legacy Qdrant memories once when MEM0_QDRANT_HOST is set on an empty Zvec store", async () => {
+  test("imports legacy Qdrant memories from default eidolon_memories, retries incomplete imports, and never restores forgotten scopes across model switches", async () => {
     const dir = storeDir();
     const historyDbPath = tempPath("qdrant-migrate-history.db");
     createdDirs.push(dirname(historyDbPath));
     setEnv({
       MEM0_QDRANT_HOST: "qdrant.internal",
       MEM0_QDRANT_PORT: "6333",
-      MEM0_QDRANT_COLLECTION: "legacy_mem",
+      MEM0_QDRANT_COLLECTION: undefined,
     });
 
     const settings: Readonly<Record<string, string>> = {
@@ -281,8 +286,9 @@ describe("ZvecVectorStore", () => {
     };
     const selection = select("embeddings", (name) => settings[name]) as Selection;
     let scrollCalls = 0;
+    let failPage2Once = true;
     const fetch = (async (url: string, init?: RequestInit) => {
-      if (url === "http://qdrant.internal:6333/collections/legacy_mem/points/scroll") {
+      if (url === "http://qdrant.internal:6333/collections/eidolon_memories/points/scroll") {
         scrollCalls++;
         const body = JSON.parse(String(init?.body ?? "{}")) as { offset?: string };
         if (!body.offset) {
@@ -299,6 +305,15 @@ describe("ZvecVectorStore", () => {
                   },
                 },
                 {
+                  id: "q-forgotten",
+                  vector: [1, 0, 0, 0],
+                  payload: {
+                    user_id: "u-forgotten",
+                    data: "已遗忘观众记忆",
+                    created_at: "2026-05-01T00:00:00+00:00",
+                  },
+                },
+                {
                   id: "q-wrong-dim",
                   vector: [1, 0],
                   payload: { user_id: "u-legacy", data: "wrong dim" },
@@ -307,6 +322,10 @@ describe("ZvecVectorStore", () => {
               next_page_offset: "page-2",
             },
           });
+        }
+        if (failPage2Once) {
+          failPage2Once = false;
+          return new Response("upstream timeout", { status: 504 });
         }
         return Response.json({
           result: {
@@ -328,8 +347,8 @@ describe("ZvecVectorStore", () => {
       throw new Error(`unexpected fetch: ${url}`);
     }) as unknown as typeof globalThis.fetch;
 
-    const cfg = {
-      store: { dir, vectorSize: 4, embedModel: "openai-compatible:embed-model" },
+    const makeCfg = (embedModel: string) => ({
+      store: { dir, vectorSize: 4, embedModel },
       embedder: { selection, dims: 4 },
       llm: {
         provider: "openai-compatible",
@@ -339,25 +358,45 @@ describe("ZvecVectorStore", () => {
         keyMissing: null,
       },
       historyDbPath,
-    };
+    });
 
-    const first = await openMemoryEngine(cfg, { http: { fetch } });
+    // Attempt 1 fails on page 2 after inserting page 1; u-forgotten wipes their memories meanwhile.
+    const partial = await openMemoryEngine(makeCfg("openai-compatible:embed-model"), {
+      http: { fetch },
+    });
     try {
       expect(scrollCalls).toBe(2);
-      const items = await first.getAll({ filters: { userId: "u-legacy" } });
-      expect(items.map((m) => m.memory)).toEqual(["旧Qdrant记忆一", "旧Qdrant记忆二"]);
+      await partial.deleteAll({ userId: "u-forgotten" });
     } finally {
-      first.close();
+      partial.close();
     }
 
+    // Attempt 2 retries even though page 1 points already exist locally, finishes page 2, and skips u-forgotten.
     closeMemoryStores();
-    const second = await openMemoryEngine(cfg, { http: { fetch } });
+    const completed = await openMemoryEngine(makeCfg("openai-compatible:embed-model"), {
+      http: { fetch },
+    });
     try {
-      expect(scrollCalls).toBe(2);
-      const items = await second.getAll({ filters: { userId: "u-legacy" } });
+      expect(scrollCalls).toBe(4);
+      const items = await completed.getAll({ filters: { userId: "u-legacy" } });
       expect(items.map((m) => m.memory)).toEqual(["旧Qdrant记忆一", "旧Qdrant记忆二"]);
+      expect(await completed.getAll({ filters: { userId: "u-forgotten" } })).toEqual([]);
     } finally {
-      second.close();
+      completed.close();
+    }
+
+    // Switching embedding model does NOT re-import Qdrant into the new collection or revive forgotten facts.
+    closeMemoryStores();
+    const switched = await openMemoryEngine(makeCfg("openai-compatible:embed-model-v2"), {
+      http: { fetch },
+    });
+    try {
+      expect(scrollCalls).toBe(4);
+      expect(await switched.getAll({ filters: { userId: "u-legacy" } })).toEqual([]);
+      expect(await switched.countRetained({ userId: "u-legacy" })).toBe(2);
+      expect(await switched.getAll({ filters: { userId: "u-forgotten" } })).toEqual([]);
+    } finally {
+      switched.close();
     }
   });
 

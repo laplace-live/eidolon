@@ -119,6 +119,22 @@ describe("memories per persona", () => {
     expect((await api("DELETE", "?persona=nobody")).status).toBe(404);
   });
 
+  test("surfaces retainedCount when inactive embedding collections still hold memories", async () => {
+    booted.fakes.memoryAdmin = {
+      list: async () => ({ ok: true, value: [] }),
+      forget: async () => ({ ok: true, value: undefined }),
+      retainedCount: async () => ({ ok: true, value: 3 }),
+    };
+    const response = await api("GET");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      persona: "alpha",
+      count: 0,
+      memories: [],
+      retainedCount: 3,
+    });
+  });
+
   test("memory off is 503; a store that fails is 503 or 502", async () => {
     booted.fakes.memoryAdmin = null;
     const off = await api("GET");

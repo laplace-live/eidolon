@@ -835,11 +835,26 @@ function readLayers(chosen: string | null, warn: Warn): ReadLayers {
     values.set(setting.env, { source: setting.scope, value, raw });
     if (setting.scope === "persona" && value) owned.add(setting.env);
   }
-  if ((values.get("MEM0_ENABLED")?.value ?? null) === null) {
-    const legacyHost = lookup(app, "memory.qdrant.host");
-    if (typeof legacyHost === "string" && legacyHost.trim() !== "") {
+  const legacyHost = lookup(app, "memory.qdrant.host");
+  if (typeof legacyHost === "string" && legacyHost.trim() !== "") {
+    values.set("MEM0_QDRANT_HOST", { source: "app", value: legacyHost.trim(), raw: legacyHost });
+    if ((values.get("MEM0_ENABLED")?.value ?? null) === null) {
       values.set("MEM0_ENABLED", { source: "app", value: "true", raw: true });
     }
+  }
+  const legacyPort = lookup(app, "memory.qdrant.port");
+  if (typeof legacyPort === "number" && Number.isInteger(legacyPort) && legacyPort > 0) {
+    values.set("MEM0_QDRANT_PORT", { source: "app", value: String(legacyPort), raw: legacyPort });
+  } else if (typeof legacyPort === "string" && legacyPort.trim() !== "") {
+    values.set("MEM0_QDRANT_PORT", { source: "app", value: legacyPort.trim(), raw: legacyPort });
+  }
+  const legacyCollection = lookup(app, "memory.qdrant.collection");
+  if (typeof legacyCollection === "string" && legacyCollection.trim() !== "") {
+    values.set("MEM0_QDRANT_COLLECTION", {
+      source: "app",
+      value: legacyCollection.trim(),
+      raw: legacyCollection,
+    });
   }
   const styles = readVoiceStyles(persona, personaPath, warn);
   for (const [env, { voiceId }] of styles) {
