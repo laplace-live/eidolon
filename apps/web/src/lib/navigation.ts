@@ -94,7 +94,7 @@ export function createBrowserHistory(
   const dirtyBlockers = new Map<symbol, boolean>();
   let blockerState: Blocker = IDLE_BLOCKER;
   let unblockPop: (() => void) | null = null;
-  let allowNextPop = false;
+  let inflightProceedTarget: number | null = null;
   let proceedToken = 0;
 
   const notifyLocation = () => {
@@ -145,7 +145,7 @@ export function createBrowserHistory(
       win.history[replace ? "replaceState" : "pushState"](state, "", href);
     }
     proceedToken += 1;
-    allowNextPop = false;
+    inflightProceedTarget = null;
     inflightReturn = 0;
     restoreTargetIdx = null;
     blockedTargetIdx = null;
@@ -170,7 +170,6 @@ export function createBrowserHistory(
 
     if ((nextPath !== pathname || nextSearch !== search) && shouldBlock()) {
       proceedToken += 1;
-      allowNextPop = false;
       blockedTargetIdx = null;
       setBlocker({
         state: "blocked",
@@ -225,12 +224,28 @@ export function createBrowserHistory(
       resolve();
     }
 
+    const consumedProceed = inflightProceedTarget !== null && rawIdx === inflightProceedTarget;
+    if (consumedProceed) {
+      inflightProceedTarget = null;
+      if (blockerState.state === "blocked") {
+        // A newer blocked navigate() superseded this in-flight proceed(): reverse and keep it.
+        lastBrowserIdx = rawIdx;
+        restoreTargetIdx = index;
+        inflightReturn = index - rawIdx;
+        if (inflightReturn !== 0) {
+          unblockPop = () => {};
+          win.history.go(inflightReturn);
+        }
+        return;
+      }
+    }
+
     const delta = rawIdx !== null ? rawIdx - index : null;
     const nextPath = win.location.pathname;
     const nextSearch = win.location.search;
 
     if (
-      !allowNextPop &&
+      !consumedProceed &&
       (nextPath !== pathname || nextSearch !== search) &&
       delta !== null &&
       delta !== 0 &&
@@ -267,7 +282,7 @@ export function createBrowserHistory(
               setBlocker(IDLE_BLOCKER);
               return;
             }
-            allowNextPop = true;
+            inflightProceedTarget = target;
             win.history.go(step);
           });
         },
@@ -276,7 +291,6 @@ export function createBrowserHistory(
     }
 
     proceedToken += 1;
-    allowNextPop = false;
     blockedTargetIdx = null;
     if (rawIdx !== null) {
       index = rawIdx;
@@ -324,7 +338,7 @@ export function createBrowserHistory(
       win?.removeEventListener("popstate", onPopState);
       proceedToken += 1;
       unblockPop = null;
-      allowNextPop = false;
+      inflightProceedTarget = null;
       inflightReturn = 0;
       restoreTargetIdx = null;
       blockedTargetIdx = null;
