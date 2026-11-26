@@ -8,7 +8,7 @@ import { linguiMacro, linguiReactMacro } from "@/test/lingui-macro";
 
 vi.doMock("@lingui/core/macro", linguiMacro);
 vi.doMock("@lingui/react/macro", linguiReactMacro);
-const { DisplayField } = await import("./chat-settings");
+const { chainLimitChoices, DisplayField } = await import("./chat-settings");
 const { DISPLAY_HELP } = await import("./labels");
 
 function field(display: ChatDisplay | null, fallback: ChatDisplay): string {
@@ -41,4 +41,9 @@ test("a chat's own display is chosen, and says what it shows", () => {
     expect(markup).toContain(DISPLAY_HELP[display].message?.replaceAll("'", "&#x27;") ?? "?");
     expect(markup).not.toContain("Until you choose");
   }
+});
+
+test("chainLimitChoices shows the presets and preserves an older custom value", () => {
+  expect(chainLimitChoices(5)).toEqual(["0", "1", "5", "10", "100"]);
+  expect(chainLimitChoices(3)).toEqual(["0", "1", "3", "5", "10", "100"]);
 });

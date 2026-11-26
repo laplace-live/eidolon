@@ -924,16 +924,20 @@ describe("a chat that answers in voice", () => {
       replies: [
         { persona: "vera", mode: "voice" },
         { persona: "yuki", mode: "text" },
+        { persona: "wren", mode: "voice" },
       ],
       source: "mention",
     });
-    expect(spoken.map(({ text, persona }) => `${persona}: ${text}`)).toEqual(["vera: 维拉在"]);
+    expect(spoken.map(({ text, persona }) => `${persona}: ${text}`)).toEqual([
+      "vera: 维拉在",
+      "wren: 小雀在",
+    ]);
     expect(
       events.flatMap((event) =>
         event.type === "message" && event.speaker.kind === "persona"
           ? [`${event.speaker.id} ${event.modality ?? "text"}`]
           : [],
       ),
-    ).toEqual(["vera voice", "yuki text"]);
+    ).toEqual(["vera voice", "yuki text", "wren voice"]);
   });
 });

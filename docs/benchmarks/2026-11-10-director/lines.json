@@ -808,7 +808,8 @@
    "responders": ["xiaoman"],
    "maybe": ["kuro"],
    "invites_reply": true,
-   "note": "你们俩 speaks to both, but Jev reads no plural as addressing her, so 小满's interest carries it. Both were required before the first run."
+   "everyone": true,
+   "note": "你们俩 speaks to both, so everyone carries both."
   },
   {
    "id": "group-03",
@@ -1264,6 +1265,79 @@
    "interested": [],
    "responders": [],
    "invites_reply": false
+  },
+  {
+   "id": "mention-12",
+   "kind": "mention",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "@all 都在吗，出来冒个泡"],
+   "addressed": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "interested": [],
+   "responders": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "mention-13",
+   "kind": "mention",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "@奶绿 @茶茶 @露米 @小满 报个到"],
+   "addressed": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "interested": [],
+   "responders": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "invites_reply": true
+  },
+  {
+   "id": "group-04",
+   "kind": "group",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "latest": ["viewer", "都介绍一下自己，互相熟悉一下"],
+   "interested": [],
+   "responders": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "invites_reply": true,
+   "everyone": true
+  },
+  {
+   "id": "group-05",
+   "kind": "group",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "history": [
+    ["viewer", "都介绍一下自己"],
+    ["lumi", "我是露米！每天唱歌跳舞的偶像主播～"]
+   ],
+   "latest": ["viewer", "其他人呢？"],
+   "interested": [],
+   "responders": ["milky-green", "kuro", "xiaoman"],
+   "invites_reply": true,
+   "others": true
+  },
+  {
+   "id": "group-06",
+   "kind": "group",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "history": [
+    ["viewer", "都介绍一下自己"],
+    ["lumi", "我是露米！"],
+    ["viewer", "其他人呢？"],
+    ["lumi", "你们快出来冒泡呀，别躲着啦"]
+   ],
+   "latest": ["viewer", "其他人说话！"],
+   "interested": [],
+   "responders": ["milky-green", "kuro", "xiaoman"],
+   "invites_reply": true,
+   "others": true
+  },
+  {
+   "id": "persona-36",
+   "kind": "persona-addresses",
+   "participants": ["milky-green", "kuro", "lumi", "xiaoman"],
+   "history": [
+    ["viewer", "@露米 叫大家挨个出来做个自我介绍"]
+   ],
+   "latest": ["lumi", "我是露米！奶绿、茶茶、小满，你们一个个快冒个泡自我介绍一下吧！"],
+   "interested": [],
+   "responders": ["milky-green", "kuro", "xiaoman"],
+   "invites_reply": true,
+   "others": true
   }
  ]
 }

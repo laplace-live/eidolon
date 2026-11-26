@@ -441,18 +441,24 @@ describe("POST /api/chat/turn", () => {
     expect(eventsIn(lines).at(-1)).toMatchObject({ type: "message", modality: "voice" });
   });
 
-  test("a chain limit past 3 is cut to 3 hops", async () => {
-    const { url, record } = await start({
-      engine: { choose: (input, call) => [input.participants[(call - 1) % 2]?.id as string] },
-    });
-    const settings = { seq: 1, at: 1001, type: "settings", chainLimit: 6 };
-    const response = await postTurn(url, {
-      chat: { header: GROUP, events: [settings] },
-      text: "你们聊",
-    });
-    await linesOf(response);
-    expect(record.minds.map((mind) => mind.persona)).toEqual([MILKY, BEA, MILKY, BEA]);
-    expect(record.decisions.map((decision) => decision.hop)).toEqual([0, 1, 2, 3]);
+  test("a chain limit past 3, or default 5, is cut to 3 hops", async () => {
+    for (const events of [[{ seq: 1, at: 1001, type: "settings", chainLimit: 100 }], []]) {
+      const { url, record } = await start({
+        engine: { choose: (input, call) => [input.participants[(call - 1) % 2]?.id as string] },
+      });
+      try {
+        const response = await postTurn(url, {
+          chat: { header: GROUP, events },
+          text: "你们聊",
+        });
+        await linesOf(response);
+        expect(record.minds.map((mind) => mind.persona)).toEqual([MILKY, BEA, MILKY, BEA]);
+        expect(record.decisions.map((decision) => decision.hop)).toEqual([0, 1, 2, 3]);
+      } finally {
+        await served?.stop();
+        served = null;
+      }
+    }
   });
 
   test("a voice reply only while her voice can speak, its audio served from the files route", async () => {

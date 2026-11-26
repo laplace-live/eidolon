@@ -297,7 +297,7 @@ export function chatsRoutes(runner: () => ChatRunner): LocalRouteSpec[] {
           return localError(
             400,
             "bad-request",
-            "Send a `title` of 1 to 80 characters on one line, a `chainLimit` from 0 to 6, a `replyMode` of auto, text or voice, a `display` of focus, normal or verbose, or `permissions` of ask, auto or full",
+            "Send a `title` of 1 to 80 characters on one line, a `chainLimit` from 0 to 100, a `replyMode` of auto, text or voice, a `display` of focus, normal or verbose, or `permissions` of ask, auto or full",
           );
         }
         return inChat(async () => {

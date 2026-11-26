@@ -6,27 +6,31 @@
   "addressed": 0.5,
   "interest": 0.3,
   "invites": 0.3,
+  "everyone": 0.5,
+  "others": 0.65,
   "hop_step": 0.1,
+  "max_hop_raise": 0.3,
   "just_spoke_penalty": 0.1,
+  "max_replies_to_user": 3,
   "voice": 0.42,
   "voice_after_voice": 0.35
  },
  "latency_ms": {
-  "p50": 396,
-  "p90": 454,
-  "max": 717,
+  "p50": 382,
+  "p90": 409,
+  "max": 503,
   "over_timeout": 0
  },
  "decided_right": {
-  "all": "100/100",
-  "mention": "11/11",
+  "all": "106/106",
+  "mention": "13/13",
   "name": "11/11",
   "reply": "10/10",
   "interest": "17/17",
   "off-topic": "7/7",
   "closing": "6/6",
-  "group": "3/3",
-  "persona-addresses": "13/13",
+  "group": "6/6",
+  "persona-addresses": "14/14",
   "persona-to-viewer": "8/8",
   "persona-closing": "6/6",
   "persona-opinion": "6/6",
@@ -40,23 +44,23 @@
   "addressed": {
    "threshold": 0.5,
    "labelled_yes": {
-    "n": 57,
-    "min": 0.06,
-    "median": 0.93,
+    "n": 65,
+    "min": 0.05,
+    "median": 0.85,
     "max": 0.98
    },
    "labelled_no": {
     "n": 136,
-    "min": -0.28,
+    "min": -0.29,
     "median": 0.02,
-    "max": 0.38
+    "max": 0.39
    },
-   "wrong": 3,
+   "wrong": 7,
    "suggests": {
     "threshold": 0.43,
-    "wrong": 2,
+    "wrong": 6,
     "range": [
-     0.39,
+     0.4,
      0.46
     ]
    }
@@ -66,22 +70,22 @@
    "labelled_yes": {
     "n": 71,
     "min": 0.24,
-    "median": 0.88,
+    "median": 0.87,
     "max": 0.98
    },
    "labelled_no": {
-    "n": 153,
+    "n": 176,
     "min": 0.03,
-    "median": 0.08,
-    "max": 0.9
+    "median": 0.09,
+    "max": 0.89
    },
    "wrong": null,
    "suggests": {
-    "threshold": 0.5,
-    "wrong": 8,
+    "threshold": 0.55,
+    "wrong": 9,
     "range": [
-     0.47,
-     0.53
+     0.53,
+     0.57
     ]
    }
   },
@@ -89,41 +93,41 @@
    "threshold": 0.3,
    "labelled_yes": {
     "n": 15,
-    "min": 0.145,
-    "median": 0.364,
-    "max": 0.837
+    "min": 0.15,
+    "median": 0.368,
+    "max": 0.846
    },
    "labelled_no": {
     "n": 55,
-    "min": -0.119,
+    "min": -0.101,
     "median": 0.036,
-    "max": 0.16
+    "max": 0.144
    },
    "wrong": 6,
    "suggests": {
-    "threshold": 0.13,
-    "wrong": 1,
+    "threshold": 0.15,
+    "wrong": 0,
     "range": [
-     0.12,
-     0.14
+     0.15,
+     0.15
     ]
    }
   },
   "invites_reply_after_persona": {
    "threshold": 0.3,
    "labelled_yes": {
-    "n": 26,
-    "min": 0.05,
-    "median": 0.76,
+    "n": 27,
+    "min": 0.03,
+    "median": 0.83,
     "max": 0.88
    },
    "labelled_no": {
     "n": 9,
-    "min": -0.17,
-    "median": 0.07,
+    "min": -0.16,
+    "median": 0.08,
     "max": 0.22
    },
-   "wrong": 2,
+   "wrong": 3,
    "suggests": {
     "threshold": 0.23,
     "wrong": 1,
@@ -136,24 +140,72 @@
   "invites_reply_after_viewer": {
    "threshold": null,
    "labelled_yes": {
-    "n": 59,
-    "min": 0.37,
-    "median": 0.94,
+    "n": 64,
+    "min": 0.41,
+    "median": 0.95,
     "max": 0.98
    },
    "labelled_no": {
     "n": 6,
-    "min": 0.07,
-    "median": 0.13,
-    "max": 0.21
+    "min": 0.08,
+    "median": 0.12,
+    "max": 0.22
    },
    "wrong": null,
    "suggests": {
-    "threshold": 0.3,
+    "threshold": 0.32,
     "wrong": 0,
     "range": [
-     0.22,
-     0.37
+     0.23,
+     0.41
+    ]
+   }
+  },
+  "everyone": {
+   "threshold": 0.5,
+   "labelled_yes": {
+    "n": 2,
+    "min": 0.56,
+    "median": 0.56,
+    "max": 0.81
+   },
+   "labelled_no": {
+    "n": 89,
+    "min": -0.29,
+    "median": 0.02,
+    "max": 0.19
+   },
+   "wrong": 0,
+   "suggests": {
+    "threshold": 0.38,
+    "wrong": 0,
+    "range": [
+     0.2,
+     0.56
+    ]
+   }
+  },
+  "others": {
+   "threshold": 0.65,
+   "labelled_yes": {
+    "n": 3,
+    "min": 0.85,
+    "median": 0.95,
+    "max": 0.97
+   },
+   "labelled_no": {
+    "n": 56,
+    "min": -0.28,
+    "median": -0.03,
+    "max": 0.51
+   },
+   "wrong": 0,
+   "suggests": {
+    "threshold": 0.69,
+    "wrong": 0,
+    "range": [
+     0.52,
+     0.85
     ]
    }
   },
@@ -161,23 +213,23 @@
    "threshold": 0.42,
    "labelled_yes": {
     "n": 10,
-    "min": 0.45,
-    "median": 0.61,
-    "max": 0.75
+    "min": 0.43,
+    "median": 0.59,
+    "max": 0.77
    },
    "labelled_no": {
     "n": 8,
     "min": 0.1,
-    "median": 0.25,
+    "median": 0.28,
     "max": 0.39
    },
    "wrong": 0,
    "suggests": {
-    "threshold": 0.43,
+    "threshold": 0.42,
     "wrong": 0,
     "range": [
      0.4,
-     0.45
+     0.43
     ]
    }
   },
@@ -185,14 +237,14 @@
    "threshold": 0.35,
    "labelled_yes": {
     "n": 4,
-    "min": 0.59,
+    "min": 0.6,
     "median": 0.65,
     "max": 0.73
    },
    "labelled_no": {
     "n": 2,
-    "min": 0.22,
-    "median": 0.22,
+    "min": 0.24,
+    "median": 0.24,
     "max": 0.27
    },
    "wrong": 0,
@@ -201,7 +253,7 @@
     "wrong": 0,
     "range": [
      0.28,
-     0.59
+     0.6
     ]
    }
   }
@@ -227,12 +279,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.94,
-    "interested_milky-green": 0.82,
+    "interested_milky-green": 0.83,
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.05,
-    "invites_reply": 0.98
+    "interested_kuro": 0.04,
+    "invites_reply": 0.97,
+    "everyone": 0.04,
+    "others": 0.03
    },
-   "ms": 413,
+   "ms": 400,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -254,15 +308,17 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.01,
-    "interested_milky-green": 0.07,
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.08,
     "addressed_kuro": 0.97,
     "interested_kuro": 0.95,
     "addressed_lumi": 0.01,
-    "interested_lumi": 0.04,
-    "invites_reply": 0.97
+    "interested_lumi": 0.05,
+    "invites_reply": 0.97,
+    "everyone": 0.07,
+    "others": 0.04
    },
-   "ms": 440,
+   "ms": 371,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -291,11 +347,13 @@
     "addressed_lumi": 0.98,
     "interested_lumi": 0.95,
     "addressed_xiaoman": 0.01,
-    "interested_xiaoman": 0.05,
+    "interested_xiaoman": 0.04,
     "invites_reply": 0.97,
+    "everyone": 0.04,
+    "others": 0.02,
     "voice_moment": 0.39
    },
-   "ms": 481,
+   "ms": 393,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -320,17 +378,19 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.8,
-    "interested_milky-green": 0.4,
+    "addressed_milky-green": 0.85,
+    "interested_milky-green": 0.44,
     "addressed_kuro": 0.01,
     "interested_kuro": 0.07,
     "addressed_lumi": 0.03,
     "interested_lumi": 0.18,
-    "addressed_xiaoman": 0.94,
-    "interested_xiaoman": 0.95,
-    "invites_reply": 0.98
+    "addressed_xiaoman": 0.93,
+    "interested_xiaoman": 0.94,
+    "invites_reply": 0.97,
+    "everyone": 0.22,
+    "others": 0.24
    },
-   "ms": 392,
+   "ms": 385,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -356,9 +416,11 @@
     "interested_kuro": 0.97,
     "addressed_xiaoman": 0.01,
     "interested_xiaoman": 0.12,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "everyone": 0.04,
+    "others": 0.02
    },
-   "ms": 467,
+   "ms": 385,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -381,14 +443,16 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.01,
-    "interested_milky-green": 0.06,
+    "interested_milky-green": 0.05,
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.79,
+    "interested_kuro": 0.83,
     "addressed_xiaoman": 0.98,
     "interested_xiaoman": 0.92,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 418,
+   "ms": 379,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -413,12 +477,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.98,
-    "interested_milky-green": 0.18,
-    "addressed_lumi": 0.07,
+    "interested_milky-green": 0.17,
+    "addressed_lumi": 0.06,
     "interested_lumi": 0.96,
-    "invites_reply": 0.97
+    "invites_reply": 0.97,
+    "everyone": 0.08,
+    "others": 0.06
    },
-   "ms": 505,
+   "ms": 360,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -445,13 +511,15 @@
    "scores": {
     "addressed_milky-green": 0.01,
     "interested_milky-green": 0.07,
-    "addressed_kuro": 0.87,
-    "interested_kuro": 0.92,
-    "addressed_lumi": 0.94,
-    "interested_lumi": 0.24,
-    "invites_reply": 0.98
+    "addressed_kuro": 0.88,
+    "interested_kuro": 0.94,
+    "addressed_lumi": 0.95,
+    "interested_lumi": 0.25,
+    "invites_reply": 0.98,
+    "everyone": 0.43,
+    "others": 0.12
    },
-   "ms": 427,
+   "ms": 402,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -477,16 +545,18 @@
     "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.96,
-    "interested_milky-green": 0.86,
+    "addressed_milky-green": 0.95,
+    "interested_milky-green": 0.85,
     "addressed_kuro": 0.01,
     "interested_kuro": 0.04,
     "addressed_xiaoman": 0.01,
-    "interested_xiaoman": 0.05,
+    "interested_xiaoman": 0.04,
     "invites_reply": 0.98,
-    "voice_moment": 0.31
+    "everyone": 0.02,
+    "others": 0.02,
+    "voice_moment": 0.29
    },
-   "ms": 439,
+   "ms": 394,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -510,14 +580,16 @@
     "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.14,
-    "interested_milky-green": 0.82,
+    "addressed_milky-green": 0.17,
+    "interested_milky-green": 0.81,
     "addressed_kuro": 0.01,
     "interested_kuro": 0.05,
-    "invites_reply": 0.63,
+    "invites_reply": 0.65,
+    "everyone": 0.06,
+    "others": 0.08,
     "voice_moment": 0.58
    },
-   "ms": 379,
+   "ms": 391,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -541,11 +613,13 @@
    "scores": {
     "addressed_kuro": 0.01,
     "interested_kuro": 0.07,
-    "addressed_lumi": 0.98,
-    "interested_lumi": 0.97,
-    "invites_reply": 0.97
+    "addressed_lumi": 0.97,
+    "interested_lumi": 0.96,
+    "invites_reply": 0.97,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 406,
+   "ms": 382,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -565,13 +639,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.97,
-    "interested_milky-green": 0.81,
+    "addressed_milky-green": 0.96,
+    "interested_milky-green": 0.82,
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.03,
-    "invites_reply": 0.97
+    "interested_kuro": 0.04,
+    "invites_reply": 0.97,
+    "everyone": 0.03,
+    "others": 0.02
    },
-   "ms": 423,
+   "ms": 372,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -591,15 +667,17 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.04,
+    "addressed_milky-green": 0.05,
     "interested_milky-green": 0.1,
     "addressed_kuro": 0.46,
-    "interested_kuro": 0.91,
+    "interested_kuro": 0.92,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.04,
-    "invites_reply": 0.84
+    "invites_reply": 0.83,
+    "everyone": 0.01,
+    "others": 0.04
    },
-   "ms": 420,
+   "ms": 366,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -622,10 +700,12 @@
     "addressed_lumi": 0.98,
     "interested_lumi": 0.97,
     "addressed_xiaoman": 0.01,
-    "interested_xiaoman": 0.04,
-    "invites_reply": 0.98
+    "interested_xiaoman": 0.05,
+    "invites_reply": 0.98,
+    "everyone": 0.03,
+    "others": 0.02
    },
-   "ms": 717,
+   "ms": 364,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -650,13 +730,15 @@
    },
    "scores": {
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.06,
+    "interested_kuro": 0.07,
     "addressed_xiaoman": 0.98,
-    "interested_xiaoman": 0.89,
-    "invites_reply": 0.97,
-    "voice_moment": 0.31
+    "interested_xiaoman": 0.91,
+    "invites_reply": 0.96,
+    "everyone": 0.02,
+    "others": 0.02,
+    "voice_moment": 0.33
    },
-   "ms": 413,
+   "ms": 378,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -676,15 +758,17 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.96,
+    "addressed_milky-green": 0.95,
     "interested_milky-green": 0.24,
     "addressed_kuro": 0.01,
     "interested_kuro": 0.06,
     "addressed_xiaoman": 0.01,
     "interested_xiaoman": 0.09,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "everyone": 0.03,
+    "others": 0.02
    },
-   "ms": 393,
+   "ms": 373,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -699,24 +783,26 @@
    ],
    "maybe": [],
    "decided": [
-    "kuro",
-    "milky-green"
+    "milky-green",
+    "kuro"
    ],
    "source": "model",
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.66,
-    "interested_milky-green": 0.46,
-    "addressed_kuro": 0.69,
-    "interested_kuro": 0.63,
+    "addressed_milky-green": 0.64,
+    "interested_milky-green": 0.47,
+    "addressed_kuro": 0.62,
+    "interested_kuro": 0.66,
     "addressed_lumi": 0.01,
-    "interested_lumi": 0.03,
+    "interested_lumi": 0.04,
     "addressed_xiaoman": 0.01,
     "interested_xiaoman": 0.04,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "everyone": 0.19,
+    "others": 0.04
    },
-   "ms": 485,
+   "ms": 405,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -741,12 +827,14 @@
     "addressed_milky-green": 0.07,
     "interested_milky-green": 0.84,
     "addressed_lumi": 0.01,
-    "interested_lumi": 0.03,
+    "interested_lumi": 0.04,
     "addressed_xiaoman": 0.95,
-    "interested_xiaoman": 0.13,
-    "invites_reply": 0.98
+    "interested_xiaoman": 0.12,
+    "invites_reply": 0.97,
+    "everyone": 0.03,
+    "others": 0.03
    },
-   "ms": 391,
+   "ms": 386,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -773,13 +861,15 @@
     "addressed_milky-green": 0.01,
     "interested_milky-green": 0.07,
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.05,
-    "addressed_lumi": 0.93,
-    "interested_lumi": 0.85,
+    "interested_kuro": 0.04,
+    "addressed_lumi": 0.94,
+    "interested_lumi": 0.83,
     "invites_reply": 0.58,
-    "voice_moment": 0.59
+    "everyone": 0.01,
+    "others": 0.01,
+    "voice_moment": 0.6
    },
-   "ms": 365,
+   "ms": 387,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -807,10 +897,12 @@
     "interested_kuro": 0.96,
     "addressed_lumi": 0.01,
     "interested_lumi": 0.04,
-    "invites_reply": 0.75,
-    "voice_moment": 0.7
+    "invites_reply": 0.78,
+    "everyone": 0.02,
+    "others": 0.02,
+    "voice_moment": 0.71
    },
-   "ms": 425,
+   "ms": 415,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -833,12 +925,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.94,
-    "interested_milky-green": 0.39,
-    "addressed_kuro": 0.06,
-    "interested_kuro": 0.92,
-    "invites_reply": 0.88
+    "interested_milky-green": 0.38,
+    "addressed_kuro": 0.07,
+    "interested_kuro": 0.9,
+    "invites_reply": 0.89,
+    "everyone": 0.05,
+    "others": 0.08
    },
-   "ms": 384,
+   "ms": 371,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -859,14 +953,16 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.14,
+    "interested_kuro": 0.11,
     "addressed_lumi": 0.01,
     "interested_lumi": 0.05,
     "addressed_xiaoman": 0.98,
-    "interested_xiaoman": 0.78,
-    "invites_reply": 0.97
+    "interested_xiaoman": 0.77,
+    "invites_reply": 0.97,
+    "everyone": 0.03,
+    "others": 0.02
    },
-   "ms": 373,
+   "ms": 503,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -887,10 +983,12 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.11,
+    "interested_kuro": 0.14,
     "addressed_xiaoman": 0.95,
-    "interested_xiaoman": 0.86,
-    "invites_reply": 0.63
+    "interested_xiaoman": 0.85,
+    "invites_reply": 0.63,
+    "everyone": 0.02,
+    "others": 0.02
    },
    "ms": 409,
    "model": "typesafe/jev-1.14-20261014"
@@ -919,13 +1017,15 @@
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.1,
+    "interested_kuro": 0.09,
     "addressed_lumi": 0.95,
     "interested_lumi": 0.94,
-    "invites_reply": 0.37,
-    "voice_moment": 0.75
+    "invites_reply": 0.41,
+    "everyone": 0.03,
+    "others": 0.02,
+    "voice_moment": 0.77
    },
-   "ms": 421,
+   "ms": 367,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -951,9 +1051,11 @@
     "interested_kuro": 0.97,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.05,
-    "invites_reply": 0.65
+    "invites_reply": 0.65,
+    "everyone": 0.03,
+    "others": 0.03
    },
-   "ms": 495,
+   "ms": 459,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -977,14 +1079,16 @@
     "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.73,
-    "interested_milky-green": 0.79,
-    "addressed_xiaoman": 0.06,
-    "interested_xiaoman": 0.11,
-    "invites_reply": 0.65,
+    "addressed_milky-green": 0.72,
+    "interested_milky-green": 0.82,
+    "addressed_xiaoman": 0.05,
+    "interested_xiaoman": 0.13,
+    "invites_reply": 0.64,
+    "everyone": 0.03,
+    "others": 0.04,
     "voice_moment": 0.62
    },
-   "ms": 417,
+   "ms": 381,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1006,13 +1110,15 @@
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.07,
-    "addressed_kuro": 0.96,
-    "interested_kuro": 0.92,
+    "addressed_kuro": 0.95,
+    "interested_kuro": 0.91,
     "addressed_xiaoman": 0.02,
     "interested_xiaoman": 0.09,
-    "invites_reply": 0.47
+    "invites_reply": 0.44,
+    "everyone": 0.01,
+    "others": 0.01
    },
-   "ms": 504,
+   "ms": 386,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1033,12 +1139,14 @@
    "voice": null,
    "scores": {
     "addressed_lumi": 0.93,
-    "interested_lumi": 0.82,
-    "addressed_xiaoman": 0.03,
-    "interested_xiaoman": 0.17,
-    "invites_reply": 0.43
+    "interested_lumi": 0.83,
+    "addressed_xiaoman": 0.04,
+    "interested_xiaoman": 0.18,
+    "invites_reply": 0.43,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 370,
+   "ms": 408,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1061,14 +1169,16 @@
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.14,
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.12,
+    "interested_kuro": 0.1,
     "addressed_lumi": 0.03,
     "interested_lumi": 0.05,
     "addressed_xiaoman": 0.96,
     "interested_xiaoman": 0.95,
-    "invites_reply": 0.49
+    "invites_reply": 0.49,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 388,
+   "ms": 355,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1089,12 +1199,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.97,
-    "interested_milky-green": 0.83,
+    "interested_milky-green": 0.82,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.06,
-    "invites_reply": 0.5
+    "invites_reply": 0.52,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 396,
+   "ms": 409,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1115,14 +1227,16 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.03,
-    "interested_milky-green": 0.24,
+    "interested_milky-green": 0.23,
     "addressed_kuro": 0.95,
-    "interested_kuro": 0.85,
+    "interested_kuro": 0.83,
     "addressed_lumi": 0.01,
-    "interested_lumi": 0.03,
-    "invites_reply": 0.41
+    "interested_lumi": 0.04,
+    "invites_reply": 0.42,
+    "everyone": 0.03,
+    "others": 0.02
    },
-   "ms": 416,
+   "ms": 353,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1142,15 +1256,17 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.13,
-    "interested_milky-green": 0.25,
+    "addressed_milky-green": 0.11,
+    "interested_milky-green": 0.29,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.18,
-    "addressed_lumi": 0.92,
+    "interested_kuro": 0.2,
+    "addressed_lumi": 0.93,
     "interested_lumi": 0.87,
-    "invites_reply": 0.58
+    "invites_reply": 0.6,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 399,
+   "ms": 386,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1172,13 +1288,15 @@
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.08,
-    "addressed_kuro": 0.24,
+    "addressed_kuro": 0.23,
     "interested_kuro": 0.97,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.05,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "everyone": 0.03,
+    "others": 0.04
    },
-   "ms": 355,
+   "ms": 409,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1199,14 +1317,16 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.09,
-    "addressed_lumi": 0.09,
-    "interested_lumi": 0.93,
+    "interested_milky-green": 0.1,
+    "addressed_lumi": 0.11,
+    "interested_lumi": 0.94,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.13,
-    "invites_reply": 0.96
+    "interested_xiaoman": 0.12,
+    "invites_reply": 0.96,
+    "everyone": 0.1,
+    "others": 0.21
    },
-   "ms": 366,
+   "ms": 381,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1232,12 +1352,14 @@
    "scores": {
     "addressed_lumi": 0.03,
     "interested_lumi": 0.07,
-    "addressed_xiaoman": 0.24,
-    "interested_xiaoman": 0.94,
+    "addressed_xiaoman": 0.21,
+    "interested_xiaoman": 0.93,
     "invites_reply": 0.98,
-    "voice_moment": 0.22
+    "everyone": 0.02,
+    "others": 0.02,
+    "voice_moment": 0.24
    },
-   "ms": 451,
+   "ms": 373,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1257,15 +1379,17 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.38,
-    "interested_milky-green": 0.76,
+    "addressed_milky-green": 0.39,
+    "interested_milky-green": 0.77,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.06,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.11,
-    "invites_reply": 0.71
+    "interested_xiaoman": 0.1,
+    "invites_reply": 0.73,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 365,
+   "ms": 373,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1289,18 +1413,20 @@
     "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.03,
-    "interested_milky-green": 0.31,
-    "addressed_kuro": 0.01,
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.34,
+    "addressed_kuro": 0.02,
     "interested_kuro": 0.08,
     "addressed_lumi": 0.02,
-    "interested_lumi": 0.04,
+    "interested_lumi": 0.05,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.12,
+    "interested_xiaoman": 0.13,
     "invites_reply": 0.98,
+    "everyone": 0.02,
+    "others": 0.02,
     "voice_moment": 0.27
    },
-   "ms": 408,
+   "ms": 438,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1320,13 +1446,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.08,
+    "addressed_kuro": 0.07,
     "interested_kuro": 0.9,
     "addressed_lumi": 0.03,
     "interested_lumi": 0.05,
-    "invites_reply": 0.94
+    "invites_reply": 0.95,
+    "everyone": 0.03,
+    "others": 0.07
    },
-   "ms": 407,
+   "ms": 393,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1354,12 +1482,14 @@
     "interested_milky-green": 0.09,
     "addressed_kuro": 0.02,
     "interested_kuro": 0.09,
-    "addressed_xiaoman": 0.15,
-    "interested_xiaoman": 0.73,
+    "addressed_xiaoman": 0.14,
+    "interested_xiaoman": 0.72,
     "invites_reply": 0.98,
+    "everyone": 0.02,
+    "others": 0.02,
     "voice_moment": 0.1
    },
-   "ms": 392,
+   "ms": 372,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1381,13 +1511,15 @@
    "scores": {
     "addressed_kuro": 0.02,
     "interested_kuro": 0.11,
-    "addressed_lumi": 0.13,
-    "interested_lumi": 0.88,
+    "addressed_lumi": 0.12,
+    "interested_lumi": 0.89,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.12,
-    "invites_reply": 0.74
+    "interested_xiaoman": 0.13,
+    "invites_reply": 0.76,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 404,
+   "ms": 366,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1407,13 +1539,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.17,
-    "interested_kuro": 0.91,
-    "addressed_xiaoman": 0.04,
-    "interested_xiaoman": 0.23,
-    "invites_reply": 0.61
+    "addressed_kuro": 0.15,
+    "interested_kuro": 0.92,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.26,
+    "invites_reply": 0.58,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 391,
+   "ms": 398,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1435,13 +1569,15 @@
    "scores": {
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.11,
-    "addressed_lumi": 0.03,
-    "interested_lumi": 0.77,
+    "addressed_lumi": 0.05,
+    "interested_lumi": 0.82,
     "addressed_xiaoman": 0.03,
     "interested_xiaoman": 0.34,
-    "invites_reply": 0.97
+    "invites_reply": 0.97,
+    "everyone": 0.04,
+    "others": 0.04
    },
-   "ms": 376,
+   "ms": 379,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1469,18 +1605,20 @@
     "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.03,
-    "interested_milky-green": 0.09,
+    "addressed_milky-green": 0.02,
+    "interested_milky-green": 0.08,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.19,
+    "interested_kuro": 0.21,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.05,
     "addressed_xiaoman": 0.03,
-    "interested_xiaoman": 0.66,
+    "interested_xiaoman": 0.74,
     "invites_reply": 0.98,
+    "everyone": 0.14,
+    "others": 0.18,
     "voice_moment": 0.15
    },
-   "ms": 399,
+   "ms": 366,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1501,14 +1639,16 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.06,
-    "interested_milky-green": 0.53,
+    "interested_milky-green": 0.5,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.08,
+    "interested_kuro": 0.09,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.11,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 379,
+   "ms": 391,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1535,13 +1675,15 @@
    },
    "scores": {
     "addressed_kuro": 0.05,
-    "interested_kuro": 0.84,
+    "interested_kuro": 0.85,
     "addressed_xiaoman": 0.03,
     "interested_xiaoman": 0.15,
     "invites_reply": 0.97,
+    "everyone": 0.03,
+    "others": 0.17,
     "voice_moment": 0.71
    },
-   "ms": 398,
+   "ms": 384,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1567,14 +1709,16 @@
     "right": true
    },
    "scores": {
-    "addressed_lumi": 0.11,
-    "interested_lumi": 0.88,
-    "addressed_xiaoman": 0.09,
-    "interested_xiaoman": 0.69,
+    "addressed_lumi": 0.09,
+    "interested_lumi": 0.87,
+    "addressed_xiaoman": 0.1,
+    "interested_xiaoman": 0.72,
     "invites_reply": 0.98,
-    "voice_moment": 0.18
+    "everyone": 0.02,
+    "others": 0.02,
+    "voice_moment": 0.17
    },
-   "ms": 384,
+   "ms": 407,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1598,13 +1742,15 @@
     "interested_milky-green": 0.1,
     "addressed_kuro": 0.09,
     "interested_kuro": 0.95,
-    "addressed_lumi": 0.02,
-    "interested_lumi": 0.05,
+    "addressed_lumi": 0.01,
+    "interested_lumi": 0.04,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.12,
-    "invites_reply": 0.83
+    "interested_xiaoman": 0.11,
+    "invites_reply": 0.85,
+    "everyone": 0.02,
+    "others": 0.04
    },
-   "ms": 415,
+   "ms": 364,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1624,13 +1770,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.04,
-    "interested_milky-green": 0.07,
-    "addressed_xiaoman": 0.05,
-    "interested_xiaoman": 0.86,
-    "invites_reply": 0.75
+    "addressed_milky-green": 0.05,
+    "interested_milky-green": 0.08,
+    "addressed_xiaoman": 0.06,
+    "interested_xiaoman": 0.83,
+    "invites_reply": 0.77,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 403,
+   "ms": 367,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1651,12 +1799,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.05,
-    "interested_milky-green": 0.29,
+    "interested_milky-green": 0.3,
     "addressed_lumi": 0.03,
     "interested_lumi": 0.05,
-    "invites_reply": 0.77
+    "invites_reply": 0.74,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 363,
+   "ms": 399,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1685,13 +1835,15 @@
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.07,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.4,
+    "interested_kuro": 0.36,
     "addressed_lumi": 0.02,
-    "interested_lumi": 0.08,
-    "invites_reply": 0.67,
-    "voice_moment": 0.58
+    "interested_lumi": 0.09,
+    "invites_reply": 0.66,
+    "everyone": 0.01,
+    "others": 0.02,
+    "voice_moment": 0.59
    },
-   "ms": 364,
+   "ms": 415,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1713,12 +1865,14 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.17,
+    "interested_kuro": 0.18,
     "addressed_xiaoman": 0.03,
     "interested_xiaoman": 0.11,
-    "invites_reply": 0.72
+    "invites_reply": 0.74,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 430,
+   "ms": 399,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1744,13 +1898,15 @@
    },
    "scores": {
     "addressed_milky-green": 0.04,
-    "interested_milky-green": 0.07,
+    "interested_milky-green": 0.08,
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.07,
-    "invites_reply": 0.8,
+    "interested_kuro": 0.06,
+    "invites_reply": 0.78,
+    "everyone": 0.01,
+    "others": 0.02,
     "voice_moment": 0.57
    },
-   "ms": 358,
+   "ms": 356,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1777,18 +1933,20 @@
     "right": true
    },
    "scores": {
-    "addressed_milky-green": 0.04,
-    "interested_milky-green": 0.07,
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.08,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.07,
+    "interested_kuro": 0.06,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.07,
     "addressed_xiaoman": 0.02,
     "interested_xiaoman": 0.17,
     "invites_reply": 0.62,
+    "everyone": 0.01,
+    "others": 0.02,
     "voice_moment": 0.65
    },
-   "ms": 376,
+   "ms": 411,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1812,10 +1970,12 @@
     "addressed_kuro": 0.03,
     "interested_kuro": 0.17,
     "addressed_xiaoman": 0.03,
-    "interested_xiaoman": 0.11,
-    "invites_reply": 0.81
+    "interested_xiaoman": 0.12,
+    "invites_reply": 0.81,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 395,
+   "ms": 361,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1843,11 +2003,13 @@
     "addressed_milky-green": 0.04,
     "interested_milky-green": 0.07,
     "addressed_xiaoman": 0.04,
-    "interested_xiaoman": 0.19,
-    "invites_reply": 0.81,
+    "interested_xiaoman": 0.17,
+    "invites_reply": 0.83,
+    "everyone": 0.02,
+    "others": 0.02,
     "voice_moment": 0.73
    },
-   "ms": 519,
+   "ms": 367,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1872,12 +2034,14 @@
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.06,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.05,
+    "interested_kuro": 0.04,
     "addressed_lumi": 0.02,
-    "interested_lumi": 0.13,
-    "invites_reply": 0.71
+    "interested_lumi": 0.14,
+    "invites_reply": 0.72,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 446,
+   "ms": 359,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1902,13 +2066,15 @@
    },
    "scores": {
     "addressed_milky-green": 0.04,
-    "interested_milky-green": 0.08,
-    "addressed_kuro": 0.86,
-    "interested_kuro": 0.2,
+    "interested_milky-green": 0.09,
+    "addressed_kuro": 0.85,
+    "interested_kuro": 0.17,
     "invites_reply": 0.1,
-    "voice_moment": 0.45
+    "everyone": 0.02,
+    "others": 0.02,
+    "voice_moment": 0.43
    },
-   "ms": 394,
+   "ms": 402,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1930,15 +2096,17 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.14,
-    "interested_milky-green": 0.26,
+    "addressed_milky-green": 0.16,
+    "interested_milky-green": 0.25,
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.08,
+    "interested_kuro": 0.07,
     "addressed_lumi": 0.14,
-    "interested_lumi": 0.18,
-    "invites_reply": 0.07
+    "interested_lumi": 0.17,
+    "invites_reply": 0.08,
+    "everyone": 0.02,
+    "others": 0.07
    },
-   "ms": 376,
+   "ms": 388,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1958,13 +2126,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_lumi": 0.02,
+    "addressed_lumi": 0.01,
     "interested_lumi": 0.06,
     "addressed_xiaoman": 0.97,
     "interested_xiaoman": 0.96,
-    "invites_reply": 0.21
+    "invites_reply": 0.2,
+    "everyone": 0.02,
+    "others": 0.01
    },
-   "ms": 380,
+   "ms": 376,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -1984,15 +2154,17 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.81,
-    "interested_milky-green": 0.22,
+    "addressed_milky-green": 0.75,
+    "interested_milky-green": 0.19,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.05,
+    "interested_kuro": 0.04,
     "addressed_xiaoman": 0.02,
-    "interested_xiaoman": 0.06,
-    "invites_reply": 0.2
+    "interested_xiaoman": 0.05,
+    "invites_reply": 0.22,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 422,
+   "ms": 349,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2017,12 +2189,14 @@
     "addressed_kuro": 0.01,
     "interested_kuro": 0.04,
     "addressed_lumi": 0.93,
-    "interested_lumi": 0.73,
+    "interested_lumi": 0.77,
     "addressed_xiaoman": 0.02,
     "interested_xiaoman": 0.03,
-    "invites_reply": 0.19
+    "invites_reply": 0.21,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 397,
+   "ms": 383,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2045,10 +2219,12 @@
     "addressed_kuro": 0.02,
     "interested_kuro": 0.04,
     "addressed_xiaoman": 0.97,
-    "interested_xiaoman": 0.93,
-    "invites_reply": 0.13
+    "interested_xiaoman": 0.92,
+    "invites_reply": 0.12,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 392,
+   "ms": 354,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2064,7 +2240,7 @@
     "lumi"
    ],
    "decided": [
-    "kuro"
+    "lumi"
    ],
    "source": "model",
    "right": true,
@@ -2073,12 +2249,14 @@
     "addressed_milky-green": 0.03,
     "interested_milky-green": 0.14,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.21,
+    "interested_kuro": 0.16,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.09,
-    "invites_reply": 0.48
+    "invites_reply": 0.45,
+    "everyone": 0.02,
+    "others": 0.05
    },
-   "ms": 381,
+   "ms": 368,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2094,19 +2272,22 @@
     "kuro"
    ],
    "decided": [
-    "xiaoman"
+    "xiaoman",
+    "kuro"
    ],
    "source": "model",
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.06,
-    "interested_kuro": 0.23,
-    "addressed_xiaoman": 0.07,
-    "interested_xiaoman": 0.73,
-    "invites_reply": 0.98
+    "addressed_kuro": 0.05,
+    "interested_kuro": 0.26,
+    "addressed_xiaoman": 0.08,
+    "interested_xiaoman": 0.72,
+    "invites_reply": 0.98,
+    "everyone": 0.56,
+    "others": 0.48
    },
-   "ms": 403,
+   "ms": 376,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2133,15 +2314,17 @@
    },
    "scores": {
     "addressed_milky-green": 0.06,
-    "interested_milky-green": 0.23,
+    "interested_milky-green": 0.25,
     "addressed_lumi": 0.04,
-    "interested_lumi": 0.2,
+    "interested_lumi": 0.15,
     "addressed_xiaoman": 0.03,
-    "interested_xiaoman": 0.07,
+    "interested_xiaoman": 0.09,
     "invites_reply": 0.97,
+    "everyone": 0.05,
+    "others": 0.23,
     "voice_moment": 0.62
    },
-   "ms": 356,
+   "ms": 380,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2161,11 +2344,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.76,
-    "interested_kuro": 0.89,
-    "invites_reply": 0.97
+    "addressed_kuro": 0.78,
+    "interested_kuro": 0.87,
+    "invites_reply": 0.97,
+    "everyone": 0.22,
+    "others": 0.07
    },
-   "ms": 425,
+   "ms": 390,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2187,11 +2372,13 @@
    "scores": {
     "addressed_kuro": 0.03,
     "interested_kuro": 0.07,
-    "addressed_xiaoman": 0.88,
+    "addressed_xiaoman": 0.89,
     "interested_xiaoman": 0.17,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "everyone": 0.13,
+    "others": 0.08
    },
-   "ms": 364,
+   "ms": 403,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2209,9 +2396,11 @@
    "scores": {
     "addressed_kuro": 0.04,
     "interested_kuro": 0.06,
-    "invites_reply": 0.27
+    "invites_reply": 0.32,
+    "everyone": 0.01,
+    "others": 0.01
    },
-   "ms": 425,
+   "ms": 384,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2228,12 +2417,14 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.06,
-    "addressed_lumi": 0.07,
-    "interested_lumi": 0.09,
-    "invites_reply": 0.22
+    "interested_kuro": 0.07,
+    "addressed_lumi": 0.08,
+    "interested_lumi": 0.11,
+    "invites_reply": 0.21,
+    "everyone": 0.02,
+    "others": 0.03
    },
-   "ms": 421,
+   "ms": 356,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2257,12 +2448,14 @@
     "right": true
    },
    "scores": {
-    "addressed_lumi": 0.67,
-    "interested_lumi": 0.26,
-    "invites_reply": 0.94,
-    "voice_moment": 0.62
+    "addressed_lumi": 0.73,
+    "interested_lumi": 0.24,
+    "invites_reply": 0.93,
+    "everyone": 0.03,
+    "others": 0.07,
+    "voice_moment": 0.64
    },
-   "ms": 368,
+   "ms": 392,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2282,13 +2475,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.84,
-    "interested_kuro": 0.92,
+    "addressed_kuro": 0.81,
+    "interested_kuro": 0.9,
     "addressed_lumi": 0.02,
     "interested_lumi": 0.04,
-    "invites_reply": 0.58
+    "invites_reply": 0.58,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 391,
+   "ms": 424,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2306,11 +2501,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_xiaoman": 0.21,
-    "interested_xiaoman": 0.64,
-    "invites_reply": 0.97
+    "addressed_xiaoman": 0.2,
+    "interested_xiaoman": 0.59,
+    "invites_reply": 0.98,
+    "everyone": 0.18,
+    "others": 0.14
    },
-   "ms": 393,
+   "ms": 382,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2331,10 +2528,12 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.97,
-    "interested_milky-green": 0.62,
-    "invites_reply": 0.96
+    "interested_milky-green": 0.59,
+    "invites_reply": 0.97,
+    "everyone": 0.11,
+    "others": 0.03
    },
-   "ms": 358,
+   "ms": 389,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2354,9 +2553,11 @@
    "scores": {
     "addressed_kuro": 0.93,
     "interested_kuro": 0.89,
-    "invites_reply": 0.24
+    "invites_reply": 0.24,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 376,
+   "ms": 355,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2379,12 +2580,14 @@
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.1,
-    "addressed_xiaoman": 0.03,
+    "interested_kuro": 0.09,
+    "addressed_xiaoman": 0.02,
     "interested_xiaoman": 0.13,
-    "invites_reply": 0.97
+    "invites_reply": 0.97,
+    "everyone": 0.08,
+    "others": 0.61
    },
-   "ms": 381,
+   "ms": 373,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2402,11 +2605,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_xiaoman": 0.04,
-    "interested_xiaoman": 0.64,
-    "invites_reply": 0.55
+    "addressed_xiaoman": 0.05,
+    "interested_xiaoman": 0.6,
+    "invites_reply": 0.57,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 454,
+   "ms": 382,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2428,10 +2633,12 @@
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.09,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.06,
-    "invites_reply": 0.17
+    "interested_kuro": 0.05,
+    "invites_reply": 0.18,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 398,
+   "ms": 385,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2455,14 +2662,16 @@
     "right": true
    },
    "scores": {
-    "addressed_kuro": 0.02,
-    "interested_kuro": 0.09,
+    "addressed_kuro": 0.01,
+    "interested_kuro": 0.08,
     "addressed_xiaoman": 0.95,
     "interested_xiaoman": 0.81,
     "invites_reply": 0.98,
-    "voice_moment": 0.34
+    "everyone": 0.03,
+    "others": 0.05,
+    "voice_moment": 0.35
    },
-   "ms": 396,
+   "ms": 398,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2482,11 +2691,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_lumi": 0.08,
+    "addressed_lumi": 0.07,
     "interested_lumi": 0.95,
-    "invites_reply": 0.47
+    "invites_reply": 0.49,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 404,
+   "ms": 384,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2506,11 +2717,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_kuro": 0.9,
-    "interested_kuro": 0.71,
-    "invites_reply": 0.95
+    "addressed_kuro": 0.89,
+    "interested_kuro": 0.69,
+    "invites_reply": 0.95,
+    "everyone": 0.16,
+    "others": 0.06
    },
-   "ms": 391,
+   "ms": 395,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2529,10 +2742,12 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.03,
-    "interested_kuro": 0.6,
-    "invites_reply": 0.44
+    "interested_kuro": 0.62,
+    "invites_reply": 0.46,
+    "everyone": 0.02,
+    "others": 0.01
    },
-   "ms": 358,
+   "ms": 375,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2550,9 +2765,11 @@
    "scores": {
     "addressed_kuro": 0.02,
     "interested_kuro": 0.06,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "everyone": 0.05,
+    "others": 0.02
    },
-   "ms": 375,
+   "ms": 371,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2572,11 +2789,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_xiaoman": 0.97,
-    "interested_xiaoman": 0.88,
-    "invites_reply": 0.96
+    "addressed_xiaoman": 0.96,
+    "interested_xiaoman": 0.9,
+    "invites_reply": 0.96,
+    "everyone": 0.1,
+    "others": 0.03
    },
-   "ms": 363,
+   "ms": 379,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2595,10 +2814,12 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.96,
-    "interested_kuro": 0.9,
-    "invites_reply": 0.27
+    "interested_kuro": 0.89,
+    "invites_reply": 0.3,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 455,
+   "ms": 378,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2617,8 +2838,10 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.15,
-    "invites_reply": 0.98
+    "interested_milky-green": 0.14,
+    "invites_reply": 0.98,
+    "everyone": 0.07,
+    "others": 0.02
    },
    "ms": 403,
    "model": "typesafe/jev-1.14-20261014"
@@ -2643,14 +2866,16 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.11,
-    "addressed_lumi": 0.07,
-    "interested_lumi": 0.91,
-    "addressed_xiaoman": 0.14,
-    "interested_xiaoman": 0.84,
-    "invites_reply": 0.41
+    "interested_kuro": 0.12,
+    "addressed_lumi": 0.08,
+    "interested_lumi": 0.92,
+    "addressed_xiaoman": 0.11,
+    "interested_xiaoman": 0.85,
+    "invites_reply": 0.42,
+    "everyone": 0.02,
+    "others": 0.04
    },
-   "ms": 386,
+   "ms": 355,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2674,12 +2899,14 @@
     "right": true
    },
    "scores": {
-    "addressed_xiaoman": 0.86,
-    "interested_xiaoman": 0.89,
+    "addressed_xiaoman": 0.85,
+    "interested_xiaoman": 0.91,
     "invites_reply": 0.96,
-    "voice_moment": 0.25
+    "everyone": 0.12,
+    "others": 0.05,
+    "voice_moment": 0.28
    },
-   "ms": 355,
+   "ms": 364,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2697,11 +2924,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_lumi": 0.87,
-    "interested_lumi": 0.16,
-    "invites_reply": 0.43
+    "addressed_lumi": 0.91,
+    "interested_lumi": 0.17,
+    "invites_reply": 0.43,
+    "everyone": 0.04,
+    "others": 0.02
    },
-   "ms": 428,
+   "ms": 400,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2718,12 +2947,14 @@
    "voice": null,
    "scores": {
     "addressed_milky-green": 0.02,
-    "interested_milky-green": 0.05,
+    "interested_milky-green": 0.06,
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.04,
-    "invites_reply": 0.08
+    "interested_kuro": 0.05,
+    "invites_reply": 0.08,
+    "everyone": 0.01,
+    "others": 0.01
    },
-   "ms": 366,
+   "ms": 398,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2746,9 +2977,11 @@
     "interested_milky-green": 0.09,
     "addressed_lumi": 0.03,
     "interested_lumi": 0.07,
-    "invites_reply": 0.98
+    "invites_reply": 0.98,
+    "everyone": 0.13,
+    "others": 0.38
    },
-   "ms": 366,
+   "ms": 377,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2764,11 +2997,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_lumi": 0.03,
-    "interested_lumi": 0.07,
-    "invites_reply": 0.2
+    "addressed_lumi": 0.04,
+    "interested_lumi": 0.06,
+    "invites_reply": 0.22,
+    "everyone": 0.01,
+    "others": 0.01
    },
-   "ms": 478,
+   "ms": 369,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2786,11 +3021,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.07,
+    "addressed_milky-green": 0.05,
     "interested_milky-green": 0.07,
-    "invites_reply": 0.54
+    "invites_reply": 0.53,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 448,
+   "ms": 393,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2814,12 +3051,14 @@
     "right": true
    },
    "scores": {
-    "addressed_kuro": 0.82,
+    "addressed_kuro": 0.78,
     "interested_kuro": 0.27,
     "invites_reply": 0.95,
-    "voice_moment": 0.61
+    "everyone": 0.25,
+    "others": 0.09,
+    "voice_moment": 0.59
    },
-   "ms": 437,
+   "ms": 374,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2840,10 +3079,12 @@
    "voice": null,
    "scores": {
     "addressed_xiaoman": 0.79,
-    "interested_xiaoman": 0.77,
-    "invites_reply": 0.98
+    "interested_xiaoman": 0.8,
+    "invites_reply": 0.98,
+    "everyone": 0.22,
+    "others": 0.07
    },
-   "ms": 364,
+   "ms": 374,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2860,10 +3101,12 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.04,
-    "interested_kuro": 0.08,
-    "invites_reply": 0.32
+    "interested_kuro": 0.07,
+    "invites_reply": 0.32,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 374,
+   "ms": 412,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2883,13 +3126,15 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_milky-green": 0.83,
-    "interested_milky-green": 0.6,
+    "addressed_milky-green": 0.79,
+    "interested_milky-green": 0.57,
     "addressed_kuro": 0.03,
     "interested_kuro": 0.07,
-    "invites_reply": 0.67
+    "invites_reply": 0.67,
+    "everyone": 0.02,
+    "others": 0.02
    },
-   "ms": 394,
+   "ms": 409,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2909,11 +3154,13 @@
    "right": true,
    "voice": null,
    "scores": {
-    "addressed_lumi": 0.15,
+    "addressed_lumi": 0.14,
     "interested_lumi": 0.95,
-    "invites_reply": 0.53
+    "invites_reply": 0.51,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 452,
+   "ms": 422,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2932,12 +3179,14 @@
    "voice": null,
    "scores": {
     "addressed_kuro": 0.01,
-    "interested_kuro": 0.04,
+    "interested_kuro": 0.05,
     "addressed_lumi": 0.98,
     "interested_lumi": 0.98,
-    "invites_reply": 0.25
+    "invites_reply": 0.23,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 370,
+   "ms": 381,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2950,20 +3199,20 @@
    "maybe": [
     "lumi"
    ],
-   "decided": [
-    "lumi"
-   ],
+   "decided": [],
    "source": "model",
    "right": true,
    "voice": null,
    "scores": {
     "addressed_kuro": 0.02,
-    "interested_kuro": 0.09,
-    "addressed_lumi": 0.91,
+    "interested_kuro": 0.08,
+    "addressed_lumi": 0.92,
     "interested_lumi": 0.92,
-    "invites_reply": 0.55
+    "invites_reply": 0.49,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 384,
+   "ms": 393,
    "model": "typesafe/jev-1.14-20261014"
   },
   {
@@ -2981,13 +3230,245 @@
    "scores": {
     "addressed_milky-green": 0.02,
     "interested_milky-green": 0.06,
-    "addressed_kuro": 0.85,
-    "interested_kuro": 0.86,
-    "addressed_lumi": 0.02,
+    "addressed_kuro": 0.84,
+    "interested_kuro": 0.88,
+    "addressed_lumi": 0.01,
     "interested_lumi": 0.03,
-    "invites_reply": 0.13
+    "invites_reply": 0.14,
+    "everyone": 0.01,
+    "others": 0.02
    },
-   "ms": 383,
+   "ms": 363,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-12",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@all 都在吗，出来冒个泡",
+   "mentions": [
+    "milky-green",
+    "kuro",
+    "lumi",
+    "xiaoman"
+   ],
+   "responders": [
+    "milky-green",
+    "kuro",
+    "lumi",
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green",
+    "kuro",
+    "lumi",
+    "xiaoman"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.05,
+    "interested_milky-green": 0.17,
+    "addressed_kuro": 0.06,
+    "interested_kuro": 0.11,
+    "addressed_lumi": 0.06,
+    "interested_lumi": 0.11,
+    "addressed_xiaoman": 0.07,
+    "interested_xiaoman": 0.09,
+    "invites_reply": 0.95,
+    "everyone": 0.76,
+    "others": 0.96
+   },
+   "ms": 369,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "mention-13",
+   "kind": "mention",
+   "hop": 0,
+   "latest": "viewer：@奶绿 @茶茶 @露米 @小满 报个到",
+   "mentions": [
+    "milky-green",
+    "kuro",
+    "lumi",
+    "xiaoman"
+   ],
+   "responders": [
+    "milky-green",
+    "kuro",
+    "lumi",
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green",
+    "kuro",
+    "lumi",
+    "xiaoman"
+   ],
+   "source": "mention",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.79,
+    "interested_milky-green": 0.36,
+    "addressed_kuro": 0.78,
+    "interested_kuro": 0.17,
+    "addressed_lumi": 0.67,
+    "interested_lumi": 0.2,
+    "addressed_xiaoman": 0.83,
+    "interested_xiaoman": 0.18,
+    "invites_reply": 0.92,
+    "everyone": 0.79,
+    "others": 0.87
+   },
+   "ms": 408,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "group-04",
+   "kind": "group",
+   "hop": 0,
+   "latest": "viewer：都介绍一下自己，互相熟悉一下",
+   "mentions": [],
+   "responders": [
+    "milky-green",
+    "kuro",
+    "lumi",
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "lumi",
+    "milky-green",
+    "kuro",
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.34,
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.18,
+    "addressed_lumi": 0.03,
+    "interested_lumi": 0.23,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.19,
+    "invites_reply": 0.95,
+    "everyone": 0.81,
+    "others": 0.71
+   },
+   "ms": 385,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "group-05",
+   "kind": "group",
+   "hop": 0,
+   "latest": "viewer：其他人呢？",
+   "mentions": [],
+   "responders": [
+    "milky-green",
+    "kuro",
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green",
+    "kuro",
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.03,
+    "interested_milky-green": 0.37,
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.16,
+    "addressed_lumi": 0.22,
+    "interested_lumi": 0.3,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.17,
+    "invites_reply": 0.97,
+    "everyone": 0.3,
+    "others": 0.95
+   },
+   "ms": 360,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "group-06",
+   "kind": "group",
+   "hop": 0,
+   "latest": "viewer：其他人说话！",
+   "mentions": [],
+   "responders": [
+    "milky-green",
+    "kuro",
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "milky-green",
+    "kuro",
+    "xiaoman"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.04,
+    "interested_milky-green": 0.3,
+    "addressed_kuro": 0.03,
+    "interested_kuro": 0.15,
+    "addressed_lumi": 0.18,
+    "interested_lumi": 0.52,
+    "addressed_xiaoman": 0.03,
+    "interested_xiaoman": 0.12,
+    "invites_reply": 0.88,
+    "everyone": 0.45,
+    "others": 0.97
+   },
+   "ms": 380,
+   "model": "typesafe/jev-1.14-20261014"
+  },
+  {
+   "id": "persona-36",
+   "kind": "persona-addresses",
+   "hop": 1,
+   "latest": "露米：我是露米！奶绿、茶茶、小满，你们一个个快冒个泡自我介绍一下吧！",
+   "mentions": [],
+   "responders": [
+    "milky-green",
+    "kuro",
+    "xiaoman"
+   ],
+   "maybe": [],
+   "decided": [
+    "xiaoman",
+    "kuro",
+    "milky-green"
+   ],
+   "source": "model",
+   "right": true,
+   "voice": null,
+   "scores": {
+    "addressed_milky-green": 0.68,
+    "interested_milky-green": 0.39,
+    "addressed_kuro": 0.7,
+    "interested_kuro": 0.17,
+    "addressed_xiaoman": 0.78,
+    "interested_xiaoman": 0.2,
+    "invites_reply": 0.96,
+    "everyone": 0.96,
+    "others": 0.95
+   },
+   "ms": 412,
    "model": "typesafe/jev-1.14-20261014"
   }
  ]

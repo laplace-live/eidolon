@@ -324,7 +324,7 @@ describe("openChatWindow", () => {
       { ...user(9, "九"), at: null },
       "junk",
       { ...user(10, "十"), speaker: { kind: "user" }, modality: "smoke" },
-      { seq: 11, at: 1011, type: "settings", chainLimit: 7 },
+      { seq: 11, at: 1011, type: "settings", chainLimit: 101 },
       user(12, "十二"),
       user(12, "又十二"),
       { seq: 13, at: 1013, type: "kickoff", persona: "milky-green", turn: "t", content: "打招呼" },
@@ -361,7 +361,7 @@ describe("openChatWindow", () => {
       },
       { seq: 2, at: 1002, type: "title", title: "奶绿", sig: "x" },
       { seq: 3, at: 1003, type: "participants", added: ["other"], extra: 1 },
-      { seq: 4, at: 1004, type: "settings", chainLimit: 6, replyMode: "voice" },
+      { seq: 4, at: 1004, type: "settings", chainLimit: 100, replyMode: "voice" },
       { seq: 5, at: 1005, type: "settings", chainLimit: 1 },
       // A call's marks, which the browser writes around it.
       { seq: 6, at: 1006, type: "call-started", call: "c1", persona: "milky-green", sig: "x" },

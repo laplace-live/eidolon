@@ -25,11 +25,14 @@ export {
   directorParticipant,
   directorQuestions,
   directorState,
+  EVERYONE_THRESHOLD,
   HOP_STEP,
   INTEREST_THRESHOLD,
   INVITES_THRESHOLD,
   JUST_SPOKE_PENALTY,
+  MAX_HOP_RAISE,
   MAX_REPLIES_TO_USER,
+  OTHERS_THRESHOLD,
 } from "./director.ts";
 export {
   formatFacts,

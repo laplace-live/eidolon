@@ -373,15 +373,25 @@ describe("runChat", () => {
     ]);
   });
 
-  test("chains up to the chat's limit, the default 3 hops after the viewer's line", async () => {
+  test("chains up to the chat's limit, the default 5 hops after the viewer's line", async () => {
     const { createMind } = minds();
-    const run = async (...settings: ChatEventDraft[]) => {
-      const director = scripted(["ann"], ["bea"], ["ann"], ["bea"], ["ann"]);
-      const chat = chatOf(header("ann", "bea"), ...settings, user("聊吧"));
-      await chat.drive(runChat(request(chat), deps(createMind, director.decide)));
+    const run = async (...settings: (ChatEventDraft | { readonly maxChainLimit: number })[]) => {
+      const director = scripted(["ann"], ["bea"], ["ann"], ["bea"], ["ann"], ["bea"], ["ann"]);
+      const events = settings.filter((item): item is ChatEventDraft => "type" in item);
+      const cap = settings.find(
+        (item): item is { readonly maxChainLimit: number } => "maxChainLimit" in item,
+      );
+      const chat = chatOf(header("ann", "bea"), ...events, user("聊吧"));
+      await chat.drive(
+        runChat(
+          { ...request(chat), ...(cap ? { maxChainLimit: cap.maxChainLimit } : {}) },
+          deps(createMind, director.decide),
+        ),
+      );
       return { hops: director.inputs.map(({ hop }) => hop), lines: messages(chat.events).length };
     };
-    expect(await run()).toEqual({ hops: [0, 1, 2, 3], lines: 5 });
+    expect(await run()).toEqual({ hops: [0, 1, 2, 3, 4, 5], lines: 7 });
+    expect(await run({ maxChainLimit: 3 })).toEqual({ hops: [0, 1, 2, 3], lines: 5 });
     expect(await run({ type: "settings", chainLimit: 1 })).toEqual({ hops: [0, 1], lines: 3 });
     expect(
       await run({ type: "settings", chainLimit: 5 }, { type: "settings", chainLimit: 0 }),

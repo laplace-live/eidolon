@@ -6,8 +6,9 @@ export const CHAT_FORMAT = 1;
 /** The most personas a chat holds. */
 export const MAX_PARTICIPANTS = 6;
 /** Persona-to-persona hops after each viewer line until a `settings` event sets them; 0 is none. */
-export const DEFAULT_CHAIN_LIMIT = 3;
-export const MAX_CHAIN_LIMIT = 6;
+export const CHAIN_LIMITS = [0, 1, 5, 10, 100] as const;
+export const DEFAULT_CHAIN_LIMIT = 5;
+export const MAX_CHAIN_LIMIT = 100;
 /** The longest voice message the viewer can send. */
 export const MAX_VOICE_MS = 120_000;
 

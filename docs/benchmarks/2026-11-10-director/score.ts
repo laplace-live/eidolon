@@ -28,11 +28,14 @@ import {
   type DirectorInput,
   type DirectorLine,
   type DirectorParticipant,
+  EVERYONE_THRESHOLD,
   HOP_STEP,
   INTEREST_THRESHOLD,
   INVITES_THRESHOLD,
   JUST_SPOKE_PENALTY,
+  MAX_HOP_RAISE,
   MAX_REPLIES_TO_USER,
+  OTHERS_THRESHOLD,
 } from "../../../packages/context/src/index.ts";
 import { type DecisionModel, gateDecisionModel } from "../../../packages/providers/src/index.ts";
 
@@ -64,6 +67,10 @@ interface Line {
   readonly invites_reply: boolean;
   /** How many persona lines after the viewer's last answer it, as one decision; absent is 1. */
   readonly viewer_replies?: number;
+  /** Whether the line explicitly asks every participant to reply. */
+  readonly everyone?: boolean;
+  /** Whether the line explicitly calls on silent participants rather than the recent speaker. */
+  readonly others?: boolean;
   /** Whether a voice message suits the reply better than text; absent unlabelled. */
   readonly voice_moment?: boolean;
   readonly note?: string;
@@ -163,7 +170,11 @@ function validate(): void {
       fail("a voice_moment label needs a line someone answers");
     }
     const replies = line.viewer_replies;
-    if (replies !== undefined && replies > Math.min(spokenOf(saidOf(line)), MAX_REPLIES_TO_USER)) {
+    if (
+      replies !== undefined &&
+      replies >
+        Math.min(spokenOf(saidOf(line)), Math.max(MAX_REPLIES_TO_USER, line.participants.length))
+    ) {
       fail(`viewer_replies ${replies}: more than the lines since hers, or than a decision chooses`);
     }
     const candidates = candidatesOf(line);
@@ -395,12 +406,14 @@ function question(points: readonly Point[], threshold: number | null) {
 }
 
 const lineOf = new Map(lines.map((line) => [line.id, line]));
-const raiseOf = (row: Row) => HOP_STEP * row.hop;
+const raiseOf = (row: Row) => Math.min(HOP_STEP * row.hop, MAX_HOP_RAISE);
 const addressed: Point[] = [];
 const interested: Point[] = [];
 const keen: Point[] = [];
 const invitesAfterPersona: Point[] = [];
 const invitesAfterViewer: Point[] = [];
+const everyone: Point[] = [];
+const others: Point[] = [];
 const voiceMoment: Point[] = [];
 const voiceMomentAfterVoice: Point[] = [];
 for (const row of rows) {
@@ -463,6 +476,25 @@ for (const row of rows) {
       positive: line.invites_reply,
     });
   }
+  if (row.mentions.length === 0 && !line.others) {
+    everyone.push({
+      id: row.id,
+      persona: null,
+      score: round((row.scores.everyone as number) - raise),
+      positive: line.everyone ?? false,
+    });
+  }
+  const hadPersona = saidOf(line)
+    .slice(-10)
+    .some(([speaker]) => speaker !== VIEWER);
+  if (hadPersona || line.others !== undefined) {
+    others.push({
+      id: row.id,
+      persona: null,
+      score: round((row.scores.others as number) - raise),
+      positive: line.others ?? false,
+    });
+  }
 }
 
 const questions = {
@@ -471,6 +503,8 @@ const questions = {
   interested_x_talkativeness: question(keen, INTEREST_THRESHOLD),
   invites_reply_after_persona: question(invitesAfterPersona, INVITES_THRESHOLD),
   invites_reply_after_viewer: question(invitesAfterViewer, null),
+  everyone: question(everyone, EVERYONE_THRESHOLD),
+  others: question(others, OTHERS_THRESHOLD),
   voice_moment: question(voiceMoment, VOICE_THRESHOLD),
   voice_moment_after_voice: question(voiceMomentAfterVoice, VOICE_THRESHOLD_AFTER_VOICE),
 };
@@ -489,8 +523,12 @@ const result = {
     addressed: ADDRESSED_THRESHOLD,
     interest: INTEREST_THRESHOLD,
     invites: INVITES_THRESHOLD,
+    everyone: EVERYONE_THRESHOLD,
+    others: OTHERS_THRESHOLD,
     hop_step: HOP_STEP,
+    max_hop_raise: MAX_HOP_RAISE,
     just_spoke_penalty: JUST_SPOKE_PENALTY,
+    max_replies_to_user: MAX_REPLIES_TO_USER,
     voice: VOICE_THRESHOLD,
     voice_after_voice: VOICE_THRESHOLD_AFTER_VOICE,
   },

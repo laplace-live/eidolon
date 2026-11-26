@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
+  CHAIN_LIMITS as SERVER_CHAIN_LIMITS,
   CHAT_FORMAT as SERVER_CHAT_FORMAT,
   CHAT_WINDOW_MESSAGES as SERVER_CHAT_WINDOW_MESSAGES,
   DEFAULT_CHAIN_LIMIT as SERVER_DEFAULT_CHAIN_LIMIT,
@@ -37,6 +38,7 @@ import { fittedSize } from "../src/chat/files.ts";
 import {
   AUDIO_QUALITIES,
   buildWindow,
+  CHAIN_LIMITS,
   CHAT_FORMAT,
   CHAT_WINDOW_BYTES,
   CHAT_WINDOW_EVENTS,
@@ -71,6 +73,7 @@ describe("server and client SDK protocol parity", () => {
   test("chat log format and window budgets match server constants", () => {
     expect(CHAT_FORMAT).toBe(SERVER_CHAT_FORMAT);
     expect(MAX_PARTICIPANTS).toBe(SERVER_MAX_PARTICIPANTS);
+    expect(CHAIN_LIMITS).toEqual(SERVER_CHAIN_LIMITS);
     expect(DEFAULT_CHAIN_LIMIT).toBe(SERVER_DEFAULT_CHAIN_LIMIT);
     expect(MAX_CHAIN_LIMIT).toBe(SERVER_MAX_CHAIN_LIMIT);
     expect(PUBLIC_CHAIN_LIMIT).toBe(SERVER_PUBLIC_CHAIN_LIMIT);

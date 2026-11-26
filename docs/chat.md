@@ -354,38 +354,54 @@ gate's decision model: the active persona's `gate` role and its key, through `ga
     something <name> cares about (her interests above), or something she has a stake in?");
   - once, `invites_reply` ("Does the latest message invite a reply (a question, an opinion, a
     tease) rather than close the exchange?");
+  - once, `everyone` ("Does the latest message explicitly ask every participant (or each one in
+    turn) to answer, rather than just anyone who wants to?");
+  - once, `others` ("Does the latest message explicitly call on the other participants who have
+    stayed silent so far (e.g. asking where the others are or telling the rest to speak up) rather
+    than a specific named person or whoever just spoke?");
   - once, and only when some candidate's reply mode is `auto`, `voice_moment` ("Would a voice
     message suit a reply to the latest message better than text…?",
     [Voice messages](#voice-messages)).
 
   Jev reads them literally, so a reworded question or state needs the benchmark run again.
 - **Who answers the viewer's line:**
-  1. The personas it @-mentions, in order, then those it addresses (`addressed` 0.5 or more), most
-     addressed first. The source is `mention` when it mentions anyone, else `model`.
-  2. Otherwise each candidate scores `interested × chat.talkativeness`, less 0.1 for whoever
-     spoke the persona line before. Those at 0.3 or more answer, keenest first.
-  3. With no one at that bar, the keenest answers anyway, the more talkative of a tie, because the
+  1. The personas it @-mentions, in order (uncapped, so mentioning every participant wakes them
+     all), then those it addresses (`addressed` 0.5 or more), most addressed first, up to
+     `MAX_REPLIES_TO_USER` (3) when not solely mentions. The source is `mention`.
+  2. Otherwise, when `everyone` is 0.5 or more, every willing participant (`talkativeness > 0`,
+     else all; any `addressed` participant first), uncapped.
+  3. Otherwise, when `others` is 0.65 or more with unheard candidates, every willing unheard
+     candidate (those without a line in the last 10 lines, or who didn't speak after the previous
+     viewer line if everyone spoke recently; any unheard `addressed` candidate first, ignoring
+     recent speakers so a false positive doesn't re-pick them), uncapped.
+  4. Otherwise, those it addresses (`addressed` 0.5 or more), most addressed first, up to 3.
+  5. Otherwise each candidate scores `interested × chat.talkativeness`, less 0.1 for whoever
+     spoke the persona line before. Those at 0.3 or more answer, keenest first, up to 3.
+  6. With no one at that bar, the keenest answers anyway, the more talkative of a tie, because the
      viewer is never left unanswered. A persona whose talkativeness is 0 is passed over unless
      everyone's is, even when the penalty sinks the others below her.
-  4. Two replies at most.
-- **Who answers a persona's line:** someone answers only if `invites_reply` is 0.3 or more, then by
-  the same rules, but with one reply at most and none forced. Each hop raises every bar by 0.1
-  (`HOP_STEP`), so chains die down on their own.
+- **Who answers a persona's line:** someone answers only if `invites_reply` is 0.3 or more. Each
+  hop raises every bar by 0.1 (`HOP_STEP`), capped at 0.3 (`MAX_HOP_RAISE`), so chains with higher
+  limits plateau instead of climbing past 1.0. When `everyone` or `others` clears its raised bar
+  on a group handoff, every willing unheard candidate answers (any unheard `addressed` candidate
+  first), or no one when `everyone` clears after every candidate has already been heard; otherwise
+  one reply at most and none forced.
 - **Mentions** are `@` or `＠` and a participant's name or short name, case-blind
-  (`parseMentions`, in `@eidolon/chat`, which the composer shares). A mention of someone not in the
-  chat counts for nothing.
-- **The bars** come from the 100 labelled lines of
+  (`parseMentions`, in `@eidolon/chat`, which the composer shares), or a broadcast alias (`@all`,
+  `@everyone`, `@全体`, `@全体成员`, `@所有人`, `@大家`) when no longer participant name matches. A
+  mention of someone not in the chat counts for nothing.
+- **The bars** come from the 106 labelled lines of
   [`docs/benchmarks/2026-11-10-director/`](benchmarks/2026-11-10-director/README.md), which are
-  synthetic until real logs replace them. All 100 are decided right, and stay right with any one
-  bar moved 0.05 either way.
+  synthetic until real logs replace them. All 106 are decided right.
 - **When it fails:** nobody can speak before it answers, so it gives up after 2 s
   (`DIRECTOR_TIMEOUT_SEC`) or on any error, and falls back to rules:
-  1. the mentions;
-  2. then the personas whose name or short name the line holds, in the order they appear;
+  1. the mentions (uncapped for the viewer, 1 for a persona line);
+  2. then the personas whose name or short name the line holds, in the order they appear (up to 3
+     for the viewer, 1 for a persona line);
   3. then, after the viewer's line only, the most talkative.
 
-  The same caps apply. The source is `fallback`, with no scores, so every reply is in text unless
-  her mode is `voice`. Without a key for the gate role, every group decision falls back.
+  The source is `fallback`, with no scores, so every reply is in text unless her mode is `voice`.
+  Without a key for the gate role, every group decision falls back.
 - **A chat of one persona:** she answers every viewer line, as `single`. The director asks only
   `voice_moment`, and only while her reply mode is `auto`; otherwise it makes no request. She
   doesn't wait for it ([Voice messages](#voice-messages)).
@@ -397,8 +413,8 @@ gate's decision model: the active persona's `gate` role and its key, through `ga
 `runChat` (`packages/engine/src/chat.ts`) answers each viewer line:
 
 1. It reads the participants, their reply modes and the chain limit once, from the log as it
-   stood. The limit is the last `settings` event's `chainLimit`, 0 to 6, else 3
-   (`DEFAULT_CHAIN_LIMIT`). A chat of one never chains.
+   stood. The limit is the last `settings` event's `chainLimit`, 0 to 100 (presets 0, 1, 5, 10,
+   100), else 5 (`DEFAULT_CHAIN_LIMIT`). A chat of one never chains.
 2. It asks the director about the viewer's line, in the chat's usage scope, and yields the
    decision for the caller to store.
 3. It runs each chosen persona's turn in order with `runTurn`, in the mode the decision gave her.
@@ -471,17 +487,20 @@ Production's endpoint and calls pass no owed lines.
 
 ### Costs
 
-For each viewer line, at the default chain limit, the most it can cost is:
-- 5 turns: 2 replies to the viewer, then 3 hops. Each turn is up to `chat.maxRounds` + 1 mind
-  calls, 9 by default ([step 5](#a-turn-runturn)), and more where a malformed reply is asked for
-  again, with its gate and recall as in a chat of one;
-- 4 director calls: one for the viewer's line, and one before each of the 3 hops. The
-  benchmark's 101 calls cost $0.0033 in all, about $0.00003 each, and took 413 ms at the median on
+For each viewer line, at the default chain limit (5 hops), the most it can cost is:
+- 8 turns normally (3 replies to the viewer, then 5 hops), or 11 when explicit `@`-mentions,
+  `everyone`, or `others` wake all 6 participants (all 6 stay inside the 10-line recent window
+  through hop 5, so group handoffs cannot re-wake heard speakers). Each turn is up to
+  `chat.maxRounds` + 1 mind calls, 9 by default ([step 5](#a-turn-runturn)), and more where a
+  malformed reply is asked for again, with its gate and recall as in a chat of one;
+- 6 director calls: one for the viewer's line, and one before each of the 5 hops. The
+  benchmark's 107 calls cost $0.0039 in all, about $0.00004 each, and took 382 ms at the median on
   a warm connection;
 - a synthesis for each of those turns that answers in voice ([Voice costs](#voice-costs)).
 
-The defaults keep a typical line at one or two replies. A chain limit of 6 allows 8 turns and 7
-director calls.
+The defaults keep a typical line at one to three replies. A chain limit of 100 allows up to 103
+turns without group wake-ups, or 139 when group handoffs re-wake up to 4 participants every 9 hops
+as earlier speakers leave the 10-line recent window, across 101 director calls.
 
 ### Calibrating
 
@@ -920,7 +939,7 @@ The runner (`apps/bot/src/local/chats/runner.ts`) keeps one `JsonlChatStore` at
 | `POST chats/:id/voice?durationMs=n` | The recorded audio: `audio/webm`, `audio/ogg`, `audio/mp4` or `audio/mpeg`, codecs allowed, at most 10 MB; `durationMs` is the recorder's clock, 1 to 120000 | As `POST messages`, its first `events` line holding the stored voice message with its transcript. `415` for another type, `400` without `durationMs` or with an empty body, `413` past 2 minutes or 10 MB, `409 missing-key` while the hearing role can't hear, `409 chat-in-call` during a call, `502 upstream-failed` when hearing fails |
 | `GET chats/:id/live` | | NDJSON of the running reply from its start; during a call, each event the chat stores, from `call-started` until the stream ends after `call-ended`; or `204` while neither runs |
 | `POST chats/:id/stop` | | `204` once the stopped reply's words are stored |
-| `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 6, `{ replyMode }`, `auto`, `text` or `voice`, `{ display }`, `focus`, `normal` or `verbose`, or `{ permissions }`, `ask`, `auto` or `full`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line; a `display` applies at once, during a call too, whose feed carries it, and starts no turn; `permissions` reaches her tasks there at their next question, and her texts at her next turn, a call's included, and starts no turn |
+| `PATCH chats/:id` | `{ title }`, 1 to 80 characters on one line, `{ chainLimit }`, a whole number from 0 to 100, `{ replyMode }`, `auto`, `text` or `voice`, `{ display }`, `focus`, `normal` or `verbose`, or `{ permissions }`, `ask`, `auto` or `full`; one per request | Appends a `title`, or a `settings` that applies from the next viewer line; a `display` applies at once, during a call too, whose feed carries it, and starts no turn; `permissions` reaches her tasks there at their next question, and her texts at her next turn, a call's included, and starts no turn |
 | `POST chats/:id/participants` | `{ add?: [id], remove?: [id] }`, at least one persona, none in both | `200 { ok }` and a `participants` event; `400` when it adds one already there, removes one who isn't, or leaves fewer than 1 or more than 6 |
 | `DELETE chats/:id` | | Stops any reply and cancels a voice message being heard, whose `POST voice` answers `502`; stops the chat's live tasks, after any `start_task` still being answered; then removes `chats/<id>/` and nothing else, leaving the tasks' records. `409 chat-in-call` during a call, stopping and cancelling nothing; a call still opening when it comes is refused `404 unknown-chat` |
 | `GET chats/:id/files/:name` | | The attachment: its type, a text file's with `charset=utf-8`, `nosniff`, a sandbox CSP and `Cache-Control: private, max-age=31536000, immutable`; an `<img>` or `<audio>` reads it with the cookie alone. It answers a single `Range` with a `206` and an unsatisfiable one with a `416` (`ranges.ts`), and always sends `Accept-Ranges: bytes`, with a `Content-Length` on a `200` or `206`, since Safari plays audio only from a server that takes ranges |
@@ -1050,8 +1069,9 @@ temporary data home and find it unchanged.
 - **Mem0** runs for logged-in viewers alone, keyed by mid and persona as calls key it. An
   anonymous viewer's turn skips it.
 - **What a line can cost:** the chain limit is at most 3 (`PUBLIC_CHAIN_LIMIT`), whatever a
-  `settings` event asks, so at most 5 turns, each up to `chat.maxRounds` + 1 mind calls and more
-  where a malformed reply is asked for again, plus the director's calls ([Costs](#costs)). The
+  `settings` event asks, so at most 6 turns normally (3 replies to the viewer, then 3 hops), or 9
+  when all 6 participants wake on a group call-out, each up to `chat.maxRounds` + 1 mind calls and
+  more where a malformed reply is asked for again, plus the director's calls ([Costs](#costs)). The
   template persona sets no `chat.maxRounds`, so the server's `CHAT_MAX_ROUNDS` decides, 8 by
   default; 3 keeps a turn at 4. A reply is in voice only while her voice role can speak, whatever
   the reply mode. Every request a chat makes is billed with `source: "chat"` and the chat's id as
