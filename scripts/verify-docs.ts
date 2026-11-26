@@ -21,6 +21,8 @@ export const README_BUDGET = 1_000;
 /** Soft ceiling on a changeset summary. The documented rule is ~80; this warns on prose. */
 export const SUMMARY_WARN_CHARS = 100;
 
+const ALLOWED_CHANGESET_PREFIX = /^(?:feat|fix|perf|chore)(?:\([^)]*\))?!?:[ \t]+/;
+
 export interface VerifyDocsResult {
   readonly failures: readonly string[];
   readonly warnings: readonly string[];
@@ -29,9 +31,39 @@ export interface VerifyDocsResult {
   readonly docCount: number;
 }
 
-/** Removes fenced code blocks so literal code examples never count as headings. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Removes fenced code blocks per CommonMark fence char/length rules so literal examples never count as headings. */
 function stripFencedCode(markdown: string): string {
-  return markdown.replace(/^```[\s\S]*?^```/gm, "").replace(/^~~~[\s\S]*?^~~~/gm, "");
+  const out: string[] = [];
+  let fenceChar: "`" | "~" | null = null;
+  let fenceLen = 0;
+  for (const line of markdown.split("\n")) {
+    if (fenceChar === null) {
+      const open = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+      if (open?.[1]) {
+        const mark = open[1];
+        const rest = open[2] ?? "";
+        if (mark[0] === "`" && rest.includes("`")) {
+          out.push(line);
+        } else {
+          fenceChar = mark[0] as "`" | "~";
+          fenceLen = mark.length;
+        }
+        continue;
+      }
+      out.push(line);
+    } else {
+      const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (close?.[1]?.[0] === fenceChar && close[1].length >= fenceLen) {
+        fenceChar = null;
+        fenceLen = 0;
+      }
+    }
+  }
+  return out.join("\n");
 }
 
 /** Removes fenced code blocks and inline code spans so literal snippets never count as links. */
@@ -138,6 +170,7 @@ export function verifyDocs(root: string): VerifyDocsResult {
     }
     return anchors;
   };
+  const linkedFromAgents = new Set<string>();
 
   for (const file of docFiles) {
     const body = read(file);
@@ -156,6 +189,7 @@ export function verifyDocs(root: string): VerifyDocsResult {
       }
       const [pathPart = "", anchor] = target.split("#", 2);
       const abs = resolve(root, dirname(file), pathPart);
+      if (file === "AGENTS.md") linkedFromAgents.add(relative(root, abs).replace(/\\/g, "/"));
       let targetBody: string;
       try {
         targetBody = readFileSync(abs, "utf8");
@@ -176,31 +210,35 @@ export function verifyDocs(root: string): VerifyDocsResult {
     }
   }
 
-  // 3. Every docs/*.md page is reachable from AGENTS.md.
+  // 3. Every docs/*.md page is linked from AGENTS.md.
   for (const doc of docsEntries) {
-    if (!agentsMd.includes(doc)) {
+    if (!linkedFromAgents.has(doc)) {
       fail(`${doc} is not linked from AGENTS.md — add a "Where to look" entry`);
     }
   }
 
-  // 4. Every root script is documented in AGENTS.md or docs/.
+  // 4. Every root script is documented by exact token in AGENTS.md or docs/.
   const pkg = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
   for (const name of Object.keys(pkg.scripts ?? {})) {
-    if (!agentCorpus.includes(name)) {
+    if (!new RegExp(`(?<![\\w:-])${escapeRegExp(name)}(?![\\w:-])`).test(agentCorpus)) {
       fail(`root script "${name}" is undocumented in AGENTS.md or docs/`);
     }
   }
 
-  // 5. Every tracked workspace package is documented in AGENTS.md or docs/.
+  // 5. Every tracked workspace package is documented by boundary-aware path or name in AGENTS.md or docs/.
   for (const manifest of trackedWorkspaceManifests(root)) {
     const dir = dirname(manifest);
     const { name } = JSON.parse(read(manifest)) as { name: string };
-    if (!agentCorpus.includes(dir) && !agentCorpus.includes(name)) {
+    const matchesDir = new RegExp(`(?<![\\w./-])${escapeRegExp(dir)}(?![\\w.-])`).test(agentCorpus);
+    const matchesName = new RegExp(`(?<![\\w@/-])${escapeRegExp(name)}(?![\\w-])`).test(
+      agentCorpus,
+    );
+    if (!matchesDir && !matchesName) {
       fail(`workspace package ${dir} (${name}) is undocumented in AGENTS.md or docs/`);
     }
   }
 
-  // 6. Changesets still read as single-sentence release notes with a valid kind prefix.
+  // 6. Changesets still read as single-sentence release notes with one of the four documented prefixes.
   const changesetDir = join(root, ".changeset");
   if (existsSync(changesetDir)) {
     for (const name of readdirSync(changesetDir)
@@ -229,10 +267,10 @@ export function verifyDocs(root: string): VerifyDocsResult {
         continue;
       }
       const summary = lines[0] ?? "";
-      const { kind, text } = classify(summary);
-      if (kind === "other" && !/^other(?:\([^)]*\))?!?:[ \t]+/.test(summary)) {
+      const { text } = classify(summary);
+      if (!ALLOWED_CHANGESET_PREFIX.test(summary)) {
         fail(
-          `${rel}: summary needs a kind prefix (feat:/fix:/perf:/chore:) — changelog.json takes no other source`,
+          `${rel}: summary needs a kind prefix (feat:/fix:/perf:/chore:) — see docs/releasing.md#changesets`,
         );
       }
       if (/^[a-z]/.test(text)) {

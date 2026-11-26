@@ -41,11 +41,14 @@ The production bot serves no UI. LAPLACE's `/ai` page accepts a custom backend U
 
 CI publishes `ghcr.io/laplace-live/eidolon` from `apps/bot/Dockerfile`, tagged `edge`, `sha-…`,
 and per release `X.Y.Z`, `X.Y`, and `X`. It listens on port `7860`, reads `.env`, mounts the
-persona data home at `/data` (`EIDOLON_HOME=/data`), and keeps Mem0's change log at
-`/app/data/mem0`. To build locally from this checkout:
+persona data home at `/data` (`EIDOLON_HOME=/data`), and writes Mem0's change log to
+`/data/mem0/history.db` unless `MEM0_HISTORY_DB_PATH` overrides it (the `bot-ts` compose service
+points `MEM0_HISTORY_DB_PATH` at `/var/lib/eidolon/mem0/history.db` on its own volume beside a
+read-only `/data` mount, and publishes port `7861` → `7860`). To build and run `bot-ts` locally
+from this checkout:
 
 ```bash
-docker compose --profile ts up --build
+docker compose --profile ts up --build bot-ts
 ```
 
 Production keeps `apps/bot/src/local`, `packages/assistant`, `@eidolon/ingest`, and

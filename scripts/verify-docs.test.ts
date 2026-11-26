@@ -74,6 +74,28 @@ describe("verifyDocs", () => {
     expect(result.warnings).toEqual([]);
   });
 
+  test("ignores links inside longer fenced code blocks containing inner fences", () => {
+    const root = makeFixtureRepo();
+    writeFixture(
+      root,
+      "docs/guide.md",
+      [
+        "# Guide",
+        "",
+        "## Details",
+        "",
+        "````markdown",
+        "```bash",
+        "echo hi",
+        "```",
+        "See [missing](docs/nope.md) inside the outer fence.",
+        "````",
+        "",
+      ].join("\n"),
+    );
+    expect(verifyDocs(root).failures).toEqual([]);
+  });
+
   test("flags AGENTS.md over budget with its fattest sections", () => {
     const root = makeFixtureRepo();
     writeFixture(
@@ -112,9 +134,24 @@ describe("verifyDocs", () => {
     expect(failures[1]).toContain("no such heading");
   });
 
-  test("flags orphan docs, undocumented scripts, and undocumented workspace packages", () => {
+  test("flags orphan docs (even when named in prose), overlapping script names, and overlapping package names", () => {
     const root = makeFixtureRepo();
     writeFixture(root, "docs/orphan.md", "# Orphan\n");
+    writeFixture(
+      root,
+      "AGENTS.md",
+      [
+        "# AGENTS.md",
+        "",
+        "## Index",
+        "",
+        "- guide → [guide.md](docs/guide.md#details)",
+        "- mentions docs/orphan.md without linking it",
+        "- desktop: `apps/desktop`, `pnpm test`, `pnpm doc-check`",
+        "- substring neighbor: `packages/secrets`",
+        "",
+      ].join("\n"),
+    );
     writeFixture(
       root,
       "package.json",
@@ -123,7 +160,7 @@ describe("verifyDocs", () => {
         scripts: {
           test: "vitest run",
           "doc-check": "node scripts/verify-docs.ts",
-          hidden: "echo 1",
+          check: "echo 1",
         },
       }),
     );
@@ -131,21 +168,27 @@ describe("verifyDocs", () => {
     const { failures } = verifyDocs(root);
     expect(failures).toEqual([
       'docs/orphan.md is not linked from AGENTS.md — add a "Where to look" entry',
-      'root script "hidden" is undocumented in AGENTS.md or docs/',
+      'root script "check" is undocumented in AGENTS.md or docs/',
       "workspace package packages/secret (@fixture/secret) is undocumented in AGENTS.md or docs/",
     ]);
   });
 
-  test("flags invalid changeset summaries", () => {
+  test("flags invalid changeset summaries including disallowed prefixes", () => {
     const root = makeFixtureRepo();
+    writeFixture(
+      root,
+      ".changeset/disallowed.md",
+      '---\n"a": patch\n---\n\ndocs: Explain the CLI\n',
+    );
+    writeFixture(root, ".changeset/lower.md", '---\n"a": patch\n---\n\nfix: lowercase start\n');
     writeFixture(root, ".changeset/multi.md", '---\n"a": patch\n---\n\nfeat: One\nSecond line\n');
     writeFixture(root, ".changeset/no-prefix.md", '---\n"a": patch\n---\n\nMissing prefix\n');
-    writeFixture(root, ".changeset/lower.md", '---\n"a": patch\n---\n\nfix: lowercase start\n');
     const { failures } = verifyDocs(root);
-    expect(failures).toHaveLength(3);
-    expect(failures[0]).toContain("starts lowercase");
-    expect(failures[1]).toContain("summary is 2 lines");
-    expect(failures[2]).toContain("needs a kind prefix");
+    expect(failures).toHaveLength(4);
+    expect(failures[0]).toContain("needs a kind prefix");
+    expect(failures[1]).toContain("starts lowercase");
+    expect(failures[2]).toContain("summary is 2 lines");
+    expect(failures[3]).toContain("needs a kind prefix");
   });
 
   test("flags Electron floor mismatch in README.md", () => {

@@ -255,7 +255,8 @@ pipeline's dry run against the plan it emits).
   `onnxruntime-node`'s CUDA fetch on `linux/x64`) and a 14-day `minimumReleaseAge` (newer versions
   need an exact `minimumReleaseAgeExclude` entry until aged). No runtime code, script, or
   benchmark imports `bun`/`bun:*` or uses `Bun`, `HTMLRewriter`, `import.meta.dir`, `import.meta.path`,
-  or `Uint8Array.fromBase64`/`toBase64`/`fromHex` (`apps/cli/test/no_bun.test.ts` and Biome check it).
+  or `Uint8Array.fromBase64`/`toBase64`/`fromHex`; `apps/cli/test/no_bun.test.ts` and Biome enforce
+  the Bun modules, globals, and `import.meta` fields.
 - **Run tests from the repository root only (`pnpm test [paths]`).** Running Vitest outside the root
   skips `vitest.config.ts` and its `isolated-home.ts` setup, exposing the real data home; any test
   that deletes inside the data home imports `packages/config/test/isolated-guard.ts` first

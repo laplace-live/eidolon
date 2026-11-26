@@ -54,16 +54,19 @@ Read the entry for what you are about to touch. **Adding a subsystem means addin
 
 ```bash
 pnpm install
-pnpm dev / start            # production bot on :7860 (watch / plain)
-pnpm app / local            # local web app + supervisor (--open / headless)
-pnpm dev:local / dev:web / build:web / i18n
-pnpm dev:desktop / build:desktop / package:desktop
-pnpm smoke:desktop / smoke:desktop:dev
-pnpm build:npm / pack:npm / build:sdk / pack:sdk
-pnpm typecheck && pnpm lint && pnpm format && pnpm test && pnpm doc-check
+pnpm dev                    # production bot on :7860 (`pnpm start` without watch)
+pnpm app                    # builds web app if needed + `pnpm local --open`
+pnpm local                  # local web server + supervisor (`pnpm dev:local` watches)
+pnpm dev:web                # Vite on :5173 → :7860 (`pnpm build:web`, `pnpm i18n`)
+pnpm dev:desktop            # unpackaged desktop (`pnpm build:desktop`, `pnpm package:desktop`)
+pnpm smoke:desktop          # packaged desktop smoke (`pnpm smoke:desktop:dev` on macOS)
+pnpm build:npm              # stage npm pkg (`pnpm pack:npm`, `pnpm build:sdk`, `pnpm pack:sdk`)
+pnpm typecheck && pnpm lint && pnpm test && pnpm doc-check
+pnpm format                 # biome format --write .
 ```
 
-Offline & eval CLIs (`--persona <id>`, `--help`): `pnpm laplace-pipeline`, `laplace-download`, `laplace-transcribe`, `laplace-refine`, `laplace-ingest-streams`, `laplace-ingest-facts`, `laplace-build-stream-catalog`, `laplace-prepare-batch`, `laplace-discover`, `laplace-extract-users`, `laplace-search`, `laplace-eval-retrieval`, `laplace-generate-image`, `laplace-task`, `gate-decisions`, `director-decisions`, `review-decisions` ([typescript.md](docs/typescript.md), [assistant.md](docs/assistant.md)).
+- **Offline chain** (`--persona <id>`, `--help`; [typescript.md](docs/typescript.md)): `pnpm laplace-pipeline`, `pnpm laplace-download`, `pnpm laplace-transcribe`, `pnpm laplace-refine`, `pnpm laplace-ingest-streams`, `pnpm laplace-ingest-facts`, `pnpm laplace-build-stream-catalog`, `pnpm laplace-prepare-batch`, `pnpm laplace-discover`, `pnpm laplace-extract-users`.
+- **Query, task, and eval CLIs:** `pnpm laplace-search`, `pnpm laplace-eval-retrieval`, `pnpm laplace-generate-image`, `pnpm laplace-task` (`--help`; [assistant.md](docs/assistant.md#laplace-task)); billed benchmarks (take no `--help`, run immediately): `pnpm gate-decisions`, `pnpm director-decisions`, `pnpm review-decisions`.
 
 ### Which checks to run
 
@@ -79,7 +82,7 @@ Match the gate to what you touched; don't reflexively run paid or full-stack sui
 - **`packages/assistant`, `runTask`, `laplace-task`** → `pnpm test packages/assistant packages/engine apps/cli/test/task.test.ts`, plus `pnpm review-decisions` if changing `review.ts` (billed ~$0.002), and one billed `laplace-task` run if changing task behavior ([assistant.md](docs/assistant.md#laplace-task)).
 - **Voice loop / transport / `packages/runtime`** → `pnpm test packages/voice packages/webrtc packages/runtime`, then billed `e2e-call.ts` + `e2e-compare.ts` ([voice-engine.md](docs/voice-engine.md#real-calls)).
 - **Retrieval / offline ingest / `packages/retrieval` write side** → `pnpm laplace-eval-retrieval --compare ...` ([retrieval.md](docs/retrieval.md#evaluation)), re-run both ingests if changing embeddings, and run `EIDOLON_REQUIRE_PARITY=1 pnpm test` on the `*_real.test.ts` suites ([typescript.md](docs/typescript.md#real-data-tests)).
-- **Gate / director / `prompt.md` markup / selfies / Mem0** → `pnpm gate-decisions`, `node docs/benchmarks/2026-11-10-director/score.ts --cached --check` (or `pnpm director-decisions`), live `e2e-call.ts` for markup ([personas.md](docs/personas.md#prompt-and-code-rules)), `pnpm laplace-generate-image` for selfies ([selfies.md](docs/selfies.md)), and live Qdrant round-trip for `packages/memory` ([self-hosting.md](docs/self-hosting.md#identity-quotas-and-mem0)).
+- **Gate / director / `prompt.md` markup / selfies / Mem0** → `pnpm gate-decisions`; run `pnpm director-decisions` for director question or state changes (`node docs/benchmarks/2026-11-10-director/score.ts --cached --check` only after threshold or label edits); live `e2e-call.ts` for markup ([personas.md](docs/personas.md#prompt-and-code-rules)); `pnpm laplace-generate-image` for selfies ([selfies.md](docs/selfies.md)); live Qdrant round-trip for `packages/memory` ([self-hosting.md](docs/self-hosting.md#identity-quotas-and-mem0)).
 
 ## Rules
 

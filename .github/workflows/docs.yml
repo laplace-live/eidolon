@@ -10,33 +10,7 @@ on:
   workflow_dispatch:
   push:
     branches: [master]
-    paths:
-      - "AGENTS.md"
-      - "README.md"
-      - "apps/*/package.json"
-      - "packages/*/package.json"
-      - "docs/**"
-      - ".changeset/**"
-      - "package.json"
-      - "scripts/verify-docs.ts"
-      - "scripts/changelog.ts"
-      - ".changeset/changelog.ts"
-      - "apps/desktop/src/shared/release-notes.ts"
-      - ".github/workflows/docs.yml"
   pull_request:
-    paths:
-      - "AGENTS.md"
-      - "README.md"
-      - "apps/*/package.json"
-      - "packages/*/package.json"
-      - "docs/**"
-      - ".changeset/**"
-      - "package.json"
-      - "scripts/verify-docs.ts"
-      - "scripts/changelog.ts"
-      - ".changeset/changelog.ts"
-      - "apps/desktop/src/shared/release-notes.ts"
-      - ".github/workflows/docs.yml"
 
 concurrency:
   group: docs-${{ github.ref }}

@@ -22,7 +22,9 @@ pnpm laplace-pipeline --dry-run ~/.laplace/eidolon/sources/<id>/lists/videos.txt
 pnpm laplace-pipeline ~/.laplace/eidolon/sources/<id>/lists/videos.txt
 ```
 
-Offline commands act on the active persona or `--persona <id>` ([typescript.md](typescript.md#the-offline-chain)).
+Ingest and pipeline commands act on the active persona or `--persona <id>`
+([typescript.md](typescript.md#the-offline-chain)); `laplace-search` and `laplace-eval-retrieval` use
+`EIDOLON_PERSONA` or explicit `--db-path` / `--queries` flags instead of `--persona`.
 The download stage installs its own `yt-dlp`, and audio over five hours uses `ffmpeg`. Both ingests
 write a jieba-tokenized `tokens` column and build an FTS index after embedding so hybrid search
 works at runtime without a separate build step.
@@ -32,9 +34,10 @@ works at runtime without a separate build step.
 Each enabled turn runs this pipeline:
 
 1. **Build a query** from the last few user turns so short utterances ("嗯, 那呢？") keep prior context.
-2. **Embed the query** once with `EMBED_MODEL` (default Gemini, `EMBED_DIM` 3072).
+2. **Embed the query** for each enabled index with `EMBED_MODEL` (default Gemini, `EMBED_DIM` 3072).
 3. **Date pre-filter:** when the query mentions a date (`2026年5月9日`, `5月9号`, `2024年3月`),
-   narrow the candidate pool with a SQL `WHERE` clause on `date` before scoring.
+   narrow each index with a SQL `WHERE` clause on its date column (`date` for `persona_facts`,
+   `stream_date` for `stream_chunks`) before scoring.
 4. **Hybrid search** (vector + jieba-tokenized BM25/FTS) pulls `PERSONA_FACTS_CANDIDATES` (default
    30) or `STREAM_ARCHIVE_CANDIDATES` (default 15), stripping Chinese stopwords on the query side
    only.
